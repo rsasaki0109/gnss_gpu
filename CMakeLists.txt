@@ -8,14 +8,167 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(CUDAToolkit REQUIRED)
 find_package(pybind11 QUIET)
 
+# --- Core library (positioning + coordinates) ---
 add_library(gnss_gpu_core
   src/utils/coordinates.cu
   src/positioning/wls.cu
+  src/positioning/multi_gnss.cu
 )
 target_include_directories(gnss_gpu_core PUBLIC include)
 target_link_libraries(gnss_gpu_core CUDA::cudart)
 
+# --- Ray tracing module ---
+add_library(gnss_gpu_raytrace
+  src/raytrace/raytrace.cu
+)
+target_include_directories(gnss_gpu_raytrace PUBLIC include)
+target_link_libraries(gnss_gpu_raytrace CUDA::cudart)
+
+# --- Multipath simulation module ---
+add_library(gnss_gpu_multipath
+  src/multipath/multipath.cu
+)
+target_include_directories(gnss_gpu_multipath PUBLIC include)
+target_link_libraries(gnss_gpu_multipath CUDA::cudart)
+
+# --- Skyplot / vulnerability map module ---
+add_library(gnss_gpu_skyplot
+  src/skyplot/skyplot.cu
+)
+target_include_directories(gnss_gpu_skyplot PUBLIC include)
+target_link_libraries(gnss_gpu_skyplot CUDA::cudart)
+
+# --- Signal acquisition module (requires cuFFT) ---
+add_library(gnss_gpu_acquisition
+  src/acquisition/acquisition.cu
+)
+target_include_directories(gnss_gpu_acquisition PUBLIC include)
+target_link_libraries(gnss_gpu_acquisition CUDA::cudart CUDA::cufft)
+
+# --- Interference detection module (requires cuFFT) ---
+add_library(gnss_gpu_interference
+  src/interference/interference.cu
+)
+target_include_directories(gnss_gpu_interference PUBLIC include)
+target_link_libraries(gnss_gpu_interference CUDA::cudart CUDA::cufft)
+
+# --- Vector tracking module ---
+add_library(gnss_gpu_tracking
+  src/tracking/tracking.cu
+)
+target_include_directories(gnss_gpu_tracking PUBLIC include)
+target_link_libraries(gnss_gpu_tracking CUDA::cudart gnss_gpu_core)
+
+# --- Particle filter module (requires cuRAND) ---
+add_library(gnss_gpu_pf
+  src/particle_filter/predict.cu
+  src/particle_filter/weight.cu
+  src/particle_filter/resampling.cu
+)
+target_include_directories(gnss_gpu_pf PUBLIC include)
+target_link_libraries(gnss_gpu_pf CUDA::cudart CUDA::curand)
+
+# --- SVGD module (Stein Variational Gradient Descent for particle filter) ---
+add_library(gnss_gpu_svgd
+  src/particle_filter/svgd.cu
+)
+target_include_directories(gnss_gpu_svgd PUBLIC include)
+target_link_libraries(gnss_gpu_svgd CUDA::cudart CUDA::curand)
+
+# --- 3D-aware particle filter (raytrace + PF) ---
+add_library(gnss_gpu_pf3d
+  src/particle_filter/weight_3d.cu
+)
+target_include_directories(gnss_gpu_pf3d PUBLIC include)
+target_link_libraries(gnss_gpu_pf3d CUDA::cudart)
+
+# --- Ephemeris module ---
+add_library(gnss_gpu_ephemeris
+  src/ephemeris/ephemeris.cu
+)
+target_include_directories(gnss_gpu_ephemeris PUBLIC include)
+target_link_libraries(gnss_gpu_ephemeris CUDA::cudart)
+
+# --- Atmosphere module (tropospheric + ionospheric corrections) ---
+add_library(gnss_gpu_atmosphere
+  src/atmosphere/atmosphere.cu
+)
+target_include_directories(gnss_gpu_atmosphere PUBLIC include)
+target_link_libraries(gnss_gpu_atmosphere CUDA::cudart)
+
+# --- EKF module ---
+add_library(gnss_gpu_ekf
+  src/ekf/ekf.cu
+)
+target_include_directories(gnss_gpu_ekf PUBLIC include)
+target_link_libraries(gnss_gpu_ekf CUDA::cudart)
+
+# --- RTK module ---
+add_library(gnss_gpu_rtk
+  src/rtk/rtk.cu
+)
+target_include_directories(gnss_gpu_rtk PUBLIC include)
+target_link_libraries(gnss_gpu_rtk CUDA::cudart)
+
+# --- Python bindings ---
 if(pybind11_FOUND)
+  # Original bindings (positioning + coordinates)
   pybind11_add_module(_gnss_gpu python/gnss_gpu/_bindings.cpp)
   target_link_libraries(_gnss_gpu PRIVATE gnss_gpu_core)
+
+  # Multi-GNSS bindings (ISB estimation)
+  pybind11_add_module(_gnss_gpu_multi_gnss python/gnss_gpu/_multi_gnss_bindings.cpp)
+  target_link_libraries(_gnss_gpu_multi_gnss PRIVATE gnss_gpu_core)
+
+  # Ray tracing bindings
+  pybind11_add_module(_raytrace python/gnss_gpu/_raytrace_bindings.cpp)
+  target_link_libraries(_raytrace PRIVATE gnss_gpu_raytrace)
+
+  # Multipath bindings
+  pybind11_add_module(_gnss_gpu_multipath python/gnss_gpu/_multipath_bindings.cpp)
+  target_link_libraries(_gnss_gpu_multipath PRIVATE gnss_gpu_multipath)
+
+  # Skyplot bindings
+  pybind11_add_module(_gnss_gpu_skyplot python/gnss_gpu/_skyplot_bindings.cpp)
+  target_link_libraries(_gnss_gpu_skyplot PRIVATE gnss_gpu_skyplot)
+
+  # Acquisition bindings
+  pybind11_add_module(_gnss_gpu_acq python/gnss_gpu/_acquisition_bindings.cpp)
+  target_link_libraries(_gnss_gpu_acq PRIVATE gnss_gpu_acquisition)
+
+  # Interference bindings
+  pybind11_add_module(_gnss_gpu_interference python/gnss_gpu/_interference_bindings.cpp)
+  target_link_libraries(_gnss_gpu_interference PRIVATE gnss_gpu_interference)
+
+  # Tracking bindings
+  pybind11_add_module(_gnss_gpu_tracking python/gnss_gpu/_tracking_bindings.cpp)
+  target_link_libraries(_gnss_gpu_tracking PRIVATE gnss_gpu_tracking)
+
+  # Particle filter bindings
+  pybind11_add_module(_gnss_gpu_pf python/gnss_gpu/_particle_filter_bindings.cpp)
+  target_link_libraries(_gnss_gpu_pf PRIVATE gnss_gpu_pf)
+
+  # SVGD bindings
+  pybind11_add_module(_gnss_gpu_svgd python/gnss_gpu/_svgd_bindings.cpp)
+  target_link_libraries(_gnss_gpu_svgd PRIVATE gnss_gpu_svgd)
+
+  # RTK bindings
+  pybind11_add_module(_gnss_gpu_rtk python/gnss_gpu/_rtk_bindings.cpp)
+  target_link_libraries(_gnss_gpu_rtk PRIVATE gnss_gpu_rtk)
+
+  # Ephemeris bindings
+  pybind11_add_module(_gnss_gpu_ephemeris python/gnss_gpu/_ephemeris_bindings.cpp)
+  target_link_libraries(_gnss_gpu_ephemeris PRIVATE gnss_gpu_ephemeris)
+
+  # 3D-aware PF bindings
+  pybind11_add_module(_gnss_gpu_pf3d python/gnss_gpu/_pf3d_bindings.cpp)
+  target_link_libraries(_gnss_gpu_pf3d PRIVATE gnss_gpu_pf3d)
+
+  # Atmosphere bindings
+  pybind11_add_module(_gnss_gpu_atmosphere python/gnss_gpu/_atmosphere_bindings.cpp)
+  target_link_libraries(_gnss_gpu_atmosphere PRIVATE gnss_gpu_atmosphere)
+
+  # EKF bindings
+  pybind11_add_module(_gnss_gpu_ekf python/gnss_gpu/_ekf_bindings.cpp)
+  target_link_libraries(_gnss_gpu_ekf PRIVATE gnss_gpu_ekf)
 endif()
