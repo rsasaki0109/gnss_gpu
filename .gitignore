@@ -1,0 +1,23 @@
+# Build
+build/
+dist/
+*.egg-info/
+*.so
+*.o
+*.a
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# CUDA
+*.cubin
+*.fatbin
+*.ptx
