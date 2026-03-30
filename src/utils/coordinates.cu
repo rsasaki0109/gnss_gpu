@@ -1,3 +1,4 @@
+#include "gnss_gpu/cuda_check.h"
 #include "gnss_gpu/coordinates.h"
 #include <cmath>
 
@@ -30,23 +31,23 @@ void ecef_to_lla(const double* ecef_x, const double* ecef_y, const double* ecef_
   double *d_ex, *d_ey, *d_ez, *d_lat, *d_lon, *d_alt;
   size_t sz = n * sizeof(double);
 
-  cudaMalloc(&d_ex, sz); cudaMalloc(&d_ey, sz); cudaMalloc(&d_ez, sz);
-  cudaMalloc(&d_lat, sz); cudaMalloc(&d_lon, sz); cudaMalloc(&d_alt, sz);
+  CUDA_CHECK(cudaMalloc(&d_ex, sz)); CUDA_CHECK(cudaMalloc(&d_ey, sz)); CUDA_CHECK(cudaMalloc(&d_ez, sz));
+  CUDA_CHECK(cudaMalloc(&d_lat, sz)); CUDA_CHECK(cudaMalloc(&d_lon, sz)); CUDA_CHECK(cudaMalloc(&d_alt, sz));
 
-  cudaMemcpy(d_ex, ecef_x, sz, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_ey, ecef_y, sz, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_ez, ecef_z, sz, cudaMemcpyHostToDevice);
+  CUDA_CHECK(cudaMemcpy(d_ex, ecef_x, sz, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_ey, ecef_y, sz, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_ez, ecef_z, sz, cudaMemcpyHostToDevice));
 
   int block = 256;
   int grid = (n + block - 1) / block;
   ecef_to_lla_kernel<<<grid, block>>>(d_ex, d_ey, d_ez, d_lat, d_lon, d_alt, n);
 
-  cudaMemcpy(lat, d_lat, sz, cudaMemcpyDeviceToHost);
-  cudaMemcpy(lon, d_lon, sz, cudaMemcpyDeviceToHost);
-  cudaMemcpy(alt, d_alt, sz, cudaMemcpyDeviceToHost);
+  CUDA_CHECK(cudaMemcpy(lat, d_lat, sz, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(lon, d_lon, sz, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(alt, d_alt, sz, cudaMemcpyDeviceToHost));
 
-  cudaFree(d_ex); cudaFree(d_ey); cudaFree(d_ez);
-  cudaFree(d_lat); cudaFree(d_lon); cudaFree(d_alt);
+  CUDA_CHECK(cudaFree(d_ex)); CUDA_CHECK(cudaFree(d_ey)); CUDA_CHECK(cudaFree(d_ez));
+  CUDA_CHECK(cudaFree(d_lat)); CUDA_CHECK(cudaFree(d_lon)); CUDA_CHECK(cudaFree(d_alt));
 }
 
 __global__ void lla_to_ecef_kernel(const double* lat, const double* lon, const double* alt,
@@ -69,23 +70,23 @@ void lla_to_ecef(const double* lat, const double* lon, const double* alt,
   double *d_lat, *d_lon, *d_alt, *d_ex, *d_ey, *d_ez;
   size_t sz = n * sizeof(double);
 
-  cudaMalloc(&d_lat, sz); cudaMalloc(&d_lon, sz); cudaMalloc(&d_alt, sz);
-  cudaMalloc(&d_ex, sz); cudaMalloc(&d_ey, sz); cudaMalloc(&d_ez, sz);
+  CUDA_CHECK(cudaMalloc(&d_lat, sz)); CUDA_CHECK(cudaMalloc(&d_lon, sz)); CUDA_CHECK(cudaMalloc(&d_alt, sz));
+  CUDA_CHECK(cudaMalloc(&d_ex, sz)); CUDA_CHECK(cudaMalloc(&d_ey, sz)); CUDA_CHECK(cudaMalloc(&d_ez, sz));
 
-  cudaMemcpy(d_lat, lat, sz, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_lon, lon, sz, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_alt, alt, sz, cudaMemcpyHostToDevice);
+  CUDA_CHECK(cudaMemcpy(d_lat, lat, sz, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_lon, lon, sz, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_alt, alt, sz, cudaMemcpyHostToDevice));
 
   int block = 256;
   int grid = (n + block - 1) / block;
   lla_to_ecef_kernel<<<grid, block>>>(d_lat, d_lon, d_alt, d_ex, d_ey, d_ez, n);
 
-  cudaMemcpy(ecef_x, d_ex, sz, cudaMemcpyDeviceToHost);
-  cudaMemcpy(ecef_y, d_ey, sz, cudaMemcpyDeviceToHost);
-  cudaMemcpy(ecef_z, d_ez, sz, cudaMemcpyDeviceToHost);
+  CUDA_CHECK(cudaMemcpy(ecef_x, d_ex, sz, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(ecef_y, d_ey, sz, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(ecef_z, d_ez, sz, cudaMemcpyDeviceToHost));
 
-  cudaFree(d_lat); cudaFree(d_lon); cudaFree(d_alt);
-  cudaFree(d_ex); cudaFree(d_ey); cudaFree(d_ez);
+  CUDA_CHECK(cudaFree(d_lat)); CUDA_CHECK(cudaFree(d_lon)); CUDA_CHECK(cudaFree(d_alt));
+  CUDA_CHECK(cudaFree(d_ex)); CUDA_CHECK(cudaFree(d_ey)); CUDA_CHECK(cudaFree(d_ez));
 }
 
 __global__ void satellite_azel_kernel(double rx, double ry, double rz,
@@ -127,18 +128,18 @@ void satellite_azel(double rx, double ry, double rz,
   size_t sz3 = n_sat * 3 * sizeof(double);
   size_t sz = n_sat * sizeof(double);
 
-  cudaMalloc(&d_sat, sz3); cudaMalloc(&d_az, sz); cudaMalloc(&d_el, sz);
-  cudaMemcpy(d_sat, sat_ecef, sz3, cudaMemcpyHostToDevice);
+  CUDA_CHECK(cudaMalloc(&d_sat, sz3)); CUDA_CHECK(cudaMalloc(&d_az, sz)); CUDA_CHECK(cudaMalloc(&d_el, sz));
+  CUDA_CHECK(cudaMemcpy(d_sat, sat_ecef, sz3, cudaMemcpyHostToDevice));
 
   int block = 256;
   int grid = (n_sat + block - 1) / block;
   satellite_azel_kernel<<<grid, block>>>(rx, ry, rz, sin_lat, cos_lat, sin_lon, cos_lon,
                                          d_sat, d_az, d_el, n_sat);
 
-  cudaMemcpy(az, d_az, sz, cudaMemcpyDeviceToHost);
-  cudaMemcpy(el, d_el, sz, cudaMemcpyDeviceToHost);
+  CUDA_CHECK(cudaMemcpy(az, d_az, sz, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(el, d_el, sz, cudaMemcpyDeviceToHost));
 
-  cudaFree(d_sat); cudaFree(d_az); cudaFree(d_el);
+  CUDA_CHECK(cudaFree(d_sat)); CUDA_CHECK(cudaFree(d_az)); CUDA_CHECK(cudaFree(d_el));
 }
 
 }  // namespace gnss_gpu
