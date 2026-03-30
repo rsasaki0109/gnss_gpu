@@ -95,4 +95,9 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
         return output;
     }, "Copy particles to host for visualization (only when needed)",
        py::arg("state"));
+
+    m.def("pf_device_sync", [](gnss_gpu::PFDeviceState* state) {
+        gnss_gpu::pf_device_sync(state);
+    }, "Synchronize CUDA stream - wait for all pending operations to complete",
+       py::arg("state"));
 }
