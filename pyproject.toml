@@ -1,13 +1,60 @@
 [build-system]
-requires = ["scikit-build-core", "pybind11"]
+requires = ["scikit-build-core>=0.5", "pybind11>=2.11"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "gnss_gpu"
-version = "0.0.1"
-description = "GPU-accelerated GNSS signal processing"
-requires-python = ">=3.8"
+name = "gnss-gpu"
+version = "0.1.0"
+description = "GPU-accelerated GNSS signal processing with CUDA"
+readme = "README.md"
+requires-python = ">=3.9"
 license = {text = "Apache-2.0"}
+authors = [
+    {name = "gnss-gpu contributors", email = "redacted@example.com"},
+]
+keywords = ["gnss", "gpu", "cuda", "positioning", "satellite-navigation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: C++",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+    "numpy>=1.21",
+]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+viz = [
+    "matplotlib>=3.5",
+    "plotly>=5.0",
+]
+ros2 = [
+    "rclpy",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+all = [
+    "gnss-gpu[viz,dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/redacted/gnss_gpu"
+Repository = "https://github.com/redacted/gnss_gpu"
+
+[tool.scikit-build]
+wheel.packages = ["python/gnss_gpu"]
+cmake.build-type = "Release"
+cmake.verbose = true
+
+[tool.scikit-build.cmake.define]
+CMAKE_CUDA_ARCHITECTURES = "native"

@@ -24,6 +24,13 @@ add_library(gnss_gpu_raytrace
 target_include_directories(gnss_gpu_raytrace PUBLIC include)
 target_link_libraries(gnss_gpu_raytrace CUDA::cudart)
 
+# --- BVH-accelerated ray tracing module ---
+add_library(gnss_gpu_bvh
+  src/raytrace/bvh.cu
+)
+target_include_directories(gnss_gpu_bvh PUBLIC include)
+target_link_libraries(gnss_gpu_bvh CUDA::cudart)
+
 # --- Multipath simulation module ---
 add_library(gnss_gpu_multipath
   src/multipath/multipath.cu
@@ -82,6 +89,13 @@ add_library(gnss_gpu_pf3d
 target_include_directories(gnss_gpu_pf3d PUBLIC include)
 target_link_libraries(gnss_gpu_pf3d CUDA::cudart)
 
+# --- Device-resident particle filter (CUDA streams + pinned memory) ---
+add_library(gnss_gpu_pf_device
+  src/particle_filter/pf_device.cu
+)
+target_include_directories(gnss_gpu_pf_device PUBLIC include)
+target_link_libraries(gnss_gpu_pf_device CUDA::cudart CUDA::curand)
+
 # --- Ephemeris module ---
 add_library(gnss_gpu_ephemeris
   src/ephemeris/ephemeris.cu
@@ -96,12 +110,26 @@ add_library(gnss_gpu_atmosphere
 target_include_directories(gnss_gpu_atmosphere PUBLIC include)
 target_link_libraries(gnss_gpu_atmosphere CUDA::cudart)
 
+# --- RAIM / FDE module ---
+add_library(gnss_gpu_raim
+  src/raim/raim.cu
+)
+target_include_directories(gnss_gpu_raim PUBLIC include)
+target_link_libraries(gnss_gpu_raim CUDA::cudart gnss_gpu_core)
+
 # --- EKF module ---
 add_library(gnss_gpu_ekf
   src/ekf/ekf.cu
 )
 target_include_directories(gnss_gpu_ekf PUBLIC include)
 target_link_libraries(gnss_gpu_ekf CUDA::cudart)
+
+# --- Doppler velocity module ---
+add_library(gnss_gpu_doppler
+  src/doppler/doppler.cu
+)
+target_include_directories(gnss_gpu_doppler PUBLIC include)
+target_link_libraries(gnss_gpu_doppler CUDA::cudart)
 
 # --- RTK module ---
 add_library(gnss_gpu_rtk
@@ -152,6 +180,10 @@ if(pybind11_FOUND)
   pybind11_add_module(_gnss_gpu_svgd python/gnss_gpu/_svgd_bindings.cpp)
   target_link_libraries(_gnss_gpu_svgd PRIVATE gnss_gpu_svgd)
 
+  # Doppler bindings
+  pybind11_add_module(_gnss_gpu_doppler python/gnss_gpu/_doppler_bindings.cpp)
+  target_link_libraries(_gnss_gpu_doppler PRIVATE gnss_gpu_doppler)
+
   # RTK bindings
   pybind11_add_module(_gnss_gpu_rtk python/gnss_gpu/_rtk_bindings.cpp)
   target_link_libraries(_gnss_gpu_rtk PRIVATE gnss_gpu_rtk)
@@ -171,4 +203,16 @@ if(pybind11_FOUND)
   # EKF bindings
   pybind11_add_module(_gnss_gpu_ekf python/gnss_gpu/_ekf_bindings.cpp)
   target_link_libraries(_gnss_gpu_ekf PRIVATE gnss_gpu_ekf)
+
+  # RAIM / FDE bindings
+  pybind11_add_module(_gnss_gpu_raim python/gnss_gpu/_raim_bindings.cpp)
+  target_link_libraries(_gnss_gpu_raim PRIVATE gnss_gpu_raim)
+
+  # BVH ray tracing bindings
+  pybind11_add_module(_bvh python/gnss_gpu/_bvh_bindings.cpp)
+  target_link_libraries(_bvh PRIVATE gnss_gpu_bvh)
+
+  # Device-resident particle filter bindings (CUDA streams)
+  pybind11_add_module(_gnss_gpu_pf_device python/gnss_gpu/_pf_device_bindings.cpp)
+  target_link_libraries(_gnss_gpu_pf_device PRIVATE gnss_gpu_pf_device)
 endif()

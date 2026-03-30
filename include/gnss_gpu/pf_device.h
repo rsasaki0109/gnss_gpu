@@ -30,6 +30,19 @@ struct PFDeviceState {
     // Velocity buffer (3 doubles, persistent)
     double* d_vel;
 
+    // CUDA stream for pipelined execution
+    cudaStream_t stream;
+
+    // Persistent device buffers for satellite data (avoids per-call cudaMalloc)
+    double* d_sat_ecef;     // [pinned_capacity * 3]
+    double* d_pseudoranges; // [pinned_capacity]
+    double* d_weights_sat;  // [pinned_capacity]
+
+    // Pinned host memory for async H2D transfers
+    double* h_sat_pinned;    // pinned memory for satellite data
+    double* h_result_pinned; // pinned memory for estimate result (4 doubles)
+    int pinned_capacity;     // max satellites supported without realloc
+
     int n_particles;
     int grid_size;  // precomputed (n_particles + 255) / 256
     bool allocated;
@@ -69,5 +82,8 @@ void pf_device_estimate(const PFDeviceState* state, double* result);
 
 // Copy particles to host for visualization (only when needed)
 void pf_device_get_particles(const PFDeviceState* state, double* output);
+
+// Explicit synchronization - wait for all stream operations to complete
+void pf_device_sync(PFDeviceState* state);
 
 }  // namespace gnss_gpu

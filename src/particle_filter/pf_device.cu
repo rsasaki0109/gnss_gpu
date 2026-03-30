@@ -7,6 +7,7 @@
 #include <cfloat>
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 namespace gnss_gpu {
 
@@ -326,16 +327,7 @@ __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a, d
     }
 }
 
-// ============================================================
-// Helper: CUDA error checking macro
-// ============================================================
-#define CUDA_CHECK(call) do { \
-    cudaError_t err = call; \
-    if (err != cudaSuccess) { \
-        fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__, \
-                cudaGetErrorString(err)); \
-    } \
-} while(0)
+// CUDA_CHECK macro is provided by gnss_gpu/cuda_check.h (included above)
 
 // ============================================================
 // Lifecycle
@@ -365,16 +357,29 @@ PFDeviceState* pf_device_create(int n_particles) {
 
     // Reduction temporaries
     // partial_a: max(grid * 4, grid) doubles - used for estimate (grid*4) or ESS (grid)
-    CUDA_CHECK(cudaMalloc(&state->d_partial_a, grid * 4 * sizeof(double));
-    CUDA_CHECK(cudaMalloc(&state->d_partial_b, grid * sizeof(double));
-    CUDA_CHECK(cudaMalloc(&state->d_partial_c, grid * sizeof(double));
+    CUDA_CHECK(cudaMalloc(&state->d_partial_a, grid * 4 * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&state->d_partial_b, grid * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&state->d_partial_c, grid * sizeof(double)));
 
     // Systematic resampling buffers
     CUDA_CHECK(cudaMalloc(&state->d_weights_norm, sz));
     CUDA_CHECK(cudaMalloc(&state->d_cdf, sz));
 
     // Velocity buffer (3 doubles)
-    CUDA_CHECK(cudaMalloc(&state->d_vel, 3 * sizeof(double));
+    CUDA_CHECK(cudaMalloc(&state->d_vel, 3 * sizeof(double)));
+
+    // CUDA stream for pipelined execution
+    CUDA_CHECK(cudaStreamCreate(&state->stream));
+
+    // Persistent device buffers for satellite data (pre-allocate for MAX_SATS)
+    state->pinned_capacity = MAX_SATS;
+    CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, MAX_SATS * 3 * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&state->d_pseudoranges, MAX_SATS * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&state->d_weights_sat, MAX_SATS * sizeof(double)));
+
+    // Pinned host memory for async transfers
+    CUDA_CHECK(cudaMallocHost(&state->h_sat_pinned, MAX_SATS * 5 * sizeof(double)));
+    CUDA_CHECK(cudaMallocHost(&state->h_result_pinned, 4 * sizeof(double)));
 
     state->allocated = true;
     return state;
@@ -383,6 +388,10 @@ PFDeviceState* pf_device_create(int n_particles) {
 void pf_device_destroy(PFDeviceState* state) {
     if (!state) return;
     if (state->allocated) {
+        // Synchronize stream before freeing resources
+        CUDA_CHECK(cudaStreamSynchronize(state->stream));
+        CUDA_CHECK(cudaStreamDestroy(state->stream));
+
         CUDA_CHECK(cudaFree(state->d_px));
         CUDA_CHECK(cudaFree(state->d_py));
         CUDA_CHECK(cudaFree(state->d_pz));
@@ -398,6 +407,16 @@ void pf_device_destroy(PFDeviceState* state) {
         CUDA_CHECK(cudaFree(state->d_weights_norm));
         CUDA_CHECK(cudaFree(state->d_cdf));
         CUDA_CHECK(cudaFree(state->d_vel));
+
+        // Free persistent satellite device buffers
+        CUDA_CHECK(cudaFree(state->d_sat_ecef));
+        CUDA_CHECK(cudaFree(state->d_pseudoranges));
+        CUDA_CHECK(cudaFree(state->d_weights_sat));
+
+        // Free pinned host memory
+        CUDA_CHECK(cudaFreeHost(state->h_sat_pinned));
+        CUDA_CHECK(cudaFreeHost(state->h_result_pinned));
+
         state->allocated = false;
     }
     delete state;
@@ -415,7 +434,7 @@ void pf_device_initialize(PFDeviceState* state,
     int N = state->n_particles;
     int grid = state->grid_size;
 
-    pfd_init_kernel<<<grid, BLOCK_SIZE>>>(
+    pfd_init_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
         state->d_log_weights,
         init_x, init_y, init_z, init_cb,
@@ -436,11 +455,18 @@ void pf_device_predict(PFDeviceState* state,
     int N = state->n_particles;
     int grid = state->grid_size;
 
-    // Copy velocity to device (only 3 doubles = 24 bytes)
-    double vel[3] = {vx, vy, vz};
-    CUDA_CHECK(cudaMemcpy(state->d_vel, vel, 3 * sizeof(double), cudaMemcpyHostToDevice));
+    // Ensure previous async transfer from pinned buffer is complete before overwriting
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
 
-    pfd_predict_kernel<<<grid, BLOCK_SIZE>>>(
+    // Copy velocity to pinned memory, then async transfer to device
+    // h_result_pinned has 4 doubles; we reuse first 3 for velocity (non-overlapping use)
+    state->h_result_pinned[0] = vx;
+    state->h_result_pinned[1] = vy;
+    state->h_result_pinned[2] = vz;
+    CUDA_CHECK(cudaMemcpyAsync(state->d_vel, state->h_result_pinned,
+                               3 * sizeof(double), cudaMemcpyHostToDevice, state->stream));
+
+    pfd_predict_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
         state->d_vel,
         dt, sigma_pos, sigma_cb,
@@ -461,28 +487,49 @@ void pf_device_weight(PFDeviceState* state,
     int grid = state->grid_size;
 
     // Satellite data is small: n_sat * 5 doubles typically < 1KB
-    // Use temporary device allocations for satellite data (small and variable-sized)
-    double *d_sat, *d_pr, *d_ws;
+    // Use persistent device buffers and pinned host memory for async transfer
     size_t sz_sat = (size_t)n_sat * 3 * sizeof(double);
     size_t sz_obs = (size_t)n_sat * sizeof(double);
 
-    CUDA_CHECK(cudaMalloc(&d_sat, sz_sat));
-    CUDA_CHECK(cudaMalloc(&d_pr, sz_obs));
-    CUDA_CHECK(cudaMalloc(&d_ws, sz_obs));
+    // If n_sat exceeds pinned_capacity, reallocate (rare path)
+    if (n_sat > state->pinned_capacity) {
+        CUDA_CHECK(cudaStreamSynchronize(state->stream));
+        CUDA_CHECK(cudaFreeHost(state->h_sat_pinned));
+        CUDA_CHECK(cudaFree(state->d_sat_ecef));
+        CUDA_CHECK(cudaFree(state->d_pseudoranges));
+        CUDA_CHECK(cudaFree(state->d_weights_sat));
 
-    CUDA_CHECK(cudaMemcpy(d_sat, sat_ecef, sz_sat, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_pr, pseudoranges, sz_obs, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_ws, weights_sat, sz_obs, cudaMemcpyHostToDevice));
+        state->pinned_capacity = n_sat;
+        CUDA_CHECK(cudaMallocHost(&state->h_sat_pinned, n_sat * 5 * sizeof(double)));
+        CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, n_sat * 3 * sizeof(double)));
+        CUDA_CHECK(cudaMalloc(&state->d_pseudoranges, n_sat * sizeof(double)));
+        CUDA_CHECK(cudaMalloc(&state->d_weights_sat, n_sat * sizeof(double)));
+    }
 
-    pfd_weight_kernel<<<grid, BLOCK_SIZE>>>(
+    // Ensure previous async transfers from pinned buffer are complete before overwriting
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+
+    // Stage satellite data into contiguous pinned buffer: [sat_ecef | pseudoranges | weights]
+    double* h_sat = state->h_sat_pinned;
+    memcpy(h_sat, sat_ecef, sz_sat);
+    memcpy(h_sat + n_sat * 3, pseudoranges, sz_obs);
+    memcpy(h_sat + n_sat * 4, weights_sat, sz_obs);
+
+    // Async H2D transfer on the stream (overlaps with previous kernel if any)
+    CUDA_CHECK(cudaMemcpyAsync(state->d_sat_ecef, h_sat,
+                               sz_sat, cudaMemcpyHostToDevice, state->stream));
+    CUDA_CHECK(cudaMemcpyAsync(state->d_pseudoranges, h_sat + n_sat * 3,
+                               sz_obs, cudaMemcpyHostToDevice, state->stream));
+    CUDA_CHECK(cudaMemcpyAsync(state->d_weights_sat, h_sat + n_sat * 4,
+                               sz_obs, cudaMemcpyHostToDevice, state->stream));
+
+    // Launch weight kernel on the same stream (waits for async copies to complete)
+    pfd_weight_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
-        d_sat, d_pr, d_ws, state->d_log_weights,
+        state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
+        state->d_log_weights,
         N, n_sat, sigma_pr);
     cudaGetLastError();
-
-    CUDA_CHECK(cudaFree(d_sat));
-    CUDA_CHECK(cudaFree(d_pr));
-    CUDA_CHECK(cudaFree(d_ws));
 }
 
 // ============================================================
@@ -498,13 +545,16 @@ double pf_device_ess(const PFDeviceState* state) {
     // d_partial_b -> partial_sum_w2
     // d_partial_c -> partial_max_lw
     size_t smem = 3 * BLOCK_SIZE * sizeof(double);
-    pfd_ess_kernel<<<grid, BLOCK_SIZE, smem>>>(
+    pfd_ess_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_log_weights,
         state->d_partial_a,   // sum_w
         state->d_partial_b,   // sum_w2
         state->d_partial_c,   // max_lw
         N);
     cudaGetLastError();
+
+    // Synchronize stream before reading results back
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
 
     // Copy partial results back (small: grid * 3 doubles)
     double* h_sum_w = new double[grid];
@@ -546,10 +596,11 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     int grid = state->grid_size;
 
     // Step 1: Find max log_weight using persistent buffers
-    pfd_find_max_kernel<<<grid, BLOCK_SIZE, BLOCK_SIZE * sizeof(double)>>>(
+    pfd_find_max_kernel<<<grid, BLOCK_SIZE, BLOCK_SIZE * sizeof(double), state->stream>>>(
         state->d_log_weights, state->d_partial_c, N);
     cudaGetLastError();
 
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
     double* h_block_max = new double[grid];
     CUDA_CHECK(cudaMemcpy(h_block_max, state->d_partial_c, grid * sizeof(double), cudaMemcpyDeviceToHost));
     double max_lw = h_block_max[0];
@@ -557,13 +608,14 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     delete[] h_block_max;
 
     // Step 2: exp(lw - max) into weights_norm
-    pfd_exp_shift_kernel<<<grid, BLOCK_SIZE>>>(
+    pfd_exp_shift_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_log_weights, state->d_weights_norm, max_lw, N);
 
     // Step 3: Compute sum of weights
-    pfd_sum_reduce_kernel<<<grid, BLOCK_SIZE, BLOCK_SIZE * sizeof(double)>>>(
+    pfd_sum_reduce_kernel<<<grid, BLOCK_SIZE, BLOCK_SIZE * sizeof(double), state->stream>>>(
         state->d_weights_norm, state->d_partial_b, N);
 
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
     double* h_block_sums = new double[grid];
     CUDA_CHECK(cudaMemcpy(h_block_sums, state->d_partial_b, grid * sizeof(double), cudaMemcpyDeviceToHost));
     double sum_w = 0;
@@ -571,10 +623,12 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     delete[] h_block_sums;
 
     // Step 4: Normalize weights
-    pfd_normalize_kernel<<<grid, BLOCK_SIZE>>>(
+    pfd_normalize_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_log_weights, state->d_weights_norm, max_lw, sum_w, N);
 
-    // Step 5: Inclusive scan (CDF) using thrust
+    // Step 5: Inclusive scan (CDF) using thrust on the stream
+    // Synchronize stream first since thrust uses default stream by default
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
     thrust::device_ptr<double> w_ptr(state->d_weights_norm);
     thrust::device_ptr<double> cdf_ptr(state->d_cdf);
     thrust::inclusive_scan(w_ptr, w_ptr + N, cdf_ptr);
@@ -583,7 +637,7 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     double u0 = (double)(seed % 1000000) / (double)(1000000 * N);
 
     // Step 7: Resample into tmp buffers
-    pfd_systematic_resample_kernel<<<grid, BLOCK_SIZE>>>(
+    pfd_systematic_resample_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_cdf,
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
         state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp, state->d_pcb_tmp,
@@ -597,7 +651,7 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     std::swap(state->d_pcb, state->d_pcb_tmp);
 
     // Step 9: Reset log weights to uniform
-    pfd_reset_weights_kernel<<<grid, BLOCK_SIZE>>>(state->d_log_weights, N);
+    pfd_reset_weights_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(state->d_log_weights, N);
     cudaGetLastError();
 }
 
@@ -615,7 +669,7 @@ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsign
 
     for (int iter = 0; iter < n_iterations; iter++) {
         int src_buf = iter % 2;
-        pfd_megopolis_kernel<<<grid, BLOCK_SIZE>>>(
+        pfd_megopolis_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
             state->d_px, state->d_py, state->d_pz, state->d_pcb,
             state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp, state->d_pcb_tmp,
             state->d_log_weights,
@@ -634,7 +688,7 @@ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsign
     }
 
     // Reset log weights to uniform
-    pfd_reset_weights_kernel<<<grid, BLOCK_SIZE>>>(state->d_log_weights, N);
+    pfd_reset_weights_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(state->d_log_weights, N);
     cudaGetLastError();
 }
 
@@ -647,7 +701,7 @@ void pf_device_estimate(const PFDeviceState* state, double* result) {
     int grid = state->grid_size;
 
     size_t smem = 6 * BLOCK_SIZE * sizeof(double);
-    pfd_estimate_kernel<<<grid, BLOCK_SIZE, smem>>>(
+    pfd_estimate_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
         state->d_log_weights,
         state->d_partial_a,   // [grid * 4] partial results
@@ -655,6 +709,9 @@ void pf_device_estimate(const PFDeviceState* state, double* result) {
         state->d_partial_c,   // [grid] max_lw
         N);
     cudaGetLastError();
+
+    // Synchronize stream before reading results back
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
 
     // Copy partial results back (small)
     double* h_partial = new double[grid * 4];
@@ -707,13 +764,23 @@ void pf_device_get_particles(const PFDeviceState* state, double* output) {
     CUDA_CHECK(cudaMalloc(&d_out, sz_out));
 
     int grid = state->grid_size;
-    pfd_get_particles_kernel<<<grid, BLOCK_SIZE>>>(
+    pfd_get_particles_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
         d_out, N);
     cudaGetLastError();
 
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
     CUDA_CHECK(cudaMemcpy(output, d_out, sz_out, cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaFree(d_out));
+}
+
+// ============================================================
+// Explicit synchronization
+// ============================================================
+
+void pf_device_sync(PFDeviceState* state) {
+    if (!state || !state->allocated) return;
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
 }
 
 }  // namespace gnss_gpu
