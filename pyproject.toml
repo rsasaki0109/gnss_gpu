@@ -1,0 +1,13 @@
+[build-system]
+requires = ["scikit-build-core", "pybind11"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "gnss_gpu"
+version = "0.0.1"
+description = "GPU-accelerated GNSS signal processing"
+requires-python = ">=3.8"
+license = {text = "Apache-2.0"}
+
+[project.optional-dependencies]
+dev = ["pytest"]
