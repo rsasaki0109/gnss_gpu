@@ -3,12 +3,14 @@ project(gnss_gpu LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 find_package(CUDAToolkit REQUIRED)
 find_package(pybind11 QUIET)
 
 add_library(gnss_gpu_core
-  src/dummy.cu
+  src/utils/coordinates.cu
+  src/positioning/wls.cu
 )
 target_include_directories(gnss_gpu_core PUBLIC include)
 target_link_libraries(gnss_gpu_core CUDA::cudart)
