@@ -48,6 +48,7 @@ class ParticleFilterDevice:
             pf_device_resample_megopolis,
             pf_device_estimate,
             pf_device_get_particles,
+            pf_device_sync,
         )
         self._pf_device_create = pf_device_create
         self._pf_device_destroy = pf_device_destroy
@@ -59,6 +60,7 @@ class ParticleFilterDevice:
         self._pf_device_resample_megopolis = pf_device_resample_megopolis
         self._pf_device_estimate = pf_device_estimate
         self._pf_device_get_particles = pf_device_get_particles
+        self._pf_device_sync = pf_device_sync
 
         self.n_particles = n_particles
         self.sigma_pos = sigma_pos
@@ -223,3 +225,14 @@ class ParticleFilterDevice:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
 
         return self._pf_device_ess(self._state)
+
+    def sync(self):
+        """Explicitly synchronize the CUDA stream.
+
+        Waits for all pending GPU operations (async transfers and kernel
+        launches) to complete. This is called automatically before any
+        D2H transfer (estimate, get_particles, get_ess), but can be
+        useful when benchmarking or coordinating with other GPU work.
+        """
+        if hasattr(self, '_state') and self._state is not None:
+            self._pf_device_sync(self._state)
