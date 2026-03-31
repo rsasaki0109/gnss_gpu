@@ -1,9 +1,8 @@
 # gnss_gpu Performance Benchmark Results
 
 **Date**: 2026-04-01
-**GPU**: NVIDIA GeForce RTX 4070 Ti SUPER 
+**GPU**: NVIDIA Ada Lovelace consumer GPU 
 **CUDA**: 12.0
-**Driver**: 580.126.09
 
 ## Summary
 
