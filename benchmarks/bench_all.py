@@ -204,6 +204,41 @@ def _run_skyplot_summary():
     return {"time_ms": mean_t * 1e3, "throughput": throughput, "label": "100x100 grid"}
 
 
+def _run_pf_device_summary():
+    """Run PF Device vs standard benchmark at 1M particles and return metrics."""
+    try:
+        from bench_pf_device import run_device_vs_standard_summary
+    except ImportError:
+        # Fallback: try adding benchmarks dir to sys.path
+        import os
+        bench_dir = os.path.dirname(os.path.abspath(__file__))
+        if bench_dir not in sys.path:
+            sys.path.insert(0, bench_dir)
+        try:
+            from bench_pf_device import run_device_vs_standard_summary
+        except ImportError:
+            return None
+
+    try:
+        data = run_device_vs_standard_summary(n_particles=1_000_000)
+    except Exception:
+        return None
+
+    if not data:
+        return None
+
+    # Prefer device result; fall back to standard
+    if "device" in data:
+        entry = data["device"]
+        if "standard" in data:
+            speedup = data["standard"]["time_ms"] / entry["time_ms"]
+            entry["label"] = f"1M parts (PFD {speedup:.1f}x)"
+        return entry
+    elif "standard" in data:
+        return data["standard"]
+    return None
+
+
 def _run_raytrace_summary():
     """Run raytrace benchmark at 1000 triangles, 8 sats and return key metric."""
     try:
@@ -315,6 +350,19 @@ def main():
         print()
 
         try:
+            from bench_pf_device import (
+                benchmark_device_vs_standard,
+                benchmark_pf_device_detailed,
+                benchmark_async_overlap,
+            )
+            benchmark_device_vs_standard()
+            benchmark_pf_device_detailed()
+            benchmark_async_overlap()
+        except Exception as e:
+            print(f"[PF Device detailed] SKIP: {e}")
+        print()
+
+        try:
             from bench_wls import benchmark_wls
             benchmark_wls()
         except Exception as e:
@@ -351,6 +399,7 @@ def main():
     benchmarks = [
         ("WLS Batch", _run_wls_summary, "epoch/s"),
         ("Particle Filter", _run_particle_filter_summary, "part/s"),
+        ("PF Device", _run_pf_device_summary, "part/s"),
         ("Signal Acquisition", _run_acquisition_summary, "PRN/s"),
         ("Vulnerability Map", _run_skyplot_summary, "pts/s"),
         ("Ray Tracing", _run_raytrace_summary, "checks/s"),
