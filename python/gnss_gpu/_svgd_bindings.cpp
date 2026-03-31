@@ -29,6 +29,10 @@ PYBIND11_MODULE(_gnss_gpu_svgd, m) {
                              double sigma_pr, double step_size,
                              int n_neighbors, double bandwidth,
                              unsigned long long seed, int step) {
+    {
+      auto bs = sat_ecef.request();
+      // sat_ecef: accept (N,3) or (N*3,) flat
+    }
     gnss_gpu::pf_svgd_step(
         static_cast<double*>(px.request().ptr),
         static_cast<double*>(py_arr.request().ptr),

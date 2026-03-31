@@ -16,7 +16,11 @@ PYBIND11_MODULE(_gnss_gpu_rtk, m) {
     auto brpr = rover_pr.request(), bbpr = base_pr.request();
     auto brcp = rover_carrier.request(), bbcp = base_carrier.request();
     auto bsat = sat_ecef.request();
+    if (bb.size < 3)
+      throw std::runtime_error("base_ecef must have at least 3 elements");
     int n_sat = brpr.size;
+    if (n_sat < 2)
+      throw std::runtime_error("rtk_float requires at least 2 satellites");
     int n_dd = n_sat - 1;
 
     auto result = py::array_t<double>({3}, {sizeof(double)});
@@ -46,6 +50,13 @@ PYBIND11_MODULE(_gnss_gpu_rtk, m) {
                                 double wavelength, int max_iter, double tol) {
     auto bb = base_ecef.request();
     auto brpr = rover_pr.request();
+    if (bb.size < 3)
+      throw std::runtime_error("base_ecef must have at least 3 elements");
+    if (brpr.ndim != 2)
+      throw std::runtime_error("rover_pr must be 2D array (n_epoch, n_sat)");
+    {
+      auto bsat = sat_ecef.request();
+    }
     int n_epoch = brpr.shape[0];
     int n_sat = brpr.shape[1];
     int n_dd = n_sat - 1;

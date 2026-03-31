@@ -4,6 +4,7 @@ from gnss_gpu.io.nmea import parse_nmea
 from gnss_gpu.io.citygml import parse_citygml
 from gnss_gpu.io.plateau import PlateauLoader, load_plateau
 from gnss_gpu.io.nmea_writer import NMEAWriter, positions_to_nmea, ecef_to_nmea
+from gnss_gpu.io.urbannav import UrbanNavLoader
 
 __all__ = [
     "read_rinex_obs",
@@ -16,4 +17,5 @@ __all__ = [
     "NMEAWriter",
     "positions_to_nmea",
     "ecef_to_nmea",
+    "UrbanNavLoader",
 ]
