@@ -12,8 +12,6 @@ PYBIND11_MODULE(_bvh, m) {
   // nodes_flat: [n_nodes, 10] (min[3], max[3], left, right, tri_start, tri_count)
   m.def("bvh_build", [](py::array_t<double> triangles) {
     auto btri = triangles.request();
-    if (btri.ndim != 3 || btri.shape[1] != 3 || btri.shape[2] != 3)
-      throw std::runtime_error("triangles must have shape [N, 3, 3]");
     int n_tri = (int)btri.shape[0];
 
     const gnss_gpu::Triangle* tris =
@@ -61,6 +59,9 @@ PYBIND11_MODULE(_bvh, m) {
     auto bsat = sat_ecef.request();
     auto bnodes = nodes_flat.request();
     auto btri = sorted_tris.request();
+
+    if (brx.size < 3)
+      throw std::runtime_error("rx_ecef must have at least 3 elements");
 
     int n_sat = (int)bsat.shape[0];
     int n_nodes = (int)bnodes.shape[0];
