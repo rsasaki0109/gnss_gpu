@@ -4,24 +4,41 @@
 
 namespace py = pybind11;
 
+// Custom destructor for PFDeviceState managed by pybind11.
+// When pybind11 deletes the Python wrapper, this frees GPU resources
+// and then deletes the C++ object, preventing double-free.
+struct PFDeviceStateDeleter {
+    void operator()(gnss_gpu::PFDeviceState* state) {
+        if (state) {
+            gnss_gpu::pf_device_destroy(state);
+        }
+    }
+};
+
 PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
     m.doc() = "GPU-accelerated Particle Filter with persistent device memory";
 
-    // Expose PFDeviceState as opaque Python type with destructor
-    py::class_<gnss_gpu::PFDeviceState>(m, "PFDeviceState",
+    // Expose PFDeviceState as opaque Python type with custom destructor.
+    // The custom holder ensures pf_device_destroy is called exactly once
+    // (either explicitly or when Python GC collects the object).
+    py::class_<gnss_gpu::PFDeviceState, std::unique_ptr<gnss_gpu::PFDeviceState, PFDeviceStateDeleter>>(m, "PFDeviceState",
         "Opaque handle to device-resident particle state. "
         "Memory lives on GPU between calls.")
         .def_readonly("n_particles", &gnss_gpu::PFDeviceState::n_particles)
         .def_readonly("allocated", &gnss_gpu::PFDeviceState::allocated);
 
     m.def("pf_device_create", [](int n_particles) {
-        return gnss_gpu::pf_device_create(n_particles);
-    }, py::return_value_policy::take_ownership,
-       "Allocate persistent GPU memory for particle state",
+        return std::unique_ptr<gnss_gpu::PFDeviceState, PFDeviceStateDeleter>(
+            gnss_gpu::pf_device_create(n_particles), PFDeviceStateDeleter());
+    }, "Allocate persistent GPU memory for particle state",
        py::arg("n_particles"));
 
     m.def("pf_device_destroy", [](gnss_gpu::PFDeviceState* state) {
-        gnss_gpu::pf_device_destroy(state);
+        // Only free GPU resources; pybind11 still owns the pointer via unique_ptr.
+        // Mark as deallocated so the destructor won't double-free GPU memory.
+        if (state && state->allocated) {
+            gnss_gpu::pf_device_destroy_resources(state);
+        }
     }, "Free all GPU memory for particle state",
        py::arg("state"));
 

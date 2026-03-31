@@ -76,9 +76,11 @@ class ParticleFilterDevice:
         self._step = 0
 
     def __del__(self):
-        if hasattr(self, '_state') and self._state is not None:
-            self._pf_device_destroy(self._state)
-            self._state = None
+        # GPU resources are freed automatically by the pybind11 unique_ptr
+        # custom deleter when the Python object is garbage collected.
+        # Explicitly calling pf_device_destroy here would cause a double-free
+        # since pybind11 already manages the lifetime.
+        pass
 
     def initialize(self, position_ecef, clock_bias=0.0, spread_pos=100.0,
                    spread_cb=1000.0):
