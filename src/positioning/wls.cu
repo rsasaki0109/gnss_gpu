@@ -1,5 +1,6 @@
 #include "gnss_gpu/positioning.h"
 #include "gnss_gpu/coordinates.h"
+#include "gnss_gpu/cuda_check.h"
 #include <cmath>
 #include <cstring>
 
@@ -9,6 +10,12 @@ namespace gnss_gpu {
 int wls_position(const double* sat_ecef, const double* pseudoranges,
                  const double* weights, double* result,
                  int n_sat, int max_iter, double tol) {
+  // Need at least 4 satellites for 3D position + clock bias
+  if (n_sat < 4) {
+    result[0] = 0; result[1] = 0; result[2] = 0; result[3] = 0;
+    return -1;
+  }
+
   // Initial guess using Bancroft-like approximation
   // Use first satellite direction, project to Earth surface (~6371 km)
   double cx = 0, cy = 0, cz = 0;
@@ -19,6 +26,11 @@ int wls_position(const double* sat_ecef, const double* pseudoranges,
   }
   cx /= n_sat; cy /= n_sat; cz /= n_sat;
   double cn = sqrt(cx * cx + cy * cy + cz * cz);
+  // Guard against degenerate satellite geometry (centroid at origin)
+  if (cn < 1e-6) {
+    result[0] = 0; result[1] = 0; result[2] = 0; result[3] = 0;
+    return -1;
+  }
   // Project centroid direction onto Earth surface
   double scale = WGS84_A / cn;  // ~6378 km / ~26000 km
   double x = cx * scale, y = cy * scale, z = cz * scale;
@@ -69,6 +81,7 @@ int wls_position(const double* sat_ecef, const double* pseudoranges,
       A[a][4] = HTWdy[a];
     }
 
+    bool singular = false;
     for (int col = 0; col < 4; col++) {
       // Partial pivoting
       int max_row = col;
@@ -78,11 +91,16 @@ int wls_position(const double* sat_ecef, const double* pseudoranges,
       for (int k = 0; k < 5; k++) {
         double tmp = A[col][k]; A[col][k] = A[max_row][k]; A[max_row][k] = tmp;
       }
-      if (fabs(A[col][col]) < 1e-15) continue;
+      if (fabs(A[col][col]) < 1e-15) { singular = true; break; }
       for (int row = col + 1; row < 4; row++) {
         double factor = A[row][col] / A[col][col];
         for (int k = col; k < 5; k++) A[row][k] -= factor * A[col][k];
       }
+    }
+    if (singular) {
+      // Matrix is singular; return current best estimate
+      result[0] = x; result[1] = y; result[2] = z; result[3] = cb;
+      return iter;
     }
     double delta[4] = {};
     for (int row = 3; row >= 0; row--) {
@@ -213,28 +231,29 @@ void wls_batch(const double* sat_ecef, const double* pseudoranges,
   double *d_sat, *d_pr, *d_w, *d_res;
   int *d_it = nullptr;
 
-  cudaMalloc(&d_sat, sz_sat);
-  cudaMalloc(&d_pr, sz_pr);
-  cudaMalloc(&d_w, sz_pr);
-  cudaMalloc(&d_res, sz_res);
-  if (iters) cudaMalloc(&d_it, sz_it);
+  CUDA_CHECK(cudaMalloc(&d_sat, sz_sat));
+  CUDA_CHECK(cudaMalloc(&d_pr, sz_pr));
+  CUDA_CHECK(cudaMalloc(&d_w, sz_pr));
+  CUDA_CHECK(cudaMalloc(&d_res, sz_res));
+  if (iters) CUDA_CHECK(cudaMalloc(&d_it, sz_it));
 
-  cudaMemcpy(d_sat, sat_ecef, sz_sat, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_pr, pseudoranges, sz_pr, cudaMemcpyHostToDevice);
-  cudaMemcpy(d_w, weights, sz_pr, cudaMemcpyHostToDevice);
+  CUDA_CHECK(cudaMemcpy(d_sat, sat_ecef, sz_sat, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_pr, pseudoranges, sz_pr, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_w, weights, sz_pr, cudaMemcpyHostToDevice));
 
   int block = 256;
   int grid = (n_epoch + block - 1) / block;
   wls_batch_kernel<<<grid, block>>>(d_sat, d_pr, d_w, d_res, d_it,
                                      n_epoch, n_sat, max_iter, tol);
+  CUDA_CHECK_LAST();
 
-  cudaMemcpy(results, d_res, sz_res, cudaMemcpyDeviceToHost);
+  CUDA_CHECK(cudaMemcpy(results, d_res, sz_res, cudaMemcpyDeviceToHost));
   if (iters) {
-    cudaMemcpy(iters, d_it, sz_it, cudaMemcpyDeviceToHost);
-    cudaFree(d_it);
+    CUDA_CHECK(cudaMemcpy(iters, d_it, sz_it, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaFree(d_it));
   }
 
-  cudaFree(d_sat); cudaFree(d_pr); cudaFree(d_w); cudaFree(d_res);
+  CUDA_CHECK(cudaFree(d_sat)); CUDA_CHECK(cudaFree(d_pr));
 }
 
 }  // namespace gnss_gpu
