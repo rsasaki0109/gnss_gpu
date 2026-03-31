@@ -1,9 +1,8 @@
 # gnss_gpu Performance Benchmark Results
 
 **Date**: 2026-04-01
-**GPU**: NVIDIA GeForce GPU (16GB VRAM)
+**GPU**: generic GPU (16GB VRAM)
 **CUDA**: 12.0
-**Driver**: 580.126.09
 
 ## Summary
 
