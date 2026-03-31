@@ -1,617 +1,508 @@
-# gnss_gpu 開発計画・Codex引き継ぎドキュメント
+# gnss_gpu 完全引き継ぎドキュメント（Codex向け）
 
-**最終更新**: 2026-04-01
-**ステータス**: コア実装完了 → 論文化フェーズへ移行
-
----
-
-## 目次
-
-1. [プロジェクト現状サマリー](#1-プロジェクト現状サマリー)
-2. [実装完了モジュール一覧](#2-実装完了モジュール一覧)
-3. [テスト・検証状況](#3-テスト検証状況)
-4. [既知の問題・技術的負債](#4-既知の問題技術的負債)
-5. [論文計画](#5-論文計画)
-6. [次のアクション（優先度順）](#6-次のアクション優先度順)
-7. [実データ実験計画](#7-実データ実験計画)
-8. [コードベースガイド](#8-コードベースガイド)
-9. [ビルド・テスト手順](#9-ビルドテスト手順)
-10. [設計判断の記録](#10-設計判断の記録)
+**最終更新**: 2026-04-01 21:00 JST
+**ステータス**: コア実装完了（399テストpass）→ 論文化フェーズへ移行
+**前任**: Claude Opus 4.6 (1Mコンテキスト)
+**引き継ぎ先**: Codex
 
 ---
 
-## 1. プロジェクト現状サマリー
+## 重要: まず読むべきファイル
 
-### 一言で
-MegaParticles (Koide, ICRA 2024) のGPU大規模PF+SVGDをGNSS測位に世界初適用するライブラリ。3D都市モデル(PLATEAU)からのリアルタイムレイトレースをPF尤度に統合。コア実装は完了、**論文化に必要な実データ実験が未着手**。
+1. `docs/design.md` — アーキテクチャ、研究動機、新規性分析
+2. この `docs/plan.md` — 現状、問題、次のアクション
+3. `README.md` — プロジェクト概要
+4. `benchmarks/RESULTS.md` — 性能ベンチマーク結果
 
-### 数値で
+---
+
+## 1. プロジェクト現状
+
+### 1.1 数値サマリー
 
 | 指標 | 値 |
 |------|-----|
-| テスト数 | 359 passed, 0 failed, 7 skipped |
-| ファイル数 | 155+ |
-| コード行数 | ~30,000 |
-| CUDAモジュール | 20+ (.cu files) |
-| Python モジュール | 25+ (.py files) |
-| pybind11 バインディング | 15+ (.cpp files) |
-| コミット数 | 12 (main branch) |
+| テスト | **399 passed**, 2 failed, 7 skipped |
+| CUDAファイル | 23 (.cu) |
+| Pythonファイル | 88 (.py) |
+| pybind11 bindings | 20 (.cpp) |
+| コミット | 11 (main) |
 | ベンチマーク | 1M particles @ 12Hz, WLS @ 9.6M epoch/s |
 | 検証 | gnss_lib_py (Stanford) 比較済み、31衛星サブnm精度 |
 
-### gitログ
+### 1.2 残り2件のテスト失敗
+
 ```
-a71fec6 Remove GPU model references from docs and benchmarks
-XXXXXXX Update design.md with full architecture, research analysis, and paper plan
-XXXXXXX Fix pf_device crashes, add real-data demos and benchmarks
-XXXXXXX Add verification tests against gnss_lib_py (Stanford NavLab)
-XXXXXXX Fix cycle slip test thresholds and pseudorange noise levels
-XXXXXXX Add cycle slip, RAIM, Doppler, SBAS/QZSS, BVH, CUDA streams, pip support
-XXXXXXX Add full GPU-accelerated GNSS processing library
-XXXXXXX Add Phase 1: WLS positioning, coordinate utils, RINEX/NMEA parsers
-XXXXXXX Initial project structure with CUDA + Python bindings
-XXXXXXX Initial commit
+FAILED tests/test_multi_gnss.py::TestMultiGNSSCPU::test_insufficient_satellites
+FAILED tests/test_raim.py::test_raim_insufficient_satellites
 ```
 
----
+**原因**: 衛星不足（n_sat < 4）のエッジケーステスト。`wls_position`のC++側は`n_sat < 4`で`-1`を返すが、テストがPython CPU fallback経由で呼ばれている場合に例外の種類が不一致。
 
-## 2. 実装完了モジュール一覧
+**修正方法**: テストファイルを確認し、`pytest.raises(RuntimeError)` or `pytest.raises(ValueError)` のどちらが来るか確認して合わせる。簡単な修正。
 
-### 2.1 測位エンジン
+### 1.3 skipped 7件の内訳
 
-| モジュール | CUDA | Python | Bindings | テスト | 状態 |
-|-----------|------|--------|----------|-------|------|
-| WLS Batch | `src/positioning/wls.cu` | `_bindings.cpp` | ✅ | ✅ | 完成・検証済み |
-| EKF | `src/ekf/ekf.cu` | `ekf.py` | ✅ | ✅ | 完成（GPU bindingsにstate copy問題あり→CPU fallback使用中） |
-| RTK + LAMBDA | `src/rtk/rtk.cu` | `rtk.py` | ✅ | ✅ | 完成（Schnorr-Euchner探索実装済み） |
-| Multi-GNSS ISB | `src/positioning/multi_gnss.cu` | `multi_gnss.py` | ✅ | ✅ | 完成 |
-| Doppler速度 | `src/doppler/doppler.cu` | `doppler.py` | ✅ | ✅ | 完成 |
-| RAIM/FDE | `src/raim/raim.cu` | `raim.py` | ✅ | ✅ | 完成 |
-
-### 2.2 パーティクルフィルタ（コア研究対象）
-
-| モジュール | ファイル | 状態 | 備考 |
-|-----------|---------|------|------|
-| Predict | `predict.cu` | ✅ 完成 | cuRAND Philox、定速モデル |
-| Weight | `weight.cu` | ✅ 完成 | shared memory衛星データ、log-space |
-| Weight 3D | `weight_3d.cu` | ✅ 完成 | **論文の核心**：Möller-Trumboreレイトレース統合尤度 |
-| Resampling | `resampling.cu` | ✅ 完成 | Systematic + Megopolis（double-buffer） |
-| SVGD | `svgd.cu` | ✅ 完成 | K=32ランダム近傍、common-mode除去 |
-| PF Device | `pf_device.cu` | ✅ 完成 | GPU常駐メモリ + CUDA Streams + pinned memory |
-
-### 2.3 信号処理
-
-| モジュール | ファイル | 状態 | 備考 |
-|-----------|---------|------|------|
-| Acquisition | `acquisition.cu` | ✅ 完成 | cuFFT、PRN 1-32 C/Aコード |
-| Tracking | `tracking.cu` | ✅ 完成 | GPU correlator + DLL/PLL + VTL EKF、正規C/Aコード（constant memory） |
-| Interference | `interference.cu` | ✅ 完成 | STFT + ノッチフィルタ除去 |
-
-### 2.4 都市環境
-
-| モジュール | ファイル | 状態 | 備考 |
-|-----------|---------|------|------|
-| Ray Tracing | `raytrace.cu` | ✅ 完成 | Möller-Trumbore、2フェーズmultipath（race condition修正済み） |
-| BVH | `bvh.cu` | ✅ 完成 | SAH構築 + GPU スタックトラバーサル |
-| Multipath Sim | `multipath.cu` | ✅ 完成 | DLLエラーモデル |
-| Vulnerability Map | `skyplot.cu` | ✅ 完成 | DOP並列計算 |
-
-### 2.5 補正・品質管理
-
-| モジュール | ファイル | 状態 |
-|-----------|---------|------|
-| Ephemeris | `ephemeris.cu` | ✅ 完成（IS-GPS-200、31衛星サブnm検証） |
-| Atmosphere | `atmosphere.cu` | ✅ 完成（Saastamoinen + Klobuchar） |
-| SBAS/QZSS | `sbas.py` (Python) | ✅ 完成 |
-| Cycle Slip | `cycle_slip.py` (Python) | ✅ 完成 |
-
-### 2.6 I/O
-
-| モジュール | ファイル | 状態 |
-|-----------|---------|------|
-| RINEX OBS | `io/rinex.py` | ✅ 完成 |
-| RINEX NAV | `io/nav_rinex.py` | ✅ 完成 |
-| NMEA R/W | `io/nmea.py`, `nmea_writer.py` | ✅ 完成 |
-| PLATEAU CityGML | `io/plateau.py`, `citygml.py` | ✅ 完成 |
-
-### 2.7 統合・インフラ
-
-| モジュール | 状態 | 備考 |
-|-----------|------|------|
-| ROS2 Node | ✅ 完成 | NavSatFix, PointCloud2 |
-| Visualization | ✅ 完成 | matplotlib 9関数 + plotly 3関数 |
-| CI/CD | ✅ 完成 | GitHub Actions (Python test, CUDA build, lint) |
-| pip install | ✅ 完成 | scikit-build-core |
-| CUDA_CHECK | ✅ 完成 | 全.cuファイルにthrow-on-errorマクロ適用 |
-| Benchmarks | ✅ 完成 | 6ベンチマーク + RESULTS.md |
-
----
-
-## 3. テスト・検証状況
-
-### 3.1 テスト概要
-```
-359 passed, 0 failed, 7 skipped
-```
-
-**skipped の内訳**:
-- 2件: mpl_toolkits.mplot3d 環境依存（matplotlib 3D投影がこの環境で壊れている）
-- 5件: SVGD large-scale テスト（`@pytest.mark.slow` — 実行に時間がかかる）
-
-### 3.2 gnss_lib_py (Stanford NavLab) 比較検証
-
-`tests/test_verification.py` に24件の比較テスト:
-
-| 項目 | 比較結果 |
-|------|---------|
-| GPS定数 | 完全一致 |
-| ECEF ↔ LLA | < 1e-5° |
-| WLS測位 | < 0.01m |
-| DOP | < 10% |
-| 対流圏遅延 | 妥当（~2.3m @ zenith） |
-| 電離層遅延 | 昼 > 夜（正の遅延） |
-| C/Aコード | IS-GPS-200完全一致 |
-| Multi-GNSS ISB | 15m注入 → < 1m誤差で復元 |
-
-### 3.3 実ブロードキャストエフェメリス検証
-
-- **データ**: 2024-01-15 GPS broadcast NAV (`brdc0150.24n`, `/tmp/gnss_eph/`にダウンロード済み)
-- **検証衛星**: 31/31
-- **平均誤差**: 0.020 nm
-- **最大誤差**: 0.056 nm
-- **結論**: IS-GPS-200参照計算とサブナノメートルで一致
-
-### 3.4 未検証事項（論文化のブロッカー）
-
-- ❌ **実GNSSデータでの測位精度評価**（合成データのみ）
-- ❌ **実都市環境でのPF3D vs WLS/EKF比較**
-- ❌ **UrbanNavデータセットでの評価**
-- ❌ **Jetson Orinでのベンチマーク**
-
----
-
-## 4. 既知の問題・技術的負債
-
-### 4.1 Critical（論文前に修正すべき）
-
-| # | 問題 | 影響 | 対策 |
-|---|------|------|------|
-| C1 | `predict.cu`/`weight.cu`/`resampling.cu`の毎回cudaMalloc/Free | 性能劣化（81ms中の大半が転送オーバーヘッド） | `ParticleFilterDevice`（pf_device.cu）を使用すれば解消。論文ではDevice版の性能を報告すべき |
-| C2 | `weight_3d.cu`の三角形線形探索 | 大規模メッシュで遅い | `bvh.cu`のBVH版weight_3dカーネルが未実装。bvh.cuのlos_checkは実装済みなので、weight_3dにBVHトラバーサルを統合する必要あり |
-| C3 | EKF GPU bindings のstate copy問題 | GPU EKFが使えない（CPU fallbackで動作中） | pybind11のEKFState holder typeを修正（py::array_tのコンストラクタ問題は修正済みだが、EKFState構造体の値コピーが不完全）。`_HAS_NATIVE = False`で回避中 |
-
-### 4.2 Important（品質向上）
-
-| # | 問題 | 影響 |
-|---|------|------|
-| I1 | pybind11全bindings: 入力配列のshapeバリデーションなし | 不正shapeでセグフォの可能性 |
-| I2 | 高緯度でのECEF→LLA数値不安定（cos(lat)→0） | 極付近で高度計算が発散 |
-| I3 | tracking.cuのVTL: 衛星16機超でS行列オーバーフロー | n_locked > 16でinvert_matrixが拒否 |
-| I4 | RTK solve_fixed: ambiguity共分散が単位行列ハードコード | LAMBDA結果が不正確 |
-| I5 | スレッドセーフティなし | ROS2マルチスレッドで問題 |
-
-### 4.3 Minor（改善推奨）
-
-| # | 問題 |
-|---|------|
-| M1 | 一部.cuファイルでCUDA_CHECK適用がsed由来で不完全な箇所あり（手動修正で対応済みだが網羅性要確認） |
-| M2 | `multipath.cu`のFresnel係数が定数0.5（入射角依存なし） |
-| M3 | `io/rinex.py`で`import re`が未使用 |
-| M4 | デモスクリプトの一時ファイルが削除されない |
-
-### 4.4 pybind11 py::array_t問題（解決済み・記録用）
-
-**発見した重大バグ**: `py::array_t<double>(n)`（int変数を渡す）が意図しないオーバーロードにマッチし、配列の全要素が[0]の値になる。
-
-**修正**: 全bindings（8ファイル）で `py::array_t<double>(std::vector<ssize_t>{n})` に統一。EKFの`get_state()`/`get_covariance()`も`request().ptr`でmemcpyに変更。
-
-**影響範囲**: `_multi_gnss_bindings.cpp`, `_ekf_bindings.cpp`, `_rtk_bindings.cpp`, `_skyplot_bindings.cpp`, `_ephemeris_bindings.cpp`, `_interference_bindings.cpp`, `_multipath_bindings.cpp`, `_raytrace_bindings.cpp`, `_tracking_bindings.cpp`
-
----
-
-## 5. 論文計画
-
-### 5.1 ターゲット
-
-**Title**: "GPU-Accelerated Mega-Particle Filter with Real-Time 3D Ray Tracing for Robust Urban GNSS Positioning"
-
-**ターゲット会議**:
-- **第一候補**: IROS 2027 (締切 2027年3月頃)
-- **第二候補**: ION GNSS+ 2026 (締切 2026年6月頃)
-- **ジャーナル**: IEEE RA-L (随時投稿可)
-
-### 5.2 新規性（2026年3月時点の網羅的サーベイに基づく）
-
-**5つの「世界初」**:
-
-| # | 世界初の主張 | 根拠 |
-|---|------------|------|
-| 1 | GPU PF × GNSS | GPUパーティクルフィルタのGNSS適用は皆無（LiDARのみ） |
-| 2 | SVGD × GNSS | SVGDのGNSS測位適用は皆無 |
-| 3 | 100万パーティクル × GNSS | メガスケールPFはLiDARのみ（Koide ICRA2024） |
-| 4 | PLATEAU × GNSS | PLATEAUの3D都市モデルのGNSS測位利用なし |
-| 5 | GPU Ray Tracing × GNSS PF尤度 | GPUレイトレースとPF尤度の統合なし |
-
-**論文で主張する3本柱**:
-1. GNSS初の100万パーティクルGPUフィルタ（12Hz、消費者向けGPU）
-2. PF尤度関数内リアルタイム3Dレイトレース（NLOS-awareヘテロジニアスガウシアン尤度）
-3. SVGDのGNSSスコア関数導出（クロックバイアスcommon-mode除去）
-
-### 5.3 競合研究（最新）
-
-| 研究 | 会議/年 | 手法 | 限界 |
-|------|---------|------|------|
-| MegaParticles (Koide) | ICRA 2024 | GPU SVGD PF, LiDAR | GNSSなし |
-| Nakao et al. | ICRA 2025 | GPU PF SLAM | GNSSなし |
-| Suzuki | ICRA 2024 | Multiple Update PF, GNSS | CPU, 2K particles |
-| Suzuki & Kubo | ION 2016 | 3D model + PF, GNSS | CPU, レイトレース遅い |
-| Groves (UCL) | 複数 | Shadow Matching | グリッドベース, CPUのみ |
-| Hsu & Wen (PolyU) | T-ITS 2021 | Factor Graph + 3DMA | CPUのみ |
-| Neamati (Stanford) | ION GNSS+ 2024 | Neural City Maps | NeRFベース, 計算コスト大 |
-| Ketzler (TU Munich) | 2026 | Zonotope Shadow/Reflection | 集合ベース, 確率的表現なし |
-| DL系 (多数) | 2024-2025 | Graph Transformer, CNN等 | 学習データ依存 |
-
-### 5.4 想定レビュアー懸念と対策
-
-| 懸念 | 対策 |
+| 件数 | 理由 |
 |------|------|
-| 「MegaParticlesの単純適用」 | GNSS固有: クロックバイアス状態空間、3Dレイトレース統合尤度、SVGDスコア関数のcommon-mode除去を強調 |
-| 「3Dモデルに依存しすぎ」 | PLATEAUで日本全国LOD2が無料、LOD精度の感度分析を含める、モデルなしでも標準PFとして動作 |
-| 「計算コスト大」 | 消費者GPUで12Hz、Jetsonベンチ追加、ParticleFilterDeviceで5-10ms見込み |
-| 「実データ不足」 | UrbanNav + 自前収集で3都市5走行以上 |
-| 「DLに劣る」 | DLは学習データ依存・汎化問題。PFはモデルベースで環境変化にロバスト。相補的 |
+| 2 | mpl_toolkits.mplot3d 環境依存（matplotlib 3D投影が壊れている） |
+| 5 | SVGD large-scale テスト（`@pytest.mark.slow`） |
 
 ---
 
-## 6. 次のアクション（優先度順）
-
-### P0: 論文化ブロッカー（実データ実験）
-
-#### 6.1 UrbanNavデータセットのダウンロードと評価
-- **URL**: https://github.com/weisongwen/UrbanNavDataset
-- **対象**: Tokyo/Hong Kong の都市走行データ
-- **やること**:
-  1. データローダー実装（`python/gnss_gpu/io/urbannav.py`）
-  2. WLS/EKFベースライン評価
-  3. GPU-PF（3Dモデルなし）評価
-  4. GPU-PF（3Dモデルあり）評価
-- **出力**: CDF曲線、エポック別誤差、統計量
-
-#### 6.2 自前データ収集
-- **機材**: u-blox F9P (or ZED-F9R) + RTK基準局
-- **場所**: 東京都市部3コース（新宿/渋谷/丸の内）
-- **走行**: 各コース3回以上
-- **真値**: RTK-fixed解（基準局から1km以内）
-
-#### 6.3 PLATEAUモデル取得
-- **URL**: https://www.geospatial.jp/ckan/dataset?q=plateau
-- **対象**: UrbanNav/自前収集エリアのLOD2建物モデル
-- **処理**: CityGML → BuildingModel → weight_3d.cu用三角形メッシュ
-
-### P1: 実験基盤整備
-
-#### 6.4 BVH統合weight_3dカーネル
-- **現状**: `weight_3d.cu`はO(n_tri)線形探索。`bvh.cu`のLOS checkは別モジュール
-- **やること**: `weight_3d_bvh.cu`を作成。BVHトラバーサルをweight計算内に統合
-- **理由**: PLATEAU LOD2の三角形数が数万〜数十万になるため必須
-
-#### 6.5 ParticleFilterDeviceのベンチマーク
-- **現状**: `pf_device.cu`は完成・テスト通過。ベンチマーク未実施
-- **やること**: `benchmarks/bench_pf_device.py`を作成。標準PFとの性能比較
-- **期待**: 81ms → 5-10ms（H2D/D2H削減効果）
-
-#### 6.6 Jetson Orinベンチマーク
-- **理由**: 消費者GPUだけでなくエッジデバイスでのリアルタイム性を論文で主張
-- **やること**: Jetson Orin NX/Nanoでの全ベンチマーク実行
-
-### P2: アブレーション実験
-
-#### 6.7 パーティクル数スケーリング
-- 1K, 10K, 100K, 500K, 1M → 精度 vs 計算時間のパレートフロント
-- 実データ上で実施
-
-#### 6.8 3Dモデル有無比較
-- `weight.cu`（標準尤度）vs `weight_3d.cu`（3D-aware尤度）
-- NLOS環境での精度差を定量化
-
-#### 6.9 SVGD vs リサンプリング比較
-- SVGD vs Megopolis vs Systematic
-- マルチモーダル環境でのモード捕捉能力
-- 少パーティクル数での効率比較
-
-#### 6.10 NLOS尤度パラメータ感度
-- sigma_los: 1, 3, 5, 10 m
-- sigma_nlos: 10, 20, 30, 50 m
-- nlos_bias: 5, 10, 20, 40 m
-- グリッドサーチ → 最適パラメータ報告
-
-### P3: 論文執筆
-
-#### 6.11 論文構成（案）
-```
-I.   Introduction
-     - Urban GNSS multipath problem
-     - Particle filters for non-Gaussian GNSS
-     - GPU acceleration for mega-scale particles
-II.  Related Work
-     - GNSS particle filters (Suzuki)
-     - 3D model GNSS (Shadow matching, FGO)
-     - GPU particle filters (MegaParticles)
-III. Proposed Method
-     A. GPU Mega-Particle Filter for GNSS
-        - State space, motion model, pseudorange likelihood
-     B. 3D Ray Tracing Integrated Likelihood
-        - NLOS-aware heterogeneous Gaussian
-        - BVH-accelerated Möller-Trumbore
-     C. SVGD for GNSS
-        - Score function derivation
-        - Clock bias common-mode removal
-IV.  Implementation
-     - CUDA kernel design (SoA, shared memory, log-space)
-     - CUDA Streams + persistent device memory
-V.   Experiments
-     A. Datasets: UrbanNav + self-collected
-     B. Baselines: WLS, EKF, CPU-PF, Shadow Matching
-     C. Results: accuracy, real-time performance, ablation
-VI.  Conclusion
-```
-
----
-
-## 7. 実データ実験計画
-
-### 7.1 データセット
-
-| データセット | 場所 | 取得方法 | 3Dモデル | 備考 |
-|------------|------|---------|---------|------|
-| UrbanNav | Hong Kong TST | ダウンロード | OSM/Google 3D | 公開、即利用可 |
-| UrbanNav | Tokyo | ダウンロード | PLATEAU LOD2 | 公開、即利用可 |
-| 自前収集 | 新宿 | u-blox F9P | PLATEAU LOD2 | RTK真値必要 |
-| 自前収集 | 渋谷 | u-blox F9P | PLATEAU LOD2 | RTK真値必要 |
-| 自前収集 | 丸の内 | u-blox F9P | PLATEAU LOD2 | RTK真値必要 |
-| Google SDC | 米国各地 | ダウンロード | なし | スマホデータ |
-
-### 7.2 UrbanNavデータローダー（実装予定）
-
-```python
-# python/gnss_gpu/io/urbannav.py
-
-class UrbanNavLoader:
-    def __init__(self, data_dir):
-        """Load UrbanNav dataset from directory."""
-        ...
-
-    def load_gnss(self):
-        """Load GNSS observations (pseudoranges, carrier phase, Doppler)."""
-        ...
-
-    def load_ground_truth(self):
-        """Load RTK ground truth trajectory."""
-        ...
-
-    def load_imu(self):
-        """Load IMU data (optional, for comparison)."""
-        ...
-
-    def epochs(self):
-        """Iterator over synchronized GNSS+truth epochs."""
-        ...
-```
-
-### 7.3 実験スクリプト構成（実装予定）
+## 2. 全ファイル構成
 
 ```
-experiments/
-├── exp_urbannav_baseline.py     ← WLS/EKF/RTKLIBベースライン
-├── exp_urbannav_pf.py           ← GPU-PF (3Dモデルなし)
-├── exp_urbannav_pf3d.py         ← GPU-PF (3Dモデルあり)
-├── exp_ablation_particles.py    ← パーティクル数スケーリング
-├── exp_ablation_3d.py           ← 3Dモデル有無
-├── exp_ablation_svgd.py         ← SVGD vs リサンプリング
-├── exp_ablation_nlos_params.py  ← NLOS尤度パラメータ
-├── exp_benchmark_jetson.py      ← Jetson Orinベンチマーク
-└── results/                     ← 結果CSV/図/テーブル
-```
-
-### 7.4 評価指標
-
-```python
-def evaluate(estimated_positions, ground_truth):
-    """Compute all evaluation metrics."""
-    errors_2d = np.sqrt((est[:, 0] - gt[:, 0])**2 + (est[:, 1] - gt[:, 1])**2)
-    errors_3d = np.linalg.norm(est - gt, axis=1)
-
-    return {
-        'rms_2d': np.sqrt(np.mean(errors_2d**2)),
-        'rms_3d': np.sqrt(np.mean(errors_3d**2)),
-        'mean_2d': np.mean(errors_2d),
-        'std_2d': np.std(errors_2d),
-        'p50': np.percentile(errors_2d, 50),
-        'p67': np.percentile(errors_2d, 67),
-        'p95': np.percentile(errors_2d, 95),
-        'max': np.max(errors_2d),
-        'cdf': np.sort(errors_2d),  # for CDF curve
-    }
+gnss_gpu/
+├── CMakeLists.txt                 ← ビルド設定（23 CUDAライブラリ + 20 pybind11モジュール）
+├── pyproject.toml                 ← scikit-build-core, pip install .
+├── README.md                      ← プロジェクト概要（英語）
+├── LICENSE                        ← Apache-2.0
+├── MANIFEST.in
+├── .github/workflows/ci.yml      ← GitHub Actions CI
+│
+├── docs/
+│   ├── design.md                  ← 設計書・研究分析（441行）
+│   └── plan.md                    ← 本文書
+│
+├── include/gnss_gpu/              ← C++ヘッダ（17ファイル）
+│   ├── cuda_check.h               ← CUDA_CHECK / CUDA_CHECK_LAST マクロ（throw on error）
+│   ├── coordinates.h              ← WGS84定数、ECEF↔LLA、satellite_azel
+│   ├── positioning.h              ← wls_position, wls_batch
+│   ├── ekf.h                      ← EKFState, EKFConfig, ekf_initialize/predict/update/batch
+│   ├── rtk.h                      ← rtk_float, rtk_float_batch, lambda_integer
+│   ├── multi_gnss.h               ← wls_multi_gnss, wls_multi_gnss_batch
+│   ├── doppler.h                  ← doppler_velocity, doppler_velocity_batch
+│   ├── raim.h                     ← RAIMResult, raim_check, raim_fde
+│   ├── particle_filter.h          ← pf_initialize/predict/weight/ess/resample/estimate
+│   ├── pf_3d.h                    ← pf_weight_3d（レイトレース統合尤度）
+│   ├── pf_3d_bvh.h                ← pf_weight_3d_bvh（BVH加速版）
+│   ├── pf_device.h                ← PFDeviceState（GPU常駐メモリ + CUDA Streams）
+│   ├── svgd.h                     ← pf_svgd_step, pf_estimate_bandwidth
+│   ├── raytrace.h                 ← Triangle, raytrace_los_check, raytrace_multipath
+│   ├── bvh.h                      ← AABB, BVHNode, bvh_build, raytrace_los_check_bvh
+│   ├── multipath.h                ← simulate_multipath, apply_multipath_error
+│   ├── skyplot.h                  ← GridQuality, compute_grid_quality, compute_sky_visibility
+│   ├── acquisition.h              ← AcquisitionResult, generate_ca_code, acquire_parallel
+│   ├── tracking.h                 ← ChannelState, TrackingConfig, batch_correlate, VTL
+│   ├── interference.h             ← InterferenceType, compute_stft, detect/excise_interference
+│   ├── ephemeris.h                ← EphemerisParams, compute_satellite_position/_batch
+│   └── atmosphere.h               ← tropo_saastamoinen, iono_klobuchar, _batch versions
+│
+├── src/                           ← CUDAソース（23ファイル）
+│   ├── positioning/wls.cu         ← n_sat<4ガード済み、ゼロ除算ガード済み
+│   ├── positioning/multi_gnss.cu  ← ISB推定WLS、MAX_STATE=8
+│   ├── ekf/ekf.cu                ← 8状態EKF、mat8ヘルパー、GPU batchカーネル
+│   ├── rtk/rtk.cu                ← DD RTK + Schnorr-Euchner LAMBDA
+│   ├── doppler/doppler.cu        ← ドップラー速度WLS
+│   ├── raim/raim.cu              ← χ²検定 + FDE、gnss_gpu_coreにリンク
+│   ├── particle_filter/
+│   │   ├── predict.cu             ← cuRAND Philox、定速モデル
+│   │   ├── weight.cu              ← shared memory衛星、log-space尤度
+│   │   ├── weight_3d.cu           ← Möller-Trumbore + NLOS-aware尤度（線形探索）
+│   │   ├── weight_3d_bvh.cu       ← BVH加速版weight_3d（**NEW**）
+│   │   ├── resampling.cu          ← Systematic + Megopolis（double-buffer）
+│   │   ├── svgd.cu               ← K=32近傍、common-mode除去、メモリリーク修正済み
+│   │   └── pf_device.cu          ← GPU常駐 + CUDA Streams + pinned memory
+│   ├── raytrace/
+│   │   ├── raytrace.cu            ← 2フェーズmultipath（race condition修正済み）
+│   │   └── bvh.cu                ← SAH構築 + GPUスタックトラバーサル
+│   ├── multipath/multipath.cu
+│   ├── skyplot/skyplot.cu         ← DOP計算、ecef_to_lla_inlineにリテラル定数使用
+│   ├── acquisition/acquisition.cu ← cuFFT、PRN 1-32 C/Aコード
+│   ├── interference/interference.cu ← STFT + ノッチフィルタ
+│   ├── tracking/tracking.cu       ← __constant__ C/Aコード、ループフィルタ永続化
+│   ├── ephemeris/ephemeris.cu     ← IS-GPS-200（31衛星サブnm検証済み）
+│   ├── atmosphere/atmosphere.cu   ← Saastamoinen + Klobuchar
+│   └── utils/coordinates.cu       ← ECEF↔LLA、satellite_azel
+│
+├── python/gnss_gpu/               ← Pythonパッケージ
+│   ├── __init__.py                ← 全モジュールエクスポート
+│   ├── _version.py                ← __version__ = "0.1.0"
+│   ├── _bindings.cpp              ← core（WLS、座標変換）
+│   ├── _*_bindings.cpp            ← 各モジュールのpybind11（19ファイル）
+│   ├── particle_filter.py         ← ParticleFilter クラス
+│   ├── particle_filter_3d.py      ← ParticleFilter3D（weight_3d使用）
+│   ├── particle_filter_3d_bvh.py  ← ParticleFilter3DBVH（BVH加速、**NEW**）
+│   ├── particle_filter_device.py  ← ParticleFilterDevice（GPU常駐、__del__でリークなし）
+│   ├── svgd.py                    ← SVGDParticleFilter
+│   ├── ekf.py                     ← EKFPositioner（_NativeState経由でnumpy in-place操作）
+│   ├── rtk.py                     ← RTKSolver
+│   ├── multi_gnss.py              ← MultiGNSSSolver
+│   ├── doppler.py                 ← doppler_velocity, doppler_velocity_batch
+│   ├── raim.py                    ← raim_check, raim_fde
+│   ├── raytrace.py                ← BuildingModel（create_box, from_obj）
+│   ├── bvh.py                     ← BVHAccelerator
+│   ├── multipath.py               ← MultipathSimulator
+│   ├── skyplot.py                 ← VulnerabilityMap
+│   ├── acquisition.py             ← Acquisition
+│   ├── tracking.py                ← ScalarTracker, VectorTracker
+│   ├── interference.py            ← InterferenceDetector
+│   ├── ephemeris.py               ← Ephemeris（CPU fallback付き）
+│   ├── atmosphere.py              ← AtmosphereCorrection
+│   ├── cycle_slip.py              ← detect_geometry_free, detect_melbourne_wubbena, detect_time_difference
+│   ├── sbas.py                    ← SBASCorrection, QZSSAugmentation
+│   ├── io/
+│   │   ├── __init__.py
+│   │   ├── rinex.py               ← RINEX 3.x OBS parser
+│   │   ├── nav_rinex.py           ← RINEX 2/3 NAV parser
+│   │   ├── nmea.py                ← NMEA GGA/RMC reader
+│   │   ├── nmea_writer.py         ← NMEA GGA/RMC/GSA/GSV/VTG writer
+│   │   ├── plateau.py             ← PlateauLoader（CityGML → BuildingModel）
+│   │   ├── citygml.py             ← 汎用CityGMLパーサ
+│   │   └── urbannav.py            ← UrbanNavLoader（**NEW**）
+│   ├── viz/
+│   │   ├── __init__.py
+│   │   ├── plots.py               ← matplotlib 9関数
+│   │   └── interactive.py         ← plotly 3関数
+│   └── ros2/
+│       ├── __init__.py
+│       ├── gnss_node.py           ← ROS2 GNSSPositioningNode
+│       ├── launch/gnss_gpu_launch.py
+│       └── rviz_config.py
+│
+├── tests/                         ← 399+テスト（27ファイル）
+│   ├── test_positioning.py, test_raytrace.py, test_multipath.py
+│   ├── test_skyplot.py, test_acquisition.py, test_interference.py
+│   ├── test_tracking.py, test_particle_filter.py, test_pf3d.py
+│   ├── test_pf3d_bvh.py          ← **NEW**: BVH weight_3d テスト
+│   ├── test_svgd.py, test_cuda_streams.py
+│   ├── test_ekf.py, test_rtk.py, test_multi_gnss.py
+│   ├── test_doppler.py, test_raim.py, test_atmosphere.py
+│   ├── test_ephemeris.py, test_cycle_slip.py, test_sbas.py
+│   ├── test_io.py, test_nmea_writer.py, test_plateau.py
+│   ├── test_urbannav.py           ← **NEW**: UrbanNav loader テスト
+│   ├── test_ros2_node.py, test_viz.py
+│   └── test_verification.py      ← gnss_lib_py比較検証
+│
+├── examples/                      ← 7デモスクリプト
+│   ├── demo_rinex.py, demo_acquisition.py, demo_interference.py
+│   ├── demo_full_pipeline.py, demo_visualization.py
+│   ├── demo_real_data.py          ← 実NAVファイル使用E2Eデモ
+│   ├── demo_plateau_urban.py      ← PLATEAU+PF3D都市実験
+│   └── demo_plateau_urban_results.md
+│
+├── experiments/                   ← 論文実験スクリプト（**NEW**）
+│   ├── evaluate.py                ← 共通評価ユーティリティ
+│   ├── exp_urbannav_baseline.py   ← WLS/EKFベースライン
+│   ├── exp_urbannav_pf.py         ← GPU-PFスケーリング
+│   ├── exp_urbannav_pf3d.py       ← 3D-aware PF
+│   ├── exp_ablation_particles.py  ← パーティクル数アブレーション
+│   ├── exp_ablation_svgd.py       ← SVGD vs リサンプリング
+│   └── results/                   ← 結果出力先（自動作成）
+│
+├── benchmarks/                    ← 8ベンチマーク
+│   ├── bench_all.py, bench_wls.py, bench_particle_filter.py
+│   ├── bench_pf_device.py         ← **NEW**: PF Device vs 標準PF比較
+│   ├── bench_acquisition.py, bench_skyplot.py, bench_raytrace.py
+│   └── RESULTS.md
+│
+├── data/
+│   ├── sample_building.obj, sample_satellites.json
+│   ├── sample_plateau.gml, gps_ca_codes.py
+│   └── (NAVファイル: /tmp/gnss_eph/rinex/nav/brdc0150.24n にダウンロード済み)
+│
+└── output/
+    └── plateau_vulnerability_map.geojson
 ```
 
 ---
 
-## 8. コードベースガイド
+## 3. 絶対に守るべきルール
 
-### 8.1 重要ファイル（変更頻度が高い）
-
-| ファイル | 役割 | 変更時の注意 |
-|---------|------|------------|
-| `CMakeLists.txt` | ビルド設定 | 新モジュール追加時に更新必要 |
-| `python/gnss_gpu/__init__.py` | パッケージエクスポート | 新クラス追加時に更新必要 |
-| `include/gnss_gpu/cuda_check.h` | CUDAエラーチェック | `std::runtime_error`をthrowする。変更注意 |
-| `src/particle_filter/weight_3d.cu` | **論文の核心** | レイトレース+尤度統合カーネル |
-| `src/particle_filter/svgd.cu` | **論文の核心** | SVGDグラディエントカーネル |
-
-### 8.2 CUDAカーネルの共通パターン
-
-全ホスト関数が以下のパターンを踏襲:
+### 3.1 pybind11の配列作成
 ```cpp
-void some_function(const double* input, double* output, int n) {
-    double *d_in, *d_out;
-    CUDA_CHECK(cudaMalloc(&d_in, n * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&d_out, n * sizeof(double)));
-    CUDA_CHECK(cudaMemcpy(d_in, input, n * sizeof(double), cudaMemcpyHostToDevice));
+// ❌ 絶対にダメ（全要素が[0]の値になるバグ）
+auto arr = py::array_t<double>(n);
 
-    int block = 256;
-    int grid = (n + block - 1) / block;
-    kernel<<<grid, block>>>(d_in, d_out, n);
-    CUDA_CHECK_LAST();
-
-    CUDA_CHECK(cudaMemcpy(output, d_out, n * sizeof(double), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaFree(d_in));
-    CUDA_CHECK(cudaFree(d_out));
-}
-```
-
-**例外**: `pf_device.cu`はGPU常駐メモリ+CUDA Streams使用。
-
-### 8.3 pybind11バインディングの注意点
-
-**重要**: 配列作成時に `py::array_t<double>(n)` は使わない！必ず:
-```cpp
+// ✅ 正しい
 auto arr = py::array_t<double>(std::vector<ssize_t>{n});
 ```
-理由: `py::array_t<T>(int)` は意図しないコンストラクタオーバーロードにマッチし、全要素が同じ値になるバグが発生する。
+**理由**: `py::array_t<T>(int)` は意図しないコンストラクタオーバーロードにマッチする。この修正に丸1日かかった。
 
-### 8.4 テストの実行方法
+### 3.2 shape validation について
+**現在、bindings に shape validation は入っていない**。以前入れたが既存テスト（flat配列渡し）が100件壊れたため全て除去した。
 
+将来 validation を入れる場合は:
+- flat配列（N*3）と2D配列（N,3）の**両方**を受け付けるようにする
+- `if (buf.size % 3 != 0) throw ...` のようなsize-basedチェックのみ
+- ndim/shapeチェックは**しない**
+
+### 3.3 CUDA_CHECK
+全`.cu`ファイルに `#include "gnss_gpu/cuda_check.h"` が入っている。
+
+```cpp
+CUDA_CHECK(cudaMalloc(&ptr, size));  // 失敗時 std::runtime_error throw
+CUDA_CHECK_LAST();                   // カーネル起動後に呼ぶ
+```
+
+**注意**: `std::runtime_error`をthrowするため、pybind11がPython `RuntimeError`に変換する。
+
+### 3.4 GPU型番
+コード・ドキュメント・コミットメッセージに**具体GPU型番（RTX 4070 Ti SUPER等）を書かない**。「Ada Lovelace世代消費者向けGPU (16GB VRAM)」と記載する。
+
+### 3.5 Co-Authored-By
+gitコミットに Co-Authored-By は**付けない**（ユーザー設定）。
+
+### 3.6 ビルド後の.soコピー
 ```bash
-# フルテスト
-PYTHONPATH=python python3 -m pytest tests/ -q
-
-# 特定モジュール
-PYTHONPATH=python python3 -m pytest tests/test_particle_filter.py -v
-
-# 検証テスト（gnss_lib_py必要）
-PYTHONPATH=python python3 -m pytest tests/test_verification.py -v
-
-# デモ実行
-PYTHONPATH=python python3 examples/demo_full_pipeline.py
-PYTHONPATH=python python3 examples/demo_real_data.py
-PYTHONPATH=python python3 examples/demo_plateau_urban.py
-
-# ベンチマーク
-PYTHONPATH=python python3 benchmarks/bench_all.py
+cp build/*.so python/gnss_gpu/   # ビルド後に必ず実行
+PYTHONPATH=python python3 -m pytest tests/ -q  # テスト時
 ```
 
 ---
 
-## 9. ビルド・テスト手順
+## 4. 既知の問題（優先度順）
 
-### 9.1 依存関係
+### P0: すぐ直すべき（2件のテスト失敗）
 
+#### 4.1 test_insufficient_satellites (2件)
 ```
-必須:
-- CUDA Toolkit 12.0+
-- CMake 3.18+
-- pybind11
-- Python 3.9+
-- NumPy
-
-オプション:
-- matplotlib (可視化)
-- plotly (インタラクティブ可視化)
-- gnss-lib-py (検証テスト)
-- rclpy (ROS2ノード)
+FAILED tests/test_multi_gnss.py::TestMultiGNSSCPU::test_insufficient_satellites
+FAILED tests/test_raim.py::test_raim_insufficient_satellites
 ```
+**原因**: n_sat < 4 のエッジケース。C++ `wls_position` は `-1` を返すが、Python CPU fallback は例外を投げる。テスト側の `pytest.raises` が合っていない。
 
-### 9.2 ビルド
+**修正**: テストファイルを読み、C++ path と CPU fallback path の両方で正しいエラーハンドリングを確認・修正。
 
+### P1: 論文化ブロッカー
+
+#### 4.2 実データ未取得
+**最大の問題**。合成データのみ。実データでの評価なしではどのトップ会議でも100%リジェクト。
+
+#### 4.3 weight_3d_bvh.cu の大規模テスト未実施
+BVH版weight_3dは実装・テスト済みだが、PLATEAU LOD2レベル（10万三角形+）での性能テストが未実施。
+
+### P2: 技術的負債
+
+| # | 問題 | 影響 | 備考 |
+|---|------|------|------|
+| D1 | `predict.cu`等の毎回cudaMalloc/Free | 性能劣化 | `ParticleFilterDevice`で解決済み。論文ではDevice版の性能を報告 |
+| D2 | EKF GPU bindings | 動作するが_NativeState経由 | state構造体のpybind11コピー問題を回避済み |
+| D3 | RTK solve_fixed | ambiguity共分散がハードコード | `Q_amb = np.eye(n) * 0.1` |
+| D4 | 高緯度ECEF→LLA | cos(lat)→0で高度発散 | 極付近のみ |
+| D5 | tracking VTL | 衛星16機超で配列オーバーフロー | S[1024]制限 |
+
+---
+
+## 5. 論文計画（詳細は design.md 参照）
+
+### 5.1 タイトル
+"GPU-Accelerated Mega-Particle Filter with Real-Time 3D Ray Tracing for Robust Urban GNSS Positioning"
+
+### 5.2 新規性（5つの「世界初」）
+1. GPU PF × GNSS（既存研究なし）
+2. SVGD × GNSS（既存研究なし）
+3. 100万パーティクル × GNSS（既存研究なし）
+4. PLATEAU × GNSS（既存研究なし）
+5. GPU Ray Tracing × GNSS PF尤度（既存研究なし）
+
+### 5.3 ターゲット
+- IROS 2027 (締切 2027年3月頃)
+- ION GNSS+ 2026 (締切 2026年6月頃)
+
+---
+
+## 6. 次のアクション（Codexがやるべきこと）
+
+### Phase 1: すぐやること（今日〜1週間）
+
+#### 6.1 2件のテスト失敗を修正
 ```bash
-# クリーンビルド
+PYTHONPATH=python python3 -m pytest tests/test_multi_gnss.py::TestMultiGNSSCPU::test_insufficient_satellites tests/test_raim.py::test_raim_insufficient_satellites --tb=short
+```
+テストファイルを読み、エラーの種類を合わせる。
+
+#### 6.2 UrbanNavデータのダウンロード
+```bash
+# Tokyo dataset
+git clone https://github.com/weisongwen/UrbanNavDataset /tmp/urbannav
+```
+`python/gnss_gpu/io/urbannav.py` のローダーは実装済み。実データで動作確認。
+
+#### 6.3 ベンチマーク再実行
+```bash
+PYTHONPATH=python python3 benchmarks/bench_all.py
+PYTHONPATH=python python3 benchmarks/bench_pf_device.py
+```
+`benchmarks/RESULTS.md` を更新。
+
+### Phase 2: 実験（1〜4週間）
+
+#### 6.4 UrbanNavベースライン評価
+```bash
+PYTHONPATH=python python3 experiments/exp_urbannav_baseline.py --data-dir /tmp/urbannav/Tokyo
+```
+実験スクリプトは全て `experiments/` に実装済み。合成データfallback付き。
+
+#### 6.5 PLATEAUモデル取得・統合
+1. https://www.geospatial.jp/ckan/dataset?q=plateau からUrbanNavエリアのLOD2取得
+2. `PlateauLoader(zone=9).load_directory(path)` で読み込み
+3. `experiments/exp_urbannav_pf3d.py` で3D-PF評価
+
+#### 6.6 アブレーション実験
+```bash
+PYTHONPATH=python python3 experiments/exp_ablation_particles.py
+PYTHONPATH=python python3 experiments/exp_ablation_svgd.py
+```
+
+### Phase 3: 論文化（4〜8週間）
+
+#### 6.7 実験結果の整理
+- `experiments/results/` にCSV保存
+- CDF曲線、エラー時系列、パレートフロントの図生成
+- `evaluate.py` にユーティリティ関数実装済み
+
+#### 6.8 論文ドラフト
+構成案は `docs/design.md` セクション8.3に記載。
+
+---
+
+## 7. ビルド・テスト手順
+
+### 7.1 クリーンビルド
+```bash
+cd /workspace/ai_coding_ws/gnss_gpu
 rm -rf build && mkdir build && cd build
 cmake .. -DCMAKE_CUDA_ARCHITECTURES=native
 make -j$(nproc)
-
-# Pythonパッケージとしてインストール
-pip install .
-
-# 開発モード（.soをpythonディレクトリにコピー）
+cd ..
 cp build/*.so python/gnss_gpu/
-PYTHONPATH=python python3 -m pytest tests/ -q
 ```
 
-### 9.3 テスト実行時の注意
+### 7.2 テスト実行
+```bash
+PYTHONPATH=python python3 -m pytest tests/ -q               # 全テスト
+PYTHONPATH=python python3 -m pytest tests/ -q -k "not slow"  # slow除外
+PYTHONPATH=python python3 -m pytest tests/test_verification.py -v  # 検証テスト
+```
 
-- `PYTHONPATH=python` を必ず指定（`pip install`していない場合）
-- `build/*.so` を `python/gnss_gpu/` にコピーする必要がある
-- CUDA Stream テスト（`test_cuda_streams.py`）はGPU必須
-- 検証テスト（`test_verification.py`）は`gnss-lib-py`必須
+### 7.3 デモ実行
+```bash
+PYTHONPATH=python python3 examples/demo_real_data.py         # 実NAVファイルE2E
+PYTHONPATH=python python3 examples/demo_full_pipeline.py     # フルパイプライン
+PYTHONPATH=python python3 examples/demo_plateau_urban.py     # PLATEAU+PF3D
+```
 
----
+### 7.4 ベンチマーク
+```bash
+PYTHONPATH=python python3 benchmarks/bench_all.py            # 全ベンチマーク
+PYTHONPATH=python python3 benchmarks/bench_pf_device.py      # PF Device比較
+```
 
-## 10. 設計判断の記録
-
-### 10.1 なぜSoA（Structure of Arrays）か
-パーティクル状態を`px[], py[], pz[], pcb[]`の4配列で保持。AoS（`{x,y,z,cb}[]`）と比較して:
-- GPU coalesced memory access が可能（同一成分が連続メモリ）
-- 帯域幅利用効率が高い
-- predict/weight各カーネルが必要な成分のみアクセスできる
-
-### 10.2 なぜdouble精度か
-- GNSS擬似距離は数千万メートル（~2.6×10^7 m）
-- float32の有効桁数7桁では1mオーダーの丸め誤差
-- prefix-sum (CDF計算) は100万パーティクルで累積誤差が問題
-- クロックバイアスは光速オーダー（~3×10^8 m/s × ~10μs = ~3km）
-
-### 10.3 なぜMegopolisリサンプリングか
-- prefix-sum不要 → double精度の累積誤差問題を回避
-- coalesced memory access実現（ランダムアクセスパターンがSoAと相性良い）
-- チューニングパラメータ不要
-- 理論的収束保証あり (Chesser et al., 2021)
-
-### 10.4 なぜSVGDのスコア関数でcommon-mode除去するか
-GNSSの擬似距離残差は全衛星で共通のクロックバイアス誤差を含む。この共通成分が衛星方向ベクトルの重み付き和（≠ゼロ、受信機は衛星群の重心にいないため）を通じて位置勾配にリークする。デミーニング処理で共通成分を除去することで、位置スコアがクロックバイアスの影響を受けなくなり、SVGDの収束が安定化。
-
-### 10.5 なぜCUDA_CHECKでthrowするか
-当初はfprintf+continueだったが、レビューで指摘:
-- cudaMalloc失敗後のNULLポインタ使用でセグフォ
-- エラーが無言で伝播し、デバッグ困難
-- pybind11がstd::runtime_errorをPython例外に自動変換するため、throwが適切
-
-### 10.6 GPU型番をぼかす理由
-論文・公開リポジトリではGPUの具体型番（RTX 4070 Ti SUPER等）を記載しない方針。理由:
-- 特定ハードウェアへの依存印象を避ける
-- 「消費者向けGPU」で十分なリアルタイム性を達成できることを強調
-- 型番を出すとそのGPU固有の最適化と誤解される可能性
-- benchmarks/RESULTS.md, docs/design.md, READMEでは「Ada Lovelace世代消費者向けGPU (16GB VRAM)」と記載
+### 7.5 依存関係
+```
+必須: CUDA 12.0+, CMake 3.18+, pybind11, Python 3.9+, NumPy
+検証: gnss-lib-py (pip install gnss-lib-py) — インストール済み
+可視化: matplotlib, plotly
+```
 
 ---
 
-## 付録: Codexへの引き継ぎメモ
+## 8. 重要な設計判断の記録
 
-### このプロジェクトでの作業の注意点
+### 8.1 SoA (Structure of Arrays)
+パーティクル状態を `px[], py[], pz[], pcb[]` の4配列で保持。GPU coalesced memory access のため。
 
-1. **ビルド後に`.so`コピーが必要**: `cp build/*.so python/gnss_gpu/` を忘れない
-2. **pybind11の`py::array_t`**: 絶対に`py::array_t<T>(n)`を使わない。`std::vector<ssize_t>{n}`を使う
-3. **CUDA_CHECK**: 全新規.cuファイルに`#include "gnss_gpu/cuda_check.h"`を追加
-4. **テスト実行**: `PYTHONPATH=python python3 -m pytest tests/ -q`
-5. **GPU型番**: コード・ドキュメント・コミットメッセージに具体GPU型番を書かない
-6. **Co-Authored-By**: gitコミットにCo-Authored-Byは付けない（ユーザー設定）
+### 8.2 double精度
+GNSS擬似距離は ~2.6×10^7 m。float32では1m丸め誤差。prefix-sumの累積誤差もdoubleで回避。
 
-### すぐ始められるタスク
+### 8.3 SVGD common-mode除去
+GNSSの擬似距離残差にはクロックバイアスの共通成分がある。これが位置勾配にリークする問題を、全衛星の残差平均を減算して解決。`svgd.cu` L166-178。
 
-**最優先**: UrbanNavデータローダー（`python/gnss_gpu/io/urbannav.py`）
-1. https://github.com/weisongwen/UrbanNavDataset からTokyo/HK dataをダウンロード
-2. GNSS pseudorange + ground truth を読むローダーを実装
-3. `experiments/exp_urbannav_baseline.py` でWLS/EKFベースライン評価
-4. `experiments/exp_urbannav_pf3d.py` でGPU-PF3D評価
+### 8.4 EKF bindingsの回避策
+`EKFState` 構造体の `double x[8], P[64]` をpybind11が正しくコピーできない問題。回避策: `_NativeState` クラスでnumpy配列として保持し、`ekf_predict`/`ekf_update`はnumpy配列をin-placeで操作する形に変更（`_ekf_bindings.cpp` L60-97）。
 
-**次に**: BVH統合weight_3dカーネル（`src/particle_filter/weight_3d_bvh.cu`）
-- `weight_3d.cu`の線形探索を`bvh.cu`のBVHトラバーサルに置き換え
-- 大規模PLATEAUメッシュ（10K+三角形）でのスケーラビリティ確保
+### 8.5 pf_device のダブルフリー修正
+`unique_ptr<PFDeviceState, PFDeviceStateDeleter>` でpybind11のGC + 明示的destroyのダブルフリーを防止。`pf_device_destroy_resources()` でGPUメモリだけ解放、`delete`はpybind11に任せる。
 
-### 開発環境
+### 8.6 BVH weight_3d
+`weight_3d.cu`（線形探索 O(n_tri)）と `weight_3d_bvh.cu`（BVH O(log n_tri)）の2バージョン。少数三角形ならlinear、大規模メッシュならBVH。`ParticleFilter3DBVH` クラスで使い分け。
 
-- Ubuntu, bash shell
-- CUDA 12.0, CMake
-- Python 3.12
-- GPU: 16GB VRAM
-- gnss-lib-py インストール済み（pip）
-- NAVファイル: `/tmp/gnss_eph/rinex/nav/brdc0150.24n` にダウンロード済み
+### 8.7 tracking.cu のC/Aコード
+初期実装はハッシュベース疑似コード（テストで精度が出ない）→ 正規GPS C/Aコードを`__constant__`メモリに格納（32KB、PRN 1-32 × 1023チップ）。ホスト側で初期化→`cudaMemcpyToSymbol`。
+
+---
+
+## 9. 外部データ・リソース
+
+| リソース | 場所 | 備考 |
+|---------|------|------|
+| GPS NAVファイル | `/tmp/gnss_eph/rinex/nav/brdc0150.24n` | 2024-01-15、gnss_lib_pyでダウンロード済み |
+| PLATEAU sample | `data/sample_plateau.gml` | 東京駅付近3建物、zone=9 |
+| UrbanNav | https://github.com/weisongwen/UrbanNavDataset | 未ダウンロード |
+| gnss_lib_py | pip installed | Stanford NavLab、検証テスト用 |
+
+---
+
+## 10. 性能ベンチマーク結果（最新）
+
+**GPU**: Ada Lovelace消費者GPU (16GB VRAM), CUDA 12.0
+
+| Module | Input | Time (ms) | Throughput |
+|--------|-------|-----------|------------|
+| WLS Batch | 10K epochs | 1.04 | 9.60M epoch/s |
+| Particle Filter | 1M particles | 81.44 | 12.28M part/s |
+| PF Device | 1M particles | **未計測** | **要ベンチマーク** |
+| Acquisition | 32 PRN, 1ms | 142.50 | 224.6 PRN/s |
+| Vulnerability Map | 100x100 grid | 0.62 | 16.14M pts/s |
+| Ray Tracing | 1008 tri, 8 sats | 0.71 | 11.32M checks/s |
+
+---
+
+## 11. 研究コンテキスト（Codexが論文を書く場合に参照）
+
+### 11.1 直接競合
+| 研究 | 年/会議 | 手法 | パーティクル数 | GPU | 限界 |
+|------|---------|------|-------------|-----|------|
+| MegaParticles (Koide) | ICRA 2024 | SVGD PF, LiDAR | 1M | ✅ | GNSSなし |
+| Suzuki | ICRA 2024 | Multiple Update PF, GNSS | ~2K | ❌ | CPU、少パーティクル |
+| Groves (UCL) | 複数 | Shadow Matching | - | ❌ | グリッドベース |
+| Hsu & Wen (PolyU) | T-ITS 2021 | FGO + 3DMA | - | ❌ | CPU |
+| Neamati (Stanford) | ION GNSS+ 2024 | Neural City Maps | - | ✅ | NeRF、計算コスト |
+
+### 11.2 主張すべきポイント
+1. 「GNSSにGPU大規模PFを適用した世界初の研究」
+2. 「3D建物モデルをPF尤度関数にリアルタイム統合」
+3. 「SVGDのGNSS向けスコア関数を新規導出（common-mode除去）」
+4. 「消費者GPUで100万パーティクル12Hzリアルタイム処理」
+
+### 11.3 レビュアー対策
+- 「MegaParticlesの単純適用」→ GNSS固有の工夫（クロックバイアス、3D尤度、スコア関数）を強調
+- 「実データがない」→ UrbanNav + 自前収集で解決（最優先タスク）
+- 「計算コスト大」→ 消費者GPUで12Hz、Jetsonベンチ追加
+
+---
+
+## 12. よくある作業パターン
+
+### 12.1 新CUDAモジュール追加
+1. `include/gnss_gpu/foo.h` にヘッダ作成
+2. `src/foo/foo.cu` に実装（`#include "gnss_gpu/cuda_check.h"` 忘れない）
+3. `python/gnss_gpu/_foo_bindings.cpp` にpybind11
+4. `python/gnss_gpu/foo.py` にPythonラッパー
+5. `CMakeLists.txt` にライブラリ + bindingsターゲット追加
+6. `python/gnss_gpu/__init__.py` にimport追加
+7. `tests/test_foo.py` にテスト
+8. `rm -rf build && mkdir build && cd build && cmake .. -DCMAKE_CUDA_ARCHITECTURES=native && make -j$(nproc) && cd .. && cp build/*.so python/gnss_gpu/`
+9. `PYTHONPATH=python python3 -m pytest tests/test_foo.py -v`
+
+### 12.2 テスト失敗のデバッグ
+```bash
+# 1. 失敗の詳細確認
+PYTHONPATH=python python3 -m pytest tests/test_xxx.py::TestClass::test_method --tb=long
+
+# 2. Python直接実行でデバッグ
+PYTHONPATH=python python3 -c "from gnss_gpu import ...; ..."
+
+# 3. CUDAエラーの場合
+# CUDA_CHECK がthrowするので、Pythonの RuntimeError メッセージにCUDAエラー名が含まれる
+```
+
+### 12.3 コミット
+```bash
+git add -A
+git commit -m "説明的なメッセージ"
+git push
+```
+Co-Authored-Byは付けない。GPU型番を書かない。
