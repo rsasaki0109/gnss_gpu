@@ -3,6 +3,8 @@
 #include <curand_kernel.h>
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
+#include <thrust/execution_policy.h>
+#include <thrust/system/cuda/execution_policy.h>
 #include <cmath>
 #include <cfloat>
 #include <algorithm>
@@ -59,9 +61,11 @@ __global__ void pfd_weight_kernel(const double* px, const double* py,
                                   const double* weights_sat,
                                   double* log_weights,
                                   int N, int n_sat, double sigma_pr) {
-    __shared__ double s_sat[MAX_SATS * 3];
-    __shared__ double s_pr[MAX_SATS];
-    __shared__ double s_ws[MAX_SATS];
+    // Dynamic shared memory layout: [sat_ecef: n_sat*3] [pr: n_sat] [ws: n_sat]
+    extern __shared__ double s_data[];
+    double* s_sat = s_data;
+    double* s_pr = s_data + n_sat * 3;
+    double* s_ws = s_data + n_sat * 4;
 
     for (int i = threadIdx.x; i < n_sat; i += blockDim.x) {
         s_sat[i * 3 + 0] = sat_ecef[i * 3 + 0];
@@ -385,40 +389,66 @@ PFDeviceState* pf_device_create(int n_particles) {
     return state;
 }
 
+void pf_device_destroy_resources(PFDeviceState* state) {
+    if (!state || !state->allocated) return;
+
+    // Synchronize stream before freeing resources
+    cudaStreamSynchronize(state->stream);
+    cudaStreamDestroy(state->stream);
+
+    cudaFree(state->d_px);
+    cudaFree(state->d_py);
+    cudaFree(state->d_pz);
+    cudaFree(state->d_pcb);
+    cudaFree(state->d_log_weights);
+    cudaFree(state->d_px_tmp);
+    cudaFree(state->d_py_tmp);
+    cudaFree(state->d_pz_tmp);
+    cudaFree(state->d_pcb_tmp);
+    cudaFree(state->d_partial_a);
+    cudaFree(state->d_partial_b);
+    cudaFree(state->d_partial_c);
+    cudaFree(state->d_weights_norm);
+    cudaFree(state->d_cdf);
+    cudaFree(state->d_vel);
+
+    // Free persistent satellite device buffers
+    cudaFree(state->d_sat_ecef);
+    cudaFree(state->d_pseudoranges);
+    cudaFree(state->d_weights_sat);
+
+    // Free pinned host memory
+    cudaFreeHost(state->h_sat_pinned);
+    cudaFreeHost(state->h_result_pinned);
+
+    // Null out all pointers to prevent use-after-free
+    state->d_px = nullptr;
+    state->d_py = nullptr;
+    state->d_pz = nullptr;
+    state->d_pcb = nullptr;
+    state->d_log_weights = nullptr;
+    state->d_px_tmp = nullptr;
+    state->d_py_tmp = nullptr;
+    state->d_pz_tmp = nullptr;
+    state->d_pcb_tmp = nullptr;
+    state->d_partial_a = nullptr;
+    state->d_partial_b = nullptr;
+    state->d_partial_c = nullptr;
+    state->d_weights_norm = nullptr;
+    state->d_cdf = nullptr;
+    state->d_vel = nullptr;
+    state->d_sat_ecef = nullptr;
+    state->d_pseudoranges = nullptr;
+    state->d_weights_sat = nullptr;
+    state->h_sat_pinned = nullptr;
+    state->h_result_pinned = nullptr;
+
+    state->allocated = false;
+}
+
 void pf_device_destroy(PFDeviceState* state) {
     if (!state) return;
-    if (state->allocated) {
-        // Synchronize stream before freeing resources
-        CUDA_CHECK(cudaStreamSynchronize(state->stream));
-        CUDA_CHECK(cudaStreamDestroy(state->stream));
-
-        CUDA_CHECK(cudaFree(state->d_px));
-        CUDA_CHECK(cudaFree(state->d_py));
-        CUDA_CHECK(cudaFree(state->d_pz));
-        CUDA_CHECK(cudaFree(state->d_pcb));
-        CUDA_CHECK(cudaFree(state->d_log_weights));
-        CUDA_CHECK(cudaFree(state->d_px_tmp));
-        CUDA_CHECK(cudaFree(state->d_py_tmp));
-        CUDA_CHECK(cudaFree(state->d_pz_tmp));
-        CUDA_CHECK(cudaFree(state->d_pcb_tmp));
-        CUDA_CHECK(cudaFree(state->d_partial_a));
-        CUDA_CHECK(cudaFree(state->d_partial_b));
-        CUDA_CHECK(cudaFree(state->d_partial_c));
-        CUDA_CHECK(cudaFree(state->d_weights_norm));
-        CUDA_CHECK(cudaFree(state->d_cdf));
-        CUDA_CHECK(cudaFree(state->d_vel));
-
-        // Free persistent satellite device buffers
-        CUDA_CHECK(cudaFree(state->d_sat_ecef));
-        CUDA_CHECK(cudaFree(state->d_pseudoranges));
-        CUDA_CHECK(cudaFree(state->d_weights_sat));
-
-        // Free pinned host memory
-        CUDA_CHECK(cudaFreeHost(state->h_sat_pinned));
-        CUDA_CHECK(cudaFreeHost(state->h_result_pinned));
-
-        state->allocated = false;
-    }
+    pf_device_destroy_resources(state);
     delete state;
 }
 
@@ -440,7 +470,7 @@ void pf_device_initialize(PFDeviceState* state,
         init_x, init_y, init_z, init_cb,
         spread_pos, spread_cb,
         N, seed);
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 }
 
 // ============================================================
@@ -471,7 +501,7 @@ void pf_device_predict(PFDeviceState* state,
         state->d_vel,
         dt, sigma_pos, sigma_cb,
         N, seed, step);
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 }
 
 // ============================================================
@@ -524,12 +554,14 @@ void pf_device_weight(PFDeviceState* state,
                                sz_obs, cudaMemcpyHostToDevice, state->stream));
 
     // Launch weight kernel on the same stream (waits for async copies to complete)
-    pfd_weight_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+    // Dynamic shared memory: n_sat*3 (sat_ecef) + n_sat (pr) + n_sat (ws) = n_sat*5 doubles
+    size_t smem_weight = (size_t)n_sat * 5 * sizeof(double);
+    pfd_weight_kernel<<<grid, BLOCK_SIZE, smem_weight, state->stream>>>(
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
         state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
         state->d_log_weights,
         N, n_sat, sigma_pr);
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 }
 
 // ============================================================
@@ -551,7 +583,7 @@ double pf_device_ess(const PFDeviceState* state) {
         state->d_partial_b,   // sum_w2
         state->d_partial_c,   // max_lw
         N);
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 
     // Synchronize stream before reading results back
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
@@ -598,7 +630,7 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     // Step 1: Find max log_weight using persistent buffers
     pfd_find_max_kernel<<<grid, BLOCK_SIZE, BLOCK_SIZE * sizeof(double), state->stream>>>(
         state->d_log_weights, state->d_partial_c, N);
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
     double* h_block_max = new double[grid];
@@ -626,12 +658,10 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     pfd_normalize_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_log_weights, state->d_weights_norm, max_lw, sum_w, N);
 
-    // Step 5: Inclusive scan (CDF) using thrust on the stream
-    // Synchronize stream first since thrust uses default stream by default
-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+    // Step 5: Inclusive scan (CDF) using thrust on the custom stream
     thrust::device_ptr<double> w_ptr(state->d_weights_norm);
     thrust::device_ptr<double> cdf_ptr(state->d_cdf);
-    thrust::inclusive_scan(w_ptr, w_ptr + N, cdf_ptr);
+    thrust::inclusive_scan(thrust::cuda::par.on(state->stream), w_ptr, w_ptr + N, cdf_ptr);
 
     // Step 6: Generate u0
     double u0 = (double)(seed % 1000000) / (double)(1000000 * N);
@@ -642,7 +672,7 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
         state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp, state->d_pcb_tmp,
         N, u0);
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 
     // Step 8: Swap pointers (tmp becomes primary)
     std::swap(state->d_px, state->d_px_tmp);
@@ -652,7 +682,7 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
 
     // Step 9: Reset log weights to uniform
     pfd_reset_weights_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(state->d_log_weights, N);
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 }
 
 // ============================================================
@@ -675,7 +705,7 @@ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsign
             state->d_log_weights,
             N, seed, iter, src_buf);
     }
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 
     // If final result is in buffer B (tmp), swap pointers
     int final_buf = n_iterations % 2;
@@ -689,7 +719,7 @@ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsign
 
     // Reset log weights to uniform
     pfd_reset_weights_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(state->d_log_weights, N);
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 }
 
 // ============================================================
@@ -708,7 +738,7 @@ void pf_device_estimate(const PFDeviceState* state, double* result) {
         state->d_partial_b,   // [grid] sum_w
         state->d_partial_c,   // [grid] max_lw
         N);
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 
     // Synchronize stream before reading results back
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
@@ -767,7 +797,7 @@ void pf_device_get_particles(const PFDeviceState* state, double* output) {
     pfd_get_particles_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
         d_out, N);
-    cudaGetLastError();
+    CUDA_CHECK_LAST();
 
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
     CUDA_CHECK(cudaMemcpy(output, d_out, sz_out, cudaMemcpyDeviceToHost));

@@ -52,6 +52,10 @@ struct PFDeviceState {
 PFDeviceState* pf_device_create(int n_particles);
 void pf_device_destroy(PFDeviceState* state);
 
+// Free GPU resources without deleting the struct itself.
+// Used by pybind11 custom holder to avoid double-free.
+void pf_device_destroy_resources(PFDeviceState* state);
+
 // Initialize particles on device (no H2D copy needed after this)
 void pf_device_initialize(PFDeviceState* state,
     double init_x, double init_y, double init_z, double init_cb,
