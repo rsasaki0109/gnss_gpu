@@ -1,9 +1,8 @@
 # gnss_gpu Performance Benchmark Results
 
 **Date**: 2026-04-01
-**GPU**: NVIDIA GeForce RTX 4070 Ti SUPER (16GB VRAM)
+**GPU**: NVIDIA Ada Lovelace consumer GPU (16GB VRAM)
 **CUDA**: 12.0
-**Driver**: 580.126.09
 
 ## Summary
 

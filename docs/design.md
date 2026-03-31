@@ -37,7 +37,7 @@ GPU加速GNSS測位ライブラリ。MegaParticles (Koide et al., ICRA 2024) の
 
 ### 1.2 新規性の3本柱
 
-1. **GNSS初の100万パーティクルGPUフィルタ**: 12Hz@RTX 4070 Ti SUPER
+1. **GNSS初の100万パーティクルGPUフィルタ**: 12Hz（消費者向けGPU）
 2. **PF尤度関数内リアルタイム3Dレイトレース**: 各パーティクル×各衛星のLOS/NLOSをリアルタイム判定、NLOS-awareヘテロジニアスガウシアン尤度
 3. **SVGDのGNSSスコア関数導出**: クロックバイアスcommon-mode除去による位置勾配リーク防止
 
@@ -298,9 +298,8 @@ struct BVHNode {
 ## 6. 性能ベンチマーク
 
 ### 6.1 測定環境
-- **GPU**: NVIDIA GeForce RTX 4070 Ti SUPER (16GB VRAM)
+- **GPU**: NVIDIA Ada Lovelace世代 消費者向けGPU (16GB VRAM)
 - **CUDA**: 12.0
-- **Driver**: 580.126.09
 
 ### 6.2 結果
 
@@ -406,7 +405,7 @@ struct BVHNode {
 |------|------|
 | MegaParticlesの単純適用 | GNSS固有のクロックバイアス状態空間、3Dレイトレース統合尤度、SVGDスコア関数のGNSS向け導出を強調 |
 | 3Dモデルの入手性・精度に依存 | PLATEAUで日本全国LOD2が無料、LOD精度の感度分析を含める、モデルなしでも動作 |
-| 計算コストが大きい | RTX 4070クラスで12Hz、Jetsonベンチマーク追加、ParticleFilterDeviceで5-10ms見込み |
+| 計算コストが大きい | 消費者向けGPUで12Hz、Jetsonベンチマーク追加、ParticleFilterDeviceで5-10ms見込み |
 | 実データでの検証不十分 | 複数都市・複数走行のデータセットで評価（UrbanNav + 自前収集） |
 
 ### 8.4 アクションプラン
