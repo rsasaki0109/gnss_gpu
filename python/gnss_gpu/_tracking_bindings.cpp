@@ -108,6 +108,14 @@ PYBIND11_MODULE(_gnss_gpu_tracking, m) {
                                       int n_channels,
                                       const gnss_gpu::TrackingConfig& config,
                                       double dt) {
+    {
+      auto bs = sat_ecef.request();
+      // sat_ecef: accept (N,3) or (N*3,) flat
+      auto bv = sat_vel.request();
+      auto bns = nav_state.request();
+      if (bns.size < 8)
+        throw std::runtime_error("nav_state must have at least 8 elements");
+    }
     std::vector<gnss_gpu::ChannelState> channels(n_channels);
     for (int i = 0; i < n_channels; i++) {
       channels[i] = *channels_list[i].cast<gnss_gpu::ChannelState*>();

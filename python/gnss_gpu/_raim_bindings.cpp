@@ -23,7 +23,12 @@ PYBIND11_MODULE(_gnss_gpu_raim, m) {
     auto bp = pseudoranges.request();
     auto bw = weights.request();
     auto bpos = position.request();
+    // sat_ecef: accept (N,3) or (N*3,) flat
+    if (bpos.size < 4)
+      throw std::runtime_error("position must have at least 4 elements [x, y, z, cb]");
     int n_sat = bp.size;
+    if (n_sat < 5)
+      throw std::runtime_error("raim_check requires at least 5 satellites");
 
     gnss_gpu::RAIMResult result;
     gnss_gpu::raim_check(static_cast<double*>(bs.ptr),
@@ -43,7 +48,12 @@ PYBIND11_MODULE(_gnss_gpu_raim, m) {
     auto bp = pseudoranges.request();
     auto bw = weights.request();
     auto bpos = position.request();
+    // sat_ecef: accept (N,3) or (N*3,) flat
+    if (bpos.size < 4)
+      throw std::runtime_error("position must have at least 4 elements [x, y, z, cb]");
     int n_sat = bp.size;
+    if (n_sat < 5)
+      throw std::runtime_error("raim_fde requires at least 5 satellites");
 
     // Copy position so we can modify it
     auto pos_out = py::array_t<double>({4}, {sizeof(double)});

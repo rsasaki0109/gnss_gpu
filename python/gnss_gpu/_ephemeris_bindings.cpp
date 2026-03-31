@@ -38,6 +38,8 @@ PYBIND11_MODULE(_gnss_gpu_ephemeris, m) {
         [](py::array_t<double> params_flat, double gps_time, int n_sat) {
             auto buf = params_flat.request();
             // params_flat is a contiguous array of EphemerisParams structs
+            if (buf.size * (ssize_t)sizeof(double) < n_sat * (ssize_t)sizeof(gnss_gpu::EphemerisParams))
+                throw std::runtime_error("params_flat is too small for n_sat EphemerisParams structs");
             const gnss_gpu::EphemerisParams* params =
                 reinterpret_cast<const gnss_gpu::EphemerisParams*>(buf.ptr);
 
@@ -60,6 +62,8 @@ PYBIND11_MODULE(_gnss_gpu_ephemeris, m) {
         [](py::array_t<double> params_flat, py::array_t<double> gps_times, int n_sat) {
             auto buf_params = params_flat.request();
             auto buf_times = gps_times.request();
+            if (buf_params.size * (ssize_t)sizeof(double) < n_sat * (ssize_t)sizeof(gnss_gpu::EphemerisParams))
+                throw std::runtime_error("params_flat is too small for n_sat EphemerisParams structs");
             int n_epoch = buf_times.size;
 
             const gnss_gpu::EphemerisParams* params =

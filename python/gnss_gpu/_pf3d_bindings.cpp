@@ -17,6 +17,10 @@ PYBIND11_MODULE(_gnss_gpu_pf3d, m) {
                             int n_particles, int n_sat,
                             double sigma_pr_los, double sigma_pr_nlos,
                             double nlos_bias) {
+    {
+      auto bs = sat_ecef.request();
+      // sat_ecef: accept (N,3) or (N*3,) flat
+    }
     auto btri = triangles.request();
     int n_tri = btri.shape[0];
 

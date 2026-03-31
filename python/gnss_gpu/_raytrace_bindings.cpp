@@ -13,6 +13,8 @@ PYBIND11_MODULE(_raytrace, m) {
     auto brx = rx_ecef.request();
     auto bsat = sat_ecef.request();
     auto btri = triangles.request();
+    if (brx.size < 3)
+      throw std::runtime_error("rx_ecef must have at least 3 elements");
     int n_sat = bsat.shape[0];
     int n_tri = btri.shape[0];
 
@@ -41,6 +43,8 @@ PYBIND11_MODULE(_raytrace, m) {
     auto brx = rx_ecef.request();
     auto bsat = sat_ecef.request();
     auto btri = triangles.request();
+    if (brx.size < 3)
+      throw std::runtime_error("rx_ecef must have at least 3 elements");
     int n_sat = bsat.shape[0];
     int n_tri = btri.shape[0];
 

@@ -12,6 +12,7 @@ PYBIND11_MODULE(_gnss_gpu_skyplot, m) {
        int n_grid, int n_sat, double elevation_mask_rad) {
       auto bg = grid_ecef.request();
       auto bs = sat_ecef.request();
+      // sat_ecef: accept (N,3) or (N*3,) flat
 
       auto pdop = py::array_t<double>(std::vector<ssize_t>{n_grid});
       auto hdop = py::array_t<double>(std::vector<ssize_t>{n_grid});

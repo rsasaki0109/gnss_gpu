@@ -26,6 +26,10 @@ PYBIND11_MODULE(_gnss_gpu_acq, m) {
                                   float threshold) {
         auto sig_buf = signal.request();
         auto prn_buf = prn_list.request();
+        if (sig_buf.ndim != 1)
+            throw std::runtime_error("signal must be a 1D array");
+        if (prn_buf.ndim != 1)
+            throw std::runtime_error("prn_list must be a 1D array");
         int n_samples = sig_buf.size;
         int n_prn = prn_buf.size;
 

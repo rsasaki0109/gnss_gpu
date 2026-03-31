@@ -18,6 +18,9 @@ PYBIND11_MODULE(_gnss_gpu_doppler, m) {
     auto bd = doppler.request();
     auto br = rx_pos.request();
     auto bw = weights.request();
+    // sat_ecef: accept (N,3) or (N*3,) flat
+    if (br.size < 3)
+      throw std::runtime_error("rx_pos must have at least 3 elements");
     int n_sat = bd.size;
 
     auto result = py::array_t<double>({4}, {sizeof(double)});
@@ -43,6 +46,9 @@ PYBIND11_MODULE(_gnss_gpu_doppler, m) {
                                       py::array_t<double> weights,
                                       double wavelength, int max_iter, double tol) {
     auto bs = sat_ecef.request();
+    {
+      auto bv = sat_vel.request();
+    }
     int n_epoch = bs.shape[0];
     int n_sat = bs.shape[1];
 

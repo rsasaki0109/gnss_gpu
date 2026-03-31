@@ -39,7 +39,7 @@ PYBIND11_MODULE(_gnss_gpu, m) {
 
   m.def("satellite_azel", [](double rx, double ry, double rz, py::array_t<double> sat_ecef) {
     auto buf = sat_ecef.request();
-    int n_sat = buf.shape[0];
+    int n_sat = buf.size / 3;  // accept flat or (N,3)
     auto az = py::array_t<double>(n_sat);
     auto el = py::array_t<double>(n_sat);
     gnss_gpu::satellite_azel(rx, ry, rz, static_cast<double*>(buf.ptr),
@@ -54,6 +54,8 @@ PYBIND11_MODULE(_gnss_gpu, m) {
                             py::array_t<double> weights, int max_iter, double tol) {
     auto bs = sat_ecef.request(), bp = pseudoranges.request(), bw = weights.request();
     int n_sat = bp.size;
+    if (n_sat < 4)
+      throw std::runtime_error("wls_position requires at least 4 satellites");
     auto result = py::array_t<double>({4}, {sizeof(double)});
     double* result_ptr = result.mutable_data();
     int iters = gnss_gpu::wls_position(static_cast<double*>(bs.ptr),
@@ -71,6 +73,8 @@ PYBIND11_MODULE(_gnss_gpu, m) {
     auto bs = sat_ecef.request(), bp = pseudoranges.request();
     int n_epoch = bs.shape[0];
     int n_sat = bs.shape[1];
+    if (n_sat < 4)
+      throw std::runtime_error("wls_batch requires at least 4 satellites");
     auto results = py::array_t<double>({n_epoch, 4});
     auto iters = py::array_t<int>(n_epoch);
     gnss_gpu::wls_batch(static_cast<double*>(bs.ptr),

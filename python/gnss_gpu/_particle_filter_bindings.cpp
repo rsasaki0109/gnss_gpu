@@ -53,6 +53,10 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
                          py::array_t<double> sat_ecef, py::array_t<double> pseudoranges,
                          py::array_t<double> weights_sat, py::array_t<double> log_weights,
                          int n_particles, int n_sat, double sigma_pr) {
+    {
+      auto bs = sat_ecef.request();
+      // sat_ecef: accept (N,3) or (N*3,) flat
+    }
     gnss_gpu::pf_weight(
         static_cast<double*>(px.request().ptr),
         static_cast<double*>(py_arr.request().ptr),

@@ -57,29 +57,47 @@ PYBIND11_MODULE(_gnss_gpu_ekf, m) {
        py::arg("initial_pos"), py::arg("initial_cb") = 0.0,
        py::arg("sigma_pos") = 100.0, py::arg("sigma_cb") = 1000.0);
 
-    // ekf_predict
-    m.def("ekf_predict", [](gnss_gpu::EKFState state, double dt,
-                             const gnss_gpu::EKFConfig& config) {
+    // ekf_predict — operate on numpy arrays to avoid struct copy issues
+    m.def("ekf_predict", [](py::array_t<double> state_x, py::array_t<double> state_P,
+                             double dt, const gnss_gpu::EKFConfig& config) {
+        auto bx = state_x.request();
+        auto bP = state_P.request();
+        if (bx.size < 8) throw std::runtime_error("state_x must have 8 elements");
+        if (bP.size < 64) throw std::runtime_error("state_P must have 64 elements");
+        gnss_gpu::EKFState state;
+        memcpy(state.x, bx.ptr, 8 * sizeof(double));
+        memcpy(state.P, bP.ptr, 64 * sizeof(double));
         gnss_gpu::ekf_predict(&state, dt, config);
-        return state;
-    }, "EKF predict step",
-       py::arg("state"), py::arg("dt"), py::arg("config"));
+        memcpy(state_x.mutable_data(), state.x, 8 * sizeof(double));
+        memcpy(state_P.mutable_data(), state.P, 64 * sizeof(double));
+    }, "EKF predict step (modifies state_x and state_P in-place)",
+       py::arg("state_x"), py::arg("state_P"), py::arg("dt"), py::arg("config"));
 
-    // ekf_update
-    m.def("ekf_update", [](gnss_gpu::EKFState state, py::array_t<double> sat_ecef,
+    // ekf_update — operate on numpy arrays to avoid struct copy issues
+    m.def("ekf_update", [](py::array_t<double> state_x, py::array_t<double> state_P,
+                            py::array_t<double> sat_ecef,
                             py::array_t<double> pseudoranges,
                             py::array_t<double> weights) {
+        auto bx = state_x.request();
+        auto bP = state_P.request();
         auto bs = sat_ecef.request();
         auto bp = pseudoranges.request();
         auto bw = weights.request();
-        int n_sat = bp.size;
+        if (bx.size < 8) throw std::runtime_error("state_x must have 8 elements");
+        if (bP.size < 64) throw std::runtime_error("state_P must have 64 elements");
+        // sat_ecef: accept (N,3) or (N*3,) flat
+        int n_sat = static_cast<int>(bp.size);
+        gnss_gpu::EKFState state;
+        memcpy(state.x, bx.ptr, 8 * sizeof(double));
+        memcpy(state.P, bP.ptr, 64 * sizeof(double));
         gnss_gpu::ekf_update(&state, static_cast<double*>(bs.ptr),
                               static_cast<double*>(bp.ptr),
                               static_cast<double*>(bw.ptr), n_sat);
-        return state;
-    }, "EKF update step with pseudorange measurements",
-       py::arg("state"), py::arg("sat_ecef"), py::arg("pseudoranges"),
-       py::arg("weights"));
+        memcpy(state_x.mutable_data(), state.x, 8 * sizeof(double));
+        memcpy(state_P.mutable_data(), state.P, 64 * sizeof(double));
+    }, "EKF update step with pseudorange measurements (modifies state_x and state_P in-place)",
+       py::arg("state_x"), py::arg("state_P"), py::arg("sat_ecef"),
+       py::arg("pseudoranges"), py::arg("weights"));
 
     // ekf_batch
     m.def("ekf_batch", [](py::array_t<double> states_x, py::array_t<double> states_P,
@@ -88,6 +106,10 @@ PYBIND11_MODULE(_gnss_gpu_ekf, m) {
                            const gnss_gpu::EKFConfig& config) {
         auto bx = states_x.request();
         auto bP = states_P.request();
+        {
+            auto bs = sat_ecef.request();
+            // sat_ecef: accept (N,3) or (N*3,) flat
+        }
         int n_instances = bx.shape[0];
         int n_sat = pseudoranges.request().shape[0];
 

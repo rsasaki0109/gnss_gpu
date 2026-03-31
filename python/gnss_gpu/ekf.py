@@ -15,6 +15,17 @@ try:
 except ImportError:
     _HAS_NATIVE = False
 
+# _NativeState wraps native EKFState's arrays as plain numpy arrays so that
+# ekf_predict / ekf_update (which now operate in-place on numpy arrays) work
+# correctly without relying on pybind11 struct-copy semantics.
+class _NativeState:
+    """Holds EKF state as numpy arrays for use with native bindings."""
+
+    def __init__(self, ekf_state):
+        # Extract arrays from the native EKFState returned by ekf_initialize
+        self.x = np.asarray(ekf_state.get_state(), dtype=np.float64).copy()
+        self.P = np.asarray(ekf_state.get_covariance(), dtype=np.float64).ravel().copy()
+
 
 class EKFPositioner:
     """Extended Kalman Filter for GNSS positioning.
@@ -79,8 +90,9 @@ class EKFPositioner:
             raise ValueError("position_ecef must have at least 3 elements")
 
         if _HAS_NATIVE:
-            self.state = ekf_initialize(pos[:3], float(clock_bias),
-                                        float(sigma_pos), float(sigma_cb))
+            native = ekf_initialize(pos[:3], float(clock_bias),
+                                    float(sigma_pos), float(sigma_cb))
+            self.state = _NativeState(native)
         else:
             self.state = _PureState(pos[:3], clock_bias, sigma_pos, sigma_cb)
 
@@ -98,7 +110,7 @@ class EKFPositioner:
             raise RuntimeError("EKF not initialized. Call initialize() first.")
 
         if _HAS_NATIVE:
-            self.state = ekf_predict(self.state, float(dt), self.config)
+            ekf_predict(self.state.x, self.state.P, float(dt), self.config)
         else:
             self.state.predict(dt, self.config)
 
@@ -127,7 +139,7 @@ class EKFPositioner:
             w = np.asarray(weights, dtype=np.float64).ravel()
 
         if _HAS_NATIVE:
-            self.state = ekf_update(self.state, sat.ravel(), pr, w)
+            ekf_update(self.state.x, self.state.P, sat, pr, w)
         else:
             self.state.update(sat.ravel(), pr, w, n_sat)
 
@@ -165,13 +177,13 @@ class EKFPositioner:
         if not self.initialized:
             raise RuntimeError("EKF not initialized.")
         if _HAS_NATIVE:
-            return np.array(self.state.get_covariance())
+            return self.state.P.reshape(8, 8).copy()
         else:
             return self.state.P.reshape(8, 8).copy()
 
     def _get_state_vec(self):
         if _HAS_NATIVE:
-            return np.array(self.state.get_state())
+            return self.state.x.copy()
         else:
             return self.state.x.copy()
 

@@ -37,6 +37,8 @@ PYBIND11_MODULE(_gnss_gpu_interference, m) {
                                      double sampling_freq, float threshold_db,
                                      int max_detections) {
         auto buf = spectrogram.request();
+        if (buf.ndim != 2)
+          throw std::runtime_error("spectrogram must be 2D array (n_frames, n_bins)");
         int n_frames = buf.shape[0];
 
         std::vector<gnss_gpu::InterferenceDetection> dets(max_detections);
