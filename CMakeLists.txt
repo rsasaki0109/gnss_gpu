@@ -89,6 +89,13 @@ add_library(gnss_gpu_pf3d
 target_include_directories(gnss_gpu_pf3d PUBLIC include)
 target_link_libraries(gnss_gpu_pf3d CUDA::cudart)
 
+# --- BVH-accelerated 3D-aware particle filter ---
+add_library(gnss_gpu_pf3d_bvh
+  src/particle_filter/weight_3d_bvh.cu
+)
+target_include_directories(gnss_gpu_pf3d_bvh PUBLIC include)
+target_link_libraries(gnss_gpu_pf3d_bvh CUDA::cudart)
+
 # --- Device-resident particle filter (CUDA streams + pinned memory) ---
 add_library(gnss_gpu_pf_device
   src/particle_filter/pf_device.cu
@@ -211,6 +218,10 @@ if(pybind11_FOUND)
   # BVH ray tracing bindings
   pybind11_add_module(_bvh python/gnss_gpu/_bvh_bindings.cpp)
   target_link_libraries(_bvh PRIVATE gnss_gpu_bvh)
+
+  # BVH-accelerated 3D-aware PF bindings
+  pybind11_add_module(_gnss_gpu_pf3d_bvh python/gnss_gpu/_pf3d_bvh_bindings.cpp)
+  target_link_libraries(_gnss_gpu_pf3d_bvh PRIVATE gnss_gpu_pf3d_bvh)
 
   # Device-resident particle filter bindings (CUDA streams)
   pybind11_add_module(_gnss_gpu_pf_device python/gnss_gpu/_pf_device_bindings.cpp)
