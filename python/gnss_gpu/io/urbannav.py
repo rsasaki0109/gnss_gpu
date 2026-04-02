@@ -20,7 +20,12 @@ from typing import Iterator
 import numpy as np
 
 from gnss_gpu.io.rinex import read_rinex_obs, RinexObs
-from gnss_gpu.io.nav_rinex import read_nav_rinex, NavMessage
+from gnss_gpu.io.nav_rinex import (
+    _datetime_to_gps_seconds_of_week,
+    read_nav_rinex,
+    read_nav_rinex_multi,
+    NavMessage,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +79,8 @@ def _safe_float(val: str) -> float:
 
 _WGS84_A = 6_378_137.0          # semi-major axis [m]
 _WGS84_E2 = 6.694379990141316e-3  # first eccentricity squared
+C_LIGHT = 299_792_458.0
+_SYSTEM_ID_MAP = {"G": 0, "R": 1, "E": 2, "C": 3, "J": 4}
 
 
 def _llh_to_ecef(lat_deg: float, lon_deg: float, alt: float) -> np.ndarray:
@@ -87,13 +94,71 @@ def _llh_to_ecef(lat_deg: float, lon_deg: float, alt: float) -> np.ndarray:
     return np.array([x, y, z])
 
 
-_GT_TIME_ALIASES = ("GPS_time", "gps_time", "time", "timestamp", "Time")
-_GT_LAT_ALIASES = ("latitude", "lat", "Latitude", "Lat")
-_GT_LON_ALIASES = ("longitude", "lon", "Longitude", "Lon")
-_GT_ALT_ALIASES = ("altitude", "alt", "Altitude", "Alt", "height", "Height")
-_GT_X_ALIASES = ("x", "X", "ECEF_X", "ecef_x", "pos_x")
-_GT_Y_ALIASES = ("y", "Y", "ECEF_Y", "ecef_y", "pos_y")
-_GT_Z_ALIASES = ("z", "Z", "ECEF_Z", "ecef_z", "pos_z")
+def _nearest_index(sorted_times: np.ndarray, t: float) -> int:
+    idx = int(np.searchsorted(sorted_times, t))
+    if idx <= 0:
+        return 0
+    if idx >= len(sorted_times):
+        return len(sorted_times) - 1
+    prev_idx = idx - 1
+    return idx if abs(sorted_times[idx] - t) < abs(sorted_times[prev_idx] - t) else prev_idx
+
+
+_GT_TIME_ALIASES = ("GPS TOW (s)", "GPS TOW", "GPS_time", "gps_time", "time", "timestamp", "Time")
+_GT_LAT_ALIASES = ("latitude", "lat", "Latitude", "Lat", "Latitude (deg)")
+_GT_LON_ALIASES = ("longitude", "lon", "Longitude", "Lon", "Longitude (deg)")
+_GT_ALT_ALIASES = (
+    "Altitude (m)",
+    "Ellipsoid Height (m)",
+    "Ellipsoid Height",
+    "altitude",
+    "alt",
+    "Altitude",
+    "Alt",
+    "height",
+    "Height",
+)
+_GT_X_ALIASES = ("ECEF X (m)", "ECEF X", "x", "X", "ECEF_X", "ecef_x", "pos_x")
+_GT_Y_ALIASES = ("ECEF Y (m)", "ECEF Y", "y", "Y", "ECEF_Y", "ecef_y", "pos_y")
+_GT_Z_ALIASES = ("ECEF Z (m)", "ECEF Z", "z", "Z", "ECEF_Z", "ecef_z", "pos_z")
+
+_SYSTEM_PR_FALLBACKS = {
+    "G": ("C1C", "C1W", "C1X", "C1P"),
+    "E": ("C1X", "C1C"),
+    "J": ("C1C", "C1X", "C1Z"),
+    "C": ("C1I", "C1X", "C2I"),
+    "R": ("C1C", "C1P"),
+}
+_SYSTEM_SNR_FALLBACKS = {
+    "G": ("S1C", "S1W", "S1X", "S1P"),
+    "E": ("S1X", "S1C"),
+    "J": ("S1C", "S1X", "S1Z"),
+    "C": ("S1I", "S1X", "S2I"),
+    "R": ("S1C", "S1P"),
+}
+
+
+def _candidate_codes(system: str, requested_code: str, fallbacks: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for code in (requested_code,) + fallbacks.get(system, (requested_code,)):
+        if code and code not in seen:
+            seen.add(code)
+            ordered.append(code)
+    return tuple(ordered)
+
+
+def _pick_observation_value(
+    system: str,
+    observations: dict[str, float],
+    requested_code: str,
+    fallbacks: dict[str, tuple[str, ...]],
+) -> tuple[str | None, float]:
+    for code in _candidate_codes(system, requested_code, fallbacks):
+        value = float(observations.get(code, 0.0))
+        if np.isfinite(value) and value != 0.0:
+            return code, value
+    return None, 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +179,17 @@ class UrbanNavLoader:
         if not self.data_dir.is_dir():
             raise FileNotFoundError(f"data_dir not found: {self.data_dir}")
 
+    @classmethod
+    def is_run_directory(cls, path: str | Path) -> bool:
+        p = Path(path)
+        if not p.is_dir():
+            return False
+        has_reference = (p / "reference.csv").exists()
+        has_nav = (p / "base.nav").exists()
+        has_base_obs = any(p.glob("base*.obs")) or any(p.glob("base*.OBS"))
+        has_rover_obs = any(p.glob("rover*.obs")) or any(p.glob("rover*.OBS"))
+        return has_reference and has_nav and has_base_obs and has_rover_obs
+
     # ------------------------------------------------------------------
     # File discovery helpers
     # ------------------------------------------------------------------
@@ -127,7 +203,7 @@ class UrbanNavLoader:
         return None
 
     def _find_ground_truth_csv(self) -> Path | None:
-        for pattern in ("*groundtruth*.csv", "*ground_truth*.csv", "*gt*.csv", "*GTruth*.csv"):
+        for pattern in ("reference.csv", "*groundtruth*.csv", "*ground_truth*.csv", "*gt*.csv", "*GTruth*.csv"):
             matches = sorted(self.data_dir.glob(pattern))
             if matches:
                 return matches[0]
@@ -143,6 +219,39 @@ class UrbanNavLoader:
     def _find_rinex_nav(self) -> Path | None:
         for pattern in ("*.nav", "*.NAV", "*_nav.rnx", "*.n", "*.N"):
             matches = sorted(self.data_dir.glob(pattern))
+            if matches:
+                return matches[0]
+        return None
+
+    def _find_base_obs(self) -> Path | None:
+        for pattern in ("base*.obs", "base*.OBS", "*base*.obs", "*base*.OBS"):
+            matches = sorted(self.data_dir.glob(pattern))
+            if matches:
+                return matches[0]
+        return None
+
+    def _find_base_nav(self) -> Path | None:
+        for pattern in ("base*.nav", "base*.NAV", "*base*.nav", "*base*.NAV", "*.nav", "*.NAV"):
+            matches = sorted(self.data_dir.glob(pattern))
+            if matches:
+                return matches[0]
+        return None
+
+    def _find_rover_obs(self, rover_source: str = "ublox") -> Path | None:
+        source = rover_source.strip().lower()
+        patterns: tuple[str, ...]
+        if source == "ublox":
+            patterns = ("*ublox*.obs", "*ublox*.OBS", "rover*.obs", "rover*.OBS")
+        elif source == "trimble":
+            patterns = ("*trimble*.obs", "*trimble*.OBS", "rover*.obs", "rover*.OBS")
+        else:
+            patterns = (f"*{source}*.obs", f"*{source}*.OBS", "rover*.obs", "rover*.OBS")
+
+        for pattern in patterns:
+            matches = sorted(
+                path for path in self.data_dir.glob(pattern)
+                if "base" not in path.name.lower()
+            )
             if matches:
                 return matches[0]
         return None
@@ -174,7 +283,7 @@ class UrbanNavLoader:
             raise FileNotFoundError("No GNSS CSV file found in " + str(self.data_dir))
 
         with open(path, newline="") as fh:
-            reader = csv.DictReader(fh)
+            reader = csv.DictReader(fh, skipinitialspace=True)
             rows = list(reader)
 
         if not rows:
@@ -258,7 +367,7 @@ class UrbanNavLoader:
             raise FileNotFoundError("No ground-truth CSV file found in " + str(self.data_dir))
 
         with open(path, newline="") as fh:
-            reader = csv.DictReader(fh)
+            reader = csv.DictReader(fh, skipinitialspace=True)
             rows = list(reader)
 
         if not rows:
@@ -315,9 +424,27 @@ class UrbanNavLoader:
             return None
         return read_rinex_obs(path)
 
+    def load_rover_obs(
+        self,
+        filepath: str | Path | None = None,
+        rover_source: str = "ublox",
+    ) -> RinexObs | None:
+        path = Path(filepath) if filepath else self._find_rover_obs(rover_source)
+        if path is None:
+            return None
+        return read_rinex_obs(path)
+
+    def load_base_obs(self, filepath: str | Path | None = None) -> RinexObs | None:
+        path = Path(filepath) if filepath else self._find_base_obs()
+        if path is None:
+            return None
+        return read_rinex_obs(path)
+
     def load_rinex_nav(
-        self, filepath: str | Path | None = None
-    ) -> dict[int, list[NavMessage]] | None:
+        self,
+        filepath: str | Path | None = None,
+        systems: tuple[str, ...] | None = None,
+    ) -> dict[int | str, list[NavMessage]] | None:
         """Load RINEX navigation file if available.
 
         Uses :func:`gnss_gpu.io.nav_rinex.read_nav_rinex` internally.
@@ -327,10 +454,146 @@ class UrbanNavLoader:
         dict mapping PRN -> list of :class:`~gnss_gpu.io.nav_rinex.NavMessage`,
         or ``None`` if no file is found.
         """
-        path = Path(filepath) if filepath else self._find_rinex_nav()
+        path = Path(filepath) if filepath else self._find_base_nav() or self._find_rinex_nav()
         if path is None:
             return None
-        return read_nav_rinex(path)
+        if systems is None:
+            return read_nav_rinex(path)
+        return read_nav_rinex_multi(path, systems=systems)
+
+    def load_experiment_data(
+        self,
+        max_epochs: int | None = None,
+        start_epoch: int = 0,
+        obs_code: str = "C1C",
+        snr_code: str = "S1C",
+        systems: tuple[str, ...] = ("G",),
+        time_tolerance: float = 0.15,
+        rover_source: str = "ublox",
+    ) -> dict:
+        """Build experiment-ready arrays from an UrbanNav run."""
+        from gnss_gpu.ephemeris import Ephemeris
+
+        rover_obs = self.load_rover_obs(rover_source=rover_source)
+        base_obs = self.load_base_obs()
+        nav_messages = self.load_rinex_nav(systems=systems)
+        if rover_obs is None:
+            raise FileNotFoundError(f"rover observation file not found in {self.data_dir}")
+        if base_obs is None:
+            raise FileNotFoundError(f"base observation file not found in {self.data_dir}")
+        if nav_messages is None:
+            raise FileNotFoundError(f"navigation file not found in {self.data_dir}")
+
+        eph = Ephemeris(nav_messages)
+        gt_times, gt_ecef = self.load_ground_truth()
+        if len(gt_times) == 0:
+            raise ValueError("reference.csv is empty")
+
+        sat_ecef_list: list[np.ndarray] = []
+        pseudorange_list: list[np.ndarray] = []
+        weight_list: list[np.ndarray] = []
+        truth_list: list[np.ndarray] = []
+        time_list: list[float] = []
+        sat_id_list_per_epoch: list[list[str]] = []
+        system_id_list: list[np.ndarray] = []
+        usable_epoch_index = 0
+
+        for epoch in rover_obs.epochs:
+            tow = _datetime_to_gps_seconds_of_week(epoch.time)
+            sat_id_list: list[str] = []
+            pseudoranges: list[float] = []
+            obs_code_list: list[str] = []
+            snr_vals: list[float] = []
+
+            for sat_id in epoch.satellites:
+                if not sat_id or sat_id[0] not in systems:
+                    continue
+                obs = epoch.observations.get(sat_id, {})
+                pr_code, pr = _pick_observation_value(
+                    sat_id[0],
+                    obs,
+                    obs_code,
+                    _SYSTEM_PR_FALLBACKS,
+                )
+                if not pr or pr < 1e6:
+                    continue
+                snr_code_sel, snr = _pick_observation_value(
+                    sat_id[0],
+                    obs,
+                    snr_code,
+                    _SYSTEM_SNR_FALLBACKS,
+                )
+                sat_id_list.append(sat_id)
+                pseudoranges.append(float(pr))
+                obs_code_list.append(pr_code or obs_code)
+                snr_vals.append(snr if np.isfinite(snr) and snr > 0.0 else 1.0)
+
+            if len(sat_id_list) < 4:
+                continue
+
+            sat_ecef, sat_clk, used_sat_ids = eph.compute(
+                tow,
+                sat_id_list,
+                obs_codes=obs_code_list,
+            )
+            if len(used_sat_ids) < 4:
+                continue
+
+            pr_map = {sat_id: pr for sat_id, pr in zip(sat_id_list, pseudoranges)}
+            snr_map = {sat_id: snr for sat_id, snr in zip(sat_id_list, snr_vals)}
+            pr_corr = np.array(
+                [pr_map[sat_id] + sat_clk[i] * C_LIGHT for i, sat_id in enumerate(used_sat_ids)],
+                dtype=np.float64,
+            )
+            weights = np.array([max(snr_map[sat_id], 1.0) for sat_id in used_sat_ids], dtype=np.float64)
+            system_ids = np.array([_SYSTEM_ID_MAP[sat_id[0]] for sat_id in used_sat_ids], dtype=np.int32)
+
+            gt_idx = _nearest_index(gt_times, tow)
+            if abs(gt_times[gt_idx] - tow) > time_tolerance:
+                continue
+
+            if usable_epoch_index < start_epoch:
+                usable_epoch_index += 1
+                continue
+
+            sat_ecef_list.append(np.asarray(sat_ecef, dtype=np.float64))
+            pseudorange_list.append(pr_corr)
+            weight_list.append(weights)
+            truth_list.append(gt_ecef[gt_idx].astype(np.float64))
+            time_list.append(float(tow))
+            sat_id_list_per_epoch.append(list(used_sat_ids))
+            system_id_list.append(system_ids)
+            usable_epoch_index += 1
+
+            if max_epochs is not None and len(time_list) >= max_epochs:
+                break
+
+        if not time_list:
+            raise ValueError("No usable UrbanNav epochs found")
+
+        times = np.array(time_list, dtype=np.float64)
+        ground_truth = np.vstack(truth_list)
+        sat_counts = np.array([len(sats) for sats in sat_id_list_per_epoch], dtype=np.int32)
+        dt = float(np.median(np.diff(times))) if len(times) > 1 else 0.2
+
+        return {
+            "dataset_name": f"UrbanNav {self.data_dir.name} ({rover_source})",
+            "sat_ecef": sat_ecef_list,
+            "pseudoranges": pseudorange_list,
+            "weights": weight_list,
+            "system_ids": system_id_list,
+            "ground_truth": ground_truth,
+            "times": times,
+            "origin_ecef": ground_truth[0].copy(),
+            "base_ecef": np.asarray(base_obs.header.approx_position, dtype=np.float64),
+            "n_epochs": len(times),
+            "n_satellites": int(np.median(sat_counts)),
+            "satellite_counts": sat_counts,
+            "dt": dt,
+            "used_prns": sat_id_list_per_epoch,
+            "constellations": tuple(sorted({sat_id[0] for sats in sat_id_list_per_epoch for sat_id in sats})),
+            "rover_source": rover_source,
+        }
 
     def epochs(
         self,

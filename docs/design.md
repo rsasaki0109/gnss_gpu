@@ -2,7 +2,7 @@
 
 ## 1. プロジェクト概要
 
-GPU加速GNSS測位ライブラリ。MegaParticles (Koide et al., ICRA 2024) のGPU大規模パーティクルフィルタ+SVGDフレームワークをGNSS測位に世界初適用。3D都市モデル（PLATEAU CityGML）からのリアルタイムレイトレースをパーティクルフィルタ尤度関数に統合し、都市峡谷環境でのロバスト測位を実現する。
+GPU加速GNSS測位ライブラリ。MegaParticles (Koide et al., ICRA 2024) のGPU大規模パーティクルフィルタ+SVGD設計を参照しつつ、GNSS都市測位向けに GPU常駐の大規模粒子推論、3D都市モデル（PLATEAU CityGML）からのレイトレース尤度、GNSS向けのSVGD/重み設計を統合する。研究上の主張は個別要素の「世界初」ではなく、組み合わせ、規模、実データでのロバスト性評価に置く。
 
 ### 1.1 研究的動機
 
@@ -14,32 +14,44 @@ GPU加速GNSS測位ライブラリ。MegaParticles (Koide et al., ICRA 2024) の
 - A100で約91ms/frame (11Hz)
 - 被引用: Nakao et al. (ICRA 2025) がSLAMに拡張
 
-#### 研究ギャップ（2026年3月時点の網羅的調査に基づく）
+#### 関連研究の位置づけ（2026-04-01 literature audit 反映）
 
-| ギャップ | 既存研究の状況 | 本プロジェクト |
+| 観点 | 既存研究の状況 | 本プロジェクトの狙い |
 |---------|--------------|-------------|
-| GPU PF × GNSS | **皆無** | 世界初実装 |
-| SVGD × GNSS | **皆無**（LiDARのみ） | 世界初適用 |
-| 100万パーティクル × GNSS | **皆無** | 世界初達成 |
-| PLATEAU × GNSS | **皆無** | 世界初統合 |
-| GPU Ray Tracing × GNSS PF尤度 | **皆無** | 世界初統合 |
+| GNSS particle filter | Suzuki 2024, Gupta & Gao 2021 など先行あり | GPU常駐・大規模化・実用ランタイム化 |
+| 3D map aided GNSS | Groves 2011, Adjrad & Groves 2017, Suzuki & Kubo 2016 など先行あり | パーティクルごとのレイトレース尤度を大規模PFに統合 |
+| GPU/SVGD large-scale PF | MegaParticles 2024 がLiDARで先行 | GNSS状態空間・擬似距離尤度向けの適応 |
+| 日本の公開3D都市モデル活用 | PLATEAU自体は公開基盤 | 3DMA GNSS評価パイプラインへの実装統合 |
+| robustness / integrity analysis | PF系GNSSで議論あり | catastrophic tail を含む失敗解析を明示 |
 
 #### 既存GNSS PF研究との比較
-- **Suzuki (ICRA 2024)**: Multiple Update PF, CPU, ~2000パーティクル → 本プロジェクトは500倍のパーティクル数
-- **Suzuki & Kubo (ION 2016)**: 3Dモデル+PF, CPU, レイトレース計算コスト大 → GPUで解決
-- **Groves et al. (UCL)**: Shadow Matching, グリッドベース, CPUのみ → パーティクル内リアルタイムレイトレースで連続確率推定
-- **Hsu & Wen (PolyU)**: Factor Graph + 3DMA, CPUのみ → ベイズ推論パラダイム（PF）で補完
+- **Suzuki (2024)**: 都市GNSSの直接PF推定。既に urban GNSS PF 自体は先行あり。
+- **Gupta & Gao (2021)**: GNSS fault-aware PF。integrity / availability の論点は既に存在。
+- **Suzuki & Kubo (ION 2016)**: 3DモデルとPFの統合。3D map aided GNSS PF 自体は新規ではない。
+- **Groves (2011), Adjrad & Groves (2017)**: shadow matching と 3DMA GNSS ranging の系譜。3D building model 利用や shadow matching+ranging 統合は先行あり。
+- **Hsu & Wen (PolyU)**: Factor Graph + 3DMA。PF以外のベイズ推論系との比較対象。
+- **Zhong (UCL thesis, 2024)**: 3DMA GNSS の multi-epoch filtering/PF 系の整理があるため、研究方向そのものの新規性主張は避ける。
 
 #### 競合研究動向
 - **Deep Learning系**: Graph Transformer (NAVIGATION 2024), STL-NLOS (GPS Solutions 2024) — 学習データ依存
 - **Neural表現**: Neural City Maps (Stanford, ION GNSS+ 2024) — NeRFベース、計算コスト大
 - **集合ベース**: Zonotope Shadow Matching (TU Munich, 2026) — 確率的表現なし
 
-### 1.2 新規性の3本柱
+### 1.2 守れる貢献の3本柱
 
-1. **GNSS初の100万パーティクルGPUフィルタ**: 12Hz（消費者向けGPU）
-2. **PF尤度関数内リアルタイム3Dレイトレース**: 各パーティクル×各衛星のLOS/NLOSをリアルタイム判定、NLOS-awareヘテロジニアスガウシアン尤度
-3. **SVGDのGNSSスコア関数導出**: クロックバイアスcommon-mode除去による位置勾配リーク防止
+1. **GPU常駐の大規模GNSS粒子推論**: 100万粒子級まで拡張可能な実装と実測ランタイム評価
+2. **3Dレイトレース尤度の統合**: 各パーティクル×各衛星のLOS/NLOSを評価する NLOS-aware likelihood をPFに統合
+3. **GNSS向けの粒子更新と頑健性評価**: クロックバイアスcommon-mode除去を含むSVGD/粒子更新設計と、catastrophic tail を含む失敗解析
+
+#### 1.3 避けるべき主張
+
+- 「world first GNSS particle filter」
+- 「world first urban GNSS particle filter」
+- 「3D building model を使ったGNSS尤度が初」
+- 「shadow matching と ranging の統合が初」
+- 「real-time 3D-map-aided GNSS が初」
+
+詳細な整理は `docs/literature_audit_2026-04-01.md` を参照。
 
 ---
 
@@ -353,19 +365,20 @@ struct BVHNode {
 
 ### 8.1 ターゲット論文
 
-**Title**: "GPU-Accelerated Mega-Particle Filter with Real-Time 3D Ray Tracing for Robust Urban GNSS Positioning"
+**Title**: "GPU-Resident Large-Scale Particle Filtering with 3D Ray-Tracing Likelihoods for Urban GNSS Positioning"
 
-**Key Claim**: 100万パーティクルのGPU粒子フィルタに3D建物モデルからのリアルタイムレイトレースを統合した尤度関数を提案。各パーティクル位置で衛星ごとのLOS/NLOSをリアルタイム判定し、都市峡谷環境でCPUベースのPF・WLS・EKFに対して大幅な測位精度改善を達成。
+**Key Claim**: GPU常駐の大規模GNSS粒子フィルタに、3D建物モデルからのレイトレース尤度とGNSS向け粒子更新を統合する。既存のGNSS PF / 3DMA GNSS / shadow matching を踏まえた上で、規模、計算時間、外れ値耐性の観点から WLS・EKF・RTK-like・PF系ベースラインと比較評価する。
 
 **ターゲット会議**: IROS 2027 (締切 2027年3月頃) / ION GNSS+ 2026 (締切 2026年6月頃)
 
 ### 8.2 必要な実験（論文化の最大ボトルネック）
 
 #### 実データセット（致命的に不足）
-1. **UrbanNav** (Hong Kong/Tokyo) — 公開データ、即ダウンロード可
-2. **Google Smartphone Decimeter Challenge** — 公開データ
-3. **自前収集** — 東京都市部（u-blox F9P + RTK真値）3コース以上
-4. **PLATEAUモデル** — 対応エリアのCityGML LOD2
+1. **PPC-Dataset** (`taroz/PPC-Dataset`) — 現在の主実データ。real-data evaluation と tail解析を継続
+2. **UrbanNav** (Hong Kong/Tokyo) — 外部妥当性のため追加候補
+3. **Google Smartphone Decimeter Challenge** — スマホGNSS系の追加候補
+4. **自前収集** — 東京都市部（u-blox F9P + RTK真値）3コース以上
+5. **PLATEAUモデル** — 対応エリアのCityGML LOD2
 
 #### ベースライン
 | 手法 | 実装状態 | 備考 |
@@ -391,6 +404,9 @@ struct BVHNode {
 - 50/67/95パーセンタイル誤差
 - CDF曲線
 - 最大誤差
+- 100m超外れ値率
+- 500m超catastrophic rate
+- 最長failure segment長・時間
 - 処理時間/epoch
 - ESS推移
 
@@ -403,19 +419,20 @@ struct BVHNode {
 
 | 懸念 | 対策 |
 |------|------|
-| MegaParticlesの単純適用 | GNSS固有のクロックバイアス状態空間、3Dレイトレース統合尤度、SVGDスコア関数のGNSS向け導出を強調 |
+| MegaParticlesの単純適用 | GNSS固有の状態空間、擬似距離尤度、clock-bias common-mode除去、3Dレイトレース統合を切り分けて説明 |
+| 新規性主張が強すぎる | 個別要素の「初」は避け、組み合わせ・規模・実証の貢献として記述する |
 | 3Dモデルの入手性・精度に依存 | PLATEAUで日本全国LOD2が無料、LOD精度の感度分析を含める、モデルなしでも動作 |
 | 計算コストが大きい | 消費者向けGPUで12Hz、Jetsonベンチマーク追加、ParticleFilterDeviceで5-10ms見込み |
-| 実データでの検証不十分 | 複数都市・複数走行のデータセットで評価（UrbanNav + 自前収集） |
+| 実データでの検証不十分 | PPC-Dataset全runで評価済み。UrbanNav / 自前収集で外部データ追加 |
 
 ### 8.4 アクションプラン
 
 ```
-Week 1:   UrbanNavデータダウンロード + データローダー実装
-Week 2:   WLS/EKFベースライン評価 on UrbanNav
+Week 1:   PPC-Dataset full-run の catastrophic outlier 抑制（n_sat閾値, fallback, RAIM連携）
+Week 2:   WLS/EKF/RTK-like の tail-aware 再評価（RMSだけでなく p95 / >100m / >500m）
 Week 3-4: PLATEAU対応エリアの3Dモデル取得 + 3D-PF評価
 Week 5-6: アブレーション実験（パーティクル数、3D有無、SVGD vs リサンプリング）
-Week 7:   Jetson Orinベンチマーク
+Week 7:   UrbanNav など外部データで再評価、Jetson Orinベンチマーク
 Week 8:   論文ドラフト
 ```
 
@@ -493,13 +510,16 @@ gnss_gpu/
 - Liu & Wang, "Stein Variational Gradient Descent", NeurIPS 2016. arXiv:1608.04471
 
 ### GNSS パーティクルフィルタ
-- Suzuki, "Multiple Update Particle Filter for GNSS", ICRA 2024. arXiv:2403.03394
+- Suzuki, "Multiple Update Particle Filter: Position Estimation by Combining GNSS Pseudorange and Carrier Phase Observations", 2024. arXiv:2403.03394
+- Gupta and Gao, "Reliable GNSS Localization Against Multiple Faults Using a Particle Filter Framework", 2021. arXiv:2101.06380
 - Suzuki & Kubo, "Integration of GNSS and 3D Map using Particle Filter", ION GNSS 2016
 - Murray et al., "Parallel Resampling in the Particle Filter", 2013. arXiv:1301.4019
 
 ### 3D建物モデル × GNSS
-- Groves et al., "GNSS Shadow Matching: Improving Urban Positioning Accuracy Using a 3D City Model", UCL
+- Groves, "Shadow Matching: A New GNSS Positioning Technique for Urban Canyons", Journal of Navigation, 2011
+- Adjrad & Groves, "Intelligent Urban Positioning: Integration of Shadow Matching with 3D-Mapping-Aided GNSS Ranging", Journal of Navigation, 2017
 - Hsu & Wen, "3D Mapping Database Aided GNSS Based Collaborative Positioning Using FGO", IEEE T-ITS 2021
+- Zhong, "Investigation of 3D-Mapping-Aided GNSS Navigation in Urban Canyons", UCL PhD thesis, 2024
 - Neamati et al., "Neural City Maps for GNSS Shadow Matching", ION GNSS+ 2024
 - Ketzler & Althoff, "Zonotope Shadow and Reflection Matching", TU Munich 2026. arXiv:2601.10727
 

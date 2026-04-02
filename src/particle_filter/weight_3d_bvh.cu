@@ -56,6 +56,21 @@ __device__ static bool bvh_mt_hit(const double origin[3], const double dir[3],
   return (t > 1e-6) && (t < max_t);
 }
 
+__device__ static double logaddexp2(double a, double b) {
+  double m = (a > b) ? a : b;
+  return m + log(exp(a - m) + exp(b - m));
+}
+
+__device__ static double mixed_log_likelihood(
+    double los_loglik,
+    double nlos_loglik,
+    double nlos_prob) {
+  if (nlos_prob <= 0.0) return los_loglik;
+  if (nlos_prob >= 1.0) return nlos_loglik;
+  return logaddexp2(log(1.0 - nlos_prob) + los_loglik,
+                    log(nlos_prob) + nlos_loglik);
+}
+
 // -----------------------------------------------------------------------
 // BVH traversal: returns true if any triangle blocks the ray from origin
 // to origin + dir*dist (exclusive endpoints).
@@ -101,8 +116,8 @@ __device__ static bool bvh_is_blocked(const double origin[3],
 //
 // For each particle the kernel loops over all satellites and performs a
 // BVH-accelerated ray cast to determine LOS/NLOS.  The appropriate
-// Gaussian log-likelihood (tight sigma for LOS, loose sigma with bias
-// correction for NLOS) is accumulated into log_weights[pid].
+// Gaussian log-likelihood (tight sigma for LOS, loose sigma for NLOS with
+// positive-only bias correction) is accumulated into log_weights[pid].
 //
 // Satellite data (small, invariant across particles) is loaded cooperatively
 // into shared memory.  BVH nodes and triangles are accessed from read-only
@@ -122,7 +137,8 @@ __global__ void weight_3d_bvh_kernel(
     int n_nodes,
     double* __restrict__ log_weights,
     int N, int n_sat,
-    double sigma_los, double sigma_nlos, double nlos_bias) {
+    double sigma_los, double sigma_nlos, double nlos_bias,
+    double blocked_nlos_prob, double clear_nlos_prob) {
 
   // Shared memory for satellite data (invariant across the block)
   __shared__ double s_sat[MAX_SATS_BVH * 3];
@@ -182,11 +198,21 @@ __global__ void weight_3d_bvh_kernel(
 
     // Compute likelihood contribution
     double residual = obs_pr - pred_pr;
+    double los_loglik = -0.5 * s_ws[s] * residual * residual * inv_sigma_los2;
+
+    double residual_nlos = residual;
+    if (residual_nlos > 0.0) {
+      residual_nlos -= nlos_bias;
+    }
+    double nlos_loglik =
+        -0.5 * s_ws[s] * residual_nlos * residual_nlos * inv_sigma_nlos2;
+
     if (is_nlos) {
-      residual -= nlos_bias;
-      log_w += -0.5 * s_ws[s] * residual * residual * inv_sigma_nlos2;
+      log_w += mixed_log_likelihood(
+          los_loglik, nlos_loglik, blocked_nlos_prob);
     } else {
-      log_w += -0.5 * s_ws[s] * residual * residual * inv_sigma_los2;
+      log_w += mixed_log_likelihood(
+          los_loglik, nlos_loglik, clear_nlos_prob);
     }
   }
 
@@ -204,7 +230,8 @@ void pf_weight_3d_bvh(
     const Triangle* sorted_tris, int n_tri,
     double* log_weights,
     int n_particles, int n_sat,
-    double sigma_pr_los, double sigma_pr_nlos, double nlos_bias) {
+    double sigma_pr_los, double sigma_pr_nlos, double nlos_bias,
+    double blocked_nlos_prob, double clear_nlos_prob) {
 
   const size_t sz      = (size_t)n_particles * sizeof(double);
   const size_t sz_sat  = (size_t)n_sat * 3 * sizeof(double);
@@ -252,7 +279,8 @@ void pf_weight_3d_bvh(
       d_bvh, d_tri, n_nodes,
       d_lw,
       n_particles, n_sat,
-      sigma_pr_los, sigma_pr_nlos, nlos_bias);
+      sigma_pr_los, sigma_pr_nlos, nlos_bias,
+      blocked_nlos_prob, clear_nlos_prob);
 
   CUDA_CHECK_LAST();
   CUDA_CHECK(cudaDeviceSynchronize());

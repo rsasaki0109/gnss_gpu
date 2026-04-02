@@ -48,6 +48,21 @@ __device__ static bool moller_trumbore_inline(
   return (t > 1e-6) && (t < max_t);
 }
 
+__device__ static double logaddexp2(double a, double b) {
+  double m = (a > b) ? a : b;
+  return m + log(exp(a - m) + exp(b - m));
+}
+
+__device__ static double mixed_log_likelihood(
+    double los_loglik,
+    double nlos_loglik,
+    double nlos_prob) {
+  if (nlos_prob <= 0.0) return los_loglik;
+  if (nlos_prob >= 1.0) return nlos_loglik;
+  return logaddexp2(log(1.0 - nlos_prob) + los_loglik,
+                    log(nlos_prob) + nlos_loglik);
+}
+
 // -----------------------------------------------------------------------
 // Combined weight + ray tracing kernel.
 //
@@ -58,7 +73,8 @@ __device__ static bool moller_trumbore_inline(
 //      memory via L1/L2 cache -- triangle data is read-only and shared
 //      across all threads, so the cache is effective).
 //   4. Applies an appropriate Gaussian likelihood: tight sigma for LOS,
-//      loose sigma with positive bias correction for NLOS.
+//      loose sigma for NLOS, with positive bias correction applied only when
+//      the residual itself is positive.
 //
 // Note: Shared memory is used only for satellite data (small, fits easily).
 // Triangle data is accessed from global memory to avoid __syncthreads()
@@ -77,7 +93,8 @@ __global__ void weight_3d_kernel(
     int n_tri,
     double* __restrict__ log_weights,
     int N, int n_sat,
-    double sigma_los, double sigma_nlos, double nlos_bias) {
+    double sigma_los, double sigma_nlos, double nlos_bias,
+    double blocked_nlos_prob, double clear_nlos_prob) {
 
   // Shared memory for satellite data only
   __shared__ double s_sat[MAX_SATS * 3];
@@ -140,13 +157,21 @@ __global__ void weight_3d_kernel(
 
     // Compute likelihood contribution
     double residual = obs_pr - pred_pr;
+    double los_loglik = -0.5 * s_ws[s] * residual * residual * inv_sigma_los2;
+
+    double residual_nlos = residual;
+    if (residual_nlos > 0.0) {
+      residual_nlos -= nlos_bias;
+    }
+    double nlos_loglik =
+        -0.5 * s_ws[s] * residual_nlos * residual_nlos * inv_sigma_nlos2;
+
     if (is_nlos) {
-      // NLOS: account for positive multipath bias
-      residual -= nlos_bias;
-      log_w += -0.5 * s_ws[s] * residual * residual * inv_sigma_nlos2;
+      log_w += mixed_log_likelihood(
+          los_loglik, nlos_loglik, blocked_nlos_prob);
     } else {
-      // LOS: tight Gaussian
-      log_w += -0.5 * s_ws[s] * residual * residual * inv_sigma_los2;
+      log_w += mixed_log_likelihood(
+          los_loglik, nlos_loglik, clear_nlos_prob);
     }
   }
 
@@ -163,7 +188,8 @@ void pf_weight_3d(
     const Triangle* triangles, int n_tri,
     double* log_weights,
     int n_particles, int n_sat,
-    double sigma_pr_los, double sigma_pr_nlos, double nlos_bias) {
+    double sigma_pr_los, double sigma_pr_nlos, double nlos_bias,
+    double blocked_nlos_prob, double clear_nlos_prob) {
 
   size_t sz     = (size_t)n_particles * sizeof(double);
   size_t sz_sat = (size_t)n_sat * 3 * sizeof(double);
@@ -205,7 +231,8 @@ void pf_weight_3d(
       d_tri, n_tri,
       d_lw,
       n_particles, n_sat,
-      sigma_pr_los, sigma_pr_nlos, nlos_bias);
+      sigma_pr_los, sigma_pr_nlos, nlos_bias,
+      blocked_nlos_prob, clear_nlos_prob);
 
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
@@ -220,8 +247,14 @@ void pf_weight_3d(
 
   CUDA_CHECK(cudaMemcpy(log_weights, d_lw, sz, cudaMemcpyDeviceToHost));
 
-  CUDA_CHECK(cudaFree(d_px)); CUDA_CHECK(cudaFree(d_py));
-  CUDA_CHECK(cudaFree(d_sat)); CUDA_CHECK(cudaFree(d_pr));
+  CUDA_CHECK(cudaFree(d_px));
+  CUDA_CHECK(cudaFree(d_py));
+  CUDA_CHECK(cudaFree(d_pz));
+  CUDA_CHECK(cudaFree(d_pcb));
+  CUDA_CHECK(cudaFree(d_sat));
+  CUDA_CHECK(cudaFree(d_pr));
+  CUDA_CHECK(cudaFree(d_ws));
+  CUDA_CHECK(cudaFree(d_lw));
   if (d_tri) CUDA_CHECK(cudaFree(d_tri));
 }
 

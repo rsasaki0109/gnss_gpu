@@ -167,12 +167,17 @@ class PlateauLoader:
         Parameters
         ----------
         coords : ndarray, shape (N, 3)
-            Coordinates as stored in PLATEAU CityGML.  The Japanese plane
-            rectangular system labels the axes as:
+            Coordinates as stored in PLATEAU CityGML.  Most datasets use the
+            Japanese plane rectangular system:
             - 1st value = Y (northing from origin latitude)
             - 2nd value = X (easting from origin longitude, with no false
               easting in PLATEAU data -- but some datasets add 500 km)
             - 3rd value = Z (ellipsoidal height in metres)
+
+            Some published files instead store geographic coordinates directly
+            as ``(lat_deg, lon_deg, h_m)``.  Those are detected heuristically
+            from the coordinate ranges and converted without the plane-rect
+            inverse projection.
 
         Returns
         -------
@@ -181,11 +186,31 @@ class PlateauLoader:
         """
         n = coords.shape[0]
         ecef = np.empty((n, 3), dtype=np.float64)
+        use_geodetic_degrees = self._looks_geodetic_degrees(coords)
         for i in range(n):
-            ecef[i] = self._plane_rect_to_ecef(
-                coords[i, 0], coords[i, 1], coords[i, 2]
-            )
+            if use_geodetic_degrees:
+                ecef[i] = self._geodetic_degrees_to_ecef(
+                    coords[i, 0], coords[i, 1], coords[i, 2]
+                )
+            else:
+                ecef[i] = self._plane_rect_to_ecef(
+                    coords[i, 0], coords[i, 1], coords[i, 2]
+                )
         return ecef
+
+    @staticmethod
+    def _looks_geodetic_degrees(coords):
+        """Return True when ``coords`` looks like (lat_deg, lon_deg, h_m)."""
+        if coords.ndim != 2 or coords.shape[1] < 2:
+            return False
+        lat = coords[:, 0]
+        lon = coords[:, 1]
+        return bool(
+            np.all(np.isfinite(lat))
+            and np.all(np.isfinite(lon))
+            and np.max(np.abs(lat)) <= 90.0
+            and np.max(np.abs(lon)) <= 180.0
+        )
 
     @staticmethod
     def _polygon_to_triangles(coords_3d):
@@ -382,6 +407,11 @@ class PlateauLoader:
         y = (N + alt) * cos_lat * sin_lon
         z = (N * (1.0 - _E2) + alt) * sin_lat
         return np.array([x, y, z], dtype=np.float64)
+
+    @classmethod
+    def _geodetic_degrees_to_ecef(cls, lat_deg, lon_deg, alt):
+        """Convert geodetic degrees to ECEF."""
+        return cls._lla_to_ecef(np.radians(lat_deg), np.radians(lon_deg), alt)
 
 
 def load_plateau(filepath_or_dir, zone=9):

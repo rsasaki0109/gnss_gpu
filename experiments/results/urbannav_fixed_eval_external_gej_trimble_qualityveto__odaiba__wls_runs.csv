@@ -1,0 +1,2 @@
+run,method,backend,time_ms_per_epoch,mean_2d,rms_2d,rms_3d,p50,p67,p95,max_2d,outlier_rate_pct,catastrophic_rate_pct,longest_outlier_segment_epochs,longest_outlier_segment_s,n_epochs
+Odaiba,WLS,WLS,0.024513,507.796255,2969.173426,933159.122764,63.941170,69.592743,243.036606,20240.239320,10.229219,2.357452,216.000000,21.500000,12259
