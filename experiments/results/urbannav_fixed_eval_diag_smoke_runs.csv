@@ -1,0 +1,3 @@
+run,method,backend,time_ms_per_epoch,mean_2d,rms_2d,rms_3d,p50,p67,p95,max_2d,outlier_rate_pct,catastrophic_rate_pct,longest_outlier_segment_epochs,longest_outlier_segment_s,n_epochs
+Odaiba,EKF,EKF,0.026095,82.314170,82.314751,83.121766,82.303216,82.364374,82.904614,82.958102,0.000000,0.000000,0.000000,0.000000,50
+Odaiba,PF-10K,GPU,1.218194,82.268090,82.284034,83.641797,82.419958,82.972546,85.071906,86.557489,0.000000,0.000000,0.000000,0.000000,50

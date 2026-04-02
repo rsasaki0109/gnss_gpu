@@ -1,0 +1,6 @@
+city,run,config,systems,weight_scale,n_epochs,median_satellites,rms_2d,p95,time_ms
+tokyo,run1,G,G,-,30,9,53.560075,54.386047,0.025151
+tokyo,run1,"G,J","G,J",-,30,12,55.882819,56.722445,0.060492
+tokyo,run1,"G,E","G,E",-,30,16,73.421796,74.120715,0.062959
+tokyo,run1,"G,E,J","G,E,J",-,30,19,73.175589,74.077438,0.075354
+tokyo,run1,"G,E,J scaled","G,E,J","E=0.1,J=2.0",30,19,58.742264,59.621545,0.094204

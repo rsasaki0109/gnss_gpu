@@ -1,0 +1,2 @@
+run,method,backend,time_ms_per_epoch,mean_2d,rms_2d,rms_3d,p50,p67,p95,max_2d,outlier_rate_pct,catastrophic_rate_pct,longest_outlier_segment_epochs,longest_outlier_segment_s,n_epochs
+HK_20190428,EKF,EKF,0.038829,66.581557,76.949376,123.454617,60.384824,69.943358,95.352087,456.375179,3.490760,0.000000,11.000000,10.000000,487

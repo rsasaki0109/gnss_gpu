@@ -1,0 +1,2 @@
+run,method,backend,time_ms_per_epoch,mean_2d,rms_2d,rms_3d,p50,p67,p95,max_2d,outlier_rate_pct,catastrophic_rate_pct,longest_outlier_segment_epochs,longest_outlier_segment_s,n_epochs
+HK_20190428,PF+EKFGuide-10K,GPU+QVGated(487fb)+Guide,1.911164,73.194247,82.368076,135.286005,70.640859,77.778286,100.695774,456.114450,5.544148,0.000000,11.000000,10.000000,487

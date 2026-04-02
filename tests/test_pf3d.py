@@ -177,6 +177,36 @@ class TestWeight3DKernel:
         # 3D should penalize much less (log_w closer to 0)
         assert np.all(log_w_3d > log_w_std)
 
+    def test_nlos_negative_residual_does_not_apply_positive_bias(self):
+        """Negative NLOS residuals should not be shifted by a positive bias term."""
+        building = _make_box_building()
+        n = 32
+
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+
+        sat_pos = np.array([200.0, 0.0, 25.0], dtype=np.float64)
+        dist = np.sqrt(np.sum(sat_pos ** 2))
+        nlos_bias = 20.0
+        pseudoranges = np.array([dist + 100.0 - nlos_bias], dtype=np.float64)
+        weights_sat = np.ones(1, dtype=np.float64)
+
+        tri = building.triangles.reshape(-1, 3, 3)
+        log_w = np.zeros(n, dtype=np.float64)
+        sigma_nlos = 30.0
+
+        pf_weight_3d(
+            px, py, pz, pcb,
+            sat_pos, pseudoranges, weights_sat, tri,
+            log_w, n, 1,
+            3.0, sigma_nlos, nlos_bias,
+        )
+
+        expected = -0.5 * (nlos_bias ** 2) / (sigma_nlos ** 2)
+        assert np.allclose(log_w, expected, atol=1e-10)
+
     def test_different_particles_different_los(self):
         """Particles at different positions should get different LOS classification."""
         building = _make_box_building()

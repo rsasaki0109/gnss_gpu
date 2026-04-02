@@ -1,0 +1,3 @@
+method,analyze_epoch,gps_tow,n_sat,sample_particles,uniform_weights,estimate_x,estimate_y,estimate_z,estimate_cb,position_error_m
+pf,63,555929.199999,6,128,True,-3810168.015366,3567779.152986,3653089.500388,113485.217437,81.342148
+pf3d_bvh,63,555929.199999,6,128,True,-3810163.890479,3567784.760964,3653083.963717,113473.947035,72.512854
