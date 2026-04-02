@@ -1,0 +1,7 @@
+city,run,config,systems,weight_scale,n_epochs,median_satellites,rms_2d,p95,time_ms
+nagoya,run1,"G,E","G,E",-,300,12,26.364609,39.905890,0.051744
+nagoya,run2,"G,E,J","G,E,J",-,300,18,55.869934,57.160563,0.069365
+nagoya,run3,"G,E,J","G,E,J",-,300,16,61.129637,62.843180,0.066508
+tokyo,run1,G,G,-,300,9,54.588227,65.476222,0.023883
+tokyo,run2,"G,E","G,E",-,300,20,39.013058,44.131900,0.063530
+tokyo,run3,"G,E,J","G,E,J",-,300,22,53.626272,55.897393,0.078011

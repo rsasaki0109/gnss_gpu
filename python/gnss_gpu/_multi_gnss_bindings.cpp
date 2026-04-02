@@ -18,8 +18,6 @@ PYBIND11_MODULE(_gnss_gpu_multi_gnss, m) {
     auto bsys = system_ids.request();
     // sat_ecef: accept (N,3) or (N*3,) flat
     int n_sat = bp.size;
-    if (n_sat < 4)
-      throw std::runtime_error("wls_multi_gnss requires at least 4 satellites");
     int n_state = 3 + n_systems;
     auto result = py::array_t<double>(std::vector<ssize_t>{n_state});
     double* result_ptr = static_cast<double*>(result.request().ptr);
@@ -45,9 +43,9 @@ PYBIND11_MODULE(_gnss_gpu_multi_gnss, m) {
     auto bp = pseudoranges.request();
     int n_epoch = bs.shape[0];
     int n_sat = bs.shape[1];
-    if (n_sat < 4)
-      throw std::runtime_error("wls_multi_gnss_batch requires at least 4 satellites");
     int n_state = 3 + n_systems;
+    if (n_sat < n_state)
+      throw std::runtime_error("wls_multi_gnss_batch requires at least 3 + n_systems satellites");
     auto results = py::array_t<double>({n_epoch, n_state});
     auto iters = py::array_t<int>(std::vector<ssize_t>{n_epoch});
     gnss_gpu::wls_multi_gnss_batch(

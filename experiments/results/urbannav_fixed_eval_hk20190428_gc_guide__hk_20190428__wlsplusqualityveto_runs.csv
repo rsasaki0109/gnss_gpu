@@ -1,0 +1,2 @@
+run,method,backend,time_ms_per_epoch,mean_2d,rms_2d,rms_3d,p50,p67,p95,max_2d,outlier_rate_pct,catastrophic_rate_pct,longest_outlier_segment_epochs,longest_outlier_segment_s,n_epochs
+HK_20190428,WLS+QualityVeto,WLS+QualityVeto,0.255901,68.175108,82.058844,120.736758,60.568606,71.048106,95.505342,471.901999,3.696099,0.000000,11.000000,10.000000,487

@@ -1,0 +1,10 @@
+{
+  "name": "gnss-gpu-site-smoke",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "1.58.2"
+  },
+  "scripts": {
+    "site:smoke": "playwright test -c tests/site/playwright.config.cjs"
+  }
+}

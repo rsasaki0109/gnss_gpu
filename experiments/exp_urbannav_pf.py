@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-"""Experiment: GPU Particle Filter (without 3D model) on UrbanNav data.
+"""Experiment: GPU Particle Filter (without 3D model) on PPC / UrbanNav / synthetic data.
 
-Evaluates the GPU Mega Particle Filter at three particle counts and compares
-with WLS/EKF baselines.  Reports accuracy vs computation time tradeoff.
-
-Particle counts evaluated: 10K, 100K, 1M
+Evaluates the GPU particle filter at multiple particle counts and compares it
+with WLS/EKF baselines. Supports PPC-Dataset real data via the shared baseline
+loader and falls back to synthetic data when no real dataset is provided.
 
 Outputs
 -------
-  experiments/results/pf_results.csv
-  experiments/results/pf_summary.csv
-  experiments/results/pf_cdf.png
-  experiments/results/pf_timeline.png
-  experiments/results/pf_pareto.png
+  experiments/results/<prefix>_results.csv
+  experiments/results/<prefix>_summary.csv
+  experiments/results/<prefix>_cdf.png
+  experiments/results/<prefix>_timeline.png
+  experiments/results/<prefix>_pareto.png
 
 Usage
 -----
   PYTHONPATH=python python3 experiments/exp_urbannav_pf.py
-  PYTHONPATH=python python3 experiments/exp_urbannav_pf.py --data-dir /path/to/urbannav
+  PYTHONPATH=python python3 experiments/exp_urbannav_pf.py \
+      --data-dir /tmp/PPC-real/PPC-Dataset/tokyo/run1 --systems G
+  PYTHONPATH=python python3 experiments/exp_urbannav_pf.py \
+      --data-dir /path/to/UrbanNav/Odaiba --systems G --urban-rover ublox
 """
 
 from __future__ import annotations
@@ -42,14 +44,13 @@ RESULTS_DIR = _SCRIPT_DIR / "results"
 from evaluate import (
     SimplePFCPU,
     compute_metrics,
-    generate_synthetic_urbannav,
     plot_cdf,
     plot_error_timeline,
     plot_pareto,
     print_comparison_table,
     save_results,
-    wls_solve_py,
 )
+from exp_urbannav_baseline import load_or_generate_data, run_ekf, run_wls
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -59,97 +60,78 @@ PF_SIGMA_POS = 2.0    # m/step
 PF_SIGMA_CB = 300.0   # m/step
 PF_SIGMA_PR = 8.0     # m
 
-# ---------------------------------------------------------------------------
-# Data loading (reuse from baseline)
-# ---------------------------------------------------------------------------
 
-def load_or_generate_data(data_dir: Path | None, n_epochs: int = 300) -> dict:
-    if data_dir is not None and data_dir.exists():
-        print(f"    Searching for UrbanNav data in: {data_dir}")
-    else:
-        print("    No data directory provided. Using synthetic data.")
+def _epoch_dt(data: dict, i: int) -> float:
+    """Return a positive step size for epoch *i*."""
+    if i <= 0:
+        return float(data.get("dt", 1.0))
 
-    data = generate_synthetic_urbannav(n_epochs=n_epochs, n_satellites=8, seed=42)
-    print(f"    Synthetic data: {data['n_epochs']} epochs, "
-          f"{data['n_satellites']} satellites")
-    return data
+    times = np.asarray(data.get("times", []), dtype=np.float64)
+    if len(times) > i:
+        dt = float(times[i] - times[i - 1])
+        if dt > 0.0:
+            return dt
+    return float(data.get("dt", 1.0))
 
 
-# ---------------------------------------------------------------------------
-# WLS baseline (quick re-run to have common reference)
-# ---------------------------------------------------------------------------
+def _longest_segment(mask: np.ndarray, times: np.ndarray) -> tuple[int, float]:
+    longest_epochs = 0
+    longest_duration = 0.0
+    start = None
 
-def run_wls_quick(data: dict) -> np.ndarray:
+    for i, flagged in enumerate(mask):
+        if flagged and start is None:
+            start = i
+        elif not flagged and start is not None:
+            end = i - 1
+            n_epochs = end - start + 1
+            duration = float(times[end] - times[start]) if end > start else 0.0
+            if n_epochs > longest_epochs:
+                longest_epochs = n_epochs
+                longest_duration = duration
+            start = None
+
+    if start is not None:
+        end = len(mask) - 1
+        n_epochs = end - start + 1
+        duration = float(times[end] - times[start]) if end > start else 0.0
+        if n_epochs > longest_epochs:
+            longest_epochs = n_epochs
+            longest_duration = duration
+
+    return longest_epochs, longest_duration
+
+
+def _augment_tail_metrics(metrics: dict, times: np.ndarray) -> dict:
+    errors = np.asarray(metrics["errors_2d"], dtype=np.float64)
+    outlier_mask = errors > 100.0
+    catastrophic_mask = errors > 500.0
+    longest_epochs, longest_duration = _longest_segment(outlier_mask, times)
+    metrics["outlier_rate_pct"] = 100.0 * float(np.mean(outlier_mask))
+    metrics["catastrophic_rate_pct"] = 100.0 * float(np.mean(catastrophic_mask))
+    metrics["longest_outlier_segment_epochs"] = float(longest_epochs)
+    metrics["longest_outlier_segment_s"] = float(longest_duration)
+    return metrics
+
+
+def run_pf(
+    data: dict,
+    n_particles: int,
+    wls_init: np.ndarray,
+    resampling: str = "megopolis",
+) -> tuple[np.ndarray, float, str]:
+    """Run ParticleFilter with the given particle count."""
     n_epochs = data["n_epochs"]
     sat_ecef = data["sat_ecef"]
     pseudoranges = data["pseudoranges"]
     weights = data["weights"]
-    positions = np.zeros((n_epochs, 4))
-
-    try:
-        from gnss_gpu import wls_position as _gpu_wls
-        for i in range(n_epochs):
-            result, _ = _gpu_wls(sat_ecef[i], pseudoranges[i], weights[i], 10, 1e-4)
-            positions[i] = np.asarray(result)
-    except (ImportError, Exception):
-        for i in range(n_epochs):
-            positions[i], _ = wls_solve_py(sat_ecef[i], pseudoranges[i], weights[i])
-
-    return positions
-
-
-# ---------------------------------------------------------------------------
-# EKF baseline
-# ---------------------------------------------------------------------------
-
-def run_ekf_quick(data: dict, wls_init: np.ndarray) -> np.ndarray:
-    from gnss_gpu.ekf import EKFPositioner
-    n_epochs = data["n_epochs"]
-    sat_ecef = data["sat_ecef"]
-    pseudoranges = data["pseudoranges"]
-    weights = data["weights"]
-    dt = data["dt"]
-
-    ekf = EKFPositioner(sigma_pr=5.0, sigma_pos=1.0, sigma_vel=0.1,
-                        sigma_clk=100.0, sigma_drift=10.0)
-    ekf.initialize(wls_init[0, :3], clock_bias=float(wls_init[0, 3]),
-                   sigma_pos=50.0, sigma_cb=500.0)
-
-    positions = np.zeros((n_epochs, 3))
-    for i in range(n_epochs):
-        if i > 0:
-            ekf.predict(dt=dt)
-        ekf.update(sat_ecef[i], pseudoranges[i], weights=weights[i])
-        positions[i] = ekf.get_position()
-
-    return positions
-
-
-# ---------------------------------------------------------------------------
-# Particle Filter runner
-# ---------------------------------------------------------------------------
-
-def run_pf(data: dict, n_particles: int, wls_init: np.ndarray,
-           resampling: str = "megopolis") -> tuple[np.ndarray, float, str]:
-    """Run ParticleFilter with given particle count.
-
-    Returns
-    -------
-    positions : ndarray, shape (N, 3)
-    ms_per_epoch : float
-    backend : str
-    """
-    n_epochs = data["n_epochs"]
-    sat_ecef = data["sat_ecef"]
-    pseudoranges = data["pseudoranges"]
-    weights = data["weights"]
-    dt = data["dt"]
 
     positions = np.zeros((n_epochs, 3))
     t0 = time.perf_counter()
 
     try:
         from gnss_gpu import ParticleFilter
+
         pf = ParticleFilter(
             n_particles=n_particles,
             sigma_pos=PF_SIGMA_POS,
@@ -165,16 +147,16 @@ def run_pf(data: dict, n_particles: int, wls_init: np.ndarray,
             spread_cb=500.0,
         )
         for i in range(n_epochs):
-            pf.predict(dt=dt)
+            pf.predict(dt=_epoch_dt(data, i))
             pf.update(sat_ecef[i], pseudoranges[i], weights=weights[i])
-            est = pf.estimate()
-            positions[i] = est[:3]
+            positions[i] = pf.estimate()[:3]
         backend = "GPU"
     except (ImportError, RuntimeError, Exception) as e:
-        # CPU fallback with capped particle count for speed
         n_cpu = min(n_particles, 50_000)
-        print(f"      GPU ParticleFilter unavailable ({type(e).__name__}). "
-              f"CPU fallback with {n_cpu} particles.")
+        print(
+            f"      GPU ParticleFilter unavailable ({type(e).__name__}: {e}). "
+            f"CPU fallback with {n_cpu} particles."
+        )
         pf = SimplePFCPU(
             n_particles=n_cpu,
             sigma_pos=PF_SIGMA_POS,
@@ -189,49 +171,102 @@ def run_pf(data: dict, n_particles: int, wls_init: np.ndarray,
             spread_cb=500.0,
         )
         for i in range(n_epochs):
-            pf.predict(dt=dt)
+            pf.predict(dt=_epoch_dt(data, i))
             pf.update(sat_ecef[i], pseudoranges[i], weights=weights[i])
-            est = pf.estimate()
-            positions[i] = est[:3]
+            positions[i] = pf.estimate()[:3]
         backend = f"CPU({n_cpu})"
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
-    print(f"    PF-{n_particles//1000}K ({backend}): "
-          f"{elapsed:.1f} ms total, {ms_per_epoch:.3f} ms/epoch")
+    print(
+        f"    PF-{n_particles//1000}K ({backend}): "
+        f"{elapsed:.1f} ms total, {ms_per_epoch:.3f} ms/epoch"
+    )
     return positions, ms_per_epoch, backend
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
 def main():
     parser = argparse.ArgumentParser(
-        description="GPU Particle Filter (no 3D model) evaluation on UrbanNav")
-    parser.add_argument("--data-dir", type=Path, default=None,
-                        help="Path to UrbanNav dataset directory")
-    parser.add_argument("--n-epochs", type=int, default=300,
-                        help="Number of epochs for synthetic data (default: 300)")
-    parser.add_argument("--no-plots", action="store_true",
-                        help="Skip generating plots")
-    parser.add_argument("--quick", action="store_true",
-                        help="Run only 10K and 100K particles (faster)")
+        description="GPU Particle Filter (no 3D model) evaluation on PPC or synthetic data"
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Path to PPC/UrbanNav run directory, dataset root, or none for synthetic",
+    )
+    parser.add_argument(
+        "--n-epochs",
+        type=int,
+        default=300,
+        help="Number of epochs for synthetic fallback (default: 300)",
+    )
+    parser.add_argument(
+        "--max-epochs",
+        type=int,
+        default=None,
+        help="Optional cap on real-data epochs",
+    )
+    parser.add_argument(
+        "--start-epoch",
+        type=int,
+        default=0,
+        help="Skip this many usable real-data epochs before evaluation",
+    )
+    parser.add_argument(
+        "--systems",
+        type=str,
+        default="G",
+        help="Comma-separated constellations for real data, e.g. G or G,E",
+    )
+    parser.add_argument(
+        "--urban-rover",
+        type=str,
+        default="ublox",
+        help="UrbanNav rover observation source, e.g. ublox or trimble",
+    )
+    parser.add_argument(
+        "--no-plots",
+        action="store_true",
+        help="Skip generating plots",
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Run only 10K and 100K particles (faster)",
+    )
+    parser.add_argument(
+        "--results-prefix",
+        type=str,
+        default="pf",
+        help="Output filename prefix under experiments/results/",
+    )
     args = parser.parse_args()
+    systems = tuple(part.strip().upper() for part in args.systems.split(",") if part.strip())
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("=" * 72)
-    print("  Experiment: GPU Particle Filter (No 3D Model) on UrbanNav")
+    print("  Experiment: GPU Particle Filter (No 3D Model) on PPC / Synthetic")
     print("=" * 72)
 
     # ------------------------------------------------------------------
     # [1] Data
     # ------------------------------------------------------------------
     print("\n[1] Loading data ...")
-    data = load_or_generate_data(args.data_dir, n_epochs=args.n_epochs)
+    data = load_or_generate_data(
+        args.data_dir,
+        n_epochs=args.n_epochs,
+        max_real_epochs=args.max_epochs,
+        start_epoch=args.start_epoch,
+        systems=systems,
+        urban_rover=args.urban_rover,
+    )
     ground_truth = data["ground_truth"]
     n_epochs = data["n_epochs"]
+    times = np.asarray(data["times"], dtype=np.float64)
+    if "dataset_name" in data:
+        print(f"    Dataset: {data['dataset_name']}")
 
     # ------------------------------------------------------------------
     # [2] Baselines
@@ -239,20 +274,22 @@ def main():
     print("\n[2] Running baselines ...")
 
     print("    WLS ...")
-    t0 = time.perf_counter()
-    wls_pos = run_wls_quick(data)
-    wls_ms = (time.perf_counter() - t0) * 1000.0 / n_epochs
-    wls_metrics = compute_metrics(wls_pos[:, :3], ground_truth)
-    print(f"    WLS: RMS 2D={wls_metrics['rms_2d']:.2f} m, "
-          f"{wls_ms:.3f} ms/epoch")
+    wls_pos, wls_ms = run_wls(data)
+    wls_metrics = _augment_tail_metrics(compute_metrics(wls_pos[:, :3], ground_truth), times)
+    wls_metrics["time_ms"] = wls_ms
+    print(
+        f"    WLS: RMS 2D={wls_metrics['rms_2d']:.2f} m, "
+        f"P95={wls_metrics['p95']:.2f} m"
+    )
 
     print("    EKF ...")
-    t0 = time.perf_counter()
-    ekf_pos = run_ekf_quick(data, wls_pos)
-    ekf_ms = (time.perf_counter() - t0) * 1000.0 / n_epochs
-    ekf_metrics = compute_metrics(ekf_pos, ground_truth)
-    print(f"    EKF: RMS 2D={ekf_metrics['rms_2d']:.2f} m, "
-          f"{ekf_ms:.3f} ms/epoch")
+    ekf_pos, ekf_ms = run_ekf(data, wls_pos)
+    ekf_metrics = _augment_tail_metrics(compute_metrics(ekf_pos, ground_truth), times)
+    ekf_metrics["time_ms"] = ekf_ms
+    print(
+        f"    EKF: RMS 2D={ekf_metrics['rms_2d']:.2f} m, "
+        f"P95={ekf_metrics['p95']:.2f} m"
+    )
 
     # ------------------------------------------------------------------
     # [3] Particle Filter at each particle count
@@ -260,7 +297,7 @@ def main():
     particle_counts = [10_000, 100_000] if args.quick else PF_PARTICLE_COUNTS
 
     print(f"\n[3] Running Particle Filter ({particle_counts}) ...")
-    pf_results = {}  # label -> (positions, ms_per_epoch, backend)
+    pf_results: dict[str, tuple[np.ndarray, float, str]] = {}
 
     for n_p in particle_counts:
         label = f"PF-{n_p // 1000}K"
@@ -276,15 +313,22 @@ def main():
         "WLS": wls_metrics,
         "EKF": ekf_metrics,
     }
-    all_metrics["WLS"]["time_ms"] = wls_ms
-    all_metrics["EKF"]["time_ms"] = ekf_ms
+    position_by_label = {
+        "WLS": wls_pos[:, :3],
+        "EKF": ekf_pos,
+    }
 
     for label, (pos, ms, backend) in pf_results.items():
-        m = compute_metrics(pos, ground_truth)
+        m = _augment_tail_metrics(compute_metrics(pos, ground_truth), times)
         m["time_ms"] = ms
         m["backend"] = backend
         all_metrics[label] = m
-        print(f"    {label}: RMS 2D={m['rms_2d']:.2f} m, P95={m['p95']:.2f} m")
+        position_by_label[label] = pos
+        print(
+            f"    {label}: RMS 2D={m['rms_2d']:.2f} m, "
+            f"P95={m['p95']:.2f} m, "
+            f">100m={m['outlier_rate_pct']:.2f}%"
+        )
 
     # ------------------------------------------------------------------
     # [5] Comparison table
@@ -297,20 +341,23 @@ def main():
     # ------------------------------------------------------------------
     print("\n[6] Saving results ...")
     epochs = np.arange(n_epochs)
+    all_errors_per_epoch = {label: all_metrics[label]["errors_2d"] for label in all_metrics}
 
-    # Per-epoch errors for each PF run
-    all_errors_per_epoch = {"WLS": wls_metrics["errors_2d"],
-                             "EKF": ekf_metrics["errors_2d"]}
-    for label, (pos, _, _) in pf_results.items():
-        m = compute_metrics(pos, ground_truth)
-        all_errors_per_epoch[label] = m["errors_2d"]
-
-    row_data: dict = {"epoch": epochs}
+    row_data: dict[str, object] = {
+        "epoch": epochs,
+        "gps_tow": times,
+        "satellite_count": np.asarray(data.get("satellite_counts", np.full(n_epochs, data.get("n_satellites", 0))), dtype=np.int32),
+    }
     for label, errs in all_errors_per_epoch.items():
-        row_data[f"error_2d_{label.lower().replace('-', '_')}"] = errs
-    save_results(row_data, RESULTS_DIR / "pf_results.csv")
+        key = label.lower().replace("-", "_")
+        row_data[f"error_2d_{key}"] = errs
+        pos = np.asarray(position_by_label[label], dtype=np.float64)
+        row_data[f"est_x_{key}"] = pos[:, 0]
+        row_data[f"est_y_{key}"] = pos[:, 1]
+        row_data[f"est_z_{key}"] = pos[:, 2]
 
-    # Summary
+    save_results(row_data, RESULTS_DIR / f"{args.results_prefix}_results.csv")
+
     method_labels = list(all_metrics.keys())
     summary = {
         "method": method_labels,
@@ -319,9 +366,19 @@ def main():
         "p50": [all_metrics[m]["p50"] for m in method_labels],
         "p95": [all_metrics[m]["p95"] for m in method_labels],
         "max_2d": [all_metrics[m]["max_2d"] for m in method_labels],
+        "outlier_rate_pct": [all_metrics[m]["outlier_rate_pct"] for m in method_labels],
+        "catastrophic_rate_pct": [all_metrics[m]["catastrophic_rate_pct"] for m in method_labels],
+        "longest_outlier_segment_epochs": [
+            all_metrics[m]["longest_outlier_segment_epochs"] for m in method_labels
+        ],
+        "longest_outlier_segment_s": [
+            all_metrics[m]["longest_outlier_segment_s"] for m in method_labels
+        ],
         "time_ms": [all_metrics[m].get("time_ms", 0.0) for m in method_labels],
+        "backend": [all_metrics[m].get("backend", "-") for m in method_labels],
+        "n_epochs": [n_epochs for _ in method_labels],
     }
-    save_results(summary, RESULTS_DIR / "pf_summary.csv")
+    save_results(summary, RESULTS_DIR / f"{args.results_prefix}_summary.csv")
 
     # ------------------------------------------------------------------
     # [7] Plots
@@ -329,25 +386,28 @@ def main():
     if not args.no_plots:
         print("\n[7] Generating plots ...")
 
-        plot_cdf(all_errors_per_epoch, RESULTS_DIR / "pf_cdf.png",
-                 title="CDF of 2D Error - Particle Filter vs Baselines")
+        plot_cdf(
+            all_errors_per_epoch,
+            RESULTS_DIR / f"{args.results_prefix}_cdf.png",
+            title="CDF of 2D Error - Particle Filter vs Baselines",
+        )
 
         plot_error_timeline(
-            data["times"], all_errors_per_epoch,
-            RESULTS_DIR / "pf_timeline.png",
+            times,
+            all_errors_per_epoch,
+            RESULTS_DIR / f"{args.results_prefix}_timeline.png",
             title="2D Error Over Time - Particle Filter vs Baselines",
         )
 
-        # Pareto: accuracy vs time
-        pareto_time = {m: all_metrics[m].get("time_ms", 0.0)
-                       for m in all_metrics}
+        pareto_time = {m: all_metrics[m].get("time_ms", 0.0) for m in all_metrics}
         pareto_acc = {m: all_metrics[m]["mean_2d"] for m in all_metrics}
-        plot_pareto(pareto_time, pareto_acc, RESULTS_DIR / "pf_pareto.png",
-                    title="Accuracy vs Computation Time - PF Particle Counts")
+        plot_pareto(
+            pareto_time,
+            pareto_acc,
+            RESULTS_DIR / f"{args.results_prefix}_pareto.png",
+            title="Accuracy vs Computation Time - PF Particle Counts",
+        )
 
-    # ------------------------------------------------------------------
-    # Done
-    # ------------------------------------------------------------------
     print(f"\n{'=' * 72}")
     print(f"  Results saved to: {RESULTS_DIR}/")
     print(f"{'=' * 72}")
