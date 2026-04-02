@@ -1,0 +1,660 @@
+{
+  "generated_at_utc": "2026-04-03T00:31:16+00:00",
+  "title": "gnss_gpu Artifact Snapshot",
+  "subtitle": "Mainline is frozen on `PF+RobustClear-10K`. PPC gate work stays exploratory, and explicit 3D PF remains a systems result.",
+  "status": {
+    "label": "Current Read",
+    "value": "Accept-strength package, not a guaranteed strong accept",
+    "detail": "The external UrbanNav result is now clearly in favor of the multi-GNSS PF path, while BVH delivers a large runtime gain. What remains limited is breadth and the size of the PPC gate gain."
+  },
+  "hero_cards": [
+    {
+      "label": "Frozen Mainline",
+      "value": "PF+RobustClear-10K",
+      "detail": "External winner on UrbanNav trimble + G,E,J."
+    },
+    {
+      "label": "UrbanNav vs EKF",
+      "value": "93.25 -> 66.6 m",
+      "detail": "Mean RMS 2D across Odaiba + Shinjuku."
+    },
+    {
+      "label": "Window Wins",
+      "value": "90/127 RMS wins",
+      "detail": "Fixed 500-epoch windows against EKF on UrbanNav Tokyo."
+    },
+    {
+      "label": "BVH Speedup",
+      "value": "57.8x",
+      "detail": "PF3D vs PF3D-BVH on the real PLATEAU subset."
+    },
+    {
+      "label": "Freeze Validation",
+      "value": "440 passed, 7 skipped",
+      "detail": "The freeze checkpoint reran full repo pytest. Remaining warnings are known slow-mark, datetime, and plotting warnings rather than new failures."
+    }
+  ],
+  "repo_summary": [
+    "This repo is not presenting a single heroic algorithm. It is an experiment-first GNSS package where comparable variants are built, measured, and either frozen or discarded.",
+    "The accuracy headline is the UrbanNav external result with trimble + G,E,J. The PPC gate family remains useful as a design-discipline story, but not as the main empirical claim.",
+    "The 3D PF path is currently a systems contribution: BVH preserves PF3D accuracy on a real PLATEAU subset while making runtime practical."
+  ],
+  "quick_links": [
+    {
+      "label": "Paper Main Table",
+      "href": "assets/data/paper_main_table.csv",
+      "detail": "Paper-ready CSV summary copied from `experiments/results/paper_assets/`."
+    },
+    {
+      "label": "UrbanNav Summary CSV",
+      "href": "assets/data/urbannav_fixed_eval_external_gej_trimble_qualityveto_summary.csv",
+      "detail": "Frozen external result for trimble + G,E,J."
+    },
+    {
+      "label": "UrbanNav Runs CSV",
+      "href": "assets/data/urbannav_fixed_eval_external_gej_trimble_qualityveto_runs.csv",
+      "detail": "Per-run Odaiba and Shinjuku metrics."
+    },
+    {
+      "label": "PPC Holdout Figure",
+      "href": "assets/figures/paper_ppc_holdout.png",
+      "detail": "Holdout comparison between `always_robust` and the exploratory gate."
+    },
+    {
+      "label": "UrbanNav Figure",
+      "href": "assets/figures/paper_urbannav_external.png",
+      "detail": "CDF and tail summary for the main external result."
+    },
+    {
+      "label": "BVH Figure",
+      "href": "assets/figures/paper_bvh_runtime.png",
+      "detail": "Runtime and accuracy on the real PLATEAU subset."
+    },
+    {
+      "label": "Snapshot JSON",
+      "href": "assets/results_snapshot.json",
+      "detail": "Machine-readable version of this page."
+    }
+  ],
+  "method_freeze": [
+    {
+      "label": "Mainline",
+      "value": "PF+RobustClear-10K",
+      "detail": "Best full-run external method on UrbanNav Tokyo. This is the number that drives the README, Pages, and paper assets."
+    },
+    {
+      "label": "Exploratory PPC Gate",
+      "value": "entry_veto_negative_exit_...",
+      "detail": "Holdout RMS improves from 66.92 to 65.54 m, but the gain stays small."
+    },
+    {
+      "label": "Supplemental Safety Variants",
+      "value": "PF+AdaptiveGuide / PF+EKFRescue",
+      "detail": "Useful for cross-geometry mitigation and Hong Kong control recovery, but they do not replace the frozen Tokyo mainline."
+    },
+    {
+      "label": "Promoted Core Hook",
+      "value": "WLS+QualityVeto",
+      "detail": "A reusable multi-GNSS stabilization hook in core code. It improves raw multi-WLS tails but is not the final best method."
+    }
+  ],
+  "showcase_media": [
+    {
+      "kind": "image",
+      "title": "Front Poster",
+      "image": "assets/media/site_poster.png",
+      "href": "assets/media/site_poster.png",
+      "caption": "One-image summary of the current mainline, external win, and BVH systems result.",
+      "alt": "Front Poster"
+    },
+    {
+      "kind": "video",
+      "title": "Teaser Clip",
+      "href": "assets/media/site_teaser.webm",
+      "caption": "Short motion version for the front page. Uses mp4/webm when available and falls back to GIF.",
+      "poster": "assets/media/site_poster.png",
+      "sources": [
+        {
+          "src": "assets/media/site_teaser.webm",
+          "type": "video/webm"
+        },
+        {
+          "src": "assets/media/site_teaser.mp4",
+          "type": "video/mp4"
+        }
+      ]
+    }
+  ],
+  "analysis_charts": [
+    {
+      "kind": "image",
+      "title": "UrbanNav Per-Run Comparison",
+      "image": "assets/media/site_urbannav_runs.png",
+      "href": "assets/media/site_urbannav_runs.png",
+      "caption": "Odaiba and Shinjuku side-by-side for EKF, PF-10K, and PF+RobustClear-10K.",
+      "alt": "UrbanNav Per-Run Comparison"
+    },
+    {
+      "kind": "image",
+      "title": "Window Win Rates",
+      "image": "assets/media/site_window_wins.png",
+      "href": "assets/media/site_window_wins.png",
+      "caption": "Fixed-window win rates against EKF on UrbanNav Tokyo.",
+      "alt": "Window Win Rates"
+    },
+    {
+      "kind": "image",
+      "title": "Hong Kong Control",
+      "image": "assets/media/site_hk_control.png",
+      "href": "assets/media/site_hk_control.png",
+      "caption": "Cross-geometry control check showing why adaptive guidance stays supplemental.",
+      "alt": "Hong Kong Control"
+    },
+    {
+      "kind": "image",
+      "title": "Epoch Error Timeline",
+      "image": "assets/media/site_urbannav_timeline.png",
+      "href": "assets/media/site_urbannav_timeline.png",
+      "caption": "Smoothed Odaiba and Shinjuku traces make the PF-vs-EKF gap visible over time.",
+      "alt": "Epoch Error Timeline"
+    },
+    {
+      "kind": "image",
+      "title": "Error-Band Composition",
+      "image": "assets/media/site_error_bands.png",
+      "href": "assets/media/site_error_bands.png",
+      "caption": "Epoch share in <25 m, 25-50 m, 50-100 m, 100-500 m, and >500 m bands.",
+      "alt": "Error-Band Composition"
+    }
+  ],
+  "featured_figures": [
+    {
+      "title": "PPC Holdout",
+      "image": "assets/figures/paper_ppc_holdout.png",
+      "href": "assets/figures/paper_ppc_holdout.png",
+      "caption": "Holdout gain survives but stays modest. This is the design-discipline figure, not the headline accuracy claim.",
+      "alt": "PPC Holdout"
+    },
+    {
+      "title": "UrbanNav External",
+      "image": "assets/figures/paper_urbannav_external.png",
+      "href": "assets/figures/paper_urbannav_external.png",
+      "caption": "Main accuracy figure. `PF+RobustClear-10K` is the frozen external winner on trimble + G,E,J without UrbanNav-specific retuning.",
+      "alt": "UrbanNav External"
+    },
+    {
+      "title": "BVH Runtime",
+      "image": "assets/figures/paper_bvh_runtime.png",
+      "href": "assets/figures/paper_bvh_runtime.png",
+      "caption": "Systems figure. `PF3D-BVH-10K` preserves PF3D accuracy on the real PLATEAU subset while cutting runtime by 57.8x.",
+      "alt": "BVH Runtime"
+    }
+  ],
+  "supplemental_checks": [
+    "UrbanNav fixed-window check: `PF+RobustClear-10K` beats `EKF` in 90/127 RMS windows and 102/127 P95 windows.",
+    "Hong Kong control: `PF+AdaptiveGuide-10K` recovers the raw PF collapse from 301.68 m to 66.85 m RMS, close to `EKF` at 69.49 m.",
+    "Adaptive guide helps cross-geometry robustness and Hong Kong recovery, but full Tokyo runs still leave it behind `PF+RobustClear-10K`, so it stays supplemental."
+  ],
+  "repo_map": [
+    {
+      "path": "python/gnss_gpu/",
+      "detail": "Core library code, pybind wrappers, reusable hooks like `multi_gnss_quality.py`, and the main Python API."
+    },
+    {
+      "path": "experiments/",
+      "detail": "Discardable experiment code, evaluators, dataset adapters, and artifact builders such as `build_paper_assets.py` and `build_githubio_summary.py`."
+    },
+    {
+      "path": "docs/experiments.md",
+      "detail": "What was run, on which split, and what the result actually was."
+    },
+    {
+      "path": "docs/decisions.md",
+      "detail": "Why each variant was adopted, kept as supplemental, or rejected."
+    },
+    {
+      "path": "docs/interfaces.md",
+      "detail": "The minimal interface kept after comparison and pruning."
+    },
+    {
+      "path": "docs/index.html",
+      "detail": "This GitHub Pages front door for artifact readers."
+    }
+  ],
+  "reproduce_commands": [
+    "python3 experiments/build_paper_assets.py",
+    "python3 experiments/build_githubio_summary.py",
+    "PYTHONPATH=python python3 -m pytest tests/ -q"
+  ],
+  "takeaways": [
+    "PPC tuned split: the exploratory gate trims mean RMS from 80.02 m to 79.41 m, but mean P95 stays flat at 97.75 m.",
+    "PPC holdout split: the same gate survives holdout with 66.92 -> 65.54 m RMS and 81.69 -> 81.22 m P95.",
+    "UrbanNav external validation: `PF+RobustClear-10K` is the frozen winner at 66.6 m RMS and 98.53 m P95, ahead of `EKF` at 93.25 m and 178.18 m.",
+    "`PF-10K` remains a close ablation at 67.61 m RMS, which keeps the robust-clear story honest: the gain is real but not huge.",
+    "`WLS+QualityVeto` is useful because it moved a stabilization policy into reusable core code, not because it became the best external method.",
+    "Systems result: `PF3D-BVH-10K` keeps PF3D accuracy while cutting runtime from 1028.29 to 17.78 ms/epoch."
+  ],
+  "tables": {
+    "paper_main": {
+      "title": "Frozen Paper Main Table",
+      "source_csv": "assets/data/paper_main_table.csv",
+      "columns": [
+        "section",
+        "method",
+        "rms_2d_m",
+        "p95_m",
+        "outlier_rate_pct",
+        "catastrophic_rate_pct",
+        "time_ms_per_epoch",
+        "note"
+      ],
+      "rows": [
+        {
+          "section": "PPC holdout",
+          "method": "Safe baseline",
+          "rms_2d_m": "66.92",
+          "p95_m": "81.69",
+          "outlier_rate_pct": "5.83",
+          "catastrophic_rate_pct": "0.0",
+          "time_ms_per_epoch": "",
+          "note": "always_robust"
+        },
+        {
+          "section": "PPC holdout",
+          "method": "Exploratory gate",
+          "rms_2d_m": "65.54",
+          "p95_m": "81.22",
+          "outlier_rate_pct": "5.83",
+          "catastrophic_rate_pct": "0.0",
+          "time_ms_per_epoch": "",
+          "note": "entry_veto_negative_exit_rescue..."
+        },
+        {
+          "section": "UrbanNav external",
+          "method": "EKF",
+          "rms_2d_m": "93.25",
+          "p95_m": "178.18",
+          "outlier_rate_pct": "16.29",
+          "catastrophic_rate_pct": "0.161",
+          "time_ms_per_epoch": "0.031",
+          "note": "trimble + G,E,J"
+        },
+        {
+          "section": "UrbanNav external",
+          "method": "PF-10K",
+          "rms_2d_m": "67.61",
+          "p95_m": "101.46",
+          "outlier_rate_pct": "5.44",
+          "catastrophic_rate_pct": "0.0",
+          "time_ms_per_epoch": "1.367",
+          "note": "trimble + G,E,J"
+        },
+        {
+          "section": "UrbanNav external",
+          "method": "PF+RobustClear-10K",
+          "rms_2d_m": "66.6",
+          "p95_m": "98.53",
+          "outlier_rate_pct": "4.8",
+          "catastrophic_rate_pct": "0.0",
+          "time_ms_per_epoch": "1.401",
+          "note": "trimble + G,E,J"
+        },
+        {
+          "section": "UrbanNav external",
+          "method": "WLS+QualityVeto",
+          "rms_2d_m": "2933.77",
+          "p95_m": "175.38",
+          "outlier_rate_pct": "10.13",
+          "catastrophic_rate_pct": "2.552",
+          "time_ms_per_epoch": "0.195",
+          "note": "promoted core hook"
+        },
+        {
+          "section": "BVH systems",
+          "method": "PF3D-10K",
+          "rms_2d_m": "55.5",
+          "p95_m": "58.39",
+          "outlier_rate_pct": "0.0",
+          "catastrophic_rate_pct": "0.0",
+          "time_ms_per_epoch": "1028.29",
+          "note": "real PLATEAU subset"
+        },
+        {
+          "section": "BVH systems",
+          "method": "PF3D-BVH-10K",
+          "rms_2d_m": "55.5",
+          "p95_m": "58.39",
+          "outlier_rate_pct": "0.0",
+          "catastrophic_rate_pct": "0.0",
+          "time_ms_per_epoch": "17.78",
+          "note": "57.8x faster"
+        }
+      ]
+    },
+    "ppc_tuned": {
+      "title": "PPC Tuned Split",
+      "source_csv": "assets/data/pf_strategy_lab_positive6_summary.csv",
+      "columns": [
+        "Variant",
+        "Mean RMS 2D (m)",
+        "Mean P95 (m)",
+        "PF Wins",
+        "Blocked Epoch Fraction"
+      ],
+      "rows": [
+        {
+          "Variant": "Safe baseline: always_robust",
+          "Mean RMS 2D (m)": 80.02,
+          "Mean P95 (m)": 97.75,
+          "PF Wins": "5/6",
+          "Blocked Epoch Fraction": 0.0
+        },
+        {
+          "Variant": "Exploratory best: entry_veto_negative_exit_...",
+          "Mean RMS 2D (m)": 79.41,
+          "Mean P95 (m)": 97.75,
+          "PF Wins": "5/6",
+          "Blocked Epoch Fraction": 0.02
+        }
+      ]
+    },
+    "ppc_holdout": {
+      "title": "PPC Holdout Split",
+      "source_csv": "assets/data/pf_strategy_lab_holdout6_r200_s200_summary.csv",
+      "columns": [
+        "Variant",
+        "Mean RMS 2D (m)",
+        "Mean P95 (m)",
+        "PF Wins",
+        "Blocked Epoch Fraction"
+      ],
+      "rows": [
+        {
+          "Variant": "Safe baseline: always_robust",
+          "Mean RMS 2D (m)": 66.92,
+          "Mean P95 (m)": 81.69,
+          "PF Wins": "3/6",
+          "Blocked Epoch Fraction": 0.0
+        },
+        {
+          "Variant": "Exploratory best: entry_veto_negative_exit_...",
+          "Mean RMS 2D (m)": 65.54,
+          "Mean P95 (m)": 81.22,
+          "PF Wins": "4/6",
+          "Blocked Epoch Fraction": 0.203
+        }
+      ]
+    },
+    "urbannav_external": {
+      "title": "UrbanNav External Validation",
+      "source_csv": "assets/data/urbannav_fixed_eval_external_gej_trimble_qualityveto_summary.csv",
+      "columns": [
+        "Method",
+        "Mean RMS 2D (m)",
+        "Mean P95 (m)",
+        ">100 m Rate (%)",
+        ">500 m Rate (%)",
+        "Wins vs WLS RMS"
+      ],
+      "rows": [
+        {
+          "Method": "WLS",
+          "Mean RMS 2D (m)": 3179.37,
+          "Mean P95 (m)": 194.55,
+          ">100 m Rate (%)": 10.37,
+          ">500 m Rate (%)": 2.909,
+          "Wins vs WLS RMS": 0
+        },
+        {
+          "Method": "WLS+QualityVeto",
+          "Mean RMS 2D (m)": 2933.77,
+          "Mean P95 (m)": 175.38,
+          ">100 m Rate (%)": 10.13,
+          ">500 m Rate (%)": 2.552,
+          "Wins vs WLS RMS": 2
+        },
+        {
+          "Method": "EKF",
+          "Mean RMS 2D (m)": 93.25,
+          "Mean P95 (m)": 178.18,
+          ">100 m Rate (%)": 16.29,
+          ">500 m Rate (%)": 0.161,
+          "Wins vs WLS RMS": 2
+        },
+        {
+          "Method": "PF-10K",
+          "Mean RMS 2D (m)": 67.61,
+          "Mean P95 (m)": 101.46,
+          ">100 m Rate (%)": 5.44,
+          ">500 m Rate (%)": 0.0,
+          "Wins vs WLS RMS": 2
+        },
+        {
+          "Method": "PF+RobustClear-10K",
+          "Mean RMS 2D (m)": 66.6,
+          "Mean P95 (m)": 98.53,
+          ">100 m Rate (%)": 4.8,
+          ">500 m Rate (%)": 0.0,
+          "Wins vs WLS RMS": 2
+        }
+      ]
+    },
+    "urbannav_windows": {
+      "title": "UrbanNav Fixed-Window Check",
+      "source_csv": "assets/data/urbannav_window_eval_external_gej_trimble_qualityveto_w500_s250_summary.csv",
+      "columns": [
+        "Method",
+        "Mean RMS 2D (m)",
+        "Mean P95 (m)",
+        "RMS Wins vs EKF",
+        "P95 Wins vs EKF",
+        "Catastrophic Wins vs EKF"
+      ],
+      "rows": [
+        {
+          "Method": "EKF",
+          "Mean RMS 2D (m)": 85.52,
+          "Mean P95 (m)": 139.15,
+          "RMS Wins vs EKF": "-",
+          "P95 Wins vs EKF": "-",
+          "Catastrophic Wins vs EKF": "-"
+        },
+        {
+          "Method": "PF-10K",
+          "Mean RMS 2D (m)": 65.1,
+          "Mean P95 (m)": 85.54,
+          "RMS Wins vs EKF": "88/127",
+          "P95 Wins vs EKF": "101/127",
+          "Catastrophic Wins vs EKF": "127/127"
+        },
+        {
+          "Method": "PF+RobustClear-10K",
+          "Mean RMS 2D (m)": 63.59,
+          "Mean P95 (m)": 84.61,
+          "RMS Wins vs EKF": "90/127",
+          "P95 Wins vs EKF": "102/127",
+          "Catastrophic Wins vs EKF": "127/127"
+        }
+      ]
+    },
+    "hong_kong_control": {
+      "title": "Hong Kong Control Check",
+      "source_csv": "assets/data/urbannav_fixed_eval_hk20190428_gc_adaptive_summary.csv",
+      "columns": [
+        "Method",
+        "Mean RMS 2D (m)",
+        "Mean P95 (m)",
+        ">100 m Rate (%)",
+        "Longest >100 m Segment (s)"
+      ],
+      "rows": [
+        {
+          "Method": "EKF",
+          "Mean RMS 2D (m)": 69.49,
+          "Mean P95 (m)": 95.19,
+          ">100 m Rate (%)": 2.99,
+          "Longest >100 m Segment (s)": 10.0
+        },
+        {
+          "Method": "PF+AdaptiveGuide-10K",
+          "Mean RMS 2D (m)": 66.85,
+          "Mean P95 (m)": 97.45,
+          ">100 m Rate (%)": 3.85,
+          "Longest >100 m Segment (s)": 6.0
+        },
+        {
+          "Method": "PF+EKFGuide-10K",
+          "Mean RMS 2D (m)": 66.85,
+          "Mean P95 (m)": 97.45,
+          ">100 m Rate (%)": 3.85,
+          "Longest >100 m Segment (s)": 6.0
+        },
+        {
+          "Method": "PF-10K",
+          "Mean RMS 2D (m)": 301.68,
+          "Mean P95 (m)": 560.12,
+          ">100 m Rate (%)": 68.16,
+          "Longest >100 m Segment (s)": 281.0
+        },
+        {
+          "Method": "WLS+QualityVeto",
+          "Mean RMS 2D (m)": 69.76,
+          "Mean P95 (m)": 95.47,
+          ">100 m Rate (%)": 2.99,
+          "Longest >100 m Segment (s)": 10.0
+        }
+      ]
+    },
+    "bvh_runtime": {
+      "title": "Real-PLATEAU Runtime",
+      "source_csv": "assets/data/ppc_pf3d_tokyo_run1_g_100_plateau_summary.csv",
+      "columns": [
+        "Method",
+        "RMS 2D (m)",
+        "P95 (m)",
+        "Time (ms/epoch)"
+      ],
+      "rows": [
+        {
+          "Method": "PF3D-10K",
+          "RMS 2D (m)": 55.5,
+          "P95 (m)": 58.39,
+          "Time (ms/epoch)": 1028.29
+        },
+        {
+          "Method": "PF3D-BVH-10K",
+          "RMS 2D (m)": 55.5,
+          "P95 (m)": 58.39,
+          "Time (ms/epoch)": 17.78
+        }
+      ]
+    },
+    "urbannav_runs": {
+      "title": "UrbanNav Per-Run Results",
+      "source_csv": "assets/data/urbannav_fixed_eval_external_gej_trimble_qualityveto_runs.csv",
+      "columns": [
+        "Run",
+        "Method",
+        "RMS 2D (m)",
+        "P95 (m)",
+        ">100 m Rate (%)",
+        "Time (ms/epoch)"
+      ],
+      "rows": [
+        {
+          "Run": "Odaiba",
+          "Method": "WLS",
+          "RMS 2D (m)": 2969.17,
+          "P95 (m)": 243.04,
+          ">100 m Rate (%)": 10.23,
+          "Time (ms/epoch)": 0.02
+        },
+        {
+          "Run": "Odaiba",
+          "Method": "WLS+QualityVeto",
+          "RMS 2D (m)": 2765.31,
+          "P95 (m)": 218.96,
+          ">100 m Rate (%)": 10.12,
+          "Time (ms/epoch)": 0.2
+        },
+        {
+          "Run": "Odaiba",
+          "Method": "EKF",
+          "RMS 2D (m)": 89.42,
+          "P95 (m)": 165.29,
+          ">100 m Rate (%)": 16.36,
+          "Time (ms/epoch)": 0.03
+        },
+        {
+          "Run": "Odaiba",
+          "Method": "PF-10K",
+          "RMS 2D (m)": 63.49,
+          "P95 (m)": 95.52,
+          ">100 m Rate (%)": 3.43,
+          "Time (ms/epoch)": 1.42
+        },
+        {
+          "Run": "Odaiba",
+          "Method": "PF+RobustClear-10K",
+          "RMS 2D (m)": 61.86,
+          "P95 (m)": 94.12,
+          ">100 m Rate (%)": 3.54,
+          "Time (ms/epoch)": 1.48
+        },
+        {
+          "Run": "Shinjuku",
+          "Method": "WLS",
+          "RMS 2D (m)": 3389.57,
+          "P95 (m)": 146.07,
+          ">100 m Rate (%)": 10.51,
+          "Time (ms/epoch)": 0.02
+        },
+        {
+          "Run": "Shinjuku",
+          "Method": "WLS+QualityVeto",
+          "RMS 2D (m)": 3102.23,
+          "P95 (m)": 131.8,
+          ">100 m Rate (%)": 10.14,
+          "Time (ms/epoch)": 0.19
+        },
+        {
+          "Run": "Shinjuku",
+          "Method": "EKF",
+          "RMS 2D (m)": 97.07,
+          "P95 (m)": 191.07,
+          ">100 m Rate (%)": 16.23,
+          "Time (ms/epoch)": 0.03
+        },
+        {
+          "Run": "Shinjuku",
+          "Method": "PF-10K",
+          "RMS 2D (m)": 71.72,
+          "P95 (m)": 107.39,
+          ">100 m Rate (%)": 7.46,
+          "Time (ms/epoch)": 1.32
+        },
+        {
+          "Run": "Shinjuku",
+          "Method": "PF+RobustClear-10K",
+          "RMS 2D (m)": 71.33,
+          "P95 (m)": 102.94,
+          ">100 m Rate (%)": 6.06,
+          "Time (ms/epoch)": 1.32
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "The exploratory PPC gate generalizes on holdout, but the gain is still small enough that it should not carry the paper by itself.",
+    "The strongest current story is not explicit 3D-map accuracy. The real-data 3D path is still best framed as a BVH systems contribution.",
+    "UrbanNav external gains depend on the repaired multi-GNSS measurement path. The older GPS-only results were limited by loader and measurement issues.",
+    "Hong Kong is now a useful control check, but not yet a second positive external win of the same strength as Tokyo trimble + G,E,J.",
+    "AdaptiveGuide and EKFRescue help robustness in the right regimes, but they do not beat the frozen Tokyo mainline `PF+RobustClear-10K` on full runs."
+  ],
+  "validation": {
+    "tests": "440 passed, 7 skipped, 17 warnings",
+    "note": "The freeze checkpoint reran full repo pytest. Remaining warnings are known slow-mark, datetime, and plotting warnings rather than new failures.",
+    "command": "PYTHONPATH=python python3 -m pytest tests/ -q",
+    "generated_at_utc": "2026-04-02T23:39:29Z"
+  }
+}

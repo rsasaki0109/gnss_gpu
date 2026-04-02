@@ -7,7 +7,9 @@ namespace gnss_gpu {
 ///
 /// For each particle, casts rays to every satellite through the building mesh.
 /// LOS satellites use a tight sigma; NLOS satellites use a loose sigma with
-/// a positive bias correction for the expected multipath delay.
+/// a positive-only bias correction for the expected multipath delay. The
+/// ray-tracing result can also be treated as a soft prior on the LOS/NLOS
+/// mixture instead of a hard switch.
 ///
 /// @param px, py, pz, pcb  [N] particle states (SoA layout)
 /// @param sat_ecef          [n_sat * 3] satellite ECEF positions
@@ -21,6 +23,8 @@ namespace gnss_gpu {
 /// @param sigma_pr_los      sigma for LOS satellites [m] (tight, e.g., 3 m)
 /// @param sigma_pr_nlos     sigma for NLOS satellites [m] (loose, e.g., 30 m)
 /// @param nlos_bias         expected positive bias for NLOS [m] (e.g., 20 m)
+/// @param blocked_nlos_prob P(NLOS | ray blocked), 0..1
+/// @param clear_nlos_prob   P(NLOS | ray clear), 0..1
 void pf_weight_3d(
     const double* px, const double* py, const double* pz, const double* pcb,
     const double* sat_ecef, const double* pseudoranges,
@@ -30,6 +34,8 @@ void pf_weight_3d(
     int n_particles, int n_sat,
     double sigma_pr_los,
     double sigma_pr_nlos,
-    double nlos_bias);
+    double nlos_bias,
+    double blocked_nlos_prob,
+    double clear_nlos_prob);
 
 }  // namespace gnss_gpu

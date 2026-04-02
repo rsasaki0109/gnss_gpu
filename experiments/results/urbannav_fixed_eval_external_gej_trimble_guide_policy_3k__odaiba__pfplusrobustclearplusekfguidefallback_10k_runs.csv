@@ -1,0 +1,2 @@
+run,method,backend,time_ms_per_epoch,mean_2d,rms_2d,rms_3d,p50,p67,p95,max_2d,outlier_rate_pct,catastrophic_rate_pct,longest_outlier_segment_epochs,longest_outlier_segment_s,n_epochs
+Odaiba,PF+RobustClear+EKFGuideFallback-10K,GPU-3D+QVGated(4fb)+GuideFallback,1.939452,56.091666,59.317220,69.004482,58.474993,67.506650,84.050577,111.157029,1.533333,0.000000,46.000000,4.500000,3000

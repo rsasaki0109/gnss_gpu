@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Experiment: WLS / EKF / RTKLIB-equivalent baseline evaluation on UrbanNav.
+"""Experiment: WLS / EKF / RTKLIB-equivalent baseline evaluation on urban GNSS data.
 
-Evaluates three baseline positioning methods on UrbanNav data (or synthetic
-fallback):
+Evaluates three baseline positioning methods on PPC-Dataset / UrbanNav real data
+(or synthetic fallback):
   1. WLS  -- single-epoch Weighted Least Squares
   2. EKF  -- Extended Kalman Filter
   3. RTK  -- code-only RTKLIB-equivalent (double-differenced WLS)
@@ -18,7 +18,8 @@ Outputs
 Usage
 -----
   PYTHONPATH=python python3 experiments/exp_urbannav_baseline.py
-  PYTHONPATH=python python3 experiments/exp_urbannav_baseline.py --data-dir /path/to/urbannav
+  PYTHONPATH=python python3 experiments/exp_urbannav_baseline.py --data-dir /path/to/PPC-Dataset/tokyo/run1
+  PYTHONPATH=python python3 experiments/exp_urbannav_baseline.py --data-dir /path/to/UrbanNav/Odaiba
 """
 
 from __future__ import annotations
@@ -52,61 +53,121 @@ from evaluate import (
     save_results,
     wls_solve_py,
 )
+from gnss_gpu.io.ppc import PPCDatasetLoader
+from gnss_gpu.io.urbannav import UrbanNavLoader
+from gnss_gpu.multi_gnss import MultiGNSSSolver, SYSTEM_GPS
+from gnss_gpu.multi_gnss_quality import (
+    MultiGNSSQualityVetoConfig,
+    select_multi_gnss_solution,
+)
+
+SYSTEM_IDS = {
+    "G": 0,
+    "R": 1,
+    "E": 2,
+    "C": 3,
+    "J": 4,
+}
 
 
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
 
-def load_urbannav(data_dir: Path) -> dict | None:
-    """Attempt to load UrbanNav dataset from data_dir.
+def _resolve_ppc_run_dir(data_dir: Path) -> Path | None:
+    """Resolve a PPC run directory from a run path, city directory, or dataset root."""
+    if PPCDatasetLoader.is_run_directory(data_dir):
+        return data_dir
 
-    Returns None if the data is not found (triggers synthetic fallback).
+    candidates = sorted(
+        path for path in data_dir.rglob("run*")
+        if PPCDatasetLoader.is_run_directory(path)
+    )
+    return candidates[0] if candidates else None
 
-    The expected directory layout::
 
-        <data_dir>/
-            gnss/          # RINEX OBS files per epoch
-            reference/     # ground-truth trajectory CSV
-    """
-    ref_candidates = list(data_dir.glob("**/*.csv"))
-    obs_candidates = list(data_dir.glob("**/*.obs")) + list(data_dir.glob("**/*.rnx"))
+def _resolve_urbannav_run_dir(data_dir: Path) -> Path | None:
+    """Resolve an UrbanNav run directory from a run path or dataset root."""
+    if UrbanNavLoader.is_run_directory(data_dir):
+        return data_dir
 
-    if not ref_candidates:
+    candidates = sorted(
+        path for path in data_dir.rglob("*")
+        if UrbanNavLoader.is_run_directory(path)
+    )
+    return candidates[0] if candidates else None
+
+
+def load_real_data(
+    data_dir: Path,
+    max_epochs: int | None = None,
+    start_epoch: int = 0,
+    systems: tuple[str, ...] = ("G",),
+    urban_rover: str = "ublox",
+) -> dict | None:
+    """Attempt to load PPC-Dataset or UrbanNav real data from *data_dir*."""
+    run_dir = _resolve_ppc_run_dir(data_dir)
+    if run_dir is not None:
+        print(f"    Detected PPC run: {run_dir}")
+        try:
+            loader = PPCDatasetLoader(run_dir)
+            data = loader.load_experiment_data(
+                max_epochs=max_epochs,
+                start_epoch=start_epoch,
+                systems=systems,
+            )
+            print(f"    Loaded {data['dataset_name']}: {data['n_epochs']} epochs")
+            print(f"    Median satellites/epoch: {data['n_satellites']}")
+            if "constellations" in data:
+                print(f"    Constellations: {', '.join(data['constellations'])}")
+            return data
+        except Exception as e:
+            print(f"    Could not parse PPC data: {e}")
+
+    run_dir = _resolve_urbannav_run_dir(data_dir)
+    if run_dir is None:
         return None
 
-    print(f"    Found reference files: {[p.name for p in ref_candidates[:3]]}")
-
-    # Minimal NMEA/CSV parser: expect columns lat,lon,alt or x,y,z
+    print(f"    Detected UrbanNav run: {run_dir}")
     try:
-        import csv
-        rows = []
-        with open(ref_candidates[0], newline="") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                rows.append(row)
-
-        if not rows:
-            return None
-
-        # Try to parse ground truth
-        keys = list(rows[0].keys())
-        print(f"    Reference CSV columns: {keys[:8]}")
-        return None  # Extend here with real UrbanNav parsing logic
+        loader = UrbanNavLoader(run_dir)
+        data = loader.load_experiment_data(
+            max_epochs=max_epochs,
+            start_epoch=start_epoch,
+            systems=systems,
+            rover_source=urban_rover,
+        )
+        print(f"    Loaded {data['dataset_name']}: {data['n_epochs']} epochs")
+        print(f"    Median satellites/epoch: {data['n_satellites']}")
+        if "constellations" in data:
+            print(f"    Constellations: {', '.join(data['constellations'])}")
+        return data
     except Exception as e:
         print(f"    Could not parse UrbanNav data: {e}")
         return None
 
 
-def load_or_generate_data(data_dir: Path | None, n_epochs: int = 300) -> dict:
-    """Load UrbanNav data or generate synthetic fallback."""
+def load_or_generate_data(
+    data_dir: Path | None,
+    n_epochs: int = 300,
+    max_real_epochs: int | None = None,
+    start_epoch: int = 0,
+    systems: tuple[str, ...] = ("G",),
+    urban_rover: str = "ublox",
+) -> dict:
+    """Load PPC/UrbanNav data or generate synthetic fallback."""
     if data_dir is not None and data_dir.exists():
-        print(f"    Searching for UrbanNav data in: {data_dir}")
-        data = load_urbannav(data_dir)
+        print(f"    Searching for real data in: {data_dir}")
+        data = load_real_data(
+            data_dir,
+            max_epochs=max_real_epochs,
+            start_epoch=start_epoch,
+            systems=systems,
+            urban_rover=urban_rover,
+        )
         if data is not None:
-            print(f"    Loaded UrbanNav data: {data['n_epochs']} epochs")
             return data
-        print("    UrbanNav data not found or not parseable. Using synthetic data.")
+        print("    Real data not found or not parseable. Using synthetic data.")
     else:
         print("    No data directory provided. Using synthetic data.")
 
@@ -118,11 +179,63 @@ def load_or_generate_data(data_dir: Path | None, n_epochs: int = 300) -> dict:
     return data
 
 
+def _parse_weight_scale(spec: str) -> dict[int, float]:
+    scales: dict[int, float] = {}
+    if not spec:
+        return scales
+
+    for part in spec.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            raise ValueError(f"invalid weight scale entry: {item}")
+        key, value = item.split("=", 1)
+        sys_char = key.strip().upper()
+        if sys_char not in SYSTEM_IDS:
+            raise ValueError(f"unknown constellation in weight scale: {sys_char}")
+        scales[SYSTEM_IDS[sys_char]] = float(value)
+    return scales
+
+
+def _apply_weight_scale(
+    weights: np.ndarray,
+    system_ids: np.ndarray | None,
+    scale_by_system: dict[int, float],
+) -> np.ndarray:
+    if system_ids is None or not scale_by_system:
+        return weights
+
+    scaled = np.asarray(weights, dtype=np.float64).copy()
+    for system_id, scale in scale_by_system.items():
+        scaled[np.asarray(system_ids) == system_id] *= scale
+    return scaled
+
+
+def _solve_single_system_epoch(
+    sat_ecef: np.ndarray,
+    pseudoranges: np.ndarray,
+    weights: np.ndarray,
+) -> np.ndarray:
+    try:
+        from gnss_gpu import wls_position as _gpu_wls
+
+        result, _ = _gpu_wls(sat_ecef, pseudoranges, weights, 10, 1e-4)
+        return np.asarray(result, dtype=np.float64)
+    except (ImportError, Exception):
+        result, _ = wls_solve_py(sat_ecef, pseudoranges, weights)
+        return np.asarray(result, dtype=np.float64)
+
+
 # ---------------------------------------------------------------------------
 # WLS baseline
 # ---------------------------------------------------------------------------
 
-def run_wls(data: dict) -> tuple[np.ndarray, float]:
+def run_wls(
+    data: dict,
+    weight_scale_by_system: dict[int, float] | None = None,
+    quality_veto_config: MultiGNSSQualityVetoConfig | None = None,
+) -> tuple[np.ndarray, float]:
     """Run WLS on every epoch.
 
     Returns
@@ -134,23 +247,87 @@ def run_wls(data: dict) -> tuple[np.ndarray, float]:
     sat_ecef = data["sat_ecef"]
     pseudoranges = data["pseudoranges"]
     weights = data["weights"]
+    system_ids = data.get("system_ids")
+    weight_scale_by_system = weight_scale_by_system or {}
 
     # Try GPU-accelerated WLS
     positions = np.zeros((n_epochs, 4))
     t0 = time.perf_counter()
 
-    try:
-        from gnss_gpu import wls_position as _gpu_wls
+    if system_ids is not None and len(data.get("constellations", ())) > 1:
+        systems = sorted({int(sid) for epoch_ids in system_ids for sid in epoch_ids})
+        solver = MultiGNSSSolver(systems=systems)
+        accepted_multi_epochs = 0
+        fallback_epochs = 0
         for i in range(n_epochs):
-            result, _ = _gpu_wls(sat_ecef[i], pseudoranges[i], weights[i],
-                                  10, 1e-4)
-            positions[i] = np.asarray(result)
-        backend = "GPU"
-    except (ImportError, Exception):
-        for i in range(n_epochs):
-            positions[i], _ = wls_solve_py(
-                sat_ecef[i], pseudoranges[i], weights[i])
-        backend = "Python"
+            scaled_weights = _apply_weight_scale(
+                weights[i],
+                system_ids[i],
+                weight_scale_by_system,
+            )
+            pos, biases, _ = solver.solve(
+                sat_ecef[i],
+                pseudoranges[i],
+                system_ids[i],
+                scaled_weights,
+            )
+            if quality_veto_config is not None:
+                ref_mask = np.asarray(system_ids[i]) == int(quality_veto_config.reference_system)
+                if int(np.count_nonzero(ref_mask)) >= 4:
+                    reference_solution = _solve_single_system_epoch(
+                        sat_ecef[i][ref_mask],
+                        pseudoranges[i][ref_mask],
+                        scaled_weights[ref_mask],
+                    )
+                    decision = select_multi_gnss_solution(
+                        reference_solution=reference_solution,
+                        multi_position=pos,
+                        multi_biases=biases,
+                        sat_ecef=sat_ecef[i],
+                        pseudoranges=pseudoranges[i],
+                        system_ids=system_ids[i],
+                        config=quality_veto_config,
+                    )
+                    positions[i, :3] = decision.position
+                    positions[i, 3] = decision.clock_bias_m
+                    accepted_multi_epochs += int(decision.use_multi)
+                    fallback_epochs += int(not decision.use_multi)
+                    continue
+            positions[i, :3] = pos
+            positions[i, 3] = float(
+                biases.get(
+                    int(
+                        quality_veto_config.reference_system
+                        if quality_veto_config is not None
+                        else SYSTEM_GPS
+                    ),
+                    biases.get(SYSTEM_GPS, 0.0),
+                )
+            )
+            accepted_multi_epochs += 1
+        backend = "Multi-GNSS"
+        if weight_scale_by_system:
+            backend += " scaled"
+        if quality_veto_config is not None:
+            backend += " quality-veto"
+            print(
+                f"    Multi-GNSS quality veto: "
+                f"{accepted_multi_epochs}/{n_epochs} epochs kept multi, "
+                f"{fallback_epochs} fell back"
+            )
+    else:
+        try:
+            from gnss_gpu import wls_position as _gpu_wls
+            for i in range(n_epochs):
+                result, _ = _gpu_wls(sat_ecef[i], pseudoranges[i], weights[i],
+                                      10, 1e-4)
+                positions[i] = np.asarray(result)
+            backend = "GPU"
+        except (ImportError, Exception):
+            for i in range(n_epochs):
+                positions[i], _ = wls_solve_py(
+                    sat_ecef[i], pseudoranges[i], weights[i])
+            backend = "Python"
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
@@ -175,7 +352,9 @@ def run_ekf(data: dict, wls_init: np.ndarray) -> tuple[np.ndarray, float]:
     sat_ecef = data["sat_ecef"]
     pseudoranges = data["pseudoranges"]
     weights = data["weights"]
-    dt = data["dt"]
+    times = np.asarray(data["times"], dtype=np.float64)
+    system_ids = data.get("system_ids")
+    gps_only = system_ids is not None and len(data.get("constellations", ())) > 1
 
     from gnss_gpu.ekf import EKFPositioner
 
@@ -189,13 +368,31 @@ def run_ekf(data: dict, wls_init: np.ndarray) -> tuple[np.ndarray, float]:
 
     for i in range(n_epochs):
         if i > 0:
+            dt = float(times[i] - times[i - 1])
+            if dt <= 0.0:
+                dt = float(data.get("dt", 1.0))
             ekf.predict(dt=dt)
-        ekf.update(sat_ecef[i], pseudoranges[i], weights=weights[i])
+
+        sat_i = sat_ecef[i]
+        pr_i = pseudoranges[i]
+        w_i = weights[i]
+        if gps_only:
+            mask = system_ids[i] == SYSTEM_GPS
+            if int(np.count_nonzero(mask)) >= 4:
+                sat_i = sat_i[mask]
+                pr_i = pr_i[mask]
+                w_i = w_i[mask]
+            else:
+                positions[i] = ekf.get_position()
+                continue
+
+        ekf.update(sat_i, pr_i, weights=w_i)
         positions[i] = ekf.get_position()
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
-    print(f"    EKF: {elapsed:.1f} ms total, {ms_per_epoch:.3f} ms/epoch")
+    mode = "GPS-only" if gps_only else "all-sats"
+    print(f"    EKF ({mode}): {elapsed:.1f} ms total, {ms_per_epoch:.3f} ms/epoch")
     return positions, ms_per_epoch
 
 
@@ -215,37 +412,46 @@ def run_rtklib_equivalent(data: dict) -> tuple[np.ndarray, float]:
     time_per_epoch_ms : float
     """
     n_epochs = data["n_epochs"]
-    sat_ecef = data["sat_ecef"]
-    pseudoranges = data["pseudoranges"]
-    weights = data["weights"]
-
     positions = np.zeros((n_epochs, 3))
     t0 = time.perf_counter()
 
+    # Fallback until the experiment dataset provides matched base observations
+    # and carrier phases through the loader.
+    sat_ecef = data["sat_ecef"]
+    pseudoranges = data["pseudoranges"]
+    weights = data["weights"]
+    system_ids = data.get("system_ids")
+    gps_only = system_ids is not None and len(data.get("constellations", ())) > 1
+
     try:
-        from gnss_gpu.rtk import RTKSolver
-
-        # Use a synthetic base station at origin
-        base_pos = data["origin_ecef"]
-        base_pr = np.zeros((n_epochs, data["n_satellites"]))
+        from gnss_gpu import wls_position as _gpu_wls
         for i in range(n_epochs):
-            for s in range(data["n_satellites"]):
-                base_pr[i, s] = np.linalg.norm(sat_ecef[i, s] - base_pos)
-
-        solver = RTKSolver(sigma_pr=5.0)
+            sat_i = sat_ecef[i]
+            pr_i = pseudoranges[i]
+            w_i = weights[i]
+            if gps_only:
+                mask = system_ids[i] == SYSTEM_GPS
+                if int(np.count_nonzero(mask)) >= 4:
+                    sat_i = sat_i[mask]
+                    pr_i = pr_i[mask]
+                    w_i = w_i[mask]
+            sol, _ = _gpu_wls(sat_i, pr_i, w_i, 10, 1e-4)
+            positions[i] = np.asarray(sol)[:3]
+        backend = "GPU WLS fallback (GPS-only)" if gps_only else "GPU WLS fallback"
+    except (ImportError, Exception):
         for i in range(n_epochs):
-            # Double-differenced pseudoranges
-            dd_pr = pseudoranges[i] - base_pr[i]
-            result = solver.solve(sat_ecef[i], pseudoranges[i], base_pr[i],
-                                   base_pos)
-            positions[i] = np.asarray(result)[:3]
-        backend = "GPU RTK"
-    except (ImportError, Exception) as e:
-        # Fallback: treat as smoothed WLS with tighter model
-        for i in range(n_epochs):
-            sol, _ = wls_solve_py(sat_ecef[i], pseudoranges[i], weights[i])
+            sat_i = sat_ecef[i]
+            pr_i = pseudoranges[i]
+            w_i = weights[i]
+            if gps_only:
+                mask = system_ids[i] == SYSTEM_GPS
+                if int(np.count_nonzero(mask)) >= 4:
+                    sat_i = sat_i[mask]
+                    pr_i = pr_i[mask]
+                    w_i = w_i[mask]
+            sol, _ = wls_solve_py(sat_i, pr_i, w_i)
             positions[i] = sol[:3]
-        backend = "WLS fallback (RTK unavailable)"
+        backend = "Python WLS fallback (GPS-only)" if gps_only else "Python WLS fallback"
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
@@ -260,34 +466,55 @@ def run_rtklib_equivalent(data: dict) -> tuple[np.ndarray, float]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Baseline evaluation (WLS/EKF/RTKLIB) on UrbanNav data")
+        description="Baseline evaluation (WLS/EKF/RTKLIB) on PPC or synthetic data")
     parser.add_argument("--data-dir", type=Path, default=None,
-                        help="Path to UrbanNav dataset directory")
+                        help="Path to PPC run directory, UrbanNav run directory, or dataset root")
     parser.add_argument("--n-epochs", type=int, default=300,
                         help="Number of epochs for synthetic data (default: 300)")
+    parser.add_argument("--max-epochs", type=int, default=None,
+                        help="Optional cap on real-data epochs")
+    parser.add_argument("--start-epoch", type=int, default=0,
+                        help="Skip this many usable real-data epochs before evaluation")
+    parser.add_argument("--systems", type=str, default="G",
+                        help="Comma-separated constellations for real data, e.g. G or G,E,J")
+    parser.add_argument("--urban-rover", type=str, default="ublox",
+                        help="UrbanNav rover observation source, e.g. ublox or trimble")
+    parser.add_argument("--weight-scale", type=str, default="",
+                        help="Optional per-constellation weight scale, e.g. E=0.1,J=2.0")
     parser.add_argument("--no-plots", action="store_true",
                         help="Skip generating plots")
     args = parser.parse_args()
+    systems = tuple(part.strip().upper() for part in args.systems.split(",") if part.strip())
+    weight_scale_by_system = _parse_weight_scale(args.weight_scale)
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("=" * 72)
-    print("  Experiment: Baseline Methods on UrbanNav Data")
+    print("  Experiment: Baseline Methods on PPC / Synthetic Data")
     print("=" * 72)
 
     # ------------------------------------------------------------------
     # [1] Data loading
     # ------------------------------------------------------------------
     print("\n[1] Loading data ...")
-    data = load_or_generate_data(args.data_dir, n_epochs=args.n_epochs)
+    data = load_or_generate_data(
+        args.data_dir,
+        n_epochs=args.n_epochs,
+        max_real_epochs=args.max_epochs,
+        start_epoch=args.start_epoch,
+        systems=systems,
+        urban_rover=args.urban_rover,
+    )
     ground_truth = data["ground_truth"]
     n_epochs = data["n_epochs"]
+    if "dataset_name" in data:
+        print(f"    Dataset: {data['dataset_name']}")
 
     # ------------------------------------------------------------------
     # [2] WLS
     # ------------------------------------------------------------------
     print("\n[2] Running WLS ...")
-    wls_pos, wls_ms = run_wls(data)
+    wls_pos, wls_ms = run_wls(data, weight_scale_by_system=weight_scale_by_system)
     wls_metrics = compute_metrics(wls_pos[:, :3], ground_truth)
     print(f"    WLS: RMS 2D={wls_metrics['rms_2d']:.2f} m, "
           f"P95={wls_metrics['p95']:.2f} m")

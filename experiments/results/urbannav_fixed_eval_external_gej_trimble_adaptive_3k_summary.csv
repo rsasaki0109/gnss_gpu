@@ -1,0 +1,5 @@
+method,n_runs,mean_rms_2d,mean_rms_3d,mean_p50,mean_p95,mean_outlier_rate_pct,mean_catastrophic_rate_pct,mean_longest_outlier_segment_s,mean_time_ms_per_epoch,wins_vs_wls_rms
+EKF,2,67.852894,130.491785,63.491399,102.701729,6.533333,0.000000,6.000001,0.031092,nan
+PF+AdaptiveGuide-10K,2,62.902789,73.233248,60.575607,90.353267,2.766666,0.000000,8.150001,1.998196,nan
+PF+EKFGuide-10K,2,62.485421,120.936045,57.550644,97.220358,5.650000,0.000000,4.900000,1.713228,nan
+PF+RobustClear-10K,2,64.577546,75.479693,60.767004,96.524341,4.983333,0.000000,14.700000,1.381474,nan

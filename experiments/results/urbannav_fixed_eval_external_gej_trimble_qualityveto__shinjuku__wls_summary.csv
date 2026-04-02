@@ -1,0 +1,2 @@
+method,n_runs,mean_rms_2d,mean_rms_3d,mean_p50,mean_p95,mean_outlier_rate_pct,mean_catastrophic_rate_pct,mean_longest_outlier_segment_s,mean_time_ms_per_epoch,wins_vs_wls_rms
+WLS,1,3389.572856,1065733.554388,63.430826,146.073043,10.510704,3.460721,10.300001,0.024179,0.000000

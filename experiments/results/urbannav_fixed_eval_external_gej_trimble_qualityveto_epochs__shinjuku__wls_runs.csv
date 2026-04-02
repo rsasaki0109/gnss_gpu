@@ -1,0 +1,2 @@
+run,method,backend,time_ms_per_epoch,mean_2d,rms_2d,rms_3d,p50,p67,p95,max_2d,outlier_rate_pct,catastrophic_rate_pct,longest_outlier_segment_epochs,longest_outlier_segment_s,n_epochs
+Shinjuku,WLS,WLS,0.026264,634.498122,3389.572856,1065733.554388,63.430826,72.798754,146.073043,20255.663809,10.510704,3.460721,104.000000,10.300001,20227

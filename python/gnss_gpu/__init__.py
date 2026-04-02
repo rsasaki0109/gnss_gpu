@@ -31,6 +31,14 @@ from gnss_gpu.io.nmea_writer import NMEAWriter
 from gnss_gpu.atmosphere import AtmosphereCorrection
 from gnss_gpu.sbas import SBASCorrection, QZSSAugmentation
 from gnss_gpu.multi_gnss import MultiGNSSSolver
+from gnss_gpu.multi_gnss_quality import (
+    MultiGNSSQualityDecision,
+    MultiGNSSQualityMetrics,
+    MultiGNSSQualityVetoConfig,
+    accept_multi_gnss_solution,
+    compute_multi_gnss_quality_metrics,
+    select_multi_gnss_solution,
+)
 from gnss_gpu.ekf import EKFPositioner
 from gnss_gpu.raim import raim_check, raim_fde
 from gnss_gpu.doppler import doppler_velocity, doppler_velocity_batch
@@ -83,6 +91,12 @@ __all__ = [
     "QZSSAugmentation",
     # Multi-GNSS positioning
     "MultiGNSSSolver",
+    "MultiGNSSQualityDecision",
+    "MultiGNSSQualityMetrics",
+    "MultiGNSSQualityVetoConfig",
+    "accept_multi_gnss_solution",
+    "compute_multi_gnss_quality_metrics",
+    "select_multi_gnss_solution",
     # EKF positioning
     "EKFPositioner",
     # RAIM / FDE integrity monitoring

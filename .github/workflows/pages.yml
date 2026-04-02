@@ -1,0 +1,65 @@
+name: Pages
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/pages.yml"
+      - "docs/**"
+      - "tests/site/**"
+      - "package.json"
+      - "package-lock.json"
+      - "experiments/build_paper_assets.py"
+      - "experiments/build_site_media.py"
+      - "experiments/build_githubio_summary.py"
+      - "experiments/results/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: pip install numpy matplotlib
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: python3 experiments/build_paper_assets.py
+      - run: python3 experiments/build_githubio_summary.py
+      - run: npm run site:smoke
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pages-playwright-artifacts
+          path: |
+            test-results/
+            playwright-report/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

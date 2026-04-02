@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import math
 import struct
-from dataclasses import dataclass
 
 import numpy as np
 
@@ -25,6 +25,73 @@ GPS_MU = 3.986005e14  # Earth gravitational parameter [m^3/s^2]
 GPS_OMEGA_E = 7.2921151467e-5  # Earth rotation rate [rad/s]
 GPS_F = -4.442807633e-10  # relativistic correction constant [s/m^0.5]
 GPS_WEEK_SEC = 604800.0  # seconds per GPS week
+
+GAL_MU = 3.986004418e14
+GAL_OMEGA_E = 7.2921151467e-5
+GAL_F = -4.442807309e-10
+
+QZS_MU = GPS_MU
+QZS_OMEGA_E = GPS_OMEGA_E
+QZS_F = GPS_F
+
+
+def _constellation_constants(system: str) -> tuple[float, float, float]:
+    system = system.upper()
+    if system == "E":
+        return GAL_MU, GAL_OMEGA_E, GAL_F
+    if system == "J":
+        return QZS_MU, QZS_OMEGA_E, QZS_F
+    return GPS_MU, GPS_OMEGA_E, GPS_F
+
+
+def _normalize_sat_id(sat: int | str) -> int | str:
+    if isinstance(sat, str):
+        sat_id = sat.strip().upper()
+        if not sat_id:
+            return sat_id
+        system = sat_id[0]
+        prn = sat_id[1:].strip().replace(" ", "")
+        if system.isalpha() and prn.isdigit():
+            return f"{system}{int(prn):02d}"
+        return sat_id.replace(" ", "")
+    return int(sat)
+
+
+def _obs_band(obs_code: str | None) -> str:
+    if not obs_code or len(obs_code) < 2:
+        return ""
+    return obs_code[1]
+
+
+def _galileo_priority(nav: NavMessage, obs_code: str | None) -> int:
+    band = _obs_band(obs_code)
+    data_sources = int(round(nav.data_sources or nav.codes_on_l2))
+    if band == "1":
+        return (
+            4 * int(bool(data_sources & 0x001))
+            + 2 * int(bool(data_sources & 0x200))
+            + int(bool(data_sources & 0x004))
+        )
+    if band == "5":
+        return 4 * int(bool(data_sources & 0x002)) + 2 * int(bool(data_sources & 0x100))
+    if band == "7":
+        return 4 * int(bool(data_sources & 0x004)) + 2 * int(bool(data_sources & 0x200))
+    return 0
+
+
+def _group_delay(nav: NavMessage, obs_code: str | None) -> float:
+    if nav.system != "E":
+        return nav.tgd
+
+    band = _obs_band(obs_code)
+    data_sources = int(round(nav.data_sources or nav.codes_on_l2))
+    if band == "1":
+        if data_sources & 0x200:
+            return nav.bgd_e5b_e1
+        if data_sources & 0x100:
+            return nav.bgd_e5a_e1
+        return nav.bgd_e5b_e1 if nav.bgd_e5b_e1 != 0.0 else nav.bgd_e5a_e1
+    return nav.tgd
 
 
 def _nav_to_params_bytes(nav: NavMessage) -> bytes:
@@ -73,7 +140,7 @@ class Ephemeris:
     using the IS-GPS-200 algorithm on the GPU.
     """
 
-    def __init__(self, nav_messages: dict[int, list[NavMessage]]) -> None:
+    def __init__(self, nav_messages: dict[int | str, list[NavMessage]]) -> None:
         """Initialize from parsed NAV RINEX messages.
 
         Args:
@@ -81,14 +148,19 @@ class Ephemeris:
                 by read_nav_rinex().
         """
         self._nav_messages = nav_messages
-        self._prn_list = sorted(nav_messages.keys())
+        self._prn_list = sorted(nav_messages.keys(), key=str)
 
     @property
-    def available_prns(self) -> list[int]:
+    def available_prns(self) -> list[int | str]:
         """List of PRN numbers with available ephemeris data."""
         return list(self._prn_list)
 
-    def select_ephemeris(self, prn: int, gps_time: float) -> NavMessage | None:
+    def select_ephemeris(
+        self,
+        prn: int | str,
+        gps_time: float,
+        obs_code: str | None = None,
+    ) -> NavMessage | None:
         """Select best ephemeris for given PRN and GPS time of week.
 
         Chooses the ephemeris with toe closest to the requested time.
@@ -100,6 +172,9 @@ class Ephemeris:
         Returns:
             Best matching NavMessage, or None if PRN not found.
         """
+        prn = _normalize_sat_id(prn)
+        if prn not in self._nav_messages and isinstance(prn, int):
+            prn = f"G{prn:02d}"
         if prn not in self._nav_messages:
             return None
         messages = self._nav_messages[prn]
@@ -107,20 +182,24 @@ class Ephemeris:
             return None
 
         best = None
-        best_dt = float("inf")
+        best_key = None
         for msg in messages:
             dt = abs(gps_time - msg.toe)
             # Handle week crossover
             if dt > GPS_WEEK_SEC / 2.0:
                 dt = GPS_WEEK_SEC - dt
-            if dt < best_dt:
-                best_dt = dt
+            priority = 0
+            if obs_code is not None and msg.system == "E":
+                priority = _galileo_priority(msg, obs_code)
+            key = (dt, -priority)
+            if best_key is None or key < best_key:
+                best_key = key
                 best = msg
         return best
 
     def _build_params(
-        self, gps_time: float, prn_list: list[int] | None = None
-    ) -> tuple[np.ndarray, list[int]]:
+        self, gps_time: float, prn_list: list[int | str] | None = None
+    ) -> tuple[np.ndarray, list[int | str]]:
         """Build packed EphemerisParams array for GPU computation.
 
         Returns:
@@ -135,6 +214,8 @@ class Ephemeris:
         for prn in prn_list:
             nav = self.select_ephemeris(prn, gps_time)
             if nav is not None:
+                if nav.system != "G":
+                    raise ValueError("GPU ephemeris path only supports GPS")
                 params_bytes += _nav_to_params_bytes(nav)
                 used_prns.append(prn)
 
@@ -145,8 +226,11 @@ class Ephemeris:
         return params_flat, used_prns
 
     def compute(
-        self, gps_time: float, prn_list: list[int] | None = None
-    ) -> tuple[np.ndarray, np.ndarray, list[int]]:
+        self,
+        gps_time: float,
+        prn_list: list[int | str] | None = None,
+        obs_codes: list[str] | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, list[int | str]]:
         """Compute satellite positions at given GPS time of week.
 
         Args:
@@ -158,8 +242,23 @@ class Ephemeris:
             sat_clk: array of shape [n_sat] clock corrections [s]
             used_prns: list of PRN numbers corresponding to output rows
         """
-        if not HAS_GPU:
-            return self._compute_cpu(gps_time, prn_list)
+        if prn_list is None:
+            prn_list = self._prn_list
+        if obs_codes is not None and len(obs_codes) != len(prn_list):
+            raise ValueError("obs_codes must match prn_list length")
+
+        navs = [
+            self.select_ephemeris(
+                prn,
+                gps_time,
+                None if obs_codes is None else obs_codes[i],
+            )
+            for i, prn in enumerate(prn_list)
+        ]
+        use_gpu = HAS_GPU and all(nav is not None and nav.system == "G" for nav in navs if nav is not None)
+
+        if not use_gpu:
+            return self._compute_cpu(gps_time, prn_list, obs_codes)
 
         params_flat, used_prns = self._build_params(gps_time, prn_list)
         if not used_prns:
@@ -170,8 +269,8 @@ class Ephemeris:
         return np.asarray(sat_ecef), np.asarray(sat_clk), used_prns
 
     def compute_batch(
-        self, gps_times: np.ndarray | list[float], prn_list: list[int] | None = None
-    ) -> tuple[np.ndarray, np.ndarray, list[int]]:
+        self, gps_times: np.ndarray | list[float], prn_list: list[int | str] | None = None
+    ) -> tuple[np.ndarray, np.ndarray, list[int | str]]:
         """Batch computation for multiple epochs.
 
         Args:
@@ -185,11 +284,16 @@ class Ephemeris:
         """
         gps_times = np.asarray(gps_times, dtype=np.float64)
 
-        if not HAS_GPU:
+        if prn_list is None:
+            prn_list = self._prn_list
+
+        ref_time = gps_times[0] if len(gps_times) > 0 else 0.0
+        navs = [self.select_ephemeris(prn, ref_time) for prn in prn_list]
+        use_gpu = HAS_GPU and all(nav is not None and nav.system == "G" for nav in navs if nav is not None)
+
+        if not use_gpu:
             return self._compute_batch_cpu(gps_times, prn_list)
 
-        # Use first epoch time for ephemeris selection
-        ref_time = gps_times[0] if len(gps_times) > 0 else 0.0
         params_flat, used_prns = self._build_params(ref_time, prn_list)
         if not used_prns:
             n_epoch = len(gps_times)
@@ -219,10 +323,15 @@ class Ephemeris:
         return E
 
     @staticmethod
-    def _compute_single_cpu(nav: NavMessage, gps_time: float) -> tuple[np.ndarray, float]:
+    def _compute_single_cpu(
+        nav: NavMessage,
+        gps_time: float,
+        obs_code: str | None = None,
+    ) -> tuple[np.ndarray, float]:
         """Compute single satellite position on CPU."""
+        mu, omega_e, rel_f = _constellation_constants(nav.system)
         a = nav.sqrt_a ** 2
-        n0 = np.sqrt(GPS_MU / (a ** 3))
+        n0 = math.sqrt(mu / (a ** 3))
         n = n0 + nav.delta_n
 
         tk = gps_time - nav.toe
@@ -256,7 +365,7 @@ class Ephemeris:
         xp = r * np.cos(u)
         yp = r * np.sin(u)
 
-        Omega = nav.omega0 + (nav.omega_dot - GPS_OMEGA_E) * tk - GPS_OMEGA_E * nav.toe
+        Omega = nav.omega0 + (nav.omega_dot - omega_e) * tk - omega_e * nav.toe
 
         cosO = np.cos(Omega)
         sinO = np.sin(Omega)
@@ -275,27 +384,33 @@ class Ephemeris:
             dt -= GPS_WEEK_SEC
         if dt < -GPS_WEEK_SEC / 2.0:
             dt += GPS_WEEK_SEC
-        dtr = GPS_F * nav.e * nav.sqrt_a * sinE
-        clk = nav.af0 + nav.af1 * dt + nav.af2 * dt * dt + dtr - nav.tgd
+        dtr = rel_f * nav.e * nav.sqrt_a * sinE
+        clk = nav.af0 + nav.af1 * dt + nav.af2 * dt * dt + dtr - _group_delay(nav, obs_code)
 
         return pos, clk
 
     def _compute_cpu(
-        self, gps_time: float, prn_list: list[int] | None = None
-    ) -> tuple[np.ndarray, np.ndarray, list[int]]:
+        self,
+        gps_time: float,
+        prn_list: list[int | str] | None = None,
+        obs_codes: list[str] | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, list[int | str]]:
         """CPU fallback for single-epoch computation."""
         if prn_list is None:
             prn_list = self._prn_list
+        if obs_codes is not None and len(obs_codes) != len(prn_list):
+            raise ValueError("obs_codes must match prn_list length")
 
         positions = []
         clocks = []
         used_prns = []
 
-        for prn in prn_list:
-            nav = self.select_ephemeris(prn, gps_time)
+        for i, prn in enumerate(prn_list):
+            obs_code = None if obs_codes is None else obs_codes[i]
+            nav = self.select_ephemeris(prn, gps_time, obs_code)
             if nav is None:
                 continue
-            pos, clk = self._compute_single_cpu(nav, gps_time)
+            pos, clk = self._compute_single_cpu(nav, gps_time, obs_code)
             positions.append(pos)
             clocks.append(clk)
             used_prns.append(prn)
@@ -306,8 +421,8 @@ class Ephemeris:
         return np.array(positions), np.array(clocks), used_prns
 
     def _compute_batch_cpu(
-        self, gps_times: np.ndarray, prn_list: list[int] | None = None
-    ) -> tuple[np.ndarray, np.ndarray, list[int]]:
+        self, gps_times: np.ndarray, prn_list: list[int | str] | None = None
+    ) -> tuple[np.ndarray, np.ndarray, list[int | str]]:
         """CPU fallback for batch computation."""
         if prn_list is None:
             prn_list = self._prn_list

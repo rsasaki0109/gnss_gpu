@@ -75,6 +75,12 @@ class MultiGNSSSolver:
         else:
             weights = np.ascontiguousarray(weights, dtype=np.float64)
 
+        n_state = 3 + self.n_systems
+        if n_sat < n_state:
+            return np.zeros(3, dtype=np.float64), {
+                system: 0.0 for system in self.systems
+            }, -1
+
         # Remap system_ids to contiguous indices
         mapped_ids = np.array([self._sys_to_idx.get(int(s), 0) for s in system_ids],
                               dtype=np.int32)
@@ -117,6 +123,14 @@ class MultiGNSSSolver:
         else:
             weights = np.ascontiguousarray(weights, dtype=np.float64)
 
+        n_state = 3 + self.n_systems
+        if n_sat < n_state:
+            return (
+                np.zeros((n_epoch, 3), dtype=np.float64),
+                np.zeros((n_epoch, self.n_systems), dtype=np.float64),
+                np.full(n_epoch, -1, dtype=np.int32),
+            )
+
         # Remap system_ids to contiguous indices
         sys_ids_flat = system_ids.ravel()
         mapped_ids = np.array([self._sys_to_idx.get(int(s), 0) for s in sys_ids_flat],
@@ -129,7 +143,6 @@ class MultiGNSSSolver:
                 self.n_systems, self.max_iter, self.tol)
         else:
             # CPU fallback: iterate over epochs
-            n_state = 3 + self.n_systems
             results = np.zeros((n_epoch, n_state))
             n_iters = np.zeros(n_epoch, dtype=np.int32)
             for i in range(n_epoch):

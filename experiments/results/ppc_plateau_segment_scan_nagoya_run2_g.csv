@@ -1,0 +1,3 @@
+segment_id,start_epoch,end_epoch,n_epochs,start_mesh,n_meshes,subset_key,triangle_count,n_nlos,n_total_obs,nlos_fraction
+1,983,1082,100,52366700,9,63e337fab2e5f33f,1004652,8,120,0.066667
+0,0,99,100,52365790,9,938b44fb6b226b9f,954621,0,146,0.000000

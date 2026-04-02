@@ -1,0 +1,2 @@
+run,method,backend,time_ms_per_epoch,mean_2d,rms_2d,rms_3d,p50,p67,p95,max_2d,outlier_rate_pct,catastrophic_rate_pct,longest_outlier_segment_epochs,longest_outlier_segment_s,n_epochs
+Shinjuku,PF+RobustClear-10K,GPU-3D,1.327098,47.569856,47.591337,89.517301,47.443440,47.819499,50.405518,51.250853,0.000000,0.000000,0.000000,0.000000,50

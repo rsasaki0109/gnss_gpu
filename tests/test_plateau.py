@@ -71,11 +71,71 @@ MINIMAL_CITYGML = textwrap.dedent("""\
 """)
 
 
+GEOGRAPHIC_CITYGML = textwrap.dedent("""\
+    <?xml version="1.0" encoding="UTF-8"?>
+    <core:CityModel
+      xmlns:core="http://www.opengis.net/citygml/2.0"
+      xmlns:bldg="http://www.opengis.net/citygml/building/2.0"
+      xmlns:gml="http://www.opengis.net/gml">
+      <core:cityObjectMember>
+        <bldg:Building gml:id="geo_bldg_1">
+          <bldg:lod1Solid>
+            <gml:Solid>
+              <gml:exterior>
+                <gml:CompositeSurface>
+                  <gml:surfaceMember>
+                    <gml:Polygon>
+                      <gml:exterior>
+                        <gml:LinearRing>
+                          <gml:posList>
+                            35.68120 139.76710 5.0
+                            35.68120 139.76720 5.0
+                            35.68130 139.76720 5.0
+                            35.68130 139.76710 5.0
+                            35.68120 139.76710 5.0
+                          </gml:posList>
+                        </gml:LinearRing>
+                      </gml:exterior>
+                    </gml:Polygon>
+                  </gml:surfaceMember>
+                  <gml:surfaceMember>
+                    <gml:Polygon>
+                      <gml:exterior>
+                        <gml:LinearRing>
+                          <gml:posList>
+                            35.68120 139.76710 25.0
+                            35.68130 139.76710 25.0
+                            35.68130 139.76720 25.0
+                            35.68120 139.76720 25.0
+                            35.68120 139.76710 25.0
+                          </gml:posList>
+                        </gml:LinearRing>
+                      </gml:exterior>
+                    </gml:Polygon>
+                  </gml:surfaceMember>
+                </gml:CompositeSurface>
+              </gml:exterior>
+            </gml:Solid>
+          </bldg:lod1Solid>
+        </bldg:Building>
+      </core:cityObjectMember>
+    </core:CityModel>
+""")
+
+
 @pytest.fixture
 def citygml_file(tmp_path):
     """Write the minimal CityGML to a temporary file."""
     p = tmp_path / "test.gml"
     p.write_text(MINIMAL_CITYGML, encoding="utf-8")
+    return p
+
+
+@pytest.fixture
+def geographic_citygml_file(tmp_path):
+    """Write a minimal CityGML that stores coordinates in lat/lon/height."""
+    p = tmp_path / "geographic.gml"
+    p.write_text(GEOGRAPHIC_CITYGML, encoding="utf-8")
     return p
 
 
@@ -244,6 +304,17 @@ class TestPlateauLoader:
         assert isinstance(model, BuildingModel)
         # 2 polygons, each a quad => 2 * 2 = 4 triangles
         assert model.triangles.shape == (4, 3, 3)
+
+    def test_load_geographic_citygml(self, geographic_citygml_file):
+        """Geographic lat/lon PLATEAU exports should map near Tokyo Station."""
+        loader = PlateauLoader(zone=9)
+        model = loader.load_citygml(geographic_citygml_file)
+        assert isinstance(model, BuildingModel)
+        assert model.triangles.shape == (4, 3, 3)
+
+        expected = loader._lla_to_ecef(np.radians(35.68120), np.radians(139.76710), 5.0)
+        first_vertex = model.triangles[0, 0]
+        assert np.linalg.norm(first_vertex - expected) < 5.0
 
     def test_load_sample_plateau_file(self, sample_gml_path):
         """Load the shipped sample PLATEAU GML file."""

@@ -1,0 +1,4 @@
+city,run,anchor_start_epoch,start_epoch,offset_epoch,is_anchor,is_holdout,nlos_fraction,subset_key,plateau_zone,triangle_count,n_meshes,n_total_obs,n_nlos
+tokyo,run3,774,574,-200,0,1,0.000000,d1839e131b11ac32,9,1043714,9,166,0
+tokyo,run3,774,774,0,1,0,0.013605,436910dd3dca5c2a,9,1728999,12,147,2
+tokyo,run3,774,974,200,0,1,0.042553,5dc816ee3fc0ae64,9,1573007,9,141,6

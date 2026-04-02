@@ -18,6 +18,11 @@ venv/
 .vscode/
 .idea/
 *.swp
+node_modules/
+playwright-report/
+test-results/
+tmp/playwright_check/
+tmp/site_visual_check/
 
 # CUDA
 *.cubin

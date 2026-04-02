@@ -26,7 +26,10 @@ namespace gnss_gpu {
 /// @param n_sat             number of satellites
 /// @param sigma_pr_los      sigma for LOS satellites [m] (tight, e.g., 3 m)
 /// @param sigma_pr_nlos     sigma for NLOS satellites [m] (loose, e.g., 30 m)
-/// @param nlos_bias         expected positive bias for NLOS [m] (e.g., 20 m)
+/// @param nlos_bias         expected positive bias for NLOS [m] (applied only
+///                          when the residual itself is positive)
+/// @param blocked_nlos_prob P(NLOS | ray blocked), 0..1
+/// @param clear_nlos_prob   P(NLOS | ray clear), 0..1
 void pf_weight_3d_bvh(
     const double* px, const double* py, const double* pz, const double* pcb,
     const double* sat_ecef, const double* pseudoranges,
@@ -37,6 +40,8 @@ void pf_weight_3d_bvh(
     int n_particles, int n_sat,
     double sigma_pr_los,
     double sigma_pr_nlos,
-    double nlos_bias);
+    double nlos_bias,
+    double blocked_nlos_prob,
+    double clear_nlos_prob);
 
 }  // namespace gnss_gpu

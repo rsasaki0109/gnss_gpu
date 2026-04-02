@@ -1,0 +1,3 @@
+label,sigma_pr,sigma_los,sigma_nlos,nlos_bias,backend,time_ms_per_epoch,rms_2d,p95,max_2d,outlier_rate_pct,nlos_fraction,n_total_obs
+soft_nlos,3.000000,3.000000,100.000000,0.000000,GPU-3D-BVH,334.051118,153.777571,224.479254,231.674163,73.000000,0.026846,298
+moderate_nlos,3.000000,3.000000,60.000000,5.000000,GPU-3D-BVH,344.017251,155.121132,224.457042,231.945872,72.000000,0.026846,298

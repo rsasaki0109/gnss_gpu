@@ -1,105 +1,207 @@
-# gnss_gpu — GPU-Accelerated GNSS Positioning Library
+# gnss_gpu
 
-GPU-accelerated GNSS signal processing and positioning library using CUDA, featuring mega-particle filtering for urban multimodal positioning.
+`gnss_gpu` is a CUDA-backed GNSS positioning repo built around experiment-first development. The repository contains reusable core code under `python/gnss_gpu/`, but a large part of the current value is the evaluation stack around UrbanNav, PPC-Dataset, and real-PLATEAU subsets.
 
-## Features
+This repo is no longer in a "pick one perfect architecture first" phase. The current workflow is:
 
-### Core Positioning
-- **WLS Batch Positioning** — GPU-parallel Weighted Least Squares (9.2M epochs/s)
-- **EKF Positioning** — Extended Kalman Filter with constant-velocity model
-- **Multi-GNSS** — GPS/GLONASS/Galileo/BeiDou with ISB estimation
-- **RTK** — Carrier phase positioning with LAMBDA ambiguity resolution
+1. build comparable variants under the same contract
+2. evaluate them on fixed splits and external checks
+3. freeze only the parts that survive
+4. keep rejected or supplemental ideas in `experiments/`, not in the core API
 
-### Particle Filter
-- **Mega Particle Filter** — 1M+ particles on GPU (13.3M particles/s)
-- **Megopolis Resampling** — Numerically stable, no prefix-sum
-- **SVGD** — Stein Variational Gradient Descent (no sample impoverishment)
-- **3D-Aware PF** — Ray tracing integrated NLOS-aware likelihood
+## Visual snapshot
 
-### Signal Processing
-- **Signal Acquisition** — cuFFT-based parallel GPS L1 C/A acquisition
-- **Vector Tracking** — Coupled DLL/PLL + EKF navigation filter
-- **Interference Detection** — STFT-based jamming detection & excision
+![gnss_gpu poster](docs/assets/media/site_poster.png)
 
-### Urban Environment
-- **3D Ray Tracing** — Moller-Trumbore NLOS detection
-- **Multipath Simulation** — Signal-level DLL error model
-- **Vulnerability Mapping** — DOP/visibility grid evaluation (11M pts/s)
-- **PLATEAU Integration** — Japanese 3D city model (CityGML) loader
+![gnss_gpu teaser](docs/assets/media/site_teaser.gif)
 
-### Atmospheric Correction
-- **Troposphere** — Saastamoinen model
-- **Ionosphere** — Klobuchar broadcast model
+Motion assets:
+- [`site_teaser.mp4`](docs/assets/media/site_teaser.mp4)
+- [`site_teaser.webm`](docs/assets/media/site_teaser.webm)
 
-### I/O
-- RINEX 3.x observation & navigation file parser
-- NMEA reader/writer (GGA, RMC, GSA, GSV, VTG)
-- PLATEAU CityGML loader
+| UrbanNav per-run | Window wins vs EKF | Hong Kong control |
+| --- | --- | --- |
+| ![UrbanNav per-run](docs/assets/media/site_urbannav_runs.png) | ![Window wins](docs/assets/media/site_window_wins.png) | ![Hong Kong control](docs/assets/media/site_hk_control.png) |
 
-### Integration
-- ROS2 node with PointCloud2 particle visualization
-- Matplotlib & Plotly visualization tools
+| Epoch error timeline | Error-band composition |
+| --- | --- |
+| ![UrbanNav timeline](docs/assets/media/site_urbannav_timeline.png) | ![UrbanNav error bands](docs/assets/media/site_error_bands.png) |
 
-## Quick Start
+## Current frozen read
+
+- Main external method: `PF+RobustClear-10K`
+- Main external dataset/result: UrbanNav Tokyo, `trimble + G,E,J`, fixed evaluation
+- Exploratory but not headline: PPC gate family
+- Systems contribution: `PF3D-BVH-10K`
+- Supplemental safety variants: `PF+AdaptiveGuide-10K`, `PF+EKFRescue-10K`
+- Promoted reusable hook: `WLS+QualityVeto`
+
+### Current headline numbers
+
+| Area | Method | RMS 2D | P95 | >100 m | >500 m | Note |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| UrbanNav external | `EKF` | 93.25 m | 178.18 m | 16.29% | 0.161% | `trimble + G,E,J` |
+| UrbanNav external | `PF-10K` | 67.61 m | 101.46 m | 5.44% | 0.000% | close ablation |
+| UrbanNav external | `PF+RobustClear-10K` | 66.60 m | 98.53 m | 4.80% | 0.000% | frozen winner |
+| PPC holdout | `always_robust` | 66.92 m | 81.69 m | 5.83% | 0.000% | safe baseline |
+| PPC holdout | exploratory gate | 65.54 m | 81.22 m | 5.83% | 0.000% | holdout survives, but gain is modest |
+| BVH systems | `PF3D-10K` | 55.50 m | 58.39 m | 0.000% | 0.000% | real PLATEAU subset |
+| BVH systems | `PF3D-BVH-10K` | 55.50 m | 58.39 m | 0.000% | 0.000% | `57.8x` faster |
+
+### What this repo claims
+
+- UrbanNav external validation now supports the multi-GNSS PF path.
+- `PF+RobustClear-10K` is the strongest current full-run external method.
+- BVH makes real-PLATEAU PF3D runtime practical without changing the measured PF3D accuracy on the evaluated subset.
+- The repo has a reproducible experiment trail: accepted, exploratory, and rejected variants are documented separately.
+
+### What this repo does not claim
+
+- It does not claim a world-first GNSS particle filter.
+- It does not claim that explicit 3D map reasoning is the current main accuracy winner on real data.
+- It does not claim that every exploratory gate family generalizes strongly.
+- It does not claim that Hong Kong is already a second positive external win of the same strength as UrbanNav Tokyo.
+
+## Repo front door
+
+- GitHub Pages artifact snapshot: `docs/index.html`
+- Experiment log: [`docs/experiments.md`](docs/experiments.md)
+- Decision log: [`docs/decisions.md`](docs/decisions.md)
+- Minimal retained interface: [`docs/interfaces.md`](docs/interfaces.md)
+- Working plan / handoff log: [`docs/plan.md`](docs/plan.md)
+- Paper-oriented asset outputs: `experiments/results/paper_assets/`
+
+## Quick start
 
 ### Build
+
 ```bash
 pip install .
-# or
-mkdir build && cd build
+```
+
+Or build manually:
+
+```bash
+mkdir -p build
+cd build
 cmake .. -DCMAKE_CUDA_ARCHITECTURES=native
-make -j$(nproc)
+make -j"$(nproc)"
 ```
 
-### Usage
-```python
-import gnss_gpu
+If you build extensions manually, copy the generated `.so` files into `python/gnss_gpu/` before running Python-side experiments.
 
-# WLS positioning
-positions, iters = gnss_gpu.wls_batch(sat_ecef, pseudoranges, weights)
+### Run tests
 
-# Mega particle filter
-pf = gnss_gpu.ParticleFilter(n_particles=1_000_000)
-pf.initialize(initial_position)
-pf.predict(dt=1.0)
-pf.update(sat_ecef, pseudoranges)
-estimate = pf.estimate()
-
-# 3D-aware particle filter
-from gnss_gpu import BuildingModel, ParticleFilter3D
-buildings = BuildingModel.from_obj("city.obj")
-pf3d = ParticleFilter3D(buildings, n_particles=100_000)
-
-# Load PLATEAU 3D city model
-from gnss_gpu.io import load_plateau
-buildings = load_plateau("path/to/plateau/", zone=9)
+```bash
+PYTHONPATH=python python3 -m pytest tests/ -q
 ```
 
-## Architecture
-```
-Python API (gnss_gpu)
-    | pybind11
-CUDA Kernels
-    |-- Positioning (WLS, EKF, RTK, Multi-GNSS)
-    |-- Particle Filter (predict, weight, resampling, SVGD)
-    |-- Signal Processing (acquisition, tracking, interference)
-    |-- Ray Tracing (LOS/NLOS, multipath)
-    +-- Utilities (coordinates, atmosphere, ephemeris)
+Freeze checkpoint status:
+
+```text
+440 passed, 7 skipped, 17 warnings
 ```
 
-## Performance Benchmarks
-| Module | Input | Time | Throughput |
-|--------|-------|------|------------|
-| WLS Batch | 10K epochs | 1.1 ms | 9.2M epoch/s |
-| Particle Filter | 1M particles | 75 ms | 13.3M part/s |
-| Acquisition | 32 PRN | 263 ms | 122 PRN/s |
-| Vulnerability Map | 10K grid | 0.9 ms | 11M pts/s |
-| Ray Tracing | 1K tri x 8 sat | 0.9 ms | 9.5M checks/s |
+The remaining warnings are existing `pytest.mark.slow`, `datetime.utcnow()`, and plotting warnings rather than new failures.
 
-## References
-- Koide et al., "MegaParticles", ICRA 2024. arXiv:2404.16370
-- Chesser et al., "Megopolis Resampling", 2021. arXiv:2109.13504
-- Liu & Wang, "Stein Variational Gradient Descent", 2016
+## Rebuild artifact outputs
+
+### GitHub Pages snapshot
+
+```bash
+python3 experiments/build_githubio_summary.py
+```
+
+This rebuilds:
+
+- `docs/assets/results_snapshot.json`
+- `docs/assets/data/*.csv`
+- `docs/assets/figures/*.png`
+- `docs/assets/media/site_poster.png`
+- `docs/assets/media/site_teaser.gif`
+- `docs/assets/media/site_teaser.mp4`
+- `docs/assets/media/site_teaser.webm`
+- `docs/assets/media/site_urbannav_runs.png`
+- `docs/assets/media/site_window_wins.png`
+- `docs/assets/media/site_hk_control.png`
+- `docs/assets/media/site_urbannav_timeline.png`
+- `docs/assets/media/site_error_bands.png`
+
+### GitHub Pages smoke test
+
+```bash
+npm install
+npx playwright install chromium
+npm run site:smoke
+```
+
+This checks the built snapshot page on desktop and mobile Chromium, asserts that the main sections render, and fails on non-ignored browser runtime errors.
+
+### Paper-facing figures and main table
+
+```bash
+python3 experiments/build_paper_assets.py
+```
+
+This rebuilds:
+
+- `experiments/results/paper_assets/paper_main_table.csv`
+- `experiments/results/paper_assets/paper_main_table.md`
+- `experiments/results/paper_assets/paper_ppc_holdout.png`
+- `experiments/results/paper_assets/paper_urbannav_external.png`
+- `experiments/results/paper_assets/paper_bvh_runtime.png`
+- `experiments/results/paper_assets/paper_captions.md`
+
+## Reproduce the current headline result
+
+UrbanNav external, frozen mainline:
+
+```bash
+PYTHONPATH=python python3 experiments/exp_urbannav_fixed_eval.py \
+  --data-root /tmp/UrbanNav-Tokyo \
+  --runs Odaiba,Shinjuku \
+  --systems G,E,J \
+  --urban-rover trimble \
+  --n-particles 10000 \
+  --methods EKF,PF-10K,PF+RobustClear-10K,WLS,WLS+QualityVeto \
+  --quality-veto-residual-p95-max 100 \
+  --quality-veto-residual-max 250 \
+  --quality-veto-bias-delta-max 100 \
+  --quality-veto-extra-sat-min 2 \
+  --clear-nlos-prob 0.01 \
+  --isolate-methods \
+  --results-prefix urbannav_fixed_eval_external_gej_trimble_qualityveto
+```
+
+Main output files:
+
+- `experiments/results/urbannav_fixed_eval_external_gej_trimble_qualityveto_summary.csv`
+- `experiments/results/urbannav_fixed_eval_external_gej_trimble_qualityveto_runs.csv`
+
+## Repo layout
+
+- `python/gnss_gpu/`: reusable library code, bindings, dataset adapters, and core hooks
+- `src/`: CUDA/C++ kernels and pybind-facing native implementations
+- `experiments/`: experiment-only runners, sweeps, diagnostics, and artifact builders
+- `docs/`: experiment log, decisions, interface notes, paper draft, and GitHub Pages source
+- `tests/`: unit and regression tests
+
+## Development policy
+
+- Keep stable, reusable code in `python/gnss_gpu/` or `src/`.
+- Keep variant-heavy logic in `experiments/` until it survives fixed evaluation.
+- Do not promote a method because it wins a pilot split.
+- Prefer same-input, same-metric comparisons over new abstractions.
+- Record adoption and rejection reasons in [`docs/decisions.md`](docs/decisions.md).
+
+## Result files worth opening first
+
+- `experiments/results/paper_assets/paper_main_table.md`
+- `experiments/results/paper_assets/paper_urbannav_external.png`
+- `experiments/results/paper_assets/paper_bvh_runtime.png`
+- `experiments/results/urbannav_window_eval_external_gej_trimble_qualityveto_w500_s250_summary.csv`
+- `experiments/results/pf_strategy_lab_holdout6_r200_s200_summary.csv`
 
 ## License
+
 Apache-2.0

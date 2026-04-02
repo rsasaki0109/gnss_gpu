@@ -1,0 +1,5 @@
+method,rms_2d,mean_2d,p50,p95,max_2d,outlier_rate_pct,catastrophic_rate_pct,longest_outlier_segment_epochs,longest_outlier_segment_s,time_ms,backend,building_source,n_epochs
+WLS,54.719704,54.204655,54.151417,72.804052,82.856232,0.000000,0.000000,0.000000,0.000000,0.025949,-,PLATEAU:/tmp/plateau_segment_cache/a5844cfc41fbda08,100
+EKF,54.692032,54.196976,54.376822,70.589065,78.520957,0.000000,0.000000,0.000000,0.000000,0.075795,-,PLATEAU:/tmp/plateau_segment_cache/a5844cfc41fbda08,100
+PF-10K,96.016834,93.555444,100.415639,115.917789,117.100892,50.000000,0.000000,50.000000,9.799999,1.547341,GPU,PLATEAU:/tmp/plateau_segment_cache/a5844cfc41fbda08,100
+PF3D-BVH-10K,96.149775,93.782562,99.897573,117.469733,118.203395,50.000000,0.000000,50.000000,9.799999,368.574142,GPU-3D-BVH,PLATEAU:/tmp/plateau_segment_cache/a5844cfc41fbda08,100

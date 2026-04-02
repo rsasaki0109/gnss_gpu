@@ -162,6 +162,32 @@ class TestWeight3DBVHKernel:
         log_w_los_sigma = -0.5 * (residual_los ** 2) / (sigma_los ** 2)
         assert np.all(log_w_bvh > log_w_los_sigma)
 
+    def test_nlos_negative_residual_does_not_apply_positive_bias(self):
+        """Negative NLOS residuals should not be shifted by a positive bias term."""
+        building = _make_box_building()
+        bvh = BVHAccelerator.from_building_model(building)
+        n = 32
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+
+        sat = np.array([200.0, 0.0, 25.0], dtype=np.float64)
+        dist = float(np.linalg.norm(sat))
+        nlos_bias = 20.0
+        pr = np.array([dist + 100.0 - nlos_bias], dtype=np.float64)
+        ws = np.ones(1, dtype=np.float64)
+        sigma_nlos = 30.0
+
+        log_w = _run_bvh(
+            px, py, pz, pcb,
+            sat.reshape(1, 3), pr, ws, bvh,
+            sigma_los=3.0, sigma_nlos=sigma_nlos, nlos_bias=nlos_bias,
+        )
+
+        expected = -0.5 * (nlos_bias ** 2) / (sigma_nlos ** 2)
+        assert np.allclose(log_w, expected, atol=1e-10)
+
     def test_empty_mesh_all_los(self):
         """With zero triangles every satellite is LOS; kernel must not crash."""
         empty = BVHAccelerator(np.zeros((0, 3, 3), dtype=np.float64))

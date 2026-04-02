@@ -610,6 +610,7 @@ def generate_synthetic_urbannav(
         "weights": weights,
         "ground_truth": traj_ecef,
         "times": times,
+        "satellite_counts": np.full(n_epochs, n_satellites, dtype=np.int32),
         "origin_ecef": origin_ecef,
         "true_clock_bias_m": true_cb,
         "n_nlos_total": n_nlos_total,

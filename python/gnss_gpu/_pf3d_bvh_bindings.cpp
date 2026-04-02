@@ -28,7 +28,9 @@ PYBIND11_MODULE(_gnss_gpu_pf3d_bvh, m) {
        py::array_t<double> log_weights,
        int n_particles, int n_sat,
        double sigma_pr_los, double sigma_pr_nlos,
-       double nlos_bias) {
+       double nlos_bias,
+       double blocked_nlos_prob,
+       double clear_nlos_prob) {
 
       auto bnodes = nodes_flat.request();
       auto btri   = sorted_tris.request();
@@ -69,7 +71,8 @@ PYBIND11_MODULE(_gnss_gpu_pf3d_bvh, m) {
           reinterpret_cast<const gnss_gpu::Triangle*>(btri.ptr), n_tri,
           static_cast<double*>(log_weights.request().ptr),
           n_particles, n_sat,
-          sigma_pr_los, sigma_pr_nlos, nlos_bias);
+          sigma_pr_los, sigma_pr_nlos, nlos_bias,
+          blocked_nlos_prob, clear_nlos_prob);
     },
     "Compute 3D-aware pseudorange likelihood weights using BVH-accelerated ray tracing",
     py::arg("px"), py::arg("py"), py::arg("pz"), py::arg("pcb"),
@@ -79,5 +82,7 @@ PYBIND11_MODULE(_gnss_gpu_pf3d_bvh, m) {
     py::arg("log_weights"),
     py::arg("n_particles"), py::arg("n_sat"),
     py::arg("sigma_pr_los"), py::arg("sigma_pr_nlos"),
-    py::arg("nlos_bias"));
+    py::arg("nlos_bias"),
+    py::arg("blocked_nlos_prob") = 1.0,
+    py::arg("clear_nlos_prob") = 0.0);
 }

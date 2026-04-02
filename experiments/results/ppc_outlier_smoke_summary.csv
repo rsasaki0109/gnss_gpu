@@ -1,0 +1,2 @@
+city,run,config,systems,weight_scale,n_epochs,rms_2d,p95,max_2d,wls_ms,outlier_threshold,outlier_epochs,outlier_rate_pct,severe_epochs_200m,catastrophic_epochs_500m,worst_epoch_index,worst_epoch_time,worst_epoch_error_2d,n_outlier_segments,longest_segment_epochs,longest_segment_duration_s,worst_segment_max_error_2d,worst_segment_epochs
+nagoya,run1,"G,E","G,E",-,100,32.552283,36.168638,43.209449,0.041297,100.000000,0,0.000000,0,0,23,550384.599999,43.209449,0,0,0.000000,0.000000,0
