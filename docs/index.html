@@ -222,7 +222,7 @@
             video.muted = true;
             video.loop = true;
             video.playsInline = true;
-            video.controls = true;
+            video.preload = "metadata";
             item.sources.forEach((sourceSpec) => {
               const source = document.createElement("source");
               source.src = sourceSpec.src;

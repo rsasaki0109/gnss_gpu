@@ -207,28 +207,129 @@ def _build_poster() -> Image.Image:
 
 
 def _build_teaser(poster: Image.Image) -> list[Image.Image]:
-    base = poster.resize((1200, 675), Image.Resampling.LANCZOS).convert("P")
+    target_size = (1200, 675)
+    base = poster.resize(target_size, Image.Resampling.LANCZOS).convert("RGBA")
 
     focus_specs = [
-        ((560, 188, 842, 430), "UrbanNav external win", "66.60 m RMS, 98.53 m p95"),
-        ((868, 188, 1152, 344), "BVH systems", "1028.29 -> 17.78 ms/epoch"),
-        ((868, 434, 1152, 588), "PPC holdout", "66.92 -> 65.54 m RMS"),
+        {
+            "image_path": PAPER_ASSETS_DIR / "paper_urbannav_external.png",
+            "eyebrow": "MAINLINE",
+            "title": "UrbanNav external win",
+            "subtitle": "PF+RobustClear-10K beats EKF on trimble + G,E,J.",
+            "metrics": [("66.60 m", "RMS 2D"), ("98.53 m", "P95")],
+            "footer": "External Tokyo result, frozen mainline headline.",
+            "accent": "#168f86",
+            "panel": "#fffaf1",
+            "chip": "#dff6f3",
+        },
+        {
+            "image_path": PAPER_ASSETS_DIR / "paper_bvh_runtime.png",
+            "eyebrow": "SYSTEMS",
+            "title": "BVH systems speedup",
+            "subtitle": "Same PF3D path, 57.8x faster than the linear baseline.",
+            "metrics": [("1028.29", "ms/epoch"), ("17.78", "BVH ms/epoch")],
+            "footer": "Acceleration is a main contribution, not a side note.",
+            "accent": "#bc6c25",
+            "panel": "#fff7ef",
+            "chip": "#fce6d0",
+        },
+        {
+            "image_path": PAPER_ASSETS_DIR / "paper_ppc_holdout.png",
+            "eyebrow": "HOLDOUT",
+            "title": "PPC holdout signal",
+            "subtitle": "Exploratory gate survives holdout, but stays supplemental.",
+            "metrics": [("66.92", "baseline RMS"), ("65.54", "best holdout RMS")],
+            "footer": "Design-space evidence, not the external headline.",
+            "accent": "#3b5b75",
+            "panel": "#f6f8fb",
+            "chip": "#dbe8f1",
+        },
     ]
 
-    frames = [base]
-    for box, title, subtitle in focus_specs:
-        frame = poster.resize((1200, 675), Image.Resampling.LANCZOS).convert("RGBA")
-        overlay = Image.new("RGBA", frame.size, (18, 20, 22, 88))
-        hole = Image.new("L", frame.size, 255)
-        hole_draw = ImageDraw.Draw(hole)
-        hole_draw.rounded_rectangle(box, radius=24, fill=0)
-        overlay.putalpha(hole)
-        frame.alpha_composite(overlay)
+    frames = [base.convert("P", palette=Image.Palette.ADAPTIVE)]
+    for index, spec in enumerate(focus_specs, start=1):
+        frame = Image.new("RGBA", target_size, "#efe7d8")
 
-        draw = ImageDraw.Draw(frame)
-        draw.rounded_rectangle((52, 520, 1148, 640), radius=28, fill=(255, 250, 241, 236))
-        draw.text((86, 548), title, font=_font(36, bold=True), fill="#1f2724")
-        draw.text((86, 592), subtitle, font=_font(24), fill="#55615d")
+        for y in range(target_size[1]):
+            blend = y / max(target_size[1] - 1, 1)
+            r = int(239 * (1 - blend) + 227 * blend)
+            g = int(231 * (1 - blend) + 235 * blend)
+            b = int(216 * (1 - blend) + 223 * blend)
+            ImageDraw.Draw(frame).line([(0, y), (target_size[0], y)], fill=(r, g, b, 255))
+
+        glow = Image.new("RGBA", target_size, (0, 0, 0, 0))
+        glow_draw = ImageDraw.Draw(glow)
+        accent = ImageColor.getrgb(spec["accent"])
+        glow_draw.ellipse((700, -40, 1280, 470), fill=accent + (58,))
+        glow_draw.ellipse((-120, 430, 360, 860), fill=(255, 250, 241, 84))
+        glow = glow.filter(ImageFilter.GaussianBlur(40))
+        frame.alpha_composite(glow)
+
+        frame_draw = ImageDraw.Draw(frame)
+        shadow = Image.new("RGBA", target_size, (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow)
+        preview_box = (516, 74, 1134, 456)
+        shadow_draw.rounded_rectangle(
+            (preview_box[0] + 12, preview_box[1] + 18, preview_box[2] + 12, preview_box[3] + 18),
+            radius=42,
+            fill=(36, 41, 39, 44),
+        )
+        shadow = shadow.filter(ImageFilter.GaussianBlur(18))
+        frame.alpha_composite(shadow)
+
+        frame_draw.rounded_rectangle(preview_box, radius=38, fill=spec["panel"])
+        frame_draw.rounded_rectangle((548, 102, 654, 138), radius=16, fill=spec["chip"])
+        frame_draw.text((572, 110), f"0{index}", font=_font(20, bold=True), fill=spec["accent"])
+
+        preview = _load_and_fit(spec["image_path"], (preview_box[2] - preview_box[0] - 42, 250))
+        frame.alpha_composite(preview, (preview_box[0] + 21, preview_box[1] + 56))
+
+        frame_draw.rounded_rectangle(
+            (preview_box[0] + 22, preview_box[1] + 322, preview_box[2] - 22, preview_box[3] - 20),
+            radius=24,
+            fill="#fff4e6",
+        )
+        frame_draw.text(
+            (preview_box[0] + 44, preview_box[1] + 338),
+            spec["title"],
+            font=_font(30, bold=True),
+            fill="#1f2724",
+        )
+        frame_draw.text(
+            (preview_box[0] + 44, preview_box[1] + 378),
+            spec["footer"],
+            font=_font(18),
+            fill="#55615d",
+        )
+
+        frame_draw.rounded_rectangle((70, 74, 458, 504), radius=38, fill=(255, 250, 241, 224))
+        frame_draw.rounded_rectangle((94, 98, 248, 140), radius=18, fill=spec["accent"])
+        frame_draw.text((118, 108), spec["eyebrow"], font=_font(20, bold=True), fill="#f2fffd")
+        _draw_text_block(
+            frame_draw,
+            (96, 172),
+            [
+                (spec["title"], _font(44, bold=True), "#1f2724"),
+                (spec["subtitle"], _font(24), "#55615d"),
+            ],
+            spacing=14,
+        )
+
+        chip_y = 360
+        for metric_value, metric_label in spec["metrics"]:
+            chip_box = (96, chip_y, 412, chip_y + 74)
+            frame_draw.rounded_rectangle(chip_box, radius=24, fill=spec["chip"])
+            frame_draw.text((118, chip_y + 12), metric_value, font=_font(28, bold=True), fill="#1f2724")
+            frame_draw.text((118, chip_y + 44), metric_label, font=_font(17), fill="#55615d")
+            chip_y += 88
+
+        frame_draw.rounded_rectangle((70, 548, 1130, 624), radius=26, fill=(255, 250, 241, 226))
+        frame_draw.text(
+            (98, 570),
+            "artifact snapshot: frozen headline, systems result, and holdout context",
+            font=_font(24, bold=True),
+            fill="#273330",
+        )
         frames.append(frame.convert("P", palette=Image.Palette.ADAPTIVE))
     return frames
 
