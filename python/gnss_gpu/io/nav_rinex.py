@@ -14,6 +14,7 @@ class NavMessage:
 
     prn: int
     toc: datetime  # time of clock
+    system: str = "G"
     # Clock correction coefficients
     af0: float = 0.0
     af1: float = 0.0
@@ -40,6 +41,9 @@ class NavMessage:
     week: int = 0  # GPS week number
     # Group delay
     tgd: float = 0.0  # group delay [s]
+    data_sources: float = 0.0  # Galileo I/NAV/F/NAV data-source bit mask
+    bgd_e5a_e1: float = 0.0  # Galileo BGD(E5a/E1) [s]
+    bgd_e5b_e1: float = 0.0  # Galileo BGD(E5b/E1) [s]
     # Additional fields
     iode: float = 0.0  # issue of data (ephemeris)
     iodc: float = 0.0  # issue of data (clock)
@@ -49,6 +53,11 @@ class NavMessage:
     sv_health: float = 0.0
     fit_interval: float = 0.0
     toc_seconds: float = 0.0  # toc as GPS seconds of week
+
+    @property
+    def sat_id(self) -> str:
+        """RINEX-style satellite identifier, e.g. ``G05``."""
+        return f"{self.system}{self.prn:02d}"
 
 
 def _parse_nav_float(s: str) -> float:
@@ -81,16 +90,21 @@ def _datetime_to_gps_week(dt: datetime) -> int:
     return int(total_seconds // 604800)
 
 
-def read_nav_rinex(filepath: str | Path) -> dict[int, list[NavMessage]]:
+def read_nav_rinex(
+    filepath: str | Path,
+    systems: tuple[str, ...] = ("G",),
+    key_by_sat_id: bool = False,
+) -> dict[int | str, list[NavMessage]]:
     """Parse RINEX 2/3 navigation file.
-
-    Supports GPS navigation messages only (G constellation).
 
     Args:
         filepath: path to the RINEX navigation file (.nav, .n, etc.)
+        systems: constellation identifiers to keep in RINEX 3 mixed-nav files.
+        key_by_sat_id: when True, key the result by strings such as ``G05``.
 
     Returns:
-        dict mapping PRN number to list of NavMessage objects, sorted by toc.
+        dict mapping PRN number or sat-id string to list of NavMessage objects,
+        sorted by toc.
     """
     filepath = Path(filepath)
     with open(filepath) as f:
@@ -120,7 +134,8 @@ def read_nav_rinex(filepath: str | Path) -> dict[int, list[NavMessage]]:
         idx += 1
 
     is_v3 = version >= 3.0
-    nav_messages: dict[int, list[NavMessage]] = {}
+    nav_messages: dict[int | str, list[NavMessage]] = {}
+    systems_set = {system.upper() for system in systems}
 
     while idx < len(lines):
         line = lines[idx]
@@ -130,7 +145,7 @@ def read_nav_rinex(filepath: str | Path) -> dict[int, list[NavMessage]]:
 
         try:
             if is_v3:
-                nav, consumed = _parse_v3_record(lines, idx)
+                nav, consumed = _parse_v3_record(lines, idx, systems_set)
             else:
                 nav, consumed = _parse_v2_record(lines, idx)
         except (ValueError, IndexError):
@@ -138,36 +153,54 @@ def read_nav_rinex(filepath: str | Path) -> dict[int, list[NavMessage]]:
             continue
 
         if nav is not None:
-            if nav.prn not in nav_messages:
-                nav_messages[nav.prn] = []
-            nav_messages[nav.prn].append(nav)
+            key = nav.sat_id if key_by_sat_id else nav.prn
+            if key not in nav_messages:
+                nav_messages[key] = []
+            nav_messages[key].append(nav)
 
         idx += consumed
 
-    # Sort each PRN's messages by toc
-    for prn in nav_messages:
-        nav_messages[prn].sort(key=lambda m: m.toc)
+    for key in nav_messages:
+        nav_messages[key].sort(key=lambda m: m.toc)
 
     return nav_messages
 
 
-def _parse_v3_record(lines: list[str], idx: int) -> tuple[NavMessage | None, int]:
+def read_nav_rinex_multi(
+    filepath: str | Path,
+    systems: tuple[str, ...] = ("G", "E", "J"),
+) -> dict[str, list[NavMessage]]:
+    """Parse a mixed RINEX 3 navigation file keyed by sat-id strings."""
+    return read_nav_rinex(filepath, systems=systems, key_by_sat_id=True)
+
+
+def _v3_record_length(sys_char: str) -> int:
+    if sys_char in {"R", "S"}:
+        return 4
+    return 8
+
+
+def _parse_v3_record(
+    lines: list[str], idx: int, systems_set: set[str]
+) -> tuple[NavMessage | None, int]:
     """Parse a RINEX 3 navigation record (8 lines)."""
-    if idx + 7 >= len(lines):
+    if idx >= len(lines):
         return None, 1
 
     line0 = lines[idx]
 
     # System identifier
-    sys_char = line0[0]
-    if sys_char != "G" and sys_char != " ":
-        # Skip non-GPS records (8 lines per record typically)
-        return None, 8
+    sys_char = line0[0] if line0 and line0[0] != " " else "G"
+    record_length = _v3_record_length(sys_char)
+    if idx + record_length - 1 >= len(lines):
+        return None, 1
+    if sys_char not in systems_set:
+        return None, record_length
 
     # PRN
     prn_str = line0[1:3].strip()
     if not prn_str:
-        return None, 8
+        return None, record_length
     prn = int(prn_str)
 
     # Epoch: YYYY MM DD HH MM SS
@@ -193,9 +226,21 @@ def _parse_v3_record(lines: list[str], idx: int) -> tuple[NavMessage | None, int
             end = start + 19
             vals.append(_parse_nav_float(ln[start:end] if end <= len(ln) else ""))
 
+    data_sources = 0.0
+    bgd_e5a_e1 = 0.0
+    bgd_e5b_e1 = 0.0
+    tgd = vals[22]
+    if sys_char == "E":
+        data_sources = vals[17]
+        bgd_e5a_e1 = vals[22]
+        bgd_e5b_e1 = vals[23]
+        # Keep the legacy field populated for callers that only know about tgd.
+        tgd = bgd_e5a_e1
+
     nav = NavMessage(
         prn=prn,
         toc=toc,
+        system=sys_char,
         af0=af0,
         af1=af1,
         af2=af2,
@@ -222,19 +267,22 @@ def _parse_v3_record(lines: list[str], idx: int) -> tuple[NavMessage | None, int
         # Line 5: IDOT, codes_on_l2, week, l2_p_flag
         idot=vals[16],
         codes_on_l2=vals[17],
+        data_sources=data_sources,
         week=int(vals[18]),
         l2_p_flag=vals[19],
         # Line 6: SV accuracy, SV health, TGD, IODC
         sv_accuracy=vals[20],
         sv_health=vals[21],
-        tgd=vals[22],
+        tgd=tgd,
+        bgd_e5a_e1=bgd_e5a_e1,
+        bgd_e5b_e1=bgd_e5b_e1,
         iodc=vals[23],
         # Line 7: transmission time, fit interval
         fit_interval=vals[25] if len(vals) > 25 else 0.0,
         toc_seconds=_datetime_to_gps_seconds_of_week(toc),
     )
 
-    return nav, 8
+    return nav, record_length
 
 
 def _parse_v2_record(lines: list[str], idx: int) -> tuple[NavMessage | None, int]:

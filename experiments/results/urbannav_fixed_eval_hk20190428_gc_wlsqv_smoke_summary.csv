@@ -1,0 +1,3 @@
+method,n_runs,mean_rms_2d,mean_rms_3d,mean_p50,mean_p95,mean_outlier_rate_pct,mean_catastrophic_rate_pct,mean_longest_outlier_segment_s,mean_time_ms_per_epoch,wins_vs_wls_rms
+WLS,1,43132.639952,229185.946806,43199.671000,53307.188780,100.000000,100.000000,98.997000,0.030281,0.000000
+WLS+QualityVeto,1,61.742859,112.089222,60.219235,82.285599,0.000000,0.000000,0.000000,0.256683,1.000000

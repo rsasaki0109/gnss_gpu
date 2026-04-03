@@ -1,0 +1,7 @@
+city,run,start_epoch,nlos_fraction,subset_key,plateau_zone,anchor_start_epoch,offset_epoch,triangle_count,n_meshes,n_total_obs,n_nlos
+nagoya,run1,200,0.006803,938b44fb6b226b9f,7,0,200,954621,9,147,1
+nagoya,run2,1183,0.047619,63e337fab2e5f33f,7,983,200,1004652,9,126,6
+nagoya,run3,35,0.000000,0e4243ee2f150db6,7,235,-200,956870,9,160,0
+tokyo,run1,1663,0.052980,d4712be925c71a58,9,1463,200,1490984,9,151,8
+tokyo,run2,1008,0.231214,5dc816ee3fc0ae64,9,808,200,1573007,9,173,40
+tokyo,run3,974,0.042553,5dc816ee3fc0ae64,9,774,200,1573007,9,141,6

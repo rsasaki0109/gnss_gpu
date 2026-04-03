@@ -1,0 +1,4 @@
+city,run,anchor_start_epoch,start_epoch,offset_epoch,is_anchor,is_holdout,nlos_fraction,subset_key,plateau_zone,triangle_count,n_meshes,n_total_obs,n_nlos
+nagoya,run3,235,35,-200,0,1,0.000000,0e4243ee2f150db6,7,956870,9,160,0
+nagoya,run3,235,235,0,1,0,0.019481,166238c5838382f5,7,741734,9,154,3
+nagoya,run3,235,435,200,0,1,0.000000,166238c5838382f5,7,741734,9,160,0

@@ -1,0 +1,7 @@
+{
+  "headline": "440 passed, 7 skipped",
+  "summary": "440 passed, 7 skipped, 17 warnings",
+  "command": "PYTHONPATH=python python3 -m pytest tests/ -q",
+  "generated_at_utc": "2026-04-02T23:39:29Z",
+  "note": "The freeze checkpoint reran full repo pytest. Remaining warnings are known slow-mark, datetime, and plotting warnings rather than new failures."
+}

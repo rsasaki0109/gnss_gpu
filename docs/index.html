@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>gnss_gpu Artifact Snapshot</title>
+    <meta
+      name="description"
+      content="Frozen mainline results, artifact links, figures, and reproduction notes for gnss_gpu."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="site.css" />
+    <script src="assets/results_snapshot.js"></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">gnss_gpu</p>
+          <h1 id="title">Artifact Snapshot</h1>
+          <p id="subtitle" class="subtitle"></p>
+        </div>
+        <div class="status-card">
+          <p class="status-label" id="status-label"></p>
+          <p class="status-value" id="status-value"></p>
+          <p class="status-detail" id="status-detail"></p>
+        </div>
+      </header>
+
+      <noscript>
+        <section class="noscript-card">
+          <h2>Static Fallback</h2>
+          <p>
+            JavaScript is disabled, so this page cannot render the live snapshot.
+            The frozen mainline is <code>PF+RobustClear-10K</code>.
+          </p>
+          <p>
+            Open the raw artifacts directly:
+            <a href="assets/data/paper_main_table.csv">paper main table</a>,
+            <a href="assets/figures/paper_urbannav_external.png">UrbanNav figure</a>,
+            <a href="assets/figures/paper_bvh_runtime.png">BVH figure</a>,
+            <a href="assets/results_snapshot.json">snapshot JSON</a>.
+          </p>
+        </section>
+      </noscript>
+
+      <main class="content">
+        <section>
+          <div class="section-head">
+            <h2>Visual Summary</h2>
+            <p class="meta">Poster and teaser assets generated from the frozen experiment outputs.</p>
+          </div>
+          <div id="showcase-media" class="showcase-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>At A Glance</h2>
+            <p id="generated-at" class="meta"></p>
+          </div>
+          <div id="hero-cards" class="hero-cards"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>What This Repo Is</h2>
+            <p class="meta">Experiment-first package, then freeze the parts that survive.</p>
+          </div>
+          <div id="repo-summary" class="bullet-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Method Freeze</h2>
+            <p class="meta">Mainline, exploratory, and supplemental variants are separated explicitly.</p>
+          </div>
+          <div id="method-freeze" class="freeze-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Artifact Links</h2>
+            <p class="meta">Paper assets, CSVs, and machine-readable snapshot files.</p>
+          </div>
+          <div id="quick-links" class="link-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Featured Figures</h2>
+            <p class="meta">These images are copied from the paper asset builder.</p>
+          </div>
+          <div id="figures" class="figure-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Extra Charts</h2>
+            <p class="meta">Site-only charts generated from the fixed CSV outputs.</p>
+          </div>
+          <div id="analysis-charts" class="chart-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Key Takeaways</h2>
+            <p class="meta">Current headline, not every experiment ever run.</p>
+          </div>
+          <div id="takeaways" class="bullet-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Results Tables</h2>
+            <p class="meta">Copied from repo CSVs at build time.</p>
+          </div>
+          <div id="tables" class="table-stack"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Supplemental Checks</h2>
+            <p class="meta">Evidence that did not become the mainline headline, but still matters.</p>
+          </div>
+          <div id="supplemental-checks" class="bullet-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Repo Map</h2>
+            <p class="meta">Where to look in the repository once you leave this page.</p>
+          </div>
+          <div id="repo-map" class="path-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Reproduce</h2>
+            <p class="meta">Minimal commands to rebuild the artifact layer.</p>
+          </div>
+          <div id="reproduce-commands" class="command-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Validation</h2>
+            <p class="meta">What was rerun at the freeze checkpoint.</p>
+          </div>
+          <div id="validation-card" class="single-card"></div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>Limitations</h2>
+            <p class="meta">Still honest about what is not yet solved.</p>
+          </div>
+          <div id="limitations" class="bullet-grid warnings"></div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const snapshotUrl = "assets/results_snapshot.json";
+
+      function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      function renderMetricCards(cards) {
+        const root = document.getElementById("hero-cards");
+        cards.forEach((card) => {
+          const item = el("article", "metric-card");
+          item.append(el("p", "metric-label", card.label));
+          item.append(el("p", "metric-value", card.value));
+          item.append(el("p", "metric-detail", card.detail));
+          root.append(item);
+        });
+      }
+
+      function renderBullets(targetId, items) {
+        const root = document.getElementById(targetId);
+        items.forEach((item) => {
+          const article = el("article", "bullet-card");
+          article.append(el("p", "bullet-text", item));
+          root.append(article);
+        });
+      }
+
+      function renderFreezeCards(items) {
+        const root = document.getElementById("method-freeze");
+        items.forEach((item) => {
+          const card = el("article", "freeze-card");
+          card.append(el("p", "metric-label", item.label));
+          card.append(el("p", "freeze-value", item.value));
+          card.append(el("p", "metric-detail", item.detail));
+          root.append(card);
+        });
+      }
+
+      function renderShowcase(items) {
+        const root = document.getElementById("showcase-media");
+        items.forEach((item) => {
+          const card = el("article", "showcase-card");
+          if (item.kind === "video" && item.sources?.length) {
+            const link = el("a", "showcase-link");
+            link.href = item.href;
+            link.target = "_blank";
+            link.rel = "noreferrer";
+
+            const video = document.createElement("video");
+            video.className = "showcase-image";
+            video.poster = item.poster || "";
+            video.autoplay = true;
+            video.muted = true;
+            video.loop = true;
+            video.playsInline = true;
+            video.controls = true;
+            item.sources.forEach((sourceSpec) => {
+              const source = document.createElement("source");
+              source.src = sourceSpec.src;
+              source.type = sourceSpec.type;
+              video.append(source);
+            });
+            link.append(video);
+            card.append(link);
+          } else {
+            const link = el("a", "showcase-link");
+            link.href = item.href;
+            link.target = "_blank";
+            link.rel = "noreferrer";
+
+            const img = document.createElement("img");
+            img.className = "showcase-image";
+            img.src = item.image;
+            img.alt = item.alt || item.title;
+            link.append(img);
+            card.append(link);
+          }
+
+          card.append(el("h3", "", item.title));
+          card.append(el("p", "metric-detail", item.caption));
+          root.append(card);
+        });
+      }
+
+      function renderLinkCards(items) {
+        const root = document.getElementById("quick-links");
+        items.forEach((item) => {
+          const card = el("article", "link-card");
+          const link = el("a", "artifact-link", item.label);
+          link.href = item.href;
+          link.target = "_blank";
+          link.rel = "noreferrer";
+          card.append(link);
+          card.append(el("p", "metric-detail", item.detail));
+          root.append(card);
+        });
+      }
+
+      function renderFigures(items) {
+        const root = document.getElementById("figures");
+        items.forEach((item) => {
+          const card = el("article", "figure-card");
+          const link = el("a", "figure-link");
+          link.href = item.href;
+          link.target = "_blank";
+          link.rel = "noreferrer";
+
+          const img = document.createElement("img");
+          img.className = "figure-image";
+          img.src = item.image;
+          img.alt = item.alt || item.title;
+          link.append(img);
+
+          card.append(link);
+          card.append(el("h3", "", item.title));
+          card.append(el("p", "metric-detail", item.caption));
+          root.append(card);
+        });
+      }
+
+      function renderAnalysisCharts(items) {
+        const root = document.getElementById("analysis-charts");
+        items.forEach((item) => {
+          const card = el("article", "figure-card");
+          const link = el("a", "figure-link");
+          link.href = item.href;
+          link.target = "_blank";
+          link.rel = "noreferrer";
+
+          const img = document.createElement("img");
+          img.className = "figure-image";
+          img.src = item.image;
+          img.alt = item.alt || item.title;
+          link.append(img);
+
+          card.append(link);
+          card.append(el("h3", "", item.title));
+          card.append(el("p", "metric-detail", item.caption));
+          root.append(card);
+        });
+      }
+
+      function renderRepoMap(items) {
+        const root = document.getElementById("repo-map");
+        items.forEach((item) => {
+          const card = el("article", "path-card");
+          card.append(el("code", "path-chip", item.path));
+          card.append(el("p", "metric-detail", item.detail));
+          root.append(card);
+        });
+      }
+
+      function renderCommands(items) {
+        const root = document.getElementById("reproduce-commands");
+        items.forEach((item) => {
+          const card = el("article", "command-card");
+          const pre = el("pre", "command-pre");
+          const code = el("code", "", item);
+          pre.append(code);
+          card.append(pre);
+          root.append(card);
+        });
+      }
+
+      function renderValidation(item) {
+        const root = document.getElementById("validation-card");
+        const card = el("article", "metric-card");
+        card.append(el("p", "metric-label", "Test Sweep"));
+        card.append(el("p", "metric-value", item.tests));
+        card.append(el("p", "metric-detail", item.note));
+        if (item.command) {
+          const pre = el("pre", "command-pre");
+          pre.append(el("code", "", item.command));
+          card.append(pre);
+        }
+        root.append(card);
+      }
+
+      function renderTableSection(table) {
+        const section = el("section", "table-card");
+        const head = el("div", "table-head");
+        head.append(el("h3", "", table.title));
+        const link = el("a", "csv-link", "CSV");
+        link.href = table.source_csv;
+        link.target = "_blank";
+        link.rel = "noreferrer";
+        head.append(link);
+        section.append(head);
+
+        const wrap = el("div", "table-wrap");
+        const htmlTable = el("table");
+        const thead = el("thead");
+        const headRow = el("tr");
+        table.columns.forEach((column) => headRow.append(el("th", "", column)));
+        thead.append(headRow);
+        htmlTable.append(thead);
+
+        const tbody = el("tbody");
+        table.rows.forEach((row) => {
+          const tr = el("tr");
+          table.columns.forEach((column) => {
+            tr.append(el("td", "", String(row[column])));
+          });
+          tbody.append(tr);
+        });
+        htmlTable.append(tbody);
+        wrap.append(htmlTable);
+        section.append(wrap);
+        document.getElementById("tables").append(section);
+      }
+
+      function renderSnapshot(data) {
+          document.getElementById("title").textContent = data.title;
+          document.getElementById("subtitle").textContent = data.subtitle;
+          document.getElementById("status-label").textContent = data.status.label;
+          document.getElementById("status-value").textContent = data.status.value;
+          document.getElementById("status-detail").textContent = data.status.detail;
+          document.getElementById("generated-at").textContent =
+            `Updated: ${new Date(data.generated_at_utc).toLocaleString("en-US", {
+              timeZone: "UTC",
+              hour12: false,
+            })} UTC`;
+
+          renderMetricCards(data.hero_cards);
+          renderShowcase(data.showcase_media);
+          renderBullets("repo-summary", data.repo_summary);
+          renderFreezeCards(data.method_freeze);
+          renderLinkCards(data.quick_links);
+          renderFigures(data.featured_figures);
+          renderAnalysisCharts(data.analysis_charts);
+          renderBullets("takeaways", data.takeaways);
+          Object.values(data.tables).forEach((table) => renderTableSection(table));
+          renderBullets("supplemental-checks", data.supplemental_checks);
+          renderRepoMap(data.repo_map);
+          renderCommands(data.reproduce_commands);
+          renderValidation(data.validation);
+          renderBullets("limitations", data.limitations);
+      }
+
+      if (window.__GNSS_GPU_SNAPSHOT__) {
+        renderSnapshot(window.__GNSS_GPU_SNAPSHOT__);
+      } else {
+        fetch(snapshotUrl)
+          .then((resp) => resp.json())
+          .then((data) => renderSnapshot(data))
+          .catch((error) => {
+          const main = document.querySelector(".content");
+          const box = el("div", "error-box");
+          box.textContent = `Failed to load ${snapshotUrl}: ${error}`;
+          main.prepend(box);
+          });
+      }
+    </script>
+  </body>
+</html>

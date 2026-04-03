@@ -2,7 +2,7 @@
 
 Extends the base ParticleFilter with building-aware LOS/NLOS classification
 via ray tracing.  NLOS satellites receive a wider observation sigma and a
-positive pseudorange bias correction, preventing multipath-contaminated
+positive-only pseudorange bias correction, preventing multipath-contaminated
 observations from dragging the position estimate.
 """
 
@@ -17,7 +17,7 @@ class ParticleFilter3D(ParticleFilter):
 
     For each particle position and each satellite, a ray is cast through the
     building mesh.  If the ray is blocked (NLOS), the pseudorange likelihood
-    is evaluated with a larger sigma and a positive bias correction.
+    is evaluated with a larger sigma and a positive-only bias correction.
 
     Parameters
     ----------
@@ -29,12 +29,17 @@ class ParticleFilter3D(ParticleFilter):
         Observation sigma for NLOS satellites [m] (loose, e.g., 30.0).
     nlos_bias : float
         Expected positive pseudorange bias for NLOS satellites [m] (e.g., 20.0).
+    blocked_nlos_prob : float
+        Prior probability of NLOS when the ray tracer says blocked.
+    clear_nlos_prob : float
+        Prior probability of NLOS when the ray tracer says clear.
     **kwargs
         Additional keyword arguments forwarded to ``ParticleFilter.__init__``.
     """
 
     def __init__(self, building_model, sigma_los=3.0, sigma_nlos=30.0,
-                 nlos_bias=20.0, **kwargs):
+                 nlos_bias=20.0, blocked_nlos_prob=1.0,
+                 clear_nlos_prob=0.0, **kwargs):
         super().__init__(**kwargs)
         if not isinstance(building_model, BuildingModel):
             raise TypeError("building_model must be a BuildingModel instance")
@@ -42,6 +47,8 @@ class ParticleFilter3D(ParticleFilter):
         self.sigma_los = sigma_los
         self.sigma_nlos = sigma_nlos
         self.nlos_bias = nlos_bias
+        self.blocked_nlos_prob = blocked_nlos_prob
+        self.clear_nlos_prob = clear_nlos_prob
 
         from gnss_gpu._gnss_gpu_pf3d import pf_weight_3d as _pf_weight_3d
         self._pf_weight_3d = _pf_weight_3d
@@ -79,7 +86,9 @@ class ParticleFilter3D(ParticleFilter):
             self._log_weights,
             self.n_particles, n_sat,
             float(self.sigma_los), float(self.sigma_nlos),
-            float(self.nlos_bias))
+            float(self.nlos_bias),
+            float(self.blocked_nlos_prob),
+            float(self.clear_nlos_prob))
 
         # Adaptive resampling based on ESS
         ess = self.get_ess()

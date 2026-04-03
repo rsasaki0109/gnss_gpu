@@ -1,0 +1,3 @@
+config,systems,weight_scale,n_runs,mean_rms_2d,median_rms_2d,max_rms_2d,mean_p95
+"G,E","G,E",-,1,73.232097,73.232097,73.232097,73.958598
+"G,E,J","G,E,J",-,1,72.943259,72.943259,72.943259,73.865664

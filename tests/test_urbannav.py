@@ -12,7 +12,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from gnss_gpu.io.urbannav import UrbanNavLoader, GnssObs, _llh_to_ecef
+from gnss_gpu.io.urbannav import (
+    UrbanNavLoader,
+    GnssObs,
+    _llh_to_ecef,
+    _pick_observation_value,
+    _SYSTEM_PR_FALLBACKS,
+    _SYSTEM_SNR_FALLBACKS,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +66,24 @@ def test_loader_init_valid():
 def test_loader_init_missing_dir():
     with pytest.raises(FileNotFoundError):
         UrbanNavLoader("/nonexistent/path/abc123")
+
+
+def test_is_run_directory_true_for_tokyo_style_layout():
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = Path(td)
+        for name in ("reference.csv", "base.nav", "base_trimble.obs", "rover_ublox.obs"):
+            _write(run_dir, name, "")
+
+        assert UrbanNavLoader.is_run_directory(run_dir)
+
+
+def test_is_run_directory_false_when_required_files_missing():
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = Path(td)
+        _write(run_dir, "reference.csv", "")
+        _write(run_dir, "base.nav", "")
+
+        assert not UrbanNavLoader.is_run_directory(run_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +176,12 @@ GPS_time,x,y,z
 3.0,-2414267.1000,5386769.1000,2407460.2000
 """
 
+GT_REFERENCE_STYLE_CSV = """\
+GPS TOW (s), GPS Week, ECEF X (m), ECEF Y (m), ECEF Z (m), Ellipsoid Height (m)
+273375.10,2032,-3963426.7981,3350882.1576,3694865.5458,44.6995
+273375.20,2032,-3963426.7981,3350882.1576,3694865.5458,44.6995
+"""
+
 
 def test_load_ground_truth_ecef():
     with tempfile.TemporaryDirectory() as td:
@@ -164,6 +195,47 @@ def test_load_ground_truth_ecef():
     assert ecef[0, 0] == pytest.approx(-2_414_266.9197)
 
 
+def test_load_ground_truth_reference_csv_aliases():
+    with tempfile.TemporaryDirectory() as td:
+        _write(Path(td), "reference.csv", GT_REFERENCE_STYLE_CSV)
+        loader = UrbanNavLoader(td)
+        times, ecef = loader.load_ground_truth()
+
+    assert times.shape == (2,)
+    assert times[0] == pytest.approx(273375.10)
+    assert ecef[0, 0] == pytest.approx(-3_963_426.7981)
+
+
+def test_pick_observation_value_prefers_requested_code():
+    code, value = _pick_observation_value(
+        "G",
+        {"C1C": 20_000_000.0, "C1W": 21_000_000.0},
+        "C1C",
+        _SYSTEM_PR_FALLBACKS,
+    )
+    assert code == "C1C"
+    assert value == pytest.approx(20_000_000.0)
+
+
+def test_pick_observation_value_falls_back_by_constellation():
+    pr_code, pr_value = _pick_observation_value(
+        "E",
+        {"C1X": 24_000_000.0, "S1X": 39.0},
+        "C1C",
+        _SYSTEM_PR_FALLBACKS,
+    )
+    snr_code, snr_value = _pick_observation_value(
+        "E",
+        {"C1X": 24_000_000.0, "S1X": 39.0},
+        "S1C",
+        _SYSTEM_SNR_FALLBACKS,
+    )
+    assert pr_code == "C1X"
+    assert pr_value == pytest.approx(24_000_000.0)
+    assert snr_code == "S1X"
+    assert snr_value == pytest.approx(39.0)
+
+
 # ---------------------------------------------------------------------------
 # load_ground_truth – geodetic (lat/lon/alt) variant
 # ---------------------------------------------------------------------------
@@ -172,6 +244,12 @@ GT_LLH_CSV = """\
 GPS_time,latitude,longitude,altitude
 1.0,22.3198,114.1694,50.0
 2.0,22.3199,114.1695,50.5
+"""
+
+GT_HK_REFERENCE_CSV = """\
+ROS Time (s), GPS Week, GPS TOW (s), Latitude (deg), Longitude (deg), Altitude (m)
+1556456283.924171925,2051,46699.000000000,22.301155545,114.179000313,6.613695497
+1556456284.924304008,2051,46700.000000000,22.301155461,114.179000322,6.605289413
 """
 
 
@@ -184,6 +262,18 @@ def test_load_ground_truth_llh():
     assert times.shape == (2,)
     assert ecef.shape == (2, 3)
     # ECEF magnitude for a point near sea level should be ~6.37e6 m
+    assert 6.3e6 < np.linalg.norm(ecef[0]) < 6.4e6
+
+
+def test_load_ground_truth_hk_reference_aliases():
+    with tempfile.TemporaryDirectory() as td:
+        _write(Path(td), "reference.csv", GT_HK_REFERENCE_CSV)
+        loader = UrbanNavLoader(td)
+        times, ecef = loader.load_ground_truth()
+
+    assert times.shape == (2,)
+    assert times[0] == pytest.approx(46699.0)
+    assert ecef.shape == (2, 3)
     assert 6.3e6 < np.linalg.norm(ecef[0]) < 6.4e6
 
 

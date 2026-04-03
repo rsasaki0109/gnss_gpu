@@ -9,7 +9,14 @@ import numpy as np
 import pytest
 
 from gnss_gpu.io.nav_rinex import NavMessage, read_nav_rinex, _parse_nav_float
-from gnss_gpu.ephemeris import Ephemeris, GPS_MU, GPS_OMEGA_E, GPS_F, GPS_WEEK_SEC
+from gnss_gpu.ephemeris import (
+    Ephemeris,
+    GPS_MU,
+    GPS_OMEGA_E,
+    GPS_F,
+    GPS_WEEK_SEC,
+    _normalize_sat_id,
+)
 
 try:
     from gnss_gpu._gnss_gpu_ephemeris import compute_satellite_position
@@ -221,6 +228,24 @@ class TestClockCorrection:
         # Allow for relativistic correction difference
         assert abs(drift - expected_drift) < 1e-8
 
+    def test_galileo_e1_clock_uses_bgd_e5b_e1(self):
+        """Galileo E1 single-frequency clock should use the E5b/E1 BGD."""
+        nav = _make_reference_nav()
+        nav.prn = 1
+        nav.system = "E"
+        nav.data_sources = 513.0
+        nav.codes_on_l2 = 513.0
+        nav.bgd_e5a_e1 = 4.19095158577e-09
+        nav.bgd_e5b_e1 = 8.38190317154e-09
+        nav.tgd = nav.bgd_e5a_e1
+        nav.e = 0.0
+        nav.af1 = 0.0
+        nav.af2 = 0.0
+        eph = Ephemeris({"E01": [nav]})
+
+        _, clk, _ = eph.compute(nav.toe, ["E01"], obs_codes=["C1C"])
+        assert abs(clk[0] - (nav.af0 - nav.bgd_e5b_e1)) < 1e-12
+
 
 # ---------------------------------------------------------------------------
 # Test: NAV RINEX parsing
@@ -298,11 +323,42 @@ class TestNavRinexParsing:
         assert result[6][0].prn == 6
         assert abs(result[6][0].e - 0.008) < 1e-10
 
+    def test_parse_galileo_data_sources_and_bgd(self, tmp_path):
+        """Galileo records should preserve data-source and both BGD fields."""
+        nav_content = textwrap.dedent("""\
+             3.04           N: GNSS NAV DATA    M: MIXED            RINEX VERSION / TYPE
+                                                                    END OF HEADER
+            E01 2024 01 15 00 00 00 1.000000000000E-06 0.000000000000E+00 0.000000000000E+00
+                 1.000000000000E+00 2.000000000000E+00 3.000000000000E+00 4.000000000000E+00
+                 5.000000000000E+00 6.000000000000E+00 7.000000000000E+00 8.000000000000E+00
+                 9.000000000000E+00 1.000000000000E+01 1.100000000000E+01 1.200000000000E+01
+                 1.300000000000E+01 1.400000000000E+01 1.500000000000E+01 1.600000000000E+01
+                 1.700000000000E+01 5.130000000000E+02 2.324000000000E+03 0.000000000000E+00
+                 3.120000000000E+01 0.000000000000E+00 4.190951585770E-09 4.423782229420E-09
+                 1.958950000000E+05 0.000000000000E+00 0.000000000000E+00 0.000000000000E+00
+        """)
+
+        nav_file = tmp_path / "gal.nav"
+        nav_file.write_text(nav_content)
+
+        result = read_nav_rinex(str(nav_file), systems=("E",), key_by_sat_id=True)
+        nav = result["E01"][0]
+        assert nav.system == "E"
+        assert nav.data_sources == pytest.approx(513.0)
+        assert nav.bgd_e5a_e1 == pytest.approx(4.19095158577e-09)
+        assert nav.bgd_e5b_e1 == pytest.approx(4.42378222942e-09)
+        assert nav.tgd == pytest.approx(nav.bgd_e5a_e1)
+
 
 # ---------------------------------------------------------------------------
 # Test: Ephemeris selection
 # ---------------------------------------------------------------------------
 class TestEphemerisSelection:
+    def test_normalize_sat_id_with_internal_spaces(self):
+        assert _normalize_sat_id("G 5") == "G05"
+        assert _normalize_sat_id("E 1") == "E01"
+        assert _normalize_sat_id("J02") == "J02"
+
     def test_select_closest_toe(self):
         """Should select ephemeris with toe closest to requested time."""
         nav1 = _make_reference_nav()
@@ -327,6 +383,23 @@ class TestEphemerisSelection:
         """Should return None for unknown PRN."""
         eph = Ephemeris({1: [_make_reference_nav()]})
         assert eph.select_ephemeris(99, 518400.0) is None
+
+    def test_select_galileo_e1_prefers_inav_message(self):
+        """E1 observations should prefer Galileo I/NAV records over F/NAV."""
+        base = _make_reference_nav()
+        base.prn = 1
+        base.system = "E"
+        base.toe = 1000.0
+        base.toc_seconds = 1000.0
+
+        fnav = NavMessage(**{**base.__dict__, "data_sources": 258.0, "codes_on_l2": 258.0})
+        e5b_inav = NavMessage(**{**base.__dict__, "data_sources": 516.0, "codes_on_l2": 516.0})
+        e1_inav = NavMessage(**{**base.__dict__, "data_sources": 513.0, "codes_on_l2": 513.0})
+
+        eph = Ephemeris({"E01": [fnav, e5b_inav, e1_inav]})
+        selected = eph.select_ephemeris("E01", 1000.0, obs_code="C1C")
+        assert selected is not None
+        assert int(selected.data_sources) == 513
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,2 @@
+method,n_runs,mean_rms_2d,mean_rms_3d,mean_p50,mean_p95,mean_outlier_rate_pct,mean_catastrophic_rate_pct,mean_longest_outlier_segment_s,mean_time_ms_per_epoch,wins_vs_wls_rms
+PF+RobustClear+EKFRescue-10K,1,73.204765,102.900283,58.943752,122.965037,8.377519,0.000000,17.300001,1.688830,nan

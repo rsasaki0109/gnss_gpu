@@ -13,6 +13,17 @@ except ImportError:
     HAS_RAIM = False
 
 
+def _no_redundancy_result():
+    result = RAIMResult()
+    result.integrity_ok = True
+    result.hpl = 1e9
+    result.vpl = 1e9
+    result.test_statistic = 0.0
+    result.threshold = 0.0
+    result.excluded_sat = -1
+    return result
+
+
 def raim_check(sat_ecef, pseudoranges, weights, position, p_fa=1e-5):
     """Run RAIM chi-squared consistency check.
 
@@ -33,6 +44,12 @@ def raim_check(sat_ecef, pseudoranges, weights, position, p_fa=1e-5):
     pseudoranges = np.ascontiguousarray(pseudoranges, dtype=np.float64)
     weights = np.ascontiguousarray(weights, dtype=np.float64)
     position = np.ascontiguousarray(position, dtype=np.float64)
+
+    n_sat = pseudoranges.size
+    if n_sat < 4:
+        raise RuntimeError("raim_check requires at least 4 satellites")
+    if n_sat == 4:
+        return _no_redundancy_result()
 
     return _raim_check(sat_ecef, pseudoranges, weights, position, p_fa)
 
@@ -61,5 +78,11 @@ def raim_fde(sat_ecef, pseudoranges, weights, position, p_fa=1e-5):
     pseudoranges = np.ascontiguousarray(pseudoranges, dtype=np.float64)
     weights = np.ascontiguousarray(weights, dtype=np.float64)
     position = np.ascontiguousarray(position, dtype=np.float64)
+
+    n_sat = pseudoranges.size
+    if n_sat < 4:
+        raise RuntimeError("raim_fde requires at least 4 satellites")
+    if n_sat == 4:
+        return _no_redundancy_result(), position.copy()
 
     return _raim_fde(sat_ecef, pseudoranges, weights, position, p_fa)
