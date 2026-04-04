@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-05T09:59:35+00:00",
+  "generated_at_utc": "2026-04-05T10:42:41+00:00",
   "title": "gnss_gpu Artifact Snapshot",
   "subtitle": "Mainline frozen on `PF+RobustClear-10K`. PF beats EKF across 5 sequences in 2 cities. Particle scaling reveals a phase transition at N~1,000 with tail improvement up to 1M.",
   "status": {
@@ -125,6 +125,32 @@
         },
         {
           "src": "assets/media/site_teaser.mp4",
+          "type": "video/mp4"
+        }
+      ]
+    },
+    {
+      "kind": "video",
+      "title": "Odaiba Particle Cloud",
+      "href": "assets/media/particle_viz_odaiba.mp4",
+      "caption": "100K particles on OpenStreetMap. Green dots: particles. Red: PF estimate. Blue: ground truth.",
+      "poster": "assets/media/site_poster.png",
+      "sources": [
+        {
+          "src": "assets/media/particle_viz_odaiba.mp4",
+          "type": "video/mp4"
+        }
+      ]
+    },
+    {
+      "kind": "video",
+      "title": "Shinjuku Particle Cloud",
+      "href": "assets/media/particle_viz_shinjuku.mp4",
+      "caption": "100K particles in deep urban Shinjuku. Watch the particle spread widen in canyon sections.",
+      "poster": "assets/media/site_poster.png",
+      "sources": [
+        {
+          "src": "assets/media/particle_viz_shinjuku.mp4",
           "type": "video/mp4"
         }
       ]
