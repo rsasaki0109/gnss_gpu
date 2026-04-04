@@ -1,0 +1,81 @@
+% Bibliography for gnss_gpu paper draft
+% Sources verified against docs/literature_audit_2026-04-01.md and docs/design.md
+
+% --- GNSS Particle Filtering ---
+
+@inproceedings{suzuki2024,
+  author    = {Taro Suzuki},
+  title     = {Multiple Update Particle Filter: Position Estimation by Combining {GNSS} Pseudorange and Carrier Phase Observations},
+  booktitle = {2024 {IEEE} International Conference on Robotics and Automation ({ICRA})},
+  year      = {2024},
+  pages     = {13680--13686},
+  doi       = {10.1109/ICRA57147.2024.10610209},
+  eprint    = {2403.03394},
+  archiveprefix = {arXiv}
+}
+
+@article{gupta2021,
+  author    = {Shubh Gupta and Grace X. Gao},
+  title     = {Reliable {GNSS} Localization Against Multiple Faults Using a Particle Filter Framework},
+  year      = {2021},
+  eprint    = {2101.06380},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.RO},
+  note      = {arXiv preprint, submitted to IEEE Trans. Intelligent Transportation Systems}
+}
+
+% --- 3D-Mapping-Aided GNSS / Shadow Matching ---
+
+@article{groves2011,
+  author    = {Paul D. Groves},
+  title     = {Shadow Matching: A New {GNSS} Positioning Technique for Urban Canyons},
+  journal   = {Journal of Navigation},
+  year      = {2011},
+  volume    = {64},
+  number    = {3},
+  pages     = {417--430},
+  publisher = {Cambridge University Press},
+  doi       = {10.1017/S0373463311000087}
+}
+
+@article{adjrad2018,
+  author    = {Mounir Adjrad and Paul D. Groves},
+  title     = {Intelligent Urban Positioning: Integration of Shadow Matching with {3D}-Mapping-Aided {GNSS} Ranging},
+  journal   = {Journal of Navigation},
+  year      = {2018},
+  volume    = {71},
+  number    = {1},
+  pages     = {1--20},
+  publisher = {Cambridge University Press},
+  doi       = {10.1017/S0373463317000509}
+}
+
+@inproceedings{suzuki2013,
+  author    = {Taro Suzuki and Nobuaki Kubo},
+  title     = {Correcting {GNSS} Multipath Errors Using a {3D} Surface Model and Particle Filter},
+  booktitle = {Proceedings of the 26th International Technical Meeting of the Satellite Division of the Institute of Navigation ({ION} {GNSS}+ 2013)},
+  year      = {2013},
+  pages     = {1583--1595},
+  address   = {Nashville, TN, USA}
+}
+
+@phdthesis{zhong2023,
+  author    = {Qiming Zhong},
+  title     = {Investigation of {3D}-Mapping-Aided {GNSS} Navigation in Urban Areas},
+  school    = {University College London},
+  year      = {2023},
+  url       = {https://discovery.ucl.ac.uk/id/eprint/10196136/}
+}
+
+% --- GPU-Accelerated Particle Filtering ---
+
+@inproceedings{koide2024,
+  author    = {Kenji Koide and Shuji Oishi and Masashi Yokozuka and Atsuhiko Banno},
+  title     = {{MegaParticles}: Range-Based {6-DoF} {Monte Carlo} Localization with {GPU}-Accelerated {Stein} Particle Filter},
+  booktitle = {2024 {IEEE} International Conference on Robotics and Automation ({ICRA})},
+  year      = {2024},
+  pages     = {1738--1744},
+  doi       = {10.1109/ICRA57147.2024.10610447},
+  eprint    = {2404.16370},
+  archiveprefix = {arXiv}
+}

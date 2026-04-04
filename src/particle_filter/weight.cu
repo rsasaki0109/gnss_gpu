@@ -252,6 +252,8 @@ void pf_weight(const double* px, const double* py, const double* pz, const doubl
   weight_kernel<<<grid, block>>>(d_px, d_py, d_pz, d_pcb,
                                  d_sat, d_pr, d_ws, d_lw,
                                  n_particles, n_sat, sigma_pr);
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
 
   CUDA_CHECK(cudaMemcpy(log_weights, d_lw, sz, cudaMemcpyDeviceToHost));
 
