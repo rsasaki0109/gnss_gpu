@@ -11,21 +11,13 @@ This repo is no longer in a "pick one perfect architecture first" phase. The cur
 
 ## Visual snapshot
 
-![gnss_gpu poster](docs/assets/media/site_poster.png)
-
-![gnss_gpu teaser](docs/assets/media/site_teaser.gif)
-
-Motion assets:
-- [`site_teaser.mp4`](docs/assets/media/site_teaser.mp4)
-- [`site_teaser.webm`](docs/assets/media/site_teaser.webm)
-
-| UrbanNav per-run | Window wins vs EKF | Hong Kong control |
-| --- | --- | --- |
-| ![UrbanNav per-run](docs/assets/media/site_urbannav_runs.png) | ![Window wins](docs/assets/media/site_window_wins.png) | ![Hong Kong control](docs/assets/media/site_hk_control.png) |
-
-| Epoch error timeline | Error-band composition |
+| Main result (UrbanNav external) | Particle scaling (100 to 1M) |
 | --- | --- |
-| ![UrbanNav timeline](docs/assets/media/site_urbannav_timeline.png) | ![UrbanNav error bands](docs/assets/media/site_error_bands.png) |
+| ![UrbanNav external](experiments/results/paper_assets/paper_urbannav_external.png) | ![Particle scaling](experiments/results/paper_assets/paper_particle_scaling.png) |
+
+| BVH runtime (57.8x speedup) | PPC holdout (design discipline) |
+| --- | --- |
+| ![BVH runtime](experiments/results/paper_assets/paper_bvh_runtime.png) | ![PPC holdout](experiments/results/paper_assets/paper_ppc_holdout.png) |
 
 ## Current frozen read
 
