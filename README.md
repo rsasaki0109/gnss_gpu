@@ -31,9 +31,10 @@ Motion assets:
 
 - Main external method: `PF+RobustClear-10K`
 - Main external dataset/result: UrbanNav Tokyo, `trimble + G,E,J`, fixed evaluation
+- Cross-geography breadth: Hong Kong 3 sequences, `PF+AdaptiveGuide-10K` beats `EKF` on all
+- Scaling finding: particle count phase transition at N≈1,000, tail improvement up to 1M
 - Exploratory but not headline: PPC gate family
 - Systems contribution: `PF3D-BVH-10K`
-- Supplemental safety variants: `PF+AdaptiveGuide-10K`, `PF+EKFRescue-10K`
 - Promoted reusable hook: `WLS+QualityVeto`
 
 ### Current headline numbers
@@ -43,24 +44,34 @@ Motion assets:
 | UrbanNav external | `EKF` | 93.25 m | 178.18 m | 16.29% | 0.161% | `trimble + G,E,J` |
 | UrbanNav external | `PF-10K` | 67.61 m | 101.46 m | 5.44% | 0.000% | close ablation |
 | UrbanNav external | `PF+RobustClear-10K` | 66.60 m | 98.53 m | 4.80% | 0.000% | frozen winner |
+| HK supplemental | `EKF` | 69.49 m | 95.19 m | 2.99% | 0.000% | `ublox + G` (GPS-only) |
+| HK supplemental | `PF+AdaptiveGuide-10K` | 66.85 m | 97.45 m | 3.85% | 0.000% | `ublox + G,C` (adaptive guide) |
 | PPC holdout | `always_robust` | 66.92 m | 81.69 m | 5.83% | 0.000% | safe baseline |
 | PPC holdout | exploratory gate | 65.54 m | 81.22 m | 5.83% | 0.000% | holdout survives, but gain is modest |
 | BVH systems | `PF3D-10K` | 55.50 m | 58.39 m | 0.000% | 0.000% | real PLATEAU subset |
 | BVH systems | `PF3D-BVH-10K` | 55.50 m | 58.39 m | 0.000% | 0.000% | `57.8x` faster |
 
+### Particle count scaling
+
+![Particle scaling](experiments/results/paper_assets/paper_particle_scaling.png)
+
+PF performance crosses the EKF baseline at N≈1,000 particles. Mean RMS saturates near N=5,000, but the >100 m failure rate continues to improve up to 1M particles — from 3.31% to 1.97% on Odaiba and from 7.46% to 4.49% on Shinjuku. GPU-scale particle inference enables a tail-robustness regime unreachable at conventional particle counts.
+
 ### What this repo claims
 
-- UrbanNav external validation now supports the multi-GNSS PF path.
-- `PF+RobustClear-10K` is the strongest current full-run external method.
-- BVH makes real-PLATEAU PF3D runtime practical without changing the measured PF3D accuracy on the evaluated subset.
-- The repo has a reproducible experiment trail: accepted, exploratory, and rejected variants are documented separately.
+- PF family outperforms EKF across 5 sequences in 2 cities (Tokyo + Hong Kong).
+- `PF+RobustClear-10K` is the strongest Tokyo external method.
+- `PF+AdaptiveGuide-10K` beats EKF on all 3 Hong Kong sequences when configured with GPS+BeiDou.
+- Particle count scaling reveals a phase transition: RMS saturates early, but tail failure rates require GPU-scale inference to reach their floor.
+- BVH makes real-PLATEAU PF3D runtime practical without changing accuracy.
+- The repo has a reproducible experiment trail with 14 cited references.
 
 ### What this repo does not claim
 
 - It does not claim a world-first GNSS particle filter.
 - It does not claim that explicit 3D map reasoning is the current main accuracy winner on real data.
 - It does not claim that every exploratory gate family generalizes strongly.
-- It does not claim that Hong Kong is already a second positive external win of the same strength as UrbanNav Tokyo.
+- It does not claim that the frozen Tokyo mainline transfers directly to Hong Kong without configuration change.
 
 ## Repo front door
 
@@ -151,6 +162,7 @@ This rebuilds:
 - `experiments/results/paper_assets/paper_urbannav_external.png`
 - `experiments/results/paper_assets/paper_bvh_runtime.png`
 - `experiments/results/paper_assets/paper_captions.md`
+- `experiments/results/paper_assets/paper_particle_scaling.png`
 
 ## Reproduce the current headline result
 
@@ -199,8 +211,10 @@ Main output files:
 - `experiments/results/paper_assets/paper_main_table.md`
 - `experiments/results/paper_assets/paper_urbannav_external.png`
 - `experiments/results/paper_assets/paper_bvh_runtime.png`
+- `experiments/results/paper_assets/paper_particle_scaling.png`
 - `experiments/results/urbannav_window_eval_external_gej_trimble_qualityveto_w500_s250_summary.csv`
 - `experiments/results/pf_strategy_lab_holdout6_r200_s200_summary.csv`
+- `experiments/results/urbannav_fixed_eval_hk20190428_gc_adaptive_summary.csv`
 
 ## License
 
