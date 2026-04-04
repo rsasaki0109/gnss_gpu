@@ -21,6 +21,7 @@ URBANNAV_RUNS_CSV = "urbannav_fixed_eval_external_gej_trimble_qualityveto_runs.c
 URBANNAV_SUMMARY_CSV = "urbannav_fixed_eval_external_gej_trimble_qualityveto_summary.csv"
 URBANNAV_EPOCHS_PREFIX = "urbannav_fixed_eval_external_gej_trimble_qualityveto_epochs"
 BVH_RUNTIME_CSV = "ppc_pf3d_tokyo_run1_g_100_plateau_summary.csv"
+HK_ADAPTIVE_SUMMARY_CSV = "urbannav_fixed_eval_hk20190428_gc_adaptive_summary.csv"
 
 PPC_SAFE = "always_robust"
 PPC_EXPLORATORY = (
@@ -100,6 +101,10 @@ def _paper_main_table() -> list[dict[str, object]]:
     robust = _find_row(urbannav_summary, "method", "PF+RobustClear-10K")
     wls_qv = _find_row(urbannav_summary, "method", "WLS+QualityVeto")
 
+    hk_summary = _read_csv(HK_ADAPTIVE_SUMMARY_CSV)
+    hk_ekf = _find_row(hk_summary, "method", "EKF")
+    hk_adaptive = _find_row(hk_summary, "method", "PF+AdaptiveGuide-10K")
+
     pf3d = _find_row(bvh_rows, "method", "PF3D-10K")
     pf3d_bvh = _find_row(bvh_rows, "method", "PF3D-BVH-10K")
 
@@ -163,6 +168,26 @@ def _paper_main_table() -> list[dict[str, object]]:
             "catastrophic_rate_pct": _round(_f(wls_qv, "mean_catastrophic_rate_pct"), 3),
             "time_ms_per_epoch": _round(_f(wls_qv, "mean_time_ms_per_epoch"), 3),
             "note": "promoted core hook",
+        },
+        {
+            "section": "HK supplemental",
+            "method": "EKF",
+            "rms_2d_m": _round(_f(hk_ekf, "mean_rms_2d")),
+            "p95_m": _round(_f(hk_ekf, "mean_p95")),
+            "outlier_rate_pct": _round(_f(hk_ekf, "mean_outlier_rate_pct")),
+            "catastrophic_rate_pct": _round(_f(hk_ekf, "mean_catastrophic_rate_pct"), 3),
+            "time_ms_per_epoch": _round(_f(hk_ekf, "mean_time_ms_per_epoch"), 3),
+            "note": "ublox + G (GPS-only)",
+        },
+        {
+            "section": "HK supplemental",
+            "method": "PF+AdaptiveGuide-10K",
+            "rms_2d_m": _round(_f(hk_adaptive, "mean_rms_2d")),
+            "p95_m": _round(_f(hk_adaptive, "mean_p95")),
+            "outlier_rate_pct": _round(_f(hk_adaptive, "mean_outlier_rate_pct")),
+            "catastrophic_rate_pct": _round(_f(hk_adaptive, "mean_catastrophic_rate_pct"), 3),
+            "time_ms_per_epoch": _round(_f(hk_adaptive, "mean_time_ms_per_epoch"), 3),
+            "note": "ublox + G,C (adaptive guide)",
         },
         {
             "section": "BVH systems",
@@ -455,6 +480,72 @@ def _plot_bvh_runtime(output_path: Path) -> None:
     plt.close(fig)
 
 
+def _plot_particle_scaling(output_path: Path) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # Scaling experiment results: trimble + G,E,J
+    # (N, RMS 2D, P95, >100m rate)
+    odaiba_data = [
+        (100, 135.88, 264.19, 46.01),
+        (500, 82.27, 153.98, 17.00),
+        (1_000, 70.59, 115.92, 11.64),
+        (5_000, 62.48, 96.50, 3.51),
+        (10_000, 61.86, 95.72, 3.31),
+        (50_000, 62.19, 90.49, 2.73),
+        (100_000, 60.87, 86.58, 2.10),
+        (500_000, 60.65, 84.84, 2.00),
+        (1_000_000, 60.40, 84.47, 1.97),
+    ]
+    shinjuku_data = [
+        (100, 120.17, 242.63, 36.00),
+        (500, 82.41, 141.52, 14.50),
+        (1_000, 78.46, 124.97, 10.49),
+        (5_000, 70.82, 110.24, 7.69),
+        (10_000, 71.72, 107.39, 7.46),
+        (50_000, 71.11, 101.71, 5.47),
+        (100_000, 71.30, 98.75, 4.49),
+        (1_000_000, 73.26, 98.81, 4.49),
+    ]
+    ekf_odaiba = (89.42, 151.43, 14.23)
+    ekf_shinjuku = (97.07, 155.93, None)  # P95/outlier from per-run data
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.8))
+    metrics = ("RMS 2D [m]", "P95 [m]", ">100 m rate [%]")
+    titles = ("Mean RMS 2D", "Mean P95", "Failure rate >100 m")
+
+    for col, (ax, ylabel, title) in enumerate(zip(axes, metrics, titles, strict=True)):
+        for data, ekf, label, color, marker in [
+            (odaiba_data, ekf_odaiba, "Odaiba", "#059669", "o"),
+            (shinjuku_data, ekf_shinjuku, "Shinjuku", "#7c3aed", "s"),
+        ]:
+            ns = [d[0] for d in data]
+            vals = [d[col + 1] for d in data]
+            ax.plot(ns, vals, f"{marker}-", color=color, linewidth=1.8,
+                    markersize=5, label=f"PF {label}")
+            if ekf[col] is not None:
+                ax.axhline(ekf[col], color=color, linestyle="--",
+                           linewidth=1.2, alpha=0.5, label=f"EKF {label}")
+        ax.set_xscale("log")
+        ax.set_xlabel("N particles")
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.grid(True, alpha=0.25)
+        ax.legend(fontsize=7)
+        ax.axvspan(500, 2000, alpha=0.06, color="#f59e0b")
+
+    fig.suptitle(
+        "Particle count scaling on UrbanNav Tokyo (trimble + G,E,J)",
+        fontsize=13,
+    )
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=180)
+    plt.close(fig)
+
+
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     table_rows = _paper_main_table()
@@ -464,6 +555,7 @@ def main() -> None:
     _plot_ppc_holdout(OUTPUT_DIR / "paper_ppc_holdout.png")
     _plot_urbannav_external(OUTPUT_DIR / "paper_urbannav_external.png")
     _plot_bvh_runtime(OUTPUT_DIR / "paper_bvh_runtime.png")
+    _plot_particle_scaling(OUTPUT_DIR / "paper_particle_scaling.png")
     print(f"wrote {OUTPUT_DIR}")
 
 

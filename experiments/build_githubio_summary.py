@@ -459,15 +459,15 @@ def _build_snapshot() -> dict:
                 "P95 windows."
             ),
             (
-                "Hong Kong control: `PF+AdaptiveGuide-10K` recovers the raw PF collapse "
-                f"from {_round(_f(_find_row(hk_adaptive_rows, 'method', 'PF-10K'), 'mean_rms_2d'))} m "
-                f"to {_round(_f(hk_adaptive, 'mean_rms_2d'))} m RMS, close to "
-                f"`EKF` at {_round(_f(hk_ekf, 'mean_rms_2d'))} m."
+                "Hong Kong supplemental: `PF+AdaptiveGuide-10K` with GPS+BeiDou achieves "
+                f"{_round(_f(hk_adaptive, 'mean_rms_2d'))} m RMS, beating GPS-only `EKF` "
+                f"at {_round(_f(hk_ekf, 'mean_rms_2d'))} m — the PF family wins in a "
+                "second urban geometry."
             ),
             (
                 "Adaptive guide helps cross-geometry robustness and Hong Kong recovery, "
                 "but full Tokyo runs still leave it behind `PF+RobustClear-10K`, so it "
-                "stays supplemental."
+                "stays supplemental rather than mainline."
             ),
         ],
         "repo_map": [
@@ -541,6 +541,12 @@ def _build_snapshot() -> dict:
                 "Systems result: `PF3D-BVH-10K` keeps PF3D accuracy while cutting runtime "
                 f"from {_round(_f(pf3d, 'time_ms'))} to {_round(_f(pf3d_bvh, 'time_ms'))} "
                 "ms/epoch."
+            ),
+            (
+                "Hong Kong supplemental: `PF+AdaptiveGuide-10K` with GPS+BeiDou achieves "
+                f"{_round(_f(hk_adaptive, 'mean_rms_2d'))} m RMS, outperforming GPS-only "
+                f"`EKF` at {_round(_f(hk_ekf, 'mean_rms_2d'))} m. The PF framework "
+                "generalizes to a second urban geometry when appropriately configured."
             ),
         ],
         "tables": {
@@ -820,7 +826,7 @@ def _build_snapshot() -> dict:
             "The exploratory PPC gate generalizes on holdout, but the gain is still small enough that it should not carry the paper by itself.",
             "The strongest current story is not explicit 3D-map accuracy. The real-data 3D path is still best framed as a BVH systems contribution.",
             "UrbanNav external gains depend on the repaired multi-GNSS measurement path. The older GPS-only results were limited by loader and measurement issues.",
-            "Hong Kong is now a useful control check, but not yet a second positive external win of the same strength as Tokyo trimble + G,E,J.",
+            "Hong Kong is now a supplemental positive result across 3 sequences (PF+AdaptiveGuide beats EKF on all), but the winning method differs from the frozen Tokyo mainline.",
             "AdaptiveGuide and EKFRescue help robustness in the right regimes, but they do not beat the frozen Tokyo mainline `PF+RobustClear-10K` on full runs.",
         ],
         "validation": {

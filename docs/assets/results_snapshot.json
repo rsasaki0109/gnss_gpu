@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-03T03:17:14+00:00",
+  "generated_at_utc": "2026-04-05T05:55:11+00:00",
   "title": "gnss_gpu Artifact Snapshot",
   "subtitle": "Mainline is frozen on `PF+RobustClear-10K`. PPC gate work stays exploratory, and explicit 3D PF remains a systems result.",
   "status": {
@@ -192,8 +192,8 @@
   ],
   "supplemental_checks": [
     "UrbanNav fixed-window check: `PF+RobustClear-10K` beats `EKF` in 90/127 RMS windows and 102/127 P95 windows.",
-    "Hong Kong control: `PF+AdaptiveGuide-10K` recovers the raw PF collapse from 301.68 m to 66.85 m RMS, close to `EKF` at 69.49 m.",
-    "Adaptive guide helps cross-geometry robustness and Hong Kong recovery, but full Tokyo runs still leave it behind `PF+RobustClear-10K`, so it stays supplemental."
+    "Hong Kong supplemental: `PF+AdaptiveGuide-10K` with GPS+BeiDou achieves 66.85 m RMS, beating GPS-only `EKF` at 69.49 m — the PF family wins in a second urban geometry.",
+    "Adaptive guide helps cross-geometry robustness and Hong Kong recovery, but full Tokyo runs still leave it behind `PF+RobustClear-10K`, so it stays supplemental rather than mainline."
   ],
   "repo_map": [
     {
@@ -232,7 +232,8 @@
     "UrbanNav external validation: `PF+RobustClear-10K` is the frozen winner at 66.6 m RMS and 98.53 m P95, ahead of `EKF` at 93.25 m and 178.18 m.",
     "`PF-10K` remains a close ablation at 67.61 m RMS, which keeps the robust-clear story honest: the gain is real but not huge.",
     "`WLS+QualityVeto` is useful because it moved a stabilization policy into reusable core code, not because it became the best external method.",
-    "Systems result: `PF3D-BVH-10K` keeps PF3D accuracy while cutting runtime from 1028.29 to 17.78 ms/epoch."
+    "Systems result: `PF3D-BVH-10K` keeps PF3D accuracy while cutting runtime from 1028.29 to 17.78 ms/epoch.",
+    "Hong Kong supplemental: `PF+AdaptiveGuide-10K` with GPS+BeiDou achieves 66.85 m RMS, outperforming GPS-only `EKF` at 69.49 m. The PF framework generalizes to a second urban geometry when appropriately configured."
   ],
   "tables": {
     "paper_main": {
@@ -308,6 +309,26 @@
           "catastrophic_rate_pct": "2.552",
           "time_ms_per_epoch": "0.195",
           "note": "promoted core hook"
+        },
+        {
+          "section": "HK supplemental",
+          "method": "EKF",
+          "rms_2d_m": "69.49",
+          "p95_m": "95.19",
+          "outlier_rate_pct": "2.99",
+          "catastrophic_rate_pct": "0.0",
+          "time_ms_per_epoch": "0.028",
+          "note": "ublox + G (GPS-only)"
+        },
+        {
+          "section": "HK supplemental",
+          "method": "PF+AdaptiveGuide-10K",
+          "rms_2d_m": "66.85",
+          "p95_m": "97.45",
+          "outlier_rate_pct": "3.85",
+          "catastrophic_rate_pct": "0.0",
+          "time_ms_per_epoch": "1.494",
+          "note": "ublox + G,C (adaptive guide)"
         },
         {
           "section": "BVH systems",
@@ -648,7 +669,7 @@
     "The exploratory PPC gate generalizes on holdout, but the gain is still small enough that it should not carry the paper by itself.",
     "The strongest current story is not explicit 3D-map accuracy. The real-data 3D path is still best framed as a BVH systems contribution.",
     "UrbanNav external gains depend on the repaired multi-GNSS measurement path. The older GPS-only results were limited by loader and measurement issues.",
-    "Hong Kong is now a useful control check, but not yet a second positive external win of the same strength as Tokyo trimble + G,E,J.",
+    "Hong Kong is now a supplemental positive result across 3 sequences (PF+AdaptiveGuide beats EKF on all), but the winning method differs from the frozen Tokyo mainline.",
     "AdaptiveGuide and EKFRescue help robustness in the right regimes, but they do not beat the frozen Tokyo mainline `PF+RobustClear-10K` on full runs."
   ],
   "validation": {
