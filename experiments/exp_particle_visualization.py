@@ -180,10 +180,12 @@ def create_animation(
 
     # Animation elements
     particles_scatter = ax.scatter([], [], s=0.3, c="#059669", alpha=0.15, zorder=3)
-    estimate_dot, = ax.plot([], [], "o", color="#ef4444", markersize=8, zorder=5, label="PF estimate")
-    gt_dot, = ax.plot([], [], "s", color="#3b82f6", markersize=6, zorder=5, label="Ground truth")
-    gt_trail, = ax.plot([], [], "-", color="#3b82f6", linewidth=1.5, alpha=0.6, zorder=4)
-    est_trail, = ax.plot([], [], "-", color="#ef4444", linewidth=1.0, alpha=0.4, zorder=4)
+    est_trail, = ax.plot([], [], "-", color="#ef4444", linewidth=2.5, alpha=0.8, zorder=4)
+    gt_trail, = ax.plot([], [], "-", color="#3b82f6", linewidth=2.5, alpha=0.8, zorder=4)
+    estimate_dot, = ax.plot([], [], "o", color="#ef4444", markersize=14,
+                            markeredgecolor="white", markeredgewidth=2, zorder=6, label="PF estimate")
+    gt_dot, = ax.plot([], [], "s", color="#3b82f6", markersize=10,
+                      markeredgecolor="white", markeredgewidth=2, zorder=6, label="Ground truth")
     epoch_text = ax.text(0.02, 0.98, "", transform=ax.transAxes, fontsize=12,
                          va="top", ha="left", fontweight="bold",
                          bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
