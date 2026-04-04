@@ -51,6 +51,16 @@ Motion assets:
 | BVH systems | `PF3D-10K` | 55.50 m | 58.39 m | 0.000% | 0.000% | real PLATEAU subset |
 | BVH systems | `PF3D-BVH-10K` | 55.50 m | 58.39 m | 0.000% | 0.000% | `57.8x` faster |
 
+### Particle cloud on OpenStreetMap
+
+100K particles visualized on real Tokyo streets. Green dots: particle cloud. Red trail: PF estimate. Blue trail: ground truth.
+
+| Odaiba (moderate urban) | Shinjuku (deep urban canyon) |
+| --- | --- |
+| [Download mp4](docs/assets/media/particle_viz_odaiba.mp4) | [Download mp4](docs/assets/media/particle_viz_shinjuku.mp4) |
+
+View on [GitHub Pages](https://rsasaki0109.github.io/gnss_gpu/) for inline playback.
+
 ### Particle count scaling
 
 ![Particle scaling](experiments/results/paper_assets/paper_particle_scaling.png)
