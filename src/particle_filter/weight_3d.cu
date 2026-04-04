@@ -234,16 +234,8 @@ void pf_weight_3d(
       sigma_pr_los, sigma_pr_nlos, nlos_bias,
       blocked_nlos_prob, clear_nlos_prob);
 
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    fprintf(stderr, "weight_3d_kernel launch error: %s\n",
-            cudaGetErrorString(err));
-  }
-  err = cudaDeviceSynchronize();
-  if (err != cudaSuccess) {
-    fprintf(stderr, "weight_3d_kernel sync error: %s\n",
-            cudaGetErrorString(err));
-  }
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
 
   CUDA_CHECK(cudaMemcpy(log_weights, d_lw, sz, cudaMemcpyDeviceToHost));
 
