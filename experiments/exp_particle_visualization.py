@@ -131,45 +131,32 @@ def create_animation(
     title: str = "MegaParticle GNSS",
     fps: int = 10,
     trail_length: int = 50,
+    zoom_radius_m: float = 300.0,
 ) -> None:
-    """Create mp4 animation with particles on OpenStreetMap."""
+    """Create mp4 animation with particles on OpenStreetMap (full + zoom)."""
     import contextily as cx
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from matplotlib.animation import FuncAnimation, FFMpegWriter
+    from matplotlib.animation import FFMpegWriter
 
-    # Compute bounds from all frames
-    all_lons = np.concatenate([f["particles_lonlat"][:, 0] for f in frames])
-    all_lats = np.concatenate([f["particles_lonlat"][:, 1] for f in frames])
     gt_lons = np.array([f["gt_lonlat"][0] for f in frames])
     gt_lats = np.array([f["gt_lonlat"][1] for f in frames])
 
-    # Use ground truth extent with padding
+    # Full view extent from ground truth
     lon_min, lon_max = gt_lons.min() - 0.003, gt_lons.max() + 0.003
     lat_min, lat_max = gt_lats.min() - 0.002, gt_lats.max() + 0.002
 
-    # Convert to Web Mercator for contextily
     def lonlat_to_webmerc(lon, lat):
         x = lon * 20037508.34 / 180.0
-        y = np.log(np.tan((90 + lat) * np.pi / 360.0)) * 20037508.34 / np.pi
+        y_val = np.clip(lat, -85, 85)
+        y = np.log(np.tan((90 + y_val) * np.pi / 360.0)) * 20037508.34 / np.pi
         return x, y
 
-    xmin, ymin = lonlat_to_webmerc(lon_min, lat_min)
-    xmax, ymax = lonlat_to_webmerc(lon_max, lat_max)
+    # Zoom radius in Web Mercator meters (approximate)
+    zoom_r = zoom_radius_m * 1.5  # scale factor for Web Mercator at mid-lat
 
-    fig, ax = plt.subplots(figsize=(10, 8), dpi=120)
-
-    # Download OSM basemap
-    print("    Downloading OSM tiles...")
-    ax.set_xlim(xmin, xmax)
-    ax.set_ylim(ymin, ymax)
-    cx.add_basemap(ax, source=cx.providers.OpenStreetMap.Mapnik, zoom="auto")
-    # Save basemap as background
-    fig.canvas.draw()
-    bg = fig.canvas.copy_from_bbox(ax.bbox)
-
-    # Pre-convert all coordinates to Web Mercator
+    # Pre-convert all coordinates
     for f in frames:
         px, py = lonlat_to_webmerc(f["particles_lonlat"][:, 0], f["particles_lonlat"][:, 1])
         f["particles_wm"] = np.column_stack([px, py])
@@ -178,50 +165,113 @@ def create_animation(
         gx, gy = lonlat_to_webmerc(f["gt_lonlat"][0], f["gt_lonlat"][1])
         f["gt_wm"] = np.array([gx, gy])
 
-    # Animation elements
-    particles_scatter = ax.scatter([], [], s=0.3, c="#059669", alpha=0.15, zorder=3)
-    est_trail, = ax.plot([], [], "-", color="#ef4444", linewidth=2.5, alpha=0.8, zorder=4)
-    gt_trail, = ax.plot([], [], "-", color="#3b82f6", linewidth=2.5, alpha=0.8, zorder=4)
-    estimate_dot, = ax.plot([], [], "o", color="#ef4444", markersize=14,
-                            markeredgecolor="white", markeredgewidth=2, zorder=6, label="PF estimate")
-    gt_dot, = ax.plot([], [], "s", color="#3b82f6", markersize=10,
-                      markeredgecolor="white", markeredgewidth=2, zorder=6, label="Ground truth")
-    epoch_text = ax.text(0.02, 0.98, "", transform=ax.transAxes, fontsize=12,
-                         va="top", ha="left", fontweight="bold",
-                         bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
-    ax.legend(loc="upper right", fontsize=9)
-    ax.set_title(title, fontsize=14, fontweight="bold")
-    ax.set_axis_off()
+    xmin_full, ymin_full = lonlat_to_webmerc(lon_min, lat_min)
+    xmax_full, ymax_full = lonlat_to_webmerc(lon_max, lat_max)
+
+    # --- Render frames manually (no FuncAnimation for reliability) ---
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    writer = FFMpegWriter(fps=fps, bitrate=4000)
+
+    fig, (ax_full, ax_zoom) = plt.subplots(1, 2, figsize=(18, 8), dpi=100)
+    fig.suptitle(title, fontsize=16, fontweight="bold")
+
+    # Setup full view
+    print("    Downloading OSM tiles (full view)...")
+    ax_full.set_xlim(xmin_full, xmax_full)
+    ax_full.set_ylim(ymin_full, ymax_full)
+    cx.add_basemap(ax_full, source=cx.providers.OpenStreetMap.Mapnik, zoom="auto")
+    ax_full.set_title("Full trajectory", fontsize=12)
+    ax_full.set_axis_off()
+
+    # Setup zoom view (will be re-tiled per frame)
+    print("    Downloading OSM tiles (zoom view)...")
+    mid_x = (xmin_full + xmax_full) / 2
+    mid_y = (ymin_full + ymax_full) / 2
+    ax_zoom.set_xlim(mid_x - zoom_r, mid_x + zoom_r)
+    ax_zoom.set_ylim(mid_y - zoom_r, mid_y + zoom_r)
+    cx.add_basemap(ax_zoom, source=cx.providers.OpenStreetMap.Mapnik, zoom="auto")
+    ax_zoom.set_title("Zoom (around current position)", fontsize=12)
+    ax_zoom.set_axis_off()
 
     gt_trail_x, gt_trail_y = [], []
     est_trail_x, est_trail_y = [], []
 
-    def update(frame_idx):
-        f = frames[frame_idx]
-        # Particles
-        particles_scatter.set_offsets(f["particles_wm"])
-        # Estimate
-        estimate_dot.set_data([f["estimate_wm"][0]], [f["estimate_wm"][1]])
-        # Ground truth
-        gt_dot.set_data([f["gt_wm"][0]], [f["gt_wm"][1]])
-        # Trails
-        gt_trail_x.append(f["gt_wm"][0])
-        gt_trail_y.append(f["gt_wm"][1])
-        est_trail_x.append(f["estimate_wm"][0])
-        est_trail_y.append(f["estimate_wm"][1])
-        start = max(0, len(gt_trail_x) - trail_length)
-        gt_trail.set_data(gt_trail_x[start:], gt_trail_y[start:])
-        est_trail.set_data(est_trail_x[start:], est_trail_y[start:])
-        # Text
-        epoch_text.set_text(f"Epoch {f['epoch']} / {frames[-1]['epoch']}  |  {len(f['particles_wm'])} particles shown")
-        return particles_scatter, estimate_dot, gt_dot, gt_trail, est_trail, epoch_text
-
     print(f"    Rendering {len(frames)} frames...")
-    anim = FuncAnimation(fig, update, frames=len(frames), blit=True, interval=1000 // fps)
+    with writer.saving(fig, str(output_path), dpi=100):
+        for frame_idx, f in enumerate(frames):
+            # Clear dynamic elements
+            for collection in list(ax_full.collections):
+                collection.remove()
+            for collection in list(ax_zoom.collections):
+                collection.remove()
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    writer = FFMpegWriter(fps=fps, bitrate=3000)
-    anim.save(str(output_path), writer=writer)
+            # Trails
+            gt_trail_x.append(f["gt_wm"][0])
+            gt_trail_y.append(f["gt_wm"][1])
+            est_trail_x.append(f["estimate_wm"][0])
+            est_trail_y.append(f["estimate_wm"][1])
+            start = max(0, len(gt_trail_x) - trail_length)
+
+            particles = f["particles_wm"]
+            est = f["estimate_wm"]
+            gt = f["gt_wm"]
+
+            # --- Full view ---
+            # Remove old lines
+            while len(ax_full.lines) > 0:
+                ax_full.lines[0].remove()
+            while len(ax_full.texts) > 0:
+                ax_full.texts[0].remove()
+
+            ax_full.scatter(particles[:, 0], particles[:, 1],
+                           s=2, c="#22c55e", alpha=0.4, zorder=3, edgecolors="none")
+            ax_full.plot(gt_trail_x, gt_trail_y, "-", color="#3b82f6",
+                        linewidth=2, alpha=0.7, zorder=4)
+            ax_full.plot(est_trail_x, est_trail_y, "-", color="#ef4444",
+                        linewidth=2, alpha=0.7, zorder=4)
+            ax_full.plot(est[0], est[1], "o", color="#ef4444", markersize=12,
+                        markeredgecolor="white", markeredgewidth=2, zorder=6)
+            ax_full.plot(gt[0], gt[1], "s", color="#3b82f6", markersize=9,
+                        markeredgecolor="white", markeredgewidth=2, zorder=6)
+            ax_full.text(0.02, 0.98,
+                        f"Epoch {f['epoch']} / {frames[-1]['epoch']}",
+                        transform=ax_full.transAxes, fontsize=11, va="top",
+                        bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.85))
+
+            # --- Zoom view (centered on GT) ---
+            while len(ax_zoom.lines) > 0:
+                ax_zoom.lines[0].remove()
+            while len(ax_zoom.texts) > 0:
+                ax_zoom.texts[0].remove()
+
+            ax_zoom.set_xlim(gt[0] - zoom_r, gt[0] + zoom_r)
+            ax_zoom.set_ylim(gt[1] - zoom_r, gt[1] + zoom_r)
+
+            ax_zoom.scatter(particles[:, 0], particles[:, 1],
+                           s=8, c="#22c55e", alpha=0.5, zorder=3, edgecolors="none")
+            ax_zoom.plot(gt_trail_x[start:], gt_trail_y[start:], "-",
+                        color="#3b82f6", linewidth=3, alpha=0.8, zorder=4)
+            ax_zoom.plot(est_trail_x[start:], est_trail_y[start:], "-",
+                        color="#ef4444", linewidth=3, alpha=0.8, zorder=4)
+            ax_zoom.plot(est[0], est[1], "o", color="#ef4444", markersize=16,
+                        markeredgecolor="white", markeredgewidth=2.5, zorder=6,
+                        label="PF estimate" if frame_idx == 0 else "")
+            ax_zoom.plot(gt[0], gt[1], "s", color="#3b82f6", markersize=12,
+                        markeredgecolor="white", markeredgewidth=2.5, zorder=6,
+                        label="Ground truth" if frame_idx == 0 else "")
+
+            # Error text
+            err_m = np.sqrt((est[0] - gt[0])**2 + (est[1] - gt[1])**2)
+            ax_zoom.text(0.02, 0.98,
+                        f"Error: {err_m:.0f} m (Web Mercator)\n{len(particles)} particles shown",
+                        transform=ax_zoom.transAxes, fontsize=10, va="top",
+                        bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.85))
+
+            if frame_idx == 0:
+                ax_zoom.legend(loc="lower right", fontsize=9)
+
+            writer.grab_frame()
+
     plt.close(fig)
     print(f"    Saved {output_path} ({output_path.stat().st_size / 1024:.0f} KB)")
 
