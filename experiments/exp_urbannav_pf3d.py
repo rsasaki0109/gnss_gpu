@@ -400,16 +400,28 @@ def run_pf_standard(
     )
 
     try:
-        from gnss_gpu import ParticleFilter
+        try:
+            from gnss_gpu import ParticleFilterDevice
 
-        pf = ParticleFilter(
-            n_particles=n_particles,
-            sigma_pos=PF_SIGMA_POS,
-            sigma_cb=PF_SIGMA_CB,
-            sigma_pr=sigma_pr,
-            resampling="megopolis",
-            seed=42,
-        )
+            pf = ParticleFilterDevice(
+                n_particles=n_particles,
+                sigma_pos=PF_SIGMA_POS,
+                sigma_cb=PF_SIGMA_CB,
+                sigma_pr=sigma_pr,
+                resampling="megopolis",
+                seed=42,
+            )
+        except (ImportError, RuntimeError):
+            from gnss_gpu import ParticleFilter
+
+            pf = ParticleFilter(
+                n_particles=n_particles,
+                sigma_pos=PF_SIGMA_POS,
+                sigma_cb=PF_SIGMA_CB,
+                sigma_pr=sigma_pr,
+                resampling="megopolis",
+                seed=42,
+            )
         pf.initialize(
             init_position,
             clock_bias=init_clock_bias,

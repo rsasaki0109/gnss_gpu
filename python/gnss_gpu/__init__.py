@@ -22,6 +22,7 @@ from gnss_gpu.acquisition import Acquisition
 from gnss_gpu.interference import InterferenceDetector
 from gnss_gpu.tracking import ScalarTracker, VectorTracker
 from gnss_gpu.particle_filter import ParticleFilter
+from gnss_gpu.particle_filter_device import ParticleFilterDevice
 from gnss_gpu.svgd import SVGDParticleFilter
 from gnss_gpu.particle_filter_3d import ParticleFilter3D
 from gnss_gpu.ephemeris import Ephemeris
