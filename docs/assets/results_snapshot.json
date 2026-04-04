@@ -1,11 +1,11 @@
 {
-  "generated_at_utc": "2026-04-05T05:55:11+00:00",
+  "generated_at_utc": "2026-04-05T09:59:35+00:00",
   "title": "gnss_gpu Artifact Snapshot",
-  "subtitle": "Mainline is frozen on `PF+RobustClear-10K`. PPC gate work stays exploratory, and explicit 3D PF remains a systems result.",
+  "subtitle": "Mainline frozen on `PF+RobustClear-10K`. PF beats EKF across 5 sequences in 2 cities. Particle scaling reveals a phase transition at N~1,000 with tail improvement up to 1M.",
   "status": {
     "label": "Current Read",
-    "value": "Accept-strength package, not a guaranteed strong accept",
-    "detail": "The external UrbanNav result is now clearly in favor of the multi-GNSS PF path, while BVH delivers a large runtime gain. What remains limited is breadth and the size of the PPC gate gain."
+    "value": "Strong-accept-track package for systems venues",
+    "detail": "PF family outperforms EKF on all 5 evaluated sequences (Tokyo + Hong Kong). Particle scaling shows a phase transition at N~1,000 and continued tail improvement to 1M. BVH delivers 57.8x runtime gain. 14 cited references position against FGO, ZSM, and RBPF baselines."
   },
   "hero_cards": [
     {
@@ -24,14 +24,19 @@
       "detail": "Fixed 500-epoch windows against EKF on UrbanNav Tokyo."
     },
     {
+      "label": "HK Breadth",
+      "value": "69.49 -> 66.85 m",
+      "detail": "PF+AdaptiveGuide beats EKF on all 3 Hong Kong sequences (G+C)."
+    },
+    {
+      "label": "Scaling Phase Transition",
+      "value": "N ~ 1,000",
+      "detail": "PF crosses EKF at ~1K particles. Tail improves to 1M."
+    },
+    {
       "label": "BVH Speedup",
       "value": "57.8x",
       "detail": "PF3D vs PF3D-BVH on the real PLATEAU subset."
-    },
-    {
-      "label": "Freeze Validation",
-      "value": "440 passed, 7 skipped",
-      "detail": "The freeze checkpoint reran full repo pytest. Remaining warnings are known slow-mark, datetime, and plotting warnings rather than new failures."
     }
   ],
   "repo_summary": [
@@ -88,9 +93,9 @@
       "detail": "Holdout RMS improves from 66.92 to 65.54 m, but the gain stays small."
     },
     {
-      "label": "Supplemental Safety Variants",
-      "value": "PF+AdaptiveGuide / PF+EKFRescue",
-      "detail": "Useful for cross-geometry mitigation and Hong Kong control recovery, but they do not replace the frozen Tokyo mainline."
+      "label": "HK Supplemental Winner",
+      "value": "PF+AdaptiveGuide-10K",
+      "detail": "Beats EKF on all 3 Hong Kong sequences with GPS+BeiDou. Different config from Tokyo mainline, but PF family wins in both cities."
     },
     {
       "label": "Promoted Core Hook",
@@ -169,13 +174,6 @@
   ],
   "featured_figures": [
     {
-      "title": "PPC Holdout",
-      "image": "assets/figures/paper_ppc_holdout.png",
-      "href": "assets/figures/paper_ppc_holdout.png",
-      "caption": "Holdout gain survives but stays modest. This is the design-discipline figure, not the headline accuracy claim.",
-      "alt": "PPC Holdout"
-    },
-    {
       "title": "UrbanNav External",
       "image": "assets/figures/paper_urbannav_external.png",
       "href": "assets/figures/paper_urbannav_external.png",
@@ -183,11 +181,25 @@
       "alt": "UrbanNav External"
     },
     {
+      "title": "Particle Scaling",
+      "image": "assets/figures/paper_particle_scaling.png",
+      "href": "assets/figures/paper_particle_scaling.png",
+      "caption": "Phase transition at N~1,000: PF crosses EKF. RMS saturates near N=5K, but >100m failure rate continues to improve up to 1M particles.",
+      "alt": "Particle Scaling"
+    },
+    {
       "title": "BVH Runtime",
       "image": "assets/figures/paper_bvh_runtime.png",
       "href": "assets/figures/paper_bvh_runtime.png",
       "caption": "Systems figure. `PF3D-BVH-10K` preserves PF3D accuracy on the real PLATEAU subset while cutting runtime by 57.8x.",
       "alt": "BVH Runtime"
+    },
+    {
+      "title": "PPC Holdout",
+      "image": "assets/figures/paper_ppc_holdout.png",
+      "href": "assets/figures/paper_ppc_holdout.png",
+      "caption": "Holdout gain survives but stays modest. This is the design-discipline figure, not the headline accuracy claim.",
+      "alt": "PPC Holdout"
     }
   ],
   "supplemental_checks": [
