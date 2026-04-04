@@ -488,53 +488,65 @@ def _plot_particle_scaling(output_path: Path) -> None:
 
     # Scaling experiment results: trimble + G,E,J
     # (N, RMS 2D, P95, >100m rate)
+    # (N, RMS 2D, P95, >100m rate, runtime ms/epoch)
     odaiba_data = [
-        (100, 135.88, 264.19, 46.01),
-        (500, 82.27, 153.98, 17.00),
-        (1_000, 70.59, 115.92, 11.64),
-        (5_000, 62.48, 96.50, 3.51),
-        (10_000, 61.86, 95.72, 3.31),
-        (50_000, 62.19, 90.49, 2.73),
-        (100_000, 60.87, 86.58, 2.10),
-        (500_000, 60.65, 84.84, 2.00),
-        (1_000_000, 60.40, 84.47, 1.97),
+        (100, 135.88, 264.19, 46.01, 1.03),
+        (500, 82.27, 153.98, 17.00, 0.99),
+        (1_000, 70.59, 115.92, 11.64, 1.05),
+        (5_000, 62.48, 96.50, 3.51, 1.29),
+        (10_000, 61.86, 95.72, 3.31, 1.95),
+        (50_000, 62.19, 90.49, 2.73, 0.43),
+        (100_000, 60.87, 86.58, 2.10, 1.28),
+        (500_000, 60.65, 84.84, 2.00, 2.25),
+        (1_000_000, 60.40, 84.47, 1.97, 7.16),
     ]
     shinjuku_data = [
-        (100, 120.17, 242.63, 36.00),
-        (500, 82.41, 141.52, 14.50),
-        (1_000, 78.46, 124.97, 10.49),
-        (5_000, 70.82, 110.24, 7.69),
-        (10_000, 71.72, 107.39, 7.46),
-        (50_000, 71.11, 101.71, 5.47),
-        (100_000, 71.30, 98.75, 4.49),
-        (1_000_000, 73.26, 98.81, 4.49),
+        (100, 120.17, 242.63, 36.00, None),
+        (500, 82.41, 141.52, 14.50, None),
+        (1_000, 78.46, 124.97, 10.49, None),
+        (5_000, 70.82, 110.24, 7.69, None),
+        (10_000, 71.72, 107.39, 7.46, None),
+        (50_000, 71.11, 101.71, 5.47, None),
+        (100_000, 71.30, 98.75, 4.49, None),
+        (1_000_000, 73.26, 98.81, 4.49, None),
     ]
     ekf_odaiba = (89.42, 151.43, 14.23)
-    ekf_shinjuku = (97.07, 155.93, None)  # P95/outlier from per-run data
+    ekf_shinjuku = (97.07, 155.93, None)
 
-    fig, axes = plt.subplots(1, 3, figsize=(16, 4.8))
-    metrics = ("RMS 2D [m]", "P95 [m]", ">100 m rate [%]")
-    titles = ("Mean RMS 2D", "Mean P95", "Failure rate >100 m")
+    fig, axes = plt.subplots(1, 4, figsize=(20, 4.8))
+    metrics = ("RMS 2D [m]", "P95 [m]", ">100 m rate [%]", "Runtime [ms/epoch]")
+    titles = ("Mean RMS 2D", "Mean P95", "Failure rate >100 m", "Runtime per epoch")
 
     for col, (ax, ylabel, title) in enumerate(zip(axes, metrics, titles, strict=True)):
-        for data, ekf, label, color, marker in [
-            (odaiba_data, ekf_odaiba, "Odaiba", "#059669", "o"),
-            (shinjuku_data, ekf_shinjuku, "Shinjuku", "#7c3aed", "s"),
-        ]:
-            ns = [d[0] for d in data]
-            vals = [d[col + 1] for d in data]
-            ax.plot(ns, vals, f"{marker}-", color=color, linewidth=1.8,
-                    markersize=5, label=f"PF {label}")
-            if ekf[col] is not None:
-                ax.axhline(ekf[col], color=color, linestyle="--",
-                           linewidth=1.2, alpha=0.5, label=f"EKF {label}")
+        if col < 3:
+            for data, ekf, label, color, marker in [
+                (odaiba_data, ekf_odaiba, "Odaiba", "#059669", "o"),
+                (shinjuku_data, ekf_shinjuku, "Shinjuku", "#7c3aed", "s"),
+            ]:
+                ns = [d[0] for d in data]
+                vals = [d[col + 1] for d in data]
+                ax.plot(ns, vals, f"{marker}-", color=color, linewidth=1.8,
+                        markersize=5, label=f"PF {label}")
+                if ekf[col] is not None:
+                    ax.axhline(ekf[col], color=color, linestyle="--",
+                               linewidth=1.2, alpha=0.5, label=f"EKF {label}")
+            ax.axvspan(500, 2000, alpha=0.06, color="#f59e0b")
+        else:
+            # Runtime panel (Odaiba only)
+            ns = [d[0] for d in odaiba_data if d[4] is not None]
+            rts = [d[4] for d in odaiba_data if d[4] is not None]
+            ax.plot(ns, rts, "o-", color="#059669", linewidth=1.8, markersize=5,
+                    label="PF Odaiba")
+            ax.axhline(0.031, color="#3b82f6", linestyle="--", linewidth=1.2,
+                       alpha=0.5, label="EKF (0.03 ms)")
+            ax.axhline(1000, color="#ef4444", linestyle=":", linewidth=1,
+                       alpha=0.4, label="1 Hz budget")
         ax.set_xscale("log")
         ax.set_xlabel("N particles")
         ax.set_ylabel(ylabel)
         ax.set_title(title)
         ax.grid(True, alpha=0.25)
         ax.legend(fontsize=7)
-        ax.axvspan(500, 2000, alpha=0.06, color="#f59e0b")
 
     fig.suptitle(
         "Particle count scaling on UrbanNav Tokyo (trimble + G,E,J)",
