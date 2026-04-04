@@ -257,9 +257,9 @@ def _build_snapshot() -> dict:
     media_cards = []
     for viz_name, viz_title, viz_caption in [
         ("particle_viz_odaiba.mp4", "Odaiba Particle Cloud",
-         "100K particles on OpenStreetMap. Green: particles. Red: PF estimate. Blue: ground truth."),
+         "100K particles on OpenStreetMap (full + zoom). Orange: particles. Red: PF estimate. Blue: ground truth."),
         ("particle_viz_shinjuku.mp4", "Shinjuku Particle Cloud",
-         "100K particles in deep urban Shinjuku. Watch the particle spread widen in canyon sections."),
+         "100K particles in deep urban Shinjuku (full + zoom). Watch the particle spread in canyon sections."),
     ]:
         if (MEDIA_DIR / viz_name).exists():
             media_cards.append({
