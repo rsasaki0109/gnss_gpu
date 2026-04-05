@@ -295,12 +295,13 @@ def _build_snapshot() -> dict:
         ),
         "status": {
             "label": "Current Read",
-            "value": "Strong-accept-track package for systems venues",
+            "value": "PF beats RTKLIB demo5 — RMS 6.72m vs 13.08m",
             "detail": (
+                "With gnssplusplus-corrected pseudoranges, PF (1M particles) achieves "
+                "RMS 6.72m on Odaiba — 49% better than RTKLIB demo5 (13.08m), "
+                "59% better P95, zero catastrophic failures. "
                 "PF family outperforms EKF on all 5 evaluated sequences (Tokyo + Hong Kong). "
-                "Particle scaling shows a phase transition at N~1,000 and continued tail "
-                "improvement to 1M. BVH delivers 57.8x runtime gain. "
-                "14 cited references position against FGO, ZSM, and RBPF baselines."
+                "24 cited references, gnssplusplus as submodule for GNSS corrections."
             ),
         },
         "hero_cards": [
@@ -337,6 +338,11 @@ def _build_snapshot() -> dict:
                 "Scaling Phase Transition",
                 "N ~ 1,000",
                 "PF crosses EKF at ~1K particles. Tail improves to 1M.",
+            ),
+            _card(
+                "PF vs RTKLIB demo5",
+                "RMS 6.72 vs 13.08 m",
+                "PF (1M particles + gnssplusplus corrections) beats RTKLIB demo5 by 49% in RMS, 59% in P95, with zero >100m failures.",
             ),
             _card(
                 "BVH Speedup",
@@ -520,6 +526,12 @@ def _build_snapshot() -> dict:
                 f"{_round(_f(hk_adaptive, 'mean_rms_2d'))} m RMS, outperforming GPS-only "
                 f"`EKF` at {_round(_f(hk_ekf, 'mean_rms_2d'))} m. The PF framework "
                 "generalizes to a second urban geometry when appropriately configured."
+            ),
+            (
+                "PF vs RTKLIB demo5 (Odaiba, gnssplusplus corrections): "
+                "PF 1M achieves P50=3.64m, RMS=6.72m, >100m=0% vs "
+                "RTKLIB P50=2.67m, RMS=13.08m. PF wins RMS by 49%, P95 by 59%, "
+                "with zero catastrophic failures. RTKLIB wins P50 by 27%."
             ),
         ],
         "tables": {
