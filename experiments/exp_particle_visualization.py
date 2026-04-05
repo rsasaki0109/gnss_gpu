@@ -48,6 +48,13 @@ def particles_ecef_to_lonlat(particles: np.ndarray) -> np.ndarray:
     return result
 
 
+def _run_ekf(data: dict, wls_init: np.ndarray) -> np.ndarray:
+    """Run EKF to get reference positions for guide velocity."""
+    from exp_urbannav_baseline import run_ekf
+    ekf_pos, _ = run_ekf(data, wls_init)
+    return ekf_pos
+
+
 def run_pf_with_particle_dumps(
     data: dict,
     n_particles: int,
@@ -56,21 +63,40 @@ def run_pf_with_particle_dumps(
     dump_every: int = 10,
     max_dump_particles: int = 5000,
 ) -> dict:
-    """Run PF and dump particle clouds at regular intervals."""
+    """Run PF with same pipeline as evaluation and dump particles."""
     from gnss_gpu import ParticleFilterDevice
-    from exp_urbannav_pf3d import PF_SIGMA_CB, PF_SIGMA_POS, _epoch_dt
+    from exp_urbannav_pf3d import (
+        PF_SIGMA_CB, PF_SIGMA_POS, PF_SIGMA_LOS,
+        _epoch_dt, _select_pf_epoch_measurements, _select_guide_velocity,
+        _should_rescue_pf_epoch,
+    )
+    from gnss_gpu.multi_gnss import MultiGNSSSolver
+    from gnss_gpu.multi_gnss_quality import MultiGNSSQualityVetoConfig
 
     n_epochs = data["n_epochs"]
     sat_ecef = data["sat_ecef"]
     pseudoranges = data["pseudoranges"]
     weights = data["weights"]
     gt_ecef = data["ground_truth"]
+    system_ids = data.get("system_ids")
+
+    # Run EKF first for guide velocity (same as evaluation pipeline)
+    print("    Running EKF for guide reference...")
+    ekf_pos = _run_ekf(data, wls_init)
+
+    # Quality veto config (same as evaluation default)
+    multi_solver = None
+    quality_veto_config = None
+    if system_ids is not None and len(data.get("constellations", ())) > 1:
+        systems = sorted({int(sid) for epoch_ids in system_ids for sid in epoch_ids})
+        multi_solver = MultiGNSSSolver(systems=systems)
+        quality_veto_config = MultiGNSSQualityVetoConfig()
 
     pf = ParticleFilterDevice(
         n_particles=n_particles,
         sigma_pos=PF_SIGMA_POS,
         sigma_cb=PF_SIGMA_CB,
-        sigma_pr=sigma_pr,
+        sigma_pr=PF_SIGMA_LOS,
         resampling="megopolis",
         seed=42,
     )
@@ -80,19 +106,37 @@ def run_pf_with_particle_dumps(
     pf.initialize(init_pos, clock_bias=init_cb, spread_pos=50.0, spread_cb=500.0)
 
     estimates = np.zeros((n_epochs, 3))
-    particle_frames = []  # list of (epoch, particles_lonlat, estimate_lonlat, gt_lonlat)
+    particle_frames = []
 
     t0 = time.perf_counter()
     for i in range(n_epochs):
         dt = _epoch_dt(data, i)
-        sat_i = np.asarray(sat_ecef[i], dtype=np.float64).reshape(-1, 3)
-        pr_i = np.asarray(pseudoranges[i], dtype=np.float64).ravel()
-        w_i = np.asarray(weights[i], dtype=np.float64).ravel()
-        mask = np.isfinite(pr_i) & (pr_i > 0)
-        sat_i, pr_i, w_i = sat_i[mask], pr_i[mask], w_i[mask]
 
-        pf.predict(dt=dt)
-        if len(pr_i) >= 4:
+        # Use same measurement selection as evaluation pipeline
+        sat_i, pr_i, w_i, use_multi = _select_pf_epoch_measurements(
+            sat_ecef[i], pseudoranges[i], weights[i],
+            None if system_ids is None else system_ids[i],
+            multi_solver, quality_veto_config,
+        )
+
+        # Guide velocity from EKF (same as PF+EKFGuide)
+        velocity = _select_guide_velocity(
+            ekf_pos, i, dt, "always", use_multi, sat_i.shape[0],
+        )
+
+        pf.predict(velocity=velocity, dt=dt)
+
+        # Rescue if too far from EKF
+        if ekf_pos is not None and _should_rescue_pf_epoch(
+            pf.estimate(), ekf_pos[i], 500.0,
+        ):
+            pf.initialize(
+                ekf_pos[i, :3],
+                clock_bias=float(ekf_pos[i, 3]) if ekf_pos.shape[1] > 3 else 0.0,
+                spread_pos=50.0, spread_cb=500.0,
+            )
+
+        if sat_i.shape[0] >= 4:
             pf.update(sat_i, pr_i, weights=w_i)
 
         estimate = np.asarray(pf.estimate(), dtype=np.float64)
