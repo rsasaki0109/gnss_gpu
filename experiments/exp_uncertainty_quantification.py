@@ -248,10 +248,12 @@ def main() -> None:
     for i in range(n_epochs):
         sat_i = np.asarray(data["sat_ecef"][i], dtype=np.float64).reshape(-1, 3)
         pr_i = np.asarray(data["pseudoranges"][i], dtype=np.float64).ravel()
+        w_i = np.asarray(data["weights"][i], dtype=np.float64).ravel()
         mask = np.isfinite(pr_i) & (pr_i > 0)
         if mask.sum() >= 4:
             try:
-                wls_pos[i] = wls_position(sat_i[mask], pr_i[mask])
+                res = wls_position(sat_i[mask], pr_i[mask], w_i[mask])
+                wls_pos[i] = np.array(res[0])
             except Exception:
                 if i > 0:
                     wls_pos[i] = wls_pos[i - 1]

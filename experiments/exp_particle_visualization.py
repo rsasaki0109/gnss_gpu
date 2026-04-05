@@ -207,6 +207,10 @@ def create_animation(
                 collection.remove()
             for collection in list(ax_zoom.collections):
                 collection.remove()
+            for patch in list(ax_full.patches):
+                patch.remove()
+            for patch in list(ax_zoom.patches):
+                patch.remove()
 
             # Trails
             gt_trail_x.append(f["gt_wm"][0])
@@ -228,6 +232,19 @@ def create_animation(
 
             ax_full.scatter(particles[:, 0], particles[:, 1],
                            s=6, c="#ff6600", alpha=0.5, zorder=3, edgecolors="none")
+            # 2-sigma ellipse on full view too
+            if len(particles) > 10:
+                from matplotlib.patches import Ellipse
+                px_mean = np.mean(particles[:, 0])
+                py_mean = np.mean(particles[:, 1])
+                px_std = np.std(particles[:, 0])
+                py_std = np.std(particles[:, 1])
+                ellipse_full = Ellipse(
+                    (px_mean, py_mean), width=4 * max(px_std, 1), height=4 * max(py_std, 1),
+                    facecolor="none", edgecolor="#ff6600",
+                    linewidth=2, zorder=5, linestyle="-",
+                )
+                ax_full.add_patch(ellipse_full)
             ax_full.plot(gt_trail_x, gt_trail_y, "-", color="#3b82f6",
                         linewidth=2, alpha=0.7, zorder=4)
             ax_full.plot(est_trail_x, est_trail_y, "-", color="#ef4444",
@@ -250,8 +267,23 @@ def create_animation(
             ax_zoom.set_xlim(gt[0] - zoom_r, gt[0] + zoom_r)
             ax_zoom.set_ylim(gt[1] - zoom_r, gt[1] + zoom_r)
 
+            # Draw 2-sigma ellipse showing particle spread
+            if len(particles) > 10:
+                from matplotlib.patches import Ellipse
+                px_mean = np.mean(particles[:, 0])
+                py_mean = np.mean(particles[:, 1])
+                px_std = np.std(particles[:, 0])
+                py_std = np.std(particles[:, 1])
+                ellipse = Ellipse(
+                    (px_mean, py_mean), width=4 * max(px_std, 1), height=4 * max(py_std, 1),
+                    facecolor="#ff6600", alpha=0.25, edgecolor="#cc3300",
+                    linewidth=2, zorder=3, linestyle="--",
+                )
+                ax_zoom.add_patch(ellipse)
+
+            # Particles on top of everything
             ax_zoom.scatter(particles[:, 0], particles[:, 1],
-                           s=80, c="#ff6600", alpha=0.7, zorder=3,
+                           s=80, c="#ff6600", alpha=0.7, zorder=7,
                            edgecolors="#cc3300", linewidths=0.5)
             ax_zoom.plot(gt_trail_x[start:], gt_trail_y[start:], "-",
                         color="#3b82f6", linewidth=3, alpha=0.8, zorder=4)
@@ -306,10 +338,12 @@ def main() -> None:
     for i in range(n_epochs):
         sat_i = np.asarray(data["sat_ecef"][i], dtype=np.float64).reshape(-1, 3)
         pr_i = np.asarray(data["pseudoranges"][i], dtype=np.float64).ravel()
+        w_i = np.asarray(data["weights"][i], dtype=np.float64).ravel()
         mask = np.isfinite(pr_i) & (pr_i > 0)
         if mask.sum() >= 4:
             try:
-                wls_pos[i] = wls_position(sat_i[mask], pr_i[mask])
+                res = wls_position(sat_i[mask], pr_i[mask], w_i[mask])
+                wls_pos[i] = np.array(res[0])
             except Exception:
                 if i > 0:
                     wls_pos[i] = wls_pos[i - 1]
