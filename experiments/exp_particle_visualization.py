@@ -534,23 +534,32 @@ def _run_pf_gnssplusplus(
     pf_err, _ = ecef_errors_2d_3d(pf_arr, gt_arr)
     spp_err, _ = ecef_errors_2d_3d(spp_arr, gt_arr)
 
-    # Attach metrics to frames
-    epoch_to_pf_err = {}
-    epoch_to_spp_err = {}
+    # Attach metrics to frames with proper running RMS
+    # Map frame epoch -> index in pf_err/spp_err arrays
+    frame_epochs = [f["epoch"] for f in particle_frames]
     cum_pf_sq, cum_spp_sq = 0.0, 0.0
+    pf_count, spp_count = 0, 0
+
     for i in range(len(pf_err)):
         cum_pf_sq += pf_err[i] ** 2
         cum_spp_sq += spp_err[i] ** 2
-        epoch_to_pf_err[i] = pf_err[i]
-        epoch_to_spp_err[i] = spp_err[i]
+        pf_count += 1
+        spp_count += 1
 
+        # Check if this epoch matches a frame
+        if i in frame_epochs:
+            fi = frame_epochs.index(i)
+            particle_frames[fi]["error_2d"] = float(pf_err[i])
+            particle_frames[fi]["ekf_error_2d"] = float(spp_err[i])
+            particle_frames[fi]["pf_rms"] = float(np.sqrt(cum_pf_sq / pf_count))
+            particle_frames[fi]["ekf_rms"] = float(np.sqrt(cum_spp_sq / spp_count))
+
+    # Fill any unmatched frames with zeros
     for f in particle_frames:
-        ep = f["epoch"]
-        f["error_2d"] = epoch_to_pf_err.get(ep, 0)
-        f["ekf_error_2d"] = epoch_to_spp_err.get(ep, 0)  # SPP as "EKF" for display
-        n_so_far = ep + 1
-        f["pf_rms"] = float(np.sqrt(cum_pf_sq / max(n_so_far, 1))) if ep < len(pf_err) else 0
-        f["ekf_rms"] = float(np.sqrt(cum_spp_sq / max(n_so_far, 1))) if ep < len(spp_err) else 0
+        f.setdefault("error_2d", 0)
+        f.setdefault("ekf_error_2d", 0)
+        f.setdefault("pf_rms", 0)
+        f.setdefault("ekf_rms", 0)
 
     print(f"    PF+gpp: P50={np.median(pf_err):.2f}m  RMS={np.sqrt(np.mean(pf_err**2)):.2f}m  >100m={np.mean(pf_err>100)*100:.3f}%")
     print(f"    SPP:    P50={np.median(spp_err):.2f}m  RMS={np.sqrt(np.mean(spp_err**2)):.2f}m")
