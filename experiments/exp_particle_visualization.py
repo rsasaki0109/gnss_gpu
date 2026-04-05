@@ -341,13 +341,13 @@ def create_animation(
             if rtk_rms_f > 0:
                 full_text = (
                     f"Epoch {f['epoch']} / {frames[-1]['epoch']}\n"
-                    f"Fused  RMS: {pf_rms_f:.1f} m\n"
+                    f"PF     RMS: {pf_rms_f:.1f} m\n"
                     f"RTKLIB RMS: {rtk_rms_f:.1f} m"
                 )
             else:
                 full_text = (
                     f"Epoch {f['epoch']} / {frames[-1]['epoch']}\n"
-                    f"Fused RMS: {pf_rms_f:.1f} m"
+                    f"PF RMS: {pf_rms_f:.1f} m"
                 )
             ax_full.text(0.02, 0.98, full_text,
                         transform=ax_full.transAxes, fontsize=9, va="top",
@@ -380,7 +380,7 @@ def create_animation(
                             label="RTKLIB demo5" if frame_idx == 0 else "")
             ax_zoom.plot(est[0], est[1], "o", color="#ef4444", markersize=16,
                         markeredgecolor="white", markeredgewidth=2.5, zorder=6,
-                        label="SPP+PF fused" if frame_idx == 0 else "")
+                        label="PF estimate" if frame_idx == 0 else "")
             ax_zoom.plot(gt[0], gt[1], "s", color="#3b82f6", markersize=12,
                         markeredgecolor="white", markeredgewidth=2.5, zorder=6,
                         label="Ground truth" if frame_idx == 0 else "")
@@ -394,13 +394,13 @@ def create_animation(
             rtk_rms = f.get("rtklib_rms", 0)
             if rtk_rms > 0:
                 metrics_text = (
-                    f"Fused:     {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
+                    f"PF:     {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
                     f"RTKLIB error: {rtk_err:6.1f} m  (RMS: {rtk_rms:.1f} m)\n"
                     f"{len(particles)} particles"
                 )
             else:
                 metrics_text = (
-                    f"Fused:  {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
+                    f"PF:  {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
                     f"{len(particles)} particles"
                 )
             ax_zoom.text(0.02, 0.98, metrics_text,
@@ -493,13 +493,8 @@ def _run_pf_gnssplusplus(
         pf_est = pf.estimate()[:3]
         spp_est = np.array(sol_epoch.position_ecef_m[:3])
 
-        # Fusion: use SPP when trajectory-consistent, PF when SPP jumps
-        max_jump = 30.0 * dt + 20.0 if dt > 0 else 50.0
-        if np.linalg.norm(spp_est - prev_fused) < max_jump:
-            est = spp_est
-        else:
-            est = pf_est
-        prev_fused = est
+        # PF only (no fusion)
+        est = pf_est
 
         # Match GT
         gt_idx = np.argmin(np.abs(our_times - tow))
@@ -598,7 +593,7 @@ def _run_pf_gnssplusplus(
         f.setdefault("rtklib_error_2d", 0)
         f.setdefault("rtklib_rms", 0)
 
-    print(f"    Fused:  P50={np.median(pf_err):.2f}m  RMS={np.sqrt(np.mean(pf_err**2)):.2f}m  >100m={np.mean(pf_err>100)*100:.3f}%")
+    print(f"    PF:  P50={np.median(pf_err):.2f}m  RMS={np.sqrt(np.mean(pf_err**2)):.2f}m  >100m={np.mean(pf_err>100)*100:.3f}%")
     rtk_valid = rtk_err[np.isfinite(rtk_err)]
     if len(rtk_valid) > 0:
         print(f"    RTKLIB: P50={np.median(rtk_valid):.2f}m  RMS={np.sqrt(np.mean(rtk_valid**2)):.2f}m  ({len(rtk_valid)} epochs)")
@@ -734,7 +729,7 @@ def main() -> None:
         print(f"    RTKLIB demo5: {len(rtk_errors)} matched epochs, {sum(1 for f in result['frames'] if 'spp_lonlat' in f)} frames with trail")
 
     output = args.output or (RESULTS_DIR / "paper_assets" / f"particle_viz_{args.run.lower()}_{args.n_particles}.mp4")
-    mode = "SPP+PF Fusion" if args.use_gnssplusplus else "PF"
+    mode = "PF + gnssplusplus corrections" if args.use_gnssplusplus else "PF"
     create_animation(
         result["frames"], output,
         title=f"MegaParticle GNSS — {args.run} ({mode}, {args.n_particles:,} particles)",
