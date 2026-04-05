@@ -237,10 +237,12 @@ def create_animation(
     # Setup zoom view — download tiles for the FULL possible extent
     print("    Downloading OSM tiles (zoom view, full coverage)...")
     all_gt_wm = np.array([f["gt_wm"] for f in frames])
-    zoom_xmin = all_gt_wm[:, 0].min() - zoom_r * 1.5
-    zoom_xmax = all_gt_wm[:, 0].max() + zoom_r * 1.5
-    zoom_ymin = all_gt_wm[:, 1].min() - zoom_r * 1.5
-    zoom_ymax = all_gt_wm[:, 1].max() + zoom_r * 1.5
+    all_est_wm = np.array([f["estimate_wm"] for f in frames])
+    all_pts = np.vstack([all_gt_wm, all_est_wm])
+    zoom_xmin = all_pts[:, 0].min() - zoom_r * 2
+    zoom_xmax = all_pts[:, 0].max() + zoom_r * 2
+    zoom_ymin = all_pts[:, 1].min() - zoom_r * 2
+    zoom_ymax = all_pts[:, 1].max() + zoom_r * 2
     ax_zoom.set_xlim(zoom_xmin, zoom_xmax)
     ax_zoom.set_ylim(zoom_ymin, zoom_ymax)
     cx.add_basemap(ax_zoom, source=cx.providers.OpenStreetMap.Mapnik, zoom=18)
@@ -282,20 +284,7 @@ def create_animation(
                 ax_full.texts[0].remove()
 
             ax_full.scatter(particles[:, 0], particles[:, 1],
-                           s=6, c="#ff6600", alpha=0.5, zorder=3, edgecolors="none")
-            # 2-sigma ellipse on full view too
-            if len(particles) > 10:
-                from matplotlib.patches import Ellipse
-                px_mean = np.mean(particles[:, 0])
-                py_mean = np.mean(particles[:, 1])
-                px_std = np.std(particles[:, 0])
-                py_std = np.std(particles[:, 1])
-                ellipse_full = Ellipse(
-                    (px_mean, py_mean), width=4 * max(px_std, 1), height=4 * max(py_std, 1),
-                    facecolor="none", edgecolor="#ff6600",
-                    linewidth=2, zorder=5, linestyle="-",
-                )
-                ax_full.add_patch(ellipse_full)
+                           s=3, c="#ff6600", alpha=0.3, zorder=3, edgecolors="none")
             ax_full.plot(gt_trail_x, gt_trail_y, "-", color="#3b82f6",
                         linewidth=2, alpha=0.7, zorder=4)
             ax_full.plot(est_trail_x, est_trail_y, "-", color="#ef4444",
@@ -315,27 +304,16 @@ def create_animation(
             while len(ax_zoom.texts) > 0:
                 ax_zoom.texts[0].remove()
 
-            ax_zoom.set_xlim(gt[0] - zoom_r, gt[0] + zoom_r)
-            ax_zoom.set_ylim(gt[1] - zoom_r, gt[1] + zoom_r)
+            # Center zoom on midpoint of estimate and GT
+            cx_mid = (est[0] + gt[0]) / 2
+            cy_mid = (est[1] + gt[1]) / 2
+            ax_zoom.set_xlim(cx_mid - zoom_r, cx_mid + zoom_r)
+            ax_zoom.set_ylim(cy_mid - zoom_r, cy_mid + zoom_r)
 
-            # Draw 2-sigma ellipse showing particle spread
-            if len(particles) > 10:
-                from matplotlib.patches import Ellipse
-                px_mean = np.mean(particles[:, 0])
-                py_mean = np.mean(particles[:, 1])
-                px_std = np.std(particles[:, 0])
-                py_std = np.std(particles[:, 1])
-                ellipse = Ellipse(
-                    (px_mean, py_mean), width=4 * max(px_std, 1), height=4 * max(py_std, 1),
-                    facecolor="#ff6600", alpha=0.25, edgecolor="#cc3300",
-                    linewidth=2, zorder=3, linestyle="--",
-                )
-                ax_zoom.add_patch(ellipse)
-
-            # Particles on top of everything
+            # Particles — semi-transparent to show map underneath
             ax_zoom.scatter(particles[:, 0], particles[:, 1],
-                           s=80, c="#ff6600", alpha=0.7, zorder=7,
-                           edgecolors="#cc3300", linewidths=0.5)
+                           s=15, c="#ff6600", alpha=0.3, zorder=3,
+                           edgecolors="none")
             ax_zoom.plot(gt_trail_x[start:], gt_trail_y[start:], "-",
                         color="#3b82f6", linewidth=3, alpha=0.8, zorder=4)
             ax_zoom.plot(est_trail_x[start:], est_trail_y[start:], "-",
