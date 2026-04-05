@@ -245,6 +245,9 @@ def create_animation(
         f["estimate_wm"] = np.array([ex, ey])
         gx, gy = lonlat_to_webmerc(f["gt_lonlat"][0], f["gt_lonlat"][1])
         f["gt_wm"] = np.array([gx, gy])
+        if "spp_lonlat" in f:
+            sx, sy = lonlat_to_webmerc(f["spp_lonlat"][0], f["spp_lonlat"][1])
+            f["spp_wm"] = np.array([sx, sy])
 
     xmin_full, ymin_full = lonlat_to_webmerc(lon_min, lat_min)
     xmax_full, ymax_full = lonlat_to_webmerc(lon_max, lat_max)
@@ -281,6 +284,7 @@ def create_animation(
 
     gt_trail_x, gt_trail_y = [], []
     est_trail_x, est_trail_y = [], []
+    spp_trail_x, spp_trail_y = [], []
 
     print(f"    Rendering {len(frames)} frames...")
     with writer.saving(fig, str(output_path), dpi=80):
@@ -300,6 +304,9 @@ def create_animation(
             gt_trail_y.append(f["gt_wm"][1])
             est_trail_x.append(f["estimate_wm"][0])
             est_trail_y.append(f["estimate_wm"][1])
+            if "spp_wm" in f:
+                spp_trail_x.append(f["spp_wm"][0])
+                spp_trail_y.append(f["spp_wm"][1])
             start = max(0, len(gt_trail_x) - trail_length)
 
             particles = f["particles_wm"]
@@ -319,6 +326,11 @@ def create_animation(
                         linewidth=2, alpha=0.7, zorder=4)
             ax_full.plot(est_trail_x, est_trail_y, "-", color="#ef4444",
                         linewidth=2, alpha=0.7, zorder=4)
+            if spp_trail_x:
+                ax_full.plot(spp_trail_x, spp_trail_y, "-", color="#22c55e",
+                            linewidth=2, alpha=0.7, zorder=4)
+                ax_full.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#22c55e",
+                            markersize=7, markeredgecolor="white", markeredgewidth=1.5, zorder=6)
             ax_full.plot(est[0], est[1], "o", color="#ef4444", markersize=12,
                         markeredgecolor="white", markeredgewidth=2, zorder=6)
             ax_full.plot(gt[0], gt[1], "s", color="#3b82f6", markersize=9,
@@ -364,6 +376,12 @@ def create_animation(
                         color="#3b82f6", linewidth=3, alpha=0.8, zorder=4)
             ax_zoom.plot(est_trail_x[start:], est_trail_y[start:], "-",
                         color="#ef4444", linewidth=3, alpha=0.8, zorder=4)
+            if spp_trail_x:
+                ax_zoom.plot(spp_trail_x[start:], spp_trail_y[start:], "-",
+                            color="#22c55e", linewidth=2.5, alpha=0.8, zorder=4)
+                ax_zoom.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#22c55e",
+                            markersize=12, markeredgecolor="white", markeredgewidth=2, zorder=6,
+                            label="SPP" if frame_idx == 0 else "")
             ax_zoom.plot(est[0], est[1], "o", color="#ef4444", markersize=16,
                         markeredgecolor="white", markeredgewidth=2.5, zorder=6,
                         label="PF estimate" if frame_idx == 0 else "")
@@ -495,11 +513,14 @@ def _run_pf_gnssplusplus(
                 p_lonlat = particles_ecef_to_lonlat(particles)
                 gt_lat, gt_lon, _ = ecef_to_lla(gt[gt_idx][0], gt[gt_idx][1], gt[gt_idx][2])
                 est_lat, est_lon, _ = ecef_to_lla(est[0], est[1], est[2])
+                spp_ecef = np.array(sol_epoch.position_ecef_m[:3])
+                spp_lat, spp_lon, _ = ecef_to_lla(spp_ecef[0], spp_ecef[1], spp_ecef[2])
                 particle_frames.append({
                     "epoch": frame_count,
                     "particles_lonlat": p_lonlat,
                     "estimate_lonlat": np.array([est_lon, est_lat]),
                     "gt_lonlat": np.array([gt_lon, gt_lat]),
+                    "spp_lonlat": np.array([spp_lon, spp_lat]),
                 })
             frame_count += 1
 
