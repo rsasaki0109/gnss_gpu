@@ -327,10 +327,10 @@ def create_animation(
             ax_full.plot(est_trail_x, est_trail_y, "-", color="#ef4444",
                         linewidth=2, alpha=0.7, zorder=4)
             if spp_trail_x:
-                ax_full.plot(spp_trail_x, spp_trail_y, "-", color="#22c55e",
-                            linewidth=2, alpha=0.7, zorder=4)
-                ax_full.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#22c55e",
-                            markersize=7, markeredgecolor="white", markeredgewidth=1.5, zorder=6)
+                ax_full.plot(spp_trail_x, spp_trail_y, "--", color="#16a34a",
+                            linewidth=3, alpha=0.9, zorder=5)
+                ax_full.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#16a34a",
+                            markersize=10, markeredgecolor="white", markeredgewidth=2, zorder=7)
             ax_full.plot(est[0], est[1], "o", color="#ef4444", markersize=12,
                         markeredgecolor="white", markeredgewidth=2, zorder=6)
             ax_full.plot(gt[0], gt[1], "s", color="#3b82f6", markersize=9,
@@ -373,10 +373,10 @@ def create_animation(
             ax_zoom.plot(est_trail_x[start:], est_trail_y[start:], "-",
                         color="#ef4444", linewidth=3, alpha=0.8, zorder=4)
             if spp_trail_x:
-                ax_zoom.plot(spp_trail_x[start:], spp_trail_y[start:], "-",
-                            color="#22c55e", linewidth=2.5, alpha=0.8, zorder=4)
-                ax_zoom.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#22c55e",
-                            markersize=12, markeredgecolor="white", markeredgewidth=2, zorder=6,
+                ax_zoom.plot(spp_trail_x[start:], spp_trail_y[start:], "--",
+                            color="#16a34a", linewidth=4, alpha=0.9, zorder=5)
+                ax_zoom.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#16a34a",
+                            markersize=16, markeredgecolor="white", markeredgewidth=2.5, zorder=7,
                             label="RTKLIB demo5" if frame_idx == 0 else "")
             ax_zoom.plot(est[0], est[1], "o", color="#ef4444", markersize=16,
                         markeredgecolor="white", markeredgewidth=2.5, zorder=6,
