@@ -271,6 +271,26 @@ def run_wls(
                 system_ids[i],
                 scaled_weights,
             )
+            # Fallback: if multi-GNSS solver fails, try single-system GPS WLS
+            if np.all(pos == 0) or not np.all(np.isfinite(pos)):
+                ref_mask = np.asarray(system_ids[i]) == SYSTEM_GPS
+                if int(np.count_nonzero(ref_mask)) >= 4:
+                    fb = _solve_single_system_epoch(
+                        sat_ecef[i][ref_mask],
+                        pseudoranges[i][ref_mask],
+                        scaled_weights[ref_mask],
+                    )
+                    if fb is not None and np.all(np.isfinite(fb[:3])) and not np.all(fb[:3] == 0):
+                        pos = fb[:3]
+                        biases = {SYSTEM_GPS: float(fb[3])}
+                    elif i > 0:
+                        positions[i] = positions[i - 1]
+                        fallback_epochs += 1
+                        continue
+                elif i > 0:
+                    positions[i] = positions[i - 1]
+                    fallback_epochs += 1
+                    continue
             if quality_veto_config is not None:
                 ref_mask = np.asarray(system_ids[i]) == int(quality_veto_config.reference_system)
                 if int(np.count_nonzero(ref_mask)) >= 4:
@@ -292,6 +312,13 @@ def run_wls(
                     positions[i, 3] = decision.clock_bias_m
                     accepted_multi_epochs += int(decision.use_multi)
                     fallback_epochs += int(not decision.use_multi)
+                    continue
+            # Sanity check: reject positions that jump too far from previous
+            if i > 0 and np.any(positions[i - 1, :3] != 0):
+                jump = np.linalg.norm(np.asarray(pos) - positions[i - 1, :3])
+                if jump > 10000:  # > 10 km jump is clearly wrong
+                    positions[i] = positions[i - 1]
+                    fallback_epochs += 1
                     continue
             positions[i, :3] = pos
             positions[i, 3] = float(
