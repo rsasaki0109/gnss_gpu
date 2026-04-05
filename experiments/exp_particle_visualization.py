@@ -377,7 +377,7 @@ def create_animation(
                             color="#22c55e", linewidth=2.5, alpha=0.8, zorder=4)
                 ax_zoom.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#22c55e",
                             markersize=12, markeredgecolor="white", markeredgewidth=2, zorder=6,
-                            label="RTKLIB" if frame_idx == 0 else "")
+                            label="RTKLIB demo5" if frame_idx == 0 else "")
             ax_zoom.plot(est[0], est[1], "o", color="#ef4444", markersize=16,
                         markeredgecolor="white", markeredgewidth=2.5, zorder=6,
                         label="PF estimate" if frame_idx == 0 else "")
@@ -641,28 +641,40 @@ def main() -> None:
                 err, _ = _ecef_err(rtklib_lookup[key].reshape(1,3), gt_all[i:i+1])
                 rtk_errors[key] = float(err[0])
 
-        # Attach to frames
+        # Build sorted RTKLIB TOW list for nearest-match
+        rtk_tow_sorted = np.array(sorted(rtklib_lookup.keys()))
+
+        # Attach to frames by matching GT position time
         cum_rtk_sq = 0.0
         rtk_count = 0
         for f in result["frames"]:
-            # Find closest TOW for this frame
+            # Use GT lonlat to find closest time in our data, then match RTKLIB
+            gt_ll = f["gt_lonlat"]
+            # Find this GT in times_all by scanning nearest epoch
             ep = f["epoch"]
-            if ep < len(times_all):
-                key = round(times_all[min(ep * args.dump_every, len(times_all)-1)], 1)
-                rtk_err = rtk_errors.get(key, -1)
+            # Try multiple candidate indices
+            best_key = None
+            for offset in range(0, min(len(times_all), args.dump_every * 2)):
+                idx = min(ep * args.dump_every + offset, len(times_all) - 1)
+                candidate_key = round(times_all[idx], 1)
+                if candidate_key in rtklib_lookup:
+                    best_key = candidate_key
+                    break
+
+            if best_key is not None:
+                rtk_err = rtk_errors.get(best_key, -1)
                 if rtk_err >= 0:
                     cum_rtk_sq += rtk_err ** 2
                     rtk_count += 1
                 f["rtklib_error_2d"] = rtk_err if rtk_err >= 0 else 0
                 f["rtklib_rms"] = float(np.sqrt(cum_rtk_sq / max(rtk_count, 1)))
-                # Add RTKLIB lon/lat for trail
-                rtk_ll = rtklib_lonlat_lookup.get(key)
+                rtk_ll = rtklib_lonlat_lookup.get(best_key)
                 if rtk_ll is not None:
-                    f["spp_lonlat"] = rtk_ll  # reuse spp_lonlat for RTKLIB trail
+                    f["spp_lonlat"] = rtk_ll
             else:
                 f["rtklib_error_2d"] = 0
                 f["rtklib_rms"] = 0
-        print(f"    RTKLIB demo5: {len(rtk_errors)} matched epochs loaded")
+        print(f"    RTKLIB demo5: {len(rtk_errors)} matched epochs, {sum(1 for f in result['frames'] if 'spp_lonlat' in f)} frames with trail")
 
     output = args.output or (RESULTS_DIR / "paper_assets" / f"particle_viz_{args.run.lower()}_{args.n_particles}.mp4")
     create_animation(
