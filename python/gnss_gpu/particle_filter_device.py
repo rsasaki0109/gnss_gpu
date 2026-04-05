@@ -35,7 +35,7 @@ class ParticleFilterDevice:
     """
 
     def __init__(self, n_particles=1_000_000, sigma_pos=1.0, sigma_cb=300.0,
-                 sigma_pr=5.0, resampling="megopolis", ess_threshold=0.5,
+                 sigma_pr=5.0, nu=0.0, resampling="megopolis", ess_threshold=0.5,
                  seed=42):
         from gnss_gpu._gnss_gpu_pf_device import (
             pf_device_create,
@@ -66,6 +66,7 @@ class ParticleFilterDevice:
         self.sigma_pos = sigma_pos
         self.sigma_cb = sigma_cb
         self.sigma_pr = sigma_pr
+        self.nu = nu  # Student's t DoF. 0=Gaussian, 1=Cauchy, 3-5=moderate
         self.resampling = resampling
         self.ess_threshold = ess_threshold
         self.seed = seed
@@ -168,7 +169,7 @@ class ParticleFilterDevice:
         self._pf_device_weight(
             self._state,
             sat.ravel(), pr, weights,
-            n_sat, float(self.sigma_pr))
+            n_sat, float(self.sigma_pr), float(self.nu))
 
         # Adaptive resampling based on ESS
         ess = self.get_ess()
