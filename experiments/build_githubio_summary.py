@@ -35,20 +35,8 @@ BVH_RUNTIME_CSV = "ppc_pf3d_tokyo_run1_g_100_plateau_summary.csv"
 
 PAPER_MAIN_TABLE_CSV = "paper_main_table.csv"
 VALIDATION_SUMMARY_JSON = RESULTS_DIR / "freeze_validation_summary.json"
-SITE_MEDIA = {
-    "site_poster.png": {
-        "title": "Front Poster",
-        "caption": "One-image summary of the current mainline, external win, and BVH systems result.",
-    },
-}
-SITE_VIDEO = {
-    "title": "Teaser Clip",
-    "caption": "Short motion version for the front page. Uses mp4/webm when available and falls back to GIF.",
-    "poster": "site_poster.png",
-    "mp4": "site_teaser.mp4",
-    "webm": "site_teaser.webm",
-    "gif": "site_teaser.gif",
-}
+SITE_MEDIA = {}
+SITE_VIDEO = None
 SITE_CHARTS = {
     "site_urbannav_runs.png": {
         "title": "UrbanNav Per-Run Comparison",
@@ -197,7 +185,6 @@ def _ensure_site_media() -> None:
         MEDIA_DIR / name
         for name in (
             *SITE_MEDIA,
-            SITE_VIDEO["gif"],
             *SITE_CHARTS,
         )
     ]
@@ -268,57 +255,9 @@ def _build_snapshot() -> dict:
         )
 
     media_cards = []
-    for name, meta in SITE_MEDIA.items():
-        rel_path = _media_href(name)
-        media_cards.append(
-            {
-                "kind": "image",
-                "title": meta["title"],
-                "image": rel_path,
-                "href": rel_path,
-                "caption": meta["caption"],
-                "alt": meta["title"],
-            }
-        )
-
-    video_sources = []
-    for fmt in ("webm", "mp4"):
-        name = SITE_VIDEO[fmt]
-        if (MEDIA_DIR / name).exists():
-            video_sources.append(
-                {
-                    "src": _media_href(name),
-                    "type": f"video/{fmt}",
-                }
-            )
-    if video_sources:
-        media_cards.append(
-            {
-                "kind": "video",
-                "title": SITE_VIDEO["title"],
-                "href": video_sources[0]["src"],
-                "caption": SITE_VIDEO["caption"],
-                "poster": _media_href(SITE_VIDEO["poster"]),
-                "sources": video_sources,
-            }
-        )
-    else:
-        rel_path = _media_href(SITE_VIDEO["gif"])
-        media_cards.append(
-            {
-                "kind": "image",
-                "title": SITE_VIDEO["title"],
-                "image": rel_path,
-                "href": rel_path,
-                "caption": SITE_VIDEO["caption"],
-                "alt": SITE_VIDEO["title"],
-            }
-        )
-
-    # Add particle visualization videos
     for viz_name, viz_title, viz_caption in [
         ("particle_viz_odaiba.mp4", "Odaiba Particle Cloud",
-         "100K particles on OpenStreetMap. Green dots: particles. Red: PF estimate. Blue: ground truth."),
+         "100K particles on OpenStreetMap. Green: particles. Red: PF estimate. Blue: ground truth."),
         ("particle_viz_shinjuku.mp4", "Shinjuku Particle Cloud",
          "100K particles in deep urban Shinjuku. Watch the particle spread widen in canyon sections."),
     ]:
@@ -328,7 +267,7 @@ def _build_snapshot() -> dict:
                 "title": viz_title,
                 "href": _media_href(viz_name),
                 "caption": viz_caption,
-                "poster": _media_href(SITE_VIDEO["poster"]),
+                "poster": "",
                 "sources": [{"src": _media_href(viz_name), "type": "video/mp4"}],
             })
 
