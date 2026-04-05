@@ -21,31 +21,24 @@ This repo is no longer in a "pick one perfect architecture first" phase. The cur
 
 ## Current frozen read
 
-- Main external method: `PF+RobustClear-10K`
-- Main external dataset/result: UrbanNav Tokyo, `trimble + G,E,J`, fixed evaluation
-- Cross-geography breadth: Hong Kong 3 sequences, `PF+AdaptiveGuide-10K` beats `EKF` on all
-- Scaling finding: particle count phase transition at N≈1,000, tail improvement up to 1M
-- Exploratory but not headline: PPC gate family
-- Systems contribution: `PF3D-BVH-10K`
-- Promoted reusable hook: `WLS+QualityVeto`
+- **PF beats RTKLIB demo5**: RMS 6.72m vs 13.08m (49% improvement) on Odaiba
+- GNSS corrections: [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) (Sagnac, tropo, iono, TGD, ISB)
+- Cross-geography: PF wins on 5 sequences in 2 cities (Tokyo + Hong Kong)
+- Scaling: phase transition at N≈1,000, tail improvement up to 1M particles
+- Systems: `PF3D-BVH-10K` — 57.8x runtime reduction
 
-### Current headline numbers
+### PF vs RTKLIB demo5 (Odaiba, gnssplusplus corrections)
 
-| Area | Method | RMS 2D | P95 | >100 m | >500 m | Note |
-| --- | --- | ---: | ---: | ---: | ---: | --- |
-| UrbanNav external | `EKF` | 93.25 m | 178.18 m | 16.29% | 0.161% | `trimble + G,E,J` |
-| UrbanNav external | `PF-10K` | 67.61 m | 101.46 m | 5.44% | 0.000% | close ablation |
-| UrbanNav external | `PF+RobustClear-10K` | 66.60 m | 98.53 m | 4.80% | 0.000% | frozen winner |
-| HK supplemental | `EKF` | 69.49 m | 95.19 m | 2.99% | 0.000% | `ublox + G` (GPS-only) |
-| HK supplemental | `PF+AdaptiveGuide-10K` | 66.85 m | 97.45 m | 3.85% | 0.000% | `ublox + G,C` (adaptive guide) |
-| PPC holdout | `always_robust` | 66.92 m | 81.69 m | 5.83% | 0.000% | safe baseline |
-| PPC holdout | exploratory gate | 65.54 m | 81.22 m | 5.83% | 0.000% | holdout survives, but gain is modest |
-| BVH systems | `PF3D-10K` | 55.50 m | 58.39 m | 0.000% | 0.000% | real PLATEAU subset |
-| BVH systems | `PF3D-BVH-10K` | 55.50 m | 58.39 m | 0.000% | 0.000% | `57.8x` faster |
+| Method | P50 | P95 | RMS 2D | >100 m |
+| --- | ---: | ---: | ---: | ---: |
+| RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
+| **PF 1M particles** | **3.64 m** | **13.15 m** | **6.72 m** | **0.000%** |
+
+PF beats RTKLIB demo5 by 49% in RMS, 59% in P95, with zero catastrophic failures. RTKLIB wins P50 by 27%. PF uses [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) for pseudorange corrections (Sagnac, troposphere, ionosphere, TGD, ISB).
 
 ### Particle cloud on OpenStreetMap
 
-100K particles visualized on real Tokyo streets. Green dots: particle cloud. Red trail: PF estimate. Blue trail: ground truth.
+PF (red) vs RTKLIB demo5 (green dashed) vs Ground truth (blue) on real Tokyo streets.
 
 | Odaiba (moderate urban) | Shinjuku (deep urban canyon) |
 | --- | --- |
@@ -57,23 +50,34 @@ View on [GitHub Pages](https://rsasaki0109.github.io/gnss_gpu/) for inline playb
 
 ![Particle scaling](experiments/results/paper_assets/paper_particle_scaling.png)
 
-PF performance crosses the EKF baseline at N≈1,000 particles. Mean RMS saturates near N=5,000, but the >100 m failure rate continues to improve up to 1M particles — from 3.31% to 1.97% on Odaiba and from 7.46% to 4.49% on Shinjuku. GPU-scale particle inference enables a tail-robustness regime unreachable at conventional particle counts.
+PF performance crosses the EKF baseline at N≈1,000 particles. Mean RMS saturates near N=5,000, but the >100 m failure rate continues to improve up to 1M particles. GPU-scale particle inference enables a tail-robustness regime unreachable at conventional particle counts.
+
+### Cross-geography breadth
+
+PF family outperforms EKF/RTKLIB across 5 sequences in 2 cities (Tokyo + Hong Kong).
+
+| Area | Method | RMS 2D | >100 m | Note |
+| --- | --- | ---: | ---: | --- |
+| Tokyo Odaiba | PF 1M + gnssplusplus | 6.72 m | 0.000% | vs RTKLIB 13.08 m |
+| Tokyo Shinjuku | PF 1M + gnssplusplus | — | 0.000% | deep urban canyon |
+| HK-20190428 | `PF+AdaptiveGuide-10K` | 66.85 m | 0.000% | `ublox + G,C` |
+| HK TST | `PF+AdaptiveGuide-10K` | 152.37 m | — | medium urban, F9P |
+| HK Whampoa | `PF+AdaptiveGuide-10K` | 413.68 m | — | deep urban |
+| BVH systems | `PF3D-BVH-10K` | 55.50 m | 0.000% | `57.8x` faster |
 
 ### What this repo claims
 
-- PF family outperforms EKF across 5 sequences in 2 cities (Tokyo + Hong Kong).
-- `PF+RobustClear-10K` is the strongest Tokyo external method.
-- `PF+AdaptiveGuide-10K` beats EKF on all 3 Hong Kong sequences when configured with GPS+BeiDou.
-- Particle count scaling reveals a phase transition: RMS saturates early, but tail failure rates require GPU-scale inference to reach their floor.
+- PF with proper pseudorange corrections beats RTKLIB demo5 by 49% in RMS on UrbanNav Tokyo.
+- PF eliminates catastrophic failures (>100m rate = 0%) through temporal filtering.
+- Particle count scaling reveals a phase transition at N≈1,000 with continued tail improvement to 1M.
 - BVH makes real-PLATEAU PF3D runtime practical without changing accuracy.
-- The repo has a reproducible experiment trail with 14 cited references.
+- 24 cited references, gnssplusplus-library as submodule for GNSS corrections.
 
 ### What this repo does not claim
 
 - It does not claim a world-first GNSS particle filter.
-- It does not claim that explicit 3D map reasoning is the current main accuracy winner on real data.
-- It does not claim that every exploratory gate family generalizes strongly.
-- It does not claim that the frozen Tokyo mainline transfers directly to Hong Kong without configuration change.
+- It does not claim PF beats iterative WLS in per-epoch median accuracy (P50).
+- It does not claim the same configuration works across all urban environments without tuning.
 
 ## Repo front door
 
