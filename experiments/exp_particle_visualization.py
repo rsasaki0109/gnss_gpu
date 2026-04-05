@@ -424,6 +424,7 @@ def _run_pf_gnssplusplus(
     dump_every: int,
     max_dump_particles: int,
     rover_source: str = "trimble",
+    rtklib_pos_path: Path | None = None,
 ) -> dict:
     """Run PF with gnssplusplus corrected pseudoranges and dump particles."""
     from libgnsspp import preprocess_spp_file, solve_spp_file
@@ -527,42 +528,80 @@ def _run_pf_gnssplusplus(
 
         prev_tow = tow
 
-    # Compute ENU errors for metrics
-    pf_arr = np.array(all_pf_pos)
-    spp_arr = np.array(all_spp_pos)
-    gt_arr = np.array(all_gt)
-    pf_err, _ = ecef_errors_2d_3d(pf_arr, gt_arr)
-    spp_err, _ = ecef_errors_2d_3d(spp_arr, gt_arr)
+    # Load RTKLIB if available
+    import math as _math
+    rtklib_lookup = {}
+    rtklib_lonlat_lookup = {}
+    if rtklib_pos_path and rtklib_pos_path.exists():
+        with open(rtklib_pos_path) as f:
+            for line in f:
+                if line.startswith("%"): continue
+                parts = line.split()
+                if len(parts) < 5: continue
+                tow_r = float(parts[1])
+                lat_r, lon_r, alt_r = float(parts[2]), float(parts[3]), float(parts[4])
+                a = 6378137.0; fv = 1/298.257223563; e2 = 2*fv - fv*fv
+                lr = _math.radians(lat_r); lnr = _math.radians(lon_r)
+                sl = _math.sin(lr); cl = _math.cos(lr)
+                N = a / _math.sqrt(1 - e2 * sl * sl)
+                ecef_r = np.array([(N+alt_r)*cl*_math.cos(lnr), (N+alt_r)*cl*_math.sin(lnr), (N*(1-e2)+alt_r)*sl])
+                key_r = round(tow_r, 1)
+                rtklib_lookup[key_r] = ecef_r
+                rlat, rlon, _ = ecef_to_lla(ecef_r[0], ecef_r[1], ecef_r[2])
+                rtklib_lonlat_lookup[key_r] = np.array([rlon, rlat])
+        print(f"    RTKLIB loaded: {len(rtklib_lookup)} epochs")
 
-    # Attach metrics to frames with proper running RMS
-    # Map frame epoch -> index in pf_err/spp_err arrays
+    # Compute ENU errors for ALL methods on SAME epoch set
+    pf_arr = np.array(all_pf_pos)
+    gt_arr = np.array(all_gt)
+    tow_arr = np.array(all_tow)
+    pf_err, _ = ecef_errors_2d_3d(pf_arr, gt_arr)
+
+    # RTKLIB errors on same epochs
+    rtk_err = np.full(len(pf_err), np.nan)
+    for i, tow in enumerate(tow_arr):
+        key = round(tow, 1)
+        if key in rtklib_lookup:
+            e, _ = ecef_errors_2d_3d(rtklib_lookup[key].reshape(1,3), gt_arr[i:i+1])
+            rtk_err[i] = e[0]
+
+    # Attach running RMS to frames (same epoch set for both)
     frame_epochs = [f["epoch"] for f in particle_frames]
-    cum_pf_sq, cum_spp_sq = 0.0, 0.0
-    pf_count, spp_count = 0, 0
+    cum_pf_sq, cum_rtk_sq = 0.0, 0.0
+    pf_count, rtk_count = 0, 0
 
     for i in range(len(pf_err)):
         cum_pf_sq += pf_err[i] ** 2
-        cum_spp_sq += spp_err[i] ** 2
         pf_count += 1
-        spp_count += 1
+        if np.isfinite(rtk_err[i]):
+            cum_rtk_sq += rtk_err[i] ** 2
+            rtk_count += 1
 
-        # Check if this epoch matches a frame
         if i in frame_epochs:
             fi = frame_epochs.index(i)
             particle_frames[fi]["error_2d"] = float(pf_err[i])
-            particle_frames[fi]["ekf_error_2d"] = float(spp_err[i])
             particle_frames[fi]["pf_rms"] = float(np.sqrt(cum_pf_sq / pf_count))
-            particle_frames[fi]["ekf_rms"] = float(np.sqrt(cum_spp_sq / spp_count))
+            if rtk_count > 0:
+                particle_frames[fi]["rtklib_error_2d"] = float(rtk_err[i]) if np.isfinite(rtk_err[i]) else 0
+                particle_frames[fi]["rtklib_rms"] = float(np.sqrt(cum_rtk_sq / rtk_count))
+                # Add RTKLIB trail
+                key = round(tow_arr[i], 1)
+                if key in rtklib_lonlat_lookup:
+                    particle_frames[fi]["spp_lonlat"] = rtklib_lonlat_lookup[key]
 
-    # Fill any unmatched frames with zeros
+    # Fill defaults
     for f in particle_frames:
         f.setdefault("error_2d", 0)
         f.setdefault("ekf_error_2d", 0)
         f.setdefault("pf_rms", 0)
         f.setdefault("ekf_rms", 0)
+        f.setdefault("rtklib_error_2d", 0)
+        f.setdefault("rtklib_rms", 0)
 
-    print(f"    PF+gpp: P50={np.median(pf_err):.2f}m  RMS={np.sqrt(np.mean(pf_err**2)):.2f}m  >100m={np.mean(pf_err>100)*100:.3f}%")
-    print(f"    SPP:    P50={np.median(spp_err):.2f}m  RMS={np.sqrt(np.mean(spp_err**2)):.2f}m")
+    print(f"    Fused:  P50={np.median(pf_err):.2f}m  RMS={np.sqrt(np.mean(pf_err**2)):.2f}m  >100m={np.mean(pf_err>100)*100:.3f}%")
+    rtk_valid = rtk_err[np.isfinite(rtk_err)]
+    if len(rtk_valid) > 0:
+        print(f"    RTKLIB: P50={np.median(rtk_valid):.2f}m  RMS={np.sqrt(np.mean(rtk_valid**2)):.2f}m  ({len(rtk_valid)} epochs)")
     return {"frames": particle_frames, "particle_dumps": {}}
 
 
@@ -612,6 +651,7 @@ def main() -> None:
         result = _run_pf_gnssplusplus(
             args.data_root / args.run, args.run, args.n_particles,
             args.dump_every, args.max_dump_particles, args.urban_rover,
+            rtklib_pos_path=args.rtklib_pos,
         )
     else:
         result = run_pf_with_particle_dumps(
@@ -620,8 +660,8 @@ def main() -> None:
             max_dump_particles=args.max_dump_particles,
         )
 
-    # Optionally add RTKLIB demo5 positions for 3-way comparison
-    if args.rtklib_pos and args.rtklib_pos.exists():
+    # Optionally add RTKLIB demo5 positions (non-gnssplusplus mode only)
+    if args.rtklib_pos and args.rtklib_pos.exists() and not args.use_gnssplusplus:
         import math as _math
         rtklib_lookup = {}
         with open(args.rtklib_pos) as f:
