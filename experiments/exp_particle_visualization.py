@@ -131,7 +131,7 @@ def create_animation(
     title: str = "MegaParticle GNSS",
     fps: int = 10,
     trail_length: int = 50,
-    zoom_radius_m: float = 300.0,
+    zoom_radius_m: float = 80.0,
 ) -> None:
     """Create mp4 animation with particles on OpenStreetMap (full + zoom)."""
     import contextily as cx
@@ -168,9 +168,9 @@ def create_animation(
     xmin_full, ymin_full = lonlat_to_webmerc(lon_min, lat_min)
     xmax_full, ymax_full = lonlat_to_webmerc(lon_max, lat_max)
 
-    # --- Render frames manually (no FuncAnimation for reliability) ---
+    # --- Render frames manually ---
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    writer = FFMpegWriter(fps=fps, bitrate=4000)
+    writer = FFMpegWriter(fps=fps, bitrate=5000)
 
     fig, (ax_full, ax_zoom) = plt.subplots(1, 2, figsize=(18, 8), dpi=100)
     fig.suptitle(title, fontsize=16, fontweight="bold")
@@ -183,13 +183,16 @@ def create_animation(
     ax_full.set_title("Full trajectory", fontsize=12)
     ax_full.set_axis_off()
 
-    # Setup zoom view (will be re-tiled per frame)
-    print("    Downloading OSM tiles (zoom view)...")
-    mid_x = (xmin_full + xmax_full) / 2
-    mid_y = (ymin_full + ymax_full) / 2
-    ax_zoom.set_xlim(mid_x - zoom_r, mid_x + zoom_r)
-    ax_zoom.set_ylim(mid_y - zoom_r, mid_y + zoom_r)
-    cx.add_basemap(ax_zoom, source=cx.providers.OpenStreetMap.Mapnik, zoom="auto")
+    # Setup zoom view — download tiles for the FULL possible extent
+    print("    Downloading OSM tiles (zoom view, full coverage)...")
+    all_gt_wm = np.array([f["gt_wm"] for f in frames])
+    zoom_xmin = all_gt_wm[:, 0].min() - zoom_r * 1.5
+    zoom_xmax = all_gt_wm[:, 0].max() + zoom_r * 1.5
+    zoom_ymin = all_gt_wm[:, 1].min() - zoom_r * 1.5
+    zoom_ymax = all_gt_wm[:, 1].max() + zoom_r * 1.5
+    ax_zoom.set_xlim(zoom_xmin, zoom_xmax)
+    ax_zoom.set_ylim(zoom_ymin, zoom_ymax)
+    cx.add_basemap(ax_zoom, source=cx.providers.OpenStreetMap.Mapnik, zoom=18)
     ax_zoom.set_title("Zoom (around current position)", fontsize=12)
     ax_zoom.set_axis_off()
 
@@ -224,7 +227,7 @@ def create_animation(
                 ax_full.texts[0].remove()
 
             ax_full.scatter(particles[:, 0], particles[:, 1],
-                           s=2, c="#22c55e", alpha=0.4, zorder=3, edgecolors="none")
+                           s=6, c="#ff6600", alpha=0.5, zorder=3, edgecolors="none")
             ax_full.plot(gt_trail_x, gt_trail_y, "-", color="#3b82f6",
                         linewidth=2, alpha=0.7, zorder=4)
             ax_full.plot(est_trail_x, est_trail_y, "-", color="#ef4444",
@@ -248,7 +251,8 @@ def create_animation(
             ax_zoom.set_ylim(gt[1] - zoom_r, gt[1] + zoom_r)
 
             ax_zoom.scatter(particles[:, 0], particles[:, 1],
-                           s=8, c="#22c55e", alpha=0.5, zorder=3, edgecolors="none")
+                           s=80, c="#ff6600", alpha=0.7, zorder=3,
+                           edgecolors="#cc3300", linewidths=0.5)
             ax_zoom.plot(gt_trail_x[start:], gt_trail_y[start:], "-",
                         color="#3b82f6", linewidth=3, alpha=0.8, zorder=4)
             ax_zoom.plot(est_trail_x[start:], est_trail_y[start:], "-",
