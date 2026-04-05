@@ -60,7 +60,8 @@ __global__ void pfd_weight_kernel(const double* px, const double* py,
                                   const double* pseudoranges,
                                   const double* weights_sat,
                                   double* log_weights,
-                                  int N, int n_sat, double sigma_pr) {
+                                  int N, int n_sat, double sigma_pr,
+                                  double nu) {
     // Dynamic shared memory layout: [sat_ecef: n_sat*3] [pr: n_sat] [ws: n_sat]
     extern __shared__ double s_data[];
     double* s_sat = s_data;
@@ -87,6 +88,13 @@ __global__ void pfd_weight_kernel(const double* px, const double* py,
     double inv_sigma2 = 1.0 / (sigma_pr * sigma_pr);
     double log_w = 0.0;
 
+    // nu <= 0: Gaussian likelihood (default)
+    // nu > 0:  Student's t likelihood (robust to NLOS outliers)
+    //          nu=1 is Cauchy (most robust), nu=3-5 moderately robust
+    int use_student_t = (nu > 0.0);
+    double half_nup1 = 0.5 * (nu + 1.0);
+    double inv_nu_sigma2 = (nu > 0.0) ? 1.0 / (nu * sigma_pr * sigma_pr) : 0.0;
+
     for (int s = 0; s < n_sat; s++) {
         double dx = x - s_sat[s * 3 + 0];
         double dy = y - s_sat[s * 3 + 1];
@@ -94,7 +102,14 @@ __global__ void pfd_weight_kernel(const double* px, const double* py,
         double r = sqrt(dx * dx + dy * dy + dz * dz);
         double pred_pr = r + cb;
         double residual = s_pr[s] - pred_pr;
-        log_w += -0.5 * s_ws[s] * residual * residual * inv_sigma2;
+
+        if (use_student_t) {
+            // Student's t: log p = -((nu+1)/2) * log(1 + r^2/(nu*sigma^2))
+            log_w += -half_nup1 * log(1.0 + s_ws[s] * residual * residual * inv_nu_sigma2);
+        } else {
+            // Gaussian: log p = -0.5 * r^2/sigma^2
+            log_w += -0.5 * s_ws[s] * residual * residual * inv_sigma2;
+        }
     }
 
     log_weights[tid] = log_w;
@@ -511,7 +526,7 @@ void pf_device_predict(PFDeviceState* state,
 void pf_device_weight(PFDeviceState* state,
     const double* sat_ecef, const double* pseudoranges,
     const double* weights_sat,
-    int n_sat, double sigma_pr) {
+    int n_sat, double sigma_pr, double nu) {
 
     int N = state->n_particles;
     int grid = state->grid_size;
@@ -560,7 +575,7 @@ void pf_device_weight(PFDeviceState* state,
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
         state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
         state->d_log_weights,
-        N, n_sat, sigma_pr);
+        N, n_sat, sigma_pr, nu);
     CUDA_CHECK_LAST();
 }
 
