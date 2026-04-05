@@ -185,6 +185,22 @@ def run_pf_with_particle_dumps(
             })
 
     elapsed = time.perf_counter() - t0
+
+    # Compute proper ENU-based 2D errors for all epochs
+    from evaluate import ecef_errors_2d_3d
+    pf_errors_2d, _ = ecef_errors_2d_3d(estimates, gt_ecef)
+    ekf_errors_2d, _ = ecef_errors_2d_3d(ekf_pos[:, :3], gt_ecef)
+
+    # Attach per-frame metrics
+    for f in particle_frames:
+        i = f["epoch"]
+        f["error_2d"] = float(pf_errors_2d[i])
+        f["ekf_error_2d"] = float(ekf_errors_2d[i])
+        # Running RMS up to this epoch
+        pf_rms = float(np.sqrt(np.mean(pf_errors_2d[:i+1] ** 2)))
+        ekf_rms = float(np.sqrt(np.mean(ekf_errors_2d[:i+1] ** 2)))
+        f["pf_rms"] = pf_rms
+        f["ekf_rms"] = ekf_rms
     print(f"    PF run: {n_epochs} epochs, {n_particles} particles, {elapsed:.1f}s")
     print(f"    Dumped {len(particle_frames)} frames")
     return {"frames": particle_frames, "estimates": estimates}
@@ -307,10 +323,15 @@ def create_animation(
                         markeredgecolor="white", markeredgewidth=2, zorder=6)
             ax_full.plot(gt[0], gt[1], "s", color="#3b82f6", markersize=9,
                         markeredgecolor="white", markeredgewidth=2, zorder=6)
+            pf_rms = f.get("pf_rms", 0)
+            ekf_rms = f.get("ekf_rms", 0)
             ax_full.text(0.02, 0.98,
-                        f"Epoch {f['epoch']} / {frames[-1]['epoch']}",
-                        transform=ax_full.transAxes, fontsize=11, va="top",
-                        bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.85))
+                        f"Epoch {f['epoch']} / {frames[-1]['epoch']}\n"
+                        f"PF  RMS: {pf_rms:.1f} m\n"
+                        f"EKF RMS: {ekf_rms:.1f} m",
+                        transform=ax_full.transAxes, fontsize=10, va="top",
+                        fontfamily="monospace",
+                        bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.9))
 
             # --- Zoom view (centered on GT) ---
             while len(ax_zoom.lines) > 0:
@@ -339,12 +360,18 @@ def create_animation(
                         markeredgecolor="white", markeredgewidth=2.5, zorder=6,
                         label="Ground truth" if frame_idx == 0 else "")
 
-            # Error text
-            err_m = np.sqrt((est[0] - gt[0])**2 + (est[1] - gt[1])**2)
+            # Metrics overlay (ENU-based)
+            err_2d = f.get("error_2d", 0)
+            ekf_err = f.get("ekf_error_2d", 0)
+            pf_rms = f.get("pf_rms", 0)
+            ekf_rms = f.get("ekf_rms", 0)
             ax_zoom.text(0.02, 0.98,
-                        f"Error: {err_m:.0f} m (Web Mercator)\n{len(particles)} particles shown",
-                        transform=ax_zoom.transAxes, fontsize=10, va="top",
-                        bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.85))
+                        f"PF error:  {err_2d:.1f} m  (RMS: {pf_rms:.1f} m)\n"
+                        f"EKF error: {ekf_err:.1f} m  (RMS: {ekf_rms:.1f} m)\n"
+                        f"{len(particles)} particles",
+                        transform=ax_zoom.transAxes, fontsize=9, va="top",
+                        fontfamily="monospace",
+                        bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.9))
 
             if frame_idx == 0:
                 ax_zoom.legend(loc="lower right", fontsize=9)
