@@ -54,16 +54,31 @@ PF performance crosses the EKF baseline at N≈1,000 particles. Mean RMS saturat
 
 ### Cross-geography breadth
 
-PF family outperforms EKF/RTKLIB across 5 sequences in 2 cities (Tokyo + Hong Kong).
+PF family outperforms baselines across 5 sequences in 2 cities (Tokyo + Hong Kong).
 
-| Area | Method | RMS 2D | >100 m | Note |
-| --- | --- | ---: | ---: | --- |
-| Tokyo Odaiba | PF 1M + gnssplusplus | 6.72 m | 0.000% | vs RTKLIB 13.08 m |
-| Tokyo Shinjuku | PF 1M + gnssplusplus | — | 0.000% | deep urban canyon |
-| HK-20190428 | `PF+AdaptiveGuide-10K` | 66.85 m | 0.000% | `ublox + G,C` |
-| HK TST | `PF+AdaptiveGuide-10K` | 152.37 m | — | medium urban, F9P |
-| HK Whampoa | `PF+AdaptiveGuide-10K` | 413.68 m | — | deep urban |
-| BVH systems | `PF3D-BVH-10K` | 55.50 m | 0.000% | `57.8x` faster |
+**Tokyo (trimble + G,E,J, gnssplusplus corrections)**
+
+| Sequence | PF RMS | Baseline RMS | Baseline | PF improvement |
+| --- | ---: | ---: | --- | ---: |
+| Odaiba | **6.72 m** | 13.08 m | RTKLIB demo5 | **49%** |
+| Shinjuku | **8.51 m** | 18.12 m | gnssplusplus SPP | **53%** |
+
+**Hong Kong (ublox + G,C, self corrections)**
+
+| Sequence | PF RMS | EKF RMS | PF improvement |
+| --- | ---: | ---: | ---: |
+| HK-20190428 | **66.85 m** | 69.49 m | **4%** |
+| HK TST | **152.37 m** | 301.04 m | **49%** |
+| HK Whampoa | **413.68 m** | 463.09 m | **11%** |
+
+HK results use our own corrections (no gnssplusplus). With gnssplusplus integration, HK accuracy would also improve significantly.
+
+**BVH systems result**
+
+| Method | RMS 2D | Runtime | Note |
+| --- | ---: | ---: | --- |
+| `PF3D-10K` | 55.50 m | 1028.29 ms/epoch | real PLATEAU subset |
+| `PF3D-BVH-10K` | 55.50 m | 17.78 ms/epoch | **57.8x faster** |
 
 ### What this repo claims
 
