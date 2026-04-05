@@ -136,6 +136,13 @@ _SYSTEM_SNR_FALLBACKS = {
     "C": ("S1I", "S1X", "S2I"),
     "R": ("S1C", "S1P"),
 }
+_SYSTEM_DOPPLER_FALLBACKS = {
+    "G": ("D1C", "D1W", "D1X", "D1P"),
+    "E": ("D1X", "D1C"),
+    "J": ("D1C", "D1X", "D1Z"),
+    "C": ("D1I", "D1X", "D2I"),
+    "R": ("D1C", "D1P"),
+}
 
 
 def _candidate_codes(system: str, requested_code: str, fallbacks: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
@@ -492,6 +499,7 @@ class UrbanNavLoader:
         sat_ecef_list: list[np.ndarray] = []
         pseudorange_list: list[np.ndarray] = []
         weight_list: list[np.ndarray] = []
+        doppler_list: list[np.ndarray] = []
         truth_list: list[np.ndarray] = []
         time_list: list[float] = []
         sat_id_list_per_epoch: list[list[str]] = []
@@ -504,6 +512,7 @@ class UrbanNavLoader:
             pseudoranges: list[float] = []
             obs_code_list: list[str] = []
             snr_vals: list[float] = []
+            doppler_vals: list[float] = []
 
             for sat_id in epoch.satellites:
                 if not sat_id or sat_id[0] not in systems:
@@ -523,10 +532,17 @@ class UrbanNavLoader:
                     snr_code,
                     _SYSTEM_SNR_FALLBACKS,
                 )
+                _, doppler = _pick_observation_value(
+                    sat_id[0],
+                    obs,
+                    "D1C",
+                    _SYSTEM_DOPPLER_FALLBACKS,
+                )
                 sat_id_list.append(sat_id)
                 pseudoranges.append(float(pr))
                 obs_code_list.append(pr_code or obs_code)
                 snr_vals.append(snr if np.isfinite(snr) and snr > 0.0 else 1.0)
+                doppler_vals.append(doppler if np.isfinite(doppler) else np.nan)
 
             if len(sat_id_list) < 4:
                 continue
@@ -541,6 +557,7 @@ class UrbanNavLoader:
 
             pr_map = {sat_id: pr for sat_id, pr in zip(sat_id_list, pseudoranges)}
             snr_map = {sat_id: snr for sat_id, snr in zip(sat_id_list, snr_vals)}
+            doppler_map = {sat_id: d for sat_id, d in zip(sat_id_list, doppler_vals)}
             pr_corr = np.array(
                 [pr_map[sat_id] + sat_clk[i] * C_LIGHT for i, sat_id in enumerate(used_sat_ids)],
                 dtype=np.float64,
@@ -556,9 +573,14 @@ class UrbanNavLoader:
                 usable_epoch_index += 1
                 continue
 
+            dopplers_epoch = np.array(
+                [doppler_map.get(sat_id, np.nan) for sat_id in used_sat_ids],
+                dtype=np.float64,
+            )
             sat_ecef_list.append(np.asarray(sat_ecef, dtype=np.float64))
             pseudorange_list.append(pr_corr)
             weight_list.append(weights)
+            doppler_list.append(dopplers_epoch)
             truth_list.append(gt_ecef[gt_idx].astype(np.float64))
             time_list.append(float(tow))
             sat_id_list_per_epoch.append(list(used_sat_ids))
@@ -581,6 +603,7 @@ class UrbanNavLoader:
             "sat_ecef": sat_ecef_list,
             "pseudoranges": pseudorange_list,
             "weights": weight_list,
+            "doppler": doppler_list,
             "system_ids": system_id_list,
             "ground_truth": ground_truth,
             "times": times,
