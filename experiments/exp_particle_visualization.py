@@ -209,7 +209,7 @@ def run_pf_with_particle_dumps(
 def create_animation(
     frames: list[dict],
     output_path: Path,
-    title: str = "MegaParticle GNSS",
+    title: str = "GPU Particle Filter GNSS",
     fps: int = 10,
     trail_length: int = 50,
     zoom_radius_m: float = 80.0,
@@ -732,7 +732,7 @@ def main() -> None:
     mode = "PF + gnssplusplus corrections" if args.use_gnssplusplus else "PF"
     create_animation(
         result["frames"], output,
-        title=f"MegaParticle GNSS — {args.run} ({mode}, {args.n_particles:,} particles)",
+        title=f"GPU Particle Filter GNSS — {args.run} ({mode}, {args.n_particles:,} particles)",
         fps=args.fps,
     )
 
