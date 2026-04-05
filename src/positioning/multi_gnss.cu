@@ -103,7 +103,16 @@ int wls_multi_gnss(const double* sat_ecef, const double* pseudoranges,
       double sy = sat_ecef[s * 3 + 1];
       double sz = sat_ecef[s * 3 + 2];
 
-      double dx = x - sx, dy_v = y - sy, dz = z - sz;
+      // Earth rotation correction (Sagnac effect)
+      double dx0 = x - sx, dy0 = y - sy, dz0 = z - sz;
+      double range_approx = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+      double transit_time = range_approx / 299792458.0;
+      double omega_e_v = 7.2921151467e-5;
+      double theta_v = omega_e_v * transit_time;
+      double sx_r = sx * cos(theta_v) + sy * sin(theta_v);
+      double sy_r = -sx * sin(theta_v) + sy * cos(theta_v);
+
+      double dx = x - sx_r, dy_v = y - sy_r, dz = z - sz;
       double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
       int sys = system_ids[s];
       double pr_pred = r + ((sys >= 0 && sys < n_systems) ? cb[sys] : cb[0]);
