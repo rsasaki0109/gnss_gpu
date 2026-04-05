@@ -382,6 +382,136 @@ def create_animation(
     print(f"    Saved {output_path} ({output_path.stat().st_size / 1024:.0f} KB)")
 
 
+def _run_pf_gnssplusplus(
+    run_dir: Path,
+    run_name: str,
+    n_particles: int,
+    dump_every: int,
+    max_dump_particles: int,
+    rover_source: str = "trimble",
+) -> dict:
+    """Run PF with gnssplusplus corrected pseudoranges and dump particles."""
+    from libgnsspp import preprocess_spp_file, solve_spp_file
+    from gnss_gpu import ParticleFilterDevice
+    from exp_urbannav_pf3d import PF_SIGMA_POS, PF_SIGMA_CB
+    from exp_urbannav_baseline import load_or_generate_data
+    from evaluate import ecef_errors_2d_3d
+
+    obs_path = str(run_dir / f"rover_{rover_source}.obs")
+    nav_path = str(run_dir / "base.nav")
+
+    print("    Preprocessing with gnssplusplus...")
+    epochs = preprocess_spp_file(obs_path, nav_path)
+    print(f"    {len(epochs)} epochs preprocessed")
+
+    # SPP positions for guide and comparison
+    sol = solve_spp_file(obs_path, nav_path)
+    spp_records = [r for r in sol.records() if r.is_valid()]
+    spp_lookup = {round(r.time.tow, 1): np.array(r.position_ecef_m) for r in spp_records}
+
+    # GT
+    data = load_or_generate_data(run_dir, systems=("G", "E", "J"), urban_rover=rover_source)
+    gt = data["ground_truth"]
+    our_times = data["times"]
+
+    pf = ParticleFilterDevice(
+        n_particles=n_particles, sigma_pos=PF_SIGMA_POS, sigma_cb=PF_SIGMA_CB,
+        sigma_pr=3.0, resampling="megopolis", seed=42,
+    )
+
+    first_pos = spp_records[0].position_ecef_m if spp_records else gt[0]
+    pf.initialize(np.array(first_pos[:3]), clock_bias=0.0, spread_pos=10.0, spread_cb=100.0)
+
+    all_pf_pos = []
+    all_spp_pos = []
+    all_gt = []
+    all_tow = []
+    particle_frames = []
+
+    prev_tow = None
+    frame_count = 0
+    for sol_epoch, measurements in epochs:
+        if not sol_epoch.is_valid() or len(measurements) < 4:
+            continue
+        tow = sol_epoch.time.tow
+        tow_key = round(tow, 1)
+        dt = tow - prev_tow if prev_tow else 0.1
+
+        # Guide from SPP
+        velocity = None
+        if prev_tow is not None and tow_key in spp_lookup:
+            prev_key = round(prev_tow, 1)
+            if prev_key in spp_lookup and dt > 0:
+                vel = (spp_lookup[tow_key][:3] - spp_lookup[prev_key][:3]) / dt
+                if np.all(np.isfinite(vel)) and np.linalg.norm(vel) < 50:
+                    velocity = vel
+
+        pf.predict(velocity=velocity, dt=dt)
+
+        sat_ecef = np.array([m.satellite_ecef for m in measurements])
+        pr = np.array([m.corrected_pseudorange for m in measurements])
+        w = np.array([m.weight for m in measurements])
+        pf.update(sat_ecef, pr, weights=w)
+
+        est = pf.estimate()
+
+        # Match GT
+        gt_idx = np.argmin(np.abs(our_times - tow))
+        if abs(our_times[gt_idx] - tow) < 0.05:
+            all_pf_pos.append(est[:3])
+            all_spp_pos.append(np.array(sol_epoch.position_ecef_m[:3]))
+            all_gt.append(gt[gt_idx])
+            all_tow.append(tow)
+
+            # Dump particles
+            if frame_count % dump_every == 0:
+                particles = pf.get_particles()
+                if len(particles) > max_dump_particles:
+                    idx = np.random.default_rng(42).choice(len(particles), max_dump_particles, replace=False)
+                    particles = particles[idx]
+                p_lonlat = particles_ecef_to_lonlat(particles)
+                gt_lat, gt_lon, _ = ecef_to_lla(gt[gt_idx][0], gt[gt_idx][1], gt[gt_idx][2])
+                est_lat, est_lon, _ = ecef_to_lla(est[0], est[1], est[2])
+                particle_frames.append({
+                    "epoch": frame_count,
+                    "particles_lonlat": p_lonlat,
+                    "estimate_lonlat": np.array([est_lon, est_lat]),
+                    "gt_lonlat": np.array([gt_lon, gt_lat]),
+                })
+            frame_count += 1
+
+        prev_tow = tow
+
+    # Compute ENU errors for metrics
+    pf_arr = np.array(all_pf_pos)
+    spp_arr = np.array(all_spp_pos)
+    gt_arr = np.array(all_gt)
+    pf_err, _ = ecef_errors_2d_3d(pf_arr, gt_arr)
+    spp_err, _ = ecef_errors_2d_3d(spp_arr, gt_arr)
+
+    # Attach metrics to frames
+    epoch_to_pf_err = {}
+    epoch_to_spp_err = {}
+    cum_pf_sq, cum_spp_sq = 0.0, 0.0
+    for i in range(len(pf_err)):
+        cum_pf_sq += pf_err[i] ** 2
+        cum_spp_sq += spp_err[i] ** 2
+        epoch_to_pf_err[i] = pf_err[i]
+        epoch_to_spp_err[i] = spp_err[i]
+
+    for f in particle_frames:
+        ep = f["epoch"]
+        f["error_2d"] = epoch_to_pf_err.get(ep, 0)
+        f["ekf_error_2d"] = epoch_to_spp_err.get(ep, 0)  # SPP as "EKF" for display
+        n_so_far = ep + 1
+        f["pf_rms"] = float(np.sqrt(cum_pf_sq / max(n_so_far, 1))) if ep < len(pf_err) else 0
+        f["ekf_rms"] = float(np.sqrt(cum_spp_sq / max(n_so_far, 1))) if ep < len(spp_err) else 0
+
+    print(f"    PF+gpp: P50={np.median(pf_err):.2f}m  RMS={np.sqrt(np.mean(pf_err**2)):.2f}m  >100m={np.mean(pf_err>100)*100:.3f}%")
+    print(f"    SPP:    P50={np.median(spp_err):.2f}m  RMS={np.sqrt(np.mean(spp_err**2)):.2f}m")
+    return {"frames": particle_frames, "particle_dumps": {}}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Particle cloud visualization on OSM")
     parser.add_argument("--data-root", type=Path, required=True)
@@ -393,6 +523,8 @@ def main() -> None:
     parser.add_argument("--max-dump-particles", type=int, default=3000)
     parser.add_argument("--fps", type=int, default=10)
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--use-gnssplusplus", action="store_true",
+                        help="Use gnssplusplus corrected pseudoranges")
     args = parser.parse_args()
 
     from exp_urbannav_baseline import load_or_generate_data
@@ -420,11 +552,17 @@ def main() -> None:
         elif i > 0:
             wls_pos[i] = wls_pos[i - 1]
 
-    result = run_pf_with_particle_dumps(
-        data, args.n_particles, wls_pos,
-        dump_every=args.dump_every,
-        max_dump_particles=args.max_dump_particles,
-    )
+    if args.use_gnssplusplus:
+        result = _run_pf_gnssplusplus(
+            args.data_root / args.run, args.run, args.n_particles,
+            args.dump_every, args.max_dump_particles, args.urban_rover,
+        )
+    else:
+        result = run_pf_with_particle_dumps(
+            data, args.n_particles, wls_pos,
+            dump_every=args.dump_every,
+            max_dump_particles=args.max_dump_particles,
+        )
 
     output = args.output or (RESULTS_DIR / "paper_assets" / f"particle_viz_{args.run.lower()}_{args.n_particles}.mp4")
     create_animation(
