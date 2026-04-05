@@ -63,15 +63,15 @@ PF family outperforms baselines across 5 sequences in 2 cities (Tokyo + Hong Kon
 | Odaiba | **6.72 m** | 13.08 m | RTKLIB demo5 | **49%** |
 | Shinjuku | **8.51 m** | 18.12 m | gnssplusplus SPP | **53%** |
 
-**Hong Kong (ublox + G,C, without gnssplusplus corrections)**
+**Hong Kong (ublox, gnssplusplus corrections)**
 
-PF beats EKF on all 3 HK sequences. Absolute errors are larger than Tokyo because HK uses our own incomplete corrections (no gnssplusplus integration yet) and single-frequency ublox receiver in deep urban canyons.
+| Sequence | PF RMS | SPP RMS | PF vs SPP | Note |
+| --- | ---: | ---: | ---: | --- |
+| HK-20190428 | **25.6 m** | 25.4 m | ≈ same | PF with SPP rescue (44% epochs) |
+| HK TST | 299.3 m | 318.3 m | **-6%** | deep urban, severe NLOS |
+| HK Whampoa | 497.3 m | 508.7 m | **-2%** | deepest urban canyon |
 
-| Sequence | PF RMS | EKF RMS | PF vs EKF |
-| --- | ---: | ---: | ---: |
-| HK-20190428 | 66.85 m | 69.49 m | **-4%** |
-| HK TST | 152.37 m | 301.04 m | **-49%** |
-| HK Whampoa | 413.68 m | 463.09 m | **-11%** |
+HK deep urban is genuinely hard — median 6 satellites with heavy NLOS. PF provides marginal improvement over SPP but cannot achieve the 49% gain seen in Tokyo. This is an honest limitation of pseudorange-only PF in extreme environments.
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
