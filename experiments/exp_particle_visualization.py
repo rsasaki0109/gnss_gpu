@@ -362,11 +362,9 @@ def create_animation(
             while len(ax_zoom.texts) > 0:
                 ax_zoom.texts[0].remove()
 
-            # Center zoom on midpoint of estimate and GT
-            cx_mid = (est[0] + gt[0]) / 2
-            cy_mid = (est[1] + gt[1]) / 2
-            ax_zoom.set_xlim(cx_mid - zoom_r, cx_mid + zoom_r)
-            ax_zoom.set_ylim(cy_mid - zoom_r, cy_mid + zoom_r)
+            # Center zoom on GT (smooth camera motion)
+            ax_zoom.set_xlim(gt[0] - zoom_r, gt[0] + zoom_r)
+            ax_zoom.set_ylim(gt[1] - zoom_r, gt[1] + zoom_r)
 
             # Particles — semi-transparent to show map underneath
             ax_zoom.scatter(particles[:, 0], particles[:, 1],
