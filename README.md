@@ -63,15 +63,15 @@ PF family outperforms baselines across 5 sequences in 2 cities (Tokyo + Hong Kon
 | Odaiba | **6.72 m** | 13.08 m | RTKLIB demo5 | **49%** |
 | Shinjuku | **8.51 m** | 18.12 m | gnssplusplus SPP | **53%** |
 
-**Hong Kong (ublox, gnssplusplus corrections)**
+**Hong Kong (ublox, gnssplusplus corrections, multi-GNSS nav)**
 
-| Sequence | PF RMS | SPP RMS | PF vs SPP | Note |
-| --- | ---: | ---: | ---: | --- |
-| HK-20190428 | **25.6 m** | 25.4 m | ≈ same | PF with SPP rescue (44% epochs) |
-| HK TST | 299.3 m | 318.3 m | **-6%** | deep urban, severe NLOS |
-| HK Whampoa | 497.3 m | 508.7 m | **-2%** | deepest urban canyon |
+| Sequence | Sats | PF RMS | SPP RMS | >100m (PF) | Note |
+| --- | ---: | ---: | ---: | ---: | --- |
+| HK-20190428 | 8 | **24.6 m** | 23.7 m | **0.0%** | GPS+BeiDou |
+| HK TST | 20 | 317.6 m | 318.3 m | 78.5% | deep urban, NLOS dominant |
+| HK Whampoa | 30 | 503.4 m | 508.7 m | 94.7% | deepest urban canyon |
 
-HK deep urban is genuinely hard — median 6 satellites with heavy NLOS. PF provides marginal improvement over SPP but cannot achieve the 49% gain seen in Tokyo. This is an honest limitation of pseudorange-only PF in extreme environments.
+HK-20190428 achieves sub-25m with multi-GNSS nav (GPS+BeiDou). TST and Whampoa have 20-30 satellites but SPP itself fails (>300m) due to dominant NLOS — this is a fundamental SPP limitation in extreme urban canyons, not a PF issue. RTK or 3D-map-aided methods are needed for these environments.
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
