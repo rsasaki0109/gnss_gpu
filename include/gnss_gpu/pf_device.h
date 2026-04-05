@@ -69,10 +69,12 @@ void pf_device_predict(PFDeviceState* state,
     unsigned long long seed, int step);
 
 // Weight update - satellite data is small, only that gets H2D copied
+// nu: Student's t degrees of freedom. nu=0 means Gaussian (default).
+//     nu=1 is Cauchy (most robust). nu=3-5 is moderately robust.
 void pf_device_weight(PFDeviceState* state,
     const double* sat_ecef, const double* pseudoranges,
     const double* weights_sat,
-    int n_sat, double sigma_pr);
+    int n_sat, double sigma_pr, double nu = 0.0);
 
 // ESS - compute on device, return scalar to host
 double pf_device_ess(const PFDeviceState* state);

@@ -137,7 +137,14 @@ def run_pf_with_particle_dumps(
             )
 
         if sat_i.shape[0] >= 4:
-            pf.update(sat_i, pr_i, weights=w_i)
+            # Adaptive per-satellite weighting (Gupta & Gao inspired)
+            from gnss_gpu.adaptive_weight import compute_adaptive_weights
+            est = pf.estimate()
+            adaptive_w = compute_adaptive_weights(
+                sat_i, pr_i, est, sigma_pr=PF_SIGMA_LOS,
+                base_weights=w_i,
+            )
+            pf.update(sat_i, pr_i, weights=adaptive_w)
 
         estimate = np.asarray(pf.estimate(), dtype=np.float64)
         estimates[i] = estimate[:3]
