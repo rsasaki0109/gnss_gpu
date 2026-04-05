@@ -63,10 +63,10 @@ def run_pf_with_particle_dumps(
     dump_every: int = 10,
     max_dump_particles: int = 5000,
 ) -> dict:
-    """Run PF with same pipeline as evaluation and dump particles."""
-    from gnss_gpu import ParticleFilterDevice
+    """Run PF with RobustClear likelihood (same as paper) and dump particles."""
     from exp_urbannav_pf3d import (
         PF_SIGMA_CB, PF_SIGMA_POS, PF_SIGMA_LOS,
+        PF_SIGMA_NLOS, PF_NLOS_BIAS,
         _epoch_dt, _select_pf_epoch_measurements, _select_guide_velocity,
         _should_rescue_pf_epoch,
     )
@@ -92,14 +92,35 @@ def run_pf_with_particle_dumps(
         multi_solver = MultiGNSSSolver(systems=systems)
         quality_veto_config = MultiGNSSQualityVetoConfig()
 
-    pf = ParticleFilterDevice(
-        n_particles=n_particles,
-        sigma_pos=PF_SIGMA_POS,
-        sigma_cb=PF_SIGMA_CB,
-        sigma_pr=PF_SIGMA_LOS,
-        resampling="megopolis",
-        seed=42,
-    )
+    # Use PF3D with RobustClear likelihood (same as paper headline)
+    try:
+        from gnss_gpu import ParticleFilter3D, BuildingModel
+        empty_model = BuildingModel(np.zeros((0, 3, 3), dtype=np.float64))
+        pf = ParticleFilter3D(
+            n_particles=n_particles,
+            building_model=empty_model,  # no 3D model, but clear_nlos_prob > 0
+            sigma_pos=PF_SIGMA_POS,
+            sigma_cb=PF_SIGMA_CB,
+            sigma_los=PF_SIGMA_LOS,
+            sigma_nlos=PF_SIGMA_NLOS,
+            nlos_bias=PF_NLOS_BIAS,
+            blocked_nlos_prob=1.0,
+            clear_nlos_prob=0.01,  # RobustClear: 1% NLOS mixture
+            resampling="megopolis",
+            seed=42,
+        )
+        print(f"    Using PF3D+RobustClear (clear_nlos_prob=0.01)")
+    except (ImportError, RuntimeError):
+        from gnss_gpu import ParticleFilterDevice
+        pf = ParticleFilterDevice(
+            n_particles=n_particles,
+            sigma_pos=PF_SIGMA_POS,
+            sigma_cb=PF_SIGMA_CB,
+            sigma_pr=PF_SIGMA_LOS,
+            resampling="megopolis",
+            seed=42,
+        )
+        print(f"    Fallback to ParticleFilterDevice (Gaussian)")
 
     init_pos = np.asarray(wls_init[0, :3], dtype=np.float64)
     init_cb = float(wls_init[0, 3])
@@ -137,14 +158,7 @@ def run_pf_with_particle_dumps(
             )
 
         if sat_i.shape[0] >= 4:
-            # Adaptive per-satellite weighting (Gupta & Gao inspired)
-            from gnss_gpu.adaptive_weight import compute_adaptive_weights
-            est = pf.estimate()
-            adaptive_w = compute_adaptive_weights(
-                sat_i, pr_i, est, sigma_pr=PF_SIGMA_LOS,
-                base_weights=w_i,
-            )
-            pf.update(sat_i, pr_i, weights=adaptive_w)
+            pf.update(sat_i, pr_i, weights=w_i)
 
         estimate = np.asarray(pf.estimate(), dtype=np.float64)
         estimates[i] = estimate[:3]
@@ -223,7 +237,7 @@ def create_animation(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     writer = FFMpegWriter(fps=fps, bitrate=5000)
 
-    fig, (ax_full, ax_zoom) = plt.subplots(1, 2, figsize=(18, 8), dpi=100)
+    fig, (ax_full, ax_zoom) = plt.subplots(1, 2, figsize=(14, 6), dpi=80)
     fig.suptitle(title, fontsize=16, fontweight="bold")
 
     # Setup full view
@@ -253,7 +267,7 @@ def create_animation(
     est_trail_x, est_trail_y = [], []
 
     print(f"    Rendering {len(frames)} frames...")
-    with writer.saving(fig, str(output_path), dpi=100):
+    with writer.saving(fig, str(output_path), dpi=80):
         for frame_idx, f in enumerate(frames):
             # Clear dynamic elements
             for collection in list(ax_full.collections):
