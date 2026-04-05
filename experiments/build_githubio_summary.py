@@ -315,6 +315,23 @@ def _build_snapshot() -> dict:
             }
         )
 
+    # Add particle visualization videos
+    for viz_name, viz_title, viz_caption in [
+        ("particle_viz_odaiba.mp4", "Odaiba Particle Cloud",
+         "100K particles on OpenStreetMap. Green dots: particles. Red: PF estimate. Blue: ground truth."),
+        ("particle_viz_shinjuku.mp4", "Shinjuku Particle Cloud",
+         "100K particles in deep urban Shinjuku. Watch the particle spread widen in canyon sections."),
+    ]:
+        if (MEDIA_DIR / viz_name).exists():
+            media_cards.append({
+                "kind": "video",
+                "title": viz_title,
+                "href": _media_href(viz_name),
+                "caption": viz_caption,
+                "poster": _media_href(SITE_VIDEO["poster"]),
+                "sources": [{"src": _media_href(viz_name), "type": "video/mp4"}],
+            })
+
     chart_cards = []
     for name, meta in SITE_CHARTS.items():
         rel_path = _media_href(name)
