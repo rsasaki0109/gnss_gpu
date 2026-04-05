@@ -323,13 +323,24 @@ def create_animation(
                         markeredgecolor="white", markeredgewidth=2, zorder=6)
             ax_full.plot(gt[0], gt[1], "s", color="#3b82f6", markersize=9,
                         markeredgecolor="white", markeredgewidth=2, zorder=6)
-            pf_rms = f.get("pf_rms", 0)
-            ekf_rms = f.get("ekf_rms", 0)
-            ax_full.text(0.02, 0.98,
-                        f"Epoch {f['epoch']} / {frames[-1]['epoch']}\n"
-                        f"PF  RMS: {pf_rms:.1f} m\n"
-                        f"EKF RMS: {ekf_rms:.1f} m",
-                        transform=ax_full.transAxes, fontsize=10, va="top",
+            pf_rms_f = f.get("pf_rms", 0)
+            spp_rms_f = f.get("ekf_rms", 0)
+            rtk_rms_f = f.get("rtklib_rms", 0)
+            if rtk_rms_f > 0:
+                full_text = (
+                    f"Epoch {f['epoch']} / {frames[-1]['epoch']}\n"
+                    f"PF     RMS: {pf_rms_f:.1f} m\n"
+                    f"SPP    RMS: {spp_rms_f:.1f} m\n"
+                    f"RTKLIB RMS: {rtk_rms_f:.1f} m"
+                )
+            else:
+                full_text = (
+                    f"Epoch {f['epoch']} / {frames[-1]['epoch']}\n"
+                    f"PF  RMS: {pf_rms_f:.1f} m\n"
+                    f"SPP RMS: {spp_rms_f:.1f} m"
+                )
+            ax_full.text(0.02, 0.98, full_text,
+                        transform=ax_full.transAxes, fontsize=9, va="top",
                         fontfamily="monospace",
                         bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.9))
 
@@ -362,14 +373,26 @@ def create_animation(
 
             # Metrics overlay (ENU-based)
             err_2d = f.get("error_2d", 0)
-            ekf_err = f.get("ekf_error_2d", 0)
+            spp_err = f.get("ekf_error_2d", 0)
             pf_rms = f.get("pf_rms", 0)
-            ekf_rms = f.get("ekf_rms", 0)
-            ax_zoom.text(0.02, 0.98,
-                        f"PF error:  {err_2d:.1f} m  (RMS: {pf_rms:.1f} m)\n"
-                        f"EKF error: {ekf_err:.1f} m  (RMS: {ekf_rms:.1f} m)\n"
-                        f"{len(particles)} particles",
-                        transform=ax_zoom.transAxes, fontsize=9, va="top",
+            spp_rms = f.get("ekf_rms", 0)
+            rtk_err = f.get("rtklib_error_2d", 0)
+            rtk_rms = f.get("rtklib_rms", 0)
+            if rtk_rms > 0:
+                metrics_text = (
+                    f"PF error:    {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
+                    f"SPP error:   {spp_err:6.1f} m  (RMS: {spp_rms:.1f} m)\n"
+                    f"RTKLIB error:{rtk_err:6.1f} m  (RMS: {rtk_rms:.1f} m)\n"
+                    f"{len(particles)} particles"
+                )
+            else:
+                metrics_text = (
+                    f"PF error:  {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
+                    f"SPP error: {spp_err:6.1f} m  (RMS: {spp_rms:.1f} m)\n"
+                    f"{len(particles)} particles"
+                )
+            ax_zoom.text(0.02, 0.98, metrics_text,
+                        transform=ax_zoom.transAxes, fontsize=8, va="top",
                         fontfamily="monospace",
                         bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.9))
 
@@ -525,6 +548,8 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--use-gnssplusplus", action="store_true",
                         help="Use gnssplusplus corrected pseudoranges")
+    parser.add_argument("--rtklib-pos", type=Path, default=None,
+                        help="RTKLIB .pos file for 3-way comparison")
     args = parser.parse_args()
 
     from exp_urbannav_baseline import load_or_generate_data
@@ -563,6 +588,59 @@ def main() -> None:
             dump_every=args.dump_every,
             max_dump_particles=args.max_dump_particles,
         )
+
+    # Optionally add RTKLIB demo5 positions for 3-way comparison
+    if args.rtklib_pos and args.rtklib_pos.exists():
+        import math as _math
+        rtklib_lookup = {}
+        with open(args.rtklib_pos) as f:
+            for line in f:
+                if line.startswith("%"):
+                    continue
+                parts = line.split()
+                if len(parts) < 5:
+                    continue
+                tow = float(parts[1])
+                lat, lon, alt = float(parts[2]), float(parts[3]), float(parts[4])
+                a = 6378137.0; fv = 1/298.257223563; e2 = 2*fv - fv*fv
+                lr = _math.radians(lat); lnr = _math.radians(lon)
+                sl = _math.sin(lr); cl = _math.cos(lr)
+                N = a / _math.sqrt(1 - e2 * sl * sl)
+                ecef = np.array([(N+alt)*cl*_math.cos(lnr), (N+alt)*cl*_math.sin(lnr), (N*(1-e2)+alt)*sl])
+                rtklib_lookup[round(tow, 1)] = ecef
+
+        from evaluate import ecef_errors_2d_3d as _ecef_err
+        data_for_gt = load_or_generate_data(
+            args.data_root / args.run, systems=("G","E","J"), urban_rover=args.urban_rover)
+        gt_all = data_for_gt["ground_truth"]
+        times_all = data_for_gt["times"]
+
+        # Build per-frame RTKLIB error + running RMS
+        rtk_errors = {}
+        for i, t in enumerate(times_all):
+            key = round(t, 1)
+            if key in rtklib_lookup:
+                err, _ = _ecef_err(rtklib_lookup[key].reshape(1,3), gt_all[i:i+1])
+                rtk_errors[key] = float(err[0])
+
+        # Attach to frames
+        cum_rtk_sq = 0.0
+        rtk_count = 0
+        for f in result["frames"]:
+            # Find closest TOW for this frame
+            ep = f["epoch"]
+            if ep < len(times_all):
+                key = round(times_all[min(ep * args.dump_every, len(times_all)-1)], 1)
+                rtk_err = rtk_errors.get(key, -1)
+                if rtk_err >= 0:
+                    cum_rtk_sq += rtk_err ** 2
+                    rtk_count += 1
+                f["rtklib_error_2d"] = rtk_err if rtk_err >= 0 else 0
+                f["rtklib_rms"] = float(np.sqrt(cum_rtk_sq / max(rtk_count, 1)))
+            else:
+                f["rtklib_error_2d"] = 0
+                f["rtklib_rms"] = 0
+        print(f"    RTKLIB demo5: {len(rtk_errors)} matched epochs loaded")
 
     output = args.output or (RESULTS_DIR / "paper_assets" / f"particle_viz_{args.run.lower()}_{args.n_particles}.mp4")
     create_animation(
