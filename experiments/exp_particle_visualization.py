@@ -660,18 +660,20 @@ def main() -> None:
                 err, _ = _ecef_err(rtklib_lookup[key].reshape(1,3), gt_all[i:i+1])
                 rtk_errors[key] = float(err[0])
 
-        # Build sorted RTKLIB TOW list for nearest-match
-        rtk_tow_sorted = np.array(sorted(rtklib_lookup.keys()))
-
-        # Attach to frames by matching GT position time
+        # Build running RMS for RTKLIB across ALL epochs, then sample at frame times
+        sorted_tow_keys = sorted(rtk_errors.keys())
         cum_rtk_sq = 0.0
         rtk_count = 0
+        rtk_running_rms = {}  # tow_key -> running RMS at that point
+        for key in sorted_tow_keys:
+            cum_rtk_sq += rtk_errors[key] ** 2
+            rtk_count += 1
+            rtk_running_rms[key] = float(np.sqrt(cum_rtk_sq / rtk_count))
+
+        # Attach to frames
         for f in result["frames"]:
-            # Use GT lonlat to find closest time in our data, then match RTKLIB
-            gt_ll = f["gt_lonlat"]
-            # Find this GT in times_all by scanning nearest epoch
             ep = f["epoch"]
-            # Try multiple candidate indices
+            # Find best matching RTKLIB tow for this frame
             best_key = None
             for offset in range(0, min(len(times_all), args.dump_every * 2)):
                 idx = min(ep * args.dump_every + offset, len(times_all) - 1)
@@ -681,12 +683,8 @@ def main() -> None:
                     break
 
             if best_key is not None:
-                rtk_err = rtk_errors.get(best_key, -1)
-                if rtk_err >= 0:
-                    cum_rtk_sq += rtk_err ** 2
-                    rtk_count += 1
-                f["rtklib_error_2d"] = rtk_err if rtk_err >= 0 else 0
-                f["rtklib_rms"] = float(np.sqrt(cum_rtk_sq / max(rtk_count, 1)))
+                f["rtklib_error_2d"] = rtk_errors.get(best_key, 0)
+                f["rtklib_rms"] = rtk_running_rms.get(best_key, 0)
                 rtk_ll = rtklib_lonlat_lookup.get(best_key)
                 if rtk_ll is not None:
                     f["spp_lonlat"] = rtk_ll
