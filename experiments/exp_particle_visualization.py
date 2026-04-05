@@ -342,14 +342,12 @@ def create_animation(
                 full_text = (
                     f"Epoch {f['epoch']} / {frames[-1]['epoch']}\n"
                     f"PF     RMS: {pf_rms_f:.1f} m\n"
-                    f"SPP    RMS: {spp_rms_f:.1f} m\n"
                     f"RTKLIB RMS: {rtk_rms_f:.1f} m"
                 )
             else:
                 full_text = (
                     f"Epoch {f['epoch']} / {frames[-1]['epoch']}\n"
-                    f"PF  RMS: {pf_rms_f:.1f} m\n"
-                    f"SPP RMS: {spp_rms_f:.1f} m"
+                    f"PF RMS: {pf_rms_f:.1f} m"
                 )
             ax_full.text(0.02, 0.98, full_text,
                         transform=ax_full.transAxes, fontsize=9, va="top",
@@ -379,7 +377,7 @@ def create_animation(
                             color="#22c55e", linewidth=2.5, alpha=0.8, zorder=4)
                 ax_zoom.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#22c55e",
                             markersize=12, markeredgecolor="white", markeredgewidth=2, zorder=6,
-                            label="SPP" if frame_idx == 0 else "")
+                            label="RTKLIB" if frame_idx == 0 else "")
             ax_zoom.plot(est[0], est[1], "o", color="#ef4444", markersize=16,
                         markeredgecolor="white", markeredgewidth=2.5, zorder=6,
                         label="PF estimate" if frame_idx == 0 else "")
@@ -396,15 +394,13 @@ def create_animation(
             rtk_rms = f.get("rtklib_rms", 0)
             if rtk_rms > 0:
                 metrics_text = (
-                    f"PF error:    {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
-                    f"SPP error:   {spp_err:6.1f} m  (RMS: {spp_rms:.1f} m)\n"
-                    f"RTKLIB error:{rtk_err:6.1f} m  (RMS: {rtk_rms:.1f} m)\n"
+                    f"PF error:     {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
+                    f"RTKLIB error: {rtk_err:6.1f} m  (RMS: {rtk_rms:.1f} m)\n"
                     f"{len(particles)} particles"
                 )
             else:
                 metrics_text = (
                     f"PF error:  {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
-                    f"SPP error: {spp_err:6.1f} m  (RMS: {spp_rms:.1f} m)\n"
                     f"{len(particles)} particles"
                 )
             ax_zoom.text(0.02, 0.98, metrics_text,
@@ -511,14 +507,11 @@ def _run_pf_gnssplusplus(
                 p_lonlat = particles_ecef_to_lonlat(particles)
                 gt_lat, gt_lon, _ = ecef_to_lla(gt[gt_idx][0], gt[gt_idx][1], gt[gt_idx][2])
                 est_lat, est_lon, _ = ecef_to_lla(est[0], est[1], est[2])
-                spp_ecef = np.array(sol_epoch.position_ecef_m[:3])
-                spp_lat, spp_lon, _ = ecef_to_lla(spp_ecef[0], spp_ecef[1], spp_ecef[2])
                 particle_frames.append({
                     "epoch": frame_count,
                     "particles_lonlat": p_lonlat,
                     "estimate_lonlat": np.array([est_lon, est_lat]),
                     "gt_lonlat": np.array([gt_lon, gt_lat]),
-                    "spp_lonlat": np.array([spp_lon, spp_lat]),
                 })
             frame_count += 1
 
@@ -634,6 +627,12 @@ def main() -> None:
         gt_all = data_for_gt["ground_truth"]
         times_all = data_for_gt["times"]
 
+        # Build RTKLIB lon/lat lookup
+        rtklib_lonlat_lookup = {}
+        for tow_key, ecef in rtklib_lookup.items():
+            rlat, rlon, _ = ecef_to_lla(ecef[0], ecef[1], ecef[2])
+            rtklib_lonlat_lookup[tow_key] = np.array([rlon, rlat])
+
         # Build per-frame RTKLIB error + running RMS
         rtk_errors = {}
         for i, t in enumerate(times_all):
@@ -656,6 +655,10 @@ def main() -> None:
                     rtk_count += 1
                 f["rtklib_error_2d"] = rtk_err if rtk_err >= 0 else 0
                 f["rtklib_rms"] = float(np.sqrt(cum_rtk_sq / max(rtk_count, 1)))
+                # Add RTKLIB lon/lat for trail
+                rtk_ll = rtklib_lonlat_lookup.get(key)
+                if rtk_ll is not None:
+                    f["spp_lonlat"] = rtk_ll  # reuse spp_lonlat for RTKLIB trail
             else:
                 f["rtklib_error_2d"] = 0
                 f["rtklib_rms"] = 0
