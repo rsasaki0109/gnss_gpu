@@ -68,7 +68,7 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
                                  py::array_t<double> sat_ecef,
                                  py::array_t<double> pseudoranges,
                                  py::array_t<double> weights_sat,
-                                 int n_sat, double sigma_pr) {
+                                 int n_sat, double sigma_pr, double nu) {
         {
             auto bs = sat_ecef.request();
             // sat_ecef: accept (N,3) or (N*3,) flat
@@ -77,11 +77,11 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
             static_cast<double*>(sat_ecef.request().ptr),
             static_cast<double*>(pseudoranges.request().ptr),
             static_cast<double*>(weights_sat.request().ptr),
-            n_sat, sigma_pr);
-    }, "Weight update - only satellite data transferred to device",
+            n_sat, sigma_pr, nu);
+    }, "Weight update with optional robust Student's t likelihood",
        py::arg("state"),
        py::arg("sat_ecef"), py::arg("pseudoranges"), py::arg("weights_sat"),
-       py::arg("n_sat"), py::arg("sigma_pr"));
+       py::arg("n_sat"), py::arg("sigma_pr"), py::arg("nu") = 0.0);
 
     m.def("pf_device_ess", [](const gnss_gpu::PFDeviceState* state) {
         return gnss_gpu::pf_device_ess(state);
