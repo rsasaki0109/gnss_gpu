@@ -71,7 +71,7 @@ PF family outperforms baselines across 5 sequences in 2 cities (Tokyo + Hong Kon
 | HK TST | 20 | 317.6 m | 318.3 m | 78.5% | deep urban, NLOS dominant |
 | HK Whampoa | 30 | 503.4 m | 508.7 m | 94.7% | deepest urban canyon |
 
-HK-20190428 achieves sub-25m with multi-GNSS nav (GPS+BeiDou). TST and Whampoa have 20-30 satellites but SPP itself fails (>300m) due to dominant NLOS — this is a fundamental SPP limitation in extreme urban canyons, not a PF issue. RTK or 3D-map-aided methods are needed for these environments.
+HK-20190428 achieves sub-25m with multi-GNSS nav (GPS+BeiDou). TST and Whampoa have 20-30 satellites but SPP itself fails (>300m) due to dominant NLOS — pseudorange errors of hundreds of meters make single-epoch and temporal filtering approaches equally ineffective. This is a fundamental SPP limitation, not a PF limitation. These environments require RTK, carrier-phase, or 3D-map-aided NLOS exclusion to achieve usable accuracy.
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
