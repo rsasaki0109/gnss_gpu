@@ -101,10 +101,11 @@ Fuses gyroscope heading (short-term precise) with SPP heading (long-term stable)
 
 | Method | P50 | RMS | P95 |
 | --- | ---: | ---: | ---: |
-| PF + SPP guide only | 4.19 m | 6.42 m | 11.56 m |
-| **PF + complementary (gyro+SPP+wheel)** | **4.16 m** | **6.03 m** | **10.47 m** |
+| PF 10K + SPP guide only | 4.19 m | 6.42 m | 11.56 m |
+| PF 10K + complementary | 4.16 m | 6.03 m | 10.47 m |
+| **PF 100K + complementary** | **3.49 m** | **5.74 m** | **9.73 m** |
 
-**6% RMS improvement, 9% P95 improvement** over SPP-only guide. Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages).
+**PF 100K + complementary filter is the best configuration: RMS 5.74m (56% better than RTKLIB 13.08m), P50=3.49m (0.82m gap to RTKLIB 2.67m).** Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages).
 
 ### Carrier phase (RTK) — honest negative result
 
