@@ -112,7 +112,16 @@ With adaptive PF-SPP blend (sigmoid-weighted: trust SPP when PF agrees, trust PF
 | RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
 | **PF + adaptive blend** | **1.89 m** | **9.64 m** | **5.23 m** | **0%** |
 
-**Beats RTKLIB on ALL metrics: P50 29%, P95 70%, RMS 60%, zero catastrophic failures.** Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages).
+Odaiba beats RTKLIB on ALL metrics. Shinjuku (deep canyon) wins RMS but loses P50 to SPP.
+
+| Sequence | Method | P50 | RMS | >100m |
+| --- | --- | ---: | ---: | ---: |
+| Odaiba | RTKLIB demo5 | 2.67 m | 13.08 m | — |
+| Odaiba | **Adaptive blend** | **1.89 m** | **5.23 m** | **0%** |
+| Shinjuku | SPP | **3.01 m** | 18.12 m | 0.09% |
+| Shinjuku | **Adaptive blend** | 6.18 m | **12.47 m** | **0%** |
+
+Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages).
 
 ### Carrier phase (RTK) — honest negative result
 
