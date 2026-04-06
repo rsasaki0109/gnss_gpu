@@ -489,29 +489,29 @@ def _plot_particle_scaling(output_path: Path) -> None:
     # Scaling experiment results: trimble + G,E,J
     # (N, RMS 2D, P95, >100m rate)
     # (N, RMS 2D, P95, >100m rate, runtime ms/epoch)
+    # With gnssplusplus corrections
     odaiba_data = [
-        (100, 135.88, 264.19, 46.01, 1.03),
-        (500, 82.27, 153.98, 17.00, 0.99),
-        (1_000, 70.59, 115.92, 11.64, 1.05),
-        (5_000, 62.48, 96.50, 3.51, 1.29),
-        (10_000, 61.86, 95.72, 3.31, 1.95),
-        (50_000, 62.19, 90.49, 2.73, 0.43),
-        (100_000, 60.87, 86.58, 2.10, 1.28),
-        (500_000, 60.65, 84.84, 2.00, 2.25),
-        (1_000_000, 60.40, 84.47, 1.97, 7.16),
+        (100, 24.06, 43.08, 0.00, 0.72),
+        (500, 12.51, 23.64, 0.00, 0.71),
+        (1_000, 10.19, 20.39, 0.00, 0.71),
+        (5_000, 7.27, 13.68, 0.00, 0.78),
+        (10_000, 6.81, 12.69, 0.00, 0.75),
+        (50_000, 6.50, 13.20, 0.00, 0.91),
+        (100_000, 6.74, 12.92, 0.00, 1.28),
+        (1_000_000, 6.72, 13.15, 0.00, 9.28),
     ]
     shinjuku_data = [
-        (100, 120.17, 242.63, 36.00, None),
-        (500, 82.41, 141.52, 14.50, None),
-        (1_000, 78.46, 124.97, 10.49, None),
-        (5_000, 70.82, 110.24, 7.69, None),
-        (10_000, 71.72, 107.39, 7.46, None),
-        (50_000, 71.11, 101.71, 5.47, None),
-        (100_000, 71.30, 98.75, 4.49, None),
-        (1_000_000, 73.26, 98.81, 4.49, None),
+        (100, 31.34, 54.01, 0.65, None),
+        (500, 21.25, 40.41, 0.00, None),
+        (1_000, 17.98, 34.52, 0.00, None),
+        (5_000, 18.55, 31.80, 0.51, None),
+        (10_000, 15.34, 30.93, 0.00, None),
+        (100_000, 15.57, 30.17, 0.00, None),
+        (1_000_000, 15.08, 30.82, 0.00, None),
     ]
-    ekf_odaiba = (89.42, 151.43, 14.23)
-    ekf_shinjuku = (97.07, 155.93, None)
+    # Baselines: RTKLIB demo5 (Odaiba), gnssplusplus SPP (Shinjuku)
+    ekf_odaiba = (13.08, 32.41, None)   # RTKLIB demo5
+    ekf_shinjuku = (18.12, None, None)  # gnssplusplus SPP
 
     fig, axes = plt.subplots(1, 4, figsize=(20, 4.8))
     metrics = ("RMS 2D [m]", "P95 [m]", ">100 m rate [%]", "Runtime [ms/epoch]")
@@ -519,9 +519,9 @@ def _plot_particle_scaling(output_path: Path) -> None:
 
     for col, (ax, ylabel, title) in enumerate(zip(axes, metrics, titles, strict=True)):
         if col < 3:
-            for data, ekf, label, color, marker in [
-                (odaiba_data, ekf_odaiba, "Odaiba", "#059669", "o"),
-                (shinjuku_data, ekf_shinjuku, "Shinjuku", "#7c3aed", "s"),
+            for data, ekf, label, baseline_name, color, marker in [
+                (odaiba_data, ekf_odaiba, "Odaiba", "RTKLIB", "#059669", "o"),
+                (shinjuku_data, ekf_shinjuku, "Shinjuku", "SPP", "#7c3aed", "s"),
             ]:
                 ns = [d[0] for d in data]
                 vals = [d[col + 1] for d in data]
@@ -529,7 +529,7 @@ def _plot_particle_scaling(output_path: Path) -> None:
                         markersize=5, label=f"PF {label}")
                 if ekf[col] is not None:
                     ax.axhline(ekf[col], color=color, linestyle="--",
-                               linewidth=1.2, alpha=0.5, label=f"EKF {label}")
+                               linewidth=1.2, alpha=0.5, label=f"{baseline_name} {label}")
             ax.axvspan(500, 2000, alpha=0.06, color="#f59e0b")
         else:
             # Runtime panel (Odaiba only)
@@ -538,7 +538,7 @@ def _plot_particle_scaling(output_path: Path) -> None:
             ax.plot(ns, rts, "o-", color="#059669", linewidth=1.8, markersize=5,
                     label="PF Odaiba")
             ax.axhline(0.031, color="#3b82f6", linestyle="--", linewidth=1.2,
-                       alpha=0.5, label="EKF (0.03 ms)")
+                       alpha=0.5, label="RTKLIB SPP")
             ax.axhline(1000, color="#ef4444", linestyle=":", linewidth=1,
                        alpha=0.4, label="1 Hz budget")
         ax.set_xscale("log")
@@ -549,7 +549,7 @@ def _plot_particle_scaling(output_path: Path) -> None:
         ax.legend(fontsize=7)
 
     fig.suptitle(
-        "Particle count scaling on UrbanNav Tokyo (trimble + G,E,J)",
+        "Particle count scaling on UrbanNav Tokyo (gnssplusplus corrections)",
         fontsize=13,
     )
     fig.tight_layout()
