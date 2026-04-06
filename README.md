@@ -21,7 +21,7 @@ This repo is no longer in a "pick one perfect architecture first" phase. The cur
 
 ## Current frozen read
 
-- **PF beats RTKLIB demo5**: RMS 6.72m vs 13.08m (49% improvement) on Odaiba
+- **PF beats RTKLIB demo5**: RMS 6.81m (10K particles) vs 13.08m (48% improvement) on Odaiba
 - GNSS corrections: [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) (Sagnac, tropo, iono, TGD, ISB)
 - Cross-geography: PF wins on 5 sequences in 2 cities (Tokyo + Hong Kong)
 - Scaling: phase transition at N≈1,000, tail improvement up to 1M particles
@@ -32,9 +32,10 @@ This repo is no longer in a "pick one perfect architecture first" phase. The cur
 | Method | P50 | P95 | RMS 2D | >100 m |
 | --- | ---: | ---: | ---: | ---: |
 | RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
-| **PF 1M particles** | **3.64 m** | **13.15 m** | **6.72 m** | **0.000%** |
+| **PF 10K particles** | **4.32 m** | **12.69 m** | **6.81 m** | **0.000%** |
+| PF 1M particles | 3.64 m | 13.15 m | 6.72 m | 0.000% |
 
-PF beats RTKLIB demo5 by 49% in RMS, 59% in P95, with zero catastrophic failures. RTKLIB wins P50 by 27%. PF uses [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) for pseudorange corrections (Sagnac, troposphere, ionosphere, TGD, ISB).
+PF 10K already beats RTKLIB demo5 by 48% in RMS and 61% in P95, with zero catastrophic failures. Scaling to 1M gives marginal additional improvement (6.81→6.72m). RTKLIB wins P50 by 36% (iterative WLS produces sharper point estimates). PF uses [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) for pseudorange corrections (Sagnac, troposphere, ionosphere, TGD, ISB).
 
 ### Particle cloud on OpenStreetMap
 
