@@ -102,7 +102,7 @@ Controlled simulation with parametric canyon (parallel buildings, ray-traced NLO
 | ---: | ---: | ---: | ---: | ---: | ---: |
 | 20 m | 33% | 40.68 m | 12.41 m | 11.45 m | 72% |
 | 60 m | 83% | 51.83 m | 11.73 m | 10.09 m | 81% |
-| 80 m | 91% | 51.72 m | 7.88 m | **6.47 m** | **88%** |
+| 80 m | 91% | 51.72 m | 7.88 m | **6.47 m** | **87%** |
 
 **PF+Map prior** ([Oh et al. 2004 IROS](http://sonify.psych.gatech.edu/~walkerb/publications/pdfs/2004IROS-mapPrior.pdf) inspired): particles inside building footprints receive near-zero weight, constraining the posterior to the street. Adds 14-18% improvement in deep canyons on top of standard PF.
 
@@ -114,7 +114,7 @@ Controlled simulation with parametric canyon (parallel buildings, ray-traced NLO
 - PF eliminates catastrophic failures (>100m rate = 0%) through temporal filtering.
 - Particle count scaling reveals a phase transition at N≈1,000 with continued tail improvement to 1M.
 - BVH makes real-PLATEAU PF3D runtime practical without changing accuracy.
-- Urban canyon simulation confirms PF advantage increases with NLOS severity (88% gain at 91% NLOS).
+- Urban canyon simulation confirms PF advantage increases with NLOS severity (87% gain at 91% NLOS).
 - Map prior (Oh et al. 2004) adds 14-18% improvement by constraining particles to road network.
 - 24 cited references, gnssplusplus-library as submodule for GNSS corrections.
 

@@ -535,7 +535,7 @@ def _build_snapshot() -> dict:
             ),
             (
                 "Urban canyon simulation: PF advantage increases with NLOS severity. "
-                "At 91% NLOS (80m buildings), PF achieves 7.88m vs WLS 51.72m (85% gain). "
+                "At 91% NLOS (80m buildings), PF achieves 7.88m vs WLS 51.72m (85% improvement). "
                 "Map prior (Oh et al. 2004) adds 14-18% further improvement (PF+Map: 6.47m)."
             ),
         ],
