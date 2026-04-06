@@ -63,22 +63,24 @@ PF family outperforms baselines across 5 sequences in 2 cities (Tokyo + Hong Kon
 | Odaiba | **6.72 m** | 13.08 m | RTKLIB demo5 | **49%** |
 | Shinjuku | **8.51 m** | 18.12 m | gnssplusplus SPP | **53%** |
 
-**Hong Kong (ublox + G,C, self corrections)**
+**Hong Kong (ublox + G,C, without gnssplusplus corrections)**
 
-| Sequence | PF RMS | EKF RMS | PF improvement |
+PF beats EKF on all 3 HK sequences. Absolute errors are larger than Tokyo because HK uses our own incomplete corrections (no gnssplusplus integration yet) and single-frequency ublox receiver in deep urban canyons.
+
+| Sequence | PF RMS | EKF RMS | PF vs EKF |
 | --- | ---: | ---: | ---: |
-| HK-20190428 | **66.85 m** | 69.49 m | **4%** |
-| HK TST | **152.37 m** | 301.04 m | **49%** |
-| HK Whampoa | **413.68 m** | 463.09 m | **11%** |
+| HK-20190428 | 66.85 m | 69.49 m | **-4%** |
+| HK TST | 152.37 m | 301.04 m | **-49%** |
+| HK Whampoa | 413.68 m | 463.09 m | **-11%** |
 
-HK results use our own corrections (no gnssplusplus). With gnssplusplus integration, HK accuracy would also improve significantly.
+**BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
-**BVH systems result**
+BVH accelerates 3D ray-tracing likelihood without affecting accuracy. This is a systems contribution on a different dataset (PPC-Dataset with PLATEAU 3D building models), not the UrbanNav evaluation.
 
-| Method | RMS 2D | Runtime | Note |
-| --- | ---: | ---: | --- |
-| `PF3D-10K` | 55.50 m | 1028.29 ms/epoch | real PLATEAU subset |
-| `PF3D-BVH-10K` | 55.50 m | 17.78 ms/epoch | **57.8x faster** |
+| Method | Runtime | Speedup |
+| --- | ---: | ---: |
+| `PF3D-10K` | 1028.29 ms/epoch | baseline |
+| `PF3D-BVH-10K` | 17.78 ms/epoch | **57.8x faster** |
 
 ### What this repo claims
 
