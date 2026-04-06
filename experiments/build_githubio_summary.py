@@ -533,6 +533,11 @@ def _build_snapshot() -> dict:
                 "RTKLIB P50=2.67m, RMS=13.08m. PF wins RMS by 49%, P95 by 59%, "
                 "with zero catastrophic failures. RTKLIB wins P50 by 27%."
             ),
+            (
+                "Urban canyon simulation: PF advantage increases with NLOS severity. "
+                "At 91% NLOS (80m buildings), PF achieves 7.88m vs WLS 51.72m (85% gain). "
+                "Map prior (Oh et al. 2004) adds 14-18% further improvement (PF+Map: 6.47m)."
+            ),
         ],
         "tables": {
             "paper_main": {
