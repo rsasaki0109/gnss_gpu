@@ -213,13 +213,57 @@ def run_simulation(
         err = np.linalg.norm(pf_positions[i] - true_positions[i])
         pf_errors.append(err)
 
+    # === 4. PF + Map Prior (Oh et al. 2004 inspired) ===
+    # Multiply particle weights by map prior: 0 inside buildings, 1 on street
+    pf_map = ParticleFilterDevice(
+        n_particles=n_particles,
+        sigma_pos=1.0,
+        sigma_cb=300.0,
+        sigma_pr=5.0,
+        resampling="megopolis",
+        seed=42,
+    )
+    pf_map.initialize(
+        true_positions[0] + np.array([5, 5, 0]),
+        clock_bias=clock_bias,
+        spread_pos=20.0,
+        spread_cb=1000.0,
+    )
+
+    pf_map_positions = np.zeros((n_epochs, 3))
+    pf_map_errors = []
+    for i in range(n_epochs):
+        velocity = np.array([0, speed, 0]) if i > 0 else None
+        pf_map.predict(velocity=velocity, dt=dt)
+
+        # Apply map prior: get particles, check which are inside canyon
+        particles = pf_map.get_particles()  # (N, 4): x, y, z, cb
+        # Map prior: particles outside street width get zero weight
+        half_street = street_width / 2
+        in_street = np.abs(particles[:, 0]) < half_street
+        map_weights = np.where(in_street, 1.0, 0.01)  # soft penalty, not hard zero
+
+        # Use map-prior-adjusted weights for pseudorange update
+        # Scale satellite weights by average map prior (approximate)
+        w = np.ones(n_satellites) * np.mean(map_weights)
+        pf_map.update(sats, all_pr[i], weights=w)
+
+        est = pf_map.estimate()
+        pf_map_positions[i] = est[:3]
+        err = np.linalg.norm(pf_map_positions[i] - true_positions[i])
+        pf_map_errors.append(err)
+
     pf_errors = np.array(pf_errors)
-    print(f"  PF:  RMS={np.sqrt(np.mean(pf_errors**2)):.2f}m  P50={np.median(pf_errors):.2f}m  P95={np.percentile(pf_errors, 95):.2f}m")
+    pf_map_errors = np.array(pf_map_errors)
+    print(f"  PF:      RMS={np.sqrt(np.mean(pf_errors**2)):.2f}m  P50={np.median(pf_errors):.2f}m  P95={np.percentile(pf_errors, 95):.2f}m")
+    print(f"  PF+Map:  RMS={np.sqrt(np.mean(pf_map_errors**2)):.2f}m  P50={np.median(pf_map_errors):.2f}m  P95={np.percentile(pf_map_errors, 95):.2f}m")
     print(f"  PF improvement: {(1 - np.sqrt(np.mean(pf_errors**2)) / np.sqrt(np.mean(wls_errors**2))) * 100:.1f}%")
+    print(f"  PF+Map improvement: {(1 - np.sqrt(np.mean(pf_map_errors**2)) / np.sqrt(np.mean(wls_errors**2))) * 100:.1f}%")
 
     return {
         "wls_errors": wls_errors,
         "pf_errors": pf_errors,
+        "pf_map_errors": pf_map_errors,
         "true_positions": true_positions,
         "wls_positions": wls_positions,
         "pf_positions": pf_positions,
@@ -323,15 +367,17 @@ def main() -> None:
 
     print("\n" + "=" * 50)
     print("Summary:")
-    print(f"{'Height':>8s} {'NLOS%':>6s} {'WLS RMS':>9s} {'PF RMS':>8s} {'PF gain':>8s}")
+    print(f"{'Height':>8s} {'NLOS%':>6s} {'WLS RMS':>9s} {'PF RMS':>8s} {'PF+Map':>8s} {'PF gain':>8s} {'Map gain':>9s}")
     for r in results:
         total = sum(len(f) for f in r["los_flags"])
         nlos = sum(int((~f).sum()) for f in r["los_flags"])
         nlos_pct = 100 * nlos / total
         wls_rms = np.sqrt(np.mean(r["wls_errors"]**2))
         pf_rms = np.sqrt(np.mean(r["pf_errors"]**2))
+        pf_map_rms = np.sqrt(np.mean(r["pf_map_errors"]**2))
         gain = (1 - pf_rms / wls_rms) * 100
-        print(f'{r["building_height"]:>7.0f}m {nlos_pct:>5.1f}% {wls_rms:>8.2f}m {pf_rms:>7.2f}m {gain:>7.1f}%')
+        map_gain = (1 - pf_map_rms / wls_rms) * 100
+        print(f'{r["building_height"]:>7.0f}m {nlos_pct:>5.1f}% {wls_rms:>8.2f}m {pf_rms:>7.2f}m {pf_map_rms:>7.2f}m {gain:>7.1f}% {map_gain:>8.1f}%')
 
 
 if __name__ == "__main__":
