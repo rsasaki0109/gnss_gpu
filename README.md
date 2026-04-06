@@ -50,7 +50,7 @@ View on [GitHub Pages](https://rsasaki0109.github.io/gnss_gpu/) for inline playb
 
 ![Particle scaling](experiments/results/paper_assets/paper_particle_scaling.png)
 
-PF performance crosses the EKF baseline at N≈1,000 particles. Mean RMS saturates near N=5,000, but the >100 m failure rate continues to improve up to 1M particles. GPU-scale particle inference enables a tail-robustness regime unreachable at conventional particle counts.
+PF crosses the RTKLIB demo5 baseline at N≈500 particles on Odaiba. Mean RMS saturates near N=5,000 (~7m on Odaiba, ~15m on Shinjuku), with >100m failure rate at 0% for all N≥500. GPU-scale particle inference enables a tail-robustness regime unreachable at conventional particle counts. 1M particles at 9 ms/epoch — well within 1 Hz GNSS budget.
 
 ### Cross-geography breadth
 
@@ -111,9 +111,9 @@ where `p_nlos` is set by the ray-trace result (high if blocked, `clear_nlos_prob
 ## Repo front door
 
 - GitHub Pages artifact snapshot: `docs/index.html`
-- Experiment log: [`docs/experiments.md`](docs/experiments.md)
-- Decision log: [`docs/decisions.md`](docs/decisions.md)
-- Minimal retained interface: [`docs/interfaces.md`](docs/interfaces.md)
+- Experiment log: [`internal_docs/experiments.md`](internal_docs/experiments.md)
+- Decision log: [`internal_docs/decisions.md`](internal_docs/decisions.md)
+- Minimal retained interface: [`internal_docs/interfaces.md`](internal_docs/interfaces.md)
 - Working plan / handoff log: [`internal_docs/plan.md`](internal_docs/plan.md)
 - Paper-oriented asset outputs: `experiments/results/paper_assets/`
 
@@ -239,7 +239,7 @@ Main output files:
 - Keep variant-heavy logic in `experiments/` until it survives fixed evaluation.
 - Do not promote a method because it wins a pilot split.
 - Prefer same-input, same-metric comparisons over new abstractions.
-- Record adoption and rejection reasons in [`docs/decisions.md`](docs/decisions.md).
+- Record adoption and rejection reasons in [`internal_docs/decisions.md`](internal_docs/decisions.md).
 
 ## Result files worth opening first
 
