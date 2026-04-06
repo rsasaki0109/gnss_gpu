@@ -313,3 +313,114 @@ class ParticleFilterDevice:
         """
         if hasattr(self, '_state') and self._state is not None:
             self._pf_device_sync(self._state)
+
+    # ----------------------------------------------------------------
+    # Smoother support (forward-backward)
+    # ----------------------------------------------------------------
+
+    def enable_smoothing(self):
+        """Enable epoch storage for offline forward-backward smoothing.
+
+        Call this before the forward pass. After all epochs are processed,
+        call ``smooth()`` to run a backward pass and return smoothed estimates.
+        """
+        self._smooth_epochs = []  # list of (estimate, sat_ecef, pr, weights, velocity, dt, spp_ref)
+        self._smooth_enabled = True
+
+    def store_epoch(self, sat_ecef, pseudoranges, weights, velocity, dt, spp_ref=None):
+        """Store observation data for the current epoch (call after update/estimate).
+
+        Parameters
+        ----------
+        sat_ecef, pseudoranges, weights : array_like
+            Same arrays passed to ``update()``.
+        velocity : array_like or None
+            Velocity used in ``predict()``.
+        dt : float
+            Time step.
+        spp_ref : array_like or None
+            SPP reference position for position_update (None to skip).
+        """
+        if not getattr(self, '_smooth_enabled', False):
+            return
+        est = np.asarray(self.estimate(), dtype=np.float64)
+        self._smooth_epochs.append({
+            'estimate': est[:3].copy(),
+            'sat_ecef': np.asarray(sat_ecef, dtype=np.float64).copy(),
+            'pseudoranges': np.asarray(pseudoranges, dtype=np.float64).copy(),
+            'weights': np.asarray(weights, dtype=np.float64).copy(),
+            'velocity': np.asarray(velocity, dtype=np.float64).copy() if velocity is not None else None,
+            'dt': float(dt),
+            'spp_ref': np.asarray(spp_ref, dtype=np.float64).copy() if spp_ref is not None else None,
+        })
+
+    def smooth(self, position_update_sigma=None):
+        """Run backward pass and return smoothed (forward+backward averaged) estimates.
+
+        Must be called after a complete forward pass with ``enable_smoothing()``
+        and ``store_epoch()`` on every epoch.
+
+        Parameters
+        ----------
+        position_update_sigma : float or None
+            Sigma for SPP position-domain update in backward pass.
+            If None, uses same as forward.
+
+        Returns
+        -------
+        smoothed : ndarray, shape (N_epochs, 3)
+            Smoothed ECEF positions.
+        forward : ndarray, shape (N_epochs, 3)
+            Forward-only estimates (for comparison).
+        """
+        if not getattr(self, '_smooth_enabled', False) or not self._smooth_epochs:
+            raise RuntimeError("No stored epochs. Call enable_smoothing() before forward pass.")
+
+        stored = self._smooth_epochs
+        n_ep = len(stored)
+        forward_pos = np.array([e['estimate'] for e in stored])
+
+        # Backward pass: new PF instance, reversed epoch order
+        last = stored[-1]
+        init_pos = last['estimate']
+        init_cb_candidates = last['pseudoranges'] - np.linalg.norm(
+            last['sat_ecef'].reshape(-1, 3) - init_pos, axis=1)
+        init_cb = float(np.median(init_cb_candidates))
+
+        bwd_pf = ParticleFilterDevice(
+            n_particles=self.n_particles,
+            sigma_pos=self.sigma_pos,
+            sigma_cb=self.sigma_cb,
+            sigma_pr=self.sigma_pr,
+            nu=self.nu,
+            resampling=self.resampling,
+            ess_threshold=self.ess_threshold,
+            seed=self.seed + 1,  # different seed for diversity
+        )
+        bwd_pf.initialize(init_pos, clock_bias=init_cb, spread_pos=10.0, spread_cb=100.0)
+
+        backward_pos = np.zeros((n_ep, 3))
+        for i in range(n_ep - 1, -1, -1):
+            ep = stored[i]
+            vel = -ep['velocity'] if ep['velocity'] is not None else None
+            bwd_pf.predict(velocity=vel, dt=ep['dt'])
+
+            sat = ep['sat_ecef'].reshape(-1, 3)
+            pr = ep['pseudoranges']
+            w = ep['weights']
+            bwd_pf.correct_clock_bias(sat, pr)
+            bwd_pf.update(sat, pr, weights=w)
+
+            pu_sigma = position_update_sigma if position_update_sigma is not None else None
+            if pu_sigma is not None and ep['spp_ref'] is not None:
+                bwd_pf.position_update(ep['spp_ref'][:3], sigma_pos=pu_sigma)
+
+            backward_pos[i] = bwd_pf.estimate()[:3]
+
+        # Combine: simple average (equal weight)
+        smoothed = (forward_pos + backward_pos) / 2.0
+
+        self._smooth_enabled = False
+        self._smooth_epochs = []
+
+        return smoothed, forward_pos
