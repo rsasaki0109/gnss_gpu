@@ -75,12 +75,24 @@ HK-20190428 achieves sub-25m with multi-GNSS nav (GPS+BeiDou). TST and Whampoa h
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
-BVH accelerates 3D ray-tracing likelihood without affecting accuracy. This is a systems contribution on a different dataset (PPC-Dataset with PLATEAU 3D building models), not the UrbanNav evaluation.
+BVH (Bounding Volume Hierarchy) accelerates the 3D ray-tracing likelihood computation used in the PF3D variant. For each particle-satellite pair, the system traces a ray through PLATEAU 3D building models to determine LOS/NLOS visibility. Without BVH, this requires checking every triangle in the mesh (O(N×K×T) where T=triangles). BVH organizes triangles into a spatial hierarchy, reducing this to O(N×K×log(T)) through hierarchical culling. Accuracy is preserved because BVH is an exact acceleration structure (no approximation).
 
 | Method | Runtime | Speedup |
 | --- | ---: | ---: |
 | `PF3D-10K` | 1028.29 ms/epoch | baseline |
 | `PF3D-BVH-10K` | 17.78 ms/epoch | **57.8x faster** |
+
+### Per-particle NLOS likelihood
+
+In the PF3D variant, each particle independently evaluates whether each satellite signal is LOS or NLOS by ray-tracing from the particle's position to the satellite through 3D building geometry. The per-particle likelihood is a two-component mixture:
+
+```
+p(pseudorange | particle, satellite) =
+    (1 - p_nlos) × N(residual; 0, σ_los²)     [LOS component]
+  + p_nlos       × N(residual; bias, σ_nlos²)  [NLOS component]
+```
+
+where `p_nlos` is set by the ray-trace result (high if blocked, `clear_nlos_prob=0.01` if clear), `σ_los` is the LOS noise (~3m), `σ_nlos` is the NLOS noise (~30m), and `bias` is the NLOS positive bias (~15m). This means different particles can disagree on which satellites are blocked, naturally handling the multi-modal posterior in urban canyons. The standard PF variant (without 3D models) uses a simpler Gaussian likelihood with `clear_nlos_prob` to provide robustness without explicit ray-tracing.
 
 ### What this repo claims
 
@@ -102,7 +114,7 @@ BVH accelerates 3D ray-tracing likelihood without affecting accuracy. This is a 
 - Experiment log: [`docs/experiments.md`](docs/experiments.md)
 - Decision log: [`docs/decisions.md`](docs/decisions.md)
 - Minimal retained interface: [`docs/interfaces.md`](docs/interfaces.md)
-- Working plan / handoff log: [`docs/plan.md`](docs/plan.md)
+- Working plan / handoff log: [`internal_docs/plan.md`](internal_docs/plan.md)
 - Paper-oriented asset outputs: `experiments/results/paper_assets/`
 
 ## Quick start
