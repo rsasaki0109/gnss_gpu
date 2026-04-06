@@ -155,6 +155,7 @@ def main():
         title=f"GPU Particle Filter GNSS — HK-20190428 ({n_particles:,} particles, cb correct + PU)",
         fps=8,
         zoom_radius_m=120.0,
+        baseline_label="SPP",
     )
 
     # Also create GIF
