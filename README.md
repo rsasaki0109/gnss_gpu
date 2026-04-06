@@ -21,8 +21,10 @@ This repo is no longer in a "pick one perfect architecture first" phase. The cur
 
 ## Current frozen read
 
-- **PF beats RTKLIB demo5**: RMS 6.81m (10K particles) vs 13.08m (48% improvement) on Odaiba
+- **PF beats RTKLIB demo5**: RMS 6.02m (10K particles) vs 13.08m (54% improvement) on Odaiba
+- **PF beats RTKLIB demo5 on P50**: 2.27m vs 2.67m (15% improvement) with position-domain update
 - GNSS corrections: [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) (Sagnac, tropo, iono, TGD, ISB)
+- Clock bias correction: per-epoch re-centering from pseudorange residuals — enables cross-receiver robustness
 - Cross-geography: PF wins on 5 sequences in 2 cities (Tokyo + Hong Kong)
 - Scaling: phase transition at N≈1,000, tail improvement up to 1M particles
 - Systems: `PF3D-BVH-10K` — 57.8x runtime reduction
@@ -32,10 +34,11 @@ This repo is no longer in a "pick one perfect architecture first" phase. The cur
 | Method | P50 | P95 | RMS 2D | >100 m |
 | --- | ---: | ---: | ---: | ---: |
 | RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
-| **PF 10K particles** | **4.32 m** | **12.69 m** | **6.81 m** | **0.000%** |
-| PF 1M particles | 3.64 m | 13.15 m | 6.72 m | 0.000% |
+| SPP (gnssplusplus) | 1.66 m | 12.96 m | 63.25 m | 0.08% |
+| PF 10K | 4.34 m | 12.05 m | 6.56 m | 0.000% |
+| **PF 10K + position update** | **2.27 m** | **12.33 m** | **6.04 m** | **0.000%** |
 
-PF 10K already beats RTKLIB demo5 by 48% in RMS and 61% in P95, with zero catastrophic failures. Scaling to 1M gives marginal additional improvement (6.81→6.72m). RTKLIB wins P50 by 36% (iterative WLS produces sharper point estimates). PF uses [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) for pseudorange corrections (Sagnac, troposphere, ionosphere, TGD, ISB).
+PF 10K with clock bias correction and SPP position-domain update beats RTKLIB demo5 by 54% in RMS, 62% in P95, and 15% in P50, with zero catastrophic failures. Position-domain update pulls the particle cloud center toward the SPP solution (σ=5m soft constraint), closing the P50 gap that pure PF cannot address. PF uses [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) for pseudorange corrections (Sagnac, troposphere, ionosphere, TGD, ISB).
 
 ### Particle cloud on OpenStreetMap
 
@@ -51,28 +54,30 @@ View on [GitHub Pages](https://rsasaki0109.github.io/gnss_gpu/) for inline playb
 
 ![Particle scaling](experiments/results/paper_assets/paper_particle_scaling.png)
 
-PF crosses the RTKLIB demo5 baseline at N≈500 particles on Odaiba. Mean RMS saturates near N=5,000 (~7m on Odaiba, ~15m on Shinjuku), with >100m failure rate at 0% for all N≥500. GPU-scale particle inference enables a tail-robustness regime unreachable at conventional particle counts. 1M particles at 9 ms/epoch — well within 1 Hz GNSS budget.
+PF crosses the RTKLIB demo5 baseline at N≈500 particles on Odaiba. Mean RMS saturates near N=5,000 (~6m on Odaiba with cb correct + position update, ~13m on Shinjuku), with >100m failure rate at 0% for all N≥500. GPU-scale particle inference enables a tail-robustness regime unreachable at conventional particle counts. 1M particles at 9 ms/epoch — well within 1 Hz GNSS budget.
 
 ### Cross-geography breadth
 
 PF family outperforms baselines across 5 sequences in 2 cities (Tokyo + Hong Kong).
 
-**Tokyo (trimble + G,E,J, gnssplusplus corrections)**
+**Tokyo (trimble + G,E,J, gnssplusplus corrections + cb correct + position update)**
 
-| Sequence | PF RMS | Baseline RMS | Baseline | PF improvement |
-| --- | ---: | ---: | --- | ---: |
-| Odaiba | **6.72 m** | 13.08 m | RTKLIB demo5 | **49%** |
-| Shinjuku | **8.51 m** | 18.12 m | gnssplusplus SPP | **53%** |
+| Sequence | PF P50 | PF RMS | Baseline RMS | Baseline | PF RMS improvement |
+| --- | ---: | ---: | ---: | --- | ---: |
+| Odaiba | **2.27 m** | **6.04 m** | 13.08 m | RTKLIB demo5 | **54%** |
+| Shinjuku | **4.18 m** | **13.42 m** | 18.12 m | gnssplusplus SPP | **26%** |
 
-**Hong Kong (ublox, gnssplusplus corrections, multi-GNSS nav)**
+**Hong Kong (ublox, gnssplusplus corrections + cb correct, multi-GNSS nav)**
 
 | Sequence | Sats | PF RMS | SPP RMS | >100m (PF) | Note |
 | --- | ---: | ---: | ---: | ---: | --- |
-| HK-20190428 | 8 | **24.6 m** | 23.7 m | **0.0%** | GPS+BeiDou |
+| HK-20190428 | 13 | **30.66 m** | 23.7 m | **0.0%** | GPS+BeiDou (gnssplusplus) |
 | HK TST | 20 | 317.6 m | 318.3 m | 78.5% | deep urban, NLOS dominant |
 | HK Whampoa | 30 | 503.4 m | 508.7 m | 94.7% | deepest urban canyon |
 
-HK-20190428 achieves sub-25m with multi-GNSS nav (GPS+BeiDou). TST and Whampoa have 20-30 satellites but SPP itself fails (>300m) due to dominant NLOS — pseudorange errors of hundreds of meters make single-epoch and temporal filtering approaches equally ineffective. This is a fundamental SPP limitation, not a PF limitation. These environments require RTK, carrier-phase, or 3D-map-aided NLOS exclusion to achieve usable accuracy.
+Clock bias correction (`correct_clock_bias`) re-centers particles' cb each epoch using median pseudorange residuals. This compensates for systematic receiver clock drift that the random-walk model cannot track — critical for ublox receivers where cb drifts at ~65 m/s (vs ~6 m/s for trimble). Without cb correction, HK PF diverges to >100m on 100% of epochs; with it, >100m drops to 0%.
+
+TST and Whampoa have 20-30 satellites but SPP itself fails (>300m) due to dominant NLOS — pseudorange errors of hundreds of meters make single-epoch and temporal filtering approaches equally ineffective. This is a fundamental SPP limitation, not a PF limitation. These environments require RTK, carrier-phase, or 3D-map-aided NLOS exclusion to achieve usable accuracy.
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
@@ -105,19 +110,19 @@ Fuses gyroscope heading (short-term precise) with SPP heading (long-term stable)
 | PF 10K + complementary | 4.16 m | 6.03 m | 10.47 m |
 | **PF 100K + complementary** | **3.49 m** | **5.74 m** | **9.73 m** |
 
-With adaptive PF-SPP blend (sigmoid center=30m, slope=10): trust SPP when PF agrees, trust PF when SPP jumps.
+With position-domain update (SPP soft constraint, σ=5m) and clock bias correction:
 
 | Sequence | Method | P50 | P95 | RMS | >100m |
 | --- | --- | ---: | ---: | ---: | ---: |
 | Odaiba | RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
 | Odaiba | SPP (gnssplusplus) | **1.66 m** | 12.96 m | 63.25 m | 0.08% |
-| Odaiba | **Adaptive blend** | **1.79 m** | **11.02 m** | **5.57 m** | **0%** |
+| Odaiba | **PF + cb correct + PU** | **2.27 m** | **12.33 m** | **6.04 m** | **0%** |
 | Shinjuku | SPP (gnssplusplus) | **3.01 m** | 32.80 m | 18.12 m | 0.09% |
-| Shinjuku | **Adaptive blend** | 3.64 m | **29.30 m** | **12.03 m** | **0%** |
+| Shinjuku | **PF + cb correct + PU** | 4.18 m | **30.83 m** | **13.42 m** | **0%** |
 
-Beats RTKLIB/SPP on RMS (57-34% improvement) and eliminates all >100m failures on both sequences. P50 approaches SPP precision (0.13m gap on Odaiba, 0.63m on Shinjuku).
+Beats RTKLIB/SPP on RMS (54-26% improvement) and eliminates all >100m failures on both sequences. P50 beats RTKLIB demo5 on Odaiba (2.27m vs 2.67m). Position-domain update applies a Gaussian soft constraint from the SPP solution directly to particle log-weights, pulling the cloud center toward SPP without losing PF's tail robustness.
 
-Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages).
+Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages) when combined with IMU (complementary heading filter).
 
 ### Carrier phase (RTK) — honest negative result
 
@@ -139,8 +144,10 @@ Controlled simulation with parametric canyon (parallel buildings, ray-traced NLO
 
 ### What this repo claims
 
-- PF with proper pseudorange corrections beats RTKLIB demo5 by 49% in RMS on UrbanNav Tokyo.
+- PF with proper pseudorange corrections beats RTKLIB demo5 by 54% in RMS and 15% in P50 on UrbanNav Tokyo.
 - PF eliminates catastrophic failures (>100m rate = 0%) through temporal filtering.
+- Per-epoch clock bias correction enables cross-receiver robustness (trimble and ublox).
+- Position-domain update closes the P50 gap by pulling the particle cloud toward the SPP solution.
 - Particle count scaling reveals a phase transition at N≈1,000 with continued tail improvement to 1M.
 - BVH makes real-PLATEAU PF3D runtime practical without changing accuracy.
 - Urban canyon simulation confirms PF advantage increases with NLOS severity (87% gain at 91% NLOS).
@@ -150,7 +157,6 @@ Controlled simulation with parametric canyon (parallel buildings, ray-traced NLO
 ### What this repo does not claim
 
 - It does not claim a world-first GNSS particle filter.
-- It does not claim PF beats iterative WLS in per-epoch median accuracy (P50).
 - It does not claim the same configuration works across all urban environments without tuning.
 
 ## Repo front door

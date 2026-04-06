@@ -43,6 +43,8 @@ class ParticleFilterDevice:
             pf_device_initialize,
             pf_device_predict,
             pf_device_weight,
+            pf_device_position_update,
+            pf_device_shift_clock_bias,
             pf_device_ess,
             pf_device_resample_systematic,
             pf_device_resample_megopolis,
@@ -55,6 +57,8 @@ class ParticleFilterDevice:
         self._pf_device_initialize = pf_device_initialize
         self._pf_device_predict = pf_device_predict
         self._pf_device_weight = pf_device_weight
+        self._pf_device_position_update = pf_device_position_update
+        self._pf_device_shift_clock_bias = pf_device_shift_clock_bias
         self._pf_device_ess = pf_device_ess
         self._pf_device_resample_systematic = pf_device_resample_systematic
         self._pf_device_resample_megopolis = pf_device_resample_megopolis
@@ -175,6 +179,76 @@ class ParticleFilterDevice:
         ess = self.get_ess()
         if ess < self.ess_threshold * self.n_particles:
             self._resample()
+
+    def position_update(self, ref_ecef, sigma_pos=30.0):
+        """Apply position-domain soft constraint from external estimate.
+
+        Adds a Gaussian log-likelihood penalty based on distance from
+        a reference position (e.g., SPP solution). Particles far from
+        the reference get lower weight, pulling the cloud center toward it.
+
+        Parameters
+        ----------
+        ref_ecef : array_like, shape (3,)
+            Reference ECEF position [m] (e.g., from SPP).
+        sigma_pos : float
+            Standard deviation of the soft constraint [m].
+            Smaller = stronger pull toward reference.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        ref = np.asarray(ref_ecef, dtype=np.float64).ravel()
+        self._pf_device_position_update(
+            self._state,
+            float(ref[0]), float(ref[1]), float(ref[2]),
+            float(sigma_pos))
+
+    def shift_clock_bias(self, shift: float):
+        """Shift all particles' clock bias by a constant offset.
+
+        Used to re-center cb around an external estimate each epoch,
+        compensating for systematic receiver clock drift that the
+        random-walk model cannot track.
+
+        Parameters
+        ----------
+        shift : float
+            Clock bias shift [m]. Positive shifts increase all cb values.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        self._pf_device_shift_clock_bias(self._state, float(shift))
+
+    def correct_clock_bias(self, sat_ecef, pseudoranges):
+        """Re-center particles' clock bias using pseudorange residuals.
+
+        Computes the expected cb from the current position estimate and
+        observed pseudoranges, then shifts all particles' cb to match.
+
+        Parameters
+        ----------
+        sat_ecef : array_like, shape (n_sat, 3)
+            Satellite ECEF positions [m].
+        pseudoranges : array_like, shape (n_sat,)
+            Observed pseudoranges [m].
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        est = np.asarray(self.estimate(), dtype=np.float64)
+        pos = est[:3]
+        current_cb = est[3]
+
+        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+        pr = np.asarray(pseudoranges, dtype=np.float64).ravel()
+
+        ranges = np.linalg.norm(sat - pos, axis=1)
+        residuals = pr - ranges
+        expected_cb = float(np.median(residuals))
+
+        shift = expected_cb - current_cb
+        self._pf_device_shift_clock_bias(self._state, shift)
 
     def _resample(self):
         """Perform resampling entirely on GPU."""

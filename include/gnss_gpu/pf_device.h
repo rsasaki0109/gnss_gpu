@@ -76,6 +76,13 @@ void pf_device_weight(PFDeviceState* state,
     const double* weights_sat,
     int n_sat, double sigma_pr, double nu = 0.0);
 
+// Position-domain update - apply soft constraint from external position estimate
+void pf_device_position_update(PFDeviceState* state,
+    double ref_x, double ref_y, double ref_z, double sigma_pos);
+
+// Shift all particles' clock bias by a constant offset
+void pf_device_shift_clock_bias(PFDeviceState* state, double shift);
+
 // ESS - compute on device, return scalar to host
 double pf_device_ess(const PFDeviceState* state);
 
