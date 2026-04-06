@@ -115,6 +115,32 @@ __global__ void pfd_weight_kernel(const double* px, const double* py,
     log_weights[tid] = log_w;
 }
 
+// --- Position-domain update kernel ---
+// Applies a Gaussian likelihood based on distance to a reference position.
+// log_w += -0.5 * ||particle_pos - ref_pos||^2 / sigma^2
+__global__ void pfd_position_update_kernel(
+    const double* px, const double* py, const double* pz,
+    double* log_weights,
+    double ref_x, double ref_y, double ref_z,
+    double inv_sigma2, int N) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+    double dx = px[tid] - ref_x;
+    double dy = py[tid] - ref_y;
+    double dz = pz[tid] - ref_z;
+    log_weights[tid] += -0.5 * (dx*dx + dy*dy + dz*dz) * inv_sigma2;
+}
+
+// --- Clock bias shift kernel ---
+// Shifts all particles' clock bias by a constant offset.
+// Used to re-center cb around an external estimate each epoch.
+__global__ void pfd_shift_clock_bias_kernel(
+    double* pcb, double shift, int N) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+    pcb[tid] += shift;
+}
+
 // --- ESS reduction kernel (same logic as weight.cu) ---
 __global__ void pfd_ess_kernel(const double* log_weights,
                                double* partial_sum_w,
@@ -576,6 +602,36 @@ void pf_device_weight(PFDeviceState* state,
         state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
         state->d_log_weights,
         N, n_sat, sigma_pr, nu);
+    CUDA_CHECK_LAST();
+}
+
+// ============================================================
+// Position-domain update (soft constraint from external position)
+// ============================================================
+
+void pf_device_position_update(PFDeviceState* state,
+    double ref_x, double ref_y, double ref_z, double sigma_pos) {
+    int N = state->n_particles;
+    int grid = state->grid_size;
+    double inv_sigma2 = 1.0 / (sigma_pos * sigma_pos);
+
+    pfd_position_update_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        state->d_log_weights,
+        ref_x, ref_y, ref_z, inv_sigma2, N);
+    CUDA_CHECK_LAST();
+}
+
+// ============================================================
+// Clock bias shift
+// ============================================================
+
+void pf_device_shift_clock_bias(PFDeviceState* state, double shift) {
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    pfd_shift_clock_bias_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_pcb, shift, N);
     CUDA_CHECK_LAST();
 }
 

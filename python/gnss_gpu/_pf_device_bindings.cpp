@@ -83,6 +83,21 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
        py::arg("sat_ecef"), py::arg("pseudoranges"), py::arg("weights_sat"),
        py::arg("n_sat"), py::arg("sigma_pr"), py::arg("nu") = 0.0);
 
+    m.def("pf_device_position_update", [](gnss_gpu::PFDeviceState* state,
+                                         double ref_x, double ref_y, double ref_z,
+                                         double sigma_pos) {
+        gnss_gpu::pf_device_position_update(state, ref_x, ref_y, ref_z, sigma_pos);
+    }, "Apply position-domain soft constraint from external estimate",
+       py::arg("state"),
+       py::arg("ref_x"), py::arg("ref_y"), py::arg("ref_z"),
+       py::arg("sigma_pos"));
+
+    m.def("pf_device_shift_clock_bias", [](gnss_gpu::PFDeviceState* state,
+                                           double shift) {
+        gnss_gpu::pf_device_shift_clock_bias(state, shift);
+    }, "Shift all particles' clock bias by a constant offset",
+       py::arg("state"), py::arg("shift"));
+
     m.def("pf_device_ess", [](const gnss_gpu::PFDeviceState* state) {
         return gnss_gpu::pf_device_ess(state);
     }, "Compute ESS on device, return scalar to host",
