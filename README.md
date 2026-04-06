@@ -105,21 +105,17 @@ Fuses gyroscope heading (short-term precise) with SPP heading (long-term stable)
 | PF 10K + complementary | 4.16 m | 6.03 m | 10.47 m |
 | **PF 100K + complementary** | **3.49 m** | **5.74 m** | **9.73 m** |
 
-With adaptive PF-SPP blend (sigmoid-weighted: trust SPP when PF agrees, trust PF when SPP jumps):
+With adaptive PF-SPP blend (sigmoid center=30m, slope=10): trust SPP when PF agrees, trust PF when SPP jumps.
 
-| Method | P50 | P95 | RMS | >100m |
-| --- | ---: | ---: | ---: | ---: |
-| RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
-| **PF + adaptive blend** | **1.89 m** | **9.64 m** | **5.23 m** | **0%** |
+| Sequence | Method | P50 | P95 | RMS | >100m |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Odaiba | RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
+| Odaiba | SPP (gnssplusplus) | **1.66 m** | 12.96 m | 63.25 m | 0.08% |
+| Odaiba | **Adaptive blend** | **1.79 m** | **11.02 m** | **5.57 m** | **0%** |
+| Shinjuku | SPP (gnssplusplus) | **3.01 m** | 32.80 m | 18.12 m | 0.09% |
+| Shinjuku | **Adaptive blend** | 3.64 m | **29.30 m** | **12.03 m** | **0%** |
 
-Odaiba beats RTKLIB on ALL metrics. Shinjuku (deep canyon) wins RMS but loses P50 to SPP.
-
-| Sequence | Method | P50 | RMS | >100m |
-| --- | --- | ---: | ---: | ---: |
-| Odaiba | RTKLIB demo5 | 2.67 m | 13.08 m | — |
-| Odaiba | **Adaptive blend** | **1.89 m** | **5.23 m** | **0%** |
-| Shinjuku | SPP | **3.01 m** | 18.12 m | 0.09% |
-| Shinjuku | **Adaptive blend** | 6.18 m | **12.47 m** | **0%** |
+Beats RTKLIB/SPP on RMS (57-34% improvement) and eliminates all >100m failures on both sequences. P50 approaches SPP precision (0.13m gap on Odaiba, 0.63m on Shinjuku).
 
 Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages).
 
