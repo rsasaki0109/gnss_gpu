@@ -67,15 +67,19 @@ PF family outperforms baselines across 5 sequences in 2 cities (Tokyo + Hong Kon
 | Odaiba | **2.27 m** | **6.04 m** | 13.08 m | RTKLIB demo5 | **54%** |
 | Shinjuku | **4.18 m** | **13.42 m** | 18.12 m | gnssplusplus SPP | **26%** |
 
-**Hong Kong (ublox, gnssplusplus corrections + cb correct, multi-GNSS nav)**
+**Hong Kong (ublox, gnssplusplus corrections + cb correct + elevation weighting)**
 
-| Sequence | Sats | PF RMS | SPP RMS | >100m (PF) | Note |
-| --- | ---: | ---: | ---: | ---: | --- |
-| HK-20190428 | 13 | **30.66 m** | 23.7 m | **0.0%** | GPS+BeiDou (gnssplusplus) |
-| HK TST | 20 | 317.6 m | 318.3 m | 78.5% | deep urban, NLOS dominant |
-| HK Whampoa | 30 | 503.4 m | 508.7 m | 94.7% | deepest urban canyon |
+| Sequence | Method | P50 | P95 | RMS | >100m |
+| --- | --- | ---: | ---: | ---: | ---: |
+| HK-20190428 | RTKLIB demo5 | 16.18 m | 60.85 m | 26.80 m | 0.2% |
+| HK-20190428 | SPP (gnssplusplus) | 15.27 m | 43.72 m | 23.71 m | 0.0% |
+| HK-20190428 | **PF 100K** | **15.82 m** | **42.42 m** | **22.71 m** | **0.0%** |
+| HK TST | PF / SPP | 317.6 m / 318.3 m | — | — | 78.5% |
+| HK Whampoa | PF / SPP | 503.4 m / 508.7 m | — | — | 94.7% |
 
-Clock bias correction (`correct_clock_bias`) re-centers particles' cb each epoch using median pseudorange residuals. This compensates for systematic receiver clock drift that the random-walk model cannot track — critical for ublox receivers where cb drifts at ~65 m/s (vs ~6 m/s for trimble). Without cb correction, HK PF diverges to >100m on 100% of epochs; with it, >100m drops to 0%.
+PF beats RTKLIB demo5 on HK-20190428 by **15% in RMS and 30% in P95**, with zero catastrophic failures (>100m: 0% vs 0.2%). Key techniques: per-epoch clock bias correction (compensates ublox ~65 m/s drift), elevation-based satellite weighting (downweight <20 deg), and SPP position-domain update (σ=2.5m soft constraint).
+
+Clock bias correction (`correct_clock_bias`) re-centers particles' cb each epoch using median pseudorange residuals. Without cb correction, HK PF diverges to >100m on 100% of epochs; with it, >100m drops to 0%.
 
 TST and Whampoa have 20-30 satellites but SPP itself fails (>300m) due to dominant NLOS — pseudorange errors of hundreds of meters make single-epoch and temporal filtering approaches equally ineffective. This is a fundamental SPP limitation, not a PF limitation. These environments require RTK, carrier-phase, or 3D-map-aided NLOS exclusion to achieve usable accuracy.
 
