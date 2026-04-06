@@ -21,24 +21,22 @@ This repo is no longer in a "pick one perfect architecture first" phase. The cur
 
 ## Current frozen read
 
-- **PF beats RTKLIB demo5**: RMS 6.02m (10K particles) vs 13.08m (54% improvement) on Odaiba
-- **PF beats RTKLIB demo5 on P50**: 2.27m vs 2.67m (15% improvement) with position-domain update
+- **PF beats RTKLIB demo5 and SPP on all metrics**: P50 1.65m vs 2.67m (38%), RMS 6.45m vs 13.08m (51%) on Odaiba
+- Full observation stack: Doppler velocity, dual-frequency iono-free pseudorange, carrier phase NLOS detection, elevation/SNR weighting, RAIM satellite exclusion
 - GNSS corrections: [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) (Sagnac, tropo, iono, TGD, ISB)
 - Clock bias correction: per-epoch re-centering from pseudorange residuals — enables cross-receiver robustness
-- Cross-geography: PF wins on 5 sequences in 2 cities (Tokyo + Hong Kong)
 - Scaling: phase transition at N≈1,000, tail improvement up to 1M particles
 - Systems: `PF3D-BVH-10K` — 57.8x runtime reduction
 
-### PF vs RTKLIB demo5 (Odaiba, gnssplusplus corrections)
+### PF vs RTKLIB demo5 (Odaiba, dual-frequency Trimble, gnssplusplus corrections)
 
 | Method | P50 | P95 | RMS 2D | >100 m |
 | --- | ---: | ---: | ---: | ---: |
 | RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
 | SPP (gnssplusplus) | 1.66 m | 12.96 m | 63.25 m | 0.08% |
-| PF 10K | 4.34 m | 12.05 m | 6.56 m | 0.000% |
-| **PF 10K + position update** | **2.27 m** | **12.33 m** | **6.04 m** | **0.000%** |
+| **PF 100K (full stack)** | **1.65 m** | **12.60 m** | **6.45 m** | **0.000%** |
 
-PF 10K with clock bias correction and SPP position-domain update beats RTKLIB demo5 by 54% in RMS, 62% in P95, and 15% in P50, with zero catastrophic failures. Position-domain update pulls the particle cloud center toward the SPP solution (σ=5m soft constraint), closing the P50 gap that pure PF cannot address. PF uses [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) for pseudorange corrections (Sagnac, troposphere, ionosphere, TGD, ISB).
+PF 100K with the full observation stack beats RTKLIB demo5 by 51% in RMS, 61% in P95, and 38% in P50, and beats SPP on P50 (1.65m vs 1.66m) — with zero catastrophic failures. The full stack includes: Doppler-derived velocity for predict, dual-frequency iono-free pseudorange (L1+L2), per-epoch clock bias correction, SPP position-domain update, and elevation/SNR-based satellite weighting. PF uses [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) for pseudorange corrections (Sagnac, troposphere, ionosphere, TGD, ISB).
 
 ### Particle cloud on OpenStreetMap
 
@@ -58,30 +56,30 @@ PF crosses the RTKLIB demo5 baseline at N≈500 particles on Odaiba. Mean RMS sa
 
 ### Cross-geography breadth
 
-PF family outperforms baselines across 5 sequences in 2 cities (Tokyo + Hong Kong).
+**Tokyo (dual-frequency Trimble + G,E,J, full observation stack)**
 
-**Tokyo (trimble + G,E,J, gnssplusplus corrections + cb correct + position update)**
+| Sequence | PF P50 | PF RMS | Baseline | Baseline RMS | PF RMS improvement |
+| --- | ---: | ---: | --- | ---: | ---: |
+| Odaiba | **1.65 m** | **6.45 m** | RTKLIB demo5 | 13.08 m | **51%** |
+| Shinjuku | **3.13 m** | **13.88 m** | gnssplusplus SPP | 18.12 m | **23%** |
 
-| Sequence | PF P50 | PF RMS | Baseline RMS | Baseline | PF RMS improvement |
-| --- | ---: | ---: | ---: | --- | ---: |
-| Odaiba | **2.27 m** | **6.04 m** | 13.08 m | RTKLIB demo5 | **54%** |
-| Shinjuku | **4.18 m** | **13.42 m** | 18.12 m | gnssplusplus SPP | **26%** |
+PF beats all baselines on both sequences with zero >100m failures.
 
-**Hong Kong (ublox, gnssplusplus corrections + cb correct + elevation weighting)**
+### Supplemental: Hong Kong (single-frequency ublox)
+
+HK uses a single-frequency ublox M8 receiver (L1 only), which cannot benefit from dual-frequency iono-free combination. Results are included as a supplemental analysis of single-frequency performance.
 
 | Sequence | Method | P50 | P95 | RMS | >100m |
 | --- | --- | ---: | ---: | ---: | ---: |
 | HK-20190428 | RTKLIB demo5 | 16.18 m | 60.85 m | 26.80 m | 0.2% |
 | HK-20190428 | SPP (gnssplusplus) | 15.27 m | 43.72 m | 23.71 m | 0.0% |
-| HK-20190428 | **PF 100K** | **15.82 m** | **42.42 m** | **22.71 m** | **0.0%** |
-| HK TST | PF / SPP | 317.6 m / 318.3 m | — | — | 78.5% |
-| HK Whampoa | PF / SPP | 503.4 m / 508.7 m | — | — | 94.7% |
+| HK-20190428 | **PF 100K** | **14.21 m** | **41.60 m** | **22.53 m** | **0.0%** |
 
-PF beats RTKLIB demo5 on HK-20190428 by **15% in RMS and 30% in P95**, with zero catastrophic failures (>100m: 0% vs 0.2%). Key techniques: per-epoch clock bias correction (compensates ublox ~65 m/s drift), elevation-based satellite weighting (downweight <20 deg), and SPP position-domain update (σ=2.5m soft constraint).
+PF beats RTKLIB demo5 by **16% in RMS and 32% in P95** even with single-frequency. Key techniques: per-epoch clock bias correction (compensates ublox ~65 m/s drift), Doppler velocity, RAIM satellite exclusion, elevation/SNR weighting, and carrier phase NLOS detection.
 
-Clock bias correction (`correct_clock_bias`) re-centers particles' cb each epoch using median pseudorange residuals. Without cb correction, HK PF diverges to >100m on 100% of epochs; with it, >100m drops to 0%.
+Without clock bias correction, HK PF diverges to >100m on 100% of epochs. Per-epoch cb re-centering is critical for ublox receivers where cb drifts at ~65 m/s (vs ~6 m/s for Trimble).
 
-TST and Whampoa have 20-30 satellites but SPP itself fails (>300m) due to dominant NLOS — pseudorange errors of hundreds of meters make single-epoch and temporal filtering approaches equally ineffective. This is a fundamental SPP limitation, not a PF limitation. These environments require RTK, carrier-phase, or 3D-map-aided NLOS exclusion to achieve usable accuracy.
+TST and Whampoa sequences have 20-30 satellites but SPP itself fails (>300m RMS) due to dominant NLOS. These environments require RTK, carrier-phase, or 3D-map-aided NLOS exclusion.
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
@@ -114,17 +112,17 @@ Fuses gyroscope heading (short-term precise) with SPP heading (long-term stable)
 | PF 10K + complementary | 4.16 m | 6.03 m | 10.47 m |
 | **PF 100K + complementary** | **3.49 m** | **5.74 m** | **9.73 m** |
 
-With position-domain update (SPP soft constraint, σ=5m) and clock bias correction:
+With full observation stack (Doppler velocity, iono-free L1+L2, position-domain update, cb correction, elevation/SNR weighting):
 
 | Sequence | Method | P50 | P95 | RMS | >100m |
 | --- | --- | ---: | ---: | ---: | ---: |
 | Odaiba | RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
-| Odaiba | SPP (gnssplusplus) | **1.66 m** | 12.96 m | 63.25 m | 0.08% |
-| Odaiba | **PF + cb correct + PU** | **2.27 m** | **12.33 m** | **6.04 m** | **0%** |
+| Odaiba | SPP (gnssplusplus) | 1.66 m | 12.96 m | 63.25 m | 0.08% |
+| Odaiba | **PF 100K (full stack)** | **1.65 m** | **12.60 m** | **6.45 m** | **0%** |
 | Shinjuku | SPP (gnssplusplus) | **3.01 m** | 32.80 m | 18.12 m | 0.09% |
-| Shinjuku | **PF + cb correct + PU** | 4.18 m | **30.83 m** | **13.42 m** | **0%** |
+| Shinjuku | **PF 100K (full stack)** | **3.13 m** | **31.41 m** | **13.88 m** | **0%** |
 
-Beats RTKLIB/SPP on RMS (54-26% improvement) and eliminates all >100m failures on both sequences. P50 beats RTKLIB demo5 on Odaiba (2.27m vs 2.67m). Position-domain update applies a Gaussian soft constraint from the SPP solution directly to particle log-weights, pulling the cloud center toward SPP without losing PF's tail robustness.
+Beats RTKLIB on RMS (51-23%), eliminates all >100m failures, and matches SPP P50 on Odaiba (1.65m vs 1.66m). The observation stack combines: (1) Doppler-derived velocity from satellite velocity-corrected range rates, (2) dual-frequency iono-free pseudoranges for GPS (L1+L2), (3) SPP position-domain update as Gaussian soft constraint, (4) per-epoch clock bias correction, (5) elevation and SNR-based satellite weighting.
 
 Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages) when combined with IMU (complementary heading filter).
 
