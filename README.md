@@ -95,23 +95,6 @@ p(pseudorange | particle, satellite) =
 
 where `p_nlos` is set by the ray-trace result (high if blocked, `clear_nlos_prob=0.01` if clear), `σ_los` is the LOS noise (~3m), `σ_nlos` is the NLOS noise (~30m), and `bias` is the NLOS positive bias (~15m). This means different particles can disagree on which satellites are blocked, naturally handling the multi-modal posterior in urban canyons. The standard PF variant (without 3D models) uses a simpler Gaussian likelihood with `clear_nlos_prob` to provide robustness without explicit ray-tracing.
 
-### IMU integration (GNSS blackout bridging)
-
-PF predict step can use IMU (gyroscope heading + wheel velocity) instead of GNSS-derived velocity. This bridges GNSS signal blockage (tunnels, urban canyons).
-
-| GNSS blackout | GNSS dropped | IMU guide RMS | No guide RMS | IMU improvement |
-| ---: | ---: | ---: | ---: | ---: |
-| 3s / 60s | 5% | **15.5 m** | 32.3 m | 52% |
-| 5s / 60s | 9% | **16.7 m** | 35.6 m | 53% |
-| 10s / 60s | 17% | **23.1 m** | 49.7 m | 54% |
-| 20s / 60s | 34% | **39.4 m** | 86.8 m | 55% |
-
-IMU uses gyroscope for heading + wheel velocity for speed (avoids accelerometer bias drift). Full strapdown integration diverges due to MEMS accelerometer bias.
-
-### Carrier phase (RTK) — honest negative result
-
-gnssplusplus RTK on Odaiba urban canyon: all solutions are **float** (integer ambiguity never resolved, ratio=0). Float RTK achieves P50=0.70m but 25% of epochs have >20m error. **RTK does not improve over PF+SPP in urban canyons** because multi-GNSS signals with heavy NLOS prevent reliable integer ambiguity resolution. Open-sky or suburban environments with better signal conditions would benefit from RTK integration.
-
 ### Urban canyon simulation
 
 Controlled simulation with parametric canyon (parallel buildings, ray-traced NLOS). PF advantage increases with NLOS severity.
