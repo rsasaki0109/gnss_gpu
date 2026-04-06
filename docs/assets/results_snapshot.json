@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-06T21:58:31+00:00",
+  "generated_at_utc": "2026-04-06T22:37:20+00:00",
   "title": "gnss_gpu Artifact Snapshot",
   "subtitle": "Mainline frozen on `PF+RobustClear-10K`. PF beats EKF across 5 sequences in 2 cities. Particle scaling reveals a phase transition at N~1,000 with tail improvement up to 1M.",
   "status": {
@@ -252,7 +252,8 @@
     "`WLS+QualityVeto` is useful because it moved a stabilization policy into reusable core code, not because it became the best external method.",
     "Systems result: `PF3D-BVH-10K` keeps PF3D accuracy while cutting runtime from 1028.29 to 17.78 ms/epoch.",
     "Hong Kong supplemental: `PF+AdaptiveGuide-10K` with GPS+BeiDou achieves 66.85 m RMS, outperforming GPS-only `EKF` at 69.49 m. The PF framework generalizes to a second urban geometry when appropriately configured.",
-    "PF vs RTKLIB demo5 (Odaiba, gnssplusplus corrections): PF 1M achieves P50=3.64m, RMS=6.72m, >100m=0% vs RTKLIB P50=2.67m, RMS=13.08m. PF wins RMS by 49%, P95 by 59%, with zero catastrophic failures. RTKLIB wins P50 by 27%."
+    "PF vs RTKLIB demo5 (Odaiba, gnssplusplus corrections): PF 1M achieves P50=3.64m, RMS=6.72m, >100m=0% vs RTKLIB P50=2.67m, RMS=13.08m. PF wins RMS by 49%, P95 by 59%, with zero catastrophic failures. RTKLIB wins P50 by 27%.",
+    "Urban canyon simulation: PF advantage increases with NLOS severity. At 91% NLOS (80m buildings), PF achieves 7.88m vs WLS 51.72m (85% gain). Map prior (Oh et al. 2004) adds 14-18% further improvement (PF+Map: 6.47m)."
   ],
   "tables": {
     "paper_main": {
