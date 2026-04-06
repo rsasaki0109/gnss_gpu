@@ -108,17 +108,9 @@ PF predict step can use IMU (gyroscope heading + wheel velocity) instead of GNSS
 
 IMU uses gyroscope for heading + wheel velocity for speed (avoids accelerometer bias drift). Full strapdown integration diverges due to MEMS accelerometer bias.
 
-### Carrier phase (RTK) integration
+### Carrier phase (RTK) — honest negative result
 
-gnssplusplus RTK provides cm-level accuracy when integer ambiguity is resolved.
-
-| Method | P50 | P95 | RMS | >100m |
-| --- | ---: | ---: | ---: | ---: |
-| RTK only (1Hz) | **0.70 m** | 21.48 m | 10.76 m | — |
-| PF + SPP guide (10Hz) | 4.32 m | 12.69 m | 6.81 m | 0% |
-| **PF + RTK/SPP hybrid** | 4.41 m | **12.10 m** | **6.66 m** | **0%** |
-
-RTK adds cm-accurate velocity guide when fixed, with SPP fallback. Improvement is modest (2%) because RTK runs at 1Hz while GNSS is 10Hz. The main value is in P95 tail reduction (12.69→12.10m).
+gnssplusplus RTK on Odaiba urban canyon: all solutions are **float** (integer ambiguity never resolved, ratio=0). Float RTK achieves P50=0.70m but 25% of epochs have >20m error. **RTK does not improve over PF+SPP in urban canyons** because multi-GNSS signals with heavy NLOS prevent reliable integer ambiguity resolution. Open-sky or suburban environments with better signal conditions would benefit from RTK integration.
 
 ### Urban canyon simulation
 
