@@ -217,7 +217,7 @@ This rebuilds:
 
 ## Reproduce the current headline result
 
-UrbanNav external, frozen mainline:
+UrbanNav external evaluation (PF+RobustClear-10K with self-corrections):
 
 ```bash
 PYTHONPATH=python python3 experiments/exp_urbannav_fixed_eval.py \
