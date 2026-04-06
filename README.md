@@ -105,7 +105,14 @@ Fuses gyroscope heading (short-term precise) with SPP heading (long-term stable)
 | PF 10K + complementary | 4.16 m | 6.03 m | 10.47 m |
 | **PF 100K + complementary** | **3.49 m** | **5.74 m** | **9.73 m** |
 
-**PF 100K + complementary filter is the best configuration: RMS 5.74m (56% better than RTKLIB 13.08m), P50=3.49m (0.82m gap to RTKLIB 2.67m).** Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages).
+With adaptive PF-SPP blend (sigmoid-weighted: trust SPP when PF agrees, trust PF when SPP jumps):
+
+| Method | P50 | P95 | RMS | >100m |
+| --- | ---: | ---: | ---: | ---: |
+| RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
+| **PF + adaptive blend** | **1.89 m** | **9.64 m** | **5.23 m** | **0%** |
+
+**Beats RTKLIB on ALL metrics: P50 29%, P95 70%, RMS 60%, zero catastrophic failures.** Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages).
 
 ### Carrier phase (RTK) — honest negative result
 
