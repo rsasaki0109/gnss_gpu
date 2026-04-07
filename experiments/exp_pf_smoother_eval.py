@@ -33,6 +33,7 @@ from evaluate import compute_metrics
 from exp_urbannav_baseline import load_or_generate_data
 from exp_urbannav_pf3d import PF_SIGMA_CB, PF_SIGMA_POS
 from gnss_gpu import ParticleFilterDevice
+from gnss_gpu.robust_spp import robust_spp
 from gnss_gpu.tdcp_velocity import estimate_velocity_from_tdcp_with_metrics
 
 RESULTS_DIR = _SCRIPT_DIR / "results"
@@ -116,6 +117,11 @@ def run_pf_with_optional_smoother(
     gmm_w_los: float = 0.7,
     gmm_mu_nlos: float = 15.0,
     gmm_sigma_nlos: float = 30.0,
+    doppler_position_update: bool = False,
+    doppler_pu_sigma: float = 5.0,
+    use_robust_spp: bool = False,
+    robust_spp_threshold: float = 15.0,
+    robust_spp_weight_func: str = "cauchy",
 ) -> dict[str, object]:
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -153,6 +159,7 @@ def run_pf_with_optional_smoother(
 
     prev_tow = None
     prev_measurements: list | None = None
+    prev_estimate: np.ndarray | None = None
     t0 = time.perf_counter()
     epochs_done = 0
 
@@ -259,16 +266,35 @@ def run_pf_with_optional_smoother(
             pf.update(sat_ecef, pr, weights=w)
 
         spp_pos = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
+
+        # Optionally replace SPP with robust IRLS solution
+        pu_pos = spp_pos
+        if use_robust_spp:
+            robust_result = robust_spp(
+                sat_ecef, pr,
+                weights=np.array([m.weight for m in measurements]),
+                init_pos=spp_pos if np.isfinite(spp_pos).all() and np.linalg.norm(spp_pos) > 1e6 else None,
+                threshold=robust_spp_threshold,
+                weight_func=robust_spp_weight_func,
+            )
+            if robust_result is not None:
+                pu_pos = robust_result
+
         if position_update_sigma is not None:
-            if np.isfinite(spp_pos).all() and np.linalg.norm(spp_pos) > 1e6:
-                pf.position_update(spp_pos, sigma_pos=position_update_sigma)
+            if np.isfinite(pu_pos).all() and np.linalg.norm(pu_pos) > 1e6:
+                pf.position_update(pu_pos, sigma_pos=position_update_sigma)
+
+        # Doppler-predicted position update: propagate previous estimate by velocity
+        if doppler_position_update and velocity is not None and prev_estimate is not None and dt > 0:
+            doppler_predicted_pos = prev_estimate + velocity * dt
+            pf.position_update(doppler_predicted_pos, sigma_pos=doppler_pu_sigma)
 
         if use_smoother:
             spp_ref = (
-                spp_pos
+                pu_pos
                 if position_update_sigma is not None
-                and np.isfinite(spp_pos).all()
-                and np.linalg.norm(spp_pos) > 1e6
+                and np.isfinite(pu_pos).all()
+                and np.linalg.norm(pu_pos) > 1e6
                 else None
             )
             pf.store_epoch(sat_ecef, pr, w, velocity, dt, spp_ref=spp_ref)
@@ -284,6 +310,7 @@ def run_pf_with_optional_smoother(
 
         prev_tow = tow
         prev_measurements = list(measurements)
+        prev_estimate = np.asarray(pf.estimate()[:3], dtype=np.float64).copy()
         epochs_done += 1
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
@@ -311,6 +338,8 @@ def run_pf_with_optional_smoother(
         "tdcp_elevation_weight": tdcp_elevation_weight,
         "tdcp_el_sin_floor": tdcp_el_sin_floor,
         "tdcp_rms_threshold": tdcp_rms_threshold,
+        "doppler_position_update": doppler_position_update,
+        "doppler_pu_sigma": doppler_pu_sigma,
         "n_tdcp_used": n_tdcp_used,
         "n_tdcp_fallback": n_tdcp_fallback,
         "elapsed_ms": elapsed_ms,
@@ -425,6 +454,34 @@ def main() -> None:
     parser.add_argument("--gmm-w-los", type=float, default=0.7, help="GMM LOS weight")
     parser.add_argument("--gmm-mu-nlos", type=float, default=15.0, help="GMM NLOS mean bias (m)")
     parser.add_argument("--gmm-sigma-nlos", type=float, default=30.0, help="GMM NLOS sigma (m)")
+    parser.add_argument(
+        "--doppler-position-update",
+        action="store_true",
+        help="Apply a second position_update using Doppler-predicted position (prev_estimate + velocity*dt)",
+    )
+    parser.add_argument(
+        "--doppler-pu-sigma",
+        type=float,
+        default=5.0,
+        help="Sigma (m) for Doppler-predicted position_update constraint",
+    )
+    parser.add_argument(
+        "--robust-spp",
+        action="store_true",
+        help="Use robust IRLS SPP for position_update instead of gnssplusplus SPP",
+    )
+    parser.add_argument(
+        "--robust-spp-threshold",
+        type=float,
+        default=15.0,
+        help="Residual threshold (m) for robust SPP weight function",
+    )
+    parser.add_argument(
+        "--robust-spp-weight-func",
+        choices=("cauchy", "huber"),
+        default="cauchy",
+        help="Robust weight function for IRLS SPP",
+    )
     args = parser.parse_args()
 
     pos_sigma = args.position_update_sigma
@@ -478,6 +535,11 @@ def main() -> None:
                 gmm_w_los=args.gmm_w_los,
                 gmm_mu_nlos=args.gmm_mu_nlos,
                 gmm_sigma_nlos=args.gmm_sigma_nlos,
+                doppler_position_update=args.doppler_position_update,
+                doppler_pu_sigma=args.doppler_pu_sigma,
+                use_robust_spp=args.robust_spp,
+                robust_spp_threshold=args.robust_spp_threshold,
+                robust_spp_weight_func=args.robust_spp_weight_func,
             )
             fm = out["forward_metrics"]
             sm = out["smoothed_metrics"]
@@ -509,6 +571,11 @@ def main() -> None:
                 "pr_accel_downweight": args.pr_accel_downweight,
                 "pr_accel_threshold": args.pr_accel_threshold,
                 "position_update_sigma": pos_sigma if pos_sigma is not None else "off",
+                "doppler_position_update": args.doppler_position_update,
+                "doppler_pu_sigma": args.doppler_pu_sigma,
+                "robust_spp": args.robust_spp,
+                "robust_spp_threshold": args.robust_spp_threshold,
+                "robust_spp_weight_func": args.robust_spp_weight_func,
                 "smoother": use_sm,
                 "n_particles": args.n_particles,
                 "forward_p50": fm["p50"] if fm else None,
