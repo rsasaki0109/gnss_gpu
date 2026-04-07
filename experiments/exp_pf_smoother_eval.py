@@ -112,6 +112,10 @@ def run_pf_with_optional_smoother(
     residual_threshold: float = 15.0,
     pr_accel_downweight: bool = False,
     pr_accel_threshold: float = 5.0,
+    use_gmm: bool = False,
+    gmm_w_los: float = 0.7,
+    gmm_mu_nlos: float = 15.0,
+    gmm_sigma_nlos: float = 30.0,
 ) -> dict[str, object]:
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -223,11 +227,13 @@ def run_pf_with_optional_smoother(
 
         # --- Residual-based adaptive downweighting ---
         if residual_downweight:
-            spp_pos_for_res = np.array(sol_epoch.position_ecef_m[:4], dtype=np.float64)
-            if np.isfinite(spp_pos_for_res[:3]).all() and np.linalg.norm(spp_pos_for_res[:3]) > 1e6:
+            spp_pos3 = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
+            if np.isfinite(spp_pos3).all() and np.linalg.norm(spp_pos3) > 1e6:
+                # Estimate clock bias as median(PR - range)
+                ranges = np.linalg.norm(sat_ecef - spp_pos3, axis=1)
+                cb_est = float(np.median(pr - ranges))
                 for i_m in range(len(measurements)):
-                    rng = float(np.linalg.norm(sat_ecef[i_m] - spp_pos_for_res[:3]))
-                    residual = abs(pr[i_m] - rng - spp_pos_for_res[3])
+                    residual = abs(pr[i_m] - ranges[i_m] - cb_est)
                     w[i_m] *= 1.0 / (1.0 + (residual / residual_threshold) ** 2)
 
         # --- Pseudorange acceleration downweighting ---
@@ -246,7 +252,11 @@ def run_pf_with_optional_smoother(
                 pr_history[prn] = hist
 
         pf.correct_clock_bias(sat_ecef, pr)
-        pf.update(sat_ecef, pr, weights=w)
+        if use_gmm:
+            pf.update_gmm(sat_ecef, pr, weights=w,
+                          w_los=gmm_w_los, mu_nlos=gmm_mu_nlos, sigma_nlos=gmm_sigma_nlos)
+        else:
+            pf.update(sat_ecef, pr, weights=w)
 
         spp_pos = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
         if position_update_sigma is not None:
@@ -411,6 +421,10 @@ def main() -> None:
         default=5.0,
         help="PR acceleration threshold (m) for Cauchy downweighting",
     )
+    parser.add_argument("--gmm", action="store_true", help="Use GMM likelihood (LOS+NLOS mixture)")
+    parser.add_argument("--gmm-w-los", type=float, default=0.7, help="GMM LOS weight")
+    parser.add_argument("--gmm-mu-nlos", type=float, default=15.0, help="GMM NLOS mean bias (m)")
+    parser.add_argument("--gmm-sigma-nlos", type=float, default=30.0, help="GMM NLOS sigma (m)")
     args = parser.parse_args()
 
     pos_sigma = args.position_update_sigma
@@ -460,6 +474,10 @@ def main() -> None:
                 residual_threshold=args.residual_threshold,
                 pr_accel_downweight=args.pr_accel_downweight,
                 pr_accel_threshold=args.pr_accel_threshold,
+                use_gmm=args.gmm,
+                gmm_w_los=args.gmm_w_los,
+                gmm_mu_nlos=args.gmm_mu_nlos,
+                gmm_sigma_nlos=args.gmm_sigma_nlos,
             )
             fm = out["forward_metrics"]
             sm = out["smoothed_metrics"]
