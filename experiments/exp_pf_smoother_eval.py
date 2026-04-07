@@ -149,6 +149,9 @@ def run_pf_with_optional_smoother(
     doppler_position_update: bool = False,
     doppler_pu_sigma: float = 5.0,
     imu_tight_coupling: bool = False,
+    tdcp_position_update: bool = False,
+    tdcp_pu_sigma: float = 0.5,
+    tdcp_pu_rms_max: float = 3.0,
 ) -> dict[str, object]:
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -432,6 +435,17 @@ def run_pf_with_optional_smoother(
             doppler_predicted_pos = prev_estimate + velocity * dt
             pf.position_update(doppler_predicted_pos, sigma_pos=doppler_pu_sigma)
 
+        # TDCP displacement position update: cm-level carrier phase constraint
+        # This is the key to matching FGO performance without FGO.
+        # TDCP velocity * dt = cm-level displacement from carrier phase.
+        # Apply as tight position_update when TDCP RMS is good.
+        if tdcp_position_update and used_tdcp and prev_estimate is not None and dt > 0:
+            if np.isfinite(tdcp_rms) and tdcp_rms < tdcp_pu_rms_max:
+                tdcp_displacement = velocity * dt  # velocity here is TDCP velocity
+                tdcp_predicted_pos = prev_estimate + tdcp_displacement
+                if np.all(np.isfinite(tdcp_predicted_pos)):
+                    pf.position_update(tdcp_predicted_pos, sigma_pos=tdcp_pu_sigma)
+
         if use_smoother:
             spp_ref = (
                 spp_pos
@@ -637,6 +651,15 @@ def main() -> None:
         action="store_true",
         help="Apply IMU dead-reckoning position_update after SPP in each epoch",
     )
+    parser.add_argument(
+        "--tdcp-position-update",
+        action="store_true",
+        help="Apply TDCP displacement as tight position_update (carrier-phase constraint)",
+    )
+    parser.add_argument("--tdcp-pu-sigma", type=float, default=0.5,
+                        help="Sigma for TDCP displacement position_update (m)")
+    parser.add_argument("--tdcp-pu-rms-max", type=float, default=3.0,
+                        help="Max TDCP postfit RMS to apply displacement PU (m)")
     args = parser.parse_args()
 
     pos_sigma = args.position_update_sigma
@@ -693,6 +716,9 @@ def main() -> None:
                 doppler_position_update=args.doppler_position_update,
                 doppler_pu_sigma=args.doppler_pu_sigma,
                 imu_tight_coupling=args.imu_tight_coupling,
+                tdcp_position_update=args.tdcp_position_update,
+                tdcp_pu_sigma=args.tdcp_pu_sigma,
+                tdcp_pu_rms_max=args.tdcp_pu_rms_max,
             )
             fm = out["forward_metrics"]
             sm = out["smoothed_metrics"]
