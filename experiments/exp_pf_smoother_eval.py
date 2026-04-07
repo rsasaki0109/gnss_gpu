@@ -342,6 +342,13 @@ def main() -> None:
         help="postfit RMS threshold (m) for --sigma-pos-tdcp-tight (default: disabled)",
     )
     parser.add_argument(
+        "--tdcp-rms-threshold",
+        type=float,
+        default=3.0,
+        help="Postfit RMS threshold (m) for tdcp_adaptive mode; "
+        "epochs with RMS >= threshold fall back to Doppler/random-walk predict",
+    )
+    parser.add_argument(
         "--tdcp-elevation-weight",
         action="store_true",
         help="WLS row weight ∝ sin(el)^2 when measurements expose elevation (TDCP guide only)",
@@ -396,6 +403,7 @@ def main() -> None:
                 tdcp_tight_rms_max_m=args.tdcp_tight_rms_max,
                 tdcp_elevation_weight=args.tdcp_elevation_weight,
                 tdcp_el_sin_floor=args.tdcp_el_sin_floor,
+                tdcp_rms_threshold=args.tdcp_rms_threshold,
             )
             fm = out["forward_metrics"]
             sm = out["smoothed_metrics"]
@@ -421,6 +429,7 @@ def main() -> None:
                 "skip_valid_epochs": args.skip_valid_epochs,
                 "tdcp_elevation_weight": args.tdcp_elevation_weight,
                 "tdcp_el_sin_floor": args.tdcp_el_sin_floor,
+                "tdcp_rms_threshold": args.tdcp_rms_threshold,
                 "position_update_sigma": pos_sigma if pos_sigma is not None else "off",
                 "smoother": use_sm,
                 "n_particles": args.n_particles,
