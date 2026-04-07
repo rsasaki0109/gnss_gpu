@@ -29,7 +29,7 @@ for _p in (
 from evaluate import compute_metrics
 from gnss_gpu import ParticleFilterDevice
 from gnss_gpu.io.urbannav import UrbanNavLoader
-from gnss_gpu.wide_lane import WidelaneResolver
+from gnss_gpu.wide_lane import WidelaneResolver, L1_FREQ, L2_FREQ, LAMBDA_1, LAMBDA_2
 from gnss_gpu.tdcp_velocity import estimate_velocity_from_tdcp_with_metrics
 from exp_urbannav_pf3d import PF_SIGMA_CB, PF_SIGMA_POS
 
@@ -49,7 +49,7 @@ def _build_urban_maps(data: dict[str, object]) -> dict[float, dict[str, dict[str
     l2car_series = data.get("l2_carrier_per_epoch", [])
 
     maps: dict[float, dict[str, dict[str, float]]] = {}
-    if not time_series:
+    if time_series is None or len(time_series) == 0:
         return maps
 
     for i, tow in enumerate(time_series):
@@ -185,6 +185,7 @@ def run_pf_with_widelane(
     n_tdcp_fallback = 0
 
     resolver = WidelaneResolver()
+    _carrier_smooth_state: dict[int, tuple[float, float]] = {}  # prn -> (smoothed_pr, prev_carrier_m)
 
     for sol_epoch, measurements in epochs:
         if not sol_epoch.is_valid() or len(measurements) < 4:
@@ -260,34 +261,66 @@ def run_pf_with_widelane(
         wl_replaced_epoch = 0
         wl_candidates_epoch = 0
 
+        # Carrier-phase smoothing (divergence-free, dual-freq iono-free)
+        # Use iono-free carrier combination delta to smooth code PR:
+        #   smoothed_PR(t) = alpha * code_PR(t) + (1-alpha) * (smoothed_PR(t-1) + delta_iono_free_carrier)
+        # where delta_iono_free_carrier = (f1^2*dL1 - f2^2*dL2)/(f1^2-f2^2) * wavelengths
+        # This avoids ambiguity resolution entirely.
+        alpha = 0.2  # weight on raw code PR per epoch (lower = more smoothing)
+        f1sq = L1_FREQ * L1_FREQ
+        f2sq = L2_FREQ * L2_FREQ
+
         for i, m in enumerate(measurements):
             sat_id = sat_ids[i]
             prn = int(getattr(m, "prn", 0))
 
             l1 = l1_map.get(sat_id)
-            l2p = l2pr_map.get(sat_id)
+            # Fallback: use gnssplusplus carrier_phase (L1) if RINEX L1 unavailable
+            if l1 is None:
+                cp = float(getattr(m, "carrier_phase", 0.0))
+                if cp != 0.0 and np.isfinite(cp):
+                    l1 = cp
             l2c = l2car_map.get(sat_id)
-            if l1 is None or l2p is None or l2c is None:
-                if prn:
-                    resolver.reset(prn)
-                continue
+            l2p = l2pr_map.get(sat_id)
 
             wl_candidates_epoch += 1
             total_pr_count += 1
-            resolver.update(prn, l1, l2c, m.corrected_pseudorange, l2p)
 
-            n_wl = resolver.get_fixed_ambiguity(prn)
-            if n_wl is None:
+            if l1 is None:
+                # No carrier at all — reset smoother for this sat, use code PR as-is
+                _carrier_smooth_state.pop(prn, None)
                 continue
 
+            # Carrier range in meters: iono-free if L2 available, else L1-only
+            if l2c is not None:
+                carrier_if_m = (f1sq * l1 * LAMBDA_1 - f2sq * l2c * LAMBDA_2) / (f1sq - f2sq)
+            else:
+                carrier_if_m = l1 * LAMBDA_1
+
+            prev_state = _carrier_smooth_state.get(prn)
+            code_pr_val = corrected_pr[i]
+
+            if prev_state is None:
+                # Initialize: smoothed = code PR
+                _carrier_smooth_state[prn] = (code_pr_val, carrier_if_m)
+                continue
+
+            prev_smoothed, prev_carrier = prev_state
+            delta_carrier = carrier_if_m - prev_carrier
+
+            # Divergence-free Hatch filter
+            smoothed = alpha * code_pr_val + (1.0 - alpha) * (prev_smoothed + delta_carrier)
+
+            # Sanity: if smoothed diverges too far from code, reset
+            if abs(smoothed - code_pr_val) > 50.0:
+                _carrier_smooth_state[prn] = (code_pr_val, carrier_if_m)
+                continue
+
+            _carrier_smooth_state[prn] = (smoothed, carrier_if_m)
+            corrected_pr[i] = smoothed
+            wl_replaced_epoch += 1
             wl_fixed_epoch += 1
             fixed_sat_ids.add(sat_id)
-            wl_pr = resolver.get_widelane_pseudorange(prn, l1, l2c)
-            if wl_pr is None or not np.isfinite(wl_pr):
-                continue
-
-            corrected_pr[i] = float(wl_pr)
-            wl_replaced_epoch += 1
 
         total_wl_candidates += wl_candidates_epoch
         total_wl_fixed += wl_fixed_epoch
