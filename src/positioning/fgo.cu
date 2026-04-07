@@ -98,13 +98,14 @@ __global__ void fgo_assemble_pseudorange(
 }
 
 void add_motion_rw_host(int n_epoch, int ss, int n_state, double w_motion, const double* state,
-                        double* H, double* g) {
+                        const double* motion_disp, double* H, double* g) {
   if (w_motion <= 0.0) return;
   for (int t = 0; t < n_epoch - 1; t++) {
     int o0 = ss * t;
     int o1 = ss * (t + 1);
     for (int i = 0; i < 3; i++) {
-      double d01 = state[o0 + i] - state[o1 + i];
+      double pred = motion_disp ? motion_disp[t * 3 + i] : 0.0;
+      double d01 = state[o0 + i] - state[o1 + i] + pred;
       g[o0 + i] += w_motion * d01;
       g[o1 + i] += w_motion * (-d01);
     }
@@ -256,13 +257,15 @@ void effective_pr_weights_huber_host(
   }
 }
 
-double motion_cost_host(int n_epoch, int ss, double w_motion, const double* state) {
+double motion_cost_host(int n_epoch, int ss, double w_motion, const double* state,
+                        const double* motion_disp) {
   if (w_motion <= 0.0) return 0.0;
   double e = 0.0;
   for (int t = 0; t < n_epoch - 1; t++) {
     int o0 = ss * t, o1 = ss * (t + 1);
     for (int i = 0; i < 3; i++) {
-      double d = state[o0 + i] - state[o1 + i];
+      double pred = motion_disp ? motion_disp[t * 3 + i] : 0.0;
+      double d = state[o0 + i] - state[o1 + i] + pred;
       e += 0.5 * w_motion * d * d;
     }
   }
@@ -326,7 +329,8 @@ int fgo_gnss_lm(const double* sat_ecef,
                 double tol,
                 double huber_k,
                 int enable_line_search,
-                double* out_mse_pr) {
+                double* out_mse_pr,
+                const double* motion_displacement) {
   if (n_epoch < 1 || n_sat < 4 || !sat_ecef || !pseudorange || !weights || !state_io) return -1;
   if (n_clock < 1 || n_clock > kMaxClock) return -1;
 
@@ -407,12 +411,12 @@ int fgo_gnss_lm(const double* sat_ecef,
     CUDA_CHECK(cudaMemcpy(h_H, d_H, sz_H, cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaMemcpy(h_g, d_g, sz_state, cudaMemcpyDeviceToHost));
 
-    add_motion_rw_host(n_epoch, ss, n_state, w_motion, state_io, h_H, h_g);
+    add_motion_rw_host(n_epoch, ss, n_state, w_motion, state_io, motion_displacement, h_H, h_g);
 
     double cost_before =
         pr_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, pseudorange, weights, sys_host, state_io,
                      huber_k) +
-        motion_cost_host(n_epoch, ss, w_motion, state_io);
+        motion_cost_host(n_epoch, ss, w_motion, state_io, motion_displacement);
 
     for (int i = 0; i < n_state; i++) h_g[i] = -h_g[i];
 
@@ -437,7 +441,7 @@ int fgo_gnss_lm(const double* sat_ecef,
         for (int i = 0; i < n_state; i++) trial[i] = state_io[i] + alpha * h_delta[i];
         double ctry = pr_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, pseudorange, weights,
                                     sys_host, trial, huber_k) 
-                       + motion_cost_host(n_epoch, ss, w_motion, trial);
+                       + motion_cost_host(n_epoch, ss, w_motion, trial, motion_displacement);
         if (ctry <= cost_before * (1.0 + 1e-12)) {
           std::memcpy(state_io, trial, sz_state);
           accepted = true;

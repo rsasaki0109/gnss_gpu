@@ -94,7 +94,8 @@ PYBIND11_MODULE(_gnss_gpu, m) {
       "fgo_gnss_lm",
       [](py::array_t<double> sat_ecef, py::array_t<double> pseudorange, py::array_t<double> weights,
          py::array_t<double> state_io, double motion_sigma_m, int max_iter, double tol, double huber_k,
-         int enable_line_search, py::object sys_kind_py, int n_clock) {
+         int enable_line_search, py::object sys_kind_py, int n_clock,
+         py::object motion_displacement_py) {
         auto bs = sat_ecef.request(), bp = pseudorange.request(), bw = weights.request();
         auto bst = state_io.request();
         if (bs.ndim != 3 || bp.ndim != 2 || bw.ndim != 2 || bst.ndim != 2)
@@ -123,11 +124,20 @@ PYBIND11_MODULE(_gnss_gpu, m) {
           throw std::runtime_error("fgo_gnss_lm: sys_kind is required when n_clock > 1");
         }
 
+        const double* md_ptr = nullptr;
+        if (!motion_displacement_py.is_none()) {
+          auto md_arr = py::cast<py::array_t<double>>(motion_displacement_py);
+          auto mdr = md_arr.request();
+          if (mdr.size != n_epoch * 3)
+            throw std::runtime_error("motion_displacement must have n_epoch*3 elements");
+          md_ptr = static_cast<const double*>(mdr.ptr);
+        }
+
         double mse = 0.0;
         int iters = gnss_gpu::fgo_gnss_lm(
             static_cast<double*>(bs.ptr), static_cast<double*>(bp.ptr), static_cast<double*>(bw.ptr),
             sk_ptr, n_clock, static_cast<double*>(bst.ptr), n_epoch, n_sat, motion_sigma_m, max_iter,
-            tol, huber_k, enable_line_search, &mse);
+            tol, huber_k, enable_line_search, &mse, md_ptr);
         return py::make_tuple(iters, mse);
       },
       "GPU FGO: PseudorangeFactor_XC-style clocks (h=[1,0..] or [1,1,0..]) + optional RW motion. "
@@ -136,5 +146,6 @@ PYBIND11_MODULE(_gnss_gpu, m) {
       py::arg("sat_ecef"), py::arg("pseudorange"), py::arg("weights"), py::arg("state_io"),
       py::arg("motion_sigma_m") = 0.0, py::arg("max_iter") = 25, py::arg("tol") = 1e-3,
       py::arg("huber_k") = 0.0, py::arg("enable_line_search") = 1, py::arg("sys_kind") = py::none(),
-      py::arg("n_clock") = 1);
+      py::arg("n_clock") = 1,
+      py::arg("motion_displacement") = py::none());
 }
