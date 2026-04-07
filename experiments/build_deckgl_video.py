@@ -396,7 +396,6 @@ def generate_html(
 </div>
 <script>
 const datasets = {data_json};
-let dsIdx = 0, epIdx = 0;
 const HOLD_MS = {int(hold_ms)};
 const INITIAL_DELAY_MS = {int(initial_delay_ms)};
 const CAMERA_BEARING = {float(bearing)};
@@ -436,46 +435,163 @@ const deckgl = new deck.DeckGL({{
   getTooltip: ({{object}}) => object && object.prn ? `PRN ${{object.prn}} ${{object.los?'LOS':'NLOS'}} el=${{object.el.toFixed(0)}}°` : null,
 }});
 
-function update() {{
-  const ds = datasets[dsIdx];
+function clamp01(v) {{
+  return Math.max(0, Math.min(1, v));
+}}
+
+function smoothstep(t) {{
+  const x = clamp01(t);
+  return x * x * (3 - 2 * x);
+}}
+
+function lerp(a, b, t) {{
+  return a + (b - a) * t;
+}}
+
+function lerpVec(a, b, t) {{
+  return a.map((value, idx) => lerp(value, b[idx], t));
+}}
+
+function mixColor(rgb, alpha) {{
+  return [rgb[0], rgb[1], rgb[2], Math.round(alpha)];
+}}
+
+function rayMap(ep) {{
+  const out = new Map();
+  for (const ray of ep.rays) {{
+    out.set(ray.prn, ray);
+  }}
+  return out;
+}}
+
+function prefixTrajectory(ds, progress01, rxNow) {{
+  const maxIdx = Math.max(ds.trajectory.length - 1, 0);
+  const cutIdx = Math.min(maxIdx, Math.round(progress01 * maxIdx));
+  const prefix = ds.trajectory
+    .slice(0, cutIdx + 1)
+    .map(p => [p[1], p[0], p[2]]);
+  prefix.push([rxNow[1], rxNow[0], rxNow[2]]);
+  return [{{ path: prefix }}];
+}}
+
+function interpolateEpoch(ds, epIdx, tRaw) {{
   const ep = ds.epochs[epIdx];
+  const atDatasetEnd = epIdx >= ds.epochs.length - 1;
+  const nextEp = atDatasetEnd ? ep : ds.epochs[epIdx + 1];
+  const t = atDatasetEnd ? 0 : smoothstep(tRaw);
+  const rxNow = lerpVec(ep.rx, nextEp.rx, t);
+  const ceilingPolygon = ep.sky_disk.map((point, idx) => {{
+    const nextPoint = nextEp.sky_disk[idx] || point;
+    const p = lerpVec(point, nextPoint, t);
+    return [p[1], p[0], p[2]];
+  }});
 
-  // Trajectory path
-  const pathData = [{{ path: ds.trajectory.map(p => [p[1], p[0], p[2]]) }}];
+  const rays0 = rayMap(ep);
+  const rays1 = rayMap(nextEp);
+  const prns = new Set([...rays0.keys(), ...rays1.keys()]);
+  const rayData = [];
+  const satData = [];
 
-  // Ceiling-projected rays
-  const rayData = ep.rays.map(r => ({{
-    source: [ep.rx[1], ep.rx[0], ep.rx[2]],
-    target: [r.sky[1], r.sky[0], r.sky[2]],
-    los: r.los, prn: r.prn, el: r.el,
-  }}));
+  for (const prn of prns) {{
+    const ray0 = rays0.get(prn);
+    const ray1 = rays1.get(prn);
+    const fadeIn = !ray0 && ray1;
+    const fadeOut = ray0 && !ray1;
+    const base = ray1 || ray0;
+    const sourceAlpha = fadeIn ? 255 * t : fadeOut ? 255 * (1 - t) : 255;
+    if (sourceAlpha < 8 || !base) {{
+      continue;
+    }}
 
-  // Receiver point
-  const pointData = [{{ position: [ep.rx[1], ep.rx[0], ep.rx[2]], color: [255, 217, 61] }}];
+    let skyNow = (ray0 || ray1).sky;
+    if (ray0 && ray1) {{
+      skyNow = lerpVec(ray0.sky, ray1.sky, t);
+    }} else if (ray1 && fadeIn) {{
+      skyNow = ray1.sky;
+    }} else if (ray0 && fadeOut) {{
+      skyNow = ray0.sky;
+    }}
 
-  // Satellite markers on the virtual sky ceiling
-  const satData = ep.rays.map(r => ({{
-    position: [r.sky[1], r.sky[0], r.sky[2]],
-    color: r.los ? [0, 212, 170] : [255, 107, 107],
-    prn: r.prn, los: r.los, el: r.el,
-  }}));
+    const losNow = t >= 0.5 ? (ray1 ? ray1.los : ray0.los) : (ray0 ? ray0.los : ray1.los);
+    const color = losNow ? [0, 212, 170] : [255, 107, 107];
+    const elNow = ray0 && ray1 ? lerp(ray0.el, ray1.el, t) : (ray0 ? ray0.el : ray1.el);
+    const satAlpha = fadeIn ? 230 * t : fadeOut ? 230 * (1 - t) : 230;
+    const targetAlpha = fadeIn ? 120 * t : fadeOut ? 120 * (1 - t) : 120;
 
-  const buildingData = ds.buildings;
-  const ceilingData = [{{ polygon: ep.sky_disk.map(p => [p[1], p[0], p[2]]) }}];
+    rayData.push({{
+      source: [rxNow[1], rxNow[0], rxNow[2]],
+      target: [skyNow[1], skyNow[0], skyNow[2]],
+      los: losNow,
+      prn,
+      el: elNow,
+      sourceColor: mixColor(color, sourceAlpha),
+      targetColor: mixColor(color, targetAlpha),
+      width: losNow ? 3 : 5,
+    }});
+
+    satData.push({{
+      position: [skyNow[1], skyNow[0], skyNow[2]],
+      color: mixColor(color, satAlpha),
+      prn,
+      los: losNow,
+      el: elNow,
+    }});
+  }}
+
+  return {{
+    ep,
+    rxNow,
+    rayData,
+    satData,
+    ceilingData: [{{ polygon: ceilingPolygon }}],
+    pathData: prefixTrajectory(
+      ds,
+      (epIdx + t) / Math.max(ds.epochs.length - 1, 1),
+      rxNow,
+    ),
+    bearing: CAMERA_BEARING + (epIdx + t) * ROTATION_STEP,
+  }};
+}}
+
+const datasetDurations = datasets.map(ds => ds.epochs.length * HOLD_MS);
+const totalDurationMs = datasetDurations.reduce((acc, value) => acc + value, 0);
+let startTs = null;
+
+function renderFrame(nowTs) {{
+  if (startTs === null) {{
+    startTs = nowTs;
+  }}
+  const elapsed = nowTs - startTs;
+  if (elapsed < INITIAL_DELAY_MS) {{
+    requestAnimationFrame(renderFrame);
+    return;
+  }}
+
+  let cycleMs = (elapsed - INITIAL_DELAY_MS) % totalDurationMs;
+  let dsIdx = 0;
+  while (cycleMs >= datasetDurations[dsIdx]) {{
+    cycleMs -= datasetDurations[dsIdx];
+    dsIdx += 1;
+  }}
+
+  const ds = datasets[dsIdx];
+  const epIdx = Math.min(Math.floor(cycleMs / HOLD_MS), ds.epochs.length - 1);
+  const segMs = cycleMs - epIdx * HOLD_MS;
+  const interp = interpolateEpoch(ds, epIdx, segMs / HOLD_MS);
+  const ep = interp.ep;
 
   deckgl.setProps({{
     viewState: {{
       ...INITIAL_VIEW,
-      longitude: ep.rx[1],
-      latitude: ep.rx[0],
-      bearing: CAMERA_BEARING + epIdx * ROTATION_STEP,
-      transitionDuration: Math.max(800, HOLD_MS - 300),
+      longitude: interp.rxNow[1],
+      latitude: interp.rxNow[0],
+      bearing: interp.bearing,
     }},
     layers: [
       osmLayer,
       new deck.PolygonLayer({{
         id: 'buildings',
-        data: buildingData,
+        data: ds.buildings,
         getPolygon: d => d.polygon,
         extruded: true,
         filled: true,
@@ -488,7 +604,7 @@ function update() {{
       }}),
       new deck.PolygonLayer({{
         id: 'sky-ceiling',
-        data: ceilingData,
+        data: interp.ceilingData,
         getPolygon: d => d.polygon,
         filled: true,
         stroked: true,
@@ -497,20 +613,20 @@ function update() {{
         lineWidthMinPixels: 2,
       }}),
       new deck.PathLayer({{
-        id: 'traj', data: pathData,
+        id: 'traj', data: interp.pathData,
         getPath: d => d.path, getColor: [255, 217, 61, 180],
         widthMinPixels: 4, widthScale: 1,
       }}),
       new deck.LineLayer({{
-        id: 'rays', data: rayData,
+        id: 'rays', data: interp.rayData,
         getSourcePosition: d => d.source,
         getTargetPosition: d => d.target,
-        getSourceColor: d => d.los ? [0, 212, 170, 220] : [255, 107, 107, 220],
-        getTargetColor: d => d.los ? [0, 212, 170, 120] : [255, 107, 107, 120],
-        getWidth: d => d.los ? 3 : 5,
+        getSourceColor: d => d.sourceColor,
+        getTargetColor: d => d.targetColor,
+        getWidth: d => d.width,
       }}),
       new deck.ScatterplotLayer({{
-        id: 'rx', data: pointData,
+        id: 'rx', data: [{{ position: [interp.rxNow[1], interp.rxNow[0], interp.rxNow[2]], color: [255, 217, 61] }}],
         getPosition: d => d.position,
         getFillColor: d => d.color,
         getLineColor: [20, 24, 34, 255],
@@ -519,7 +635,7 @@ function update() {{
         getRadius: 36, radiusMinPixels: 9,
       }}),
       new deck.ScatterplotLayer({{
-        id: 'sky-nodes', data: satData,
+        id: 'sky-nodes', data: interp.satData,
         getPosition: d => d.position,
         getFillColor: d => d.color,
         getLineColor: [10, 15, 30, 255],
@@ -529,7 +645,7 @@ function update() {{
         radiusMinPixels: 6,
       }}),
       new deck.TextLayer({{
-        id: 'labels', data: satData,
+        id: 'labels', data: interp.satData,
         getPosition: d => d.position,
         getText: d => 'PRN' + d.prn,
         getColor: d => d.color,
@@ -545,16 +661,10 @@ function update() {{
     '<span class="los">LOS: ' + ep.n_los + '</span>  <span class="nlos">NLOS: ' + ep.n_nlos + '</span>';
   document.getElementById('epoch').textContent =
     'Epoch ' + (epIdx+1) + '/' + ds.epochs.length + '  t=' + ep.t.toFixed(0) + 's';
-
-  epIdx++;
-  if (epIdx >= ds.epochs.length) {{
-    epIdx = 0;
-    dsIdx = (dsIdx + 1) % datasets.length;
-  }}
-  setTimeout(update, HOLD_MS);
+  requestAnimationFrame(renderFrame);
 }}
 
-setTimeout(update, INITIAL_DELAY_MS);
+requestAnimationFrame(renderFrame);
 </script>
 </body>
 </html>"""

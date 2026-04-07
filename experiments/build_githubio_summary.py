@@ -295,8 +295,8 @@ def _build_snapshot() -> dict:
                 "satellites projected onto a virtual sky ceiling above the receiver."
             ),
             "poster": (
-                _media_href("los_nlos_deckgl.gif")
-                if "los_nlos_deckgl.gif" in optional_media
+                _media_href("los_nlos_deckgl_still.png")
+                if "los_nlos_deckgl_still.png" in optional_media
                 else ""
             ),
             "sources": deckgl_sources,

@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-08T10:51:01+00:00",
+  "generated_at_utc": "2026-04-08T11:19:29+00:00",
   "title": "gnss_gpu Artifact Snapshot",
   "subtitle": "Best method: `PF+RobustClear-10K`. PF beats EKF across 5 sequences in 2 cities. Particle scaling reveals a phase transition at N~1,000 with tail improvement up to 1M.",
   "status": {
@@ -114,7 +114,7 @@
       "title": "UrbanNav LOS/NLOS Map Sweep",
       "href": "assets/media/los_nlos_deckgl.html",
       "caption": "Long-form deck.gl sweep over OpenStreetMap, with PLATEAU BVH providing LOS/NLOS labels, coarse 3D PLATEAU buildings, and satellites projected onto a virtual sky ceiling above the receiver.",
-      "poster": "assets/media/los_nlos_deckgl.gif",
+      "poster": "assets/media/los_nlos_deckgl_still.png",
       "sources": [
         {
           "src": "assets/media/los_nlos_deckgl.mp4",
