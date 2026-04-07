@@ -16,8 +16,10 @@ import csv
 import json
 import math
 import os
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -563,9 +565,77 @@ setTimeout(update, INITIAL_DELAY_MS);
     print(f"HTML: {output_path}")
 
 
+def _start_local_http_server(root_dir):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+
+    server = subprocess.Popen(
+        [sys.executable, "-m", "http.server", str(port), "-d", root_dir],
+        cwd=root_dir,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    time.sleep(0.5)
+    return server, f"http://127.0.0.1:{port}"
+
+
+def capture_still(html_path, output_path, delay_ms=6000, width=1440, height=1100):
+    """Capture a representative still frame for PRs and docs."""
+    print(f"Capturing still ({delay_ms/1000:.1f}s delay)...")
+    output_abs = str(Path(output_path).resolve())
+    html_name = Path(html_path).name
+    root_dir = str(Path(html_path).resolve().parent)
+    server, base_url = _start_local_http_server(root_dir)
+    script = f"""
+const {{ chromium }} = require('playwright');
+(async () => {{
+  const browser = await chromium.launch({{
+    headless: true,
+    args: ['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']
+  }});
+  const page = await browser.newPage({{
+    viewport: {{ width: {int(width)}, height: {int(height)} }},
+  }});
+  await page.goto({json.dumps(base_url + "/" + html_name)}, {{ waitUntil: 'domcontentloaded' }});
+  await page.waitForTimeout({int(delay_ms)});
+  await page.screenshot({{
+    path: {json.dumps(output_abs)},
+    type: 'png',
+  }});
+  await browser.close();
+}})();
+"""
+    script_path = os.path.join(os.path.dirname(output_abs), "_still.js")
+    with open(script_path, "w") as f:
+        f.write(script)
+    try:
+        subprocess.run(
+            ["node", script_path],
+            timeout=delay_ms / 1000 + 30,
+            cwd=os.path.dirname(os.path.abspath(__file__)) + "/..",
+            check=True,
+        )
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+        if os.path.exists(script_path):
+            os.unlink(script_path)
+
+    if os.path.exists(output_path):
+        size_mb = os.path.getsize(output_path) / 1e6
+        print(f"Still: {output_path} ({size_mb:.1f}MB)")
+
+
 def record_video(html_path, output_dir, duration_ms=25000, gif_duration_s=30):
     """Record with Playwright."""
     print(f"Recording video ({duration_ms/1000:.0f}s)...")
+    html_name = Path(html_path).name
+    root_dir = str(Path(html_path).resolve().parent)
+    server, base_url = _start_local_http_server(root_dir)
     script = f"""
 const {{ chromium }} = require('playwright');
 (async () => {{
@@ -578,7 +648,7 @@ const {{ chromium }} = require('playwright');
     recordVideo: {{ dir: '{output_dir}', size: {{ width: 1280, height: 720 }} }},
   }});
   const page = await ctx.newPage();
-  await page.goto('file://{os.path.abspath(html_path)}');
+  await page.goto({json.dumps(base_url + "/" + html_name)}, {{ waitUntil: 'domcontentloaded' }});
   await page.waitForTimeout({duration_ms});
   await ctx.close();
   await browser.close();
@@ -587,9 +657,16 @@ const {{ chromium }} = require('playwright');
     script_path = os.path.join(output_dir, "_rec.js")
     with open(script_path, "w") as f:
         f.write(script)
-    subprocess.run(["node", script_path], timeout=duration_ms/1000+30,
-                   cwd=os.path.dirname(os.path.abspath(__file__)) + "/..")
-    os.unlink(script_path)
+    try:
+        subprocess.run(["node", script_path], timeout=duration_ms/1000+30,
+                       cwd=os.path.dirname(os.path.abspath(__file__)) + "/..")
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+        os.unlink(script_path)
 
     # Find and rename webm
     webms = sorted([f for f in os.listdir(output_dir) if f.endswith(".webm")])
@@ -649,6 +726,8 @@ def parse_args():
                         help="Recording duration in ms. 0 means auto.")
     parser.add_argument("--gif-duration-s", type=int, default=30,
                         help="GIF clip length in seconds.")
+    parser.add_argument("--still-delay-ms", type=int, default=6000,
+                        help="Delay before capturing the still preview image.")
     parser.add_argument("--zoom", type=float, default=15.0,
                         help="Map zoom level.")
     parser.add_argument("--pitch", type=float, default=55.0,
@@ -700,6 +779,12 @@ def main():
         rotation_step=args.rotation_step,
         hold_ms=args.hold_ms,
         initial_delay_ms=args.initial_delay_ms,
+    )
+
+    capture_still(
+        html_path,
+        os.path.join(out_dir, "los_nlos_deckgl_still.png"),
+        delay_ms=args.still_delay_ms,
     )
 
     duration_ms = args.duration_ms

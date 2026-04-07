@@ -42,6 +42,9 @@ OPTIONAL_SHOWCASE_ASSETS = {
     "los_nlos_deckgl.mp4": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.mp4",
     "los_nlos_deckgl.webm": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.webm",
     "los_nlos_deckgl.gif": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.gif",
+    "los_nlos_deckgl_still.png": (
+        RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl_still.png"
+    ),
 }
 SITE_CHARTS = {
     "site_urbannav_runs.png": {
