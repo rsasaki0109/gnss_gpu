@@ -108,6 +108,10 @@ def run_pf_with_optional_smoother(
     tdcp_elevation_weight: bool = False,
     tdcp_el_sin_floor: float = 0.1,
     tdcp_rms_threshold: float = 3.0,
+    residual_downweight: bool = False,
+    residual_threshold: float = 15.0,
+    pr_accel_downweight: bool = False,
+    pr_accel_threshold: float = 5.0,
 ) -> dict[str, object]:
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -140,6 +144,8 @@ def run_pf_with_optional_smoother(
     n_stored = 0
     n_tdcp_used = 0
     n_tdcp_fallback = 0
+    # PR acceleration weighting: need per-satellite PR history
+    pr_history: dict[int, list[float]] = {}  # prn -> [pr(t-2), pr(t-1)]
 
     prev_tow = None
     prev_measurements: list | None = None
@@ -214,6 +220,30 @@ def run_pf_with_optional_smoother(
         sat_ecef = np.array([m.satellite_ecef for m in measurements])
         pr = np.array([m.corrected_pseudorange for m in measurements])
         w = np.array([m.weight for m in measurements])
+
+        # --- Residual-based adaptive downweighting ---
+        if residual_downweight:
+            spp_pos_for_res = np.array(sol_epoch.position_ecef_m[:4], dtype=np.float64)
+            if np.isfinite(spp_pos_for_res[:3]).all() and np.linalg.norm(spp_pos_for_res[:3]) > 1e6:
+                for i_m in range(len(measurements)):
+                    rng = float(np.linalg.norm(sat_ecef[i_m] - spp_pos_for_res[:3]))
+                    residual = abs(pr[i_m] - rng - spp_pos_for_res[3])
+                    w[i_m] *= 1.0 / (1.0 + (residual / residual_threshold) ** 2)
+
+        # --- Pseudorange acceleration downweighting ---
+        if pr_accel_downweight:
+            for i_m in range(len(measurements)):
+                prn = int(getattr(measurements[i_m], "prn", 0))
+                cur_pr = float(pr[i_m])
+                hist = pr_history.get(prn, [])
+                if len(hist) >= 2:
+                    accel = abs(cur_pr - 2.0 * hist[-1] + hist[-2])
+                    w[i_m] *= 1.0 / (1.0 + (accel / pr_accel_threshold) ** 2)
+                # Update history (keep last 2)
+                hist.append(cur_pr)
+                if len(hist) > 2:
+                    hist.pop(0)
+                pr_history[prn] = hist
 
         pf.correct_clock_bias(sat_ecef, pr)
         pf.update(sat_ecef, pr, weights=w)
@@ -359,6 +389,28 @@ def main() -> None:
         default=0.1,
         help="Floor on sin(elevation) when --tdcp-elevation-weight is set",
     )
+    parser.add_argument(
+        "--residual-downweight",
+        action="store_true",
+        help="Downweight satellites with large SPP residuals (Cauchy-like)",
+    )
+    parser.add_argument(
+        "--residual-threshold",
+        type=float,
+        default=15.0,
+        help="Residual threshold (m) for Cauchy downweighting",
+    )
+    parser.add_argument(
+        "--pr-accel-downweight",
+        action="store_true",
+        help="Downweight satellites with large pseudorange acceleration (multipath indicator)",
+    )
+    parser.add_argument(
+        "--pr-accel-threshold",
+        type=float,
+        default=5.0,
+        help="PR acceleration threshold (m) for Cauchy downweighting",
+    )
     args = parser.parse_args()
 
     pos_sigma = args.position_update_sigma
@@ -404,6 +456,10 @@ def main() -> None:
                 tdcp_elevation_weight=args.tdcp_elevation_weight,
                 tdcp_el_sin_floor=args.tdcp_el_sin_floor,
                 tdcp_rms_threshold=args.tdcp_rms_threshold,
+                residual_downweight=args.residual_downweight,
+                residual_threshold=args.residual_threshold,
+                pr_accel_downweight=args.pr_accel_downweight,
+                pr_accel_threshold=args.pr_accel_threshold,
             )
             fm = out["forward_metrics"]
             sm = out["smoothed_metrics"]
@@ -430,6 +486,10 @@ def main() -> None:
                 "tdcp_elevation_weight": args.tdcp_elevation_weight,
                 "tdcp_el_sin_floor": args.tdcp_el_sin_floor,
                 "tdcp_rms_threshold": args.tdcp_rms_threshold,
+                "residual_downweight": args.residual_downweight,
+                "residual_threshold": args.residual_threshold,
+                "pr_accel_downweight": args.pr_accel_downweight,
+                "pr_accel_threshold": args.pr_accel_threshold,
                 "position_update_sigma": pos_sigma if pos_sigma is not None else "off",
                 "smoother": use_sm,
                 "n_particles": args.n_particles,
