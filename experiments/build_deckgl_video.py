@@ -261,12 +261,20 @@ def _sky_disk(rx_ecef, sky_height_m, sky_radius_m, n_points=40):
     return points
 
 
+def _sky_radial_norm(el_deg):
+    elevation_01 = min(max(el_deg / 90.0, 0.0), 1.0)
+    return 0.22 + 0.78 * math.sqrt(max(0.0, 1.0 - elevation_01))
+
+
 def _project_to_sky_ceiling(rx_ecef, sat_ecef, sky_height_m, sky_radius_m):
     east_m, north_m, up_m = _ecef_to_enu(rx_ecef, sat_ecef)
     az = math.atan2(east_m, north_m)
     horiz = math.hypot(east_m, north_m)
     el = math.atan2(up_m, horiz)
-    radial_m = sky_radius_m * max(0.0, math.cos(el))
+    # Keep azimuth/elevation ordering monotonic but avoid collapsing the
+    # readable marker layout toward the receiver footprint.
+    radial_norm = _sky_radial_norm(math.degrees(el))
+    radial_m = sky_radius_m * radial_norm
     sky_east_m = radial_m * math.sin(az)
     sky_north_m = radial_m * math.cos(az)
     sky = _enu_to_lla(rx_ecef, sky_east_m, sky_north_m, sky_height_m)
@@ -343,6 +351,7 @@ def compute_epochs(
                 "los": bool(result["is_los"][i]),
                 "el": float(el_deg),
                 "az": float(az_deg),
+                "az_cont": float((360.0 * i / max(n_sat, 1)) + t * 2.0),
                 "sky": sky_point,
             })
 
@@ -419,7 +428,7 @@ def generate_html(
   <div class="area" id="area"></div>
   <div id="stats"></div>
   <div id="epoch"></div>
-  <div id="meta">Map: OpenStreetMap<br>LOS/NLOS geometry: PLATEAU BVH<br>Satellite markers: projected to a virtual sky ceiling<br>Labels: G=GPS R=GLONASS E=Galileo J=QZSS</div>
+  <div id="meta">Map: OpenStreetMap<br>LOS/NLOS geometry: PLATEAU BVH<br>Satellite markers: readability-spread on a virtual sky ceiling<br>Labels: G=GPS R=GLONASS E=Galileo J=QZSS</div>
   <div id="legend">
     <span style="background:#00d4aa"></span>LOS &nbsp;
     <span style="background:#ff6b6b"></span>NLOS &nbsp;
@@ -501,7 +510,7 @@ const CAPTURE_HEIGHT = 720;
 const HUD_META_LINES = [
   'Map: OpenStreetMap',
   'LOS/NLOS geometry: PLATEAU BVH',
-  'Satellite markers: projected to a virtual sky ceiling',
+  'Satellite markers: readability-spread on a virtual sky ceiling',
   'Labels: G=GPS R=GLONASS E=Galileo J=QZSS',
 ];
 const captureCanvas = document.createElement('canvas');
@@ -647,6 +656,29 @@ function catmullRomVec(a, b, c, d, t) {{
   return b.map((_, idx) => catmullRom(a[idx], b[idx], c[idx], d[idx], t));
 }}
 
+function wrapAngleDeltaDeg(deltaDeg) {{
+  let delta = deltaDeg % 360.0;
+  if (delta > 180.0) {{
+    delta -= 360.0;
+  }}
+  if (delta < -180.0) {{
+    delta += 360.0;
+  }}
+  return delta;
+}}
+
+function unwrapAngleDeg(referenceDeg, angleDeg) {{
+  return referenceDeg + wrapAngleDeltaDeg(angleDeg - referenceDeg);
+}}
+
+function interpolateAzimuthDeg(rayPrev, ray0, ray1, rayNextNext, t) {{
+  const az0 = ray0.az_cont ?? ray0.az;
+  const az1 = ray1.az_cont ?? unwrapAngleDeg(az0, ray1.az);
+  const azPrev = rayPrev?.az_cont ?? unwrapAngleDeg(az0, rayPrev ? rayPrev.az : ray0.az);
+  const azNextNext = rayNextNext?.az_cont ?? unwrapAngleDeg(az1, rayNextNext ? rayNextNext.az : ray1.az);
+  return catmullRom(azPrev, az0, az1, azNextNext, t);
+}}
+
 function mixColor(rgb, alpha) {{
   return [rgb[0], rgb[1], rgb[2], Math.round(alpha)];
 }}
@@ -667,6 +699,27 @@ function offsetLatLon(latDeg, lonDeg, bearingDeg, forwardM) {{
     latDeg + metersToLatDeg(northM),
     lonDeg + metersToLonDeg(eastM, latDeg),
   ];
+}}
+
+function skyRadialNorm(elDeg) {{
+  const elevation01 = clamp01(elDeg / 90.0);
+  return 0.22 + 0.78 * Math.sqrt(Math.max(0.0, 1.0 - elevation01));
+}}
+
+function projectToSkyCeiling(rxLla, skySpec, azDeg, elDeg) {{
+  const radialM = skySpec.radius_m * skyRadialNorm(elDeg);
+  const [latDeg, lonDeg] = offsetLatLon(rxLla[0], rxLla[1], azDeg, radialM);
+  return [latDeg, lonDeg, (rxLla[2] || 0) + skySpec.height_m];
+}}
+
+function buildSkyDisk(rxLla, skySpec, nPoints = 40) {{
+  const out = [];
+  for (let idx = 0; idx < nPoints; idx += 1) {{
+    const azDeg = (idx * 360.0) / nPoints;
+    const [latDeg, lonDeg] = offsetLatLon(rxLla[0], rxLla[1], azDeg, skySpec.radius_m);
+    out.push([lonDeg, latDeg, (rxLla[2] || 0) + skySpec.height_m]);
+  }}
+  return out;
 }}
 
 function rayMap(ep) {{
@@ -743,13 +796,7 @@ function interpolateEpoch(ds, epIdx, tRaw) {{
   const t = atDatasetEnd ? 0 : smoothstep(tRaw);
   const tSec = atDatasetEnd ? ep.t : lerp(ep.t, nextEp.t, tLinear);
   const rxNow = sampleTrajectoryAt(ds, tSec);
-  const ceilingPolygon = ep.sky_disk.map((point, idx) => {{
-    const prevPoint = prevEp.sky_disk[idx] || point;
-    const nextPoint = nextEp.sky_disk[idx] || point;
-    const nextNextPoint = nextNextEp.sky_disk[idx] || nextPoint;
-    const p = catmullRomVec(prevPoint, point, nextPoint, nextNextPoint, t);
-    return [p[1], p[0], p[2]];
-  }});
+  const ceilingPolygon = buildSkyDisk(rxNow, ds.sky);
 
   const prevRays = rayMap(prevEp);
   const rays0 = rayMap(ep);
@@ -770,20 +817,24 @@ function interpolateEpoch(ds, epIdx, tRaw) {{
       continue;
     }}
 
-    let skyNow = (ray0 || ray1).sky;
+    let azNow = ray0 ? (ray0.az_cont ?? ray0.az) : (ray1.az_cont ?? ray1.az);
+    let elNow = ray0 ? ray0.el : ray1.el;
     if (ray0 && ray1) {{
       const rayPrev = prevRays.get(prn) || ray0;
       const rayNextNext = nextNextRays.get(prn) || ray1;
-      skyNow = catmullRomVec(rayPrev.sky, ray0.sky, ray1.sky, rayNextNext.sky, t);
+      azNow = interpolateAzimuthDeg(rayPrev, ray0, ray1, rayNextNext, t);
+      elNow = catmullRom(rayPrev.el, ray0.el, ray1.el, rayNextNext.el, t);
     }} else if (ray1 && fadeIn) {{
-      skyNow = ray1.sky;
+      azNow = ray1.az_cont ?? ray1.az;
+      elNow = ray1.el;
     }} else if (ray0 && fadeOut) {{
-      skyNow = ray0.sky;
+      azNow = ray0.az_cont ?? ray0.az;
+      elNow = ray0.el;
     }}
+    const skyNow = projectToSkyCeiling(rxNow, ds.sky, azNow, elNow);
 
     const losNow = t >= 0.5 ? (ray1 ? ray1.los : ray0.los) : (ray0 ? ray0.los : ray1.los);
     const color = losNow ? [0, 212, 170] : [255, 107, 107];
-    const elNow = ray0 && ray1 ? lerp(ray0.el, ray1.el, t) : (ray0 ? ray0.el : ray1.el);
     const satAlpha = fadeIn ? 230 * t : fadeOut ? 230 * (1 - t) : 230;
     const targetAlpha = fadeIn ? 120 * t : fadeOut ? 120 * (1 - t) : 120;
 
@@ -836,6 +887,7 @@ const datasetDurations = datasets.map(ds => ds.epochs.length * HOLD_MS);
 const totalDurationMs = datasetDurations.reduce((acc, value) => acc + value, 0);
 let startTs = null;
 let mapReady = false;
+let firstMeaningfulMs = null;
 
 function initialCaptureState() {{
   const ds = datasets[0];
@@ -850,6 +902,7 @@ function initialCaptureState() {{
 
 function resetAnimation() {{
   startTs = null;
+  firstMeaningfulMs = null;
   captureState = initialCaptureState();
 }}
 
@@ -937,6 +990,17 @@ function renderFrame(nowTs) {{
   const segMs = cycleMs - epIdx * HOLD_MS;
   const interp = interpolateEpoch(ds, epIdx, segMs / HOLD_MS);
   const ep = interp.ep;
+  if (firstMeaningfulMs === null && interp.satData.length > 0) {{
+    firstMeaningfulMs = nowTs;
+  }}
+  window.__losFrameState = {{
+    area: ds.area,
+    epochIdx: epIdx,
+    satCount: interp.satData.length,
+    buildingCount: ds.buildings.length,
+    elapsedMs: elapsed,
+    meaningfulMs: firstMeaningfulMs,
+  }};
   const viewCenter = offsetLatLon(interp.rxNow[0], interp.rxNow[1], interp.bearing, CAMERA_LEAD_M);
 
   map.jumpTo({{
@@ -1101,7 +1165,7 @@ const {{ chromium }} = require('playwright');
     try:
         subprocess.run(
             ["node", script_path],
-            timeout=delay_ms / 1000 + 30,
+            timeout=delay_ms / 1000 + 90,
             cwd=os.path.dirname(os.path.abspath(__file__)) + "/..",
             check=True,
         )
@@ -1142,7 +1206,10 @@ const {{ chromium }} = require('playwright');
   }});
   const page = await ctx.newPage();
   await page.goto({json.dumps(base_url + "/" + html_name)}, {{ waitUntil: 'domcontentloaded' }});
+  await page.waitForFunction(() => window.__losCapture?.ready === true, {{ timeout: 30000 }});
   await page.waitForTimeout({int(duration_ms)});
+  const frameState = await page.evaluate(() => window.__losFrameState || null);
+  console.log(JSON.stringify({{ frameState }}));
   await ctx.close();
   await browser.close();
 }})().catch(err => {{
@@ -1153,13 +1220,27 @@ const {{ chromium }} = require('playwright');
     script_path = os.path.join(output_dir, "_rec_fallback.js")
     with open(script_path, "w") as f:
         f.write(script)
+    capture_meta = None
     try:
-        subprocess.run(
+        proc = subprocess.run(
             ["node", script_path],
-            timeout=duration_ms / 1000 + 30,
+            timeout=duration_ms / 1000 + 60,
             cwd=os.path.dirname(os.path.abspath(__file__)) + "/..",
             check=True,
+            capture_output=True,
+            text=True,
         )
+        for line in reversed((proc.stdout or "").splitlines()):
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            capture_meta = payload.get("frameState")
+            if capture_meta is not None:
+                break
     finally:
         server.terminate()
         try:
@@ -1179,23 +1260,37 @@ const {{ chromium }} = require('playwright');
     src = max(new_webms, key=lambda path: path.stat().st_mtime)
     dst = Path(target_webm)
     os.replace(src, dst)
-    return str(dst)
+    return {
+        "webm": str(dst),
+        "frame_state": capture_meta,
+    }
 
 
-def record_video(html_path, output_dir, duration_ms=25000, gif_duration_s=30, capture_fps=60):
+def record_video(
+    html_path,
+    output_dir,
+    duration_ms=25000,
+    gif_duration_s=30,
+    capture_fps=60,
+    trim_start_ms=13300,
+):
     """Record the interactive map and export smoother 60 fps masters."""
     print(f"Recording video ({duration_ms/1000:.0f}s @ {capture_fps}fps)...")
     target_webm = os.path.join(output_dir, "los_nlos_deckgl.webm")
     raw_webm = os.path.join(output_dir, "_los_nlos_deckgl_raw.webm")
+    trimmed_webm = os.path.join(output_dir, "_los_nlos_deckgl_trimmed.webm")
     if os.path.exists(raw_webm):
         os.unlink(raw_webm)
+    if os.path.exists(trimmed_webm):
+        os.unlink(trimmed_webm)
 
-    recorded_webm = _record_video_playwright_fallback(
+    capture_result = _record_video_playwright_fallback(
         html_path,
         output_dir,
         duration_ms,
         raw_webm,
     )
+    recorded_webm = capture_result["webm"] if capture_result else None
     if not recorded_webm or not os.path.exists(recorded_webm):
         return None
 
@@ -1203,9 +1298,37 @@ def record_video(html_path, output_dir, duration_ms=25000, gif_duration_s=30, ca
     size_mb = os.path.getsize(dst) / 1e6
     print(f"Raw video: {dst} ({size_mb:.1f}MB)")
 
+    auto_trim_ms = 0
+    frame_state = capture_result.get("frame_state") if capture_result else None
+    if frame_state and frame_state.get("meaningfulMs") is not None:
+        auto_trim_ms = max(0, int(round(frame_state["meaningfulMs"])) - 250)
+        print(
+            "First meaningful frame:"
+            f" t={frame_state['meaningfulMs']:.0f}ms"
+            f" sat={frame_state.get('satCount', 0)}"
+            f" buildings={frame_state.get('buildingCount', 0)}"
+        )
+
+    effective_trim_ms = max(int(trim_start_ms), auto_trim_ms)
+    source_webm = str(dst)
+    if effective_trim_ms > 0:
+        trim_start_s = effective_trim_ms / 1000.0
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-ss", str(trim_start_s),
+            "-i", str(dst),
+            "-avoid_negative_ts", "make_zero",
+            "-c", "copy",
+            trimmed_webm,
+        ], capture_output=True, check=True)
+        if os.path.exists(trimmed_webm):
+            source_webm = trimmed_webm
+            size_mb = os.path.getsize(trimmed_webm) / 1e6
+            print(f"Trimmed WebM: {trimmed_webm} ({size_mb:.1f}MB, start +{trim_start_s:.1f}s)")
+
     mp4_path = os.path.join(output_dir, "los_nlos_deckgl.mp4")
     subprocess.run([
-        "ffmpeg", "-y", "-i", str(dst),
+        "ffmpeg", "-y", "-i", source_webm,
         "-vf", f"framerate=fps={int(capture_fps)}:interp_start=0:interp_end=255:scene=100,format=yuv420p",
         "-c:v", "libx264",
         "-preset", "medium",
@@ -1217,7 +1340,7 @@ def record_video(html_path, output_dir, duration_ms=25000, gif_duration_s=30, ca
         size_mb = os.path.getsize(mp4_path) / 1e6
         print(f"MP4: {mp4_path} ({size_mb:.1f}MB)")
 
-    os.replace(str(dst), target_webm)
+    os.replace(source_webm, target_webm)
     if os.path.exists(target_webm):
         size_mb = os.path.getsize(target_webm) / 1e6
         print(f"WebM: {target_webm} ({size_mb:.1f}MB)")
@@ -1231,6 +1354,10 @@ def record_video(html_path, output_dir, duration_ms=25000, gif_duration_s=30, ca
     if os.path.exists(gif_path):
         size_mb = os.path.getsize(gif_path) / 1e6
         print(f"GIF: {gif_path} ({size_mb:.1f}MB)")
+    if os.path.exists(raw_webm):
+        os.unlink(raw_webm)
+    if os.path.exists(trimmed_webm):
+        os.unlink(trimmed_webm)
     return gif_path
 
 
@@ -1260,6 +1387,8 @@ def parse_args():
                         help="GIF clip length in seconds.")
     parser.add_argument("--capture-fps", type=int, default=60,
                         help="Target video frame rate for recorder/compositor output.")
+    parser.add_argument("--trim-start-ms", type=int, default=13300,
+                        help="Force-trim this many milliseconds from the start of exported video files.")
     parser.add_argument("--still-delay-ms", type=int, default=6000,
                         help="Delay before capturing the still preview image.")
     parser.add_argument("--zoom", type=float, default=14.4,
@@ -1331,6 +1460,7 @@ def main():
         duration_ms=duration_ms,
         gif_duration_s=args.gif_duration_s,
         capture_fps=args.capture_fps,
+        trim_start_ms=args.trim_start_ms,
     )
 
 
