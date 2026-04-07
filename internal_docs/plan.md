@@ -1,9 +1,19 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-04-07 JST  
-**現在の HEAD**: `b361006` (feature/carrier-phase-imu)  
+**最終更新**: 2026-04-07 JST（本稿を Claude 向けに長めに更新）  
+**現在の HEAD**: `d0c7436` (feature/carrier-phase-imu) — 作業ツリーは **多くの変更が未コミット**（実験スクリプト・`tdcp_velocity.py`・FFBSi 系・CUDA 祖先バッファ等）。コミット前に `git status` を必ず確認すること。  
 **ブランチ**: `feature/carrier-phase-imu` (PR #4 open, main から分岐)  
-**現フェーズ**: carrier phase / TDCP 実装中。Odaiba P50=1.65m で SPP と同等。1m 切りを目指す。
+**現フェーズ**: **TDCP ガイド付き PF** は Python 実装・単体テストまで完了。**系譜（genealogy）スムーザ** と公平比較スクリプトあり。仰角重み付き TDCP WLS を試したが効果はデータ区間依存。**1 m 切り**は引き続き carrier / wide-lane 統合が主戦場。  
+**FGO**: ユーザー方針で **やらない**（既存どおり）。
+
+### Claude へ（最初に読む順）
+
+1. 本ファイルの **§1.5**（TDCP ガイドの短い実測）と **§10**（残課題）
+2. `python/gnss_gpu/tdcp_velocity.py` — TDCP WLS（衛星運動・衛星時計補正済み）
+3. `python/gnss_gpu/particle_ffbsi.py` — genealogy / marginal FFBSi
+4. `experiments/exp_pf_smoother_eval.py` — `run_pf_with_optional_smoother`、**`--skip-valid-epochs`**
+5. `experiments/exp_gnss_compare_pf_ffbsi.py` — forward vs FFBSi の門番比較（`resampling` 一致が必須）
+6. PR #4 は **merge 禁止**（許可があるまで）
 
 ---
 
@@ -58,6 +68,26 @@ RTKLIB demo5 に P50 12%, P95 32%, RMS 16% 勝利。single-freq の限界あり 
 
 PF は WLS に負け。GSDC は open-sky 寄りで NLOS 少ない → PF の temporal filtering の恩恵が少ない。PF は urban canyon で強い。
 
+### 1.5 短い実測メモ: PF + TDCP 速度ガイド + 仰角重み（100k 粒子, PU=1.95, σ_pos_tdcp=1.0）
+
+**前提**: 以下は `experiments/exp_pf_smoother_eval.py` 一行評価。**全区間フル run の headline 表（§1.1）とは条件が違う**（エポック数・ウィンドウ・PU 等）。相対比較用。
+
+| 設定 | 区間 | 仰角重み | P50 | RMS 2D |
+|---|------|---------|-----|--------|
+| Odaiba | 先頭 500 有効 ep | off | 0.78 m | 0.86 m |
+| Odaiba | 先頭 500 有効 ep | on (`--tdcp-elevation-weight`) | 0.75 m | 0.84 m |
+| Shinjuku | 先頭 500 有効 ep | off | **1.79 m** | 2.77 m |
+| Shinjuku | 先頭 500 有効 ep | on | 1.87 m | 2.81 m |
+| Odaiba | **中盤** skip=4000 後 500 ep | off | **6.80 m** | 9.30 m |
+| Odaiba | 同上 | on | 6.88 m | 9.58 m |
+
+**解釈（事実と推論を分ける）**
+
+- **事実**: 仰角重みは区間によって **改善も悪化も**あり、一貫した勝ちではない。
+- **確認済み (2026-04-08)**: `CorrectedMeasurement.elevation` は **radians**（`navigation.cpp` の `atan2` → `spp.cpp` でそのまま代入）。`tdcp_velocity.py` の `np.sin(el)` は正しい。効果が区間依存なのは `sin²(el)` モデル自体の限界。
+
+**ウィンドウ評価**: `--skip-valid-epochs K` で先頭 K 有効エポックは **PF では burn-in のみ**（メトリクスには含めない）。`--max-epochs N` と併用で **合計 K+N 有効 ep 処理後に打ち切り**。
+
 ---
 
 ## 2. 実装済みの技術スタック
@@ -94,8 +124,27 @@ CorrectedMeasurement に追加:
 - `snr` — C/N0 [dB-Hz]
 - `satellite_velocity` — 衛星速度 ECEF [m/s]
 - `clock_drift` — 衛星 clock drift [s/s]
+- `elevation` — 仰角 [rad]（`navigation.cpp:atan2` 由来。TDCP 仰角重みで使用。**単位確認済み 2026-04-08**）
 
-### 2.4 観測スタック (Python レベル)
+### 2.4 TDCP 速度（Python・コア外）
+
+| 項目 | 内容 |
+|---|---|
+| 実装 | `python/gnss_gpu/tdcp_velocity.py` |
+| 内容 | 衛星 LOS・衛星平均速度・衛星 clock drift で補正した TDCP、WLS で `delta_rx/dt`；L1 波長仮定、多周波行の SNR で 1 行に圧縮 |
+| テスト | `tests/test_tdcp_velocity.py` |
+| オプション | `elevation_weight=True` で行重みに `max(sin el, floor)²`（両エポックで有限の `elevation` がある行のみ） |
+
+### 2.5 系譜スムーザ・FFBSi（Python + デバイス）
+
+| 項目 | 内容 |
+|---|---|
+| 動機 | systematic 再サンプル時の親インデックスを無視した marginal backward は、ESS 等と組み合わせたとき整合が崩れうる |
+| CUDA | systematic resample カーネルが **祖先インデックス GPU バッファ**に書き込み。`pf_device_get_resample_ancestors` / Python `get_resample_ancestors()` |
+| デフォルト実験 | FFBSi 評価は **genealogy**（祖先一致）を優先。marginal は明示指定 |
+| resampling | genealogy 比較では forward も **`systematic`** に揃える必要あり（`exp_gnss_compare_pf_ffbsi.py` の `--resampling`） |
+
+### 2.6 観測スタック (Python レベル)
 
 | 手法 | 効果 (Odaiba) | 状態 |
 |---|---|---|
@@ -110,18 +159,26 @@ CorrectedMeasurement に追加:
 | RAIM satellite exclusion | P95 -1m (HK) | 実装済み (HK) |
 | Carrier-phase-derived PR (float) | P50 -0.1m | 実装済み、効果限定的 |
 | Forward-backward smoother | RMS -1m, P50 +0.3m | 実装済み (トレードオフ) |
+| **TDCP predict ガイド** | 条件依存（§1.5） | **実装済み**・実験スクリプト複数から利用可 |
+| **Genealogy スムーザ** | FFBSi 公平比較用 | 実装済み（祖先 export 要 systematic） |
 
 ---
 
 ## 3. 次にやるべきこと (carrier phase / TDCP)
 
-### 3.1 TDCP (Time-Differenced Carrier Phase) — 最優先
+### 3.1 TDCP (Time-Differenced Carrier Phase) — 最優先（更新）
 
-**目的**: cm 級の inter-epoch 変位推定で predict を劇的に改善
+**目的**: cm 級の inter-epoch 変位推定で predict を劇的に改善し、**σ_pos / tight-RMS 連動**や wide-lane 側の好循環を作る。
 
-**前回の問題**: 衛星移動分を引いていなかった → 修正コード作成済みだが未テスト
+**実装状況（2026-04）**: 衛星運動・衛星時計補正を含む WLS は **`tdcp_velocity.py` に実装済み**。単体テストあり。実験では `predict_guide=tdcp` と `--sigma-pos-tdcp` 等で制御。
 
-**正しい TDCP**:
+**残り（優先順）**
+
+1. ~~**仰角 `elevation` の単位・値域の確認**~~ → **確認済み (2026-04-08): radians**。`navigation.cpp:atan2` → `spp.cpp` → Python バインディング。`tdcp_velocity.py` の `sin(el)` は正しい。
+2. **TDCP 採用時の σ_pos カーブ**（RMS・衛星本数・都市区間で切り替え）— いまの `sigma_pos_tdcp` / `tdcp_tight_rms_max` の整理・拡張。
+3. Odaiba **全区間**で TDCP ガイドの headline 行を README 水準で更新するか判断。
+
+**正しい TDCP（整理・数式は従来どおり）**:
 ```
 delta_L_m = (L_current - L_prev) * wavelength
 sat_range_change = los · avg_sat_vel * dt
@@ -131,11 +188,11 @@ WLS: [los, 1] * [delta_rx; delta_cb_rx] = corrected
 velocity = delta_rx / dt
 ```
 
-**実装場所**: 実験スクリプト内（Python レベル）。CUDA カーネル変更不要。
+**実装場所**: **`python/gnss_gpu/tdcp_velocity.py`**（実験は import して利用）。CUDA カーネル変更不要。
 
-**必要なデータ**: gnssplusplus の carrier_phase + satellite_velocity + clock_drift (拡張済み)
+**必要なデータ**: gnssplusplus の carrier_phase + satellite_velocity + clock_drift（**elevation はオプション**）
 
-**期待効果**: Doppler velocity (0.1 m/s 精度) → TDCP (0.01 m/s 精度)。predict noise が 10 倍改善。
+**期待効果**: Doppler ガイドより強い predict が取れる区間では σ_pos を下げられる → 1 m 帯への寄与を全体評価で確認。
 
 ### 3.2 Wide-lane integer ambiguity resolution
 
@@ -176,7 +233,8 @@ TDCP と carrier phase PR の両方が carrier_phase を使うが、異なる用
 | RTK carrier phase | float-only、改善なし | urban NLOS で integer fix 不可 |
 | Float carrier phase (HK) | 効果なし | single-freq + NLOS で ambiguity 収束しない |
 | OSM map constraint | 悪化 | wrong road matching で引きずられる |
-| TDCP (初回実装) | 動作せず | 衛星移動分の未補正 |
+| TDCP (初回実装) | 動作せず | 衛星移動分の未補正（**現行 `tdcp_velocity.py` では補正済み**） |
+| TDCP WLS `sin²(el)` 重み | 区間次第で悪化あり | モデルが粗い（仰角単位は rad で正しい、§1.5） |
 | Hatch filter | Odaiba で悪化 | urban canyon で carrier phase が途切れ diverge |
 | DGNSS (base station 差分) | 改善なし | gnssplusplus 補正が既に十分 |
 | GSDC PF | WLS に負け | open-sky で temporal filtering 不要 |
@@ -223,8 +281,13 @@ TDCP と carrier phase PR の両方が carrier_phase を使うが、異なる用
 - CorrectedMeasurement に PRN, carrier_phase, doppler, satellite_velocity 追加済み
 
 ### 7.4 実験スクリプト
-- `experiments/exp_urbannav_fixed_eval.py` — メイン評価
-- `experiments/exp_position_update_eval.py` — position_update 評価
+- `experiments/exp_urbannav_fixed_eval.py` — メイン評価（headline に近い全区間）
+- `experiments/exp_pf_smoother_eval.py` — PF + optional smoother；**`run_pf_with_optional_smoother`**；**`--skip-valid-epochs`**；TDCP 仰角重み **`--tdcp-elevation-weight`**
+- `experiments/exp_ffbsi_eval.py` — FFBSi / genealogy；`resampling=systematic` 固定
+- `experiments/exp_gnss_compare_pf_ffbsi.py` — forward vs smoother **公平比較**（同一 `dataset`、`--resampling`）
+- `experiments/exp_submeter_sweep.py` / `exp_zenbu_sweep.py` / `exp_fine_pu_sweep.py` — 設定スイープ
+- `experiments/exp_position_update_eval.py` — position_update；TDCP ガイド・仰角重み CLI あり
+- `experiments/exp_fgo_benchmark_hook.py` — FGO ベンチ外部コマンド用フック（**実装しない**；参照用）
 - `experiments/exp_hk_visualization.py` — HK GIF 生成
 - `experiments/exp_gsdc2023_pf.py` — GSDC 評価
 - `experiments/exp_particle_visualization.py` — OSM 可視化 (baseline_label 対応)
@@ -249,12 +312,12 @@ TDCP と carrier phase PR の両方が carrier_phase を使うが、異なる用
 - sigma が小さいほど SPP に強く引かれる (sigma=3 が Odaiba 最適)
 - PU なしだと P50 が 2.68m に悪化 (SPP アンカーが必要)
 
-### 8.3 Smoother (forward-backward)
-- enable_smoothing() → store_epoch() × N → smooth()
-- backward pass: 新しい PF インスタンスで逆順に走る
-- 結合: (forward + backward) / 2
-- 効果: RMS 改善 (6.51→5.35), P50 悪化 (1.67→2.94)
-- position_update が両方向で SPP に引くため、差が小さい
+### 8.3 Smoother (forward-backward) と FFBSi
+- **デフォルト smoother（exp_pf_smoother_eval）**: enable_smoothing() → store_epoch() × N → smooth()；backward は別 PF で逆順、**forward/backward の平均**。
+- **効果（過去メモ）**: RMS 改善例 (6.51→5.35), P50 悪化例 (1.67→2.94)。PU が両方向で SPP に引くと差が縮む。
+- **FFBSi / genealogy（exp_ffbsi_eval）**: forward 履歴Weights/States/**祖先**を使い、**backward で祖先パスをサンプル**（genealogy）または legacy カーネル（marginal）。
+- **公平比較の注意**: forward が **Megopolis**、smoother 側が **systematic 前提**だと再サンプルが一致せず指標が歪む。比較時は **`--resampling systematic`** 等で揃える（`exp_gnss_compare_pf_ffbsi.py`）。
+- **実装メモ**: systematic 再サンプル直後に `get_resample_ancestors()` で親インデックス取得。テスト: `tests/test_ffbsi.py`, `tests/test_cuda_streams.py`。
 
 ### 8.4 Doppler velocity
 - gnssplusplus の satellite_velocity で衛星運動を補正
@@ -281,32 +344,59 @@ cd third_party/gnssplusplus/build && cmake --build . -j$(nproc)
 
 # テスト
 PYTHONPATH=python python3 -m pytest tests/ -q
+
+# CUDA / バインディングを直したら .so を python 配下へコピー（環境依存ファイル名）
+# cp build/python/gnss_gpu/_gnss_gpu_pf_device*.so python/gnss_gpu/
 ```
 
 ---
 
-## 10. 残課題 (Cursor に引き継ぐ)
+## 10. 残課題 (Claude / Cursor に引き継ぐ)
 
-### 10.1 最優先: TDCP + carrier phase で 1m 切り
+### 10.1 最優先: 1 m 切り（TDCP + carrier、FGO なし）
 
-1. TDCP velocity の正しい実装 (衛星移動補正済みコードは書いた、テスト未完了)
-2. TDCP velocity → predict で sigma_pos を下げられるか検証
-3. Wide-lane integer fix → narrow-lane float → carrier-phase PR
-4. TDCP + CP PR の相乗効果を Odaiba で検証
+1. ~~**仰角の単位確認**~~ → **確認済み: radians** (2026-04-08)。
+2. **TDCP × σ_pos**：全区間・都市区間で「いつ σ を締めるか」规则化。`tdcp_tight_rms_max` と併用。
+3. **Wide-lane → carrier-phase PR** パイプライン（§3.2）を TDCP 改善後に再挑戦。
+4. **README / headline**：条件を揃えた Odaiba 全区間の数値を更新するか、短評価と役割分担を文書化。
 
-### 10.2 FGO は NG
+### 10.2 実装・実験の片付け
 
-ユーザーが明示的に FGO を拒否。PF / smoother の枠組みで攻める。
+- 未コミットの実験スクリプト・`tdcp_velocity.py`・FFBSi・祖先バッファ変更を **論理単位でコミット**するか、不要なら捨てる。
+- `skip_valid_epochs` を **`exp_gnss_compare_pf_ffbsi.py` 等**にも渡したい場合は `run_pf_with_optional_smoother` の引数をスレッドする（未対応なら明記して実装）。
 
-### 10.3 PR #4 の merge
+### 10.3 FGO は NG
 
-ユーザーが "merge するな" と言っている。merge は明示的に許可を得てから。
+ユーザーが明示的に FGO を拒否。PF / smoother / 粒子 backward の枠で攻める。
 
-### 10.4 README / PR 更新
+### 10.4 PR #4
 
-carrier phase / TDCP の結果が出たら README と PR #4 の description を更新。
+**ユーザー許可まで merge しない**。
 
-### 10.5 GIF
+### 10.5 可視化
 
-HK の GIF は生成済み (`experiments/results/paper_assets/particle_viz_hk20190428.gif`)。
-Odaiba/Shinjuku の GIF は既存のまま (gnssplusplus + RTKLIB demo5 比較)。
+HK: `experiments/results/paper_assets/particle_viz_hk20190428.gif`（ほか `.mp4` が未追跡で残っている場合あり）。Odaiba/Shinjuku GIF は従来どおり。
+
+---
+
+## 11. 付録: コマンド例（UrbanNav）
+
+```bash
+cd /path/to/gnss_gpu/experiments
+export PYTHONPATH=".:../python:../third_party/gnssplusplus/build/python:../third_party/gnssplusplus/python"
+
+# TDCP ガイド、先頭 500 ep、PU 例
+python3 exp_pf_smoother_eval.py --data-root /tmp/UrbanNav-Tokyo --runs Odaiba \
+  --n-particles 100000 --max-epochs 500 --predict-guide tdcp \
+  --position-update-sigma 1.95 --sigma-pos-tdcp 1.0
+
+# 仰角重みオン
+#  ... 上に加え --tdcp-elevation-weight [--tdcp-el-sin-floor 0.1]
+
+# burn-in 4000 後に 500 ep だけメトリクス
+python3 exp_pf_smoother_eval.py --data-root /tmp/UrbanNav-Tokyo --runs Odaiba \
+  --n-particles 100000 --skip-valid-epochs 4000 --max-epochs 500 \
+  --predict-guide tdcp --position-update-sigma 1.95 --sigma-pos-tdcp 1.0
+```
+
+**注意**: `exp_pf_smoother_eval` の CSV は既定パスで**上書き**される。複数 run を残すなら実行後にファイルをリネームすること。
