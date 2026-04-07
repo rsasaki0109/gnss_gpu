@@ -120,6 +120,34 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
        py::arg("sat_ecef"), py::arg("carrier_phase"), py::arg("weights_sat"),
        py::arg("n_sat"), py::arg("wavelength") = 0.190293673, py::arg("sigma_cycles") = 0.05);
 
+    m.def("pf_device_weight_dd_carrier_afv", [](gnss_gpu::PFDeviceState* state,
+                                 py::array_t<double> sat_ecef_k,
+                                 py::array_t<double> ref_ecef,
+                                 py::array_t<double> dd_carrier,
+                                 py::array_t<double> base_range_k,
+                                 double base_range_ref,
+                                 py::array_t<double> weights_dd,
+                                 int n_dd, double wavelength, double sigma_cycles) {
+        py::buffer_info b_sk = sat_ecef_k.request();
+        py::buffer_info b_ref = ref_ecef.request();
+        py::buffer_info b_dd = dd_carrier.request();
+        py::buffer_info b_brk = base_range_k.request();
+        py::buffer_info b_w = weights_dd.request();
+        gnss_gpu::pf_device_weight_dd_carrier_afv(state,
+            static_cast<double*>(b_sk.ptr),
+            static_cast<double*>(b_ref.ptr),
+            static_cast<double*>(b_dd.ptr),
+            static_cast<double*>(b_brk.ptr),
+            base_range_ref,
+            static_cast<double*>(b_w.ptr),
+            n_dd, wavelength, sigma_cycles);
+    }, "Weight update using DD carrier phase AFV (no clock bias needed)",
+       py::arg("state"),
+       py::arg("sat_ecef_k"), py::arg("ref_ecef"),
+       py::arg("dd_carrier"), py::arg("base_range_k"),
+       py::arg("base_range_ref"), py::arg("weights_dd"),
+       py::arg("n_dd"), py::arg("wavelength") = 0.190293673, py::arg("sigma_cycles") = 0.05);
+
     m.def("pf_device_position_update", [](gnss_gpu::PFDeviceState* state,
                                          double ref_x, double ref_y, double ref_z,
                                          double sigma_pos) {
