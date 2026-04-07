@@ -241,6 +241,78 @@ __global__ void pfd_weight_carrier_afv_kernel(
     log_weights[tid] += log_w;
 }
 
+// --- DD Carrier phase AFV weight kernel ---
+// Double-differenced: eliminates receiver clock bias from both rover and base.
+// For each DD pair (sat_k vs ref):
+//   dd_expected = (range_to_k - range_to_ref - base_range_k + base_range_ref) / wavelength
+//   dd_residual = dd_carrier[k] - dd_expected
+//   afv = dd_residual - round(dd_residual)
+__global__ void pfd_weight_dd_carrier_afv_kernel(
+    const double* px, const double* py,
+    const double* pz,
+    const double* dd_data,      // layout: [sat_k: n_dd*3][ref: 3][dd_carrier: n_dd][base_range_k: n_dd][base_range_ref: 1][weights: n_dd]
+    double* log_weights,
+    int N, int n_dd,
+    double wavelength,
+    double sigma_cycles) {
+
+    // Dynamic shared memory layout:
+    // [sat_k_ecef: n_dd*3] [ref_ecef: 3] [dd_carrier: n_dd] [base_range_k: n_dd] [base_range_ref: 1] [weights: n_dd]
+    // Total: n_dd*3 + 3 + n_dd + n_dd + 1 + n_dd = n_dd*6 + 4 doubles
+    extern __shared__ double s_data[];
+    double* s_sat_k   = s_data;                      // n_dd * 3
+    double* s_ref     = s_data + n_dd * 3;            // 3
+    double* s_dd_cp   = s_data + n_dd * 3 + 3;        // n_dd
+    double* s_br_k    = s_data + n_dd * 4 + 3;        // n_dd
+    double* s_br_ref  = s_data + n_dd * 5 + 3;        // 1
+    double* s_ws      = s_data + n_dd * 5 + 4;        // n_dd
+
+    int total_shared = n_dd * 6 + 4;
+    for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
+        s_data[i] = dd_data[i];
+    }
+    __syncthreads();
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    double x = px[tid];
+    double y = py[tid];
+    double z = pz[tid];
+
+    // Range from particle to reference satellite
+    double dx_ref = x - s_ref[0];
+    double dy_ref = y - s_ref[1];
+    double dz_ref = z - s_ref[2];
+    double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+
+    double inv_wl = 1.0 / wavelength;
+    double inv_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
+    double base_range_ref = s_br_ref[0];
+    double log_w = 0.0;
+
+    for (int d = 0; d < n_dd; d++) {
+        // Range from particle to satellite k
+        double dx_k = x - s_sat_k[d * 3 + 0];
+        double dy_k = y - s_sat_k[d * 3 + 1];
+        double dz_k = z - s_sat_k[d * 3 + 2];
+        double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+
+        // DD expected range in cycles (no clock bias!)
+        double dd_expected = (r_k - r_ref - s_br_k[d] + base_range_ref) * inv_wl;
+
+        // DD residual
+        double dd_residual = s_dd_cp[d] - dd_expected;
+
+        // AFV: fractional cycle
+        double afv = dd_residual - rint(dd_residual);
+
+        log_w += -0.5 * s_ws[d] * (afv * afv) * inv_sigma2;
+    }
+
+    log_weights[tid] += log_w;
+}
+
 // --- Position-domain update kernel ---
 // Applies a Gaussian likelihood based on distance to a reference position.
 // log_w += -0.5 * ||particle_pos - ref_pos||^2 / sigma^2
@@ -1119,6 +1191,61 @@ void pf_device_weight_carrier_afv(PFDeviceState* state,
         state->d_log_weights,
         N, n_sat, wavelength, sigma_cycles);
     CUDA_CHECK_LAST();
+}
+
+// ============================================================
+// Weight update: DD Carrier phase AFV
+// ============================================================
+
+void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
+    const double* sat_ecef_k, const double* ref_ecef,
+    const double* dd_carrier, const double* base_range_k,
+    double base_range_ref, const double* weights_dd,
+    int n_dd, double wavelength, double sigma_cycles) {
+
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    // Pack all DD data into a contiguous buffer for a single H2D transfer.
+    // Layout: [sat_k: n_dd*3][ref: 3][dd_carrier: n_dd][base_range_k: n_dd][base_range_ref: 1][weights: n_dd]
+    int total_doubles = n_dd * 6 + 4;
+    size_t total_bytes = (size_t)total_doubles * sizeof(double);
+
+    // Check if we need to reallocate (reuse pinned capacity; need total_doubles <= pinned_capacity * 5)
+    // For safety, just use malloc/free for the staging buffer since n_dd is small (~10)
+    // and this is called once per epoch.
+    double* h_buf = (double*)malloc(total_bytes);
+    if (!h_buf) return;
+
+    // Pack
+    int off = 0;
+    memcpy(h_buf + off, sat_ecef_k, n_dd * 3 * sizeof(double)); off += n_dd * 3;
+    memcpy(h_buf + off, ref_ecef, 3 * sizeof(double)); off += 3;
+    memcpy(h_buf + off, dd_carrier, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_buf + off, base_range_k, n_dd * sizeof(double)); off += n_dd;
+    h_buf[off] = base_range_ref; off += 1;
+    memcpy(h_buf + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
+
+    // Allocate device buffer for DD data (small, ~hundreds of bytes)
+    double* d_dd_data = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_dd_data, total_bytes));
+
+    // Synchronous copy (data is tiny)
+    CUDA_CHECK(cudaMemcpyAsync(d_dd_data, h_buf, total_bytes,
+                                cudaMemcpyHostToDevice, state->stream));
+
+    // Launch DD-AFV kernel
+    size_t smem = (size_t)total_doubles * sizeof(double);
+    pfd_weight_dd_carrier_afv_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        d_dd_data, state->d_log_weights,
+        N, n_dd, wavelength, sigma_cycles);
+    CUDA_CHECK_LAST();
+
+    // Free device buffer after kernel completes
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+    CUDA_CHECK(cudaFree(d_dd_data));
+    free(h_buf);
 }
 
 // ============================================================

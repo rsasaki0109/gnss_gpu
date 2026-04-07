@@ -45,6 +45,7 @@ class ParticleFilterDevice:
             pf_device_weight,
             pf_device_weight_gmm,
             pf_device_weight_carrier_afv,
+            pf_device_weight_dd_carrier_afv,
             pf_device_position_update,
             pf_device_shift_clock_bias,
             pf_device_ess,
@@ -63,6 +64,7 @@ class ParticleFilterDevice:
         self._pf_device_weight = pf_device_weight
         self._pf_device_weight_gmm = pf_device_weight_gmm
         self._pf_device_weight_carrier_afv = pf_device_weight_carrier_afv
+        self._pf_device_weight_dd_carrier_afv = pf_device_weight_dd_carrier_afv
         self._pf_device_position_update = pf_device_position_update
         self._pf_device_shift_clock_bias = pf_device_shift_clock_bias
         self._pf_device_ess = pf_device_ess
@@ -283,6 +285,42 @@ class ParticleFilterDevice:
             self._state,
             sat.ravel(), cp, weights,
             n_sat, float(wavelength), float(sigma_cycles))
+
+        if resample:
+            _ = self.resample_if_needed()
+
+    def update_dd_carrier_afv(self, dd_result, wavelength=0.190293673,
+                               sigma_cycles=0.05, resample=True):
+        """Update weights using DD carrier phase AFV likelihood.
+
+        Double-differenced carrier phase eliminates receiver clock bias
+        from both rover and base, and largely cancels atmospheric errors.
+        This makes the AFV likelihood much more effective than undifferenced.
+
+        Parameters
+        ----------
+        dd_result : DDResult
+            Output from :meth:`DDCarrierComputer.compute_dd`.
+        wavelength : float
+            Carrier wavelength [m]. Default is L1 GPS.
+        sigma_cycles : float
+            Standard deviation of DD AFV residual [cycles]. Default 0.05.
+        resample : bool
+            If True (default), run ESS-based adaptive resampling after weighting.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        self._pf_device_weight_dd_carrier_afv(
+            self._state,
+            dd_result.sat_ecef_k.ravel(),
+            dd_result.sat_ecef_ref.ravel(),
+            dd_result.dd_carrier_cycles,
+            dd_result.base_range_k,
+            float(dd_result.base_range_ref),
+            dd_result.dd_weights,
+            dd_result.n_dd,
+            float(wavelength), float(sigma_cycles))
 
         if resample:
             _ = self.resample_if_needed()

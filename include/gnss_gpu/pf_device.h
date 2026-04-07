@@ -97,6 +97,20 @@ void pf_device_weight_carrier_afv(PFDeviceState* state,
     const double* weights_sat,
     int n_sat, double wavelength = 0.190293673, double sigma_cycles = 0.05);
 
+// Weight update using DD carrier phase AFV (Double-Differenced).
+// Eliminates receiver clock bias; uses satellite differencing geometry.
+// sat_ecef_k: [n_dd, 3] non-ref satellite positions
+// ref_ecef: [3] reference satellite position
+// dd_carrier: [n_dd] DD carrier phase observations in cycles
+// base_range_k: [n_dd] base-to-sat_k ranges [m]
+// base_range_ref: base-to-ref range [m]
+// weights_dd: [n_dd] per-DD-pair weights
+void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
+    const double* sat_ecef_k, const double* ref_ecef,
+    const double* dd_carrier, const double* base_range_k,
+    double base_range_ref, const double* weights_dd,
+    int n_dd, double wavelength = 0.190293673, double sigma_cycles = 0.05);
+
 // Position-domain update - apply soft constraint from external position estimate
 void pf_device_position_update(PFDeviceState* state,
     double ref_x, double ref_y, double ref_z, double sigma_pos);

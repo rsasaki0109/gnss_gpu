@@ -154,6 +154,10 @@ def run_pf_with_optional_smoother(
     tdcp_pu_rms_max: float = 3.0,
     mupf: bool = False,
     mupf_sigma_cycles: float = 0.05,
+    mupf_snr_min: float = 25.0,
+    mupf_elev_min: float = 0.15,
+    mupf_dd: bool = False,
+    mupf_dd_sigma_cycles: float = 0.05,
 ) -> dict[str, object]:
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -195,6 +199,25 @@ def run_pf_with_optional_smoother(
                 h = _spp_heading_from_velocity(spp_vel_init, lat0, lon0)
                 if h is not None:
                     imu_filter.heading = h
+
+    # --- DD carrier phase setup ---
+    dd_computer = None
+    n_dd_used = 0
+    n_dd_skip = 0
+    if mupf_dd:
+        from gnss_gpu.dd_carrier import DDCarrierComputer
+        # Try common base station filenames
+        base_obs_path = None
+        for name in ("base_trimble.obs", "base.obs"):
+            p = run_dir / name
+            if p.exists():
+                base_obs_path = p
+                break
+        if base_obs_path is not None:
+            dd_computer = DDCarrierComputer(base_obs_path)
+            print(f"  [DD] base_pos = {dd_computer.base_position}")
+        else:
+            print(f"  [DD] WARNING: no base station RINEX found in {run_dir}, DD disabled")
 
     pf = ParticleFilterDevice(
         n_particles=n_particles,
@@ -393,15 +416,34 @@ def run_pf_with_optional_smoother(
         # --- MUPF: carrier phase AFV update (after pseudorange) ---
         if mupf:
             # Collect carrier phase from gnssplusplus measurements
+            # Filter: only use high-quality satellites (C/N0 + elevation)
             cp_cycles = []
             cp_sat_ecef = []
             cp_weights = []
             for m in measurements:
                 cp = float(getattr(m, "carrier_phase", 0.0))
-                if cp != 0.0 and np.isfinite(cp) and abs(cp) > 1e3:
-                    cp_cycles.append(cp)
-                    cp_sat_ecef.append(m.satellite_ecef)
-                    cp_weights.append(m.weight)
+                if cp == 0.0 or not np.isfinite(cp) or abs(cp) < 1e3:
+                    continue
+                snr = float(getattr(m, "snr", 0.0))
+                elev = float(getattr(m, "elevation", 0.0))
+                # Skip low SNR (likely NLOS/multipath)
+                if snr < mupf_snr_min and snr > 0:
+                    continue
+                # Skip low elevation (likely NLOS)
+                if 0 < elev < mupf_elev_min:
+                    continue
+                # Also check pseudorange residual — large residual = likely NLOS
+                spp_pos_check = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
+                sat_pos = np.array(m.satellite_ecef, dtype=np.float64)
+                if np.isfinite(spp_pos_check).all() and np.linalg.norm(spp_pos_check) > 1e6:
+                    rng = np.linalg.norm(sat_pos - spp_pos_check)
+                    cb_est_m = float(np.median(pr - np.linalg.norm(sat_ecef - spp_pos_check, axis=1)))
+                    res = abs(m.corrected_pseudorange - rng - cb_est_m)
+                    if res > 30.0:  # large residual = NLOS
+                        continue
+                cp_cycles.append(cp)
+                cp_sat_ecef.append(m.satellite_ecef)
+                cp_weights.append(m.weight)
             if len(cp_cycles) >= 4:
                 # Resample after pseudorange update to concentrate particles
                 pf.resample_if_needed()
@@ -411,6 +453,18 @@ def run_pf_with_optional_smoother(
                 cp_w = np.array(cp_weights, dtype=np.float64)
                 pf.update_carrier_afv(cp_sat, cp_arr, weights=cp_w,
                                       sigma_cycles=mupf_sigma_cycles)
+
+        # --- MUPF-DD: Double-Differenced carrier phase AFV update ---
+        if mupf_dd and dd_computer is not None:
+            pf_est = np.asarray(pf.estimate()[:3], dtype=np.float64)
+            dd_result = dd_computer.compute_dd(tow, measurements, pf_est)
+            if dd_result is not None and dd_result.n_dd >= 3:
+                # Resample to concentrate particles before DD-AFV
+                pf.resample_if_needed()
+                pf.update_dd_carrier_afv(dd_result, sigma_cycles=mupf_dd_sigma_cycles)
+                n_dd_used += 1
+            else:
+                n_dd_skip += 1
 
         spp_pos = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
         if position_update_sigma is not None:
@@ -516,6 +570,13 @@ def run_pf_with_optional_smoother(
         print(
             f"  [imu_tight] IMU position_update used {n_imu_tight_used}/{total_tight} epochs, "
             f"skip {n_imu_tight_skip}/{total_tight}"
+        )
+
+    if mupf_dd:
+        total_dd = n_dd_used + n_dd_skip
+        print(
+            f"  [mupf_dd] DD-AFV used {n_dd_used}/{total_dd} epochs, "
+            f"skip {n_dd_skip}/{total_dd}"
         )
 
     forward_pos_full = np.array(forward_aligned, dtype=np.float64)
@@ -688,6 +749,14 @@ def main() -> None:
                         help="Multiple Update PF: carrier phase AFV update after pseudorange")
     parser.add_argument("--mupf-sigma-cycles", type=float, default=0.05,
                         help="Carrier phase AFV sigma in cycles (default 0.05 ≈ 1cm)")
+    parser.add_argument("--mupf-snr-min", type=float, default=25.0,
+                        help="Min C/N0 (dB-Hz) for carrier phase in MUPF")
+    parser.add_argument("--mupf-elev-min", type=float, default=0.15,
+                        help="Min elevation (rad) for carrier phase in MUPF (~8.6 deg)")
+    parser.add_argument("--mupf-dd", action="store_true",
+                        help="Use Double-Differenced carrier phase AFV (requires base station RINEX)")
+    parser.add_argument("--mupf-dd-sigma-cycles", type=float, default=0.05,
+                        help="DD carrier phase AFV sigma in cycles (default 0.05)")
     args = parser.parse_args()
 
     pos_sigma = args.position_update_sigma
@@ -749,6 +818,10 @@ def main() -> None:
                 tdcp_pu_rms_max=args.tdcp_pu_rms_max,
                 mupf=args.mupf,
                 mupf_sigma_cycles=args.mupf_sigma_cycles,
+                mupf_snr_min=args.mupf_snr_min,
+                mupf_elev_min=args.mupf_elev_min,
+                mupf_dd=args.mupf_dd,
+                mupf_dd_sigma_cycles=args.mupf_dd_sigma_cycles,
             )
             fm = out["forward_metrics"]
             sm = out["smoothed_metrics"]
@@ -783,6 +856,8 @@ def main() -> None:
                 "doppler_position_update": args.doppler_position_update,
                 "doppler_pu_sigma": args.doppler_pu_sigma,
                 "imu_tight_coupling": args.imu_tight_coupling,
+                "mupf": args.mupf,
+                "mupf_dd": args.mupf_dd,
                 "smoother": use_sm,
                 "n_particles": args.n_particles,
                 "forward_p50": fm["p50"] if fm else None,
