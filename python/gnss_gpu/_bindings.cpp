@@ -1,6 +1,8 @@
+#include <cstdint>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include "gnss_gpu/coordinates.h"
+#include "gnss_gpu/fgo.h"
 #include "gnss_gpu/positioning.h"
 
 namespace py = pybind11;
@@ -87,4 +89,52 @@ PYBIND11_MODULE(_gnss_gpu, m) {
   }, "Batch WLS positioning (GPU parallel)",
      py::arg("sat_ecef"), py::arg("pseudoranges"), py::arg("weights"),
      py::arg("max_iter") = 10, py::arg("tol") = 1e-4);
+
+  m.def(
+      "fgo_gnss_lm",
+      [](py::array_t<double> sat_ecef, py::array_t<double> pseudorange, py::array_t<double> weights,
+         py::array_t<double> state_io, double motion_sigma_m, int max_iter, double tol, double huber_k,
+         int enable_line_search, py::object sys_kind_py, int n_clock) {
+        auto bs = sat_ecef.request(), bp = pseudorange.request(), bw = weights.request();
+        auto bst = state_io.request();
+        if (bs.ndim != 3 || bp.ndim != 2 || bw.ndim != 2 || bst.ndim != 2)
+          throw std::runtime_error(
+              "fgo_gnss_lm: expected sat_ecef [T,S,3], pr/weights [T,S], state [T,3+n_clock]");
+        int n_epoch = static_cast<int>(bs.shape[0]);
+        int n_sat = static_cast<int>(bs.shape[1]);
+        const int ss = 3 + n_clock;
+        if (bp.shape[0] != n_epoch || bw.shape[0] != n_epoch ||
+            static_cast<int>(bp.shape[1]) != n_sat || static_cast<int>(bw.shape[1]) != n_sat)
+          throw std::runtime_error("fgo_gnss_lm: pseudorange/weights shape mismatch");
+        if (static_cast<int>(bst.shape[0]) != n_epoch || static_cast<int>(bst.shape[1]) != ss)
+          throw std::runtime_error("fgo_gnss_lm: state_io must be [T, 3+n_clock]");
+        if (bst.readonly) throw std::runtime_error("fgo_gnss_lm: state_io must be writable");
+        if (n_clock < 1 || n_clock > 4)
+          throw std::runtime_error("fgo_gnss_lm: n_clock must be in 1..4");
+
+        const std::int32_t* sk_ptr = nullptr;
+        if (!sys_kind_py.is_none()) {
+          auto sk_arr = py::cast<py::array_t<std::int32_t>>(sys_kind_py);
+          auto skr = sk_arr.request();
+          if (skr.ndim != 2 || skr.shape[0] != n_epoch || skr.shape[1] != n_sat)
+            throw std::runtime_error("fgo_gnss_lm: sys_kind must be int32 [T, S]");
+          sk_ptr = static_cast<const std::int32_t*>(skr.ptr);
+        } else if (n_clock > 1) {
+          throw std::runtime_error("fgo_gnss_lm: sys_kind is required when n_clock > 1");
+        }
+
+        double mse = 0.0;
+        int iters = gnss_gpu::fgo_gnss_lm(
+            static_cast<double*>(bs.ptr), static_cast<double*>(bp.ptr), static_cast<double*>(bw.ptr),
+            sk_ptr, n_clock, static_cast<double*>(bst.ptr), n_epoch, n_sat, motion_sigma_m, max_iter,
+            tol, huber_k, enable_line_search, &mse);
+        return py::make_tuple(iters, mse);
+      },
+      "GPU FGO: PseudorangeFactor_XC-style clocks (h=[1,0..] or [1,1,0..]) + optional RW motion. "
+      "GN + host Cholesky; huber_k>0 enables IRLS Huber on z=|sqrt(w)*res|; "
+      "enable_line_search uses backtracking on the GN step.",
+      py::arg("sat_ecef"), py::arg("pseudorange"), py::arg("weights"), py::arg("state_io"),
+      py::arg("motion_sigma_m") = 0.0, py::arg("max_iter") = 25, py::arg("tol") = 1e-3,
+      py::arg("huber_k") = 0.0, py::arg("enable_line_search") = 1, py::arg("sys_kind") = py::none(),
+      py::arg("n_clock") = 1);
 }
