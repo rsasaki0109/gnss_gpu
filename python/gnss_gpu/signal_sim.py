@@ -9,10 +9,11 @@ class SignalSimulator:
     """CUDA-accelerated GNSS IQ signal generator."""
 
     def __init__(self, sampling_freq=2.6e6, intermediate_freq=0,
-                 noise_floor_db=-20):
+                 noise_floor_db=-20, noise_seed=None):
         self.sampling_freq = float(sampling_freq)
         self.intermediate_freq = float(intermediate_freq)
         self.noise_floor_db = float(noise_floor_db)
+        self.noise_seed = None if noise_seed is None else int(noise_seed)
 
     def generate_epoch(self, channels, n_samples=None):
         """Generate composite IQ signal for one epoch.
@@ -32,7 +33,8 @@ class SignalSimulator:
 
         return generate_signal(
             self.sampling_freq, self.intermediate_freq,
-            channels, int(n_samples), self.noise_floor_db)
+            channels, int(n_samples), self.noise_floor_db,
+            0 if self.noise_seed is None else self.noise_seed)
 
     def generate_test_signal(self, prn, code_phase=0, doppler=0,
                              cn0_dbhz=45, duration_s=1e-3):
@@ -61,7 +63,8 @@ class SignalSimulator:
 
         return generate_signal(
             self.sampling_freq, self.intermediate_freq,
-            channels, n_samples, -float(cn0_dbhz))
+            channels, n_samples, -float(cn0_dbhz),
+            0 if self.noise_seed is None else self.noise_seed)
 
     @staticmethod
     def write_bin(iq_data, path, fmt="int8"):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate 3D visualization HTML + record video with Playwright.
+"""Generate 3D LOS/NLOS geometry visualization + recording helper.
 
 Creates a standalone HTML file using CesiumJS (free tier) that shows:
   - 3D globe with terrain + buildings (Cesium OSM Buildings)
@@ -8,6 +8,9 @@ Creates a standalone HTML file using CesiumJS (free tier) that shows:
   - Animated flythrough
 
 Then uses Playwright to record a video of the visualization.
+
+The receiver trajectory is sourced from UrbanNav, while satellite rays use
+a synthetic sky geometry to sanity-check LOS/NLOS behavior against buildings.
 """
 
 import csv
@@ -35,6 +38,7 @@ def load_trajectory(csv_path, step=200):
 
 
 def generate_sats(rx_ecef, n_sat=10, time_offset=0.0):
+    """Generate synthetic satellite positions for visualization."""
     lat, lon, _ = ecef_to_lla(*rx_ecef)
     sin_lat, cos_lat = math.sin(lat), math.cos(lat)
     sin_lon, cos_lon = math.sin(lon), math.cos(lon)
@@ -148,11 +152,7 @@ def generate_html(datasets, output_path):
   <div id="progress"></div>
 </div>
 <script>
-// Use Cesium Ion default token (free tier with OSM buildings)
-Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYTRjMzI1Mi1lMzZjLTRkNzUtOGQ4OC04NmM0NTczMGE0N2YiLCJpZCI6MjU5LCJpYXQiOjE3MzI1NTYxMjd9.Yj8OyKHxSYP0-R56VR-UBtoaTj6NQP68SLQIFUDR1xY';
-
 const viewer = new Cesium.Viewer('cesiumContainer', {{
-  terrain: Cesium.Terrain.fromWorldTerrain(),
   timeline: false,
   animation: false,
   baseLayerPicker: false,
@@ -165,10 +165,14 @@ const viewer = new Cesium.Viewer('cesiumContainer', {{
   selectionIndicator: false,
 }});
 
-// Add OSM 3D Buildings
-Cesium.createOsmBuildingsAsync().then(tileset => {{
-  viewer.scene.primitives.add(tileset);
-}});
+const ionToken = window.CESIUM_ION_TOKEN || '';
+if (ionToken) {{
+  Cesium.Ion.defaultAccessToken = ionToken;
+  viewer.scene.setTerrain(Cesium.Terrain.fromWorldTerrain());
+  Cesium.createOsmBuildingsAsync().then(tileset => {{
+    viewer.scene.primitives.add(tileset);
+  }});
+}}
 
 const datasets = {data_json};
 let currentDataset = 0;

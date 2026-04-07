@@ -1,18 +1,30 @@
 #!/usr/bin/env python3
-"""Generate LOS/NLOS verification video using deck.gl + Playwright.
+"""Generate LOS/NLOS geometry video using deck.gl + Playwright.
 
-Uses deck.gl's ArcLayer over OpenStreetMap tiles (no API key needed).
+Uses deck.gl's ArcLayer over an OpenStreetMap basemap (no API key needed).
 Lighter than CesiumJS — works in headless Chrome with swiftshader.
+
+The receiver trajectory comes from UrbanNav, while satellite rays use a
+synthetic sky geometry so the output stays a geometry sanity check rather
+than a real-sky validation artifact.
 """
 
+import argparse
 import csv
 import json
 import math
 import os
 import subprocess
-import time
+import sys
 
 import numpy as np
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+PYTHON_DIR = os.path.join(REPO_ROOT, "python")
+for path in (PYTHON_DIR, REPO_ROOT):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 from gnss_gpu.io.plateau import PlateauLoader
 from gnss_gpu.bvh import BVHAccelerator
@@ -31,6 +43,7 @@ def load_trajectory(csv_path, step=200):
 
 
 def generate_sats(rx_ecef, n_sat=10, time_offset=0.0):
+    """Generate synthetic satellite positions for visualization."""
     lat, lon, _ = ecef_to_lla(*rx_ecef)
     sin_lat, cos_lat = math.sin(lat), math.cos(lat)
     sin_lon, cos_lon = math.sin(lon), math.cos(lon)
@@ -50,7 +63,14 @@ def generate_sats(rx_ecef, n_sat=10, time_offset=0.0):
     return sat_ecef
 
 
-def compute_epochs(area_name, plateau_dir, traj_csv, n_epochs=10, step=300):
+def compute_epochs(
+    area_name,
+    plateau_dir,
+    traj_csv,
+    n_epochs=14,
+    step=240,
+    ray_length_m=1000.0,
+):
     print(f"[{area_name}] Loading PLATEAU + BVH...")
     loader = PlateauLoader(zone=9)
     building = loader.load_directory(plateau_dir)
@@ -84,7 +104,7 @@ def compute_epochs(area_name, plateau_dir, traj_csv, n_epochs=10, step=300):
                 continue
             direction = sats[i] - rx
             dist = np.linalg.norm(direction)
-            ray_end = rx + direction / dist * 800  # 800m for map view
+            ray_end = rx + direction / dist * ray_length_m
             re_la, re_lo, _ = ecef_to_lla(*ray_end)
             rays.append({
                 "prn": prn_list[i],
@@ -103,7 +123,17 @@ def compute_epochs(area_name, plateau_dir, traj_csv, n_epochs=10, step=300):
     return {"epochs": epochs, "trajectory": traj_lla, "area": area_name}
 
 
-def generate_html(datasets, output_path):
+def generate_html(
+    datasets,
+    output_path,
+    *,
+    zoom=15.0,
+    pitch=55.0,
+    bearing=-20.0,
+    rotation_step=6.0,
+    hold_ms=2200,
+    initial_delay_ms=1000,
+):
     data_json = json.dumps(datasets)
 
     # Center on first epoch of first dataset
@@ -121,10 +151,11 @@ def generate_html(datasets, output_path):
   #hud {{
     position:absolute; top:12px; left:12px; z-index:10;
     background:rgba(10,15,30,0.92); color:#e0e0e0; padding:14px 18px;
-    border-radius:10px; border:1px solid #334; min-width:240px;
+    border-radius:10px; border:1px solid #334; min-width:270px;
   }}
   #hud h2 {{ margin:0 0 6px 0; font-size:15px; color:#fff; }}
   #hud .area {{ font-size:18px; color:#ffd93d; margin-bottom:4px; }}
+  #meta {{ color:#9cb0c8; font-size:11px; margin-top:6px; line-height:1.45; }}
   .los {{ color:#00d4aa; font-weight:bold; }}
   .nlos {{ color:#ff6b6b; font-weight:bold; }}
   #epoch {{ color:#888; font-size:11px; margin-top:4px; }}
@@ -139,6 +170,7 @@ def generate_html(datasets, output_path):
   <div class="area" id="area"></div>
   <div id="stats"></div>
   <div id="epoch"></div>
+  <div id="meta">Map: OpenStreetMap<br>LOS/NLOS geometry: PLATEAU BVH</div>
   <div id="legend">
     <span style="background:#00d4aa"></span>LOS &nbsp;
     <span style="background:#ff6b6b"></span>NLOS &nbsp;
@@ -148,14 +180,36 @@ def generate_html(datasets, output_path):
 <script>
 const datasets = {data_json};
 let dsIdx = 0, epIdx = 0;
+const HOLD_MS = {int(hold_ms)};
+const INITIAL_DELAY_MS = {int(initial_delay_ms)};
+const CAMERA_BEARING = {float(bearing)};
+const ROTATION_STEP = {float(rotation_step)};
 
 const INITIAL_VIEW = {{
   longitude: {center[1]},
   latitude: {center[0]},
-  zoom: 14.5,
-  pitch: 55,
-  bearing: -20,
+  zoom: {float(zoom)},
+  pitch: {float(pitch)},
+  bearing: CAMERA_BEARING,
 }};
+
+const osmLayer = new deck.TileLayer({{
+  id: 'osm-base',
+  data: 'https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',
+  minZoom: 0,
+  maxZoom: 19,
+  tileSize: 256,
+  renderSubLayers: props => {{
+    const bbox = props.tile.bbox;
+    return new deck.BitmapLayer(props, {{
+      id: `${{props.id}}-bitmap`,
+      data: null,
+      image: props.data,
+      bounds: [bbox.west, bbox.south, bbox.east, bbox.north],
+      desaturate: 0.2,
+    }});
+  }},
+}});
 
 const deckgl = new deck.DeckGL({{
   container: 'map',
@@ -194,36 +248,40 @@ function update() {{
       ...INITIAL_VIEW,
       longitude: ep.rx[1],
       latitude: ep.rx[0],
-      bearing: -20 + epIdx * 8,
-      transitionDuration: 1200,
+      bearing: CAMERA_BEARING + epIdx * ROTATION_STEP,
+      transitionDuration: Math.max(800, HOLD_MS - 300),
     }},
     layers: [
+      osmLayer,
       new deck.PathLayer({{
         id: 'traj', data: pathData,
-        getPath: d => d.path, getColor: [255, 217, 61, 100],
-        widthMinPixels: 3, widthScale: 1,
+        getPath: d => d.path, getColor: [255, 217, 61, 180],
+        widthMinPixels: 4, widthScale: 1,
       }}),
       new deck.ArcLayer({{
         id: 'rays', data: arcData,
         getSourcePosition: d => d.source,
         getTargetPosition: d => d.target,
-        getSourceColor: d => d.los ? [0, 212, 170, 200] : [255, 107, 107, 200],
+        getSourceColor: d => d.los ? [0, 212, 170, 220] : [255, 107, 107, 220],
         getTargetColor: d => d.los ? [0, 212, 170, 120] : [255, 107, 107, 120],
-        getWidth: d => d.los ? 2 : 4,
-        getHeight: 0.3,
+        getWidth: d => d.los ? 3 : 5,
+        getHeight: d => 0.1 + d.el / 160,
       }}),
       new deck.ScatterplotLayer({{
         id: 'rx', data: pointData,
         getPosition: d => d.position,
         getFillColor: d => d.color,
-        getRadius: 30, radiusMinPixels: 8,
+        getLineColor: [20, 24, 34, 255],
+        lineWidthMinPixels: 2,
+        stroked: true,
+        getRadius: 36, radiusMinPixels: 9,
       }}),
       new deck.TextLayer({{
         id: 'labels', data: satData,
         getPosition: d => d.position,
         getText: d => 'PRN' + d.prn,
         getColor: d => d.color,
-        getSize: 13, getAngle: 0,
+        getSize: 14, getAngle: 0,
         getTextAnchor: 'middle', getAlignmentBaseline: 'bottom',
         fontFamily: 'monospace', fontWeight: 'bold',
       }}),
@@ -241,10 +299,10 @@ function update() {{
     epIdx = 0;
     dsIdx = (dsIdx + 1) % datasets.length;
   }}
-  setTimeout(update, 2000);
+  setTimeout(update, HOLD_MS);
 }}
 
-setTimeout(update, 1000);
+setTimeout(update, INITIAL_DELAY_MS);
 </script>
 </body>
 </html>"""
@@ -255,7 +313,7 @@ setTimeout(update, 1000);
     print(f"HTML: {output_path}")
 
 
-def record_video(html_path, output_dir, duration_ms=25000):
+def record_video(html_path, output_dir, duration_ms=25000, gif_duration_s=30):
     """Record with Playwright."""
     print(f"Recording video ({duration_ms/1000:.0f}s)...")
     script = f"""
@@ -292,12 +350,23 @@ const {{ chromium }} = require('playwright');
         size_mb = os.path.getsize(dst) / 1e6
         print(f"Video: {dst} ({size_mb:.1f}MB)")
 
+        mp4_path = os.path.join(output_dir, "los_nlos_deckgl.mp4")
+        subprocess.run([
+            "ffmpeg", "-y", "-i", dst,
+            "-movflags", "+faststart",
+            "-pix_fmt", "yuv420p",
+            mp4_path,
+        ], capture_output=True)
+        if os.path.exists(mp4_path):
+            size_mb = os.path.getsize(mp4_path) / 1e6
+            print(f"MP4: {mp4_path} ({size_mb:.1f}MB)")
+
         # Convert to gif
         gif_path = os.path.join(output_dir, "los_nlos_deckgl.gif")
         subprocess.run([
             "ffmpeg", "-y", "-i", dst,
             "-vf", "fps=8,scale=800:-1:flags=lanczos",
-            "-t", "24", gif_path
+            "-t", str(gif_duration_s), gif_path
         ], capture_output=True)
         if os.path.exists(gif_path):
             size_mb = os.path.getsize(gif_path) / 1e6
@@ -306,18 +375,77 @@ const {{ chromium }} = require('playwright');
     return None
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--n-epochs", type=int, default=14,
+                        help="Epochs to render per area.")
+    parser.add_argument("--step", type=int, default=240,
+                        help="Trajectory subsampling step.")
+    parser.add_argument("--ray-length-m", type=float, default=1000.0,
+                        help="Displayed ray length in meters.")
+    parser.add_argument("--hold-ms", type=int, default=2200,
+                        help="Milliseconds to hold each epoch on screen.")
+    parser.add_argument("--initial-delay-ms", type=int, default=1000,
+                        help="Delay before animation starts.")
+    parser.add_argument("--duration-ms", type=int, default=0,
+                        help="Recording duration in ms. 0 means auto.")
+    parser.add_argument("--gif-duration-s", type=int, default=30,
+                        help="GIF clip length in seconds.")
+    parser.add_argument("--zoom", type=float, default=15.0,
+                        help="Map zoom level.")
+    parser.add_argument("--pitch", type=float, default=55.0,
+                        help="Camera pitch in degrees.")
+    parser.add_argument("--bearing", type=float, default=-20.0,
+                        help="Initial camera bearing in degrees.")
+    parser.add_argument("--rotation-step", type=float, default=6.0,
+                        help="Bearing increment per epoch.")
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     out_dir = os.path.join(os.path.dirname(__file__), "results", "los_nlos_verification")
 
-    shinjuku = compute_epochs("Shinjuku", "experiments/data/plateau_shinjuku",
-                              "experiments/data/urbannav/Shinjuku/reference.csv", n_epochs=10)
-    odaiba = compute_epochs("Odaiba", "experiments/data/plateau_odaiba",
-                            "experiments/data/urbannav/Odaiba/reference.csv", n_epochs=10)
+    shinjuku = compute_epochs(
+        "Shinjuku",
+        "experiments/data/plateau_shinjuku",
+        "experiments/data/urbannav/Shinjuku/reference.csv",
+        n_epochs=args.n_epochs,
+        step=args.step,
+        ray_length_m=args.ray_length_m,
+    )
+    odaiba = compute_epochs(
+        "Odaiba",
+        "experiments/data/plateau_odaiba",
+        "experiments/data/urbannav/Odaiba/reference.csv",
+        n_epochs=args.n_epochs,
+        step=args.step,
+        ray_length_m=args.ray_length_m,
+    )
 
     html_path = os.path.join(out_dir, "los_nlos_deckgl.html")
-    generate_html([shinjuku, odaiba], html_path)
+    datasets = [shinjuku, odaiba]
+    generate_html(
+        datasets,
+        html_path,
+        zoom=args.zoom,
+        pitch=args.pitch,
+        bearing=args.bearing,
+        rotation_step=args.rotation_step,
+        hold_ms=args.hold_ms,
+        initial_delay_ms=args.initial_delay_ms,
+    )
 
-    record_video(html_path, out_dir, duration_ms=25000)
+    duration_ms = args.duration_ms
+    if duration_ms <= 0:
+        duration_ms = args.initial_delay_ms + len(datasets) * args.n_epochs * args.hold_ms
+
+    record_video(
+        html_path,
+        out_dir,
+        duration_ms=duration_ms,
+        gif_duration_s=args.gif_duration_s,
+    )
 
 
 if __name__ == "__main__":

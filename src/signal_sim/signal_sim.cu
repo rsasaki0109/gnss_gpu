@@ -1,4 +1,6 @@
+#include <atomic>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <mutex>
@@ -56,6 +58,19 @@ static const int G2_TAPS[kNumSatellites][2] = {
 // 32*1023*4 = ~128KB exceeds the limit and other modules also use constant memory)
 int* d_ca_codes = nullptr;
 std::once_flag g_ca_init_flag;
+std::atomic<unsigned long long> g_noise_seed_counter{0};
+
+unsigned long long resolve_noise_seed(unsigned long long requested_seed) {
+    if (requested_seed != 0ULL) {
+        return requested_seed;
+    }
+
+    const auto now = static_cast<unsigned long long>(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto counter =
+        g_noise_seed_counter.fetch_add(0x9e3779b97f4a7c15ULL, std::memory_order_relaxed);
+    return now ^ counter ^ 0xa0761d6478bd642fULL;
+}
 
 void build_ca_codes_host() {
     int h_ca_codes[kNumSatellites][kCaCodeLength];
@@ -191,7 +206,7 @@ void simulate_epoch(const SignalSimConfig& config,
     composite_kernel<<<blocks, kBlockSize>>>(
         d_channel, d_output, n_samples,
         (n_channels > 0) ? n_channels : 0, noise_std,
-        0x9e3779b97f4a7c15ULL);
+        resolve_noise_seed(config.noise_seed));
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 

@@ -6,6 +6,7 @@ struct SignalSimConfig {
     double sampling_freq = 2.6e6;
     double intermediate_freq = 0.0;
     double noise_floor_db = -20.0;
+    unsigned long long noise_seed = 0;  // 0 => choose a fresh seed per epoch
 };
 
 struct SatChannel {

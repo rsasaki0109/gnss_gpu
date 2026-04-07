@@ -37,6 +37,12 @@ PAPER_MAIN_TABLE_CSV = "paper_main_table.csv"
 VALIDATION_SUMMARY_JSON = RESULTS_DIR / "freeze_validation_summary.json"
 SITE_MEDIA = {}
 SITE_VIDEO = None
+OPTIONAL_SHOWCASE_ASSETS = {
+    "los_nlos_deckgl.html": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.html",
+    "los_nlos_deckgl.mp4": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.mp4",
+    "los_nlos_deckgl.webm": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.webm",
+    "los_nlos_deckgl.gif": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.gif",
+}
 SITE_CHARTS = {
     "site_urbannav_runs.png": {
         "title": "UrbanNav Per-Run Comparison",
@@ -129,6 +135,15 @@ def _media_href(name: str) -> str:
     return f"assets/media/{name}"
 
 
+def _sync_optional_showcase_assets() -> set[str]:
+    copied: set[str] = set()
+    for name, src in OPTIONAL_SHOWCASE_ASSETS.items():
+        if src.exists():
+            _copy_file(src, MEDIA_DIR)
+            copied.add(name)
+    return copied
+
+
 def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -208,6 +223,7 @@ def _ensure_site_media() -> None:
 def _build_snapshot() -> dict:
     _ensure_paper_assets()
     _ensure_site_media()
+    optional_media = _sync_optional_showcase_assets()
 
     ppc_tuned_rows = _read_csv(PPC_TUNED_CSV)
     ppc_holdout_rows = _read_csv(PPC_HOLDOUT_CSV)
@@ -255,6 +271,34 @@ def _build_snapshot() -> dict:
         )
 
     media_cards = []
+    deckgl_sources = []
+    if "los_nlos_deckgl.mp4" in optional_media:
+        deckgl_sources.append({"src": _media_href("los_nlos_deckgl.mp4"), "type": "video/mp4"})
+    if "los_nlos_deckgl.webm" in optional_media:
+        deckgl_sources.append({"src": _media_href("los_nlos_deckgl.webm"), "type": "video/webm"})
+    if deckgl_sources:
+        deckgl_href = (
+            _media_href("los_nlos_deckgl.html")
+            if "los_nlos_deckgl.html" in optional_media
+            else deckgl_sources[0]["src"]
+        )
+        media_cards.append({
+            "kind": "video",
+            "title": "UrbanNav LOS/NLOS Map Sweep",
+            "href": deckgl_href,
+            "caption": (
+                "Long-form deck.gl sweep over OpenStreetMap, with PLATEAU BVH "
+                "providing the LOS/NLOS geometry labels. Click through for the "
+                "interactive map."
+            ),
+            "poster": (
+                _media_href("los_nlos_deckgl.gif")
+                if "los_nlos_deckgl.gif" in optional_media
+                else ""
+            ),
+            "sources": deckgl_sources,
+        })
+
     for viz_name, viz_title, viz_caption in [
         ("particle_viz_odaiba.mp4", "Odaiba Particle Cloud",
          "100K particles on OpenStreetMap (full + zoom). Orange: particles. Red: PF estimate. Blue: ground truth."),

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Verify LOS/NLOS with real PLATEAU Odaiba + UrbanNav trajectory.
+"""Verify LOS/NLOS geometry with PLATEAU Odaiba + UrbanNav trajectory.
 
-Loads real 3D building data (249K triangles) and UrbanNav ground truth
-trajectory, runs BVH-accelerated ray-tracing for LOS/NLOS at sampled
-epochs, and generates verification images.
+Loads real 3D building data (249K triangles) and an UrbanNav receiver
+trajectory, then evaluates LOS/NLOS against a synthetic satellite sky
+geometry at sampled epochs to generate verification images.
 """
 
 import csv
@@ -42,7 +42,7 @@ def load_urbannav_trajectory(csv_path, step=100):
 
 
 def generate_sats(rx_ecef, n_sat=10, time_offset=0.0):
-    """Generate satellite positions for a given receiver."""
+    """Generate synthetic satellite positions for a given receiver."""
     lat, lon, _ = ecef_to_lla(*rx_ecef)
     sin_lat, cos_lat = math.sin(lat), math.cos(lat)
     sin_lon, cos_lon = math.sin(lon), math.cos(lon)
