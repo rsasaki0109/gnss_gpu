@@ -63,7 +63,7 @@ PAPER_FIGURES = {
     "paper_urbannav_external.png": {
         "title": "UrbanNav External",
         "caption": (
-            "Main accuracy figure. `PF+RobustClear-10K` is the frozen external winner "
+            "Main accuracy figure. `PF+RobustClear-10K` is the best external method "
             "on trimble + G,E,J without UrbanNav-specific retuning."
         ),
     },
@@ -289,7 +289,7 @@ def _build_snapshot() -> dict:
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "title": "gnss_gpu Artifact Snapshot",
         "subtitle": (
-            "Mainline frozen on `PF+RobustClear-10K`. PF beats EKF across "
+            "Best method: `PF+RobustClear-10K`. PF beats EKF across "
             "5 sequences in 2 cities. Particle scaling reveals a phase transition "
             "at N~1,000 with tail improvement up to 1M."
         ),
@@ -306,7 +306,7 @@ def _build_snapshot() -> dict:
         },
         "hero_cards": [
             _card(
-                "Frozen Mainline",
+                "Best Method",
                 "PF+RobustClear-10K",
                 "External winner on UrbanNav trimble + G,E,J.",
             ),
@@ -351,7 +351,7 @@ def _build_snapshot() -> dict:
             ),
         ],
         "repo_summary": [
-            "This repo is not presenting a single heroic algorithm. It is an experiment-first GNSS package where comparable variants are built, measured, and either frozen or discarded.",
+            "This repo is not presenting a single heroic algorithm. It is an experiment-first GNSS package where comparable variants are built, measured, and either kept or discarded.",
             "The accuracy headline is the UrbanNav external result with trimble + G,E,J. The PPC gate family remains useful as a design-discipline story, but not as the main empirical claim.",
             "The 3D PF path is currently a systems contribution: BVH preserves PF3D accuracy on a real PLATEAU subset while making runtime practical.",
         ],
@@ -364,7 +364,7 @@ def _build_snapshot() -> dict:
             {
                 "label": "UrbanNav Summary CSV",
                 "href": _copy_data_file(URBANNAV_SUMMARY_CSV),
-                "detail": "Frozen external result for trimble + G,E,J.",
+                "detail": "External result for trimble + G,E,J.",
             },
             {
                 "label": "UrbanNav Runs CSV",
@@ -502,7 +502,7 @@ def _build_snapshot() -> dict:
                 f"{_round(_f(holdout_best, 'mean_p95'))} m P95."
             ),
             (
-                "UrbanNav external validation: `PF+RobustClear-10K` is the frozen winner "
+                "UrbanNav external validation: `PF+RobustClear-10K` is the best method "
                 f"at {_round(_f(robust, 'mean_rms_2d'))} m RMS and "
                 f"{_round(_f(robust, 'mean_p95'))} m P95, ahead of `EKF` at "
                 f"{_round(_f(ekf, 'mean_rms_2d'))} m and {_round(_f(ekf, 'mean_p95'))} m."
@@ -541,7 +541,7 @@ def _build_snapshot() -> dict:
         ],
         "tables": {
             "paper_main": {
-                "title": "Frozen Paper Main Table",
+                "title": "Paper Main Table",
                 "source_csv": _copy_paper_data_file(PAPER_MAIN_TABLE_CSV),
                 "columns": list(paper_main_rows[0].keys()),
                 "rows": paper_main_rows,
@@ -816,8 +816,8 @@ def _build_snapshot() -> dict:
             "The exploratory PPC gate generalizes on holdout, but the gain is still small enough that it should not carry the paper by itself.",
             "The strongest current story is not explicit 3D-map accuracy. The real-data 3D path is still best framed as a BVH systems contribution.",
             "UrbanNav external gains depend on the repaired multi-GNSS measurement path. The older GPS-only results were limited by loader and measurement issues.",
-            "Hong Kong is now a supplemental positive result across 3 sequences (PF+AdaptiveGuide beats EKF on all), but the winning method differs from the frozen Tokyo mainline.",
-            "AdaptiveGuide and EKFRescue help robustness in the right regimes, but they do not beat the frozen Tokyo mainline `PF+RobustClear-10K` on full runs.",
+            "Hong Kong is now a supplemental positive result across 3 sequences (PF+AdaptiveGuide beats EKF on all), but the winning method differs from the Tokyo best method.",
+            "AdaptiveGuide and EKFRescue help robustness in the right regimes, but they do not beat the Tokyo best method `PF+RobustClear-10K` on full runs.",
         ],
         "validation": {
             "tests": validation["summary"],
