@@ -180,6 +180,67 @@ __global__ void pfd_weight_gmm_kernel(const double* px, const double* py,
     log_weights[tid] = log_w;
 }
 
+// --- Carrier phase AFV weight kernel ---
+// Ambiguity Function Value likelihood: uses fractional cycle residuals
+// so integer ambiguity resolution is not needed. After pseudorange update
+// clusters particles to ~3m, the correct integer peak dominates.
+__global__ void pfd_weight_carrier_afv_kernel(
+    const double* px, const double* py,
+    const double* pz, const double* pcb,
+    const double* sat_ecef,
+    const double* carrier_phase,   // [n_sat] in cycles
+    const double* weights_sat,
+    double* log_weights,
+    int N, int n_sat,
+    double wavelength,      // L1 ~ 0.190293673 m
+    double sigma_cycles) {  // ~ 0.05 cycles
+
+    // Dynamic shared memory layout: [sat_ecef: n_sat*3] [cp: n_sat] [ws: n_sat]
+    extern __shared__ double s_data[];
+    double* s_sat = s_data;
+    double* s_cp  = s_data + n_sat * 3;
+    double* s_ws  = s_data + n_sat * 4;
+
+    for (int i = threadIdx.x; i < n_sat; i += blockDim.x) {
+        s_sat[i * 3 + 0] = sat_ecef[i * 3 + 0];
+        s_sat[i * 3 + 1] = sat_ecef[i * 3 + 1];
+        s_sat[i * 3 + 2] = sat_ecef[i * 3 + 2];
+        s_cp[i] = carrier_phase[i];
+        s_ws[i] = weights_sat[i];
+    }
+    __syncthreads();
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    double x  = px[tid];
+    double y  = py[tid];
+    double z  = pz[tid];
+    double cb = pcb[tid];
+
+    double inv_wl = 1.0 / wavelength;
+    double inv_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
+    double log_w = 0.0;
+
+    for (int s = 0; s < n_sat; s++) {
+        double dx = x - s_sat[s * 3 + 0];
+        double dy = y - s_sat[s * 3 + 1];
+        double dz = z - s_sat[s * 3 + 2];
+        double r = sqrt(dx * dx + dy * dy + dz * dz);
+
+        // Expected carrier phase in cycles
+        double expected_cycles = (r + cb) * inv_wl;
+        double residual_cycles = s_cp[s] - expected_cycles;
+
+        // AFV: distance to nearest integer cycle (fractional part)
+        double afv = residual_cycles - rint(residual_cycles);
+
+        log_w += -0.5 * s_ws[s] * (afv * afv) * inv_sigma2;
+    }
+
+    log_weights[tid] += log_w;
+}
+
 // --- Position-domain update kernel ---
 // Applies a Gaussian likelihood based on distance to a reference position.
 // log_w += -0.5 * ||particle_pos - ref_pos||^2 / sigma^2
@@ -998,6 +1059,66 @@ void pf_device_get_resample_ancestors(const PFDeviceState* state, int* output) {
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
     CUDA_CHECK(cudaMemcpy(output, state->d_resample_ancestor,
                           (size_t)N * sizeof(int), cudaMemcpyDeviceToHost));
+}
+
+// ============================================================
+// Weight update: Carrier phase AFV
+// ============================================================
+
+void pf_device_weight_carrier_afv(PFDeviceState* state,
+    const double* sat_ecef, const double* carrier_phase,
+    const double* weights_sat,
+    int n_sat, double wavelength, double sigma_cycles) {
+
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    // Satellite data is small: n_sat * 5 doubles typically < 1KB
+    // Reuse persistent device buffers (d_pseudoranges holds carrier_phase here)
+    size_t sz_sat = (size_t)n_sat * 3 * sizeof(double);
+    size_t sz_obs = (size_t)n_sat * sizeof(double);
+
+    // If n_sat exceeds pinned_capacity, reallocate (rare path)
+    if (n_sat > state->pinned_capacity) {
+        CUDA_CHECK(cudaStreamSynchronize(state->stream));
+        CUDA_CHECK(cudaFreeHost(state->h_sat_pinned));
+        CUDA_CHECK(cudaFree(state->d_sat_ecef));
+        CUDA_CHECK(cudaFree(state->d_pseudoranges));
+        CUDA_CHECK(cudaFree(state->d_weights_sat));
+
+        state->pinned_capacity = n_sat;
+        CUDA_CHECK(cudaMallocHost(&state->h_sat_pinned, n_sat * 5 * sizeof(double)));
+        CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, n_sat * 3 * sizeof(double)));
+        CUDA_CHECK(cudaMalloc(&state->d_pseudoranges, n_sat * sizeof(double)));
+        CUDA_CHECK(cudaMalloc(&state->d_weights_sat, n_sat * sizeof(double)));
+    }
+
+    // Ensure previous async transfers from pinned buffer are complete before overwriting
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+
+    // Stage satellite data into contiguous pinned buffer: [sat_ecef | carrier_phase | weights]
+    double* h_sat = state->h_sat_pinned;
+    memcpy(h_sat, sat_ecef, sz_sat);
+    memcpy(h_sat + n_sat * 3, carrier_phase, sz_obs);
+    memcpy(h_sat + n_sat * 4, weights_sat, sz_obs);
+
+    // Async H2D transfer on the stream
+    CUDA_CHECK(cudaMemcpyAsync(state->d_sat_ecef, h_sat,
+                               sz_sat, cudaMemcpyHostToDevice, state->stream));
+    CUDA_CHECK(cudaMemcpyAsync(state->d_pseudoranges, h_sat + n_sat * 3,
+                               sz_obs, cudaMemcpyHostToDevice, state->stream));
+    CUDA_CHECK(cudaMemcpyAsync(state->d_weights_sat, h_sat + n_sat * 4,
+                               sz_obs, cudaMemcpyHostToDevice, state->stream));
+
+    // Launch AFV weight kernel on the same stream
+    // Dynamic shared memory: n_sat*3 (sat_ecef) + n_sat (cp) + n_sat (ws) = n_sat*5 doubles
+    size_t smem_weight = (size_t)n_sat * 5 * sizeof(double);
+    pfd_weight_carrier_afv_kernel<<<grid, BLOCK_SIZE, smem_weight, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz, state->d_pcb,
+        state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
+        state->d_log_weights,
+        N, n_sat, wavelength, sigma_cycles);
+    CUDA_CHECK_LAST();
 }
 
 // ============================================================

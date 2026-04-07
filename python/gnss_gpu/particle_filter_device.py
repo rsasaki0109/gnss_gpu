@@ -44,6 +44,7 @@ class ParticleFilterDevice:
             pf_device_predict,
             pf_device_weight,
             pf_device_weight_gmm,
+            pf_device_weight_carrier_afv,
             pf_device_position_update,
             pf_device_shift_clock_bias,
             pf_device_ess,
@@ -61,6 +62,7 @@ class ParticleFilterDevice:
         self._pf_device_predict = pf_device_predict
         self._pf_device_weight = pf_device_weight
         self._pf_device_weight_gmm = pf_device_weight_gmm
+        self._pf_device_weight_carrier_afv = pf_device_weight_carrier_afv
         self._pf_device_position_update = pf_device_position_update
         self._pf_device_shift_clock_bias = pf_device_shift_clock_bias
         self._pf_device_ess = pf_device_ess
@@ -237,6 +239,50 @@ class ParticleFilterDevice:
             self._state,
             sat.ravel(), pr, weights,
             n_sat, sp, float(w_los), float(mu_nlos), float(sigma_nlos))
+
+        if resample:
+            _ = self.resample_if_needed()
+
+    def update_carrier_afv(self, sat_ecef, carrier_phase_cycles, weights=None,
+                           wavelength=0.190293673, sigma_cycles=0.05, resample=True):
+        """Update weights using carrier phase AFV likelihood (no ambiguity needed).
+
+        Uses the Ambiguity Function Value: fractional cycle residuals form a
+        sharp likelihood (sigma ~ 0.05 cycles ~ 1 cm) without resolving integer
+        ambiguities. Call AFTER update() (pseudorange) for the MUPF algorithm
+        (Suzuki 2024).
+
+        Parameters
+        ----------
+        sat_ecef : array_like, shape (n_sat, 3)
+            Satellite ECEF positions [m].
+        carrier_phase_cycles : array_like, shape (n_sat,)
+            Observed carrier phase measurements [cycles].
+        weights : array_like, shape (n_sat,), optional
+            Per-satellite elevation weights. Defaults to ones.
+        wavelength : float
+            Carrier wavelength [m]. Default is L1 GPS (0.190293673 m).
+        sigma_cycles : float
+            Standard deviation of AFV residual [cycles]. Default 0.05.
+        resample : bool
+            If True (default), run ESS-based adaptive resampling after weighting.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+        cp = np.asarray(carrier_phase_cycles, dtype=np.float64).ravel()
+        n_sat = len(cp)
+
+        if weights is None:
+            weights = np.ones(n_sat, dtype=np.float64)
+        else:
+            weights = np.asarray(weights, dtype=np.float64).ravel()
+
+        self._pf_device_weight_carrier_afv(
+            self._state,
+            sat.ravel(), cp, weights,
+            n_sat, float(wavelength), float(sigma_cycles))
 
         if resample:
             _ = self.resample_if_needed()

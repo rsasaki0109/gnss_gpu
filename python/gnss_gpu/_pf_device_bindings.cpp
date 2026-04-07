@@ -102,6 +102,24 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
        py::arg("n_sat"), py::arg("sigma_pr"),
        py::arg("w_los") = 0.7, py::arg("mu_nlos") = 15.0, py::arg("sigma_nlos") = 30.0);
 
+    m.def("pf_device_weight_carrier_afv", [](gnss_gpu::PFDeviceState* state,
+                                 py::array_t<double> sat_ecef,
+                                 py::array_t<double> carrier_phase,
+                                 py::array_t<double> weights_sat,
+                                 int n_sat, double wavelength, double sigma_cycles) {
+        py::buffer_info b_sat = sat_ecef.request();
+        py::buffer_info b_cp = carrier_phase.request();
+        py::buffer_info b_w = weights_sat.request();
+        gnss_gpu::pf_device_weight_carrier_afv(state,
+            static_cast<double*>(b_sat.ptr),
+            static_cast<double*>(b_cp.ptr),
+            static_cast<double*>(b_w.ptr),
+            n_sat, wavelength, sigma_cycles);
+    }, "Weight update using carrier phase AFV likelihood (no ambiguity resolution needed)",
+       py::arg("state"),
+       py::arg("sat_ecef"), py::arg("carrier_phase"), py::arg("weights_sat"),
+       py::arg("n_sat"), py::arg("wavelength") = 0.190293673, py::arg("sigma_cycles") = 0.05);
+
     m.def("pf_device_position_update", [](gnss_gpu::PFDeviceState* state,
                                          double ref_x, double ref_y, double ref_z,
                                          double sigma_pos) {
