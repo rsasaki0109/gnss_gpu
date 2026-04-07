@@ -152,6 +152,8 @@ def run_pf_with_optional_smoother(
     tdcp_position_update: bool = False,
     tdcp_pu_sigma: float = 0.5,
     tdcp_pu_rms_max: float = 3.0,
+    mupf: bool = False,
+    mupf_sigma_cycles: float = 0.05,
 ) -> dict[str, object]:
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -387,6 +389,28 @@ def run_pf_with_optional_smoother(
                           w_los=gmm_w_los, mu_nlos=gmm_mu_nlos, sigma_nlos=gmm_sigma_nlos)
         else:
             pf.update(sat_ecef, pr, weights=w)
+
+        # --- MUPF: carrier phase AFV update (after pseudorange) ---
+        if mupf:
+            # Collect carrier phase from gnssplusplus measurements
+            cp_cycles = []
+            cp_sat_ecef = []
+            cp_weights = []
+            for m in measurements:
+                cp = float(getattr(m, "carrier_phase", 0.0))
+                if cp != 0.0 and np.isfinite(cp) and abs(cp) > 1e3:
+                    cp_cycles.append(cp)
+                    cp_sat_ecef.append(m.satellite_ecef)
+                    cp_weights.append(m.weight)
+            if len(cp_cycles) >= 4:
+                # Resample after pseudorange update to concentrate particles
+                pf.resample_if_needed()
+                # Apply carrier phase AFV likelihood
+                cp_sat = np.array(cp_sat_ecef, dtype=np.float64)
+                cp_arr = np.array(cp_cycles, dtype=np.float64)
+                cp_w = np.array(cp_weights, dtype=np.float64)
+                pf.update_carrier_afv(cp_sat, cp_arr, weights=cp_w,
+                                      sigma_cycles=mupf_sigma_cycles)
 
         spp_pos = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
         if position_update_sigma is not None:
@@ -660,6 +684,10 @@ def main() -> None:
                         help="Sigma for TDCP displacement position_update (m)")
     parser.add_argument("--tdcp-pu-rms-max", type=float, default=3.0,
                         help="Max TDCP postfit RMS to apply displacement PU (m)")
+    parser.add_argument("--mupf", action="store_true",
+                        help="Multiple Update PF: carrier phase AFV update after pseudorange")
+    parser.add_argument("--mupf-sigma-cycles", type=float, default=0.05,
+                        help="Carrier phase AFV sigma in cycles (default 0.05 ≈ 1cm)")
     args = parser.parse_args()
 
     pos_sigma = args.position_update_sigma
@@ -719,6 +747,8 @@ def main() -> None:
                 tdcp_position_update=args.tdcp_position_update,
                 tdcp_pu_sigma=args.tdcp_pu_sigma,
                 tdcp_pu_rms_max=args.tdcp_pu_rms_max,
+                mupf=args.mupf,
+                mupf_sigma_cycles=args.mupf_sigma_cycles,
             )
             fm = out["forward_metrics"]
             sm = out["smoothed_metrics"]

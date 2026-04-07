@@ -88,6 +88,15 @@ void pf_device_weight_gmm(PFDeviceState* state,
     int n_sat, double sigma_pr,
     double w_los = 0.7, double mu_nlos = 15.0, double sigma_nlos = 30.0);
 
+// Weight update using carrier phase AFV (Ambiguity Function Value) likelihood.
+// Uses fractional cycle residuals — no integer ambiguity resolution needed.
+// Call AFTER pf_device_weight (pseudorange) for the MUPF algorithm.
+// carrier_phase is in cycles, wavelength in meters, sigma_cycles in cycles.
+void pf_device_weight_carrier_afv(PFDeviceState* state,
+    const double* sat_ecef, const double* carrier_phase,
+    const double* weights_sat,
+    int n_sat, double wavelength = 0.190293673, double sigma_cycles = 0.05);
+
 // Position-domain update - apply soft constraint from external position estimate
 void pf_device_position_update(PFDeviceState* state,
     double ref_x, double ref_y, double ref_z, double sigma_pos);
