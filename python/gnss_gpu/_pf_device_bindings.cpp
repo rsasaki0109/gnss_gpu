@@ -69,14 +69,13 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
                                  py::array_t<double> pseudoranges,
                                  py::array_t<double> weights_sat,
                                  int n_sat, double sigma_pr, double nu) {
-        {
-            auto bs = sat_ecef.request();
-            // sat_ecef: accept (N,3) or (N*3,) flat
-        }
+        py::buffer_info b_sat = sat_ecef.request();
+        py::buffer_info b_pr = pseudoranges.request();
+        py::buffer_info b_w = weights_sat.request();
         gnss_gpu::pf_device_weight(state,
-            static_cast<double*>(sat_ecef.request().ptr),
-            static_cast<double*>(pseudoranges.request().ptr),
-            static_cast<double*>(weights_sat.request().ptr),
+            static_cast<double*>(b_sat.ptr),
+            static_cast<double*>(b_pr.ptr),
+            static_cast<double*>(b_w.ptr),
             n_sat, sigma_pr, nu);
     }, "Weight update with optional robust Student's t likelihood",
        py::arg("state"),
@@ -131,6 +130,29 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
         return output;
     }, "Copy particles to host for visualization (only when needed)",
        py::arg("state"));
+
+    m.def("pf_device_get_log_weights", [](const gnss_gpu::PFDeviceState* state,
+                                         py::array_t<double> out) {
+        int N = state->n_particles;
+        auto r = out.request();
+        if (r.size != N) {
+            throw std::runtime_error("pf_device_get_log_weights: output size must match n_particles");
+        }
+        gnss_gpu::pf_device_get_log_weights(state, static_cast<double*>(r.ptr));
+    }, "Copy log-weights to host (D2H, synchronizes stream)",
+       py::arg("state"), py::arg("out"));
+
+    m.def("pf_device_get_resample_ancestors", [](const gnss_gpu::PFDeviceState* state,
+                                                  py::array_t<int> out) {
+        int N = state->n_particles;
+        auto r = out.request();
+        if (r.size != N) {
+            throw std::runtime_error(
+                "pf_device_get_resample_ancestors: output size must match n_particles");
+        }
+        gnss_gpu::pf_device_get_resample_ancestors(state, static_cast<int*>(r.ptr));
+    }, "After systematic resample: copy ancestor indices out[j]=source (D2H, sync)",
+       py::arg("state"), py::arg("out"));
 
     m.def("pf_device_sync", [](gnss_gpu::PFDeviceState* state) {
         gnss_gpu::pf_device_sync(state);

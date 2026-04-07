@@ -210,6 +210,47 @@ class TestParticleFilterDeviceWrapper:
         assert result.shape == (4,)
         assert np.all(np.isfinite(result))
 
+    def test_get_log_weights_shape(self):
+        """Log-weights D2H matches n_particles after update."""
+        sat_ecef, pseudoranges, weights = _make_satellite_data()
+        pf = ParticleFilterDevice(
+            n_particles=1024,
+            sigma_pos=1.0,
+            sigma_cb=300.0,
+            sigma_pr=5.0,
+            resampling="systematic",
+            seed=SEED,
+        )
+        pf.initialize(position_ecef=TRUE_POS, clock_bias=TRUE_CB,
+                      spread_pos=50.0, spread_cb=200.0)
+        pf.predict(dt=1.0)
+        pf.update(sat_ecef, pseudoranges, weights, resample=False)
+        lw = pf.get_log_weights()
+        assert lw.shape == (1024,)
+        assert np.all(np.isfinite(lw))
+        pf.resample_if_needed()
+
+    def test_get_resample_ancestors_after_systematic(self):
+        """Systematic resample writes ancestor indices retrievable from host."""
+        sat_ecef, pseudoranges, weights = _make_satellite_data()
+        pf = ParticleFilterDevice(
+            n_particles=512,
+            sigma_pos=1.0,
+            sigma_cb=300.0,
+            sigma_pr=5.0,
+            resampling="systematic",
+            seed=SEED,
+        )
+        pf.initialize(position_ecef=TRUE_POS, clock_bias=TRUE_CB,
+                      spread_pos=50.0, spread_cb=200.0)
+        pf.predict(dt=1.0)
+        pf.update(sat_ecef, pseudoranges, weights)
+        pf._resample()
+        anc = pf.get_resample_ancestors()
+        assert anc.shape == (512,)
+        assert anc.dtype == np.int32
+        assert np.all(anc >= 0) and np.all(anc < 512)
+
     def test_convergence_near_truth(self):
         """Estimate should converge near the true position."""
         sat_ecef, pseudoranges, weights = _make_satellite_data()

@@ -50,6 +50,8 @@ class ParticleFilterDevice:
             pf_device_resample_megopolis,
             pf_device_estimate,
             pf_device_get_particles,
+            pf_device_get_log_weights,
+            pf_device_get_resample_ancestors,
             pf_device_sync,
         )
         self._pf_device_create = pf_device_create
@@ -64,6 +66,8 @@ class ParticleFilterDevice:
         self._pf_device_resample_megopolis = pf_device_resample_megopolis
         self._pf_device_estimate = pf_device_estimate
         self._pf_device_get_particles = pf_device_get_particles
+        self._pf_device_get_log_weights = pf_device_get_log_weights
+        self._pf_device_get_resample_ancestors = pf_device_get_resample_ancestors
         self._pf_device_sync = pf_device_sync
 
         self.n_particles = n_particles
@@ -115,7 +119,7 @@ class ParticleFilterDevice:
         self._initialized = True
         self._step = 0
 
-    def predict(self, velocity=None, dt=1.0):
+    def predict(self, velocity=None, dt=1.0, sigma_pos=None):
         """Predict step with optional velocity.
 
         Only 24 bytes (velocity) transferred to GPU.
@@ -126,6 +130,9 @@ class ParticleFilterDevice:
             Velocity in ECEF [m/s]. Defaults to zero (stationary).
         dt : float
             Time step [s].
+        sigma_pos : float, optional
+            Per-step position random-walk sigma [m]. Defaults to ``self.sigma_pos``.
+            Use a smaller value when a high-quality velocity guide (e.g. TDCP) is available.
         """
         if not self._initialized:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
@@ -136,14 +143,16 @@ class ParticleFilterDevice:
             vel = np.asarray(velocity, dtype=np.float64).ravel()
             vx, vy, vz = float(vel[0]), float(vel[1]), float(vel[2])
 
+        sp = float(self.sigma_pos if sigma_pos is None else sigma_pos)
+
         self._step += 1
         self._pf_device_predict(
             self._state,
             vx, vy, vz,
-            float(dt), float(self.sigma_pos), float(self.sigma_cb),
+            float(dt), sp, float(self.sigma_cb),
             self.seed, self._step)
 
-    def update(self, sat_ecef, pseudoranges, weights=None):
+    def update(self, sat_ecef, pseudoranges, weights=None, resample=True):
         """Weight update with pseudorange observations.
 
         Only satellite data (~1KB) transferred to GPU.
@@ -157,6 +166,9 @@ class ParticleFilterDevice:
             Observed pseudoranges [m].
         weights : array_like, shape (n_sat,), optional
             Per-satellite weights (1/sigma^2). Defaults to ones.
+        resample : bool
+            If True (default), run ESS-based adaptive resampling after weighting.
+            Set False to snapshot log-weights and particles before resampling (FFBSi).
         """
         if not self._initialized:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
@@ -175,10 +187,8 @@ class ParticleFilterDevice:
             sat.ravel(), pr, weights,
             n_sat, float(self.sigma_pr), float(self.nu))
 
-        # Adaptive resampling based on ESS
-        ess = self.get_ess()
-        if ess < self.ess_threshold * self.n_particles:
-            self._resample()
+        if resample:
+            _ = self.resample_if_needed()
 
     def position_update(self, ref_ecef, sigma_pos=30.0):
         """Apply position-domain soft constraint from external estimate.
@@ -257,6 +267,21 @@ class ParticleFilterDevice:
         else:
             self._pf_device_resample_systematic(self._state, self.seed)
 
+    def resample_if_needed(self):
+        """Resample when ESS falls below ``ess_threshold * n_particles``.
+
+        Returns
+        -------
+        did_resample : bool
+            True if resampling ran. For genealogy smoothers with systematic
+            resampling, call ``get_resample_ancestors()`` only when True.
+        """
+        ess = self.get_ess()
+        if ess < self.ess_threshold * self.n_particles:
+            self._resample()
+            return True
+        return False
+
     def estimate(self):
         """Compute weighted mean position.
 
@@ -287,6 +312,32 @@ class ParticleFilterDevice:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
 
         return self._pf_device_get_particles(self._state)
+
+    def get_log_weights(self):
+        """Copy per-particle log-weights from GPU (synchronizes stream).
+
+        Values reflect the current step after ``update`` / ``position_update``.
+        Intended for FFBSi and diagnostics; prefer ``get_ess`` / ``estimate`` for metrics.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        out = np.empty(self.n_particles, dtype=np.float64)
+        self._pf_device_get_log_weights(self._state, out)
+        return out
+
+    def get_resample_ancestors(self):
+        """Ancestor indices from the **last** systematic resample: ``out[j]=i`` means slot ``j``
+        copied state from slot ``i``. Only valid after a systematic resample (not Megopolis).
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        if self.resampling != "systematic":
+            raise RuntimeError("get_resample_ancestors requires resampling='systematic'")
+
+        out = np.empty(self.n_particles, dtype=np.int32)
+        self._pf_device_get_resample_ancestors(self._state, out)
+        return out
 
     def get_ess(self):
         """Compute current Effective Sample Size.
