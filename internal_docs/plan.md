@@ -376,21 +376,17 @@ PYTHONPATH=python python3 -m pytest tests/ -q
 #### ~~Task C: Smoother + TDCP 組み合わせ~~ → **完了 (2026-04-08)**
 8 runs 実行。smoother + tdcp_adaptive: Odaiba P50=1.66m (微改善), Shinjuku P50=3.30m (悪化)。効果なし。`results/pf_smoother_eval.csv`。
 
-#### Task D: Wide-lane を実験パイプラインに統合して Odaiba 評価 ← **次のタスク**
-**状態**: `wide_lane.py` 実装済み、実験統合が必要。
+#### ~~Task D: Wide-lane / carrier-phase smoothing 統合~~ → **完了・ネガティブ (2026-04-08)**
+**実装**: `exp_widelane_eval.py` + `urbannav.py` L2 拡張 (Codex 実装)。3 段階で試行:
+1. **N_wl 固定 wide-lane PR 直接置換** → P50=35.75m。N1 未解決でバイアス発散。
+2. **median bias 除去** → P50=4.11m。改善だがまだ悪い。
+3. **Iono-free divergence-free Hatch filter** (carrier delta smoothing, alpha=0.2, L1 fallback) → P50=1.71m, RMS=6.31m。ベースライン 1.67m より微悪化。カバレッジ 42.6%。
 
-**やること**:
-1. `experiments/exp_urbannav_fixed_eval.py` の RINEX L2 パーサを確認し、L2 carrier phase + L2 pseudorange の取得方法を把握
-2. `exp_pf_smoother_eval.py`（または新スクリプト）に wide-lane 統合:
-   - エポックごとに `WidelaneResolver.update()` で N_wl を蓄積
-   - 固定された衛星は `get_widelane_pseudorange()` で carrier-phase PR を取得
-   - PF の weight ステップで通常 PR と wide-lane PR をブレンド（または置換）
-3. Odaiba 全区間で評価。**Shinjuku/HK は L1 only なのでスキップ**。
-4. N1 は float のまま（循環依存問題は後回し）
+**結論**: carrier-phase PR 改善は urban canyon の cycle slip + iono divergence で限界。§4 の Hatch filter ネガティブ結果と一致。**1m 切りには carrier-phase 以外のアプローチが必要**。
 
-**必要なデータ**: RINEX L2 は `/tmp/UrbanNav-Tokyo/Odaiba` にある obs ファイルから取得。既存の inline RINEX パーサ参照。
-
-**判断基準**: Odaiba P50 < 1.5m なら有望。
+**ネガティブ結果に追加**:
+| Wide-lane N_wl → PR 置換 | P50=35m 崩壊 | N1 未解決でバイアス発散 |
+| Iono-free Hatch filter (dual-freq) | P50=1.71m (微悪化) | urban canyon cycle slip + iono divergence |
 
 ### 10.3 実装・実験の片付け
 
