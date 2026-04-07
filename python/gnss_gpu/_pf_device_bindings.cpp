@@ -82,6 +82,26 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
        py::arg("sat_ecef"), py::arg("pseudoranges"), py::arg("weights_sat"),
        py::arg("n_sat"), py::arg("sigma_pr"), py::arg("nu") = 0.0);
 
+    m.def("pf_device_weight_gmm", [](gnss_gpu::PFDeviceState* state,
+                                 py::array_t<double> sat_ecef,
+                                 py::array_t<double> pseudoranges,
+                                 py::array_t<double> weights_sat,
+                                 int n_sat, double sigma_pr,
+                                 double w_los, double mu_nlos, double sigma_nlos) {
+        py::buffer_info b_sat = sat_ecef.request();
+        py::buffer_info b_pr = pseudoranges.request();
+        py::buffer_info b_w = weights_sat.request();
+        gnss_gpu::pf_device_weight_gmm(state,
+            static_cast<double*>(b_sat.ptr),
+            static_cast<double*>(b_pr.ptr),
+            static_cast<double*>(b_w.ptr),
+            n_sat, sigma_pr, w_los, mu_nlos, sigma_nlos);
+    }, "Weight update using GMM likelihood (LOS + NLOS mixture)",
+       py::arg("state"),
+       py::arg("sat_ecef"), py::arg("pseudoranges"), py::arg("weights_sat"),
+       py::arg("n_sat"), py::arg("sigma_pr"),
+       py::arg("w_los") = 0.7, py::arg("mu_nlos") = 15.0, py::arg("sigma_nlos") = 30.0);
+
     m.def("pf_device_position_update", [](gnss_gpu::PFDeviceState* state,
                                          double ref_x, double ref_y, double ref_z,
                                          double sigma_pos) {
