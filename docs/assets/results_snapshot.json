@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-08T11:38:10+00:00",
+  "generated_at_utc": "2026-04-08T12:01:16+00:00",
   "title": "gnss_gpu Artifact Snapshot",
   "subtitle": "Best method: `PF+RobustClear-10K`. PF beats EKF across 5 sequences in 2 cities. Particle scaling reveals a phase transition at N~1,000 with tail improvement up to 1M.",
   "status": {
