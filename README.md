@@ -47,7 +47,8 @@ PF (red) vs RTKLIB demo5 (green dashed) vs Ground truth (blue) on real Tokyo str
 
 View on [GitHub Pages](https://rsasaki0109.github.io/gnss_gpu/) for inline playback.
 
-For a longer LOS/NLOS sweep with OpenStreetMap basemap and PLATEAU BVH geometry, open the
+For a longer LOS/NLOS sweep with OpenStreetMap basemap, coarse 3D PLATEAU buildings, and
+satellites projected onto a virtual sky ceiling, open the
 [interactive deck.gl map](docs/assets/media/los_nlos_deckgl.html) or
 [download mp4](docs/assets/media/los_nlos_deckgl.mp4).
 
