@@ -445,14 +445,18 @@ def run_pf_with_optional_smoother(
                 cp_sat_ecef.append(m.satellite_ecef)
                 cp_weights.append(m.weight)
             if len(cp_cycles) >= 4:
-                # Resample after pseudorange update to concentrate particles
-                pf.resample_if_needed()
-                # Apply carrier phase AFV likelihood
                 cp_sat = np.array(cp_sat_ecef, dtype=np.float64)
                 cp_arr = np.array(cp_cycles, dtype=np.float64)
                 cp_w = np.array(cp_weights, dtype=np.float64)
-                pf.update_carrier_afv(cp_sat, cp_arr, weights=cp_w,
-                                      sigma_cycles=mupf_sigma_cycles)
+                # Multi-step carrier phase AFV: progressively tighten sigma
+                # Step 1: very loose (sigma=2.0 cycles ≈ 38cm) → coarse narrowing
+                # Step 2: medium (sigma=0.5 cycles ≈ 10cm) → medium narrowing
+                # Step 3: tight (sigma=target) → final precision
+                mupf_sigmas = [2.0, 0.5, mupf_sigma_cycles]
+                for sig in mupf_sigmas:
+                    pf.resample_if_needed()
+                    pf.update_carrier_afv(cp_sat, cp_arr, weights=cp_w,
+                                          sigma_cycles=sig)
 
         # --- MUPF-DD: Double-Differenced carrier phase AFV update ---
         if mupf_dd and dd_computer is not None:
