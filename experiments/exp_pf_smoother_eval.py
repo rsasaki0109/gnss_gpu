@@ -148,6 +148,7 @@ def run_pf_with_optional_smoother(
     gmm_sigma_nlos: float = 30.0,
     doppler_position_update: bool = False,
     doppler_pu_sigma: float = 5.0,
+    imu_tight_coupling: bool = False,
 ) -> dict[str, object]:
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -209,12 +210,15 @@ def run_pf_with_optional_smoother(
     n_stored = 0
     n_tdcp_used = 0
     n_tdcp_fallback = 0
+    n_imu_tight_used = 0
+    n_imu_tight_skip = 0
     # PR acceleration weighting: need per-satellite PR history
     pr_history: dict[int, list[float]] = {}  # prn -> [pr(t-2), pr(t-1)]
 
     prev_tow = None
     prev_measurements: list | None = None
     prev_estimate: np.ndarray | None = None
+    prev_pf_estimate: np.ndarray | None = None
     t0 = time.perf_counter()
     epochs_done = 0
 
@@ -229,6 +233,7 @@ def run_pf_with_optional_smoother(
         dt = tow - prev_tow if prev_tow else 0.1
 
         velocity = None
+        imu_velocity = None
         used_tdcp = False
         tdcp_rms = float("nan")
         used_imu = False
@@ -267,6 +272,7 @@ def run_pf_with_optional_smoother(
 
                     if predict_guide == "imu":
                         velocity = imu_vel_ecef
+                        imu_velocity = imu_vel_ecef
                         used_imu = True
                         n_imu_used += 1
                     elif predict_guide == "imu_spp_blend":
@@ -281,6 +287,7 @@ def run_pf_with_optional_smoother(
                         else:
                             # No SPP velocity, use IMU only
                             velocity = imu_vel_ecef
+                        imu_velocity = velocity
                         used_imu = True
                         n_imu_used += 1
                 else:
@@ -383,6 +390,43 @@ def run_pf_with_optional_smoother(
             if np.isfinite(spp_pos).all() and np.linalg.norm(spp_pos) > 1e6:
                 pf.position_update(spp_pos, sigma_pos=position_update_sigma)
 
+        # --- IMU tight-coupling dead-reckoning position update ---
+        if (
+            imu_tight_coupling
+            and prev_pf_estimate is not None
+            and imu_velocity is not None
+            and np.isfinite(imu_velocity).all()
+            and dt > 0
+        ):
+            imu_predicted_pos = prev_pf_estimate + imu_velocity * dt
+            if len(measurements) > 0:
+                ranges = np.linalg.norm(sat_ecef - spp_pos, axis=1)
+                valid_mask = np.isfinite(ranges) & np.isfinite(pr)
+                if np.any(valid_mask):
+                    cb_est = float(np.median((pr - ranges)[valid_mask]))
+                    residuals = np.abs((pr - ranges - cb_est)[valid_mask])
+                    spp_residual_rms = float(np.sqrt(np.mean(residuals**2)))
+                else:
+                    spp_residual_rms = float("inf")
+            else:
+                spp_residual_rms = float("inf")
+
+            n_sats = len(measurements)
+            if n_sats < 6 or spp_residual_rms > 20.0:
+                imu_pu_sigma = 3.0
+            elif n_sats < 8 or spp_residual_rms > 10.0:
+                imu_pu_sigma = 8.0
+            else:
+                imu_pu_sigma = 30.0
+
+            if np.all(np.isfinite(imu_predicted_pos)):
+                pf.position_update(imu_predicted_pos, sigma_pos=imu_pu_sigma)
+                n_imu_tight_used += 1
+            else:
+                n_imu_tight_skip += 1
+        elif imu_tight_coupling:
+            n_imu_tight_skip += 1
+
         # Doppler-predicted position update: propagate previous estimate by velocity
         if doppler_position_update and velocity is not None and prev_estimate is not None and dt > 0:
             doppler_predicted_pos = prev_estimate + velocity * dt
@@ -410,6 +454,7 @@ def run_pf_with_optional_smoother(
         prev_tow = tow
         prev_measurements = list(measurements)
         prev_estimate = np.asarray(pf.estimate()[:3], dtype=np.float64).copy()
+        prev_pf_estimate = np.asarray(pf.estimate()[:3], dtype=np.float64).copy()
         epochs_done += 1
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
@@ -426,6 +471,13 @@ def run_pf_with_optional_smoother(
         print(
             f"  [{predict_guide}] IMU used {n_imu_used}/{total_imu} epochs, "
             f"fallback {n_imu_fallback}/{total_imu}"
+        )
+
+    if imu_tight_coupling:
+        total_tight = n_imu_tight_used + n_imu_tight_skip
+        print(
+            f"  [imu_tight] IMU position_update used {n_imu_tight_used}/{total_tight} epochs, "
+            f"skip {n_imu_tight_skip}/{total_tight}"
         )
 
     forward_pos_full = np.array(forward_aligned, dtype=np.float64)
@@ -446,6 +498,9 @@ def run_pf_with_optional_smoother(
         "tdcp_rms_threshold": tdcp_rms_threshold,
         "doppler_position_update": doppler_position_update,
         "doppler_pu_sigma": doppler_pu_sigma,
+        "imu_tight_coupling": imu_tight_coupling,
+        "n_imu_tight_used": n_imu_tight_used,
+        "n_imu_tight_skip": n_imu_tight_skip,
         "n_tdcp_used": n_tdcp_used,
         "n_tdcp_fallback": n_tdcp_fallback,
         "n_imu_used": n_imu_used,
@@ -577,6 +632,11 @@ def main() -> None:
         default=5.0,
         help="Sigma (m) for Doppler-predicted position_update constraint",
     )
+    parser.add_argument(
+        "--imu-tight-coupling",
+        action="store_true",
+        help="Apply IMU dead-reckoning position_update after SPP in each epoch",
+    )
     args = parser.parse_args()
 
     pos_sigma = args.position_update_sigma
@@ -632,6 +692,7 @@ def main() -> None:
                 gmm_sigma_nlos=args.gmm_sigma_nlos,
                 doppler_position_update=args.doppler_position_update,
                 doppler_pu_sigma=args.doppler_pu_sigma,
+                imu_tight_coupling=args.imu_tight_coupling,
             )
             fm = out["forward_metrics"]
             sm = out["smoothed_metrics"]
@@ -665,6 +726,7 @@ def main() -> None:
                 "position_update_sigma": pos_sigma if pos_sigma is not None else "off",
                 "doppler_position_update": args.doppler_position_update,
                 "doppler_pu_sigma": args.doppler_pu_sigma,
+                "imu_tight_coupling": args.imu_tight_coupling,
                 "smoother": use_sm,
                 "n_particles": args.n_particles,
                 "forward_p50": fm["p50"] if fm else None,
