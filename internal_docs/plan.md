@@ -1,13 +1,360 @@
-# gnss_gpu / gnss_gpu_ws Claude 引き継ぎメモ
+# gnss_gpu / gnss_gpu_ws Codex 引き継ぎメモ
+
+**最終更新**: 2026-04-08 JST  
+**現在のブランチ**: `feature/rtklib-spp-fgo-pipeline`（PR #6 open）  
+**前回の HEAD**: `edda2d8`
 
 **ドキュメント先頭の読み方**
 
-- **セクション A（このファイルの上の方）**: 2026-04-07 時点の **RTKLIB demo5 と gnss_gpu の SPP（単点）観測モデル整合**、`export_spp_meas`、`gtsam_gnss` 公開 RINEX での FGO 検証。**いまコードを触るなら基本はここ。**
-- **付録 B（ファイル後半）**: 2026-04-04 スナップショットの **UrbanNav / PF / paper assets frozen mainline**。別系統の実験パイプライン記録として残している。
+- **セクション C（最優先）**: 2026-04-08 時点の **GPU FGO + RTKLIB SPP 整合 + Doppler motion model + PPC-Dataset 検証 + GSDC2023 未完了**。**いまコードを触るなら必ずここから読め。**
+- **セクション A（旧）**: 2026-04-07 時点の RTKLIB demo5 SPP 整合。セクション C に包含済み。歴史的記録。
+- **付録 B（凍結）**: UrbanNav / PF / paper assets frozen mainline。別系統。
 
 ---
 
-## A. RTKLIB demo5 × gnss_gpu（SPP / FGO / 公開 RINEX）— 2026-04-07 更新
+## C. GPU FGO + RTKLIB 整合 + Doppler + PPC 検証 — 2026-04-08 更新
+
+### C.0 全体の状況と結論
+
+#### C.0.1 やったこと
+
+1. **GPU FGO ソルバ** (`fgo.cu`): Gauss-Newton + GPU 正規方程式組み立て + ホスト Cholesky。Sagnac 補正、マルチクロック ISB、Huber IRLS、バックトラッキング線探索。
+2. **RTKLIB demo5 SPP 観測モデル整合**: `export_spp_meas.c` C ツールで RTKLIB `pntpos` と同一の `prange`/`iono`/`trop`/`sat_clk`/`sat_ecef`/`el_rad`/`var_total`/`sat_vel`/`rx_vel` を CSV 出力。
+3. **pybind11 バインディング**: RTKLIB SPP を共有ライブラリ化し Python から直接呼び出し（subprocess 不要）。`py::array_t` の stride=0 バグ発見・修正済み。
+4. **重みモード**: `sin²(el)` デフォルト（FGO 精度最良）、`rtklib` モード（pntpos 完全一致）選択可能。
+5. **Doppler motion displacement**: RTKLIB `estvel()` の受信機速度を FGO の motion prior に注入。`motion_displacement` パラメータで `(x_{t+1} - x_t - disp[t])` を制約。
+6. **PPC-Dataset 検証**: Tokyo 3ラン + Nagoya 3ラン、GPS-only SPP。
+7. **回帰テスト**: 4 pytest テスト（精度、RTKLIB 一致、レガシーパス、CSV フォーマット）。
+8. **PR #6**: `feature/rtklib-spp-fgo-pipeline` として提出済み。
+
+#### C.0.2 代表的な数値
+
+**gtsam_gnss 公開 RINEX（60 epoch, GPS, 15°, 静止局）**
+
+| 手法 | RMS 2D vs reference |
+| --- | ---: |
+| RTKLIB demo5 rnx2rtkp SPP | 1.67 m |
+| **gnss_gpu FGO (sin²el)** | **0.96 m** |
+| gnss_gpu FGO (rtklib weight) | 1.67 m (完全一致) |
+| レガシー correct_pseudoranges | 36.2 m (モデル不整合) |
+
+**PPC-Dataset（500 epoch, GPS-only, 15°, 車両走行）**
+
+| Run | RTKLIB SPP | FGO (σ=3) | FGO+Dop (σ=0.3) |
+| --- | ---: | ---: | ---: |
+| tokyo/run1 | 9.87 m | 7.40 m | **1.86 m** (200ep) |
+| tokyo/run2 | 2.66 m | 2.23 m | — |
+| tokyo/run3 | 2.55 m | 2.43 m | — |
+| nagoya/run1 | 4.75 m | 3.63 m | — |
+| nagoya/run2 | 1.23 m | 0.93 m | 1.03 m (200ep) |
+| nagoya/run3 | 2.08 m | 2.15 m | — |
+| **平均** | **3.86 m** | **3.13 m (19%↓)** | — |
+
+#### C.0.3 やっていないこと / 次にやるべきこと
+
+1. **GSDC2023 Kaggle データ検証** — URL 404 でダウンロード失敗。Kaggle CLI (`kaggle competitions download`) か手動 DL が必要。`phone_data.mat` には前処理済みデータが入っている。scipy.io.loadmat で読める。gtsam_gnss MATLAB 版と同一結果になるかの比較が目的。
+2. **マルチ GNSS** — GPS のみ → GPS+GAL+QZS で衛星数 3 倍。`export_spp_meas.c` の `opt.navsys` を `SYS_GPS|SYS_GAL|SYS_QZS` に変え、Python 側も対応必要。
+3. **Doppler を FGO 内に正式ファクタ化** — 現状は motion displacement として外部注入。gtsam_gnss のように state に velocity を含め Doppler を直接ファクタ化すると joint optimization になる。
+4. **TDCP（Time-Differenced Carrier Phase）** — gtsam_gnss が使う搬送波位相差分ファクタ。数 cm 精度の inter-epoch 制約。
+5. **密 Cholesky のスケーラビリティ** — 200 epoch 超で数値不安定。スパース Cholesky か sliding window に移行が必要。
+6. **180 epoch 発散バグ** — gtsam_gnss 公開 RINEX で一部エポックが衛星 0 → WLS ゼロベクトル → FGO 発散。
+
+### C.1 リポジトリ・パスの前提
+
+```
+gnss_gpu_ws/
+├── gnss_gpu/                  # メインリポ (git@github.com:rsasaki0109/gnss_gpu.git)
+│   ├── src/positioning/fgo.cu        # GPU FGO カーネル
+│   ├── src/rtklib_spp/               # RTKLIB C ラッパー (pybind 用)
+│   ├── include/gnss_gpu/fgo.h
+│   ├── python/gnss_gpu/fgo.py        # FGO Python ラッパー
+│   ├── python/gnss_gpu/_rtklib_spp_bindings.cpp
+│   ├── python/gnss_gpu/_bindings.cpp # FGO pybind
+│   ├── experiments/
+│   │   ├── gtsam_public_dataset.py   # 共有ローダー (RTKLIB 整合)
+│   │   ├── compare_fgo_rtklib_demo5.py
+│   │   ├── validate_fgo_gtsam_public_dataset.py
+│   │   └── validate_fgo_ppc.py       # PPC-Dataset 検証 + Doppler
+│   ├── tests/
+│   │   ├── test_rtklib_spp_regression.py  # 4テスト
+│   │   └── test_fgo.py
+│   ├── build/                        # CMake ビルド
+│   └── internal_docs/plan.md         # このファイル
+├── ref/
+│   ├── RTKLIB-demo5/app/consapp/rnx2rtkp/gcc/
+│   │   ├── export_spp_meas.c         # CSV 出力ツール (改造済み)
+│   │   └── makefile
+│   ├── gtsam_gnss/examples/data/     # 公開 RINEX テストデータ
+│   ├── PPC-Dataset/PPC-Dataset/      # PPC 6ラン (DL済み 155MB)
+│   │   ├── tokyo/run{1,2,3}/
+│   │   └── nagoya/run{1,2,3}/
+│   └── gsdc2023/                     # MATLAB コードのみ (データ未DL)
+│       ├── fgo_gnss.m
+│       ├── parameters.m
+│       └── functions/
+```
+
+### C.2 export_spp_meas CSV フォーマット (2026-04-08 版)
+
+**ヘッダ**: `gps_week,gps_tow,prn,sat_id,prange_m,r_m,iono_m,trop_m,sat_clk_m,satx,saty,satz,el_rad,var_total,svx,svy,svz,rx_vx,rx_vy,rx_vz`
+
+| 列 | 意味 |
+| --- | --- |
+| `prange_m` | RTKLIB `prange` (TGD/コードバイアス補正済み生コード) |
+| `iono_m` | Klobuchar 電離層遅延 (m) |
+| `trop_m` | Saastamoinen 対流圏遅延 (m) |
+| `sat_clk_m` | `-CLIGHT * dts` 衛星時計 (m) |
+| `satx/y/z` | `satposs` ECEF 衛星位置 (m) |
+| `el_rad` | 仰角 (rad) |
+| `var_total` | `vare + vmeas + vion + vtrp + varerr_spp` (m²) |
+| `svx/y/z` | `satposs` ECEF 衛星速度 (m/s) |
+| `rx_vx/y/z` | `estvel` ECEF 受信機速度 (m/s, Sagnac 補正済み) |
+
+**擬似距離の使い方**: `pr_for_wls = prange_m - iono_m - trop_m - sat_clk_m`
+
+**重みの選択**:
+- `sin²(el)`: `max(sin(el_rad), 0.1)²` — FGO 精度最良
+- `1/var_total`: RTKLIB pntpos 完全一致
+
+**ビルド**: `make -C ref/RTKLIB-demo5/app/consapp/rnx2rtkp/gcc`
+
+### C.3 GPU FGO アーキテクチャ
+
+#### C.3.1 状態ベクトル
+
+```
+state[t] = [x, y, z, c_0, c_1, ..., c_{nc-1}]  (3 + n_clock 次元)
+```
+
+GPS のみ: `nc=1` → 4 次元/epoch。マルチ GNSS (ISB): `nc` ≤ 4。
+
+#### C.3.2 ファクタ
+
+1. **疑似距離ファクタ** (GPU カーネル `fgo_assemble_pseudorange`):
+   - 残差: `res = pr[t,s] - (range(state[t], sat[t,s]) + clock)`
+   - Sagnac 地球回転補正付き `geodist`
+   - Huber IRLS 対応
+
+2. **Motion ファクタ** (ホスト `add_motion_rw_host`):
+   - 残差: `res_i = (state[t,i] - state[t+1,i] + disp[t,i])` for i ∈ {0,1,2}
+   - `motion_displacement` = `None` → ゼロ平均ランダムウォーク
+   - `motion_displacement` = 速度×dt → Doppler 情報付き motion
+
+3. **密正規方程式 → Cholesky**:
+   - `H (n_state × n_state)` + `g (n_state)` を GPU で並列組み立て
+   - ホストで Cholesky 分解 → 解く
+   - バックトラッキング線探索でステップ幅調整
+
+#### C.3.3 制限事項
+
+- **密 Cholesky**: `n_state > 8192` で拒否。GPS-only 4次元で最大 2048 epoch。
+- **200 epoch 超で数値不安定**: PPC 1000 epoch で発散（RMS 800m+）。原因は密行列の条件数悪化。
+- **スパース化未実装**: gtsam は iSAM2 でスパース増分解。gnss_gpu は全体をバッチで解く。
+
+### C.4 Doppler motion model の詳細
+
+#### C.4.1 動作原理
+
+RTKLIB `pntpos` → `estvel()` が Sagnac 補正付き Doppler 速度推定を実行。結果は `sol.rr[3..5]` (ECEF m/s)。`export_spp_meas` が `rx_vx,rx_vy,rx_vz` として CSV 出力。
+
+Python 側: `displacement[t] = [rx_vx, rx_vy, rx_vz] * dt` を計算し `fgo_gnss_lm(..., motion_displacement=disp)` に渡す。
+
+#### C.4.2 重要: gnss_gpu の doppler_velocity() は Sagnac 未補正
+
+`python/gnss_gpu/doppler.py` / `src/doppler/doppler.cu` の `doppler_velocity()` は **Sagnac 地球回転補正をしていない**。RTKLIB `resdop()` にある:
+
+```c
+rate = dot3(vs, e) + OMGE/CLIGHT*(rs[4]*rr[0] + rs[1]*x[0] - rs[3]*rr[1] - rs[0]*x[1]);
+```
+
+この補正項がないため、gnss_gpu の `doppler_velocity()` は ~18 m/s のバイアスが出る（静止局テストで確認）。
+
+**対策**: RTKLIB の `rx_vx/vy/vz` を使う。自前の `doppler_velocity()` は使わない。
+
+#### C.4.3 RINEX D1C 符号規約
+
+RINEX D1C は `d(carrier_phase)/dt` [Hz]。RTKLIB `resdop` は `-D1C * c/freq` で range rate に変換。gnss_gpu の `doppler_velocity()` は `D1C * wavelength` を使う。**符号が逆**。
+
+もし gnss_gpu の `doppler_velocity()` を直接使うなら **D1C を符号反転** + **Sagnac 補正追加** が必要。
+
+#### C.4.4 効果
+
+| 条件 | tokyo/run1 200ep | nagoya/run2 200ep |
+| --- | ---: | ---: |
+| WLS (per-epoch) | 2.13 m | 1.05 m |
+| FGO RW σ=0.3 | 1.96 m | 1.03 m |
+| **FGO Dop σ=0.3** | **1.86 m (13%↓)** | 1.03 m |
+
+### C.5 PPC-Dataset 検証の詳細
+
+#### C.5.1 データ
+
+- taroz/PPC-Dataset (OneDrive 155MB)
+- Tokyo 3ラン + Nagoya 3ラン
+- 5Hz RINEX 3.04 (GPS+GLO+GAL+BDS+QZS)、IMU 100Hz、reference.csv
+- **ただし現在の検証は GPS-only**
+
+#### C.5.2 実行方法
+
+```bash
+cd gnss_gpu
+PYTHONPATH=python python3 experiments/validate_fgo_ppc.py --all --max-epochs 500 --motion-sigma-m 3.0
+PYTHONPATH=python python3 experiments/validate_fgo_ppc.py --all --max-epochs 200 --motion-sigma-m 0.3 --doppler
+```
+
+#### C.5.3 注意
+
+- `--max-epochs 200` が安全上限（密 Cholesky）
+- `--doppler` は `export_spp_meas` の `rx_vx/vy/vz` を使う（RTKLIB 必須）
+- 全ラン実行は約 3-5 分
+
+### C.6 GSDC2023 (Kaggle) — 未完了
+
+#### C.6.1 目的
+
+gtsam_gnss MATLAB 版 (`ref/gsdc2023/fgo_gnss.m`) と同一結果になるかの比較。
+
+#### C.6.2 データ取得
+
+`https://taroz.net/data/dataset_2023.zip` (2.7GB) は **2026-04-08 時点で 404**。
+
+代替手段:
+- `kaggle competitions download -c smartphone-decimeter-2023` (Kaggle CLI)
+- 手動 DL で `ref/gsdc2023/dataset_2023/` に配置
+
+`run_preprocessing.m` のコメント: **"The dataset_2023 already contains the processed phone_data.mat"** → DL すれば前処理不要。
+
+#### C.6.3 phone_data.mat の構造 (推測)
+
+```matlab
+obs.n       % エポック数
+obs.nsat    % 衛星数
+obs.L1.resPc(n, nsat)  % 疑似距離残差 [m]
+obs.L1.resD(n, nsat)   % Doppler 残差 [m/s]
+obs.L1.resL(n, nsat)   % 搬送波位相残差 [m]
+obs.clk(n, 1)          % 受信機時計 [m]
+obs.dclk(n, 1)         % 時計ドリフト [m/s]
+obs.dt                 % エポック間隔 [s]
+obs.utcms(n, 1)        % UTC ミリ秒
+posbl.xyz(n, 3)        % WLS 基準位置 ECEF [m]
+nav                    % エフェメリス
+```
+
+Python で読む: `scipy.io.loadmat('phone_data.mat')`
+
+#### C.6.4 MATLAB FGO の構成
+
+```
+状態/epoch: x(ENU 3), v(ENU 3), c(clock 7), d(drift 1) = 14 次元
+ファクタ:
+  - PseudorangeFactor_XC:  擬似距離 → 位置+時計
+  - DopplerFactor_VD:      Doppler → 速度+ドリフト
+  - MotionFactor_XXVV:     位置-速度 連成 (x2 ≈ x1 + v1*dt)
+  - ClockFactor_CCDD:      時計-ドリフト 連成
+  - TDCPFactor_XXCC:       搬送波位相差分 → 位置+時計
+  - Huber ロバスト推定
+  - LM 最適化 (max 1000 iter)
+パラメータ (parameters.m):
+  - sigma_motion = 0.01-0.05 m
+  - sigma_motion_clk = 0.1 m
+  - Huber P = 0.1-0.2, D = 0.4-0.8, L = 0.2-0.5
+  - ENU 座標系 (ECEF→ENU 変換)
+```
+
+#### C.6.5 gnss_gpu で再現するために必要なこと
+
+1. `phone_data.mat` を Python で読み込む
+2. 観測残差を ECEF に戻す（ENU→ECEF 変換）、または FGO を ENU 対応にする
+3. マルチクロック (7次元) 対応: 既存 `n_clock` ≤ 4 → 拡張 or ISB を整理
+4. Doppler ファクタの正式実装（現状は motion displacement のみ）
+5. TDCP ファクタ実装（最も精度に効く）
+6. LM 最適化（現在は GN + 線探索）
+
+**最小限のパス**: 擬似距離 + Doppler velocity で比較。TDCP なし。精度は gtsam_gnss より劣るが、パイプラインの健全性を確認できる。
+
+### C.7 pybind11 バインディングの注意
+
+#### C.7.1 stride=0 バグ
+
+`py::array_t<double>(n)` がゼロストライドの配列を作る環境がある。**必ず明示的に shape + strides を指定する**:
+
+```cpp
+auto arr = py::array_t<double>(
+    {sz},                                    // shape
+    {static_cast<ssize_t>(sizeof(double))}   // strides
+);
+```
+
+#### C.7.2 ビルド
+
+```bash
+cd gnss_gpu/build
+cmake .. -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc) _gnss_gpu _gnss_gpu_rtklib_spp
+cp _gnss_gpu.cpython-310-x86_64-linux-gnu.so ../python/gnss_gpu/
+cp _gnss_gpu_rtklib_spp.cpython-310-x86_64-linux-gnu.so ../python/gnss_gpu/
+```
+
+#### C.7.3 RTKLIB pybind が不要な場合
+
+`CMakeLists.txt` で `if(EXISTS ${RTKLIB_DIR}/rtklib.h)` ガード付き。RTKLIB ソースがなければスキップされる。subprocess + CSV パスに自動フォールバック。
+
+### C.8 回帰テスト
+
+```bash
+cd gnss_gpu
+PYTHONPATH=python python3 -m pytest tests/test_rtklib_spp_regression.py -v
+```
+
+4 テスト:
+1. `test_fgo_beats_rtklib_accuracy` — FGO 0.96m < 1.5m threshold
+2. `test_fgo_rtklib_weight_alignment` — weight_mode=rtklib で ||FGO-RTKLIB|| < 0.1m
+3. `test_legacy_spp_path` — レガシーパス 30-50m (既知のモデルギャップ)
+4. `test_export_spp_meas_csv_format` — CSV ヘッダ・データ品質
+
+### C.9 Codex への注意事項
+
+#### C.9.1 やるべきこと（優先順）
+
+1. **GSDC2023 データ取得** → Kaggle CLI で DL → `phone_data.mat` を読んで FGO 実行 → MATLAB と比較
+2. **マルチ GNSS** → `export_spp_meas.c` の `SYS_GPS` を拡張 → PPC でマルチ GNSS 検証
+3. **Doppler ファクタ正式化** → state に velocity 追加 → 密 Cholesky のスケーラビリティ問題
+4. **スパース Cholesky / sliding window** → 200 epoch 制限の撤廃
+
+#### C.9.2 やってはいけないこと
+
+- `sin²(el)` をデフォルトから変えない（RTKLIB 重みは精度が落ちる）
+- `motion_displacement` を gnss_gpu の `doppler_velocity()` で計算しない（Sagnac 未補正で 18m/s バイアス）
+- 密 Cholesky で 500 epoch 以上を解かない（数値不安定）
+- `export_spp_meas` の CSV フォーマットの既存列を変えない（後方互換性）
+
+#### C.9.3 RTKLIB 側の変更は ref/ 配下
+
+`ref/RTKLIB-demo5/` は gnss_gpu リポの外にある。PR には含まれない。`export_spp_meas.c` の変更は別途管理が必要。
+
+#### C.9.4 ビルド手順
+
+```bash
+# RTKLIB ツール
+make -C ref/RTKLIB-demo5/app/consapp/rnx2rtkp/gcc
+
+# gnss_gpu CUDA + pybind
+cd gnss_gpu/build
+cmake .. -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+cp _gnss_gpu*.cpython*.so ../python/gnss_gpu/
+
+# テスト
+cd gnss_gpu
+PYTHONPATH=python python3 -m pytest tests/test_rtklib_spp_regression.py -v
+PYTHONPATH=python python3 experiments/validate_fgo_ppc.py --all --max-epochs 200 --motion-sigma-m 0.3 --doppler
+```
+
+---
+
+## A. RTKLIB demo5 × gnss_gpu（SPP / FGO / 公開 RINEX）— 2026-04-07 更新（旧）
+
+> **注: このセクションはセクション C に包含済み。歴史的記録として残す。**
 
 ### A.0 目的（ユーザーが選んだ「1」）
 
