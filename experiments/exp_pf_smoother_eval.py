@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import sys
 import time
 from pathlib import Path
@@ -29,11 +30,11 @@ for _p in (
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from evaluate import compute_metrics
+from evaluate import compute_metrics, ecef_to_lla
 from exp_urbannav_baseline import load_or_generate_data
 from exp_urbannav_pf3d import PF_SIGMA_CB, PF_SIGMA_POS
 from gnss_gpu import ParticleFilterDevice
-from gnss_gpu.robust_spp import robust_spp
+from gnss_gpu.imu import ComplementaryHeadingFilter, load_imu_csv
 from gnss_gpu.tdcp_velocity import estimate_velocity_from_tdcp_with_metrics
 
 RESULTS_DIR = _SCRIPT_DIR / "results"
@@ -43,7 +44,8 @@ def load_pf_smoother_dataset(run_dir: Path, rover_source: str = "trimble") -> di
     """Load RINEX / UrbanNav ground-truth once for repeated PF runs (sweeps).
 
     Returns a dict with keys: ``epochs``, ``spp_lookup``, ``gt``, ``our_times``,
-    ``first_pos``, ``init_cb``.
+    ``first_pos``, ``init_cb``.  If ``imu.csv`` exists in *run_dir*, also
+    includes ``imu_data`` (raw dict from :func:`load_imu_csv`).
     """
     from libgnsspp import preprocess_spp_file, solve_spp_file
 
@@ -78,7 +80,7 @@ def load_pf_smoother_dataset(run_dir: Path, rover_source: str = "trimble") -> di
             ]
         )
     )
-    return {
+    result = {
         "epochs": epochs,
         "spp_lookup": spp_lookup,
         "gt": gt,
@@ -86,6 +88,33 @@ def load_pf_smoother_dataset(run_dir: Path, rover_source: str = "trimble") -> di
         "first_pos": first_pos,
         "init_cb": init_cb,
     }
+
+    # Load IMU data if available
+    imu_path = run_dir / "imu.csv"
+    if imu_path.exists():
+        result["imu_data"] = load_imu_csv(imu_path)
+        print(f"  [IMU] loaded {len(result['imu_data']['tow'])} samples from {imu_path}")
+    else:
+        result["imu_data"] = None
+
+    return result
+
+
+def _spp_heading_from_velocity(spp_vel_ecef: np.ndarray, lat: float, lon: float) -> float | None:
+    """Compute heading (radians from north, clockwise) from SPP velocity in ECEF."""
+    sin_lat = math.sin(lat)
+    cos_lat = math.cos(lat)
+    sin_lon = math.sin(lon)
+    cos_lon = math.cos(lon)
+    # ECEF to ENU rotation
+    ve = -sin_lon * spp_vel_ecef[0] + cos_lon * spp_vel_ecef[1]
+    vn = (-sin_lat * cos_lon * spp_vel_ecef[0]
+          - sin_lat * sin_lon * spp_vel_ecef[1]
+          + cos_lat * spp_vel_ecef[2])
+    speed = math.sqrt(ve ** 2 + vn ** 2)
+    if speed < 0.5:  # too slow to get reliable heading
+        return None
+    return math.atan2(ve, vn)  # heading from north, clockwise
 
 
 def run_pf_with_optional_smoother(
@@ -119,9 +148,6 @@ def run_pf_with_optional_smoother(
     gmm_sigma_nlos: float = 30.0,
     doppler_position_update: bool = False,
     doppler_pu_sigma: float = 5.0,
-    use_robust_spp: bool = False,
-    robust_spp_threshold: float = 15.0,
-    robust_spp_weight_func: str = "cauchy",
 ) -> dict[str, object]:
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -134,6 +160,35 @@ def run_pf_with_optional_smoother(
     our_times = ds["our_times"]
     first_pos = np.asarray(ds["first_pos"], dtype=np.float64)
     init_cb = float(ds["init_cb"])
+
+    # --- IMU setup (for predict_guide in {"imu", "imu_spp_blend"}) ---
+    imu_filter: ComplementaryHeadingFilter | None = None
+    n_imu_used = 0
+    n_imu_fallback = 0
+    if predict_guide in ("imu", "imu_spp_blend"):
+        imu_data = ds.get("imu_data")
+        if imu_data is None:
+            imu_path = run_dir / "imu.csv"
+            if imu_path.exists():
+                imu_data = load_imu_csv(imu_path)
+            else:
+                raise RuntimeError(
+                    f"predict_guide={predict_guide} requires IMU data but "
+                    f"imu.csv not found in {run_dir}"
+                )
+        imu_filter = ComplementaryHeadingFilter(imu_data, alpha=0.05)
+        # Initialize heading from first two SPP positions
+        tow_keys = sorted(spp_lookup.keys())
+        if len(tow_keys) >= 2:
+            p0 = spp_lookup[tow_keys[0]][:3]
+            p1 = spp_lookup[tow_keys[1]][:3]
+            lat0, lon0, _ = ecef_to_lla(float(p0[0]), float(p0[1]), float(p0[2]))
+            dt_init = tow_keys[1] - tow_keys[0]
+            if dt_init > 0:
+                spp_vel_init = (p1 - p0) / dt_init
+                h = _spp_heading_from_velocity(spp_vel_init, lat0, lon0)
+                if h is not None:
+                    imu_filter.heading = h
 
     pf = ParticleFilterDevice(
         n_particles=n_particles,
@@ -176,7 +231,63 @@ def run_pf_with_optional_smoother(
         velocity = None
         used_tdcp = False
         tdcp_rms = float("nan")
+        used_imu = False
+
         if prev_tow is not None and dt > 0:
+            # --- IMU-based velocity ---
+            if predict_guide in ("imu", "imu_spp_blend") and imu_filter is not None:
+                # Get current PF estimate for ECEF -> geodetic
+                cur_est = np.asarray(pf.estimate()[:3], dtype=np.float64)
+                lat_r, lon_r, _ = ecef_to_lla(
+                    float(cur_est[0]), float(cur_est[1]), float(cur_est[2])
+                )
+
+                # Correct heading drift with SPP velocity if available
+                pk = round(prev_tow, 1)
+                spp_fd_vel_ecef: np.ndarray | None = None
+                if tow_key in spp_lookup and pk in spp_lookup:
+                    ddx = spp_lookup[tow_key][:3] - spp_lookup[pk][:3]
+                    if np.all(np.isfinite(ddx)):
+                        spp_fd_vel_ecef = ddx / dt
+                        spp_heading = _spp_heading_from_velocity(
+                            spp_fd_vel_ecef, lat_r, lon_r
+                        )
+                        if spp_heading is not None:
+                            imu_filter.correct_heading_spp(spp_heading)
+
+                # Get IMU velocity in ENU
+                vel_enu = imu_filter.get_velocity_enu(prev_tow, tow)
+                speed_enu = float(np.linalg.norm(vel_enu[:2]))
+
+                if speed_enu > 0.01:
+                    # Convert ENU velocity to ECEF
+                    imu_vel_ecef = ComplementaryHeadingFilter.velocity_enu_to_ecef(
+                        vel_enu, lat_r, lon_r
+                    )
+
+                    if predict_guide == "imu":
+                        velocity = imu_vel_ecef
+                        used_imu = True
+                        n_imu_used += 1
+                    elif predict_guide == "imu_spp_blend":
+                        # Blend IMU + SPP velocity (average)
+                        if spp_fd_vel_ecef is not None:
+                            spp_speed = float(np.linalg.norm(spp_fd_vel_ecef))
+                            if spp_speed < 50:
+                                velocity = 0.5 * imu_vel_ecef + 0.5 * spp_fd_vel_ecef
+                            else:
+                                # SPP velocity unreasonable, use IMU only
+                                velocity = imu_vel_ecef
+                        else:
+                            # No SPP velocity, use IMU only
+                            velocity = imu_vel_ecef
+                        used_imu = True
+                        n_imu_used += 1
+                else:
+                    # IMU reports near-zero speed, fall back to SPP
+                    n_imu_fallback += 1
+
+            # --- TDCP-based velocity ---
             if predict_guide in ("tdcp", "tdcp_adaptive") and prev_measurements is not None:
                 spp_pos_pre = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
                 pk = round(prev_tow, 1)
@@ -208,6 +319,8 @@ def run_pf_with_optional_smoother(
                             n_tdcp_used += 1
                 elif predict_guide == "tdcp_adaptive":
                     n_tdcp_fallback += 1
+
+            # --- SPP finite-difference fallback ---
             if velocity is None and tow_key in spp_lookup:
                 pk = round(prev_tow, 1)
                 if pk in spp_lookup:
@@ -266,23 +379,9 @@ def run_pf_with_optional_smoother(
             pf.update(sat_ecef, pr, weights=w)
 
         spp_pos = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
-
-        # Optionally replace SPP with robust IRLS solution
-        pu_pos = spp_pos
-        if use_robust_spp:
-            robust_result = robust_spp(
-                sat_ecef, pr,
-                weights=np.array([m.weight for m in measurements]),
-                init_pos=spp_pos if np.isfinite(spp_pos).all() and np.linalg.norm(spp_pos) > 1e6 else None,
-                threshold=robust_spp_threshold,
-                weight_func=robust_spp_weight_func,
-            )
-            if robust_result is not None:
-                pu_pos = robust_result
-
         if position_update_sigma is not None:
-            if np.isfinite(pu_pos).all() and np.linalg.norm(pu_pos) > 1e6:
-                pf.position_update(pu_pos, sigma_pos=position_update_sigma)
+            if np.isfinite(spp_pos).all() and np.linalg.norm(spp_pos) > 1e6:
+                pf.position_update(spp_pos, sigma_pos=position_update_sigma)
 
         # Doppler-predicted position update: propagate previous estimate by velocity
         if doppler_position_update and velocity is not None and prev_estimate is not None and dt > 0:
@@ -291,10 +390,10 @@ def run_pf_with_optional_smoother(
 
         if use_smoother:
             spp_ref = (
-                pu_pos
+                spp_pos
                 if position_update_sigma is not None
-                and np.isfinite(pu_pos).all()
-                and np.linalg.norm(pu_pos) > 1e6
+                and np.isfinite(spp_pos).all()
+                and np.linalg.norm(spp_pos) > 1e6
                 else None
             )
             pf.store_epoch(sat_ecef, pr, w, velocity, dt, spp_ref=spp_ref)
@@ -322,6 +421,13 @@ def run_pf_with_optional_smoother(
             f"fallback {n_tdcp_fallback}/{total_tdcp} (rms_threshold={tdcp_rms_threshold:.1f}m)"
         )
 
+    if predict_guide in ("imu", "imu_spp_blend"):
+        total_imu = n_imu_used + n_imu_fallback
+        print(
+            f"  [{predict_guide}] IMU used {n_imu_used}/{total_imu} epochs, "
+            f"fallback {n_imu_fallback}/{total_imu}"
+        )
+
     forward_pos_full = np.array(forward_aligned, dtype=np.float64)
     gt_arr = np.array(all_gt, dtype=np.float64)
 
@@ -342,6 +448,8 @@ def run_pf_with_optional_smoother(
         "doppler_pu_sigma": doppler_pu_sigma,
         "n_tdcp_used": n_tdcp_used,
         "n_tdcp_fallback": n_tdcp_fallback,
+        "n_imu_used": n_imu_used,
+        "n_imu_fallback": n_imu_fallback,
         "elapsed_ms": elapsed_ms,
         "forward_metrics": None,
         "smoothed_metrics": None,
@@ -379,7 +487,11 @@ def main() -> None:
         default=3.0,
         help="SPP soft constraint (m); use negative to disable",
     )
-    parser.add_argument("--predict-guide", choices=("spp", "tdcp", "tdcp_adaptive"), default="spp")
+    parser.add_argument(
+        "--predict-guide",
+        choices=("spp", "tdcp", "tdcp_adaptive", "imu", "imu_spp_blend"),
+        default="spp",
+    )
     parser.add_argument("--smoother", action="store_true", help="Enable forward-backward smooth")
     parser.add_argument("--compare-both", action="store_true", help="Run with and without smoother")
     parser.add_argument("--max-epochs", type=int, default=0, help="Limit valid epochs (0 = no limit)")
@@ -420,7 +532,7 @@ def main() -> None:
     parser.add_argument(
         "--tdcp-elevation-weight",
         action="store_true",
-        help="WLS row weight ∝ sin(el)^2 when measurements expose elevation (TDCP guide only)",
+        help="WLS row weight sin(el)^2 when measurements expose elevation (TDCP guide only)",
     )
     parser.add_argument(
         "--tdcp-el-sin-floor",
@@ -464,23 +576,6 @@ def main() -> None:
         type=float,
         default=5.0,
         help="Sigma (m) for Doppler-predicted position_update constraint",
-    )
-    parser.add_argument(
-        "--robust-spp",
-        action="store_true",
-        help="Use robust IRLS SPP for position_update instead of gnssplusplus SPP",
-    )
-    parser.add_argument(
-        "--robust-spp-threshold",
-        type=float,
-        default=15.0,
-        help="Residual threshold (m) for robust SPP weight function",
-    )
-    parser.add_argument(
-        "--robust-spp-weight-func",
-        choices=("cauchy", "huber"),
-        default="cauchy",
-        help="Robust weight function for IRLS SPP",
     )
     args = parser.parse_args()
 
@@ -537,9 +632,6 @@ def main() -> None:
                 gmm_sigma_nlos=args.gmm_sigma_nlos,
                 doppler_position_update=args.doppler_position_update,
                 doppler_pu_sigma=args.doppler_pu_sigma,
-                use_robust_spp=args.robust_spp,
-                robust_spp_threshold=args.robust_spp_threshold,
-                robust_spp_weight_func=args.robust_spp_weight_func,
             )
             fm = out["forward_metrics"]
             sm = out["smoothed_metrics"]
@@ -573,9 +665,6 @@ def main() -> None:
                 "position_update_sigma": pos_sigma if pos_sigma is not None else "off",
                 "doppler_position_update": args.doppler_position_update,
                 "doppler_pu_sigma": args.doppler_pu_sigma,
-                "robust_spp": args.robust_spp,
-                "robust_spp_threshold": args.robust_spp_threshold,
-                "robust_spp_weight_func": args.robust_spp_weight_func,
                 "smoother": use_sm,
                 "n_particles": args.n_particles,
                 "forward_p50": fm["p50"] if fm else None,
