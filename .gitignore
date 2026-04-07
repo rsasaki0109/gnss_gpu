@@ -28,3 +28,10 @@ tmp/site_visual_check/
 *.cubin
 *.fatbin
 *.ptx
+
+# Runtime cache
+cache/
+
+# Experiment artifacts
+experiments/results/*.log
+experiments/results/paper_assets/*.mp4
