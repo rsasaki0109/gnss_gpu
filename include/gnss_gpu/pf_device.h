@@ -79,6 +79,15 @@ void pf_device_weight(PFDeviceState* state,
     const double* weights_sat,
     int n_sat, double sigma_pr, double nu = 0.0);
 
+// Weight update using GMM likelihood (LOS + NLOS mixture components)
+// w_los: weight of LOS component (e.g. 0.7), sigma_pr is sigma_los
+// mu_nlos: mean bias of NLOS component [m], sigma_nlos: std of NLOS component [m]
+void pf_device_weight_gmm(PFDeviceState* state,
+    const double* sat_ecef, const double* pseudoranges,
+    const double* weights_sat,
+    int n_sat, double sigma_pr,
+    double w_los = 0.7, double mu_nlos = 15.0, double sigma_nlos = 30.0);
+
 // Position-domain update - apply soft constraint from external position estimate
 void pf_device_position_update(PFDeviceState* state,
     double ref_x, double ref_y, double ref_z, double sigma_pos);

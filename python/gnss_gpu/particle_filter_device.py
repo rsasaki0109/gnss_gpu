@@ -43,6 +43,7 @@ class ParticleFilterDevice:
             pf_device_initialize,
             pf_device_predict,
             pf_device_weight,
+            pf_device_weight_gmm,
             pf_device_position_update,
             pf_device_shift_clock_bias,
             pf_device_ess,
@@ -59,6 +60,7 @@ class ParticleFilterDevice:
         self._pf_device_initialize = pf_device_initialize
         self._pf_device_predict = pf_device_predict
         self._pf_device_weight = pf_device_weight
+        self._pf_device_weight_gmm = pf_device_weight_gmm
         self._pf_device_position_update = pf_device_position_update
         self._pf_device_shift_clock_bias = pf_device_shift_clock_bias
         self._pf_device_ess = pf_device_ess
@@ -186,6 +188,55 @@ class ParticleFilterDevice:
             self._state,
             sat.ravel(), pr, weights,
             n_sat, float(self.sigma_pr), float(self.nu))
+
+        if resample:
+            _ = self.resample_if_needed()
+
+    def update_gmm(self, sat_ecef, pseudoranges, weights=None, sigma_pr=None,
+                   w_los=0.7, mu_nlos=15.0, sigma_nlos=30.0, resample=True):
+        """Update weights using GMM likelihood (LOS + NLOS components).
+
+        Models pseudorange errors as a mixture of a narrow LOS Gaussian
+        and a wide NLOS Gaussian with positive bias. More robust than
+        Student's t for NLOS multipath in urban environments.
+
+        Parameters
+        ----------
+        sat_ecef : array_like, shape (n_sat, 3)
+            Satellite ECEF positions [m].
+        pseudoranges : array_like, shape (n_sat,)
+            Observed pseudoranges [m].
+        weights : array_like, shape (n_sat,), optional
+            Per-satellite weights (1/sigma^2). Defaults to ones.
+        sigma_pr : float, optional
+            LOS component sigma [m]. Defaults to ``self.sigma_pr``.
+        w_los : float
+            Weight of LOS component (0-1). Default 0.7.
+        mu_nlos : float
+            Mean of NLOS component [m]. Default 15.0.
+        sigma_nlos : float
+            Std of NLOS component [m]. Default 30.0.
+        resample : bool
+            If True (default), run ESS-based adaptive resampling after weighting.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+        pr = np.asarray(pseudoranges, dtype=np.float64).ravel()
+        n_sat = len(pr)
+
+        if weights is None:
+            weights = np.ones(n_sat, dtype=np.float64)
+        else:
+            weights = np.asarray(weights, dtype=np.float64).ravel()
+
+        sp = float(self.sigma_pr if sigma_pr is None else sigma_pr)
+
+        self._pf_device_weight_gmm(
+            self._state,
+            sat.ravel(), pr, weights,
+            n_sat, sp, float(w_los), float(mu_nlos), float(sigma_nlos))
 
         if resample:
             _ = self.resample_if_needed()

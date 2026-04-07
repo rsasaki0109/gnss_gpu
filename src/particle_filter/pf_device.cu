@@ -115,6 +115,71 @@ __global__ void pfd_weight_kernel(const double* px, const double* py,
     log_weights[tid] = log_w;
 }
 
+// --- GMM weight kernel ---
+// GMM likelihood: p(residual) = w_los * N(0, sigma_los) + w_nlos * N(mu_nlos, sigma_nlos)
+// Uses logsumexp trick for numerical stability.
+__global__ void pfd_weight_gmm_kernel(const double* px, const double* py,
+                                      const double* pz, const double* pcb,
+                                      const double* sat_ecef,
+                                      const double* pseudoranges,
+                                      const double* weights_sat,
+                                      double* log_weights,
+                                      int N, int n_sat, double sigma_los,
+                                      double w_los, double mu_nlos, double sigma_nlos) {
+    // Dynamic shared memory layout: [sat_ecef: n_sat*3] [pr: n_sat] [ws: n_sat]
+    extern __shared__ double s_data[];
+    double* s_sat = s_data;
+    double* s_pr = s_data + n_sat * 3;
+    double* s_ws = s_data + n_sat * 4;
+
+    for (int i = threadIdx.x; i < n_sat; i += blockDim.x) {
+        s_sat[i * 3 + 0] = sat_ecef[i * 3 + 0];
+        s_sat[i * 3 + 1] = sat_ecef[i * 3 + 1];
+        s_sat[i * 3 + 2] = sat_ecef[i * 3 + 2];
+        s_pr[i] = pseudoranges[i];
+        s_ws[i] = weights_sat[i];
+    }
+    __syncthreads();
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    double x = px[tid];
+    double y = py[tid];
+    double z = pz[tid];
+    double cb = pcb[tid];
+
+    double inv_sigma_los2 = 1.0 / (sigma_los * sigma_los);
+    double inv_sigma_nlos2 = 1.0 / (sigma_nlos * sigma_nlos);
+    double log_w_los = log(w_los);
+    double log_w_nlos = log(1.0 - w_los);
+    double log_sigma_los = log(sigma_los);
+    double log_sigma_nlos = log(sigma_nlos);
+
+    double log_w = 0.0;
+
+    for (int s = 0; s < n_sat; s++) {
+        double dx = x - s_sat[s * 3 + 0];
+        double dy = y - s_sat[s * 3 + 1];
+        double dz = z - s_sat[s * 3 + 2];
+        double r = sqrt(dx * dx + dy * dy + dz * dz);
+        double pred_pr = r + cb;
+        double residual = s_pr[s] - pred_pr;
+
+        // LOS component: log(w_los * N(0, sigma_los)) = log(w_los) - log(sigma_los) - 0.5*(r/sigma_los)^2
+        double log_los = log_w_los - log_sigma_los - 0.5 * s_ws[s] * residual * residual * inv_sigma_los2;
+        // NLOS component: log(w_nlos * N(mu_nlos, sigma_nlos))
+        double r_nlos = residual - mu_nlos;
+        double log_nlos = log_w_nlos - log_sigma_nlos - 0.5 * s_ws[s] * r_nlos * r_nlos * inv_sigma_nlos2;
+
+        // logsumexp: log(exp(a) + exp(b)) = max(a,b) + log(exp(a-max) + exp(b-max))
+        double mx = fmax(log_los, log_nlos);
+        log_w += mx + log(exp(log_los - mx) + exp(log_nlos - mx));
+    }
+
+    log_weights[tid] = log_w;
+}
+
 // --- Position-domain update kernel ---
 // Applies a Gaussian likelihood based on distance to a reference position.
 // log_w += -0.5 * ||particle_pos - ref_pos||^2 / sigma^2
@@ -610,6 +675,62 @@ void pf_device_weight(PFDeviceState* state,
         state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
         state->d_log_weights,
         N, n_sat, sigma_pr, nu);
+    CUDA_CHECK_LAST();
+}
+
+void pf_device_weight_gmm(PFDeviceState* state,
+    const double* sat_ecef, const double* pseudoranges,
+    const double* weights_sat,
+    int n_sat, double sigma_pr,
+    double w_los, double mu_nlos, double sigma_nlos) {
+
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    // Satellite data is small: n_sat * 5 doubles typically < 1KB
+    // Use persistent device buffers and pinned host memory for async transfer
+    size_t sz_sat = (size_t)n_sat * 3 * sizeof(double);
+    size_t sz_obs = (size_t)n_sat * sizeof(double);
+
+    // If n_sat exceeds pinned_capacity, reallocate (rare path)
+    if (n_sat > state->pinned_capacity) {
+        CUDA_CHECK(cudaStreamSynchronize(state->stream));
+        CUDA_CHECK(cudaFreeHost(state->h_sat_pinned));
+        CUDA_CHECK(cudaFree(state->d_sat_ecef));
+        CUDA_CHECK(cudaFree(state->d_pseudoranges));
+        CUDA_CHECK(cudaFree(state->d_weights_sat));
+
+        state->pinned_capacity = n_sat;
+        CUDA_CHECK(cudaMallocHost(&state->h_sat_pinned, n_sat * 5 * sizeof(double)));
+        CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, n_sat * 3 * sizeof(double)));
+        CUDA_CHECK(cudaMalloc(&state->d_pseudoranges, n_sat * sizeof(double)));
+        CUDA_CHECK(cudaMalloc(&state->d_weights_sat, n_sat * sizeof(double)));
+    }
+
+    // Ensure previous async transfers from pinned buffer are complete before overwriting
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+
+    // Stage satellite data into contiguous pinned buffer: [sat_ecef | pseudoranges | weights]
+    double* h_sat = state->h_sat_pinned;
+    memcpy(h_sat, sat_ecef, sz_sat);
+    memcpy(h_sat + n_sat * 3, pseudoranges, sz_obs);
+    memcpy(h_sat + n_sat * 4, weights_sat, sz_obs);
+
+    // Async H2D transfer on the stream
+    CUDA_CHECK(cudaMemcpyAsync(state->d_sat_ecef, h_sat,
+                               sz_sat, cudaMemcpyHostToDevice, state->stream));
+    CUDA_CHECK(cudaMemcpyAsync(state->d_pseudoranges, h_sat + n_sat * 3,
+                               sz_obs, cudaMemcpyHostToDevice, state->stream));
+    CUDA_CHECK(cudaMemcpyAsync(state->d_weights_sat, h_sat + n_sat * 4,
+                               sz_obs, cudaMemcpyHostToDevice, state->stream));
+
+    // Launch GMM weight kernel on the same stream
+    size_t smem_weight = (size_t)n_sat * 5 * sizeof(double);
+    pfd_weight_gmm_kernel<<<grid, BLOCK_SIZE, smem_weight, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz, state->d_pcb,
+        state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
+        state->d_log_weights,
+        N, n_sat, sigma_pr, w_los, mu_nlos, sigma_nlos);
     CUDA_CHECK_LAST();
 }
 
