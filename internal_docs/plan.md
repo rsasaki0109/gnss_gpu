@@ -356,67 +356,41 @@ PYTHONPATH=python python3 -m pytest tests/ -q
 ### 10.1 最優先: 1 m 切り（TDCP + carrier、FGO なし）
 
 1. ~~**仰角の単位確認**~~ → **確認済み: radians** (2026-04-08)。
-2. ~~**TDCP × σ_pos スイープ**~~ → **完了 (2026-04-08)**。全区間では TDCP ガイド単体の恩恵は小さい（Odaiba P50=1.672m、ベースライン 1.65m とほぼ同等）。σ_pos_tdcp=1.5-3.0, PU=1.5 が安定。Shinjuku は 3.24m（ベースライン 3.13m よりやや悪化）。短区間 (500ep) では P50=0.78m と効くが、全区間では carrier phase 途切れが悪影響。→ **adaptive mode で解決を試行中**。
-3. **Wide-lane → carrier-phase PR** パイプライン（§3.2）を TDCP 改善後に再挑戦。
-4. **README / headline**：条件を揃えた Odaiba 全区間の数値を更新するか、短評価と役割分担を文書化。
+2. ~~**TDCP × σ_pos スイープ**~~ → **完了 (2026-04-08)**。全区間では TDCP ガイド単体の恩恵は小さい（Odaiba P50=1.672m、ベースライン 1.65m とほぼ同等）。σ_pos_tdcp=1.5-3.0, PU=1.5 が安定。Shinjuku は 3.24m（ベースライン 3.13m よりやや悪化）。短区間 (500ep) では P50=0.78m と効くが、全区間では carrier phase 途切れが悪影響。
+3. ~~**TDCP adaptive + smoother 組み合わせ**~~ → **完了 (2026-04-08)**。結論: **効果なし**。
+   - **Adaptive TDCP**: postfit RMS が常に閾値以下で fallback 0 回。always-on と同一結果。TDCP の品質は良好だが PF 全体への寄与が小さい。
+   - **Smoother + TDCP**: Odaiba P50=1.66m (ベスト)、RMS は smoother で一貫改善 (6.33→6.27m)。ただし P50 改善は微小。
+   - **Shinjuku**: tdcp_adaptive 単体が P50 ベスト (3.28m) だがベースライン 3.13m より悪化。
+   - 詳細: `results/tdcp_adaptive_sweep.csv`, `results/pf_smoother_eval.csv`
+4. **Wide-lane → carrier-phase PR** パイプライン（§3.2）が **次の主戦場**。`wide_lane.py` 実装済み (12テスト全パス)、実験統合が必要。
+5. **README / headline**：条件を揃えた Odaiba 全区間の数値を更新するか、短評価と役割分担を文書化。
 
 ### 10.2 Cursor タスク（2026-04-08 起票、上から順に実行）
 
-#### Task A: tdcp_adaptive のスイープ実行と最適閾値決定
-**状態**: 実装済み (`predict_guide='tdcp_adaptive'`, `--tdcp-rms-threshold`)、**実験未実行**。
+#### ~~Task A: tdcp_adaptive スイープ~~ → **完了 (2026-04-08)**
+80 runs 実行。TDCP postfit RMS が常に全閾値 (1.0-8.0m) 以下で fallback 0 回。adaptive と always-on で結果同一。ベースラインを上回る設定なし。`results/tdcp_adaptive_sweep.csv`。
 
-```bash
-cd /path/to/gnss_gpu/experiments
-export PYTHONPATH=".:../python:../third_party/gnssplusplus/build/python:../third_party/gnssplusplus/python"
+#### ~~Task B: Wide-lane integer ambiguity resolution~~ → **実装完了 (2026-04-08)**
+`python/gnss_gpu/wide_lane.py` + `tests/test_wide_lane.py` (12 tests pass)。Melbourne-Wübbena N_wl 推定 + integer fix + wide-lane pseudorange 出力。**実験統合は未着手**（下記 Task D）。
 
-# tdcp_adaptive スイープ: rms_threshold を振る
-# exp_tdcp_sigma_sweep.py を参考に、predict_guide=tdcp_adaptive で
-# tdcp_rms_threshold = [1.0, 2.0, 3.0, 5.0, 8.0] × sigma_pos_tdcp = [1.0, 1.5, 2.0, 3.0] × PU = [1.5, 1.95]
-# Odaiba + Shinjuku 全区間、100k 粒子
-```
+#### ~~Task C: Smoother + TDCP 組み合わせ~~ → **完了 (2026-04-08)**
+8 runs 実行。smoother + tdcp_adaptive: Odaiba P50=1.66m (微改善), Shinjuku P50=3.30m (悪化)。効果なし。`results/pf_smoother_eval.csv`。
 
-**やること**:
-1. `experiments/exp_tdcp_sigma_sweep.py` を拡張するか新スクリプトを作成し、`predict_guide='tdcp_adaptive'` + `tdcp_rms_threshold` のスイープを追加
-2. `exp_pf_smoother_eval.py` の `run_pf_with_optional_smoother()` に `tdcp_rms_threshold` を CLI から渡す引数を追加（関数シグネチャには既にある）
-3. Odaiba + Shinjuku で実行し、ベースライン (TDCP なし P50=1.65m) を上回る設定を探す
-4. 結果を `experiments/results/tdcp_adaptive_sweep.csv` に保存
-
-**判断基準**: Odaiba P50 < 1.65m かつ Shinjuku P50 < 3.13m なら採用。
-
-#### Task B: Wide-lane integer ambiguity resolution パイプライン
-**状態**: 未実装。§3.2 の設計あり。
+#### Task D: Wide-lane を実験パイプラインに統合して Odaiba 評価 ← **次のタスク**
+**状態**: `wide_lane.py` 実装済み、実験統合が必要。
 
 **やること**:
-1. `python/gnss_gpu/wide_lane.py` を新規作成:
-   - Melbourne-Wübbena combination: `N_wl = L1_cycles - L2_cycles - P_nl / lambda_wl`
-   - `P_nl = (f1*P1 + f2*P2) / (f1+f2)`, `lambda_wl = 0.862m`
-   - 数エポック（5-10）の移動平均で `N_wl` を integer に round
-   - Wide-lane fixed carrier-phase pseudorange を出力
-2. テスト `tests/test_wide_lane.py` を作成
-3. `exp_pf_smoother_eval.py` に `--carrier-phase-pr widelane` オプションを追加
-   - update ステップで wide-lane fixed carrier-phase PR を pseudorange と併用
-4. Odaiba (L1+L2 あり) で評価。**Shinjuku/HK は L1 only なのでスキップ**。
+1. `experiments/exp_urbannav_fixed_eval.py` の RINEX L2 パーサを確認し、L2 carrier phase + L2 pseudorange の取得方法を把握
+2. `exp_pf_smoother_eval.py`（または新スクリプト）に wide-lane 統合:
+   - エポックごとに `WidelaneResolver.update()` で N_wl を蓄積
+   - 固定された衛星は `get_widelane_pseudorange()` で carrier-phase PR を取得
+   - PF の weight ステップで通常 PR と wide-lane PR をブレンド（または置換）
+3. Odaiba 全区間で評価。**Shinjuku/HK は L1 only なのでスキップ**。
+4. N1 は float のまま（循環依存問題は後回し）
 
-**必要なデータ**: RINEX から L2 carrier phase と pseudorange。既存の inline RINEX パーサ（`exp_urbannav_fixed_eval.py` 等）を参考にする。gnssplusplus は L1 only。
+**必要なデータ**: RINEX L2 は `/tmp/UrbanNav-Tokyo/Odaiba` にある obs ファイルから取得。既存の inline RINEX パーサ参照。
 
-**注意**: N2 = N_wl + N1 の N1 推定は PF 位置に依存する循環問題がある（§3.2）。まず N_wl 固定だけで carrier-phase PR を作り、N1 は float のまま試す。
-
-#### Task C: Smoother + TDCP 組み合わせ評価
-**状態**: 両方個別に実装済み、組み合わせ未実験。
-
-**やること**:
-1. `exp_pf_smoother_eval.py` で以下を実行:
-```bash
-# forward-backward smoother + tdcp_adaptive
-python3 exp_pf_smoother_eval.py --data-root /tmp/UrbanNav-Tokyo --runs Odaiba Shinjuku \
-  --n-particles 100000 --predict-guide tdcp_adaptive --tdcp-rms-threshold 3.0 \
-  --sigma-pos-tdcp 1.5 --position-update-sigma 1.5 --smoother
-```
-2. smoother なし (forward-only) + tdcp_adaptive と比較
-3. FFBSi + tdcp_adaptive も試す（`exp_gnss_compare_pf_ffbsi.py` に `predict_guide` を渡せるか確認、なければ追加）
-4. 結果を `experiments/results/smoother_tdcp_eval.csv` に記録
-
-**期待**: smoother の backward パスが TDCP で改善された forward 推定を活用し、P50/RMS 両方改善される可能性。
+**判断基準**: Odaiba P50 < 1.5m なら有望。
 
 ### 10.3 実装・実験の片付け
 
