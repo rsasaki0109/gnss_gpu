@@ -636,6 +636,12 @@ def record_video(html_path, output_dir, duration_ms=25000, gif_duration_s=30):
     html_name = Path(html_path).name
     root_dir = str(Path(html_path).resolve().parent)
     server, base_url = _start_local_http_server(root_dir)
+    target_webm = os.path.join(output_dir, "los_nlos_deckgl.webm")
+    preexisting = {
+        path.name
+        for path in Path(output_dir).glob("*.webm")
+        if path.name != Path(target_webm).name
+    }
     script = f"""
 const {{ chromium }} = require('playwright');
 (async () => {{
@@ -668,12 +674,15 @@ const {{ chromium }} = require('playwright');
             server.kill()
         os.unlink(script_path)
 
-    # Find and rename webm
-    webms = sorted([f for f in os.listdir(output_dir) if f.endswith(".webm")])
-    if webms:
-        src = os.path.join(output_dir, webms[-1])
-        dst = os.path.join(output_dir, "los_nlos_deckgl.webm")
-        os.rename(src, dst)
+    # Pick the newly recorded temp webm rather than an older tracked artifact.
+    new_webms = [
+        path for path in Path(output_dir).glob("*.webm")
+        if path.name != Path(target_webm).name and path.name not in preexisting
+    ]
+    if new_webms:
+        src = max(new_webms, key=lambda path: path.stat().st_mtime)
+        dst = Path(target_webm)
+        os.replace(src, dst)
         size_mb = os.path.getsize(dst) / 1e6
         print(f"Video: {dst} ({size_mb:.1f}MB)")
 
