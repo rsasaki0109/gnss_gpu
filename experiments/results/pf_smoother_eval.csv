@@ -1,0 +1,2 @@
+run,variant,predict_guide,sigma_pos,sigma_pos_tdcp,sigma_pos_tdcp_tight,tdcp_tight_rms_max_m,skip_valid_epochs,tdcp_elevation_weight,tdcp_el_sin_floor,position_update_sigma,smoother,n_particles,forward_p50,forward_p95,forward_rms_2d,smoothed_p50,smoothed_p95,smoothed_rms_2d,n_epochs,ms_per_epoch
+Odaiba,forward_only,tdcp,2.0,1.0,,1000000000.0,4000,True,0.1,1.95,False,100000,6.882176479988857,20.486158724366543,9.578272228324169,,,,500,13.020150564028881
