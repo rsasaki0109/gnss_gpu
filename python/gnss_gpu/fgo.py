@@ -28,6 +28,7 @@ def fgo_gnss_lm(
     tol: float = 1e-3,
     huber_k: float = 0.0,
     line_search: bool = True,
+    motion_displacement: np.ndarray | None = None,
 ) -> tuple[int, float]:
     """Iterated Gauss–Newton with GPU-assembled normal equations (in-place ``state``).
 
@@ -38,6 +39,11 @@ def fgo_gnss_lm(
 
     ``huber_k``: if > 0, apply IRLS Huber reweighting with threshold on Mahalanobis
     residuals ``z = |sqrt(w) * res|`` (same pattern as common robust GNSS solvers).
+
+    ``motion_displacement``: optional ``(T, 3)`` array of predicted inter-epoch
+    position changes (e.g. Doppler velocity * dt). When provided, the motion
+    random-walk factor penalises ``(x_{t} - x_{t+1}) + disp[t]`` instead of
+    ``(x_{t} - x_{t+1})``, equivalent to gtsam_gnss DopplerFactor_XXCC.
     """
     if _fgo_gnss_lm is None:
         raise RuntimeError("gnss_gpu native extension not built (fgo_gnss_lm unavailable)")
@@ -52,6 +58,9 @@ def fgo_gnss_lm(
     sk = None
     if sys_kind is not None:
         sk = np.ascontiguousarray(sys_kind, dtype=np.int32)
+    md = None
+    if motion_displacement is not None:
+        md = np.ascontiguousarray(motion_displacement, dtype=np.float64).ravel()
     ls = 1 if line_search else 0
     return _fgo_gnss_lm(
         sat_ecef,
@@ -65,6 +74,7 @@ def fgo_gnss_lm(
         ls,
         sk,
         int(n_clock),
+        md,
     )
 
 

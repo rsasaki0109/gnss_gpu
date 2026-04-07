@@ -38,6 +38,7 @@ int fgo_gnss_lm(const double* sat_ecef,
                 double tol,
                 double huber_k,
                 int enable_line_search,
-                double* out_mse_pr);
+                double* out_mse_pr,
+                const double* motion_displacement = nullptr);
 
 }  // namespace gnss_gpu
