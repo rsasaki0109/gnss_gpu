@@ -26,6 +26,7 @@ struct PFDeviceState {
     // For systematic resampling
     double* d_weights_norm;  // [N] normalized weights
     double* d_cdf;           // [N] CDF
+    int* d_resample_ancestor;  // [N] last systematic resample: out[j]=source index i
 
     // Velocity buffer (3 doubles, persistent)
     double* d_vel;
@@ -41,6 +42,8 @@ struct PFDeviceState {
     // Pinned host memory for async H2D transfers
     double* h_sat_pinned;    // pinned memory for satellite data
     double* h_result_pinned; // pinned memory for estimate result (4 doubles)
+    // Scratch for ESS / estimate / systematic-resample CPU reductions (6 * grid doubles)
+    double* h_reduction_pinned;
     int pinned_capacity;     // max satellites supported without realloc
 
     int n_particles;
@@ -95,6 +98,13 @@ void pf_device_estimate(const PFDeviceState* state, double* result);
 
 // Copy particles to host for visualization (only when needed)
 void pf_device_get_particles(const PFDeviceState* state, double* output);
+
+// Copy log-weights to host (for FFBSi / diagnostics). Synchronizes the stream.
+void pf_device_get_log_weights(const PFDeviceState* state, double* output);
+
+// Copy last systematic-resampling ancestor indices to host (out[j] = source idx).
+// Only valid after pf_device_resample_systematic; synchronizes the stream.
+void pf_device_get_resample_ancestors(const PFDeviceState* state, int* output);
 
 // Explicit synchronization - wait for all stream operations to complete
 void pf_device_sync(PFDeviceState* state);
