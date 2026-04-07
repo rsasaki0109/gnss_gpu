@@ -31,10 +31,20 @@ def run_pf_gnssplusplus_with_position_update(
     n_particles: int,
     position_update_sigma: float | None,
     rover_source: str = "trimble",
+    predict_guide: str = "spp",
+    tdcp_elevation_weight: bool = False,
+    tdcp_el_sin_floor: float = 0.1,
 ) -> tuple[np.ndarray, np.ndarray, float]:
-    """Run PF with gnssplusplus corrections and optional position_update."""
+    """Run PF with gnssplusplus corrections and optional position_update.
+
+    predict_guide
+        ``"spp"``: inter-epoch SPP position difference (default).
+        ``"tdcp"``: time-differenced carrier phase velocity with satellite
+        motion / clock terms (falls back to SPP guide when TDCP is unavailable).
+    """
     from libgnsspp import preprocess_spp_file, solve_spp_file
     from gnss_gpu import ParticleFilterDevice
+    from gnss_gpu.tdcp_velocity import estimate_velocity_from_tdcp_with_metrics
     from exp_urbannav_pf3d import PF_SIGMA_POS, PF_SIGMA_CB
 
     obs_path = str(run_dir / f"rover_{rover_source}.obs")
@@ -61,6 +71,7 @@ def run_pf_gnssplusplus_with_position_update(
     all_gt = []
 
     prev_tow = None
+    prev_measurements: list | None = None
     t0 = time.perf_counter()
 
     for sol_epoch, measurements in epochs:
@@ -70,14 +81,36 @@ def run_pf_gnssplusplus_with_position_update(
         tow_key = round(tow, 1)
         dt = tow - prev_tow if prev_tow else 0.1
 
-        # Guide velocity from SPP
         velocity = None
-        if prev_tow is not None and tow_key in spp_lookup:
-            prev_key = round(prev_tow, 1)
-            if prev_key in spp_lookup and dt > 0:
-                vel = (spp_lookup[tow_key][:3] - spp_lookup[prev_key][:3]) / dt
-                if np.all(np.isfinite(vel)) and np.linalg.norm(vel) < 50:
-                    velocity = vel
+        if prev_tow is not None and dt > 0:
+            if predict_guide == "tdcp" and prev_measurements is not None:
+                spp_pos = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
+                pk = round(prev_tow, 1)
+                spp_fd = None
+                if tow_key in spp_lookup and pk in spp_lookup:
+                    ddx = spp_lookup[tow_key][:3] - spp_lookup[pk][:3]
+                    if np.all(np.isfinite(ddx)):
+                        spp_fd = ddx / dt
+                if np.all(np.isfinite(spp_pos)):
+                    tdcp_vel, _ = estimate_velocity_from_tdcp_with_metrics(
+                        spp_pos,
+                        prev_measurements,
+                        measurements,
+                        dt=dt,
+                        elevation_weight=tdcp_elevation_weight,
+                        el_sin_floor=tdcp_el_sin_floor,
+                    )
+                    if tdcp_vel is not None and spp_fd is not None:
+                        if float(np.linalg.norm(tdcp_vel - spp_fd)) > 6.0:
+                            tdcp_vel = None
+                    if tdcp_vel is not None:
+                        velocity = tdcp_vel
+            if velocity is None and tow_key in spp_lookup:
+                prev_key = round(prev_tow, 1)
+                if prev_key in spp_lookup:
+                    vel = (spp_lookup[tow_key][:3] - spp_lookup[prev_key][:3]) / dt
+                    if np.all(np.isfinite(vel)) and np.linalg.norm(vel) < 50:
+                        velocity = vel
 
         pf.predict(velocity=velocity, dt=dt)
 
@@ -100,6 +133,7 @@ def run_pf_gnssplusplus_with_position_update(
             all_gt.append(gt[gt_idx])
 
         prev_tow = tow
+        prev_measurements = list(measurements)
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
     return np.array(all_pf_pos), np.array(all_gt), elapsed_ms
@@ -112,6 +146,18 @@ def main() -> None:
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--runs", type=str, default="Odaiba,Shinjuku")
     parser.add_argument("--n-particles", type=int, default=10_000)
+    parser.add_argument(
+        "--predict-guide",
+        choices=("spp", "tdcp"),
+        default="spp",
+        help="Velocity for PF predict: SPP finite-difference or TDCP (fallback SPP)",
+    )
+    parser.add_argument(
+        "--tdcp-elevation-weight",
+        action="store_true",
+        help="TDCP: sin(el)^2 weights in WLS when elevation is available",
+    )
+    parser.add_argument("--tdcp-el-sin-floor", type=float, default=0.1)
     args = parser.parse_args()
 
     runs = [r.strip() for r in args.runs.split(",")]
@@ -131,8 +177,13 @@ def main() -> None:
             print(f"  {label} ...", end=" ", flush=True)
 
             positions, ground_truth, elapsed_ms = run_pf_gnssplusplus_with_position_update(
-                run_dir, run_name, args.n_particles,
+                run_dir,
+                run_name,
+                args.n_particles,
                 position_update_sigma=sigma,
+                predict_guide=args.predict_guide,
+                tdcp_elevation_weight=args.tdcp_elevation_weight,
+                tdcp_el_sin_floor=args.tdcp_el_sin_floor,
             )
             metrics = compute_metrics(positions, ground_truth)
             n_ep = len(positions)
