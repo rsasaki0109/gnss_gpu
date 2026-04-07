@@ -37,6 +37,20 @@ from gnss_gpu.bvh import BVHAccelerator
 from gnss_gpu.urban_signal_sim import UrbanSignalSimulator, ecef_to_lla
 
 
+SATELLITE_MANIFEST = (
+    {"label": "G05", "system": "GPS", "code": "G", "slot": 5},
+    {"label": "G12", "system": "GPS", "code": "G", "slot": 12},
+    {"label": "G19", "system": "GPS", "code": "G", "slot": 19},
+    {"label": "E11", "system": "Galileo", "code": "E", "slot": 11},
+    {"label": "E24", "system": "Galileo", "code": "E", "slot": 24},
+    {"label": "E31", "system": "Galileo", "code": "E", "slot": 31},
+    {"label": "R04", "system": "GLONASS", "code": "R", "slot": 4},
+    {"label": "R11", "system": "GLONASS", "code": "R", "slot": 11},
+    {"label": "J02", "system": "QZSS", "code": "J", "slot": 2},
+    {"label": "J07", "system": "QZSS", "code": "J", "slot": 7},
+)
+
+
 def load_trajectory(csv_path, step=200):
     with open(csv_path) as f:
         rows = list(csv.DictReader(f))
@@ -276,23 +290,27 @@ def compute_epochs(
     building = loader.load_directory(plateau_dir)
     bvh = BVHAccelerator.from_building_model(building)
 
+    trajectory_step = max(1, min(step, 10))
+    traj_positions, traj_times = load_trajectory(traj_csv, step=trajectory_step)
     positions, times = load_trajectory(traj_csv, step=step)
     indices = np.linspace(0, len(positions) - 1, n_epochs, dtype=int)
     visual_buildings = _load_visual_buildings(
         loader,
         plateau_dir,
-        positions,
+        traj_positions,
         margin_m=building_margin_m,
         max_buildings=max_buildings,
     )
 
-    n_sat = 10
+    sat_manifest = list(SATELLITE_MANIFEST)
+    n_sat = len(sat_manifest)
     prn_list = list(range(1, n_sat + 1))
     usim = UrbanSignalSimulator(building_model=bvh, noise_floor_db=-35)
 
     epochs = []
     traj_lla = []
-    for p in positions:
+    traj_t = [float(t - traj_times[0]) for t in traj_times]
+    for p in traj_positions:
         la, lo, al = ecef_to_lla(*p)
         traj_lla.append([math.degrees(la), math.degrees(lo), 4.0])
 
@@ -309,6 +327,7 @@ def compute_epochs(
         for i in range(n_sat):
             if not result["visible"][i]:
                 continue
+            sat_meta = sat_manifest[i]
             sky_point, az_deg, el_deg = _project_to_sky_ceiling(
                 rx,
                 sats[i],
@@ -317,6 +336,10 @@ def compute_epochs(
             )
             rays.append({
                 "prn": prn_list[i],
+                "label": sat_meta["label"],
+                "system": sat_meta["system"],
+                "code": sat_meta["code"],
+                "slot": sat_meta["slot"],
                 "los": bool(result["is_los"][i]),
                 "el": float(el_deg),
                 "az": float(az_deg),
@@ -334,6 +357,7 @@ def compute_epochs(
     return {
         "epochs": epochs,
         "trajectory": traj_lla,
+        "trajectory_t": traj_t,
         "buildings": visual_buildings,
         "area": area_name,
         "sky": {"height_m": sky_height_m, "radius_m": sky_radius_m},
@@ -395,7 +419,7 @@ def generate_html(
   <div class="area" id="area"></div>
   <div id="stats"></div>
   <div id="epoch"></div>
-  <div id="meta">Map: OpenStreetMap<br>LOS/NLOS geometry: PLATEAU BVH<br>Satellite markers: projected to a virtual sky ceiling</div>
+  <div id="meta">Map: OpenStreetMap<br>LOS/NLOS geometry: PLATEAU BVH<br>Satellite markers: projected to a virtual sky ceiling<br>Labels: G=GPS R=GLONASS E=Galileo J=QZSS</div>
   <div id="legend">
     <span style="background:#00d4aa"></span>LOS &nbsp;
     <span style="background:#ff6b6b"></span>NLOS &nbsp;
@@ -467,7 +491,7 @@ const map = new maplibregl.Map({{
 const overlay = new deck.MapboxOverlay({{
   interleaved: false,
   layers: [],
-  getTooltip: ({{object}}) => object && object.prn ? `PRN ${{object.prn}} ${{object.los?'LOS':'NLOS'}} el=${{object.el.toFixed(0)}}°` : null,
+  getTooltip: ({{object}}) => object && object.label ? `${{object.system}} ${{object.label}} ${{object.los ? 'LOS' : 'NLOS'}} el=${{object.el.toFixed(0)}}°` : null,
 }});
 map.addControl(overlay);
 
@@ -533,10 +557,56 @@ function rayMap(ep) {{
   return out;
 }}
 
-function prefixTrajectory(ds, progress01, rxNow) {{
-  const maxIdx = Math.max(ds.trajectory.length - 1, 0);
-  const cutIdx = Math.min(maxIdx, Math.round(progress01 * maxIdx));
-  const prefix = ds.trajectory
+function lowerBound(values, target) {{
+  let lo = 0;
+  let hi = values.length;
+  while (lo < hi) {{
+    const mid = Math.floor((lo + hi) / 2);
+    if (values[mid] < target) {{
+      lo = mid + 1;
+    }} else {{
+      hi = mid;
+    }}
+  }}
+  return lo;
+}}
+
+function sampleTrajectoryAt(ds, tSec) {{
+  const traj = ds.trajectory || [];
+  const times = ds.trajectory_t || [];
+  if (!traj.length) {{
+    return ds.epochs[0].rx;
+  }}
+  if (!times.length || times.length !== traj.length) {{
+    return traj[0];
+  }}
+  if (tSec <= times[0]) {{
+    return traj[0];
+  }}
+  const lastIdx = times.length - 1;
+  if (tSec >= times[lastIdx]) {{
+    return traj[lastIdx];
+  }}
+  const hi = Math.max(1, lowerBound(times, tSec));
+  const lo = hi - 1;
+  const denom = Math.max(times[hi] - times[lo], 1e-6);
+  return lerpVec(traj[lo], traj[hi], clamp01((tSec - times[lo]) / denom));
+}}
+
+function prefixTrajectory(ds, tSec, rxNow) {{
+  const traj = ds.trajectory || [];
+  const times = ds.trajectory_t || [];
+  if (!traj.length) {{
+    return [{{ path: [[rxNow[1], rxNow[0], rxNow[2]]] }}];
+  }}
+  let cutIdx = traj.length - 1;
+  if (times.length === traj.length) {{
+    cutIdx = Math.min(traj.length - 1, Math.max(0, lowerBound(times, tSec)));
+    if (times[cutIdx] > tSec && cutIdx > 0) {{
+      cutIdx -= 1;
+    }}
+  }}
+  const prefix = traj
     .slice(0, cutIdx + 1)
     .map(p => [p[1], p[0], p[2]]);
   prefix.push([rxNow[1], rxNow[0], rxNow[2]]);
@@ -549,8 +619,10 @@ function interpolateEpoch(ds, epIdx, tRaw) {{
   const atDatasetEnd = epIdx >= ds.epochs.length - 1;
   const nextEp = atDatasetEnd ? ep : ds.epochs[epIdx + 1];
   const nextNextEp = epIdx + 2 < ds.epochs.length ? ds.epochs[epIdx + 2] : nextEp;
+  const tLinear = atDatasetEnd ? 0 : clamp01(tRaw);
   const t = atDatasetEnd ? 0 : smoothstep(tRaw);
-  const rxNow = catmullRomVec(prevEp.rx, ep.rx, nextEp.rx, nextNextEp.rx, t);
+  const tSec = atDatasetEnd ? ep.t : lerp(ep.t, nextEp.t, tLinear);
+  const rxNow = sampleTrajectoryAt(ds, tSec);
   const ceilingPolygon = ep.sky_disk.map((point, idx) => {{
     const prevPoint = prevEp.sky_disk[idx] || point;
     const nextPoint = nextEp.sky_disk[idx] || point;
@@ -600,6 +672,8 @@ function interpolateEpoch(ds, epIdx, tRaw) {{
       target: [skyNow[1], skyNow[0], skyNow[2]],
       los: losNow,
       prn,
+      label: base.label,
+      system: base.system,
       el: elNow,
       sourceColor: mixColor(color, sourceAlpha),
       targetColor: mixColor(color, targetAlpha),
@@ -610,6 +684,8 @@ function interpolateEpoch(ds, epIdx, tRaw) {{
       position: [skyNow[1], skyNow[0], skyNow[2]],
       color: mixColor(color, satAlpha),
       prn,
+      label: base.label,
+      system: base.system,
       los: losNow,
       el: elNow,
     }});
@@ -623,11 +699,17 @@ function interpolateEpoch(ds, epIdx, tRaw) {{
     ceilingData: [{{ polygon: ceilingPolygon }}],
     pathData: prefixTrajectory(
       ds,
-      (epIdx + t) / Math.max(ds.epochs.length - 1, 1),
+      tSec,
       rxNow,
     ),
-    bearing: CAMERA_BEARING + (epIdx + t) * ROTATION_STEP,
+    bearing: CAMERA_BEARING + (epIdx + tLinear) * ROTATION_STEP,
   }};
+}}
+
+for (const ds of datasets) {{
+  ds.fullPathData = [{{
+    path: (ds.trajectory || []).map(p => [p[1], p[0], p[2]]),
+  }}];
 }}
 
 const datasetDurations = datasets.map(ds => ds.epochs.length * HOLD_MS);
@@ -700,6 +782,14 @@ function renderFrame(nowTs) {{
         lineWidthMinPixels: 2,
       }}),
       new deck.PathLayer({{
+        id: 'traj-context',
+        data: ds.fullPathData,
+        getPath: d => d.path,
+        getColor: [230, 236, 245, 72],
+        widthMinPixels: 2,
+        widthScale: 1,
+      }}),
+      new deck.PathLayer({{
         id: 'traj', data: interp.pathData,
         getPath: d => d.path, getColor: [255, 217, 61, 180],
         widthMinPixels: 4, widthScale: 1,
@@ -734,7 +824,7 @@ function renderFrame(nowTs) {{
       new deck.TextLayer({{
         id: 'labels', data: interp.satData,
         getPosition: d => d.position,
-        getText: d => 'PRN' + d.prn,
+        getText: d => d.label,
         getColor: d => d.color,
         getSize: 14, getAngle: 0,
         getTextAnchor: 'middle', getAlignmentBaseline: 'bottom',
