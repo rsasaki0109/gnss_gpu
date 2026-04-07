@@ -107,6 +107,7 @@ def run_pf_with_optional_smoother(
     resampling: str = "megopolis",
     tdcp_elevation_weight: bool = False,
     tdcp_el_sin_floor: float = 0.1,
+    tdcp_rms_threshold: float = 3.0,
 ) -> dict[str, object]:
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -137,6 +138,8 @@ def run_pf_with_optional_smoother(
     all_gt: list[np.ndarray] = []
     aligned_indices: list[int] = []
     n_stored = 0
+    n_tdcp_used = 0
+    n_tdcp_fallback = 0
 
     prev_tow = None
     prev_measurements: list | None = None
@@ -157,7 +160,7 @@ def run_pf_with_optional_smoother(
         used_tdcp = False
         tdcp_rms = float("nan")
         if prev_tow is not None and dt > 0:
-            if predict_guide == "tdcp" and prev_measurements is not None:
+            if predict_guide in ("tdcp", "tdcp_adaptive") and prev_measurements is not None:
                 spp_pos_pre = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
                 pk = round(prev_tow, 1)
                 spp_fd_vel: np.ndarray | None = None
@@ -178,9 +181,16 @@ def run_pf_with_optional_smoother(
                         if float(np.linalg.norm(tv - spp_fd_vel)) > 6.0:
                             tv = None
                     if tv is not None:
-                        velocity = tv
-                        used_tdcp = True
-                        tdcp_rms = float(t_rms)
+                        if predict_guide == "tdcp_adaptive" and t_rms >= tdcp_rms_threshold:
+                            # Adaptive mode: postfit RMS too large, fall back
+                            n_tdcp_fallback += 1
+                        else:
+                            velocity = tv
+                            used_tdcp = True
+                            tdcp_rms = float(t_rms)
+                            n_tdcp_used += 1
+                elif predict_guide == "tdcp_adaptive":
+                    n_tdcp_fallback += 1
             if velocity is None and tow_key in spp_lookup:
                 pk = round(prev_tow, 1)
                 if pk in spp_lookup:
@@ -238,6 +248,13 @@ def run_pf_with_optional_smoother(
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
+    if predict_guide == "tdcp_adaptive":
+        total_tdcp = n_tdcp_used + n_tdcp_fallback
+        print(
+            f"  [tdcp_adaptive] TDCP used {n_tdcp_used}/{total_tdcp} epochs, "
+            f"fallback {n_tdcp_fallback}/{total_tdcp} (rms_threshold={tdcp_rms_threshold:.1f}m)"
+        )
+
     forward_pos_full = np.array(forward_aligned, dtype=np.float64)
     gt_arr = np.array(all_gt, dtype=np.float64)
 
@@ -253,6 +270,9 @@ def run_pf_with_optional_smoother(
         "tdcp_tight_rms_max_m": tdcp_tight_rms_max_m,
         "tdcp_elevation_weight": tdcp_elevation_weight,
         "tdcp_el_sin_floor": tdcp_el_sin_floor,
+        "tdcp_rms_threshold": tdcp_rms_threshold,
+        "n_tdcp_used": n_tdcp_used,
+        "n_tdcp_fallback": n_tdcp_fallback,
         "elapsed_ms": elapsed_ms,
         "forward_metrics": None,
         "smoothed_metrics": None,
@@ -290,7 +310,7 @@ def main() -> None:
         default=3.0,
         help="SPP soft constraint (m); use negative to disable",
     )
-    parser.add_argument("--predict-guide", choices=("spp", "tdcp"), default="spp")
+    parser.add_argument("--predict-guide", choices=("spp", "tdcp", "tdcp_adaptive"), default="spp")
     parser.add_argument("--smoother", action="store_true", help="Enable forward-backward smooth")
     parser.add_argument("--compare-both", action="store_true", help="Run with and without smoother")
     parser.add_argument("--max-epochs", type=int, default=0, help="Limit valid epochs (0 = no limit)")
