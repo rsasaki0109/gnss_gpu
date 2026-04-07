@@ -45,9 +45,10 @@ PF が RTKLIB demo5 に全指標で勝利。SPP の P50 にも匹敵 (1.65 vs 1.
 | Method | P50 | RMS |
 |---|---:|---:|
 | SPP | 3.01m | 18.12m |
-| **PF 100K** | **3.13m** | **13.88m** |
+| PF 100K | 3.13m | 13.88m |
+| **PF 100K + residual/accel downweight** | **3.18m** | **13.28m** |
 
-RMS 23% 改善。P50 は SPP にやや負け。
+RMS 27% 改善 (SPP比)。residual + PR accel downweighting で RMS がさらに改善 (13.88→13.28m)。
 
 ### 1.3 HK-20190428 (supplemental, single-frequency ublox)
 
@@ -239,6 +240,11 @@ TDCP と carrier phase PR の両方が carrier_phase を使うが、異なる用
 | DGNSS (base station 差分) | 改善なし | gnssplusplus 補正が既に十分 |
 | GSDC PF | WLS に負け | open-sky で temporal filtering 不要 |
 | 1M particles + small sigma_pos | 崩壊 | particle depletion (sp<1 で追従不能) |
+| GMM likelihood (LOS+NLOS mixture) | 全設定で悪化 (P50 +0.04〜+0.57m) | Student's t と同様、尤度を緩めると particle 散乱 |
+| Wide-lane N_wl → PR 置換 | P50=35m 崩壊 | N1 未解決でバイアス発散 |
+| Iono-free Hatch filter (dual-freq) | P50=1.71m (微悪化) | urban canyon cycle slip + iono divergence |
+| TDCP adaptive (RMS fallback) | ベースラインと同一 | postfit RMS が常に閾値以下で fallback 0 回 |
+| TDCP + smoother 組み合わせ | P50=1.66m (微改善のみ) | 劇的改善なし |
 
 ---
 
