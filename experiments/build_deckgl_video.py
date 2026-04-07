@@ -495,6 +495,126 @@ const overlay = new deck.MapboxOverlay({{
 }});
 map.addControl(overlay);
 
+const CAPTURE_FPS = 60;
+const CAPTURE_WIDTH = 1280;
+const CAPTURE_HEIGHT = 720;
+const HUD_META_LINES = [
+  'Map: OpenStreetMap',
+  'LOS/NLOS geometry: PLATEAU BVH',
+  'Satellite markers: projected to a virtual sky ceiling',
+  'Labels: G=GPS R=GLONASS E=Galileo J=QZSS',
+];
+const captureCanvas = document.createElement('canvas');
+captureCanvas.width = CAPTURE_WIDTH;
+captureCanvas.height = CAPTURE_HEIGHT;
+const captureCtx = captureCanvas.getContext('2d', {{ alpha: false }});
+let captureActive = false;
+let captureState = null;
+
+function roundedRectPath(ctx, x, y, w, h, r) {{
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}}
+
+function drawLegendItem(ctx, x, y, color, label) {{
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y - 9, 12, 12);
+  ctx.fillStyle = '#e0e0e0';
+  ctx.fillText(label, x + 18, y + 1);
+}}
+
+function drawHudToCapture(ctx) {{
+  if (!captureState) {{
+    return;
+  }}
+  const panelX = 12;
+  const panelY = 12;
+  const panelW = 420;
+  const panelH = 188;
+
+  ctx.save();
+  roundedRectPath(ctx, panelX, panelY, panelW, panelH, 12);
+  ctx.fillStyle = 'rgba(10,15,30,0.92)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(51,68,85,0.95)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  let y = panelY + 24;
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = 'bold 15px monospace';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('GPU Urban GNSS Signal Sim', panelX + 18, y);
+
+  y += 30;
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = '#ffd93d';
+  ctx.fillText(captureState.area, panelX + 18, y);
+
+  y += 26;
+  ctx.font = 'bold 14px monospace';
+  const losText = `LOS: ${{captureState.nLos}}`;
+  ctx.fillStyle = '#00d4aa';
+  ctx.fillText(losText, panelX + 18, y);
+  ctx.fillStyle = '#ff6b6b';
+  ctx.fillText(`NLOS: ${{captureState.nNlos}}`, panelX + 18 + ctx.measureText(losText).width + 18, y);
+
+  y += 21;
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#8f99ad';
+  ctx.fillText(captureState.epochText, panelX + 18, y);
+
+  y += 17;
+  ctx.fillStyle = '#9cb0c8';
+  for (const line of HUD_META_LINES) {{
+    ctx.fillText(line, panelX + 18, y);
+    y += 16;
+  }}
+
+  y += 5;
+  ctx.font = '12px monospace';
+  drawLegendItem(ctx, panelX + 18, y, '#00d4aa', 'LOS');
+  drawLegendItem(ctx, panelX + 88, y, '#ff6b6b', 'NLOS');
+  drawLegendItem(ctx, panelX + 166, y, '#ffd93d', 'Receiver');
+  ctx.restore();
+}}
+
+function compositeCaptureFrame() {{
+  const mapEl = document.getElementById('map');
+  const mapRect = mapEl.getBoundingClientRect();
+  if (mapRect.width <= 0 || mapRect.height <= 0) {{
+    return;
+  }}
+  const scaleX = CAPTURE_WIDTH / mapRect.width;
+  const scaleY = CAPTURE_HEIGHT / mapRect.height;
+
+  captureCtx.save();
+  captureCtx.fillStyle = '#e9e6dc';
+  captureCtx.fillRect(0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
+  for (const canvas of mapEl.querySelectorAll('canvas')) {{
+    if (!canvas.width || !canvas.height) {{
+      continue;
+    }}
+    const rect = canvas.getBoundingClientRect();
+    const dx = (rect.left - mapRect.left) * scaleX;
+    const dy = (rect.top - mapRect.top) * scaleY;
+    const dw = rect.width * scaleX;
+    const dh = rect.height * scaleY;
+    try {{
+      captureCtx.drawImage(canvas, dx, dy, dw, dh);
+    }} catch (err) {{
+      // Ignore transient cross-canvas draw failures during tile uploads.
+    }}
+  }}
+  drawHudToCapture(captureCtx);
+  captureCtx.restore();
+}}
+
 function clamp01(v) {{
   return Math.max(0, Math.min(1, v));
 }}
@@ -717,8 +837,75 @@ const totalDurationMs = datasetDurations.reduce((acc, value) => acc + value, 0);
 let startTs = null;
 let mapReady = false;
 
+function initialCaptureState() {{
+  const ds = datasets[0];
+  const ep = ds.epochs[0];
+  return {{
+    area: ds.area,
+    nLos: ep.n_los,
+    nNlos: ep.n_nlos,
+    epochText: 'Epoch 1/' + ds.epochs.length + '  t=' + ep.t.toFixed(0) + 's',
+  }};
+}}
+
+function resetAnimation() {{
+  startTs = null;
+  captureState = initialCaptureState();
+}}
+
+window.__losCapture = {{
+  ready: false,
+  fps: CAPTURE_FPS,
+  async download(durationMs, fps = CAPTURE_FPS) {{
+    if (!mapReady) {{
+      throw new Error('map not ready');
+    }}
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+        ? 'video/webm;codecs=vp8'
+        : 'video/webm';
+    const stream = captureCanvas.captureStream(fps);
+    const recorder = new MediaRecorder(stream, {{
+      mimeType,
+      videoBitsPerSecond: 12_000_000,
+    }});
+    const chunks = [];
+    const stopped = new Promise((resolve, reject) => {{
+      recorder.ondataavailable = event => {{
+        if (event.data && event.data.size) {{
+          chunks.push(event.data);
+        }}
+      }};
+      recorder.onerror = event => reject(event.error || new Error('MediaRecorder failed'));
+      recorder.onstop = () => resolve(new Blob(chunks, {{ type: mimeType }}));
+    }});
+
+    captureActive = true;
+    recorder.start(250);
+    resetAnimation();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    compositeCaptureFrame();
+    await new Promise(resolve => setTimeout(resolve, durationMs));
+    recorder.stop();
+    const blob = await stopped;
+    captureActive = false;
+    stream.getTracks().forEach(track => track.stop());
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'los_nlos_deckgl.webm';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }},
+}};
+
 map.on('load', () => {{
   mapReady = true;
+  window.__losCapture.ready = true;
   requestAnimationFrame(renderFrame);
 }});
 
@@ -731,6 +918,9 @@ function renderFrame(nowTs) {{
   }}
   const elapsed = nowTs - startTs;
   if (elapsed < INITIAL_DELAY_MS) {{
+    if (captureActive) {{
+      compositeCaptureFrame();
+    }}
     requestAnimationFrame(renderFrame);
     return;
   }}
@@ -836,8 +1026,17 @@ function renderFrame(nowTs) {{
   document.getElementById('area').textContent = ds.area;
   document.getElementById('stats').innerHTML =
     '<span class="los">LOS: ' + ep.n_los + '</span>  <span class="nlos">NLOS: ' + ep.n_nlos + '</span>';
-  document.getElementById('epoch').textContent =
-    'Epoch ' + (epIdx+1) + '/' + ds.epochs.length + '  t=' + ep.t.toFixed(0) + 's';
+  const epochText = 'Epoch ' + (epIdx+1) + '/' + ds.epochs.length + '  t=' + ep.t.toFixed(0) + 's';
+  document.getElementById('epoch').textContent = epochText;
+  captureState = {{
+    area: ds.area,
+    nLos: ep.n_los,
+    nNlos: ep.n_nlos,
+    epochText,
+  }};
+  if (captureActive) {{
+    compositeCaptureFrame();
+  }}
   requestAnimationFrame(renderFrame);
 }}
 
@@ -920,13 +1119,11 @@ const {{ chromium }} = require('playwright');
         print(f"Still: {output_path} ({size_mb:.1f}MB)")
 
 
-def record_video(html_path, output_dir, duration_ms=25000, gif_duration_s=30):
-    """Record with Playwright."""
-    print(f"Recording video ({duration_ms/1000:.0f}s)...")
+def _record_video_playwright_fallback(html_path, output_dir, duration_ms, target_webm):
+    """Fallback recorder when in-page MediaRecorder is unavailable."""
     html_name = Path(html_path).name
     root_dir = str(Path(html_path).resolve().parent)
     server, base_url = _start_local_http_server(root_dir)
-    target_webm = os.path.join(output_dir, "los_nlos_deckgl.webm")
     preexisting = {
         path.name
         for path in Path(output_dir).glob("*.webm")
@@ -941,64 +1138,100 @@ const {{ chromium }} = require('playwright');
   }});
   const ctx = await browser.newContext({{
     viewport: {{ width: 1280, height: 720 }},
-    recordVideo: {{ dir: '{output_dir}', size: {{ width: 1280, height: 720 }} }},
+    recordVideo: {{ dir: {json.dumps(output_dir)}, size: {{ width: 1280, height: 720 }} }},
   }});
   const page = await ctx.newPage();
   await page.goto({json.dumps(base_url + "/" + html_name)}, {{ waitUntil: 'domcontentloaded' }});
-  await page.waitForTimeout({duration_ms});
+  await page.waitForTimeout({int(duration_ms)});
   await ctx.close();
   await browser.close();
-}})();
+}})().catch(err => {{
+  console.error(err);
+  process.exit(1);
+}});
 """
-    script_path = os.path.join(output_dir, "_rec.js")
+    script_path = os.path.join(output_dir, "_rec_fallback.js")
     with open(script_path, "w") as f:
         f.write(script)
     try:
-        subprocess.run(["node", script_path], timeout=duration_ms/1000+30,
-                       cwd=os.path.dirname(os.path.abspath(__file__)) + "/..")
+        subprocess.run(
+            ["node", script_path],
+            timeout=duration_ms / 1000 + 30,
+            cwd=os.path.dirname(os.path.abspath(__file__)) + "/..",
+            check=True,
+        )
     finally:
         server.terminate()
         try:
             server.wait(timeout=5)
         except subprocess.TimeoutExpired:
             server.kill()
-        os.unlink(script_path)
+        if os.path.exists(script_path):
+            os.unlink(script_path)
 
-    # Pick the newly recorded temp webm rather than an older tracked artifact.
     new_webms = [
         path for path in Path(output_dir).glob("*.webm")
         if path.name != Path(target_webm).name and path.name not in preexisting
     ]
-    if new_webms:
-        src = max(new_webms, key=lambda path: path.stat().st_mtime)
-        dst = Path(target_webm)
-        os.replace(src, dst)
-        size_mb = os.path.getsize(dst) / 1e6
-        print(f"Video: {dst} ({size_mb:.1f}MB)")
+    if not new_webms:
+        return None
 
-        mp4_path = os.path.join(output_dir, "los_nlos_deckgl.mp4")
-        subprocess.run([
-            "ffmpeg", "-y", "-i", dst,
-            "-movflags", "+faststart",
-            "-pix_fmt", "yuv420p",
-            mp4_path,
-        ], capture_output=True)
-        if os.path.exists(mp4_path):
-            size_mb = os.path.getsize(mp4_path) / 1e6
-            print(f"MP4: {mp4_path} ({size_mb:.1f}MB)")
+    src = max(new_webms, key=lambda path: path.stat().st_mtime)
+    dst = Path(target_webm)
+    os.replace(src, dst)
+    return str(dst)
 
-        # Convert to gif
-        gif_path = os.path.join(output_dir, "los_nlos_deckgl.gif")
-        subprocess.run([
-            "ffmpeg", "-y", "-i", dst,
-            "-vf", "fps=8,scale=800:-1:flags=lanczos",
-            "-t", str(gif_duration_s), gif_path
-        ], capture_output=True)
-        if os.path.exists(gif_path):
-            size_mb = os.path.getsize(gif_path) / 1e6
-            print(f"GIF: {gif_path} ({size_mb:.1f}MB)")
-        return gif_path
-    return None
+
+def record_video(html_path, output_dir, duration_ms=25000, gif_duration_s=30, capture_fps=60):
+    """Record the interactive map and export smoother 60 fps masters."""
+    print(f"Recording video ({duration_ms/1000:.0f}s @ {capture_fps}fps)...")
+    target_webm = os.path.join(output_dir, "los_nlos_deckgl.webm")
+    raw_webm = os.path.join(output_dir, "_los_nlos_deckgl_raw.webm")
+    if os.path.exists(raw_webm):
+        os.unlink(raw_webm)
+
+    recorded_webm = _record_video_playwright_fallback(
+        html_path,
+        output_dir,
+        duration_ms,
+        raw_webm,
+    )
+    if not recorded_webm or not os.path.exists(recorded_webm):
+        return None
+
+    dst = Path(recorded_webm)
+    size_mb = os.path.getsize(dst) / 1e6
+    print(f"Raw video: {dst} ({size_mb:.1f}MB)")
+
+    mp4_path = os.path.join(output_dir, "los_nlos_deckgl.mp4")
+    subprocess.run([
+        "ffmpeg", "-y", "-i", str(dst),
+        "-vf", f"framerate=fps={int(capture_fps)}:interp_start=0:interp_end=255:scene=100,format=yuv420p",
+        "-c:v", "libx264",
+        "-preset", "medium",
+        "-crf", "20",
+        "-movflags", "+faststart",
+        mp4_path,
+    ], capture_output=True, check=True)
+    if os.path.exists(mp4_path):
+        size_mb = os.path.getsize(mp4_path) / 1e6
+        print(f"MP4: {mp4_path} ({size_mb:.1f}MB)")
+
+    os.replace(str(dst), target_webm)
+    if os.path.exists(target_webm):
+        size_mb = os.path.getsize(target_webm) / 1e6
+        print(f"WebM: {target_webm} ({size_mb:.1f}MB)")
+
+    gif_path = os.path.join(output_dir, "los_nlos_deckgl.gif")
+    subprocess.run([
+        "ffmpeg", "-y", "-i", mp4_path,
+        "-vf", "fps=10,scale=800:-1:flags=lanczos",
+        "-t", str(gif_duration_s), gif_path
+    ], capture_output=True, check=True)
+    if os.path.exists(gif_path):
+        size_mb = os.path.getsize(gif_path) / 1e6
+        print(f"GIF: {gif_path} ({size_mb:.1f}MB)")
+    return gif_path
 
 
 def parse_args():
@@ -1025,6 +1258,8 @@ def parse_args():
                         help="Recording duration in ms. 0 means auto.")
     parser.add_argument("--gif-duration-s", type=int, default=30,
                         help="GIF clip length in seconds.")
+    parser.add_argument("--capture-fps", type=int, default=60,
+                        help="Target video frame rate for recorder/compositor output.")
     parser.add_argument("--still-delay-ms", type=int, default=6000,
                         help="Delay before capturing the still preview image.")
     parser.add_argument("--zoom", type=float, default=14.4,
@@ -1095,6 +1330,7 @@ def main():
         out_dir,
         duration_ms=duration_ms,
         gif_duration_s=args.gif_duration_s,
+        capture_fps=args.capture_fps,
     )
 
 
