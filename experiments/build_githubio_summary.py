@@ -288,8 +288,8 @@ def _build_snapshot() -> dict:
             "href": deckgl_href,
             "caption": (
                 "Long-form deck.gl sweep over OpenStreetMap, with PLATEAU BVH "
-                "providing the LOS/NLOS geometry labels. Click through for the "
-                "interactive map."
+                "providing LOS/NLOS labels, coarse 3D PLATEAU buildings, and "
+                "satellites projected onto a virtual sky ceiling above the receiver."
             ),
             "poster": (
                 _media_href("los_nlos_deckgl.gif")
