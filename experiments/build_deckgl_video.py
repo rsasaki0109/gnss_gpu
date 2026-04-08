@@ -400,6 +400,7 @@ const HOLD_MS = {int(hold_ms)};
 const INITIAL_DELAY_MS = {int(initial_delay_ms)};
 const CAMERA_BEARING = {float(bearing)};
 const ROTATION_STEP = {float(rotation_step)};
+const CAMERA_LEAD_M = 120.0;
 
 const INITIAL_VIEW = {{
   longitude: {center[1]},
@@ -452,8 +453,71 @@ function lerpVec(a, b, t) {{
   return a.map((value, idx) => lerp(value, b[idx], t));
 }}
 
+function catmullRom(a, b, c, d, t) {{
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return 0.5 * (
+    (2 * b) +
+    (-a + c) * t +
+    (2 * a - 5 * b + 4 * c - d) * t2 +
+    (-a + 3 * b - 3 * c + d) * t3
+  );
+}}
+
+function catmullRomVec(a, b, c, d, t) {{
+  return b.map((_, idx) => catmullRom(a[idx], b[idx], c[idx], d[idx], t));
+}}
+
 function mixColor(rgb, alpha) {{
   return [rgb[0], rgb[1], rgb[2], Math.round(alpha)];
+}}
+
+function metersToLatDeg(m) {{
+  return m / 111320.0;
+}}
+
+function metersToLonDeg(m, latDeg) {{
+  return m / (111320.0 * Math.max(Math.cos(latDeg * Math.PI / 180.0), 1e-4));
+}}
+
+function offsetLatLon(latDeg, lonDeg, bearingDeg, forwardM) {{
+  const br = bearingDeg * Math.PI / 180.0;
+  const northM = Math.cos(br) * forwardM;
+  const eastM = Math.sin(br) * forwardM;
+  return [
+    latDeg + metersToLatDeg(northM),
+    lonDeg + metersToLonDeg(eastM, latDeg),
+  ];
+}}
+
+function buildGroundPatch(ds, padM = 4500.0) {{
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  for (const p of ds.trajectory) {{
+    minLat = Math.min(minLat, p[0]);
+    maxLat = Math.max(maxLat, p[0]);
+    minLon = Math.min(minLon, p[1]);
+    maxLon = Math.max(maxLon, p[1]);
+  }}
+  for (const b of ds.buildings) {{
+    for (const pt of b.polygon) {{
+      minLon = Math.min(minLon, pt[0]);
+      maxLon = Math.max(maxLon, pt[0]);
+      minLat = Math.min(minLat, pt[1]);
+      maxLat = Math.max(maxLat, pt[1]);
+    }}
+  }}
+  const lat0 = 0.5 * (minLat + maxLat);
+  const padLat = metersToLatDeg(padM);
+  const padLon = metersToLonDeg(padM, lat0);
+  return [[
+    [minLon - padLon, minLat - padLat, -10],
+    [maxLon + padLon, minLat - padLat, -10],
+    [maxLon + padLon, maxLat + padLat, -10],
+    [minLon - padLon, maxLat + padLat, -10],
+  ]];
 }}
 
 function rayMap(ep) {{
@@ -475,19 +539,25 @@ function prefixTrajectory(ds, progress01, rxNow) {{
 }}
 
 function interpolateEpoch(ds, epIdx, tRaw) {{
+  const prevEp = epIdx > 0 ? ds.epochs[epIdx - 1] : ds.epochs[epIdx];
   const ep = ds.epochs[epIdx];
   const atDatasetEnd = epIdx >= ds.epochs.length - 1;
   const nextEp = atDatasetEnd ? ep : ds.epochs[epIdx + 1];
+  const nextNextEp = epIdx + 2 < ds.epochs.length ? ds.epochs[epIdx + 2] : nextEp;
   const t = atDatasetEnd ? 0 : smoothstep(tRaw);
-  const rxNow = lerpVec(ep.rx, nextEp.rx, t);
+  const rxNow = catmullRomVec(prevEp.rx, ep.rx, nextEp.rx, nextNextEp.rx, t);
   const ceilingPolygon = ep.sky_disk.map((point, idx) => {{
+    const prevPoint = prevEp.sky_disk[idx] || point;
     const nextPoint = nextEp.sky_disk[idx] || point;
-    const p = lerpVec(point, nextPoint, t);
+    const nextNextPoint = nextNextEp.sky_disk[idx] || nextPoint;
+    const p = catmullRomVec(prevPoint, point, nextPoint, nextNextPoint, t);
     return [p[1], p[0], p[2]];
   }});
 
+  const prevRays = rayMap(prevEp);
   const rays0 = rayMap(ep);
   const rays1 = rayMap(nextEp);
+  const nextNextRays = rayMap(nextNextEp);
   const prns = new Set([...rays0.keys(), ...rays1.keys()]);
   const rayData = [];
   const satData = [];
@@ -505,7 +575,9 @@ function interpolateEpoch(ds, epIdx, tRaw) {{
 
     let skyNow = (ray0 || ray1).sky;
     if (ray0 && ray1) {{
-      skyNow = lerpVec(ray0.sky, ray1.sky, t);
+      const rayPrev = prevRays.get(prn) || ray0;
+      const rayNextNext = nextNextRays.get(prn) || ray1;
+      skyNow = catmullRomVec(rayPrev.sky, ray0.sky, ray1.sky, rayNextNext.sky, t);
     }} else if (ray1 && fadeIn) {{
       skyNow = ray1.sky;
     }} else if (ray0 && fadeOut) {{
@@ -553,6 +625,10 @@ function interpolateEpoch(ds, epIdx, tRaw) {{
   }};
 }}
 
+for (const ds of datasets) {{
+  ds.groundPatch = buildGroundPatch(ds);
+}}
+
 const datasetDurations = datasets.map(ds => ds.epochs.length * HOLD_MS);
 const totalDurationMs = datasetDurations.reduce((acc, value) => acc + value, 0);
 let startTs = null;
@@ -579,15 +655,24 @@ function renderFrame(nowTs) {{
   const segMs = cycleMs - epIdx * HOLD_MS;
   const interp = interpolateEpoch(ds, epIdx, segMs / HOLD_MS);
   const ep = interp.ep;
+  const viewCenter = offsetLatLon(interp.rxNow[0], interp.rxNow[1], interp.bearing, CAMERA_LEAD_M);
 
   deckgl.setProps({{
     viewState: {{
       ...INITIAL_VIEW,
-      longitude: interp.rxNow[1],
-      latitude: interp.rxNow[0],
+      longitude: viewCenter[1],
+      latitude: viewCenter[0],
       bearing: interp.bearing,
     }},
     layers: [
+      new deck.PolygonLayer({{
+        id: 'ground-fill',
+        data: ds.groundPatch,
+        filled: true,
+        stroked: false,
+        getPolygon: d => d,
+        getFillColor: [234, 232, 224, 255],
+      }}),
       osmLayer,
       new deck.PolygonLayer({{
         id: 'buildings',
@@ -847,13 +932,13 @@ def parse_args():
                         help="GIF clip length in seconds.")
     parser.add_argument("--still-delay-ms", type=int, default=6000,
                         help="Delay before capturing the still preview image.")
-    parser.add_argument("--zoom", type=float, default=15.0,
+    parser.add_argument("--zoom", type=float, default=14.4,
                         help="Map zoom level.")
-    parser.add_argument("--pitch", type=float, default=55.0,
+    parser.add_argument("--pitch", type=float, default=44.0,
                         help="Camera pitch in degrees.")
     parser.add_argument("--bearing", type=float, default=-20.0,
                         help="Initial camera bearing in degrees.")
-    parser.add_argument("--rotation-step", type=float, default=6.0,
+    parser.add_argument("--rotation-step", type=float, default=2.2,
                         help="Bearing increment per epoch.")
     return parser.parse_args()
 
