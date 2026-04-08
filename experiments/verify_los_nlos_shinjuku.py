@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Verify LOS/NLOS with PLATEAU Shinjuku + UrbanNav + KML export.
+"""Verify LOS/NLOS geometry with PLATEAU Shinjuku + UrbanNav + KML export.
 
 Shinjuku has dense high-rise buildings — expects significantly more
-NLOS satellites than Odaiba.
+NLOS satellites than Odaiba for the same synthetic sky geometry.
 """
 
 import csv
@@ -35,6 +35,7 @@ def load_trajectory(csv_path, step=200):
 
 
 def generate_sats(rx_ecef, n_sat=10, time_offset=0.0):
+    """Generate synthetic satellite positions for visualization."""
     lat, lon, _ = ecef_to_lla(*rx_ecef)
     sin_lat, cos_lat = math.sin(lat), math.cos(lat)
     sin_lon, cos_lon = math.sin(lon), math.cos(lon)

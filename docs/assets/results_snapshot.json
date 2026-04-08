@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-07T00:45:11+00:00",
+  "generated_at_utc": "2026-04-08T09:35:11+00:00",
   "title": "gnss_gpu Artifact Snapshot",
   "subtitle": "Best method: `PF+RobustClear-10K`. PF beats EKF across 5 sequences in 2 cities. Particle scaling reveals a phase transition at N~1,000 with tail improvement up to 1M.",
   "status": {
@@ -109,6 +109,23 @@
     }
   ],
   "showcase_media": [
+    {
+      "kind": "video",
+      "title": "UrbanNav LOS/NLOS Map Sweep",
+      "href": "assets/media/los_nlos_deckgl.html",
+      "caption": "Long-form deck.gl sweep over OpenStreetMap, with PLATEAU BVH providing the LOS/NLOS geometry labels. Click through for the interactive map.",
+      "poster": "assets/media/los_nlos_deckgl.gif",
+      "sources": [
+        {
+          "src": "assets/media/los_nlos_deckgl.mp4",
+          "type": "video/mp4"
+        },
+        {
+          "src": "assets/media/los_nlos_deckgl.webm",
+          "type": "video/webm"
+        }
+      ]
+    },
     {
       "kind": "video",
       "title": "Odaiba Particle Cloud",

@@ -8,10 +8,12 @@ import pytest
 from gnss_gpu.signal_sim import SignalSimulator
 from gnss_gpu.acquisition import Acquisition
 
+pytestmark = [pytest.mark.gpu, pytest.mark.cuda]
+
 
 def test_single_channel_acquisition_roundtrip():
     """Generate a signal and verify it can be acquired."""
-    sim = SignalSimulator()
+    sim = SignalSimulator(noise_seed=1)
     channels = [{
         "prn": 1,
         "code_phase": 0.0,
@@ -38,7 +40,7 @@ def test_single_channel_acquisition_roundtrip():
 
 def test_multi_satellite():
     """Generate 3 satellites and verify all are acquired."""
-    sim = SignalSimulator(noise_floor_db=-40)
+    sim = SignalSimulator(noise_floor_db=-40, noise_seed=1)
     channels = [
         {"prn": 1,  "code_phase": 0.0,  "carrier_phase": 0.0,
          "doppler_hz": -1200.0, "amplitude": 1.0, "nav_bit": 1},
@@ -62,7 +64,7 @@ def test_multi_satellite():
 
 def test_output_formats(tmp_path: Path):
     """Verify binary output file sizes."""
-    sim = SignalSimulator()
+    sim = SignalSimulator(noise_seed=1)
     iq = sim.generate_test_signal(prn=3, code_phase=10, doppler=200,
                                   duration_s=2e-3)
     n_iq = len(iq)
@@ -83,7 +85,7 @@ def test_output_formats(tmp_path: Path):
 def test_noise_floor():
     """Verify noise-only signal RMS matches expected level."""
     noise_floor_db = -20.0
-    sim = SignalSimulator(noise_floor_db=noise_floor_db)
+    sim = SignalSimulator(noise_floor_db=noise_floor_db, noise_seed=1)
     iq = sim.generate_epoch([], n_samples=8192)
 
     rms = float(np.sqrt(np.mean(np.asarray(iq, dtype=np.float64) ** 2)))

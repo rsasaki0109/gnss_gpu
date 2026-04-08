@@ -130,8 +130,6 @@ def export_kml(results, output_path, name="GNSS LOS/NLOS Visualization"):
 
             status = "LOS" if los else "NLOS"
             style = "#los_ray" if los else "#nlos_ray"
-            sat_style = "#los_sat" if los else "#nlos_sat"
-
             # Ray line (receiver -> intermediate point ~50km along LOS)
             # Don't draw all the way to satellite orbit
             direction = np.array(sat) - np.array(rx_ecef)

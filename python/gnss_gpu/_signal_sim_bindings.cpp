@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
+#include <cstdint>
 #include <vector>
 #include "gnss_gpu/signal_sim.h"
 
@@ -14,7 +15,8 @@ PYBIND11_MODULE(_gnss_gpu_signal_sim, m) {
 
     m.def("generate_signal", [](double sampling_freq, double intermediate_freq,
                                  py::list channels_list, int n_samples,
-                                 double noise_floor_db) {
+                                 double noise_floor_db,
+                                 std::uint64_t noise_seed) {
         std::vector<gnss_gpu::SatChannel> channels;
         channels.reserve(channels_list.size());
         for (auto item : channels_list) {
@@ -33,6 +35,7 @@ PYBIND11_MODULE(_gnss_gpu_signal_sim, m) {
         config.sampling_freq = sampling_freq;
         config.intermediate_freq = intermediate_freq;
         config.noise_floor_db = noise_floor_db;
+        config.noise_seed = noise_seed;
 
         py::array_t<float> out({2 * n_samples});
         gnss_gpu::simulate_epoch(config, channels.data(),
@@ -43,7 +46,8 @@ PYBIND11_MODULE(_gnss_gpu_signal_sim, m) {
     }, "Generate composite GNSS IQ signal",
        py::arg("sampling_freq"), py::arg("intermediate_freq"),
        py::arg("channels"), py::arg("n_samples"),
-       py::arg("noise_floor_db"));
+       py::arg("noise_floor_db"),
+       py::arg("noise_seed") = 0);
 
     m.def("generate_single", [](int prn, double code_phase, double carrier_phase,
                                  double doppler_hz, float amplitude, int nav_bit,

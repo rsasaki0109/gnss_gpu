@@ -1,4 +1,4 @@
-"""End-to-end urban GNSS IQ signal simulator.
+"""Geometry-aware urban GNSS IQ signal simulator.
 
 Chains 3D city models, GPU ray-tracing, ephemeris, atmosphere, and
 CUDA signal generation into a single pipeline:
@@ -9,7 +9,7 @@ CUDA signal generation into a single pipeline:
         -> Atmospheric delay (Saastamoinen + Klobuchar)
         -> Per-satellite signal parameters (code phase, Doppler, amplitude)
         -> CUDA IQ signal generation with multipath replica injection
-        -> Output: realistic urban GNSS IF samples
+        -> Output: urban GNSS IF samples with scene-driven LOS/NLOS effects
 """
 
 import math
@@ -67,7 +67,7 @@ def _sat_elevation_azimuth(rx_ecef, sat_ecef):
 
 
 class UrbanSignalSimulator:
-    """End-to-end urban GNSS IQ signal simulator with 3D environment."""
+    """Urban GNSS IQ signal simulator with a 3D scene model."""
 
     def __init__(self, building_model=None, sampling_freq=2.6e6,
                  intermediate_freq=0.0, noise_floor_db=-20.0,
