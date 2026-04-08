@@ -441,7 +441,12 @@ const HOLD_MS = {int(hold_ms)};
 const INITIAL_DELAY_MS = {int(initial_delay_ms)};
 const CAMERA_BEARING = {float(bearing)};
 const ROTATION_STEP = {float(rotation_step)};
-const CAMERA_LEAD_M = 120.0;
+const CAMERA_LEAD_M = 92.0;
+const INTRO_MS = 4400.0;
+const INTRO_LEAD_M = 34.0;
+const INTRO_ZOOM_OFFSET = -0.75;
+const INTRO_PITCH_OFFSET = -13.0;
+const INTRO_BEARING_OFFSET = -10.0;
 
 const INITIAL_VIEW = {{
   longitude: {center[1]},
@@ -906,6 +911,8 @@ function resetAnimation() {{
   captureState = initialCaptureState();
 }}
 
+window.__losReset = resetAnimation;
+
 window.__losCapture = {{
   ready: false,
   fps: CAPTURE_FPS,
@@ -991,7 +998,7 @@ function renderFrame(nowTs) {{
   const interp = interpolateEpoch(ds, epIdx, segMs / HOLD_MS);
   const ep = interp.ep;
   if (firstMeaningfulMs === null && interp.satData.length > 0) {{
-    firstMeaningfulMs = nowTs;
+    firstMeaningfulMs = elapsed;
   }}
   window.__losFrameState = {{
     area: ds.area,
@@ -1001,13 +1008,18 @@ function renderFrame(nowTs) {{
     elapsedMs: elapsed,
     meaningfulMs: firstMeaningfulMs,
   }};
-  const viewCenter = offsetLatLon(interp.rxNow[0], interp.rxNow[1], interp.bearing, CAMERA_LEAD_M);
+  const introMix = dsIdx === 0 ? 1.0 - smoothstep(clamp01(cycleMs / INTRO_MS)) : 0.0;
+  const cameraBearing = lerp(interp.bearing, CAMERA_BEARING + INTRO_BEARING_OFFSET, introMix);
+  const cameraLeadM = lerp(CAMERA_LEAD_M, INTRO_LEAD_M, introMix);
+  const cameraZoom = lerp(INITIAL_VIEW.zoom, INITIAL_VIEW.zoom + INTRO_ZOOM_OFFSET, introMix);
+  const cameraPitch = lerp(INITIAL_VIEW.pitch, Math.max(18.0, INITIAL_VIEW.pitch + INTRO_PITCH_OFFSET), introMix);
+  const viewCenter = offsetLatLon(interp.rxNow[0], interp.rxNow[1], cameraBearing, cameraLeadM);
 
   map.jumpTo({{
     center: [viewCenter[1], viewCenter[0]],
-    zoom: INITIAL_VIEW.zoom,
-    pitch: INITIAL_VIEW.pitch,
-    bearing: interp.bearing,
+    zoom: cameraZoom,
+    pitch: cameraPitch,
+    bearing: cameraBearing,
   }});
 
   overlay.setProps({{
@@ -1183,7 +1195,7 @@ const {{ chromium }} = require('playwright');
         print(f"Still: {output_path} ({size_mb:.1f}MB)")
 
 
-def _record_video_playwright_fallback(html_path, output_dir, duration_ms, target_webm):
+def _record_video_playwright_fallback(html_path, output_dir, duration_ms, target_webm, warmup_ms=7000):
     """Fallback recorder when in-page MediaRecorder is unavailable."""
     html_name = Path(html_path).name
     root_dir = str(Path(html_path).resolve().parent)
@@ -1207,6 +1219,9 @@ const {{ chromium }} = require('playwright');
   const page = await ctx.newPage();
   await page.goto({json.dumps(base_url + "/" + html_name)}, {{ waitUntil: 'domcontentloaded' }});
   await page.waitForFunction(() => window.__losCapture?.ready === true, {{ timeout: 30000 }});
+  await page.waitForTimeout({int(warmup_ms)});
+  await page.evaluate(() => window.__losReset && window.__losReset());
+  await page.waitForTimeout(250);
   await page.waitForTimeout({int(duration_ms)});
   const frameState = await page.evaluate(() => window.__losFrameState || null);
   console.log(JSON.stringify({{ frameState }}));
@@ -1224,7 +1239,7 @@ const {{ chromium }} = require('playwright');
     try:
         proc = subprocess.run(
             ["node", script_path],
-            timeout=duration_ms / 1000 + 60,
+            timeout=(duration_ms + warmup_ms) / 1000 + 60,
             cwd=os.path.dirname(os.path.abspath(__file__)) + "/..",
             check=True,
             capture_output=True,
@@ -1272,7 +1287,7 @@ def record_video(
     duration_ms=25000,
     gif_duration_s=30,
     capture_fps=60,
-    trim_start_ms=13300,
+    trim_start_ms=7000,
 ):
     """Record the interactive map and export smoother 60 fps masters."""
     print(f"Recording video ({duration_ms/1000:.0f}s @ {capture_fps}fps)...")
@@ -1289,6 +1304,7 @@ def record_video(
         output_dir,
         duration_ms,
         raw_webm,
+        warmup_ms=trim_start_ms,
     )
     recorded_webm = capture_result["webm"] if capture_result else None
     if not recorded_webm or not os.path.exists(recorded_webm):
@@ -1387,17 +1403,17 @@ def parse_args():
                         help="GIF clip length in seconds.")
     parser.add_argument("--capture-fps", type=int, default=60,
                         help="Target video frame rate for recorder/compositor output.")
-    parser.add_argument("--trim-start-ms", type=int, default=13300,
+    parser.add_argument("--trim-start-ms", type=int, default=7000,
                         help="Force-trim this many milliseconds from the start of exported video files.")
     parser.add_argument("--still-delay-ms", type=int, default=6000,
                         help="Delay before capturing the still preview image.")
-    parser.add_argument("--zoom", type=float, default=14.4,
+    parser.add_argument("--zoom", type=float, default=14.2,
                         help="Map zoom level.")
-    parser.add_argument("--pitch", type=float, default=44.0,
+    parser.add_argument("--pitch", type=float, default=41.0,
                         help="Camera pitch in degrees.")
     parser.add_argument("--bearing", type=float, default=-20.0,
                         help="Initial camera bearing in degrees.")
-    parser.add_argument("--rotation-step", type=float, default=2.2,
+    parser.add_argument("--rotation-step", type=float, default=1.8,
                         help="Bearing increment per epoch.")
     return parser.parse_args()
 
