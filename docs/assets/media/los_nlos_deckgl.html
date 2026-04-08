@@ -113,6 +113,126 @@ const overlay = new deck.MapboxOverlay({
 });
 map.addControl(overlay);
 
+const CAPTURE_FPS = 60;
+const CAPTURE_WIDTH = 1280;
+const CAPTURE_HEIGHT = 720;
+const HUD_META_LINES = [
+  'Map: OpenStreetMap',
+  'LOS/NLOS geometry: PLATEAU BVH',
+  'Satellite markers: projected to a virtual sky ceiling',
+  'Labels: G=GPS R=GLONASS E=Galileo J=QZSS',
+];
+const captureCanvas = document.createElement('canvas');
+captureCanvas.width = CAPTURE_WIDTH;
+captureCanvas.height = CAPTURE_HEIGHT;
+const captureCtx = captureCanvas.getContext('2d', { alpha: false });
+let captureActive = false;
+let captureState = null;
+
+function roundedRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawLegendItem(ctx, x, y, color, label) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y - 9, 12, 12);
+  ctx.fillStyle = '#e0e0e0';
+  ctx.fillText(label, x + 18, y + 1);
+}
+
+function drawHudToCapture(ctx) {
+  if (!captureState) {
+    return;
+  }
+  const panelX = 12;
+  const panelY = 12;
+  const panelW = 420;
+  const panelH = 188;
+
+  ctx.save();
+  roundedRectPath(ctx, panelX, panelY, panelW, panelH, 12);
+  ctx.fillStyle = 'rgba(10,15,30,0.92)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(51,68,85,0.95)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  let y = panelY + 24;
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = 'bold 15px monospace';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('GPU Urban GNSS Signal Sim', panelX + 18, y);
+
+  y += 30;
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = '#ffd93d';
+  ctx.fillText(captureState.area, panelX + 18, y);
+
+  y += 26;
+  ctx.font = 'bold 14px monospace';
+  const losText = `LOS: ${captureState.nLos}`;
+  ctx.fillStyle = '#00d4aa';
+  ctx.fillText(losText, panelX + 18, y);
+  ctx.fillStyle = '#ff6b6b';
+  ctx.fillText(`NLOS: ${captureState.nNlos}`, panelX + 18 + ctx.measureText(losText).width + 18, y);
+
+  y += 21;
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#8f99ad';
+  ctx.fillText(captureState.epochText, panelX + 18, y);
+
+  y += 17;
+  ctx.fillStyle = '#9cb0c8';
+  for (const line of HUD_META_LINES) {
+    ctx.fillText(line, panelX + 18, y);
+    y += 16;
+  }
+
+  y += 5;
+  ctx.font = '12px monospace';
+  drawLegendItem(ctx, panelX + 18, y, '#00d4aa', 'LOS');
+  drawLegendItem(ctx, panelX + 88, y, '#ff6b6b', 'NLOS');
+  drawLegendItem(ctx, panelX + 166, y, '#ffd93d', 'Receiver');
+  ctx.restore();
+}
+
+function compositeCaptureFrame() {
+  const mapEl = document.getElementById('map');
+  const mapRect = mapEl.getBoundingClientRect();
+  if (mapRect.width <= 0 || mapRect.height <= 0) {
+    return;
+  }
+  const scaleX = CAPTURE_WIDTH / mapRect.width;
+  const scaleY = CAPTURE_HEIGHT / mapRect.height;
+
+  captureCtx.save();
+  captureCtx.fillStyle = '#e9e6dc';
+  captureCtx.fillRect(0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
+  for (const canvas of mapEl.querySelectorAll('canvas')) {
+    if (!canvas.width || !canvas.height) {
+      continue;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const dx = (rect.left - mapRect.left) * scaleX;
+    const dy = (rect.top - mapRect.top) * scaleY;
+    const dw = rect.width * scaleX;
+    const dh = rect.height * scaleY;
+    try {
+      captureCtx.drawImage(canvas, dx, dy, dw, dh);
+    } catch (err) {
+      // Ignore transient cross-canvas draw failures during tile uploads.
+    }
+  }
+  drawHudToCapture(captureCtx);
+  captureCtx.restore();
+}
+
 function clamp01(v) {
   return Math.max(0, Math.min(1, v));
 }
@@ -335,8 +455,75 @@ const totalDurationMs = datasetDurations.reduce((acc, value) => acc + value, 0);
 let startTs = null;
 let mapReady = false;
 
+function initialCaptureState() {
+  const ds = datasets[0];
+  const ep = ds.epochs[0];
+  return {
+    area: ds.area,
+    nLos: ep.n_los,
+    nNlos: ep.n_nlos,
+    epochText: 'Epoch 1/' + ds.epochs.length + '  t=' + ep.t.toFixed(0) + 's',
+  };
+}
+
+function resetAnimation() {
+  startTs = null;
+  captureState = initialCaptureState();
+}
+
+window.__losCapture = {
+  ready: false,
+  fps: CAPTURE_FPS,
+  async download(durationMs, fps = CAPTURE_FPS) {
+    if (!mapReady) {
+      throw new Error('map not ready');
+    }
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+        ? 'video/webm;codecs=vp8'
+        : 'video/webm';
+    const stream = captureCanvas.captureStream(fps);
+    const recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 12_000_000,
+    });
+    const chunks = [];
+    const stopped = new Promise((resolve, reject) => {
+      recorder.ondataavailable = event => {
+        if (event.data && event.data.size) {
+          chunks.push(event.data);
+        }
+      };
+      recorder.onerror = event => reject(event.error || new Error('MediaRecorder failed'));
+      recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+    });
+
+    captureActive = true;
+    recorder.start(250);
+    resetAnimation();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    compositeCaptureFrame();
+    await new Promise(resolve => setTimeout(resolve, durationMs));
+    recorder.stop();
+    const blob = await stopped;
+    captureActive = false;
+    stream.getTracks().forEach(track => track.stop());
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'los_nlos_deckgl.webm';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+};
+
 map.on('load', () => {
   mapReady = true;
+  window.__losCapture.ready = true;
   requestAnimationFrame(renderFrame);
 });
 
@@ -349,6 +536,9 @@ function renderFrame(nowTs) {
   }
   const elapsed = nowTs - startTs;
   if (elapsed < INITIAL_DELAY_MS) {
+    if (captureActive) {
+      compositeCaptureFrame();
+    }
     requestAnimationFrame(renderFrame);
     return;
   }
@@ -454,8 +644,17 @@ function renderFrame(nowTs) {
   document.getElementById('area').textContent = ds.area;
   document.getElementById('stats').innerHTML =
     '<span class="los">LOS: ' + ep.n_los + '</span>  <span class="nlos">NLOS: ' + ep.n_nlos + '</span>';
-  document.getElementById('epoch').textContent =
-    'Epoch ' + (epIdx+1) + '/' + ds.epochs.length + '  t=' + ep.t.toFixed(0) + 's';
+  const epochText = 'Epoch ' + (epIdx+1) + '/' + ds.epochs.length + '  t=' + ep.t.toFixed(0) + 's';
+  document.getElementById('epoch').textContent = epochText;
+  captureState = {
+    area: ds.area,
+    nLos: ep.n_los,
+    nNlos: ep.n_nlos,
+    epochText,
+  };
+  if (captureActive) {
+    compositeCaptureFrame();
+  }
   requestAnimationFrame(renderFrame);
 }
 
