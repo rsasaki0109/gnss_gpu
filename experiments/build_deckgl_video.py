@@ -361,7 +361,13 @@ def generate_html(
 <head>
 <meta charset="utf-8">
 <title>GPU Urban GNSS Signal Simulator — LOS/NLOS</title>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+/>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/deck.gl@9.1.12/dist.min.js"></script>
+<script src="https://unpkg.com/@deck.gl/mapbox@9.1.12/dist.min.js"></script>
 <style>
   body {{ margin:0; padding:0; background:#0a0f1e; overflow:hidden; font-family:monospace; }}
   #map {{ width:100vw; height:100vh; }}
@@ -378,6 +384,8 @@ def generate_html(
   #epoch {{ color:#888; font-size:11px; margin-top:4px; }}
   #legend {{ margin-top:8px; font-size:11px; }}
   #legend span {{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-right:4px; vertical-align:middle; }}
+  .maplibregl-control-container {{ font-family: monospace; }}
+  .maplibregl-ctrl-bottom-right {{ opacity: 0.9; }}
 </style>
 </head>
 <body>
@@ -410,31 +418,58 @@ const INITIAL_VIEW = {{
   bearing: CAMERA_BEARING,
 }};
 
-const osmLayer = new deck.TileLayer({{
-  id: 'osm-base',
-  data: 'https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',
-  minZoom: 0,
-  maxZoom: 19,
-  tileSize: 256,
-  renderSubLayers: props => {{
-    const bbox = props.tile.bbox;
-    return new deck.BitmapLayer(props, {{
-      id: `${{props.id}}-bitmap`,
-      data: null,
-      image: props.data,
-      bounds: [bbox.west, bbox.south, bbox.east, bbox.north],
-      desaturate: 0.2,
-    }});
+const MAP_STYLE = {{
+  version: 8,
+  sources: {{
+    osm: {{
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png'],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }},
   }},
+  layers: [
+    {{
+      id: 'bg',
+      type: 'background',
+      paint: {{ 'background-color': '#e9e6dc' }},
+    }},
+    {{
+      id: 'osm',
+      type: 'raster',
+      source: 'osm',
+      minzoom: 0,
+      maxzoom: 19,
+    }},
+  ],
+}};
+
+const map = new maplibregl.Map({{
+  container: 'map',
+  style: MAP_STYLE,
+  center: [INITIAL_VIEW.longitude, INITIAL_VIEW.latitude],
+  zoom: INITIAL_VIEW.zoom,
+  pitch: INITIAL_VIEW.pitch,
+  bearing: INITIAL_VIEW.bearing,
+  antialias: true,
+  attributionControl: true,
+  renderWorldCopies: false,
+  dragPan: false,
+  scrollZoom: false,
+  boxZoom: false,
+  dragRotate: false,
+  keyboard: false,
+  doubleClickZoom: false,
+  touchZoomRotate: false,
 }});
 
-const deckgl = new deck.DeckGL({{
-  container: 'map',
-  initialViewState: INITIAL_VIEW,
-  controller: false,
+const overlay = new deck.MapboxOverlay({{
+  interleaved: false,
   layers: [],
   getTooltip: ({{object}}) => object && object.prn ? `PRN ${{object.prn}} ${{object.los?'LOS':'NLOS'}} el=${{object.el.toFixed(0)}}°` : null,
 }});
+map.addControl(overlay);
 
 function clamp01(v) {{
   return Math.max(0, Math.min(1, v));
@@ -488,36 +523,6 @@ function offsetLatLon(latDeg, lonDeg, bearingDeg, forwardM) {{
     latDeg + metersToLatDeg(northM),
     lonDeg + metersToLonDeg(eastM, latDeg),
   ];
-}}
-
-function buildGroundPatch(ds, padM = 4500.0) {{
-  let minLat = Infinity;
-  let maxLat = -Infinity;
-  let minLon = Infinity;
-  let maxLon = -Infinity;
-  for (const p of ds.trajectory) {{
-    minLat = Math.min(minLat, p[0]);
-    maxLat = Math.max(maxLat, p[0]);
-    minLon = Math.min(minLon, p[1]);
-    maxLon = Math.max(maxLon, p[1]);
-  }}
-  for (const b of ds.buildings) {{
-    for (const pt of b.polygon) {{
-      minLon = Math.min(minLon, pt[0]);
-      maxLon = Math.max(maxLon, pt[0]);
-      minLat = Math.min(minLat, pt[1]);
-      maxLat = Math.max(maxLat, pt[1]);
-    }}
-  }}
-  const lat0 = 0.5 * (minLat + maxLat);
-  const padLat = metersToLatDeg(padM);
-  const padLon = metersToLonDeg(padM, lat0);
-  return [[
-    [minLon - padLon, minLat - padLat, -10],
-    [maxLon + padLon, minLat - padLat, -10],
-    [maxLon + padLon, maxLat + padLat, -10],
-    [minLon - padLon, maxLat + padLat, -10],
-  ]];
 }}
 
 function rayMap(ep) {{
@@ -625,15 +630,20 @@ function interpolateEpoch(ds, epIdx, tRaw) {{
   }};
 }}
 
-for (const ds of datasets) {{
-  ds.groundPatch = buildGroundPatch(ds);
-}}
-
 const datasetDurations = datasets.map(ds => ds.epochs.length * HOLD_MS);
 const totalDurationMs = datasetDurations.reduce((acc, value) => acc + value, 0);
 let startTs = null;
+let mapReady = false;
+
+map.on('load', () => {{
+  mapReady = true;
+  requestAnimationFrame(renderFrame);
+}});
 
 function renderFrame(nowTs) {{
+  if (!mapReady) {{
+    return;
+  }}
   if (startTs === null) {{
     startTs = nowTs;
   }}
@@ -657,23 +667,15 @@ function renderFrame(nowTs) {{
   const ep = interp.ep;
   const viewCenter = offsetLatLon(interp.rxNow[0], interp.rxNow[1], interp.bearing, CAMERA_LEAD_M);
 
-  deckgl.setProps({{
-    viewState: {{
-      ...INITIAL_VIEW,
-      longitude: viewCenter[1],
-      latitude: viewCenter[0],
-      bearing: interp.bearing,
-    }},
+  map.jumpTo({{
+    center: [viewCenter[1], viewCenter[0]],
+    zoom: INITIAL_VIEW.zoom,
+    pitch: INITIAL_VIEW.pitch,
+    bearing: interp.bearing,
+  }});
+
+  overlay.setProps({{
     layers: [
-      new deck.PolygonLayer({{
-        id: 'ground-fill',
-        data: ds.groundPatch,
-        filled: true,
-        stroked: false,
-        getPolygon: d => d,
-        getFillColor: [234, 232, 224, 255],
-      }}),
-      osmLayer,
       new deck.PolygonLayer({{
         id: 'buildings',
         data: ds.buildings,
@@ -749,7 +751,10 @@ function renderFrame(nowTs) {{
   requestAnimationFrame(renderFrame);
 }}
 
-requestAnimationFrame(renderFrame);
+map.on('error', event => {{
+  console.error('map-error', event?.error?.message || event);
+}});
+
 </script>
 </body>
 </html>"""
