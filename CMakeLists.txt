@@ -66,6 +66,13 @@ add_library(gnss_gpu_tracking
 target_include_directories(gnss_gpu_tracking PUBLIC include)
 target_link_libraries(gnss_gpu_tracking CUDA::cudart gnss_gpu_core)
 
+# --- Signal simulator module (requires cuRAND) ---
+add_library(gnss_gpu_signal_sim
+  src/signal_sim/signal_sim.cu
+)
+target_include_directories(gnss_gpu_signal_sim PUBLIC include)
+target_link_libraries(gnss_gpu_signal_sim CUDA::cudart CUDA::curand)
+
 # --- Particle filter module (requires cuRAND) ---
 add_library(gnss_gpu_pf
   src/particle_filter/predict.cu
@@ -226,4 +233,19 @@ if(pybind11_FOUND)
   # Device-resident particle filter bindings (CUDA streams)
   pybind11_add_module(_gnss_gpu_pf_device python/gnss_gpu/_pf_device_bindings.cpp)
   target_link_libraries(_gnss_gpu_pf_device PRIVATE gnss_gpu_pf_device)
+
+  # Signal simulator bindings
+  pybind11_add_module(_gnss_gpu_signal_sim python/gnss_gpu/_signal_sim_bindings.cpp)
+  target_link_libraries(_gnss_gpu_signal_sim PRIVATE gnss_gpu_signal_sim)
+
+  # Install all pybind11 modules into the gnss_gpu package
+  install(TARGETS
+    _gnss_gpu _gnss_gpu_multi_gnss _raytrace _gnss_gpu_multipath
+    _gnss_gpu_skyplot _gnss_gpu_acq _gnss_gpu_interference
+    _gnss_gpu_tracking _gnss_gpu_pf _gnss_gpu_svgd _gnss_gpu_pf3d
+    _gnss_gpu_atmosphere _gnss_gpu_ekf _gnss_gpu_raim _bvh
+    _gnss_gpu_pf3d_bvh _gnss_gpu_pf_device _gnss_gpu_doppler
+    _gnss_gpu_rtk _gnss_gpu_ephemeris _gnss_gpu_signal_sim
+    DESTINATION gnss_gpu
+  )
 endif()
