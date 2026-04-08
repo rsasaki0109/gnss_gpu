@@ -142,9 +142,10 @@ class UrbanSignalSimulator:
                 is_los_vis = np.asarray(los_result, dtype=bool)
                 is_los[vis_idx] = is_los_vis
 
-                # Multipath excess delay for all visible satellites
-                delays, _ = self.building_model.compute_multipath(rx, sats[vis_idx])
-                excess_delays[vis_idx] = np.asarray(delays, dtype=np.float64)
+                # Multipath excess delay (if supported by the model)
+                if hasattr(self.building_model, 'compute_multipath'):
+                    delays, _ = self.building_model.compute_multipath(rx, sats[vis_idx])
+                    excess_delays[vis_idx] = np.asarray(delays, dtype=np.float64)
 
         # --- Geometric range + atmospheric delays ---
         ranges = np.linalg.norm(sats - rx, axis=1)
