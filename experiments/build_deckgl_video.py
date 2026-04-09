@@ -5,10 +5,10 @@ Uses deck.gl over an OpenStreetMap basemap (no API key needed).
 Lighter than CesiumJS and suitable for headless Chrome recording.
 
 The receiver trajectory comes from UrbanNav, while satellite rays use a
-synthetic sky geometry so the output stays a geometry sanity check rather
-than a real-sky validation artifact. To avoid the misleading impression that
-satellites sit on the street grid, the visible satellites are projected onto
-a virtual sky ceiling above the receiver.
+synthetic Earth-centered orbital surrogates so the output stays a geometry
+sanity check rather than a real-sky validation artifact. To avoid the
+misleading impression that satellites sit on the street grid, the visible
+satellites are projected onto a virtual sky ceiling above the receiver.
 """
 
 import argparse
@@ -50,6 +50,31 @@ SATELLITE_MANIFEST = (
     {"label": "J07", "system": "QZSS", "code": "J", "slot": 7},
 )
 
+SYSTEM_ORBIT_CONFIG = {
+    "GPS": {
+        "radius_m": 26_560_000.0,
+        "period_s": 11.966 * 3600.0,
+        "axis_seed": np.array([0.24, 0.18, 1.0], dtype=np.float64),
+    },
+    "Galileo": {
+        "radius_m": 29_600_000.0,
+        "period_s": 14.08 * 3600.0,
+        "axis_seed": np.array([-0.12, 0.32, 1.0], dtype=np.float64),
+    },
+    "GLONASS": {
+        "radius_m": 25_510_000.0,
+        "period_s": 11.25 * 3600.0,
+        "axis_seed": np.array([0.28, -0.22, 1.0], dtype=np.float64),
+    },
+    "QZSS": {
+        "radius_m": 42_164_000.0,
+        "period_s": 23.934 * 3600.0,
+        "axis_seed": np.array([-0.34, 0.06, 1.0], dtype=np.float64),
+    },
+}
+INITIAL_ELEVATION_DEG = (18.0, 28.0, 36.0, 44.0, 52.0, 60.0, 68.0, 34.0, 58.0, 74.0)
+SATELLITE_ORBIT_CACHE = None
+
 
 def load_trajectory(csv_path, step=200):
     with open(csv_path) as f:
@@ -62,24 +87,108 @@ def load_trajectory(csv_path, step=200):
     return np.array(positions), np.array(times)
 
 
-def generate_sats(rx_ecef, n_sat=10, time_offset=0.0):
-    """Generate synthetic satellite positions for visualization."""
-    lat, lon, _ = ecef_to_lla(*rx_ecef)
-    sin_lat, cos_lat = math.sin(lat), math.cos(lat)
-    sin_lon, cos_lon = math.sin(lon), math.cos(lon)
-    sat_ecef = np.zeros((n_sat, 3))
-    for i in range(n_sat):
-        el_deg = 10 + 70 * (i / max(n_sat - 1, 1))
-        az_deg = (i * 36 + time_offset * 2) % 360
-        el, az = math.radians(el_deg), math.radians(az_deg)
-        r = 26600e3
-        e = math.sin(az) * math.cos(el)
-        n = math.cos(az) * math.cos(el)
-        u = math.sin(el)
-        dx = -sin_lon * e - sin_lat * cos_lon * n + cos_lat * cos_lon * u
-        dy = cos_lon * e - sin_lat * sin_lon * n + cos_lat * sin_lon * u
-        dz = cos_lat * n + sin_lat * u
-        sat_ecef[i] = rx_ecef + r * np.array([dx, dy, dz])
+def _normalize(vec):
+    vec = np.asarray(vec, dtype=np.float64)
+    norm = float(np.linalg.norm(vec))
+    if norm < 1e-9:
+        raise ValueError("cannot normalize near-zero vector")
+    return vec / norm
+
+
+def _rotation_matrix(axis, angle_rad):
+    axis = _normalize(axis)
+    c = math.cos(angle_rad)
+    s = math.sin(angle_rad)
+    x, y, z = axis
+    return np.array([
+        [c + x * x * (1.0 - c), x * y * (1.0 - c) - z * s, x * z * (1.0 - c) + y * s],
+        [y * x * (1.0 - c) + z * s, c + y * y * (1.0 - c), y * z * (1.0 - c) - x * s],
+        [z * x * (1.0 - c) - y * s, z * y * (1.0 - c) + x * s, c + z * z * (1.0 - c)],
+    ], dtype=np.float64)
+
+
+def _rotate_vector(vec, axis, angle_rad):
+    return _rotation_matrix(axis, angle_rad) @ np.asarray(vec, dtype=np.float64)
+
+
+def _az_el_to_ecef_unit(rx_ecef, az_deg, el_deg):
+    east, north, up = _enu_basis(rx_ecef)
+    az = math.radians(az_deg)
+    el = math.radians(el_deg)
+    return _normalize(
+        math.sin(az) * math.cos(el) * east
+        + math.cos(az) * math.cos(el) * north
+        + math.sin(el) * up
+    )
+
+
+def _line_sphere_intersection(rx_ecef, los_dir_ecef, shell_radius_m):
+    rx = np.asarray(rx_ecef, dtype=np.float64)
+    los_dir = _normalize(los_dir_ecef)
+    rx_dot = float(np.dot(rx, los_dir))
+    radius_sq = shell_radius_m * shell_radius_m
+    rx_sq = float(np.dot(rx, rx))
+    discriminant = rx_dot * rx_dot - (rx_sq - radius_sq)
+    if discriminant <= 0.0:
+        raise ValueError("line of sight misses orbital shell")
+    range_m = -rx_dot + math.sqrt(discriminant)
+    return rx + range_m * los_dir
+
+
+def _unwrap_angle_deg(previous_deg, current_deg):
+    delta = (current_deg - previous_deg + 180.0) % 360.0 - 180.0
+    return previous_deg + delta
+
+
+def _build_satellite_orbits(reference_rx_ecef, sat_manifest):
+    orbits = []
+    for idx, sat_meta in enumerate(sat_manifest):
+        cfg = SYSTEM_ORBIT_CONFIG[sat_meta["system"]]
+        az_deg = (26.0 + idx * 37.0 + (sat_meta["slot"] % 5) * 4.0) % 360.0
+        el_deg = INITIAL_ELEVATION_DEG[idx % len(INITIAL_ELEVATION_DEG)]
+        los_dir = _az_el_to_ecef_unit(reference_rx_ecef, az_deg=az_deg, el_deg=el_deg)
+        reference_sat_ecef = _line_sphere_intersection(
+            reference_rx_ecef,
+            los_dir,
+            shell_radius_m=cfg["radius_m"],
+        )
+
+        axis_seed = _rotate_vector(
+            cfg["axis_seed"],
+            axis=np.array([0.0, 0.0, 1.0], dtype=np.float64),
+            angle_rad=math.radians((sat_meta["slot"] * 19) % 360),
+        )
+        tangent = np.cross(axis_seed, reference_sat_ecef)
+        if float(np.linalg.norm(tangent)) < 1e-6:
+            tangent = np.cross(np.array([1.0, 0.0, 0.0], dtype=np.float64), reference_sat_ecef)
+        orbit_axis = _normalize(np.cross(reference_sat_ecef, tangent))
+        slot_rate_scale = 1.0 + 0.02 * ((sat_meta["slot"] % 5) - 2)
+        angular_rate_rad_s = 2.0 * math.pi / cfg["period_s"] * slot_rate_scale
+        orbits.append({
+            "reference_ecef": reference_sat_ecef,
+            "orbit_axis": orbit_axis,
+            "angular_rate_rad_s": angular_rate_rad_s,
+        })
+    return orbits
+
+
+def generate_sats(rx_ecef, sat_manifest, time_s):
+    """Generate synthetic Earth-centered satellite positions for visualization."""
+    global SATELLITE_ORBIT_CACHE
+    if SATELLITE_ORBIT_CACHE is None:
+        SATELLITE_ORBIT_CACHE = {
+            "reference_time_s": float(time_s),
+            "orbits": _build_satellite_orbits(rx_ecef, sat_manifest),
+        }
+
+    delta_t = float(time_s) - SATELLITE_ORBIT_CACHE["reference_time_s"]
+    sat_ecef = np.zeros((len(sat_manifest), 3), dtype=np.float64)
+    for idx, orbit in enumerate(SATELLITE_ORBIT_CACHE["orbits"]):
+        sat_ecef[idx] = _rotate_vector(
+            orbit["reference_ecef"],
+            orbit["orbit_axis"],
+            orbit["angular_rate_rad_s"] * delta_t,
+        )
     return sat_ecef
 
 
@@ -318,6 +427,7 @@ def compute_epochs(
     epochs = []
     traj_lla = []
     traj_t = [float(t - traj_times[0]) for t in traj_times]
+    prev_az_cont = {}
     for p in traj_positions:
         la, lo, al = ecef_to_lla(*p)
         traj_lla.append([math.degrees(la), math.degrees(lo), 4.0])
@@ -325,16 +435,15 @@ def compute_epochs(
     for fi, ei in enumerate(indices):
         rx = positions[ei]
         t = times[ei] - times[0]
-        sats = generate_sats(rx, n_sat, time_offset=t)
+        sats = generate_sats(rx, sat_manifest, time_s=times[ei])
         result = usim.compute_epoch(rx_ecef=rx, sat_ecef=sats, prn_list=prn_list)
 
         la, lo, al = ecef_to_lla(*rx)
         rx_ll = [math.degrees(la), math.degrees(lo), 4.0]
 
         rays = []
+        current_az_cont = {}
         for i in range(n_sat):
-            if not result["visible"][i]:
-                continue
             sat_meta = sat_manifest[i]
             sky_point, az_deg, el_deg = _project_to_sky_ceiling(
                 rx,
@@ -342,8 +451,13 @@ def compute_epochs(
                 sky_height_m=sky_height_m,
                 sky_radius_m=sky_radius_m,
             )
+            prn = prn_list[i]
+            az_cont = _unwrap_angle_deg(prev_az_cont[prn], az_deg) if prn in prev_az_cont else az_deg
+            current_az_cont[prn] = az_cont
+            if not result["visible"][i]:
+                continue
             rays.append({
-                "prn": prn_list[i],
+                "prn": prn,
                 "label": sat_meta["label"],
                 "system": sat_meta["system"],
                 "code": sat_meta["code"],
@@ -351,9 +465,10 @@ def compute_epochs(
                 "los": bool(result["is_los"][i]),
                 "el": float(el_deg),
                 "az": float(az_deg),
-                "az_cont": float((360.0 * i / max(n_sat, 1)) + t * 2.0),
+                "az_cont": float(az_cont),
                 "sky": sky_point,
             })
+        prev_az_cont = current_az_cont
 
         epochs.append({
             "rx": rx_ll, "rays": rays,
@@ -428,7 +543,7 @@ def generate_html(
   <div class="area" id="area"></div>
   <div id="stats"></div>
   <div id="epoch"></div>
-  <div id="meta">Map: OpenStreetMap<br>LOS/NLOS geometry: PLATEAU BVH<br>Satellite markers: readability-spread on a virtual sky ceiling<br>Labels: G=GPS R=GLONASS E=Galileo J=QZSS</div>
+  <div id="meta">Map: OpenStreetMap<br>LOS/NLOS geometry: PLATEAU BVH<br>Synthetic sky: Earth-centered orbital surrogates<br>Labels: G=GPS R=GLONASS E=Galileo J=QZSS</div>
   <div id="legend">
     <span style="background:#00d4aa"></span>LOS &nbsp;
     <span style="background:#ff6b6b"></span>NLOS &nbsp;
@@ -515,7 +630,7 @@ const CAPTURE_HEIGHT = 720;
 const HUD_META_LINES = [
   'Map: OpenStreetMap',
   'LOS/NLOS geometry: PLATEAU BVH',
-  'Satellite markers: readability-spread on a virtual sky ceiling',
+  'Synthetic sky: Earth-centered orbital surrogates',
   'Labels: G=GPS R=GLONASS E=Galileo J=QZSS',
 ];
 const captureCanvas = document.createElement('canvas');
