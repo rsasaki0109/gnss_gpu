@@ -151,6 +151,21 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _read_existing_snapshot() -> dict | None:
+    if not SNAPSHOT_PATH.exists():
+        return None
+    try:
+        return _read_json(SNAPSHOT_PATH)
+    except json.JSONDecodeError:
+        return None
+
+
+def _snapshot_without_generated_at(snapshot: dict) -> dict:
+    normalized = dict(snapshot)
+    normalized.pop("generated_at_utc", None)
+    return normalized
+
+
 def _find_row(rows: list[dict[str, str]], key: str, value: str) -> dict[str, str]:
     for row in rows:
         if row.get(key) == value:
@@ -877,6 +892,12 @@ def _build_snapshot() -> dict:
 
 def main() -> None:
     snapshot = _build_snapshot()
+    existing_snapshot = _read_existing_snapshot()
+    if existing_snapshot and (
+        _snapshot_without_generated_at(existing_snapshot)
+        == _snapshot_without_generated_at(snapshot)
+    ):
+        snapshot["generated_at_utc"] = existing_snapshot["generated_at_utc"]
     ASSETS_DIR.mkdir(parents=True, exist_ok=True)
     SNAPSHOT_PATH.write_text(
         json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n",
