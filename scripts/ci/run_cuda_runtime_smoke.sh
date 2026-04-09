@@ -34,4 +34,4 @@ assert results[0]["acquired"], results
 print("CUDA runtime roundtrip passed")
 PY
 
-python3 -m pytest -q tests/test_signal_sim.py
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q tests/test_signal_sim.py
