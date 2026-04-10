@@ -5,10 +5,19 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from gnss_gpu.signal_sim import SignalSimulator
-from gnss_gpu.acquisition import Acquisition
+signal_sim = pytest.importorskip(
+    "gnss_gpu.signal_sim",
+    reason="CUDA signal simulator bindings not available",
+)
+acquisition = pytest.importorskip(
+    "gnss_gpu.acquisition",
+    reason="CUDA acquisition bindings not available",
+)
 
 pytestmark = [pytest.mark.gpu, pytest.mark.cuda]
+
+SignalSimulator = signal_sim.SignalSimulator
+Acquisition = acquisition.Acquisition
 
 
 def test_single_channel_acquisition_roundtrip():
