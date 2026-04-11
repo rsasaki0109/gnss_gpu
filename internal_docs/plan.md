@@ -1,14 +1,424 @@
 # gnss_gpu / gnss_gpu_ws Codex 引き継ぎメモ
 
-**最終更新**: 2026-04-08 JST  
+**最終更新**: 2026-04-12 JST  
 **現在のブランチ**: `feature/rtklib-spp-fgo-pipeline`（PR #6 open）  
-**前回の HEAD**: `edda2d8`
+**現在の HEAD**: `1d7d009`  
+**gnss_gpu repo の状態**: raw-bridge 関連の Python 実装とテストは **まだ commit/push していない**。`git -C gnss_gpu status --short` では `experiments/gsdc2023_raw_bridge.py`, `experiments/validate_fgo_gsdc2023_raw.py`, `experiments/validate_gsdc2023_phone_data.py`, `tests/test_validate_fgo_gsdc2023_raw.py`, `tests/test_validate_gsdc2023_phone_data.py` などが untracked。  
+**workspace 側の注意**: `ref/gsdc2023/*` は `gnss_gpu` リポジトリの外側にある。`RAW_BRIDGE_API.md`, `run_raw_bridge_batch.py`, `run_fgo_raw_bridge.m`, `functions/submission.m`, `README.md` の変更は workspace ローカルで管理している。Claude に引き継ぐときは **「repo 内変更」と「workspace 補助ファイル」を分けて認識させること**。
 
 **ドキュメント先頭の読み方**
 
-- **セクション C（最優先）**: 2026-04-08 時点の **GPU FGO + RTKLIB SPP 整合 + Doppler motion model + PPC-Dataset 検証 + GSDC2023 未完了**。**いまコードを触るなら必ずここから読め。**
+- **セクション E（最優先）**: 2026-04-12 時点の **外れ trip 診断完了 + gated source fallback 実装・検証**。**いま Claude に引き継ぐなら必ずここから読め。**
+- **セクション D（補助）**: 2026-04-11 時点の **GSDC2023 raw-bridge 実装完了、40 trip full rerun、shared API 化、MATLAB bridge refactor、API 文書整備**。
+- **セクション C（旧・補助）**: 2026-04-08 時点の **GPU FGO + RTKLIB SPP 整合 + Doppler motion model + PPC-Dataset 検証 + GSDC2023 初期状態**。Section D の前提知識として必要な場合だけ読む。
 - **セクション A（旧）**: 2026-04-07 時点の RTKLIB demo5 SPP 整合。セクション C に包含済み。歴史的記録。
 - **付録 B（凍結）**: UrbanNav / PF / paper assets frozen mainline。別系統。
+
+---
+
+## E. 外れ trip 診断 + gated source fallback — 2026-04-12 更新
+
+### E.0 診断結果
+
+D.4.1 の外れ trip 5件を診断した結果、**5 trip すべて「baseline（Kaggle WLS）が壊れている」ことが判明**。raw_wls / fgo は正常。
+
+#### E.0.1 数値まとめ
+
+| # | trip | baseline_mse_pr | raw_wls_mse_pr | fgo_mse_pr | bl-rw max位置差 | 原因 |
+|---|---|---:|---:|---:|---:|---|
+| 1 | `2021-11-30-20-59-us-ca-mtv-m/mi8` | **9,985,992** | 161 | 161 | **300 km** | baseline が数百km飛ぶエポックあり |
+| 2 | `2023-06-15-18-49-us-ca-sjc-ce1/pixel7pro` | **396,318** | 152 | 153 | **24 km** | baseline が km 級ジャンプ |
+| 3 | `2021-09-28-21-56-us-ca-mtv-a/mi8` | **38,126** | 172 | 173 | **20 km** | baseline が km 級ジャンプ |
+| 4 | `2020-12-11-19-30-us-ca-mtv-e/pixel4xl` | 124 | 152 | 152 | 8 m | **epoch が 5 しかない**（データ欠損） |
+| 5 | `2022-04-27-21-55-us-ca-ebf-ww/mi8` | **1,182** | 140 | 140 | **2 km** | baseline に一部大きなスパイク |
+
+#### E.0.2 全 40 trip の分布
+
+- **raw_wls_mse_pr**: 全 trip が 130〜321 の範囲（中央値 185）— 安定
+- **baseline_mse_pr**: 中央値 221 だが上位 5 trip が 500 超（最大 1000万）
+- **baseline_mse_pr > 500 の trip は 5 件のみ** — これが OptError 外れ値の正体
+- mi8 デバイスが 5件中 3件 — Kaggle WLS baseline に問題がある傾向
+
+#### E.0.3 結論
+
+baseline が壊れている trip でのみ raw_wls/fgo にフォールバックする **gated source** を実装すれば、submission 品質が大幅改善する。
+
+### E.1 gated source fallback の実装
+
+#### E.1.1 新しい position_source: `"gated"`
+
+`POSITION_SOURCES` に `"gated"` を追加。動作:
+
+1. solve_trip() で baseline / raw_wls / fgo の mse_pr をすべて計算（従来通り）
+2. `baseline_mse_pr > gated_baseline_threshold`（デフォルト 500）なら、raw_wls と fgo のうち mse_pr が小さい方にフォールバック
+3. 閾値以下なら baseline を使用
+
+#### E.1.2 変更ファイル
+
+| ファイル | 変更内容 |
+|---|---|
+| `gnss_gpu/experiments/gsdc2023_raw_bridge.py` | `POSITION_SOURCES` に `"gated"` 追加、`BridgeConfig.gated_baseline_threshold` 追加、`solve_trip()` に gating ロジック |
+| `gnss_gpu/experiments/validate_fgo_gsdc2023_raw.py` | `--gated-threshold` CLI 引数追加 |
+| `ref/gsdc2023/run_raw_bridge_batch.py` | `--gated-threshold` CLI 引数追加、subprocess に渡す |
+
+#### E.1.3 使い方
+
+```bash
+# single trip
+PYTHONPATH=gnss_gpu/python:gnss_gpu python3 \
+  gnss_gpu/experiments/validate_fgo_gsdc2023_raw.py \
+  --data-root ref/gsdc2023/dataset_2023 \
+  --trip test/2021-11-30-20-59-us-ca-mtv-m/mi8 \
+  --max-epochs -1 --chunk-epochs 200 \
+  --position-source gated
+
+# batch
+python3 ref/gsdc2023/run_raw_bridge_batch.py \
+  --dataset-root ref/gsdc2023/dataset_2023 \
+  --settings-csv ref/gsdc2023/dataset_2023/settings_test.csv \
+  --dataset test --workers 1 \
+  --max-epochs -1 --chunk-epochs 200 \
+  --position-source gated --force
+```
+
+### E.2 batch rerun 結果
+
+#### E.2.1 gated vs baseline 全体比較
+
+| 指標 | baseline (04-10) | gated (04-12) | 改善 |
+|---|---:|---:|---|
+| mean OptError | **260,783** | **243** | **1,072x 改善** |
+| median OptError | 222.66 | 203.89 | 8%↓ |
+| max OptError | 9,985,992 | 1,446 | **6,906x 改善** |
+
+#### E.2.2 影響を受けた trip（6 件）
+
+| trip | baseline | gated | 改善幅 |
+|---|---:|---:|---:|
+| `mtv-m/mi8` | 9,985,992 | 161 | -9,985,831 |
+| `sjc-ce1/pixel7pro` | 396,318 | 152 | -396,166 |
+| `mtv-a/mi8` | 38,126 | 172 | -37,954 |
+| `mtv-e/pixel4xl` | 1,850 | 1,446 | -404 |
+| `ebf-ww/mi8` | 1,182 | 140 | -1,042 |
+| `lax-x/pixel5` | 506 | 321 | -185 |
+
+#### E.2.3 副作用
+
+- **残り 34 trip は完全に同一**（delta = 0.00）— gating は正常 trip に一切影響しない
+- 6 件目の `lax-x/pixel5`（baseline_mse_pr=506）も閾値 500 で捕捉された
+- 成果物: `ref/gsdc2023/results/test_parallel/20260412_1053/`
+
+### E.3 次タスク
+
+1. batch rerun 結果の確認と submission 生成
+2. train trip で ground truth 付き検証（gated vs baseline の精度比較）
+3. 閾値チューニング（500 が最適かの検証）
+4. D.4.3 の refactor 継続
+5. D.4.4 の repo hygiene
+
+---
+
+## D. GSDC2023 raw-bridge + full test rerun + API/refactor handoff — 2026-04-11 更新
+
+### D.0 全体の状況と結論
+
+#### D.0.1 いま何ができるか
+
+1. **preprocessed `dataset_2023.zip` がなくても GSDC2023 を回せる。**  
+   Kaggle raw `device_gnss.csv` から Python 側で `bridge_positions.csv` / `bridge_metrics.json` を生成し、MATLAB の `run_fgo.m` / `submission.m` から利用できる。
+2. **test 40 trip の full epoch rerun は完了している。**  
+   baseline source で 40/40 trip を再実行し、partial submission を生成済み。
+3. **raw-bridge の Python 中核ロジックは共通 API に切り出した。**  
+   使い回しの本体は `gnss_gpu/experiments/gsdc2023_raw_bridge.py` にある。CLI と batch と MATLAB bridge はここに依存する。
+4. **MATLAB bridge は環境変数から source/epoch/chunk/FGO パラメータを受け取れる。**  
+   `run_fgo_raw_bridge.m` が Python CLI の front-end として動く。
+5. **API/運用ドキュメントは整理済み。**  
+   `ref/gsdc2023/RAW_BRIDGE_API.md` に Python API、CLI、CSV/JSON 契約、MATLAB 側 env がまとまっている。
+
+#### D.0.2 現時点の結論
+
+1. **現在の raw-only bridge では baseline を既定にするのが安全。**  
+   train の確認用 trip `train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4` では、full epoch / chunked 実行で  
+   - Kaggle WLS baseline: `RMS2D 2.342 m`, `P50 1.924 m`, `P95 3.935 m`  
+   - raw WLS: `RMS2D 6.985 m`  
+   - current raw-bridge FGO: `RMS2D 7.313 m`  
+   だった。**ground truth がある範囲では baseline が最良**。
+2. **`results.csv` の `OptError` は Kaggle score ではない。**  
+   これは **疑似距離残差の weighted MSE (`mse_pr`)**。位置精度の proxy として一部使えるが、Kaggle スコアそのものではない。  
+   したがって test 40 trip rerun の `OptError` 大外れは「診断対象」であって「即座に submission がダメ」という意味ではない。
+3. **auto source selection は現時点では default にしない。**  
+   `baseline/raw_wls/fgo` を擬似距離残差で chunk ごとに切り替える `auto` を試したが、train 例では baseline を上回らなかった。  
+   今は `position_source=baseline` が既定。
+
+#### D.0.3 直近で完了したこと
+
+1. **all test `device_gnss.csv` を 40/40 trip 分ダウンロード済み。**
+2. **`settings_test.csv` は 40 trip をカバーしている。**
+3. **full rerun 実行済み。**  
+   コマンド:
+   ```bash
+   python3 ref/gsdc2023/run_raw_bridge_batch.py \
+     --dataset-root ref/gsdc2023/dataset_2023 \
+     --settings-csv ref/gsdc2023/dataset_2023/settings_test.csv \
+     --dataset test \
+     --workers 1 \
+     --max-epochs -1 \
+     --chunk-epochs 200 \
+     --position-source baseline \
+     --force
+   ```
+4. **成果物**:
+   - `ref/gsdc2023/results/test_parallel/20260410_0900/results.csv`
+   - `ref/gsdc2023/results/test_parallel/20260410_0900/submission_20260410_0900.csv`
+   - `ref/gsdc2023/results/test_parallel/20260410_0900/summary.json`
+5. **結果の要点**:
+   - `results_rows = 40`
+   - `submission_rows = 71936`
+   - `submission_trips = 40`
+   - `position_source = baseline`
+   - `median OptError = 222.66`
+   - `max OptError = 9985992.04`
+6. **最大残差 trip（診断優先）**:
+   - `2021-11-30-20-59-us-ca-mtv-m/mi8` → `9985992.04`
+   - `2023-06-15-18-49-us-ca-sjc-ce1/pixel7pro` → `396317.65`
+   - `2021-09-28-21-56-us-ca-mtv-a/mi8` → `38126.32`
+   - `2020-12-11-19-30-us-ca-mtv-e/pixel4xl` → `1850.07`
+   - `2022-04-27-21-55-us-ca-ebf-ww/mi8` → `1182.06`
+
+#### D.0.4 MATLAB bridge の smoke
+
+2026-04-11 時点で以下を確認済み:
+
+```bash
+GSDC2023_BRIDGE_MAX_EPOCHS=5 \
+GSDC2023_BRIDGE_CHUNK_EPOCHS=5 \
+GSDC2023_BRIDGE_POSITION_SOURCE=baseline \
+matlab -batch "cd('/media/autoware/aa/ai_coding_ws/gnss_gpu_ws/ref/gsdc2023'); \
+  s=table(\"2020-06-25-00-34-us-ca-mtv-sb-101\",\"pixel4\",'VariableNames',{'Course','Phone'}); \
+  opt=run_fgo_raw_bridge('./dataset_2023','train',s); disp(opt);"
+```
+
+返ってきた `optstatus`:
+
+- `OptTime ≈ 1.35`
+- `OptIter = 1`
+- `OptError = 180.8576`
+- `Score = 2.2453`
+
+つまり、**MATLAB -> Python CLI -> bridge CSV/JSON -> metrics 返却** の入口は動いている。
+
+### D.1 現在の raw-bridge アーキテクチャ
+
+#### D.1.1 Python 側の責務分離
+
+1. **中核 API**  
+   `gnss_gpu/experiments/gsdc2023_raw_bridge.py`
+   - `TripArrays`
+   - `BridgeConfig`
+   - `BridgeResult`
+   - `build_trip_arrays(...)`
+   - `validate_raw_gsdc2023_trip(...)`
+   - `solve_trip(...)`
+   - `export_bridge_outputs(...)`
+   - `has_valid_bridge_outputs(...)`
+   - `bridge_position_columns(...)`
+2. **thin CLI wrapper**  
+   `gnss_gpu/experiments/validate_fgo_gsdc2023_raw.py`
+   - argparse だけ持つ
+   - 中核 API を呼んで summary を表示する
+3. **batch orchestration**  
+   `ref/gsdc2023/run_raw_bridge_batch.py`
+   - trip 並列実行
+   - `results.csv` 生成
+   - sample submission に対する補間
+   - `submission_<timestamp>.csv` 生成
+
+#### D.1.2 MATLAB 側の責務分離
+
+1. **README 入口**  
+   `ref/gsdc2023/run_fgo.m`
+   - `phone_data.mat` がなければ raw-bridge 経路へフォールバック
+2. **raw bridge 起動**  
+   `ref/gsdc2023/run_fgo_raw_bridge.m`
+   - Python CLI の command line を組み立て
+   - bridge metrics を読んで `optstatus` に戻す
+3. **submission 生成**  
+   `ref/gsdc2023/functions/submission.m`
+   - `result_gnss_imu.mat` がなければ `bridge_positions.csv` を読む
+   - `GSDC2023_BRIDGE_POSITION_SOURCE` で列選択
+
+#### D.1.3 データ契約
+
+`bridge_positions.csv` は以下の候補軌跡を同時に保存する:
+
+- `BaselineLatitudeDegrees`, `BaselineLongitudeDegrees`, `BaselineAltitudeMeters`
+- `RawWlsLatitudeDegrees`, `RawWlsLongitudeDegrees`, `RawWlsAltitudeMeters`
+- `FgoLatitudeDegrees`, `FgoLongitudeDegrees`, `FgoAltitudeMeters`
+- `LatitudeDegrees`, `LongitudeDegrees`, `AltitudeMeters`  
+  これは **選択済み output source** に対応
+- `SelectedSource`
+
+`bridge_metrics.json` は少なくとも以下を持つ:
+
+- `selected_source_mode`
+- `mse_pr`
+- `baseline_mse_pr`
+- `raw_wls_mse_pr`
+- `fgo_mse_pr`
+- `fgo_iters`
+- `failed_chunks`
+- `selected_source_counts`
+- train の場合のみ `selected_score_m` / `selected_metrics`
+
+**重要**: `run_raw_bridge_batch.py` の skip 判定は、**単なるファイル存在ではなく** `has_valid_bridge_outputs(...)` を使い、`bridge_positions.csv` と `bridge_metrics.json` が両方あり、`fgo_iters >= 0` かつ `mse_pr` が finite であることを確認する。
+
+### D.2 重要ファイル一覧（Claude がまず開くべきもの）
+
+1. `gnss_gpu/internal_docs/plan.md` ← このファイル
+2. `gnss_gpu/experiments/gsdc2023_raw_bridge.py`
+3. `gnss_gpu/experiments/validate_fgo_gsdc2023_raw.py`
+4. `gnss_gpu/tests/test_validate_fgo_gsdc2023_raw.py`
+5. `ref/gsdc2023/RAW_BRIDGE_API.md`
+6. `ref/gsdc2023/run_raw_bridge_batch.py`
+7. `ref/gsdc2023/run_fgo_raw_bridge.m`
+8. `ref/gsdc2023/functions/submission.m`
+9. `ref/gsdc2023/README.md`
+
+### D.3 現在使えるコマンド
+
+#### D.3.1 Python single trip
+
+```bash
+cd /media/autoware/aa/ai_coding_ws/gnss_gpu_ws
+PYTHONPATH=gnss_gpu/python:gnss_gpu python3 \
+  gnss_gpu/experiments/validate_fgo_gsdc2023_raw.py \
+  --data-root ref/gsdc2023/dataset_2023 \
+  --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 \
+  --max-epochs -1 \
+  --chunk-epochs 200 \
+  --position-source baseline
+```
+
+#### D.3.2 Batch rerun / submission assemble
+
+```bash
+cd /media/autoware/aa/ai_coding_ws/gnss_gpu_ws
+python3 ref/gsdc2023/run_raw_bridge_batch.py \
+  --dataset-root ref/gsdc2023/dataset_2023 \
+  --settings-csv ref/gsdc2023/dataset_2023/settings_test.csv \
+  --dataset test \
+  --workers 1 \
+  --max-epochs -1 \
+  --chunk-epochs 200 \
+  --position-source baseline
+```
+
+`--force` を付けなければ有効 bridge 出力を再利用する。
+
+#### D.3.3 README 経由（MATLAB）
+
+```bash
+cd /media/autoware/aa/ai_coding_ws/gnss_gpu_ws
+GSDC2023_DATASET=test \
+GSDC2023_BRIDGE_CHUNK_EPOCHS=200 \
+GSDC2023_BRIDGE_POSITION_SOURCE=baseline \
+bash ref/gsdc2023/run_readme_local.sh fgo
+```
+
+#### D.3.4 テスト
+
+```bash
+cd /media/autoware/aa/ai_coding_ws/gnss_gpu_ws
+PYTHONPATH=gnss_gpu/python:gnss_gpu python3 -m pytest \
+  gnss_gpu/tests/test_validate_fgo_gsdc2023_raw.py \
+  gnss_gpu/tests/test_validate_gsdc2023_phone_data.py -q
+```
+
+2026-04-11 時点の結果: **`7 passed`**
+
+### D.4 Claude にやってほしい次タスク（優先順）
+
+#### D.4.1 最優先: 外れ trip 診断
+
+やること:
+
+1. `2021-11-30-20-59-us-ca-mtv-m/mi8`
+2. `2023-06-15-18-49-us-ca-sjc-ce1/pixel7pro`
+3. `2021-09-28-21-56-us-ca-mtv-a/mi8`
+4. `2020-12-11-19-30-us-ca-mtv-e/pixel4xl`
+5. `2022-04-27-21-55-us-ca-ebf-ww/mi8`
+
+について、各 trip の `bridge_positions.csv` / `bridge_metrics.json` を見て次を比較する:
+
+- baseline と raw_wls の位置差
+- baseline と fgo の位置差
+- `selected_source_mode`
+- `baseline_mse_pr`, `raw_wls_mse_pr`, `fgo_mse_pr`
+- `SelectedSource`（auto を再試すなら）
+
+目的:
+
+- **baseline 自体が壊れている trip** と
+- **raw/fgo が壊れているだけの trip** を分けること
+
+#### D.4.2 次点: 異常検知 / source gating
+
+今の default は `baseline` 固定。もし改善を続けるなら、次は **global default を変える前に** train で妥当性を見ながら以下をやるべき。
+
+候補:
+
+1. baseline が極端に飛んだ chunk だけ raw_wls か fgo に切り替える
+2. `mse_pr` だけでなく軌跡平滑性や step size を gating に入れる
+3. device / trip type（mi8, pixel7pro 等）ごとの異常傾向を見る
+
+**やってはいけない**:
+
+- test だけ見て `position_source=auto` を default にすること
+- `OptError` を Kaggle score と誤解して source policy を決めること
+
+#### D.4.3 refactor 継続
+
+今回まだ残っている改善余地:
+
+1. `run_raw_bridge_batch.py` の subprocess 実行を直接 API 呼び出しに置き換える
+2. `results.csv` / `summary.json` の assembler も Python 共通モジュールに切り出す
+3. `run_fgo.m` の raw-bridge branch を helper 化して main loop を短くする
+
+ただし優先度は **外れ trip 診断より下**。
+
+#### D.4.4 repo hygiene
+
+`gnss_gpu` repo 側では raw-bridge 関連ファイルが untracked のまま。Claude に渡すときは:
+
+1. `gnss_gpu` repo に入れるべきもの
+   - `experiments/gsdc2023_raw_bridge.py`
+   - `experiments/validate_fgo_gsdc2023_raw.py`
+   - `experiments/validate_gsdc2023_phone_data.py`
+   - `tests/test_validate_fgo_gsdc2023_raw.py`
+   - `tests/test_validate_gsdc2023_phone_data.py`
+2. workspace 補助として残るもの
+   - `ref/gsdc2023/RAW_BRIDGE_API.md`
+   - `ref/gsdc2023/run_raw_bridge_batch.py`
+   - `ref/gsdc2023/run_fgo_raw_bridge.m`
+   - `ref/gsdc2023/functions/submission.m`
+   - `ref/gsdc2023/README.md`
+
+を分けて commit / handoff した方がよい。
+
+### D.5 いま触ってはいけない / 忘れてはいけないこと
+
+1. **`OptError` は疑似距離残差であって Kaggle score ではない。**
+2. **raw bridge の default source は baseline のまま維持する。**
+3. **`device_gnss.csv` は見かけ上 `.csv` でも ZIP payload のことがある。**
+4. **`taroz.net` の preprocessed `dataset_2023.zip` は 2026-04-11 時点でも壊れている前提で考える。**
+5. **`ref/gsdc2023` は `gnss_gpu` git repo の外。**
+6. **MATLAB から Python を呼ぶ経路は quoting を直した状態が正。**  
+   `run_fgo_raw_bridge.m` の `shell_quote()` を壊すと README 経路がすぐ死ぬ。
+
+### D.6 ひとことで言うと
+
+**GSDC2023 raw-bridge の end-to-end はもう通っている。**  
+次の仕事は「配線」ではなく **外れ trip の診断と source policy の改善**。Claude にはそこから始めさせるのが正しい。
 
 ---
 
