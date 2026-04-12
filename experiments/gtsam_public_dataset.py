@@ -100,7 +100,11 @@ def _run_rtklib_export_spp_meas(
 
 
 def _load_rtklib_spp_export(path: Path) -> dict[tuple[int, float, str], dict[str, float]]:
-    """Parse ``export_spp_meas`` CSV: key (gps_week, tow rounded, sat_id)."""
+    """Parse ``export_spp_meas`` CSV: key (gps_week, tow rounded, sat_id).
+
+    Supports both old (GPS-only, no ``sys_id`` column) and new multi-GNSS format.
+    When ``sys_id`` is present it is stored in the dict as ``"sys_id"`` string value.
+    """
     out: dict[tuple[int, float, str], dict[str, float]] = {}
     with open(path, newline="", encoding="utf-8") as f:
         r = csv.DictReader(f)
@@ -120,8 +124,15 @@ def _load_rtklib_spp_export(path: Path) -> dict[tuple[int, float, str], dict[str
             if "el_rad" in row and "var_total" in row:
                 d["el_rad"] = float(row["el_rad"])
                 d["var_total"] = float(row["var_total"])
+            # Multi-GNSS sys_id column (backward compatible)
+            if "sys_id" in row and row["sys_id"]:
+                d["sys_id"] = row["sys_id"].strip()  # type: ignore[assignment]
             out[(wk, tow, sid)] = d
     return out
+
+
+# System index mapping for multi-GNSS ISB estimation (matches fgo.cu sys_kind)
+SYS_ID_TO_KIND: dict[str, int] = {"G": 0, "E": 1, "J": 2}
 
 
 @dataclass
@@ -135,6 +146,8 @@ class PublicGtsamBatch:
     weights: np.ndarray
     ref_tow: np.ndarray
     ref_ecef: np.ndarray
+    sys_kind: np.ndarray | None = None  # int32 (n_epoch, max_sats), None = all GPS
+    n_clock: int = 1  # 1 = GPS-only, 3 = GPS+GAL+QZS with ISB
 
 
 def build_public_gtsam_arrays(
@@ -145,6 +158,7 @@ def build_public_gtsam_arrays(
     el_mask_deg: float = 15.0,
     use_pybind: bool = True,
     weight_mode: str = "sin2el",
+    multi_gnss: bool = False,
 ) -> PublicGtsamBatch:
     """Build preprocessed PR / sat ECEF / weights aligned with ``validate_fgo_gtsam_public_dataset``.
 
@@ -165,6 +179,10 @@ def build_public_gtsam_arrays(
       SPP ~1.67 m).
     - ``"rtklib"``  : inverse of RTKLIB ``var_total`` (matches RTKLIB pntpos
       exactly but removes the FGO accuracy advantage).
+
+    ``multi_gnss``: when True and RTKLIB CSV has ``sys_id`` column, include
+    Galileo (E) and QZSS (J) satellites.  The returned batch will have
+    ``sys_kind`` (int32 array) and ``n_clock=3`` for ISB estimation.
     """
     obs_p = data_dir / "rover_1Hz.obs"
     nav_p = data_dir / "base.nav"
@@ -197,12 +215,17 @@ def build_public_gtsam_arrays(
         finally:
             rtk_csv_path.unlink(missing_ok=True)
 
+    # Determine which satellite system prefixes to accept from RINEX
+    _accept_prefixes = ("G",)
+    if multi_gnss and rtk_meas is not None:
+        _accept_prefixes = ("G", "E", "J")
+
     epochs_data: list[tuple[float, list[str], np.ndarray, int]] = []
     max_sats = 0
     for ep in rinex.epochs:
         pr_map: dict[str, float] = {}
         for sat, obs in ep.observations.items():
-            if not sat.startswith("G"):
+            if not any(sat.startswith(p) for p in _accept_prefixes):
                 continue
             if "C1C" in obs and obs["C1C"] and obs["C1C"] != 0.0:
                 pr_map[sat] = obs["C1C"]
@@ -219,11 +242,22 @@ def build_public_gtsam_arrays(
 
     n_epoch = len(epochs_data)
     if n_epoch < 5:
-        raise RuntimeError("Not enough valid GPS epochs (need >= 5).")
+        raise RuntimeError("Not enough valid epochs (need >= 5).")
 
     sat_ecef = np.zeros((n_epoch, max_sats, 3), dtype=np.float64)
     pseudorange = np.zeros((n_epoch, max_sats), dtype=np.float64)
     raw_weights = np.zeros((n_epoch, max_sats), dtype=np.float64)
+
+    # Build sys_kind for multi-GNSS ISB
+    has_multi = multi_gnss and rtk_meas is not None
+    n_clock = 3 if has_multi else 1
+    sys_kind_arr: np.ndarray | None = None
+    if has_multi:
+        sys_kind_arr = np.zeros((n_epoch, max_sats), dtype=np.int32)
+        for t_sk, (_tow_sk, sats_sk, _pr_sk, _wk_sk) in enumerate(epochs_data):
+            for si_sk, sid_sk in enumerate(sats_sk):
+                prefix = sid_sk[0] if sid_sk else "G"
+                sys_kind_arr[t_sk, si_sk] = SYS_ID_TO_KIND.get(prefix, 0)
 
     approx0 = rinex.header.approx_position.copy()
     if np.linalg.norm(approx0) < 1e3:
@@ -358,4 +392,6 @@ def build_public_gtsam_arrays(
         weights=raw_weights.copy(),
         ref_tow=ref_tow,
         ref_ecef=ref_ecef,
+        sys_kind=sys_kind_arr,
+        n_clock=n_clock,
     )

@@ -479,4 +479,707 @@ int fgo_gnss_lm(const double* sat_ecef,
   return ok ? total_iters : -1;
 }
 
+// ===========================================================================
+// Extended FGO with velocity state + clock drift + Doppler factor
+// ===========================================================================
+// Per-epoch state layout:
+//   [x, y, z, vx, vy, vz, c0, ..., c_{nc-1}, drift]
+//   ss_vd = 3 + 3 + nc + 1 = 7 + nc
+// ===========================================================================
+
+namespace {
+
+constexpr int kMaxClockVD = 4;
+constexpr int kMaxSSVD = 7 + kMaxClockVD;  // max state size per epoch
+
+// Pseudorange factor for VD state: touches position [0..2] and clock [6..6+nc-1].
+// Jacobian columns: dx/r, dy/r, dz/r at [0,1,2]; hc[k] at [6+k].
+__global__ void fgo_assemble_pseudorange_vd(
+    int n_epoch, int n_sat, int nc, int ss, int n_state,
+    const double* sat_ecef,
+    const double* pseudorange,
+    const double* weights,
+    const int* sys_kind,
+    const double* state,
+    double* H,
+    double* g) {
+  int t = blockIdx.x * blockDim.x + threadIdx.x;
+  if (t >= n_epoch) return;
+
+  const double x = state[t * ss + 0];
+  const double y = state[t * ss + 1];
+  const double z = state[t * ss + 2];
+  // clock states start at index 6
+  const double* cptr = state + t * ss + 6;
+
+  // Local accumulation buffers for the used columns only: 3 pos + nc clock
+  double Hloc[kMaxSSVD][kMaxSSVD] = {};
+  double gloc[kMaxSSVD] = {};
+
+  const double* my_sat = sat_ecef + (size_t)t * n_sat * 3;
+  const double* my_pr = pseudorange + (size_t)t * n_sat;
+  const double* my_w = weights + (size_t)t * n_sat;
+
+  for (int s = 0; s < n_sat; s++) {
+    double w = my_w[s];
+    if (w <= 0.0) continue;
+
+    int sk = sys_kind ? sys_kind[t * n_sat + s] : 0;
+    if (sk < 0 || sk >= nc) continue;
+
+    double sx = my_sat[s * 3 + 0];
+    double sy = my_sat[s * 3 + 1];
+    double sz = my_sat[s * 3 + 2];
+
+    double dx0 = x - sx, dy0 = y - sy, dz0 = z - sz;
+    double r0 = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+
+    double transit = r0 / kC;
+    double theta = kOmegaE * transit;
+    double sx_rot = sx * cos(theta) + sy * sin(theta);
+    double sy_rot = -sx * sin(theta) + sy * cos(theta);
+
+    double dx = x - sx_rot, dy_v = y - sy_rot, dz = z - sz;
+    double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+    if (r < 1e-6) continue;
+
+    double hc[kMaxClockVD];
+    fill_hc_int(nc, sk, hc);
+    double clk = 0.0;
+    for (int k = 0; k < nc; k++) clk += hc[k] * cptr[k];
+
+    double pred = r + clk;
+    double res = my_pr[s] - pred;
+
+    // Build full-ss Jacobian: only position and clock columns are non-zero
+    double J[kMaxSSVD] = {};
+    J[0] = dx / r;
+    J[1] = dy_v / r;
+    J[2] = dz / r;
+    for (int k = 0; k < nc; k++) J[6 + k] = hc[k];
+
+    double Jr = res * w;
+    for (int a = 0; a < ss; a++) {
+      if (J[a] == 0.0) continue;
+      gloc[a] += J[a] * Jr;
+      for (int b = 0; b < ss; b++) {
+        if (J[b] == 0.0) continue;
+        Hloc[a][b] += w * J[a] * J[b];
+      }
+    }
+  }
+
+  int o = ss * t;
+  for (int a = 0; a < ss; a++) {
+    for (int b = 0; b < ss; b++) {
+      H[(size_t)(o + a) * n_state + (o + b)] += Hloc[a][b];
+    }
+    g[o + a] += gloc[a];
+  }
+}
+
+// Doppler factor: res = doppler_obs - ((sv - rv) . e + drift)
+// where sv = satellite velocity, rv = receiver velocity, e = unit LOS vector
+// Jacobian w.r.t. state [x,y,z,vx,vy,vz,clk...,drift]:
+//   d/dvx = e_x, d/dvy = e_y, d/dvz = e_z  (indices 3,4,5)
+//   d/ddrift = 1  (index 6+nc)
+// NOTE: we do not differentiate the unit vector w.r.t. position here (standard
+// linearization around the current position estimate).
+void add_doppler_factor_host(
+    int n_epoch, int n_sat, int nc, int ss, int n_state,
+    const double* sat_ecef,
+    const double* sat_vel,
+    const double* doppler,
+    const double* doppler_weights,
+    const int* sys_kind,
+    const double* state,
+    double* H, double* g) {
+  if (!sat_vel || !doppler || !doppler_weights) return;
+  const int drift_idx = 6 + nc;
+
+  for (int t = 0; t < n_epoch; t++) {
+    const double x = state[t * ss + 0];
+    const double y = state[t * ss + 1];
+    const double z = state[t * ss + 2];
+    const double vx = state[t * ss + 3];
+    const double vy = state[t * ss + 4];
+    const double vz = state[t * ss + 5];
+    const double drift = state[t * ss + drift_idx];
+
+    const double* my_sat = sat_ecef + (size_t)t * n_sat * 3;
+    const double* my_sv = sat_vel + (size_t)t * n_sat * 3;
+    const double* my_dop = doppler + (size_t)t * n_sat;
+    const double* my_dw = doppler_weights + (size_t)t * n_sat;
+
+    int o = ss * t;
+
+    for (int s = 0; s < n_sat; s++) {
+      double w = my_dw[s];
+      if (w <= 0.0) continue;
+
+      double sx = my_sat[s * 3 + 0], sy = my_sat[s * 3 + 1], sz = my_sat[s * 3 + 2];
+      // Sagnac rotation for satellite position
+      double dx0 = x - sx, dy0 = y - sy, dz0 = z - sz;
+      double r0 = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+      double transit = r0 / kC;
+      double theta = kOmegaE * transit;
+      double sx_rot = sx * cos(theta) + sy * sin(theta);
+      double sy_rot = -sx * sin(theta) + sy * cos(theta);
+
+      double dx = x - sx_rot, dy_v = y - sy_rot, dz = z - sz;
+      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      if (r < 1e-6) continue;
+
+      double ex = dx / r, ey = dy_v / r, ez = dz / r;
+
+      double svx = my_sv[s * 3 + 0], svy = my_sv[s * 3 + 1], svz = my_sv[s * 3 + 2];
+
+      // Doppler pseudorange-rate model:
+      // predicted = (sv - rv) . e + drift
+      // where e = unit vector from satellite to receiver
+      // Actually: e points from receiver to satellite in some conventions,
+      // but let's match RTKLIB: predicted = -((sv - rv) . e_sat_to_rx) + drift
+      // In RTKLIB estvel: rate = dot(e_sat_to_rx, sv - rv) + drift
+      // predicted_rate = (svx - vx)*ex + (svy - vy)*ey + (svz - vz)*ez + drift
+      // where e = (rx - sat)/r (points from sat to rx) - but that's what we have
+      // Wait, let's be careful. In RTKLIB's estvel, the LOS is from rx to sat:
+      // e[j] = (sat[j] - rx[j]) / r, and rate = -e . (sv - rv) + drift
+      // Our e = (rx - sat)/r, so -e_rtklib = our e. So:
+      // rate = our_e . (sv - rv) + drift
+      double pred = ex * (svx - vx) + ey * (svy - vy) + ez * (svz - vz) + drift;
+      double res = my_dop[s] - pred;
+
+      // Jacobian w.r.t. [vx, vy, vz] at indices [3,4,5]:
+      // d(pred)/d(vx) = -ex, d(pred)/d(vy) = -ey, d(pred)/d(vz) = -ez
+      // d(pred)/d(drift) = 1
+      // We build a sparse J for the full state vector
+      double Jv[3] = {-ex, -ey, -ez};
+      double Jd = 1.0;
+
+      // Gradient: g += J * w * res (standard J^T * W * r convention, same as PR and motion)
+      double Jr = res * w;
+      // Velocity-velocity block
+      for (int a = 0; a < 3; a++) {
+        g[o + 3 + a] += Jv[a] * Jr;
+        for (int b = 0; b < 3; b++) {
+          H[(size_t)(o + 3 + a) * n_state + (o + 3 + b)] += w * Jv[a] * Jv[b];
+        }
+        // Velocity-drift cross
+        H[(size_t)(o + 3 + a) * n_state + (o + drift_idx)] += w * Jv[a] * Jd;
+        H[(size_t)(o + drift_idx) * n_state + (o + 3 + a)] += w * Jd * Jv[a];
+      }
+      // Drift-drift
+      g[o + drift_idx] += Jd * Jr;
+      H[(size_t)(o + drift_idx) * n_state + (o + drift_idx)] += w * Jd * Jd;
+    }
+  }
+}
+
+// Motion factor: x_{t+1} = x_t + v_t * dt
+// residual_i = x_{t,i} + v_{t,i} * dt - x_{t+1,i}  for i in {0,1,2}
+// Couples position at t, velocity at t, and position at t+1.
+void add_motion_factor_host(
+    int n_epoch, int ss, int n_state, double w_motion,
+    const double* state, const double* dt_arr, double* H, double* g) {
+  if (w_motion <= 0.0 || !dt_arr) return;
+
+  for (int t = 0; t < n_epoch - 1; t++) {
+    double dt = dt_arr[t];
+    if (dt <= 0.0) continue;
+
+    int o0 = ss * t;
+    int o1 = ss * (t + 1);
+
+    for (int i = 0; i < 3; i++) {
+      double x_t = state[o0 + i];
+      double v_t = state[o0 + 3 + i];
+      double x_t1 = state[o1 + i];
+      double res = x_t + v_t * dt - x_t1;
+
+      // Jacobian: d/d(x_t,i)=1, d/d(v_t,i)=dt, d/d(x_{t+1},i)=-1
+      g[o0 + i]     += w_motion * res * 1.0;
+      g[o0 + 3 + i] += w_motion * res * dt;
+      g[o1 + i]     += w_motion * res * (-1.0);
+
+      // Hessian contributions: J^T W J
+      // (x_t,i)-(x_t,i):  1*1 = 1
+      H[(size_t)(o0 + i) * n_state + (o0 + i)] += w_motion;
+      // (x_t,i)-(v_t,i):  1*dt
+      H[(size_t)(o0 + i) * n_state + (o0 + 3 + i)] += w_motion * dt;
+      H[(size_t)(o0 + 3 + i) * n_state + (o0 + i)] += w_motion * dt;
+      // (x_t,i)-(x_{t+1},i):  1*(-1)
+      H[(size_t)(o0 + i) * n_state + (o1 + i)] += -w_motion;
+      H[(size_t)(o1 + i) * n_state + (o0 + i)] += -w_motion;
+      // (v_t,i)-(v_t,i):  dt*dt
+      H[(size_t)(o0 + 3 + i) * n_state + (o0 + 3 + i)] += w_motion * dt * dt;
+      // (v_t,i)-(x_{t+1},i):  dt*(-1)
+      H[(size_t)(o0 + 3 + i) * n_state + (o1 + i)] += -w_motion * dt;
+      H[(size_t)(o1 + i) * n_state + (o0 + 3 + i)] += -w_motion * dt;
+      // (x_{t+1},i)-(x_{t+1},i):  (-1)*(-1) = 1
+      H[(size_t)(o1 + i) * n_state + (o1 + i)] += w_motion;
+    }
+  }
+}
+
+// Clock drift factor: c0_{t+1} = c0_t + drift_t * dt
+// residual = c0_t + drift_t * dt - c0_{t+1}
+// Clock index in VD state: 6 (first clock). Drift index: 6+nc.
+void add_clock_drift_factor_host(
+    int n_epoch, int nc, int ss, int n_state, double w_clkdrift,
+    const double* state, const double* dt_arr, double* H, double* g) {
+  if (w_clkdrift <= 0.0 || !dt_arr) return;
+  const int clk_idx = 6;  // first clock
+  const int drift_idx = 6 + nc;
+
+  for (int t = 0; t < n_epoch - 1; t++) {
+    double dt = dt_arr[t];
+    if (dt <= 0.0) continue;
+
+    int o0 = ss * t;
+    int o1 = ss * (t + 1);
+
+    double c_t = state[o0 + clk_idx];
+    double d_t = state[o0 + drift_idx];
+    double c_t1 = state[o1 + clk_idx];
+    double res = c_t + d_t * dt - c_t1;
+
+    // Jacobian: d/d(c_t)=1, d/d(drift_t)=dt, d/d(c_{t+1})=-1
+    g[o0 + clk_idx]   += w_clkdrift * res * 1.0;
+    g[o0 + drift_idx]  += w_clkdrift * res * dt;
+    g[o1 + clk_idx]   += w_clkdrift * res * (-1.0);
+
+    // Hessian
+    // (c_t)-(c_t)
+    H[(size_t)(o0 + clk_idx) * n_state + (o0 + clk_idx)] += w_clkdrift;
+    // (c_t)-(drift_t)
+    H[(size_t)(o0 + clk_idx) * n_state + (o0 + drift_idx)] += w_clkdrift * dt;
+    H[(size_t)(o0 + drift_idx) * n_state + (o0 + clk_idx)] += w_clkdrift * dt;
+    // (c_t)-(c_{t+1})
+    H[(size_t)(o0 + clk_idx) * n_state + (o1 + clk_idx)] += -w_clkdrift;
+    H[(size_t)(o1 + clk_idx) * n_state + (o0 + clk_idx)] += -w_clkdrift;
+    // (drift_t)-(drift_t)
+    H[(size_t)(o0 + drift_idx) * n_state + (o0 + drift_idx)] += w_clkdrift * dt * dt;
+    // (drift_t)-(c_{t+1})
+    H[(size_t)(o0 + drift_idx) * n_state + (o1 + clk_idx)] += -w_clkdrift * dt;
+    H[(size_t)(o1 + clk_idx) * n_state + (o0 + drift_idx)] += -w_clkdrift * dt;
+    // (c_{t+1})-(c_{t+1})
+    H[(size_t)(o1 + clk_idx) * n_state + (o1 + clk_idx)] += w_clkdrift;
+  }
+}
+
+// PR cost for VD state (clock offset at index 6)
+double pr_cost_host_vd(
+    int n_epoch, int n_sat, int nc, int ss,
+    const double* sat_ecef,
+    const double* pseudorange,
+    const double* weights,
+    const int* sys_kind_host,
+    const double* state,
+    double huber_k) {
+  double e = 0.0;
+  for (int t = 0; t < n_epoch; t++) {
+    const double x = state[t * ss + 0], y = state[t * ss + 1], z = state[t * ss + 2];
+    const double* cptr = state + t * ss + 6;
+    const double* my_sat = sat_ecef + (size_t)t * n_sat * 3;
+    const double* my_pr = pseudorange + (size_t)t * n_sat;
+    const double* my_w = weights + (size_t)t * n_sat;
+    for (int s = 0; s < n_sat; s++) {
+      double w = my_w[s];
+      if (w <= 0.0) continue;
+      int sk = sys_kind_host[t * n_sat + s];
+      if (sk < 0 || sk >= nc) continue;
+      double sx = my_sat[s * 3 + 0], sy = my_sat[s * 3 + 1], sz = my_sat[s * 3 + 2];
+      double dx0 = x - sx, dy0 = y - sy, dz0 = z - sz;
+      double r0 = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+      double transit = r0 / kC;
+      double theta = kOmegaE * transit;
+      double sx_rot = sx * cos(theta) + sy * sin(theta);
+      double sy_rot = -sx * sin(theta) + sy * cos(theta);
+      double dx = x - sx_rot, dy_v = y - sy_rot, dz = z - sz;
+      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      if (r < 1e-6) continue;
+      double hc[kMaxClockVD];
+      fill_hc_int(nc, sk, hc);
+      double clk = 0.0;
+      for (int k = 0; k < nc; k++) clk += hc[k] * cptr[k];
+      double res = my_pr[s] - (r + clk);
+      if (huber_k <= 0.0) {
+        e += 0.5 * w * res * res;
+      } else {
+        double z_m = sqrt(w) * std::fabs(res);
+        if (z_m <= huber_k)
+          e += 0.5 * z_m * z_m;
+        else
+          e += huber_k * z_m - 0.5 * huber_k * huber_k;
+      }
+    }
+  }
+  return e;
+}
+
+// Motion factor cost
+double motion_factor_cost_host(
+    int n_epoch, int ss, double w_motion,
+    const double* state, const double* dt_arr) {
+  if (w_motion <= 0.0 || !dt_arr) return 0.0;
+  double e = 0.0;
+  for (int t = 0; t < n_epoch - 1; t++) {
+    double dt = dt_arr[t];
+    if (dt <= 0.0) continue;
+    int o0 = ss * t, o1 = ss * (t + 1);
+    for (int i = 0; i < 3; i++) {
+      double res = state[o0 + i] + state[o0 + 3 + i] * dt - state[o1 + i];
+      e += 0.5 * w_motion * res * res;
+    }
+  }
+  return e;
+}
+
+// Clock drift factor cost
+double clock_drift_cost_host(
+    int n_epoch, int nc, int ss, double w_clkdrift,
+    const double* state, const double* dt_arr) {
+  if (w_clkdrift <= 0.0 || !dt_arr) return 0.0;
+  double e = 0.0;
+  const int clk_idx = 6;
+  const int drift_idx = 6 + nc;
+  for (int t = 0; t < n_epoch - 1; t++) {
+    double dt = dt_arr[t];
+    if (dt <= 0.0) continue;
+    int o0 = ss * t, o1 = ss * (t + 1);
+    double res = state[o0 + clk_idx] + state[o0 + drift_idx] * dt - state[o1 + clk_idx];
+    e += 0.5 * w_clkdrift * res * res;
+  }
+  return e;
+}
+
+// Doppler factor cost
+double doppler_cost_host(
+    int n_epoch, int n_sat, int nc, int ss,
+    const double* sat_ecef, const double* sat_vel,
+    const double* doppler, const double* doppler_weights,
+    const double* state) {
+  if (!sat_vel || !doppler || !doppler_weights) return 0.0;
+  double e = 0.0;
+  const int drift_idx = 6 + nc;
+  for (int t = 0; t < n_epoch; t++) {
+    const double x = state[t * ss + 0], y = state[t * ss + 1], z = state[t * ss + 2];
+    const double vx = state[t * ss + 3], vy = state[t * ss + 4], vz = state[t * ss + 5];
+    const double drift = state[t * ss + drift_idx];
+    const double* my_sat = sat_ecef + (size_t)t * n_sat * 3;
+    const double* my_sv = sat_vel + (size_t)t * n_sat * 3;
+    const double* my_dop = doppler + (size_t)t * n_sat;
+    const double* my_dw = doppler_weights + (size_t)t * n_sat;
+    for (int s = 0; s < n_sat; s++) {
+      double w = my_dw[s];
+      if (w <= 0.0) continue;
+      double sx = my_sat[s * 3 + 0], sy = my_sat[s * 3 + 1], sz = my_sat[s * 3 + 2];
+      double dx0 = x - sx, dy0 = y - sy, dz0 = z - sz;
+      double r0 = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+      double transit = r0 / kC;
+      double theta = kOmegaE * transit;
+      double sx_rot = sx * cos(theta) + sy * sin(theta);
+      double sy_rot = -sx * sin(theta) + sy * cos(theta);
+      double dx = x - sx_rot, dy_v = y - sy_rot, dz = z - sz;
+      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      if (r < 1e-6) continue;
+      double ex = dx / r, ey = dy_v / r, ez = dz / r;
+      double svx = my_sv[s * 3 + 0], svy = my_sv[s * 3 + 1], svz = my_sv[s * 3 + 2];
+      double pred = ex * (svx - vx) + ey * (svy - vy) + ez * (svz - vz) + drift;
+      double res = my_dop[s] - pred;
+      e += 0.5 * w * res * res;
+    }
+  }
+  return e;
+}
+
+// Effective Huber weights for VD state (clock at index 6)
+void effective_pr_weights_huber_host_vd(
+    int n_epoch, int n_sat, int nc, int ss,
+    const double* sat_ecef,
+    const double* pseudorange,
+    const double* weights,
+    const int* sys_kind_host,
+    const double* state,
+    double huber_k,
+    double* eff_w_out) {
+  if (huber_k <= 0.0) {
+    std::memcpy(eff_w_out, weights, (size_t)n_epoch * n_sat * sizeof(double));
+    return;
+  }
+  for (int t = 0; t < n_epoch; t++) {
+    const double x = state[t * ss + 0], y = state[t * ss + 1], z = state[t * ss + 2];
+    const double* cptr = state + t * ss + 6;
+    const double* my_sat = sat_ecef + (size_t)t * n_sat * 3;
+    const double* my_pr = pseudorange + (size_t)t * n_sat;
+    const double* my_w = weights + (size_t)t * n_sat;
+    for (int s = 0; s < n_sat; s++) {
+      double w = my_w[s];
+      size_t idx = (size_t)t * n_sat + s;
+      if (w <= 0.0) { eff_w_out[idx] = w; continue; }
+      int sk = sys_kind_host[t * n_sat + s];
+      if (sk < 0 || sk >= nc) { eff_w_out[idx] = 0.0; continue; }
+      double sx = my_sat[s * 3 + 0], sy = my_sat[s * 3 + 1], sz = my_sat[s * 3 + 2];
+      double dx0 = x - sx, dy0 = y - sy, dz0 = z - sz;
+      double r0 = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+      double transit = r0 / kC;
+      double theta = kOmegaE * transit;
+      double sx_rot = sx * cos(theta) + sy * sin(theta);
+      double sy_rot = -sx * sin(theta) + sy * cos(theta);
+      double dx = x - sx_rot, dy_v = y - sy_rot, dz = z - sz;
+      double r_geom = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      if (r_geom < 1e-6) { eff_w_out[idx] = 0.0; continue; }
+      double hc[kMaxClockVD];
+      fill_hc_int(nc, sk, hc);
+      double clk = 0.0;
+      for (int k = 0; k < nc; k++) clk += hc[k] * cptr[k];
+      double res = my_pr[s] - (r_geom + clk);
+      double z_m = sqrt(w) * std::fabs(res);
+      double v = (z_m <= huber_k) ? 1.0 : (huber_k / z_m);
+      eff_w_out[idx] = w * v;
+    }
+  }
+}
+
+// PR MSE for VD state
+double compute_pr_mse_host_vd(
+    int n_epoch, int n_sat, int nc, int ss,
+    const double* sat_ecef,
+    const double* pseudorange,
+    const double* weights,
+    const int* sys_kind_host,
+    const double* state) {
+  double sse = 0.0;
+  int cnt = 0;
+  for (int t = 0; t < n_epoch; t++) {
+    double x = state[t * ss + 0], y = state[t * ss + 1], z = state[t * ss + 2];
+    const double* cptr = state + t * ss + 6;
+    const double* my_sat = sat_ecef + (size_t)t * n_sat * 3;
+    const double* my_pr = pseudorange + (size_t)t * n_sat;
+    const double* my_w = weights + (size_t)t * n_sat;
+    for (int s = 0; s < n_sat; s++) {
+      double w = my_w[s];
+      if (w <= 0.0) continue;
+      int sk = sys_kind_host[t * n_sat + s];
+      if (sk < 0 || sk >= nc) continue;
+      double sx = my_sat[s * 3 + 0], sy = my_sat[s * 3 + 1], sz = my_sat[s * 3 + 2];
+      double dx0 = x - sx, dy0 = y - sy, dz0 = z - sz;
+      double r0 = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+      double transit = r0 / kC;
+      double theta = kOmegaE * transit;
+      double sx_rot = sx * cos(theta) + sy * sin(theta);
+      double sy_rot = -sx * sin(theta) + sy * cos(theta);
+      double dx = x - sx_rot, dy_v = y - sy_rot, dz = z - sz;
+      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      if (r < 1e-6) continue;
+      double hc[kMaxClockVD];
+      fill_hc_int(nc, sk, hc);
+      double clk = 0.0;
+      for (int k = 0; k < nc; k++) clk += hc[k] * cptr[k];
+      double res = my_pr[s] - (r + clk);
+      sse += w * res * res;
+      cnt++;
+    }
+  }
+  return cnt > 0 ? sse / cnt : 0.0;
+}
+
+}  // anonymous namespace
+
+int fgo_gnss_lm_vd(const double* sat_ecef,
+                   const double* pseudorange,
+                   const double* weights,
+                   const std::int32_t* sys_kind,
+                   int n_clock,
+                   double* state_io,
+                   int n_epoch,
+                   int n_sat,
+                   double motion_sigma_m,
+                   double clock_drift_sigma_m,
+                   int max_iter,
+                   double tol,
+                   double huber_k,
+                   int enable_line_search,
+                   double* out_mse_pr,
+                   const double* sat_vel,
+                   const double* doppler,
+                   const double* doppler_weights,
+                   const double* dt) {
+  if (n_epoch < 1 || n_sat < 4 || !sat_ecef || !pseudorange || !weights || !state_io) return -1;
+  if (n_clock < 1 || n_clock > kMaxClockVD) return -1;
+
+  const int ss = 7 + n_clock;  // x,y,z,vx,vy,vz,clk...,drift
+  const int n_state = ss * n_epoch;
+  if (n_state > 16384) return -1;  // larger limit for extended state
+
+  std::vector<int> sys_buf((size_t)n_epoch * n_sat, 0);
+  if (sys_kind != nullptr) {
+    for (size_t i = 0; i < sys_buf.size(); i++)
+      sys_buf[i] = static_cast<int>(sys_kind[i]);
+  }
+  const int* sys_host = sys_buf.data();
+
+  size_t sz_state = (size_t)n_state * sizeof(double);
+  size_t sz_sat = (size_t)n_epoch * n_sat * 3 * sizeof(double);
+  size_t sz_ws = (size_t)n_epoch * n_sat * sizeof(double);
+  size_t sz_H = (size_t)n_state * n_state * sizeof(double);
+  size_t sz_sys = (size_t)n_epoch * n_sat * sizeof(int);
+
+  double *d_state = nullptr, *d_sat = nullptr, *d_pr = nullptr, *d_w = nullptr;
+  double *d_H = nullptr, *d_g = nullptr;
+  int* d_sys = nullptr;
+
+  CUDA_CHECK(cudaMalloc(&d_state, sz_state));
+  CUDA_CHECK(cudaMalloc(&d_sat, sz_sat));
+  CUDA_CHECK(cudaMalloc(&d_pr, sz_ws));
+  CUDA_CHECK(cudaMalloc(&d_w, sz_ws));
+  CUDA_CHECK(cudaMalloc(&d_H, sz_H));
+  CUDA_CHECK(cudaMalloc(&d_g, sz_state));
+  CUDA_CHECK(cudaMalloc(&d_sys, sz_sys));
+  CUDA_CHECK(cudaMemcpy(d_sys, sys_host, sz_sys, cudaMemcpyHostToDevice));
+
+  CUDA_CHECK(cudaMemcpy(d_state, state_io, sz_state, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_sat, sat_ecef, sz_sat, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_pr, pseudorange, sz_ws, cudaMemcpyHostToDevice));
+
+  double* h_H = (double*)std::malloc(sz_H);
+  double* h_g = (double*)std::malloc(sz_state);
+  double* h_delta = (double*)std::malloc(sz_state);
+  double* h_work = (double*)std::malloc(sz_H);
+  double* trial = (double*)std::malloc(sz_state);
+  double* h_eff_w = (double*)std::malloc(sz_ws);
+  if (!h_H || !h_g || !h_delta || !h_work || !trial || !h_eff_w) {
+    if (h_H) std::free(h_H);
+    if (h_g) std::free(h_g);
+    if (h_delta) std::free(h_delta);
+    if (h_work) std::free(h_work);
+    if (trial) std::free(trial);
+    if (h_eff_w) std::free(h_eff_w);
+    cudaFree(d_state); cudaFree(d_sat); cudaFree(d_pr); cudaFree(d_w);
+    cudaFree(d_H); cudaFree(d_g); cudaFree(d_sys);
+    return -1;
+  }
+
+  double w_motion = 0.0;
+  if (motion_sigma_m > 0.0) w_motion = 1.0 / (motion_sigma_m * motion_sigma_m);
+
+  double w_clkdrift = 0.0;
+  if (clock_drift_sigma_m > 0.0) w_clkdrift = 1.0 / (clock_drift_sigma_m * clock_drift_sigma_m);
+
+  int total_iters = 0;
+  bool ok = false;
+  const int block = 256;
+
+  for (int it = 0; it < max_iter; it++) {
+    effective_pr_weights_huber_host_vd(
+        n_epoch, n_sat, n_clock, ss, sat_ecef, pseudorange, weights, sys_host, state_io,
+        huber_k, h_eff_w);
+    CUDA_CHECK(cudaMemcpy(d_w, h_eff_w, sz_ws, cudaMemcpyHostToDevice));
+
+    CUDA_CHECK(cudaMemset(d_H, 0, sz_H));
+    CUDA_CHECK(cudaMemset(d_g, 0, sz_state));
+
+    int grid_pr = (n_epoch + block - 1) / block;
+    fgo_assemble_pseudorange_vd<<<grid_pr, block>>>(
+        n_epoch, n_sat, n_clock, ss, n_state, d_sat, d_pr, d_w, d_sys, d_state, d_H, d_g);
+    CUDA_CHECK_LAST();
+
+    CUDA_CHECK(cudaMemcpy(h_H, d_H, sz_H, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_g, d_g, sz_state, cudaMemcpyDeviceToHost));
+
+    // Add host-side factors
+    add_motion_factor_host(n_epoch, ss, n_state, w_motion, state_io, dt, h_H, h_g);
+    add_clock_drift_factor_host(n_epoch, n_clock, ss, n_state, w_clkdrift, state_io, dt, h_H, h_g);
+    add_doppler_factor_host(n_epoch, n_sat, n_clock, ss, n_state,
+                            sat_ecef, sat_vel, doppler, doppler_weights, sys_host, state_io,
+                            h_H, h_g);
+
+    double cost_before =
+        pr_cost_host_vd(n_epoch, n_sat, n_clock, ss, sat_ecef, pseudorange, weights, sys_host, state_io, huber_k)
+        + motion_factor_cost_host(n_epoch, ss, w_motion, state_io, dt)
+        + clock_drift_cost_host(n_epoch, n_clock, ss, w_clkdrift, state_io, dt)
+        + doppler_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, sat_vel, doppler, doppler_weights, state_io);
+
+    // NOTE: Unlike the original fgo_gnss_lm which negates h_g, the VD solver
+    // solves H * delta = g directly. All factors accumulate g = J^T * W * r
+    // (the RHS of the Gauss-Newton normal equation), so the correct step is
+    // delta = H^{-1} * g without negation.
+
+    std::memcpy(h_work, h_H, sz_H);
+    // Diagonal regularization: stronger for velocity/drift to ensure
+    // positive definiteness even when unconstrained by factors.
+    // Velocity (indices 3,4,5) and drift (index 6+nc) get ~1e6 times
+    // stronger regularization than position/clock, which is still very
+    // weak (equivalent to a 1000 m/s sigma prior).
+    {
+      constexpr double kVelDriftJitter = 1e-6;  // weak prior ~1000 m/s sigma
+      for (int t2 = 0; t2 < n_epoch; t2++) {
+        int off = ss * t2;
+        for (int d2 = 0; d2 < ss; d2++) {
+          double jit = kDiagJitter;
+          if (d2 >= 3 && d2 <= 5) jit = kVelDriftJitter;  // velocity
+          if (d2 == 6 + n_clock) jit = kVelDriftJitter;    // drift
+          h_work[(size_t)(off + d2) * n_state + (off + d2)] += jit;
+        }
+      }
+    }
+    if (!cholesky_decompose_inplace(n_state, h_work)) {
+      break;
+    }
+    cholesky_solve_lower(n_state, h_work, h_g, h_delta);
+
+    double step_norm = 0.0;
+    for (int i = 0; i < n_state; i++) step_norm += h_delta[i] * h_delta[i];
+    step_norm = sqrt(step_norm);
+
+    bool accepted = false;
+    if (!enable_line_search) {
+      for (int i = 0; i < n_state; i++) state_io[i] += h_delta[i];
+      accepted = true;
+    } else {
+      double alpha = 1.0;
+      for (int ls = 0; ls < 12; ls++) {
+        for (int i = 0; i < n_state; i++) trial[i] = state_io[i] + alpha * h_delta[i];
+        double ctry =
+            pr_cost_host_vd(n_epoch, n_sat, n_clock, ss, sat_ecef, pseudorange, weights, sys_host, trial, huber_k)
+            + motion_factor_cost_host(n_epoch, ss, w_motion, trial, dt)
+            + clock_drift_cost_host(n_epoch, n_clock, ss, w_clkdrift, trial, dt)
+            + doppler_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, sat_vel, doppler, doppler_weights, trial);
+        if (ctry <= cost_before * (1.0 + 1e-12)) {
+          std::memcpy(state_io, trial, sz_state);
+          accepted = true;
+          break;
+        }
+        alpha *= 0.5;
+      }
+    }
+
+    CUDA_CHECK(cudaMemcpy(d_state, state_io, sz_state, cudaMemcpyHostToDevice));
+
+    total_iters++;
+    ok = true;
+    if (accepted && step_norm < tol) break;
+    if (!accepted) break;
+  }
+
+  if (out_mse_pr)
+    *out_mse_pr = compute_pr_mse_host_vd(n_epoch, n_sat, n_clock, ss, sat_ecef, pseudorange, weights, sys_host, state_io);
+
+  std::free(h_H);
+  std::free(h_g);
+  std::free(h_delta);
+  std::free(h_work);
+  std::free(trial);
+  std::free(h_eff_w);
+  CUDA_CHECK(cudaFree(d_state));
+  CUDA_CHECK(cudaFree(d_sat));
+  CUDA_CHECK(cudaFree(d_pr));
+  CUDA_CHECK(cudaFree(d_w));
+  CUDA_CHECK(cudaFree(d_H));
+  CUDA_CHECK(cudaFree(d_g));
+  CUDA_CHECK(cudaFree(d_sys));
+
+  return ok ? total_iters : -1;
+}
+
 }  // namespace gnss_gpu

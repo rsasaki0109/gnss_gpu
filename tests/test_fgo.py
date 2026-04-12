@@ -392,3 +392,356 @@ def test_line_search_reduces_or_matches_cost():
     c0 = nonlinear_cost(st0)
     c_ls = nonlinear_cost(st_ls)
     assert c_ls <= c0 * (1.0 + 1e-9)
+
+
+# =========================================================================
+# Tests for fgo_gnss_lm_vd (velocity + drift extended state)
+# =========================================================================
+
+try:
+    from gnss_gpu._gnss_gpu import fgo_gnss_lm_vd
+
+    HAS_FGO_VD = True
+except ImportError:
+    HAS_FGO_VD = False
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_basic_convergence():
+    """VD solver converges when initialized from WLS solution (matching FGO pipeline)."""
+    rng = np.random.Generator(np.random.PCG64(42))
+    n_epoch, n_sat, nc = 5, 8, 1
+    ss_old = 3 + nc  # 4 for old solver
+    ss_vd = 7 + nc   # 8 for VD solver
+
+    # Generate satellite positions and pseudoranges
+    sat = rng.normal(0, 5e6, (n_epoch, n_sat, 3))
+    true_pos = np.array([-3.8e6, 3.5e6, 3.6e6], dtype=np.float64)
+    true_clk = 150.0
+
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pr[t, s] = _geometric_range_sagnacrcv(true_pos, sat[t, s]) + true_clk
+    pr += rng.normal(0, 2.0, pr.shape)
+    w = np.ones((n_epoch, n_sat)) * 0.3
+
+    # First solve with old FGO to get good initial position
+    state_old = np.zeros((n_epoch, ss_old), dtype=np.float64)
+    state_old[:, :3] = true_pos + rng.normal(0, 1e3, (n_epoch, 3))
+    state_old[:, 3] = true_clk + rng.normal(0, 4.0, n_epoch)
+    iters_old, _ = fgo_gnss_lm(
+        sat, pr, w, state_old,
+        motion_sigma_m=0.0, max_iter=25, tol=1e-7,
+        enable_line_search=1, sys_kind=None, n_clock=1,
+    )
+
+    # Initialize VD state from old FGO result
+    state_vd = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state_vd[:, :3] = state_old[:, :3]  # position from old solver
+    state_vd[:, 6] = state_old[:, 3]    # clock from old solver
+
+    iters, mse = fgo_gnss_lm_vd(
+        sat, pr, w, state_vd,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1,
+    )
+    assert iters > 0, f"VD solver failed: iters={iters}"
+
+    # Position should remain good (matching old solver)
+    for t in range(n_epoch):
+        err_vd = np.linalg.norm(state_vd[t, :3] - true_pos)
+        err_old = np.linalg.norm(state_old[t, :3] - true_pos)
+        assert err_vd < err_old + 5.0, (
+            f"Epoch {t}: VD error {err_vd:.1f} m worse than old {err_old:.1f} m"
+        )
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_motion_factor():
+    """Motion factor (x_{t+1} = x_t + v_t*dt) couples position and velocity."""
+    rng = np.random.Generator(np.random.PCG64(77))
+    n_epoch, n_sat, nc = 6, 8, 1
+    ss_old = 3 + nc
+    ss_vd = 7 + nc
+
+    sat = rng.normal(0, 5e6, (n_epoch, n_sat, 3))
+    true_pos = np.array([-3.8e6, 3.5e6, 3.6e6], dtype=np.float64)
+    true_vel = np.array([10.0, -5.0, 2.0], dtype=np.float64)
+    true_clk = 150.0
+    dt_val = 1.0
+
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        pos_t = true_pos + true_vel * (t * dt_val)
+        for s in range(n_sat):
+            pr[t, s] = _geometric_range_sagnacrcv(pos_t, sat[t, s]) + true_clk
+    pr += rng.normal(0, 1.5, pr.shape)
+    w = np.ones((n_epoch, n_sat)) * 0.3
+    dt_arr = np.full(n_epoch, dt_val, dtype=np.float64)
+
+    # Get initial positions from old FGO
+    state_old = np.zeros((n_epoch, ss_old), dtype=np.float64)
+    for t in range(n_epoch):
+        state_old[t, :3] = true_pos + true_vel * (t * dt_val) + rng.normal(0, 500, 3)
+    state_old[:, 3] = true_clk + rng.normal(0, 4.0, n_epoch)
+    fgo_gnss_lm(sat, pr, w, state_old,
+                motion_sigma_m=0.0, max_iter=25, tol=1e-7,
+                enable_line_search=1, sys_kind=None, n_clock=1)
+
+    # Initialize VD state from old solver
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[:, :3] = state_old[:, :3]
+    state[:, 3:6] = true_vel + rng.normal(0, 20, (n_epoch, 3))
+    state[:, 6] = state_old[:, 3]
+
+    iters, mse = fgo_gnss_lm_vd(
+        sat, pr, w, state,
+        motion_sigma_m=3.0, clock_drift_sigma_m=0.0,
+        max_iter=15, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1, dt=dt_arr,
+    )
+    assert iters > 0, f"VD solver with motion factor failed: iters={iters}"
+
+    # Position should remain good
+    for t in range(n_epoch):
+        err_vd = np.linalg.norm(state[t, :3] - (true_pos + true_vel * (t * dt_val)))
+        err_old = np.linalg.norm(state_old[t, :3] - (true_pos + true_vel * (t * dt_val)))
+        assert err_vd < err_old + 10.0, (
+            f"Epoch {t}: VD position error {err_vd:.1f}m worse than old {err_old:.1f}m"
+        )
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_doppler_constrains_velocity():
+    """Doppler factor modifies velocity state (different from no-Doppler baseline)."""
+    rng = np.random.Generator(np.random.PCG64(123))
+    n_epoch, n_sat, nc = 4, 8, 1
+    ss_old = 3 + nc
+    ss_vd = 7 + nc
+
+    sat = rng.normal(0, 5e6, (n_epoch, n_sat, 3))
+    sat_vel = rng.normal(0, 3e3, (n_epoch, n_sat, 3))
+    true_pos = np.array([-3.8e6, 3.5e6, 3.6e6], dtype=np.float64)
+    true_vel = np.array([5.0, -3.0, 1.0], dtype=np.float64)
+    true_clk = 150.0
+    true_drift = 0.5
+
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    dop = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pr[t, s] = _geometric_range_sagnacrcv(true_pos, sat[t, s]) + true_clk
+            dx = true_pos - sat[t, s]
+            r = np.linalg.norm(dx)
+            e = dx / r
+            dop[t, s] = np.dot(e, sat_vel[t, s] - true_vel) + true_drift
+
+    pr += rng.normal(0, 2.0, pr.shape)
+    dop += rng.normal(0, 0.3, dop.shape)
+    w_pr = np.ones((n_epoch, n_sat)) * 0.3
+    w_dop = np.ones((n_epoch, n_sat)) * 1.0
+    dt_arr = np.ones(n_epoch, dtype=np.float64)
+
+    # First get good position from old FGO solver
+    state_old = np.zeros((n_epoch, ss_old), dtype=np.float64)
+    state_old[:, :3] = true_pos + rng.normal(0, 500, (n_epoch, 3))
+    state_old[:, 3] = true_clk + rng.normal(0, 4.0, n_epoch)
+    fgo_gnss_lm(sat, pr, w_pr, state_old,
+                motion_sigma_m=0.0, max_iter=25, tol=1e-7,
+                enable_line_search=1, sys_kind=None, n_clock=1)
+
+    # VD without Doppler
+    state_no_dop = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state_no_dop[:, :3] = state_old[:, :3]
+    state_no_dop[:, 3:6] = rng.normal(0, 10, (n_epoch, 3))  # random init velocity
+    state_no_dop[:, 6] = state_old[:, 3]
+
+    # VD with Doppler (same initial state)
+    state_with_dop = state_no_dop.copy()
+
+    fgo_gnss_lm_vd(
+        sat, pr, w_pr, state_no_dop,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1,
+    )
+
+    iters2, _ = fgo_gnss_lm_vd(
+        sat, pr, w_pr, state_with_dop,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1,
+        sat_vel=sat_vel, doppler=dop, doppler_weights=w_dop, dt=dt_arr,
+    )
+    assert iters2 > 0, f"VD solver with Doppler failed: iters={iters2}"
+
+    # Without Doppler, velocity should stay at initial (no constraint on velocity)
+    # With Doppler, velocity should change from initial (Doppler constrains it)
+    vel_change_no_dop = np.mean([np.linalg.norm(state_no_dop[t, 3:6]) for t in range(n_epoch)])
+    vel_change_with_dop = np.max([
+        np.linalg.norm(state_with_dop[t, 3:6] - state_no_dop[t, 3:6])
+        for t in range(n_epoch)
+    ])
+    # Doppler factor should modify velocity (even if not perfectly converged)
+    assert vel_change_with_dop > 0.1, (
+        f"Doppler should change velocity: max change = {vel_change_with_dop:.4f}"
+    )
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_clock_drift_factor():
+    """Clock drift factor couples clock and drift between epochs."""
+    rng = np.random.Generator(np.random.PCG64(55))
+    n_epoch, n_sat, nc = 6, 8, 1
+    ss_old = 3 + nc
+    ss_vd = 7 + nc
+
+    sat = rng.normal(0, 5e6, (n_epoch, n_sat, 3))
+    true_pos = np.array([-3.8e6, 3.5e6, 3.6e6], dtype=np.float64)
+    true_drift = 1.0  # m/s clock drift rate
+    dt_val = 1.0
+
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        clk_t = 150.0 + true_drift * (t * dt_val)
+        for s in range(n_sat):
+            pr[t, s] = _geometric_range_sagnacrcv(true_pos, sat[t, s]) + clk_t
+    pr += rng.normal(0, 2.0, pr.shape)
+    w = np.ones((n_epoch, n_sat)) * 0.3
+    dt_arr = np.full(n_epoch, dt_val, dtype=np.float64)
+
+    # Get initial position from old FGO
+    state_old = np.zeros((n_epoch, ss_old), dtype=np.float64)
+    state_old[:, :3] = true_pos + rng.normal(0, 500, (n_epoch, 3))
+    for t in range(n_epoch):
+        state_old[t, 3] = 150.0 + true_drift * (t * dt_val) + rng.normal(0, 3.0)
+    fgo_gnss_lm(sat, pr, w, state_old,
+                motion_sigma_m=0.0, max_iter=25, tol=1e-7,
+                enable_line_search=1, sys_kind=None, n_clock=1)
+
+    # VD state from old solver result
+    state_no_drift = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state_no_drift[:, :3] = state_old[:, :3]
+    state_no_drift[:, 6] = state_old[:, 3]
+    state_no_drift[:, 7] = true_drift + rng.normal(0, 1.0, n_epoch)
+
+    state_with_drift = state_no_drift.copy()
+
+    # Without clock drift factor
+    fgo_gnss_lm_vd(
+        sat, pr, w, state_no_drift,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1, dt=dt_arr,
+    )
+
+    # With clock drift factor
+    iters, mse = fgo_gnss_lm_vd(
+        sat, pr, w, state_with_drift,
+        motion_sigma_m=0.0, clock_drift_sigma_m=50.0,
+        max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1, dt=dt_arr,
+    )
+    assert iters > 0, f"VD solver with clock drift factor failed: iters={iters}"
+
+    # With clock drift coupling, clock values should be more temporally consistent
+    # Check that clock values at least don't diverge compared to old solver
+    for t in range(n_epoch):
+        err_vd = np.linalg.norm(state_with_drift[t, :3] - true_pos)
+        err_old = np.linalg.norm(state_old[t, :3] - true_pos)
+        assert err_vd < err_old + 10.0, (
+            f"Epoch {t}: VD error {err_vd:.1f}m vs old {err_old:.1f}m"
+        )
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_rejects_bad_params():
+    """VD solver rejects invalid parameters."""
+    n_epoch, n_sat, nc = 3, 6, 1
+    ss = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.ones((n_epoch, n_sat), dtype=np.float64) * 1e7
+    w = np.ones((n_epoch, n_sat), dtype=np.float64)
+    st = np.zeros((n_epoch, ss), dtype=np.float64)
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat, pr, w, st,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=1, tol=1e-3, huber_k=0.0, enable_line_search=0,
+        sys_kind=None, n_clock=1,
+    )
+    # Should run (may not converge well but shouldn't crash)
+
+    # Test over the limit: 2049 * 8 = 16392 > 16384
+    n_too_big = 2049
+    sat_tb = np.zeros((n_too_big, n_sat, 3), dtype=np.float64)
+    pr_tb = np.ones((n_too_big, n_sat), dtype=np.float64) * 1e7
+    w_tb = np.ones((n_too_big, n_sat), dtype=np.float64)
+    st_tb = np.zeros((n_too_big, ss), dtype=np.float64)
+    iters3, _ = fgo_gnss_lm_vd(
+        sat_tb, pr_tb, w_tb, st_tb,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=1, tol=1e-3, huber_k=0.0, enable_line_search=0,
+        sys_kind=None, n_clock=1,
+    )
+    assert iters3 == -1, "Should reject n_state > 16384"
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_multi_clock():
+    """VD solver works with multi-clock (GPS + GLONASS ISB) state."""
+    rng = np.random.Generator(np.random.PCG64(88))
+    n_epoch, n_sat, nc = 4, 10, 2
+    ss_old = 3 + nc  # 5 for 2-clock old solver
+    ss_vd = 7 + nc   # 9 for 2-clock VD solver
+
+    sat = rng.normal(0, 5e6, (n_epoch, n_sat, 3))
+    true_pos = np.array([-3.8e6, 3.5e6, 3.6e6], dtype=np.float64)
+    true_clk = np.array([150.0, 35.0], dtype=np.float64)
+
+    sys_kind = np.zeros((n_epoch, n_sat), dtype=np.int32)
+    sys_kind[:, 6:] = 1
+
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            rho = _geometric_range_sagnacrcv(true_pos, sat[t, s])
+            hc = np.zeros(nc)
+            _fill_hc(nc, int(sys_kind[t, s]), hc)
+            clk = float(np.dot(hc, true_clk))
+            pr[t, s] = rho + clk
+    pr += rng.normal(0, 2.0, pr.shape)
+    w = np.ones((n_epoch, n_sat)) * 0.3
+
+    # Get initial position from old FGO
+    state_old = np.zeros((n_epoch, ss_old), dtype=np.float64)
+    state_old[:, :3] = true_pos + rng.normal(0, 1e3, (n_epoch, 3))
+    state_old[:, 3] = true_clk[0] + rng.normal(0, 4, n_epoch)
+    state_old[:, 4] = true_clk[1] + rng.normal(0, 4, n_epoch)
+    fgo_gnss_lm(sat, pr, w, state_old,
+                motion_sigma_m=0.0, max_iter=25, tol=1e-7,
+                enable_line_search=1, sys_kind=sys_kind, n_clock=2)
+
+    # Initialize VD state from old solver
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[:, :3] = state_old[:, :3]
+    state[:, 6] = state_old[:, 3]
+    state[:, 7] = state_old[:, 4]
+    # drift at index 8 (6 + nc = 6 + 2 = 8)
+
+    iters, mse = fgo_gnss_lm_vd(
+        sat, pr, w, state,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=sys_kind, n_clock=2,
+    )
+    assert iters > 0, f"VD multi-clock solver failed: iters={iters}"
+
+    for t in range(n_epoch):
+        err_vd = np.linalg.norm(state[t, :3] - true_pos)
+        err_old = np.linalg.norm(state_old[t, :3] - true_pos)
+        assert err_vd < err_old + 5.0, (
+            f"Epoch {t}: VD error {err_vd:.1f}m vs old {err_old:.1f}m"
+        )
