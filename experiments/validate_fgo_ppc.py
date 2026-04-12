@@ -37,6 +37,7 @@ from gnss_gpu.io.nav_rinex import (  # noqa: E402
     read_nav_rinex,
 )
 from gnss_gpu.spp import correct_pseudoranges  # noqa: E402
+from gtsam_public_dataset import SYS_ID_TO_KIND  # noqa: E402
 
 C_LIGHT = 299792458.0
 
@@ -96,7 +97,10 @@ def _nearest_ref_error_3d(
 def _run_rtklib_export(
     exe: Path, obs_p: Path, nav_p: Path, el_mask_deg: float,
 ) -> dict[tuple[int, float, str], dict[str, float]]:
-    """Run export_spp_meas and parse CSV."""
+    """Run export_spp_meas and parse CSV.
+
+    Supports both old (GPS-only) and new multi-GNSS format (with ``sys_id`` column).
+    """
     import subprocess
     import tempfile
 
@@ -132,6 +136,9 @@ def _run_rtklib_export(
                 d["rx_vx"] = float(row["rx_vx"])
                 d["rx_vy"] = float(row["rx_vy"])
                 d["rx_vz"] = float(row["rx_vz"])
+            # Multi-GNSS sys_id column (backward compatible)
+            if "sys_id" in row and row["sys_id"]:
+                d["sys_id"] = row["sys_id"].strip()  # type: ignore[assignment]
             out[(wk, tow, sid)] = d
     tmp_p.unlink(missing_ok=True)
     return out
@@ -146,6 +153,7 @@ def run_fgo_on_ppc(
     fgo_iters: int = 8,
     export_spp: Path | None = None,
     use_doppler: bool = False,
+    multi_gnss: bool = False,
 ) -> dict:
     """Run RTKLIB-aligned FGO on a PPC run and return results."""
     obs_p = run_dir / "rover.obs"
@@ -165,6 +173,11 @@ def run_fgo_on_ppc(
     if export_spp is not None:
         rtk_meas = _run_rtklib_export(export_spp, obs_p, nav_p, el_mask_deg)
 
+    # Determine which satellite system prefixes to accept
+    _accept_prefixes = ("G",)
+    if multi_gnss and rtk_meas is not None:
+        _accept_prefixes = ("G", "E", "J")
+
     # Build epoch list from RINEX (also extract Doppler D1C if needed)
     epochs_data: list[tuple[float, list[str], np.ndarray, int]] = []
     doppler_data: list[dict[str, float]] = []  # per-epoch: sat_id -> D1C
@@ -173,7 +186,7 @@ def run_fgo_on_ppc(
         pr_map: dict[str, float] = {}
         dop_map: dict[str, float] = {}
         for sat, obs in ep.observations.items():
-            if not sat.startswith("G"):
+            if not any(sat.startswith(p) for p in _accept_prefixes):
                 continue
             if "C1C" in obs and obs["C1C"] and obs["C1C"] != 0.0:
                 pr_map[sat] = obs["C1C"]
@@ -200,6 +213,17 @@ def run_fgo_on_ppc(
     sat_ecef = np.zeros((n_epoch, max_sats, 3), dtype=np.float64)
     pseudorange = np.zeros((n_epoch, max_sats), dtype=np.float64)
     weights = np.zeros((n_epoch, max_sats), dtype=np.float64)
+
+    # Build sys_kind for multi-GNSS ISB
+    has_multi = multi_gnss and rtk_meas is not None
+    n_clock = 3 if has_multi else 1
+    sys_kind_arr: np.ndarray | None = None
+    if has_multi:
+        sys_kind_arr = np.zeros((n_epoch, max_sats), dtype=np.int32)
+        for t_sk, (_tow_sk, sats_sk, _pr_sk, _wk_sk) in enumerate(epochs_data):
+            for si_sk, sid_sk in enumerate(sats_sk):
+                prefix = sid_sk[0] if sid_sk else "G"
+                sys_kind_arr[t_sk, si_sk] = SYS_ID_TO_KIND.get(prefix, 0)
 
     approx0 = rinex.header.approx_position.copy()
 
@@ -244,7 +268,7 @@ def run_fgo_on_ppc(
         pseudorange[t, :ns] = pr_tmp
         weights[t, :ns] = w_tmp
 
-    # WLS
+    # WLS (single-clock for position seed; multi-clock handled by FGO)
     wls_state = np.zeros((n_epoch, 4), dtype=np.float64)
     for t2 in range(n_epoch):
         w = weights[t2]
@@ -278,10 +302,13 @@ def run_fgo_on_ppc(
             if 0 < dt_ep < 10:
                 motion_disp[t_d] = rx_vel * dt_ep
 
-    # FGO
-    fgo_state = wls_state.copy()
+    # FGO — expand state to (T, 3+n_clock) for multi-GNSS ISB
+    fgo_state = np.zeros((n_epoch, 3 + n_clock), dtype=np.float64)
+    fgo_state[:, :4] = wls_state  # xyz + GPS clock from WLS
     iters, mse_pr = fgo_gnss_lm(
         sat_ecef, pseudorange, weights, fgo_state,
+        sys_kind=sys_kind_arr,
+        n_clock=n_clock,
         motion_sigma_m=motion_sigma_m, max_iter=fgo_iters, tol=1e-7,
         motion_displacement=motion_disp,
     )
@@ -308,6 +335,7 @@ def run_fgo_on_ppc(
         "run": str(run_dir.relative_to(run_dir.parents[2])) if run_dir.parents[2].exists() else run_dir.name,
         "n_epoch": n_epoch,
         "max_sats": max_sats,
+        "n_clock": n_clock,
         "fgo_iters": iters,
         "rms_wls_2d": rms_wls_2d,
         "rms_fgo_2d": rms_fgo_2d,
@@ -315,6 +343,7 @@ def run_fgo_on_ppc(
         "rms_fgo_3d": rms_fgo_3d,
         "p95_fgo_2d": p95_fgo_2d,
         "export_spp": str(export_spp) if export_spp else "(off)",
+        "multi_gnss": multi_gnss,
     }
 
 
@@ -329,6 +358,8 @@ def main() -> None:
     p.add_argument("--fgo-iters", type=int, default=8)
     p.add_argument("--no-rtklib", action="store_true", help="Skip RTKLIB export_spp_meas")
     p.add_argument("--doppler", action="store_true", help="Use Doppler velocity for motion model")
+    p.add_argument("--multi-gnss", action="store_true",
+                   help="Use GPS+Galileo+QZSS with ISB (n_clock=3)")
     args = p.parse_args()
 
     ppc_root = args.ppc_root or _DEFAULT_PPC_ROOT
@@ -356,11 +387,13 @@ def main() -> None:
                 fgo_iters=args.fgo_iters,
                 export_spp=export_spp,
                 use_doppler=args.doppler,
+                multi_gnss=args.multi_gnss,
             )
             results.append(r)
-            print(f"  {r['run']:20s}  epochs={r['n_epoch']:4d}  "
+            gnss_tag = f"clk={r['n_clock']}" if r.get("multi_gnss") else ""
+            print(f"  {r['run']:20s}  epochs={r['n_epoch']:4d}  sats={r['max_sats']:2d}  "
                   f"WLS 2D={r['rms_wls_2d']:7.2f}m  FGO 2D={r['rms_fgo_2d']:7.2f}m  "
-                  f"P95={r['p95_fgo_2d']:7.2f}m  3D={r['rms_fgo_3d']:7.2f}m")
+                  f"P95={r['p95_fgo_2d']:7.2f}m  3D={r['rms_fgo_3d']:7.2f}m  {gnss_tag}")
         except Exception as e:
             print(f"  {run_name}: ERROR {e}")
 

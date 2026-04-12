@@ -41,4 +41,42 @@ int fgo_gnss_lm(const double* sat_ecef,
                 double* out_mse_pr,
                 const double* motion_displacement = nullptr);
 
+// Extended FGO with velocity state + clock drift + Doppler factor.
+//
+// Per-epoch state layout:
+//   [x, y, z, vx, vy, vz, c0, ..., c_{nc-1}, drift]
+//   ss = 3 + 3 + n_clock + 1 = 7 + n_clock
+//
+// Pseudorange factor constrains position + clock (same model as fgo_gnss_lm).
+// Motion factor: x_{t+1} ≈ x_t + v_t * dt (position-velocity coupling).
+// Clock drift factor: c0_{t+1} ≈ c0_t + drift_t * dt.
+// Doppler factor: doppler_obs ≈ (sat_vel - rx_vel) · unit_vec + drift
+//   constrains velocity [vx,vy,vz] and drift.
+//
+// sat_vel: [T, S, 3] satellite velocity ECEF (m/s).
+// doppler: [T, S] Doppler pseudorange-rate (m/s), 0 means unobserved.
+// doppler_weights: [T, S] weights for Doppler observations.
+// dt: [T] time differences between consecutive epochs (seconds); dt[T-1] unused.
+//
+// Returns iterations completed on success, -1 on failure.
+int fgo_gnss_lm_vd(const double* sat_ecef,
+                   const double* pseudorange,
+                   const double* weights,
+                   const std::int32_t* sys_kind,
+                   int n_clock,
+                   double* state_io,
+                   int n_epoch,
+                   int n_sat,
+                   double motion_sigma_m,
+                   double clock_drift_sigma_m,
+                   int max_iter,
+                   double tol,
+                   double huber_k,
+                   int enable_line_search,
+                   double* out_mse_pr,
+                   const double* sat_vel = nullptr,
+                   const double* doppler = nullptr,
+                   const double* doppler_weights = nullptr,
+                   const double* dt = nullptr);
+
 }  // namespace gnss_gpu

@@ -148,4 +148,99 @@ PYBIND11_MODULE(_gnss_gpu, m) {
       py::arg("huber_k") = 0.0, py::arg("enable_line_search") = 1, py::arg("sys_kind") = py::none(),
       py::arg("n_clock") = 1,
       py::arg("motion_displacement") = py::none());
+
+  // --- Extended FGO with velocity state + Doppler ---
+  m.def(
+      "fgo_gnss_lm_vd",
+      [](py::array_t<double> sat_ecef, py::array_t<double> pseudorange, py::array_t<double> weights,
+         py::array_t<double> state_io, double motion_sigma_m, double clock_drift_sigma_m,
+         int max_iter, double tol, double huber_k,
+         int enable_line_search, py::object sys_kind_py, int n_clock,
+         py::object sat_vel_py, py::object doppler_py, py::object doppler_weights_py,
+         py::object dt_py) {
+        auto bs = sat_ecef.request(), bp = pseudorange.request(), bw = weights.request();
+        auto bst = state_io.request();
+        if (bs.ndim != 3 || bp.ndim != 2 || bw.ndim != 2 || bst.ndim != 2)
+          throw std::runtime_error(
+              "fgo_gnss_lm_vd: expected sat_ecef [T,S,3], pr/weights [T,S], state [T,7+n_clock]");
+        int n_epoch = static_cast<int>(bs.shape[0]);
+        int n_sat = static_cast<int>(bs.shape[1]);
+        const int ss = 7 + n_clock;
+        if (bp.shape[0] != n_epoch || bw.shape[0] != n_epoch ||
+            static_cast<int>(bp.shape[1]) != n_sat || static_cast<int>(bw.shape[1]) != n_sat)
+          throw std::runtime_error("fgo_gnss_lm_vd: pseudorange/weights shape mismatch");
+        if (static_cast<int>(bst.shape[0]) != n_epoch || static_cast<int>(bst.shape[1]) != ss)
+          throw std::runtime_error("fgo_gnss_lm_vd: state_io must be [T, 7+n_clock]");
+        if (bst.readonly) throw std::runtime_error("fgo_gnss_lm_vd: state_io must be writable");
+        if (n_clock < 1 || n_clock > 4)
+          throw std::runtime_error("fgo_gnss_lm_vd: n_clock must be in 1..4");
+
+        const std::int32_t* sk_ptr = nullptr;
+        if (!sys_kind_py.is_none()) {
+          auto sk_arr = py::cast<py::array_t<std::int32_t>>(sys_kind_py);
+          auto skr = sk_arr.request();
+          if (skr.ndim != 2 || skr.shape[0] != n_epoch || skr.shape[1] != n_sat)
+            throw std::runtime_error("fgo_gnss_lm_vd: sys_kind must be int32 [T, S]");
+          sk_ptr = static_cast<const std::int32_t*>(skr.ptr);
+        } else if (n_clock > 1) {
+          throw std::runtime_error("fgo_gnss_lm_vd: sys_kind is required when n_clock > 1");
+        }
+
+        const double* sv_ptr = nullptr;
+        if (!sat_vel_py.is_none()) {
+          auto sv_arr = py::cast<py::array_t<double>>(sat_vel_py);
+          auto svr = sv_arr.request();
+          if (svr.size != n_epoch * n_sat * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: sat_vel must have T*S*3 elements");
+          sv_ptr = static_cast<const double*>(svr.ptr);
+        }
+
+        const double* dop_ptr = nullptr;
+        if (!doppler_py.is_none()) {
+          auto dop_arr = py::cast<py::array_t<double>>(doppler_py);
+          auto dopr = dop_arr.request();
+          if (dopr.size != n_epoch * n_sat)
+            throw std::runtime_error("fgo_gnss_lm_vd: doppler must have T*S elements");
+          dop_ptr = static_cast<const double*>(dopr.ptr);
+        }
+
+        const double* dw_ptr = nullptr;
+        if (!doppler_weights_py.is_none()) {
+          auto dw_arr = py::cast<py::array_t<double>>(doppler_weights_py);
+          auto dwr = dw_arr.request();
+          if (dwr.size != n_epoch * n_sat)
+            throw std::runtime_error("fgo_gnss_lm_vd: doppler_weights must have T*S elements");
+          dw_ptr = static_cast<const double*>(dwr.ptr);
+        }
+
+        const double* dt_ptr = nullptr;
+        if (!dt_py.is_none()) {
+          auto dt_arr = py::cast<py::array_t<double>>(dt_py);
+          auto dtr = dt_arr.request();
+          if (dtr.size != n_epoch)
+            throw std::runtime_error("fgo_gnss_lm_vd: dt must have T elements");
+          dt_ptr = static_cast<const double*>(dtr.ptr);
+        }
+
+        double mse = 0.0;
+        int iters = gnss_gpu::fgo_gnss_lm_vd(
+            static_cast<double*>(bs.ptr), static_cast<double*>(bp.ptr), static_cast<double*>(bw.ptr),
+            sk_ptr, n_clock, static_cast<double*>(bst.ptr), n_epoch, n_sat,
+            motion_sigma_m, clock_drift_sigma_m, max_iter,
+            tol, huber_k, enable_line_search, &mse,
+            sv_ptr, dop_ptr, dw_ptr, dt_ptr);
+        return py::make_tuple(iters, mse);
+      },
+      "GPU FGO with velocity state + Doppler factor. "
+      "State: [x,y,z,vx,vy,vz,clk...,drift] per epoch. "
+      "Motion factor couples position/velocity: x_{t+1} = x_t + v_t*dt. "
+      "Clock drift factor: clk_{t+1} = clk_t + drift_t*dt. "
+      "Doppler factor constrains velocity and drift.",
+      py::arg("sat_ecef"), py::arg("pseudorange"), py::arg("weights"), py::arg("state_io"),
+      py::arg("motion_sigma_m") = 0.0, py::arg("clock_drift_sigma_m") = 0.0,
+      py::arg("max_iter") = 25, py::arg("tol") = 1e-3,
+      py::arg("huber_k") = 0.0, py::arg("enable_line_search") = 1,
+      py::arg("sys_kind") = py::none(), py::arg("n_clock") = 1,
+      py::arg("sat_vel") = py::none(), py::arg("doppler") = py::none(),
+      py::arg("doppler_weights") = py::none(), py::arg("dt") = py::none());
 }
