@@ -76,7 +76,7 @@ from gnss_gpu.multi_gnss_quality import (
 from gnss_gpu.ekf import EKFPositioner
 from gnss_gpu.raim import raim_check, raim_fde
 from gnss_gpu.doppler import doppler_velocity, doppler_velocity_batch
-from gnss_gpu.fgo import fgo_gnss_lm
+from gnss_gpu.fgo import fgo_gnss_lm, fgo_gnss_lm_vd
 from gnss_gpu.signal_sim import SignalSimulator
 from gnss_gpu.urban_signal_sim import UrbanSignalSimulator
 from gnss_gpu.e2e_helpers import (
@@ -99,6 +99,7 @@ __all__ = [
     "wls_position",
     "wls_batch",
     "fgo_gnss_lm",
+    "fgo_gnss_lm_vd",
     # I/O
     "read_rinex_obs",
     "parse_nmea",
