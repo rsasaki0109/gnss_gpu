@@ -26,10 +26,8 @@ import numpy as np
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-PYTHON_DIR = os.path.join(REPO_ROOT, "python")
-for path in (PYTHON_DIR, REPO_ROOT):
-    if path not in sys.path:
-        sys.path.insert(0, path)
+# NOTE: Do NOT add python/ to sys.path — C extensions (.so) are only
+# available via pip install, not from the source tree directly.
 
 from gnss_gpu.io.citygml import parse_citygml
 from gnss_gpu.io.plateau import PlateauLoader
@@ -543,7 +541,6 @@ def generate_html(
   <div class="area" id="area"></div>
   <div id="stats"></div>
   <div id="epoch"></div>
-  <div id="meta">Map: OpenStreetMap<br>LOS/NLOS geometry: PLATEAU BVH<br>Synthetic sky: Earth-centered orbital surrogates<br>Labels: G=GPS R=GLONASS E=Galileo J=QZSS</div>
   <div id="legend">
     <span style="background:#00d4aa"></span>LOS &nbsp;
     <span style="background:#ff6b6b"></span>NLOS &nbsp;
@@ -576,17 +573,17 @@ const MAP_STYLE = {{
   sources: {{
     osm: {{
       type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png'],
+      tiles: ['https://basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}@2x.png'],
       tileSize: 256,
       maxzoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
+      attribution: '&copy; CARTO &copy; OpenStreetMap',
     }},
   }},
   layers: [
     {{
       id: 'bg',
       type: 'background',
-      paint: {{ 'background-color': '#e9e6dc' }},
+      paint: {{ 'background-color': '#0a0f1e' }},
     }},
     {{
       id: 'osm',
