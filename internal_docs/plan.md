@@ -721,7 +721,35 @@ pf.sigma_pos = original_sigma_pos  # restore
 
 ### 8.2 現在の状況 (2026-04-13 更新)
 
-優先度 A は完了。優先度 D (停車検知 dynamic sigma_pos) が最も有望な改善方向。
+優先度 D (停車検知) は実装・検証完了。RMS 5.04→4.81m (Odaiba), 9.53→8.92m (Shinjuku)。
+P50=1.38m は現構成の限界。1m 切りには DD pair 数の増加か TDCP predict が必要。
+
+#### 診断結果 (2026-04-13)
+
+DD pair 数と P50 の強い相関:
+- pairs=0: P50=3.854m
+- pairs=10: P50=1.418m
+- pairs=14: P50=1.191m
+- pairs≥17: **P50=0.899m (1m 切り達成)**
+
+epoch 2445-4890 で input pairs が median 9 に落ちる (base station coverage の穴)。
+last 20% (epoch 9780-12225) は P50=0.990m で既に 1m 切り。
+
+#### sigma_pos sweep 結果 (100K)
+
+| sigma_pos | stop_sigma | P50 | RMS |
+|---:|---:|---:|---:|
+| 1.2 | 0.3 | **1.38m** | 4.81m |
+| 1.0 | 0.3 | 1.42m | 4.71m |
+| 0.8 | 0.3 | 1.50m | **4.64m** |
+
+P50 重視: sp=1.2、RMS 重視: sp=0.8。トレードオフあり。
+
+#### 次の一手
+
+1. **TDCP predict の正しい実装** — 衛星速度補正済みコード (plan.md §3) を完成させる
+2. **DD pair が少ない区間 (epoch 2445-4890) の fallback 品質向上**
+3. **base station interpolation の改善** — base epoch が 1Hz、rover が 10Hz のマッチング
 
 ---
 
