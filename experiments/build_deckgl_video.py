@@ -570,27 +570,12 @@ const INITIAL_VIEW = {{
 
 const MAP_STYLE = {{
   version: 8,
-  sources: {{
-    osm: {{
-      type: 'raster',
-      tiles: ['https://basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}@2x.png'],
-      tileSize: 256,
-      maxzoom: 19,
-      attribution: '&copy; CARTO &copy; OpenStreetMap',
-    }},
-  }},
+  sources: {{}},
   layers: [
     {{
       id: 'bg',
       type: 'background',
       paint: {{ 'background-color': '#0a0f1e' }},
-    }},
-    {{
-      id: 'osm',
-      type: 'raster',
-      source: 'osm',
-      minzoom: 0,
-      maxzoom: 19,
     }},
   ],
 }};
