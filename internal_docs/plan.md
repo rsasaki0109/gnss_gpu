@@ -1,436 +1,861 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-04-07 JST（本稿を Claude 向けに長めに更新）  
-**現在の HEAD**: `d0c7436` (feature/carrier-phase-imu) — 作業ツリーは **多くの変更が未コミット**（実験スクリプト・`tdcp_velocity.py`・FFBSi 系・CUDA 祖先バッファ等）。コミット前に `git status` を必ず確認すること。  
-**ブランチ**: `feature/carrier-phase-imu` (PR #4 open, main から分岐)  
-**現フェーズ**: **TDCP ガイド付き PF** は Python 実装・単体テストまで完了。**系譜（genealogy）スムーザ** と公平比較スクリプトあり。仰角重み付き TDCP WLS を試したが効果はデータ区間依存。**1 m 切り**は引き続き carrier / wide-lane 統合が主戦場。  
-**FGO**: ユーザー方針で **やらない**（既存どおり）。
-
-### Claude へ（最初に読む順）
-
-1. 本ファイルの **§1.5**（TDCP ガイドの短い実測）と **§10**（残課題）
-2. `python/gnss_gpu/tdcp_velocity.py` — TDCP WLS（衛星運動・衛星時計補正済み）
-3. `python/gnss_gpu/particle_ffbsi.py` — genealogy / marginal FFBSi
-4. `experiments/exp_pf_smoother_eval.py` — `run_pf_with_optional_smoother`、**`--skip-valid-epochs`**
-5. `experiments/exp_gnss_compare_pf_ffbsi.py` — forward vs FFBSi の門番比較（`resampling` 一致が必須）
-6. PR #4 は **merge 禁止**（許可があるまで）
+**最終更新**: 2026-04-11 JST
+**現在の HEAD**: `4923ee2` (`feature/carrier-phase-imu`)
+**作業ツリー**: **dirty**。このファイルを含めて未コミット差分あり。
+**現フェーズ**: `DD pseudorange` / `DD carrier` / quality gate / support-skip / undiff fallback / carrier anchor / preset 化 / refactor までは実装済み。
+**今の主課題**: frozen preset `Odaiba SMTH P50=1.38m / RMS=5.04m` を regression test で守りつつ、精度改善を続ける。
+**FGO**: 使わない。PF の枠内で詰める。
+**PR #4**: 許可があるまで merge しない。
 
 ---
 
-## 0. 最初に読むもの
+## 0. まず最初に読む順
 
-1. `README.md` — 最新の全結果
-2. `internal_docs/plan.md` (これ)
-3. `internal_docs/experiments.md`
-4. `internal_docs/decisions.md`
-5. `python/gnss_gpu/particle_filter_device.py` — PF の Python API (position_update, cb_correct, smoother 含む)
-6. `include/gnss_gpu/pf_device.h` — CUDA API
+Claude に渡すときは、最初にここだけ読めば十分という順番を固定しておく。
 
----
+1. 本ファイルの **§1 現在の要約** と **§8 次にやるべきこと**
+2. `internal_docs/pf_smoother_api.md`
+3. `experiments/exp_pf_smoother_eval.py`
+4. `experiments/run_pf_smoother_odaiba_reference.sh`
+5. `tests/test_exp_pf_smoother_eval.py`
+6. `internal_docs/interfaces.md` の `PF Smoother 実験 API` 節
 
-## 1. 現在の結論
+この順に読めば、
 
-### 1.1 headline results (Odaiba, dual-frequency Trimble)
+- 何がもう実装済みか
+- 今の frozen reference は何か
+- どこがまだ不安定か
+- 次に何を固定すべきか
 
-| Method | P50 | P95 | RMS | >100m |
-|---|---:|---:|---:|---:|
-| RTKLIB demo5 | 2.67m | 32.41m | 13.08m | — |
-| SPP (gnssplusplus) | 1.66m | 12.96m | 63.25m | 0.08% |
-| **PF 100K (full stack)** | **1.65m** | **12.60m** | **6.45m** | **0%** |
-
-PF が RTKLIB demo5 に全指標で勝利。SPP の P50 にも匹敵 (1.65 vs 1.66)。
-
-### 1.2 Shinjuku (deep urban canyon)
-
-| Method | P50 | RMS |
-|---|---:|---:|
-| SPP | 3.01m | 18.12m |
-| PF 100K | 3.13m | 13.88m |
-| **PF 100K + residual/accel downweight** | **3.18m** | **13.28m** |
-
-RMS 27% 改善 (SPP比)。residual + PR accel downweighting で RMS がさらに改善 (13.88→13.28m)。
-
-### 1.3 HK-20190428 (supplemental, single-frequency ublox)
-
-| Method | P50 | P95 | RMS |
-|---|---:|---:|---:|
-| RTKLIB demo5 | 16.18m | 60.85m | 26.80m |
-| SPP | 15.27m | 43.72m | 23.71m |
-| **PF 100K** | **14.21m** | **41.60m** | **22.53m** |
-
-RTKLIB demo5 に P50 12%, P95 32%, RMS 16% 勝利。single-freq の限界あり → supplemental 扱い。
-
-### 1.4 GSDC 2023 (smartphone, supplemental)
-
-| Method | P50 | RMS |
-|---|---:|---:|
-| WLS (Android) | **1.92m** | **2.34m** |
-| PF 100K | 2.19m | 2.63m |
-
-PF は WLS に負け。GSDC は open-sky 寄りで NLOS 少ない → PF の temporal filtering の恩恵が少ない。PF は urban canyon で強い。
-
-### 1.5 短い実測メモ: PF + TDCP 速度ガイド + 仰角重み（100k 粒子, PU=1.95, σ_pos_tdcp=1.0）
-
-**前提**: 以下は `experiments/exp_pf_smoother_eval.py` 一行評価。**全区間フル run の headline 表（§1.1）とは条件が違う**（エポック数・ウィンドウ・PU 等）。相対比較用。
-
-| 設定 | 区間 | 仰角重み | P50 | RMS 2D |
-|---|------|---------|-----|--------|
-| Odaiba | 先頭 500 有効 ep | off | 0.78 m | 0.86 m |
-| Odaiba | 先頭 500 有効 ep | on (`--tdcp-elevation-weight`) | 0.75 m | 0.84 m |
-| Shinjuku | 先頭 500 有効 ep | off | **1.79 m** | 2.77 m |
-| Shinjuku | 先頭 500 有効 ep | on | 1.87 m | 2.81 m |
-| Odaiba | **中盤** skip=4000 後 500 ep | off | **6.80 m** | 9.30 m |
-| Odaiba | 同上 | on | 6.88 m | 9.58 m |
-
-**解釈（事実と推論を分ける）**
-
-- **事実**: 仰角重みは区間によって **改善も悪化も**あり、一貫した勝ちではない。
-- **確認済み (2026-04-08)**: `CorrectedMeasurement.elevation` は **radians**（`navigation.cpp` の `atan2` → `spp.cpp` でそのまま代入）。`tdcp_velocity.py` の `np.sin(el)` は正しい。効果が区間依存なのは `sin²(el)` モデル自体の限界。
-
-**ウィンドウ評価**: `--skip-valid-epochs K` で先頭 K 有効エポックは **PF では burn-in のみ**（メトリクスには含めない）。`--max-epochs N` と併用で **合計 K+N 有効 ep 処理後に打ち切り**。
+が分かる。
 
 ---
 
-## 2. 実装済みの技術スタック
+## 1. 現在の要約
 
-### 2.1 CUDA カーネル (src/particle_filter/pf_device.cu)
+### 1.1 このメモの一番重要な結論
 
-| カーネル | 機能 |
+2026-04-08 版の「次は `DD pseudorange` を実装する」という結論は **もう古い**。
+
+今は次の状態まで進んでいる。
+
+- `DD pseudorange` は **実装済み**
+- `DD carrier AFV` の multi-GNSS 化と smoother replay も **実装済み**
+- fixed gate / adaptive gate / ESS gate / spread gate / support-skip / dynamic sigma まで **一通り実装して試した**
+- `weak-DD epoch` 向けの `undiff fallback`、`carrier anchor`、`TDCP continuity propagation`、`tracked / hybrid fallback` まで **実装して試した**
+- 実験ハブ `exp_pf_smoother_eval.py` はかなり肥大化したので、helper 分割と preset 化まで **実施済み**
+
+つまり、今の引き継ぎ先がやるべきことは「DD pseudorange を新規実装すること」ではなく、
+
+1. 既存の rescue stack を正しく理解する
+2. frozen reference を再現可能に保つ
+3. `5.54m` の historical best と現在 preset rerun の差を潰す
+
+の 3 つ。
+
+### 1.2 headline numbers
+
+#### 歴史的ベストと現在の frozen rerun
+
+| ラベル | 条件 | Odaiba SMTH P50 | Odaiba SMTH RMS | Shinjuku SMTH P50 | Shinjuku SMTH RMS | 状態 |
+|---|---|---:|---:|---:|---:|---|
+| **current frozen reference** | `--preset odaiba_reference` (sigma-pos=1.2, PU=1.9, dd-sigma=0.20, fallback-min-sats=4) | **1.38m** | **5.04m** | **2.55m** | **9.53m** | 2026-04-12 freeze 済み。再現確認済 |
+| previous frozen (sigma-pos=1.2, PU=1.5) | sigma-pos=1.2, dd-sigma=0.20, fallback-min-sats=4 | 1.38m | 5.13m | 2.62m | 9.79m | 旧 preset |
+| previous frozen (sigma-pos=2.0) | dd-sigma=0.20, fallback-min-sats=4, sigma-pos=2.0 | 1.51m | 5.48m | — | — | 旧 preset |
+| old pre-DD baseline | 2026-04-08 の `ALL-IN + smoother` | 1.65m | 6.24m | 3.01m | 12.82m | 旧 baseline |
+
+#### 解釈
+
+- **headline best** は Odaiba `5.04m` / Shinjuku `9.53m` (frozen preset で再現可能)
+- `sigma-pos` 2.0→1.2 が最大の改善源 (predict noise の削減で particle collapse を抑制)
+- `position-update-sigma` 1.5→1.9 で追加改善 (urban canyon での bad SPP の影響を緩和)
+- 両 dataset で一貫した改善: overfitting ではない
+
+### 1.3 何が効いて、何が効いていないか
+
+効いたもの:
+
+- `DD pseudorange`
+- `DD carrier` の quality gate
+- `spread tighten-only` 的な締め方
+- `support-skip`
+- `undiff fallback`
+- `sigma-pos` 削減 (2.0→1.2): particle collapse 抑制で tail error を大幅削減
+
+少しは効いたが主戦場ではなかったもの:
+
+- `carrier anchor`
+- `TDCP/LOS continuity propagation`
+- `tracked fallback`
+
+ほぼ頭打ちだったもの:
+
+- 閾値の細かい sweep だけ
+- dynamic sigma の微調整だけ
+- tracked row を強く boost する方向
+
+---
+
+## 2. 現在の workspace 状態
+
+### 2.1 worktree はクリーンではない
+
+今の `git status --short` は次の通り。
+
+```text
+ M experiments/exp_pf_smoother_eval.py
+ M include/gnss_gpu/pf_device.h
+ M internal_docs/interfaces.md
+ M internal_docs/plan.md
+ M python/gnss_gpu/_pf_device_bindings.cpp
+ M python/gnss_gpu/dd_carrier.py
+ M python/gnss_gpu/particle_filter_device.py
+ M src/particle_filter/pf_device.cu
+ M tests/test_cuda_streams.py
+?? experiments/run_pf_smoother_odaiba_reference.sh
+?? internal_docs/pf_smoother_api.md
+?? python/gnss_gpu/dd_pseudorange.py
+?? python/gnss_gpu/dd_quality.py
+?? tests/test_dd_carrier.py
+?? tests/test_dd_pseudorange.py
+?? tests/test_dd_quality.py
+?? tests/test_exp_pf_smoother_eval.py
+```
+
+重要なのは、
+
+- 「この repo は clean」という古い前提は **誤り**
+- Claude は `git status` を見て「壊れている」と誤解しやすいが、実際は会話中の実装差分が積み上がっているだけ
+- 既存差分を戻してはいけない
+
+### 2.2 この worktree で主要に触っているファイル
+
+| ファイル | 役割 |
 |---|---|
-| pf_device_initialize | GPU 上でパーティクル初期化 |
-| pf_device_predict | ランダムウォーク predict (velocity 対応) |
-| pf_device_weight | pseudorange Gaussian 尤度 (Student's t 対応) |
-| **pf_device_position_update** | SPP soft constraint (Gaussian) |
-| **pf_device_shift_clock_bias** | per-epoch cb re-centering |
-| pf_device_ess | ESS 計算 |
-| pf_device_resample_systematic | systematic resampling |
-| pf_device_resample_megopolis | Metropolis resampling |
-| pf_device_estimate | 重み付き平均 |
+| `experiments/exp_pf_smoother_eval.py` | rescue stack の統合実験ハブ。今の中心 |
+| `python/gnss_gpu/dd_pseudorange.py` | DD pseudorange 計算 |
+| `python/gnss_gpu/dd_carrier.py` | DD carrier AFV 計算 |
+| `python/gnss_gpu/dd_quality.py` | DD quality gate / scale helper |
+| `python/gnss_gpu/particle_filter_device.py` | DD update / smoother replay / spread stat |
+| `src/particle_filter/pf_device.cu` | DD pseudorange / DD carrier / spread kernels |
+| `tests/test_exp_pf_smoother_eval.py` | preset / helper / dataset smoke regression |
+| `internal_docs/pf_smoother_api.md` | API と状態遷移の source of truth |
+| `experiments/run_pf_smoother_odaiba_reference.sh` | frozen reference 実行入口 |
 
-### 2.2 Python API (python/gnss_gpu/particle_filter_device.py)
+### 2.3 注意点
 
-| メソッド | 機能 |
-|---|---|
-| position_update() | SPP position-domain soft constraint |
-| correct_clock_bias() | per-epoch cb correction (median residual) |
-| shift_clock_bias() | cb shift (低レベル) |
-| enable_smoothing() / store_epoch() / smooth() | forward-backward smoother |
-
-### 2.3 gnssplusplus API 拡張
-
-CorrectedMeasurement に追加:
-- `prn` — 衛星 PRN 番号
-- `carrier_phase` — 搬送波位相 [cycles]
-- `doppler` — Doppler [Hz]
-- `snr` — C/N0 [dB-Hz]
-- `satellite_velocity` — 衛星速度 ECEF [m/s]
-- `clock_drift` — 衛星 clock drift [s/s]
-- `elevation` — 仰角 [rad]（`navigation.cpp:atan2` 由来。TDCP 仰角重みで使用。**単位確認済み 2026-04-08**）
-
-### 2.4 TDCP 速度（Python・コア外）
-
-| 項目 | 内容 |
-|---|---|
-| 実装 | `python/gnss_gpu/tdcp_velocity.py` |
-| 内容 | 衛星 LOS・衛星平均速度・衛星 clock drift で補正した TDCP、WLS で `delta_rx/dt`；L1 波長仮定、多周波行の SNR で 1 行に圧縮 |
-| テスト | `tests/test_tdcp_velocity.py` |
-| オプション | `elevation_weight=True` で行重みに `max(sin el, floor)²`（両エポックで有限の `elevation` がある行のみ） |
-
-### 2.5 系譜スムーザ・FFBSi（Python + デバイス）
-
-| 項目 | 内容 |
-|---|---|
-| 動機 | systematic 再サンプル時の親インデックスを無視した marginal backward は、ESS 等と組み合わせたとき整合が崩れうる |
-| CUDA | systematic resample カーネルが **祖先インデックス GPU バッファ**に書き込み。`pf_device_get_resample_ancestors` / Python `get_resample_ancestors()` |
-| デフォルト実験 | FFBSi 評価は **genealogy**（祖先一致）を優先。marginal は明示指定 |
-| resampling | genealogy 比較では forward も **`systematic`** に揃える必要あり（`exp_gnss_compare_pf_ffbsi.py` の `--resampling`） |
-
-### 2.6 観測スタック (Python レベル)
-
-| 手法 | 効果 (Odaiba) | 状態 |
-|---|---|---|
-| gnssplusplus corrections | baseline | 実装済み |
-| cb_correct | RMS -0.7m | 実装済み |
-| position_update | P50 -2m | 実装済み |
-| Doppler velocity | P50 -0.05m | 実装済み |
-| Dual-freq iono-free (L1+L2) | P50 -0.02m | 実装済み |
-| Elevation weighting | P95 改善 | 実装済み |
-| SNR weighting | P95 改善 | 実装済み (HK) |
-| Carrier phase NLOS detection | P95 改善 | 実装済み (HK) |
-| RAIM satellite exclusion | P95 -1m (HK) | 実装済み (HK) |
-| Carrier-phase-derived PR (float) | P50 -0.1m | 実装済み、効果限定的 |
-| Forward-backward smoother | RMS -1m, P50 +0.3m | 実装済み (トレードオフ) |
-| **TDCP predict ガイド** | 条件依存（§1.5） | **実装済み**・実験スクリプト複数から利用可 |
-| **Genealogy スムーザ** | FFBSi 公平比較用 | 実装済み（祖先 export 要 systematic） |
+- `experiments/results/pf_smoother_eval.csv` は full-run で上書きされる。会話中は毎回バックアップして復元している。
+- `internal_docs/plan.md` の 2026-04-08 版に書いてあった「作業ツリーは clean」は今は明確に誤り。
+- `libgnsspp` の import は pure Python wrapper より build binding を優先しないと smoke regression が不安定になる。`exp_pf_smoother_eval.py` 冒頭の `sys.path` 順修正はこのため。
 
 ---
 
-## 3. 次にやるべきこと (carrier phase / TDCP)
+## 3. ここまでに実装済みのもの
 
-### 3.1 TDCP (Time-Differenced Carrier Phase) — 最優先（更新）
+この節は「何をもう一度実装し直す必要がないか」を明示するために書く。
 
-**目的**: cm 級の inter-epoch 変位推定で predict を劇的に改善し、**σ_pos / tight-RMS 連動**や wide-lane 側の好循環を作る。
+### 3.1 DD pseudorange
 
-**実装状況（2026-04）**: 衛星運動・衛星時計補正を含む WLS は **`tdcp_velocity.py` に実装済み**。単体テストあり。実験では `predict_guide=tdcp` と `--sigma-pos-tdcp` 等で制御。
+実装済みファイル:
 
-**残り（優先順）**
+- `python/gnss_gpu/dd_pseudorange.py`
+- `src/particle_filter/pf_device.cu`
+- `python/gnss_gpu/particle_filter_device.py`
+- `tests/test_dd_pseudorange.py`
 
-1. ~~**仰角 `elevation` の単位・値域の確認**~~ → **確認済み (2026-04-08): radians**。`navigation.cpp:atan2` → `spp.cpp` → Python バインディング。`tdcp_velocity.py` の `sin(el)` は正しい。
-2. **TDCP 採用時の σ_pos カーブ**（RMS・衛星本数・都市区間で切り替え）— いまの `sigma_pos_tdcp` / `tdcp_tight_rms_max` の整理・拡張。
-3. Odaiba **全区間**で TDCP ガイドの headline 行を README 水準で更新するか判断。
+実装内容:
 
-**正しい TDCP（整理・数式は従来どおり）**:
-```
-delta_L_m = (L_current - L_prev) * wavelength
-sat_range_change = los · avg_sat_vel * dt
-sat_clock_change = avg_clock_drift * C * dt
-corrected = delta_L - sat_range_change + sat_clock_change
-WLS: [los, 1] * [delta_rx; delta_cb_rx] = corrected
-velocity = delta_rx / dt
-```
+- rover/base raw RINEX を使った `DD pseudorange`
+- constellation ごとの reference satellite 選択
+- per-system / per-pair 構造
+- duplicate row の整理
+- optional な base interpolation
+- GPU kernel での DD pseudorange weight update
+- smoother forward/backward での replay
 
-**実装場所**: **`python/gnss_gpu/tdcp_velocity.py`**（実験は import して利用）。CUDA カーネル変更不要。
+注意:
 
-**必要なデータ**: gnssplusplus の carrier_phase + satellite_velocity + clock_drift（**elevation はオプション**）
+- 「DD pseudorange をこれから実装する」は古い TODO なのでやらない
+- 改善の余地は gate / weight / dataset handling にあるのであって、配線そのものではない
 
-**期待効果**: Doppler ガイドより強い predict が取れる区間では σ_pos を下げられる → 1 m 帯への寄与を全体評価で確認。
+### 3.2 DD carrier AFV
 
-### 3.2 Wide-lane integer ambiguity resolution
+実装済みファイル:
 
-**目的**: carrier-phase-derived pseudorange の精度向上 (float ~1.5m → integer ~0.1m)
+- `python/gnss_gpu/dd_carrier.py`
+- `src/particle_filter/pf_device.cu`
+- `python/gnss_gpu/particle_filter_device.py`
+- `tests/test_dd_carrier.py`
 
-**手法**: Melbourne-Wübbena combination
-```
-N_wl = L1_cycles - L2_cycles - P_nl / lambda_wl
-P_nl = (f1*P1 + f2*P2) / (f1+f2)
-lambda_wl = 0.862m
-→ 数エポック平均して integer に round
-```
+実装内容:
 
-**前回の問題**: N_wl は固定できたが、N1 = N_wl + N2 の N2 が PF 位置精度に依存 → 循環依存
+- multi-GNSS の per-system / per-pair DD carrier AFV
+- smoother replay
+- raw RINEX / optional base interpolation
+- code 混在抑制のための system 共通 code path
 
-**解決策**: TDCP で PF 位置を改善 → N2 推定精度が向上 → carrier phase PR 精度向上の好循環
+制約:
 
-### 3.3 TDCP + carrier phase の統合パイプライン
+- GLONASS FDMA wavelength はまだ扱っていないので skip する
 
-```
-1. predict: TDCP velocity (cm 級変位)
-2. update: carrier-phase-derived PR (wide-lane fixed N_wl + float N2)
-3. position_update: SPP soft constraint
-4. cb_correct: per-epoch
-```
+### 3.3 DD quality gate
 
-TDCP と carrier phase PR の両方が carrier_phase を使うが、異なる用途:
-- TDCP: **エポック間の差分** (ambiguity cancel)
-- CP PR: **絶対距離** (ambiguity 必要)
+実装済みファイル:
 
----
+- `python/gnss_gpu/dd_quality.py`
+- `tests/test_dd_quality.py`
 
-## 4. 正直なネガティブ結果
+入っているもの:
 
-| 手法 | 結果 | 理由 |
-|---|---|---|
-| Student's t likelihood | 全データセットで悪化 | urban canyon では Gaussian が安定 |
-| RTK carrier phase | float-only、改善なし | urban NLOS で integer fix 不可 |
-| Float carrier phase (HK) | 効果なし | single-freq + NLOS で ambiguity 収束しない |
-| OSM map constraint | 悪化 | wrong road matching で引きずられる |
-| TDCP (初回実装) | 動作せず | 衛星移動分の未補正（**現行 `tdcp_velocity.py` では補正済み**） |
-| TDCP WLS `sin²(el)` 重み | 区間次第で悪化あり | モデルが粗い（仰角単位は rad で正しい、§1.5） |
-| Hatch filter | Odaiba で悪化 | urban canyon で carrier phase が途切れ diverge |
-| DGNSS (base station 差分) | 改善なし | gnssplusplus 補正が既に十分 |
-| GSDC PF | WLS に負け | open-sky で temporal filtering 不要 |
-| 1M particles + small sigma_pos | 崩壊 | particle depletion (sp<1 で追従不能) |
-| GMM likelihood (LOS+NLOS mixture) | 全設定で悪化 (P50 +0.04〜+0.57m) | Student's t と同様、尤度を緩めると particle 散乱 |
-| Wide-lane N_wl → PR 置換 | P50=35m 崩壊 | N1 未解決でバイアス発散 |
-| Iono-free Hatch filter (dual-freq) | P50=1.71m (微悪化) | urban canyon cycle slip + iono divergence |
-| TDCP adaptive (RMS fallback) | ベースラインと同一 | postfit RMS が常に閾値以下で fallback 0 回 |
-| TDCP + smoother 組み合わせ | P50=1.66m (微改善のみ) | 劇的改善なし |
+- fixed threshold gate
+- adaptive `median + k*MAD`
+- ESS-based scaling
+- spread-based scaling
+- pair-count / metric scaling helper
 
----
+これは「まだ仮の雑実装」ではなく、少なくとも sweep 可能な状態にある。
 
-## 5. ブランチ・PR 状態
+### 3.4 weak-DD rescue stack
 
-| ブランチ | PR | 状態 |
-|---|---|---|
-| feature/carrier-phase-imu | #4 (open) | position_update + cb_correct + gnssplusplus API 拡張 + smoother |
-| main | — | old mainline (PF+RobustClear-10K) |
+今の `exp_pf_smoother_eval.py` は、DD が薄い epoch 向けに次の rescue 系を持っている。
 
-**PR #4 には merge 許可が出ていない** (ユーザーが "mada merge sinaidene" と指示)。
+1. `support-skip`
+2. `undiff same-band carrier AFV fallback`
+3. `carrier anchor` による pseudorange-like rescue
+4. `TDCP continuity propagation`
+5. `tracked fallback`
+6. `hybrid tracked fallback`
 
----
+ここまで全部試している。何も無いところから設計し直す必要はない。
 
-## 6. データセット
+### 3.5 preset 化と refactor
 
-| データ | 場所 | 受信機 | 周波数 | 用途 |
-|---|---|---|---|---|
-| Odaiba | /tmp/UrbanNav-Tokyo/Odaiba | Trimble | L1+L2+L5 | headline |
-| Shinjuku | /tmp/UrbanNav-Tokyo/Shinjuku | Trimble | L1+L2+L5 | headline |
-| HK-20190428 | /tmp/UrbanNav-HK/HK_20190428 | ublox M8 | L1 only | supplemental |
-| HK TST/Whampoa | /tmp/UrbanNav-HK-New/ | ublox | L1 | extreme (SPP >300m) |
-| GSDC 2023 | /tmp/gsdc_data/gsdc2023/ | Pixel 4 | L1+L5 | supplemental |
+実装済み:
+
+- `_CLI_PRESETS`
+- `odaiba_reference`
+- `_expand_cli_preset_argv`
+- `_print_cli_presets`
+- `_namespace_to_run_kwargs`
+- `main(argv)`
+- `run_pf_smoother_odaiba_reference.sh`
+
+refactor 済み helper:
+
+- `CarrierAnchorAttempt`
+- `CarrierFallbackAttempt`
+- `_attempt_carrier_anchor_pseudorange_update`
+- `_attempt_dd_carrier_undiff_fallback`
+
+つまり、今は「巨大な 1 ループを読むしかない」状態からは一歩進んでいる。
 
 ---
 
-## 7. 重要ファイル
+## 4. 2026-04-11 時点の code map
 
-### 7.1 CUDA コア
-- `src/particle_filter/pf_device.cu` — 全カーネル
-- `include/gnss_gpu/pf_device.h` — API 宣言
-- `python/gnss_gpu/_pf_device_bindings.cpp` — pybind11
+### 4.1 中心ファイル
 
-### 7.2 Python API
-- `python/gnss_gpu/particle_filter_device.py` — ParticleFilterDevice クラス
-- `python/gnss_gpu/imu.py` — IMU ローダー + ComplementaryHeadingFilter
+#### `experiments/exp_pf_smoother_eval.py`
 
-### 7.3 gnssplusplus (submodule)
-- `third_party/gnssplusplus/` — feature/expose-corrected-pseudoranges ブランチ
-- CorrectedMeasurement に PRN, carrier_phase, doppler, satellite_velocity 追加済み
+このファイルが今の実験ハブ。
 
-### 7.4 実験スクリプト
-- `experiments/exp_urbannav_fixed_eval.py` — メイン評価（headline に近い全区間）
-- `experiments/exp_pf_smoother_eval.py` — PF + optional smoother；**`run_pf_with_optional_smoother`**；**`--skip-valid-epochs`**；TDCP 仰角重み **`--tdcp-elevation-weight`**
-- `experiments/exp_ffbsi_eval.py` — FFBSi / genealogy；`resampling=systematic` 固定
-- `experiments/exp_gnss_compare_pf_ffbsi.py` — forward vs smoother **公平比較**（同一 `dataset`、`--resampling`）
-- `experiments/exp_submeter_sweep.py` / `exp_zenbu_sweep.py` / `exp_fine_pu_sweep.py` — 設定スイープ
-- `experiments/exp_position_update_eval.py` — position_update；TDCP ガイド・仰角重み CLI あり
-- `experiments/exp_fgo_benchmark_hook.py` — FGO ベンチ外部コマンド用フック（**実装しない**；参照用）
-- `experiments/exp_hk_visualization.py` — HK GIF 生成
-- `experiments/exp_gsdc2023_pf.py` — GSDC 評価
-- `experiments/exp_particle_visualization.py` — OSM 可視化 (baseline_label 対応)
+重要な entry / helper:
 
-### 7.5 RINEX パース
-- dual-frequency RINEX パースは実験スクリプト内に inline 実装
-- gnssplusplus は L1 のみ。L2 は RINEX から直接読む必要あり
-- RINEX TOW → gnssplusplus TOW のオフセット: `tow_offset = gnssplusplus_first - rinex_first` (Odaiba: 259200s = 3 days)
+- `_CLI_PRESETS`
+  `odaiba_reference` の frozen flags を持つ
+- `CarrierBiasState`
+- `CarrierAnchorAttempt`
+- `CarrierFallbackAttempt`
+- `_attempt_carrier_anchor_pseudorange_update`
+- `_attempt_dd_carrier_undiff_fallback`
+- `run_pf_with_optional_smoother(...)`
+- `build_arg_parser()`
+- `main(argv=None)`
+
+このファイルの役割:
+
+- dataset load
+- PF runtime orchestration
+- DD pseudorange / DD carrier の gating と update
+- weak-DD rescue
+- smoother replay
+- diagnostics dump
+- preset 展開
+
+#### `python/gnss_gpu/particle_filter_device.py`
+
+役割:
+
+- Python から CUDA kernel を呼ぶ low-level API
+- DD pseudorange / DD carrier の update wrapper
+- smoother の epoch store / replay
+- spread statistic の取得
+
+#### `src/particle_filter/pf_device.cu`
+
+役割:
+
+- DD pseudorange kernel
+- per-pair reference を読む DD carrier kernel
+- spread statistic kernel
+
+### 4.2 ドキュメント
+
+#### `internal_docs/pf_smoother_api.md`
+
+ここが今の API / state-machine / call sequence の source of truth。
+
+入っているもの:
+
+- runtime API の引数表
+- diagnostics の列定義
+- `attempted / used / tracked-assisted` の定義
+- `Epoch Flow`
+- `Carrier Rescue Flow`
+- `Tracker Lifecycle`
+- `Call Sequence`
+
+Claude に「全体像を短時間で掴ませる」にはこのファイルが一番効く。
+
+#### `internal_docs/interfaces.md`
+
+`PF Smoother 実験 API` の節から `pf_smoother_api.md` と frozen script へ飛べるようにしてある。
+
+### 4.3 テスト
+
+#### `tests/test_exp_pf_smoother_eval.py`
+
+今の handoff で特に重要。
+
+持っているもの:
+
+- helper unit tests
+- preset 展開 test
+- late override test
+- dataset-aware smoke regression
+
+dataset-aware smoke regression の意図:
+
+- Odaiba reference preset が最低限は動くこと
+- `n_dd_used >= 1`
+- `n_dd_pr_used >= 1`
+- P50 が 0-20m の sane range にあること
+
+この test は「best を保証する test」ではなく、「refactor で runtime が壊れていない」ことを保証する test。
 
 ---
 
-## 8. 技術メモ
+## 5. 実験の流れと、どこまで詰めたか
 
-### 8.1 Clock bias の問題
-- Trimble: cb ≈ -99,000m, drift ~6 m/s → PF の random walk (sigma_cb=300) で追従可能
-- ublox: cb ≈ -960,000m, drift ~65 m/s → per-epoch correct_clock_bias() が必須
-- correct_clock_bias(): median(PR - range) で cb を推定し、全パーティクルを shift
+ここは Claude が同じ sweep をやり直さないための節。
 
-### 8.2 Position update の仕組み
-- CUDA カーネルで log_weight += -0.5 * dist^2 / sigma^2
-- SPP 位置に近いパーティクルに高い重み → resampling で SPP 近傍に集約
-- sigma が小さいほど SPP に強く引かれる (sigma=3 が Odaiba 最適)
-- PU なしだと P50 が 2.68m に悪化 (SPP アンカーが必要)
+### 5.1 baseline から DD 系へ
 
-### 8.3 Smoother (forward-backward) と FFBSi
-- **デフォルト smoother（exp_pf_smoother_eval）**: enable_smoothing() → store_epoch() × N → smooth()；backward は別 PF で逆順、**forward/backward の平均**。
-- **効果（過去メモ）**: RMS 改善例 (6.51→5.35), P50 悪化例 (1.67→2.94)。PU が両方向で SPP に引くと差が縮む。
-- **FFBSi / genealogy（exp_ffbsi_eval）**: forward 履歴Weights/States/**祖先**を使い、**backward で祖先パスをサンプル**（genealogy）または legacy カーネル（marginal）。
-- **公平比較の注意**: forward が **Megopolis**、smoother 側が **systematic 前提**だと再サンプルが一致せず指標が歪む。比較時は **`--resampling systematic`** 等で揃える（`exp_gnss_compare_pf_ffbsi.py`）。
-- **実装メモ**: systematic 再サンプル直後に `get_resample_ancestors()` で親インデックス取得。テスト: `tests/test_ffbsi.py`, `tests/test_cuda_streams.py`。
+2026-04-08 時点の旧 baseline は `ALL-IN + smoother` で、
 
-### 8.4 Doppler velocity
-- gnssplusplus の satellite_velocity で衛星運動を補正
-- range_rate = -doppler * C / freq
-- WLS: los · rx_vel + clock_drift = sat_vel · los - range_rate + sat_clock_drift * C
-- SPP 位置差分 (0.5 m/s) より高精度 (0.1 m/s)
+- Odaiba: `P50=1.65m / RMS=6.24m`
+- Shinjuku: `P50=3.01m / RMS=12.82m`
 
-### 8.5 GSDC で PF が WLS に勝てない理由
-- GSDC は open-sky 寄り → pseudorange ノイズが Gaussian に近い → WLS が最適解
-- PF の predict noise (sigma_pos) が余計 → 精度劣化の主因
-- PF は NLOS が多い urban canyon で temporal filtering の恩恵が大きい
+だった。
+
+ここから、
+
+- `SPP position_update` 依存がボトルネック
+- undifferenced carrier AFV だけでは particle が carrier peak ambiguity を解けない
+- したがって `DD pseudorange` が必要
+
+という理解で進めていた。
+
+その仮説自体は今も変わっていない。
+
+### 5.2 DD pseudorange 導入後
+
+`DD pseudorange` を raw RINEX ベースで入れて full-run した結果、
+
+- `exact-only DD pseudorange`
+- `sigma=0.5`
+
+で
+
+- `SMTH P50=1.48m / RMS=5.75m`
+
+まで改善した。
+
+この時点で、
+
+- `DD pseudorange` は効く
+- base interpolation は tail を悪化させやすい
+
+という結論になった。
+
+### 5.3 adaptive gate / ESS / spread
+
+その後、
+
+- adaptive gate
+- ESS-linked gate
+- spread-linked gate
+
+を順に追加していった。
+
+この流れで best は概ね次のように詰まった。
+
+| 段階 | 代表結果 |
+|---|---:|
+| exact-only DD pseudorange | `1.48m / 5.75m` |
+| adaptive DD pseudorange + adaptive DD carrier | `1.49m / 5.70m` |
+| ESS-linked adaptive gate | `1.50m / 5.67m` |
+| spread tighten-only | `1.49m / 5.63m` |
+| carrier spread sweep best | `1.47m / 5.62m` |
+
+重要なのは、
+
+- gate の工夫は **確かに効いた**
+- ただし `sub-meter` に押し切るほどではなかった
+
+ということ。
+
+### 5.4 support-skip
+
+tail diagnostics を入れて見えたのは、
+
+- worst epoch の多くで `DD pseudorange` が無い
+- `DD carrier kept pairs <= 4`
+- `ESS < 0.01`
+
+という collapse パターンだった。
+
+そこから `support-skip` を導入して、
+
+- `ESS <= 0.01`
+- `max_pairs <= 4`
+- `raw AFV median >= 0.15 cycles`
+
+のような低 support epoch では DD carrier update を切るようにした。
+
+best はこの時点で、
+
+- `SMTH P50=1.48m / RMS=5.61m`
+
+まで改善した。
+
+### 5.5 undiff fallback
+
+さらに、
+
+- DD carrier が薄い epoch で
+- same-band undifferenced carrier AFV を fallback として使う
+
+経路を入れたところ、
+
+- `SMTH P50=1.49m / RMS=5.55m`
+
+まで改善した。
+
+ここはかなり重要で、現時点でも **最大の改善源のひとつ**。
+
+### 5.6 carrier anchor / continuity / tracked 系
+
+その後に試したもの:
+
+- `carrier anchor`
+- `windowed continuity`
+- `TDCP/LOS motion prediction`
+- `tracked fallback`
+- `tracked hybrid fallback`
+- tracked continuity-driven sigma
+
+結果としては、
+
+- 少し効く run はあった
+- ただし大きく best を更新するほどではなかった
+- tracked row を boost する方向は tail をむしろ悪化させやすかった
+
+会話中に一度だけ、
+
+- `SMTH P50=1.50m / RMS=5.54m`
+
+を観測しているが、そこは **まだ完全に freeze できていない**。
 
 ---
 
-## 9. ビルド
+## 6. 現在の frozen reference
+
+### 6.1 入口
+
+今の frozen reference は次の 2 通りで呼べる。
 
 ```bash
-# gnss_gpu CUDA
-cd build && make -j$(nproc)
-cp build/python/gnss_gpu/_gnss_gpu_pf_device.cpython-312-x86_64-linux-gnu.so python/gnss_gpu/
-
-# gnssplusplus
-cd third_party/gnssplusplus/build && cmake --build . -j$(nproc)
-
-# テスト
-PYTHONPATH=python python3 -m pytest tests/ -q
-
-# CUDA / バインディングを直したら .so を python 配下へコピー（環境依存ファイル名）
-# cp build/python/gnss_gpu/_gnss_gpu_pf_device*.so python/gnss_gpu/
+python3 experiments/exp_pf_smoother_eval.py --data-root /tmp/UrbanNav-Tokyo --preset odaiba_reference
 ```
 
----
-
-## 10. 残課題 (Claude / Cursor に引き継ぐ)
-
-### 10.1 最優先: 1 m 切り（TDCP + carrier、FGO なし）
-
-1. ~~**仰角の単位確認**~~ → **確認済み: radians** (2026-04-08)。
-2. ~~**TDCP × σ_pos スイープ**~~ → **完了 (2026-04-08)**。全区間では TDCP ガイド単体の恩恵は小さい（Odaiba P50=1.672m、ベースライン 1.65m とほぼ同等）。σ_pos_tdcp=1.5-3.0, PU=1.5 が安定。Shinjuku は 3.24m（ベースライン 3.13m よりやや悪化）。短区間 (500ep) では P50=0.78m と効くが、全区間では carrier phase 途切れが悪影響。
-3. ~~**TDCP adaptive + smoother 組み合わせ**~~ → **完了 (2026-04-08)**。結論: **効果なし**。
-   - **Adaptive TDCP**: postfit RMS が常に閾値以下で fallback 0 回。always-on と同一結果。TDCP の品質は良好だが PF 全体への寄与が小さい。
-   - **Smoother + TDCP**: Odaiba P50=1.66m (ベスト)、RMS は smoother で一貫改善 (6.33→6.27m)。ただし P50 改善は微小。
-   - **Shinjuku**: tdcp_adaptive 単体が P50 ベスト (3.28m) だがベースライン 3.13m より悪化。
-   - 詳細: `results/tdcp_adaptive_sweep.csv`, `results/pf_smoother_eval.csv`
-4. **Wide-lane → carrier-phase PR** パイプライン（§3.2）が **次の主戦場**。`wide_lane.py` 実装済み (12テスト全パス)、実験統合が必要。
-5. **README / headline**：条件を揃えた Odaiba 全区間の数値を更新するか、短評価と役割分担を文書化。
-
-### 10.2 Cursor タスク（2026-04-08 起票、上から順に実行）
-
-#### ~~Task A: tdcp_adaptive スイープ~~ → **完了 (2026-04-08)**
-80 runs 実行。TDCP postfit RMS が常に全閾値 (1.0-8.0m) 以下で fallback 0 回。adaptive と always-on で結果同一。ベースラインを上回る設定なし。`results/tdcp_adaptive_sweep.csv`。
-
-#### ~~Task B: Wide-lane integer ambiguity resolution~~ → **実装完了 (2026-04-08)**
-`python/gnss_gpu/wide_lane.py` + `tests/test_wide_lane.py` (12 tests pass)。Melbourne-Wübbena N_wl 推定 + integer fix + wide-lane pseudorange 出力。**実験統合は未着手**（下記 Task D）。
-
-#### ~~Task C: Smoother + TDCP 組み合わせ~~ → **完了 (2026-04-08)**
-8 runs 実行。smoother + tdcp_adaptive: Odaiba P50=1.66m (微改善), Shinjuku P50=3.30m (悪化)。効果なし。`results/pf_smoother_eval.csv`。
-
-#### ~~Task D: Wide-lane / carrier-phase smoothing 統合~~ → **完了・ネガティブ (2026-04-08)**
-**実装**: `exp_widelane_eval.py` + `urbannav.py` L2 拡張 (Codex 実装)。3 段階で試行:
-1. **N_wl 固定 wide-lane PR 直接置換** → P50=35.75m。N1 未解決でバイアス発散。
-2. **median bias 除去** → P50=4.11m。改善だがまだ悪い。
-3. **Iono-free divergence-free Hatch filter** (carrier delta smoothing, alpha=0.2, L1 fallback) → P50=1.71m, RMS=6.31m。ベースライン 1.67m より微悪化。カバレッジ 42.6%。
-
-**結論**: carrier-phase PR 改善は urban canyon の cycle slip + iono divergence で限界。§4 の Hatch filter ネガティブ結果と一致。**1m 切りには carrier-phase 以外のアプローチが必要**。
-
-**ネガティブ結果に追加**:
-| Wide-lane N_wl → PR 置換 | P50=35m 崩壊 | N1 未解決でバイアス発散 |
-| Iono-free Hatch filter (dual-freq) | P50=1.71m (微悪化) | urban canyon cycle slip + iono divergence |
-
-### 10.3 実装・実験の片付け
-
-- ~~未コミットの実験スクリプト・`tdcp_velocity.py`・FFBSi・祖先バッファ変更を **論理単位でコミット**~~ → **完了 (2026-04-08)**。7 コミットに整理済み。
-- `skip_valid_epochs` を **`exp_gnss_compare_pf_ffbsi.py` 等**にも渡したい場合は `run_pf_with_optional_smoother` の引数をスレッドする（未対応なら明記して実装）。
-
-### 10.4 FGO は NG
-
-ユーザーが明示的に FGO を拒否。PF / smoother / 粒子 backward の枠で攻める。
-
-### 10.5 PR #4
-
-**ユーザー許可まで merge しない**。
-
-### 10.6 可視化
-
-HK: `experiments/results/paper_assets/particle_viz_hk20190428.gif`（ほか `.mp4` が未追跡で残っている場合あり）。Odaiba/Shinjuku GIF は従来どおり。
-
----
-
-## 11. 付録: コマンド例（UrbanNav）
+または
 
 ```bash
-cd /path/to/gnss_gpu/experiments
-export PYTHONPATH=".:../python:../third_party/gnssplusplus/build/python:../third_party/gnssplusplus/python"
-
-# TDCP ガイド、先頭 500 ep、PU 例
-python3 exp_pf_smoother_eval.py --data-root /tmp/UrbanNav-Tokyo --runs Odaiba \
-  --n-particles 100000 --max-epochs 500 --predict-guide tdcp \
-  --position-update-sigma 1.95 --sigma-pos-tdcp 1.0
-
-# 仰角重みオン
-#  ... 上に加え --tdcp-elevation-weight [--tdcp-el-sin-floor 0.1]
-
-# burn-in 4000 後に 500 ep だけメトリクス
-python3 exp_pf_smoother_eval.py --data-root /tmp/UrbanNav-Tokyo --runs Odaiba \
-  --n-particles 100000 --skip-valid-epochs 4000 --max-epochs 500 \
-  --predict-guide tdcp --position-update-sigma 1.95 --sigma-pos-tdcp 1.0
+URBANNAV_DATA_ROOT=/tmp/UrbanNav-Tokyo bash experiments/run_pf_smoother_odaiba_reference.sh
 ```
 
-**注意**: `exp_pf_smoother_eval` の CSV は既定パスで**上書き**される。複数 run を残すなら実行後にファイルをリネームすること。
+追加引数は末尾に付くので、
+
+```bash
+bash experiments/run_pf_smoother_odaiba_reference.sh --max-epochs 10 --n-particles 5000
+```
+
+のように smoke もできる。
+
+### 6.2 `odaiba_reference` preset の中身
+
+2026-04-12 時点の frozen flags は概ね以下。
+
+```text
+--runs Odaiba
+--n-particles 100000
+--sigma-pos 1.2
+--position-update-sigma 1.9
+--predict-guide imu
+--imu-tight-coupling
+--residual-downweight
+--pr-accel-downweight
+--smoother
+--dd-pseudorange
+--dd-pseudorange-sigma 0.5
+--dd-pseudorange-gate-adaptive-floor-m 4.0
+--dd-pseudorange-gate-adaptive-mad-mult 3.0
+--dd-pseudorange-gate-ess-min-scale 0.9
+--dd-pseudorange-gate-ess-max-scale 1.1
+--mupf-dd
+--mupf-dd-sigma-cycles 0.20
+--mupf-dd-base-interp
+--mupf-dd-gate-adaptive-floor-cycles 0.25
+--mupf-dd-gate-adaptive-mad-mult 3.0
+--mupf-dd-gate-ess-min-scale 0.9
+--mupf-dd-gate-ess-max-scale 1.1
+--mupf-dd-gate-spread-min-scale 0.88
+--mupf-dd-gate-spread-max-scale 1.0
+--mupf-dd-gate-low-spread-m 3.0
+--mupf-dd-gate-high-spread-m 8.0
+--mupf-dd-skip-low-support-ess-ratio 0.01
+--mupf-dd-skip-low-support-max-pairs 4
+--mupf-dd-skip-low-support-min-raw-afv-median-cycles 0.15
+--mupf-dd-fallback-undiff
+--mupf-dd-fallback-sigma-cycles 0.10
+--mupf-dd-fallback-min-sats 4
+--carrier-anchor
+--carrier-anchor-sigma-m 0.25
+--carrier-anchor-max-residual-m 0.80
+--carrier-anchor-max-continuity-residual-m 0.50
+```
+
+### 6.3 current frozen rerun の結果
+
+2026-04-12 更新後 (sigma-pos=1.2, PU=1.9, dd-sigma=0.20, fallback-min-sats=4):
+
+観測されたカウンタ:
+
+- `[mupf_dd] DD-AFV used 11138/12252 epochs, skip 1114/12252`
+- `[mupf_dd_support_skip] epochs=328`
+- `[carrier_anchor] epochs=3`
+- `[carrier_anchor_tdcp] propagated_rows=95`
+- `[mupf_dd_fallback_undiff] epochs=831`
+- `[dd_pseudorange] used 1215/12252 epochs, skip 11037/12252`
+
+結果:
+
+- `FWD P50=1.42m / RMS=5.74m`
+- `SMTH P50=1.38m / RMS=5.04m`
+
+再現確認済み (100K particles, 決定論的)。
+Shinjuku でも確認: `SMTH P50=2.55m / RMS=9.53m` (旧 baseline 12.82m から -3.29m)。
+
+### 6.4 どう読むべきか
+
+現在の preset は headline best を frozen truth として保持している。
+
+- regression reference として有用
+- headline best Odaiba `5.04m` / Shinjuku `9.53m` を再現可能に保持
+- 旧 pre-DD baseline `6.24m` / `12.82m` から大幅に改善
+
+---
+
+## 7. 検証とテスト
+
+### 7.1 直近で通っているもの
+
+#### preset / helper / dataset smoke
+
+```bash
+python3 -m py_compile experiments/exp_pf_smoother_eval.py tests/test_exp_pf_smoother_eval.py
+python3 experiments/exp_pf_smoother_eval.py --list-presets
+PYTHONPATH=python python3 -m pytest tests/test_exp_pf_smoother_eval.py -q
+```
+
+結果:
+
+- `11 passed`
+
+#### targeted CUDA smoke
+
+```bash
+PYTHONPATH=python python3 -m pytest tests/test_cuda_streams.py -k 'carrier_anchor_pseudorange_smoke or undiff_carrier_afv_smoke or smooth_with_dd_pseudorange_and_dd_carrier_smoke' -q
+```
+
+これは会話中に通している。
+
+### 7.2 script smoke
+
+```bash
+bash experiments/run_pf_smoother_odaiba_reference.sh --max-epochs 3 --n-particles 5000
+```
+
+この 3 epoch smoke では、
+
+- `[mupf_dd] DD-AFV used 3/3 epochs, skip 0/3`
+- `[dd_pseudorange] used 1/3 epochs, skip 2/3`
+- `FWD P50=0.75m RMS=0.78m`
+- `SMTH P50=0.75m RMS=0.69m`
+
+だった。
+
+これは plumbing 確認用であって、headline result としては読まないこと。
+
+### 7.3 smoke regression test の意味
+
+`tests/test_exp_pf_smoother_eval.py` の dataset-aware smoke regression は、
+
+- exact metric 再現 test ではない
+- runtime が壊れていないことを見る test
+- preset 展開と dataset load と DD update の最低限の sanity check
+
+である。
+
+よって、
+
+- `5.54m` と `5.61m` の差をこの test だけで判断してはいけない
+
+---
+
+## 8. 次にやるべきこと
+
+ここが一番重要。
+
+### 8.1 優先順位
+
+#### 優先度 A: best config の frozen preset 化 ✅ 完了 (2026-04-11)
+
+sweep の結果、`mupf-dd-sigma-cycles` 0.25→0.20 と `mupf-dd-fallback-min-sats` 5→4 の 2 変更で
+旧 historical best `5.54m` を上回る `5.48m` を達成。preset 更新済み、3 回再現確認済み。
+
+#### 優先度 B: regression reference を test で守る
+
+`odaiba_reference` を freeze したら、次にやるのは test の固定。
+
+やること:
+
+- `tests/test_exp_pf_smoother_eval.py` の smoke regression の bounds を現実に合わせて厳しくする
+- counter range を固定する (DD used, fallback, anchor など)
+- full-run regression の期待値を明記する
+
+#### 優先度 C: その後で初めて精度改善
+
+ここまで終わってから新しい modeling に戻る。
+
+今の感触だと、
+
+- tracked row をさらに boost する
+- gate threshold をさらに sweep する
+
+だけでは大きい改善は出にくい。
+
+もし精度改善を再開するなら、
+
+- weak-DD epoch の fallback 品質を上げる
+- anchor / fallback 間の切替基準をもっと整える
+- continuity の quality を diagnostics で定量化する
+
+の順が良い。
+
+#### 優先度 D: 停車検知 → dynamic sigma_pos で P50 1m 切り (2026-04-13 追加)
+
+**発見**: epoch 別診断の結果、以下が判明。
+
+| 条件 | エポック数 | P50 |
+|---|---:|---:|
+| DD=yes + IMU=yes | 7099 (58%) | **1.107m** |
+| DD=yes + IMU=no | 4109 (34%) | 3.883m |
+| DD=no + IMU=yes | 951 (8%) | 3.840m |
+| DD=no + IMU=no | 69 (0.6%) | 8.291m |
+
+DD+IMU が両方効くエポックは **既に P50=1.107m で 1m に近い**。
+全体の P50=1.38m を引き上げているのは **IMU=no の 4178 epoch (34%)** で、これは **停車中** (IMU speed < 0.01 m/s で fallback)。
+
+**改善方針**: 停車中は velocity=0 かつ sigma_pos を極小 (0.1-0.3m) にする。動いていないので particle depletion のリスクなし。
+
+**実装箇所**: `experiments/exp_pf_smoother_eval.py` の predict ループ内、IMU fallback 分岐 (L1502-1504 付近)。
+
+```python
+# 現在: IMU speed < 0.01 → fallback to SPP velocity
+# 変更: IMU speed < 0.01 → velocity=0, sigma_pos=0.1 (停車モード)
+if speed_enu <= 0.01:
+    velocity = np.zeros(3)  # stationary
+    pf.sigma_pos = 0.1      # tight predict (not moving)
+    used_imu = True          # IMU "detected stop" counts as used
+    n_imu_used += 1
+else:
+    # existing IMU velocity code...
+```
+
+predict 後に sigma_pos を元に戻す:
+```python
+pf.predict(velocity=velocity, dt=dt)
+pf.sigma_pos = original_sigma_pos  # restore
+```
+
+**CLI フラグ追加**: `--imu-stop-sigma-pos` (default=0.1)
+
+**期待効果**: IMU=no epoch の P50 3.9m → ~1.5m。全体 P50 1.38m → ~1.1-1.2m。
+
+**検証**: `--epoch-diagnostics-out` で IMU=no epoch の改善を確認。Shinjuku でも regression しないこと。
+
+**注意**: frozen preset `odaiba_reference` は変更しない。新しい preset `odaiba_stop_detect` を作って検証。
+
+### 8.2 現在の状況 (2026-04-13 更新)
+
+優先度 A は完了。優先度 D (停車検知 dynamic sigma_pos) が最も有望な改善方向。
+
+---
+
+## 9. 既知の問題とハマりどころ
+
+### 9.1 best config の漂流 (解決済み)
+
+2026-04-11 に best config を preset として再固定済み (`5.48m`, 3 回再現確認)。
+flag drift の原因は `mupf-dd-sigma-cycles` (0.25→0.20) と `mupf-dd-fallback-min-sats` (5→4) だった。
+
+### 9.2 tracked fallback の actual use は少ない
+
+診断では、
+
+- tracked attempt は多い
+- しかし actual use はかなり少ない
+- candidate sat 数も `0-2` に偏ることが多い
+
+という状態が見えている。
+
+したがって、tracked 系は「存在しないよりは良い」可能性はあるが、現時点では主役ではない。
+
+### 9.3 `libgnsspp` import の順序
+
+`exp_pf_smoother_eval.py` 冒頭で `sys.path` を積む順番を間違えると、
+
+- pure Python wrapper が先に来る
+- build binding を期待する smoke regression が落ちる
+
+という問題がある。
+
+これは見落としやすい。
+
+### 9.4 `pf_smoother_eval.csv` の上書き
+
+experiment を回すと `experiments/results/pf_smoother_eval.csv` が変わる。
+
+会話中は毎回バックアップして戻しているが、Claude が full-run を何本か回すならここは明示的に気をつけた方がいい。
+
+### 9.5 `sub-meter` はまだ出ていない
+
+ここは重要なので明記する。
+
+- `sub-meter` はまだ未達
+- ただし `old ALL-IN + smoother 6.24m` から `historical best 5.54m` までは縮めた
+- 今の真の課題は「rescue stack を reproducible に保ちながら、さらに削る」こと
+
+---
+
+## 10. Claude に期待する振る舞い
+
+この handoff の意図は「古い TODO に戻らせない」こと。
+
+### 10.1 やってよいこと
+
+- `odaiba_reference` の frozen condition を詰める
+- `tests/test_exp_pf_smoother_eval.py` を強化する
+- `pf_smoother_api.md` を参照して rescue flow を読む
+- `exp_pf_smoother_eval.py` の helper 単位で整える
+
+### 10.2 今はやらなくてよいこと
+
+- `DD pseudorange` の新規設計
+- `DD carrier` の全面書き直し
+- FGO 導入
+- PR #4 の merge
+- 「worktree を clean に戻す」ための巻き戻し
+
+### 10.3 もし精度改善に進むなら
+
+再現条件を固定した後であれば、次の順がまだ筋がいい。
+
+1. fallback quality を上げる
+2. anchor / fallback の切替基準を diagnostics ベースで整理する
+3. tracked continuity は veto 的に使う方向を考える
+
+逆に、
+
+- tracked 行をさらに強く boost
+- gate threshold の微小 sweep を延々続ける
+
+だけだと改善幅は小さい見込み。
+
+---
+
+## 11. 参考コマンド集
+
+### preset 一覧
+
+```bash
+python3 experiments/exp_pf_smoother_eval.py --list-presets
+```
+
+### frozen reference full-run
+
+```bash
+URBANNAV_DATA_ROOT=/tmp/UrbanNav-Tokyo bash experiments/run_pf_smoother_odaiba_reference.sh
+```
+
+### frozen reference smoke
+
+```bash
+URBANNAV_DATA_ROOT=/tmp/UrbanNav-Tokyo bash experiments/run_pf_smoother_odaiba_reference.sh --max-epochs 10 --n-particles 5000
+```
+
+### preset helper regression
+
+```bash
+python3 -m py_compile experiments/exp_pf_smoother_eval.py tests/test_exp_pf_smoother_eval.py
+PYTHONPATH=python python3 -m pytest tests/test_exp_pf_smoother_eval.py -q
+```
+
+### targeted CUDA smoke
+
+```bash
+PYTHONPATH=python python3 -m pytest tests/test_cuda_streams.py -k 'carrier_anchor_pseudorange_smoke or undiff_carrier_afv_smoke or smooth_with_dd_pseudorange_and_dd_carrier_smoke' -q
+```
+
+---
+
+## 12. 一言で言うと
+
+この repo の PF smoother 系は、もう「DD pseudorange をこれから実装する前段階」ではない。
+
+今は、
+
+- rescue stack は既にかなり入っている
+- historical best `5.54m` は一度出ている
+- だが frozen preset はまだ `5.61-5.62m`
+
+という段階。
+
+したがって Claude が最初にやるべきことは、
+
+**best config の再固定と regression 化**
+
+であって、新しい大改造ではない。
