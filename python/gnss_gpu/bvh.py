@@ -55,6 +55,26 @@ class BVHAccelerator:
         return raytrace_los_check_bvh(rx, sat, self._nodes_flat,
                                        self._sorted_tris)
 
+    def compute_multipath(self, rx_ecef, sat_ecef):
+        """Compute first-order multipath reflections using BVH traversal.
+
+        Args:
+            rx_ecef: [3] receiver ECEF position in meters.
+            sat_ecef: [n_sat, 3] satellite ECEF positions in meters.
+
+        Returns:
+            excess_delays: [n_sat] excess path delay in meters (0 if no reflection).
+            reflection_points: [n_sat, 3] reflection point coordinates.
+        """
+        from gnss_gpu._bvh import raytrace_multipath_bvh
+
+        rx = np.asarray(rx_ecef, dtype=np.float64).ravel()
+        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+
+        reflection_points, excess_delays = raytrace_multipath_bvh(
+            rx, sat, self._nodes_flat, self._sorted_tris)
+        return excess_delays, reflection_points
+
     @classmethod
     def from_building_model(cls, building_model):
         """Create BVH accelerator from an existing BuildingModel.
