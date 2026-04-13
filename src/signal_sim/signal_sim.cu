@@ -331,8 +331,16 @@ void simulate_epoch(const SignalSimConfig& config,
     float* d_output = nullptr;
     CUDA_CHECK(cudaMalloc(&d_output, output_bytes));
 
+    // Count valid channels first (skip invalid system/PRN)
+    int valid_count = 0;
     if (n_channels > 0 && channels != nullptr) {
-        CUDA_CHECK(cudaMalloc(&d_channel, output_bytes * (size_t)n_channels));
+        for (int ch = 0; ch < n_channels; ++ch)
+            if (resolve_code_params(channels[ch]).valid) valid_count++;
+    }
+
+    if (valid_count > 0 && channels != nullptr) {
+        CUDA_CHECK(cudaMalloc(&d_channel, output_bytes * (size_t)valid_count));
+        int slot = 0;
 
         for (int ch = 0; ch < n_channels; ++ch) {
             auto cp = resolve_code_params(channels[ch]);
@@ -347,7 +355,7 @@ void simulate_epoch(const SignalSimConfig& config,
                                        nb_bytes, cudaMemcpyHostToDevice));
             }
 
-            float* ch_out = d_channel + (size_t)ch * num_floats;
+            float* ch_out = d_channel + (size_t)slot * num_floats;
             generate_channel_kernel<<<blocks, kBlockSize>>>(
                 ch_out, cp.code_table, cp.code_length, cp.chip_rate,
                 cp.prn_index, channels[ch].code_phase,
@@ -359,13 +367,14 @@ void simulate_epoch(const SignalSimConfig& config,
             CUDA_CHECK(cudaGetLastError());
 
             if (d_nav_bits) CUDA_CHECK(cudaFree(d_nav_bits));
+            slot++;
         }
     }
 
     float noise_std = std::pow(10.0f, (float)config.noise_floor_db / 20.0f);
     composite_kernel<<<blocks, kBlockSize>>>(
         d_channel, d_output, n_samples,
-        (n_channels > 0) ? n_channels : 0, noise_std,
+        valid_count, noise_std,
         resolve_noise_seed(config.noise_seed));
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -394,15 +403,23 @@ void generate_single_channel(const SatChannel& ch,
     auto cp = resolve_code_params(ch);
     if (!cp.valid) { CUDA_CHECK(cudaFree(d_output)); return; }
 
+    int* d_nav_bits = nullptr;
+    if (ch.nav_bits != nullptr && ch.nav_bit_count > 0) {
+        size_t nb_bytes = (size_t)ch.nav_bit_count * sizeof(int);
+        CUDA_CHECK(cudaMalloc(&d_nav_bits, nb_bytes));
+        CUDA_CHECK(cudaMemcpy(d_nav_bits, ch.nav_bits, nb_bytes, cudaMemcpyHostToDevice));
+    }
+
     generate_channel_kernel<<<blocks, kBlockSize>>>(
         d_output, cp.code_table, cp.code_length, cp.chip_rate,
         cp.prn_index, ch.code_phase, ch.carrier_phase, ch.doppler_hz,
-        ch.amplitude, ch.nav_bit, nullptr, 0, 50.0,
-        n_samples, sampling_freq, intermediate_freq);
+        ch.amplitude, ch.nav_bit, d_nav_bits, ch.nav_bit_count,
+        ch.nav_bit_rate, n_samples, sampling_freq, intermediate_freq);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 
     CUDA_CHECK(cudaMemcpy(iq_out, d_output, output_bytes, cudaMemcpyDeviceToHost));
+    if (d_nav_bits) CUDA_CHECK(cudaFree(d_nav_bits));
     CUDA_CHECK(cudaFree(d_output));
 }
 
