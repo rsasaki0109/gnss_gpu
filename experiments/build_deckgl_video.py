@@ -589,7 +589,7 @@ const MAP_STYLE = {{
       id: 'osm',
       type: 'raster',
       source: 'osm',
-      paint: {{ 'raster-opacity': 0.35, 'raster-saturation': -0.8, 'raster-brightness-max': 0.4 }},
+      paint: {{ 'raster-opacity': 0.7, 'raster-saturation': -0.5, 'raster-brightness-max': 0.55 }},
     }},
   ],
 }};
