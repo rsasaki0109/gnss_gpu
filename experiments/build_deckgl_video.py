@@ -1127,11 +1127,13 @@ function renderFrame(nowTs) {{
   const cameraPitch = lerp(INITIAL_VIEW.pitch, Math.max(18.0, INITIAL_VIEW.pitch + INTRO_PITCH_OFFSET), introMix);
   const viewCenter = offsetLatLon(interp.rxNow[0], interp.rxNow[1], cameraBearing, cameraLeadM);
 
-  map.jumpTo({{
+  map.easeTo({{
     center: [viewCenter[1], viewCenter[0]],
     zoom: cameraZoom,
     pitch: cameraPitch,
     bearing: cameraBearing,
+    duration: 800,
+    easing: t => t,
   }});
 
   overlay.setProps({{
