@@ -42,17 +42,17 @@ from evaluate import ecef_to_lla
 # ---------------------------------------------------------------------------
 TEST_DIR = Path("/tmp/gsdc_data/gsdc2023/sdc2023/test")
 SAMPLE_SUB = Path("/tmp/gsdc_data/gsdc2023/sdc2023/sample_submission.csv")
-OUTPUT_CSV = _SCRIPT_DIR / "results" / "gsdc2023_submission_v2.csv"
+OUTPUT_CSV = _SCRIPT_DIR / "results" / "gsdc2023_submission_v3.csv"
 
 N_PARTICLES = 100_000
-SIGMA_POS = 10.0
+SIGMA_POS = 10.0              # v1 baseline
 SIGMA_CB = 300.0
-SIGMA_PR = 12.0               # slightly tighter than v1 (Hatch helps)
-POS_UPDATE_SIGMA = 3.0        # v1 WLS constraint
+SIGMA_PR = 15.0               # v1 baseline
+POS_UPDATE_SIGMA = 3.0        # v1 baseline
 ELEV_THRESHOLD = 15.0
 
-SIGMA_POS_TDCP = 4.0          # moderate TDCP tightness
-HATCH_MAX_WINDOW = 50         # shorter window to avoid iono divergence
+SIGMA_POS_TDCP = 5.0          # moderate
+HATCH_MAX_WINDOW = 20
 HATCH_DIVERGE_THRESHOLD = 10.0
 CN0_THRESHOLD = 20.0
 
@@ -136,7 +136,8 @@ def parse_gnss_data_v2(gnss_path: Path) -> list[dict]:
             group["AccumulatedDeltaRangeState"].values.astype(np.float64), nan=0.0
         ).astype(np.int32)
         adr_valid = (adr_state & 1) == 1       # bit0: ADR_STATE_VALID
-        # bit1: ADR_STATE_RESET, bit2: ADR_STATE_CYCLE_SLIP — both = discontinuity
+        # bit1: ADR_STATE_RESET, bit2: ADR_STATE_CYCLE_SLIP
+        # NOTE: bit4 (HALF_CYCLE_REPORTED) is NOT a slip — it's set for ALL measurements
         cycle_slip = (adr_state & 6) != 0
 
         sv_clock_drift = np.nan_to_num(
@@ -168,6 +169,63 @@ def parse_gnss_data_v2(gnss_path: Path) -> list[dict]:
         })
 
     return epochs
+
+
+# ---------------------------------------------------------------------------
+# Cycle slip detector (Doppler-carrier + ADR jump + state bits)
+# ---------------------------------------------------------------------------
+class CycleSlipDetector:
+    """Enhanced cycle slip detection using multiple criteria.
+
+    1. ADR state bits (reset, cycle_slip, half_cycle_reported) — from parser
+    2. Doppler-carrier consistency: |(-pr_rate_avg * dt) - delta_adr| > 1.5m
+    3. ADR jump: |delta_adr| > 50000m
+    """
+
+    def __init__(self):
+        self._prev_adr: dict[tuple, float] = {}
+        self._prev_pr_rate: dict[tuple, float] = {}
+        self._prev_arrival_ns: dict[tuple, int] = {}
+
+    def detect(self, epoch: dict) -> np.ndarray:
+        n_sv = epoch["n_sv"]
+        slip = epoch["cycle_slip"].copy()
+        arrival_ns = epoch["arrival_ns"]
+
+        for i in range(n_sv):
+            sid = epoch["sat_ids"][i]
+
+            if not epoch["adr_valid"][i] or epoch["adr"][i] == 0.0:
+                slip[i] = True
+                continue
+
+            adr_cur = epoch["adr"][i]
+            pr_rate_cur = epoch["pr_rate"][i]
+
+            if sid in self._prev_adr:
+                dt = (arrival_ns - self._prev_arrival_ns[sid]) / 1e9
+                if 0 < dt < 10:
+                    adr_prev = self._prev_adr[sid]
+
+                    # ADR jump check
+                    if abs(adr_cur - adr_prev) > 50000.0:
+                        slip[i] = True
+
+                    # Doppler-carrier consistency: pr_rate*dt should match delta_adr
+                    pr_rate_prev = self._prev_pr_rate.get(sid, pr_rate_cur)
+                    pr_rate_avg = (pr_rate_cur + pr_rate_prev) / 2.0
+                    predicted = pr_rate_avg * dt  # same sign convention as delta_adr
+                    actual = adr_cur - adr_prev
+                    if abs(predicted - actual) > 1.5:
+                        slip[i] = True
+                elif dt >= 10:
+                    slip[i] = True
+
+            self._prev_adr[sid] = adr_cur
+            self._prev_pr_rate[sid] = pr_rate_cur
+            self._prev_arrival_ns[sid] = arrival_ns
+
+        return slip
 
 
 # ---------------------------------------------------------------------------
@@ -321,27 +379,28 @@ def compute_tdcp_velocity(
     except np.linalg.LinAlgError:
         return None
 
+    # Iterative outlier rejection: postfit residual > 1.0m
+    H_sub = H[mask]
+    b_sub = b[mask]
+    for _ in range(3):
+        pred = H_sub @ x
+        resid = np.abs(b_sub - pred)
+        good = resid <= 1.0
+        if good.sum() >= 5 and good.sum() < len(b_sub):
+            H_sub = H_sub[good]
+            b_sub = b_sub[good]
+            try:
+                x, _, _, _ = np.linalg.lstsq(H_sub, b_sub, rcond=None)
+            except np.linalg.LinAlgError:
+                break
+        else:
+            break
+
     velocity = x[:3] / dt
 
     # Sanity: reject unreasonable speed
     if np.linalg.norm(velocity) > 80.0:
         return None
-
-    # Outlier rejection: remove satellites with large residuals and re-solve
-    pred = H[mask] @ x
-    resid = np.abs(b[mask] - pred)
-    threshold = max(3.0 * np.median(resid), 0.5)  # 3x median, min 0.5m
-    good = resid < threshold
-    if good.sum() >= 5 and good.sum() < mask.sum():
-        Hg = H[mask][good]
-        bg = b[mask][good]
-        try:
-            x2, _, _, _ = np.linalg.lstsq(Hg, bg, rcond=None)
-            velocity = x2[:3] / dt
-            if np.linalg.norm(velocity) > 80.0:
-                return None
-        except np.linalg.LinAlgError:
-            pass
 
     return velocity
 
@@ -360,6 +419,57 @@ def elevation_weights(
         cn0_w = np.clip((cn0 - 20.0) / 25.0, 0.3, 1.0)
         weights *= cn0_w
     return weights
+
+
+def compute_robust_wls(sat_ecef: np.ndarray, pseudoranges: np.ndarray,
+                       weights: np.ndarray, init_pos: np.ndarray,
+                       n_iter: int = 5) -> np.ndarray:
+    """Iteratively Reweighted Least Squares (IRLS) with Huber loss.
+
+    Returns ECEF position [3] or init_pos if solve fails.
+    """
+    pos = init_pos.copy()
+    n_sat = len(pseudoranges)
+    if n_sat < 5:
+        return init_pos.copy()
+
+    # Initialize clock bias from init_pos
+    init_ranges = np.linalg.norm(sat_ecef - pos, axis=1)
+    cb = float(np.median(pseudoranges - init_ranges))
+
+    for iteration in range(n_iter):
+        ranges = np.linalg.norm(sat_ecef - pos, axis=1)
+        ranges = np.maximum(ranges, 1.0)
+        residuals = pseudoranges - ranges - cb
+
+        # Huber weighting: k = 20m threshold
+        k = 20.0
+        huber_w = np.where(np.abs(residuals) <= k, 1.0, k / np.abs(residuals))
+
+        w = weights * huber_w
+
+        los = (sat_ecef - pos) / ranges[:, np.newaxis]
+        H = np.column_stack([-los, np.ones(n_sat)])
+        W = np.diag(w)
+
+        try:
+            HtWH = H.T @ W @ H
+            HtWy = H.T @ W @ residuals
+            dx = np.linalg.solve(HtWH, HtWy)
+        except np.linalg.LinAlgError:
+            return init_pos.copy()
+
+        pos += dx[:3]
+        cb += dx[3]
+
+        if np.linalg.norm(dx[:3]) < 0.01:
+            break
+
+    # Safety: if diverged far from init, fall back
+    if np.linalg.norm(pos - init_pos) > 100.0:
+        return init_pos.copy()
+
+    return pos
 
 
 def epochs_to_unix_ms(epochs: list[dict]) -> np.ndarray:
@@ -409,7 +519,8 @@ def run_pf_test(data_dir: Path, label: str) -> tuple[np.ndarray, np.ndarray] | N
     # Enable smoother
     pf.enable_smoothing()
 
-    # Hatch filter with divergence bound
+    # Cycle slip detector + Hatch filter
+    cycle_slip_detector = CycleSlipDetector()
     hatch = HatchFilter(max_window=HATCH_MAX_WINDOW,
                         diverge_threshold=HATCH_DIVERGE_THRESHOLD)
 
@@ -422,23 +533,25 @@ def run_pf_test(data_dir: Path, label: str) -> tuple[np.ndarray, np.ndarray] | N
         dt = max(dt, 0.01)
         prev_arrival_ns = ep["arrival_ns"]
 
-        # Hatch filter (bounded)
+        # Enhanced cycle slip detection (Doppler-carrier + ADR jump + state bits)
+        ep["cycle_slip"] = cycle_slip_detector.detect(ep)
+
+        # Hatch filter with carrier smoothing
         smoothed_pr = hatch.smooth(
-            ep["sat_ids"], ep["pseudoranges"],
-            ep["adr"], ep["adr_valid"], ep["cycle_slip"],
+            ep["sat_ids"], ep["pseudoranges"], ep["adr"],
+            ep["adr_valid"], ep["cycle_slip"],
         )
 
-        # TDCP or Doppler velocity
+        # TDCP velocity (preferred), Doppler fallback
         rx_ecef = pf_positions[i - 1] if i > 0 else init_pos
-        velocity = None
         sigma_pos = SIGMA_POS
-
+        velocity = None
         if i > 0:
             velocity = compute_tdcp_velocity(ep, epochs[i - 1], rx_ecef, dt)
-        if velocity is not None:
-            sigma_pos = SIGMA_POS_TDCP
-            tdcp_count += 1
-        else:
+            if velocity is not None:
+                sigma_pos = SIGMA_POS_TDCP
+                tdcp_count += 1
+        if velocity is None:
             velocity = compute_doppler_velocity(ep, rx_ecef)
 
         # PF steps (v1 params)
@@ -448,8 +561,9 @@ def run_pf_test(data_dir: Path, label: str) -> tuple[np.ndarray, np.ndarray] | N
         weights = elevation_weights(ep["elevations"], ep["cn0"], ELEV_THRESHOLD)
         pf.update_gmm(
             ep["sat_ecef"], smoothed_pr, weights=weights,
-            sigma_pr=SIGMA_PR, w_los=0.8, mu_nlos=15.0, sigma_nlos=30.0,
+            sigma_pr=SIGMA_PR, w_los=0.7, mu_nlos=15.0, sigma_nlos=30.0,
         )
+        # Use dataset WLS for position update (Sagnac-corrected)
         pf.position_update(ep["wls_ecef"], sigma_pos=POS_UPDATE_SIGMA)
 
         est = pf.estimate()
@@ -481,8 +595,7 @@ def run_pf_test(data_dir: Path, label: str) -> tuple[np.ndarray, np.ndarray] | N
         final_positions = pf_positions
 
     unix_ms = epochs_to_unix_ms(epochs)
-    tdcp_pct = 100 * tdcp_count / max(n_epochs - 1, 1) if n_epochs > 1 else 0
-    print(f"  {label}: {n_epochs} ep, TDCP {tdcp_pct:.0f}%")
+    print(f"  {label}: {n_epochs} ep, TDCP {tdcp_count}/{n_epochs - 1}")
     return final_positions, unix_ms
 
 
