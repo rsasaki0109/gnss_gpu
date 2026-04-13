@@ -28,7 +28,7 @@ for _p in (_REPO, _EXPERIMENTS):
         sys.path.insert(0, str(_p))
 
 from gnss_gpu import wls_position  # noqa: E402
-from gnss_gpu.fgo import fgo_gnss_lm  # noqa: E402
+from gnss_gpu.fgo import fgo_gnss_lm, fgo_gnss_lm_vd  # noqa: E402
 from gnss_gpu.io.rinex import read_rinex_obs  # noqa: E402
 from gnss_gpu.io.nav_rinex import (  # noqa: E402
     _datetime_to_gps_seconds_of_week,
@@ -154,6 +154,8 @@ def run_fgo_on_ppc(
     export_spp: Path | None = None,
     use_doppler: bool = False,
     multi_gnss: bool = False,
+    use_vd: bool = False,
+    clock_drift_sigma_m: float = 1.0,
 ) -> dict:
     """Run RTKLIB-aligned FGO on a PPC run and return results."""
     obs_p = run_dir / "rover.obs"
@@ -302,16 +304,101 @@ def run_fgo_on_ppc(
             if 0 < dt_ep < 10:
                 motion_disp[t_d] = rx_vel * dt_ep
 
-    # FGO — expand state to (T, 3+n_clock) for multi-GNSS ISB
-    fgo_state = np.zeros((n_epoch, 3 + n_clock), dtype=np.float64)
-    fgo_state[:, :4] = wls_state  # xyz + GPS clock from WLS
-    iters, mse_pr = fgo_gnss_lm(
-        sat_ecef, pseudorange, weights, fgo_state,
-        sys_kind=sys_kind_arr,
-        n_clock=n_clock,
-        motion_sigma_m=motion_sigma_m, max_iter=fgo_iters, tol=1e-7,
-        motion_displacement=motion_disp,
-    )
+    # FGO — choose between standard and VD solver
+    if use_vd:
+        # --- Velocity-Doppler (VD) solver ---
+        # State: [x,y,z, vx,vy,vz, c0,...,c_{K-1}, drift] -> 7 + n_clock columns
+        fgo_state = np.zeros((n_epoch, 7 + n_clock), dtype=np.float64)
+        fgo_state[:, :3] = wls_state[:, :3]  # position from WLS
+        fgo_state[:, 6] = wls_state[:, 3]    # GPS clock bias
+
+        # Store RTKLIB receiver velocity and initialize velocity state
+        rx_vel_per_epoch = np.zeros((n_epoch, 3), dtype=np.float64)
+        if rtk_meas is not None:
+            for t_v in range(n_epoch):
+                tow_v = epochs_data[t_v][0]
+                wk_v = epochs_data[t_v][3]
+                sats_v = epochs_data[t_v][1]
+                for sid in sats_v:
+                    row = rtk_meas.get((wk_v, round(float(tow_v), 4), sid))
+                    if row is not None and "rx_vx" in row:
+                        rv = np.array([row["rx_vx"], row["rx_vy"], row["rx_vz"]])
+                        fgo_state[t_v, 3] = rv[0]
+                        fgo_state[t_v, 4] = rv[1]
+                        fgo_state[t_v, 5] = rv[2]
+                        rx_vel_per_epoch[t_v] = rv
+                        break
+
+        # Build dt array (inter-epoch time differences)
+        dt_arr = np.zeros(n_epoch, dtype=np.float64)
+        for t_dt in range(n_epoch - 1):
+            dt_arr[t_dt] = epochs_data[t_dt + 1][0] - epochs_data[t_dt][0]
+            if dt_arr[t_dt] <= 0 or dt_arr[t_dt] > 30:
+                dt_arr[t_dt] = 1.0  # fallback
+
+        # Build satellite velocity and Doppler pseudorange-rate arrays
+        sat_vel_arr = np.zeros((n_epoch, max_sats, 3), dtype=np.float64)
+        doppler_arr = np.zeros((n_epoch, max_sats), dtype=np.float64)
+        doppler_w_arr = np.zeros((n_epoch, max_sats), dtype=np.float64)
+
+        if rtk_meas is not None:
+            for t_d in range(n_epoch):
+                tow_d = epochs_data[t_d][0]
+                wk_d = epochs_data[t_d][3]
+                sats_d = epochs_data[t_d][1]
+                # Get receiver velocity for this epoch
+                rx_vel = np.zeros(3)
+                for sid in sats_d:
+                    row = rtk_meas.get((wk_d, round(float(tow_d), 4), sid))
+                    if row is not None and "rx_vx" in row:
+                        rx_vel = np.array([row["rx_vx"], row["rx_vy"], row["rx_vz"]])
+                        break
+
+                for si, sid in enumerate(sats_d):
+                    row = rtk_meas.get((wk_d, round(float(tow_d), 4), sid))
+                    if row is None or "svx" not in row:
+                        continue
+                    sv = np.array([row["svx"], row["svy"], row["svz"]])
+                    sat_vel_arr[t_d, si] = sv
+                    # Compute pseudorange-rate (Doppler range rate):
+                    # Kernel convention: e = (rx - sat) / r (sat-to-rx)
+                    # pred = dot(e, sv - rv) + drift
+                    # So doppler_obs should be dot((rx-sat)/r, sv-rv)
+                    sat_pos = sat_ecef[t_d, si]
+                    rx_pos = fgo_state[t_d, :3]
+                    diff = rx_pos - sat_pos  # rx - sat (sat-to-rx direction)
+                    rng = np.linalg.norm(diff)
+                    if rng < 1e3:
+                        continue
+                    unit_vec = diff / rng
+                    range_rate = np.dot(sv - rx_vel, unit_vec)
+                    doppler_arr[t_d, si] = range_rate
+                    # Weight same as pseudorange (sin^2 elevation)
+                    doppler_w_arr[t_d, si] = weights[t_d, si]
+
+        iters, mse_pr = fgo_gnss_lm_vd(
+            sat_ecef, pseudorange, weights, fgo_state,
+            sys_kind=sys_kind_arr,
+            n_clock=n_clock,
+            motion_sigma_m=motion_sigma_m,
+            clock_drift_sigma_m=clock_drift_sigma_m,
+            max_iter=fgo_iters, tol=1e-7,
+            sat_vel=sat_vel_arr,
+            doppler=doppler_arr,
+            doppler_weights=doppler_w_arr,
+            dt=dt_arr,
+        )
+    else:
+        # --- Standard solver ---
+        fgo_state = np.zeros((n_epoch, 3 + n_clock), dtype=np.float64)
+        fgo_state[:, :4] = wls_state  # xyz + GPS clock from WLS
+        iters, mse_pr = fgo_gnss_lm(
+            sat_ecef, pseudorange, weights, fgo_state,
+            sys_kind=sys_kind_arr,
+            n_clock=n_clock,
+            motion_sigma_m=motion_sigma_m, max_iter=fgo_iters, tol=1e-7,
+            motion_displacement=motion_disp,
+        )
 
     # Compute errors (skip epochs where WLS failed to converge)
     err_wls_2d, err_fgo_2d = [], []
@@ -358,6 +445,10 @@ def main() -> None:
     p.add_argument("--fgo-iters", type=int, default=8)
     p.add_argument("--no-rtklib", action="store_true", help="Skip RTKLIB export_spp_meas")
     p.add_argument("--doppler", action="store_true", help="Use Doppler velocity for motion model")
+    p.add_argument("--vd", action="store_true",
+                   help="Use fgo_gnss_lm_vd solver (velocity-Doppler)")
+    p.add_argument("--clock-drift-sigma-m", type=float, default=1.0,
+                   help="Clock drift sigma for VD solver (default: 1.0)")
     p.add_argument("--multi-gnss", action="store_true",
                    help="Use GPS+Galileo+QZSS with ISB (n_clock=3)")
     args = p.parse_args()
@@ -388,6 +479,8 @@ def main() -> None:
                 export_spp=export_spp,
                 use_doppler=args.doppler,
                 multi_gnss=args.multi_gnss,
+                use_vd=args.vd,
+                clock_drift_sigma_m=args.clock_drift_sigma_m,
             )
             results.append(r)
             gnss_tag = f"clk={r['n_clock']}" if r.get("multi_gnss") else ""
