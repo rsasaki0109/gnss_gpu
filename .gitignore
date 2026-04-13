@@ -28,3 +28,12 @@ tmp/site_visual_check/
 *.cubin
 *.fatbin
 *.ptx
+
+# Experiment data (downloaded, not committed)
+experiments/data/
+
+# Intermediate frame images (GIFs are committed instead)
+experiments/results/*/frame_*.png
+experiments/results/los_nlos_verification/odaiba_*.png
+experiments/results/los_nlos_verification/shinjuku_*.png
+experiments/results/los_nlos_verification/real_eph_*.png
