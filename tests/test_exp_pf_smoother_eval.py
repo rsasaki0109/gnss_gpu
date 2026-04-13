@@ -12,6 +12,7 @@ if str(_EXPERIMENTS_DIR) not in sys.path:
 
 from experiments.exp_pf_smoother_eval import (
     CarrierBiasState,
+    _apply_dd_carrier_undiff_fallback,
     _expand_cli_preset_argv,
     _namespace_to_run_kwargs,
     _attempt_carrier_anchor_pseudorange_update,
@@ -19,7 +20,9 @@ from experiments.exp_pf_smoother_eval import (
     _build_carrier_anchor_pseudorange_update,
     _collect_hybrid_tracked_undiff_carrier_afv_inputs,
     _collect_tracked_undiff_carrier_afv_inputs,
+    _prepare_dd_carrier_undiff_fallback,
     _propagate_carrier_bias_tracker_tdcp,
+    _should_replace_weak_dd_with_fallback,
     build_arg_parser,
     load_pf_smoother_dataset,
     run_pf_with_optional_smoother,
@@ -52,6 +55,11 @@ class _DummyPF:
             "wavelength": float(wavelength),
             "sigma_cycles": float(sigma_cycles),
         }
+
+
+class _DummyDDResult:
+    def __init__(self, n_dd: int):
+        self.n_dd = int(n_dd)
 
 
 def _make_tracker_and_rows():
@@ -330,6 +338,79 @@ def test_attempt_dd_carrier_undiff_fallback_uses_tracked_hybrid_rows():
     assert pf.last_carrier_afv["carrier_phase_cycles"].shape[0] == 4
 
 
+def test_should_replace_weak_dd_with_fallback_requires_matching_guards():
+    dd_result = _DummyDDResult(4)
+    dd_pr_result = _DummyDDResult(2)
+
+    assert _should_replace_weak_dd_with_fallback(
+        dd_result,
+        dd_pr_result,
+        raw_afv_median_cycles=0.22,
+        weak_dd_max_pairs=4,
+        weak_dd_min_raw_afv_median_cycles=0.15,
+        weak_dd_require_no_dd_pr=True,
+    ) is True
+    assert _should_replace_weak_dd_with_fallback(
+        dd_result,
+        dd_pr_result,
+        raw_afv_median_cycles=0.10,
+        weak_dd_max_pairs=4,
+        weak_dd_min_raw_afv_median_cycles=0.15,
+        weak_dd_require_no_dd_pr=True,
+    ) is False
+    assert _should_replace_weak_dd_with_fallback(
+        dd_result,
+        _DummyDDResult(5),
+        raw_afv_median_cycles=0.22,
+        weak_dd_max_pairs=4,
+        weak_dd_min_raw_afv_median_cycles=0.15,
+        weak_dd_require_no_dd_pr=True,
+    ) is False
+
+
+def test_prepare_dd_carrier_undiff_fallback_marks_weak_dd_replacement():
+    tracker, carrier_rows, receiver_state_cur, tow_cur, _expected = _make_tracker_and_rows()
+
+    attempt = _prepare_dd_carrier_undiff_fallback(
+        measurements=[],
+        sat_ecef=np.zeros((0, 3), dtype=np.float64),
+        pseudoranges=np.zeros(0, dtype=np.float64),
+        spp_pos_check=receiver_state_cur[:3],
+        tracker=tracker,
+        carrier_rows=carrier_rows,
+        carrier_state=receiver_state_cur,
+        tow=tow_cur,
+        enabled=True,
+        mupf_enabled=False,
+        dd_carrier_result=_DummyDDResult(4),
+        used_carrier_anchor=False,
+        snr_min=25.0,
+        elev_min=0.15,
+        fallback_sigma_cycles=0.10,
+        fallback_min_sats=4,
+        prefer_tracked=True,
+        tracked_min_stable_epochs=2,
+        tracked_min_sats=2,
+        tracked_continuity_good_m=None,
+        tracked_continuity_bad_m=None,
+        tracked_sigma_min_scale=1.0,
+        tracked_sigma_max_scale=1.0,
+        max_age_s=1.0,
+        max_continuity_residual_m=1.5,
+        allow_weak_dd=True,
+        weak_dd_max_pairs=4,
+    )
+
+    assert attempt.replaced_weak_dd is True
+    assert attempt.afv is not None
+    assert attempt.sigma_cycles == 0.10
+
+    pf = _DummyPF()
+    attempt = _apply_dd_carrier_undiff_fallback(pf, attempt)
+    assert attempt.used is True
+    assert pf.last_carrier_afv is not None
+
+
 def test_expand_cli_preset_argv_inlines_odaiba_reference_flags():
     expanded = _expand_cli_preset_argv([
         "--preset", "odaiba_reference",
@@ -370,6 +451,26 @@ def test_odaiba_reference_preset_keeps_late_overrides():
     assert run_kwargs["predict_guide"] == "imu"
     assert run_kwargs["mupf_dd_fallback_undiff"] is True
     assert run_kwargs["carrier_anchor_max_residual_m"] == 1.0
+
+
+def test_parser_maps_weak_dd_fallback_flags():
+    parser = build_arg_parser()
+    args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_reference",
+        "--mupf-dd-fallback-weak-dd-max-pairs", "4",
+        "--mupf-dd-fallback-weak-dd-min-raw-afv-median-cycles", "0.15",
+        "--mupf-dd-fallback-weak-dd-require-no-dd-pr",
+    ]))
+
+    run_kwargs = _namespace_to_run_kwargs(
+        args,
+        position_update_sigma=args.position_update_sigma,
+        use_smoother=args.smoother,
+    )
+    assert run_kwargs["mupf_dd_fallback_weak_dd_max_pairs"] == 4
+    assert run_kwargs["mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles"] == 0.15
+    assert run_kwargs["mupf_dd_fallback_weak_dd_require_no_dd_pr"] is True
 
 
 @pytest.mark.skipif(
@@ -468,6 +569,21 @@ def test_expand_cli_preset_argv_inlines_odaiba_stop_detect_flags():
     assert expanded[expanded.index("--imu-stop-sigma-pos") + 1] == "0.1"
     assert "--dd-pseudorange" in expanded
     assert "--mupf-dd-fallback-undiff" in expanded
+    assert expanded[-2:] == ["--max-epochs", "10"]
+
+
+def test_expand_cli_preset_argv_inlines_odaiba_reference_guarded_flags():
+    expanded = _expand_cli_preset_argv([
+        "--preset", "odaiba_reference_guarded",
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--max-epochs", "10",
+    ])
+
+    assert "--preset" not in expanded
+    assert "--smoother-tail-guard-ess-max-ratio" in expanded
+    assert expanded[expanded.index("--smoother-tail-guard-ess-max-ratio") + 1] == "0.001"
+    assert "--smoother-tail-guard-min-shift-m" in expanded
+    assert expanded[expanded.index("--smoother-tail-guard-min-shift-m") + 1] == "4.0"
     assert expanded[-2:] == ["--max-epochs", "10"]
 
 

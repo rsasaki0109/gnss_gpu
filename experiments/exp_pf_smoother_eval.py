@@ -139,6 +139,49 @@ _CLI_PRESETS: dict[str, dict[str, object]] = {
             "--carrier-anchor-max-continuity-residual-m", "0.50",
         ],
     },
+    "odaiba_reference_guarded": {
+        "description": "Odaiba reference + low-ESS smoother tail guard for weak smoothing tails.",
+        "argv": [
+            "--runs", "Odaiba",
+            "--n-particles", "100000",
+            "--sigma-pos", "1.2",
+            "--position-update-sigma", "1.9",
+            "--predict-guide", "imu",
+            "--imu-tight-coupling",
+            "--residual-downweight",
+            "--pr-accel-downweight",
+            "--smoother",
+            "--dd-pseudorange",
+            "--dd-pseudorange-sigma", "0.5",
+            "--dd-pseudorange-gate-adaptive-floor-m", "4.0",
+            "--dd-pseudorange-gate-adaptive-mad-mult", "3.0",
+            "--dd-pseudorange-gate-ess-min-scale", "0.9",
+            "--dd-pseudorange-gate-ess-max-scale", "1.1",
+            "--mupf-dd",
+            "--mupf-dd-sigma-cycles", "0.20",
+            "--mupf-dd-base-interp",
+            "--mupf-dd-gate-adaptive-floor-cycles", "0.25",
+            "--mupf-dd-gate-adaptive-mad-mult", "3.0",
+            "--mupf-dd-gate-ess-min-scale", "0.9",
+            "--mupf-dd-gate-ess-max-scale", "1.1",
+            "--mupf-dd-gate-spread-min-scale", "0.88",
+            "--mupf-dd-gate-spread-max-scale", "1.0",
+            "--mupf-dd-gate-low-spread-m", "3.0",
+            "--mupf-dd-gate-high-spread-m", "8.0",
+            "--mupf-dd-skip-low-support-ess-ratio", "0.01",
+            "--mupf-dd-skip-low-support-max-pairs", "4",
+            "--mupf-dd-skip-low-support-min-raw-afv-median-cycles", "0.15",
+            "--mupf-dd-fallback-undiff",
+            "--mupf-dd-fallback-sigma-cycles", "0.10",
+            "--mupf-dd-fallback-min-sats", "4",
+            "--carrier-anchor",
+            "--carrier-anchor-sigma-m", "0.25",
+            "--carrier-anchor-max-residual-m", "0.80",
+            "--carrier-anchor-max-continuity-residual-m", "0.50",
+            "--smoother-tail-guard-ess-max-ratio", "0.001",
+            "--smoother-tail-guard-min-shift-m", "4.0",
+        ],
+    },
 }
 
 
@@ -175,6 +218,7 @@ class CarrierFallbackAttempt:
     used: bool = False
     attempted_tracked: bool = False
     used_tracked: bool = False
+    replaced_weak_dd: bool = False
 
 
 def _finite_float(value: object) -> float | None:
@@ -859,8 +903,7 @@ def _attempt_carrier_anchor_pseudorange_update(
     return attempt
 
 
-def _attempt_dd_carrier_undiff_fallback(
-    pf: ParticleFilterDevice,
+def _prepare_dd_carrier_undiff_fallback(
     measurements,
     sat_ecef: np.ndarray,
     pseudoranges: np.ndarray,
@@ -887,14 +930,25 @@ def _attempt_dd_carrier_undiff_fallback(
     tracked_sigma_max_scale: float,
     max_age_s: float,
     max_continuity_residual_m: float,
+    allow_weak_dd: bool = False,
+    weak_dd_max_pairs: int | None = None,
 ) -> CarrierFallbackAttempt:
-    """Try the same-band undifferenced carrier fallback when DD carrier is unavailable."""
+    """Prepare the same-band undifferenced carrier fallback attempt."""
 
     attempt = CarrierFallbackAttempt()
     if not enabled or mupf_enabled or used_carrier_anchor:
         return attempt
-    if dd_carrier_result is not None and int(getattr(dd_carrier_result, "n_dd", 0)) >= 3:
+    dd_pairs = int(getattr(dd_carrier_result, "n_dd", 0)) if dd_carrier_result is not None else 0
+    dd_available = dd_pairs >= 3
+    weak_dd = (
+        allow_weak_dd
+        and weak_dd_max_pairs is not None
+        and dd_available
+        and dd_pairs <= int(weak_dd_max_pairs)
+    )
+    if dd_available and not weak_dd:
         return attempt
+    attempt.replaced_weak_dd = bool(weak_dd)
 
     tracked_assist_min_sats = int(1 if tracked_min_sats is None else tracked_min_sats)
     if prefer_tracked and carrier_rows and carrier_state is not None:
@@ -952,6 +1006,17 @@ def _attempt_dd_carrier_undiff_fallback(
         )
 
     attempt.sigma_cycles = float(fallback_sigma_cycles) * float(attempt.sigma_scale)
+    return attempt
+
+
+def _apply_dd_carrier_undiff_fallback(
+    pf: ParticleFilterDevice,
+    attempt: CarrierFallbackAttempt,
+) -> CarrierFallbackAttempt:
+    """Apply a prepared undifferenced carrier fallback attempt to the PF."""
+
+    if attempt.afv is None or attempt.sigma_cycles is None:
+        return attempt
     pf.update_carrier_afv(
         attempt.afv["sat_ecef"],
         attempt.afv["carrier_phase_cycles"],
@@ -961,6 +1026,100 @@ def _attempt_dd_carrier_undiff_fallback(
     )
     attempt.used = True
     return attempt
+
+
+def _attempt_dd_carrier_undiff_fallback(
+    pf: ParticleFilterDevice,
+    measurements,
+    sat_ecef: np.ndarray,
+    pseudoranges: np.ndarray,
+    spp_pos_check: np.ndarray,
+    tracker: dict[tuple[int, int], CarrierBiasState],
+    carrier_rows: dict[tuple[int, int], dict[str, object]],
+    carrier_state: np.ndarray | None,
+    tow: float,
+    *,
+    enabled: bool,
+    mupf_enabled: bool,
+    dd_carrier_result: object | None,
+    used_carrier_anchor: bool,
+    snr_min: float,
+    elev_min: float,
+    fallback_sigma_cycles: float,
+    fallback_min_sats: int,
+    prefer_tracked: bool,
+    tracked_min_stable_epochs: int,
+    tracked_min_sats: int | None,
+    tracked_continuity_good_m: float | None,
+    tracked_continuity_bad_m: float | None,
+    tracked_sigma_min_scale: float,
+    tracked_sigma_max_scale: float,
+    max_age_s: float,
+    max_continuity_residual_m: float,
+    allow_weak_dd: bool = False,
+    weak_dd_max_pairs: int | None = None,
+) -> CarrierFallbackAttempt:
+    """Try the same-band undifferenced carrier fallback and apply it to the PF."""
+
+    attempt = _prepare_dd_carrier_undiff_fallback(
+        measurements,
+        sat_ecef,
+        pseudoranges,
+        spp_pos_check,
+        tracker,
+        carrier_rows,
+        carrier_state,
+        tow,
+        enabled=enabled,
+        mupf_enabled=mupf_enabled,
+        dd_carrier_result=dd_carrier_result,
+        used_carrier_anchor=used_carrier_anchor,
+        snr_min=snr_min,
+        elev_min=elev_min,
+        fallback_sigma_cycles=fallback_sigma_cycles,
+        fallback_min_sats=fallback_min_sats,
+        prefer_tracked=prefer_tracked,
+        tracked_min_stable_epochs=tracked_min_stable_epochs,
+        tracked_min_sats=tracked_min_sats,
+        tracked_continuity_good_m=tracked_continuity_good_m,
+        tracked_continuity_bad_m=tracked_continuity_bad_m,
+        tracked_sigma_min_scale=tracked_sigma_min_scale,
+        tracked_sigma_max_scale=tracked_sigma_max_scale,
+        max_age_s=max_age_s,
+        max_continuity_residual_m=max_continuity_residual_m,
+        allow_weak_dd=allow_weak_dd,
+        weak_dd_max_pairs=weak_dd_max_pairs,
+    )
+    return _apply_dd_carrier_undiff_fallback(pf, attempt)
+
+
+def _should_replace_weak_dd_with_fallback(
+    dd_carrier_result,
+    dd_pseudorange_result,
+    *,
+    raw_afv_median_cycles: float | None,
+    weak_dd_max_pairs: int | None,
+    weak_dd_min_raw_afv_median_cycles: float | None,
+    weak_dd_require_no_dd_pr: bool,
+) -> bool:
+    """Return True when a weak DD carrier epoch should try undiff fallback first."""
+
+    if dd_carrier_result is None or int(getattr(dd_carrier_result, "n_dd", 0)) < 3:
+        return False
+
+    conds: list[bool] = []
+    if weak_dd_max_pairs is not None:
+        conds.append(int(getattr(dd_carrier_result, "n_dd", 0)) <= int(weak_dd_max_pairs))
+    if weak_dd_min_raw_afv_median_cycles is not None:
+        conds.append(
+            raw_afv_median_cycles is not None
+            and float(raw_afv_median_cycles) >= float(weak_dd_min_raw_afv_median_cycles)
+        )
+    if weak_dd_require_no_dd_pr:
+        conds.append(
+            dd_pseudorange_result is None or int(getattr(dd_pseudorange_result, "n_dd", 0)) < 3
+        )
+    return bool(conds) and all(conds)
 
 
 def _propagate_carrier_bias_tracker_tdcp(
@@ -1318,6 +1477,9 @@ def run_pf_with_optional_smoother(
     mupf_dd_fallback_tracked_continuity_bad_m: float | None = None,
     mupf_dd_fallback_tracked_sigma_min_scale: float = 1.0,
     mupf_dd_fallback_tracked_sigma_max_scale: float = 1.0,
+    mupf_dd_fallback_weak_dd_max_pairs: int | None = None,
+    mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles: float | None = None,
+    mupf_dd_fallback_weak_dd_require_no_dd_pr: bool = False,
     mupf_dd_skip_low_support_ess_ratio: float | None = None,
     mupf_dd_skip_low_support_max_pairs: int | None = None,
     mupf_dd_skip_low_support_min_raw_afv_median_cycles: float | None = None,
@@ -1407,6 +1569,7 @@ def run_pf_with_optional_smoother(
     n_dd_fallback_undiff_used = 0
     n_dd_fallback_tracked_attempted = 0
     n_dd_fallback_tracked_used = 0
+    n_dd_fallback_weak_dd_replaced = 0
     n_dd_gate_pairs_rejected = 0
     n_dd_gate_epoch_skip = 0
     carrier_bias_tracker: dict[tuple[int, int], CarrierBiasState] = {}
@@ -1845,6 +2008,50 @@ def run_pf_with_optional_smoother(
                     dd_result = None
                     dd_cp_support_skip = True
                     n_dd_skip_support_guard += 1
+            if (
+                dd_result is not None
+                and dd_result.n_dd >= 3
+                and _should_replace_weak_dd_with_fallback(
+                    dd_result,
+                    dd_pr_result,
+                    raw_afv_median_cycles=dd_cp_raw_abs_afv_median_cycles,
+                    weak_dd_max_pairs=mupf_dd_fallback_weak_dd_max_pairs,
+                    weak_dd_min_raw_afv_median_cycles=mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles,
+                    weak_dd_require_no_dd_pr=mupf_dd_fallback_weak_dd_require_no_dd_pr,
+                )
+            ):
+                replacement_attempt = _prepare_dd_carrier_undiff_fallback(
+                    measurements,
+                    sat_ecef,
+                    pr,
+                    np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64),
+                    carrier_bias_tracker,
+                    carrier_anchor_rows,
+                    np.asarray(pf.estimate(), dtype=np.float64),
+                    tow,
+                    enabled=mupf_dd_fallback_undiff,
+                    mupf_enabled=mupf,
+                    dd_carrier_result=dd_result,
+                    used_carrier_anchor=False,
+                    snr_min=mupf_snr_min,
+                    elev_min=mupf_elev_min,
+                    fallback_sigma_cycles=mupf_dd_fallback_sigma_cycles,
+                    fallback_min_sats=mupf_dd_fallback_min_sats,
+                    prefer_tracked=mupf_dd_fallback_prefer_tracked,
+                    tracked_min_stable_epochs=mupf_dd_fallback_tracked_min_stable_epochs,
+                    tracked_min_sats=mupf_dd_fallback_tracked_min_sats,
+                    tracked_continuity_good_m=mupf_dd_fallback_tracked_continuity_good_m,
+                    tracked_continuity_bad_m=mupf_dd_fallback_tracked_continuity_bad_m,
+                    tracked_sigma_min_scale=mupf_dd_fallback_tracked_sigma_min_scale,
+                    tracked_sigma_max_scale=mupf_dd_fallback_tracked_sigma_max_scale,
+                    max_age_s=carrier_anchor_max_age_s,
+                    max_continuity_residual_m=carrier_anchor_max_continuity_residual_m,
+                    allow_weak_dd=True,
+                    weak_dd_max_pairs=mupf_dd_fallback_weak_dd_max_pairs,
+                )
+                if replacement_attempt.afv is not None and replacement_attempt.sigma_cycles is not None:
+                    fallback_attempt = _apply_dd_carrier_undiff_fallback(pf, replacement_attempt)
+                    dd_result = None
             if dd_result is not None and dd_result.n_dd >= 3:
                 if (
                     mupf_dd_sigma_support_low_pairs is not None
@@ -1899,62 +2106,68 @@ def run_pf_with_optional_smoother(
                     dd_sigma_scale_sum += float(dd_cp_sigma_scale)
             else:
                 n_dd_skip += 1
-            anchor_attempt = _attempt_carrier_anchor_pseudorange_update(
-                pf,
-                carrier_bias_tracker,
-                carrier_anchor_rows,
-                np.asarray(pf.estimate(), dtype=np.float64),
-                prev_pf_state,
-                velocity,
-                dt,
-                tow,
-                enabled=carrier_anchor,
-                dd_carrier_result=dd_carrier_result,
-                seed_dd_min_pairs=carrier_anchor_seed_dd_min_pairs,
-                sigma_m=carrier_anchor_sigma_m,
-                max_age_s=carrier_anchor_max_age_s,
-                max_residual_m=carrier_anchor_max_residual_m,
-                max_continuity_residual_m=carrier_anchor_max_continuity_residual_m,
-                min_stable_epochs=carrier_anchor_min_stable_epochs,
-                min_sats=carrier_anchor_min_sats,
-            )
-            if anchor_attempt.used:
-                n_carrier_anchor_used += 1
+            if not fallback_attempt.used:
+                anchor_attempt = _attempt_carrier_anchor_pseudorange_update(
+                    pf,
+                    carrier_bias_tracker,
+                    carrier_anchor_rows,
+                    np.asarray(pf.estimate(), dtype=np.float64),
+                    prev_pf_state,
+                    velocity,
+                    dt,
+                    tow,
+                    enabled=carrier_anchor,
+                    dd_carrier_result=dd_carrier_result,
+                    seed_dd_min_pairs=carrier_anchor_seed_dd_min_pairs,
+                    sigma_m=carrier_anchor_sigma_m,
+                    max_age_s=carrier_anchor_max_age_s,
+                    max_residual_m=carrier_anchor_max_residual_m,
+                    max_continuity_residual_m=carrier_anchor_max_continuity_residual_m,
+                    min_stable_epochs=carrier_anchor_min_stable_epochs,
+                    min_sats=carrier_anchor_min_sats,
+                )
+                if anchor_attempt.used:
+                    n_carrier_anchor_used += 1
 
-            fallback_attempt = _attempt_dd_carrier_undiff_fallback(
-                pf,
-                measurements,
-                sat_ecef,
-                pr,
-                np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64),
-                carrier_bias_tracker,
-                carrier_anchor_rows,
-                anchor_attempt.state,
-                tow,
-                enabled=mupf_dd_fallback_undiff,
-                mupf_enabled=mupf,
-                dd_carrier_result=dd_carrier_result,
-                used_carrier_anchor=anchor_attempt.used,
-                snr_min=mupf_snr_min,
-                elev_min=mupf_elev_min,
-                fallback_sigma_cycles=mupf_dd_fallback_sigma_cycles,
-                fallback_min_sats=mupf_dd_fallback_min_sats,
-                prefer_tracked=mupf_dd_fallback_prefer_tracked,
-                tracked_min_stable_epochs=mupf_dd_fallback_tracked_min_stable_epochs,
-                tracked_min_sats=mupf_dd_fallback_tracked_min_sats,
-                tracked_continuity_good_m=mupf_dd_fallback_tracked_continuity_good_m,
-                tracked_continuity_bad_m=mupf_dd_fallback_tracked_continuity_bad_m,
-                tracked_sigma_min_scale=mupf_dd_fallback_tracked_sigma_min_scale,
-                tracked_sigma_max_scale=mupf_dd_fallback_tracked_sigma_max_scale,
-                max_age_s=carrier_anchor_max_age_s,
-                max_continuity_residual_m=carrier_anchor_max_continuity_residual_m,
-            )
+                fallback_attempt = _attempt_dd_carrier_undiff_fallback(
+                    pf,
+                    measurements,
+                    sat_ecef,
+                    pr,
+                    np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64),
+                    carrier_bias_tracker,
+                    carrier_anchor_rows,
+                    anchor_attempt.state,
+                    tow,
+                    enabled=mupf_dd_fallback_undiff,
+                    mupf_enabled=mupf,
+                    dd_carrier_result=dd_carrier_result,
+                    used_carrier_anchor=anchor_attempt.used,
+                    snr_min=mupf_snr_min,
+                    elev_min=mupf_elev_min,
+                    fallback_sigma_cycles=mupf_dd_fallback_sigma_cycles,
+                    fallback_min_sats=mupf_dd_fallback_min_sats,
+                    prefer_tracked=mupf_dd_fallback_prefer_tracked,
+                    tracked_min_stable_epochs=mupf_dd_fallback_tracked_min_stable_epochs,
+                    tracked_min_sats=mupf_dd_fallback_tracked_min_sats,
+                    tracked_continuity_good_m=mupf_dd_fallback_tracked_continuity_good_m,
+                    tracked_continuity_bad_m=mupf_dd_fallback_tracked_continuity_bad_m,
+                    tracked_sigma_min_scale=mupf_dd_fallback_tracked_sigma_min_scale,
+                    tracked_sigma_max_scale=mupf_dd_fallback_tracked_sigma_max_scale,
+                    max_age_s=carrier_anchor_max_age_s,
+                    max_continuity_residual_m=carrier_anchor_max_continuity_residual_m,
+                )
+            elif carrier_anchor and carrier_anchor_rows:
+                anchor_attempt.state = np.asarray(pf.estimate(), dtype=np.float64)
+
             if fallback_attempt.attempted_tracked:
                 n_dd_fallback_tracked_attempted += 1
             if fallback_attempt.used:
                 n_dd_fallback_undiff_used += 1
             if fallback_attempt.used_tracked:
                 n_dd_fallback_tracked_used += 1
+            if fallback_attempt.used and fallback_attempt.replaced_weak_dd:
+                n_dd_fallback_weak_dd_replaced += 1
 
         spp_pos = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
         if position_update_sigma is not None:
@@ -2173,6 +2386,7 @@ def run_pf_with_optional_smoother(
                         ),
                         "used_carrier_anchor": bool(anchor_attempt.used),
                         "used_dd_carrier_fallback": bool(fallback_attempt.used),
+                        "used_dd_carrier_fallback_weak_dd": bool(fallback_attempt.used and fallback_attempt.replaced_weak_dd),
                         "attempted_dd_carrier_fallback_tracked": bool(fallback_attempt.attempted_tracked),
                         "used_dd_carrier_fallback_tracked": bool(fallback_attempt.used_tracked),
                         "dd_carrier_fallback_n_sat": (
@@ -2281,6 +2495,8 @@ def run_pf_with_optional_smoother(
             print(f"  [mupf_dd_fallback_tracked_attempt] epochs={n_dd_fallback_tracked_attempted}")
         if n_dd_fallback_tracked_used > 0:
             print(f"  [mupf_dd_fallback_tracked] epochs={n_dd_fallback_tracked_used}")
+        if n_dd_fallback_weak_dd_replaced > 0:
+            print(f"  [mupf_dd_fallback_weak_dd] epochs={n_dd_fallback_weak_dd_replaced}")
 
     if dd_pseudorange:
         total_dd_pr = n_dd_pr_used + n_dd_pr_skip
@@ -2371,6 +2587,9 @@ def run_pf_with_optional_smoother(
         "mupf_dd_fallback_tracked_continuity_bad_m": mupf_dd_fallback_tracked_continuity_bad_m,
         "mupf_dd_fallback_tracked_sigma_min_scale": mupf_dd_fallback_tracked_sigma_min_scale,
         "mupf_dd_fallback_tracked_sigma_max_scale": mupf_dd_fallback_tracked_sigma_max_scale,
+        "mupf_dd_fallback_weak_dd_max_pairs": mupf_dd_fallback_weak_dd_max_pairs,
+        "mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles": mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles,
+        "mupf_dd_fallback_weak_dd_require_no_dd_pr": mupf_dd_fallback_weak_dd_require_no_dd_pr,
         "n_dd_pr_used": n_dd_pr_used,
         "n_dd_pr_skip": n_dd_pr_skip,
         "n_dd_pr_gate_pairs_rejected": n_dd_pr_gate_pairs_rejected,
@@ -2389,6 +2608,7 @@ def run_pf_with_optional_smoother(
         "n_dd_fallback_undiff_used": n_dd_fallback_undiff_used,
         "n_dd_fallback_tracked_attempted": n_dd_fallback_tracked_attempted,
         "n_dd_fallback_tracked_used": n_dd_fallback_tracked_used,
+        "n_dd_fallback_weak_dd_replaced": n_dd_fallback_weak_dd_replaced,
         "imu_tight_coupling": imu_tight_coupling,
         "n_imu_tight_used": n_imu_tight_used,
         "n_imu_tight_skip": n_imu_tight_skip,
@@ -2601,6 +2821,9 @@ def _namespace_to_run_kwargs(
         "mupf_dd_fallback_tracked_continuity_bad_m": args.mupf_dd_fallback_tracked_continuity_bad_m,
         "mupf_dd_fallback_tracked_sigma_min_scale": args.mupf_dd_fallback_tracked_sigma_min_scale,
         "mupf_dd_fallback_tracked_sigma_max_scale": args.mupf_dd_fallback_tracked_sigma_max_scale,
+        "mupf_dd_fallback_weak_dd_max_pairs": args.mupf_dd_fallback_weak_dd_max_pairs,
+        "mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles": args.mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles,
+        "mupf_dd_fallback_weak_dd_require_no_dd_pr": args.mupf_dd_fallback_weak_dd_require_no_dd_pr,
         "mupf_dd_skip_low_support_ess_ratio": args.mupf_dd_skip_low_support_ess_ratio,
         "mupf_dd_skip_low_support_max_pairs": args.mupf_dd_skip_low_support_max_pairs,
         "mupf_dd_skip_low_support_min_raw_afv_median_cycles": args.mupf_dd_skip_low_support_min_raw_afv_median_cycles,
@@ -2868,6 +3091,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Minimum multiplier for tracked undiff fallback sigma when continuity is very good")
     parser.add_argument("--mupf-dd-fallback-tracked-sigma-max-scale", type=float, default=1.0,
                         help="Maximum multiplier for tracked undiff fallback sigma when continuity degrades")
+    parser.add_argument("--mupf-dd-fallback-weak-dd-max-pairs", type=int, default=None,
+                        help="If set, try undiff carrier fallback before DD carrier update when kept DD carrier pairs are at or below this threshold")
+    parser.add_argument("--mupf-dd-fallback-weak-dd-min-raw-afv-median-cycles", type=float, default=None,
+                        help="When weak-DD fallback replacement is enabled, require raw abs AFV median to be at or above this threshold")
+    parser.add_argument("--mupf-dd-fallback-weak-dd-require-no-dd-pr", action="store_true",
+                        help="Require DD pseudorange to be absent before replacing a weak DD carrier update with undiff fallback")
     parser.add_argument("--mupf-dd-skip-low-support-ess-ratio", type=float, default=None,
                         help="Skip DD carrier update when ESS ratio is at or below this threshold")
     parser.add_argument("--mupf-dd-skip-low-support-max-pairs", type=int, default=None,
@@ -3058,6 +3287,9 @@ def main(argv: list[str] | None = None) -> int:
                 "mupf_dd_fallback_prefer_tracked": args.mupf_dd_fallback_prefer_tracked,
                 "mupf_dd_fallback_tracked_min_stable_epochs": args.mupf_dd_fallback_tracked_min_stable_epochs,
                 "mupf_dd_fallback_tracked_min_sats": args.mupf_dd_fallback_tracked_min_sats,
+                "mupf_dd_fallback_weak_dd_max_pairs": args.mupf_dd_fallback_weak_dd_max_pairs,
+                "mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles": args.mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles,
+                "mupf_dd_fallback_weak_dd_require_no_dd_pr": args.mupf_dd_fallback_weak_dd_require_no_dd_pr,
                 "mupf_dd_skip_low_support_ess_ratio": args.mupf_dd_skip_low_support_ess_ratio,
                 "mupf_dd_skip_low_support_max_pairs": args.mupf_dd_skip_low_support_max_pairs,
                 "mupf_dd_skip_low_support_min_raw_afv_median_cycles": args.mupf_dd_skip_low_support_min_raw_afv_median_cycles,
@@ -3070,6 +3302,7 @@ def main(argv: list[str] | None = None) -> int:
                 "n_dd_fallback_undiff_used": int(out.get("n_dd_fallback_undiff_used", 0)),
                 "n_dd_fallback_tracked_attempted": int(out.get("n_dd_fallback_tracked_attempted", 0)),
                 "n_dd_fallback_tracked_used": int(out.get("n_dd_fallback_tracked_used", 0)),
+                "n_dd_fallback_weak_dd_replaced": int(out.get("n_dd_fallback_weak_dd_replaced", 0)),
                 "smoother_tail_guard_ess_max_ratio": args.smoother_tail_guard_ess_max_ratio,
                 "smoother_tail_guard_dd_carrier_max_pairs": args.smoother_tail_guard_dd_carrier_max_pairs,
                 "smoother_tail_guard_dd_pseudorange_max_pairs": args.smoother_tail_guard_dd_pseudorange_max_pairs,

@@ -22,6 +22,7 @@ FIGURES_DIR = ASSETS_DIR / "figures"
 MEDIA_DIR = ASSETS_DIR / "media"
 SNAPSHOT_PATH = ASSETS_DIR / "results_snapshot.json"
 SNAPSHOT_JS_PATH = ASSETS_DIR / "results_snapshot.js"
+ODAIBA_PF_SMOOTHER_FREEZE_JSON = RESULTS_DIR / "odaiba_pf_smoother_freeze.json"
 
 PPC_TUNED_CSV = "pf_strategy_lab_positive6_summary.csv"
 PPC_HOLDOUT_CSV = "pf_strategy_lab_holdout6_r200_s200_summary.csv"
@@ -111,6 +112,10 @@ def _copy_file(src: Path, dst_dir: Path) -> str:
     dst = dst_dir / src.name
     shutil.copy2(src, dst)
     return str(dst.relative_to(DOCS_DIR)).replace("\\", "/")
+
+
+def _copy_result_path(src: Path) -> str:
+    return _copy_file(src, DATA_DIR)
 
 
 def _copy_data_file(name: str) -> str:
@@ -218,6 +223,7 @@ def _build_snapshot() -> dict:
     bvh_rows = _read_csv(BVH_RUNTIME_CSV)
     paper_main_rows = _read_csv_path(PAPER_ASSETS_DIR / PAPER_MAIN_TABLE_CSV)
     validation = _read_json(VALIDATION_SUMMARY_JSON)
+    odaiba_freeze = _read_json(ODAIBA_PF_SMOOTHER_FREEZE_JSON)
 
     tuned_safe = _find_row(ppc_tuned_rows, "strategy", PPC_SAFE)
     tuned_best = _find_row(ppc_tuned_rows, "strategy", PPC_EXPLORATORY)
@@ -289,24 +295,36 @@ def _build_snapshot() -> dict:
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "title": "gnss_gpu Artifact Snapshot",
         "subtitle": (
-            "Best method: `PF+RobustClear-10K`. PF beats EKF across "
-            "5 sequences in 2 cities. Particle scaling reveals a phase transition "
-            "at N~1,000 with tail improvement up to 1M."
+            "Current Odaiba best: `PF 100K (DD + smoother + stop-detect)`. "
+            "External mainline remains `PF+RobustClear-10K` across 5 sequences in 2 cities."
         ),
         "status": {
             "label": "Current Read",
-            "value": "PF beats RTKLIB demo5 — RMS 6.72m vs 13.08m",
+            "value": (
+                f"PF beats RTKLIB demo5 — RMS {odaiba_freeze['pf_rms_2d_m']:.2f}m "
+                f"vs {odaiba_freeze['baseline_rms_2d_m']:.2f}m"
+            ),
             "detail": (
-                "With gnssplusplus-corrected pseudoranges, PF (1M particles) achieves "
-                "RMS 6.72m on Odaiba — 49% better than RTKLIB demo5 (13.08m), "
-                "59% better P95, zero catastrophic failures. "
-                "PF family outperforms EKF on all 5 evaluated sequences (Tokyo + Hong Kong). "
-                "24 cited references, gnssplusplus as submodule for GNSS corrections."
+                f"On {odaiba_freeze['dataset']}, `{odaiba_freeze['method']}` reaches "
+                f"P50 {odaiba_freeze['pf_p50_m']:.2f}m and RMS {odaiba_freeze['pf_rms_2d_m']:.2f}m "
+                f"against `{odaiba_freeze['baseline_method']}` at "
+                f"{odaiba_freeze['baseline_p50_m']:.2f}m / {odaiba_freeze['baseline_rms_2d_m']:.2f}m. "
+                f"That is a {odaiba_freeze['p50_improvement_pct']:.0f}% P50 gain and "
+                f"{odaiba_freeze['rms_improvement_pct']:.0f}% RMS gain over "
+                f"{int(odaiba_freeze['n_epochs'])} aligned epochs."
             ),
         },
         "hero_cards": [
             _card(
-                "Best Method",
+                "Odaiba Current Best",
+                (
+                    f"{odaiba_freeze['pf_p50_m']:.2f} / "
+                    f"{odaiba_freeze['pf_rms_2d_m']:.2f} m"
+                ),
+                "PF 100K with DD carrier, DD pseudorange, smoother, and IMU stop-detect.",
+            ),
+            _card(
+                "External Mainline",
                 "PF+RobustClear-10K",
                 "External winner on UrbanNav trimble + G,E,J.",
             ),
@@ -341,8 +359,15 @@ def _build_snapshot() -> dict:
             ),
             _card(
                 "PF vs RTKLIB demo5",
-                "RMS 6.72 vs 13.08 m",
-                "PF (1M particles + gnssplusplus corrections) beats RTKLIB demo5 by 49% in RMS, 59% in P95, with zero >100m failures.",
+                (
+                    f"RMS {odaiba_freeze['pf_rms_2d_m']:.2f} vs "
+                    f"{odaiba_freeze['baseline_rms_2d_m']:.2f} m"
+                ),
+                (
+                    f"`{odaiba_freeze['method']}` beats `{odaiba_freeze['baseline_method']}` "
+                    f"by {odaiba_freeze['rms_improvement_pct']:.0f}% in RMS and "
+                    f"{odaiba_freeze['p50_improvement_pct']:.0f}% in P50 on Odaiba."
+                ),
             ),
             _card(
                 "BVH Speedup",
@@ -352,10 +377,15 @@ def _build_snapshot() -> dict:
         ],
         "repo_summary": [
             "This repo is not presenting a single heroic algorithm. It is an experiment-first GNSS package where comparable variants are built, measured, and either kept or discarded.",
-            "The accuracy headline is the UrbanNav external result with trimble + G,E,J. The PPC gate family remains useful as a design-discipline story, but not as the main empirical claim.",
+            "The README-facing current read is the Odaiba PF smoother result with IMU stop-detect, while the paper-facing external validation remains the UrbanNav trimble + G,E,J result.",
             "The 3D PF path is currently a systems contribution: BVH preserves PF3D accuracy on a real PLATEAU subset while making runtime practical.",
         ],
         "quick_links": [
+            {
+                "label": "Odaiba Freeze JSON",
+                "href": _copy_result_path(ODAIBA_PF_SMOOTHER_FREEZE_JSON),
+                "detail": "Frozen PF smoother checkpoint for the current Odaiba README headline.",
+            },
             {
                 "label": "Paper Main Table",
                 "href": _copy_paper_data_file(PAPER_MAIN_TABLE_CSV),
@@ -394,11 +424,19 @@ def _build_snapshot() -> dict:
         ],
         "method_freeze": [
             _card(
-                "Mainline",
+                "README Current Best",
+                "PF 100K (DD + smoother + stop-detect)",
+                (
+                    f"Odaiba full-run checkpoint at {odaiba_freeze['pf_p50_m']:.2f}m P50 and "
+                    f"{odaiba_freeze['pf_rms_2d_m']:.2f}m RMS. This now drives the README headline."
+                ),
+            ),
+            _card(
+                "External Mainline",
                 "PF+RobustClear-10K",
                 (
                     "Best full-run external method on UrbanNav Tokyo. "
-                    "This is the number that drives the README, Pages, and paper assets."
+                    "This still drives the paper table, external figure, and cross-sequence Pages sections."
                 ),
             ),
             _card(
@@ -506,6 +544,12 @@ def _build_snapshot() -> dict:
                 f"at {_round(_f(robust, 'mean_rms_2d'))} m RMS and "
                 f"{_round(_f(robust, 'mean_p95'))} m P95, ahead of `EKF` at "
                 f"{_round(_f(ekf, 'mean_rms_2d'))} m and {_round(_f(ekf, 'mean_p95'))} m."
+            ),
+            (
+                f"Odaiba README checkpoint: `{odaiba_freeze['method']}` reaches "
+                f"{odaiba_freeze['pf_p50_m']:.2f} m P50 and {odaiba_freeze['pf_rms_2d_m']:.2f} m RMS "
+                f"against `{odaiba_freeze['baseline_method']}` at "
+                f"{odaiba_freeze['baseline_p50_m']:.2f} / {odaiba_freeze['baseline_rms_2d_m']:.2f} m."
             ),
             (
                 "`PF-10K` remains a close ablation at "
