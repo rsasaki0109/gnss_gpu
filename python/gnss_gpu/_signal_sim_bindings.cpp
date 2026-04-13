@@ -17,18 +17,27 @@ PYBIND11_MODULE(_gnss_gpu_signal_sim, m) {
                                  py::list channels_list, int n_samples,
                                  double noise_floor_db,
                                  std::uint64_t noise_seed) {
-        std::vector<gnss_gpu::SatChannel> channels;
-        channels.reserve(channels_list.size());
-        for (auto item : channels_list) {
-            py::dict d = item.cast<py::dict>();
-            gnss_gpu::SatChannel ch{};
+        size_t n_ch = channels_list.size();
+        std::vector<gnss_gpu::SatChannel> channels(n_ch);
+        // Keep nav_bits numpy arrays alive until simulate_epoch returns
+        std::vector<py::array_t<int>> nav_bits_refs(n_ch);
+
+        for (size_t i = 0; i < n_ch; ++i) {
+            py::dict d = channels_list[i].cast<py::dict>();
+            auto& ch = channels[i];
             ch.prn = d["prn"].cast<int>();
+            if (d.contains("system")) ch.system = d["system"].cast<int>();
             ch.code_phase = d["code_phase"].cast<double>();
             ch.carrier_phase = d["carrier_phase"].cast<double>();
             ch.doppler_hz = d["doppler_hz"].cast<double>();
             ch.amplitude = d["amplitude"].cast<float>();
             ch.nav_bit = d["nav_bit"].cast<int>();
-            channels.push_back(ch);
+            if (d.contains("nav_bit_rate")) ch.nav_bit_rate = d["nav_bit_rate"].cast<double>();
+            if (d.contains("nav_bits") && !d["nav_bits"].is_none()) {
+                nav_bits_refs[i] = d["nav_bits"].cast<py::array_t<int>>();
+                ch.nav_bits = static_cast<const int*>(nav_bits_refs[i].data());
+                ch.nav_bit_count = (int)nav_bits_refs[i].size();
+            }
         }
 
         gnss_gpu::SignalSimConfig config{};
@@ -52,9 +61,10 @@ PYBIND11_MODULE(_gnss_gpu_signal_sim, m) {
     m.def("generate_single", [](int prn, double code_phase, double carrier_phase,
                                  double doppler_hz, float amplitude, int nav_bit,
                                  double sampling_freq, double intermediate_freq,
-                                 int n_samples) {
+                                 int n_samples, int system) {
         gnss_gpu::SatChannel ch{};
         ch.prn = prn;
+        ch.system = system;
         ch.code_phase = code_phase;
         ch.carrier_phase = carrier_phase;
         ch.doppler_hz = doppler_hz;
@@ -70,5 +80,5 @@ PYBIND11_MODULE(_gnss_gpu_signal_sim, m) {
        py::arg("prn"), py::arg("code_phase"), py::arg("carrier_phase"),
        py::arg("doppler_hz"), py::arg("amplitude"), py::arg("nav_bit"),
        py::arg("sampling_freq"), py::arg("intermediate_freq"),
-       py::arg("n_samples"));
+       py::arg("n_samples"), py::arg("system") = 0);
 }
