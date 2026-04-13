@@ -29,4 +29,11 @@ void raytrace_los_check_bvh(const double* rx_ecef, const double* sat_ecef,
                              const BVHNode* bvh, const Triangle* sorted_tris,
                              int* is_los, int n_sat, int n_nodes);
 
+// Multipath reflection computation using BVH traversal on GPU.
+// For each satellite, finds the first-order reflection with minimum excess delay.
+void raytrace_multipath_bvh(const double* rx_ecef, const double* sat_ecef,
+                             const BVHNode* bvh, const Triangle* sorted_tris,
+                             double* reflection_points, double* excess_delays,
+                             int n_sat, int n_nodes);
+
 }  // namespace gnss_gpu

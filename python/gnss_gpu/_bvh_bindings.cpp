@@ -101,4 +101,52 @@ PYBIND11_MODULE(_bvh, m) {
   }, "BVH-accelerated LOS check",
      py::arg("rx_ecef"), py::arg("sat_ecef"),
      py::arg("nodes_flat"), py::arg("sorted_tris"));
+
+  // Multipath reflection with BVH
+  m.def("raytrace_multipath_bvh", [](py::array_t<double> rx_ecef,
+                                      py::array_t<double> sat_ecef,
+                                      py::array_t<double> nodes_flat,
+                                      py::array_t<double> sorted_tris) {
+    auto brx = rx_ecef.request();
+    auto bsat = sat_ecef.request();
+    auto bnodes = nodes_flat.request();
+    auto btri = sorted_tris.request();
+
+    if (brx.size < 3)
+      throw std::runtime_error("rx_ecef must have at least 3 elements");
+
+    int n_sat = (int)bsat.shape[0];
+    int n_nodes = (int)bnodes.shape[0];
+
+    const double* nptr = static_cast<const double*>(bnodes.ptr);
+    std::vector<gnss_gpu::BVHNode> nodes(n_nodes);
+    for (int i = 0; i < n_nodes; i++) {
+      nodes[i].bbox.min[0] = nptr[i * 10 + 0];
+      nodes[i].bbox.min[1] = nptr[i * 10 + 1];
+      nodes[i].bbox.min[2] = nptr[i * 10 + 2];
+      nodes[i].bbox.max[0] = nptr[i * 10 + 3];
+      nodes[i].bbox.max[1] = nptr[i * 10 + 4];
+      nodes[i].bbox.max[2] = nptr[i * 10 + 5];
+      nodes[i].left = (int)nptr[i * 10 + 6];
+      nodes[i].right = (int)nptr[i * 10 + 7];
+      nodes[i].tri_start = (int)nptr[i * 10 + 8];
+      nodes[i].tri_count = (int)nptr[i * 10 + 9];
+    }
+
+    auto refl_arr = py::array_t<double>({n_sat, 3});
+    auto delay_arr = py::array_t<double>({n_sat});
+
+    gnss_gpu::raytrace_multipath_bvh(
+        static_cast<double*>(brx.ptr),
+        static_cast<double*>(bsat.ptr),
+        nodes.data(),
+        reinterpret_cast<const gnss_gpu::Triangle*>(btri.ptr),
+        static_cast<double*>(refl_arr.mutable_data()),
+        static_cast<double*>(delay_arr.mutable_data()),
+        n_sat, n_nodes);
+
+    return py::make_tuple(refl_arr, delay_arr);
+  }, "BVH-accelerated multipath reflection",
+     py::arg("rx_ecef"), py::arg("sat_ecef"),
+     py::arg("nodes_flat"), py::arg("sorted_tris"));
 }

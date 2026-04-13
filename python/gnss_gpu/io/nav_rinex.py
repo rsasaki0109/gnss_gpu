@@ -118,7 +118,6 @@ def read_nav_rinex(
         line = lines[idx]
         # Check for header labels - use flexible matching since column alignment
         # may vary across RINEX generators
-        label = line[60:].strip() if len(line) > 60 else ""
         line_stripped = line.rstrip()
         if "RINEX VERSION / TYPE" in line_stripped:
             # Version is in the first 20 columns (standard) or wherever the number is

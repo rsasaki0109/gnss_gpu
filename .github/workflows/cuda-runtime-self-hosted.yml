@@ -1,0 +1,46 @@
+name: CUDA Runtime Smoke (Self-hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        description: Additional self-hosted runner label with CUDA access
+        required: true
+        default: gpu
+        type: string
+      cuda_arch:
+        description: CMAKE_CUDA_ARCHITECTURES for editable install
+        required: true
+        default: "80"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cuda-runtime-${{ github.ref }}-${{ inputs.runner_label }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  cuda-runtime-smoke:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - ${{ inputs.runner_label }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: nvidia-smi
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install cmake ninja pybind11 numpy pytest matplotlib
+      - run: python -m pip install -e . --config-settings=cmake.define.CMAKE_CUDA_ARCHITECTURES=${{ inputs.cuda_arch }}
+      - run: bash scripts/ci/run_cuda_runtime_smoke.sh

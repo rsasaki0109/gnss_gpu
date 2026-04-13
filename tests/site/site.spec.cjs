@@ -24,7 +24,9 @@ test("artifact snapshot renders cleanly", async ({ page }) => {
 
   await expect(page.locator("#title")).toHaveText("gnss_gpu Artifact Snapshot");
   await expect(page.locator("#subtitle")).toContainText("PF+RobustClear-10K");
-  await expect(page.locator("#showcase-media article")).toHaveCount(2);
+  const showcaseCards = page.locator("#showcase-media article");
+  await expect(showcaseCards).toHaveCount(3);
+  await expect(showcaseCards.filter({ hasText: "UrbanNav LOS/NLOS Map Sweep" })).toHaveCount(1);
   await expect(page.locator("#hero-cards article")).toHaveCount(7);
   await expect(page.locator("#method-freeze article")).toHaveCount(4);
   await expect(page.locator("#quick-links article")).toHaveCount(7);

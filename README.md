@@ -47,6 +47,12 @@ PF (red) vs RTKLIB demo5 (green dashed) vs Ground truth (blue) on real Tokyo str
 
 View on [GitHub Pages](https://rsasaki0109.github.io/gnss_gpu/) for inline playback.
 
+For a longer LOS/NLOS sweep with OpenStreetMap basemap, coarse 3D PLATEAU buildings, and
+satellites projected onto a virtual sky ceiling, open the
+[interactive deck.gl map](docs/assets/media/los_nlos_deckgl.html) or
+[download mp4](docs/assets/media/los_nlos_deckgl.mp4). A still preview is at
+[los_nlos_deckgl_still.png](docs/assets/media/los_nlos_deckgl_still.png).
+
 ### Particle count scaling
 
 ![Particle scaling](experiments/results/paper_assets/paper_particle_scaling.png)
@@ -180,6 +186,11 @@ This rebuilds:
 - `docs/assets/results_snapshot.json`
 - `docs/assets/data/*.csv`
 - `docs/assets/figures/*.png`
+- `docs/assets/media/los_nlos_deckgl.html`
+- `docs/assets/media/los_nlos_deckgl.gif`
+- `docs/assets/media/los_nlos_deckgl.mp4`
+- `docs/assets/media/los_nlos_deckgl_still.png`
+- `docs/assets/media/los_nlos_deckgl.webm`
 - `docs/assets/media/site_poster.png`
 - `docs/assets/media/site_teaser.gif`
 - `docs/assets/media/site_teaser.mp4`
