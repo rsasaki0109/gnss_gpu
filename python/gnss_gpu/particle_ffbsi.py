@@ -65,16 +65,16 @@ def ffbsi_sample_indices(
     if vel.shape[0] != T or dt.shape[0] != T or sigma_pos.shape[0] != T:
         raise ValueError("vel, dt, sigma_pos must have length T")
 
-    I = np.empty(T, dtype=np.int64)
+    idx = np.empty(T, dtype=np.int64)
 
     mx = lw[T - 1].max()
     w = np.exp(lw[T - 1] - mx)
     s = w.sum()
     if s <= 0.0 or not np.isfinite(s):
-        I[:] = 0
-        return I
+        idx[:] = 0
+        return idx
     w = w / s
-    I[T - 1] = int(rng.choice(N, p=w))
+    idx[T - 1] = int(rng.choice(N, p=w))
 
     sig_cb = float(sigma_cb)
 
@@ -84,7 +84,7 @@ def ffbsi_sample_indices(
         log_fil = lw[t] - log_norm
 
         lf = transition_logpdf(
-            X[t + 1, I[t + 1]],
+            X[t + 1, idx[t + 1]],
             X[t],
             vel[t + 1],
             float(dt[t + 1]),
@@ -96,12 +96,12 @@ def ffbsi_sample_indices(
         w_b = np.exp(logp - mp)
         sb = float(np.sum(w_b))
         if sb <= 0.0 or not np.isfinite(sb):
-            I[t] = int(rng.integers(0, N))
+            idx[t] = int(rng.integers(0, N))
             continue
         w_b = w_b / sb
-        I[t] = int(rng.choice(N, p=w_b))
+        idx[t] = int(rng.choice(N, p=w_b))
 
-    return I
+    return idx
 
 
 def ffbsi_smooth_sample(
@@ -114,8 +114,8 @@ def ffbsi_smooth_sample(
     rng: np.random.Generator,
 ) -> np.ndarray:
     """One smoothed path (T, 3) ECEF from FFBSi indices."""
-    I = ffbsi_sample_indices(log_weights, X, vel, dt, sigma_pos, sigma_cb, rng)
-    return np.asarray(X[np.arange(X.shape[0]), I, :3], dtype=np.float64)
+    idx = ffbsi_sample_indices(log_weights, X, vel, dt, sigma_pos, sigma_cb, rng)
+    return np.asarray(X[np.arange(X.shape[0]), idx, :3], dtype=np.float64)
 
 
 def genealogy_smooth_indices(
@@ -137,18 +137,18 @@ def genealogy_smooth_indices(
     if anc.shape != (T, N):
         raise ValueError(f"ancestors shape {anc.shape} != ({T},{N})")
 
-    I = np.empty(T, dtype=np.int64)
+    idx = np.empty(T, dtype=np.int64)
     mx = lw[T - 1].max()
     w = np.exp(lw[T - 1] - mx)
     s = float(w.sum())
     if s <= 0.0 or not np.isfinite(s):
-        I[:] = 0
-        return I
+        idx[:] = 0
+        return idx
     w = w / s
-    I[T - 1] = int(rng.choice(N, p=w))
+    idx[T - 1] = int(rng.choice(N, p=w))
     for t in range(T - 2, -1, -1):
-        I[t] = int(anc[t, I[t + 1]])
-    return I
+        idx[t] = int(anc[t, idx[t + 1]])
+    return idx
 
 
 def genealogy_smooth_sample(
@@ -158,6 +158,6 @@ def genealogy_smooth_sample(
     rng: np.random.Generator,
 ) -> np.ndarray:
     """One smoothed path (T, 3) ECEF via genealogy backward sampling."""
-    I = genealogy_smooth_indices(log_weights, ancestors, rng)
+    idx = genealogy_smooth_indices(log_weights, ancestors, rng)
     X = np.asarray(X, dtype=np.float64)
-    return np.asarray(X[np.arange(X.shape[0]), I, :3], dtype=np.float64)
+    return np.asarray(X[np.arange(X.shape[0]), idx, :3], dtype=np.float64)
