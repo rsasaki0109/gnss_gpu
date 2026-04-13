@@ -353,6 +353,167 @@ __global__ void los_check_bvh_kernel(const double* rx_ecef,
   is_los[sid] = blocked ? 0 : 1;
 }
 
+// ============================================================
+// BVH-accelerated multipath reflection
+// ============================================================
+
+// 1 thread per satellite.  Traverses ALL BVH leaves (no early exit) to find
+// the first-order reflection with the smallest positive excess delay.
+__global__ void multipath_bvh_kernel(const double* rx_ecef,
+                                      const double* sat_ecef,
+                                      const BVHNode* bvh,
+                                      const Triangle* tris,
+                                      double* reflection_points,
+                                      double* excess_delays,
+                                      int n_sat, int n_nodes) {
+  int sid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (sid >= n_sat) return;
+
+  double rx[3] = {rx_ecef[0], rx_ecef[1], rx_ecef[2]};
+  double sat[3] = {sat_ecef[sid * 3 + 0], sat_ecef[sid * 3 + 1], sat_ecef[sid * 3 + 2]};
+
+  double d_rx_sat = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
+                          (rx[1] - sat[1]) * (rx[1] - sat[1]) +
+                          (rx[2] - sat[2]) * (rx[2] - sat[2]));
+
+  double best_delay = 0.0;
+  double best_refl[3] = {0.0, 0.0, 0.0};
+  bool found = false;
+
+  // Stack-based BVH traversal — visit ALL leaves
+  int stack[64];
+  int sp = 0;
+  stack[sp++] = 0;
+
+  while (sp > 0) {
+    int node_idx = stack[--sp];
+    const BVHNode& node = bvh[node_idx];
+
+    // Skip subtrees that are too far (use a generous AABB check)
+    // We need to visit triangles near the rx-sat line, so check AABB
+    // against a bounding box of {rx, sat} expanded a bit
+    // For simplicity, skip AABB culling here — traverse all leaves
+
+    if (node.left == -1) {
+      // Leaf: test each triangle for mirror reflection
+      for (int i = 0; i < node.tri_count; i++) {
+        const Triangle& tri = tris[node.tri_start + i];
+
+        // Compute triangle plane normal
+        double e1[3] = {tri.v1[0] - tri.v0[0], tri.v1[1] - tri.v0[1], tri.v1[2] - tri.v0[2]};
+        double e2[3] = {tri.v2[0] - tri.v0[0], tri.v2[1] - tri.v0[1], tri.v2[2] - tri.v0[2]};
+        double n[3] = {e1[1] * e2[2] - e1[2] * e2[1],
+                        e1[2] * e2[0] - e1[0] * e2[2],
+                        e1[0] * e2[1] - e1[1] * e2[0]};
+        double nn = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+        if (nn < 1e-15) continue;
+        n[0] /= nn; n[1] /= nn; n[2] /= nn;
+
+        // Mirror rx across triangle plane
+        double dv[3] = {rx[0] - tri.v0[0], rx[1] - tri.v0[1], rx[2] - tri.v0[2]};
+        double d = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
+        double mirror[3] = {rx[0] - 2.0 * d * n[0],
+                             rx[1] - 2.0 * d * n[1],
+                             rx[2] - 2.0 * d * n[2]};
+
+        // Ray from mirror to satellite
+        double dir[3] = {sat[0] - mirror[0], sat[1] - mirror[1], sat[2] - mirror[2]};
+        double dir_len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+        if (dir_len < 1e-15) continue;
+        dir[0] /= dir_len; dir[1] /= dir_len; dir[2] /= dir_len;
+
+        // Intersect mirror->sat ray with this triangle
+        double t;
+        if (!mt_intersect(mirror, dir, tri.v0, tri.v1, tri.v2, t)) continue;
+
+        // Reflection point
+        double refl[3] = {mirror[0] + t * dir[0],
+                           mirror[1] + t * dir[1],
+                           mirror[2] + t * dir[2]};
+
+        // Excess delay = (|rx->refl| + |refl->sat|) - |rx->sat|
+        double d_rx_refl = sqrt((rx[0] - refl[0]) * (rx[0] - refl[0]) +
+                                 (rx[1] - refl[1]) * (rx[1] - refl[1]) +
+                                 (rx[2] - refl[2]) * (rx[2] - refl[2]));
+        double d_refl_sat = sqrt((refl[0] - sat[0]) * (refl[0] - sat[0]) +
+                                  (refl[1] - sat[1]) * (refl[1] - sat[1]) +
+                                  (refl[2] - sat[2]) * (refl[2] - sat[2]));
+        double excess = (d_rx_refl + d_refl_sat) - d_rx_sat;
+
+        if (excess > 0.0 && (!found || excess < best_delay)) {
+          best_delay = excess;
+          best_refl[0] = refl[0]; best_refl[1] = refl[1]; best_refl[2] = refl[2];
+          found = true;
+        }
+      }
+    } else {
+      // Internal: push children
+      if (sp < 62) {
+        stack[sp++] = node.left;
+        stack[sp++] = node.right;
+      }
+    }
+  }
+
+  excess_delays[sid] = best_delay;
+  reflection_points[sid * 3 + 0] = best_refl[0];
+  reflection_points[sid * 3 + 1] = best_refl[1];
+  reflection_points[sid * 3 + 2] = best_refl[2];
+}
+
+void raytrace_multipath_bvh(const double* rx_ecef, const double* sat_ecef,
+                             const BVHNode* bvh, const Triangle* sorted_tris,
+                             double* reflection_points, double* excess_delays,
+                             int n_sat, int n_nodes) {
+  size_t sz_rx = 3 * sizeof(double);
+  size_t sz_sat = (size_t)n_sat * 3 * sizeof(double);
+  size_t sz_bvh = (size_t)n_nodes * sizeof(BVHNode);
+  size_t sz_refl = (size_t)n_sat * 3 * sizeof(double);
+  size_t sz_delay = (size_t)n_sat * sizeof(double);
+
+  int total_tris = 0;
+  for (int i = 0; i < n_nodes; i++) {
+    if (bvh[i].left == -1) {
+      int end = bvh[i].tri_start + bvh[i].tri_count;
+      if (end > total_tris) total_tris = end;
+    }
+  }
+  size_t sz_tri = (size_t)total_tris * sizeof(Triangle);
+
+  double *d_rx, *d_sat, *d_refl, *d_delay;
+  BVHNode* d_bvh;
+  Triangle* d_tri;
+
+  CUDA_CHECK(cudaMalloc(&d_rx, sz_rx));
+  CUDA_CHECK(cudaMalloc(&d_sat, sz_sat));
+  CUDA_CHECK(cudaMalloc(&d_bvh, sz_bvh));
+  CUDA_CHECK(cudaMalloc(&d_tri, sz_tri));
+  CUDA_CHECK(cudaMalloc(&d_refl, sz_refl));
+  CUDA_CHECK(cudaMalloc(&d_delay, sz_delay));
+
+  CUDA_CHECK(cudaMemcpy(d_rx, rx_ecef, sz_rx, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_sat, sat_ecef, sz_sat, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_bvh, bvh, sz_bvh, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_tri, sorted_tris, sz_tri, cudaMemcpyHostToDevice));
+
+  int block = 256;
+  int grid = (n_sat + block - 1) / block;
+  multipath_bvh_kernel<<<grid, block>>>(d_rx, d_sat, d_bvh, d_tri,
+                                         d_refl, d_delay, n_sat, n_nodes);
+  CUDA_CHECK_LAST();
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  CUDA_CHECK(cudaMemcpy(reflection_points, d_refl, sz_refl, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(excess_delays, d_delay, sz_delay, cudaMemcpyDeviceToHost));
+
+  CUDA_CHECK(cudaFree(d_rx));
+  CUDA_CHECK(cudaFree(d_sat));
+  CUDA_CHECK(cudaFree(d_bvh));
+  CUDA_CHECK(cudaFree(d_tri));
+  CUDA_CHECK(cudaFree(d_refl));
+  CUDA_CHECK(cudaFree(d_delay));
+}
+
 void raytrace_los_check_bvh(const double* rx_ecef, const double* sat_ecef,
                              const BVHNode* bvh, const Triangle* sorted_tris,
                              int* is_los, int n_sat, int n_nodes) {

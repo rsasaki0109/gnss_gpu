@@ -1,0 +1,2475 @@
+<?xml version='1.0' encoding='utf-8'?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>LOS/NLOS Odaiba — PLATEAU + UrbanNav</name>
+    <Style id="los_ray">
+      <LineStyle>
+        <color>ff00d400</color>
+        <width>2</width>
+      </LineStyle>
+      <IconStyle>
+        <scale>0.6</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href>
+        </Icon>
+      </IconStyle>
+      <LabelStyle>
+        <scale>0.7</scale>
+        <color>ff00d400</color>
+      </LabelStyle>
+    </Style>
+    <Style id="nlos_ray">
+      <LineStyle>
+        <color>ff6b6bff</color>
+        <width>3</width>
+      </LineStyle>
+      <IconStyle>
+        <scale>0.6</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href>
+        </Icon>
+      </IconStyle>
+      <LabelStyle>
+        <scale>0.7</scale>
+        <color>ff6b6bff</color>
+      </LabelStyle>
+    </Style>
+    <Style id="mp_ray">
+      <LineStyle>
+        <color>ff3dd9ff</color>
+        <width>1</width>
+      </LineStyle>
+      <IconStyle>
+        <scale>0.6</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href>
+        </Icon>
+      </IconStyle>
+      <LabelStyle>
+        <scale>0.7</scale>
+        <color>ff3dd9ff</color>
+      </LabelStyle>
+    </Style>
+    <Style id="rx_marker">
+      <LineStyle>
+        <color>ffffffff</color>
+        <width>2</width>
+      </LineStyle>
+      <IconStyle>
+        <scale>0.8</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/wht-circle.png</href>
+        </Icon>
+      </IconStyle>
+      <LabelStyle>
+        <scale>0.7</scale>
+        <color>ffffffff</color>
+      </LabelStyle>
+    </Style>
+    <Style id="los_sat">
+      <LineStyle>
+        <color>ff00d400</color>
+        <width>2</width>
+      </LineStyle>
+      <IconStyle>
+        <scale>0.5</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href>
+        </Icon>
+      </IconStyle>
+      <LabelStyle>
+        <scale>0.7</scale>
+        <color>ff00d400</color>
+      </LabelStyle>
+    </Style>
+    <Style id="nlos_sat">
+      <LineStyle>
+        <color>ff6b6bff</color>
+        <width>2</width>
+      </LineStyle>
+      <IconStyle>
+        <scale>0.5</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/red-circle.png</href>
+        </Icon>
+      </IconStyle>
+      <LabelStyle>
+        <scale>0.7</scale>
+        <color>ff6b6bff</color>
+      </LabelStyle>
+    </Style>
+    <Style id="trajectory">
+      <LineStyle>
+        <color>ff00ffff</color>
+        <width>3</width>
+      </LineStyle>
+      <IconStyle>
+        <scale>0.6</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href>
+        </Icon>
+      </IconStyle>
+      <LabelStyle>
+        <scale>0.7</scale>
+        <color>ff00ffff</color>
+      </LabelStyle>
+    </Style>
+    <Folder>
+      <name>Trajectory</name>
+      <Placemark>
+        <name>Receiver Path</name>
+        <styleUrl>#trajectory</styleUrl>
+        <LineString>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,44.69950735196471 139.78555032171818,35.63126998435677,41.89852492325008 139.78242133274875,35.629735699906924,44.86474023852497 139.77706518338672,35.62690987047859,42.56823819130659 139.77614868780506,35.626751003522514,43.14953912887722 139.77464865664882,35.629002678562124,43.69075115118176 139.77716413806866,35.62932753440099,43.876533245667815 139.77716413722575,35.629327534794506,43.87664398737252 139.77594543678308,35.62827559556829,43.47333962563425 139.77192599491315,35.62609443349325,43.73968355357647 139.77315127694985,35.62141923639964,44.98902925942093 139.77366995066882,35.62078806199837,44.91704779583961 139.77591386004724,35.61804016424456,44.98665296193212 139.7793199340933,35.617591512598565,46.75979144126177 139.78041533582754,35.618206226536216,45.25616763532162 139.7790903912031,35.6214540295022,44.124292550608516 139.78485713401008,35.62679995550374,45.62357444502413 139.78837880356159,35.62873873059591,43.15018976666033 139.78673627222116,35.63166169034632,41.93387021217495 139.78617129193344,35.63060098897722,44.275418074801564</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=0s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=0s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.629319
+lon: 139.787126
+alt: 44.7m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,44.69950735196471</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN1 LOS el=10°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 1
+Status: LOS
+Elevation: 10.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,46.69950735196471 139.78712594935809,36.072483364670454,8917.541139001958</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,46.69950735196471 140.09666918674935,35.975240761500054,15488.593515496701</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,46.69950735196471 140.25985632470707,35.75359550500176,21772.859157753177</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,46.69950735196471 140.22320374514234,35.512683490597105,27656.266801194288</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,46.69950735196471 140.02949286658585,35.35579949512894,33031.644982756115</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 NLOS el=49°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 6
+Status: NLOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,46.69950735196471 139.78712594935809,35.334753037939834,37801.00402218755</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 NLOS el=57°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 7
+Status: NLOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,46.69950735196471 139.61044012491652,35.430156519179775,41877.987348688766</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,46.69950735196471 139.56242379548132,35.56945905498277,45189.25984969828</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,46.69950735196471 139.62794622188878,35.67141553189705,47675.215610034764</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78712594935809,35.62931852920018,46.69950735196471 139.73117477020622,35.69212665815233,49290.961725833826</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=60s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=60s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.631270
+lon: 139.785550
+alt: 41.9m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.78555032171818,35.63126998435677,41.89852492325008</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78555032171818,35.63126998435677,43.89852492325008 139.99779730084865,35.23999351680564,15485.94142565038</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78555032171818,35.63126998435677,43.89852492325008 139.6828693198224,35.234894450569435,21770.669629392214</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78555032171818,35.63126998435677,43.89852492325008 139.4453642418938,35.3799402512378,27653.6793304421</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78555032171818,35.63126998435677,43.89852492325008 139.37424962983414,35.59526015388568,33028.52742461767</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78555032171818,35.63126998435677,43.89852492325008 139.47250562672912,35.77814092203686,37797.92171215266</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78555032171818,35.63126998435677,43.89852492325008 139.66263662749165,35.855947663731904,41875.23177195899</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78555032171818,35.63126998435677,43.89852492325008 139.83482657477447,35.82006889399272,45186.59611477144</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78555032171818,35.63126998435677,43.89852492325008 139.91001104609452,35.72258785768236,47672.442780498415</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78555032171818,35.63126998435677,43.89852492325008 139.88015647625153,35.63934963423138,49288.144107002765</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=120s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=120s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.629736
+lon: 139.782421
+alt: 44.9m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.78242133274875,35.629735699906924,44.86474023852497</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 NLOS el=18°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 2
+Status: NLOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78242133274875,35.629735699906924,46.86474023852497 139.2606546633755,35.673353081809395,15488.255511366762</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78242133274875,35.629735699906924,46.86474023852497 139.41235648115256,35.90027532559997,21773.271279807203</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78242133274875,35.629735699906924,46.86474023852497 139.68651202877518,35.99637431681859,27656.947881849483</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78242133274875,35.629735699906924,46.86474023852497 139.95135618056457,35.938185768688825,33031.89481787011</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78242133274875,35.629735699906924,46.86474023852497 140.09545986882569,35.77660662991383,37800.887899238616</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78242133274875,35.629735699906924,46.86474023852497 140.08201533348716,35.603647681321085,41877.984836560674</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78242133274875,35.629735699906924,46.86474023852497 139.95785055764563,35.5004442039167,45189.48155126069</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78242133274875,35.629735699906924,46.86474023852497 139.8171440266078,35.496144128372144,47675.449964368716</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78242133274875,35.629735699906924,46.86474023852497 139.7437683734355,35.558790845524605,49291.13166135643</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=180s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=180s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.626910
+lon: 139.777065
+alt: 42.6m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.77706518338672,35.62690987047859,42.56823819130659</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77706518338672,35.62690987047859,44.56823819130659 140.08659912100862,35.972832392118306,15486.46236041747</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77706518338672,35.62690987047859,44.56823819130659 140.24978147204257,35.75118701937064,21770.72796668578</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77706518338672,35.62690987047859,44.56823819130659 140.21313010001964,35.510274816150336,27654.135598837398</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77706518338672,35.62690987047859,44.56823819130659 140.0194249840094,35.35339065786727,33029.513784517534</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77706518338672,35.62690987047859,44.56823819130659 139.77706518338672,35.332344163925306,37798.87281481363</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77706518338672,35.62690987047859,44.56823819130659 139.60038456144522,35.427747726385554,41875.856117156334</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77706518338672,35.62690987047859,44.56823819130659 139.55236968021092,35.56705037103618,45187.128598254174</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77706518338672,35.62690987047859,44.56823819130659 139.61789018517626,35.669006913216364,47673.08434974402</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77706518338672,35.62690987047859,44.56823819130659 139.72111566783926,35.68971804645329,49288.830460423604</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=260s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=260s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.626751
+lon: 139.776149
+alt: 43.1m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.77614868780506,35.626751003522514,43.14953912887722</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77614868780506,35.626751003522514,45.14953912887722 139.63235716844773,35.21514760579074,15487.263091714121</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77614868780506,35.626751003522514,45.14953912887722 139.38629286228723,35.37666500500569,21771.512341656722</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77614868780506,35.626751003522514,45.14953912887722 139.317337830826,35.61279416154916,27654.659250149503</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 NLOS el=41°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 5
+Status: NLOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77614868780506,35.626751003522514,45.14953912887722 139.432344889141,35.81514154061786,33029.92486023344</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77614868780506,35.626751003522514,45.14953912887722 139.65232359102717,35.903475581024786,37799.407885059714</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77614868780506,35.626751003522514,45.14953912887722 139.85945239836784,35.86320107224032,41876.506015134975</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77614868780506,35.626751003522514,45.14953912887722 139.96273752148306,35.74544668641196,45187.75488934852</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77614868780506,35.626751003522514,45.14953912887722 139.94333485976688,35.63140121263705,47673.658139294945</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77614868780506,35.626751003522514,45.14953912887722 139.85495775272662,35.583302828743925,49289.4029485574</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=320s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=320s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.629003
+lon: 139.774649
+alt: 43.7m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.77464865664882,35.629002678562124,43.69075115118176</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77464865664882,35.629002678562124,45.69075115118176 139.40900158846415,35.93638040620156,15487.477372800931</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77464865664882,35.629002678562124,45.69075115118176 139.70523126602535,36.030198970485934,21772.47165094968</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77464865664882,35.629002678562124,45.69075115118176 139.99111563493722,35.95979882979879,27655.66733727604</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77464865664882,35.629002678562124,45.69075115118176 140.1472005447664,35.77649771716928,33030.407268639654</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77464865664882,35.629002678562124,45.69075115118176 140.12973962576004,35.577329508231564,37799.63298176043</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77464865664882,35.629002678562124,45.69075115118176 139.98351629887637,35.45185158835301,41876.9429289652</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77464865664882,35.629002678562124,45.69075115118176 139.80747682318605,35.43784362870819,45188.39291954599</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77464865664882,35.629002678562124,45.69075115118176 139.69623171219817,35.508392229124475,47674.261784207076</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77464865664882,35.629002678562124,45.69075115118176 139.68919612369518,35.594932055887234,49289.941036576405</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=380s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=380s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.629328
+lon: 139.777164
+alt: 43.9m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,43.876533245667815</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN1 NLOS el=10°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 1
+Status: NLOS
+Elevation: 10.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,45.876533245667815 140.1275772299448,35.968305653070665,8916.370997272432</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,45.876533245667815 140.28659227348624,35.7318135727194,15487.30419794377</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,45.876533245667815 140.2364423462604,35.47666920196802,21772.070228141733</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 NLOS el=33°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 4
+Status: NLOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,45.876533245667815 140.01953659644062,35.311158758377545,27655.82156179659</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,45.876533245667815 139.74842334993474,35.29235871707404,33030.9892162811</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,45.876533245667815 139.54589459056993,35.4034563246137,37800.02687203046</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,45.876533245667815 139.48499239016536,35.569456814117196,41877.009114113636</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,45.876533245667815 139.55774184112394,35.70143769775762,45188.44378801063</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,45.876533245667815 139.68838916219624,35.74511123450931,47674.44249247387</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413806866,35.62932753440099,45.876533245667815 139.78380546063318,35.70678928507562,49290.14756313898</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=440s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=440s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.629328
+lon: 139.777164
+alt: 43.9m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.77716413722575,35.629327534794506,43.87664398737252</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 NLOS el=18°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 2
+Status: NLOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413722575,35.629327534794506,45.87664398737252 139.6333680899828,35.21772435144331,15487.990104226395</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413722575,35.629327534794506,45.87664398737252 139.38729596176242,35.379241611690404,21772.239388639107</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413722575,35.629327534794506,45.87664398737252 139.31833861849057,35.61537061761148,27655.386320183054</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413722575,35.629327534794506,45.87664398737252 139.43334926960455,35.817717923577256,33030.65192689374</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413722575,35.629327534794506,45.87664398737252 139.65333504080664,35.90605195671871,37800.13494708948</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413722575,35.629327534794506,45.87664398737252 139.8604705345909,35.86577747310374,41877.23308943119</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413722575,35.629327534794506,45.87664398737252 139.96375896295348,35.748023139970705,45188.48198104743</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413722575,35.629327534794506,45.87664398737252 139.94435565563919,35.63397773041483,47674.385239530355</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77716413722575,35.629327534794506,45.87664398737252 139.85597571792331,35.58587938097874,49290.13005139772</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=520s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=520s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.628276
+lon: 139.775945
+alt: 43.5m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.77594543678308,35.62827559556829,43.47333962563425</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77594543678308,35.62827559556829,45.47333962563425 139.73917283677022,36.05529866970246,15487.634523187764</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77594543678308,35.62827559556829,45.47333962563425 140.04006632224377,35.97158275308567,21772.070560811087</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77594543678308,35.62827559556829,45.47333962563425 140.20243126495728,35.76795210639776,27655.065788691863</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 NLOS el=41°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 5
+Status: NLOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77594543678308,35.62827559556829,45.47333962563425 140.17698062598197,35.54589120404761,33030.12582384795</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 NLOS el=49°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 6
+Status: NLOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77594543678308,35.62827559556829,45.47333962563425 140.00721199420096,35.4024043408833,37799.62369434908</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 NLOS el=57°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 7
+Status: NLOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77594543678308,35.62827559556829,45.47333962563425 139.79690166903328,35.38285453812395,41876.84983636066</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77594543678308,35.62827559556829,45.47333962563425 139.650906679628,35.464509603020915,45188.133645809256</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77594543678308,35.62827559556829,45.47333962563425 139.62094359121173,35.577015801047935,47673.993129646406</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77594543678308,35.62827559556829,45.47333962563425 139.68363504745068,35.64702582787655,49289.72014974523</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=580s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=580s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.626094
+lon: 139.771926
+alt: 43.7m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.77192599491315,35.62609443349325,43.73968355357647</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77192599491315,35.62609443349325,45.73968355357647 140.24208963816685,35.43751243090729,15487.27536358498</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77192599491315,35.62609443349325,45.73968355357647 140.0038781891424,35.268113737669104,21772.385687119327</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77192599491315,35.62609443349325,45.73968355357647 139.70831577353357,35.25483432885147,27655.842887496576</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77192599491315,35.62609443349325,45.73968355357647 139.48539540867583,35.382770574595966,33030.617913204245</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77192599491315,35.62609443349325,45.73968355357647 139.41684786376024,35.5744212947333,37799.681927819736</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77192599491315,35.62609443349325,45.73968355357647 139.50073033754865,35.73363366647327,41876.906454104</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77192599491315,35.62609443349325,45.73968355357647 139.66069144420612,35.7964762787519,45188.40899313614</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77192599491315,35.62609443349325,45.73968355357647 139.7952457580587,35.76133115056359,47674.32656240743</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77192599491315,35.62609443349325,45.73968355357647 139.83804201114134,35.68193394547272,49289.99836019706</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=640s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=640s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.621419
+lon: 139.773151
+alt: 45.0m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.77315127694985,35.62141923639964,44.98902925942093</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77315127694985,35.62141923639964,46.98902925942093 139.339779701326,35.381251015422585,15488.62006266322</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77315127694985,35.62141923639964,46.98902925942093 139.27713313705956,35.63453859622277,21773.08329360187</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77315127694985,35.62141923639964,46.98902925942093 139.41030265308908,35.85166845720755,27656.724841340445</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77315127694985,35.62141923639964,46.98902925942093 139.65865623023382,35.94605038755976,33032.06295713503</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77315127694985,35.62141923639964,46.98902925942093 139.89696803396942,35.898143991166904,37801.24741966557</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77315127694985,35.62141923639964,46.98902925942093 140.0233774521953,35.75872714741335,41878.187027806416</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77315127694985,35.62141923639964,46.98902925942093 140.00940538843614,35.61445093589595,45189.53420371842</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77315127694985,35.62141923639964,46.98902925942093 139.9048217765697,35.537266008330334,47675.527969609015</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77315127694985,35.62141923639964,46.98902925942093 139.79934170995162,35.54677235104843,49291.25827431586</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=700s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=700s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.620788
+lon: 139.773670
+alt: 44.9m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.77366995066882,35.62078806199837,44.91704779583961</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77366995066882,35.62078806199837,46.91704779583961 139.7369008413037,36.04781157279398,15489.07841169741</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77366995066882,35.62078806199837,46.91704779583961 140.03776584110096,35.96409564861929,21773.514394057915</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77366995066882,35.62078806199837,46.91704779583961 140.20011571864552,35.76046492277388,27656.509538417682</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77366995066882,35.62078806199837,46.91704779583961 140.17466777620814,35.538403771150904,33031.56955813337</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77366995066882,35.62078806199837,46.91704779583961 140.0049150748063,35.39491664025826,37801.06745916139</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77366995066882,35.62078806199837,46.91704779583961 139.7946242421321,35.37536675721834,41878.29360389989</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77366995066882,35.62078806199837,46.91704779583961 139.64864280842062,35.4570219219534,45189.57738227956</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77366995066882,35.62078806199837,46.91704779583961 139.61868256302049,35.56952824318559,47675.43684331514</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77366995066882,35.62078806199837,46.91704779583961 139.68136819385884,35.63953832300934,49291.163859300315</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=780s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=780s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.618040
+lon: 139.775914
+alt: 45.0m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,44.98665296193212</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN1 NLOS el=10°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 1
+Status: NLOS
+Elevation: 10.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,46.98665296193212 140.2446642494627,35.39553235635843,8917.20323378127</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,46.98665296193212 139.98812627791148,35.226763120511144,15489.029814319685</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,46.98665296193212 139.67324957513353,35.22166397647632,21773.75801937934</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,46.98665296193212 139.43578346102476,35.36671023691862,27656.767581352033</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,46.98665296193212 139.3646810242241,35.582030614516796,33031.61558187567</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,46.98665296193212 139.46292115906618,35.76491155076899,37801.00989198871</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,46.98665296193212 139.65302063913188,35.84271825758001,41878.319986386225</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,46.98665296193212 139.82518191610063,35.80683940071758,45189.684302448295</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,46.98665296193212 139.9003539545264,35.70935822443412,47675.53092489671</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.77591386004724,35.61804016424456,46.98665296193212 139.87050438104285,35.62611984597093,49291.23223658744</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=840s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=840s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.617592
+lon: 139.779320
+alt: 46.8m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.7793199340933,35.617591512598565,46.75979144126177</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 NLOS el=18°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 2
+Status: NLOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7793199340933,35.617591512598565,48.75979144126177 139.25763243336186,35.6612094747273,15490.150631758384</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7793199340933,35.617591512598565,48.75979144126177 139.4093117031251,35.88813185756636,21775.166486797854</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7793199340933,35.617591512598565,48.75979144126177 139.68342535629245,35.98423077673009,27658.843159816228</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7793199340933,35.617591512598565,48.75979144126177 139.94822889837553,35.926042163831376,33033.790034940466</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7793199340933,35.617591512598565,48.75979144126177 140.09231079099325,35.76446287613067,37802.78301032074</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7793199340933,35.617591512598565,48.75979144126177 140.07886859229984,35.59150361598457,41879.87991058268</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7793199340933,35.617591512598565,48.75979144126177 139.95472270888467,35.48829985287645,45191.37663771119</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7793199340933,35.617591512598565,48.75979144126177 139.8140373935008,35.48399971519894,47677.34504559729</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7793199340933,35.617591512598565,48.75979144126177 139.74067281517318,35.54664653983089,49293.02672130801</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=900s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=900s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.618206
+lon: 139.780415
+alt: 45.3m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.78041533582754,35.618206226536216,45.25616763532162</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78041533582754,35.618206226536216,47.25616763532162 140.08991517365519,35.96412923037819,15489.150412986055</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78041533582754,35.618206226536216,47.25616763532162 140.25307996892255,35.74248379993769,21773.415920615196</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78041533582754,35.618206226536216,47.25616763532162 140.2164330214076,35.501571306428445,27656.823549054563</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78041533582754,35.618206226536216,47.25616763532162 140.02274903690173,35.34468681389462,33032.20179023035</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78041533582754,35.618206226536216,47.25616763532162 139.78041533582754,35.323640220631106,37801.56083021313</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78041533582754,35.618206226536216,47.25616763532162 139.60375379268962,35.41904392156154,41878.54408708308</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78041533582754,35.618206226536216,47.25616763532162 139.55574422090933,35.558346733415576,45189.81653321721</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78041533582754,35.618206226536216,47.25616763532162 139.62125767915862,35.66030334583685,47675.772281960584</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78041533582754,35.618206226536216,47.25616763532162 139.7244719204194,35.68101447058544,49291.51839390863</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=960s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=960s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.621454
+lon: 139.779090
+alt: 44.1m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,44.124292550608516</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN1 LOS el=10°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 1
+Status: LOS
+Elevation: 10.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,46.124292550608516 140.24786060277168,35.398946202754466,8916.340845221654</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,46.124292550608516 139.99131172736833,35.23017713041507,15488.167388485745</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,46.124292550608516 139.67642179258615,35.22507800640639,21772.895593015477</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,46.124292550608516 139.43894562414482,35.37012414970596,27655.905190631747</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,46.124292550608516 139.36784004563083,35.585444406963816,33030.75321505312</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,46.124292550608516 139.46608427357398,35.76832530171636,37800.14751907159</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,46.124292550608516 139.6561918873128,35.84613201832503,41877.45760428719</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,46.124292550608516 139.82836056242806,35.81025318357456,45188.82192702126</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,46.124292550608516 139.90353580906606,35.712772042409846,47674.668560449034</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.7790903912031,35.6214540295022,46.124292550608516 139.87368494631275,35.62953370309249,49290.36987583712</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=1040s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=1040s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.626800
+lon: 139.784857
+alt: 45.6m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,45.62357444502413</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN1 LOS el=10°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 1
+Status: LOS
+Elevation: 10.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,47.62357444502413 139.24977605934396,35.70256924106047,8917.65152774658</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,47.62357444502413 139.41922032014705,35.93417774762208,15489.410186509602</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,47.62357444502413 139.7154416968092,36.02799627433811,21774.404483503662</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,47.62357444502413 140.00131803649867,35.95759614334207,27657.600161859766</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,47.62357444502413 140.15739863505695,35.77429505018123,33032.34007723909</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,47.62357444502413 140.13993827466987,35.575126824558104,37801.565790559165</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,47.62357444502413 139.99371902153734,35.44964886912218,41878.87574905157</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,47.62357444502413 139.8176843965339,35.435640894257766,45190.3257449111</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,47.62357444502413 139.7064423545628,35.506189500709425,47676.194607661106</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78485713401008,35.62679995550374,47.62357444502413 139.69940696777974,35.592729333189084,49291.87385909259</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=1100s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=1100s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.628739
+lon: 139.788379
+alt: 43.2m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.78837880356159,35.62873873059591,43.15018976666033</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78837880356159,35.62873873059591,45.15018976666033 140.29780324737726,35.73122481383335,15486.577881023288</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78837880356159,35.62873873059591,45.15018976666033 140.2476537149319,35.47608038476606,21771.34390930459</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78837880356159,35.62873873059591,45.15018976666033 140.03074953278076,35.31056989266302,27655.09524463769</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78837880356159,35.62873873059591,45.15018976666033 139.75963822033265,35.29176984227168,33030.262896195054</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78837880356159,35.62873873059591,45.15018976666033 139.55711091174996,35.40286747797638,37799.30054406449</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78837880356159,35.62873873059591,45.15018976666033 139.4962091603505,35.568868005330515,41876.28277940396</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78837880356159,35.62873873059591,45.15018976666033 139.5689580950459,35.700848913456895,45187.71745012887</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78837880356159,35.62873873059591,45.15018976666033 139.69960447139346,35.744522455803235,47673.71615249105</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78837880356159,35.62873873059591,45.15018976666033 139.79502007803833,35.70620049758878,49289.42122089956</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=1160s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=1160s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.631662
+lon: 139.786736
+alt: 41.9m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,41.93387021217495</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN1 LOS el=10°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 1
+Status: LOS
+Elevation: 10.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,43.93387021217495 139.9714479236446,35.21505133725209,8914.685970565304</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,43.93387021217495 139.64293606438721,35.22005853313963,15486.047319358215</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 NLOS el=26°</name>
+        <styleUrl>#nlos_ray</styleUrl>
+        <description>PRN: 3
+Status: NLOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,43.93387021217495 139.3968567494082,35.38157573330984,21770.296627128497</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,43.93387021217495 139.327897283259,35.61770469898313,27653.443570054136</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,43.93387021217495 139.4429112360017,35.82005202125689,33028.70916344784</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,43.93387021217495 139.66290350164078,35.90838608386599,37798.1921688579</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,43.93387021217495 139.87004513775528,35.868111606624026,41875.29031193443</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,43.93387021217495 139.97333660258374,35.75035727328847,45186.5392100364</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,43.93387021217495 139.95393270234806,35.63631187558305,47672.442468893714</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78673627222116,35.63166169034632,43.93387021217495 139.86555016415787,35.58821353786793,49288.187278172</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>t=1240s</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>RX t=1240s</name>
+        <styleUrl>#rx_marker</styleUrl>
+        <description>lat: 35.630601
+lon: 139.786171
+alt: 44.3m</description>
+        <Point>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>139.78617129193344,35.63060098897722,44.275418074801564</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>PRN2 LOS el=18°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 2
+Status: LOS
+Elevation: 17.8°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78617129193344,35.63060098897722,46.275418074801564 139.7493976147946,36.057623843704505,15488.436510728672</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN3 LOS el=26°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 3
+Status: LOS
+Elevation: 25.6°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78617129193344,35.63060098897722,46.275418074801564 140.0502998901774,35.97390794598058,21772.87256922573</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN4 LOS el=33°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 4
+Status: LOS
+Elevation: 33.3°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78617129193344,35.63060098897722,46.275418074801564 140.21266948125896,35.77027736390623,27655.86782767158</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN5 LOS el=41°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 5
+Status: LOS
+Elevation: 41.1°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78617129193344,35.63060098897722,46.275418074801564 140.18721800987348,35.54821658243693,33030.92787263356</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN6 LOS el=49°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 6
+Status: LOS
+Elevation: 48.9°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78617129193344,35.63060098897722,46.275418074801564 140.0174444625717,35.40472983038825,37800.42573873885</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN7 LOS el=57°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 7
+Status: LOS
+Elevation: 56.7°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78617129193344,35.63060098897722,46.275418074801564 139.80712812301243,35.38518005631405,41877.651884842664</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN8 LOS el=64°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 8
+Status: LOS
+Elevation: 64.4°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78617129193344,35.63060098897722,46.275418074801564 139.66112895094383,35.466835074240045,45188.93570838962</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN9 LOS el=72°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 9
+Status: LOS
+Elevation: 72.2°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78617129193344,35.63060098897722,46.275418074801564 139.63116498520696,35.579341212028716,47674.79520286061</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>PRN10 LOS el=80°</name>
+        <styleUrl>#los_ray</styleUrl>
+        <description>PRN: 10
+Status: LOS
+Elevation: 80.0°</description>
+        <LineString>
+          <altitudeMode>absolute</altitudeMode>
+          <coordinates>139.78617129193344,35.63060098897722,46.275418074801564 139.69385823890389,35.64935120871758,49290.52222662512</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>

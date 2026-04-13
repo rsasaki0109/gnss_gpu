@@ -301,7 +301,6 @@ class PlateauLoader:
         e2 = _E2_GRS80
 
         # Flattening-derived constants
-        e = np.sqrt(e2)
         e_prime2 = e2 / (1.0 - e2)
 
         # Meridian arc length coefficients (Bessel series)

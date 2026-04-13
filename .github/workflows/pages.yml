@@ -20,6 +20,10 @@ permissions:
   pages: write
   id-token: write
 
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+
 concurrency:
   group: "pages"
   cancel-in-progress: true
@@ -27,21 +31,22 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+          cache: "pip"
+      - uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: "npm"
-      - run: pip install numpy matplotlib
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install numpy matplotlib pillow
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: python3 experiments/build_paper_assets.py
-      - run: python3 experiments/build_githubio_summary.py
-      - run: npm run site:smoke
+      - run: bash scripts/ci/run_site_smoke.sh
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -59,6 +64,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build
     steps:
       - id: deployment
