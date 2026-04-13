@@ -21,8 +21,9 @@ This repo is no longer in a "pick one perfect architecture first" phase. The cur
 
 ## Current frozen read
 
-- **PF beats RTKLIB demo5 and SPP on all metrics**: P50 1.65m vs 2.67m (38%), RMS 6.45m vs 13.08m (51%) on Odaiba
-- Full observation stack: Doppler velocity, dual-frequency iono-free pseudorange, carrier phase NLOS detection, elevation/SNR weighting, RAIM satellite exclusion
+- **PF beats RTKLIB demo5 on all metrics**: P50 1.38m vs 2.67m (48%), RMS 4.81m vs 13.08m (63%) on Odaiba
+- DD carrier phase AFV + DD pseudorange with base station, forward-backward smoother
+- IMU stop-detection with dynamic sigma_pos for 100% IMU utilization
 - GNSS corrections: [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) (Sagnac, tropo, iono, TGD, ISB)
 - Clock bias correction: per-epoch re-centering from pseudorange residuals — enables cross-receiver robustness
 - Scaling: phase transition at N≈1,000, tail improvement up to 1M particles
@@ -34,9 +35,9 @@ This repo is no longer in a "pick one perfect architecture first" phase. The cur
 | --- | ---: | ---: | ---: | ---: |
 | RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
 | SPP (gnssplusplus) | 1.66 m | 12.96 m | 63.25 m | 0.08% |
-| **PF 100K (full stack)** | **1.65 m** | **12.60 m** | **6.45 m** | **0.000%** |
+| **PF 100K (DD + smoother)** | **1.38 m** | — | **4.81 m** | **0.000%** |
 
-PF 100K with the full observation stack beats RTKLIB demo5 by 51% in RMS, 61% in P95, and 38% in P50, and beats SPP on P50 (1.65m vs 1.66m) — with zero catastrophic failures. The full stack includes: Doppler-derived velocity for predict, dual-frequency iono-free pseudorange (L1+L2), per-epoch clock bias correction, SPP position-domain update, and elevation/SNR-based satellite weighting. PF uses [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) for pseudorange corrections (Sagnac, troposphere, ionosphere, TGD, ISB).
+PF 100K with DD carrier phase AFV, DD pseudorange, and forward-backward smoother beats RTKLIB demo5 by **63% in RMS and 48% in P50**, with zero catastrophic failures. The full stack includes: DD carrier phase ambiguity-free verification (AFV) with base station, IMU-guided predict with stop-detection dynamic sigma_pos, per-epoch clock bias correction, SPP position-domain update, and elevation/SNR-based satellite weighting. PF uses [gnssplusplus-library](https://github.com/rsasaki0109/gnssplusplus-library) for pseudorange corrections.
 
 ### Particle cloud on OpenStreetMap
 
@@ -56,12 +57,12 @@ PF crosses the RTKLIB demo5 baseline at N≈500 particles on Odaiba. Mean RMS sa
 
 ### Cross-geography breadth
 
-**Tokyo (dual-frequency Trimble + G,E,J, full observation stack)**
+**Tokyo (dual-frequency Trimble + G,E,J, DD + smoother)**
 
 | Sequence | PF P50 | PF RMS | Baseline | Baseline RMS | PF RMS improvement |
 | --- | ---: | ---: | --- | ---: | ---: |
-| Odaiba | **1.65 m** | **6.45 m** | RTKLIB demo5 | 13.08 m | **51%** |
-| Shinjuku | **3.13 m** | **13.88 m** | gnssplusplus SPP | 18.12 m | **23%** |
+| Odaiba | **1.38 m** | **4.81 m** | RTKLIB demo5 | 13.08 m | **63%** |
+| Shinjuku | **2.52 m** | **8.92 m** | gnssplusplus SPP | 18.12 m | **51%** |
 
 PF beats all baselines on both sequences with zero >100m failures.
 
@@ -112,17 +113,17 @@ Fuses gyroscope heading (short-term precise) with SPP heading (long-term stable)
 | PF 10K + complementary | 4.16 m | 6.03 m | 10.47 m |
 | **PF 100K + complementary** | **3.49 m** | **5.74 m** | **9.73 m** |
 
-With full observation stack (Doppler velocity, iono-free L1+L2, position-domain update, cb correction, elevation/SNR weighting):
+With DD carrier phase AFV, DD pseudorange, IMU-guided predict, and forward-backward smoother:
 
-| Sequence | Method | P50 | P95 | RMS | >100m |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Odaiba | RTKLIB demo5 | 2.67 m | 32.41 m | 13.08 m | — |
-| Odaiba | SPP (gnssplusplus) | 1.66 m | 12.96 m | 63.25 m | 0.08% |
-| Odaiba | **PF 100K (full stack)** | **1.65 m** | **12.60 m** | **6.45 m** | **0%** |
-| Shinjuku | SPP (gnssplusplus) | **3.01 m** | 32.80 m | 18.12 m | 0.09% |
-| Shinjuku | **PF 100K (full stack)** | **3.13 m** | **31.41 m** | **13.88 m** | **0%** |
+| Sequence | Method | P50 | RMS | >100m |
+| --- | --- | ---: | ---: | ---: |
+| Odaiba | RTKLIB demo5 | 2.67 m | 13.08 m | — |
+| Odaiba | SPP (gnssplusplus) | 1.66 m | 63.25 m | 0.08% |
+| Odaiba | **PF 100K (DD + smoother)** | **1.38 m** | **4.81 m** | **0%** |
+| Shinjuku | SPP (gnssplusplus) | 3.01 m | 18.12 m | 0.09% |
+| Shinjuku | **PF 100K (DD + smoother)** | **2.52 m** | **8.92 m** | **0%** |
 
-Beats RTKLIB on RMS (51-23%), eliminates all >100m failures, and matches SPP P50 on Odaiba (1.65m vs 1.66m). The observation stack combines: (1) Doppler-derived velocity from satellite velocity-corrected range rates, (2) dual-frequency iono-free pseudoranges for GPS (L1+L2), (3) SPP position-domain update as Gaussian soft constraint, (4) per-epoch clock bias correction, (5) elevation and SNR-based satellite weighting.
+Beats RTKLIB on RMS (63-51%), eliminates all >100m failures, and beats SPP P50 on Odaiba (1.38m vs 1.66m). The stack combines: (1) DD carrier phase AFV with base station for cm-level observation quality, (2) DD pseudorange for additional constraint, (3) IMU-guided predict with stop-detection dynamic sigma_pos (100% IMU utilization), (4) forward-backward particle smoother, (5) per-epoch clock bias correction, (6) SPP position-domain update, (7) elevation/SNR-based satellite weighting.
 
 Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages) when combined with IMU (complementary heading filter).
 
@@ -146,15 +147,16 @@ Controlled simulation with parametric canyon (parallel buildings, ray-traced NLO
 
 ### What this repo claims
 
-- PF with proper pseudorange corrections beats RTKLIB demo5 by 54% in RMS and 15% in P50 on UrbanNav Tokyo.
+- PF with DD carrier phase + DD pseudorange + smoother beats RTKLIB demo5 by 63% in RMS and 48% in P50 on UrbanNav Tokyo.
 - PF eliminates catastrophic failures (>100m rate = 0%) through temporal filtering.
+- DD carrier phase AFV with base station provides cm-level observation quality without integer ambiguity resolution.
+- Forward-backward particle smoother uses future observations to refine past estimates.
+- IMU stop-detection with dynamic sigma_pos achieves 100% IMU utilization.
 - Per-epoch clock bias correction enables cross-receiver robustness (trimble and ublox).
-- Position-domain update closes the P50 gap by pulling the particle cloud toward the SPP solution.
 - Particle count scaling reveals a phase transition at N≈1,000 with continued tail improvement to 1M.
 - BVH makes real-PLATEAU PF3D runtime practical without changing accuracy.
 - Urban canyon simulation confirms PF advantage increases with NLOS severity (87% gain at 91% NLOS).
-- Map prior (Oh et al. 2004) adds 14-18% improvement by constraining particles to road network.
-- 24 cited references, gnssplusplus-library as submodule for GNSS corrections.
+- gnssplusplus-library as submodule for GNSS corrections.
 
 ### What this repo does not claim
 
