@@ -1,8 +1,36 @@
-"""GPU-accelerated GNSS signal simulation."""
+"""GPU-accelerated GNSS signal simulation.
+
+Supports multi-constellation: GPS, GLONASS, Galileo, BeiDou, QZSS.
+"""
 
 from pathlib import Path
 
 import numpy as np
+
+# GNSS system constants (must match C++ GnssSystem enum)
+GNSS_GPS = 0
+GNSS_GLONASS = 1
+GNSS_GALILEO = 2
+GNSS_BEIDOU = 3
+GNSS_QZSS = 4
+
+SYSTEM_NAMES = {
+    GNSS_GPS: "GPS", GNSS_GLONASS: "GLONASS",
+    GNSS_GALILEO: "Galileo", GNSS_BEIDOU: "BeiDou", GNSS_QZSS: "QZSS",
+}
+
+def prn_label_to_system(label):
+    """Convert PRN label like 'G05' to (system_int, prn_int)."""
+    if isinstance(label, int):
+        return GNSS_GPS, label
+    s = str(label).strip().upper()
+    if not s:
+        return GNSS_GPS, 1
+    prefix = s[0]
+    prn = int(s[1:]) if s[1:].strip().isdigit() else 1
+    mapping = {"G": GNSS_GPS, "R": GNSS_GLONASS, "E": GNSS_GALILEO,
+               "C": GNSS_BEIDOU, "J": GNSS_QZSS}
+    return mapping.get(prefix, GNSS_GPS), prn
 
 
 class SignalSimulator:

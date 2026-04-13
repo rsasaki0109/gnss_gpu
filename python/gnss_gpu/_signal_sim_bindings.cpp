@@ -23,6 +23,7 @@ PYBIND11_MODULE(_gnss_gpu_signal_sim, m) {
             py::dict d = item.cast<py::dict>();
             gnss_gpu::SatChannel ch{};
             ch.prn = d["prn"].cast<int>();
+            if (d.contains("system")) ch.system = d["system"].cast<int>();
             ch.code_phase = d["code_phase"].cast<double>();
             ch.carrier_phase = d["carrier_phase"].cast<double>();
             ch.doppler_hz = d["doppler_hz"].cast<double>();
