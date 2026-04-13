@@ -39,7 +39,10 @@ int fgo_gnss_lm(const double* sat_ecef,
                 double huber_k,
                 int enable_line_search,
                 double* out_mse_pr,
-                const double* motion_displacement = nullptr);
+                const double* motion_displacement = nullptr,
+                const double* tdcp_meas = nullptr,
+                const double* tdcp_weights = nullptr,
+                double tdcp_sigma_m = 0.0);
 
 // Extended FGO with velocity state + clock drift + Doppler factor.
 //
@@ -77,6 +80,9 @@ int fgo_gnss_lm_vd(const double* sat_ecef,
                    const double* sat_vel = nullptr,
                    const double* doppler = nullptr,
                    const double* doppler_weights = nullptr,
-                   const double* dt = nullptr);
+                   const double* dt = nullptr,
+                   const double* tdcp_meas = nullptr,
+                   const double* tdcp_weights = nullptr,
+                   double tdcp_sigma_m = 0.0);
 
 }  // namespace gnss_gpu

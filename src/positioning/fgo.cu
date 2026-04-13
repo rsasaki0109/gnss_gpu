@@ -314,6 +314,160 @@ double compute_pr_mse_host(
   return cnt > 0 ? sse / cnt : 0.0;
 }
 
+// TDCP factor for 4-dim state: [x, y, z, c0, ..., c_{nc-1}]
+// Residual: e_s^T * (x_{t+1} - x_t) + (clk_{t+1} - clk_t) - tdcp_meas
+// where e_s = LOS unit vector from receiver to satellite (using mid-epoch satellite
+// position, approximated by sat at epoch t+1).
+// Jacobians: dR/dx_t = -e_s^T, dR/dx_{t+1} = +e_s^T, dR/dclk_t = -1, dR/dclk_{t+1} = +1
+void add_tdcp_factor_host(
+    int n_epoch, int n_sat, int nc, int ss, int n_state,
+    const double* sat_ecef,
+    const double* tdcp_meas,
+    const double* tdcp_weights,
+    double tdcp_sigma_m,
+    const double* state,
+    double* H, double* g) {
+  if (!tdcp_meas) return;
+
+  for (int t = 0; t < n_epoch - 1; t++) {
+    int o0 = ss * t;
+    int o1 = ss * (t + 1);
+    const double x1 = state[o1 + 0], y1 = state[o1 + 1], z1 = state[o1 + 2];
+    const double clk0 = state[o0 + 3];  // first clock at epoch t
+    const double clk1 = state[o1 + 3];  // first clock at epoch t+1
+
+    // Use satellite positions at epoch t+1 for LOS computation
+    const double* my_sat = sat_ecef + (size_t)(t + 1) * n_sat * 3;
+
+    for (int s = 0; s < n_sat; s++) {
+      double w = 0.0;
+      if (tdcp_weights) {
+        w = tdcp_weights[(size_t)t * n_sat + s];
+      } else if (tdcp_sigma_m > 0.0) {
+        w = 1.0 / (tdcp_sigma_m * tdcp_sigma_m);
+      }
+      if (w <= 0.0) continue;
+
+      double meas = tdcp_meas[(size_t)t * n_sat + s];
+      if (meas == 0.0 && !tdcp_weights) continue;  // unobserved
+      // If explicit weights are given, w==0 already skipped above
+
+      double sx = my_sat[s * 3 + 0], sy = my_sat[s * 3 + 1], sz = my_sat[s * 3 + 2];
+
+      // Sagnac correction
+      double dx0 = x1 - sx, dy0 = y1 - sy, dz0 = z1 - sz;
+      double r0 = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+      double transit = r0 / kC;
+      double theta = kOmegaE * transit;
+      double sx_rot = sx * cos(theta) + sy * sin(theta);
+      double sy_rot = -sx * sin(theta) + sy * cos(theta);
+
+      double dx = x1 - sx_rot, dy_v = y1 - sy_rot, dz = z1 - sz;
+      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      if (r < 1e-6) continue;
+
+      double ex = dx / r, ey = dy_v / r, ez = dz / r;
+
+      // Residual: obs - pred where pred = e^T*(x1-x0) + (c1-c0)
+      // Match pseudorange convention: g += J_pred * w * (obs - pred)
+      double dx_t0 = state[o0 + 0], dy_t0 = state[o0 + 1], dz_t0 = state[o0 + 2];
+      double pred_tdcp = ex * (x1 - dx_t0) + ey * (y1 - dy_t0) + ez * (z1 - dz_t0)
+                         + (clk1 - clk0);
+      double res = meas - pred_tdcp;  // obs - pred
+
+      // J_pred at x_t: d(pred)/d(x_t) = [-ex,-ey,-ez], d(pred)/d(clk_t) = -1
+      // J_pred at x_{t+1}: d(pred)/d(x_{t+1}) = [+ex,+ey,+ez], d(pred)/d(clk_{t+1}) = +1
+      double Jr = w * res;
+
+      // Gradient: g += J_pred * w * (obs - pred)
+      g[o0 + 0] += (-ex) * Jr;
+      g[o0 + 1] += (-ey) * Jr;
+      g[o0 + 2] += (-ez) * Jr;
+      g[o0 + 3] += (-1.0) * Jr;
+
+      g[o1 + 0] += ex * Jr;
+      g[o1 + 1] += ey * Jr;
+      g[o1 + 2] += ez * Jr;
+      g[o1 + 3] += 1.0 * Jr;
+
+      // Hessian: H += w * J_pred * J_pred^T (same regardless of residual sign)
+      double Jt[4] = {-ex, -ey, -ez, -1.0};
+      double Jt1[4] = {ex, ey, ez, 1.0};
+
+      // Block (t,t)
+      for (int a = 0; a < 4; a++) {
+        for (int b = 0; b < 4; b++) {
+          H[(size_t)(o0 + a) * n_state + (o0 + b)] += w * Jt[a] * Jt[b];
+        }
+      }
+      // Block (t+1,t+1)
+      for (int a = 0; a < 4; a++) {
+        for (int b = 0; b < 4; b++) {
+          H[(size_t)(o1 + a) * n_state + (o1 + b)] += w * Jt1[a] * Jt1[b];
+        }
+      }
+      // Block (t,t+1) and (t+1,t)
+      for (int a = 0; a < 4; a++) {
+        for (int b = 0; b < 4; b++) {
+          H[(size_t)(o0 + a) * n_state + (o1 + b)] += w * Jt[a] * Jt1[b];
+          H[(size_t)(o1 + a) * n_state + (o0 + b)] += w * Jt1[a] * Jt[b];
+        }
+      }
+    }
+  }
+}
+
+double tdcp_cost_host(
+    int n_epoch, int n_sat, int nc, int ss,
+    const double* sat_ecef,
+    const double* tdcp_meas,
+    const double* tdcp_weights,
+    double tdcp_sigma_m,
+    const double* state) {
+  if (!tdcp_meas) return 0.0;
+  double e = 0.0;
+  for (int t = 0; t < n_epoch - 1; t++) {
+    int o0 = ss * t;
+    int o1 = ss * (t + 1);
+    const double x1 = state[o1 + 0], y1 = state[o1 + 1], z1 = state[o1 + 2];
+    const double clk0 = state[o0 + 3];
+    const double clk1 = state[o1 + 3];
+
+    const double* my_sat = sat_ecef + (size_t)(t + 1) * n_sat * 3;
+
+    for (int s = 0; s < n_sat; s++) {
+      double w = 0.0;
+      if (tdcp_weights) {
+        w = tdcp_weights[(size_t)t * n_sat + s];
+      } else if (tdcp_sigma_m > 0.0) {
+        w = 1.0 / (tdcp_sigma_m * tdcp_sigma_m);
+      }
+      if (w <= 0.0) continue;
+
+      double meas = tdcp_meas[(size_t)t * n_sat + s];
+      if (meas == 0.0 && !tdcp_weights) continue;
+
+      double sx = my_sat[s * 3 + 0], sy = my_sat[s * 3 + 1], sz = my_sat[s * 3 + 2];
+      double dx0 = x1 - sx, dy0 = y1 - sy, dz0 = z1 - sz;
+      double r0 = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+      double transit = r0 / kC;
+      double theta = kOmegaE * transit;
+      double sx_rot = sx * cos(theta) + sy * sin(theta);
+      double sy_rot = -sx * sin(theta) + sy * cos(theta);
+      double dx = x1 - sx_rot, dy_v = y1 - sy_rot, dz = z1 - sz;
+      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      if (r < 1e-6) continue;
+
+      double ex = dx / r, ey = dy_v / r, ez = dz / r;
+      double x0 = state[o0 + 0], y0 = state[o0 + 1], z0 = state[o0 + 2];
+      double res = ex * (x1 - x0) + ey * (y1 - y0) + ez * (z1 - z0)
+                   + (clk1 - clk0) - meas;
+      e += 0.5 * w * res * res;
+    }
+  }
+  return e;
+}
+
 }  // namespace
 
 int fgo_gnss_lm(const double* sat_ecef,
@@ -330,7 +484,10 @@ int fgo_gnss_lm(const double* sat_ecef,
                 double huber_k,
                 int enable_line_search,
                 double* out_mse_pr,
-                const double* motion_displacement) {
+                const double* motion_displacement,
+                const double* tdcp_meas,
+                const double* tdcp_weights,
+                double tdcp_sigma_m) {
   if (n_epoch < 1 || n_sat < 4 || !sat_ecef || !pseudorange || !weights || !state_io) return -1;
   if (n_clock < 1 || n_clock > kMaxClock) return -1;
 
@@ -412,11 +569,14 @@ int fgo_gnss_lm(const double* sat_ecef,
     CUDA_CHECK(cudaMemcpy(h_g, d_g, sz_state, cudaMemcpyDeviceToHost));
 
     add_motion_rw_host(n_epoch, ss, n_state, w_motion, state_io, motion_displacement, h_H, h_g);
+    add_tdcp_factor_host(n_epoch, n_sat, n_clock, ss, n_state, sat_ecef,
+                         tdcp_meas, tdcp_weights, tdcp_sigma_m, state_io, h_H, h_g);
 
     double cost_before =
         pr_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, pseudorange, weights, sys_host, state_io,
                      huber_k) +
-        motion_cost_host(n_epoch, ss, w_motion, state_io, motion_displacement);
+        motion_cost_host(n_epoch, ss, w_motion, state_io, motion_displacement) +
+        tdcp_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, tdcp_meas, tdcp_weights, tdcp_sigma_m, state_io);
 
     for (int i = 0; i < n_state; i++) h_g[i] = -h_g[i];
 
@@ -440,8 +600,9 @@ int fgo_gnss_lm(const double* sat_ecef,
       for (int ls = 0; ls < 12; ls++) {
         for (int i = 0; i < n_state; i++) trial[i] = state_io[i] + alpha * h_delta[i];
         double ctry = pr_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, pseudorange, weights,
-                                    sys_host, trial, huber_k) 
-                       + motion_cost_host(n_epoch, ss, w_motion, trial, motion_displacement);
+                                    sys_host, trial, huber_k)
+                       + motion_cost_host(n_epoch, ss, w_motion, trial, motion_displacement)
+                       + tdcp_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, tdcp_meas, tdcp_weights, tdcp_sigma_m, trial);
         if (ctry <= cost_before * (1.0 + 1e-12)) {
           std::memcpy(state_io, trial, sz_state);
           accepted = true;
@@ -984,6 +1145,148 @@ double compute_pr_mse_host_vd(
   return cnt > 0 ? sse / cnt : 0.0;
 }
 
+// TDCP factor for VD state: [x, y, z, vx, vy, vz, c0, ..., c_{nc-1}, drift]
+// Position at indices [0..2], first clock at index 6.
+// Residual: e_s^T * (x_{t+1} - x_t) + (clk_{t+1} - clk_t) - tdcp_meas
+void add_tdcp_factor_host_vd(
+    int n_epoch, int n_sat, int nc, int ss, int n_state,
+    const double* sat_ecef,
+    const double* tdcp_meas,
+    const double* tdcp_weights,
+    double tdcp_sigma_m,
+    const double* state,
+    double* H, double* g) {
+  if (!tdcp_meas) return;
+  const int clk_idx = 6;  // first clock index in VD state
+
+  for (int t = 0; t < n_epoch - 1; t++) {
+    int o0 = ss * t;
+    int o1 = ss * (t + 1);
+    const double x1 = state[o1 + 0], y1 = state[o1 + 1], z1 = state[o1 + 2];
+    const double clk0 = state[o0 + clk_idx];
+    const double clk1 = state[o1 + clk_idx];
+
+    const double* my_sat = sat_ecef + (size_t)(t + 1) * n_sat * 3;
+
+    for (int s = 0; s < n_sat; s++) {
+      double w = 0.0;
+      if (tdcp_weights) {
+        w = tdcp_weights[(size_t)t * n_sat + s];
+      } else if (tdcp_sigma_m > 0.0) {
+        w = 1.0 / (tdcp_sigma_m * tdcp_sigma_m);
+      }
+      if (w <= 0.0) continue;
+
+      double meas = tdcp_meas[(size_t)t * n_sat + s];
+      if (meas == 0.0 && !tdcp_weights) continue;
+
+      double sx = my_sat[s * 3 + 0], sy = my_sat[s * 3 + 1], sz = my_sat[s * 3 + 2];
+      double dx0 = x1 - sx, dy0 = y1 - sy, dz0 = z1 - sz;
+      double r0 = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+      double transit = r0 / kC;
+      double theta = kOmegaE * transit;
+      double sx_rot = sx * cos(theta) + sy * sin(theta);
+      double sy_rot = -sx * sin(theta) + sy * cos(theta);
+      double dx = x1 - sx_rot, dy_v = y1 - sy_rot, dz = z1 - sz;
+      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      if (r < 1e-6) continue;
+
+      double ex = dx / r, ey = dy_v / r, ez = dz / r;
+
+      // Residual: obs - pred (match pseudorange convention)
+      double x0 = state[o0 + 0], y0 = state[o0 + 1], z0 = state[o0 + 2];
+      double pred_tdcp = ex * (x1 - x0) + ey * (y1 - y0) + ez * (z1 - z0)
+                         + (clk1 - clk0);
+      double res = meas - pred_tdcp;  // obs - pred
+
+      // J_pred at t: [-ex,-ey,-ez,-1], at t+1: [+ex,+ey,+ez,+1]
+      double Jr = w * res;
+
+      g[o0 + 0] += (-ex) * Jr;
+      g[o0 + 1] += (-ey) * Jr;
+      g[o0 + 2] += (-ez) * Jr;
+      g[o0 + clk_idx] += (-1.0) * Jr;
+
+      g[o1 + 0] += ex * Jr;
+      g[o1 + 1] += ey * Jr;
+      g[o1 + 2] += ez * Jr;
+      g[o1 + clk_idx] += 1.0 * Jr;
+
+      int idx0[4] = {o0 + 0, o0 + 1, o0 + 2, o0 + clk_idx};
+      int idx1[4] = {o1 + 0, o1 + 1, o1 + 2, o1 + clk_idx};
+      double Jt[4] = {-ex, -ey, -ez, -1.0};
+      double Jt1[4] = {ex, ey, ez, 1.0};
+
+      // Block (t,t)
+      for (int a = 0; a < 4; a++)
+        for (int b = 0; b < 4; b++)
+          H[(size_t)idx0[a] * n_state + idx0[b]] += w * Jt[a] * Jt[b];
+      // Block (t+1,t+1)
+      for (int a = 0; a < 4; a++)
+        for (int b = 0; b < 4; b++)
+          H[(size_t)idx1[a] * n_state + idx1[b]] += w * Jt1[a] * Jt1[b];
+      // Block (t,t+1) and (t+1,t)
+      for (int a = 0; a < 4; a++)
+        for (int b = 0; b < 4; b++) {
+          H[(size_t)idx0[a] * n_state + idx1[b]] += w * Jt[a] * Jt1[b];
+          H[(size_t)idx1[a] * n_state + idx0[b]] += w * Jt1[a] * Jt[b];
+        }
+    }
+  }
+}
+
+double tdcp_cost_host_vd(
+    int n_epoch, int n_sat, int nc, int ss,
+    const double* sat_ecef,
+    const double* tdcp_meas,
+    const double* tdcp_weights,
+    double tdcp_sigma_m,
+    const double* state) {
+  if (!tdcp_meas) return 0.0;
+  double e = 0.0;
+  const int clk_idx = 6;
+  for (int t = 0; t < n_epoch - 1; t++) {
+    int o0 = ss * t;
+    int o1 = ss * (t + 1);
+    const double x1 = state[o1 + 0], y1 = state[o1 + 1], z1 = state[o1 + 2];
+    const double clk0 = state[o0 + clk_idx];
+    const double clk1 = state[o1 + clk_idx];
+
+    const double* my_sat = sat_ecef + (size_t)(t + 1) * n_sat * 3;
+
+    for (int s = 0; s < n_sat; s++) {
+      double w = 0.0;
+      if (tdcp_weights) {
+        w = tdcp_weights[(size_t)t * n_sat + s];
+      } else if (tdcp_sigma_m > 0.0) {
+        w = 1.0 / (tdcp_sigma_m * tdcp_sigma_m);
+      }
+      if (w <= 0.0) continue;
+
+      double meas = tdcp_meas[(size_t)t * n_sat + s];
+      if (meas == 0.0 && !tdcp_weights) continue;
+
+      double sx = my_sat[s * 3 + 0], sy = my_sat[s * 3 + 1], sz = my_sat[s * 3 + 2];
+      double dx0 = x1 - sx, dy0 = y1 - sy, dz0 = z1 - sz;
+      double r0 = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+      double transit = r0 / kC;
+      double theta = kOmegaE * transit;
+      double sx_rot = sx * cos(theta) + sy * sin(theta);
+      double sy_rot = -sx * sin(theta) + sy * cos(theta);
+      double dx = x1 - sx_rot, dy_v = y1 - sy_rot, dz = z1 - sz;
+      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      if (r < 1e-6) continue;
+
+      double ex = dx / r, ey = dy_v / r, ez = dz / r;
+      double x0 = state[o0 + 0], y0 = state[o0 + 1], z0 = state[o0 + 2];
+      double res = ex * (x1 - x0) + ey * (y1 - y0) + ez * (z1 - z0)
+                   + (clk1 - clk0) - meas;
+      e += 0.5 * w * res * res;
+    }
+  }
+  return e;
+}
+
 }  // anonymous namespace
 
 int fgo_gnss_lm_vd(const double* sat_ecef,
@@ -1004,7 +1307,10 @@ int fgo_gnss_lm_vd(const double* sat_ecef,
                    const double* sat_vel,
                    const double* doppler,
                    const double* doppler_weights,
-                   const double* dt) {
+                   const double* dt,
+                   const double* tdcp_meas,
+                   const double* tdcp_weights,
+                   double tdcp_sigma_m) {
   if (n_epoch < 1 || n_sat < 4 || !sat_ecef || !pseudorange || !weights || !state_io) return -1;
   if (n_clock < 1 || n_clock > kMaxClockVD) return -1;
 
@@ -1093,12 +1399,15 @@ int fgo_gnss_lm_vd(const double* sat_ecef,
     add_doppler_factor_host(n_epoch, n_sat, n_clock, ss, n_state,
                             sat_ecef, sat_vel, doppler, doppler_weights, sys_host, state_io,
                             h_H, h_g);
+    add_tdcp_factor_host_vd(n_epoch, n_sat, n_clock, ss, n_state, sat_ecef,
+                            tdcp_meas, tdcp_weights, tdcp_sigma_m, state_io, h_H, h_g);
 
     double cost_before =
         pr_cost_host_vd(n_epoch, n_sat, n_clock, ss, sat_ecef, pseudorange, weights, sys_host, state_io, huber_k)
         + motion_factor_cost_host(n_epoch, ss, w_motion, state_io, dt)
         + clock_drift_cost_host(n_epoch, n_clock, ss, w_clkdrift, state_io, dt)
-        + doppler_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, sat_vel, doppler, doppler_weights, state_io);
+        + doppler_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, sat_vel, doppler, doppler_weights, state_io)
+        + tdcp_cost_host_vd(n_epoch, n_sat, n_clock, ss, sat_ecef, tdcp_meas, tdcp_weights, tdcp_sigma_m, state_io);
 
     // NOTE: Unlike the original fgo_gnss_lm which negates h_g, the VD solver
     // solves H * delta = g directly. All factors accumulate g = J^T * W * r
@@ -1144,7 +1453,8 @@ int fgo_gnss_lm_vd(const double* sat_ecef,
             pr_cost_host_vd(n_epoch, n_sat, n_clock, ss, sat_ecef, pseudorange, weights, sys_host, trial, huber_k)
             + motion_factor_cost_host(n_epoch, ss, w_motion, trial, dt)
             + clock_drift_cost_host(n_epoch, n_clock, ss, w_clkdrift, trial, dt)
-            + doppler_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, sat_vel, doppler, doppler_weights, trial);
+            + doppler_cost_host(n_epoch, n_sat, n_clock, ss, sat_ecef, sat_vel, doppler, doppler_weights, trial)
+            + tdcp_cost_host_vd(n_epoch, n_sat, n_clock, ss, sat_ecef, tdcp_meas, tdcp_weights, tdcp_sigma_m, trial);
         if (ctry <= cost_before * (1.0 + 1e-12)) {
           std::memcpy(state_io, trial, sz_state);
           accepted = true;

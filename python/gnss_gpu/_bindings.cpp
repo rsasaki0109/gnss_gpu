@@ -95,7 +95,8 @@ PYBIND11_MODULE(_gnss_gpu, m) {
       [](py::array_t<double> sat_ecef, py::array_t<double> pseudorange, py::array_t<double> weights,
          py::array_t<double> state_io, double motion_sigma_m, int max_iter, double tol, double huber_k,
          int enable_line_search, py::object sys_kind_py, int n_clock,
-         py::object motion_displacement_py) {
+         py::object motion_displacement_py,
+         py::object tdcp_meas_py, py::object tdcp_weights_py, double tdcp_sigma_m) {
         auto bs = sat_ecef.request(), bp = pseudorange.request(), bw = weights.request();
         auto bst = state_io.request();
         if (bs.ndim != 3 || bp.ndim != 2 || bw.ndim != 2 || bst.ndim != 2)
@@ -133,21 +134,42 @@ PYBIND11_MODULE(_gnss_gpu, m) {
           md_ptr = static_cast<const double*>(mdr.ptr);
         }
 
+        const double* tdcp_meas_ptr = nullptr;
+        if (!tdcp_meas_py.is_none()) {
+          auto tm_arr = py::cast<py::array_t<double>>(tdcp_meas_py);
+          auto tmr = tm_arr.request();
+          if (tmr.size != (n_epoch - 1) * n_sat)
+            throw std::runtime_error("fgo_gnss_lm: tdcp_meas must have (T-1)*S elements");
+          tdcp_meas_ptr = static_cast<const double*>(tmr.ptr);
+        }
+
+        const double* tdcp_weights_ptr = nullptr;
+        if (!tdcp_weights_py.is_none()) {
+          auto tw_arr = py::cast<py::array_t<double>>(tdcp_weights_py);
+          auto twr = tw_arr.request();
+          if (twr.size != (n_epoch - 1) * n_sat)
+            throw std::runtime_error("fgo_gnss_lm: tdcp_weights must have (T-1)*S elements");
+          tdcp_weights_ptr = static_cast<const double*>(twr.ptr);
+        }
+
         double mse = 0.0;
         int iters = gnss_gpu::fgo_gnss_lm(
             static_cast<double*>(bs.ptr), static_cast<double*>(bp.ptr), static_cast<double*>(bw.ptr),
             sk_ptr, n_clock, static_cast<double*>(bst.ptr), n_epoch, n_sat, motion_sigma_m, max_iter,
-            tol, huber_k, enable_line_search, &mse, md_ptr);
+            tol, huber_k, enable_line_search, &mse, md_ptr,
+            tdcp_meas_ptr, tdcp_weights_ptr, tdcp_sigma_m);
         return py::make_tuple(iters, mse);
       },
-      "GPU FGO: PseudorangeFactor_XC-style clocks (h=[1,0..] or [1,1,0..]) + optional RW motion. "
+      "GPU FGO: PseudorangeFactor_XC-style clocks (h=[1,0..] or [1,1,0..]) + optional RW motion + TDCP. "
       "GN + host Cholesky; huber_k>0 enables IRLS Huber on z=|sqrt(w)*res|; "
       "enable_line_search uses backtracking on the GN step.",
       py::arg("sat_ecef"), py::arg("pseudorange"), py::arg("weights"), py::arg("state_io"),
       py::arg("motion_sigma_m") = 0.0, py::arg("max_iter") = 25, py::arg("tol") = 1e-3,
       py::arg("huber_k") = 0.0, py::arg("enable_line_search") = 1, py::arg("sys_kind") = py::none(),
       py::arg("n_clock") = 1,
-      py::arg("motion_displacement") = py::none());
+      py::arg("motion_displacement") = py::none(),
+      py::arg("tdcp_meas") = py::none(), py::arg("tdcp_weights") = py::none(),
+      py::arg("tdcp_sigma_m") = 0.0);
 
   // --- Extended FGO with velocity state + Doppler ---
   m.def(
@@ -157,7 +179,8 @@ PYBIND11_MODULE(_gnss_gpu, m) {
          int max_iter, double tol, double huber_k,
          int enable_line_search, py::object sys_kind_py, int n_clock,
          py::object sat_vel_py, py::object doppler_py, py::object doppler_weights_py,
-         py::object dt_py) {
+         py::object dt_py,
+         py::object tdcp_meas_py, py::object tdcp_weights_py, double tdcp_sigma_m) {
         auto bs = sat_ecef.request(), bp = pseudorange.request(), bw = weights.request();
         auto bst = state_io.request();
         if (bs.ndim != 3 || bp.ndim != 2 || bw.ndim != 2 || bst.ndim != 2)
@@ -222,25 +245,47 @@ PYBIND11_MODULE(_gnss_gpu, m) {
           dt_ptr = static_cast<const double*>(dtr.ptr);
         }
 
+        const double* tdcp_meas_ptr = nullptr;
+        if (!tdcp_meas_py.is_none()) {
+          auto tm_arr = py::cast<py::array_t<double>>(tdcp_meas_py);
+          auto tmr = tm_arr.request();
+          if (tmr.size != (n_epoch - 1) * n_sat)
+            throw std::runtime_error("fgo_gnss_lm_vd: tdcp_meas must have (T-1)*S elements");
+          tdcp_meas_ptr = static_cast<const double*>(tmr.ptr);
+        }
+
+        const double* tdcp_weights_ptr = nullptr;
+        if (!tdcp_weights_py.is_none()) {
+          auto tw_arr = py::cast<py::array_t<double>>(tdcp_weights_py);
+          auto twr = tw_arr.request();
+          if (twr.size != (n_epoch - 1) * n_sat)
+            throw std::runtime_error("fgo_gnss_lm_vd: tdcp_weights must have (T-1)*S elements");
+          tdcp_weights_ptr = static_cast<const double*>(twr.ptr);
+        }
+
         double mse = 0.0;
         int iters = gnss_gpu::fgo_gnss_lm_vd(
             static_cast<double*>(bs.ptr), static_cast<double*>(bp.ptr), static_cast<double*>(bw.ptr),
             sk_ptr, n_clock, static_cast<double*>(bst.ptr), n_epoch, n_sat,
             motion_sigma_m, clock_drift_sigma_m, max_iter,
             tol, huber_k, enable_line_search, &mse,
-            sv_ptr, dop_ptr, dw_ptr, dt_ptr);
+            sv_ptr, dop_ptr, dw_ptr, dt_ptr,
+            tdcp_meas_ptr, tdcp_weights_ptr, tdcp_sigma_m);
         return py::make_tuple(iters, mse);
       },
-      "GPU FGO with velocity state + Doppler factor. "
+      "GPU FGO with velocity state + Doppler factor + optional TDCP. "
       "State: [x,y,z,vx,vy,vz,clk...,drift] per epoch. "
       "Motion factor couples position/velocity: x_{t+1} = x_t + v_t*dt. "
       "Clock drift factor: clk_{t+1} = clk_t + drift_t*dt. "
-      "Doppler factor constrains velocity and drift.",
+      "Doppler factor constrains velocity and drift. "
+      "TDCP factor provides cm-level inter-epoch constraints from carrier phase.",
       py::arg("sat_ecef"), py::arg("pseudorange"), py::arg("weights"), py::arg("state_io"),
       py::arg("motion_sigma_m") = 0.0, py::arg("clock_drift_sigma_m") = 0.0,
       py::arg("max_iter") = 25, py::arg("tol") = 1e-3,
       py::arg("huber_k") = 0.0, py::arg("enable_line_search") = 1,
       py::arg("sys_kind") = py::none(), py::arg("n_clock") = 1,
       py::arg("sat_vel") = py::none(), py::arg("doppler") = py::none(),
-      py::arg("doppler_weights") = py::none(), py::arg("dt") = py::none());
+      py::arg("doppler_weights") = py::none(), py::arg("dt") = py::none(),
+      py::arg("tdcp_meas") = py::none(), py::arg("tdcp_weights") = py::none(),
+      py::arg("tdcp_sigma_m") = 0.0);
 }
