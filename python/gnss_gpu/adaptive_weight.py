@@ -50,7 +50,6 @@ def compute_adaptive_weights(
     sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
     pr = np.asarray(pseudoranges, dtype=np.float64).ravel()
     ref = np.asarray(reference_position, dtype=np.float64).ravel()
-    n_sat = len(pr)
 
     if ref.size >= 4:
         pos = ref[:3]

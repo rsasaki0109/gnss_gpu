@@ -1,33 +1,92 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+
 jobs:
-  # Job 1: Python-only tests (no GPU required)
-  test-python:
+  workflow-lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install numpy pytest matplotlib
-      - run: PYTHONPATH=python pytest tests/ -v -k "not gpu and not cuda" --ignore=tests/test_positioning.py --ignore=tests/test_raytrace.py --ignore=tests/test_multipath.py --ignore=tests/test_acquisition.py --ignore=tests/test_interference.py --ignore=tests/test_tracking.py --ignore=tests/test_skyplot.py --ignore=tests/test_particle_filter.py --ignore=tests/test_svgd.py --ignore=tests/test_pf3d.py --ignore=tests/test_rtk.py --ignore=tests/test_pf_device.py --ignore=tests/test_ekf.py --ignore=tests/test_multi_gnss.py --ignore=tests/test_atmosphere.py
+      - uses: actions/checkout@v6
+      - run: bash scripts/ci/run_actionlint.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
 
-  # Job 2: CUDA build check
-  build-cuda:
-    runs-on: ubuntu-latest
-    container: nvidia/cuda:12.4.0-devel-ubuntu22.04
-    steps:
-      - uses: actions/checkout@v4
-      - run: apt-get update && apt-get install -y cmake python3-dev python3-pip pybind11-dev
-      - run: mkdir build && cd build && cmake .. -DCMAKE_CUDA_ARCHITECTURES=80 && make -j$(nproc)
 
-  # Job 3: Lint
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
-      - run: pip install ruff
-      - run: ruff check python/ --ignore=E501,F401
+          python-version: "3.12"
+          cache: "pip"
+      - run: python -m pip install --upgrade pip ruff
+      - run: python -m ruff check python/ --ignore=E501,F401
+
+  test-python-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install numpy pytest matplotlib requests
+      - run: bash scripts/ci/run_python_smoke.sh
+
+  site-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install numpy matplotlib pillow
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: bash scripts/ci/run_site_smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: site-smoke-playwright-artifacts
+          path: |
+            test-results/
+            playwright-report/
+
+  build-cuda:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: nvidia/cuda:12.4.0-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v6
+      - run: apt-get update && apt-get install -y cmake python3-dev python3-pip pybind11-dev
+      - run: python3 -m pip install --upgrade pip
+      - run: python3 -m pip install numpy pytest matplotlib
+      - run: mkdir -p build && cd build && cmake .. -DCMAKE_CUDA_ARCHITECTURES=80 && cmake --build . --parallel
+      - run: python3 -m pip install -e . --config-settings=cmake.define.CMAKE_CUDA_ARCHITECTURES=80
+      - run: bash scripts/ci/run_cuda_import_smoke.sh
