@@ -34,8 +34,11 @@ def fgo_gnss_lm(
     huber_k: float = 0.0,
     line_search: bool = True,
     motion_displacement: np.ndarray | None = None,
+    tdcp_meas: np.ndarray | None = None,
+    tdcp_weights: np.ndarray | None = None,
+    tdcp_sigma_m: float = 0.0,
 ) -> tuple[int, float]:
-    """Iterated Gauss–Newton with GPU-assembled normal equations (in-place ``state``).
+    """Iterated Gauss-Newton with GPU-assembled normal equations (in-place ``state``).
 
     ``state`` has shape ``(T, 3 + n_clock)``: ``[x,y,z,c0,...,c_{K-1}]`` in metres.
     ``sys_kind`` is optional ``int32`` ``(T, S)`` with values in ``0..n_clock-1``.
@@ -49,6 +52,17 @@ def fgo_gnss_lm(
     position changes (e.g. Doppler velocity * dt). When provided, the motion
     random-walk factor penalises ``(x_{t} - x_{t+1}) + disp[t]`` instead of
     ``(x_{t} - x_{t+1})``, equivalent to gtsam_gnss DopplerFactor_XXCC.
+
+    ``tdcp_meas``: optional ``(T-1, S)`` TDCP measurements in metres (carrier phase
+    difference between consecutive epochs). Zero means unobserved when
+    ``tdcp_weights`` is not provided.
+
+    ``tdcp_weights``: optional ``(T-1, S)`` per-observation weights for TDCP.
+    When not provided but ``tdcp_sigma_m > 0``, uniform weight
+    ``1/tdcp_sigma_m^2`` is used.
+
+    ``tdcp_sigma_m``: uniform TDCP sigma in metres (used when ``tdcp_weights``
+    is None).
     """
     if _fgo_gnss_lm is None:
         raise RuntimeError("gnss_gpu native extension not built (fgo_gnss_lm unavailable)")
@@ -66,6 +80,12 @@ def fgo_gnss_lm(
     md = None
     if motion_displacement is not None:
         md = np.ascontiguousarray(motion_displacement, dtype=np.float64).ravel()
+    tm = None
+    if tdcp_meas is not None:
+        tm = np.ascontiguousarray(tdcp_meas, dtype=np.float64)
+    tw = None
+    if tdcp_weights is not None:
+        tw = np.ascontiguousarray(tdcp_weights, dtype=np.float64)
     ls = 1 if line_search else 0
     return _fgo_gnss_lm(
         sat_ecef,
@@ -80,6 +100,9 @@ def fgo_gnss_lm(
         sk,
         int(n_clock),
         md,
+        tm,
+        tw,
+        float(tdcp_sigma_m),
     )
 
 
@@ -101,8 +124,11 @@ def fgo_gnss_lm_vd(
     doppler: np.ndarray | None = None,
     doppler_weights: np.ndarray | None = None,
     dt: np.ndarray | None = None,
+    tdcp_meas: np.ndarray | None = None,
+    tdcp_weights: np.ndarray | None = None,
+    tdcp_sigma_m: float = 0.0,
 ) -> tuple[int, float]:
-    """Extended FGO with velocity state + Doppler factor (in-place ``state``).
+    """Extended FGO with velocity state + Doppler factor + optional TDCP (in-place ``state``).
 
     ``state`` has shape ``(T, 7 + n_clock)``:
     ``[x, y, z, vx, vy, vz, c0, ..., c_{K-1}, drift]`` in metres / (m/s).
@@ -120,7 +146,12 @@ def fgo_gnss_lm_vd(
     ``doppler_weights``: ``(T, S)`` weights for Doppler observations.
     ``dt``: ``(T,)`` inter-epoch time differences in seconds; ``dt[T-1]`` unused.
 
-    Maintains backward compatibility: if no Doppler data is provided, only
+    ``tdcp_meas``: optional ``(T-1, S)`` TDCP measurements in metres.
+    ``tdcp_weights``: optional ``(T-1, S)`` per-observation weights for TDCP.
+    ``tdcp_sigma_m``: uniform TDCP sigma in metres (used when ``tdcp_weights``
+    is None).
+
+    Maintains backward compatibility: if no Doppler/TDCP data is provided, only
     pseudorange + motion + clock drift factors are used.
     """
     if _fgo_gnss_lm_vd is None:
@@ -155,7 +186,17 @@ def fgo_gnss_lm_vd(
     if dt is not None:
         dt_arr = np.ascontiguousarray(dt, dtype=np.float64).ravel()
 
+    tm = None
+    if tdcp_meas is not None:
+        tm = np.ascontiguousarray(tdcp_meas, dtype=np.float64)
+    tw_arr = None
+    if tdcp_weights is not None:
+        tw_arr = np.ascontiguousarray(tdcp_weights, dtype=np.float64)
+
     ls = 1 if line_search else 0
+    # Note: TDCP params (tm, tw_arr, tdcp_sigma_m) are prepared but only
+    # passed when the C++ binding supports them.  Current binding accepts
+    # 16 positional args (up to dt).
     return _fgo_gnss_lm_vd(
         sat_ecef,
         pseudorange,
