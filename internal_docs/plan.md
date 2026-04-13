@@ -16,7 +16,7 @@
 3. `experiments/exp_pf_smoother_eval.py` (UrbanNav 主戦場)
 4. `experiments/exp_gsdc2023_pf.py` (Kaggle GSDC 評価)
 5. `experiments/exp_gsdc2023_submission.py` (Kaggle submission 生成)
-6. `tests/test_exp_pf_smoother_eval.py` (15 tests, 全 pass)
+6. `tests/test_exp_pf_smoother_eval.py` (18 tests, 全 pass)
 
 ---
 
@@ -28,7 +28,7 @@
 
 | 場所 | PF P50 | PF RMS | Baseline | Baseline RMS | PF RMS 改善 |
 |---|---:|---:|---|---:|---:|
-| **Odaiba** | **1.38m** | **4.81m** | RTKLIB demo5 | 13.08m | **63%** |
+| **Odaiba** | **1.36m** | **4.11m** | RTKLIB demo5 | 13.08m | **69%** |
 | **Shinjuku** | **2.52m** | **8.92m** | SPP | 18.12m | **51%** |
 
 #### UrbanNav HK (supplemental, single-frequency ublox)
@@ -58,7 +58,7 @@
 ### 1.3 1m 切りの状況
 
 DD+IMU の両方が効く 7099 epoch (58%) は **P50=1.107m** で 1m に近い。
-全体 P50=1.38m を引き上げているのは:
+全体 P50=1.36m を引き上げているのは:
 - DD pairs 少ない区間 (epoch 2445-4890, base station coverage の穴)
 - DD pairs≥17 のエポックは **P50=0.899m (1m 切り達成)**
 
@@ -107,7 +107,7 @@ CorrectedMeasurement に追加: prn, carrier_phase, doppler, snr, satellite_velo
 | DD carrier AFV | P50 1.65→1.38m | 実装済み、主力 |
 | DD pseudorange | RMS 改善 | 実装済み |
 | Forward-backward smoother | RMS 5.04→4.81m | 実装済み |
-| IMU stop-detection | RMS 5.04→4.81m, IMU 100% | 実装済み |
+| IMU stop-detection | P50 1.38→1.36m, RMS 5.08→4.11m | 実装済み、現best |
 | cb_correct | HK で必須 (168→22m) | 実装済み |
 | position_update | P50 4.5→1.65m | 実装済み |
 | Doppler velocity | P50 -0.05m | 実装済み |
@@ -188,8 +188,9 @@ PF wins: 21% (P50), 26% (RMS)
 
 | Preset | P50 | RMS | 用途 |
 |---|---:|---:|---|
-| odaiba_reference | 1.38m | 5.04m | frozen baseline |
-| odaiba_stop_detect | 1.38m | 4.81m | + stop detection |
+| odaiba_reference | 1.38m | 5.08m | frozen baseline (2026-04-14 rerun) |
+| odaiba_stop_detect | 1.36m | 4.11m | + stop detection, current best |
+| odaiba_reference_guarded | 1.38m | 5.43m | low-ESS tail guard。full Odaiba では悪化 |
 
 ### 5.2 DD carrier 統計 (Odaiba, 100K)
 
@@ -224,11 +225,12 @@ worst epoch は TOW 273836-274261 に集中 (NLOS 区間)。DD=yes でも 20m �
 
 | 手法 | P50 | RMS | 結果 |
 |---|---:|---:|---|
-| frozen baseline (sp=1.2) | 1.38m | 5.04m | baseline |
-| + stop detect (σ=0.3) | 1.38m | 4.81m | RMS 改善 ✅ |
+| frozen baseline (sp=1.2) | 1.38m | 5.08m | baseline (2026-04-14 rerun) |
+| + stop detect (σ=0.1) | 1.36m | 4.11m | P50/RMS 改善 ✅ |
 | + sp=1.0 | 1.42m | 4.71m | P50 悪化 |
 | + sp=0.8 | 1.50m | 4.64m | P50 悪化 |
 | support skip 緩和 (max-pairs=2) | 1.37m | 5.14m | P50 微改善 |
+| + smoother tail guard (ESS≤0.001, shift≥4m) | 1.38m | 5.43m | full Odaiba では悪化 |
 | DD gate 緩和 | 1.82m | — | 悪化 |
 | TDCP predict | 1.92m | — | IMU に負ける |
 | DD PR base interpolation | — | 11.05m | RMS 暴発 |
@@ -266,7 +268,7 @@ worst epoch は TOW 273836-274261 に集中 (NLOS 区間)。DD=yes でも 20m �
 
 ```bash
 PYTHONPATH=python python3 -m pytest tests/test_exp_pf_smoother_eval.py -q
-# 15 passed (12 min)
+# 18 passed (5m45s)
 ```
 
 ### 7.3 frozen reference 再現
@@ -274,7 +276,7 @@ PYTHONPATH=python python3 -m pytest tests/test_exp_pf_smoother_eval.py -q
 ```bash
 PYTHONPATH="python:third_party/gnssplusplus/build/python:third_party/gnssplusplus/python" \
 python3 experiments/exp_pf_smoother_eval.py --data-root /tmp/UrbanNav-Tokyo --preset odaiba_reference
-# SMTH P50=1.38m RMS=5.04m
+# SMTH P50=1.38m RMS=5.08m
 ```
 
 ---
@@ -327,6 +329,7 @@ CI 全 pass。README 最新。merge はユーザーの明示許可待ち。
 - sigma_pos 縮小 (100K では 1.2 が最適、これ以下は particle depletion)
 - DD gate 緩和 (品質の悪い pair を通すと P50 悪化)
 - TDCP predict (IMU に負ける)
+- smoother tail guard (ESS/shift guard は weak segment の局所改善はあるが、full Odaiba では悪化)
 
 ### 10.3 GSDC 改善の方向 (もし続けるなら)
 
