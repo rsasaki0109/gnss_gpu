@@ -570,12 +570,26 @@ const INITIAL_VIEW = {{
 
 const MAP_STYLE = {{
   version: 8,
-  sources: {{}},
+  sources: {{
+    osm: {{
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png'],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }},
+  }},
   layers: [
     {{
       id: 'bg',
       type: 'background',
       paint: {{ 'background-color': '#0a0f1e' }},
+    }},
+    {{
+      id: 'osm',
+      type: 'raster',
+      source: 'osm',
+      paint: {{ 'raster-opacity': 0.35, 'raster-saturation': -0.8, 'raster-brightness-max': 0.4 }},
     }},
   ],
 }};
