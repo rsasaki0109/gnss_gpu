@@ -103,15 +103,7 @@ p(pseudorange | particle, satellite) =
 
 where `p_nlos` is set by the ray-trace result (high if blocked, `clear_nlos_prob=0.01` if clear), `σ_los` is the LOS noise (~3m), `σ_nlos` is the NLOS noise (~30m), and `bias` is the NLOS positive bias (~15m). This means different particles can disagree on which satellites are blocked, naturally handling the multi-modal posterior in urban canyons. The standard PF variant (without 3D models) uses a simpler Gaussian likelihood with `clear_nlos_prob` to provide robustness without explicit ray-tracing.
 
-### IMU integration (complementary heading filter)
-
-Fuses gyroscope heading (short-term precise) with SPP heading (long-term stable) via complementary filter (α=0.05). Combined with wheel velocity (0.02 m/s median error, correlation=1.0 with GT).
-
-| Method | P50 | RMS | P95 |
-| --- | ---: | ---: | ---: |
-| PF 10K + SPP guide only | 4.19 m | 6.42 m | 11.56 m |
-| PF 10K + complementary | 4.16 m | 6.03 m | 10.47 m |
-| **PF 100K + complementary** | **3.49 m** | **5.74 m** | **9.73 m** |
+### IMU integration + DD carrier phase + smoother
 
 With DD carrier phase AFV, DD pseudorange, IMU-guided predict, and forward-backward smoother:
 
@@ -124,13 +116,6 @@ With DD carrier phase AFV, DD pseudorange, IMU-guided predict, and forward-backw
 | Shinjuku | **PF 100K (DD + smoother)** | **2.52 m** | **8.92 m** | **0%** |
 
 Beats RTKLIB on RMS (63-51%), eliminates all >100m failures, and beats SPP P50 on Odaiba (1.38m vs 1.66m). The stack combines: (1) DD carrier phase AFV with base station for cm-level observation quality, (2) DD pseudorange for additional constraint, (3) IMU-guided predict with stop-detection dynamic sigma_pos (100% IMU utilization), (4) forward-backward particle smoother, (5) per-epoch clock bias correction, (6) SPP position-domain update, (7) elevation/SNR-based satellite weighting.
-
-Additionally bridges GNSS blackouts (52-55% improvement during 3-20s outages) when combined with IMU (complementary heading filter).
-
-### Carrier phase (RTK) — honest negative result
-
-gnssplusplus RTK on Odaiba urban canyon: all solutions are **float** (integer ambiguity never resolved, ratio=0). Float RTK achieves P50=0.70m but 25% of epochs have >20m error. **RTK does not improve over PF+SPP in urban canyons** because multi-GNSS signals with heavy NLOS prevent reliable integer ambiguity resolution. Open-sky or suburban environments with better signal conditions would benefit from RTK integration.
-
 ### Urban canyon simulation
 
 Controlled simulation with parametric canyon (parallel buildings, ray-traced NLOS). PF advantage increases with NLOS severity.

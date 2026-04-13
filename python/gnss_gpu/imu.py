@@ -27,7 +27,7 @@ def load_imu_csv(path: str | Path) -> dict:
     tow, accel, gyro, wheel = [], [], [], []
     with open(path, newline="") as f:
         reader = csv.reader(f)
-        header = next(reader)
+        next(reader)  # skip header
         for row in reader:
             if len(row) < 8:
                 continue
