@@ -16,7 +16,7 @@ import matplotlib.patches as mpatches
 import numpy as np
 
 from gnss_gpu.io.rinex import read_rinex_obs
-from gnss_gpu.io.nav_rinex import read_nav_rinex_multi
+from gnss_gpu.io.nav_rinex import read_nav_rinex_multi, _datetime_to_gps_seconds_of_week
 from gnss_gpu.ephemeris import Ephemeris
 from gnss_gpu.io.plateau import PlateauLoader
 from gnss_gpu.bvh import BVHAccelerator
@@ -39,7 +39,15 @@ def load_reference(csv_path, step=100):
 
 
 def find_cn0(obs_dict, system_prefix):
-    """Extract C/N0 from observation dict. Try S1C, S1X, S1I etc."""
+    """Extract L1-band C/N0 [dB-Hz] from a RINEX observation dict.
+
+    RINEX uses different observation codes per constellation:
+      GPS:     S1C (C/A code)
+      Galileo: S1X (pilot), S1B (data)
+      BeiDou:  S1I
+      QZSS:    S1C, S1L, S1Z
+    We try them in priority order and return the first positive value.
+    """
     for key in ["S1C", "S1X", "S1I", "S1L", "S1Z"]:
         if key in obs_dict and obs_dict[key] > 0:
             return obs_dict[key]
@@ -80,21 +88,30 @@ def run_validation(area_name, obs_path, nav_path, ref_path,
     for fi, ei in enumerate(epoch_indices):
         ep = rinex.epochs[ei]
 
-        # Find nearest reference position
-        # Convert epoch time to GPS TOW
-        dt = ep.time
-        gps_tow = (dt.hour * 3600 + dt.minute * 60 + dt.second +
-                    dt.microsecond / 1e6)
-        # Adjust for day offset
-        day_offset = (dt.weekday() + 1) % 7  # GPS week starts Sunday
-        gps_tow += day_offset * 86400
+        # Convert epoch time to GPS TOW using the canonical helper
+        gps_tow = _datetime_to_gps_seconds_of_week(ep.time)
 
-        # Find nearest reference
+        # Find nearest reference position (interpolate if within 2s)
         time_diffs = np.abs(ref_times - gps_tow)
         nearest_idx = np.argmin(time_diffs)
-        if time_diffs[nearest_idx] > 5.0:  # skip if >5s gap
+        if time_diffs[nearest_idx] > 10.0:  # skip if >10s gap
             continue
-        rx_ecef = ref_pos[nearest_idx]
+        if (time_diffs[nearest_idx] < 0.5 or nearest_idx == 0
+                or nearest_idx == len(ref_times) - 1):
+            rx_ecef = ref_pos[nearest_idx]
+        else:
+            # Linear interpolation between two nearest reference positions
+            if gps_tow > ref_times[nearest_idx] and nearest_idx < len(ref_times) - 1:
+                i0, i1 = nearest_idx, nearest_idx + 1
+            else:
+                i0, i1 = max(0, nearest_idx - 1), nearest_idx
+            dt_span = ref_times[i1] - ref_times[i0]
+            if dt_span > 0:
+                alpha = (gps_tow - ref_times[i0]) / dt_span
+                alpha = max(0.0, min(1.0, alpha))
+                rx_ecef = (1 - alpha) * ref_pos[i0] + alpha * ref_pos[i1]
+            else:
+                rx_ecef = ref_pos[nearest_idx]
 
         # Get GPS satellites with C/N0
         gps_sats = []
@@ -208,7 +225,7 @@ def main():
         nav_path="experiments/data/urbannav/Odaiba/base.nav",
         ref_path="experiments/data/urbannav/Odaiba/reference.csv",
         plateau_dir="experiments/data/plateau_odaiba",
-        max_epochs=30, step=400,
+        max_epochs=40, step=50,
     )
 
     # Shinjuku
@@ -218,7 +235,7 @@ def main():
         nav_path="experiments/data/urbannav/Shinjuku/base.nav",
         ref_path="experiments/data/urbannav/Shinjuku/reference.csv",
         plateau_dir="experiments/data/plateau_shinjuku",
-        max_epochs=30, step=400,
+        max_epochs=40, step=50,
     )
 
     # Plot
