@@ -55,6 +55,7 @@ SIGMA_POS_TDCP = 5.0          # moderate
 HATCH_MAX_WINDOW = 20
 HATCH_DIVERGE_THRESHOLD = 10.0
 CN0_THRESHOLD = 20.0
+DIVERGENCE_RESET_THRESHOLD_M = 500.0
 
 SIGNAL_TYPES = ["GPS_L1_CA", "GPS_L5_Q", "GAL_E1_C_P", "GAL_E5A_Q"]
 
@@ -478,6 +479,156 @@ def epochs_to_unix_ms(epochs: list[dict]) -> np.ndarray:
     return unix_ns / 1_000_000
 
 
+def estimate_clock_bias_from_reference(
+    sat_ecef: np.ndarray, pseudoranges: np.ndarray, ref_ecef: np.ndarray,
+) -> float:
+    ranges = np.linalg.norm(sat_ecef - ref_ecef, axis=1)
+    return float(np.median(pseudoranges - ranges))
+
+
+def reinitialize_pf_at_reference(
+    pf,
+    sat_ecef: np.ndarray,
+    pseudoranges: np.ndarray,
+    ref_ecef: np.ndarray,
+    spread_pos: float = 50.0,
+    spread_cb: float = 500.0,
+) -> None:
+    cb = estimate_clock_bias_from_reference(sat_ecef, pseudoranges, ref_ecef)
+    pf.initialize(ref_ecef, clock_bias=cb, spread_pos=spread_pos, spread_cb=spread_cb)
+
+
+def capture_smoother_epoch(
+    estimate: np.ndarray,
+    sat_ecef: np.ndarray,
+    pseudoranges: np.ndarray,
+    weights: np.ndarray,
+    velocity: np.ndarray | None,
+    dt: float,
+    spp_ref: np.ndarray,
+    predict_sigma_pos: float,
+    segment_start: bool,
+) -> dict:
+    return {
+        "estimate": np.asarray(estimate, dtype=np.float64).copy(),
+        "sat_ecef": np.asarray(sat_ecef, dtype=np.float64).copy(),
+        "pseudoranges": np.asarray(pseudoranges, dtype=np.float64).copy(),
+        "weights": np.asarray(weights, dtype=np.float64).copy(),
+        "velocity": (
+            np.asarray(velocity, dtype=np.float64).copy()
+            if velocity is not None else None
+        ),
+        "dt": float(dt),
+        "spp_ref": np.asarray(spp_ref, dtype=np.float64).copy(),
+        "predict_sigma_pos": float(predict_sigma_pos),
+        "segment_start": bool(segment_start),
+    }
+
+
+def smooth_segmented_epochs(
+    stored_epochs: list[dict], position_update_sigma: float | None,
+) -> np.ndarray:
+    """Run backward smoothing on contiguous reset-free segments only.
+
+    GSDC occasionally needs forward divergence resets back to the dataset WLS.
+    A single smoother over the whole trip will incorrectly propagate pre-reset
+    state across those discontinuities. Split the trip into independent segments
+    and smooth each segment separately.
+    """
+    if not stored_epochs:
+        return np.zeros((0, 3), dtype=np.float64)
+
+    from gnss_gpu.particle_filter_device import ParticleFilterDevice
+
+    segment_starts = [
+        i for i, ep in enumerate(stored_epochs) if ep.get("segment_start", False)
+    ]
+    if not segment_starts or segment_starts[0] != 0:
+        segment_starts.insert(0, 0)
+
+    smoothed = np.zeros((len(stored_epochs), 3), dtype=np.float64)
+
+    for seg_idx, start in enumerate(segment_starts):
+        end = (
+            segment_starts[seg_idx + 1]
+            if seg_idx + 1 < len(segment_starts)
+            else len(stored_epochs)
+        )
+        segment = stored_epochs[start:end]
+        forward_pos = np.array([ep["estimate"] for ep in segment], dtype=np.float64)
+        if len(segment) == 1:
+            smoothed[start:end] = forward_pos
+            continue
+
+        last = segment[-1]
+        bwd_pf = ParticleFilterDevice(
+            n_particles=N_PARTICLES,
+            sigma_pos=SIGMA_POS,
+            sigma_cb=SIGMA_CB,
+            sigma_pr=SIGMA_PR,
+            resampling="megopolis",
+            ess_threshold=0.5,
+            seed=42 + seg_idx + 1,
+        )
+        reinitialize_pf_at_reference(
+            bwd_pf,
+            last["sat_ecef"],
+            last["pseudoranges"],
+            last["estimate"],
+            spread_pos=10.0,
+            spread_cb=100.0,
+        )
+
+        backward_pos = np.zeros_like(forward_pos)
+        backward_pos[-1] = last["estimate"]
+
+        for i in range(len(segment) - 2, -1, -1):
+            next_ep = segment[i + 1]
+            ep = segment[i]
+
+            vel = -next_ep["velocity"] if next_ep["velocity"] is not None else None
+            bwd_pf.predict(
+                velocity=vel,
+                dt=next_ep["dt"],
+                sigma_pos=next_ep["predict_sigma_pos"],
+            )
+
+            sat = ep["sat_ecef"].reshape(-1, 3)
+            pr = ep["pseudoranges"]
+            w = ep["weights"]
+            bwd_pf.correct_clock_bias(sat, pr)
+            bwd_pf.update_gmm(
+                sat,
+                pr,
+                weights=w,
+                sigma_pr=SIGMA_PR,
+                w_los=0.7,
+                mu_nlos=15.0,
+                sigma_nlos=30.0,
+            )
+
+            if position_update_sigma is not None:
+                bwd_pf.position_update(ep["spp_ref"][:3], sigma_pos=position_update_sigma)
+
+            est = bwd_pf.estimate()[:3]
+            if np.linalg.norm(est - ep["spp_ref"][:3]) > DIVERGENCE_RESET_THRESHOLD_M:
+                reinitialize_pf_at_reference(
+                    bwd_pf,
+                    sat,
+                    pr,
+                    ep["spp_ref"][:3],
+                    spread_pos=10.0,
+                    spread_cb=100.0,
+                )
+                est = ep["spp_ref"][:3]
+
+            backward_pos[i] = est
+
+        smoothed[start:end] = (forward_pos + backward_pos) / 2.0
+
+    return smoothed
+
+
 # ---------------------------------------------------------------------------
 # PF pipeline
 # ---------------------------------------------------------------------------
@@ -516,17 +667,16 @@ def run_pf_test(data_dir: Path, label: str) -> tuple[np.ndarray, np.ndarray] | N
     init_cb = float(np.median(epochs[0]["pseudoranges"] - init_ranges))
     pf.initialize(init_pos, clock_bias=init_cb, spread_pos=50.0, spread_cb=500.0)
 
-    # Enable smoother
-    pf.enable_smoothing()
-
     # Cycle slip detector + Hatch filter
     cycle_slip_detector = CycleSlipDetector()
     hatch = HatchFilter(max_window=HATCH_MAX_WINDOW,
                         diverge_threshold=HATCH_DIVERGE_THRESHOLD)
 
     pf_positions = np.zeros((n_epochs, 3))
+    smooth_epochs: list[dict] = []
     prev_arrival_ns = epochs[0]["arrival_ns"]
     tdcp_count = 0
+    reset_count = 0
 
     for i, ep in enumerate(epochs):
         dt = (ep["arrival_ns"] - prev_arrival_ns) / 1e9 if i > 0 else 1.0
@@ -567,35 +717,51 @@ def run_pf_test(data_dir: Path, label: str) -> tuple[np.ndarray, np.ndarray] | N
         pf.position_update(ep["wls_ecef"], sigma_pos=POS_UPDATE_SIGMA)
 
         est = pf.estimate()
-        pf_positions[i] = est[:3]
-
-        # Store for smoother
-        pf.store_epoch(
-            ep["sat_ecef"], smoothed_pr, weights,
-            velocity, dt, spp_ref=ep["wls_ecef"],
-        )
+        est_pos = est[:3].copy()
+        segment_start = (i == 0)
 
         # Divergence reset
-        if np.linalg.norm(est[:3] - ep["wls_ecef"]) > 500.0:
-            cb = float(np.median(
-                ep["pseudoranges"]
-                - np.linalg.norm(ep["sat_ecef"] - ep["wls_ecef"], axis=1)
-            ))
-            pf.initialize(
-                ep["wls_ecef"], clock_bias=cb,
-                spread_pos=50.0, spread_cb=500.0,
+        if np.linalg.norm(est_pos - ep["wls_ecef"]) > DIVERGENCE_RESET_THRESHOLD_M:
+            reinitialize_pf_at_reference(
+                pf,
+                ep["sat_ecef"],
+                ep["pseudoranges"],
+                ep["wls_ecef"],
+                spread_pos=50.0,
+                spread_cb=500.0,
             )
-            pf_positions[i] = ep["wls_ecef"]
+            est_pos = ep["wls_ecef"].copy()
+            segment_start = True
+            reset_count += 1
+
+        pf_positions[i] = est_pos
+        smooth_epochs.append(capture_smoother_epoch(
+            estimate=est_pos,
+            sat_ecef=ep["sat_ecef"],
+            pseudoranges=smoothed_pr,
+            weights=weights,
+            velocity=velocity,
+            dt=dt,
+            spp_ref=ep["wls_ecef"],
+            predict_sigma_pos=sigma_pos,
+            segment_start=segment_start,
+        ))
 
     # Forward-backward smoother
     try:
-        smoothed, forward = pf.smooth(position_update_sigma=POS_UPDATE_SIGMA)
-        final_positions = smoothed
+        final_positions = smooth_segmented_epochs(
+            smooth_epochs,
+            position_update_sigma=POS_UPDATE_SIGMA,
+        )
     except Exception:
         final_positions = pf_positions
 
     unix_ms = epochs_to_unix_ms(epochs)
-    print(f"  {label}: {n_epochs} ep, TDCP {tdcp_count}/{n_epochs - 1}")
+    n_segments = sum(1 for ep in smooth_epochs if ep["segment_start"])
+    print(
+        f"  {label}: {n_epochs} ep, TDCP {tdcp_count}/{n_epochs - 1}, "
+        f"resets {reset_count}, segments {n_segments}"
+    )
     return final_positions, unix_ms
 
 
