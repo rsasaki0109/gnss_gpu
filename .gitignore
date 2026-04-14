@@ -35,3 +35,12 @@ cache/
 # Experiment artifacts
 experiments/results/*.log
 experiments/results/paper_assets/*.mp4
+
+# Experiment data (downloaded, not committed)
+experiments/data/
+
+# Intermediate frame images (GIFs are committed instead)
+experiments/results/*/frame_*.png
+experiments/results/los_nlos_verification/odaiba_*.png
+experiments/results/los_nlos_verification/shinjuku_*.png
+experiments/results/los_nlos_verification/real_eph_*.png
