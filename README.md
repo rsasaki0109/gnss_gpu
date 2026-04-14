@@ -88,11 +88,11 @@ Without clock bias correction, HK PF diverges to >100m on 100% of epochs. Per-ep
 
 TST and Whampoa sequences have 20-30 satellites but SPP itself fails (>300m RMS) due to dominant NLOS. These environments require RTK, carrier-phase, or 3D-map-aided NLOS exclusion.
 
-### Supplemental: Kaggle GSDC 2023 (open-sky smartphone)
+### Supplemental Only: Kaggle GSDC 2023 Submission Benchmark
 
-GSDC 2023 is a different regime from UrbanNav: open-sky smartphone data with stronger baseline WLS and less NLOS structure to exploit. It is included here as a supplemental smartphone check, not as the main claim.
+These are Kaggle leaderboard submission scores on open-sky smartphone data. They are included as a supplemental smartphone benchmark only, not as the main UrbanNav claim.
 
-| Version | Public | Private | Method |
+| Submission | Public | Private | Method |
 | --- | ---: | ---: | --- |
 | v1 | 4.207 m | 5.144 m | pseudorange only |
 | **v3** | **4.128 m** | — | + smoother |
@@ -103,7 +103,7 @@ GSDC 2023 is a different regime from UrbanNav: open-sky smartphone data with str
 | WLS (Android baseline) | **2.62 m** | **2.42 m** | **5.14 m** |
 | PF-100K | 2.83 m | 2.62 m | 5.36 m |
 
-The best submission here is `v3` at **4.128 m public** with smoothing, but WLS still wins on train averages. TDCP and Hatch made the smartphone result materially worse, which is consistent with weak smartphone carrier-phase quality.
+The best leaderboard submission is `v3` at **4.128 m public** with smoothing, but WLS still wins on train averages. TDCP and Hatch made the smartphone result materially worse, which is consistent with weak smartphone carrier-phase quality. This section is here to document the smartphone submission result, not to replace the UrbanNav headline.
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
@@ -161,7 +161,7 @@ Controlled simulation with parametric canyon (parallel buildings, ray-traced NLO
 - Forward-backward particle smoother uses future observations to refine past estimates.
 - IMU stop-detection with dynamic sigma_pos achieves 100% IMU utilization.
 - Per-epoch clock bias correction enables cross-receiver robustness (trimble and ublox).
-- On Kaggle GSDC 2023 smartphone data, the best PF submission is `v3` at 4.128 m public, but it stays a supplemental result rather than the main README claim.
+- On Kaggle GSDC 2023 smartphone data, the best PF leaderboard submission is `v3` at 4.128 m public, and it is documented only as a supplemental benchmark.
 - Particle count scaling reveals a phase transition at N≈1,000 with continued tail improvement to 1M.
 - BVH makes real-PLATEAU PF3D runtime practical without changing accuracy.
 - Urban canyon simulation confirms PF advantage increases with NLOS severity (87% gain at 91% NLOS).
@@ -171,6 +171,7 @@ Controlled simulation with parametric canyon (parallel buildings, ray-traced NLO
 
 - It does not claim a world-first GNSS particle filter.
 - It does not claim the same configuration works across all urban environments without tuning.
+- It does not claim the Kaggle GSDC submission result is the main headline. That result is supplemental and not directly comparable to the UrbanNav DD+smoother result.
 
 ## Repo front door
 
