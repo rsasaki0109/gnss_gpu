@@ -40,6 +40,7 @@ ros2 = [
     "rclpy",
 ]
 dev = [
+    "requests>=2.31",
     "pytest>=7.0",
     "pytest-cov",
 ]
@@ -58,3 +59,10 @@ cmake.verbose = true
 
 [tool.scikit-build.cmake.define]
 CMAKE_CUDA_ARCHITECTURES = "native"
+
+[tool.pytest.ini_options]
+markers = [
+    "gpu: requires compiled GPU-backed bindings",
+    "cuda: requires CUDA-backed runtime support",
+    "slow: long-running tests that are excluded from smoke suites",
+]
