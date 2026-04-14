@@ -164,6 +164,7 @@ PF wins: 21% (P50), 26% (RMS)
 | **v3** | **4.128m** | — | + smoother |
 | v2 | 10.150m | — | + TDCP + Hatch (悪化) |
 | v11 | 4.223m | 5.255m | reset-safe segmented smoother |
+| v12 | 4.133m | 5.242m | reset-safe smoother-only |
 
 ### 4.4 なぜ GSDC で PF が勝てないか
 
@@ -171,7 +172,8 @@ PF wins: 21% (P50), 26% (RMS)
 2. **WLS が既に良い** (Google 最適化済み) → temporal filtering の余地が少ない
 3. **PF の predict noise (sigma_pos=10)** が邪魔 → open-sky ではノイズを足すだけ
 4. **carrier phase がスマホで信頼できない** → TDCP/Hatch が全滅
-5. **smoother が divergence reset をまたぐと hidden/private で壊れる** → reset-safe segmentation で private は 5.255m まで回復したが、public best 更新には未達
+5. **smoother が divergence reset をまたぐと hidden/private で壊れる** → reset-safe segmentation で private は 5.255m まで回復
+6. **TDCP/Hatch が public 悪化の主因** → reset-safe smoother-only (`v12`) では `4.133m / 5.242m` まで戻り、public best `4.128m` にかなり近づいた
 
 ### 4.5 ファイル
 
@@ -181,6 +183,7 @@ PF wins: 21% (P50), 26% (RMS)
 - `experiments/results/gsdc2023_submission.csv` — v1 submission
 - `experiments/results/gsdc2023_submission_v2.csv` — v2 submission
 - `experiments/results/gsdc2023_submission_v3.csv` — v3 submission
+- `experiments/results/gsdc2023_submission_v12.csv` — reset-safe smoother-only submission
 
 ---
 

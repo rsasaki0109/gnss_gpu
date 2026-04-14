@@ -98,13 +98,14 @@ These are Kaggle leaderboard submission scores on open-sky smartphone data. They
 | **v3** | **4.128 m** | — | + smoother |
 | v2 | 10.150 m | — | + TDCP + Hatch |
 | v11 | 4.223 m | 5.255 m | reset-safe segmented smoother |
+| v12 | 4.133 m | 5.242 m | reset-safe smoother-only |
 
 | Train method | Mean P50 | Median P50 | Mean RMS |
 | --- | ---: | ---: | ---: |
 | WLS (Android baseline) | **2.62 m** | **2.42 m** | **5.14 m** |
 | PF-100K | 2.83 m | 2.62 m | 5.36 m |
 
-The best leaderboard submission is still `v3` at **4.128 m public**, while the best private score remains `v1` at **5.144 m**. A later reset-safe smoother (`v11`) removed the hidden catastrophic failure seen in earlier smoother variants and produced a sane private score (`5.255 m`), but it did not beat the frozen leaderboard best. WLS still wins on train averages, and TDCP plus Hatch materially worsened the smartphone result. This section is here to document the smartphone submission result, not to replace the UrbanNav headline.
+The best leaderboard submission is still `v3` at **4.128 m public**, while the best private score remains `v1` at **5.144 m**. The reset-safe smoother fixed the hidden catastrophic failure (`v11`: `4.223 / 5.255`), and the reset-safe smoother-only variant (`v12`: `4.133 / 5.242`) recovered almost all of the public gap without reintroducing private failure. That points to TDCP plus Hatch, not the segmented smoother itself, as the main regression source on open-sky smartphone data. This section is here to document the smartphone submission result, not to replace the UrbanNav headline.
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
