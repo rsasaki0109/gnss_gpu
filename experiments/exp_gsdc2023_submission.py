@@ -78,11 +78,16 @@ class SubmissionConfig:
     use_hatch: bool = True
     use_tdcp: bool = True
     use_shared_tdcp: bool = False
+    tdcp_predict: bool = True
     tdcp_adaptive_gate: bool = False
     tdcp_rms_threshold: float = 3.0
     tdcp_spp_delta_max_mps: float = 6.0
     tdcp_position_update_sigma: float | None = None
+    tdcp_position_reference: str = "pf"
+    tdcp_position_blend_alpha: float = 1.0
     tdcp_position_update_rms_max: float = 2.0
+    tdcp_soft_min_wls_rms: float | None = None
+    tdcp_soft_wls_delta_max_m: float | None = None
     tdcp_elevation_weight: bool = True
     enable_smoother: bool = True
     smoother_position_update_sigma: float | None = POS_UPDATE_SIGMA
@@ -123,6 +128,11 @@ def parse_args() -> SubmissionConfig:
         help="Use shared gnss_gpu.tdcp_velocity implementation instead of the local TDCP solver.",
     )
     parser.add_argument(
+        "--disable-tdcp-predict",
+        action="store_true",
+        help="Keep Doppler predict even when TDCP is accepted; TDCP can still be used as a soft displacement constraint.",
+    )
+    parser.add_argument(
         "--tdcp-adaptive-gate",
         action="store_true",
         help="Reject TDCP when postfit RMS is high or it disagrees with WLS finite-difference velocity.",
@@ -146,10 +156,34 @@ def parse_args() -> SubmissionConfig:
         help="Optional TDCP displacement soft-constraint sigma in meters; negative disables it.",
     )
     parser.add_argument(
+        "--tdcp-position-reference",
+        choices=["pf", "wls"],
+        default="pf",
+        help="Reference state used to convert TDCP velocity into a position target for the soft update.",
+    )
+    parser.add_argument(
+        "--tdcp-position-blend-alpha",
+        type=float,
+        default=1.0,
+        help="Blend between current WLS (0.0) and TDCP-projected position (1.0) for the soft displacement target.",
+    )
+    parser.add_argument(
         "--tdcp-position-update-rms-max",
         type=float,
         default=2.0,
         help="Only apply TDCP displacement soft constraint when TDCP postfit RMS is below this [m].",
+    )
+    parser.add_argument(
+        "--tdcp-soft-min-wls-rms",
+        type=float,
+        default=None,
+        help="Only apply TDCP soft displacement when the current WLS pseudorange residual RMS is at least this [m].",
+    )
+    parser.add_argument(
+        "--tdcp-soft-wls-delta-max-m",
+        type=float,
+        default=None,
+        help="Optional guard for TDCP soft displacement: skip when the TDCP-projected position is farther than this from current WLS [m].",
     )
     parser.add_argument(
         "--disable-tdcp-elevation-weight",
@@ -203,11 +237,26 @@ def parse_args() -> SubmissionConfig:
         use_hatch=not args.disable_hatch,
         use_tdcp=not args.disable_tdcp,
         use_shared_tdcp=args.shared_tdcp,
+        tdcp_predict=not args.disable_tdcp_predict,
         tdcp_adaptive_gate=args.tdcp_adaptive_gate,
         tdcp_rms_threshold=float(args.tdcp_rms_threshold),
         tdcp_spp_delta_max_mps=float(args.tdcp_spp_delta_max_mps),
         tdcp_position_update_sigma=tdcp_pu_sigma,
+        tdcp_position_reference=args.tdcp_position_reference,
+        tdcp_position_blend_alpha=float(np.clip(args.tdcp_position_blend_alpha, 0.0, 1.0)),
         tdcp_position_update_rms_max=float(args.tdcp_position_update_rms_max),
+        tdcp_soft_min_wls_rms=(
+            None
+            if args.tdcp_soft_min_wls_rms is None
+            or args.tdcp_soft_min_wls_rms < 0
+            else float(args.tdcp_soft_min_wls_rms)
+        ),
+        tdcp_soft_wls_delta_max_m=(
+            None
+            if args.tdcp_soft_wls_delta_max_m is None
+            or args.tdcp_soft_wls_delta_max_m < 0
+            else float(args.tdcp_soft_wls_delta_max_m)
+        ),
         tdcp_elevation_weight=not args.disable_tdcp_elevation_weight,
         enable_smoother=not args.disable_smoother,
         smoother_position_update_sigma=pu_sigma,
@@ -678,6 +727,23 @@ def compute_robust_wls(sat_ecef: np.ndarray, pseudoranges: np.ndarray,
     return pos
 
 
+def pseudorange_residual_rms(
+    sat_ecef: np.ndarray,
+    pseudoranges: np.ndarray,
+    rx_ecef: np.ndarray,
+) -> float:
+    if sat_ecef.shape[0] < 4 or not np.all(np.isfinite(rx_ecef)):
+        return float("inf")
+    ranges = np.linalg.norm(sat_ecef - rx_ecef, axis=1)
+    if not np.all(np.isfinite(ranges)):
+        return float("inf")
+    cb_est = float(np.median(pseudoranges - ranges))
+    residuals = pseudoranges - ranges - cb_est
+    if not np.all(np.isfinite(residuals)):
+        return float("inf")
+    return float(np.sqrt(np.mean(residuals**2)))
+
+
 def epochs_to_unix_ms(epochs: list[dict]) -> np.ndarray:
     arr = np.array([ep["arrival_ns"] for ep in epochs], dtype=np.float64)
     unix_ns = arr + GPS_UNIX_OFFSET_NS - LEAP_SECONDS_NS
@@ -898,9 +964,12 @@ def run_pf_test(
     smooth_epochs: list[dict] = []
     prev_arrival_ns = epochs[0]["arrival_ns"]
     tdcp_count = 0
+    tdcp_predict_count = 0
     tdcp_reject_rms = 0
     tdcp_reject_spp = 0
     tdcp_soft_count = 0
+    tdcp_soft_skip_residual = 0
+    tdcp_soft_skip_wls = 0
     reset_count = 0
 
     for i, ep in enumerate(epochs):
@@ -926,7 +995,7 @@ def run_pf_test(
         prev_pf_pos = pf_positions[i - 1].copy() if i > 0 else None
         sigma_pos = SIGMA_POS
         velocity = None
-        used_tdcp = False
+        accepted_tdcp_velocity: np.ndarray | None = None
         tdcp_rms = float("nan")
         if i > 0 and config.use_tdcp:
             prev_ep = epochs[i - 1]
@@ -979,10 +1048,12 @@ def run_pf_test(
                 tdcp_reject_rms += 1
 
             if tdcp_velocity is not None:
-                velocity = tdcp_velocity
-                sigma_pos = SIGMA_POS_TDCP
                 tdcp_count += 1
-                used_tdcp = True
+                accepted_tdcp_velocity = tdcp_velocity
+                if config.tdcp_predict:
+                    velocity = tdcp_velocity
+                    sigma_pos = SIGMA_POS_TDCP
+                    tdcp_predict_count += 1
         if velocity is None:
             velocity = compute_doppler_velocity(ep, rx_ecef)
 
@@ -996,25 +1067,53 @@ def run_pf_test(
         )
         # Use dataset WLS for position update (Sagnac-corrected)
         pf.position_update(ep["wls_ecef"], sigma_pos=POS_UPDATE_SIGMA)
+        wls_pr_rms = pseudorange_residual_rms(
+            ep["sat_ecef"],
+            smoothed_pr,
+            ep["wls_ecef"],
+        )
 
         if (
             config.tdcp_position_update_sigma is not None
-            and used_tdcp
-            and prev_pf_pos is not None
-            and np.all(np.isfinite(prev_pf_pos))
+            and accepted_tdcp_velocity is not None
             and dt > 0
             and (
                 not np.isfinite(tdcp_rms)
                 or tdcp_rms < float(config.tdcp_position_update_rms_max)
             )
         ):
-            tdcp_predicted_pos = prev_pf_pos + velocity * dt
-            if np.all(np.isfinite(tdcp_predicted_pos)):
-                pf.position_update(
-                    tdcp_predicted_pos,
-                    sigma_pos=float(config.tdcp_position_update_sigma),
+            if config.tdcp_position_reference == "wls":
+                tdcp_ref_pos = prev_ep["wls_ecef"]
+            else:
+                tdcp_ref_pos = prev_pf_pos
+            if tdcp_ref_pos is None or not np.all(np.isfinite(tdcp_ref_pos)):
+                tdcp_ref_pos = None
+            if tdcp_ref_pos is None:
+                tdcp_predicted_pos = None
+            else:
+                tdcp_predicted_pos = tdcp_ref_pos + accepted_tdcp_velocity * dt
+            if tdcp_predicted_pos is not None and np.all(np.isfinite(tdcp_predicted_pos)):
+                alpha = float(np.clip(config.tdcp_position_blend_alpha, 0.0, 1.0))
+                tdcp_target_pos = (
+                    (1.0 - alpha) * ep["wls_ecef"] + alpha * tdcp_predicted_pos
                 )
-                tdcp_soft_count += 1
+                if (
+                    config.tdcp_soft_min_wls_rms is not None
+                    and wls_pr_rms < float(config.tdcp_soft_min_wls_rms)
+                ):
+                    tdcp_soft_skip_residual += 1
+                elif (
+                    config.tdcp_soft_wls_delta_max_m is not None
+                    and np.linalg.norm(tdcp_target_pos - ep["wls_ecef"])
+                    > float(config.tdcp_soft_wls_delta_max_m)
+                ):
+                    tdcp_soft_skip_wls += 1
+                else:
+                    pf.position_update(
+                        tdcp_target_pos,
+                        sigma_pos=float(config.tdcp_position_update_sigma),
+                    )
+                    tdcp_soft_count += 1
 
         est = pf.estimate()
         est_pos = est[:3].copy()
@@ -1063,14 +1162,21 @@ def run_pf_test(
 
     unix_ms = epochs_to_unix_ms(epochs)
     n_segments = sum(1 for ep in smooth_epochs if ep["segment_start"])
-    velocity_label = "TDCP+Doppler" if config.use_tdcp else "Doppler"
+    if config.use_tdcp and config.tdcp_predict:
+        velocity_label = "TDCP+Doppler"
+    elif config.use_tdcp:
+        velocity_label = "Doppler+TDCP-soft"
+    else:
+        velocity_label = "Doppler"
     pr_label = "Hatch" if config.use_hatch else "rawPR"
     smooth_label = "seg-smth" if config.enable_smoother else "forward"
     print(
         f"  {label}: {n_epochs} ep, {pr_label}, {velocity_label}, {smooth_label}, "
-        f"TDCP {tdcp_count}/{n_epochs - 1}, "
+        f"TDCP {tdcp_count}/{n_epochs - 1}, pred {tdcp_predict_count}, "
         f"rej_rms {tdcp_reject_rms}, rej_spp {tdcp_reject_spp}, "
-        f"tdcp_pu {tdcp_soft_count}, resets {reset_count}, segments {n_segments}"
+        f"tdcp_pu {tdcp_soft_count}, tdcp_pu_skip_res {tdcp_soft_skip_residual}, "
+        f"tdcp_pu_skip_wls {tdcp_soft_skip_wls}, "
+        f"resets {reset_count}, segments {n_segments}"
     )
     return final_positions, unix_ms
 
@@ -1110,11 +1216,16 @@ def main():
         print(
             "  TDCP:"
             f" impl={'shared' if config.use_shared_tdcp else 'legacy'}"
+            f" predict={'on' if config.tdcp_predict else 'off'}"
             f" adaptive={'on' if config.tdcp_adaptive_gate else 'off'}"
             f" rms_th={config.tdcp_rms_threshold}"
             f" spp_delta={config.tdcp_spp_delta_max_mps}"
             f" pu_sigma={config.tdcp_position_update_sigma}"
+            f" pu_ref={config.tdcp_position_reference}"
+            f" pu_alpha={config.tdcp_position_blend_alpha}"
             f" pu_rms_max={config.tdcp_position_update_rms_max}"
+            f" pu_wls_rms>={config.tdcp_soft_min_wls_rms}"
+            f" pu_wls_max={config.tdcp_soft_wls_delta_max_m}"
             f" elev_weight={'on' if config.tdcp_elevation_weight else 'off'}"
         )
     if config.enable_smoother:

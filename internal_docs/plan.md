@@ -166,18 +166,20 @@ PF wins: 21% (P50), 26% (RMS)
 | v11 | 4.223m | 5.255m | reset-safe segmented smoother |
 | v12 | 4.133m | 5.242m | reset-safe smoother-only |
 | v13 | 4.117m | 5.268m | reset-safe smoother-only + Gaussian backward |
-| **v15** | **4.116m** | 5.268m | reset-safe smoother-only + Gaussian backward + alpha 0.45 |
+| v15 | 4.116m | 5.268m | reset-safe smoother-only + Gaussian backward + alpha 0.45 |
+| **v22** | **4.112m** | 5.200m | shared TDCP soft-only, no TDCP predict, ultra-conservative gates |
 
 ### 4.4 なぜ GSDC で PF が勝てないか
 
 1. **スマホの pseudorange ノイズが大きい** (15-20m std) → PF の PR update の情報量が少ない
 2. **WLS が既に良い** (Google 最適化済み) → temporal filtering の余地が少ない
 3. **PF の predict noise (sigma_pos=10)** が邪魔 → open-sky ではノイズを足すだけ
-4. **carrier phase がスマホで信頼できない** → TDCP/Hatch が全滅
+4. **carrier phase 自体が悪いのではなく coupling が悪かった** → `TDCP predict + Hatch` は悪化したが、shared TDCP を `soft-only` で厳しく gate すると改善余地が残る
 5. **smoother が divergence reset をまたぐと hidden/private で壊れる** → reset-safe segmentation で private は 5.255m まで回復
-6. **TDCP/Hatch が public 悪化の主因** → reset-safe smoother-only (`v12`) では `4.133m / 5.242m` まで戻り、public best `4.128m` にかなり近づいた
+6. **TDCP/Hatch の direct coupling が public 悪化の主因** → reset-safe smoother-only (`v12`) では `4.133m / 5.242m` まで戻り、public best `4.128m` にかなり近づいた
 7. **backward smoother の実装差も効く** → `Gaussian + current-step transition` に寄せた `v13` で public は `4.117m` まで改善
 8. **blend weight も数 mm 単位で効く** → `alpha=0.45` の `v15` で public は `4.116m` に微改善、private は `5.268m` で据え置き
+9. **shared TDCP を predict に入れず soft-only factor 風に使うとさらに改善** → `v22` は `4.112m / 5.200m` で public best 更新、private も `v15` より改善
 
 ### 4.5 ファイル
 
@@ -190,6 +192,7 @@ PF wins: 21% (P50), 26% (RMS)
 - `experiments/results/gsdc2023_submission_v12.csv` — reset-safe smoother-only submission
 - `experiments/results/gsdc2023_submission_v13.csv` — reset-safe smoother-only + Gaussian backward
 - `experiments/results/gsdc2023_submission_v15.csv` — reset-safe smoother-only + Gaussian backward + alpha 0.45
+- `experiments/results/gsdc2023_submission_v22.csv` — shared TDCP soft-only + strict gates, current public best
 
 ---
 
