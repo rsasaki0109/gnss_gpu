@@ -161,10 +161,11 @@ PF wins: 21% (P50), 26% (RMS)
 | Version | Public | Private | 手法 |
 |---|---:|---:|---|
 | v1 | 4.207m | **5.144m** | pseudorange only |
-| **v3** | **4.128m** | — | + smoother |
+| v3 | 4.128m | — | + smoother |
 | v2 | 10.150m | — | + TDCP + Hatch (悪化) |
 | v11 | 4.223m | 5.255m | reset-safe segmented smoother |
 | v12 | 4.133m | 5.242m | reset-safe smoother-only |
+| **v13** | **4.117m** | 5.268m | reset-safe smoother-only + Gaussian backward |
 
 ### 4.4 なぜ GSDC で PF が勝てないか
 
@@ -174,6 +175,7 @@ PF wins: 21% (P50), 26% (RMS)
 4. **carrier phase がスマホで信頼できない** → TDCP/Hatch が全滅
 5. **smoother が divergence reset をまたぐと hidden/private で壊れる** → reset-safe segmentation で private は 5.255m まで回復
 6. **TDCP/Hatch が public 悪化の主因** → reset-safe smoother-only (`v12`) では `4.133m / 5.242m` まで戻り、public best `4.128m` にかなり近づいた
+7. **backward smoother の実装差も効く** → `Gaussian + current-step transition` に寄せた `v13` で public は `4.117m` まで改善
 
 ### 4.5 ファイル
 
@@ -184,6 +186,7 @@ PF wins: 21% (P50), 26% (RMS)
 - `experiments/results/gsdc2023_submission_v2.csv` — v2 submission
 - `experiments/results/gsdc2023_submission_v3.csv` — v3 submission
 - `experiments/results/gsdc2023_submission_v12.csv` — reset-safe smoother-only submission
+- `experiments/results/gsdc2023_submission_v13.csv` — reset-safe smoother-only + Gaussian backward
 
 ---
 
