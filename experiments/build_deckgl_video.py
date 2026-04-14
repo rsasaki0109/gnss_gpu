@@ -519,15 +519,15 @@ def generate_html(
   #map {{ width:100vw; height:100vh; }}
   #hud {{
     position:absolute; top:12px; left:12px; z-index:10;
-    background:rgba(10,15,30,0.92); color:#e0e0e0; padding:14px 18px;
-    border-radius:10px; border:1px solid #334; min-width:270px;
+    background:rgba(255,255,255,0.93); color:#222; padding:14px 18px;
+    border-radius:10px; border:1px solid #ccc; min-width:270px; box-shadow:0 2px 8px rgba(0,0,0,0.12);
   }}
-  #hud h2 {{ margin:0 0 6px 0; font-size:15px; color:#fff; }}
-  #hud .area {{ font-size:18px; color:#ffd93d; margin-bottom:4px; }}
+  #hud h2 {{ margin:0 0 6px 0; font-size:15px; color:#111; }}
+  #hud .area {{ font-size:18px; color:#c07800; margin-bottom:4px; }}
   #meta {{ color:#9cb0c8; font-size:11px; margin-top:6px; line-height:1.45; }}
-  .los {{ color:#00d4aa; font-weight:bold; }}
-  .nlos {{ color:#ff6b6b; font-weight:bold; }}
-  #epoch {{ color:#888; font-size:11px; margin-top:4px; }}
+  .los {{ color:#008866; font-weight:bold; }}
+  .nlos {{ color:#cc2222; font-weight:bold; }}
+  #epoch {{ color:#666; font-size:11px; margin-top:4px; }}
   #legend {{ margin-top:8px; font-size:11px; }}
   #legend span {{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-right:4px; vertical-align:middle; }}
   .maplibregl-control-container {{ font-family: monospace; }}
@@ -583,13 +583,13 @@ const MAP_STYLE = {{
     {{
       id: 'bg',
       type: 'background',
-      paint: {{ 'background-color': '#0a0f1e' }},
+      paint: {{ 'background-color': '#e8e4da' }},
     }},
     {{
       id: 'osm',
       type: 'raster',
       source: 'osm',
-      paint: {{ 'raster-opacity': 0.7, 'raster-saturation': -0.5, 'raster-brightness-max': 0.55 }},
+      paint: {{ 'raster-opacity': 1.0 }},
     }},
   ],
 }};
@@ -1146,8 +1146,8 @@ function renderFrame(nowTs) {{
         stroked: true,
         wireframe: false,
         getElevation: d => d.height_m,
-        getFillColor: d => d.height_m > 45 ? [80, 98, 118, 190] : [103, 121, 140, 170],
-        getLineColor: [176, 186, 198, 160],
+        getFillColor: d => d.height_m > 45 ? [160, 170, 185, 220] : [185, 195, 205, 200],
+        getLineColor: [120, 130, 145, 220],
         lineWidthMinPixels: 1,
       }}),
       new deck.PolygonLayer({{
