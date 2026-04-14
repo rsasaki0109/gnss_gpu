@@ -88,6 +88,23 @@ Without clock bias correction, HK PF diverges to >100m on 100% of epochs. Per-ep
 
 TST and Whampoa sequences have 20-30 satellites but SPP itself fails (>300m RMS) due to dominant NLOS. These environments require RTK, carrier-phase, or 3D-map-aided NLOS exclusion.
 
+### Supplemental: Kaggle GSDC 2023 (open-sky smartphone)
+
+GSDC 2023 is a different regime from UrbanNav: open-sky smartphone data with stronger baseline WLS and less NLOS structure to exploit. It is included here as a supplemental smartphone check, not as the main claim.
+
+| Version | Public | Private | Method |
+| --- | ---: | ---: | --- |
+| v1 | 4.207 m | 5.144 m | pseudorange only |
+| **v3** | **4.128 m** | — | + smoother |
+| v2 | 10.150 m | — | + TDCP + Hatch |
+
+| Train method | Mean P50 | Median P50 | Mean RMS |
+| --- | ---: | ---: | ---: |
+| WLS (Android baseline) | **2.62 m** | **2.42 m** | **5.14 m** |
+| PF-100K | 2.83 m | 2.62 m | 5.36 m |
+
+The best submission here is `v3` at **4.128 m public** with smoothing, but WLS still wins on train averages. TDCP and Hatch made the smartphone result materially worse, which is consistent with weak smartphone carrier-phase quality.
+
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
 BVH (Bounding Volume Hierarchy) accelerates the 3D ray-tracing likelihood computation used in the PF3D variant. For each particle-satellite pair, the system traces a ray through PLATEAU 3D building models to determine LOS/NLOS visibility. Without BVH, this requires checking every triangle in the mesh (O(N×K×T) where T=triangles). BVH organizes triangles into a spatial hierarchy, reducing this to O(N×K×log(T)) through hierarchical culling. Accuracy is preserved because BVH is an exact acceleration structure (no approximation).
@@ -144,6 +161,7 @@ Controlled simulation with parametric canyon (parallel buildings, ray-traced NLO
 - Forward-backward particle smoother uses future observations to refine past estimates.
 - IMU stop-detection with dynamic sigma_pos achieves 100% IMU utilization.
 - Per-epoch clock bias correction enables cross-receiver robustness (trimble and ublox).
+- On Kaggle GSDC 2023 smartphone data, the best PF submission is `v3` at 4.128 m public, but it stays a supplemental result rather than the main README claim.
 - Particle count scaling reveals a phase transition at N≈1,000 with continued tail improvement to 1M.
 - BVH makes real-PLATEAU PF3D runtime practical without changing accuracy.
 - Urban canyon simulation confirms PF advantage increases with NLOS severity (87% gain at 91% NLOS).
@@ -301,6 +319,8 @@ Main output files:
 - `experiments/results/urbannav_window_eval_external_gej_trimble_qualityveto_w500_s250_summary.csv`
 - `experiments/results/pf_strategy_lab_holdout6_r200_s200_summary.csv`
 - `experiments/results/urbannav_fixed_eval_hk20190428_gc_adaptive_summary.csv`
+- `experiments/results/gsdc2023_eval.csv`
+- `experiments/results/gsdc2023_submission_v3.csv`
 
 ## License
 
