@@ -76,6 +76,10 @@ class SubmissionConfig:
     use_hatch: bool = True
     use_tdcp: bool = True
     enable_smoother: bool = True
+    smoother_position_update_sigma: float | None = POS_UPDATE_SIGMA
+    smoother_blend_alpha: float = 0.5
+    smoother_backward_update: str = "gmm"
+    smoother_transition_source: str = "next"
     label: str = "v3"
 
 
@@ -109,12 +113,46 @@ def parse_args() -> SubmissionConfig:
         action="store_true",
         help="Disable backward smoothing and output forward PF only.",
     )
+    parser.add_argument(
+        "--smoother-position-update-sigma",
+        type=float,
+        default=POS_UPDATE_SIGMA,
+        help="Backward smoother position-update sigma. Use a negative value to disable.",
+    )
+    parser.add_argument(
+        "--smoother-blend-alpha",
+        type=float,
+        default=0.5,
+        help="Blend weight for backward pass when combining forward/backward estimates.",
+    )
+    parser.add_argument(
+        "--smoother-backward-update",
+        choices=["gmm", "gaussian"],
+        default="gmm",
+        help="Backward observation model inside the segmented smoother.",
+    )
+    parser.add_argument(
+        "--smoother-transition-source",
+        choices=["next", "current"],
+        default="next",
+        help="Which epoch provides velocity/dt for backward propagation.",
+    )
     args = parser.parse_args()
+    pu_sigma = (
+        None
+        if args.smoother_position_update_sigma is not None
+        and args.smoother_position_update_sigma < 0
+        else args.smoother_position_update_sigma
+    )
     return SubmissionConfig(
         output_csv=args.output,
         use_hatch=not args.disable_hatch,
         use_tdcp=not args.disable_tdcp,
         enable_smoother=not args.disable_smoother,
+        smoother_position_update_sigma=pu_sigma,
+        smoother_blend_alpha=float(args.smoother_blend_alpha),
+        smoother_backward_update=args.smoother_backward_update,
+        smoother_transition_source=args.smoother_transition_source,
         label=args.label,
     )
 
@@ -581,7 +619,11 @@ def capture_smoother_epoch(
 
 
 def smooth_segmented_epochs(
-    stored_epochs: list[dict], position_update_sigma: float | None,
+    stored_epochs: list[dict],
+    position_update_sigma: float | None,
+    blend_alpha: float = 0.5,
+    backward_update: str = "gmm",
+    transition_source: str = "next",
 ) -> np.ndarray:
     """Run backward smoothing on contiguous reset-free segments only.
 
@@ -640,27 +682,31 @@ def smooth_segmented_epochs(
         for i in range(len(segment) - 2, -1, -1):
             next_ep = segment[i + 1]
             ep = segment[i]
+            motion_ep = next_ep if transition_source == "next" else ep
 
-            vel = -next_ep["velocity"] if next_ep["velocity"] is not None else None
+            vel = -motion_ep["velocity"] if motion_ep["velocity"] is not None else None
             bwd_pf.predict(
                 velocity=vel,
-                dt=next_ep["dt"],
-                sigma_pos=next_ep["predict_sigma_pos"],
+                dt=motion_ep["dt"],
+                sigma_pos=motion_ep["predict_sigma_pos"],
             )
 
             sat = ep["sat_ecef"].reshape(-1, 3)
             pr = ep["pseudoranges"]
             w = ep["weights"]
             bwd_pf.correct_clock_bias(sat, pr)
-            bwd_pf.update_gmm(
-                sat,
-                pr,
-                weights=w,
-                sigma_pr=SIGMA_PR,
-                w_los=0.7,
-                mu_nlos=15.0,
-                sigma_nlos=30.0,
-            )
+            if backward_update == "gmm":
+                bwd_pf.update_gmm(
+                    sat,
+                    pr,
+                    weights=w,
+                    sigma_pr=SIGMA_PR,
+                    w_los=0.7,
+                    mu_nlos=15.0,
+                    sigma_nlos=30.0,
+                )
+            else:
+                bwd_pf.update(sat, pr, weights=w, sigma_pr=SIGMA_PR)
 
             if position_update_sigma is not None:
                 bwd_pf.position_update(ep["spp_ref"][:3], sigma_pos=position_update_sigma)
@@ -679,7 +725,8 @@ def smooth_segmented_epochs(
 
             backward_pos[i] = est
 
-        smoothed[start:end] = (forward_pos + backward_pos) / 2.0
+        alpha = float(np.clip(blend_alpha, 0.0, 1.0))
+        smoothed[start:end] = (1.0 - alpha) * forward_pos + alpha * backward_pos
 
     return smoothed
 
@@ -816,7 +863,10 @@ def run_pf_test(
         try:
             final_positions = smooth_segmented_epochs(
                 smooth_epochs,
-                position_update_sigma=POS_UPDATE_SIGMA,
+                position_update_sigma=config.smoother_position_update_sigma,
+                blend_alpha=config.smoother_blend_alpha,
+                backward_update=config.smoother_backward_update,
+                transition_source=config.smoother_transition_source,
             )
         except Exception:
             final_positions = pf_positions
@@ -866,6 +916,14 @@ def main():
         f" tdcp={'on' if config.use_tdcp else 'off'}"
         f" smoother={'on' if config.enable_smoother else 'off'}"
     )
+    if config.enable_smoother:
+        print(
+            "  Smoother:"
+            f" pu_sigma={config.smoother_position_update_sigma}"
+            f" blend_alpha={config.smoother_blend_alpha}"
+            f" backward={config.smoother_backward_update}"
+            f" transition={config.smoother_transition_source}"
+        )
     print(f"  Particles: {N_PARTICLES:,}  SIGMA_PR: {SIGMA_PR}")
     print("=" * 80)
 
