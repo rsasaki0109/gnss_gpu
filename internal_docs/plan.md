@@ -160,9 +160,10 @@ PF wins: 21% (P50), 26% (RMS)
 
 | Version | Public | Private | 手法 |
 |---|---:|---:|---|
-| v1 | 4.207m | 5.144m | pseudorange only |
+| v1 | 4.207m | **5.144m** | pseudorange only |
 | **v3** | **4.128m** | — | + smoother |
 | v2 | 10.150m | — | + TDCP + Hatch (悪化) |
+| v11 | 4.223m | 5.255m | reset-safe segmented smoother |
 
 ### 4.4 なぜ GSDC で PF が勝てないか
 
@@ -170,6 +171,7 @@ PF wins: 21% (P50), 26% (RMS)
 2. **WLS が既に良い** (Google 最適化済み) → temporal filtering の余地が少ない
 3. **PF の predict noise (sigma_pos=10)** が邪魔 → open-sky ではノイズを足すだけ
 4. **carrier phase がスマホで信頼できない** → TDCP/Hatch が全滅
+5. **smoother が divergence reset をまたぐと hidden/private で壊れる** → reset-safe segmentation で private は 5.255m まで回復したが、public best 更新には未達
 
 ### 4.5 ファイル
 

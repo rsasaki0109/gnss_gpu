@@ -94,16 +94,17 @@ These are Kaggle leaderboard submission scores on open-sky smartphone data. They
 
 | Submission | Public | Private | Method |
 | --- | ---: | ---: | --- |
-| v1 | 4.207 m | 5.144 m | pseudorange only |
+| v1 | 4.207 m | **5.144 m** | pseudorange only |
 | **v3** | **4.128 m** | — | + smoother |
 | v2 | 10.150 m | — | + TDCP + Hatch |
+| v11 | 4.223 m | 5.255 m | reset-safe segmented smoother |
 
 | Train method | Mean P50 | Median P50 | Mean RMS |
 | --- | ---: | ---: | ---: |
 | WLS (Android baseline) | **2.62 m** | **2.42 m** | **5.14 m** |
 | PF-100K | 2.83 m | 2.62 m | 5.36 m |
 
-The best leaderboard submission is `v3` at **4.128 m public** with smoothing, but WLS still wins on train averages. TDCP and Hatch made the smartphone result materially worse, which is consistent with weak smartphone carrier-phase quality. This section is here to document the smartphone submission result, not to replace the UrbanNav headline.
+The best leaderboard submission is still `v3` at **4.128 m public**, while the best private score remains `v1` at **5.144 m**. A later reset-safe smoother (`v11`) removed the hidden catastrophic failure seen in earlier smoother variants and produced a sane private score (`5.255 m`), but it did not beat the frozen leaderboard best. WLS still wins on train averages, and TDCP plus Hatch materially worsened the smartphone result. This section is here to document the smartphone submission result, not to replace the UrbanNav headline.
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
