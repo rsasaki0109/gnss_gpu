@@ -22,6 +22,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -42,6 +43,7 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
 from evaluate import ecef_to_lla
+from gnss_gpu.tdcp_velocity import estimate_velocity_from_tdcp_with_metrics
 
 # ---------------------------------------------------------------------------
 # Config (v1 baseline params unless noted)
@@ -75,6 +77,13 @@ class SubmissionConfig:
     output_csv: Path
     use_hatch: bool = True
     use_tdcp: bool = True
+    use_shared_tdcp: bool = False
+    tdcp_adaptive_gate: bool = False
+    tdcp_rms_threshold: float = 3.0
+    tdcp_spp_delta_max_mps: float = 6.0
+    tdcp_position_update_sigma: float | None = None
+    tdcp_position_update_rms_max: float = 2.0
+    tdcp_elevation_weight: bool = True
     enable_smoother: bool = True
     smoother_position_update_sigma: float | None = POS_UPDATE_SIGMA
     smoother_blend_alpha: float = 0.5
@@ -107,6 +116,45 @@ def parse_args() -> SubmissionConfig:
         "--disable-tdcp",
         action="store_true",
         help="Skip TDCP velocity and use Doppler-only predict.",
+    )
+    parser.add_argument(
+        "--shared-tdcp",
+        action="store_true",
+        help="Use shared gnss_gpu.tdcp_velocity implementation instead of the local TDCP solver.",
+    )
+    parser.add_argument(
+        "--tdcp-adaptive-gate",
+        action="store_true",
+        help="Reject TDCP when postfit RMS is high or it disagrees with WLS finite-difference velocity.",
+    )
+    parser.add_argument(
+        "--tdcp-rms-threshold",
+        type=float,
+        default=3.0,
+        help="Adaptive TDCP reject threshold on postfit RMS in meters.",
+    )
+    parser.add_argument(
+        "--tdcp-spp-delta-max-mps",
+        type=float,
+        default=6.0,
+        help="Reject TDCP when it differs from WLS finite-difference velocity by more than this [m/s].",
+    )
+    parser.add_argument(
+        "--tdcp-position-update-sigma",
+        type=float,
+        default=None,
+        help="Optional TDCP displacement soft-constraint sigma in meters; negative disables it.",
+    )
+    parser.add_argument(
+        "--tdcp-position-update-rms-max",
+        type=float,
+        default=2.0,
+        help="Only apply TDCP displacement soft constraint when TDCP postfit RMS is below this [m].",
+    )
+    parser.add_argument(
+        "--disable-tdcp-elevation-weight",
+        action="store_true",
+        help="Disable low-elevation downweighting inside shared TDCP WLS.",
     )
     parser.add_argument(
         "--disable-smoother",
@@ -144,10 +192,23 @@ def parse_args() -> SubmissionConfig:
         and args.smoother_position_update_sigma < 0
         else args.smoother_position_update_sigma
     )
+    tdcp_pu_sigma = (
+        None
+        if args.tdcp_position_update_sigma is None
+        or args.tdcp_position_update_sigma < 0
+        else args.tdcp_position_update_sigma
+    )
     return SubmissionConfig(
         output_csv=args.output,
         use_hatch=not args.disable_hatch,
         use_tdcp=not args.disable_tdcp,
+        use_shared_tdcp=args.shared_tdcp,
+        tdcp_adaptive_gate=args.tdcp_adaptive_gate,
+        tdcp_rms_threshold=float(args.tdcp_rms_threshold),
+        tdcp_spp_delta_max_mps=float(args.tdcp_spp_delta_max_mps),
+        tdcp_position_update_sigma=tdcp_pu_sigma,
+        tdcp_position_update_rms_max=float(args.tdcp_position_update_rms_max),
+        tdcp_elevation_weight=not args.disable_tdcp_elevation_weight,
         enable_smoother=not args.disable_smoother,
         smoother_position_update_sigma=pu_sigma,
         smoother_blend_alpha=float(args.smoother_blend_alpha),
@@ -416,10 +477,39 @@ def compute_doppler_velocity(epoch: dict, rx_ecef: np.ndarray) -> np.ndarray:
         return np.zeros(3)
 
 
+def build_tdcp_measurements(
+    epoch: dict,
+    weights: np.ndarray,
+) -> list[SimpleNamespace]:
+    rows: list[SimpleNamespace] = []
+    for i, (system_id, prn, _signal_type) in enumerate(epoch["sat_ids"]):
+        if not epoch["adr_valid"][i] or epoch["adr"][i] == 0.0:
+            continue
+        if epoch["cycle_slip"][i]:
+            continue
+        rows.append(
+            SimpleNamespace(
+                system_id=int(system_id),
+                prn=int(prn),
+                satellite_ecef=np.asarray(epoch["sat_ecef"][i], dtype=np.float64),
+                satellite_velocity=np.asarray(epoch["sv_vel"][i], dtype=np.float64),
+                # Shared TDCP helper multiplies carrier_phase by ``wavelength``.
+                # Passing ADR in meters with wavelength=1.0 keeps the observation
+                # in meters while still reusing the robust WLS / gating path.
+                carrier_phase=float(epoch["adr"][i]),
+                clock_drift=float(epoch["sv_clock_drift"][i]) / 299792458.0,
+                weight=float(weights[i]),
+                elevation=math.radians(float(epoch["elevations"][i])),
+                snr=float(epoch["cn0"][i]),
+            )
+        )
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # TDCP velocity
 # ---------------------------------------------------------------------------
-def compute_tdcp_velocity(
+def compute_tdcp_velocity_legacy(
     cur_ep: dict, prev_ep: dict, rx_ecef: np.ndarray, dt: float,
 ) -> np.ndarray | None:
     """Compute receiver velocity from Time-Differenced Carrier Phase."""
@@ -497,6 +587,28 @@ def compute_tdcp_velocity(
         return None
 
     return velocity
+
+
+def compute_tdcp_velocity_shared(
+    cur_ep: dict,
+    prev_ep: dict,
+    rx_ecef: np.ndarray,
+    dt: float,
+    weights_cur: np.ndarray,
+    weights_prev: np.ndarray,
+    elevation_weight: bool,
+) -> tuple[np.ndarray | None, float]:
+    prev_measurements = build_tdcp_measurements(prev_ep, weights_prev)
+    cur_measurements = build_tdcp_measurements(cur_ep, weights_cur)
+    velocity, postfit_rms = estimate_velocity_from_tdcp_with_metrics(
+        rx_ecef,
+        prev_measurements,
+        cur_measurements,
+        dt=dt,
+        wavelength=1.0,
+        elevation_weight=elevation_weight,
+    )
+    return velocity, float(postfit_rms)
 
 
 # ---------------------------------------------------------------------------
@@ -786,6 +898,9 @@ def run_pf_test(
     smooth_epochs: list[dict] = []
     prev_arrival_ns = epochs[0]["arrival_ns"]
     tdcp_count = 0
+    tdcp_reject_rms = 0
+    tdcp_reject_spp = 0
+    tdcp_soft_count = 0
     reset_count = 0
 
     for i, ep in enumerate(epochs):
@@ -804,15 +919,70 @@ def run_pf_test(
         else:
             smoothed_pr = ep["pseudoranges"]
 
+        weights = elevation_weights(ep["elevations"], ep["cn0"], ELEV_THRESHOLD)
+
         # TDCP velocity (preferred), Doppler fallback
         rx_ecef = pf_positions[i - 1] if i > 0 else init_pos
+        prev_pf_pos = pf_positions[i - 1].copy() if i > 0 else None
         sigma_pos = SIGMA_POS
         velocity = None
+        used_tdcp = False
+        tdcp_rms = float("nan")
         if i > 0 and config.use_tdcp:
-            velocity = compute_tdcp_velocity(ep, epochs[i - 1], rx_ecef, dt)
-            if velocity is not None:
+            prev_ep = epochs[i - 1]
+            spp_fd_vel: np.ndarray | None = None
+            if (
+                np.all(np.isfinite(ep["wls_ecef"]))
+                and np.all(np.isfinite(prev_ep["wls_ecef"]))
+                and np.linalg.norm(ep["wls_ecef"]) > 1e6
+                and np.linalg.norm(prev_ep["wls_ecef"]) > 1e6
+            ):
+                spp_fd_vel = (ep["wls_ecef"] - prev_ep["wls_ecef"]) / dt
+                if not np.all(np.isfinite(spp_fd_vel)) or np.linalg.norm(spp_fd_vel) > 50.0:
+                    spp_fd_vel = None
+
+            if config.use_shared_tdcp:
+                prev_weights = elevation_weights(
+                    prev_ep["elevations"],
+                    prev_ep["cn0"],
+                    ELEV_THRESHOLD,
+                )
+                tdcp_velocity, tdcp_rms = compute_tdcp_velocity_shared(
+                    ep,
+                    prev_ep,
+                    rx_ecef,
+                    dt,
+                    weights_cur=weights,
+                    weights_prev=prev_weights,
+                    elevation_weight=config.tdcp_elevation_weight,
+                )
+            else:
+                tdcp_velocity = compute_tdcp_velocity_legacy(ep, prev_ep, rx_ecef, dt)
+
+            if (
+                tdcp_velocity is not None
+                and config.tdcp_adaptive_gate
+                and spp_fd_vel is not None
+                and float(np.linalg.norm(tdcp_velocity - spp_fd_vel))
+                > float(config.tdcp_spp_delta_max_mps)
+            ):
+                tdcp_velocity = None
+                tdcp_reject_spp += 1
+
+            if (
+                tdcp_velocity is not None
+                and config.tdcp_adaptive_gate
+                and np.isfinite(tdcp_rms)
+                and tdcp_rms >= float(config.tdcp_rms_threshold)
+            ):
+                tdcp_velocity = None
+                tdcp_reject_rms += 1
+
+            if tdcp_velocity is not None:
+                velocity = tdcp_velocity
                 sigma_pos = SIGMA_POS_TDCP
                 tdcp_count += 1
+                used_tdcp = True
         if velocity is None:
             velocity = compute_doppler_velocity(ep, rx_ecef)
 
@@ -820,13 +990,31 @@ def run_pf_test(
         pf.predict(velocity=velocity, dt=dt, sigma_pos=sigma_pos)
         pf.correct_clock_bias(ep["sat_ecef"], smoothed_pr)
 
-        weights = elevation_weights(ep["elevations"], ep["cn0"], ELEV_THRESHOLD)
         pf.update_gmm(
             ep["sat_ecef"], smoothed_pr, weights=weights,
             sigma_pr=SIGMA_PR, w_los=0.7, mu_nlos=15.0, sigma_nlos=30.0,
         )
         # Use dataset WLS for position update (Sagnac-corrected)
         pf.position_update(ep["wls_ecef"], sigma_pos=POS_UPDATE_SIGMA)
+
+        if (
+            config.tdcp_position_update_sigma is not None
+            and used_tdcp
+            and prev_pf_pos is not None
+            and np.all(np.isfinite(prev_pf_pos))
+            and dt > 0
+            and (
+                not np.isfinite(tdcp_rms)
+                or tdcp_rms < float(config.tdcp_position_update_rms_max)
+            )
+        ):
+            tdcp_predicted_pos = prev_pf_pos + velocity * dt
+            if np.all(np.isfinite(tdcp_predicted_pos)):
+                pf.position_update(
+                    tdcp_predicted_pos,
+                    sigma_pos=float(config.tdcp_position_update_sigma),
+                )
+                tdcp_soft_count += 1
 
         est = pf.estimate()
         est_pos = est[:3].copy()
@@ -880,7 +1068,9 @@ def run_pf_test(
     smooth_label = "seg-smth" if config.enable_smoother else "forward"
     print(
         f"  {label}: {n_epochs} ep, {pr_label}, {velocity_label}, {smooth_label}, "
-        f"TDCP {tdcp_count}/{n_epochs - 1}, resets {reset_count}, segments {n_segments}"
+        f"TDCP {tdcp_count}/{n_epochs - 1}, "
+        f"rej_rms {tdcp_reject_rms}, rej_spp {tdcp_reject_spp}, "
+        f"tdcp_pu {tdcp_soft_count}, resets {reset_count}, segments {n_segments}"
     )
     return final_positions, unix_ms
 
@@ -916,6 +1106,17 @@ def main():
         f" tdcp={'on' if config.use_tdcp else 'off'}"
         f" smoother={'on' if config.enable_smoother else 'off'}"
     )
+    if config.use_tdcp:
+        print(
+            "  TDCP:"
+            f" impl={'shared' if config.use_shared_tdcp else 'legacy'}"
+            f" adaptive={'on' if config.tdcp_adaptive_gate else 'off'}"
+            f" rms_th={config.tdcp_rms_threshold}"
+            f" spp_delta={config.tdcp_spp_delta_max_mps}"
+            f" pu_sigma={config.tdcp_position_update_sigma}"
+            f" pu_rms_max={config.tdcp_position_update_rms_max}"
+            f" elev_weight={'on' if config.tdcp_elevation_weight else 'off'}"
+        )
     if config.enable_smoother:
         print(
             "  Smoother:"
