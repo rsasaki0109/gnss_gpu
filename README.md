@@ -99,14 +99,15 @@ These are Kaggle leaderboard submission scores on open-sky smartphone data. They
 | v2 | 10.150 m | — | + TDCP + Hatch |
 | v11 | 4.223 m | 5.255 m | reset-safe segmented smoother |
 | v12 | 4.133 m | 5.242 m | reset-safe smoother-only |
-| **v13** | **4.117 m** | 5.268 m | reset-safe smoother-only + Gaussian backward |
+| v13 | 4.117 m | 5.268 m | reset-safe smoother-only + Gaussian backward |
+| **v15** | **4.116 m** | 5.268 m | reset-safe smoother-only + Gaussian backward + alpha 0.45 |
 
 | Train method | Mean P50 | Median P50 | Mean RMS |
 | --- | ---: | ---: | ---: |
 | WLS (Android baseline) | **2.62 m** | **2.42 m** | **5.14 m** |
 | PF-100K | 2.83 m | 2.62 m | 5.36 m |
 
-The best leaderboard submission is now `v13` at **4.117 m public**, while the best private score still remains `v1` at **5.144 m**. The reset-safe smoother fixed the hidden catastrophic failure (`v11`: `4.223 / 5.255`), the reset-safe smoother-only variant (`v12`: `4.133 / 5.242`) recovered almost all of the public gap, and switching the segmented backward pass closer to the old generic smoother (`v13`) pushed the public score to a new best without reintroducing catastrophic hidden failure. That points to TDCP plus Hatch as the main regression source, and to backward smoother details as second-order but still measurable on open-sky smartphone data. This section is here to document the smartphone submission result, not to replace the UrbanNav headline.
+The best leaderboard submission is now `v15` at **4.116 m public**, while the best private score still remains `v1` at **5.144 m**. The reset-safe smoother fixed the hidden catastrophic failure (`v11`: `4.223 / 5.255`), the reset-safe smoother-only variant (`v12`: `4.133 / 5.242`) recovered almost all of the public gap, switching the segmented backward pass closer to the old generic smoother (`v13`) pushed the public score to `4.117 m`, and a small blend adjustment (`v15`, `alpha=0.45`) improved it again to `4.116 m` without changing the private score. That points to TDCP plus Hatch as the main regression source, and to backward smoother details as second-order but still measurable on open-sky smartphone data. This section is here to document the smartphone submission result, not to replace the UrbanNav headline.
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
