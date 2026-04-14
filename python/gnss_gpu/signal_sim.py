@@ -20,17 +20,24 @@ SYSTEM_NAMES = {
 }
 
 def prn_label_to_system(label):
-    """Convert PRN label like 'G05' to (system_int, prn_int)."""
+    """Convert PRN label like 'G05' to (system_int, prn_int).
+
+    Raises ValueError for malformed labels.
+    """
     if isinstance(label, int):
         return GNSS_GPS, label
     s = str(label).strip().upper()
-    if not s:
-        return GNSS_GPS, 1
+    if len(s) < 2:
+        raise ValueError(f"Malformed PRN label: {label!r} (need e.g. 'G05')")
     prefix = s[0]
-    prn = int(s[1:]) if s[1:].strip().isdigit() else 1
     mapping = {"G": GNSS_GPS, "R": GNSS_GLONASS, "E": GNSS_GALILEO,
                "C": GNSS_BEIDOU, "J": GNSS_QZSS}
-    return mapping.get(prefix, GNSS_GPS), prn
+    if prefix not in mapping:
+        raise ValueError(f"Unknown GNSS system prefix: {prefix!r} in {label!r}")
+    prn_str = s[1:].strip()
+    if not prn_str.isdigit():
+        raise ValueError(f"Invalid PRN number in label: {label!r}")
+    return mapping[prefix], int(prn_str)
 
 
 class SignalSimulator:

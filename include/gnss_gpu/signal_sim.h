@@ -12,7 +12,9 @@ struct SignalSimConfig {
 // GNSS system identifiers
 enum GnssSystem : int {
     GNSS_GPS     = 0,  // GPS L1 C/A  (1575.42 MHz, 1.023 Mchip/s, 1023 chips)
-    GNSS_GLONASS = 1,  // GLONASS L1 C/A (1602+k*0.5625 MHz, 0.511 Mchip/s, 511 chips)
+    GNSS_GLONASS = 1,  // GLONASS L1 C/A (0.511 Mchip/s, 511 chips, shared code)
+                       // FDMA: caller must add slot-dependent offset to doppler_hz
+                       //   offset = (slot_k * 562500) Hz relative to GPS L1 center
     GNSS_GALILEO = 2,  // Galileo E1-B/C (1575.42 MHz, 1.023 Mchip/s, 4092 chips)
     GNSS_BEIDOU  = 3,  // BeiDou B1I (1561.098 MHz, 2.046 Mchip/s, 2046 chips)
     GNSS_QZSS    = 4,  // QZSS L1 C/A (same as GPS)

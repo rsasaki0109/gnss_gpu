@@ -53,9 +53,10 @@ PYBIND11_MODULE(_gnss_gpu_signal_sim, m) {
     m.def("generate_single", [](int prn, double code_phase, double carrier_phase,
                                  double doppler_hz, float amplitude, int nav_bit,
                                  double sampling_freq, double intermediate_freq,
-                                 int n_samples) {
+                                 int n_samples, int system) {
         gnss_gpu::SatChannel ch{};
         ch.prn = prn;
+        ch.system = system;
         ch.code_phase = code_phase;
         ch.carrier_phase = carrier_phase;
         ch.doppler_hz = doppler_hz;
@@ -71,5 +72,5 @@ PYBIND11_MODULE(_gnss_gpu_signal_sim, m) {
        py::arg("prn"), py::arg("code_phase"), py::arg("carrier_phase"),
        py::arg("doppler_hz"), py::arg("amplitude"), py::arg("nav_bit"),
        py::arg("sampling_freq"), py::arg("intermediate_freq"),
-       py::arg("n_samples"));
+       py::arg("n_samples"), py::arg("system") = 0);
 }
