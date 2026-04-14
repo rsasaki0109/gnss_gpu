@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-14T12:18:41+00:00",
+  "generated_at_utc": "2026-04-14T22:21:26+00:00",
   "title": "gnss_gpu Artifact Snapshot",
   "subtitle": "Current Odaiba best: `PF 100K (DD + smoother + stop-detect)`. External mainline remains `PF+RobustClear-10K` across 5 sequences in 2 cities.",
   "status": {
@@ -124,6 +124,23 @@
     }
   ],
   "showcase_media": [
+    {
+      "kind": "video",
+      "title": "UrbanNav LOS/NLOS Map Sweep",
+      "href": "assets/media/los_nlos_deckgl.html",
+      "caption": "Long-form deck.gl sweep over OpenStreetMap, with PLATEAU BVH providing LOS/NLOS labels, coarse 3D PLATEAU buildings, and satellites projected onto a virtual sky ceiling above the receiver.",
+      "poster": "assets/media/los_nlos_deckgl_still.png",
+      "sources": [
+        {
+          "src": "assets/media/los_nlos_deckgl.mp4",
+          "type": "video/mp4"
+        },
+        {
+          "src": "assets/media/los_nlos_deckgl.webm",
+          "type": "video/webm"
+        }
+      ]
+    },
     {
       "kind": "video",
       "title": "Odaiba Particle Cloud",
