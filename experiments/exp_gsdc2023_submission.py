@@ -8,13 +8,19 @@ Usage
 -----
   cd /workspace/ai_coding_ws/gnss_gpu
   PYTHONPATH=python python3 experiments/exp_gsdc2023_submission.py
+  PYTHONPATH=python python3 experiments/exp_gsdc2023_submission.py \
+      --label v12-smoother-only \
+      --disable-hatch --disable-tdcp \
+      --output experiments/results/gsdc2023_submission_v12.csv
 """
 
 from __future__ import annotations
 
+import argparse
 import math
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -42,7 +48,7 @@ from evaluate import ecef_to_lla
 # ---------------------------------------------------------------------------
 TEST_DIR = Path("/tmp/gsdc_data/gsdc2023/sdc2023/test")
 SAMPLE_SUB = Path("/tmp/gsdc_data/gsdc2023/sdc2023/sample_submission.csv")
-OUTPUT_CSV = _SCRIPT_DIR / "results" / "gsdc2023_submission_v3.csv"
+DEFAULT_OUTPUT_CSV = _SCRIPT_DIR / "results" / "gsdc2023_submission_v3.csv"
 
 N_PARTICLES = 100_000
 SIGMA_POS = 10.0              # v1 baseline
@@ -62,6 +68,55 @@ SIGNAL_TYPES = ["GPS_L1_CA", "GPS_L5_Q", "GAL_E1_C_P", "GAL_E5A_Q"]
 # GPS time -> Unix time
 GPS_UNIX_OFFSET_NS = 315964800 * 1_000_000_000
 LEAP_SECONDS_NS = 18 * 1_000_000_000
+
+
+@dataclass(frozen=True)
+class SubmissionConfig:
+    output_csv: Path
+    use_hatch: bool = True
+    use_tdcp: bool = True
+    enable_smoother: bool = True
+    label: str = "v3"
+
+
+def parse_args() -> SubmissionConfig:
+    parser = argparse.ArgumentParser(
+        description="Generate Kaggle GSDC 2023 submission CSV using GPU PF.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT_CSV,
+        help="Output submission CSV path.",
+    )
+    parser.add_argument(
+        "--label",
+        default="v3",
+        help="Short label shown in logs for this submission variant.",
+    )
+    parser.add_argument(
+        "--disable-hatch",
+        action="store_true",
+        help="Skip Hatch carrier smoothing and use raw corrected pseudorange.",
+    )
+    parser.add_argument(
+        "--disable-tdcp",
+        action="store_true",
+        help="Skip TDCP velocity and use Doppler-only predict.",
+    )
+    parser.add_argument(
+        "--disable-smoother",
+        action="store_true",
+        help="Disable backward smoothing and output forward PF only.",
+    )
+    args = parser.parse_args()
+    return SubmissionConfig(
+        output_csv=args.output,
+        use_hatch=not args.disable_hatch,
+        use_tdcp=not args.disable_tdcp,
+        enable_smoother=not args.disable_smoother,
+        label=args.label,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -632,7 +687,11 @@ def smooth_segmented_epochs(
 # ---------------------------------------------------------------------------
 # PF pipeline
 # ---------------------------------------------------------------------------
-def run_pf_test(data_dir: Path, label: str) -> tuple[np.ndarray, np.ndarray] | None:
+def run_pf_test(
+    data_dir: Path,
+    label: str,
+    config: SubmissionConfig,
+) -> tuple[np.ndarray, np.ndarray] | None:
     gnss_path = data_dir / "device_gnss.csv"
     if not gnss_path.exists():
         print(f"  [SKIP] {label}: missing device_gnss.csv")
@@ -667,10 +726,14 @@ def run_pf_test(data_dir: Path, label: str) -> tuple[np.ndarray, np.ndarray] | N
     init_cb = float(np.median(epochs[0]["pseudoranges"] - init_ranges))
     pf.initialize(init_pos, clock_bias=init_cb, spread_pos=50.0, spread_cb=500.0)
 
-    # Cycle slip detector + Hatch filter
-    cycle_slip_detector = CycleSlipDetector()
-    hatch = HatchFilter(max_window=HATCH_MAX_WINDOW,
-                        diverge_threshold=HATCH_DIVERGE_THRESHOLD)
+    need_cycle_slip = config.use_hatch or config.use_tdcp
+    cycle_slip_detector = CycleSlipDetector() if need_cycle_slip else None
+    hatch = None
+    if config.use_hatch:
+        hatch = HatchFilter(
+            max_window=HATCH_MAX_WINDOW,
+            diverge_threshold=HATCH_DIVERGE_THRESHOLD,
+        )
 
     pf_positions = np.zeros((n_epochs, 3))
     smooth_epochs: list[dict] = []
@@ -683,20 +746,22 @@ def run_pf_test(data_dir: Path, label: str) -> tuple[np.ndarray, np.ndarray] | N
         dt = max(dt, 0.01)
         prev_arrival_ns = ep["arrival_ns"]
 
-        # Enhanced cycle slip detection (Doppler-carrier + ADR jump + state bits)
-        ep["cycle_slip"] = cycle_slip_detector.detect(ep)
+        if cycle_slip_detector is not None:
+            ep["cycle_slip"] = cycle_slip_detector.detect(ep)
 
-        # Hatch filter with carrier smoothing
-        smoothed_pr = hatch.smooth(
-            ep["sat_ids"], ep["pseudoranges"], ep["adr"],
-            ep["adr_valid"], ep["cycle_slip"],
-        )
+        if hatch is not None:
+            smoothed_pr = hatch.smooth(
+                ep["sat_ids"], ep["pseudoranges"], ep["adr"],
+                ep["adr_valid"], ep["cycle_slip"],
+            )
+        else:
+            smoothed_pr = ep["pseudoranges"]
 
         # TDCP velocity (preferred), Doppler fallback
         rx_ecef = pf_positions[i - 1] if i > 0 else init_pos
         sigma_pos = SIGMA_POS
         velocity = None
-        if i > 0:
+        if i > 0 and config.use_tdcp:
             velocity = compute_tdcp_velocity(ep, epochs[i - 1], rx_ecef, dt)
             if velocity is not None:
                 sigma_pos = SIGMA_POS_TDCP
@@ -747,20 +812,25 @@ def run_pf_test(data_dir: Path, label: str) -> tuple[np.ndarray, np.ndarray] | N
             segment_start=segment_start,
         ))
 
-    # Forward-backward smoother
-    try:
-        final_positions = smooth_segmented_epochs(
-            smooth_epochs,
-            position_update_sigma=POS_UPDATE_SIGMA,
-        )
-    except Exception:
+    if config.enable_smoother:
+        try:
+            final_positions = smooth_segmented_epochs(
+                smooth_epochs,
+                position_update_sigma=POS_UPDATE_SIGMA,
+            )
+        except Exception:
+            final_positions = pf_positions
+    else:
         final_positions = pf_positions
 
     unix_ms = epochs_to_unix_ms(epochs)
     n_segments = sum(1 for ep in smooth_epochs if ep["segment_start"])
+    velocity_label = "TDCP+Doppler" if config.use_tdcp else "Doppler"
+    pr_label = "Hatch" if config.use_hatch else "rawPR"
+    smooth_label = "seg-smth" if config.enable_smoother else "forward"
     print(
-        f"  {label}: {n_epochs} ep, TDCP {tdcp_count}/{n_epochs - 1}, "
-        f"resets {reset_count}, segments {n_segments}"
+        f"  {label}: {n_epochs} ep, {pr_label}, {velocity_label}, {smooth_label}, "
+        f"TDCP {tdcp_count}/{n_epochs - 1}, resets {reset_count}, segments {n_segments}"
     )
     return final_positions, unix_ms
 
@@ -787,8 +857,15 @@ def match_submission_times(
 # Main
 # ---------------------------------------------------------------------------
 def main():
+    config = parse_args()
     print("=" * 80)
-    print("  GSDC 2023 Submission v3 (Smoother + bounded Hatch + TDCP)")
+    print(f"  GSDC 2023 Submission {config.label}")
+    print(
+        "  Features:"
+        f" hatch={'on' if config.use_hatch else 'off'}"
+        f" tdcp={'on' if config.use_tdcp else 'off'}"
+        f" smoother={'on' if config.enable_smoother else 'off'}"
+    )
     print(f"  Particles: {N_PARTICLES:,}  SIGMA_PR: {SIGMA_PR}")
     print("=" * 80)
 
@@ -805,7 +882,7 @@ def main():
         label = f"[{trip_idx + 1:2d}/{len(trip_ids)}] {trip_id}"
 
         t0 = time.perf_counter()
-        result = run_pf_test(data_dir, label)
+        result = run_pf_test(data_dir, label, config)
 
         if result is None:
             sub_trip = sub_df[sub_df["tripId"] == trip_id]
@@ -836,12 +913,12 @@ def main():
 
         print(f"    {len(sub_trip)} rows, {elapsed:.1f}s")
 
-    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
+    config.output_csv.parent.mkdir(parents=True, exist_ok=True)
     out_df = pd.DataFrame(out_rows)
-    out_df.to_csv(OUTPUT_CSV, index=False)
+    out_df.to_csv(config.output_csv, index=False)
 
     total_elapsed = time.perf_counter() - t0_total
-    print(f"\n  Output: {OUTPUT_CSV}")
+    print(f"\n  Output: {config.output_csv}")
     print(f"  Rows: {len(out_df)}")
     print(f"  Total time: {total_elapsed:.1f}s")
     print("=" * 80)
