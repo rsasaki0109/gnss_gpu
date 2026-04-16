@@ -275,6 +275,12 @@ def parse_args():
         help="coherent integration length in milliseconds (>=1). "
              "Acquisition still runs on the first 1 ms; refinement uses the full span.",
     )
+    p.add_argument(
+        "--noise-floor-db",
+        type=float,
+        default=-30.0,
+        help="simulator noise floor in dB relative to signal (default: -30).",
+    )
     args = p.parse_args()
     if args.n_coherent_ms < 1:
         p.error("--n-coherent-ms must be >= 1")
@@ -341,7 +347,7 @@ def main():
     print("\n=== Scenario 1: Open Sky ===")
     r1 = run_scenario(
         "Open Sky", rx_true, sat_ecef_vis, prn_vis, sat_clk=sat_clk_vis,
-        building_model=None, noise_floor_db=-30,
+        building_model=None, noise_floor_db=args.noise_floor_db,
         dll_gain=args.dll_gain, pll_gain=args.pll_gain, n_iter=args.n_iter,
         correlator_spacing=args.correlator_spacing,
         diagnostics_csv=args.diagnostics_csv,
@@ -360,7 +366,7 @@ def main():
 
     r2 = run_scenario(
         "Urban (Odaiba)", rx_true, sat_ecef_vis, prn_vis, sat_clk=sat_clk_vis,
-        building_model=bvh, noise_floor_db=-30,
+        building_model=bvh, noise_floor_db=args.noise_floor_db,
         dll_gain=args.dll_gain, pll_gain=args.pll_gain, n_iter=args.n_iter,
         correlator_spacing=args.correlator_spacing,
         diagnostics_csv=args.diagnostics_csv,
