@@ -261,6 +261,26 @@ core:
 - `src/`
 - `include/`
 
+## 11. PF Smoother 実験 API
+
+場所:
+- [exp_pf_smoother_eval.py](/workspace/ai_coding_ws/gnss_gpu/experiments/exp_pf_smoother_eval.py)
+- [run_pf_smoother_odaiba_reference.sh](/workspace/ai_coding_ws/gnss_gpu/experiments/run_pf_smoother_odaiba_reference.sh)
+- [pf_smoother_api.md](/workspace/ai_coding_ws/gnss_gpu/internal_docs/pf_smoother_api.md)
+
+用途:
+- `DD pseudorange`
+- `DD carrier AFV`
+- `carrier anchor`
+- `undiff fallback`
+- `epoch diagnostics`
+
+約束:
+- experiment-local API は `run_pf_with_optional_smoother(...)` を中心に整理する
+- fallback / anchor / tracker の状態遷移は `pf_smoother_api.md` の Mermaid を source of truth とする
+- frozen な Odaiba regression 条件は `run_pf_smoother_odaiba_reference.sh` を入口にする
+- best-result memo は [plan.md](/workspace/ai_coding_ws/gnss_gpu/internal_docs/plan.md) に残してよいが、interface の説明はそちらに寄せない
+
 ここには「確立した expert 実装」だけ置く。
 
 experiments:
@@ -274,7 +294,7 @@ experiments:
 - evaluator
 - proxy metrics
 
-## 11. paper asset builder interface
+## 12. paper asset builder interface
 
 場所:
 - [build_paper_assets.py](/workspace/ai_coding_ws/gnss_gpu/experiments/build_paper_assets.py)
@@ -298,7 +318,7 @@ experiments:
 - UrbanNav figure は CDF と tail rate を同じ raw epoch dump から作る
 - builder は raw experiment を再実行せず、固定 CSV だけを見る
 
-## 12. 今はまだ interface に入れないもの
+## 13. 今はまだ interface に入れないもの
 
 以下はまだ共通化しない。
 

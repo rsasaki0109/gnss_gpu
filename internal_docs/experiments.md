@@ -877,3 +877,31 @@ outputs:
 解釈:
 - これで paper の主結果は “その場で集めた表” ではなく、fixed CSV から再生成できる asset になった
 - reviewers 向けには、main table の主役は `PF+RobustClear-10K`, `PF-10K`, `EKF`, `PF3D-BVH` で十分で、`WLS+QualityVeto` は promoted utility として補助的に置くのが自然
+
+## Odaiba weak-DD adaptive-floor confirmation
+
+`internal_docs/plan.md` の weak-DD / coverage-hole 方針に沿って、Odaiba PF smoother preset の
+DD carrier adaptive floor を full-run で確認した。
+
+採用:
+- `odaiba_reference`: `--mupf-dd-gate-adaptive-floor-cycles 0.25 -> 0.18`
+- `odaiba_reference_guarded`: `0.25 -> 0.18`
+
+不採用:
+- `odaiba_stop_detect`: `0.18` は入れず、`0.25` を維持
+
+full-run 結果:
+
+| preset | floor | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---:|---|
+| `odaiba_reference` baseline | 0.25 | 1.46 m | 5.57 m | 1.38 m | 5.08 m | baseline |
+| `odaiba_reference` updated | 0.18 | 1.42 m | 5.46 m | 1.38 m | 5.02 m | 採用 |
+| `odaiba_reference_guarded` baseline | 0.25 | 1.46 m | 5.57 m | 1.38 m | 5.43 m | baseline |
+| `odaiba_reference_guarded` updated | 0.18 | 1.42 m | 5.46 m | 1.38 m | 5.36 m | 採用 |
+| `odaiba_stop_detect` baseline | 0.25 | 1.19 m | 4.57 m | 1.36 m | 4.11 m | 維持 |
+| `odaiba_stop_detect` trial | 0.18 | 1.63 m | 5.50 m | 1.34 m | 4.11 m | 不採用 |
+
+解釈:
+- coverage-hole は単純な “DD carrier absent” ではなく、mediocre DD carrier を信頼しすぎる epoch が混じる問題だった。
+- tracked fallback preference、ESS-only weak-DD replacement、spread-aware support-skip、contextual low-ESS epoch-median gate は promoted しない。
+- accepted change は、reference/guarded preset だけ DD carrier adaptive pair-floor を `0.18` に締めること。

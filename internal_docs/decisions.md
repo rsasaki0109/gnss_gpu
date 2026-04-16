@@ -547,6 +547,27 @@
 - `PF+AdaptiveGuide-10K` は supplemental result として残す
 - GitHub Pages / paper main assets は現状の `PF+RobustClear-10K` 主体のまま維持する
 
+## D-030: Odaiba reference/guarded の DD carrier adaptive floor は `0.18`、stop-detect は `0.25` を維持する
+
+状態: 採用
+
+根拠:
+- [exp_pf_smoother_eval.py](/workspace/ai_coding_ws/gnss_gpu/experiments/exp_pf_smoother_eval.py)
+- [test_exp_pf_smoother_eval.py](/workspace/ai_coding_ws/gnss_gpu/tests/test_exp_pf_smoother_eval.py)
+- `odaiba_reference`: `0.25` baseline は `FWD 1.46 / 5.57 m`, `SMTH 1.38 / 5.08 m`。`0.18` は `FWD 1.42 / 5.46 m`, `SMTH 1.38 / 5.02 m`。
+- `odaiba_reference_guarded`: `0.25` baseline は `FWD 1.46 / 5.57 m`, `SMTH 1.38 / 5.43 m`。`0.18` は `FWD 1.42 / 5.46 m`, `SMTH 1.38 / 5.36 m`。
+- `odaiba_stop_detect`: `0.25` baseline は `FWD 1.19 / 4.57 m`, `SMTH 1.36 / 4.11 m`。`0.18` は `FWD 1.63 / 5.50 m`, `SMTH 1.34 / 4.11 m`。
+
+理由:
+- coverage-hole 調査では、tracked fallback preference、ESS-only weak-DD replacement、spread-aware support-skip、contextual low-ESS epoch-median gate は full Odaiba の win にならなかった。
+- reference/guarded では単純な adaptive floor tightening が forward と smoother RMS を少し改善した。
+- stop-detect では smoother RMS は変わらない一方で forward quality が大きく悪化したため、headline best preset には入れない方が安全。
+
+決定:
+- `odaiba_reference` と `odaiba_reference_guarded` は `--mupf-dd-gate-adaptive-floor-cycles 0.18` を使う。
+- `odaiba_stop_detect` は `--mupf-dd-gate-adaptive-floor-cycles 0.25` を維持する。
+- weak-DD 調査で追加した extra knobs は default-off の ablation surface として残すが、full-run win なしに preset へ昇格しない。
+
 ## 現在の未決定事項
 
 - `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか
