@@ -56,17 +56,9 @@ int wls_position(const double* sat_ecef, const double* pseudoranges,
       double sy = sat_ecef[s * 3 + 1];
       double sz = sat_ecef[s * 3 + 2];
 
-      // Earth rotation correction (Sagnac effect)
-      // Rotate satellite position by omega_e * transit_time around Z-axis
-      double dx0 = x - sx, dy0 = y - sy, dz0 = z - sz;
-      double range_approx = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
-      double transit_time = range_approx / 299792458.0;
-      double omega_e = 7.2921151467e-5;  // Earth rotation rate [rad/s]
-      double theta = omega_e * transit_time;
-      double sx_rot = sx * cos(theta) + sy * sin(theta);
-      double sy_rot = -sx * sin(theta) + sy * cos(theta);
-
-      double dx = x - sx_rot, dy_v = y - sy_rot, dz = z - sz;
+      // Keep the single-epoch solver consistent with wls_batch() and the
+      // Python fallback: inputs are expected to already be corrected upstream.
+      double dx = x - sx, dy_v = y - sy, dz = z - sz;
       double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
       double pr_pred = r + cb;
 
