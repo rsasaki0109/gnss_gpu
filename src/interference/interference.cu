@@ -9,6 +9,8 @@
 
 namespace gnss_gpu {
 
+constexpr float kPi = 3.14159265358979323846f;
+
 // ---------------------------------------------------------------------------
 // CUDA kernels
 // ---------------------------------------------------------------------------
@@ -21,7 +23,7 @@ __global__ void apply_hann_window_kernel(const float* signal, float* output,
 
     for (int i = tid; i < fft_size; i += blockDim.x) {
         int sample_idx = frame * hop_size + i;
-        float window = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (fft_size - 1)));
+        float window = 0.5f * (1.0f - cosf(2.0f * kPi * i / (fft_size - 1)));
         output[frame * fft_size + i] = signal[sample_idx] * window;
     }
 }
@@ -129,7 +131,7 @@ __global__ void overlap_add_kernel(const float* frames, float* output,
     for (int f = first_frame; f <= last_frame; f++) {
         int i = sample - f * hop_size;
         if (i >= 0 && i < fft_size) {
-            float window = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (fft_size - 1)));
+            float window = 0.5f * (1.0f - cosf(2.0f * kPi * i / (fft_size - 1)));
             sum += frames[f * fft_size + i] * window;
             window_sum += window * window;
         }

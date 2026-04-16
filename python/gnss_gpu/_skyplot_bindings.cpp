@@ -14,11 +14,11 @@ PYBIND11_MODULE(_gnss_gpu_skyplot, m) {
       auto bs = sat_ecef.request();
       // sat_ecef: accept (N,3) or (N*3,) flat
 
-      auto pdop = py::array_t<double>(std::vector<ssize_t>{n_grid});
-      auto hdop = py::array_t<double>(std::vector<ssize_t>{n_grid});
-      auto vdop = py::array_t<double>(std::vector<ssize_t>{n_grid});
-      auto gdop = py::array_t<double>(std::vector<ssize_t>{n_grid});
-      auto n_visible = py::array_t<int>(std::vector<ssize_t>{n_grid});
+      auto pdop = py::array_t<double>(std::vector<py::ssize_t>{n_grid});
+      auto hdop = py::array_t<double>(std::vector<py::ssize_t>{n_grid});
+      auto vdop = py::array_t<double>(std::vector<py::ssize_t>{n_grid});
+      auto gdop = py::array_t<double>(std::vector<py::ssize_t>{n_grid});
+      auto n_visible = py::array_t<int>(std::vector<py::ssize_t>{n_grid});
 
       gnss_gpu::compute_grid_quality(
           static_cast<double*>(bg.ptr),

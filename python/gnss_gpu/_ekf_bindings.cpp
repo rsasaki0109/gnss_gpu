@@ -32,13 +32,13 @@ PYBIND11_MODULE(_gnss_gpu_ekf, m) {
     py::class_<gnss_gpu::EKFState>(m, "EKFState")
         .def(py::init<>())
         .def("get_state", [](const gnss_gpu::EKFState& s) {
-            auto arr = py::array_t<double>(std::vector<ssize_t>{8});
+            auto arr = py::array_t<double>(std::vector<py::ssize_t>{8});
             auto buf = arr.request();
             memcpy(buf.ptr, s.x, 8 * sizeof(double));
             return arr;
         })
         .def("get_covariance", [](const gnss_gpu::EKFState& s) {
-            auto arr = py::array_t<double>(std::vector<ssize_t>{8, 8});
+            auto arr = py::array_t<double>(std::vector<py::ssize_t>{8, 8});
             auto buf = arr.request();
             memcpy(buf.ptr, s.P, 64 * sizeof(double));
             return arr;

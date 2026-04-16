@@ -16,8 +16,8 @@ PYBIND11_MODULE(_gnss_gpu_multipath, m) {
     auto bsat = sat_ecef.request();
     auto bref = reflector_planes.request();
 
-    auto delays = py::array_t<double>(std::vector<ssize_t>{n_rx * n_sat});
-    auto attenuations = py::array_t<double>(std::vector<ssize_t>{n_rx * n_sat});
+    auto delays = py::array_t<double>(std::vector<py::ssize_t>{n_rx * n_sat});
+    auto attenuations = py::array_t<double>(std::vector<py::ssize_t>{n_rx * n_sat});
 
     gnss_gpu::simulate_multipath(
         static_cast<double*>(brx.ptr),
@@ -47,8 +47,8 @@ PYBIND11_MODULE(_gnss_gpu_multipath, m) {
     auto bref = reflector_planes.request();
 
     int total = n_epoch * n_sat;
-    auto corrupted = py::array_t<double>(std::vector<ssize_t>{total});
-    auto errors = py::array_t<double>(std::vector<ssize_t>{total});
+    auto corrupted = py::array_t<double>(std::vector<py::ssize_t>{total});
+    auto errors = py::array_t<double>(std::vector<py::ssize_t>{total});
 
     gnss_gpu::apply_multipath_error(
         static_cast<double*>(bpr.ptr),

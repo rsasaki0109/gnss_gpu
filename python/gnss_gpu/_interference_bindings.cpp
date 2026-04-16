@@ -78,7 +78,7 @@ PYBIND11_MODULE(_gnss_gpu_interference, m) {
         auto buf_in = input.request();
         int n_samples = buf_in.size;
 
-        auto output = py::array_t<float>(std::vector<ssize_t>{n_samples});
+        auto output = py::array_t<float>(std::vector<py::ssize_t>{n_samples});
 
         gnss_gpu::excise_interference(static_cast<float*>(buf_in.ptr),
                                       static_cast<float*>(output.request().ptr),

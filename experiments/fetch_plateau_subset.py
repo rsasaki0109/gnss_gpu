@@ -169,7 +169,7 @@ def load_reference_meshes(
     mesh_radius: int = 0,
 ) -> list[str]:
     with open(reference_csv, newline="") as fh:
-        rows = list(csv.DictReader(fh))
+        rows = list(csv.DictReader(fh, skipinitialspace=True))
     if start_row:
         rows = rows[start_row:]
     if max_rows is not None:
