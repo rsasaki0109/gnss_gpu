@@ -295,6 +295,101 @@ def test_diagnostic_batch_shapes_and_keys():
 @pytest.mark.gpu
 @pytest.mark.cuda
 @requires_cuda_signal
+def test_refine_accepts_multi_ms_buffer():
+    fs = 2.6e6
+    pytest.importorskip(
+        "gnss_gpu._gnss_gpu_tracking",
+        reason="tracking CUDA bindings not available",
+    )
+    samples_per_ms = int(round(fs * 1e-3))
+    sim = SignalSimulator(sampling_freq=fs, noise_floor_db=-55, noise_seed=2)
+    acq = Acquisition(sampling_freq=fs, intermediate_freq=0, threshold=2.0)
+    raw_pr = 20_000_100.0
+    iq_1ms = sim.generate_epoch([{
+        "prn": 1,
+        "code_phase": float(pseudorange_to_code_phase_chips(raw_pr)),
+        "carrier_phase": 0.0,
+        "doppler_hz": 0.0,
+        "amplitude": 1.0,
+        "nav_bit": 1,
+    }])
+    iq_5ms = np.tile(iq_1ms, 5)
+    signal_i_5ms = iq_5ms[0::2].copy()
+    r = acq.acquire(signal_i_5ms[:samples_per_ms], prn_list=[1])[0]
+    assert r["acquired"]
+
+    lag_ref = refine_acquisition_code_lags_dll_batch(
+        signal_i_5ms, [1], [r["code_phase"]], [r["doppler_hz"]], fs,
+        intermediate_freq=0.0, n_iter=20, dll_gain=0.25)
+    pr_coarse = acquisition_code_phase_to_pseudorange(
+        r["code_phase"], fs, raw_pr)
+    pr_ref = acquisition_code_phase_to_pseudorange(lag_ref[0], fs, raw_pr)
+    err_coarse = abs(pr_coarse - raw_pr)
+    err_ref = abs(pr_ref - raw_pr)
+
+    assert lag_ref.shape == (1,)
+    assert np.isfinite(lag_ref[0])
+    assert not np.isnan(lag_ref[0])
+    assert err_ref <= err_coarse + C_LIGHT / fs
+
+
+@pytest.mark.gpu
+@pytest.mark.cuda
+@requires_cuda_signal
+def test_diagnostic_accepts_multi_ms_buffer():
+    fs = 2.6e6
+    pytest.importorskip(
+        "gnss_gpu._gnss_gpu_tracking",
+        reason="tracking CUDA bindings not available",
+    )
+    samples_per_ms = int(round(fs * 1e-3))
+    sim = SignalSimulator(sampling_freq=fs, noise_floor_db=-55, noise_seed=2)
+    acq = Acquisition(sampling_freq=fs, intermediate_freq=0, threshold=2.0)
+    raw_pr = 20_000_100.0
+    iq_1ms = sim.generate_epoch([{
+        "prn": 1,
+        "code_phase": float(pseudorange_to_code_phase_chips(raw_pr)),
+        "carrier_phase": 0.0,
+        "doppler_hz": 0.0,
+        "amplitude": 1.0,
+        "nav_bit": 1,
+    }])
+    iq_5ms = np.tile(iq_1ms, 5)
+    signal_i_5ms = iq_5ms[0::2].copy()
+    r = acq.acquire(signal_i_5ms[:samples_per_ms], prn_list=[1])[0]
+    assert r["acquired"]
+
+    diag = refine_acquisition_code_lags_diagnostic_batch(
+        signal_i_5ms, [1], [r["code_phase"]], [r["doppler_hz"]], fs,
+        intermediate_freq=0.0, n_iter=20, dll_gain=0.25)
+    expected_keys = {
+        "lag_samples",
+        "code_phase_chips",
+        "carrier_phase_cycles",
+        "code_freq_hz",
+        "carrier_freq_hz",
+        "E_I",
+        "E_Q",
+        "P_I",
+        "P_Q",
+        "L_I",
+        "L_Q",
+        "prompt_power",
+        "dll_abs",
+        "cn0_est_db",
+        "prn",
+        "n_iter_used",
+        "gain_schedule",
+    }
+
+    assert set(diag) == expected_keys
+    assert diag["lag_samples"].shape == (1,)
+    assert np.isfinite(diag["cn0_est_db"][0])
+
+
+@pytest.mark.gpu
+@pytest.mark.cuda
+@requires_cuda_signal
 def test_acquisition_returns_fractional_code_phase_after_interpolation():
     fs = 2.6e6
     raw_pr = 20_000_030.0

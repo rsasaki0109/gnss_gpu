@@ -22,7 +22,7 @@ This document is **not** the old “artifact packaging / paper asset” plan. Th
 - **Weighted WLS**: per-sat weights from **prompt power**, **acquisition peak/second-peak ratio**, and **|DLL| power discriminator** after refinement (`gnss_gpu.e2e_helpers.compute_e2e_wls_weights`; `experiments/e2e_utils.py` is now a back-compat shim).
 - **E2E helpers** live in **`python/gnss_gpu/e2e_helpers.py`** (promoted from `experiments/`). Top-level re-exports: `compute_e2e_wls_weights`, `acquisition_lag_to_code_phase_chips`, `code_phase_chips_to_acquisition_lag`, `refine_acquisition_code_lag_dll`, `refine_acquisition_code_lags_dll_batch`, `refine_acquisition_code_lags_diagnostic_batch`, `dump_e2e_diagnostics_csv`, `pseudorange_to_code_phase_chips`, `acquisition_code_phase_to_pseudorange`.
 - **Per-channel diagnostics**: `refine_acquisition_code_lags_diagnostic_batch` returns a dict with final E/P/L IQ, code/carrier phase+freq, `prompt_power`, `dll_abs`, and a rough `cn0_est_db` (1 ms coherent, not calibrated). `dump_e2e_diagnostics_csv` writes a 15-column CSV. `exp_e2e_positioning.py` has `--diagnostics-csv PATH` (per-scenario `{stem}_{name}.csv`).
-- **CLI** on `experiments/exp_e2e_positioning.py` and `experiments/exp_e2e_trajectory.py`: `--dll-gain`, `--pll-gain`, `--n-iter`, `--correlator-spacing`, trajectory `--max-epochs`, and positioning `--diagnostics-csv`.
+- **CLI** on `experiments/exp_e2e_positioning.py` and `experiments/exp_e2e_trajectory.py`: `--dll-gain`, `--pll-gain`, `--n-iter`, `--correlator-spacing`, trajectory `--max-epochs`, and positioning `--diagnostics-csv`, `--gain-schedule`, `--n-coherent-ms`.
 
 **What is *not* claimed:** a full receiver tracking loop over many milliseconds, navigation bit alignment, or sub-centimeter code tracking. The E2E path is **honest physics + acquisition-grade + short coherent refinement**.
 
@@ -284,9 +284,17 @@ The same 1 ms buffer is re-correlated; **do not** confuse with `scalar_tracking_
 - `python/gnss_gpu/e2e_helpers.py` is the canonical location.
 - `experiments/e2e_utils.py` is a thin re-export shim.
 
-### 8.2 **Longer integration / multi-ms** (high effort) — **next big accuracy lever**
+### 8.2 **Longer integration / multi-ms** — **first cut DONE (sim-only)**
 
-- Requires thinking about **nav bits**, data wipe, and buffer length; big accuracy lever but not a small patch.
+- `experiments/exp_e2e_positioning.py --n-coherent-ms N` generates an
+  N-ms IQ buffer; acquisition runs on the first 1 ms, refinement uses the
+  full N ms. `correlate_kernel` (CUDA) already integrates coherently over
+  any buffer length, and the simulator currently emits `nav_bit = +1`
+  constant, so no nav-bit wipe is required for simulation.
+- **Still open:** real-RINEX nav-bit extraction / data wipe for
+  non-simulated flows. That path requires a bit-sync step (e.g., 20 ms
+  buffer + Costas-variant detection) and is materially larger than the
+  sim-only enabler.
 
 ### 8.3 **PLL/DLL tuning and diagnostics** (medium) — **diagnostic tap DONE, tuning pending**
 
