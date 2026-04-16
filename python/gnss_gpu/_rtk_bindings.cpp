@@ -24,8 +24,8 @@ PYBIND11_MODULE(_gnss_gpu_rtk, m) {
     int n_dd = n_sat - 1;
 
     auto result = py::array_t<double>({3}, {sizeof(double)});
-    auto ambiguities = py::array_t<double>(std::vector<ssize_t>{n_dd});
-    auto residuals = py::array_t<double>(std::vector<ssize_t>{2 * n_dd});
+    auto ambiguities = py::array_t<double>(std::vector<py::ssize_t>{n_dd});
+    auto residuals = py::array_t<double>(std::vector<py::ssize_t>{2 * n_dd});
 
     int iters = gnss_gpu::rtk_float(
         static_cast<double*>(bb.ptr),
@@ -63,7 +63,7 @@ PYBIND11_MODULE(_gnss_gpu_rtk, m) {
 
     auto results = py::array_t<double>({n_epoch, 3});
     auto ambiguities = py::array_t<double>({n_epoch, n_dd});
-    auto iters = py::array_t<int>(std::vector<ssize_t>{n_epoch});
+    auto iters = py::array_t<int>(std::vector<py::ssize_t>{n_epoch});
 
     gnss_gpu::rtk_float_batch(
         static_cast<double*>(bb.ptr),
@@ -87,7 +87,7 @@ PYBIND11_MODULE(_gnss_gpu_rtk, m) {
                                int n_candidates) {
     auto ba = float_amb.request(), bq = Q_amb.request();
     int n = ba.size;
-    auto fixed_amb = py::array_t<int>(std::vector<ssize_t>{n});
+    auto fixed_amb = py::array_t<int>(std::vector<py::ssize_t>{n});
 
     double ratio = gnss_gpu::lambda_integer(
         static_cast<double*>(ba.ptr),

@@ -5,7 +5,7 @@ namespace gnss_gpu {
 struct AcquisitionResult {
     int prn;
     bool acquired;
-    double code_phase;    // samples
+    double code_phase;    // samples (fractional after peak interpolation)
     double doppler_hz;
     double snr;           // peak/mean ratio
 };

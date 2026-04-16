@@ -56,17 +56,8 @@ int wls_position(const double* sat_ecef, const double* pseudoranges,
       double sy = sat_ecef[s * 3 + 1];
       double sz = sat_ecef[s * 3 + 2];
 
-      // Earth rotation correction (Sagnac effect)
-      // Rotate satellite position by omega_e * transit_time around Z-axis
-      double dx0 = x - sx, dy0 = y - sy, dz0 = z - sz;
-      double range_approx = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
-      double transit_time = range_approx / 299792458.0;
-      double omega_e = 7.2921151467e-5;  // Earth rotation rate [rad/s]
-      double theta = omega_e * transit_time;
-      double sx_rot = sx * cos(theta) + sy * sin(theta);
-      double sy_rot = -sx * sin(theta) + sy * cos(theta);
-
-      double dx = x - sx_rot, dy_v = y - sy_rot, dz = z - sz;
+      // Use the same receive-time ECEF range model as the batch solver.
+      double dx = x - sx, dy_v = y - sy, dz = z - sz;
       double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
       double pr_pred = r + cb;
 
@@ -264,6 +255,7 @@ void wls_batch(const double* sat_ecef, const double* pseudoranges,
   }
 
   CUDA_CHECK(cudaFree(d_sat)); CUDA_CHECK(cudaFree(d_pr));
+  CUDA_CHECK(cudaFree(d_w)); CUDA_CHECK(cudaFree(d_res));
 }
 
 }  // namespace gnss_gpu

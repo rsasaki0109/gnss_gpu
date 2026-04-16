@@ -89,7 +89,7 @@ class UrbanSignalSimulator:
         self.nlos_attenuation_db = nlos_attenuation_db
         self.fresnel_coeff = fresnel_coeff
 
-    def compute_epoch(self, rx_ecef, sat_ecef, sat_vel=None,
+    def compute_epoch(self, rx_ecef, sat_ecef, sat_clk=None, sat_vel=None,
                       rx_vel=None, rx_clock_bias=0.0,
                       prn_list=None, gps_time=0.0,
                       atmo_correction=None, iono_params=None,
@@ -99,6 +99,7 @@ class UrbanSignalSimulator:
         Args:
             rx_ecef: [3] receiver ECEF position [m].
             sat_ecef: [n_sat, 3] satellite ECEF positions [m].
+            sat_clk: [n_sat] satellite clock corrections [s].
             sat_vel: [n_sat, 3] satellite ECEF velocities [m/s] (for Doppler).
             rx_vel: [3] receiver velocity [m/s] (for Doppler).
             rx_clock_bias: Receiver clock bias [m].
@@ -119,6 +120,13 @@ class UrbanSignalSimulator:
         rx = np.asarray(rx_ecef, dtype=np.float64).ravel()
         sats = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
         n_sat = sats.shape[0]
+        sat_clock_m = np.zeros(n_sat, dtype=np.float64)
+
+        if sat_clk is not None:
+            sat_clk_arr = np.asarray(sat_clk, dtype=np.float64).reshape(-1)
+            if sat_clk_arr.size != n_sat:
+                raise ValueError("sat_clk must have one entry per satellite")
+            sat_clock_m = sat_clk_arr * C_LIGHT
 
         if prn_list is None:
             prn_list = list(range(1, n_sat + 1))
@@ -185,7 +193,7 @@ class UrbanSignalSimulator:
                 continue
 
             # Pseudorange
-            pr = ranges[i] + rx_clock_bias + atmo_delay[i]
+            pr = ranges[i] + rx_clock_bias - sat_clock_m[i] + atmo_delay[i]
 
             # Code phase (chips into the current C/A code period)
             code_chips = (pr / C_LIGHT) * CA_CHIP_RATE
@@ -245,7 +253,7 @@ class UrbanSignalSimulator:
         }
 
     def simulate_trajectory(self, rx_positions, sat_ecef_per_epoch,
-                            prn_list=None, sat_vel_per_epoch=None,
+                            prn_list=None, sat_clk_per_epoch=None, sat_vel_per_epoch=None,
                             rx_vel_per_epoch=None, gps_times=None,
                             atmo_correction=None, iono_params=None,
                             n_samples=None):
@@ -255,6 +263,7 @@ class UrbanSignalSimulator:
             rx_positions: [n_epoch, 3] receiver ECEF positions.
             sat_ecef_per_epoch: [n_epoch, n_sat, 3] or callable(epoch_idx)->array.
             prn_list: PRN list (shared across epochs).
+            sat_clk_per_epoch: [n_epoch, n_sat] or callable(epoch_idx)->array.
             sat_vel_per_epoch: [n_epoch, n_sat, 3] or None.
             rx_vel_per_epoch: [n_epoch, 3] or None.
             gps_times: [n_epoch] GPS times.
@@ -274,6 +283,10 @@ class UrbanSignalSimulator:
             else:
                 sat_ecef = sat_ecef_per_epoch[i]
 
+            sat_clk = None
+            if sat_clk_per_epoch is not None:
+                sat_clk = sat_clk_per_epoch[i] if not callable(sat_clk_per_epoch) else sat_clk_per_epoch(i)
+
             sat_vel = None
             if sat_vel_per_epoch is not None:
                 sat_vel = sat_vel_per_epoch[i] if not callable(sat_vel_per_epoch) else sat_vel_per_epoch(i)
@@ -287,6 +300,7 @@ class UrbanSignalSimulator:
             result = self.compute_epoch(
                 rx_ecef=rx_pos[i],
                 sat_ecef=sat_ecef,
+                sat_clk=sat_clk,
                 sat_vel=sat_vel,
                 rx_vel=rx_vel,
                 prn_list=prn_list,

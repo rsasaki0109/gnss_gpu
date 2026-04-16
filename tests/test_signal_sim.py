@@ -44,7 +44,9 @@ def test_single_channel_acquisition_roundtrip():
     r = results[0]
     assert r["acquired"]
     assert abs(r["doppler_hz"] - 1000.0) <= 500.0
-    assert abs(r["code_phase"]) <= 2.0  # code_phase=0 -> acq returns ~0
+    n_samples = int(sim.sampling_freq * 1e-3)
+    circular_error = min(abs(r["code_phase"]), abs(n_samples - r["code_phase"]))
+    assert circular_error <= 2.0  # code_phase=0 -> acq returns ~0 modulo 1 ms
 
 
 def test_multi_satellite():

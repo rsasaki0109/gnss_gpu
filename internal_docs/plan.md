@@ -1,591 +1,328 @@
-# gnss_gpu Claude 引き継ぎメモ
+# gnss_gpu Handoff Plan
 
-**最終更新**: 2026-04-04 JST  
-**現在の HEAD**: `41ccb98` (`refine teaser media layout`)  
-**ブランチ状態**: `main`, worktree clean  
-**現フェーズ**: 実装・探索フェーズ凍結済み。いまは artifact / README / GitHub Pages / 原稿パッケージングの段階。  
-
----
-
-## 0. 最初に読むもの
-
-1. `README.md`
-2. `docs/experiments.md`
-3. `docs/decisions.md`
-4. `docs/interfaces.md`
-5. `docs/paper_draft_2026-04-01.md`
-6. `experiments/results/paper_assets/paper_main_table.md`
-7. `docs/assets/results_snapshot.json`
-
-この `docs/plan.md` は「何が frozen で、何が exploratory で、Claude が次にどこを触るべきか」を 1 本で分かるように書いている。
+Last updated: 2026-04-15 (local)  
+Current branch: `main` (worktree may be dirty vs last commit)  
+Last known HEAD: `2c6b5aa`  
+Intended reader: **Claude / next coding agent** (Cursor, Copilot, etc.)
 
 ---
 
-## 1. いまの結論を先に書く
+## 1. Executive Summary
 
-### 1.1 frozen mainline
+This document is **not** the old “artifact packaging / paper asset” plan. The active work is **GNSS signal simulation, broadcast ephemeris, and end-to-end (E2E) evaluation** on real UrbanNav + PLATEAU subsets.
 
-- **mainline method は `PF+RobustClear-10K`**
-- これは **UrbanNav external** の full-run で一番安全に勝っている構成
-- README, GitHub Pages, paper assets, snapshot JSON はこの前提に揃っている
+**Where the repo stands conceptually:**
 
-### 1.2 exploratory / supplemental
+- Broadcast ephemeris propagation is used on real nav data. `Ephemeris.compute_batch()` **re-selects the best nav message per epoch** (no “first ephemeris stuck for the whole batch”).
+- `UrbanSignalSimulator` takes **`sat_clk`** and applies satellite clock in the simulated pseudorange model.
+- **Windows** editable installs: `py::ssize_t`, local `M_PI` replacements, `os.add_dll_directory()` for CUDA, `.pyd` ignored — native extensions are expected to build and load on MSVC.
+- **Acquisition** returns **fractional** circular lag (samples) via **3-point parabolic** interpolation around the FFT correlation peak; at zero IF, reported Doppler is a **magnitude** (sign ambiguous).
+- **E2E** reconstructs pseudorange from acquisition lag + 1 ms ambiguity resolution + **`sat_clk`**, with a **`2 km` gate** before WLS. This is **not** injecting geometric truth as pseudorange.
+- **Post-acquisition refinement** (experiments): GPU `batch_correlate` (**E/P/L**) on the **same 1 ms** IF buffer with **DLL** (code phase in chips) and **PLL** (`atan2(PQ, PI)` on carrier phase in cycles). **No** `scalar_tracking_update` time advance — frozen epoch, iterative nudges only.
+- **Weighted WLS**: per-sat weights from **prompt power**, **acquisition peak/second-peak ratio**, and **|DLL| power discriminator** after refinement (`experiments/e2e_utils.py` → `compute_e2e_wls_weights`).
+- **CLI** on `experiments/exp_e2e_positioning.py` and `experiments/exp_e2e_trajectory.py`: `--dll-gain`, `--pll-gain`, `--n-iter`, `--correlator-spacing`, and trajectory `--max-epochs`.
 
-- **PPC gate family** は残しているが exploratory
-- **`entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate`** は PPC holdout で surviving gate だが gain は小さい
-- **`PF+AdaptiveGuide-10K`** と **`PF+EKFRescue-10K`** は supplemental
-- **explicit 3D PF / PF3D-BVH** は accuracy の headline ではなく **systems result**
+**What is *not* claimed:** a full receiver tracking loop over many milliseconds, navigation bit alignment, or sub-centimeter code tracking. The E2E path is **honest physics + acquisition-grade + short coherent refinement**.
 
-### 1.3 safe headline
+**Main remaining leverage (high level):**
 
-いま安全に言えるのは次の 3 本だけ。
-
-1. **UrbanNav external では multi-GNSS PF path が EKF を明確に上回る**
-2. **Hong Kong 3シーケンスでも PF+AdaptiveGuide が EKF を上回る（cross-geography breadth）**
-3. **BVH は PF3D の runtime を大幅に削る**
-4. **PPC では holdout-surviving な小さい gate gain があるが、headline ではない**
-
-### 1.4 unsafe headline
-
-以下は今も危ない。
-
-- `world first`
-- `3D map aided PF improves real-data accuracy` を主張の中心に置くこと
-- `guaranteed strong accept`
-- `geography-independent general win`
-- `adaptive / rescue` を mainline に昇格させること
+1. Move proven E2E helpers from `experiments/` into **`python/gnss_gpu/`** (clean API, optional CUDA).
+2. **Longer coherent integration** or multiple ms (nav bit / data wipe issues) if you need another step in accuracy.
+3. **Warnings / CI hygiene** (low priority).
+4. Optional: stronger **carrier** aiding (PLL gain schedules, Costas, etc.) — current PLL is minimal.
 
 ---
 
-## 2. 現在の数値
+## 2. What Was Done (Chronological Clusters)
 
-### 2.1 paper main table の固定値
+### 2.1 Ephemeris and satellite clock
 
-出典: `experiments/results/paper_assets/paper_main_table.md`
+- `Ephemeris.compute_batch()` reselects ephemerides per epoch; tests in `tests/test_ephemeris.py`.
+- `UrbanSignalSimulator`: `sat_clk` in `compute_epoch` / `simulate_trajectory`; pseudorange uses `range + rx_clock_bias - c * sat_clk + atmo_delay` (see code for exact path).
+- Experiments pass `sat_clk`: `verify_real_ephemeris.py`, `exp_e2e_positioning.py`, `exp_e2e_trajectory.py`.
+- **Why it matters:** ignoring `sat_clk` is catastrophic on real RINEX (e.g. Odaiba nav: median `|c·τ|` on the order of **tens of km**; max **~200+ km** — see earlier notes in git history / summaries).
 
-| section | method | RMS 2D [m] | P95 [m] | >100m [%] | >500m [%] | time [ms/epoch] | note |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| PPC holdout | Safe baseline | 66.92 | 81.69 | 5.83 | 0.0 |  | `always_robust` |
-| PPC holdout | Exploratory gate | 65.54 | 81.22 | 5.83 | 0.0 |  | `entry_veto_negative_exit_rescue...` |
-| UrbanNav external | EKF | 93.25 | 178.18 | 16.29 | 0.161 | 0.031 | `trimble + G,E,J` |
-| UrbanNav external | PF-10K | 67.61 | 101.46 | 5.44 | 0.0 | 1.367 | `trimble + G,E,J` |
-| UrbanNav external | PF+RobustClear-10K | **66.60** | **98.53** | **4.80** | **0.0** | 1.401 | frozen mainline |
-| UrbanNav external | WLS+QualityVeto | 2933.77 | 175.38 | 10.13 | 2.552 | 0.195 | promoted core hook |
-| BVH systems | PF3D-10K | 55.50 | 58.39 | 0.0 | 0.0 | 1028.29 | real PLATEAU subset |
-| BVH systems | PF3D-BVH-10K | 55.50 | 58.39 | 0.0 | 0.0 | **17.78** | **57.8x faster** |
+### 2.2 Native Windows / MSVC / CUDA loading
 
-### 2.2 UrbanNav external の補強
+- Pybind: `ssize_t` → `py::ssize_t` where needed.
+- CUDA: explicit `M_PI`-style constants where MSVC was flaky.
+- `python/gnss_gpu/__init__.py`: `add_dll_directory` for package dir and `CUDA_PATH`/`CUDA_HOME` `bin`.
+- `.gitignore`: `*.pyd` and local build artifacts.
 
-出典:
+### 2.3 WLS / Multi-GNSS consistency
 
-- `experiments/results/urbannav_fixed_eval_external_gej_trimble_qualityveto_summary.csv`
-- `experiments/results/urbannav_window_eval_external_gej_trimble_qualityveto_w500_s250_summary.csv`
+- CPU single-epoch WLS aligned with batch/GPU **receive-time ECEF range** model (removed inconsistent Sagnac mismatch that caused ~31 m bias in tests).
 
-重要なのは run 平均 2 本だけではないこと。
+### 2.4 Acquisition
 
-- fixed full-run average:
-  - `EKF = 93.25 / 178.18 / 16.29% / 0.161%`
-  - `PF-10K = 67.61 / 101.46 / 5.44% / 0.000%`
-  - `PF+RobustClear-10K = 66.60 / 98.53 / 4.80% / 0.000%`
-- fixed window evaluation (`500 epoch / 250 stride`):
-  - `PF+RobustClear-10K` は `EKF` に対して
-    - `RMS 90/127 win`
-    - `P95 102/127 win`
-    - `>100m 89/127 win`
-    - `>500m 127/127 <=`
+- Parabolic sub-sample peak; fractional `code_phase` in sample units (circular lag).
+- Zero IF: Doppler reported as **magnitude** (not arbitrary search sign).
 
-つまり Tokyo external は「たまたま Odaiba / Shinjuku の run 平均で勝った」だけではない。
+### 2.5 E2E pseudorange reconstruction (baseline)
 
-### 2.3 PPC holdout の位置づけ
+- `experiments/e2e_utils.py`: lag ↔ chips, ambiguity resolution, `2 km` gate.
+- Pseudorange for WLS includes clock handling consistent with experiments.
 
-出典:
+### 2.6 Post-acquisition refinement and weighted WLS (current experiments)
 
-- `experiments/results/pf_strategy_lab_positive6_summary.csv`
-- `experiments/results/pf_strategy_lab_holdout6_r200_s200_summary.csv`
-- `experiments/results/pf_strategy_family_cv_positive6_holdout6_family_best.csv`
-
-PPC では gate family をかなり掘ったが、最終的な結論はこう。
-
-- tuned split では gain がある
-- holdout でも一応 survival する
-- ただし gain は **小さい**
-- したがって paper / README / Pages の main headline にしてはいけない
-
-安全な表現は「design-space / ablation / experiment-first process の証拠」まで。
-
-### 2.4 Hong Kong の位置づけ
-
-出典:
-
-- `experiments/results/urbannav_fixed_eval_hk20190428_gc_adaptive_summary.csv`
-- `experiments/results/urbannav_fixed_eval_hk_tst_gc_ublox_summary.csv`
-- `experiments/results/urbannav_fixed_eval_hk_whampoa_gc_ublox_summary.csv`
-
-Hong Kong は **supplemental positive result** に昇格した。3シーケンス全てで `PF+AdaptiveGuide-10K` が `EKF` を上回る:
-
-- HK-20190428 (GC): 66.85 m vs 69.49 m (EKF)
-- HK TST (GC): 152.37 m vs 301.04 m (EKF) — 49% 改善
-- HK Whampoa (GC): 413.68 m vs 463.09 m (EKF) — 11% 改善
-
-ただし frozen mainline `PF+RobustClear-10K` は HK multi-GNSS で崩壊する。
-勝つのは supplemental variant (`PF+AdaptiveGuide-10K`)。
-
-paper での位置づけ: cross-geography breadth evidence として使う。
-headline claim にはしない（winning method が mainline と異なるため）。
+- **`refine_acquisition_code_lags_dll_batch`**: batch GPU correlate per iteration; **DLL** updates code phase; **PLL** updates `carrier_phase` when `pll_gain > 0`; optional **`return_lock_metrics`** for final prompt power and |DLL|.
+- **`compute_e2e_wls_weights`**: combines prompt power, acquisition SNR ratio, and DLL magnitude into **mean-normalized** weights for `wls_position`.
+- **`exp_e2e_positioning.py` / `exp_e2e_trajectory.py`**: wire the above; **argparse** for tuning without editing `e2e_utils.py`.
 
 ---
 
-## 3. method freeze
+## 3. Current Quantitative Status (indicative)
 
-### 3.1 mainline
+Numbers **vary** with noise, acquisition draws, and which satellites pass the gate. Treat as **ballpark**, not regression baselines unless you freeze seeds and pin data.
 
-**`PF+RobustClear-10K`**
+### 3.1 Tests
 
-理由:
-
-- UrbanNav external full-run の frozen winner
-- `PF-10K` との差は大きくはないが、tail 指標まで含めて最も安定
-- README / Pages / paper assets をこの method に揃え済み
-
-### 3.2 exploratory gate
-
-**`entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate`**
-
-理由:
-
-- PPC holdout で生き残る non-trivial gate
-- ただし improvement は小さい
-- mainline ではなく appendix / lab result 扱いが妥当
-
-### 3.3 promoted core hook
-
-**`WLS+QualityVeto`**
-
-場所:
-
-- `python/gnss_gpu/multi_gnss_quality.py`
-- `experiments/exp_urbannav_baseline.py`
-- `experiments/exp_urbannav_fixed_eval.py`
-
-意味:
-
-- multi-GNSS stabilization policy を reusable hook として core 側へ押し上げた
-- ただし best external method ではない
-
-### 3.4 supplemental variants
-
-- `PF+AdaptiveGuide-10K`
-- `PF+EKFRescue-10K`
-- `PF+RobustClear+EKFRescue-10K`
-
-役割:
-
-- Hong Kong や sparse regime の mitigation
-- cross-geometry weakness の応急処置
-- Tokyo full-run frozen mainline の置換ではない
-
-### 3.5 3D path
-
-- `PF3D-BVH` は **systems contribution**
-- explicit blocked/NLOS likelihood を headline accuracy result にしないこと
-
-理由:
-
-- real PLATEAU + NLOS で explicit 3D likelihood は安定勝ちしていない
-- hard / mixture / gate を掘ったが、mainline にはなっていない
-- 一方で runtime gain は非常に強い
-
----
-
-## 4. ここまでに試して、主役から降ろしたもの
-
-### 4.1 PF strategy zoo
-
-`experiments/pf_strategy_lab/` 以下でかなり多くの gate family を試した。
-
-例:
-
-- `always_robust`
-- `always_blocked`
-- `disagreement_gate`
-- `rule_chain_gate`
-- `weighted_score_gate`
-- `clock_veto_gate`
-- `dual_mode_regime_gate`
-- `quality_veto_regime_gate`
-- `hysteresis_quality_veto_regime_gate`
-- `branch_aware_hysteresis_quality_veto_regime_gate`
-- `rescue_branch_aware_hysteresis_quality_veto_regime_gate`
-- `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate`
-
-結論:
-
-- best surviving family は最後の `entry_veto_negative_exit...`
-- それでも gain は small
-- これ以上 strategy family を増やすのは return が薄い
-
-### 4.2 adaptive guide
-
-`PF+AdaptiveGuide-10K` は 3-run mixed regime では良く見えたが、full Tokyo external では frozen mainline を超えなかった。
-
-出典:
-
-- `experiments/results/urbannav_fixed_eval_external_gej_trimble_adaptive_3k_summary.csv`
-- `experiments/results/urbannav_fixed_eval_external_gej_trimble_adaptive_full_summary.csv`
-
-結論:
-
-- supplemental に留める
-- README / Pages / paper main table を差し替えない
-
-### 4.3 rescue variants
-
-Hong Kong では効くが Odaiba で悪化する。
-
-結論:
-
-- safety option としては有用
-- mainline には昇格させない
-
-### 4.4 3D map accuracy story
-
-real PLATEAU path は integration / systems 的には重要だが、accuracy headline には使わない。
-
-結論:
-
-- runtime figure は main figure で良い
-- accuracy 主張は `PF+RobustClear-10K` に寄せる
-
----
-
-## 5. 重要ファイルの地図
-
-### 5.1 main results / artifact builders
-
-- `experiments/build_paper_assets.py`
-- `experiments/build_githubio_summary.py`
-- `experiments/build_site_media.py`
-- `experiments/results/paper_assets/paper_main_table.md`
-- `docs/assets/results_snapshot.json`
-- `docs/assets/results_snapshot.js`
-
-### 5.2 website / README
-
-- `README.md`
-- `docs/index.html`
-- `docs/site.css`
-- `.github/workflows/pages.yml`
-- `tests/site/playwright.config.cjs`
-- `tests/site/site.spec.cjs`
-
-### 5.3 frozen evaluation entry points
-
-- `experiments/exp_urbannav_fixed_eval.py`
-- `experiments/exp_urbannav_baseline.py`
-- `experiments/exp_urbannav_pf.py`
-- `experiments/exp_urbannav_pf3d.py`
-
-### 5.4 loaders
-
-- `python/gnss_gpu/io/ppc.py`
-- `python/gnss_gpu/io/urbannav.py`
-- `python/gnss_gpu/io/plateau.py`
-- `python/gnss_gpu/ephemeris.py`
-
-### 5.5 strategy lab
-
-- `experiments/pf_strategy_lab/strategies.py`
-- `experiments/pf_strategy_lab/evaluate_strategies.py`
-- `experiments/pf_strategy_lab/cross_validate_families.py`
-
-### 5.6 docs for process
-
-- `docs/experiments.md`
-- `docs/decisions.md`
-- `docs/interfaces.md`
-- `docs/paper_draft_2026-04-01.md`
-
----
-
-## 6. README / GitHub Pages / media の現状
-
-### 6.1 README
-
-README はすでに artifact-first に更新済み。
-
-載せているもの:
-
-- poster
-- teaser GIF
-- teaser `mp4` / `webm`
-- main figures
-- reproduce commands
-- method freeze
-- safe / unsafe claim の整理
-
-### 6.2 GitHub Pages
-
-Pages は `docs/index.html` から静的表示する。
-
-特徴:
-
-- `results_snapshot.js` を読む
-- `noscript` fallback あり
-- main figures と extra charts を表示
-- teaser video は controls なし、`preload="metadata"`
-- Playwright smoke test あり
-
-### 6.3 teaser 修正
-
-直近の `41ccb98` は teaser 修正。
-
-何を直したか:
-
-- 変な crop / composition をやめた
-- paper figure をそのまま preview に使うように変更
-- poster 風の full-frame slide にした
-- `video.controls` を外して browser UI の被りを避けた
-
-関係ファイル:
-
-- `experiments/build_site_media.py`
-- `docs/index.html`
-- `docs/assets/media/site_teaser.gif`
-- `docs/assets/media/site_teaser.mp4`
-- `docs/assets/media/site_teaser.webm`
-
-### 6.4 Pages workflow
-
-`.github/workflows/pages.yml` は以下を通す。
-
-1. `python3 experiments/build_paper_assets.py`
-2. `python3 experiments/build_githubio_summary.py`
-3. `npm ci`
-4. `npm run site:smoke`
-
-この順にしてあるので、paper assets と Pages assets のズレが起きにくい。
-
----
-
-## 7. validation 状態
-
-### 7.1 freeze validation
-
-出典: `experiments/results/freeze_validation_summary.json`
-
-- headline: `440 passed, 7 skipped`
-- full summary: `440 passed, 7 skipped, 17 warnings`
-- command: `PYTHONPATH=python python3 -m pytest tests/ -q`
-
-warning の中身:
-
-- `pytest.mark.slow`
-- `datetime.utcnow()`
-- plotting / matplotlib
-
-いまのところ freeze を止める性質の warning ではない。
-
-### 7.2 site validation
-
-- `npm run site:smoke`
-- Playwright 2 tests pass
-
-これは desktop / mobile の smoke で、main sections, figures, video, overflow を見ている。
-
-### 7.3 current repo state
-
-- branch: `main`
-- HEAD: `41ccb98`
-- worktree: clean
-
----
-
-## 8. data / loaders の整理
-
-### 8.1 PPC
-
-役割:
-
-- design split
-- ablation
-- holdout gate evaluation
-
-主ファイル:
-
-- `python/gnss_gpu/io/ppc.py`
-- `experiments/exp_ppc_wls_sweep.py`
-- `experiments/exp_ppc_outlier_analysis.py`
-- `experiments/exp_ppc_pf_gate_sweep.py`
-- `experiments/exp_ppc_pf_blocked_clear_sweep.py`
-
-### 8.2 UrbanNav Tokyo
-
-役割:
-
-- external validation の主戦場
-- main paper claim の source
-
-主ファイル:
-
-- `python/gnss_gpu/io/urbannav.py`
-- `experiments/fetch_urbannav_subset.py`
-- `experiments/exp_urbannav_fixed_eval.py`
-
-### 8.3 UrbanNav Hong Kong
-
-役割:
-
-- cross-geometry weakness の確認
-- supplemental mitigation の testbed
-
-主ファイル:
-
-- `experiments/fetch_urbannav_hk_subset.py`
-- `experiments/exp_urbannav_fixed_eval.py`
-
-### 8.4 PLATEAU
-
-役割:
-
-- PF3D / BVH systems path
-- real mesh integration
-
-主ファイル:
-
-- `python/gnss_gpu/io/plateau.py`
-- `experiments/fetch_plateau_subset.py`
-- `experiments/scan_ppc_plateau_segments.py`
-
----
-
-## 9. まだ残る弱点
-
-全部は潰れていない。いま残っている弱点はかなり限定的。
-
-### 9.1 geography breadth
-
-- Tokyo external は強い（2シーケンス、PF+RobustClear mainline）
-- Hong Kong 3シーケンスで PF+AdaptiveGuide が EKF を上回る
-- ただし HK の winning method は mainline と異なる
-- 5シーケンス/2都市の cross-geography breadth がある
-
-### 9.2 3D map accuracy headline
-
-- 3D path は systems 的に強い
-- でも explicit 3D likelihood が real-data accuracy を押し上げた、とはまだ言いにくい
-
-### 9.3 PPC gate gain の小ささ
-
-- holdout-surviving だが small gain
-- algorithm novelty の主役に据えるには弱い
-
-### 9.4 PF vs PF+RobustClear の差の小ささ
-
-- `PF-10K` も close ablation
-- だから robust-clear story は「real but not huge」
-
-これは弱点でもあるが、同時に誠実さでもある。過大主張しない方がいい。
-
----
-
-## 10. Claude が次にやるなら
-
-### 10.1 いちばん安全な路線
-
-**新しい method を増やさない。**
-
-やること:
-
-1. manuscript source へ fixed assets を移植
-2. bibliography / citation 整理
-3. figure / table の caption を仕上げる
-4. README / Pages と paper の wording を揃える
-
-### 10.2 もし追加実験をするなら
-
-優先順位:
-
-1. **multi-GNSS external breadth の追加**
-2. **Hong Kong でも headline が立つ regime の探索**
-3. **3D path の systems benchmark 拡充**
-
-やらない方がいい:
-
-- 新しい PPC gate family をさらに量産
-- 3D likelihood の headline accuracy 化を急ぐ
-- adaptive / rescue を mainline へ無理に昇格
-
-### 10.3 artifact / infra で触るなら
-
-候補:
-
-- Pages に captions や downloadable CSV 導線を追加
-- CI warnings の軽減
-- media の圧縮や alt text 改善
-
-ただし main story 自体はもう固定でよい。
-
----
-
-## 11. Claude への注意事項
-
-### 11.1 変えない方がいいもの
-
-- `PF+RobustClear-10K` を mainline とする freeze
-- `paper_main_table.md` の headline table
-- Pages / README / snapshot JSON の mainline wording
-
-### 11.2 変えてよいもの
-
-- paper wording
-- captions
-- bibliography
-- asset presentation
-- supplemental section の整理
-
-### 11.3 避けるべき主張
-
-- `strong accept は確定`
-- `3D map が real-data accuracy を押し上げた`
-- `global / geography-independent win`
-- `world first`
-
-### 11.4 安全な主張
-
-- `UrbanNav external では frozen PF path が EKF を大きく上回った`
-- `BVH keeps PF3D accuracy while delivering a large runtime reduction`
-- `PPC gate work is exploratory but holdout-surviving`
-- `the package now supports honest, reproducible artifact-level evaluation`
-
----
-
-## 12. 最低限の再生成コマンド
-
-artifact 層だけならこれで足りる。
-
-```bash
-python3 experiments/build_paper_assets.py
-python3 experiments/build_site_media.py
-python3 experiments/build_githubio_summary.py
-npm run site:smoke
-PYTHONPATH=python python3 -m pytest tests/ -q
+```powershell
+$env:PYTHONPATH='python'; python -m pytest tests -q
 ```
 
-### 12.1 key outputs
+Expect on the order of **440+ passed** (exact count changes when tests are added). On some Windows setups, a broken **xonsh/pytest** plugin may require:
 
-- `experiments/results/paper_assets/paper_main_table.md`
-- `experiments/results/paper_assets/paper_captions.md`
-- `docs/assets/results_snapshot.json`
-- `docs/assets/results_snapshot.js`
-- `docs/assets/media/site_teaser.gif`
-- `docs/assets/media/site_teaser.mp4`
-- `docs/assets/media/site_teaser.webm`
+```powershell
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; python -m pytest tests -q -p pytest
+```
+
+Remaining **non-blocking** warnings (typical):
+
+- `datetime.utcnow()` deprecation (`nmea_writer.py`)
+- `pytest-asyncio` loop scope
+- matplotlib scatter in viz tests
+
+### 3.2 Single-epoch E2E (`exp_e2e_positioning.py`)
+
+```powershell
+$env:PYTHONPATH='python'; python experiments\exp_e2e_positioning.py
+```
+
+**Typical recent range** (DLL+PLL+weights, default CLI):
+
+- Open Sky position error: **~2–6 m** (single draw)
+- Urban Odaiba: **~8–12 m** when only a subset of satellites acquires through the gate
+
+Older doc baseline (**~9 m** open sky) was **before** DLL/PLL+weights; do not compare blindly to old screenshots.
+
+**Artifacts:** `experiments/results/e2e_positioning/e2e_positioning.png`
+
+### 3.3 Trajectory E2E (`exp_e2e_trajectory.py`)
+
+```powershell
+$env:PYTHONPATH='python'; python experiments\exp_e2e_trajectory.py
+```
+
+**Example summary** (defaults: `n_iter=15`, `dll_gain=0.22`, `pll_gain=0.18`, `max_epochs=30`):
+
+| Scenario | RMS [m] | P50 [m] | P95 [m] | Avg NLOS | Avg Acq |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Open Sky | **~13** | ~11 | ~21 | 0.0 | ~8 |
+| Odaiba | **~22–31** | ~14–28 | ~39–58 | ~0.9 | ~6 |
+| Shinjuku | **~90–95** | ~40–65 | ~130–190 | ~2.0 | ~6 |
+
+Urban ordering **Open < Odaiba < Shinjuku** (severity) has been consistent in recent runs.
+
+**Artifacts:** `experiments/results/e2e_positioning/e2e_trajectory_cdf.png`
+
+### 3.4 LOS/NLOS verification
+
+```powershell
+$env:PYTHONPATH='python'; python experiments\verify_real_ephemeris.py
+```
+
+Large PLATEAU meshes + BVH; runtime **~1 s/frame** order of magnitude on a representative GPU setup.
+
+**Artifact:** `experiments/results/los_nlos_verification/los_nlos_real_ephemeris.gif`
+
+### 3.5 Short sanity checks
+
+- `compute_batch` vs `compute` spot checks on `G01` (same TOW) matched at **0 m / 0 s** delta in past verification.
+- Sub-sample acquisition + roundtrip tests: see `tests/test_e2e_utils.py`, `tests/test_signal_sim.py`.
 
 ---
 
-## 13. 一言でまとめると
+## 4. Files That Matter Most Right Now
 
-この repo はもう「新しい gate を探す場所」ではない。  
-いまは **`PF+RobustClear-10K` を frozen mainline として提示し、PPC は design-space、BVH は systems、Hong Kong は limitation/control として正直に並べる段階** である。
+### 4.1 Ephemeris + urban sim
 
-Claude が次に入るなら、仕事は exploration ではなく **curation / packaging / manuscript integration** が中心になる。
+- `python/gnss_gpu/ephemeris.py`
+- `python/gnss_gpu/urban_signal_sim.py`
+
+### 4.2 E2E pipeline
+
+- `experiments/e2e_utils.py` — **single source of truth** for lag/chips, DLL/PLL batch, WLS weights  
+- `experiments/exp_e2e_positioning.py` — argparse  
+- `experiments/exp_e2e_trajectory.py` — argparse + `--max-epochs`
+
+### 4.3 Acquisition
+
+- `include/gnss_gpu/acquisition.h`
+- `src/acquisition/acquisition.cu`
+- `python/gnss_gpu/acquisition.py` (+ bindings as wired in the build)
+
+### 4.4 Tracking (used by E2E correlator)
+
+- `src/tracking/tracking.cu` — `batch_correlate` / EPLL math reference  
+- `python/gnss_gpu/_tracking_bindings.cpp`
+
+### 4.5 WLS
+
+- `src/positioning/wls.cu`
+
+### 4.6 Tests (focused)
+
+- `tests/test_ephemeris.py`
+- `tests/test_urban_signal_sim.py`
+- `tests/test_signal_sim.py`
+- `tests/test_e2e_utils.py`
+
+### 4.7 Short numbers note (optional)
+
+- `experiments/results/real_ephemeris_e2e_summary.md` — may be shorter than this file; verify dates.
+
+---
+
+## 5. Repo Churn Expectations
+
+Likely **modified** when you work on GNSS sim / E2E:
+
+- `python/gnss_gpu/ephemeris.py`, `urban_signal_sim.py`
+- `experiments/e2e_utils.py`, `exp_e2e_*.py`
+- `src/acquisition/acquisition.cu`, `include/gnss_gpu/acquisition.h`
+- `tests/test_*.py` as above
+
+Likely **modified when experiments rerun** (if tracked):
+
+- `experiments/results/e2e_positioning/*.png`
+- `experiments/results/los_nlos_verification/*.gif`
+
+**Ignored on purpose:** `experiments/data/`, `*.pyd` — do not delete these ignores without cause.
+
+---
+
+## 6. Reproduction Cookbook
+
+### 6.1 Build
+
+```powershell
+python -m pip install -e .
+```
+
+After edits to `src/**/*.cu`, `include/**/*.h`, `python/gnss_gpu/_*_bindings.cpp`.
+
+### 6.2 Focused tests
+
+```powershell
+$env:PYTHONPATH='python'; python -m pytest tests/test_ephemeris.py tests/test_urban_signal_sim.py tests/test_signal_sim.py tests/test_e2e_utils.py -q
+```
+
+### 6.3 Full suite
+
+```powershell
+$env:PYTHONPATH='python'; python -m pytest tests -q
+```
+
+### 6.4 Data fetch (if missing)
+
+```powershell
+python experiments\fetch_urbannav_subset.py --run Odaiba --output-dir experiments\data\urbannav
+python experiments\fetch_urbannav_subset.py --run Shinjuku --output-dir experiments\data\urbannav
+python experiments\fetch_plateau_subset.py --run-dir experiments\data\urbannav\Odaiba --preset tokyo23 --output-dir experiments\data\plateau_odaiba --mesh-radius 1
+python experiments\fetch_plateau_subset.py --run-dir experiments\data\urbannav\Shinjuku --preset tokyo23 --output-dir experiments\data\plateau_shinjuku --mesh-radius 1
+```
+
+### 6.5 Experiments
+
+```powershell
+$env:PYTHONPATH='python'; python experiments\verify_real_ephemeris.py
+$env:PYTHONPATH='python'; python experiments\exp_e2e_positioning.py
+$env:PYTHONPATH='python'; python experiments\exp_e2e_trajectory.py
+```
+
+**Tuning (examples):**
+
+```powershell
+python experiments\exp_e2e_positioning.py --pll-gain 0 --n-iter 20
+python experiments\exp_e2e_trajectory.py --max-epochs 10 --dll-gain 0.2
+```
+
+---
+
+## 7. Behavioral Notes (do not regress lightly)
+
+### 7.1 `AcquisitionResult.code_phase` is circular lag (samples)
+
+Over one 1 ms C/A period. **0** and **n_samples** are nearly equivalent lock points — use **circular** error in tests where needed.
+
+### 7.2 E2E reconstruction is approximate
+
+Ambiguity resolution + gate + `sat_clk` handling — **not** a full tracking receiver over many ms.
+
+### 7.3 Keep the **`2 km` gate** unless you replace it with real lock detection
+
+It prevents occasional **multi-km** false locks from dominating urban error statistics.
+
+### 7.4 Post-acquisition DLL/PLL is **not** time-stepped tracking
+
+The same 1 ms buffer is re-correlated; **do not** confuse with `scalar_tracking_update` advancing epoch time. If you wire `scalar_tracking_update`, you need a different story (multiple ms of data or coherent replay).
+
+### 7.5 Weights are **relative** precision
+
+`compute_e2e_wls_weights` mean-normalizes; global scale does not change WLS solution, relative spread does.
+
+---
+
+## 8. Recommended Next Tasks (for the next agent)
+
+### 8.1 **Promote E2E helpers into the package** (high value, medium effort)
+
+- Move or wrap: DLL/PLL batch refinement, weight computation, lag/chips helpers.
+- Target: e.g. `python/gnss_gpu/e2e_helpers.py` or extend `tracking.py` with a thin, tested API.
+- Keep `experiments/` as thin scripts.
+
+### 8.2 **Longer integration / multi-ms** (high effort)
+
+- Requires thinking about **nav bits**, data wipe, and buffer length; big accuracy lever but not a small patch.
+
+### 8.3 **PLL/DLL tuning and diagnostics** (medium)
+
+- Expose per-channel **final correlator outputs** or CSV logs for papers/debug.
+- Optional: adaptive gains vs `cn0`-like metrics from prompt power.
+
+### 8.4 **Warnings cleanup** (low)
+
+- `datetime.utcnow()` → timezone-aware API
+- pytest-asyncio config if the project standardizes on asyncio tests
+
+### 8.5 **CI / regression**
+
+- Optional: one **smoke** job that runs GPU-marked tests only when CUDA is present; document `PYTHONPATH` and plugin workarounds for Windows.
+
+---
+
+## 9. Suggested Reading Order (cold start)
+
+1. `experiments/e2e_utils.py` — current behavior in one place  
+2. `experiments/exp_e2e_positioning.py` — argparse + flow  
+3. `python/gnss_gpu/ephemeris.py` — `compute_batch`  
+4. `python/gnss_gpu/urban_signal_sim.py` — `sat_clk`  
+5. `src/acquisition/acquisition.cu` — parabolic peak  
+6. `src/tracking/tracking.cu` — correlator + discriminator reference  
+7. `tests/test_e2e_utils.py`
+
+---
+
+## 10. Known Non-Goals (unless the user redirects)
+
+- Redesigning marketing / paper website assets  
+- Rewriting the **entire** CUDA tracking stack “for elegance” without experiment proof  
+- Injecting **ideal geometric pseudoranges** back into E2E to fake better accuracy  
+- Switching the whole positioning core to a different solver without a scoped reason  
+
+---
+
+## 11. One-Paragraph Handoff
+
+Real-data ephemeris + `sat_clk` are integrated into simulation and E2E; Windows native builds are in a workable state; acquisition outputs **fractional** code lag; E2E uses ambiguity resolution and a **2 km** gate. On top of acquisition, experiments run **GPU E/P/L** refinement with **DLL + PLL** on a **single 1 ms** buffer (no fake time advance), then **weighted WLS** using prompt power, acquisition SNR ratio, and DLL magnitude. Trajectory Open Sky RMS is on the order of **~10–15 m** class in recent default runs (not centimeter-grade). The next sensible steps are **lifting helpers into `python/gnss_gpu/`**, optional **longer coherent integration**, and **maintenance** (warnings/CI) — not re-breaking the honest E2E story.
