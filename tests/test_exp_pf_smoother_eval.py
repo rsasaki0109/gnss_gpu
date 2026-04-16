@@ -22,6 +22,8 @@ from experiments.exp_pf_smoother_eval import (
     _collect_tracked_undiff_carrier_afv_inputs,
     _prepare_dd_carrier_undiff_fallback,
     _propagate_carrier_bias_tracker_tdcp,
+    _effective_dd_carrier_epoch_median_gate,
+    _should_skip_low_support_dd_carrier,
     _should_replace_weak_dd_with_fallback,
     build_arg_parser,
     load_pf_smoother_dataset,
@@ -346,7 +348,9 @@ def test_should_replace_weak_dd_with_fallback_requires_matching_guards():
         dd_result,
         dd_pr_result,
         raw_afv_median_cycles=0.22,
+        ess_ratio=None,
         weak_dd_max_pairs=4,
+        weak_dd_max_ess_ratio=None,
         weak_dd_min_raw_afv_median_cycles=0.15,
         weak_dd_require_no_dd_pr=True,
     ) is True
@@ -354,7 +358,9 @@ def test_should_replace_weak_dd_with_fallback_requires_matching_guards():
         dd_result,
         dd_pr_result,
         raw_afv_median_cycles=0.10,
+        ess_ratio=None,
         weak_dd_max_pairs=4,
+        weak_dd_max_ess_ratio=None,
         weak_dd_min_raw_afv_median_cycles=0.15,
         weak_dd_require_no_dd_pr=True,
     ) is False
@@ -362,10 +368,121 @@ def test_should_replace_weak_dd_with_fallback_requires_matching_guards():
         dd_result,
         _DummyDDResult(5),
         raw_afv_median_cycles=0.22,
+        ess_ratio=None,
         weak_dd_max_pairs=4,
+        weak_dd_max_ess_ratio=None,
         weak_dd_min_raw_afv_median_cycles=0.15,
         weak_dd_require_no_dd_pr=True,
     ) is False
+
+
+def test_should_replace_weak_dd_with_fallback_can_gate_on_ess_ratio():
+    dd_result = _DummyDDResult(11)
+
+    assert _should_replace_weak_dd_with_fallback(
+        dd_result,
+        None,
+        raw_afv_median_cycles=0.22,
+        ess_ratio=0.001,
+        weak_dd_max_pairs=None,
+        weak_dd_max_ess_ratio=0.01,
+        weak_dd_min_raw_afv_median_cycles=0.15,
+        weak_dd_require_no_dd_pr=True,
+    ) is True
+    assert _should_replace_weak_dd_with_fallback(
+        dd_result,
+        None,
+        raw_afv_median_cycles=0.22,
+        ess_ratio=0.02,
+        weak_dd_max_pairs=None,
+        weak_dd_max_ess_ratio=0.01,
+        weak_dd_min_raw_afv_median_cycles=0.15,
+        weak_dd_require_no_dd_pr=True,
+    ) is False
+
+
+def test_should_skip_low_support_dd_carrier_can_gate_on_spread():
+    dd_result = _DummyDDResult(11)
+
+    assert _should_skip_low_support_dd_carrier(
+        dd_result,
+        None,
+        ess_ratio=0.001,
+        spread_m=1.8,
+        raw_afv_median_cycles=0.22,
+        low_support_ess_ratio=0.01,
+        low_support_max_pairs=None,
+        low_support_max_spread_m=2.0,
+        low_support_min_raw_afv_median_cycles=0.20,
+        low_support_require_no_dd_pr=True,
+    ) is True
+    assert _should_skip_low_support_dd_carrier(
+        dd_result,
+        None,
+        ess_ratio=0.001,
+        spread_m=2.3,
+        raw_afv_median_cycles=0.22,
+        low_support_ess_ratio=0.01,
+        low_support_max_pairs=None,
+        low_support_max_spread_m=2.0,
+        low_support_min_raw_afv_median_cycles=0.20,
+        low_support_require_no_dd_pr=True,
+    ) is False
+    assert _should_skip_low_support_dd_carrier(
+        dd_result,
+        _DummyDDResult(5),
+        ess_ratio=0.001,
+        spread_m=1.8,
+        raw_afv_median_cycles=0.22,
+        low_support_ess_ratio=0.01,
+        low_support_max_pairs=None,
+        low_support_max_spread_m=2.0,
+        low_support_min_raw_afv_median_cycles=0.20,
+        low_support_require_no_dd_pr=True,
+    ) is False
+
+
+def test_effective_dd_carrier_epoch_median_gate_tightens_contextually():
+    assert _effective_dd_carrier_epoch_median_gate(
+        None,
+        base_epoch_median_cycles=None,
+        ess_ratio=0.001,
+        spread_m=1.8,
+        low_ess_epoch_median_cycles=0.18,
+        low_ess_max_ratio=0.01,
+        low_ess_max_spread_m=2.0,
+        low_ess_require_no_dd_pr=True,
+    ) == 0.18
+    assert _effective_dd_carrier_epoch_median_gate(
+        None,
+        base_epoch_median_cycles=0.20,
+        ess_ratio=0.001,
+        spread_m=1.8,
+        low_ess_epoch_median_cycles=0.18,
+        low_ess_max_ratio=0.01,
+        low_ess_max_spread_m=2.0,
+        low_ess_require_no_dd_pr=True,
+    ) == 0.18
+    assert _effective_dd_carrier_epoch_median_gate(
+        _DummyDDResult(5),
+        base_epoch_median_cycles=0.20,
+        ess_ratio=0.001,
+        spread_m=1.8,
+        low_ess_epoch_median_cycles=0.18,
+        low_ess_max_ratio=0.01,
+        low_ess_max_spread_m=2.0,
+        low_ess_require_no_dd_pr=True,
+    ) == 0.20
+    assert _effective_dd_carrier_epoch_median_gate(
+        None,
+        base_epoch_median_cycles=0.20,
+        ess_ratio=0.02,
+        spread_m=1.8,
+        low_ess_epoch_median_cycles=0.18,
+        low_ess_max_ratio=0.01,
+        low_ess_max_spread_m=2.0,
+        low_ess_require_no_dd_pr=True,
+    ) == 0.20
 
 
 def test_prepare_dd_carrier_undiff_fallback_marks_weak_dd_replacement():
@@ -423,6 +540,7 @@ def test_expand_cli_preset_argv_inlines_odaiba_reference_flags():
     assert expanded[expanded.index("--runs") + 1] == "Odaiba"
     assert "--dd-pseudorange" in expanded
     assert "--mupf-dd-fallback-undiff" in expanded
+    assert expanded[expanded.index("--mupf-dd-gate-adaptive-floor-cycles") + 1] == "0.18"
     assert expanded[-2:] == ["--max-epochs", "10"]
 
 
@@ -453,12 +571,34 @@ def test_odaiba_reference_preset_keeps_late_overrides():
     assert run_kwargs["carrier_anchor_max_residual_m"] == 1.0
 
 
+def test_odaiba_presets_keep_targeted_dd_gate_floors():
+    parser = build_arg_parser()
+
+    reference_args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_reference",
+    ]))
+    guarded_args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_reference_guarded",
+    ]))
+    stop_detect_args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_stop_detect",
+    ]))
+
+    assert reference_args.mupf_dd_gate_adaptive_floor_cycles == 0.18
+    assert guarded_args.mupf_dd_gate_adaptive_floor_cycles == 0.18
+    assert stop_detect_args.mupf_dd_gate_adaptive_floor_cycles == 0.25
+
+
 def test_parser_maps_weak_dd_fallback_flags():
     parser = build_arg_parser()
     args = parser.parse_args(_expand_cli_preset_argv([
         "--data-root", "/tmp/UrbanNav-Tokyo",
         "--preset", "odaiba_reference",
         "--mupf-dd-fallback-weak-dd-max-pairs", "4",
+        "--mupf-dd-fallback-weak-dd-max-ess-ratio", "0.01",
         "--mupf-dd-fallback-weak-dd-min-raw-afv-median-cycles", "0.15",
         "--mupf-dd-fallback-weak-dd-require-no-dd-pr",
     ]))
@@ -469,8 +609,53 @@ def test_parser_maps_weak_dd_fallback_flags():
         use_smoother=args.smoother,
     )
     assert run_kwargs["mupf_dd_fallback_weak_dd_max_pairs"] == 4
+    assert run_kwargs["mupf_dd_fallback_weak_dd_max_ess_ratio"] == 0.01
     assert run_kwargs["mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles"] == 0.15
     assert run_kwargs["mupf_dd_fallback_weak_dd_require_no_dd_pr"] is True
+
+
+def test_parser_maps_low_support_skip_flags():
+    parser = build_arg_parser()
+    args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_reference",
+        "--mupf-dd-skip-low-support-ess-ratio", "0.01",
+        "--mupf-dd-skip-low-support-max-spread-m", "2.0",
+        "--mupf-dd-skip-low-support-min-raw-afv-median-cycles", "0.20",
+        "--mupf-dd-skip-low-support-require-no-dd-pr",
+    ]))
+
+    run_kwargs = _namespace_to_run_kwargs(
+        args,
+        position_update_sigma=args.position_update_sigma,
+        use_smoother=args.smoother,
+    )
+    assert run_kwargs["mupf_dd_skip_low_support_ess_ratio"] == 0.01
+    assert run_kwargs["mupf_dd_skip_low_support_max_spread_m"] == 2.0
+    assert run_kwargs["mupf_dd_skip_low_support_min_raw_afv_median_cycles"] == 0.20
+    assert run_kwargs["mupf_dd_skip_low_support_require_no_dd_pr"] is True
+
+
+def test_parser_maps_low_ess_dd_gate_flags():
+    parser = build_arg_parser()
+    args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_reference",
+        "--mupf-dd-gate-low-ess-epoch-median-cycles", "0.18",
+        "--mupf-dd-gate-low-ess-max-ratio", "0.01",
+        "--mupf-dd-gate-low-ess-max-spread-m", "2.0",
+        "--mupf-dd-gate-low-ess-require-no-dd-pr",
+    ]))
+
+    run_kwargs = _namespace_to_run_kwargs(
+        args,
+        position_update_sigma=args.position_update_sigma,
+        use_smoother=args.smoother,
+    )
+    assert run_kwargs["mupf_dd_gate_low_ess_epoch_median_cycles"] == 0.18
+    assert run_kwargs["mupf_dd_gate_low_ess_max_ratio"] == 0.01
+    assert run_kwargs["mupf_dd_gate_low_ess_max_spread_m"] == 2.0
+    assert run_kwargs["mupf_dd_gate_low_ess_require_no_dd_pr"] is True
 
 
 @pytest.mark.skipif(

@@ -77,7 +77,7 @@ _CLI_PRESETS: dict[str, dict[str, object]] = {
             "--mupf-dd",
             "--mupf-dd-sigma-cycles", "0.20",
             "--mupf-dd-base-interp",
-            "--mupf-dd-gate-adaptive-floor-cycles", "0.25",
+            "--mupf-dd-gate-adaptive-floor-cycles", "0.18",
             "--mupf-dd-gate-adaptive-mad-mult", "3.0",
             "--mupf-dd-gate-ess-min-scale", "0.9",
             "--mupf-dd-gate-ess-max-scale", "1.1",
@@ -160,7 +160,7 @@ _CLI_PRESETS: dict[str, dict[str, object]] = {
             "--mupf-dd",
             "--mupf-dd-sigma-cycles", "0.20",
             "--mupf-dd-base-interp",
-            "--mupf-dd-gate-adaptive-floor-cycles", "0.25",
+            "--mupf-dd-gate-adaptive-floor-cycles", "0.18",
             "--mupf-dd-gate-adaptive-mad-mult", "3.0",
             "--mupf-dd-gate-ess-min-scale", "0.9",
             "--mupf-dd-gate-ess-max-scale", "1.1",
@@ -1098,7 +1098,9 @@ def _should_replace_weak_dd_with_fallback(
     dd_pseudorange_result,
     *,
     raw_afv_median_cycles: float | None,
+    ess_ratio: float | None,
     weak_dd_max_pairs: int | None,
+    weak_dd_max_ess_ratio: float | None,
     weak_dd_min_raw_afv_median_cycles: float | None,
     weak_dd_require_no_dd_pr: bool,
 ) -> bool:
@@ -1110,6 +1112,11 @@ def _should_replace_weak_dd_with_fallback(
     conds: list[bool] = []
     if weak_dd_max_pairs is not None:
         conds.append(int(getattr(dd_carrier_result, "n_dd", 0)) <= int(weak_dd_max_pairs))
+    if weak_dd_max_ess_ratio is not None:
+        conds.append(
+            ess_ratio is not None
+            and float(ess_ratio) <= float(weak_dd_max_ess_ratio)
+        )
     if weak_dd_min_raw_afv_median_cycles is not None:
         conds.append(
             raw_afv_median_cycles is not None
@@ -1120,6 +1127,87 @@ def _should_replace_weak_dd_with_fallback(
             dd_pseudorange_result is None or int(getattr(dd_pseudorange_result, "n_dd", 0)) < 3
         )
     return bool(conds) and all(conds)
+
+
+def _should_skip_low_support_dd_carrier(
+    dd_carrier_result,
+    dd_pseudorange_result,
+    *,
+    ess_ratio: float | None,
+    spread_m: float | None,
+    raw_afv_median_cycles: float | None,
+    low_support_ess_ratio: float | None,
+    low_support_max_pairs: int | None,
+    low_support_max_spread_m: float | None,
+    low_support_min_raw_afv_median_cycles: float | None,
+    low_support_require_no_dd_pr: bool,
+) -> bool:
+    """Return True when DD carrier should be skipped in low-support epochs."""
+
+    if dd_carrier_result is None or int(getattr(dd_carrier_result, "n_dd", 0)) < 3:
+        return False
+
+    conds: list[bool] = []
+    if low_support_ess_ratio is not None:
+        conds.append(
+            ess_ratio is not None
+            and float(ess_ratio) <= float(low_support_ess_ratio)
+        )
+    if low_support_max_pairs is not None:
+        conds.append(int(getattr(dd_carrier_result, "n_dd", 0)) <= int(low_support_max_pairs))
+    if low_support_max_spread_m is not None:
+        conds.append(
+            spread_m is not None
+            and float(spread_m) <= float(low_support_max_spread_m)
+        )
+    if low_support_min_raw_afv_median_cycles is not None:
+        conds.append(
+            raw_afv_median_cycles is not None
+            and float(raw_afv_median_cycles) >= float(low_support_min_raw_afv_median_cycles)
+        )
+    if low_support_require_no_dd_pr:
+        conds.append(
+            dd_pseudorange_result is None or int(getattr(dd_pseudorange_result, "n_dd", 0)) < 3
+        )
+    return bool(conds) and all(conds)
+
+
+def _effective_dd_carrier_epoch_median_gate(
+    dd_pseudorange_result,
+    *,
+    base_epoch_median_cycles: float | None,
+    ess_ratio: float | None,
+    spread_m: float | None,
+    low_ess_epoch_median_cycles: float | None,
+    low_ess_max_ratio: float | None,
+    low_ess_max_spread_m: float | None,
+    low_ess_require_no_dd_pr: bool,
+) -> float | None:
+    """Return the active DD-carrier epoch-median gate after contextual tightening."""
+
+    limit = base_epoch_median_cycles
+    if low_ess_epoch_median_cycles is None:
+        return limit
+
+    conds: list[bool] = []
+    if low_ess_max_ratio is not None:
+        conds.append(
+            ess_ratio is not None
+            and float(ess_ratio) <= float(low_ess_max_ratio)
+        )
+    if low_ess_max_spread_m is not None:
+        conds.append(
+            spread_m is not None
+            and float(spread_m) <= float(low_ess_max_spread_m)
+        )
+    if low_ess_require_no_dd_pr:
+        conds.append(
+            dd_pseudorange_result is None or int(getattr(dd_pseudorange_result, "n_dd", 0)) < 3
+        )
+    if conds and all(conds):
+        contextual_limit = float(low_ess_epoch_median_cycles)
+        return contextual_limit if limit is None else min(float(limit), contextual_limit)
+    return limit
 
 
 def _propagate_carrier_bias_tracker_tdcp(
@@ -1441,6 +1529,10 @@ def run_pf_with_optional_smoother(
     mupf_dd_gate_adaptive_floor_cycles: float | None = None,
     mupf_dd_gate_adaptive_mad_mult: float | None = None,
     mupf_dd_gate_epoch_median_cycles: float | None = None,
+    mupf_dd_gate_low_ess_epoch_median_cycles: float | None = None,
+    mupf_dd_gate_low_ess_max_ratio: float | None = None,
+    mupf_dd_gate_low_ess_max_spread_m: float | None = None,
+    mupf_dd_gate_low_ess_require_no_dd_pr: bool = False,
     mupf_dd_gate_ess_min_scale: float = 1.0,
     mupf_dd_gate_ess_max_scale: float = 1.0,
     mupf_dd_gate_spread_min_scale: float = 1.0,
@@ -1478,10 +1570,12 @@ def run_pf_with_optional_smoother(
     mupf_dd_fallback_tracked_sigma_min_scale: float = 1.0,
     mupf_dd_fallback_tracked_sigma_max_scale: float = 1.0,
     mupf_dd_fallback_weak_dd_max_pairs: int | None = None,
+    mupf_dd_fallback_weak_dd_max_ess_ratio: float | None = None,
     mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles: float | None = None,
     mupf_dd_fallback_weak_dd_require_no_dd_pr: bool = False,
     mupf_dd_skip_low_support_ess_ratio: float | None = None,
     mupf_dd_skip_low_support_max_pairs: int | None = None,
+    mupf_dd_skip_low_support_max_spread_m: float | None = None,
     mupf_dd_skip_low_support_min_raw_afv_median_cycles: float | None = None,
     mupf_dd_skip_low_support_require_no_dd_pr: bool = False,
     collect_epoch_diagnostics: bool = False,
@@ -1823,10 +1917,13 @@ def run_pf_with_optional_smoother(
             or (mupf_dd_gate_ess_min_scale != 1.0 or mupf_dd_gate_ess_max_scale != 1.0)
             or (mupf_dd_sigma_ess_low_ratio is not None and mupf_dd_sigma_ess_high_ratio is not None)
             or (mupf_dd_skip_low_support_ess_ratio is not None)
+            or (mupf_dd_gate_low_ess_max_ratio is not None)
         )
         need_gate_spread = (
             (dd_pseudorange_gate_spread_min_scale != 1.0 or dd_pseudorange_gate_spread_max_scale != 1.0)
             or (mupf_dd_gate_spread_min_scale != 1.0 or mupf_dd_gate_spread_max_scale != 1.0)
+            or (mupf_dd_skip_low_support_max_spread_m is not None)
+            or (mupf_dd_gate_low_ess_max_spread_m is not None)
         )
         if need_gate_est:
             gate_pf_est = np.asarray(pf.estimate()[:3], dtype=np.float64)
@@ -1972,13 +2069,23 @@ def run_pf_with_optional_smoother(
                     dd_cp_raw_abs_afv_median_cycles = float(np.median(dd_cp_abs_afv))
                     dd_cp_raw_abs_afv_max_cycles = float(np.max(dd_cp_abs_afv))
             if dd_result is not None and dd_result.n_dd >= 3:
+                dd_cp_epoch_median_cycles = _effective_dd_carrier_epoch_median_gate(
+                    dd_pr_result,
+                    base_epoch_median_cycles=mupf_dd_gate_epoch_median_cycles,
+                    ess_ratio=gate_ess_ratio,
+                    spread_m=gate_spread_m,
+                    low_ess_epoch_median_cycles=mupf_dd_gate_low_ess_epoch_median_cycles,
+                    low_ess_max_ratio=mupf_dd_gate_low_ess_max_ratio,
+                    low_ess_max_spread_m=mupf_dd_gate_low_ess_max_spread_m,
+                    low_ess_require_no_dd_pr=mupf_dd_gate_low_ess_require_no_dd_pr,
+                )
                 dd_result, dd_gate_stats = gate_dd_carrier(
                     dd_result,
                     pf_est,
                     pair_afv_max_cycles=mupf_dd_gate_afv_cycles,
                     adaptive_pair_floor_cycles=mupf_dd_gate_adaptive_floor_cycles,
                     adaptive_pair_mad_mult=mupf_dd_gate_adaptive_mad_mult,
-                    epoch_median_afv_max_cycles=mupf_dd_gate_epoch_median_cycles,
+                    epoch_median_afv_max_cycles=dd_cp_epoch_median_cycles,
                     threshold_scale=dd_cp_gate_scale,
                     min_pairs=3,
                 )
@@ -1986,25 +2093,18 @@ def run_pf_with_optional_smoother(
                 if dd_gate_stats.rejected_by_epoch:
                     n_dd_gate_epoch_skip += 1
             if dd_result is not None and dd_result.n_dd >= 3:
-                support_skip_conds: list[bool] = []
-                if mupf_dd_skip_low_support_ess_ratio is not None:
-                    support_skip_conds.append(
-                        gate_ess_ratio is not None
-                        and float(gate_ess_ratio) <= float(mupf_dd_skip_low_support_ess_ratio)
-                    )
-                if mupf_dd_skip_low_support_max_pairs is not None:
-                    support_skip_conds.append(
-                        int(dd_result.n_dd) <= int(mupf_dd_skip_low_support_max_pairs)
-                    )
-                if mupf_dd_skip_low_support_min_raw_afv_median_cycles is not None:
-                    support_skip_conds.append(
-                        dd_cp_raw_abs_afv_median_cycles is not None
-                        and float(dd_cp_raw_abs_afv_median_cycles)
-                        >= float(mupf_dd_skip_low_support_min_raw_afv_median_cycles)
-                    )
-                if mupf_dd_skip_low_support_require_no_dd_pr:
-                    support_skip_conds.append(dd_pr_result is None or dd_pr_result.n_dd < 3)
-                if support_skip_conds and all(support_skip_conds):
+                if _should_skip_low_support_dd_carrier(
+                    dd_result,
+                    dd_pr_result,
+                    ess_ratio=gate_ess_ratio,
+                    spread_m=gate_spread_m,
+                    raw_afv_median_cycles=dd_cp_raw_abs_afv_median_cycles,
+                    low_support_ess_ratio=mupf_dd_skip_low_support_ess_ratio,
+                    low_support_max_pairs=mupf_dd_skip_low_support_max_pairs,
+                    low_support_max_spread_m=mupf_dd_skip_low_support_max_spread_m,
+                    low_support_min_raw_afv_median_cycles=mupf_dd_skip_low_support_min_raw_afv_median_cycles,
+                    low_support_require_no_dd_pr=mupf_dd_skip_low_support_require_no_dd_pr,
+                ):
                     dd_result = None
                     dd_cp_support_skip = True
                     n_dd_skip_support_guard += 1
@@ -2015,7 +2115,9 @@ def run_pf_with_optional_smoother(
                     dd_result,
                     dd_pr_result,
                     raw_afv_median_cycles=dd_cp_raw_abs_afv_median_cycles,
+                    ess_ratio=gate_ess_ratio,
                     weak_dd_max_pairs=mupf_dd_fallback_weak_dd_max_pairs,
+                    weak_dd_max_ess_ratio=mupf_dd_fallback_weak_dd_max_ess_ratio,
                     weak_dd_min_raw_afv_median_cycles=mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles,
                     weak_dd_require_no_dd_pr=mupf_dd_fallback_weak_dd_require_no_dd_pr,
                 )
@@ -2047,7 +2149,7 @@ def run_pf_with_optional_smoother(
                     max_age_s=carrier_anchor_max_age_s,
                     max_continuity_residual_m=carrier_anchor_max_continuity_residual_m,
                     allow_weak_dd=True,
-                    weak_dd_max_pairs=mupf_dd_fallback_weak_dd_max_pairs,
+                    weak_dd_max_pairs=int(getattr(dd_result, "n_dd", 0)),
                 )
                 if replacement_attempt.afv is not None and replacement_attempt.sigma_cycles is not None:
                     fallback_attempt = _apply_dd_carrier_undiff_fallback(pf, replacement_attempt)
@@ -2551,6 +2653,10 @@ def run_pf_with_optional_smoother(
         "mupf_dd_gate_adaptive_floor_cycles": mupf_dd_gate_adaptive_floor_cycles,
         "mupf_dd_gate_adaptive_mad_mult": mupf_dd_gate_adaptive_mad_mult,
         "mupf_dd_gate_epoch_median_cycles": mupf_dd_gate_epoch_median_cycles,
+        "mupf_dd_gate_low_ess_epoch_median_cycles": mupf_dd_gate_low_ess_epoch_median_cycles,
+        "mupf_dd_gate_low_ess_max_ratio": mupf_dd_gate_low_ess_max_ratio,
+        "mupf_dd_gate_low_ess_max_spread_m": mupf_dd_gate_low_ess_max_spread_m,
+        "mupf_dd_gate_low_ess_require_no_dd_pr": mupf_dd_gate_low_ess_require_no_dd_pr,
         "mupf_dd_gate_ess_min_scale": mupf_dd_gate_ess_min_scale,
         "mupf_dd_gate_ess_max_scale": mupf_dd_gate_ess_max_scale,
         "mupf_dd_gate_spread_min_scale": mupf_dd_gate_spread_min_scale,
@@ -2588,8 +2694,14 @@ def run_pf_with_optional_smoother(
         "mupf_dd_fallback_tracked_sigma_min_scale": mupf_dd_fallback_tracked_sigma_min_scale,
         "mupf_dd_fallback_tracked_sigma_max_scale": mupf_dd_fallback_tracked_sigma_max_scale,
         "mupf_dd_fallback_weak_dd_max_pairs": mupf_dd_fallback_weak_dd_max_pairs,
+        "mupf_dd_fallback_weak_dd_max_ess_ratio": mupf_dd_fallback_weak_dd_max_ess_ratio,
         "mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles": mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles,
         "mupf_dd_fallback_weak_dd_require_no_dd_pr": mupf_dd_fallback_weak_dd_require_no_dd_pr,
+        "mupf_dd_skip_low_support_ess_ratio": mupf_dd_skip_low_support_ess_ratio,
+        "mupf_dd_skip_low_support_max_pairs": mupf_dd_skip_low_support_max_pairs,
+        "mupf_dd_skip_low_support_max_spread_m": mupf_dd_skip_low_support_max_spread_m,
+        "mupf_dd_skip_low_support_min_raw_afv_median_cycles": mupf_dd_skip_low_support_min_raw_afv_median_cycles,
+        "mupf_dd_skip_low_support_require_no_dd_pr": mupf_dd_skip_low_support_require_no_dd_pr,
         "n_dd_pr_used": n_dd_pr_used,
         "n_dd_pr_skip": n_dd_pr_skip,
         "n_dd_pr_gate_pairs_rejected": n_dd_pr_gate_pairs_rejected,
@@ -2785,6 +2897,10 @@ def _namespace_to_run_kwargs(
         "mupf_dd_gate_adaptive_floor_cycles": args.mupf_dd_gate_adaptive_floor_cycles,
         "mupf_dd_gate_adaptive_mad_mult": args.mupf_dd_gate_adaptive_mad_mult,
         "mupf_dd_gate_epoch_median_cycles": args.mupf_dd_gate_epoch_median_cycles,
+        "mupf_dd_gate_low_ess_epoch_median_cycles": args.mupf_dd_gate_low_ess_epoch_median_cycles,
+        "mupf_dd_gate_low_ess_max_ratio": args.mupf_dd_gate_low_ess_max_ratio,
+        "mupf_dd_gate_low_ess_max_spread_m": args.mupf_dd_gate_low_ess_max_spread_m,
+        "mupf_dd_gate_low_ess_require_no_dd_pr": args.mupf_dd_gate_low_ess_require_no_dd_pr,
         "mupf_dd_gate_ess_min_scale": args.mupf_dd_gate_ess_min_scale,
         "mupf_dd_gate_ess_max_scale": args.mupf_dd_gate_ess_max_scale,
         "mupf_dd_gate_spread_min_scale": args.mupf_dd_gate_spread_min_scale,
@@ -2822,10 +2938,12 @@ def _namespace_to_run_kwargs(
         "mupf_dd_fallback_tracked_sigma_min_scale": args.mupf_dd_fallback_tracked_sigma_min_scale,
         "mupf_dd_fallback_tracked_sigma_max_scale": args.mupf_dd_fallback_tracked_sigma_max_scale,
         "mupf_dd_fallback_weak_dd_max_pairs": args.mupf_dd_fallback_weak_dd_max_pairs,
+        "mupf_dd_fallback_weak_dd_max_ess_ratio": args.mupf_dd_fallback_weak_dd_max_ess_ratio,
         "mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles": args.mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles,
         "mupf_dd_fallback_weak_dd_require_no_dd_pr": args.mupf_dd_fallback_weak_dd_require_no_dd_pr,
         "mupf_dd_skip_low_support_ess_ratio": args.mupf_dd_skip_low_support_ess_ratio,
         "mupf_dd_skip_low_support_max_pairs": args.mupf_dd_skip_low_support_max_pairs,
+        "mupf_dd_skip_low_support_max_spread_m": args.mupf_dd_skip_low_support_max_spread_m,
         "mupf_dd_skip_low_support_min_raw_afv_median_cycles": args.mupf_dd_skip_low_support_min_raw_afv_median_cycles,
         "mupf_dd_skip_low_support_require_no_dd_pr": args.mupf_dd_skip_low_support_require_no_dd_pr,
         "collect_epoch_diagnostics": _namespace_requests_epoch_diagnostics(args),
@@ -3019,6 +3137,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Adaptive DD carrier pair gate uses median + k*MAD with this k")
     parser.add_argument("--mupf-dd-gate-epoch-median-cycles", type=float, default=None,
                         help="Skip a DD carrier epoch when kept-pair median abs AFV exceeds this threshold (cycles)")
+    parser.add_argument("--mupf-dd-gate-low-ess-epoch-median-cycles", type=float, default=None,
+                        help="Contextual DD carrier epoch-median AFV limit (cycles) used under low-ESS conditions")
+    parser.add_argument("--mupf-dd-gate-low-ess-max-ratio", type=float, default=None,
+                        help="Enable contextual DD carrier epoch-median gate when ESS ratio is at or below this threshold")
+    parser.add_argument("--mupf-dd-gate-low-ess-max-spread-m", type=float, default=None,
+                        help="Require PF spread to stay at or below this threshold when applying the contextual DD carrier epoch-median gate")
+    parser.add_argument("--mupf-dd-gate-low-ess-require-no-dd-pr", action="store_true",
+                        help="Require DD pseudorange to be absent before applying the contextual DD carrier epoch-median gate")
     parser.add_argument("--mupf-dd-gate-ess-min-scale", type=float, default=1.0,
                         help="ESS-linked lower multiplier for DD carrier gate thresholds")
     parser.add_argument("--mupf-dd-gate-ess-max-scale", type=float, default=1.0,
@@ -3093,6 +3219,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Maximum multiplier for tracked undiff fallback sigma when continuity degrades")
     parser.add_argument("--mupf-dd-fallback-weak-dd-max-pairs", type=int, default=None,
                         help="If set, try undiff carrier fallback before DD carrier update when kept DD carrier pairs are at or below this threshold")
+    parser.add_argument("--mupf-dd-fallback-weak-dd-max-ess-ratio", type=float, default=None,
+                        help="If set, weak-DD fallback replacement also requires PF ESS ratio to be at or below this threshold")
     parser.add_argument("--mupf-dd-fallback-weak-dd-min-raw-afv-median-cycles", type=float, default=None,
                         help="When weak-DD fallback replacement is enabled, require raw abs AFV median to be at or above this threshold")
     parser.add_argument("--mupf-dd-fallback-weak-dd-require-no-dd-pr", action="store_true",
@@ -3101,6 +3229,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Skip DD carrier update when ESS ratio is at or below this threshold")
     parser.add_argument("--mupf-dd-skip-low-support-max-pairs", type=int, default=None,
                         help="Skip DD carrier update when kept DD carrier pairs are at or below this threshold")
+    parser.add_argument("--mupf-dd-skip-low-support-max-spread-m", type=float, default=None,
+                        help="Skip DD carrier update only when PF spread is at or below this threshold")
     parser.add_argument("--mupf-dd-skip-low-support-min-raw-afv-median-cycles", type=float, default=None,
                         help="Skip DD carrier update when raw abs AFV median is at or above this threshold")
     parser.add_argument("--mupf-dd-skip-low-support-require-no-dd-pr", action="store_true",
@@ -3255,6 +3385,10 @@ def main(argv: list[str] | None = None) -> int:
                 "mupf_dd_gate_adaptive_floor_cycles": args.mupf_dd_gate_adaptive_floor_cycles,
                 "mupf_dd_gate_adaptive_mad_mult": args.mupf_dd_gate_adaptive_mad_mult,
                 "mupf_dd_gate_epoch_median_cycles": args.mupf_dd_gate_epoch_median_cycles,
+                "mupf_dd_gate_low_ess_epoch_median_cycles": args.mupf_dd_gate_low_ess_epoch_median_cycles,
+                "mupf_dd_gate_low_ess_max_ratio": args.mupf_dd_gate_low_ess_max_ratio,
+                "mupf_dd_gate_low_ess_max_spread_m": args.mupf_dd_gate_low_ess_max_spread_m,
+                "mupf_dd_gate_low_ess_require_no_dd_pr": args.mupf_dd_gate_low_ess_require_no_dd_pr,
                 "mupf_dd_gate_ess_min_scale": args.mupf_dd_gate_ess_min_scale,
                 "mupf_dd_gate_ess_max_scale": args.mupf_dd_gate_ess_max_scale,
                 "mupf_dd_gate_spread_min_scale": args.mupf_dd_gate_spread_min_scale,
@@ -3288,10 +3422,12 @@ def main(argv: list[str] | None = None) -> int:
                 "mupf_dd_fallback_tracked_min_stable_epochs": args.mupf_dd_fallback_tracked_min_stable_epochs,
                 "mupf_dd_fallback_tracked_min_sats": args.mupf_dd_fallback_tracked_min_sats,
                 "mupf_dd_fallback_weak_dd_max_pairs": args.mupf_dd_fallback_weak_dd_max_pairs,
+                "mupf_dd_fallback_weak_dd_max_ess_ratio": args.mupf_dd_fallback_weak_dd_max_ess_ratio,
                 "mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles": args.mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles,
                 "mupf_dd_fallback_weak_dd_require_no_dd_pr": args.mupf_dd_fallback_weak_dd_require_no_dd_pr,
                 "mupf_dd_skip_low_support_ess_ratio": args.mupf_dd_skip_low_support_ess_ratio,
                 "mupf_dd_skip_low_support_max_pairs": args.mupf_dd_skip_low_support_max_pairs,
+                "mupf_dd_skip_low_support_max_spread_m": args.mupf_dd_skip_low_support_max_spread_m,
                 "mupf_dd_skip_low_support_min_raw_afv_median_cycles": args.mupf_dd_skip_low_support_min_raw_afv_median_cycles,
                 "mupf_dd_skip_low_support_require_no_dd_pr": args.mupf_dd_skip_low_support_require_no_dd_pr,
                 "n_dd_skip_support_guard": int(out.get("n_dd_skip_support_guard", 0)),
