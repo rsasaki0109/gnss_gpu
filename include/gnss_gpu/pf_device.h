@@ -79,6 +79,20 @@ void pf_device_weight(PFDeviceState* state,
     const double* weights_sat,
     int n_sat, double sigma_pr, double nu = 0.0);
 
+// Weight update using double-differenced pseudorange.
+// Eliminates receiver clock bias; uses satellite differencing geometry.
+// sat_ecef_k: [n_dd, 3] non-ref satellite positions
+// ref_ecef: [n_dd, 3] reference satellite positions per DD pair
+// dd_pseudorange: [n_dd] DD pseudorange observations in meters
+// base_range_k: [n_dd] base-to-sat_k ranges [m]
+// base_range_ref: [n_dd] base-to-ref ranges [m]
+// weights_dd: [n_dd] per-DD-pair weights
+void pf_device_weight_dd_pseudorange(PFDeviceState* state,
+    const double* sat_ecef_k, const double* ref_ecef,
+    const double* dd_pseudorange, const double* base_range_k,
+    const double* base_range_ref, const double* weights_dd,
+    int n_dd, double sigma_pr);
+
 // Weight update using GMM likelihood (LOS + NLOS mixture components)
 // w_los: weight of LOS component (e.g. 0.7), sigma_pr is sigma_los
 // mu_nlos: mean bias of NLOS component [m], sigma_nlos: std of NLOS component [m]
@@ -100,16 +114,18 @@ void pf_device_weight_carrier_afv(PFDeviceState* state,
 // Weight update using DD carrier phase AFV (Double-Differenced).
 // Eliminates receiver clock bias; uses satellite differencing geometry.
 // sat_ecef_k: [n_dd, 3] non-ref satellite positions
-// ref_ecef: [3] reference satellite position
+// ref_ecef: [n_dd, 3] reference satellite positions per DD pair
 // dd_carrier: [n_dd] DD carrier phase observations in cycles
 // base_range_k: [n_dd] base-to-sat_k ranges [m]
-// base_range_ref: base-to-ref range [m]
+// base_range_ref: [n_dd] base-to-ref ranges [m]
 // weights_dd: [n_dd] per-DD-pair weights
+// wavelengths_m: [n_dd] carrier wavelengths [m]
 void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     const double* sat_ecef_k, const double* ref_ecef,
     const double* dd_carrier, const double* base_range_k,
-    double base_range_ref, const double* weights_dd,
-    int n_dd, double wavelength = 0.190293673, double sigma_cycles = 0.05);
+    const double* base_range_ref, const double* weights_dd,
+    const double* wavelengths_m,
+    int n_dd, double sigma_cycles = 0.05);
 
 // Position-domain update - apply soft constraint from external position estimate
 void pf_device_position_update(PFDeviceState* state,
@@ -120,6 +136,11 @@ void pf_device_shift_clock_bias(PFDeviceState* state, double shift);
 
 // ESS - compute on device, return scalar to host
 double pf_device_ess(const PFDeviceState* state);
+
+// Position spread - weighted RMS distance from a reference position [m].
+double pf_device_position_spread(
+    const PFDeviceState* state,
+    double center_x, double center_y, double center_z);
 
 // Resample - operates entirely on device
 void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed);

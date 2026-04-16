@@ -10,6 +10,8 @@ This eliminates the #1 performance bottleneck: cudaMalloc/cudaFree and
 full particle array H2D/D2H transfers on every call.
 """
 
+from types import SimpleNamespace
+
 import numpy as np
 
 
@@ -43,12 +45,14 @@ class ParticleFilterDevice:
             pf_device_initialize,
             pf_device_predict,
             pf_device_weight,
+            pf_device_weight_dd_pseudorange,
             pf_device_weight_gmm,
             pf_device_weight_carrier_afv,
             pf_device_weight_dd_carrier_afv,
             pf_device_position_update,
             pf_device_shift_clock_bias,
             pf_device_ess,
+            pf_device_position_spread,
             pf_device_resample_systematic,
             pf_device_resample_megopolis,
             pf_device_estimate,
@@ -62,12 +66,14 @@ class ParticleFilterDevice:
         self._pf_device_initialize = pf_device_initialize
         self._pf_device_predict = pf_device_predict
         self._pf_device_weight = pf_device_weight
+        self._pf_device_weight_dd_pseudorange = pf_device_weight_dd_pseudorange
         self._pf_device_weight_gmm = pf_device_weight_gmm
         self._pf_device_weight_carrier_afv = pf_device_weight_carrier_afv
         self._pf_device_weight_dd_carrier_afv = pf_device_weight_dd_carrier_afv
         self._pf_device_position_update = pf_device_position_update
         self._pf_device_shift_clock_bias = pf_device_shift_clock_bias
         self._pf_device_ess = pf_device_ess
+        self._pf_device_position_spread = pf_device_position_spread
         self._pf_device_resample_systematic = pf_device_resample_systematic
         self._pf_device_resample_megopolis = pf_device_resample_megopolis
         self._pf_device_estimate = pf_device_estimate
@@ -158,7 +164,7 @@ class ParticleFilterDevice:
             float(dt), sp, float(self.sigma_cb),
             self.seed, self._step)
 
-    def update(self, sat_ecef, pseudoranges, weights=None, resample=True):
+    def update(self, sat_ecef, pseudoranges, weights=None, sigma_pr=None, resample=True):
         """Weight update with pseudorange observations.
 
         Only satellite data (~1KB) transferred to GPU.
@@ -172,6 +178,8 @@ class ParticleFilterDevice:
             Observed pseudoranges [m].
         weights : array_like, shape (n_sat,), optional
             Per-satellite weights (1/sigma^2). Defaults to ones.
+        sigma_pr : float, optional
+            Per-call pseudorange sigma [m]. Defaults to ``self.sigma_pr``.
         resample : bool
             If True (default), run ESS-based adaptive resampling after weighting.
             Set False to snapshot log-weights and particles before resampling (FFBSi).
@@ -187,11 +195,12 @@ class ParticleFilterDevice:
             weights = np.ones(n_sat, dtype=np.float64)
         else:
             weights = np.asarray(weights, dtype=np.float64).ravel()
+        sp = float(self.sigma_pr if sigma_pr is None else sigma_pr)
 
         self._pf_device_weight(
             self._state,
             sat.ravel(), pr, weights,
-            n_sat, float(self.sigma_pr), float(self.nu))
+            n_sat, sp, float(self.nu))
 
         if resample:
             _ = self.resample_if_needed()
@@ -245,6 +254,39 @@ class ParticleFilterDevice:
         if resample:
             _ = self.resample_if_needed()
 
+    def update_dd_pseudorange(self, dd_result, sigma_pr=0.75, resample=True):
+        """Update weights using DD pseudorange likelihood.
+
+        Double-differenced pseudorange eliminates receiver clock bias from both
+        rover and base, so weighting depends only on the 3D particle position.
+
+        Parameters
+        ----------
+        dd_result : DDPseudorangeResult
+            Output from :meth:`DDPseudorangeComputer.compute_dd`.
+        sigma_pr : float
+            Standard deviation of the DD pseudorange residual [m].
+        resample : bool
+            If True (default), run ESS-based adaptive resampling after weighting.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        self._pf_device_weight_dd_pseudorange(
+            self._state,
+            dd_result.sat_ecef_k.ravel(),
+            dd_result.sat_ecef_ref.ravel(),
+            dd_result.dd_pseudorange_m,
+            dd_result.base_range_k,
+            dd_result.base_range_ref,
+            dd_result.dd_weights,
+            dd_result.n_dd,
+            float(sigma_pr),
+        )
+
+        if resample:
+            _ = self.resample_if_needed()
+
     def update_carrier_afv(self, sat_ecef, carrier_phase_cycles, weights=None,
                            wavelength=0.190293673, sigma_cycles=0.05, resample=True):
         """Update weights using carrier phase AFV likelihood (no ambiguity needed).
@@ -289,7 +331,7 @@ class ParticleFilterDevice:
         if resample:
             _ = self.resample_if_needed()
 
-    def update_dd_carrier_afv(self, dd_result, wavelength=0.190293673,
+    def update_dd_carrier_afv(self, dd_result, wavelength=None,
                                sigma_cycles=0.05, resample=True):
         """Update weights using DD carrier phase AFV likelihood.
 
@@ -301,8 +343,9 @@ class ParticleFilterDevice:
         ----------
         dd_result : DDResult
             Output from :meth:`DDCarrierComputer.compute_dd`.
-        wavelength : float
-            Carrier wavelength [m]. Default is L1 GPS.
+        wavelength : float or None
+            Optional wavelength override [m]. If omitted, use per-DD-pair
+            wavelengths from ``dd_result`` when available.
         sigma_cycles : float
             Standard deviation of DD AFV residual [cycles]. Default 0.05.
         resample : bool
@@ -311,16 +354,26 @@ class ParticleFilterDevice:
         if not self._initialized:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
 
+        if wavelength is None:
+            wavelengths = getattr(dd_result, "wavelengths_m", None)
+            if wavelengths is None:
+                wavelengths = np.full(dd_result.n_dd, 0.190293673, dtype=np.float64)
+            else:
+                wavelengths = np.asarray(wavelengths, dtype=np.float64).ravel()
+        else:
+            wavelengths = np.full(dd_result.n_dd, float(wavelength), dtype=np.float64)
+
         self._pf_device_weight_dd_carrier_afv(
             self._state,
             dd_result.sat_ecef_k.ravel(),
             dd_result.sat_ecef_ref.ravel(),
             dd_result.dd_carrier_cycles,
             dd_result.base_range_k,
-            float(dd_result.base_range_ref),
+            dd_result.base_range_ref,
             dd_result.dd_weights,
+            wavelengths,
             dd_result.n_dd,
-            float(wavelength), float(sigma_cycles))
+            float(sigma_cycles))
 
         if resample:
             _ = self.resample_if_needed()
@@ -489,6 +542,34 @@ class ParticleFilterDevice:
 
         return self._pf_device_ess(self._state)
 
+    def get_position_spread(self, center=None):
+        """Compute weighted RMS particle spread around a reference point.
+
+        Parameters
+        ----------
+        center : array_like, shape (3,), optional
+            Reference ECEF position [m]. If omitted, uses the current weighted
+            mean estimate.
+
+        Returns
+        -------
+        spread_m : float
+            Weighted RMS particle radius [m].
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        if center is None:
+            center_arr = np.asarray(self.estimate()[:3], dtype=np.float64)
+        else:
+            center_arr = np.asarray(center, dtype=np.float64).ravel()
+            if center_arr.size != 3:
+                raise ValueError("center must have shape (3,)")
+        return self._pf_device_position_spread(
+            self._state,
+            float(center_arr[0]), float(center_arr[1]), float(center_arr[2]),
+        )
+
     def sync(self):
         """Explicitly synchronize the CUDA stream.
 
@@ -510,10 +591,27 @@ class ParticleFilterDevice:
         Call this before the forward pass. After all epochs are processed,
         call ``smooth()`` to run a backward pass and return smoothed estimates.
         """
-        self._smooth_epochs = []  # list of (estimate, sat_ecef, pr, weights, velocity, dt, spp_ref)
+        self._smooth_epochs = []
         self._smooth_enabled = True
 
-    def store_epoch(self, sat_ecef, pseudoranges, weights, velocity, dt, spp_ref=None):
+    def store_epoch(
+        self,
+        sat_ecef,
+        pseudoranges,
+        weights,
+        velocity,
+        dt,
+        spp_ref=None,
+        dd_pseudorange=None,
+        dd_pseudorange_sigma=None,
+        dd_carrier=None,
+        dd_carrier_sigma=None,
+        carrier_anchor_pseudorange=None,
+        carrier_anchor_sigma=None,
+        carrier_afv=None,
+        carrier_afv_sigma=None,
+        carrier_afv_wavelength=None,
+    ):
         """Store observation data for the current epoch (call after update/estimate).
 
         Parameters
@@ -526,10 +624,82 @@ class ParticleFilterDevice:
             Time step.
         spp_ref : array_like or None
             SPP reference position for position_update (None to skip).
+        dd_pseudorange : object or None
+            DD pseudorange result used in the forward pass. When present, the
+            backward pass replays the same DD update instead of undifferenced PR.
+        dd_pseudorange_sigma : float or None
+            Sigma used for the forward DD pseudorange update.
+        dd_carrier : object or None
+            DD carrier AFV result used in the forward pass. When present, the
+            backward pass replays the same DD carrier update after DD PR / PR.
+        dd_carrier_sigma : float or None
+            Sigma used for the forward DD carrier AFV update.
+        carrier_anchor_pseudorange : dict or None
+            Carrier-bias-conditioned pseudorange-like update used in the
+            forward pass. When present, the backward pass replays it after
+            DD carrier / carrier AFV updates.
+        carrier_anchor_sigma : float or None
+            Sigma used for the forward carrier-anchor pseudorange update.
+        carrier_afv : dict or None
+            Undifferenced carrier AFV observation used in the forward pass.
+            When present, the backward pass replays the same carrier AFV update.
+        carrier_afv_sigma : float or None
+            Sigma used for the forward undifferenced carrier AFV update.
+        carrier_afv_wavelength : float or None
+            Carrier wavelength used for the undifferenced AFV update.
         """
         if not getattr(self, '_smooth_enabled', False):
             return
         est = np.asarray(self.estimate(), dtype=np.float64)
+        dd_pr_store = None
+        if dd_pseudorange is not None:
+            dd_pr_store = {
+                'dd_pseudorange_m': np.asarray(dd_pseudorange.dd_pseudorange_m, dtype=np.float64).copy(),
+                'sat_ecef_k': np.asarray(dd_pseudorange.sat_ecef_k, dtype=np.float64).copy(),
+                'sat_ecef_ref': np.asarray(dd_pseudorange.sat_ecef_ref, dtype=np.float64).copy(),
+                'base_range_k': np.asarray(dd_pseudorange.base_range_k, dtype=np.float64).copy(),
+                'base_range_ref': np.asarray(dd_pseudorange.base_range_ref, dtype=np.float64).copy(),
+                'dd_weights': np.asarray(dd_pseudorange.dd_weights, dtype=np.float64).copy(),
+                'ref_sat_ids': tuple(getattr(dd_pseudorange, 'ref_sat_ids', ())),
+                'n_dd': int(dd_pseudorange.n_dd),
+            }
+        dd_cp_store = None
+        if dd_carrier is not None:
+            dd_cp_store = {
+                'dd_carrier_cycles': np.asarray(dd_carrier.dd_carrier_cycles, dtype=np.float64).copy(),
+                'sat_ecef_k': np.asarray(dd_carrier.sat_ecef_k, dtype=np.float64).copy(),
+                'sat_ecef_ref': np.asarray(dd_carrier.sat_ecef_ref, dtype=np.float64).copy(),
+                'base_range_k': np.asarray(dd_carrier.base_range_k, dtype=np.float64).copy(),
+                'base_range_ref': np.asarray(dd_carrier.base_range_ref, dtype=np.float64).copy(),
+                'dd_weights': np.asarray(dd_carrier.dd_weights, dtype=np.float64).copy(),
+                'wavelengths_m': np.asarray(dd_carrier.wavelengths_m, dtype=np.float64).copy(),
+                'ref_sat_ids': tuple(getattr(dd_carrier, 'ref_sat_ids', ())),
+                'n_dd': int(dd_carrier.n_dd),
+            }
+        carrier_anchor_store = None
+        if carrier_anchor_pseudorange is not None:
+            carrier_anchor_store = {
+                'sat_ecef': np.asarray(
+                    carrier_anchor_pseudorange['sat_ecef'], dtype=np.float64
+                ).copy(),
+                'pseudoranges': np.asarray(
+                    carrier_anchor_pseudorange['pseudoranges'], dtype=np.float64
+                ).copy(),
+                'weights': np.asarray(
+                    carrier_anchor_pseudorange['weights'], dtype=np.float64
+                ).copy(),
+                'n_sat': int(len(np.asarray(carrier_anchor_pseudorange['pseudoranges']).ravel())),
+            }
+        carrier_afv_store = None
+        if carrier_afv is not None:
+            carrier_afv_store = {
+                'sat_ecef': np.asarray(carrier_afv['sat_ecef'], dtype=np.float64).copy(),
+                'carrier_phase_cycles': np.asarray(
+                    carrier_afv['carrier_phase_cycles'], dtype=np.float64
+                ).copy(),
+                'weights': np.asarray(carrier_afv['weights'], dtype=np.float64).copy(),
+                'n_sat': int(len(np.asarray(carrier_afv['carrier_phase_cycles']).ravel())),
+            }
         self._smooth_epochs.append({
             'estimate': est[:3].copy(),
             'sat_ecef': np.asarray(sat_ecef, dtype=np.float64).copy(),
@@ -538,6 +708,25 @@ class ParticleFilterDevice:
             'velocity': np.asarray(velocity, dtype=np.float64).copy() if velocity is not None else None,
             'dt': float(dt),
             'spp_ref': np.asarray(spp_ref, dtype=np.float64).copy() if spp_ref is not None else None,
+            'dd_pseudorange': dd_pr_store,
+            'dd_pseudorange_sigma': (
+                None if dd_pseudorange_sigma is None else float(dd_pseudorange_sigma)
+            ),
+            'dd_carrier': dd_cp_store,
+            'dd_carrier_sigma': (
+                None if dd_carrier_sigma is None else float(dd_carrier_sigma)
+            ),
+            'carrier_anchor_pseudorange': carrier_anchor_store,
+            'carrier_anchor_sigma': (
+                None if carrier_anchor_sigma is None else float(carrier_anchor_sigma)
+            ),
+            'carrier_afv': carrier_afv_store,
+            'carrier_afv_sigma': (
+                None if carrier_afv_sigma is None else float(carrier_afv_sigma)
+            ),
+            'carrier_afv_wavelength': (
+                None if carrier_afv_wavelength is None else float(carrier_afv_wavelength)
+            ),
         })
 
     def smooth(self, position_update_sigma=None):
@@ -594,8 +783,61 @@ class ParticleFilterDevice:
             sat = ep['sat_ecef'].reshape(-1, 3)
             pr = ep['pseudoranges']
             w = ep['weights']
-            bwd_pf.correct_clock_bias(sat, pr)
-            bwd_pf.update(sat, pr, weights=w)
+            dd_ep = ep.get('dd_pseudorange')
+            dd_cp_ep = ep.get('dd_carrier')
+            carrier_anchor_ep = ep.get('carrier_anchor_pseudorange')
+            carrier_afv_ep = ep.get('carrier_afv')
+            if dd_ep is not None:
+                bwd_pf.update_dd_pseudorange(
+                    SimpleNamespace(**dd_ep),
+                    sigma_pr=(
+                        float(ep['dd_pseudorange_sigma'])
+                        if ep.get('dd_pseudorange_sigma') is not None
+                        else self.sigma_pr
+                    ),
+                )
+            else:
+                bwd_pf.correct_clock_bias(sat, pr)
+                bwd_pf.update(sat, pr, weights=w)
+
+            if dd_cp_ep is not None:
+                bwd_pf.resample_if_needed()
+                bwd_pf.update_dd_carrier_afv(
+                    SimpleNamespace(**dd_cp_ep),
+                    sigma_cycles=(
+                        float(ep['dd_carrier_sigma'])
+                        if ep.get('dd_carrier_sigma') is not None
+                        else 0.05
+                    ),
+                )
+            if carrier_anchor_ep is not None:
+                bwd_pf.update(
+                    carrier_anchor_ep['sat_ecef'],
+                    carrier_anchor_ep['pseudoranges'],
+                    weights=carrier_anchor_ep['weights'],
+                    sigma_pr=(
+                        float(ep['carrier_anchor_sigma'])
+                        if ep.get('carrier_anchor_sigma') is not None
+                        else self.sigma_pr
+                    ),
+                )
+            if carrier_afv_ep is not None:
+                bwd_pf.resample_if_needed()
+                bwd_pf.update_carrier_afv(
+                    carrier_afv_ep['sat_ecef'],
+                    carrier_afv_ep['carrier_phase_cycles'],
+                    weights=carrier_afv_ep['weights'],
+                    wavelength=(
+                        float(ep['carrier_afv_wavelength'])
+                        if ep.get('carrier_afv_wavelength') is not None
+                        else 0.190293673
+                    ),
+                    sigma_cycles=(
+                        float(ep['carrier_afv_sigma'])
+                        if ep.get('carrier_afv_sigma') is not None
+                        else 0.05
+                    ),
+                )
 
             pu_sigma = position_update_sigma if position_update_sigma is not None else None
             if pu_sigma is not None and ep['spp_ref'] is not None:

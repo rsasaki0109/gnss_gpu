@@ -115,6 +115,61 @@ __global__ void pfd_weight_kernel(const double* px, const double* py,
     log_weights[tid] = log_w;
 }
 
+// --- DD pseudorange weight kernel ---
+// Double-differenced pseudorange eliminates receiver clock bias from both rover
+// and base. The expected DD range is:
+//   dd_expected = range_to_k - range_to_ref - base_range_k + base_range_ref
+__global__ void pfd_weight_dd_pseudorange_kernel(
+    const double* px, const double* py,
+    const double* pz,
+    const double* dd_data,      // layout: [sat_k: n_dd*3][ref: n_dd*3][dd_pr: n_dd][base_range_k: n_dd][base_range_ref: n_dd][weights: n_dd]
+    double* log_weights,
+    int N, int n_dd,
+    double sigma_pr) {
+
+    extern __shared__ double s_data[];
+    double* s_sat_k = s_data;                   // n_dd * 3
+    double* s_ref = s_data + n_dd * 3;         // n_dd * 3
+    double* s_dd_pr = s_data + n_dd * 6;       // n_dd
+    double* s_br_k = s_data + n_dd * 7;        // n_dd
+    double* s_br_ref = s_data + n_dd * 8;      // n_dd
+    double* s_ws = s_data + n_dd * 9;          // n_dd
+
+    int total_shared = n_dd * 10;
+    for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
+        s_data[i] = dd_data[i];
+    }
+    __syncthreads();
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    double x = px[tid];
+    double y = py[tid];
+    double z = pz[tid];
+
+    double inv_sigma2 = 1.0 / (sigma_pr * sigma_pr);
+    double log_w = 0.0;
+
+    for (int d = 0; d < n_dd; d++) {
+        double dx_k = x - s_sat_k[d * 3 + 0];
+        double dy_k = y - s_sat_k[d * 3 + 1];
+        double dz_k = z - s_sat_k[d * 3 + 2];
+        double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+
+        double dx_ref = x - s_ref[d * 3 + 0];
+        double dy_ref = y - s_ref[d * 3 + 1];
+        double dz_ref = z - s_ref[d * 3 + 2];
+        double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+
+        double dd_expected = r_k - r_ref - s_br_k[d] + s_br_ref[d];
+        double residual = s_dd_pr[d] - dd_expected;
+        log_w += -0.5 * s_ws[d] * residual * residual * inv_sigma2;
+    }
+
+    log_weights[tid] = log_w;
+}
+
 // --- GMM weight kernel ---
 // GMM likelihood: p(residual) = w_los * N(0, sigma_los) + w_nlos * N(mu_nlos, sigma_nlos)
 // Uses logsumexp trick for numerical stability.
@@ -250,24 +305,24 @@ __global__ void pfd_weight_carrier_afv_kernel(
 __global__ void pfd_weight_dd_carrier_afv_kernel(
     const double* px, const double* py,
     const double* pz,
-    const double* dd_data,      // layout: [sat_k: n_dd*3][ref: 3][dd_carrier: n_dd][base_range_k: n_dd][base_range_ref: 1][weights: n_dd]
+    const double* dd_data,      // layout: [sat_k: n_dd*3][ref: n_dd*3][dd_carrier: n_dd][base_range_k: n_dd][base_range_ref: n_dd][weights: n_dd][wavelengths: n_dd]
     double* log_weights,
     int N, int n_dd,
-    double wavelength,
     double sigma_cycles) {
 
     // Dynamic shared memory layout:
-    // [sat_k_ecef: n_dd*3] [ref_ecef: 3] [dd_carrier: n_dd] [base_range_k: n_dd] [base_range_ref: 1] [weights: n_dd]
-    // Total: n_dd*3 + 3 + n_dd + n_dd + 1 + n_dd = n_dd*6 + 4 doubles
+    // [sat_k_ecef: n_dd*3] [ref_ecef: n_dd*3] [dd_carrier: n_dd]
+    // [base_range_k: n_dd] [base_range_ref: n_dd] [weights: n_dd] [wavelengths: n_dd]
     extern __shared__ double s_data[];
     double* s_sat_k   = s_data;                      // n_dd * 3
-    double* s_ref     = s_data + n_dd * 3;            // 3
-    double* s_dd_cp   = s_data + n_dd * 3 + 3;        // n_dd
-    double* s_br_k    = s_data + n_dd * 4 + 3;        // n_dd
-    double* s_br_ref  = s_data + n_dd * 5 + 3;        // 1
-    double* s_ws      = s_data + n_dd * 5 + 4;        // n_dd
+    double* s_ref     = s_data + n_dd * 3;            // n_dd * 3
+    double* s_dd_cp   = s_data + n_dd * 6;            // n_dd
+    double* s_br_k    = s_data + n_dd * 7;            // n_dd
+    double* s_br_ref  = s_data + n_dd * 8;            // n_dd
+    double* s_ws      = s_data + n_dd * 9;            // n_dd
+    double* s_wl      = s_data + n_dd * 10;           // n_dd
 
-    int total_shared = n_dd * 6 + 4;
+    int total_shared = n_dd * 11;
     for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
         s_data[i] = dd_data[i];
     }
@@ -280,15 +335,7 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
     double y = py[tid];
     double z = pz[tid];
 
-    // Range from particle to reference satellite
-    double dx_ref = x - s_ref[0];
-    double dy_ref = y - s_ref[1];
-    double dz_ref = z - s_ref[2];
-    double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
-
-    double inv_wl = 1.0 / wavelength;
     double inv_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
-    double base_range_ref = s_br_ref[0];
     double log_w = 0.0;
 
     for (int d = 0; d < n_dd; d++) {
@@ -298,8 +345,15 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
         double dz_k = z - s_sat_k[d * 3 + 2];
         double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
 
+        double dx_ref = x - s_ref[d * 3 + 0];
+        double dy_ref = y - s_ref[d * 3 + 1];
+        double dz_ref = z - s_ref[d * 3 + 2];
+        double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+
+        double inv_wl = 1.0 / s_wl[d];
+
         // DD expected range in cycles (no clock bias!)
-        double dd_expected = (r_k - r_ref - s_br_k[d] + base_range_ref) * inv_wl;
+        double dd_expected = (r_k - r_ref - s_br_k[d] + s_br_ref[d]) * inv_wl;
 
         // DD residual
         double dd_residual = s_dd_cp[d] - dd_expected;
@@ -436,6 +490,59 @@ __global__ void pfd_estimate_kernel(const double* px, const double* py,
         partial_results[blockIdx.x * 4 + 1] = s_wy[0];
         partial_results[blockIdx.x * 4 + 2] = s_wz[0];
         partial_results[blockIdx.x * 4 + 3] = s_wcb[0];
+        partial_sum_w[blockIdx.x] = s_sw[0];
+        partial_max_lw[blockIdx.x] = block_max;
+    }
+}
+
+__global__ void pfd_position_spread_kernel(const double* px, const double* py,
+                                           const double* pz,
+                                           const double* log_weights,
+                                           double center_x, double center_y, double center_z,
+                                           double* partial_sum_wd2,
+                                           double* partial_sum_w,
+                                           double* partial_max_lw,
+                                           int N) {
+    extern __shared__ double sdata[];
+    double* s_wd2 = sdata;
+    double* s_sw = sdata + blockDim.x;
+    double* s_max = sdata + 2 * blockDim.x;
+
+    int tid = threadIdx.x;
+    int gid = blockIdx.x * blockDim.x + tid;
+
+    double lw = (gid < N) ? log_weights[gid] : -INFINITY;
+    s_max[tid] = lw;
+    __syncthreads();
+
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) s_max[tid] = fmax(s_max[tid], s_max[tid + s]);
+        __syncthreads();
+    }
+    double block_max = s_max[0];
+
+    double w = (gid < N) ? exp(lw - block_max) : 0.0;
+    double wd2 = 0.0;
+    if (gid < N) {
+        double dx = px[gid] - center_x;
+        double dy = py[gid] - center_y;
+        double dz = pz[gid] - center_z;
+        wd2 = w * (dx * dx + dy * dy + dz * dz);
+    }
+    s_wd2[tid] = wd2;
+    s_sw[tid] = w;
+    __syncthreads();
+
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            s_wd2[tid] += s_wd2[tid + s];
+            s_sw[tid] += s_sw[tid + s];
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        partial_sum_wd2[blockIdx.x] = s_wd2[0];
         partial_sum_w[blockIdx.x] = s_sw[0];
         partial_max_lw[blockIdx.x] = block_max;
     }
@@ -811,6 +918,48 @@ void pf_device_weight(PFDeviceState* state,
     CUDA_CHECK_LAST();
 }
 
+void pf_device_weight_dd_pseudorange(PFDeviceState* state,
+    const double* sat_ecef_k, const double* ref_ecef,
+    const double* dd_pseudorange, const double* base_range_k,
+    const double* base_range_ref, const double* weights_dd,
+    int n_dd, double sigma_pr) {
+
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    // Pack all DD data into a contiguous buffer for a single H2D transfer.
+    // Layout: [sat_k: n_dd*3][ref: n_dd*3][dd_pr: n_dd][base_range_k: n_dd][base_range_ref: n_dd][weights: n_dd]
+    int total_doubles = n_dd * 10;
+    size_t total_bytes = (size_t)total_doubles * sizeof(double);
+
+    double* h_buf = (double*)malloc(total_bytes);
+    if (!h_buf) return;
+
+    int off = 0;
+    memcpy(h_buf + off, sat_ecef_k, n_dd * 3 * sizeof(double)); off += n_dd * 3;
+    memcpy(h_buf + off, ref_ecef, n_dd * 3 * sizeof(double)); off += n_dd * 3;
+    memcpy(h_buf + off, dd_pseudorange, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_buf + off, base_range_k, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_buf + off, base_range_ref, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_buf + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
+
+    double* d_dd_data = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_dd_data, total_bytes));
+    CUDA_CHECK(cudaMemcpyAsync(
+        d_dd_data, h_buf, total_bytes, cudaMemcpyHostToDevice, state->stream));
+
+    size_t smem = (size_t)total_doubles * sizeof(double);
+    pfd_weight_dd_pseudorange_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        d_dd_data, state->d_log_weights,
+        N, n_dd, sigma_pr);
+    CUDA_CHECK_LAST();
+
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+    CUDA_CHECK(cudaFree(d_dd_data));
+    free(h_buf);
+}
+
 void pf_device_weight_gmm(PFDeviceState* state,
     const double* sat_ecef, const double* pseudoranges,
     const double* weights_sat,
@@ -941,6 +1090,51 @@ double pf_device_ess(const PFDeviceState* state) {
 
     double ess = (total_w * total_w) / total_w2;
     return ess;
+}
+
+double pf_device_position_spread(
+    const PFDeviceState* state,
+    double center_x, double center_y, double center_z) {
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    size_t smem = 3 * BLOCK_SIZE * sizeof(double);
+    pfd_position_spread_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        state->d_log_weights,
+        center_x, center_y, center_z,
+        state->d_partial_a,
+        state->d_partial_b,
+        state->d_partial_c,
+        N);
+    CUDA_CHECK_LAST();
+
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+
+    double* h_sum_wd2 = state->h_reduction_pinned + 0;
+    double* h_sum_w = state->h_reduction_pinned + grid;
+    double* h_max_lw = state->h_reduction_pinned + 2 * grid;
+    CUDA_CHECK(cudaMemcpy(h_sum_wd2, state->d_partial_a, grid * sizeof(double), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_sum_w, state->d_partial_b, grid * sizeof(double), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_max_lw, state->d_partial_c, grid * sizeof(double), cudaMemcpyDeviceToHost));
+
+    double global_max = h_max_lw[0];
+    for (int i = 1; i < grid; i++) {
+        global_max = std::max(global_max, h_max_lw[i]);
+    }
+
+    double total_wd2 = 0.0;
+    double total_w = 0.0;
+    for (int i = 0; i < grid; i++) {
+        double correction = exp(h_max_lw[i] - global_max);
+        total_wd2 += h_sum_wd2[i] * correction;
+        total_w += h_sum_w[i] * correction;
+    }
+
+    if (!(total_w > 0.0) || !std::isfinite(total_wd2)) {
+        return 0.0;
+    }
+    return sqrt(std::max(total_wd2 / total_w, 0.0));
 }
 
 // ============================================================
@@ -1200,15 +1394,16 @@ void pf_device_weight_carrier_afv(PFDeviceState* state,
 void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     const double* sat_ecef_k, const double* ref_ecef,
     const double* dd_carrier, const double* base_range_k,
-    double base_range_ref, const double* weights_dd,
-    int n_dd, double wavelength, double sigma_cycles) {
+    const double* base_range_ref, const double* weights_dd,
+    const double* wavelengths_m,
+    int n_dd, double sigma_cycles) {
 
     int N = state->n_particles;
     int grid = state->grid_size;
 
     // Pack all DD data into a contiguous buffer for a single H2D transfer.
-    // Layout: [sat_k: n_dd*3][ref: 3][dd_carrier: n_dd][base_range_k: n_dd][base_range_ref: 1][weights: n_dd]
-    int total_doubles = n_dd * 6 + 4;
+    // Layout: [sat_k: n_dd*3][ref: n_dd*3][dd_carrier: n_dd][base_range_k: n_dd][base_range_ref: n_dd][weights: n_dd][wavelengths: n_dd]
+    int total_doubles = n_dd * 11;
     size_t total_bytes = (size_t)total_doubles * sizeof(double);
 
     // Check if we need to reallocate (reuse pinned capacity; need total_doubles <= pinned_capacity * 5)
@@ -1220,11 +1415,12 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     // Pack
     int off = 0;
     memcpy(h_buf + off, sat_ecef_k, n_dd * 3 * sizeof(double)); off += n_dd * 3;
-    memcpy(h_buf + off, ref_ecef, 3 * sizeof(double)); off += 3;
+    memcpy(h_buf + off, ref_ecef, n_dd * 3 * sizeof(double)); off += n_dd * 3;
     memcpy(h_buf + off, dd_carrier, n_dd * sizeof(double)); off += n_dd;
     memcpy(h_buf + off, base_range_k, n_dd * sizeof(double)); off += n_dd;
-    h_buf[off] = base_range_ref; off += 1;
+    memcpy(h_buf + off, base_range_ref, n_dd * sizeof(double)); off += n_dd;
     memcpy(h_buf + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_buf + off, wavelengths_m, n_dd * sizeof(double)); off += n_dd;
 
     // Allocate device buffer for DD data (small, ~hundreds of bytes)
     double* d_dd_data = nullptr;
@@ -1239,7 +1435,7 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     pfd_weight_dd_carrier_afv_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
         d_dd_data, state->d_log_weights,
-        N, n_dd, wavelength, sigma_cycles);
+        N, n_dd, sigma_cycles);
     CUDA_CHECK_LAST();
 
     // Free device buffer after kernel completes
