@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +31,7 @@ class NMEAWriter:
         fix_quality: 0=invalid, 1=GPS, 2=DGPS, 4=RTK fixed, 5=RTK float
         """
         if time_utc is None:
-            time_utc = datetime.utcnow()
+            time_utc = datetime.now(timezone.utc)
         time_str = time_utc.strftime("%H%M%S.%f")[:10]
 
         lat_nmea, lat_dir = self._deg_to_nmea(lat_deg, is_lat=True)
@@ -63,7 +63,7 @@ class NMEAWriter:
     ) -> str:
         """Generate $GPRMC sentence."""
         if time_utc is None:
-            time_utc = datetime.utcnow()
+            time_utc = datetime.now(timezone.utc)
         if date_val is None:
             date_val = time_utc.date() if isinstance(time_utc, datetime) else date.today()
 
