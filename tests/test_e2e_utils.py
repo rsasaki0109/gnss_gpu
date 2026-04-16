@@ -138,6 +138,104 @@ def test_dll_refine_moves_toward_truth_on_synthetic():
 @pytest.mark.gpu
 @pytest.mark.cuda
 @requires_cuda_signal
+def test_gain_schedule_constant_matches_existing_behavior():
+    fs = 2.6e6
+    pytest.importorskip(
+        "gnss_gpu._gnss_gpu_tracking",
+        reason="tracking CUDA bindings not available",
+    )
+    sim = SignalSimulator(sampling_freq=fs, noise_floor_db=-55, noise_seed=2)
+    acq = Acquisition(sampling_freq=fs, intermediate_freq=0, threshold=2.0)
+    raw_pr = 20_000_100.0
+    iq = sim.generate_epoch([{
+        "prn": 1,
+        "code_phase": float(pseudorange_to_code_phase_chips(raw_pr)),
+        "carrier_phase": 0.0,
+        "doppler_hz": 0.0,
+        "amplitude": 1.0,
+        "nav_bit": 1,
+    }])
+    signal_i = iq[0::2].copy()
+    r = acq.acquire(signal_i, prn_list=[1])[0]
+    assert r["acquired"]
+
+    explicit = refine_acquisition_code_lags_dll_batch(
+        signal_i, [1], [r["code_phase"]], [r["doppler_hz"]], fs,
+        intermediate_freq=0.0, n_iter=20, dll_gain=0.25,
+        gain_schedule="constant")
+    default = refine_acquisition_code_lags_dll_batch(
+        signal_i, [1], [r["code_phase"]], [r["doppler_hz"]], fs,
+        intermediate_freq=0.0, n_iter=20, dll_gain=0.25)
+
+    assert np.array_equal(explicit, default)
+
+
+@pytest.mark.gpu
+@pytest.mark.cuda
+@requires_cuda_signal
+def test_gain_schedule_cn0_weighted_converges_on_synthetic():
+    fs = 2.6e6
+    pytest.importorskip(
+        "gnss_gpu._gnss_gpu_tracking",
+        reason="tracking CUDA bindings not available",
+    )
+    sim = SignalSimulator(sampling_freq=fs, noise_floor_db=-55, noise_seed=2)
+    acq = Acquisition(sampling_freq=fs, intermediate_freq=0, threshold=2.0)
+    raw_pr = 20_000_100.0
+    iq = sim.generate_epoch([{
+        "prn": 1,
+        "code_phase": float(pseudorange_to_code_phase_chips(raw_pr)),
+        "carrier_phase": 0.0,
+        "doppler_hz": 0.0,
+        "amplitude": 1.0,
+        "nav_bit": 1,
+    }])
+    signal_i = iq[0::2].copy()
+    r = acq.acquire(signal_i, prn_list=[1])[0]
+    assert r["acquired"]
+
+    constant = refine_acquisition_code_lags_dll_batch(
+        signal_i, [1], [r["code_phase"]], [r["doppler_hz"]], fs,
+        intermediate_freq=0.0, n_iter=20, dll_gain=0.25,
+        gain_schedule="constant")
+    weighted = refine_acquisition_code_lags_dll_batch(
+        signal_i, [1], [r["code_phase"]], [r["doppler_hz"]], fs,
+        intermediate_freq=0.0, n_iter=20, dll_gain=0.25,
+        gain_schedule="cn0_weighted")
+
+    tol = 2 * C_LIGHT / fs
+    pr_constant = acquisition_code_phase_to_pseudorange(constant[0], fs, raw_pr)
+    pr_weighted = acquisition_code_phase_to_pseudorange(weighted[0], fs, raw_pr)
+    assert abs(pr_constant - raw_pr) < tol
+    assert abs(pr_weighted - raw_pr) < tol
+
+
+def test_gain_schedule_invalid_raises():
+    with pytest.raises(ValueError, match="unknown gain_schedule"):
+        refine_acquisition_code_lags_dll_batch(
+            np.zeros(0, dtype=np.float32),
+            [],
+            [],
+            [],
+            2.6e6,
+            gain_schedule="nope",
+        )
+
+
+def test_diagnostic_includes_gain_schedule_key():
+    signal_i = np.zeros(0, dtype=np.float32)
+    diag = refine_acquisition_code_lags_diagnostic_batch(
+        signal_i, [], [], [], 2.6e6)
+    assert diag["gain_schedule"] == "constant"
+
+    diag = refine_acquisition_code_lags_diagnostic_batch(
+        signal_i, [], [], [], 2.6e6, gain_schedule="cn0_weighted")
+    assert diag["gain_schedule"] == "cn0_weighted"
+
+
+@pytest.mark.gpu
+@pytest.mark.cuda
+@requires_cuda_signal
 def test_diagnostic_batch_shapes_and_keys():
     fs = 2.6e6
     pytest.importorskip(
@@ -183,7 +281,7 @@ def test_diagnostic_batch_shapes_and_keys():
         "cn0_est_db",
         "prn",
     ]
-    assert set(array_keys + ["n_iter_used"]) == set(diag)
+    assert set(array_keys + ["n_iter_used", "gain_schedule"]) == set(diag)
     for key in array_keys:
         assert diag[key].shape == (1,)
     assert diag["prn"].dtype == np.int32
@@ -191,6 +289,7 @@ def test_diagnostic_batch_shapes_and_keys():
     assert np.isfinite(diag["cn0_est_db"][0])
     assert not np.isnan(diag["cn0_est_db"][0])
     assert diag["n_iter_used"] == 20
+    assert diag["gain_schedule"] == "constant"
 
 
 @pytest.mark.gpu

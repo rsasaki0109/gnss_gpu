@@ -77,7 +77,7 @@ def _scenario_diagnostics_path(path, scenario_name):
 def run_scenario(name, rx_ecef_true, sat_ecef, prn_list, sat_clk=None, building_model=None,
                  noise_floor_db=-30, sampling_freq=2.6e6,
                  dll_gain=0.22, pll_gain=0.18, n_iter=15, correlator_spacing=0.5,
-                 diagnostics_csv=None):
+                 diagnostics_csv=None, gain_schedule="constant"):
     """Run one E2E scenario: generate → acquire → position.
 
     Pseudorange construction:
@@ -152,6 +152,7 @@ def run_scenario(name, rx_ecef_true, sat_ecef, prn_list, sat_clk=None, building_
             pll_gain=pll_gain,
             correlator_spacing=correlator_spacing,
             return_lock_metrics=True,
+            gain_schedule=gain_schedule,
         )
     else:
         lag_refs = np.array([], dtype=np.float64)
@@ -170,6 +171,7 @@ def run_scenario(name, rx_ecef_true, sat_ecef, prn_list, sat_clk=None, building_
             dll_gain=dll_gain,
             pll_gain=pll_gain,
             correlator_spacing=correlator_spacing,
+            gain_schedule=gain_schedule,
         )
         diagnostics_path = _scenario_diagnostics_path(diagnostics_csv, name)
         dump_e2e_diagnostics_csv(diagnostics_path, diagnostics)
@@ -254,6 +256,12 @@ def parse_args():
         "--diagnostics-csv", default=None,
         help="Optional per-scenario channel diagnostics CSV path stem.",
     )
+    p.add_argument(
+        "--gain-schedule",
+        choices=["constant", "cn0_weighted"],
+        default="constant",
+        help="DLL/PLL gain schedule (default: constant).",
+    )
     return p.parse_args()
 
 
@@ -264,7 +272,8 @@ def main():
 
     print(
         f"Tracking refine: n_iter={args.n_iter} dll_gain={args.dll_gain} "
-        f"pll_gain={args.pll_gain} correlator_spacing={args.correlator_spacing}",
+        f"pll_gain={args.pll_gain} correlator_spacing={args.correlator_spacing} "
+        f"gain_schedule={args.gain_schedule}",
     )
 
     # Load real ephemeris
@@ -320,6 +329,7 @@ def main():
         dll_gain=args.dll_gain, pll_gain=args.pll_gain, n_iter=args.n_iter,
         correlator_spacing=args.correlator_spacing,
         diagnostics_csv=args.diagnostics_csv,
+        gain_schedule=args.gain_schedule,
     )
     print(f"  Acquired: {r1['n_acquired']}/{r1['n_sat']}")
     print(f"  Position error: {r1['pos_error_m']:.2f} m")
@@ -337,6 +347,7 @@ def main():
         dll_gain=args.dll_gain, pll_gain=args.pll_gain, n_iter=args.n_iter,
         correlator_spacing=args.correlator_spacing,
         diagnostics_csv=args.diagnostics_csv,
+        gain_schedule=args.gain_schedule,
     )
     print(f"  LOS: {r2['n_los']}, NLOS: {r2['n_nlos']}")
     print(f"  Acquired: {r2['n_acquired']}/{r2['n_sat']}")
