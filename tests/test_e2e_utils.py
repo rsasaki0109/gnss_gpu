@@ -1,5 +1,7 @@
 """Tests for E2E acquisition/pseudorange helpers."""
 
+import csv
+
 import numpy as np
 import pytest
 
@@ -11,23 +13,28 @@ from gnss_gpu.e2e_helpers import (
     acquisition_lag_to_code_phase_chips,
     code_phase_chips_to_acquisition_lag,
     compute_e2e_wls_weights,
+    dump_e2e_diagnostics_csv,
     pseudorange_to_code_phase_chips,
     refine_acquisition_code_lag_dll,
+    refine_acquisition_code_lags_diagnostic_batch,
+    refine_acquisition_code_lags_dll_batch,
 )
 
-signal_sim = pytest.importorskip(
-    "gnss_gpu.signal_sim",
-    reason="CUDA signal simulator bindings not available",
-)
-acquisition = pytest.importorskip(
-    "gnss_gpu.acquisition",
-    reason="CUDA acquisition bindings not available",
-)
+try:
+    from gnss_gpu.signal_sim import SignalSimulator
+    from gnss_gpu.acquisition import Acquisition
+    import gnss_gpu._gnss_gpu_acq  # noqa: F401
+    import gnss_gpu._gnss_gpu_signal_sim  # noqa: F401
+    _HAS_CUDA_SIGNAL = True
+except ImportError:
+    SignalSimulator = None
+    Acquisition = None
+    _HAS_CUDA_SIGNAL = False
 
-pytestmark = [pytest.mark.gpu, pytest.mark.cuda]
-
-SignalSimulator = signal_sim.SignalSimulator
-Acquisition = acquisition.Acquisition
+requires_cuda_signal = pytest.mark.skipif(
+    not _HAS_CUDA_SIGNAL,
+    reason="CUDA signal simulator/acquisition bindings not available",
+)
 
 
 def _lag_from_pseudorange(pseudorange_m: float, sampling_freq: float) -> float:
@@ -36,6 +43,9 @@ def _lag_from_pseudorange(pseudorange_m: float, sampling_freq: float) -> float:
     return (n_samples - delay_samples) % n_samples
 
 
+@pytest.mark.gpu
+@pytest.mark.cuda
+@requires_cuda_signal
 def test_acquisition_pseudorange_roundtrip_from_signal_sim():
     fs = 2.6e6
     sim = SignalSimulator(sampling_freq=fs, noise_floor_db=-60, noise_seed=1)
@@ -91,6 +101,9 @@ def test_lag_and_chips_roundtrip():
         assert circ < 1e-9
 
 
+@pytest.mark.gpu
+@pytest.mark.cuda
+@requires_cuda_signal
 def test_dll_refine_moves_toward_truth_on_synthetic():
     fs = 2.6e6
     pytest.importorskip(
@@ -122,6 +135,67 @@ def test_dll_refine_moves_toward_truth_on_synthetic():
     assert err_ref <= err_coarse + C_LIGHT / fs
 
 
+@pytest.mark.gpu
+@pytest.mark.cuda
+@requires_cuda_signal
+def test_diagnostic_batch_shapes_and_keys():
+    fs = 2.6e6
+    pytest.importorskip(
+        "gnss_gpu._gnss_gpu_tracking",
+        reason="tracking CUDA bindings not available",
+    )
+    sim = SignalSimulator(sampling_freq=fs, noise_floor_db=-55, noise_seed=2)
+    acq = Acquisition(sampling_freq=fs, intermediate_freq=0, threshold=2.0)
+    raw_pr = 20_000_100.0
+    iq = sim.generate_epoch([{
+        "prn": 1,
+        "code_phase": float(pseudorange_to_code_phase_chips(raw_pr)),
+        "carrier_phase": 0.0,
+        "doppler_hz": 0.0,
+        "amplitude": 1.0,
+        "nav_bit": 1,
+    }])
+    signal_i = iq[0::2].copy()
+    r = acq.acquire(signal_i, prn_list=[1])[0]
+    assert r["acquired"]
+
+    diag = refine_acquisition_code_lags_diagnostic_batch(
+        signal_i, [1], [r["code_phase"]], [r["doppler_hz"]], fs,
+        intermediate_freq=0.0, n_iter=20, dll_gain=0.25)
+    lag_ref = refine_acquisition_code_lags_dll_batch(
+        signal_i, [1], [r["code_phase"]], [r["doppler_hz"]], fs,
+        intermediate_freq=0.0, n_iter=20, dll_gain=0.25)
+
+    array_keys = [
+        "lag_samples",
+        "code_phase_chips",
+        "carrier_phase_cycles",
+        "code_freq_hz",
+        "carrier_freq_hz",
+        "E_I",
+        "E_Q",
+        "P_I",
+        "P_Q",
+        "L_I",
+        "L_Q",
+        "prompt_power",
+        "dll_abs",
+        "cn0_est_db",
+        "prn",
+    ]
+    assert set(array_keys + ["n_iter_used"]) == set(diag)
+    for key in array_keys:
+        assert diag[key].shape == (1,)
+    assert diag["prn"].dtype == np.int32
+    assert diag["lag_samples"][0] == pytest.approx(lag_ref[0], abs=1e-9)
+    assert np.isfinite(diag["cn0_est_db"][0])
+    assert not np.isnan(diag["cn0_est_db"][0])
+    assert diag["n_iter_used"] == 20
+
+
+@pytest.mark.gpu
+@pytest.mark.cuda
+@requires_cuda_signal
 def test_acquisition_returns_fractional_code_phase_after_interpolation():
     fs = 2.6e6
     raw_pr = 20_000_030.0
@@ -142,3 +216,56 @@ def test_acquisition_returns_fractional_code_phase_after_interpolation():
 
     assert abs(result["code_phase"] - round(result["code_phase"])) > 0.05
     assert result["code_phase"] == pytest.approx(expected_lag, abs=0.15)
+
+
+def test_dump_e2e_diagnostics_csv_roundtrip(tmp_path):
+    columns = [
+        "prn",
+        "lag_samples",
+        "code_phase_chips",
+        "carrier_phase_cycles",
+        "code_freq_hz",
+        "carrier_freq_hz",
+        "E_I",
+        "E_Q",
+        "P_I",
+        "P_Q",
+        "L_I",
+        "L_Q",
+        "prompt_power",
+        "dll_abs",
+        "cn0_est_db",
+    ]
+    diagnostics = {
+        "prn": np.array([3, 22], dtype=np.int32),
+        "lag_samples": np.array([10.25, 20.5], dtype=np.float64),
+        "code_phase_chips": np.array([101.0, 202.5], dtype=np.float64),
+        "carrier_phase_cycles": np.array([0.125, 0.875], dtype=np.float64),
+        "code_freq_hz": np.array([1.023e6, 1.023001e6], dtype=np.float64),
+        "carrier_freq_hz": np.array([100.0, -250.0], dtype=np.float64),
+        "E_I": np.array([1.25, 2.5], dtype=np.float64),
+        "E_Q": np.array([-0.5, 0.75], dtype=np.float64),
+        "P_I": np.array([10.0, 20.0], dtype=np.float64),
+        "P_Q": np.array([0.25, -0.125], dtype=np.float64),
+        "L_I": np.array([1.0, 2.0], dtype=np.float64),
+        "L_Q": np.array([0.5, -0.75], dtype=np.float64),
+        "prompt_power": np.array([100.0625, 400.015625], dtype=np.float64),
+        "dll_abs": np.array([0.1, 0.2], dtype=np.float64),
+        "cn0_est_db": np.array([2.0412, 14.0824], dtype=np.float64),
+        "n_iter_used": 7,
+    }
+
+    path = tmp_path / "diag.csv"
+    dump_e2e_diagnostics_csv(path, diagnostics)
+
+    with path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    assert reader.fieldnames == columns
+    assert len(rows) == 2
+    for i, row in enumerate(rows):
+        assert int(row["prn"]) == int(diagnostics["prn"][i])
+        for col in columns[1:]:
+            assert float(row[col]) == pytest.approx(
+                float(diagnostics[col][i]), rel=1e-8, abs=1e-12)

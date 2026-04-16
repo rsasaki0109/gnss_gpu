@@ -13,6 +13,7 @@ Two scenarios:
 import argparse
 import math
 import os
+from pathlib import Path
 import time
 
 import matplotlib
@@ -26,8 +27,10 @@ try:
         DEFAULT_CODE_LOCK_MAX_ERROR_M,
         acquisition_code_phase_to_pseudorange,
         compute_e2e_wls_weights,
+        dump_e2e_diagnostics_csv,
         pseudorange_to_code_phase_chips,
         refine_acquisition_code_lags_dll_batch,
+        refine_acquisition_code_lags_diagnostic_batch,
     )
 except ImportError:
     from experiments.e2e_utils import (
@@ -35,8 +38,10 @@ except ImportError:
         DEFAULT_CODE_LOCK_MAX_ERROR_M,
         acquisition_code_phase_to_pseudorange,
         compute_e2e_wls_weights,
+        dump_e2e_diagnostics_csv,
         pseudorange_to_code_phase_chips,
         refine_acquisition_code_lags_dll_batch,
+        refine_acquisition_code_lags_diagnostic_batch,
     )
 
 from gnss_gpu.signal_sim import SignalSimulator
@@ -49,9 +54,30 @@ from gnss_gpu.io.plateau import PlateauLoader
 from gnss_gpu.bvh import BVHAccelerator
 
 
+def _diagnostics_slug(name):
+    slug = str(name).strip().lower()
+    if "(" in slug and ")" in slug:
+        start = slug.find("(")
+        end = slug.find(")", start + 1)
+        inner = slug[start + 1:end].strip()
+        if inner:
+            slug = inner
+    slug = slug.replace(" ", "_").replace("-", "_")
+    slug = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in slug)
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return slug.strip("_") or "scenario"
+
+
+def _scenario_diagnostics_path(path, scenario_name):
+    base = Path(path)
+    return base.with_name(f"{base.stem}_{_diagnostics_slug(scenario_name)}.csv")
+
+
 def run_scenario(name, rx_ecef_true, sat_ecef, prn_list, sat_clk=None, building_model=None,
                  noise_floor_db=-30, sampling_freq=2.6e6,
-                 dll_gain=0.22, pll_gain=0.18, n_iter=15, correlator_spacing=0.5):
+                 dll_gain=0.22, pll_gain=0.18, n_iter=15, correlator_spacing=0.5,
+                 diagnostics_csv=None):
     """Run one E2E scenario: generate → acquire → position.
 
     Pseudorange construction:
@@ -110,12 +136,15 @@ def run_scenario(name, rx_ecef_true, sat_ecef, prn_list, sat_clk=None, building_
     sat_ecef_acquired = []
 
     candidates = [(i, r) for i, r in enumerate(acq_results) if r["acquired"]]
+    candidate_prns = [int(prn_list[i]) for i, _ in candidates]
+    candidate_lags = [r["code_phase"] for _, r in candidates]
+    candidate_dopplers = [r["doppler_hz"] for _, r in candidates]
     if candidates:
         lag_refs, prompt_pow, dll_abs = refine_acquisition_code_lags_dll_batch(
             signal_i,
-            [int(prn_list[i]) for i, _ in candidates],
-            [r["code_phase"] for _, r in candidates],
-            [r["doppler_hz"] for _, r in candidates],
+            candidate_prns,
+            candidate_lags,
+            candidate_dopplers,
             sampling_freq,
             intermediate_freq=0.0,
             n_iter=n_iter,
@@ -128,6 +157,23 @@ def run_scenario(name, rx_ecef_true, sat_ecef, prn_list, sat_clk=None, building_
         lag_refs = np.array([], dtype=np.float64)
         prompt_pow = np.array([], dtype=np.float64)
         dll_abs = np.array([], dtype=np.float64)
+
+    if diagnostics_csv is not None:
+        diagnostics = refine_acquisition_code_lags_diagnostic_batch(
+            signal_i,
+            candidate_prns,
+            candidate_lags,
+            candidate_dopplers,
+            sampling_freq,
+            intermediate_freq=0.0,
+            n_iter=n_iter,
+            dll_gain=dll_gain,
+            pll_gain=pll_gain,
+            correlator_spacing=correlator_spacing,
+        )
+        diagnostics_path = _scenario_diagnostics_path(diagnostics_csv, name)
+        dump_e2e_diagnostics_csv(diagnostics_path, diagnostics)
+        print(f"  Diagnostics CSV: {diagnostics_path}")
 
     accepted_pp = []
     accepted_snr = []
@@ -204,6 +250,10 @@ def parse_args():
         "--correlator-spacing", type=float, default=0.5,
         help="Early/late spacing in chips (default: 0.5).",
     )
+    p.add_argument(
+        "--diagnostics-csv", default=None,
+        help="Optional per-scenario channel diagnostics CSV path stem.",
+    )
     return p.parse_args()
 
 
@@ -269,6 +319,7 @@ def main():
         building_model=None, noise_floor_db=-30,
         dll_gain=args.dll_gain, pll_gain=args.pll_gain, n_iter=args.n_iter,
         correlator_spacing=args.correlator_spacing,
+        diagnostics_csv=args.diagnostics_csv,
     )
     print(f"  Acquired: {r1['n_acquired']}/{r1['n_sat']}")
     print(f"  Position error: {r1['pos_error_m']:.2f} m")
@@ -285,6 +336,7 @@ def main():
         building_model=bvh, noise_floor_db=-30,
         dll_gain=args.dll_gain, pll_gain=args.pll_gain, n_iter=args.n_iter,
         correlator_spacing=args.correlator_spacing,
+        diagnostics_csv=args.diagnostics_csv,
     )
     print(f"  LOS: {r2['n_los']}, NLOS: {r2['n_nlos']}")
     print(f"  Acquired: {r2['n_acquired']}/{r2['n_sat']}")
