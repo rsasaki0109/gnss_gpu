@@ -83,6 +83,8 @@ from gnss_gpu.e2e_helpers import (
     code_phase_chips_to_acquisition_lag,
     refine_acquisition_code_lag_dll,
     refine_acquisition_code_lags_dll_batch,
+    refine_acquisition_code_lags_diagnostic_batch,
+    dump_e2e_diagnostics_csv,
     pseudorange_to_code_phase_chips,
     acquisition_code_phase_to_pseudorange,
 )
@@ -158,6 +160,8 @@ __all__ = [
     "code_phase_chips_to_acquisition_lag",
     "refine_acquisition_code_lag_dll",
     "refine_acquisition_code_lags_dll_batch",
+    "refine_acquisition_code_lags_diagnostic_batch",
+    "dump_e2e_diagnostics_csv",
     "pseudorange_to_code_phase_chips",
     "acquisition_code_phase_to_pseudorange",
 ]
