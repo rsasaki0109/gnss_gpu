@@ -6,6 +6,7 @@ UrbanNav trajectory for each area, then produces CDF curves of
 positioning error.
 """
 
+import argparse
 import csv
 import math
 import os
@@ -16,6 +17,25 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+try:
+    from e2e_utils import (
+        C_LIGHT,
+        DEFAULT_CODE_LOCK_MAX_ERROR_M,
+        acquisition_code_phase_to_pseudorange,
+        compute_e2e_wls_weights,
+        pseudorange_to_code_phase_chips,
+        refine_acquisition_code_lags_dll_batch,
+    )
+except ImportError:
+    from experiments.e2e_utils import (
+        C_LIGHT,
+        DEFAULT_CODE_LOCK_MAX_ERROR_M,
+        acquisition_code_phase_to_pseudorange,
+        compute_e2e_wls_weights,
+        pseudorange_to_code_phase_chips,
+        refine_acquisition_code_lags_dll_batch,
+    )
+
 from gnss_gpu.ephemeris import Ephemeris
 from gnss_gpu.io.nav_rinex import read_nav_rinex_multi
 from gnss_gpu.io.plateau import PlateauLoader
@@ -24,9 +44,6 @@ from gnss_gpu.signal_sim import SignalSimulator
 from gnss_gpu.urban_signal_sim import UrbanSignalSimulator, ecef_to_lla
 from gnss_gpu.acquisition import Acquisition
 from gnss_gpu._gnss_gpu import wls_position
-
-C_LIGHT = 299792458.0
-CA_CHIP_RATE = 1.023e6
 
 
 def load_trajectory(csv_path, step=100):
@@ -56,15 +73,19 @@ def visible_filter(rx, sat_ecef, el_mask_rad=0.175):
     return np.where(el > el_mask_rad)[0]
 
 
-def run_epoch(rx_true, sat_ecef, prn_ints, usim, acq, fs):
+def run_epoch(rx_true, sat_ecef, prn_ints, sat_clk, usim, acq, fs,
+              dll_gain=0.22, pll_gain=0.18, n_iter=15, correlator_spacing=0.5):
     """Run one E2E epoch, return position error."""
     n_sat = len(prn_ints)
     ranges_true = np.linalg.norm(sat_ecef - rx_true, axis=1)
+    sat_clock_m = np.zeros(n_sat, dtype=np.float64) if sat_clk is None else np.asarray(
+        sat_clk, dtype=np.float64) * C_LIGHT
+    approx_raw_pr = ranges_true - sat_clock_m
 
     # Generate signal
     if usim is not None:
         result = usim.compute_epoch(
-            rx_ecef=rx_true, sat_ecef=sat_ecef, prn_list=prn_ints)
+            rx_ecef=rx_true, sat_ecef=sat_ecef, sat_clk=sat_clk, prn_list=prn_ints)
         iq = result["iq"]
         excess_delays = result["excess_delays"]
         n_los = result["n_los"]
@@ -73,9 +94,9 @@ def run_epoch(rx_true, sat_ecef, prn_ints, usim, acq, fs):
         # Open sky
         channels = []
         for i in range(n_sat):
-            cp = (ranges_true[i] / C_LIGHT * CA_CHIP_RATE) % 1023.0
             channels.append({
-                "prn": int(prn_ints[i]), "code_phase": float(cp),
+                "prn": int(prn_ints[i]),
+                "code_phase": float(pseudorange_to_code_phase_chips(approx_raw_pr[i])),
                 "carrier_phase": 0.0, "doppler_hz": 0.0,
                 "amplitude": 1.0, "nav_bit": 1,
             })
@@ -91,24 +112,53 @@ def run_epoch(rx_true, sat_ecef, prn_ints, usim, acq, fs):
     acquired_idx = []
     pseudoranges = []
     sat_acquired = []
-    for i, r in enumerate(acq_results):
-        if not r["acquired"]:
+    candidates = [(i, r) for i, r in enumerate(acq_results) if r["acquired"]]
+    if candidates:
+        lag_refs, prompt_pow, dll_abs = refine_acquisition_code_lags_dll_batch(
+            signal_i,
+            [int(prn_ints[i]) for i, _ in candidates],
+            [r["code_phase"] for _, r in candidates],
+            [r["doppler_hz"] for _, r in candidates],
+            fs,
+            intermediate_freq=0.0,
+            n_iter=n_iter,
+            dll_gain=dll_gain,
+            pll_gain=pll_gain,
+            correlator_spacing=correlator_spacing,
+            return_lock_metrics=True,
+        )
+    else:
+        lag_refs = np.array([], dtype=np.float64)
+        prompt_pow = np.array([], dtype=np.float64)
+        dll_abs = np.array([], dtype=np.float64)
+
+    accepted_pp = []
+    accepted_snr = []
+    accepted_dll = []
+    for j, (i, r) in enumerate(candidates):
+        lag_ref = float(lag_refs[j])
+        pr_raw = acquisition_code_phase_to_pseudorange(
+            lag_ref, fs, approx_raw_pr[i])
+        if abs(pr_raw - approx_raw_pr[i]) > DEFAULT_CODE_LOCK_MAX_ERROR_M:
             continue
-        pr = ranges_true[i]
-        if excess_delays[i] > 0.1:
-            pr += excess_delays[i]
+        pr = pr_raw + sat_clock_m[i]
+
         acquired_idx.append(i)
         pseudoranges.append(pr)
         sat_acquired.append(sat_ecef[i])
+        accepted_pp.append(prompt_pow[j])
+        accepted_snr.append(float(r["snr"]))
+        accepted_dll.append(dll_abs[j])
 
     n_acq = len(acquired_idx)
     if n_acq < 4:
         return float("nan"), n_acq, n_los, n_nlos
 
     try:
+        w = compute_e2e_wls_weights(accepted_pp, accepted_snr, accepted_dll)
         res, _ = wls_position(
             np.array(sat_acquired).flatten(),
-            np.array(pseudoranges), np.ones(n_acq))
+            np.array(pseudoranges), w)
         err = float(np.linalg.norm(res[:3] - rx_true))
     except Exception:
         err = float("nan")
@@ -117,7 +167,8 @@ def run_epoch(rx_true, sat_ecef, prn_ints, usim, acq, fs):
 
 
 def run_trajectory(name, positions, times, eph, gps_prns,
-                   building_model=None, fs=2.6e6, max_epochs=50):
+                   building_model=None, fs=2.6e6, max_epochs=50,
+                   dll_gain=0.22, pll_gain=0.18, n_iter=15, correlator_spacing=0.5):
     """Run E2E over a trajectory."""
     if building_model is not None:
         usim = UrbanSignalSimulator(
@@ -138,7 +189,7 @@ def run_trajectory(name, positions, times, eph, gps_prns,
         rx = positions[ei]
         tow = times[ei]
 
-        sat_ecef, _, used_prns = eph.compute(tow, prn_list=gps_prns)
+        sat_ecef, sat_clk, used_prns = eph.compute(tow, prn_list=gps_prns)
         prn_ints = []
         for p in used_prns:
             if isinstance(p, str) and p.startswith("G"):
@@ -150,9 +201,14 @@ def run_trajectory(name, positions, times, eph, gps_prns,
         if len(vis) < 4:
             continue
         sat_vis = sat_ecef[vis]
+        sat_clk_vis = sat_clk[vis]
         prn_vis = [prn_ints[j] for j in vis]
 
-        err, n_acq, n_los, n_nlos = run_epoch(rx, sat_vis, prn_vis, usim, acq, fs)
+        err, n_acq, n_los, n_nlos = run_epoch(
+            rx, sat_vis, prn_vis, sat_clk_vis, usim, acq, fs,
+            dll_gain=dll_gain, pll_gain=pll_gain, n_iter=n_iter,
+            correlator_spacing=correlator_spacing,
+        )
         errors.append(err)
         stats["n_acq"].append(n_acq)
         stats["n_los"].append(n_los)
@@ -165,9 +221,43 @@ def run_trajectory(name, positions, times, eph, gps_prns,
     return np.array(errors), stats
 
 
+def parse_args():
+    p = argparse.ArgumentParser(
+        description="E2E trajectory: signal sim → acquisition → DLL/PLL → weighted WLS.",
+    )
+    p.add_argument(
+        "--dll-gain", type=float, default=0.22,
+        help="DLL code-phase step gain per iteration (default: 0.22).",
+    )
+    p.add_argument(
+        "--pll-gain", type=float, default=0.18,
+        help="PLL carrier-phase step gain per iteration (0 disables PLL).",
+    )
+    p.add_argument(
+        "--n-iter", type=int, default=15,
+        help="Post-acquisition DLL/PLL iterations per epoch (default: 15).",
+    )
+    p.add_argument(
+        "--correlator-spacing", type=float, default=0.5,
+        help="Early/late spacing in chips (default: 0.5).",
+    )
+    p.add_argument(
+        "--max-epochs", type=int, default=30,
+        help="Epochs per scenario (default: 30).",
+    )
+    return p.parse_args()
+
+
 def main():
+    args = parse_args()
     out_dir = os.path.join(os.path.dirname(__file__), "results", "e2e_positioning")
     os.makedirs(out_dir, exist_ok=True)
+
+    print(
+        f"Tracking refine: n_iter={args.n_iter} dll_gain={args.dll_gain} "
+        f"pll_gain={args.pll_gain} correlator_spacing={args.correlator_spacing} "
+        f"max_epochs={args.max_epochs}",
+    )
 
     # Load ephemeris (Odaiba nav file, valid for both areas at same time)
     nav_path = "experiments/data/urbannav/Odaiba/base.nav"
@@ -184,16 +274,24 @@ def main():
     print("\n=== Open Sky (Odaiba trajectory, no buildings) ===")
     pos_od, times_od = load_trajectory(
         "experiments/data/urbannav/Odaiba/reference.csv", step=500)
-    errors, stats = run_trajectory("OpenSky", pos_od, times_od, eph, gps_prns,
-                                   building_model=None, max_epochs=30)
+    errors, stats = run_trajectory(
+        "OpenSky", pos_od, times_od, eph, gps_prns,
+        building_model=None, max_epochs=args.max_epochs,
+        dll_gain=args.dll_gain, pll_gain=args.pll_gain, n_iter=args.n_iter,
+        correlator_spacing=args.correlator_spacing,
+    )
     results["Open Sky"] = (errors, stats)
 
     # --- 2. Odaiba (with PLATEAU buildings) ---
     print("\n=== Odaiba (PLATEAU 249K triangles) ===")
     bldg_od = loader.load_directory("experiments/data/plateau_odaiba")
     bvh_od = BVHAccelerator.from_building_model(bldg_od)
-    errors, stats = run_trajectory("Odaiba", pos_od, times_od, eph, gps_prns,
-                                   building_model=bvh_od, max_epochs=30)
+    errors, stats = run_trajectory(
+        "Odaiba", pos_od, times_od, eph, gps_prns,
+        building_model=bvh_od, max_epochs=args.max_epochs,
+        dll_gain=args.dll_gain, pll_gain=args.pll_gain, n_iter=args.n_iter,
+        correlator_spacing=args.correlator_spacing,
+    )
     results["Odaiba"] = (errors, stats)
 
     # --- 3. Shinjuku (with PLATEAU buildings) ---
@@ -213,8 +311,12 @@ def main():
 
     bldg_sj = loader.load_directory("experiments/data/plateau_shinjuku")
     bvh_sj = BVHAccelerator.from_building_model(bldg_sj)
-    errors, stats = run_trajectory("Shinjuku", pos_sj, times_sj, eph_sj, gps_prns_sj,
-                                   building_model=bvh_sj, max_epochs=30)
+    errors, stats = run_trajectory(
+        "Shinjuku", pos_sj, times_sj, eph_sj, gps_prns_sj,
+        building_model=bvh_sj, max_epochs=args.max_epochs,
+        dll_gain=args.dll_gain, pll_gain=args.pll_gain, n_iter=args.n_iter,
+        correlator_spacing=args.correlator_spacing,
+    )
     results["Shinjuku"] = (errors, stats)
 
     # --- CDF plot ---

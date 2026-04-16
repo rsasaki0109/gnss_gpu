@@ -428,6 +428,34 @@ class TestBatchComputation:
             np.testing.assert_allclose(batch_pos[i, 0], single_positions[i], atol=1e-6)
             np.testing.assert_allclose(batch_clk[i, 0], single_clocks[i], atol=1e-15)
 
+    def test_batch_reselects_ephemeris_across_epochs(self):
+        """Batch path should re-select the closest record for each epoch."""
+        nav1 = _make_reference_nav()
+        nav1.toe = 0.0
+        nav1.toc_seconds = 0.0
+
+        nav2 = NavMessage(**{
+            **nav1.__dict__,
+            "toe": 7200.0,
+            "toc_seconds": 7200.0,
+            "M0": nav1.M0 + 0.4,
+        })
+
+        eph = Ephemeris({1: [nav1, nav2]})
+        times = np.array([1000.0, 7400.0])
+
+        batch_pos, batch_clk, prns = eph.compute_batch(times)
+        single_pos = []
+        single_clk = []
+        for t in times:
+            pos, clk, _ = eph.compute(float(t))
+            single_pos.append(pos[0])
+            single_clk.append(clk[0])
+
+        assert prns == [1]
+        np.testing.assert_allclose(batch_pos[:, 0], np.array(single_pos), atol=1e-6)
+        np.testing.assert_allclose(batch_clk[:, 0], np.array(single_clk), atol=1e-15)
+
     def test_batch_shape(self):
         """Batch output should have correct shape."""
         nav1 = _make_reference_nav()

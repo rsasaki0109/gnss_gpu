@@ -3,6 +3,7 @@ build/
 dist/
 *.egg-info/
 *.so
+*.pyd
 *.o
 *.a
 

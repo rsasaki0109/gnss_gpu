@@ -43,7 +43,7 @@ PYBIND11_MODULE(_bvh, m) {
       nptr[i * 10 + 9] = (double)nodes[i].tri_count;
     }
 
-    auto indices_arr = py::array_t<int>(std::vector<ssize_t>{n_tri});
+    auto indices_arr = py::array_t<int>(std::vector<py::ssize_t>{n_tri});
     int* iptr = indices_arr.mutable_data();
     for (int i = 0; i < n_tri; i++) iptr[i] = sorted_indices[i];
 
@@ -83,7 +83,7 @@ PYBIND11_MODULE(_bvh, m) {
       nodes[i].tri_count = (int)nptr[i * 10 + 9];
     }
 
-    auto is_los_int = py::array_t<int>(std::vector<ssize_t>{n_sat});
+    auto is_los_int = py::array_t<int>(std::vector<py::ssize_t>{n_sat});
     int* int_ptr = is_los_int.mutable_data();
 
     gnss_gpu::raytrace_los_check_bvh(
@@ -94,7 +94,7 @@ PYBIND11_MODULE(_bvh, m) {
         int_ptr,
         n_sat, n_nodes);
 
-    auto is_los = py::array_t<bool>(std::vector<ssize_t>{n_sat});
+    auto is_los = py::array_t<bool>(std::vector<py::ssize_t>{n_sat});
     bool* bool_ptr = is_los.mutable_data();
     for (int i = 0; i < n_sat; i++) bool_ptr[i] = (int_ptr[i] != 0);
     return is_los;

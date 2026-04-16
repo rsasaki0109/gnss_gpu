@@ -143,7 +143,7 @@ PYBIND11_MODULE(_gnss_gpu_tracking, m) {
   // --- cn0_nwpr ---
   m.def("cn0_nwpr", [](py::array_t<double> correlations_hist,
                         int n_channels, int n_hist, double T) {
-    auto cn0 = py::array_t<double>(std::vector<ssize_t>{n_channels});
+    auto cn0 = py::array_t<double>(std::vector<py::ssize_t>{n_channels});
     gnss_gpu::cn0_nwpr(
       static_cast<double*>(correlations_hist.request().ptr),
       static_cast<double*>(cn0.request().ptr),

@@ -222,8 +222,17 @@ class Ephemeris:
         if not used_prns:
             return np.array([], dtype=np.float64), []
 
-        params_flat = np.frombuffer(params_bytes, dtype=np.float64)
-        return params_flat, used_prns
+        return np.frombuffer(params_bytes, dtype=np.float64), used_prns
+
+    @staticmethod
+    def _build_params_from_navs(navs: list[NavMessage]) -> np.ndarray:
+        """Build a packed EphemerisParams array from already-selected messages."""
+        if not navs:
+            return np.array([], dtype=np.float64)
+        return np.frombuffer(
+            b"".join(_nav_to_params_bytes(nav) for nav in navs),
+            dtype=np.float64,
+        )
 
     def compute(
         self,
@@ -281,33 +290,83 @@ class Ephemeris:
             sat_ecef: array of shape [n_epoch, n_sat, 3] ECEF positions [m]
             sat_clk: array of shape [n_epoch, n_sat] clock corrections [s]
             used_prns: list of PRN numbers corresponding to output columns
+
+        Notes:
+            Ephemeris records are re-selected independently for each epoch.
+            The returned PRN list is the subset with a valid ephemeris across
+            every requested epoch so that the output shape stays rectangular.
         """
-        gps_times = np.asarray(gps_times, dtype=np.float64)
+        gps_times = np.asarray(gps_times, dtype=np.float64).reshape(-1)
 
         if prn_list is None:
             prn_list = self._prn_list
 
-        ref_time = gps_times[0] if len(gps_times) > 0 else 0.0
-        navs = [self.select_ephemeris(prn, ref_time) for prn in prn_list]
-        use_gpu = HAS_GPU and all(nav is not None and nav.system == "G" for nav in navs if nav is not None)
+        n_epoch = len(gps_times)
+        if n_epoch == 0:
+            return (
+                np.array([]).reshape(0, 0, 3),
+                np.array([]).reshape(0, 0),
+                [],
+            )
 
-        if not use_gpu:
-            return self._compute_batch_cpu(gps_times, prn_list)
+        selected_navs_per_epoch = []
+        common_mask = np.ones(len(prn_list), dtype=bool)
+        for gps_time in gps_times:
+            navs = [self.select_ephemeris(prn, float(gps_time)) for prn in prn_list]
+            selected_navs_per_epoch.append(navs)
+            common_mask &= np.array([nav is not None for nav in navs], dtype=bool)
 
-        params_flat, used_prns = self._build_params(ref_time, prn_list)
+        used_prns = [prn for prn, keep in zip(prn_list, common_mask) if keep]
         if not used_prns:
-            n_epoch = len(gps_times)
             return (
                 np.array([]).reshape(n_epoch, 0, 3),
                 np.array([]).reshape(n_epoch, 0),
                 [],
             )
 
+        keep_indices = [i for i, keep in enumerate(common_mask) if keep]
+        selected_navs_per_epoch = [
+            [navs[i] for i in keep_indices] for navs in selected_navs_per_epoch
+        ]
+
         n_sat = len(used_prns)
-        sat_ecef, sat_clk = compute_satellite_position_batch(
-            params_flat, gps_times, n_sat
+        use_gpu = HAS_GPU and all(
+            nav.system == "G"
+            for navs in selected_navs_per_epoch
+            for nav in navs
         )
-        return np.asarray(sat_ecef), np.asarray(sat_clk), used_prns
+
+        if use_gpu:
+            positions = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+            clocks = np.zeros((n_epoch, n_sat), dtype=np.float64)
+            groups: dict[bytes, dict[str, list]] = {}
+
+            for epoch_idx, navs in enumerate(selected_navs_per_epoch):
+                params_blob = self._build_params_from_navs(navs).tobytes()
+                group = groups.setdefault(params_blob, {"epochs": [], "times": []})
+                group["epochs"].append(epoch_idx)
+                group["times"].append(float(gps_times[epoch_idx]))
+
+            for params_blob, group in groups.items():
+                params_flat = np.frombuffer(params_blob, dtype=np.float64)
+                group_times = np.asarray(group["times"], dtype=np.float64)
+                group_pos, group_clk = compute_satellite_position_batch(
+                    params_flat, group_times, n_sat
+                )
+                positions[group["epochs"]] = np.asarray(group_pos)
+                clocks[group["epochs"]] = np.asarray(group_clk)
+
+            return positions, clocks, used_prns
+
+        positions = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+        clocks = np.zeros((n_epoch, n_sat), dtype=np.float64)
+        for i, (gps_time, navs) in enumerate(zip(gps_times, selected_navs_per_epoch)):
+            for j, nav in enumerate(navs):
+                pos, clk = self._compute_single_cpu(nav, float(gps_time))
+                positions[i, j] = pos
+                clocks[i, j] = clk
+
+        return positions, clocks, used_prns
 
     # --- CPU fallback implementation ---
 

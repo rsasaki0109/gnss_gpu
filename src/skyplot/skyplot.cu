@@ -5,6 +5,8 @@
 
 namespace gnss_gpu {
 
+constexpr double kPi = 3.14159265358979323846;
+
 // ---------------------------------------------------------------------------
 // Device-accessible WGS84 constants (constexpr namespace-scope doubles
 // may not be accessible in __device__ code on all CUDA toolkits)
@@ -238,11 +240,11 @@ __global__ void sky_visibility_kernel(const double* grid_ecef, const double* tri
     double sin_lat = sin(lat), cos_lat = cos(lat);
     double sin_lon = sin(lon), cos_lon = cos(lon);
 
-    double az = (2.0 * M_PI * az_idx) / n_az;
+    double az = (2.0 * kPi * az_idx) / n_az;
 
     // Loop over elevation bins
     for (int el_idx = 0; el_idx < n_el; el_idx++) {
-        double el = (M_PI / 2.0 * (el_idx + 0.5)) / n_el;
+        double el = (kPi / 2.0 * (el_idx + 0.5)) / n_el;
 
         // Direction in ENU
         double ce = cos(el), se = sin(el);
