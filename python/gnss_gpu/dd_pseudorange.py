@@ -1,29 +1,22 @@
-"""Double-Differenced (DD) carrier phase computation.
+"""Double-Differenced (DD) pseudorange computation.
 
-DD eliminates receiver clock bias (both rover and base) and substantially
-reduces atmospheric (ionospheric + tropospheric) errors, making the
-carrier phase AFV likelihood much more effective for the MUPF algorithm.
+DD eliminates receiver clock bias from both rover and base and greatly reduces
+spatially correlated atmospheric errors on short baselines.
 
-Algorithm
----------
 For each epoch, given common satellites between rover and base:
 
-1. For each supported constellation, pick a reference satellite
-   (highest elevation = most likely LOS).
-2. For each non-reference common satellite *k* in that constellation:
+1. Pick a reference satellite (highest elevation = most likely LOS).
+2. For each non-reference common satellite ``k``:
 
-   DD_carrier[k] = (rover_L1[k] - rover_L1[ref]) - (base_L1[k] - base_L1[ref])
+   DD_pr[k] = (rover_PR[k] - rover_PR[ref]) - (base_PR[k] - base_PR[ref])
 
-The DD observation eliminates receiver clock bias from both rover and base,
-and largely cancels spatially-correlated atmospheric delays (since base and
-rover see similar ionosphere/troposphere for the same satellite). This module
-supports per-system wavelengths for GPS/Galileo/QZSS/BeiDou. GLONASS is
-currently skipped because FDMA slot-dependent wavelengths are not modeled yet.
+The expected DD range for a particle at position ``x`` is:
 
-DD-AFV residual per particle:
-   dd_expected = (range_rover_k - range_rover_ref - range_base_k + range_base_ref) / wavelength
-   dd_residual = DD_carrier[k] - dd_expected
-   afv = dd_residual - round(dd_residual)
+   dd_expected = (range_rover_k - range_rover_ref) - (range_base_k - range_base_ref)
+
+which is equivalent to:
+
+   dd_expected = range_rover_k - range_rover_ref - range_base_k + range_base_ref
 """
 
 from __future__ import annotations
@@ -36,44 +29,32 @@ import numpy as np
 
 from gnss_gpu.io.rinex import read_rinex_obs
 
-C_LIGHT = 299792458.0
-GPS_L1_WAVELENGTH = C_LIGHT / 1575.42e6
-GALILEO_E1_WAVELENGTH = C_LIGHT / 1575.42e6
-QZSS_L1_WAVELENGTH = C_LIGHT / 1575.42e6
-BEIDOU_B1I_WAVELENGTH = C_LIGHT / 1561.098e6
-
 _SYS_MAP = {0: "G", 1: "R", 2: "E", 3: "C", 4: "J"}
-_SYSTEM_WAVELENGTHS = {
-    "G": GPS_L1_WAVELENGTH,
-    "E": GALILEO_E1_WAVELENGTH,
-    "J": QZSS_L1_WAVELENGTH,
-    "C": BEIDOU_B1I_WAVELENGTH,
-}
-_CARRIER_CODE_PREFERENCES = {
-    "G": ("L1C", "L1W", "L1X", "L1P", "L1S", "L1L", "L1Z"),
-    "E": ("L1X", "L1C", "L1A", "L1B", "L1Z"),
-    "J": ("L1C", "L1X", "L1Z", "L1S", "L1L"),
-    "C": ("L1I", "L1D", "L1X", "L1P"),
+_PSEUDORANGE_CODE_PREFERENCES = {
+    "G": ("C1C", "C1W", "C1X", "C1P", "C1S", "C1L", "C1Z"),
+    "E": ("C1X", "C1C", "C1A", "C1B", "C1Z"),
+    "J": ("C1C", "C1X", "C1Z", "C1S", "C1L"),
+    "C": ("C1I", "C1D", "C1X", "C1P"),
+    "R": ("C1C", "C1P"),
 }
 
 
 @dataclass
-class DDResult:
-    """Result of double-differenced carrier phase computation for one epoch."""
+class DDPseudorangeResult:
+    """Result of double-differenced pseudorange computation for one epoch."""
 
-    dd_carrier_cycles: np.ndarray  # [n_dd] DD carrier phase observations in cycles
+    dd_pseudorange_m: np.ndarray  # [n_dd] DD pseudorange observations [m]
     sat_ecef_k: np.ndarray  # [n_dd, 3] ECEF positions of non-ref satellites
-    sat_ecef_ref: np.ndarray  # [n_dd, 3] ECEF positions of reference satellites
+    sat_ecef_ref: np.ndarray  # [n_dd, 3] ECEF positions of reference satellites per DD pair
     base_range_k: np.ndarray  # [n_dd] base-to-sat_k geometric ranges [m]
     base_range_ref: np.ndarray  # [n_dd] base-to-ref geometric ranges [m]
     dd_weights: np.ndarray  # [n_dd] per-DD-pair weights
-    wavelengths_m: np.ndarray  # [n_dd] carrier wavelengths [m]
-    ref_sat_ids: tuple[str, ...]  # [n_dd] reference satellite IDs per pair
+    ref_sat_ids: tuple[str, ...]  # [n_dd] reference satellite IDs per DD pair
     n_dd: int  # number of DD pairs
 
 
 def _datetime_to_tow(epoch_time) -> float:
-    dow = epoch_time.weekday()
+    dow = epoch_time.weekday()  # Monday=0 ... Sunday=6
     gps_dow = (dow + 1) % 7
     sod = (
         epoch_time.hour * 3600
@@ -102,21 +83,38 @@ def _normalize_sat_id(sat_id: str) -> str:
         return sat_id
 
 
-def _one_row_per_satellite(measurements: Sequence[Any]) -> dict[tuple[int, int], Any]:
-    by_key: dict[tuple[int, int], list[Any]] = {}
-    for m in measurements:
-        by_key.setdefault(_meas_key(m), []).append(m)
+def _one_row_per_satellite(
+    measurements: Sequence[Any], rover_weights: Sequence[float] | None = None
+) -> dict[tuple[int, int], tuple[Any, float]]:
+    """Pick one rover row per (system, prn), preferring the highest-SNR row.
 
-    out: dict[tuple[int, int], Any] = {}
+    gnssplusplus can expose multiple rows per satellite (e.g. multiple signals).
+    Prefer the highest-SNR row. If several rows tie for best SNR, omit that
+    satellite to avoid mixing frequencies.
+    """
+
+    by_key: dict[tuple[int, int], list[tuple[Any, float]]] = {}
+    for i, m in enumerate(measurements):
+        k = _meas_key(m)
+        w = (
+            float(rover_weights[i])
+            if rover_weights is not None and i < len(rover_weights)
+            else float(getattr(m, "weight", 1.0))
+        )
+        by_key.setdefault(k, []).append((m, w))
+
+    out: dict[tuple[int, int], tuple[Any, float]] = {}
     eps = 0.05
     for k, rows in by_key.items():
         if len(rows) == 1:
             out[k] = rows[0]
             continue
-        rows_sorted = sorted(rows, key=lambda m: float(getattr(m, "snr", 0.0)), reverse=True)
-        best_snr = float(getattr(rows_sorted[0], "snr", 0.0))
+        rows_sorted = sorted(rows, key=lambda p: float(getattr(p[0], "snr", 0.0)), reverse=True)
+        best_snr = float(getattr(rows_sorted[0][0], "snr", 0.0))
         n_top = sum(
-            1 for m in rows_sorted if abs(float(getattr(m, "snr", 0.0)) - best_snr) <= eps
+            1
+            for m, _w in rows_sorted
+            if abs(float(getattr(m, "snr", 0.0)) - best_snr) <= eps
         )
         if n_top != 1:
             continue
@@ -124,13 +122,13 @@ def _one_row_per_satellite(measurements: Sequence[Any]) -> dict[tuple[int, int],
     return out
 
 
-def _valid_carrier_obs(obs: dict[str, float]) -> dict[str, float]:
+def _valid_pseudorange_obs(obs: dict[str, float]) -> dict[str, float]:
     valid: dict[str, float] = {}
     for code, value in obs.items():
-        if not code.startswith("L"):
+        if not code.startswith("C"):
             continue
         val = float(value)
-        if np.isfinite(val) and abs(val) > 1e3:
+        if np.isfinite(val) and abs(val) > 1e6:
             valid[code] = val
     return valid
 
@@ -153,7 +151,7 @@ def _ordered_obs_codes(
 
     if preferred_code is not None:
         _append(preferred_code)
-    for code in _CARRIER_CODE_PREFERENCES.get(sys_char, ()):
+    for code in _PSEUDORANGE_CODE_PREFERENCES.get(sys_char, ()):
         _append(code)
 
     extras = set()
@@ -182,7 +180,7 @@ def _select_common_obs_code(
         rover_obs,
         base_obs,
         preferred_code,
-        primary_prefix="L1",
+        primary_prefix="C1",
     ):
         sats = [
             sat_id
@@ -207,27 +205,27 @@ def _pick_single_obs_value(
         {fake_sat: sat_obs},
         {fake_sat: sat_obs},
         preferred_code,
-        primary_prefix="L1",
+        primary_prefix="C1",
     ):
         if code in sat_obs:
             return float(sat_obs[code])
     return 0.0
 
 
-class DDCarrierComputer:
-    """Compute Double-Differenced carrier phase observations.
-
-    Loads base station RINEX observations and indexes them by TOW for
-    fast lookup during epoch-by-epoch processing.
+class DDPseudorangeComputer:
+    """Compute Double-Differenced pseudorange observations.
 
     Parameters
     ----------
     base_obs_path : str or Path
-        Path to base station RINEX 3.x observation file.
-    base_position : array_like, shape (3,)
-        Base station ECEF position [m]. If None, read from RINEX header.
-    carrier_obs_code : str
-        RINEX observation code for L1 carrier phase. Default ``"L1C"``.
+        Path to base station RINEX observation file.
+    base_position : array_like, shape (3,), optional
+        Base station ECEF position [m]. If omitted, use the RINEX header.
+    pseudorange_obs_code : str
+        Preferred RINEX observation code. Default ``"C1C"``.
+    allowed_systems : sequence of str
+        Constellations to use. Default is GPS only, matching the current
+        DD carrier AFV path.
     """
 
     def __init__(
@@ -235,8 +233,8 @@ class DDCarrierComputer:
         base_obs_path: str | Path,
         rover_obs_path: str | Path | None = None,
         base_position: np.ndarray | None = None,
-        carrier_obs_code: str | None = None,
-        allowed_systems: Sequence[str] = ("G", "E", "J", "C"),
+        pseudorange_obs_code: str | None = None,
+        allowed_systems: Sequence[str] = ("G", "E", "J", "C", "R"),
         interpolate_base_epochs: bool = False,
     ):
         base_obs_path = Path(base_obs_path)
@@ -244,7 +242,7 @@ class DDCarrierComputer:
             raise FileNotFoundError(f"Base RINEX not found: {base_obs_path}")
 
         self._obs = read_rinex_obs(base_obs_path)
-        self._carrier_code = carrier_obs_code
+        self._pseudorange_code = pseudorange_obs_code
         self._allowed_systems = tuple(allowed_systems)
         self._interpolate_base_epochs = bool(interpolate_base_epochs)
 
@@ -262,20 +260,16 @@ class DDCarrierComputer:
         self._base_by_tow: dict[float, dict[str, dict[str, float]]] = {}
         for ep in self._obs.epochs:
             tow_key = round(_datetime_to_tow(ep.time), 1)
-
-            carrier_obs: dict[str, dict[str, float]] = {}
+            pr_obs: dict[str, dict[str, float]] = {}
             for sat_id, obs in ep.observations.items():
                 sat_id_norm = _normalize_sat_id(sat_id)
                 if not sat_id_norm or sat_id_norm[0] not in self._allowed_systems:
                     continue
-                if sat_id_norm[0] not in _SYSTEM_WAVELENGTHS:
-                    continue
-                valid_obs = _valid_carrier_obs(obs)
+                valid_obs = _valid_pseudorange_obs(obs)
                 if valid_obs:
-                    carrier_obs[sat_id_norm] = valid_obs
-
-            if carrier_obs:
-                self._base_by_tow[tow_key] = carrier_obs
+                    pr_obs[sat_id_norm] = valid_obs
+            if pr_obs:
+                self._base_by_tow[tow_key] = pr_obs
         self._base_tow_keys = np.array(sorted(self._base_by_tow.keys()), dtype=np.float64)
 
         self._rover_by_tow: dict[float, dict[str, dict[str, float]]] | None = None
@@ -287,22 +281,20 @@ class DDCarrierComputer:
             self._rover_by_tow = {}
             for ep in rover_obs.epochs:
                 tow_key = round(_datetime_to_tow(ep.time), 1)
-                carrier_obs: dict[str, dict[str, float]] = {}
+                pr_obs: dict[str, dict[str, float]] = {}
                 for sat_id, obs in ep.observations.items():
                     sat_id_norm = _normalize_sat_id(sat_id)
                     if not sat_id_norm or sat_id_norm[0] not in self._allowed_systems:
                         continue
-                    if sat_id_norm[0] not in _SYSTEM_WAVELENGTHS:
-                        continue
-                    valid_obs = _valid_carrier_obs(obs)
+                    valid_obs = _valid_pseudorange_obs(obs)
                     if valid_obs:
-                        carrier_obs[sat_id_norm] = valid_obs
-                if carrier_obs:
-                    self._rover_by_tow[tow_key] = carrier_obs
+                        pr_obs[sat_id_norm] = valid_obs
+                if pr_obs:
+                    self._rover_by_tow[tow_key] = pr_obs
 
         print(
             f"  [DD] Loaded base station: {len(self._base_by_tow)} epochs with "
-            f"{self._carrier_code or 'system-preferred L1/E1/B1'} carrier phase"
+            f"{self._pseudorange_code or 'system-preferred C1/E1/B1'} pseudorange"
         )
 
     @property
@@ -343,33 +335,35 @@ class DDCarrierComputer:
     def compute_dd(
         self,
         tow: float,
-        rover_measurements,
+        rover_measurements: Sequence[Any],
         rover_position_approx: np.ndarray | None = None,
         min_common_sats: int = 4,
-    ) -> DDResult | None:
-        """Compute DD carrier phase for current epoch.
+        rover_weights: Sequence[float] | None = None,
+    ) -> DDPseudorangeResult | None:
+        """Compute DD pseudorange for one epoch.
 
         Parameters
         ----------
         tow : float
             GPS Time of Week [s] for the current epoch.
-        rover_measurements : list
-            gnssplusplus measurement objects with attributes:
-            ``satellite_ecef``, ``carrier_phase``, ``elevation``, ``snr``,
-            and ``prn`` or satellite ID derivable from ``system``/``prn``.
-        rover_position_approx : array_like, shape (3,), optional
-            Approximate rover position for elevation computation (not critical).
+        rover_measurements : sequence
+            gnssplusplus measurement rows exposing ``corrected_pseudorange``,
+            ``satellite_ecef``, ``elevation``, ``snr``, ``system_id`` and ``prn``.
+        rover_position_approx : ignored
+            Reserved for future use. Present to mirror the DD carrier API.
         min_common_sats : int
-            Minimum common satellites needed (including ref). Default 4.
-
-        Returns
-        -------
-        DDResult or None
-            DD carrier phase data, or None if insufficient common satellites.
+            Minimum number of common satellites including the reference.
+        rover_weights : sequence of float, optional
+            Per-row pseudorange weights aligned with ``rover_measurements``.
         """
+        del rover_position_approx
+
         tow_key = round(tow, 1)
         rover_obs = None
         if self._rover_by_tow is not None:
+            # When using raw rover/base RINEX, require the exact same epoch key
+            # on both sides. Reusing a 1 Hz raw epoch for nearby 10 Hz solver
+            # epochs injects tens of meters of deterministic bias.
             base_obs = self._base_by_tow.get(tow_key)
             if base_obs is None and self._interpolate_base_epochs:
                 base_obs = self._interpolate_base_obs(tow_key)
@@ -379,7 +373,6 @@ class DDCarrierComputer:
         else:
             base_obs = self._base_by_tow.get(tow_key)
             if base_obs is None:
-                # Legacy path: corrected rover measurements only, so keep loose matching.
                 for offset in (0.1, -0.1, 0.2, -0.2):
                     base_obs = self._base_by_tow.get(round(tow + offset, 1))
                     if base_obs is not None:
@@ -387,36 +380,31 @@ class DDCarrierComputer:
             if base_obs is None:
                 return None
 
-        rover_cp: dict[str, float] = {}
-        base_cp: dict[str, float] = {}
+        rover_rows = _one_row_per_satellite(rover_measurements, rover_weights)
+        rover_pr: dict[str, float] = {}
+        base_pr: dict[str, float] = {}
         rover_sat_ecef: dict[str, np.ndarray] = {}
         rover_elev: dict[str, float] = {}
-        rover_wavelength: dict[str, float] = {}
+        rover_w: dict[str, float] = {}
 
-        rover_rows = _one_row_per_satellite(rover_measurements)
-        for (system_id, prn), m in rover_rows.items():
+        for (system_id, prn), (m, row_weight) in rover_rows.items():
             sys_char = _SYS_MAP.get(system_id, "G")
             if sys_char not in self._allowed_systems:
                 continue
-            wavelength = _SYSTEM_WAVELENGTHS.get(sys_char)
-            if wavelength is None:
-                continue
-            sat_id = f"{sys_char}{prn:02d}"
 
-            if rover_obs is None:
-                cp = float(getattr(m, "carrier_phase", 0.0))
-                if cp == 0.0 or not np.isfinite(cp) or abs(cp) < 1e3:
-                    continue
-
-            sat_pos = np.asarray(m.satellite_ecef, dtype=np.float64).ravel()[:3]
+            sat_pos = np.asarray(getattr(m, "satellite_ecef"), dtype=np.float64).ravel()[:3]
             if sat_pos.size != 3 or not np.all(np.isfinite(sat_pos)):
                 continue
 
+            sat_id = f"{sys_char}{prn:02d}"
             if rover_obs is None:
-                rover_cp[sat_id] = cp
+                pr = float(getattr(m, "corrected_pseudorange", 0.0))
+                if pr == 0.0 or not np.isfinite(pr) or abs(pr) < 1e6:
+                    continue
+                rover_pr[sat_id] = pr
             rover_sat_ecef[sat_id] = sat_pos
             rover_elev[sat_id] = float(getattr(m, "elevation", 0.0))
-            rover_wavelength[sat_id] = wavelength
+            rover_w[sat_id] = float(row_weight) if np.isfinite(row_weight) and row_weight > 0 else 1.0
 
         if rover_obs is not None:
             sats_by_system: dict[str, list[str]] = {}
@@ -429,31 +417,29 @@ class DDCarrierComputer:
                     sys_sats,
                     rover_obs,
                     base_obs,
-                    self._carrier_code,
+                    self._pseudorange_code,
                 )
                 if len(selected_sats) < 2:
                     continue
                 for sat_id in selected_sats:
-                    rover_cp[sat_id] = float(rover_obs[sat_id][_code])
-                    base_cp[sat_id] = float(base_obs[sat_id][_code])
+                    rover_pr[sat_id] = float(rover_obs[sat_id][_code])
+                    base_pr[sat_id] = float(base_obs[sat_id][_code])
         else:
             for sat_id, sat_obs in base_obs.items():
-                cp = _pick_single_obs_value(sat_id[0], sat_obs, self._carrier_code)
-                if cp != 0.0:
-                    base_cp[sat_id] = cp
+                pr = _pick_single_obs_value(sat_id[0], sat_obs, self._pseudorange_code)
+                if pr != 0.0:
+                    base_pr[sat_id] = pr
 
-        # Find common satellites
-        common_sats = sorted(set(rover_cp.keys()) & set(base_cp.keys()))
+        common_sats = sorted(set(rover_pr.keys()) & set(base_pr.keys()))
         if len(common_sats) < min_common_sats:
             return None
 
-        dd_carrier_list = []
+        dd_pr_list = []
         sat_ecef_k_list = []
         sat_ecef_ref_list = []
         base_range_k_list = []
         base_range_ref_list = []
         dd_weight_list = []
-        wavelengths_m_list = []
         ref_sat_ids = []
 
         sats_by_system: dict[str, list[str]] = {}
@@ -469,45 +455,49 @@ class DDCarrierComputer:
             if not non_ref:
                 continue
 
-            rover_cp_ref = rover_cp[ref_sat]
-            base_cp_ref = base_cp[ref_sat]
+            rover_pr_ref = rover_pr[ref_sat]
+            base_pr_ref = base_pr[ref_sat]
             ref_ecef = rover_sat_ecef[ref_sat]
             base_range_ref = float(np.linalg.norm(ref_ecef - self._base_pos))
-            wavelength = rover_wavelength[ref_sat]
-            elev_ref = rover_elev.get(ref_sat, 0.3)
+            ref_weight = rover_w.get(ref_sat, 1.0)
+            ref_elev = rover_elev.get(ref_sat, 0.3)
 
             for sat_id in non_ref:
-                rover_cp_k = rover_cp[sat_id]
-                base_cp_k = base_cp[sat_id]
+                rover_pr_k = rover_pr[sat_id]
+                base_pr_k = base_pr[sat_id]
                 sat_k_ecef = rover_sat_ecef[sat_id]
                 base_range_k = float(np.linalg.norm(sat_k_ecef - self._base_pos))
 
-                dd = (rover_cp_k - rover_cp_ref) - (base_cp_k - base_cp_ref)
+                dd_pr = (rover_pr_k - rover_pr_ref) - (base_pr_k - base_pr_ref)
 
+                meas_weight = float(
+                    np.sqrt(
+                        max(rover_w.get(sat_id, 1.0), 1.0e-12)
+                        * max(ref_weight, 1.0e-12)
+                    )
+                )
                 elev_k = rover_elev.get(sat_id, 0.3)
-                w = min(np.sin(max(elev_k, 0.05)), np.sin(max(elev_ref, 0.05)))
+                elev_weight = min(np.sin(max(elev_k, 0.05)), np.sin(max(ref_elev, 0.05)))
 
-                dd_carrier_list.append(dd)
+                dd_pr_list.append(dd_pr)
                 sat_ecef_k_list.append(sat_k_ecef)
                 sat_ecef_ref_list.append(ref_ecef.copy())
                 base_range_k_list.append(base_range_k)
                 base_range_ref_list.append(base_range_ref)
-                dd_weight_list.append(w)
-                wavelengths_m_list.append(wavelength)
+                dd_weight_list.append(meas_weight * elev_weight)
                 ref_sat_ids.append(ref_sat)
 
-        if not dd_carrier_list:
+        if not dd_pr_list:
             return None
 
-        n_dd = len(dd_carrier_list)
-        return DDResult(
-            dd_carrier_cycles=np.array(dd_carrier_list, dtype=np.float64),
+        n_dd = len(dd_pr_list)
+        return DDPseudorangeResult(
+            dd_pseudorange_m=np.array(dd_pr_list, dtype=np.float64),
             sat_ecef_k=np.array(sat_ecef_k_list, dtype=np.float64).reshape(n_dd, 3),
             sat_ecef_ref=np.array(sat_ecef_ref_list, dtype=np.float64).reshape(n_dd, 3),
             base_range_k=np.array(base_range_k_list, dtype=np.float64),
             base_range_ref=np.array(base_range_ref_list, dtype=np.float64),
             dd_weights=np.array(dd_weight_list, dtype=np.float64),
-            wavelengths_m=np.array(wavelengths_m_list, dtype=np.float64),
             ref_sat_ids=tuple(ref_sat_ids),
             n_dd=n_dd,
         )
