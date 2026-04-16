@@ -1,8 +1,8 @@
 # gnss_gpu Handoff Plan
 
-Last updated: 2026-04-15 (local)  
-Current branch: `main` (worktree may be dirty vs last commit)  
-Last known HEAD: `2c6b5aa`  
+Last updated: 2026-04-17 (local)  
+Current branch: `main` (clean vs HEAD at last update)  
+Last known HEAD: `3388eb2`  
 Intended reader: **Claude / next coding agent** (Cursor, Copilot, etc.)
 
 ---
@@ -19,17 +19,20 @@ This document is **not** the old “artifact packaging / paper asset” plan. Th
 - **Acquisition** returns **fractional** circular lag (samples) via **3-point parabolic** interpolation around the FFT correlation peak; at zero IF, reported Doppler is a **magnitude** (sign ambiguous).
 - **E2E** reconstructs pseudorange from acquisition lag + 1 ms ambiguity resolution + **`sat_clk`**, with a **`2 km` gate** before WLS. This is **not** injecting geometric truth as pseudorange.
 - **Post-acquisition refinement** (experiments): GPU `batch_correlate` (**E/P/L**) on the **same 1 ms** IF buffer with **DLL** (code phase in chips) and **PLL** (`atan2(PQ, PI)` on carrier phase in cycles). **No** `scalar_tracking_update` time advance — frozen epoch, iterative nudges only.
-- **Weighted WLS**: per-sat weights from **prompt power**, **acquisition peak/second-peak ratio**, and **|DLL| power discriminator** after refinement (`experiments/e2e_utils.py` → `compute_e2e_wls_weights`).
-- **CLI** on `experiments/exp_e2e_positioning.py` and `experiments/exp_e2e_trajectory.py`: `--dll-gain`, `--pll-gain`, `--n-iter`, `--correlator-spacing`, and trajectory `--max-epochs`.
+- **Weighted WLS**: per-sat weights from **prompt power**, **acquisition peak/second-peak ratio**, and **|DLL| power discriminator** after refinement (`gnss_gpu.e2e_helpers.compute_e2e_wls_weights`; `experiments/e2e_utils.py` is now a back-compat shim).
+- **E2E helpers** live in **`python/gnss_gpu/e2e_helpers.py`** (promoted from `experiments/`). Top-level re-exports: `compute_e2e_wls_weights`, `acquisition_lag_to_code_phase_chips`, `code_phase_chips_to_acquisition_lag`, `refine_acquisition_code_lag_dll`, `refine_acquisition_code_lags_dll_batch`, `refine_acquisition_code_lags_diagnostic_batch`, `dump_e2e_diagnostics_csv`, `pseudorange_to_code_phase_chips`, `acquisition_code_phase_to_pseudorange`.
+- **Per-channel diagnostics**: `refine_acquisition_code_lags_diagnostic_batch` returns a dict with final E/P/L IQ, code/carrier phase+freq, `prompt_power`, `dll_abs`, and a rough `cn0_est_db` (1 ms coherent, not calibrated). `dump_e2e_diagnostics_csv` writes a 15-column CSV. `exp_e2e_positioning.py` has `--diagnostics-csv PATH` (per-scenario `{stem}_{name}.csv`).
+- **CLI** on `experiments/exp_e2e_positioning.py` and `experiments/exp_e2e_trajectory.py`: `--dll-gain`, `--pll-gain`, `--n-iter`, `--correlator-spacing`, trajectory `--max-epochs`, and positioning `--diagnostics-csv`.
 
 **What is *not* claimed:** a full receiver tracking loop over many milliseconds, navigation bit alignment, or sub-centimeter code tracking. The E2E path is **honest physics + acquisition-grade + short coherent refinement**.
 
 **Main remaining leverage (high level):**
 
-1. Move proven E2E helpers from `experiments/` into **`python/gnss_gpu/`** (clean API, optional CUDA).
-2. **Longer coherent integration** or multiple ms (nav bit / data wipe issues) if you need another step in accuracy.
-3. **Warnings / CI hygiene** (low priority).
-4. Optional: stronger **carrier** aiding (PLL gain schedules, Costas, etc.) — current PLL is minimal.
+1. ~~Move proven E2E helpers from `experiments/` into **`python/gnss_gpu/`**~~ — **done** (`gnss_gpu/e2e_helpers.py`; `experiments/e2e_utils.py` is a shim).
+2. **Longer coherent integration** or multiple ms (nav bit / data wipe issues) if you need another step in accuracy. **Biggest remaining accuracy lever.**
+3. **Adaptive gains** vs `cn0_est_db` / `dll_abs` — diagnostic tap is in place, schedule is not.
+4. **Warnings / CI hygiene** (low priority; see §8.4/§8.5).
+5. Optional: stronger **carrier** aiding (PLL gain schedules, Costas, etc.) — current PLL is minimal.
 
 ---
 
@@ -87,11 +90,10 @@ Expect on the order of **440+ passed** (exact count changes when tests are added
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; python -m pytest tests -q -p pytest
 ```
 
-Remaining **non-blocking** warnings (typical):
-
-- `datetime.utcnow()` deprecation (`nmea_writer.py`)
-- `pytest-asyncio` loop scope
-- matplotlib scatter in viz tests
+Warnings: **clean** as of commit after `3388eb2` — `datetime.utcnow()` →
+`datetime.now(timezone.utc)`, `pytest-asyncio` loop scope pinned to
+`function` in `pyproject.toml`, matplotlib scatter drops `cmap` when no
+color data is passed. `pytest -W default` shows 0 warnings.
 
 ### 3.2 Single-epoch E2E (`exp_e2e_positioning.py`)
 
@@ -152,8 +154,9 @@ Large PLATEAU meshes + BVH; runtime **~1 s/frame** order of magnitude on a repre
 
 ### 4.2 E2E pipeline
 
-- `experiments/e2e_utils.py` — **single source of truth** for lag/chips, DLL/PLL batch, WLS weights  
-- `experiments/exp_e2e_positioning.py` — argparse  
+- `python/gnss_gpu/e2e_helpers.py` — **single source of truth** for lag/chips, DLL/PLL batch, WLS weights, diagnostic tap, CSV dump
+- `experiments/e2e_utils.py` — back-compat shim (re-exports from `gnss_gpu.e2e_helpers`)
+- `experiments/exp_e2e_positioning.py` — argparse + `--diagnostics-csv`
 - `experiments/exp_e2e_trajectory.py` — argparse + `--max-epochs`
 
 ### 4.3 Acquisition
@@ -276,25 +279,29 @@ The same 1 ms buffer is re-correlated; **do not** confuse with `scalar_tracking_
 
 ## 8. Recommended Next Tasks (for the next agent)
 
-### 8.1 **Promote E2E helpers into the package** (high value, medium effort)
+### 8.1 ~~Promote E2E helpers into the package~~ — **DONE** (commit `b679cad`)
 
-- Move or wrap: DLL/PLL batch refinement, weight computation, lag/chips helpers.
-- Target: e.g. `python/gnss_gpu/e2e_helpers.py` or extend `tracking.py` with a thin, tested API.
-- Keep `experiments/` as thin scripts.
+- `python/gnss_gpu/e2e_helpers.py` is the canonical location.
+- `experiments/e2e_utils.py` is a thin re-export shim.
 
-### 8.2 **Longer integration / multi-ms** (high effort)
+### 8.2 **Longer integration / multi-ms** (high effort) — **next big accuracy lever**
 
 - Requires thinking about **nav bits**, data wipe, and buffer length; big accuracy lever but not a small patch.
 
-### 8.3 **PLL/DLL tuning and diagnostics** (medium)
+### 8.3 **PLL/DLL tuning and diagnostics** (medium) — **diagnostic tap DONE, tuning pending**
 
-- Expose per-channel **final correlator outputs** or CSV logs for papers/debug.
-- Optional: adaptive gains vs `cn0`-like metrics from prompt power.
+- ~~Per-channel final correlator outputs / CSV~~ — done in commit `3388eb2`
+  (`refine_acquisition_code_lags_diagnostic_batch` + `dump_e2e_diagnostics_csv` +
+  `exp_e2e_positioning.py --diagnostics-csv`).
+- **Still open:** adaptive gains vs `cn0_est_db` / `dll_abs`; schedule PLL gain by
+  lock quality; Costas variants.
 
-### 8.4 **Warnings cleanup** (low)
+### 8.4 ~~Warnings cleanup~~ — **DONE**
 
-- `datetime.utcnow()` → timezone-aware API
-- pytest-asyncio config if the project standardizes on asyncio tests
+- `datetime.utcnow()` → `datetime.now(timezone.utc)` in `nmea_writer.py`
+- `asyncio_default_fixture_loop_scope = "function"` in `pyproject.toml`
+- `plots.py` drops `cmap` when no color data is supplied to `scatter`.
+- Full suite: `444 passed, 6 skipped, 0 warnings`.
 
 ### 8.5 **CI / regression**
 
@@ -304,8 +311,8 @@ The same 1 ms buffer is re-correlated; **do not** confuse with `scalar_tracking_
 
 ## 9. Suggested Reading Order (cold start)
 
-1. `experiments/e2e_utils.py` — current behavior in one place  
-2. `experiments/exp_e2e_positioning.py` — argparse + flow  
+1. `python/gnss_gpu/e2e_helpers.py` — current behavior in one place  
+2. `experiments/exp_e2e_positioning.py` — argparse + flow (`--diagnostics-csv`)  
 3. `python/gnss_gpu/ephemeris.py` — `compute_batch`  
 4. `python/gnss_gpu/urban_signal_sim.py` — `sat_clk`  
 5. `src/acquisition/acquisition.cu` — parabolic peak  
