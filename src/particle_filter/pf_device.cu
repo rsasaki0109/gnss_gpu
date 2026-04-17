@@ -16,6 +16,21 @@ namespace gnss_gpu {
 static constexpr int BLOCK_SIZE = 256;
 static constexpr int MAX_SATS = 64;
 
+__device__ inline double pfd_gaussian_or_huber_loglik(
+    double residual,
+    double weight,
+    double inv_sigma,
+    double huber_k) {
+    if (huber_k > 0.0) {
+        double z = fabs(residual) * sqrt(fmax(weight, 0.0)) * inv_sigma;
+        double penalty = (z < huber_k)
+            ? 0.5 * z * z
+            : (huber_k * z - 0.5 * huber_k * huber_k);
+        return -penalty;
+    }
+    return -0.5 * weight * residual * residual * inv_sigma * inv_sigma;
+}
+
 // ============================================================
 // Kernels (self-contained, no extern dependencies)
 // ============================================================
@@ -125,7 +140,8 @@ __global__ void pfd_weight_dd_pseudorange_kernel(
     const double* dd_data,      // layout: [sat_k: n_dd*3][ref: n_dd*3][dd_pr: n_dd][base_range_k: n_dd][base_range_ref: n_dd][weights: n_dd]
     double* log_weights,
     int N, int n_dd,
-    double sigma_pr) {
+    double sigma_pr,
+    double huber_k) {
 
     extern __shared__ double s_data[];
     double* s_sat_k = s_data;                   // n_dd * 3
@@ -148,7 +164,7 @@ __global__ void pfd_weight_dd_pseudorange_kernel(
     double y = py[tid];
     double z = pz[tid];
 
-    double inv_sigma2 = 1.0 / (sigma_pr * sigma_pr);
+    double inv_sigma = 1.0 / sigma_pr;
     double log_w = 0.0;
 
     for (int d = 0; d < n_dd; d++) {
@@ -164,7 +180,8 @@ __global__ void pfd_weight_dd_pseudorange_kernel(
 
         double dd_expected = r_k - r_ref - s_br_k[d] + s_br_ref[d];
         double residual = s_dd_pr[d] - dd_expected;
-        log_w += -0.5 * s_ws[d] * residual * residual * inv_sigma2;
+        log_w += pfd_gaussian_or_huber_loglik(
+            residual, s_ws[d], inv_sigma, huber_k);
     }
 
     log_weights[tid] = log_w;
@@ -308,7 +325,8 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
     const double* dd_data,      // layout: [sat_k: n_dd*3][ref: n_dd*3][dd_carrier: n_dd][base_range_k: n_dd][base_range_ref: n_dd][weights: n_dd][wavelengths: n_dd]
     double* log_weights,
     int N, int n_dd,
-    double sigma_cycles) {
+    double sigma_cycles,
+    double huber_k) {
 
     // Dynamic shared memory layout:
     // [sat_k_ecef: n_dd*3] [ref_ecef: n_dd*3] [dd_carrier: n_dd]
@@ -335,7 +353,7 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
     double y = py[tid];
     double z = pz[tid];
 
-    double inv_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
+    double inv_sigma = 1.0 / sigma_cycles;
     double log_w = 0.0;
 
     for (int d = 0; d < n_dd; d++) {
@@ -361,7 +379,8 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
         // AFV: fractional cycle
         double afv = dd_residual - rint(dd_residual);
 
-        log_w += -0.5 * s_ws[d] * (afv * afv) * inv_sigma2;
+        log_w += pfd_gaussian_or_huber_loglik(
+            afv, s_ws[d], inv_sigma, huber_k);
     }
 
     log_weights[tid] += log_w;
@@ -922,7 +941,7 @@ void pf_device_weight_dd_pseudorange(PFDeviceState* state,
     const double* sat_ecef_k, const double* ref_ecef,
     const double* dd_pseudorange, const double* base_range_k,
     const double* base_range_ref, const double* weights_dd,
-    int n_dd, double sigma_pr) {
+    int n_dd, double sigma_pr, double huber_k) {
 
     int N = state->n_particles;
     int grid = state->grid_size;
@@ -952,7 +971,7 @@ void pf_device_weight_dd_pseudorange(PFDeviceState* state,
     pfd_weight_dd_pseudorange_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
         d_dd_data, state->d_log_weights,
-        N, n_dd, sigma_pr);
+        N, n_dd, sigma_pr, huber_k);
     CUDA_CHECK_LAST();
 
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
@@ -1396,7 +1415,7 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     const double* dd_carrier, const double* base_range_k,
     const double* base_range_ref, const double* weights_dd,
     const double* wavelengths_m,
-    int n_dd, double sigma_cycles) {
+    int n_dd, double sigma_cycles, double huber_k) {
 
     int N = state->n_particles;
     int grid = state->grid_size;
@@ -1435,7 +1454,7 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     pfd_weight_dd_carrier_afv_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
         d_dd_data, state->d_log_weights,
-        N, n_dd, sigma_cycles);
+        N, n_dd, sigma_cycles, huber_k);
     CUDA_CHECK_LAST();
 
     // Free device buffer after kernel completes
