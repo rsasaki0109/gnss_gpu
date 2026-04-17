@@ -84,8 +84,11 @@ def plot_particles(particles, true_pos=None, estimate=None,
         c = None
         clabel = None
 
-    sc = ax.scatter(particles[:, 0], particles[:, 1], s=1, alpha=0.3,
-                    c=c, cmap="viridis", rasterized=True)
+    scatter_kwargs = {"s": 1, "alpha": 0.3, "rasterized": True}
+    if c is not None:
+        scatter_kwargs["c"] = c
+        scatter_kwargs["cmap"] = "viridis"
+    sc = ax.scatter(particles[:, 0], particles[:, 1], **scatter_kwargs)
     if c is not None:
         cb = fig.colorbar(sc, ax=ax, pad=0.02)
         cb.set_label(clabel)
