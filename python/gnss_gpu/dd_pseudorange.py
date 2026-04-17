@@ -236,6 +236,7 @@ class DDPseudorangeComputer:
         pseudorange_obs_code: str | None = None,
         allowed_systems: Sequence[str] = ("G", "E", "J", "C", "R"),
         interpolate_base_epochs: bool = False,
+        base_epoch_tolerance_s: float = 0.25,
     ):
         base_obs_path = Path(base_obs_path)
         if not base_obs_path.exists():
@@ -245,6 +246,7 @@ class DDPseudorangeComputer:
         self._pseudorange_code = pseudorange_obs_code
         self._allowed_systems = tuple(allowed_systems)
         self._interpolate_base_epochs = bool(interpolate_base_epochs)
+        self._base_epoch_tolerance_s = max(float(base_epoch_tolerance_s), 0.0)
 
         if base_position is not None:
             self._base_pos = np.asarray(base_position, dtype=np.float64).ravel()
@@ -332,6 +334,21 @@ class DDPseudorangeComputer:
                 interp[sat_id] = obs_interp
         return interp or None
 
+    def _nearest_base_obs(self, tow_key: float) -> dict[str, dict[str, float]] | None:
+        if self._base_tow_keys.size == 0 or self._base_epoch_tolerance_s <= 0.0:
+            return None
+        idx = int(np.searchsorted(self._base_tow_keys, tow_key))
+        candidates = []
+        for j in (idx - 1, idx):
+            if 0 <= j < self._base_tow_keys.size:
+                candidates.append(float(self._base_tow_keys[j]))
+        if not candidates:
+            return None
+        nearest = min(candidates, key=lambda t: abs(t - tow_key))
+        if abs(nearest - tow_key) <= self._base_epoch_tolerance_s:
+            return self._base_by_tow.get(nearest)
+        return None
+
     def compute_dd(
         self,
         tow: float,
@@ -373,10 +390,7 @@ class DDPseudorangeComputer:
         else:
             base_obs = self._base_by_tow.get(tow_key)
             if base_obs is None:
-                for offset in (0.1, -0.1, 0.2, -0.2):
-                    base_obs = self._base_by_tow.get(round(tow + offset, 1))
-                    if base_obs is not None:
-                        break
+                base_obs = self._nearest_base_obs(tow_key)
             if base_obs is None:
                 return None
 

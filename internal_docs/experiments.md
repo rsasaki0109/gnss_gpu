@@ -1035,3 +1035,54 @@ full train 結果:
 結論:
 - C-1 の robust WLS prototype は再現可能な baseline として残す。
 - 現設定では Android WLS seed から独立した採用価値はないため、CUDA 化や submission promotion には進めない。
+
+## GSDC 2023 F: NOAA CORS DD pseudorange smoke
+
+GSDC 2023 向けに NOAA CORS daily RINEX を取得し、CORS raw pseudorange と GSDC raw
+L1/E1 pseudorange で DD pseudorange を形成する adapter と評価 script を追加した。
+
+実装:
+- [gsdc_dgnss.py](/workspace/ai_coding_ws/gnss_gpu/python/gnss_gpu/gsdc_dgnss.py)
+- [exp_gsdc2023_dgnss.py](/workspace/ai_coding_ws/gnss_gpu/experiments/exp_gsdc2023_dgnss.py)
+
+追加仕様:
+- NOAA CORS URL pattern: `https://noaa-cors-pds.s3.amazonaws.com/rinex/YYYY/DDD/ssss/ssssDDD0.YYd.gz`
+  を primary、NGS `https://geodesy.noaa.gov/corsdata/rinex/...` を fallback。
+- `.d.gz` は gzip 展開後、`crx2rnx` があれば Hatanaka -> RINEX 2 obs に変換。
+- `python/gnss_gpu/io/rinex.py` は NOAA daily CORS で必要な RINEX 2 observation parsing に対応。
+- station 候補は GSDC run token / trajectory centroid から `SLAC/P222`, `MHC2/MHCB/P222/P217`,
+  `TORP/CRHS`, `VDCY/JPLM` の順に選定。
+- CORS daily public file は多くが 30 s のため、GSDC の `*.438 s` epoch と合うよう
+  `DDPseudorangeComputer(base_epoch_tolerance_s=0.6)` を使い、coverage を明示記録。
+- CORS が raw RINEX pseudorange なので、GSDC rover 側も DD では raw pseudorange を使う。
+  GSDC satellite clock corrected pseudorange と CORS raw を混ぜると DD residual が 16 万 m 級になる。
+
+smoke コマンド:
+
+```bash
+PYTHONPATH=python python3 experiments/exp_gsdc2023_dgnss.py \
+  --single 2023-05-09-21-32-us-ca-mtv-pe1/pixel5 \
+  --cache-dir /tmp/gsdc_cors
+
+PYTHONPATH=python python3 experiments/exp_gsdc2023_dgnss.py \
+  --single 2021-12-09-17-06-us-ca-lax-e/pixel5 \
+  --cache-dir /tmp/gsdc_cors
+```
+
+smoke 結果:
+
+| run/phone | station | DD coverage | accepted | WLS P50 | DGNSS P50 | WLS RMS | DGNSS RMS | 判定 |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| `2023-05-09-21-32-us-ca-mtv-pe1/pixel5` | `SLAC` | 3.3% | 0.0% | 5.12 m | 5.12 m | 6.27 m | 6.28 m | 同等だが無効 |
+| `2021-12-09-17-06-us-ca-lax-e/pixel5` | `TORP` | 6.5% | 4.0% | 2.06 m | 2.09 m | 2.60 m | 3.94 m | 悪化 |
+
+追加確認:
+- `--max-shift-m 50` で MTV smoke の guard を緩めると accepted `2.3%` になるが、
+  `P50 5.12 -> 5.22 m`, `RMS 6.27 -> 8.43 m` に悪化。
+- 初回 DD epoch の residual は raw/raw にしても `~193 m RMS` 程度あり、30 s daily CORS の
+  nearest-epoch だけでは smartphone WLS seed を改善できない。
+
+結論:
+- public daily NOAA CORS 30 s RINEX を使う範囲では、PF-100K mean P50 `2.83 m` を下回る見込みがない。
+- full 156 run 展開と test submission 生成は行わない。
+- 次に進めるなら 1 Hz CORS/high-rate source と base satellite-clock/geometry correction を別途実装してから再評価する。

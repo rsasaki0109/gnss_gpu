@@ -167,3 +167,17 @@ Parser gap:
   coordinates from NOAA coordinate/API output.
 - Existing DD gating from UrbanNav should not be copied blindly. Smartphone code multipath and
   inter-signal biases need GSDC-specific residual diagnostics.
+
+## Implementation smoke note
+
+2026-04-17 に first implementation smoke を実施した。詳細は
+`internal_docs/experiments.md` の "GSDC 2023 F: NOAA CORS DD pseudorange smoke" を参照。
+
+要点:
+- NOAA CORS `.d.gz` 取得、Hatanaka -> RINEX 2 obs 変換、GSDC L1/E1 rover adapter、
+  bounded DD WLS update は実装済み。
+- CORS RINEX は raw pseudorange なので、GSDC DD 側も raw pseudorange を使う必要がある。
+  GSDC satellite-clock corrected pseudorange と CORS raw を混ぜると DD residual が 16 万 m 級になる。
+- public daily CORS 30 s file の nearest-epoch smoke では coverage が 3-7% 程度しかなく、
+  MTV/LAX smoke とも Android WLS に対して同等または悪化した。
+- この条件では PF-100K mean P50 `2.83 m` を下回る見込みがないため、full train と submission 生成には進めない。

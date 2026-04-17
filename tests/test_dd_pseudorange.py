@@ -219,6 +219,27 @@ def test_dd_pseudorange_returns_none_without_enough_common_sats(tmp_path):
     assert computer.compute_dd(86400.0, meas) is None
 
 
+def test_dd_pseudorange_allows_configured_nearest_base_epoch(tmp_path):
+    base_ecef, _rover_ecef, sat_ecef, sat_ids, base_ranges, rover_ranges = _make_geometry()
+    base_obs = _write_rinex_epochs(
+        tmp_path / "base_nearest.obs",
+        base_ecef,
+        sat_ids,
+        [("2024 01 01 00 00 00.0000000", base_ranges + 1200.0)],
+    )
+    computer = DDPseudorangeComputer(base_obs, base_epoch_tolerance_s=0.6)
+    meas = [
+        _Meas(0, i + 1, sat_ecef[i], rover_ranges[i] + 5300.0, elevation=1.2 - 0.2 * i, snr=45.0)
+        for i in range(len(sat_ids))
+    ]
+
+    result = computer.compute_dd(86400.438, meas)
+
+    assert result is not None
+    expected_dd = (rover_ranges[1:] - rover_ranges[0]) - (base_ranges[1:] - base_ranges[0])
+    np.testing.assert_allclose(result.dd_pseudorange_m, expected_dd, atol=2e-3)
+
+
 def test_dd_pseudorange_forms_per_system_references(tmp_path):
     base_ecef = np.array([-3957199.0, 3310205.0, 3737911.0])
     rover_ecef = base_ecef + np.array([80.0, -15.0, 12.0])
