@@ -905,3 +905,29 @@ full-run 結果:
 - coverage-hole は単純な “DD carrier absent” ではなく、mediocre DD carrier を信頼しすぎる epoch が混じる問題だった。
 - tracked fallback preference、ESS-only weak-DD replacement、spread-aware support-skip、contextual low-ESS epoch-median gate は promoted しない。
 - accepted change は、reference/guarded preset だけ DD carrier adaptive pair-floor を `0.18` に締めること。
+
+### Shinjuku クロスサイト検証
+
+`odaiba_reference` preset (`0.18`) と同 preset で floor だけ `0.25` に戻した変種を、Shinjuku 同一 config で比較した。
+
+| floor | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---:|---:|---:|---:|---:|
+| 0.25 (old) | 2.63 m | 10.18 m | 2.58 m | 9.93 m |
+| **0.18 (new)** | 2.63 m | **9.88 m** | 2.58 m | **9.65 m** |
+
+判定:
+- SMTH P50 は同一 (2.58 m)、SMTH RMS は `0.18` が 0.28 m 改善
+- FWD RMS も `0.18` が 0.30 m 改善
+- Shinjuku で回帰は観測されず、`reference` preset の `0.18` 化は Odaiba 以外にも安全
+
+再現コマンド:
+
+```bash
+PYTHONPATH="python:third_party/gnssplusplus/build/python:third_party/gnssplusplus/python" \
+  python3 experiments/exp_pf_smoother_eval.py \
+  --data-root /tmp/UrbanNav-Tokyo \
+  --preset odaiba_reference \
+  --runs Shinjuku \
+  --epoch-diagnostics-top-k 0
+# 0.25 との比較は末尾に --mupf-dd-gate-adaptive-floor-cycles 0.25 を追加
+```
