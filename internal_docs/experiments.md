@@ -989,6 +989,53 @@ full Odaiba:
 - `imu_stop_sigma_pos=0.1` は full Odaiba の smoother P50 と RMS を同時に改善したので、
   `odaiba_reference` preset に昇格した。
 
+## Odaiba preset G cleanup
+
+`odaiba_reference` と `odaiba_stop_detect` は両方 `--imu-stop-sigma-pos 0.1` を含む状態で、
+DD carrier adaptive floor だけ `0.18` / `0.25` が違う。current HEAD で full Odaiba を再実行し、
+preset の統合可否を確認した。
+
+再現コマンド:
+
+```bash
+URBANNAV_DATA_ROOT=/tmp/UrbanNav-Tokyo bash experiments/run_pf_smoother_odaiba_reference.sh
+
+cd experiments
+PYTHONPATH="../third_party/gnssplusplus/build/python:../third_party/gnssplusplus/python:../python:." \
+  python3 exp_pf_smoother_eval.py \
+  --data-root /tmp/UrbanNav-Tokyo \
+  --preset odaiba_stop_detect
+```
+
+結果:
+
+| preset | floor | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---:|---|
+| `odaiba_reference` | 0.18 | 1.63 m | 5.50 m | 1.34 m | 4.11 m | smoother-first reference |
+| `odaiba_stop_detect` | 0.25 | 1.19 m | 4.57 m | 1.36 m | 4.11 m | forward-stable sibling |
+
+判定:
+- smoother RMS は同等。`odaiba_reference` は smoother P50 が 0.02 m 良い。
+- `odaiba_stop_detect` は forward P50/RMS が `0.44 m / 0.93 m` 良く、config 差に意味がある。
+- よって統合せず、両方残す。description は use-case が分かるように更新した。
+- `odaiba_reference_guarded` への stop_sigma 適用は今回の昇格対象外。現 table では guarded ablation として維持する。
+
+Shinjuku 回帰確認:
+
+```bash
+cd experiments
+PYTHONPATH="../third_party/gnssplusplus/build/python:../third_party/gnssplusplus/python:../python:." \
+  python3 exp_pf_smoother_eval.py \
+  --data-root /tmp/UrbanNav-Tokyo \
+  --preset odaiba_reference \
+  --runs Shinjuku \
+  --epoch-diagnostics-top-k 0
+```
+
+| run | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---|
+| Shinjuku `odaiba_reference` | 2.53 m | 6.41 m | 2.61 m | 6.87 m | 既存 documented RMS より悪化なし |
+
 ## GSDC 2023 C-1 robust WLS baseline
 
 GSDC 2023 train の Android WLS seed を、Huber IRLS で頑健化する Python prototype を追加した。

@@ -57,7 +57,7 @@ _MUPF_L1_COMPAT_SYSTEM_IDS = frozenset({0, 2, 4})  # G/E/J share the L1/E1 frequ
 _MUPF_L1_WAVELENGTH_M = 299792458.0 / 1575.42e6
 _CLI_PRESETS: dict[str, dict[str, object]] = {
     "odaiba_reference": {
-        "description": "Frozen Odaiba rescue-stack regression config for PF smoother refactors.",
+        "description": "Smoother-first Odaiba reference: IMU stop-detect plus 0.18-cycle DD floor.",
         "argv": [
             "--runs", "Odaiba",
             "--n-particles", "100000",
@@ -99,7 +99,7 @@ _CLI_PRESETS: dict[str, dict[str, object]] = {
         ],
     },
     "odaiba_stop_detect": {
-        "description": "Odaiba reference + IMU stop-detection dynamic sigma_pos for P50 improvement.",
+        "description": "Forward-stable Odaiba sibling: IMU stop-detect plus 0.25-cycle DD floor.",
         "argv": [
             "--runs", "Odaiba",
             "--n-particles", "100000",
