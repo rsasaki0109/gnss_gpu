@@ -988,3 +988,50 @@ full Odaiba:
 - DD gate 締めや DD sigma 緩和は window または RMS で悪化したため不採用。
 - `imu_stop_sigma_pos=0.1` は full Odaiba の smoother P50 と RMS を同時に改善したので、
   `odaiba_reference` preset に昇格した。
+
+## GSDC 2023 C-1 robust WLS baseline
+
+GSDC 2023 train の Android WLS seed を、Huber IRLS で頑健化する Python prototype を追加した。
+目的は CUDA 実装に進む前に、単純な robust WLS が train baseline を超えるか確認すること。
+
+実装:
+- [exp_gsdc2023_robust_wls.py](/workspace/ai_coding_ws/gnss_gpu/experiments/exp_gsdc2023_robust_wls.py)
+- [gsdc2023_robust_wls_eval.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/gsdc2023_robust_wls_eval.csv)
+
+設定:
+- signals: `GPS_L1_CA`, `GPS_L5_Q`, `GAL_E1_C_P`, `GAL_E5A_Q`
+- Huber threshold: `20 m`
+- max IRLS iteration: `6`
+- max accepted shift from Android WLS: `30 m`
+- Android WLS position prior: `sigma=0.1 m`
+- train data: `/tmp/gsdc_data/gsdc2023/sdc2023/train`
+
+再現コマンド:
+
+```bash
+PYTHONPATH=python python3 experiments/exp_gsdc2023_robust_wls.py
+```
+
+full train 結果:
+
+| metric | Android WLS | Robust WLS | delta |
+|---|---:|---:|---:|
+| evaluated run/phone | 156 | 156 | - |
+| P50 wins | - | 85/156 | - |
+| mean P50 | 81.8046 m | 81.8038 m | -0.0007 m |
+| median P50 | 2.4221 m | 2.4229 m | +0.0008 m |
+| mean RMS | 1902.1422 m | 1902.1387 m | -0.0034 m |
+| mean P50, excluding `wls_p50 >= 100 m` | 2.6088 m | 2.6084 m | -0.0004 m |
+
+解釈:
+- Huber IRLS 単体は `2020-06-25-00-34-us-ca-mtv-sb-101/pixel4` で P50 `1.92 m -> 28.56 m`
+  まで悪化したため、そのままでは unsafe。
+- Android WLS prior を `0.1 m` に固定すると破綻は抑えられるが、改善量もほぼゼロになる。
+- P50 勝ち数は 85/156 と過半数だが、最大級の改善でも数 cm 程度で、mean/median では実質同等。
+- `2023-09-06-18-04-us-ca/sm-s908b` は Android WLS 自体が `P50=12357 m` 級で、mean を支配する。
+  この外れ値を除外しても robust WLS の mean P50 改善は `0.0004 m` しかない。
+- mean robust P50 は `2.62 m` threshold を超えないため、test submission は生成しない。
+
+結論:
+- C-1 の robust WLS prototype は再現可能な baseline として残す。
+- 現設定では Android WLS seed から独立した採用価値はないため、CUDA 化や submission promotion には進めない。
