@@ -1133,3 +1133,51 @@ smoke 結果:
 - public daily NOAA CORS 30 s RINEX を使う範囲では、PF-100K mean P50 `2.83 m` を下回る見込みがない。
 - full 156 run 展開と test submission 生成は行わない。
 - 次に進めるなら 1 Hz CORS/high-rate source と base satellite-clock/geometry correction を別途実装してから再評価する。
+
+## Odaiba best_accuracy preset 探索
+
+1m 切り目標に向けた parameter sweep。各実験は full Odaiba、smoother あり、stop_sigma=0.1 ベース。
+
+### Particle count scaling (`odaiba_reference`, sp=1.2)
+
+| particles | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---:|---:|---:|---:|---:|
+| 100K | 1.63 | 5.50 | 1.34 | 4.11 |
+| **200K** | **1.13** | 5.88 | **1.26** | 4.14 |
+| 500K | 1.27 | 4.91 | 1.40 | 4.11 |
+
+- 200K が sweet spot。500K は overshoot して SMTH P50 が悪化。
+- 200K sp=0.9 も試したが 1.43m と悪化 (particle depletion 寄り)。
+
+### 200K × preset / carrier-anchor sigma sweep
+
+| preset | anchor σ | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|
+| `odaiba_reference` | 0.25 (default) | 1.26 | 4.14 |
+| `odaiba_stop_detect` (floor=0.25) | 0.25 | 1.38 | 4.08 |
+| `odaiba_reference_guarded` + stop_sigma | 0.25 | 1.22 | 4.54 |
+| `odaiba_reference_guarded` + stop_sigma | 0.10 | 1.35 | 4.44 |
+| **`odaiba_reference_guarded` + stop_sigma** | **0.15** | **1.14** | **4.36** |
+| `odaiba_reference_guarded` + stop_sigma | 0.20 | 1.33 | 4.57 |
+
+carrier-anchor σ=0.15 が鋭い局所最適。0.10/0.20 で共に悪化する。
+
+### 追加に試して不採用
+
+| 変更 | SMTH P50 | 判定 |
+|---|---:|---|
+| DD carrier σ 0.20→0.15 | 1.26 | 悪化 |
+| anchor max_residual 0.80→1.00, continuity 0.50→0.75 | 1.31 | 悪化 |
+| anchor blend_alpha 0.5→0.7 | 1.29 | 悪化 |
+
+### 採用 preset: `odaiba_best_accuracy`
+
+- 200K particles
+- `--imu-stop-sigma-pos 0.1`
+- DD gate `floor=0.18` (reference 相当) + tail guard (guarded 相当)
+- `--carrier-anchor-sigma-m 0.15`
+- full Odaiba で **SMTH P50 = 1.14 m / SMTH RMS = 4.36 m**
+- Baseline `odaiba_reference` (100K) の `1.34 / 4.11` からは P50 -17%、RMS +6%
+
+1m 切りまで残り 0.14m。更なる改善は smoother / fallback / anchor 周辺の algorithmic
+変更が必要 (parameter sweep では届かない)。

@@ -775,6 +775,22 @@ def test_expand_cli_preset_argv_inlines_odaiba_reference_guarded_flags():
     assert expanded[-2:] == ["--max-epochs", "10"]
 
 
+def test_expand_cli_preset_argv_inlines_odaiba_best_accuracy_flags():
+    expanded = _expand_cli_preset_argv([
+        "--preset", "odaiba_best_accuracy",
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--max-epochs", "10",
+    ])
+
+    assert "--preset" not in expanded
+    assert expanded[expanded.index("--n-particles") + 1] == "200000"
+    assert expanded[expanded.index("--imu-stop-sigma-pos") + 1] == "0.1"
+    assert expanded[expanded.index("--carrier-anchor-sigma-m") + 1] == "0.15"
+    assert expanded[expanded.index("--mupf-dd-gate-adaptive-floor-cycles") + 1] == "0.18"
+    assert "--smoother-tail-guard-ess-max-ratio" in expanded
+    assert expanded[-2:] == ["--max-epochs", "10"]
+
+
 def test_odaiba_stop_detect_preset_parses_imu_stop_sigma_pos():
     parser = build_arg_parser()
     args = parser.parse_args(_expand_cli_preset_argv([
