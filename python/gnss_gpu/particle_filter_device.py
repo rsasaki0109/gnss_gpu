@@ -254,7 +254,7 @@ class ParticleFilterDevice:
         if resample:
             _ = self.resample_if_needed()
 
-    def update_dd_pseudorange(self, dd_result, sigma_pr=0.75, huber_k=None, resample=True):
+    def update_dd_pseudorange(self, dd_result, sigma_pr=0.75, resample=True):
         """Update weights using DD pseudorange likelihood.
 
         Double-differenced pseudorange eliminates receiver clock bias from both
@@ -266,9 +266,6 @@ class ParticleFilterDevice:
             Output from :meth:`DDPseudorangeComputer.compute_dd`.
         sigma_pr : float
             Standard deviation of the DD pseudorange residual [m].
-        huber_k : float or None
-            Optional Huber threshold in standardized residual units. If omitted,
-            use the existing Gaussian likelihood.
         resample : bool
             If True (default), run ESS-based adaptive resampling after weighting.
         """
@@ -285,7 +282,6 @@ class ParticleFilterDevice:
             dd_result.dd_weights,
             dd_result.n_dd,
             float(sigma_pr),
-            0.0 if huber_k is None else float(huber_k),
         )
 
         if resample:
@@ -336,7 +332,7 @@ class ParticleFilterDevice:
             _ = self.resample_if_needed()
 
     def update_dd_carrier_afv(self, dd_result, wavelength=None,
-                               sigma_cycles=0.05, huber_k=None, resample=True):
+                               sigma_cycles=0.05, resample=True):
         """Update weights using DD carrier phase AFV likelihood.
 
         Double-differenced carrier phase eliminates receiver clock bias
@@ -352,9 +348,6 @@ class ParticleFilterDevice:
             wavelengths from ``dd_result`` when available.
         sigma_cycles : float
             Standard deviation of DD AFV residual [cycles]. Default 0.05.
-        huber_k : float or None
-            Optional Huber threshold in standardized residual units. If omitted,
-            use the existing Gaussian likelihood.
         resample : bool
             If True (default), run ESS-based adaptive resampling after weighting.
         """
@@ -380,8 +373,7 @@ class ParticleFilterDevice:
             dd_result.dd_weights,
             wavelengths,
             dd_result.n_dd,
-            float(sigma_cycles),
-            0.0 if huber_k is None else float(huber_k))
+            float(sigma_cycles))
 
         if resample:
             _ = self.resample_if_needed()
@@ -612,10 +604,8 @@ class ParticleFilterDevice:
         spp_ref=None,
         dd_pseudorange=None,
         dd_pseudorange_sigma=None,
-        dd_pseudorange_huber_k=None,
         dd_carrier=None,
         dd_carrier_sigma=None,
-        dd_carrier_huber_k=None,
         carrier_anchor_pseudorange=None,
         carrier_anchor_sigma=None,
         carrier_afv=None,
@@ -639,15 +629,11 @@ class ParticleFilterDevice:
             backward pass replays the same DD update instead of undifferenced PR.
         dd_pseudorange_sigma : float or None
             Sigma used for the forward DD pseudorange update.
-        dd_pseudorange_huber_k : float or None
-            Huber threshold used for the forward DD pseudorange update.
         dd_carrier : object or None
             DD carrier AFV result used in the forward pass. When present, the
             backward pass replays the same DD carrier update after DD PR / PR.
         dd_carrier_sigma : float or None
             Sigma used for the forward DD carrier AFV update.
-        dd_carrier_huber_k : float or None
-            Huber threshold used for the forward DD carrier AFV update.
         carrier_anchor_pseudorange : dict or None
             Carrier-bias-conditioned pseudorange-like update used in the
             forward pass. When present, the backward pass replays it after
@@ -726,15 +712,9 @@ class ParticleFilterDevice:
             'dd_pseudorange_sigma': (
                 None if dd_pseudorange_sigma is None else float(dd_pseudorange_sigma)
             ),
-            'dd_pseudorange_huber_k': (
-                None if dd_pseudorange_huber_k is None else float(dd_pseudorange_huber_k)
-            ),
             'dd_carrier': dd_cp_store,
             'dd_carrier_sigma': (
                 None if dd_carrier_sigma is None else float(dd_carrier_sigma)
-            ),
-            'dd_carrier_huber_k': (
-                None if dd_carrier_huber_k is None else float(dd_carrier_huber_k)
             ),
             'carrier_anchor_pseudorange': carrier_anchor_store,
             'carrier_anchor_sigma': (
@@ -815,7 +795,6 @@ class ParticleFilterDevice:
                         if ep.get('dd_pseudorange_sigma') is not None
                         else self.sigma_pr
                     ),
-                    huber_k=ep.get('dd_pseudorange_huber_k'),
                 )
             else:
                 bwd_pf.correct_clock_bias(sat, pr)
@@ -830,7 +809,6 @@ class ParticleFilterDevice:
                         if ep.get('dd_carrier_sigma') is not None
                         else 0.05
                     ),
-                    huber_k=ep.get('dd_carrier_huber_k'),
                 )
             if carrier_anchor_ep is not None:
                 bwd_pf.update(

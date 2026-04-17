@@ -661,24 +661,6 @@ def test_parser_maps_low_ess_dd_gate_flags():
     assert run_kwargs["mupf_dd_gate_low_ess_require_no_dd_pr"] is True
 
 
-def test_parser_maps_dd_huber_flags():
-    parser = build_arg_parser()
-    args = parser.parse_args(_expand_cli_preset_argv([
-        "--data-root", "/tmp/UrbanNav-Tokyo",
-        "--preset", "odaiba_reference",
-        "--mupf-dd-huber-k", "1.5",
-        "--dd-pseudorange-huber-k", "2.0",
-    ]))
-
-    run_kwargs = _namespace_to_run_kwargs(
-        args,
-        position_update_sigma=args.position_update_sigma,
-        use_smoother=args.smoother,
-    )
-    assert run_kwargs["mupf_dd_huber_k"] == 1.5
-    assert run_kwargs["dd_pseudorange_huber_k"] == 2.0
-
-
 @pytest.mark.skipif(
     not (REFERENCE_DATA_ROOT / "Odaiba").exists(),
     reason="UrbanNav Odaiba reference data not available",

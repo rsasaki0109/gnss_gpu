@@ -591,9 +591,9 @@ class TestParticleFilterDeviceWrapper:
         weights = np.ones(len(sat_ecef), dtype=np.float64)
         for _ in range(3):
             pf.predict(dt=1.0)
-            pf.update_dd_pseudorange(dd_pr, sigma_pr=0.5, huber_k=2.0)
+            pf.update_dd_pseudorange(dd_pr, sigma_pr=0.5)
             pf.resample_if_needed()
-            pf.update_dd_carrier_afv(dd_cp, sigma_cycles=0.05, huber_k=1.5)
+            pf.update_dd_carrier_afv(dd_cp, sigma_cycles=0.05)
             pf.store_epoch(
                 sat_ecef,
                 pr,
@@ -603,10 +603,8 @@ class TestParticleFilterDeviceWrapper:
                 spp_ref=None,
                 dd_pseudorange=dd_pr,
                 dd_pseudorange_sigma=0.5,
-                dd_pseudorange_huber_k=2.0,
                 dd_carrier=dd_cp,
                 dd_carrier_sigma=0.05,
-                dd_carrier_huber_k=1.5,
             )
 
         smoothed, forward = pf.smooth(position_update_sigma=None)

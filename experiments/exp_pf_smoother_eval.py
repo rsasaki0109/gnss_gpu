@@ -1556,7 +1556,6 @@ def run_pf_with_optional_smoother(
     mupf_elev_min: float = 0.15,
     dd_pseudorange: bool = False,
     dd_pseudorange_sigma: float = 0.75,
-    dd_pseudorange_huber_k: float | None = None,
     dd_pseudorange_base_interp: bool = False,
     dd_pseudorange_gate_residual_m: float | None = None,
     dd_pseudorange_gate_adaptive_floor_m: float | None = None,
@@ -1570,7 +1569,6 @@ def run_pf_with_optional_smoother(
     dd_pseudorange_gate_high_spread_m: float = 8.0,
     mupf_dd: bool = False,
     mupf_dd_sigma_cycles: float = 0.05,
-    mupf_dd_huber_k: float | None = None,
     mupf_dd_base_interp: bool = False,
     mupf_dd_gate_afv_cycles: float | None = None,
     mupf_dd_gate_adaptive_floor_cycles: float | None = None,
@@ -2023,11 +2021,7 @@ def run_pf_with_optional_smoother(
                     n_dd_pr_gate_epoch_skip += 1
 
         if dd_pr_result is not None and dd_pr_result.n_dd >= 3:
-            pf.update_dd_pseudorange(
-                dd_pr_result,
-                sigma_pr=dd_pseudorange_sigma,
-                huber_k=dd_pseudorange_huber_k,
-            )
+            pf.update_dd_pseudorange(dd_pr_result, sigma_pr=dd_pseudorange_sigma)
             n_dd_pr_used += 1
         else:
             if dd_pseudorange:
@@ -2251,11 +2245,7 @@ def run_pf_with_optional_smoother(
                 dd_cp_sigma_cycles = float(mupf_dd_sigma_cycles) * float(dd_cp_sigma_scale)
                 # Resample to concentrate particles before DD-AFV
                 pf.resample_if_needed()
-                pf.update_dd_carrier_afv(
-                    dd_result,
-                    sigma_cycles=dd_cp_sigma_cycles,
-                    huber_k=mupf_dd_huber_k,
-                )
+                pf.update_dd_carrier_afv(dd_result, sigma_cycles=dd_cp_sigma_cycles)
                 dd_carrier_result = dd_result
                 n_dd_used += 1
                 if dd_cp_sigma_scale > 1.0 + 1e-9:
@@ -2404,19 +2394,9 @@ def run_pf_with_optional_smoother(
                 dd_pseudorange_sigma=(
                     dd_pseudorange_sigma if dd_pr_result is not None and dd_pr_result.n_dd >= 3 else None
                 ),
-                dd_pseudorange_huber_k=(
-                    dd_pseudorange_huber_k
-                    if dd_pr_result is not None and dd_pr_result.n_dd >= 3
-                    else None
-                ),
                 dd_carrier=dd_carrier_result,
                 dd_carrier_sigma=(
                     dd_cp_sigma_cycles
-                    if dd_carrier_result is not None and dd_carrier_result.n_dd >= 3
-                    else None
-                ),
-                dd_carrier_huber_k=(
-                    mupf_dd_huber_k
                     if dd_carrier_result is not None and dd_carrier_result.n_dd >= 3
                     else None
                 ),
@@ -2702,7 +2682,6 @@ def run_pf_with_optional_smoother(
         "doppler_pu_sigma": doppler_pu_sigma,
         "dd_pseudorange": dd_pseudorange,
         "dd_pseudorange_sigma": dd_pseudorange_sigma,
-        "dd_pseudorange_huber_k": dd_pseudorange_huber_k,
         "dd_pseudorange_base_interp": dd_pseudorange_base_interp,
         "dd_pseudorange_gate_residual_m": dd_pseudorange_gate_residual_m,
         "dd_pseudorange_gate_adaptive_floor_m": dd_pseudorange_gate_adaptive_floor_m,
@@ -2715,7 +2694,6 @@ def run_pf_with_optional_smoother(
         "dd_pseudorange_gate_low_spread_m": dd_pseudorange_gate_low_spread_m,
         "dd_pseudorange_gate_high_spread_m": dd_pseudorange_gate_high_spread_m,
         "mupf_dd_base_interp": mupf_dd_base_interp,
-        "mupf_dd_huber_k": mupf_dd_huber_k,
         "mupf_dd_gate_afv_cycles": mupf_dd_gate_afv_cycles,
         "mupf_dd_gate_adaptive_floor_cycles": mupf_dd_gate_adaptive_floor_cycles,
         "mupf_dd_gate_adaptive_mad_mult": mupf_dd_gate_adaptive_mad_mult,
@@ -2946,7 +2924,6 @@ def _namespace_to_run_kwargs(
         "mupf_elev_min": args.mupf_elev_min,
         "dd_pseudorange": args.dd_pseudorange,
         "dd_pseudorange_sigma": args.dd_pseudorange_sigma,
-        "dd_pseudorange_huber_k": args.dd_pseudorange_huber_k,
         "dd_pseudorange_base_interp": args.dd_pseudorange_base_interp,
         "dd_pseudorange_gate_residual_m": args.dd_pseudorange_gate_residual_m,
         "dd_pseudorange_gate_adaptive_floor_m": args.dd_pseudorange_gate_adaptive_floor_m,
@@ -2960,7 +2937,6 @@ def _namespace_to_run_kwargs(
         "dd_pseudorange_gate_high_spread_m": args.dd_pseudorange_gate_high_spread_m,
         "mupf_dd": args.mupf_dd,
         "mupf_dd_sigma_cycles": args.mupf_dd_sigma_cycles,
-        "mupf_dd_huber_k": args.mupf_dd_huber_k,
         "mupf_dd_base_interp": args.mupf_dd_base_interp,
         "mupf_dd_gate_afv_cycles": args.mupf_dd_gate_afv_cycles,
         "mupf_dd_gate_adaptive_floor_cycles": args.mupf_dd_gate_adaptive_floor_cycles,
@@ -3170,8 +3146,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Use DD pseudorange as the primary weight update (requires base station RINEX)")
     parser.add_argument("--dd-pseudorange-sigma", type=float, default=0.75,
                         help="DD pseudorange sigma in meters (default 0.75)")
-    parser.add_argument("--dd-pseudorange-huber-k", type=float, default=None,
-                        help="Optional DD pseudorange Huber threshold k; omitted keeps Gaussian likelihood")
     parser.add_argument("--dd-pseudorange-base-interp", action="store_true",
                         help="Linearly interpolate 1 Hz base pseudorange to rover epoch before DD formation")
     parser.add_argument("--dd-pseudorange-gate-residual-m", type=float, default=None,
@@ -3198,8 +3172,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Use Double-Differenced carrier phase AFV (requires base station RINEX)")
     parser.add_argument("--mupf-dd-sigma-cycles", type=float, default=0.05,
                         help="DD carrier phase AFV sigma in cycles (default 0.05)")
-    parser.add_argument("--mupf-dd-huber-k", type=float, default=None,
-                        help="Optional DD carrier AFV Huber threshold k; omitted keeps Gaussian likelihood")
     parser.add_argument("--mupf-dd-base-interp", action="store_true",
                         help="Linearly interpolate 1 Hz base carrier phase to rover epoch before DD formation")
     parser.add_argument("--mupf-dd-gate-afv-cycles", type=float, default=None,
@@ -3440,7 +3412,6 @@ def main(argv: list[str] | None = None) -> int:
                 "imu_stop_sigma_pos": args.imu_stop_sigma_pos,
                 "dd_pseudorange": args.dd_pseudorange,
                 "dd_pseudorange_sigma": args.dd_pseudorange_sigma,
-                "dd_pseudorange_huber_k": args.dd_pseudorange_huber_k,
                 "dd_pseudorange_base_interp": args.dd_pseudorange_base_interp,
                 "dd_pseudorange_gate_residual_m": args.dd_pseudorange_gate_residual_m,
                 "dd_pseudorange_gate_adaptive_floor_m": args.dd_pseudorange_gate_adaptive_floor_m,
@@ -3454,7 +3425,6 @@ def main(argv: list[str] | None = None) -> int:
                 "dd_pseudorange_gate_high_spread_m": args.dd_pseudorange_gate_high_spread_m,
                 "mupf": args.mupf,
                 "mupf_dd": args.mupf_dd,
-                "mupf_dd_huber_k": args.mupf_dd_huber_k,
                 "mupf_dd_base_interp": args.mupf_dd_base_interp,
                 "mupf_dd_gate_afv_cycles": args.mupf_dd_gate_afv_cycles,
                 "mupf_dd_gate_adaptive_floor_cycles": args.mupf_dd_gate_adaptive_floor_cycles,
