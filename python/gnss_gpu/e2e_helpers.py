@@ -70,7 +70,7 @@ _DIAGNOSTIC_CSV_COLUMNS = [
 ]
 
 
-def _zero_diagnostics(prns, code_phase_lags, n_iter):
+def _zero_diagnostics(prns, code_phase_lags, n_iter, gain_schedule="constant"):
     prn_arr = np.asarray(list(prns), dtype=np.int32).ravel()
     n_ch = int(prn_arr.size)
     diag = {
@@ -85,6 +85,7 @@ def _zero_diagnostics(prns, code_phase_lags, n_iter):
         diag["lag_samples"][:n_copy] = lags[:n_copy]
     diag["prn"] = prn_arr
     diag["n_iter_used"] = int(n_iter)
+    diag["gain_schedule"] = str(gain_schedule)
     return diag
 
 
@@ -146,6 +147,7 @@ def refine_acquisition_code_lag_dll(
     dll_gain=0.22,
     pll_gain=0.18,
     correlator_spacing=0.5,
+    gain_schedule="constant",
 ):
     """Refine acquisition lag with GPU E/P/L correlations + DLL/PLL on one epoch.
 
@@ -168,6 +170,7 @@ def refine_acquisition_code_lag_dll(
         dll_gain=dll_gain,
         pll_gain=pll_gain,
         correlator_spacing=correlator_spacing,
+        gain_schedule=gain_schedule,
     )
     return float(out[0]) if out.size else float(code_phase_lag)
 
@@ -184,6 +187,7 @@ def refine_acquisition_code_lags_dll_batch(
     pll_gain=0.18,
     correlator_spacing=0.5,
     return_lock_metrics=False,
+    gain_schedule="constant",
 ):
     """DLL + optional PLL refinement for multiple PRNs on one IF buffer.
 
@@ -197,6 +201,9 @@ def refine_acquisition_code_lags_dll_batch(
     On import failure, returns the input lags unchanged (and dummy metrics if
     requested).
     """
+    if gain_schedule not in {"constant", "cn0_weighted"}:
+        raise ValueError(f"unknown gain_schedule: {gain_schedule!r}")
+
     try:
         from gnss_gpu._gnss_gpu_tracking import (
             TrackingConfig as _TrackingConfig,
@@ -270,16 +277,26 @@ def refine_acquisition_code_lags_dll_batch(
             denom = e_pow + l_pow
             if denom < 1e-30:
                 continue
+            if gain_schedule == "constant":
+                dll_g_eff = dll_gain
+                pll_g_eff = pll_gain
+            else:
+                # cn0-weighted seeds: SNR_ref=10 lin, scale cap [0.25, 1.5]
+                noise_proxy = max(pq * pq, 1e-30)
+                snr_lin = (pi_v * pi_v + pq * pq) / noise_proxy
+                factor = float(np.clip(np.sqrt(10.0 / snr_lin), 0.25, 1.5))
+                dll_g_eff = dll_gain * factor
+                pll_g_eff = pll_gain * factor
             dll_disc = (e_pow - l_pow) / denom
-            ch_list[k].code_phase += dll_gain * dll_disc
+            ch_list[k].code_phase += dll_g_eff * dll_disc
             ch_list[k].code_phase = float(
                 np.mod(ch_list[k].code_phase, GPS_CA_CODE_LENGTH))
             if ch_list[k].code_phase < 0.0:
                 ch_list[k].code_phase += GPS_CA_CODE_LENGTH
 
-            if pll_gain > 0.0:
+            if pll_g_eff > 0.0:
                 pll_disc = float(np.arctan2(pq, pi_v))
-                ch_list[k].carrier_phase += (pll_gain * pll_disc) / (2.0 * np.pi)
+                ch_list[k].carrier_phase += (pll_g_eff * pll_disc) / (2.0 * np.pi)
                 ch_list[k].carrier_phase = float(
                     np.mod(ch_list[k].carrier_phase, 1.0))
                 if ch_list[k].carrier_phase < 0.0:
@@ -321,12 +338,16 @@ def refine_acquisition_code_lags_diagnostic_batch(
     dll_gain=0.22,
     pll_gain=0.18,
     correlator_spacing=0.5,
+    gain_schedule="constant",
 ):
     """DLL/PLL refinement with final per-channel correlator diagnostics."""
+    if gain_schedule not in {"constant", "cn0_weighted"}:
+        raise ValueError(f"unknown gain_schedule: {gain_schedule!r}")
+
     prns = list(prns)
     n_ch = len(prns)
     if n_ch == 0:
-        return _zero_diagnostics(prns, [], n_iter)
+        return _zero_diagnostics(prns, [], n_iter, gain_schedule)
 
     try:
         from gnss_gpu._gnss_gpu_tracking import (
@@ -335,7 +356,7 @@ def refine_acquisition_code_lags_diagnostic_batch(
             batch_correlate as _batch_correlate,
         )
     except ImportError:
-        return _zero_diagnostics(prns, code_phase_lags, n_iter)
+        return _zero_diagnostics(prns, code_phase_lags, n_iter, gain_schedule)
 
     lags_in = np.asarray(code_phase_lags, dtype=np.float64).ravel()
     dops = np.asarray(doppler_hz_list, dtype=np.float64).ravel()
@@ -384,16 +405,26 @@ def refine_acquisition_code_lags_diagnostic_batch(
             denom = e_pow + l_pow
             if denom < 1e-30:
                 continue
+            if gain_schedule == "constant":
+                dll_g_eff = dll_gain
+                pll_g_eff = pll_gain
+            else:
+                # cn0-weighted seeds: SNR_ref=10 lin, scale cap [0.25, 1.5]
+                noise_proxy = max(pq * pq, 1e-30)
+                snr_lin = (pi_v * pi_v + pq * pq) / noise_proxy
+                factor = float(np.clip(np.sqrt(10.0 / snr_lin), 0.25, 1.5))
+                dll_g_eff = dll_gain * factor
+                pll_g_eff = pll_gain * factor
             dll_disc = (e_pow - l_pow) / denom
-            ch_list[k].code_phase += dll_gain * dll_disc
+            ch_list[k].code_phase += dll_g_eff * dll_disc
             ch_list[k].code_phase = float(
                 np.mod(ch_list[k].code_phase, GPS_CA_CODE_LENGTH))
             if ch_list[k].code_phase < 0.0:
                 ch_list[k].code_phase += GPS_CA_CODE_LENGTH
 
-            if pll_gain > 0.0:
+            if pll_g_eff > 0.0:
                 pll_disc = float(np.arctan2(pq, pi_v))
-                ch_list[k].carrier_phase += (pll_gain * pll_disc) / (2.0 * np.pi)
+                ch_list[k].carrier_phase += (pll_g_eff * pll_disc) / (2.0 * np.pi)
                 ch_list[k].carrier_phase = float(
                     np.mod(ch_list[k].carrier_phase, 1.0))
                 if ch_list[k].carrier_phase < 0.0:
@@ -406,6 +437,7 @@ def refine_acquisition_code_lags_diagnostic_batch(
     }
     diag["prn"] = np.asarray(prns, dtype=np.int32)
     diag["n_iter_used"] = int(n_iter)
+    diag["gain_schedule"] = str(gain_schedule)
 
     for k in range(n_ch):
         ei, eq = float(corr_f[k, 0]), float(corr_f[k, 1])
