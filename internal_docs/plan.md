@@ -110,6 +110,21 @@ Older doc baseline (**~9 m** open sky) was **before** DLL/PLL+weights; do not co
 
 **Artifacts:** `experiments/results/e2e_positioning/e2e_positioning.png`
 
+#### 3.2.1 Multi-ms Monte-Carlo (`exp_e2e_multims_mc.py`)
+
+10-trial sweep on Open Sky (real Odaiba ephemeris, 8 visible sats),
+median position error per cell:
+
+| N_ms \\ noise [dB] |  -30  |  -10  |   0   |
+| ----------------: | ----: | ----: | ----: |
+|                 1 | 2.69  | 3.42  | 4.66  |
+|                 5 | 2.67  | 3.09  | 3.75  |
+|                10 | 2.67  | 2.83  | 3.44  |
+
+At low noise the result is quantization-limited (~2.7 m floor); at high
+noise multi-ms helps measurably (N=1→10 reduces median 4.66 → 3.44 m at
+0 dB, ≈26%). CSV: `experiments/results/e2e_positioning/multims_mc.csv`.
+
 ### 3.3 Trajectory E2E (`exp_e2e_trajectory.py`)
 
 ```powershell
