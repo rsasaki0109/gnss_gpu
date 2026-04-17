@@ -931,3 +931,60 @@ PYTHONPATH="python:third_party/gnssplusplus/build/python:third_party/gnssplusplu
   --epoch-diagnostics-top-k 0
 # 0.25 との比較は末尾に --mupf-dd-gate-adaptive-floor-cycles 0.25 を追加
 ```
+
+## Odaiba coverage-hole B-2 diagnostics
+
+`epoch 2445-4890` 近傍の base coverage hole を、handoff B-2 指定どおり `odaiba_reference`
+で 2400 epoch burn-in + 650 epoch 計測した。出力は `/tmp/odaiba_hole_diag.csv`。
+
+基準 window:
+
+```bash
+PYTHONPATH="python:third_party/gnssplusplus/build/python:third_party/gnssplusplus/python" \
+  python3 experiments/exp_pf_smoother_eval.py \
+  --data-root /tmp/UrbanNav-Tokyo \
+  --preset odaiba_reference \
+  --skip-valid-epochs 2400 --max-epochs 650 \
+  --epoch-diagnostics-out /tmp/odaiba_hole_diag.csv \
+  --epoch-diagnostics-top-k 20
+```
+
+基準結果:
+
+| scope | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|---:|
+| window baseline | 6.62 m | 7.93 m | 6.83 m | 7.53 m |
+
+診断:
+- 対象 window の worst epoch は TOW `273634.7-273669.3` に集中。
+- DD pseudorange は 583/648 epoch で 0 pair。DD carrier はむしろ高 support 側が悪く、`dd_cp_kept_pairs>=9`
+  は `SMTH P50=8.56 m / RMS=8.48 m`、`dd_cp_kept_pairs<=4` は `SMTH P50=1.99 m / RMS=4.51 m`。
+- `used_carrier_anchor` は 0/648、`used_dd_carrier_fallback` は 61/648。fallback が効いた epoch は
+  `SMTH P50=2.40 m / RMS=5.36 m` で、問題は fallback 不在というより、DD-PR 不在 + high-support DD carrier の低 ESS collapse。
+- worst epoch では ESS ratio が `1e-4` 前後まで落ちる一方、DD carrier raw AFV median は `0.18-0.33 cycles` 程度。
+
+window ablation:
+
+| trial | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---|
+| baseline | 6.62 m | 7.93 m | 6.83 m | 7.53 m | baseline |
+| low-ESS DD epoch median gate `0.18cy` | 6.97 m | 8.60 m | 6.65 m | 7.84 m | P50 のみ微改善、RMS 悪化 |
+| global DD epoch median gate `0.18cy` | 7.27 m | 8.86 m | 7.07 m | 8.33 m | 悪化 |
+| low-ESS DD sigma relax `x3` | 7.55 m | 10.50 m | 7.49 m | 9.70 m | 悪化 |
+| `sigma_pos=2.0` | 8.93 m | 10.69 m | 8.99 m | 10.14 m | 悪化 |
+| `position_update_sigma=1.5` | 6.77 m | 8.19 m | 6.99 m | 8.37 m | 悪化 |
+| `imu_stop_sigma_pos=0.1` | 1.83 m | 3.75 m | 4.66 m | 5.53 m | window 改善 |
+
+full Odaiba:
+
+| preset / trial | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---|
+| `odaiba_reference` baseline | 1.42 m | 5.46 m | 1.38 m | 5.02 m | baseline |
+| `odaiba_reference + --imu-stop-sigma-pos 0.1` | 1.63 m | 5.50 m | 1.34 m | 4.11 m | 採用 |
+
+結論:
+- base coverage hole は「DD pair 数 0」そのものではなく、DD-PR が無い stationary/near-stationary 区間で
+  high-support DD carrier が低 ESS collapse を起こす問題。
+- DD gate 締めや DD sigma 緩和は window または RMS で悪化したため不採用。
+- `imu_stop_sigma_pos=0.1` は full Odaiba の smoother P50 と RMS を同時に改善したので、
+  `odaiba_reference` preset に昇格した。

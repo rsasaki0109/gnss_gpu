@@ -65,6 +65,7 @@ _CLI_PRESETS: dict[str, dict[str, object]] = {
             "--position-update-sigma", "1.9",
             "--predict-guide", "imu",
             "--imu-tight-coupling",
+            "--imu-stop-sigma-pos", "0.1",
             "--residual-downweight",
             "--pr-accel-downweight",
             "--smoother",

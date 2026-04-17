@@ -539,6 +539,7 @@ def test_expand_cli_preset_argv_inlines_odaiba_reference_flags():
     assert "--runs" in expanded
     assert expanded[expanded.index("--runs") + 1] == "Odaiba"
     assert "--dd-pseudorange" in expanded
+    assert expanded[expanded.index("--imu-stop-sigma-pos") + 1] == "0.1"
     assert "--mupf-dd-fallback-undiff" in expanded
     assert expanded[expanded.index("--mupf-dd-gate-adaptive-floor-cycles") + 1] == "0.18"
     assert expanded[-2:] == ["--max-epochs", "10"]
@@ -554,6 +555,7 @@ def test_odaiba_reference_preset_keeps_late_overrides():
     ]))
 
     assert args.predict_guide == "imu"
+    assert args.imu_stop_sigma_pos == 0.1
     assert args.smoother is True
     assert args.dd_pseudorange is True
     assert args.mupf_dd is True
@@ -567,6 +569,7 @@ def test_odaiba_reference_preset_keeps_late_overrides():
         use_smoother=args.smoother,
     )
     assert run_kwargs["predict_guide"] == "imu"
+    assert run_kwargs["imu_stop_sigma_pos"] == 0.1
     assert run_kwargs["mupf_dd_fallback_undiff"] is True
     assert run_kwargs["carrier_anchor_max_residual_m"] == 1.0
 
