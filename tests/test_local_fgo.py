@@ -1,6 +1,9 @@
 import numpy as np
+import pytest
 
-from gnss_gpu.local_fgo import (
+pytest.importorskip("gtsam", reason="local FGO requires the GTSAM Python bindings")
+
+from gnss_gpu.local_fgo import (  # noqa: E402
     DDCarrierEpoch,
     DDPseudorangeEpoch,
     LambdaFixConfig,
