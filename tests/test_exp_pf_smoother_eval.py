@@ -22,10 +22,12 @@ from experiments.exp_pf_smoother_eval import (
     _collect_hybrid_tracked_undiff_carrier_afv_inputs,
     _collect_tracked_undiff_carrier_afv_inputs,
     _prepare_dd_carrier_undiff_fallback,
+    _parse_widelane_gate_exclude_epochs,
     _propagate_carrier_bias_tracker_tdcp,
     _effective_dd_carrier_epoch_median_gate,
     _should_skip_low_support_dd_carrier,
     _should_replace_weak_dd_with_fallback,
+    _widelane_epoch_gate_reason,
     build_arg_parser,
     load_pf_smoother_dataset,
     run_pf_with_optional_smoother,
@@ -663,6 +665,82 @@ def test_parser_maps_low_ess_dd_gate_flags():
     assert run_kwargs["mupf_dd_gate_low_ess_require_no_dd_pr"] is True
 
 
+def test_parser_maps_widelane_gate_flags_and_requests_diagnostics():
+    parser = build_arg_parser()
+    args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_best_accuracy",
+        "--widelane",
+        "--widelane-gate-min-dd-pairs", "17",
+        "--widelane-gate-min-ratio", "5.0",
+        "--widelane-gate-min-ess-ratio", "0.05",
+        "--widelane-gate-exclude-epochs", "2445:4890",
+        "--widelane-gate-exclude-epochs", "6000:6100,7000:7100",
+    ]))
+
+    run_kwargs = _namespace_to_run_kwargs(
+        args,
+        position_update_sigma=args.position_update_sigma,
+        use_smoother=args.smoother,
+    )
+    assert run_kwargs["widelane"] is True
+    assert run_kwargs["widelane_gate_min_dd_pairs"] == 17
+    assert run_kwargs["widelane_gate_min_ratio"] == 5.0
+    assert run_kwargs["widelane_gate_min_ess_ratio"] == 0.05
+    assert run_kwargs["widelane_gate_exclude_epochs"] == [
+        "2445:4890",
+        "6000:6100,7000:7100",
+    ]
+    assert run_kwargs["collect_epoch_diagnostics"] is True
+
+
+def test_parse_widelane_gate_exclude_epochs_accepts_repeated_and_comma_ranges():
+    assert _parse_widelane_gate_exclude_epochs([
+        "2445:4890",
+        "6000:6100, 7000:7100",
+    ]) == ((2445, 4890), (6000, 6100), (7000, 7100))
+
+    with pytest.raises(ValueError):
+        _parse_widelane_gate_exclude_epochs("20:10")
+
+
+def test_widelane_epoch_gate_reason_orders_region_ess_then_dd_support():
+    ranges = _parse_widelane_gate_exclude_epochs("100:200")
+
+    assert _widelane_epoch_gate_reason(
+        epoch_index=150,
+        dd_pairs=25,
+        ess_ratio=0.9,
+        min_dd_pairs=17,
+        min_ess_ratio=0.05,
+        exclude_ranges=ranges,
+    ) == "excluded_epoch"
+    assert _widelane_epoch_gate_reason(
+        epoch_index=99,
+        dd_pairs=25,
+        ess_ratio=0.01,
+        min_dd_pairs=17,
+        min_ess_ratio=0.05,
+        exclude_ranges=ranges,
+    ) == "low_ess"
+    assert _widelane_epoch_gate_reason(
+        epoch_index=99,
+        dd_pairs=14,
+        ess_ratio=0.5,
+        min_dd_pairs=17,
+        min_ess_ratio=0.05,
+        exclude_ranges=ranges,
+    ) == "low_dd_pairs"
+    assert _widelane_epoch_gate_reason(
+        epoch_index=99,
+        dd_pairs=17,
+        ess_ratio=0.05,
+        min_dd_pairs=17,
+        min_ess_ratio=0.05,
+        exclude_ranges=ranges,
+    ) == "ok"
+
+
 def test_parser_maps_local_fgo_flags_and_auto_requests_diagnostics():
     parser = build_arg_parser()
     args = parser.parse_args(_expand_cli_preset_argv([
@@ -699,6 +777,8 @@ def test_parser_maps_local_fgo_flags_and_auto_requests_diagnostics():
 
 
 def test_local_fgo_postprocess_replaces_requested_window_only():
+    pytest.importorskip("gtsam", reason="local FGO requires the GTSAM Python bindings")
+
     sats = np.array(
         [
             [120.0, 20.0, 80.0],
