@@ -47,6 +47,18 @@ from gnss_gpu.dd_quality import (
     spread_gate_scale,
 )
 from gnss_gpu.imu import ComplementaryHeadingFilter, load_imu_csv
+from gnss_gpu.local_fgo import (
+    DDCarrierEpoch,
+    DDPseudorangeEpoch,
+    LocalFgoConfig,
+    LocalFgoProblem,
+    LocalFgoWindow,
+    UndiffPseudorangeEpoch,
+    detect_weak_dd_window,
+    inject_into_pf,
+    parse_window_spec,
+    solve_local_fgo,
+)
 from gnss_gpu.tdcp_velocity import (
     C_LIGHT as TDCP_C_LIGHT,
     estimate_velocity_from_tdcp_with_metrics,
@@ -1429,6 +1441,181 @@ def _apply_smoother_tail_guard(
     return guarded, applied
 
 
+def _local_fgo_enabled(window_spec: str | None) -> bool:
+    if window_spec is None:
+        return False
+    return str(window_spec).strip().lower() not in {"", "off", "none", "false", "0"}
+
+
+def _make_undiff_pr_epoch(
+    sat_ecef: np.ndarray,
+    pseudoranges: np.ndarray,
+    weights: np.ndarray,
+    receiver_pos_ecef: np.ndarray,
+) -> UndiffPseudorangeEpoch | None:
+    sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+    pr = np.asarray(pseudoranges, dtype=np.float64).ravel()
+    w = np.asarray(weights, dtype=np.float64).ravel()
+    pos = np.asarray(receiver_pos_ecef, dtype=np.float64).ravel()[:3]
+    valid = (
+        np.isfinite(pr)
+        & np.isfinite(w)
+        & np.isfinite(sat).all(axis=1)
+        & np.isfinite(pos).all()
+    )
+    if not np.any(valid):
+        return None
+    ranges = np.linalg.norm(sat[valid] - pos, axis=1)
+    good = np.isfinite(ranges) & (ranges > 1e3)
+    if np.count_nonzero(good) < 4:
+        return None
+    valid_idx = np.flatnonzero(valid)[good]
+    cb_est = float(np.median(pr[valid_idx] - ranges[good]))
+    if not np.isfinite(cb_est):
+        return None
+    return UndiffPseudorangeEpoch(
+        sat_ecef=sat[valid_idx],
+        pseudoranges_m=pr[valid_idx],
+        clock_bias_m=cb_est,
+        weights=w[valid_idx],
+    )
+
+
+def _copy_dd_carrier_epoch(dd_result) -> DDCarrierEpoch | None:
+    if dd_result is None or int(getattr(dd_result, "n_dd", 0)) <= 0:
+        return None
+    return DDCarrierEpoch.from_result(dd_result)
+
+
+def _copy_dd_pseudorange_epoch(dd_pr_result) -> DDPseudorangeEpoch | None:
+    if dd_pr_result is None or int(getattr(dd_pr_result, "n_dd", 0)) <= 0:
+        return None
+    return DDPseudorangeEpoch.from_result(dd_pr_result)
+
+
+def _aligned_motion_deltas(
+    aligned_indices: list[int],
+    stored_motion_deltas: list[np.ndarray],
+) -> np.ndarray | None:
+    if len(aligned_indices) < 2:
+        return None
+    deltas: list[np.ndarray] = []
+    for a, b in zip(aligned_indices[:-1], aligned_indices[1:]):
+        if b <= a or a < 0 or b - 1 > len(stored_motion_deltas):
+            deltas.append(np.full(3, np.nan, dtype=np.float64))
+            continue
+        span = np.asarray(stored_motion_deltas[a:b], dtype=np.float64)
+        if span.ndim != 2 or span.shape[1] != 3 or not np.isfinite(span).all():
+            deltas.append(np.full(3, np.nan, dtype=np.float64))
+            continue
+        deltas.append(np.sum(span, axis=0))
+    return np.asarray(deltas, dtype=np.float64)
+
+
+def _resolve_local_fgo_window(
+    window_spec: str,
+    n_epochs: int,
+    epoch_diagnostics: list[dict[str, object]] | None,
+    *,
+    min_epochs: int,
+    dd_max_pairs: int,
+) -> LocalFgoWindow | None:
+    spec = str(window_spec).strip().lower()
+    if spec == "auto":
+        if not epoch_diagnostics:
+            return None
+        return detect_weak_dd_window(
+            epoch_diagnostics,
+            min_epochs=min_epochs,
+            dd_max_pairs=dd_max_pairs,
+        )
+    return parse_window_spec(window_spec, n_epochs)
+
+
+def _apply_local_fgo_postprocess(
+    smoothed_aligned: np.ndarray,
+    aligned_indices: list[int],
+    stored_motion_deltas: list[np.ndarray],
+    stored_dd_carrier: list[DDCarrierEpoch | None],
+    stored_dd_pseudorange: list[DDPseudorangeEpoch | None],
+    stored_undiff_pr: list[UndiffPseudorangeEpoch | None],
+    epoch_diagnostics: list[dict[str, object]] | None,
+    *,
+    window_spec: str,
+    min_epochs: int,
+    dd_max_pairs: int,
+    config: LocalFgoConfig,
+) -> tuple[np.ndarray, dict[str, object]]:
+    smoothed = np.asarray(smoothed_aligned, dtype=np.float64)
+    info: dict[str, object] = {
+        "applied": False,
+        "window": None,
+        "solve_window": None,
+        "factor_counts": None,
+        "initial_error": None,
+        "final_error": None,
+        "reason": None,
+    }
+    if len(smoothed) == 0:
+        info["reason"] = "empty_smoothed"
+        return smoothed, info
+
+    target = _resolve_local_fgo_window(
+        window_spec,
+        len(smoothed),
+        epoch_diagnostics,
+        min_epochs=min_epochs,
+        dd_max_pairs=dd_max_pairs,
+    )
+    if target is None:
+        info["reason"] = "no_window"
+        return smoothed, info
+
+    aligned_dd_carrier = [stored_dd_carrier[i] for i in aligned_indices]
+    aligned_dd_pr = [stored_dd_pseudorange[i] for i in aligned_indices]
+    aligned_undiff = [stored_undiff_pr[i] for i in aligned_indices]
+    motion_deltas = _aligned_motion_deltas(aligned_indices, stored_motion_deltas)
+    solve_window = LocalFgoWindow(
+        max(0, target.start - 1),
+        min(len(smoothed) - 1, target.end + 1),
+    )
+
+    result = solve_local_fgo(
+        LocalFgoProblem(
+            initial_positions_ecef=smoothed,
+            prior_positions_ecef=smoothed,
+            window=solve_window,
+            motion_deltas_ecef=motion_deltas,
+            dd_carrier=aligned_dd_carrier,
+            dd_pseudorange=aligned_dd_pr,
+            undiff_pseudorange=aligned_undiff,
+        ),
+        config,
+    )
+    rel_start = target.start - solve_window.start
+    rel_end = rel_start + target.size
+    updated = inject_into_pf(
+        smoothed,
+        result.positions_ecef[rel_start:rel_end],
+        target,
+    )
+    if epoch_diagnostics:
+        for i, row in enumerate(epoch_diagnostics):
+            row["local_fgo_applied"] = bool(target.start <= i <= target.end)
+    info.update(
+        {
+            "applied": True,
+            "window": f"{target.start}:{target.end}",
+            "solve_window": f"{solve_window.start}:{solve_window.end}",
+            "factor_counts": dict(result.factor_counts),
+            "initial_error": float(result.initial_error),
+            "final_error": float(result.final_error),
+            "reason": "ok",
+        }
+    )
+    return updated, info
+
+
 def _find_base_obs_path(run_dir: Path) -> Path | None:
     for name in ("base_trimble.obs", "base.obs"):
         p = run_dir / name
@@ -1628,6 +1815,16 @@ def run_pf_with_optional_smoother(
     smoother_tail_guard_dd_carrier_max_pairs: int | None = None,
     smoother_tail_guard_dd_pseudorange_max_pairs: int | None = None,
     smoother_tail_guard_min_shift_m: float | None = None,
+    fgo_local_window: str | None = None,
+    fgo_local_window_min_epochs: int = 100,
+    fgo_local_dd_max_pairs: int = 4,
+    fgo_local_prior_sigma_m: float = 0.5,
+    fgo_local_motion_sigma_m: float = 1.0,
+    fgo_local_dd_huber_k: float = 1.5,
+    fgo_local_pr_huber_k: float = 1.5,
+    fgo_local_dd_sigma_cycles: float = 0.20,
+    fgo_local_pr_sigma_m: float = 5.0,
+    fgo_local_max_iterations: int = 50,
 ) -> dict[str, object]:
     if dd_pseudorange and use_gmm:
         raise ValueError("dd_pseudorange cannot be combined with --gmm")
@@ -1742,6 +1939,10 @@ def run_pf_with_optional_smoother(
     aligned_indices: list[int] = []
     aligned_epoch_diagnostics: list[dict[str, object]] = []
     n_stored = 0
+    stored_motion_deltas: list[np.ndarray] = []
+    stored_dd_carrier: list[DDCarrierEpoch | None] = []
+    stored_dd_pseudorange: list[DDPseudorangeEpoch | None] = []
+    stored_undiff_pr: list[UndiffPseudorangeEpoch | None] = []
     n_tdcp_used = 0
     n_tdcp_fallback = 0
     n_imu_tight_used = 0
@@ -2410,6 +2611,15 @@ def run_pf_with_optional_smoother(
                     _MUPF_L1_WAVELENGTH_M if fallback_attempt.afv is not None else None
                 ),
             )
+            if n_stored > 0:
+                if velocity is not None and dt > 0 and np.isfinite(velocity).all():
+                    stored_motion_deltas.append(np.asarray(velocity, dtype=np.float64).ravel()[:3] * float(dt))
+                else:
+                    stored_motion_deltas.append(np.full(3, np.nan, dtype=np.float64))
+            fgo_receiver_pos = np.asarray(pf.estimate()[:3], dtype=np.float64)
+            stored_dd_carrier.append(_copy_dd_carrier_epoch(dd_carrier_result))
+            stored_dd_pseudorange.append(_copy_dd_pseudorange_epoch(dd_pr_result))
+            stored_undiff_pr.append(_make_undiff_pr_epoch(sat_ecef, pr, w, fgo_receiver_pos))
             n_stored += 1
 
         pf_estimate_now = np.asarray(pf.estimate()[:3], dtype=np.float64).copy()
@@ -2568,6 +2778,7 @@ def run_pf_with_optional_smoother(
                         "smoothed_shift_3d_m": None,
                         "smoothing_improvement_2d": None,
                         "tail_guard_applied": False,
+                        "local_fgo_applied": False,
                     })
                 if use_smoother:
                     aligned_indices.append(n_stored - 1)
@@ -2777,8 +2988,12 @@ def run_pf_with_optional_smoother(
         "elapsed_ms": elapsed_ms,
         "forward_metrics": None,
         "smoothed_metrics": None,
+        "smoothed_metrics_before_fgo": None,
         "epoch_diagnostics": None,
         "n_tail_guard_applied": 0,
+        "fgo_local_window": fgo_local_window,
+        "fgo_local_applied": False,
+        "fgo_local_info": None,
     }
 
     if len(forward_pos_full) == 0:
@@ -2812,6 +3027,46 @@ def run_pf_with_optional_smoother(
                 min_shift_m=smoother_tail_guard_min_shift_m,
             )
             result["n_tail_guard_applied"] = int(n_tail_guard_applied)
+            result["smoothed_metrics_before_fgo"] = compute_metrics(
+                smoothed_aligned_arr, gt_arr[: len(smoothed_aligned_arr)]
+            )
+            if _local_fgo_enabled(fgo_local_window):
+                fgo_config = LocalFgoConfig(
+                    prior_sigma_m=fgo_local_prior_sigma_m,
+                    motion_sigma_m=fgo_local_motion_sigma_m,
+                    dd_sigma_cycles=fgo_local_dd_sigma_cycles,
+                    dd_pr_sigma_m=fgo_local_pr_sigma_m,
+                    undiff_pr_sigma_m=fgo_local_pr_sigma_m,
+                    dd_huber_k=fgo_local_dd_huber_k,
+                    pr_huber_k=fgo_local_pr_huber_k,
+                    max_iterations=fgo_local_max_iterations,
+                )
+                smoothed_aligned_arr, fgo_info = _apply_local_fgo_postprocess(
+                    smoothed_aligned_arr,
+                    list(map(int, aligned_indices)),
+                    stored_motion_deltas,
+                    stored_dd_carrier,
+                    stored_dd_pseudorange,
+                    stored_undiff_pr,
+                    aligned_epoch_diagnostics if collect_epoch_diagnostics else None,
+                    window_spec=str(fgo_local_window),
+                    min_epochs=fgo_local_window_min_epochs,
+                    dd_max_pairs=fgo_local_dd_max_pairs,
+                    config=fgo_config,
+                )
+                result["fgo_local_info"] = fgo_info
+                result["fgo_local_applied"] = bool(fgo_info.get("applied"))
+                if fgo_info.get("applied"):
+                    print(
+                        "  [local_fgo] "
+                        f"window={fgo_info.get('window')} "
+                        f"solve={fgo_info.get('solve_window')} "
+                        f"factors={fgo_info.get('factor_counts')} "
+                        f"error={float(fgo_info.get('initial_error')):.2f}"
+                        f"->{float(fgo_info.get('final_error')):.2f}"
+                    )
+                else:
+                    print(f"  [local_fgo] skipped: {fgo_info.get('reason')}")
             result["smoothed_metrics"] = compute_metrics(
                 smoothed_aligned_arr, gt_arr[: len(smoothed_aligned_arr)]
             )
@@ -2820,9 +3075,19 @@ def run_pf_with_optional_smoother(
                     smoothed_aligned_arr,
                     gt_arr[: len(smoothed_aligned_arr)],
                 )
-                for row, err2d, err3d in zip(aligned_epoch_diagnostics, smoothed_errors_2d, smoothed_errors_3d):
+                smoothed_shift_m = np.linalg.norm(
+                    smoothed_aligned_arr - forward_pos_full[: len(smoothed_aligned_arr)],
+                    axis=1,
+                )
+                for row, err2d, err3d, shift_m in zip(
+                    aligned_epoch_diagnostics,
+                    smoothed_errors_2d,
+                    smoothed_errors_3d,
+                    smoothed_shift_m,
+                ):
                     row["smoothed_error_2d"] = float(err2d)
                     row["smoothed_error_3d"] = float(err3d)
+                    row["smoothed_shift_3d_m"] = float(shift_m)
                     if row["forward_error_2d"] is not None:
                         row["smoothing_improvement_2d"] = float(row["forward_error_2d"] - err2d)
 
@@ -2878,6 +3143,7 @@ def _namespace_requests_epoch_diagnostics(args: argparse.Namespace) -> bool:
         or args.smoother_tail_guard_dd_carrier_max_pairs is not None
         or args.smoother_tail_guard_dd_pseudorange_max_pairs is not None
         or args.smoother_tail_guard_min_shift_m is not None
+        or str(args.fgo_local_window).strip().lower() == "auto"
     )
 
 
@@ -2996,6 +3262,16 @@ def _namespace_to_run_kwargs(
         "smoother_tail_guard_dd_carrier_max_pairs": args.smoother_tail_guard_dd_carrier_max_pairs,
         "smoother_tail_guard_dd_pseudorange_max_pairs": args.smoother_tail_guard_dd_pseudorange_max_pairs,
         "smoother_tail_guard_min_shift_m": args.smoother_tail_guard_min_shift_m,
+        "fgo_local_window": args.fgo_local_window,
+        "fgo_local_window_min_epochs": args.fgo_local_window_min_epochs,
+        "fgo_local_dd_max_pairs": args.fgo_local_dd_max_pairs,
+        "fgo_local_prior_sigma_m": args.fgo_local_prior_sigma_m,
+        "fgo_local_motion_sigma_m": args.fgo_local_motion_sigma_m,
+        "fgo_local_dd_huber_k": args.fgo_local_dd_huber_k,
+        "fgo_local_pr_huber_k": args.fgo_local_pr_huber_k,
+        "fgo_local_dd_sigma_cycles": args.fgo_local_dd_sigma_cycles,
+        "fgo_local_pr_sigma_m": args.fgo_local_pr_sigma_m,
+        "fgo_local_max_iterations": args.fgo_local_max_iterations,
     }
 
 
@@ -3316,6 +3592,66 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="If set, require smoothed-vs-forward 3D shift to be at or above this threshold for smoother tail guard",
     )
+    parser.add_argument(
+        "--fgo-local-window",
+        type=str,
+        default=None,
+        help="Apply local FGO post-process to a weak-DD window: 'auto' or inclusive N:M aligned-epoch indices",
+    )
+    parser.add_argument(
+        "--fgo-local-window-min-epochs",
+        type=int,
+        default=100,
+        help="Minimum weak-DD run length for --fgo-local-window auto",
+    )
+    parser.add_argument(
+        "--fgo-local-dd-max-pairs",
+        type=int,
+        default=4,
+        help="DD carrier kept-pair threshold used by --fgo-local-window auto",
+    )
+    parser.add_argument(
+        "--fgo-local-prior-sigma-m",
+        type=float,
+        default=0.5,
+        help="Endpoint prior sigma for the local FGO solve",
+    )
+    parser.add_argument(
+        "--fgo-local-motion-sigma-m",
+        type=float,
+        default=1.0,
+        help="Between-factor sigma for local FGO motion deltas",
+    )
+    parser.add_argument(
+        "--fgo-local-dd-huber-k",
+        type=float,
+        default=1.5,
+        help="Huber k for local FGO DD carrier factors",
+    )
+    parser.add_argument(
+        "--fgo-local-pr-huber-k",
+        type=float,
+        default=1.5,
+        help="Huber k for local FGO DD/undiff pseudorange factors",
+    )
+    parser.add_argument(
+        "--fgo-local-dd-sigma-cycles",
+        type=float,
+        default=0.20,
+        help="DD carrier sigma in cycles for local FGO",
+    )
+    parser.add_argument(
+        "--fgo-local-pr-sigma-m",
+        type=float,
+        default=5.0,
+        help="DD and undifferenced pseudorange sigma in meters for local FGO",
+    )
+    parser.add_argument(
+        "--fgo-local-max-iterations",
+        type=int,
+        default=50,
+        help="Maximum GTSAM LM iterations for local FGO",
+    )
     return parser
 
 
@@ -3376,6 +3712,9 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 if int(out.get("n_tail_guard_applied", 0)) > 0:
                     print(f"       tail guard applied: {int(out['n_tail_guard_applied'])} epochs")
+                if out.get("fgo_local_applied"):
+                    info = out.get("fgo_local_info") or {}
+                    print(f"       local FGO window: {info.get('window')} solve={info.get('solve_window')}")
             epoch_diagnostics = out.get("epoch_diagnostics")
             if epoch_diagnostics:
                 if args.epoch_diagnostics_top_k > 0:
@@ -3489,11 +3828,52 @@ def main(argv: list[str] | None = None) -> int:
                 "smoother_tail_guard_dd_pseudorange_max_pairs": args.smoother_tail_guard_dd_pseudorange_max_pairs,
                 "smoother_tail_guard_min_shift_m": args.smoother_tail_guard_min_shift_m,
                 "n_tail_guard_applied": int(out.get("n_tail_guard_applied", 0)),
+                "fgo_local_window": args.fgo_local_window,
+                "fgo_local_window_min_epochs": args.fgo_local_window_min_epochs,
+                "fgo_local_dd_max_pairs": args.fgo_local_dd_max_pairs,
+                "fgo_local_prior_sigma_m": args.fgo_local_prior_sigma_m,
+                "fgo_local_motion_sigma_m": args.fgo_local_motion_sigma_m,
+                "fgo_local_dd_huber_k": args.fgo_local_dd_huber_k,
+                "fgo_local_pr_huber_k": args.fgo_local_pr_huber_k,
+                "fgo_local_dd_sigma_cycles": args.fgo_local_dd_sigma_cycles,
+                "fgo_local_pr_sigma_m": args.fgo_local_pr_sigma_m,
+                "fgo_local_max_iterations": args.fgo_local_max_iterations,
+                "fgo_local_applied": bool(out.get("fgo_local_applied", False)),
+                "fgo_local_resolved_window": (
+                    (out.get("fgo_local_info") or {}).get("window")
+                    if out.get("fgo_local_info") is not None
+                    else None
+                ),
+                "fgo_local_solve_window": (
+                    (out.get("fgo_local_info") or {}).get("solve_window")
+                    if out.get("fgo_local_info") is not None
+                    else None
+                ),
+                "fgo_local_initial_error": (
+                    (out.get("fgo_local_info") or {}).get("initial_error")
+                    if out.get("fgo_local_info") is not None
+                    else None
+                ),
+                "fgo_local_final_error": (
+                    (out.get("fgo_local_info") or {}).get("final_error")
+                    if out.get("fgo_local_info") is not None
+                    else None
+                ),
                 "smoother": use_sm,
                 "n_particles": args.n_particles,
                 "forward_p50": fm["p50"] if fm else None,
                 "forward_p95": fm["p95"] if fm else None,
                 "forward_rms_2d": fm["rms_2d"] if fm else None,
+                "smoothed_p50_before_fgo": (
+                    out["smoothed_metrics_before_fgo"]["p50"]
+                    if out.get("smoothed_metrics_before_fgo")
+                    else None
+                ),
+                "smoothed_rms_2d_before_fgo": (
+                    out["smoothed_metrics_before_fgo"]["rms_2d"]
+                    if out.get("smoothed_metrics_before_fgo")
+                    else None
+                ),
                 "smoothed_p50": sm["p50"] if sm else None,
                 "smoothed_p95": sm["p95"] if sm else None,
                 "smoothed_rms_2d": sm["rms_2d"] if sm else None,
