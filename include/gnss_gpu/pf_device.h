@@ -131,6 +131,15 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
 void pf_device_position_update(PFDeviceState* state,
     double ref_x, double ref_y, double ref_z, double sigma_pos);
 
+// OSM road-centerline soft constraint.
+// road_segments_enu: [n_segments, 5] rows of (e0, n0, e1, n1, sigma_scale).
+// Particles are projected into the local ENU frame using origin/east/north;
+// only horizontal distance to the nearest centerline segment is penalized.
+void pf_device_osm_road_update(PFDeviceState* state,
+    const double* road_segments_enu, int n_segments,
+    const double* origin_ecef, const double* east_basis, const double* north_basis,
+    double sigma_road_m, double huber_k);
+
 // Shift all particles' clock bias by a constant offset
 void pf_device_shift_clock_bias(PFDeviceState* state, double shift);
 

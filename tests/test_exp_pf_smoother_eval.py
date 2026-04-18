@@ -661,6 +661,32 @@ def test_parser_maps_low_ess_dd_gate_flags():
     assert run_kwargs["mupf_dd_gate_low_ess_require_no_dd_pr"] is True
 
 
+def test_parser_maps_osm_road_constraint_flags():
+    parser = build_arg_parser()
+    args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_reference",
+        "--osm-map-constraint",
+        "--osm-road-file", "experiments/data/osm_odaiba_roads.geojson",
+        "--osm-road-sigma-m", "3.0",
+        "--osm-road-huber-k", "1.5",
+        "--osm-road-search-radius-m", "120",
+        "--osm-road-max-segments", "64",
+    ]))
+
+    run_kwargs = _namespace_to_run_kwargs(
+        args,
+        position_update_sigma=args.position_update_sigma,
+        use_smoother=args.smoother,
+    )
+    assert run_kwargs["osm_map_constraint"] is True
+    assert str(run_kwargs["osm_road_file"]) == "experiments/data/osm_odaiba_roads.geojson"
+    assert run_kwargs["osm_road_sigma_m"] == 3.0
+    assert run_kwargs["osm_road_huber_k"] == 1.5
+    assert run_kwargs["osm_road_search_radius_m"] == 120.0
+    assert run_kwargs["osm_road_max_segments"] == 64
+
+
 @pytest.mark.skipif(
     not (REFERENCE_DATA_ROOT / "Odaiba").exists(),
     reason="UrbanNav Odaiba reference data not available",
