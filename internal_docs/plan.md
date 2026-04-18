@@ -4,7 +4,7 @@
 **現在の HEAD**: `ca73867` (`feature/carrier-phase-imu`)
 **ブランチ**: `feature/carrier-phase-imu` (PR #4 open, CI 全 pass)
 **作業ツリー**: dirty (DD pseudorange/carrier/quality/stop-detect/GSDC 評価が積み上がっている)
-**FGO**: 使わない。PF の枠内で詰める。
+**FGO**: メイン engine には使わない。ただし **PF の weak-DD window だけ局所 FGO** で救うハイブリッドは OK (2026-04-18 緩和)。
 **PR #4**: 許可があるまで merge しない。
 
 ---
@@ -407,7 +407,7 @@ CI 全 pass。README 最新。merge はユーザーの明示許可待ち。
 
 ## 12. ユーザーからの指示
 
-- **FGO は NG** — PF/smoother の枠組みで攻める
+- **FGO はメイン engine には NG** (PF/smoother が軸)。ただし weak-DD window など局所救済に限って FGO を使うハイブリッドは OK (2026-04-18 緩和)
 - **PR #4 は merge 不可** — 明示許可が必要
 - **コミットに Co-Authored-By は付けない**
 - **PR に AI 生成表記は入れない**
