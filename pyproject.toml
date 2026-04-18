@@ -28,6 +28,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
+    "gtsam>=4.3a0",
     "numpy>=1.21",
 ]
 

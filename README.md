@@ -195,6 +195,12 @@ Controlled simulation with parametric canyon (parallel buildings, ray-traced NLO
 pip install .
 ```
 
+The local weak-DD FGO rescue experiment uses the Python GTSAM bindings:
+
+```bash
+pip install -r requirements.txt
+```
+
 Or build manually:
 
 ```bash
