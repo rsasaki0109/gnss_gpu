@@ -91,6 +91,7 @@ class WidelaneDDStats:
 
     n_candidate_pairs: int = 0
     n_fixed_pairs: int = 0
+    n_ratio_rejected: int = 0
     n_dd: int = 0
     fix_rate: float = 0.0
     reason: str = "no_candidates"
@@ -356,6 +357,7 @@ class WidelaneDDPseudorangeComputer:
         min_common_sats: int = 4,
         rover_weights: Sequence[float] | None = None,
         min_fix_rate: float | None = None,
+        min_ratio: float | None = None,
     ) -> tuple[DDPseudorangeResult | None, WidelaneDDStats]:
         """Compute fixed wide-lane DD pseudorange rows for one epoch."""
 
@@ -388,6 +390,8 @@ class WidelaneDDPseudorangeComputer:
         ref_sat_ids: list[str] = []
         n_candidate_pairs = 0
         n_fixed_pairs = 0
+        n_ratio_rejected = 0
+        min_ratio_value = None if min_ratio is None else float(min_ratio)
 
         for sys_char, sys_sats in sorted(sats_by_system.items()):
             if len(sys_sats) < 2:
@@ -417,6 +421,9 @@ class WidelaneDDPseudorangeComputer:
                 pair_key = (sys_char, sat_id, ref_sat)
                 fix = self._resolver.update(pair_key, dd_float)
                 if fix is None:
+                    continue
+                if min_ratio_value is not None and float(fix.ratio) < min_ratio_value:
+                    n_ratio_rejected += 1
                     continue
                 n_fixed_pairs += 1
                 dd_phase_m = _dd_wl_phase_m(
@@ -449,6 +456,7 @@ class WidelaneDDPseudorangeComputer:
             return None, WidelaneDDStats(
                 n_candidate_pairs=n_candidate_pairs,
                 n_fixed_pairs=n_fixed_pairs,
+                n_ratio_rejected=n_ratio_rejected,
                 fix_rate=fix_rate,
                 reason="low_fix_rate",
             )
@@ -457,6 +465,7 @@ class WidelaneDDPseudorangeComputer:
             return None, WidelaneDDStats(
                 n_candidate_pairs=n_candidate_pairs,
                 n_fixed_pairs=n_fixed_pairs,
+                n_ratio_rejected=n_ratio_rejected,
                 n_dd=len(dd_pr_list),
                 fix_rate=fix_rate,
                 reason="too_few_fixed_pairs",
@@ -476,6 +485,7 @@ class WidelaneDDPseudorangeComputer:
         return result, WidelaneDDStats(
             n_candidate_pairs=n_candidate_pairs,
             n_fixed_pairs=n_fixed_pairs,
+            n_ratio_rejected=n_ratio_rejected,
             n_dd=n_dd,
             fix_rate=fix_rate,
             reason="ok",
