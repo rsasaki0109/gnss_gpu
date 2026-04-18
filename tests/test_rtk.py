@@ -105,11 +105,11 @@ def test_rtk_float_single():
     """Test single-epoch RTK float solution on short baseline."""
     base_ecef, rover_true, sat_ecef, rover_pr, base_pr, rcp, bcp = _make_rtk_scenario()
 
-    result = np.zeros(3)
+    np.zeros(3)
     n_sat = len(rover_pr)
     n_dd = n_sat - 1
-    ambiguities = np.zeros(n_dd)
-    residuals = np.zeros(2 * n_dd)
+    np.zeros(n_dd)
+    np.zeros(2 * n_dd)
 
     pos, amb, res, iters = rtk_float(
         base_ecef, rover_pr, base_pr, rcp, bcp,

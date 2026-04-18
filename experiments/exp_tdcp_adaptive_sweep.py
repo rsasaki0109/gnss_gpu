@@ -110,7 +110,7 @@ def main() -> None:
     print(f"Grid size:         {len(grid)} combos x {len(runs)} datasets = {len(grid) * len(runs)} runs")
     print(f"n_particles:       {args.n_particles}")
     print(f"max_epochs:        {args.max_epochs or 'full'}")
-    print(f"predict_guide:     tdcp_adaptive")
+    print("predict_guide:     tdcp_adaptive")
     print()
 
     if args.dry_run:
@@ -120,7 +120,7 @@ def main() -> None:
                 f"  [{i:3d}] rms_threshold={rms_th}  "
                 f"sigma_pos_tdcp={sp_tdcp}  position_update_sigma={pu}"
             )
-        print(f"\n--dry-run: exiting without running.")
+        print("\n--dry-run: exiting without running.")
         return
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)

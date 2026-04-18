@@ -160,7 +160,7 @@ def main():
 
     # Also create GIF
     gif_output = output.with_suffix(".gif")
-    print(f"    Converting to GIF...")
+    print("    Converting to GIF...")
     import subprocess
     subprocess.run([
         "ffmpeg", "-y", "-i", str(output),

@@ -219,9 +219,9 @@ def main():
     print(f"KML: {kml_od_path}")
 
     # Summary
-    print(f"\n=== Summary ===")
+    print("\n=== Summary ===")
     print(f"Shinjuku: avg NLOS={np.mean(nlos_counts):.1f}, max={max(nlos_counts)}")
-    print(f"  -> Dense urban = more NLOS (expected)")
+    print("  -> Dense urban = more NLOS (expected)")
 
 
 if __name__ == "__main__":

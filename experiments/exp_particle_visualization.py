@@ -109,7 +109,7 @@ def run_pf_with_particle_dumps(
             resampling="megopolis",
             seed=42,
         )
-        print(f"    Using PF3D+RobustClear (clear_nlos_prob=0.01)")
+        print("    Using PF3D+RobustClear (clear_nlos_prob=0.01)")
     except (ImportError, RuntimeError):
         from gnss_gpu import ParticleFilterDevice
         pf = ParticleFilterDevice(
@@ -120,7 +120,7 @@ def run_pf_with_particle_dumps(
             resampling="megopolis",
             seed=42,
         )
-        print(f"    Fallback to ParticleFilterDevice (Gaussian)")
+        print("    Fallback to ParticleFilterDevice (Gaussian)")
 
     init_pos = np.asarray(wls_init[0, :3], dtype=np.float64)
     init_cb = float(wls_init[0, 3])
@@ -337,7 +337,7 @@ def create_animation(
             ax_full.plot(gt[0], gt[1], "s", color="#3b82f6", markersize=9,
                         markeredgecolor="white", markeredgewidth=2, zorder=6)
             pf_rms_f = f.get("pf_rms", 0)
-            spp_rms_f = f.get("ekf_rms", 0)
+            f.get("ekf_rms", 0)
             rtk_rms_f = f.get("rtklib_rms", 0)
             if rtk_rms_f > 0:
                 bl = baseline_label.split()[0]  # first word e.g. "RTKLIB" or "SPP"
@@ -389,9 +389,9 @@ def create_animation(
 
             # Metrics overlay (ENU-based)
             err_2d = f.get("error_2d", 0)
-            spp_err = f.get("ekf_error_2d", 0)
+            f.get("ekf_error_2d", 0)
             pf_rms = f.get("pf_rms", 0)
-            spp_rms = f.get("ekf_rms", 0)
+            f.get("ekf_rms", 0)
             rtk_err = f.get("rtklib_error_2d", 0)
             rtk_rms = f.get("rtklib_rms", 0)
             if rtk_rms > 0:
@@ -468,7 +468,7 @@ def _run_pf_gnssplusplus(
     particle_frames = []
 
     prev_tow = None
-    prev_fused = np.array(first_pos[:3])
+    np.array(first_pos[:3])
     frame_count = 0
     for sol_epoch, measurements in epochs:
         if not sol_epoch.is_valid() or len(measurements) < 4:

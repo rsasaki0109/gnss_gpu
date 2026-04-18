@@ -175,7 +175,6 @@ def run_pf_with_widelane(
     total_wl_replaced = 0
     fixed_sat_ids = set[str]()
     n_stored = 0
-    epoch_counter = 0
 
     prev_tow = None
     prev_measurements: list | None = None
@@ -184,7 +183,7 @@ def run_pf_with_widelane(
     n_tdcp_used = 0
     n_tdcp_fallback = 0
 
-    resolver = WidelaneResolver()
+    WidelaneResolver()
     _carrier_smooth_state: dict[int, tuple[float, float]] = {}  # prn -> (smoothed_pr, prev_carrier_m)
 
     for sol_epoch, measurements in epochs:
@@ -281,7 +280,7 @@ def run_pf_with_widelane(
                 if cp != 0.0 and np.isfinite(cp):
                     l1 = cp
             l2c = l2car_map.get(sat_id)
-            l2p = l2pr_map.get(sat_id)
+            l2pr_map.get(sat_id)
 
             wl_candidates_epoch += 1
             total_pr_count += 1
@@ -497,7 +496,7 @@ def main() -> None:
             print(f"     SMTH P50={sm['p50']:.2f}m RMS={sm['rms_2d']:.2f}m")
 
         total_wl = out["n_wl_candidates"]
-        total_fixed = out["n_wl_fixed"]
+        out["n_wl_fixed"]
         total_replaced = out["n_wl_replaced"]
         fixed_ratio = float(total_replaced) / float(total_wl) if total_wl else 0.0
         print(

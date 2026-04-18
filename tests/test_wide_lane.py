@@ -153,7 +153,7 @@ class TestWidelanePseudorange:
 
     def test_pseudorange_after_fix(self) -> None:
         """Verify pseudorange formula: rho = (phi_wl - N_wl) * lambda_wl."""
-        rng = np.random.default_rng(123)
+        np.random.default_rng(123)
         wr = WidelaneResolver(min_epochs=5, max_std=0.4)
         prn = 3
         true_n_wl = 8

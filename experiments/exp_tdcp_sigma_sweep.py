@@ -101,7 +101,7 @@ def main() -> None:
     print(f"Grid size:       {len(grid)} combos x {len(runs)} datasets = {len(grid) * len(runs)} runs")
     print(f"n_particles:     {args.n_particles}")
     print(f"max_epochs:      {args.max_epochs or 'full'}")
-    print(f"predict_guide:   tdcp")
+    print("predict_guide:   tdcp")
     print(f"elev_weight:     {args.tdcp_elevation_weight}")
     print()
 

@@ -210,7 +210,7 @@ def main() -> None:
 
     # Print summary table
     print(f"\n{'='*80}")
-    print(f"  Summary")
+    print("  Summary")
     print(f"{'='*80}")
     print(f"{'Run':<12} {'Method':<25} {'P50':>7} {'P95':>7} {'RMS':>7} {'>100m':>7}")
     print("-" * 80)

@@ -134,7 +134,7 @@ def run_scenario(name, rx_ecef_true, sat_ecef, prn_list, building_model=None,
             result_pos, iters = wls_position(sat_flat, pr_arr, weights)
             pos_ecef = result_pos[:3]
             pos_error = float(np.linalg.norm(pos_ecef - rx_ecef_true))
-        except Exception as e:
+        except Exception:
             pos_error = float("nan")
 
     lat, lon, alt = ecef_to_lla(*rx_ecef_true)
