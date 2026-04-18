@@ -1257,3 +1257,38 @@ Phase 2 Huber-k sweep (`sigma_road=5.0`):
 - tight sigma ほど wrong road pull が強くなり、soft + Huber でも median が崩れる。
 - Odaiba はHKよりopenだが、OSM centerline prior は車線内位置・高架/側道・停止/駐車/交差点形状の誤差を吸収しきれない。
 - HK に続いて Odaiba でも positive にならなかったため、OSM road-centerline constraint はこの形では卒業扱いにする。
+
+### Local FGO LAMBDA ambiguity fix negative
+
+DD carrier integer ambiguity を local FGO window に統合して、Odaiba の 1m 切りを確認した。
+実装は `5a4fd7e` (LAMBDA/ILS solver) と `bcf2c78` (local FGO integration)。
+wrong fix 回避を優先し、ratio threshold は handoff 指定どおり `3.0` から緩めていない。
+
+条件:
+- base preset: `odaiba_best_accuracy`
+- command:
+  `exp_pf_smoother_eval.py --data-root /tmp/UrbanNav-Tokyo --preset odaiba_best_accuracy --fgo-local-window 2400:3500 --fgo-local-lambda`
+- local FGO target window: `2400:3500`, solve window: `2399:3501`
+- LAMBDA settings: ratio threshold `3.0`, fixed sigma `0.05 cycles`, min continuous epochs `20`
+- fixed DD carrier factors: `1093`
+- fixed ambiguity segments: `22` (`J:5`, `C:8`, `E:6`, `G:3`)
+
+Odaiba full result:
+
+| config | lambda fixed | FGO error | FWD P50 | FWD RMS | SMTH P50 before FGO | SMTH RMS before FGO | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| local FGO + LAMBDA | 22 / 1093 obs | `23453.63 -> 22554.61` | 1.256 m | 5.683 m | 1.1435 m | 4.3627 m | 1.1438 m | 4.3621 m |
+
+所見:
+- FGO objective は下がり、RMS は `4.3627 -> 4.3621 m` とごくわずかに良くなる。
+- 一方で target metric の P50 は `1.1435 -> 1.1438 m` と横ばいから微悪化で、1m 切りには届かない。
+- strict ratio test 下で fix できた ambiguity が window 内 `1093` observation に留まり、既存 PF smoother の MAP 解を動かすほどの拘束になっていない。
+- ratio threshold を緩める方向は wrong fix risk が高いため不採用。preset 昇格なし。
+
+Shinjuku regression:
+
+| run | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | tail guard |
+|---|---:|---:|---:|---:|---:|
+| `odaiba_best_accuracy --runs Shinjuku` | 2.490 m | 7.057 m | 2.286 m | 7.548 m | 3019 epochs |
+
+Shinjuku は LAMBDA 無効の既存 path で完走し、DD metadata 追加による実行時破綻は出ていない。
