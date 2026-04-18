@@ -383,74 +383,6 @@ __global__ void pfd_position_update_kernel(
     log_weights[tid] += -0.5 * (dx*dx + dy*dy + dz*dz) * inv_sigma2;
 }
 
-// --- OSM road-centerline soft constraint kernel ---
-// road_segments layout: n_segments rows of [e0, n0, e1, n1, sigma_scale].
-// Particles are projected into a local ENU frame and only horizontal distance
-// to the nearest road segment is penalized with a Huber loss.
-__global__ void pfd_osm_road_update_kernel(
-    const double* px, const double* py, const double* pz,
-    double* log_weights,
-    const double* road_segments,
-    int n_segments,
-    double origin_x, double origin_y, double origin_z,
-    double east_x, double east_y, double east_z,
-    double north_x, double north_y, double north_z,
-    double sigma_road_m,
-    double huber_k,
-    int N) {
-
-    extern __shared__ double s_segments[];
-    int total = n_segments * 5;
-    for (int i = threadIdx.x; i < total; i += blockDim.x) {
-        s_segments[i] = road_segments[i];
-    }
-    __syncthreads();
-
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= N || n_segments <= 0) return;
-
-    double dx0 = px[tid] - origin_x;
-    double dy0 = py[tid] - origin_y;
-    double dz0 = pz[tid] - origin_z;
-    double pe = dx0 * east_x + dy0 * east_y + dz0 * east_z;
-    double pn = dx0 * north_x + dy0 * north_y + dz0 * north_z;
-
-    double best_loss = INFINITY;
-    for (int s = 0; s < n_segments; s++) {
-        double e0 = s_segments[s * 5 + 0];
-        double n0 = s_segments[s * 5 + 1];
-        double e1 = s_segments[s * 5 + 2];
-        double n1 = s_segments[s * 5 + 3];
-        double sigma_scale = s_segments[s * 5 + 4];
-        if (!(sigma_scale > 0.0) || !isfinite(sigma_scale)) {
-            sigma_scale = 1.0;
-        }
-
-        double se = e1 - e0;
-        double sn = n1 - n0;
-        double len2 = se * se + sn * sn;
-        double t = 0.0;
-        if (len2 > 1.0e-12) {
-            t = ((pe - e0) * se + (pn - n0) * sn) / len2;
-            t = fmin(1.0, fmax(0.0, t));
-        }
-        double ce = e0 + t * se;
-        double cn = n0 + t * sn;
-        double de = pe - ce;
-        double dn = pn - cn;
-        double dist = sqrt(de * de + dn * dn);
-        double z = dist / (sigma_road_m * sigma_scale);
-        double loss = (z <= huber_k)
-            ? 0.5 * z * z
-            : huber_k * z - 0.5 * huber_k * huber_k;
-        best_loss = fmin(best_loss, loss);
-    }
-
-    if (isfinite(best_loss)) {
-        log_weights[tid] += -best_loss;
-    }
-}
-
 // --- Clock bias shift kernel ---
 // Shifts all particles' clock bias by a constant offset.
 // Used to re-center cb around an external estimate each epoch.
@@ -1099,41 +1031,6 @@ void pf_device_position_update(PFDeviceState* state,
         state->d_log_weights,
         ref_x, ref_y, ref_z, inv_sigma2, N);
     CUDA_CHECK_LAST();
-}
-
-void pf_device_osm_road_update(PFDeviceState* state,
-    const double* road_segments_enu, int n_segments,
-    const double* origin_ecef, const double* east_basis, const double* north_basis,
-    double sigma_road_m, double huber_k) {
-
-    if (n_segments <= 0) return;
-
-    int N = state->n_particles;
-    int grid = state->grid_size;
-    int total_doubles = n_segments * 5;
-    size_t total_bytes = (size_t)total_doubles * sizeof(double);
-
-    double* d_segments = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_segments, total_bytes));
-    CUDA_CHECK(cudaMemcpyAsync(
-        d_segments, road_segments_enu, total_bytes, cudaMemcpyHostToDevice, state->stream));
-
-    size_t smem = total_bytes;
-    pfd_osm_road_update_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
-        state->d_px, state->d_py, state->d_pz,
-        state->d_log_weights,
-        d_segments,
-        n_segments,
-        origin_ecef[0], origin_ecef[1], origin_ecef[2],
-        east_basis[0], east_basis[1], east_basis[2],
-        north_basis[0], north_basis[1], north_basis[2],
-        sigma_road_m,
-        huber_k,
-        N);
-    CUDA_CHECK_LAST();
-
-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
-    CUDA_CHECK(cudaFree(d_segments));
 }
 
 // ============================================================

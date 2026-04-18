@@ -191,38 +191,6 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
        py::arg("ref_x"), py::arg("ref_y"), py::arg("ref_z"),
        py::arg("sigma_pos"));
 
-    m.def("pf_device_osm_road_update", [](gnss_gpu::PFDeviceState* state,
-                                          py::array_t<double> road_segments_enu,
-                                          py::array_t<double> origin_ecef,
-                                          py::array_t<double> east_basis,
-                                          py::array_t<double> north_basis,
-                                          double sigma_road_m,
-                                          double huber_k) {
-        py::buffer_info b_segments = road_segments_enu.request();
-        py::buffer_info b_origin = origin_ecef.request();
-        py::buffer_info b_east = east_basis.request();
-        py::buffer_info b_north = north_basis.request();
-        if (b_segments.ndim != 2 || b_segments.shape[1] != 5) {
-            throw std::runtime_error("road_segments_enu must have shape (N, 5)");
-        }
-        if (b_origin.size != 3 || b_east.size != 3 || b_north.size != 3) {
-            throw std::runtime_error("origin_ecef, east_basis, and north_basis must have size 3");
-        }
-        gnss_gpu::pf_device_osm_road_update(
-            state,
-            static_cast<double*>(b_segments.ptr),
-            static_cast<int>(b_segments.shape[0]),
-            static_cast<double*>(b_origin.ptr),
-            static_cast<double*>(b_east.ptr),
-            static_cast<double*>(b_north.ptr),
-            sigma_road_m,
-            huber_k);
-    }, "Apply OSM road-centerline soft Huber constraint",
-       py::arg("state"),
-       py::arg("road_segments_enu"), py::arg("origin_ecef"),
-       py::arg("east_basis"), py::arg("north_basis"),
-       py::arg("sigma_road_m"), py::arg("huber_k"));
-
     m.def("pf_device_shift_clock_bias", [](gnss_gpu::PFDeviceState* state,
                                            double shift) {
         gnss_gpu::pf_device_shift_clock_bias(state, shift);

@@ -50,7 +50,6 @@ class ParticleFilterDevice:
             pf_device_weight_carrier_afv,
             pf_device_weight_dd_carrier_afv,
             pf_device_position_update,
-            pf_device_osm_road_update,
             pf_device_shift_clock_bias,
             pf_device_ess,
             pf_device_position_spread,
@@ -72,7 +71,6 @@ class ParticleFilterDevice:
         self._pf_device_weight_carrier_afv = pf_device_weight_carrier_afv
         self._pf_device_weight_dd_carrier_afv = pf_device_weight_dd_carrier_afv
         self._pf_device_position_update = pf_device_position_update
-        self._pf_device_osm_road_update = pf_device_osm_road_update
         self._pf_device_shift_clock_bias = pf_device_shift_clock_bias
         self._pf_device_ess = pf_device_ess
         self._pf_device_position_spread = pf_device_position_spread
@@ -404,52 +402,6 @@ class ParticleFilterDevice:
             float(ref[0]), float(ref[1]), float(ref[2]),
             float(sigma_pos))
 
-    def osm_road_update(
-        self,
-        road_segments_enu,
-        origin_ecef,
-        east_basis,
-        north_basis,
-        *,
-        sigma_road_m=2.0,
-        huber_k=2.0,
-        resample=False,
-    ):
-        """Apply a soft OSM road-centerline Huber constraint.
-
-        ``road_segments_enu`` must contain ``[e0, n0, e1, n1, sigma_scale]``
-        rows in the local ENU frame described by ``origin_ecef`` and the two
-        basis vectors. The update penalizes horizontal distance to the nearest
-        segment and never projects or removes particles.
-        """
-        if not self._initialized:
-            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
-        if sigma_road_m < 1.0:
-            raise ValueError("sigma_road_m must be >= 1.0m for a conservative road constraint")
-        if huber_k <= 0.0:
-            raise ValueError("huber_k must be positive")
-
-        segments = np.asarray(road_segments_enu, dtype=np.float64).reshape(-1, 5)
-        if len(segments) == 0:
-            return
-        origin = np.asarray(origin_ecef, dtype=np.float64).ravel()
-        east = np.asarray(east_basis, dtype=np.float64).ravel()
-        north = np.asarray(north_basis, dtype=np.float64).ravel()
-        if origin.size != 3 or east.size != 3 or north.size != 3:
-            raise ValueError("origin_ecef, east_basis, and north_basis must have shape (3,)")
-
-        self._pf_device_osm_road_update(
-            self._state,
-            segments,
-            origin,
-            east,
-            north,
-            float(sigma_road_m),
-            float(huber_k),
-        )
-        if resample:
-            _ = self.resample_if_needed()
-
     def shift_clock_bias(self, shift: float):
         """Shift all particles' clock bias by a constant offset.
 
@@ -659,7 +611,6 @@ class ParticleFilterDevice:
         carrier_afv=None,
         carrier_afv_sigma=None,
         carrier_afv_wavelength=None,
-        osm_road=None,
     ):
         """Store observation data for the current epoch (call after update/estimate).
 
@@ -696,8 +647,6 @@ class ParticleFilterDevice:
             Sigma used for the forward undifferenced carrier AFV update.
         carrier_afv_wavelength : float or None
             Carrier wavelength used for the undifferenced AFV update.
-        osm_road : dict or None
-            OSM road-centerline update data used in the forward pass.
         """
         if not getattr(self, '_smooth_enabled', False):
             return
@@ -751,18 +700,6 @@ class ParticleFilterDevice:
                 'weights': np.asarray(carrier_afv['weights'], dtype=np.float64).copy(),
                 'n_sat': int(len(np.asarray(carrier_afv['carrier_phase_cycles']).ravel())),
             }
-        osm_road_store = None
-        if osm_road is not None:
-            osm_road_store = {
-                'road_segments_enu': np.asarray(
-                    osm_road['road_segments_enu'], dtype=np.float64
-                ).reshape(-1, 5).copy(),
-                'origin_ecef': np.asarray(osm_road['origin_ecef'], dtype=np.float64).ravel()[:3].copy(),
-                'east_basis': np.asarray(osm_road['east_basis'], dtype=np.float64).ravel()[:3].copy(),
-                'north_basis': np.asarray(osm_road['north_basis'], dtype=np.float64).ravel()[:3].copy(),
-                'sigma_road_m': float(osm_road['sigma_road_m']),
-                'huber_k': float(osm_road['huber_k']),
-            }
         self._smooth_epochs.append({
             'estimate': est[:3].copy(),
             'sat_ecef': np.asarray(sat_ecef, dtype=np.float64).copy(),
@@ -790,7 +727,6 @@ class ParticleFilterDevice:
             'carrier_afv_wavelength': (
                 None if carrier_afv_wavelength is None else float(carrier_afv_wavelength)
             ),
-            'osm_road': osm_road_store,
         })
 
     def smooth(self, position_update_sigma=None):
@@ -851,7 +787,6 @@ class ParticleFilterDevice:
             dd_cp_ep = ep.get('dd_carrier')
             carrier_anchor_ep = ep.get('carrier_anchor_pseudorange')
             carrier_afv_ep = ep.get('carrier_afv')
-            osm_road_ep = ep.get('osm_road')
             if dd_ep is not None:
                 bwd_pf.update_dd_pseudorange(
                     SimpleNamespace(**dd_ep),
@@ -907,16 +842,6 @@ class ParticleFilterDevice:
             pu_sigma = position_update_sigma if position_update_sigma is not None else None
             if pu_sigma is not None and ep['spp_ref'] is not None:
                 bwd_pf.position_update(ep['spp_ref'][:3], sigma_pos=pu_sigma)
-
-            if osm_road_ep is not None:
-                bwd_pf.osm_road_update(
-                    osm_road_ep['road_segments_enu'],
-                    osm_road_ep['origin_ecef'],
-                    osm_road_ep['east_basis'],
-                    osm_road_ep['north_basis'],
-                    sigma_road_m=osm_road_ep['sigma_road_m'],
-                    huber_k=osm_road_ep['huber_k'],
-                )
 
             backward_pos[i] = bwd_pf.estimate()[:3]
 

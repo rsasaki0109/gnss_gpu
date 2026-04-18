@@ -47,7 +47,6 @@ from gnss_gpu.dd_quality import (
     spread_gate_scale,
 )
 from gnss_gpu.imu import ComplementaryHeadingFilter, load_imu_csv
-from gnss_gpu.osm_constraint import OSMRoadNetwork
 from gnss_gpu.tdcp_velocity import (
     C_LIGHT as TDCP_C_LIGHT,
     estimate_velocity_from_tdcp_with_metrics,
@@ -1629,23 +1628,9 @@ def run_pf_with_optional_smoother(
     smoother_tail_guard_dd_carrier_max_pairs: int | None = None,
     smoother_tail_guard_dd_pseudorange_max_pairs: int | None = None,
     smoother_tail_guard_min_shift_m: float | None = None,
-    osm_map_constraint: bool = False,
-    osm_road_file: Path | None = None,
-    osm_road_sigma_m: float = 2.0,
-    osm_road_huber_k: float = 2.0,
-    osm_road_search_radius_m: float = 80.0,
-    osm_road_max_segments: int = 96,
 ) -> dict[str, object]:
     if dd_pseudorange and use_gmm:
         raise ValueError("dd_pseudorange cannot be combined with --gmm")
-    if osm_map_constraint and osm_road_sigma_m < 1.0:
-        raise ValueError("osm_road_sigma_m must be >= 1.0m")
-    if osm_map_constraint and osm_road_huber_k <= 0.0:
-        raise ValueError("osm_road_huber_k must be positive")
-    if osm_map_constraint and osm_road_search_radius_m <= 0.0:
-        raise ValueError("osm_road_search_radius_m must be positive")
-    if osm_map_constraint and osm_road_max_segments <= 0:
-        raise ValueError("osm_road_max_segments must be positive")
 
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -1658,24 +1643,6 @@ def run_pf_with_optional_smoother(
     our_times = ds["our_times"]
     first_pos = np.asarray(ds["first_pos"], dtype=np.float64)
     init_cb = float(ds["init_cb"])
-
-    osm_network: OSMRoadNetwork | None = None
-    if osm_map_constraint:
-        if osm_road_file is None:
-            raise ValueError("osm_map_constraint requires osm_road_file")
-        osm_path = Path(osm_road_file)
-        if not osm_path.exists():
-            raise FileNotFoundError(f"OSM road file not found: {osm_path}")
-        lat0, lon0, _ = ecef_to_lla(float(first_pos[0]), float(first_pos[1]), float(first_pos[2]))
-        osm_network = OSMRoadNetwork.from_geojson(
-            osm_path,
-            origin_lat_deg=math.degrees(lat0),
-            origin_lon_deg=math.degrees(lon0),
-        )
-        print(
-            f"  [OSM] loaded {osm_network.segments.n_segments} road segments "
-            f"from {osm_path}"
-        )
 
     # --- IMU setup (for predict_guide in {"imu", "imu_spp_blend"}) ---
     imu_filter: ComplementaryHeadingFilter | None = None
@@ -1779,8 +1746,6 @@ def run_pf_with_optional_smoother(
     n_tdcp_fallback = 0
     n_imu_tight_used = 0
     n_imu_tight_skip = 0
-    n_osm_road_used = 0
-    n_osm_road_segments_sum = 0
     # PR acceleration weighting: need per-satellite PR history
     pr_history: dict[int, list[float]] = {}  # prn -> [pr(t-2), pr(t-1)]
 
@@ -1825,7 +1790,6 @@ def run_pf_with_optional_smoother(
         dd_cp_sigma_scale = 1.0
         dd_cp_sigma_cycles = None
         dd_cp_support_skip = False
-        osm_road_update = None
         carrier_anchor_rows = {}
         anchor_attempt = CarrierAnchorAttempt()
         fallback_attempt = CarrierFallbackAttempt()
@@ -2411,33 +2375,6 @@ def run_pf_with_optional_smoother(
                 if np.all(np.isfinite(tdcp_predicted_pos)):
                     pf.position_update(tdcp_predicted_pos, sigma_pos=tdcp_pu_sigma)
 
-        if osm_network is not None:
-            osm_center = np.asarray(pf.estimate()[:3], dtype=np.float64)
-            road_segments = osm_network.candidate_kernel_array(
-                osm_center,
-                radius_m=osm_road_search_radius_m,
-                max_segments=osm_road_max_segments,
-            )
-            if road_segments.size > 0:
-                osm_road_update = {
-                    "road_segments_enu": road_segments,
-                    "origin_ecef": osm_network.origin_ecef_m,
-                    "east_basis": osm_network.east_basis,
-                    "north_basis": osm_network.north_basis,
-                    "sigma_road_m": float(osm_road_sigma_m),
-                    "huber_k": float(osm_road_huber_k),
-                }
-                pf.osm_road_update(
-                    road_segments,
-                    osm_network.origin_ecef_m,
-                    osm_network.east_basis,
-                    osm_network.north_basis,
-                    sigma_road_m=osm_road_sigma_m,
-                    huber_k=osm_road_huber_k,
-                )
-                n_osm_road_used += 1
-                n_osm_road_segments_sum += int(road_segments.shape[0])
-
         if use_smoother:
             spp_ref = (
                 spp_pos
@@ -2472,7 +2409,6 @@ def run_pf_with_optional_smoother(
                 carrier_afv_wavelength=(
                     _MUPF_L1_WAVELENGTH_M if fallback_attempt.afv is not None else None
                 ),
-                osm_road=osm_road_update,
             )
             n_stored += 1
 
@@ -2672,18 +2608,6 @@ def run_pf_with_optional_smoother(
             f"skip {n_imu_tight_skip}/{total_tight}"
         )
 
-    if osm_network is not None:
-        mean_segments = (
-            n_osm_road_segments_sum / float(n_osm_road_used)
-            if n_osm_road_used > 0
-            else 0.0
-        )
-        print(
-            f"  [osm_road] used {n_osm_road_used} epochs, "
-            f"mean_segments={mean_segments:.1f}, "
-            f"sigma={osm_road_sigma_m:.2f}m huber_k={osm_road_huber_k:.2f}"
-        )
-
     if mupf_dd:
         total_dd = n_dd_used + n_dd_skip
         print(
@@ -2850,18 +2774,6 @@ def run_pf_with_optional_smoother(
         "n_imu_used": n_imu_used,
         "n_imu_fallback": n_imu_fallback,
         "n_imu_stop_detected": n_imu_stop_detected,
-        "osm_map_constraint": osm_map_constraint,
-        "osm_road_file": str(osm_road_file) if osm_road_file is not None else None,
-        "osm_road_sigma_m": osm_road_sigma_m,
-        "osm_road_huber_k": osm_road_huber_k,
-        "osm_road_search_radius_m": osm_road_search_radius_m,
-        "osm_road_max_segments": osm_road_max_segments,
-        "n_osm_road_used": n_osm_road_used,
-        "mean_osm_road_segments": (
-            n_osm_road_segments_sum / float(n_osm_road_used)
-            if n_osm_road_used > 0
-            else None
-        ),
         "elapsed_ms": elapsed_ms,
         "forward_metrics": None,
         "smoothed_metrics": None,
@@ -3084,12 +2996,6 @@ def _namespace_to_run_kwargs(
         "smoother_tail_guard_dd_carrier_max_pairs": args.smoother_tail_guard_dd_carrier_max_pairs,
         "smoother_tail_guard_dd_pseudorange_max_pairs": args.smoother_tail_guard_dd_pseudorange_max_pairs,
         "smoother_tail_guard_min_shift_m": args.smoother_tail_guard_min_shift_m,
-        "osm_map_constraint": args.osm_map_constraint,
-        "osm_road_file": args.osm_road_file,
-        "osm_road_sigma_m": args.osm_road_sigma_m,
-        "osm_road_huber_k": args.osm_road_huber_k,
-        "osm_road_search_radius_m": args.osm_road_search_radius_m,
-        "osm_road_max_segments": args.osm_road_max_segments,
     }
 
 
@@ -3410,41 +3316,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="If set, require smoothed-vs-forward 3D shift to be at or above this threshold for smoother tail guard",
     )
-    parser.add_argument(
-        "--osm-map-constraint",
-        action="store_true",
-        help="Apply a soft OSM road-centerline Huber constraint to particles",
-    )
-    parser.add_argument(
-        "--osm-road-file",
-        type=Path,
-        default=None,
-        help="GeoJSON file containing OSM road centerlines",
-    )
-    parser.add_argument(
-        "--osm-road-sigma-m",
-        type=float,
-        default=2.0,
-        help="Road-centerline constraint sigma in meters (must be >= 1.0)",
-    )
-    parser.add_argument(
-        "--osm-road-huber-k",
-        type=float,
-        default=2.0,
-        help="Huber k for the road-centerline constraint",
-    )
-    parser.add_argument(
-        "--osm-road-search-radius-m",
-        type=float,
-        default=80.0,
-        help="Candidate road segment search radius around the current PF estimate",
-    )
-    parser.add_argument(
-        "--osm-road-max-segments",
-        type=int,
-        default=96,
-        help="Maximum nearby OSM road segments sent to the GPU per epoch",
-    )
     return parser
 
 
@@ -3618,14 +3489,6 @@ def main(argv: list[str] | None = None) -> int:
                 "smoother_tail_guard_dd_pseudorange_max_pairs": args.smoother_tail_guard_dd_pseudorange_max_pairs,
                 "smoother_tail_guard_min_shift_m": args.smoother_tail_guard_min_shift_m,
                 "n_tail_guard_applied": int(out.get("n_tail_guard_applied", 0)),
-                "osm_map_constraint": args.osm_map_constraint,
-                "osm_road_file": str(args.osm_road_file) if args.osm_road_file is not None else None,
-                "osm_road_sigma_m": args.osm_road_sigma_m,
-                "osm_road_huber_k": args.osm_road_huber_k,
-                "osm_road_search_radius_m": args.osm_road_search_radius_m,
-                "osm_road_max_segments": args.osm_road_max_segments,
-                "n_osm_road_used": int(out.get("n_osm_road_used", 0)),
-                "mean_osm_road_segments": out.get("mean_osm_road_segments"),
                 "smoother": use_sm,
                 "n_particles": args.n_particles,
                 "forward_p50": fm["p50"] if fm else None,
