@@ -3,6 +3,7 @@ import numpy as np
 from gnss_gpu.local_fgo import (
     DDCarrierEpoch,
     DDPseudorangeEpoch,
+    LambdaFixConfig,
     LocalFgoConfig,
     LocalFgoProblem,
     LocalFgoWindow,
@@ -11,6 +12,7 @@ from gnss_gpu.local_fgo import (
     inject_into_pf,
     parse_window_spec,
     solve_local_fgo,
+    solve_local_fgo_with_lambda,
 )
 
 
@@ -111,6 +113,44 @@ def test_local_fgo_reduces_synthetic_window_error():
     assert result.factor_counts["dd_carrier"] > 0
     assert result.factor_counts["dd_pseudorange"] > 0
     assert result.final_error < result.initial_error
+
+
+def test_local_fgo_lambda_adds_fixed_carrier_factors():
+    sats = _synthetic_satellites()
+    base_pos = np.array([1_200.0, -80.0, 20.0], dtype=np.float64)
+    true_pos = np.array([[float(i), 0.25 * float(i), 0.05 * float(i)] for i in range(6)])
+    initial = true_pos.copy()
+    initial[1:5, 1] += 1.0
+
+    dd_pr = []
+    dd_cp = []
+    for x in true_pos:
+        pr_epoch, cp_epoch = _dd_epoch_for_position(x, sats, base_pos)
+        dd_pr.append(pr_epoch)
+        dd_cp.append(cp_epoch)
+
+    result, info = solve_local_fgo_with_lambda(
+        LocalFgoProblem(
+            initial_positions_ecef=initial,
+            prior_positions_ecef=true_pos,
+            window=LocalFgoWindow(1, 4),
+            motion_deltas_ecef=np.diff(true_pos, axis=0),
+            dd_pseudorange=dd_pr,
+            dd_carrier=dd_cp,
+        ),
+        LocalFgoConfig(
+            prior_sigma_m=0.05,
+            motion_sigma_m=0.2,
+            dd_sigma_cycles=10.0,
+            dd_pr_sigma_m=0.5,
+            max_iterations=20,
+        ),
+        LambdaFixConfig(min_epochs=2, max_iterations=1),
+    )
+
+    assert info["n_fixed"] > 0
+    assert info["n_fixed_observations"] > 0
+    assert result.factor_counts["dd_carrier_fixed"] > 0
 
 
 def test_window_helpers_and_injection():

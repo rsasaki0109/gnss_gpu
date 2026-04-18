@@ -70,6 +70,7 @@ class DDResult:
     wavelengths_m: np.ndarray  # [n_dd] carrier wavelengths [m]
     ref_sat_ids: tuple[str, ...]  # [n_dd] reference satellite IDs per pair
     n_dd: int  # number of DD pairs
+    sat_ids: tuple[str, ...] = ()  # [n_dd] non-reference satellite IDs per pair
 
 
 def _datetime_to_tow(epoch_time) -> float:
@@ -455,6 +456,7 @@ class DDCarrierComputer:
         dd_weight_list = []
         wavelengths_m_list = []
         ref_sat_ids = []
+        sat_ids = []
 
         sats_by_system: dict[str, list[str]] = {}
         for sat_id in common_sats:
@@ -495,6 +497,7 @@ class DDCarrierComputer:
                 dd_weight_list.append(w)
                 wavelengths_m_list.append(wavelength)
                 ref_sat_ids.append(ref_sat)
+                sat_ids.append(sat_id)
 
         if not dd_carrier_list:
             return None
@@ -510,4 +513,5 @@ class DDCarrierComputer:
             wavelengths_m=np.array(wavelengths_m_list, dtype=np.float64),
             ref_sat_ids=tuple(ref_sat_ids),
             n_dd=n_dd,
+            sat_ids=tuple(sat_ids),
         )

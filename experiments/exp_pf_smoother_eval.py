@@ -50,6 +50,7 @@ from gnss_gpu.imu import ComplementaryHeadingFilter, load_imu_csv
 from gnss_gpu.local_fgo import (
     DDCarrierEpoch,
     DDPseudorangeEpoch,
+    LambdaFixConfig,
     LocalFgoConfig,
     LocalFgoProblem,
     LocalFgoWindow,
@@ -58,6 +59,7 @@ from gnss_gpu.local_fgo import (
     inject_into_pf,
     parse_window_spec,
     solve_local_fgo,
+    solve_local_fgo_with_lambda,
 )
 from gnss_gpu.tdcp_velocity import (
     C_LIGHT as TDCP_C_LIGHT,
@@ -1545,6 +1547,7 @@ def _apply_local_fgo_postprocess(
     min_epochs: int,
     dd_max_pairs: int,
     config: LocalFgoConfig,
+    lambda_config: LambdaFixConfig | None = None,
 ) -> tuple[np.ndarray, dict[str, object]]:
     smoothed = np.asarray(smoothed_aligned, dtype=np.float64)
     info: dict[str, object] = {
@@ -1554,6 +1557,7 @@ def _apply_local_fgo_postprocess(
         "factor_counts": None,
         "initial_error": None,
         "final_error": None,
+        "lambda": None,
         "reason": None,
     }
     if len(smoothed) == 0:
@@ -1580,18 +1584,20 @@ def _apply_local_fgo_postprocess(
         min(len(smoothed) - 1, target.end + 1),
     )
 
-    result = solve_local_fgo(
-        LocalFgoProblem(
-            initial_positions_ecef=smoothed,
-            prior_positions_ecef=smoothed,
-            window=solve_window,
-            motion_deltas_ecef=motion_deltas,
-            dd_carrier=aligned_dd_carrier,
-            dd_pseudorange=aligned_dd_pr,
-            undiff_pseudorange=aligned_undiff,
-        ),
-        config,
+    problem = LocalFgoProblem(
+        initial_positions_ecef=smoothed,
+        prior_positions_ecef=smoothed,
+        window=solve_window,
+        motion_deltas_ecef=motion_deltas,
+        dd_carrier=aligned_dd_carrier,
+        dd_pseudorange=aligned_dd_pr,
+        undiff_pseudorange=aligned_undiff,
     )
+    lambda_info = None
+    if lambda_config is None:
+        result = solve_local_fgo(problem, config)
+    else:
+        result, lambda_info = solve_local_fgo_with_lambda(problem, config, lambda_config)
     rel_start = target.start - solve_window.start
     rel_end = rel_start + target.size
     updated = inject_into_pf(
@@ -1610,6 +1616,7 @@ def _apply_local_fgo_postprocess(
             "factor_counts": dict(result.factor_counts),
             "initial_error": float(result.initial_error),
             "final_error": float(result.final_error),
+            "lambda": lambda_info,
             "reason": "ok",
         }
     )
@@ -1825,6 +1832,10 @@ def run_pf_with_optional_smoother(
     fgo_local_dd_sigma_cycles: float = 0.20,
     fgo_local_pr_sigma_m: float = 5.0,
     fgo_local_max_iterations: int = 50,
+    fgo_local_lambda: bool = False,
+    fgo_local_lambda_ratio_threshold: float = 3.0,
+    fgo_local_lambda_sigma_cycles: float = 0.05,
+    fgo_local_lambda_min_epochs: int = 20,
 ) -> dict[str, object]:
     if dd_pseudorange and use_gmm:
         raise ValueError("dd_pseudorange cannot be combined with --gmm")
@@ -2994,6 +3005,7 @@ def run_pf_with_optional_smoother(
         "fgo_local_window": fgo_local_window,
         "fgo_local_applied": False,
         "fgo_local_info": None,
+        "fgo_local_lambda": bool(fgo_local_lambda),
     }
 
     if len(forward_pos_full) == 0:
@@ -3041,6 +3053,15 @@ def run_pf_with_optional_smoother(
                     pr_huber_k=fgo_local_pr_huber_k,
                     max_iterations=fgo_local_max_iterations,
                 )
+                lambda_config = (
+                    LambdaFixConfig(
+                        ratio_threshold=fgo_local_lambda_ratio_threshold,
+                        fixed_sigma_cycles=fgo_local_lambda_sigma_cycles,
+                        min_epochs=fgo_local_lambda_min_epochs,
+                    )
+                    if fgo_local_lambda
+                    else None
+                )
                 smoothed_aligned_arr, fgo_info = _apply_local_fgo_postprocess(
                     smoothed_aligned_arr,
                     list(map(int, aligned_indices)),
@@ -3053,10 +3074,18 @@ def run_pf_with_optional_smoother(
                     min_epochs=fgo_local_window_min_epochs,
                     dd_max_pairs=fgo_local_dd_max_pairs,
                     config=fgo_config,
+                    lambda_config=lambda_config,
                 )
                 result["fgo_local_info"] = fgo_info
                 result["fgo_local_applied"] = bool(fgo_info.get("applied"))
                 if fgo_info.get("applied"):
+                    lambda_info = fgo_info.get("lambda") or {}
+                    lambda_text = ""
+                    if lambda_info:
+                        lambda_text = (
+                            f" lambda_fixed={lambda_info.get('n_fixed', 0)}"
+                            f"/obs={lambda_info.get('n_fixed_observations', 0)}"
+                        )
                     print(
                         "  [local_fgo] "
                         f"window={fgo_info.get('window')} "
@@ -3064,6 +3093,7 @@ def run_pf_with_optional_smoother(
                         f"factors={fgo_info.get('factor_counts')} "
                         f"error={float(fgo_info.get('initial_error')):.2f}"
                         f"->{float(fgo_info.get('final_error')):.2f}"
+                        f"{lambda_text}"
                     )
                 else:
                     print(f"  [local_fgo] skipped: {fgo_info.get('reason')}")
@@ -3272,6 +3302,10 @@ def _namespace_to_run_kwargs(
         "fgo_local_dd_sigma_cycles": args.fgo_local_dd_sigma_cycles,
         "fgo_local_pr_sigma_m": args.fgo_local_pr_sigma_m,
         "fgo_local_max_iterations": args.fgo_local_max_iterations,
+        "fgo_local_lambda": args.fgo_local_lambda,
+        "fgo_local_lambda_ratio_threshold": args.fgo_local_lambda_ratio_threshold,
+        "fgo_local_lambda_sigma_cycles": args.fgo_local_lambda_sigma_cycles,
+        "fgo_local_lambda_min_epochs": args.fgo_local_lambda_min_epochs,
     }
 
 
@@ -3652,6 +3686,29 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=50,
         help="Maximum GTSAM LM iterations for local FGO",
     )
+    parser.add_argument(
+        "--fgo-local-lambda",
+        action="store_true",
+        help="Enable strict ratio-tested integer ambiguity fixing inside the local FGO window",
+    )
+    parser.add_argument(
+        "--fgo-local-lambda-ratio-threshold",
+        type=float,
+        default=3.0,
+        help="Minimum second/best ILS residual ratio for local FGO ambiguity fixes",
+    )
+    parser.add_argument(
+        "--fgo-local-lambda-sigma-cycles",
+        type=float,
+        default=0.05,
+        help="Carrier sigma in cycles for ratio-tested fixed DD ambiguity factors",
+    )
+    parser.add_argument(
+        "--fgo-local-lambda-min-epochs",
+        type=int,
+        default=20,
+        help="Minimum continuous epochs per DD pair before local FGO LAMBDA fixing",
+    )
     return parser
 
 
@@ -3715,6 +3772,14 @@ def main(argv: list[str] | None = None) -> int:
                 if out.get("fgo_local_applied"):
                     info = out.get("fgo_local_info") or {}
                     print(f"       local FGO window: {info.get('window')} solve={info.get('solve_window')}")
+                    lambda_info = info.get("lambda") or {}
+                    if lambda_info:
+                        print(
+                            "       local FGO lambda: "
+                            f"fixed={lambda_info.get('n_fixed', 0)} "
+                            f"obs={lambda_info.get('n_fixed_observations', 0)} "
+                            f"by_system={lambda_info.get('fixed_by_system', {})}"
+                        )
             epoch_diagnostics = out.get("epoch_diagnostics")
             if epoch_diagnostics:
                 if args.epoch_diagnostics_top_k > 0:
@@ -3728,6 +3793,8 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     _write_epoch_diagnostics(epoch_diagnostics, diag_path)
                     print(f"       epoch diagnostics: {diag_path}")
+            fgo_info_for_row = out.get("fgo_local_info") or {}
+            fgo_lambda_info_for_row = fgo_info_for_row.get("lambda") or {}
             rows.append({
                 "run": run_name,
                 "variant": label,
@@ -3838,24 +3905,30 @@ def main(argv: list[str] | None = None) -> int:
                 "fgo_local_dd_sigma_cycles": args.fgo_local_dd_sigma_cycles,
                 "fgo_local_pr_sigma_m": args.fgo_local_pr_sigma_m,
                 "fgo_local_max_iterations": args.fgo_local_max_iterations,
+                "fgo_local_lambda": args.fgo_local_lambda,
+                "fgo_local_lambda_ratio_threshold": args.fgo_local_lambda_ratio_threshold,
+                "fgo_local_lambda_sigma_cycles": args.fgo_local_lambda_sigma_cycles,
+                "fgo_local_lambda_min_epochs": args.fgo_local_lambda_min_epochs,
+                "fgo_local_lambda_fixed": fgo_lambda_info_for_row.get("n_fixed"),
+                "fgo_local_lambda_fixed_observations": fgo_lambda_info_for_row.get("n_fixed_observations"),
                 "fgo_local_applied": bool(out.get("fgo_local_applied", False)),
                 "fgo_local_resolved_window": (
-                    (out.get("fgo_local_info") or {}).get("window")
+                    fgo_info_for_row.get("window")
                     if out.get("fgo_local_info") is not None
                     else None
                 ),
                 "fgo_local_solve_window": (
-                    (out.get("fgo_local_info") or {}).get("solve_window")
+                    fgo_info_for_row.get("solve_window")
                     if out.get("fgo_local_info") is not None
                     else None
                 ),
                 "fgo_local_initial_error": (
-                    (out.get("fgo_local_info") or {}).get("initial_error")
+                    fgo_info_for_row.get("initial_error")
                     if out.get("fgo_local_info") is not None
                     else None
                 ),
                 "fgo_local_final_error": (
-                    (out.get("fgo_local_info") or {}).get("final_error")
+                    fgo_info_for_row.get("final_error")
                     if out.get("fgo_local_info") is not None
                     else None
                 ),

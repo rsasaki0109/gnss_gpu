@@ -7,10 +7,12 @@ replacement trajectory for that window.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Sequence
 
 import numpy as np
+
+from gnss_gpu.lambda_ambiguity import integer_search, ratio_test, solve_lambda
 
 
 @dataclass(frozen=True)
@@ -43,9 +45,13 @@ class DDCarrierEpoch:
     base_range_ref: np.ndarray
     wavelengths_m: np.ndarray
     weights: np.ndarray | None = None
+    sat_ids: tuple[str, ...] | None = None
+    ref_sat_ids: tuple[str, ...] | None = None
+    fixed_ambiguities: np.ndarray | None = None
 
     @classmethod
     def from_result(cls, result: Any) -> "DDCarrierEpoch":
+        n_dd = int(getattr(result, "n_dd", len(np.asarray(result.dd_carrier_cycles).ravel())))
         return cls(
             dd_carrier_cycles=np.asarray(result.dd_carrier_cycles, dtype=np.float64),
             sat_ecef_k=np.asarray(result.sat_ecef_k, dtype=np.float64),
@@ -54,6 +60,8 @@ class DDCarrierEpoch:
             base_range_ref=np.asarray(result.base_range_ref, dtype=np.float64),
             wavelengths_m=np.asarray(result.wavelengths_m, dtype=np.float64),
             weights=np.asarray(result.dd_weights, dtype=np.float64),
+            sat_ids=_tuple_or_none(getattr(result, "sat_ids", None), n_dd),
+            ref_sat_ids=_tuple_or_none(getattr(result, "ref_sat_ids", None), n_dd),
         )
 
     @property
@@ -130,6 +138,20 @@ class LocalFgoConfig:
     max_iterations: int = 50
     relative_error_tol: float = 1e-5
     min_weight: float = 1e-3
+    dd_fixed_sigma_cycles: float | None = None
+
+
+@dataclass(frozen=True)
+class LambdaFixConfig:
+    """Integer ambiguity fixing settings for a local FGO window."""
+
+    ratio_threshold: float = 3.0
+    fixed_sigma_cycles: float = 0.05
+    min_epochs: int = 20
+    max_iterations: int = 2
+    slip_threshold_cycles: float = 1.5
+    variance_floor_cycles: float = 0.04
+    max_group_size: int = 8
 
 
 @dataclass
@@ -225,6 +247,7 @@ def build_factor_graph(
         "prior": 0,
         "between": 0,
         "dd_carrier": 0,
+        "dd_carrier_fixed": 0,
         "dd_pseudorange": 0,
         "undiff_pseudorange": 0,
     }
@@ -272,13 +295,15 @@ def build_factor_graph(
         if problem.dd_carrier is not None and i < len(problem.dd_carrier):
             obs = problem.dd_carrier[i]
             if obs is not None:
-                counts["dd_carrier"] += _add_dd_carrier_factors(
+                n_carrier, n_fixed = _add_dd_carrier_factors(
                     gtsam,
                     graph,
                     key,
                     obs,
                     config,
                 )
+                counts["dd_carrier"] += n_carrier
+                counts["dd_carrier_fixed"] += n_fixed
         if problem.dd_pseudorange is not None and i < len(problem.dd_pseudorange):
             obs_pr = problem.dd_pseudorange[i]
             if obs_pr is not None:
@@ -376,13 +401,316 @@ def solve_local_fgo(
     return solve_fgo(build_factor_graph(problem, config), config)
 
 
+def solve_local_fgo_with_lambda(
+    problem: LocalFgoProblem,
+    config: LocalFgoConfig | None = None,
+    lambda_config: LambdaFixConfig | None = None,
+) -> tuple[LocalFgoResult, dict[str, Any]]:
+    """Solve local FGO, fix DD carrier ambiguities, then re-solve.
+
+    Integer fixes are accepted only through the ratio test.  If no ambiguity
+    passes validation, the initial floating/modulo-carrier FGO result is
+    returned unchanged with a diagnostic summary.
+    """
+
+    base_config = LocalFgoConfig() if config is None else config
+    lam_cfg = LambdaFixConfig() if lambda_config is None else lambda_config
+    current_problem = problem
+    current_result = solve_local_fgo(current_problem, base_config)
+    summary: dict[str, Any] = {
+        "enabled": True,
+        "ratio_threshold": float(lam_cfg.ratio_threshold),
+        "sigma_cycles": float(lam_cfg.fixed_sigma_cycles),
+        "min_epochs": int(lam_cfg.min_epochs),
+        "iterations": [],
+        "n_fixed": 0,
+        "n_fixed_observations": 0,
+        "fixed_by_system": {},
+    }
+    fixed_epoch_pairs: dict[tuple[int, tuple[str, str, str, str]], int] = {}
+
+    for iteration in range(max(1, int(lam_cfg.max_iterations))):
+        iteration_fixes, iteration_info = _estimate_lambda_fixes(
+            current_problem.dd_carrier,
+            current_result.positions_ecef,
+            current_result.window,
+            lam_cfg,
+        )
+        new_fixes = {
+            key: value
+            for key, value in iteration_fixes.items()
+            if key not in fixed_epoch_pairs
+        }
+        fixed_epoch_pairs.update(new_fixes)
+        iteration_info["iteration"] = int(iteration + 1)
+        iteration_info["n_new_fixed_observations"] = int(len(new_fixes))
+        summary["iterations"].append(iteration_info)
+        if not new_fixes:
+            break
+
+        fixed_dd = _apply_lambda_fixes_to_dd(current_problem.dd_carrier, fixed_epoch_pairs)
+        initial_positions = inject_into_pf(
+            current_problem.initial_positions_ecef,
+            current_result.positions_ecef,
+            current_result.window,
+        )
+        fixed_config = replace(base_config, dd_fixed_sigma_cycles=float(lam_cfg.fixed_sigma_cycles))
+        current_problem = replace(
+            current_problem,
+            initial_positions_ecef=np.asarray(initial_positions, dtype=np.float64),
+            dd_carrier=fixed_dd,
+        )
+        current_result = solve_local_fgo(current_problem, fixed_config)
+
+    fixed_segments = {
+        (epoch_pair[1], integer)
+        for epoch_pair, integer in fixed_epoch_pairs.items()
+    }
+    fixed_by_system: dict[str, int] = {}
+    for pair_key, _integer in fixed_segments:
+        system = pair_key[0]
+        fixed_by_system[system] = fixed_by_system.get(system, 0) + 1
+    summary["n_fixed"] = int(len(fixed_segments))
+    summary["n_fixed_observations"] = int(len(fixed_epoch_pairs))
+    summary["fixed_by_system"] = fixed_by_system
+    return current_result, summary
+
+
+def _estimate_lambda_fixes(
+    dd_epochs: Sequence[DDCarrierEpoch | None] | None,
+    positions_ecef: np.ndarray,
+    window: LocalFgoWindow,
+    config: LambdaFixConfig,
+) -> tuple[dict[tuple[int, tuple[str, str, str, str]], int], dict[str, Any]]:
+    positions = _as_positions(positions_ecef)
+    win = window
+    if len(positions) != win.size:
+        raise ValueError("lambda ambiguity positions must match the FGO result window")
+    tracks: dict[tuple[str, str, str, str], list[tuple[int, float, float]]] = {}
+    info: dict[str, Any] = {
+        "n_tracks": 0,
+        "n_segments": 0,
+        "n_candidates": 0,
+        "n_fixed": 0,
+        "n_fixed_observations": 0,
+        "n_full_groups_fixed": 0,
+        "n_partial_fixed": 0,
+        "n_ratio_rejected": 0,
+        "best_ratio": 0.0,
+        "fixed_by_system": {},
+    }
+    if dd_epochs is None:
+        return {}, info
+
+    for epoch_index in range(win.start, win.end + 1):
+        if epoch_index >= len(dd_epochs):
+            continue
+        obs = dd_epochs[epoch_index]
+        if obs is None:
+            continue
+        rel_index = epoch_index - win.start
+        x = positions[rel_index]
+        dd = np.asarray(obs.dd_carrier_cycles, dtype=np.float64).ravel()
+        sat_k = np.asarray(obs.sat_ecef_k, dtype=np.float64).reshape(-1, 3)
+        sat_ref = np.asarray(obs.sat_ecef_ref, dtype=np.float64).reshape(-1, 3)
+        base_k = np.asarray(obs.base_range_k, dtype=np.float64).ravel()
+        base_ref = np.asarray(obs.base_range_ref, dtype=np.float64).ravel()
+        wavelengths = np.asarray(obs.wavelengths_m, dtype=np.float64).ravel()
+        weights = _weights(obs.weights, len(dd))
+        for row in range(len(dd)):
+            if not _valid_dd_row(
+                dd[row],
+                sat_k[row],
+                sat_ref[row],
+                base_k[row],
+                base_ref[row],
+                wavelengths[row],
+            ):
+                continue
+            expected_m = _dd_expected_m(x, sat_k[row], sat_ref[row], base_k[row], base_ref[row])
+            if not np.isfinite(expected_m):
+                continue
+            key = _dd_pair_key(obs, row)
+            n_float = float(dd[row] - expected_m / wavelengths[row])
+            if not np.isfinite(n_float):
+                continue
+            tracks.setdefault(key, []).append(
+                (int(epoch_index), n_float, max(float(weights[row]), float(1e-6)))
+            )
+
+    info["n_tracks"] = int(len(tracks))
+    segments: list[dict[str, Any]] = []
+    for key, rows in tracks.items():
+        rows_sorted = sorted(rows, key=lambda item: item[0])
+        current: list[tuple[int, float, float]] = []
+        prev_epoch: int | None = None
+        prev_value: float | None = None
+        for row in rows_sorted:
+            epoch, value, _weight = row
+            split = False
+            if prev_epoch is not None and epoch != prev_epoch + 1:
+                split = True
+            if (
+                prev_value is not None
+                and abs(float(value) - float(prev_value)) > float(config.slip_threshold_cycles)
+            ):
+                split = True
+            if split and current:
+                segment = _lambda_segment_from_rows(key, current, config)
+                if segment is not None:
+                    segments.append(segment)
+                current = []
+            current.append(row)
+            prev_epoch = epoch
+            prev_value = value
+        if current:
+            segment = _lambda_segment_from_rows(key, current, config)
+            if segment is not None:
+                segments.append(segment)
+
+    info["n_segments"] = int(len(segments))
+    info["n_candidates"] = int(len(segments))
+    fixes: dict[tuple[int, tuple[str, str, str, str]], int] = {}
+    fixed_segments: set[int] = set()
+    ratios: list[float] = []
+
+    groups: dict[tuple[str, str], list[tuple[int, dict[str, Any]]]] = {}
+    for segment_index, segment in enumerate(segments):
+        key = segment["key"]
+        groups.setdefault((key[0], key[1]), []).append((segment_index, segment))
+
+    for group in groups.values():
+        if 1 < len(group) <= int(config.max_group_size):
+            float_amb = np.asarray([item[1]["mean"] for item in group], dtype=np.float64)
+            cov = np.diag([item[1]["variance"] for item in group]).astype(np.float64)
+            fixed, ok, solution = solve_lambda(
+                float_amb,
+                cov,
+                ratio_threshold=float(config.ratio_threshold),
+            )
+            ratios.append(solution.ratio)
+            if ok and fixed is not None:
+                info["n_full_groups_fixed"] = int(info["n_full_groups_fixed"]) + 1
+                for (segment_index, segment), integer in zip(group, fixed):
+                    _record_lambda_segment_fix(fixes, segment, int(integer))
+                    fixed_segments.add(segment_index)
+                continue
+            info["n_ratio_rejected"] = int(info["n_ratio_rejected"]) + 1
+
+        for segment_index, segment in group:
+            if segment_index in fixed_segments:
+                continue
+            candidates, residuals = integer_search(
+                np.asarray([segment["mean"]], dtype=np.float64),
+                np.asarray([[segment["variance"]]], dtype=np.float64),
+                n_candidates=2,
+            )
+            fixed_one, ok = ratio_test(
+                candidates,
+                residuals,
+                threshold=float(config.ratio_threshold),
+            )
+            ratio = (
+                float(residuals[1] / residuals[0])
+                if residuals.size >= 2 and residuals[0] > 0.0
+                else (float("inf") if residuals.size >= 2 and residuals[1] > 0.0 else 0.0)
+            )
+            ratios.append(ratio)
+            if ok and fixed_one is not None:
+                _record_lambda_segment_fix(fixes, segment, int(fixed_one[0]))
+                fixed_segments.add(segment_index)
+                info["n_partial_fixed"] = int(info["n_partial_fixed"]) + 1
+            else:
+                info["n_ratio_rejected"] = int(info["n_ratio_rejected"]) + 1
+
+    fixed_by_system: dict[str, int] = {}
+    for segment_index in fixed_segments:
+        system = str(segments[segment_index]["key"][0])
+        fixed_by_system[system] = fixed_by_system.get(system, 0) + 1
+    finite_ratios = [r for r in ratios if np.isfinite(r)]
+    if any(np.isinf(r) for r in ratios):
+        info["best_ratio"] = float("inf")
+    elif finite_ratios:
+        info["best_ratio"] = float(max(finite_ratios))
+    info["n_fixed"] = int(len(fixed_segments))
+    info["n_fixed_observations"] = int(len(fixes))
+    info["fixed_by_system"] = fixed_by_system
+    return fixes, info
+
+
+def _lambda_segment_from_rows(
+    key: tuple[str, str, str, str],
+    rows: Sequence[tuple[int, float, float]],
+    config: LambdaFixConfig,
+) -> dict[str, Any] | None:
+    if len(rows) < int(config.min_epochs):
+        return None
+    epochs = np.asarray([row[0] for row in rows], dtype=np.int64)
+    values = np.asarray([row[1] for row in rows], dtype=np.float64)
+    weights = np.asarray([row[2] for row in rows], dtype=np.float64)
+    valid = np.isfinite(values) & np.isfinite(weights) & (weights > 0.0)
+    if np.count_nonzero(valid) < int(config.min_epochs):
+        return None
+    epochs = epochs[valid]
+    values = values[valid]
+    weights = weights[valid]
+    mean = float(np.average(values, weights=weights))
+    residuals = values - mean
+    scatter = float(np.average(residuals * residuals, weights=weights))
+    sum_w = float(np.sum(weights))
+    sum_w2 = float(np.sum(weights * weights))
+    n_eff = (sum_w * sum_w / sum_w2) if sum_w2 > 0.0 else float(len(values))
+    variance = max(
+        scatter / max(n_eff, 1.0),
+        float(config.variance_floor_cycles) * float(config.variance_floor_cycles),
+        1e-8,
+    )
+    return {
+        "key": key,
+        "epochs": tuple(int(e) for e in epochs.tolist()),
+        "mean": mean,
+        "variance": float(variance),
+        "n_epochs": int(len(values)),
+    }
+
+
+def _record_lambda_segment_fix(
+    fixes: dict[tuple[int, tuple[str, str, str, str]], int],
+    segment: dict[str, Any],
+    integer: int,
+) -> None:
+    key = segment["key"]
+    for epoch in segment["epochs"]:
+        fixes[(int(epoch), key)] = int(integer)
+
+
+def _apply_lambda_fixes_to_dd(
+    dd_epochs: Sequence[DDCarrierEpoch | None] | None,
+    fixes: dict[tuple[int, tuple[str, str, str, str]], int],
+) -> list[DDCarrierEpoch | None] | None:
+    if dd_epochs is None:
+        return None
+    fixed_epochs: list[DDCarrierEpoch | None] = []
+    for epoch_index, obs in enumerate(dd_epochs):
+        if obs is None:
+            fixed_epochs.append(None)
+            continue
+        fixed = _fixed_ambiguities(obs.fixed_ambiguities, obs.n)
+        for row in range(obs.n):
+            value = fixes.get((int(epoch_index), _dd_pair_key(obs, row)))
+            if value is not None:
+                fixed[row] = float(value)
+        fixed_epochs.append(replace(obs, fixed_ambiguities=fixed))
+    return fixed_epochs
+
+
 def _add_dd_carrier_factors(
     gtsam: Any,
     graph: Any,
     key: int,
     obs: DDCarrierEpoch,
     config: LocalFgoConfig,
-) -> int:
+) -> tuple[int, int]:
     dd = np.asarray(obs.dd_carrier_cycles, dtype=np.float64).ravel()
     sat_k = np.asarray(obs.sat_ecef_k, dtype=np.float64).reshape(-1, 3)
     sat_ref = np.asarray(obs.sat_ecef_ref, dtype=np.float64).reshape(-1, 3)
@@ -390,27 +718,51 @@ def _add_dd_carrier_factors(
     base_ref = np.asarray(obs.base_range_ref, dtype=np.float64).ravel()
     wavelengths = np.asarray(obs.wavelengths_m, dtype=np.float64).ravel()
     weights = _weights(obs.weights, len(dd))
+    fixed = _fixed_ambiguities(obs.fixed_ambiguities, len(dd))
     n_added = 0
+    n_fixed = 0
     for j in range(len(dd)):
         if not _valid_dd_row(dd[j], sat_k[j], sat_ref[j], base_k[j], base_ref[j], wavelengths[j]):
             continue
-        sigma = _weighted_sigma(config.dd_sigma_cycles, weights[j], config.min_weight)
+        fixed_ambiguity = fixed[j]
+        is_fixed = bool(np.isfinite(fixed_ambiguity))
+        base_sigma = (
+            float(config.dd_fixed_sigma_cycles)
+            if is_fixed and config.dd_fixed_sigma_cycles is not None
+            else float(config.dd_sigma_cycles)
+        )
+        sigma = _weighted_sigma(base_sigma, weights[j], config.min_weight)
         model = _robust_model(gtsam, 1, sigma, config.dd_huber_k)
-        factor = gtsam.CustomFactor(
-            model,
-            [key],
-            _dd_carrier_error_fn(
+        error_fn = (
+            _dd_carrier_fixed_error_fn(
                 sat_k[j],
                 sat_ref[j],
                 float(base_k[j]),
                 float(base_ref[j]),
                 float(wavelengths[j]),
                 float(dd[j]),
-            ),
+                int(round(float(fixed_ambiguity))),
+            )
+            if is_fixed
+            else _dd_carrier_error_fn(
+                sat_k[j],
+                sat_ref[j],
+                float(base_k[j]),
+                float(base_ref[j]),
+                float(wavelengths[j]),
+                float(dd[j]),
+            )
+        )
+        factor = gtsam.CustomFactor(
+            model,
+            [key],
+            error_fn,
         )
         graph.add(factor)
         n_added += 1
-    return n_added
+        if is_fixed:
+            n_fixed += 1
+    return n_added, n_fixed
 
 
 def _add_dd_pseudorange_factors(
@@ -488,6 +840,26 @@ def _dd_carrier_error_fn(
         expected_m, jac_m = _dd_expected_and_jacobian_m(x, sat_k, sat_ref, base_k, base_ref)
         raw_residual = observed_cycles - expected_m / wavelength
         residual = raw_residual - np.round(raw_residual)
+        if jacobians is not None:
+            jacobians[0] = np.asarray(-jac_m / wavelength, dtype=np.float64).reshape(1, 3, order="C")
+        return np.asarray([residual], dtype=np.float64)
+
+    return error
+
+
+def _dd_carrier_fixed_error_fn(
+    sat_k: np.ndarray,
+    sat_ref: np.ndarray,
+    base_k: float,
+    base_ref: float,
+    wavelength: float,
+    observed_cycles: float,
+    fixed_ambiguity: int,
+):
+    def error(_factor: Any, values: Any, jacobians: list[np.ndarray] | None) -> np.ndarray:
+        x = np.asarray(values.atPoint3(_factor.keys()[0]), dtype=np.float64)
+        expected_m, jac_m = _dd_expected_and_jacobian_m(x, sat_k, sat_ref, base_k, base_ref)
+        residual = observed_cycles - expected_m / wavelength - float(fixed_ambiguity)
         if jacobians is not None:
             jacobians[0] = np.asarray(-jac_m / wavelength, dtype=np.float64).reshape(1, 3, order="C")
         return np.asarray([residual], dtype=np.float64)
@@ -577,6 +949,35 @@ def _weights(weights: np.ndarray | None, n: int) -> np.ndarray:
     if len(arr) != int(n):
         raise ValueError(f"weights length {len(arr)} does not match observation length {n}")
     return arr
+
+
+def _fixed_ambiguities(values: np.ndarray | None, n: int) -> np.ndarray:
+    if values is None:
+        return np.full(int(n), np.nan, dtype=np.float64)
+    arr = np.asarray(values, dtype=np.float64).ravel()
+    if len(arr) != int(n):
+        raise ValueError(f"fixed ambiguity length {len(arr)} does not match observation length {n}")
+    return arr.copy()
+
+
+def _tuple_or_none(values: Any, n: int) -> tuple[str, ...] | None:
+    if values is None:
+        return None
+    out = tuple(str(v) for v in values)
+    if len(out) != int(n):
+        return None
+    return out
+
+
+def _dd_pair_key(obs: DDCarrierEpoch, row: int) -> tuple[str, str, str, str]:
+    wavelengths = np.asarray(obs.wavelengths_m, dtype=np.float64).ravel()
+    wavelength_key = f"{float(wavelengths[int(row)]):.9f}" if int(row) < len(wavelengths) else "nan"
+    ref_ids = obs.ref_sat_ids or ()
+    sat_ids = obs.sat_ids or ()
+    ref_id = str(ref_ids[int(row)]) if int(row) < len(ref_ids) else f"ref{int(row)}"
+    sat_id = str(sat_ids[int(row)]) if int(row) < len(sat_ids) else f"sat{int(row)}"
+    system = sat_id[:1] or ref_id[:1] or "?"
+    return (system, ref_id, sat_id, wavelength_key)
 
 
 def _valid_dd_row(

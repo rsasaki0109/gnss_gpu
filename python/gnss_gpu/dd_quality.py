@@ -33,6 +33,8 @@ def _subset_dd_result(dd_result, mask: np.ndarray):
         "ref_sat_ids": tuple(np.asarray(dd_result.ref_sat_ids, dtype=object)[mask].tolist()),
         "n_dd": n_kept,
     }
+    if hasattr(dd_result, "sat_ids") and getattr(dd_result, "sat_ids"):
+        updates["sat_ids"] = tuple(np.asarray(dd_result.sat_ids, dtype=object)[mask].tolist())
     if hasattr(dd_result, "dd_pseudorange_m"):
         updates["dd_pseudorange_m"] = np.asarray(dd_result.dd_pseudorange_m, dtype=np.float64)[mask]
     if hasattr(dd_result, "dd_carrier_cycles"):

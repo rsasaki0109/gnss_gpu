@@ -674,6 +674,10 @@ def test_parser_maps_local_fgo_flags_and_auto_requests_diagnostics():
         "--fgo-local-prior-sigma-m", "0.4",
         "--fgo-local-dd-sigma-cycles", "0.3",
         "--fgo-local-pr-sigma-m", "4.0",
+        "--fgo-local-lambda",
+        "--fgo-local-lambda-ratio-threshold", "3.5",
+        "--fgo-local-lambda-sigma-cycles", "0.04",
+        "--fgo-local-lambda-min-epochs", "45",
     ]))
 
     run_kwargs = _namespace_to_run_kwargs(
@@ -687,6 +691,10 @@ def test_parser_maps_local_fgo_flags_and_auto_requests_diagnostics():
     assert run_kwargs["fgo_local_prior_sigma_m"] == 0.4
     assert run_kwargs["fgo_local_dd_sigma_cycles"] == 0.3
     assert run_kwargs["fgo_local_pr_sigma_m"] == 4.0
+    assert run_kwargs["fgo_local_lambda"] is True
+    assert run_kwargs["fgo_local_lambda_ratio_threshold"] == 3.5
+    assert run_kwargs["fgo_local_lambda_sigma_cycles"] == 0.04
+    assert run_kwargs["fgo_local_lambda_min_epochs"] == 45
     assert run_kwargs["collect_epoch_diagnostics"] is True
 
 
