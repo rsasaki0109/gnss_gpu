@@ -568,6 +568,32 @@
 - `odaiba_stop_detect` は `--mupf-dd-gate-adaptive-floor-cycles 0.25` を維持する。
 - weak-DD 調査で追加した extra knobs は default-off の ablation surface として残すが、full-run win なしに preset へ昇格しない。
 
+## D-031: L1-L2 widelane DD pseudorange は default-off 実験 hook として残すが preset 昇格しない
+
+状態: 採用
+
+根拠:
+- [widelane.py](/workspace/ai_coding_ws/gnss_gpu/python/gnss_gpu/widelane.py)
+- [exp_pf_smoother_eval.py](/workspace/ai_coding_ws/gnss_gpu/experiments/exp_pf_smoother_eval.py)
+- [test_widelane.py](/workspace/ai_coding_ws/gnss_gpu/tests/test_widelane.py)
+- Odaiba 100 epoch smoke は `SMTH P50=0.80 m / RMS=0.79 m`、WL fixed pairs `568/600 (94.7%)`
+- full Odaiba default WL は `SMTH P50=1.83 m / RMS=4.91 m`、WL used `8926/12252`, fixed pairs `50042/52665 (95.0%)`
+- full Odaiba conservative WL は `SMTH P50=1.45 m / RMS=5.62 m`
+- Shinjuku WL regression は `SMTH P50=3.07 m / RMS=9.13 m`
+- non-WL `run_pf_smoother_odaiba_reference.sh` は `SMTH P50=1.34 m / RMS=4.11 m` で維持
+
+理由:
+- WL integer fix 自体の成立率は高いが、full-run の PF smoother median は改善しなかった。
+- 現実装は GPS/QZSS L1-L2 fixed DD を epoch 単位で DD pseudorange path に差し替えるため、既存 raw DD pseudorange の Galileo constraints を落とす。
+- sigma を弱めても current best `SMTH P50=1.14 m` には届かず、RMS/回帰条件が悪化する。
+- smoke の submeter は局所区間の結果で、full Odaiba の headline 指標へ一般化しない。
+
+決定:
+- `--widelane` hook と `gnss_gpu.widelane` module は default-off の実験 surface として残す。
+- `odaiba_best_accuracy` は変更しない。
+- `odaiba_widelane` preset は作らない。
+- 次に試すなら、epoch-level replacement ではなく row-level merge または additional likelihood として、Galileo raw DD constraints を落とさない設計にする。
+
 ## 現在の未決定事項
 
 - `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか

@@ -1292,3 +1292,49 @@ Shinjuku regression:
 | `odaiba_best_accuracy --runs Shinjuku` | 2.490 m | 7.057 m | 2.286 m | 7.548 m | 3019 epochs |
 
 Shinjuku は LAMBDA 無効の既存 path で完走し、DD metadata 追加による実行時破綻は出ていない。
+
+### Widelane L1-L2 integer DD pseudorange negative
+
+Trimble の L1+L2 から Melbourne-Wuebbena wide-lane ambiguity を DD pair 単位で固定し、
+`exp_pf_smoother_eval.py` の DD pseudorange path に統合した。実装は default-off の
+`--widelane` hook とし、`odaiba_best_accuracy` 自体は変更していない。
+
+実装条件:
+- module: `python/gnss_gpu/widelane.py`
+- PF hook: `--widelane`, `--widelane-min-fix-rate`, `--widelane-ratio-threshold`, `--widelane-dd-sigma`
+- base preset: `odaiba_best_accuracy`
+- default WL settings: min fix rate `0.30`, ratio threshold `3.0`, DD sigma `0.1 m`
+- 対象 signal: GPS/QZSS L1-L2。Galileo E1/E5 は周波数ペアが異なるためこの hook では使わない。
+
+Smoke:
+
+| run | epochs | WL used | fixed pairs | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Odaiba 100 epoch | 100 | 96/100 | 568/600 (94.7%) | 1.44 m | 1.27 m | 0.80 m | 0.79 m |
+
+Full Odaiba:
+
+| config | WL used | fixed pairs | low-fix epochs | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | tail guard |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| default `0.30 / ratio 3 / sigma 0.1` | 8926/12252 | 50042/52665 (95.0%) | 290 | 1.80 m | 5.54 m | 1.83 m | 4.91 m | 553 |
+| conservative `0.80 / ratio 3 / sigma 0.3` | 8653/12252 | 50042/52665 (95.0%) | 1114 | 1.59 m | 6.92 m | 1.45 m | 5.62 m | 1022 |
+
+Shinjuku regression:
+
+| config | WL used | fixed pairs | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | tail guard |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| default `0.30 / ratio 3 / sigma 0.1` | 14035/20127 | 70478/75654 (93.2%) | 3.10 m | 8.99 m | 3.07 m | 9.13 m | 3448 |
+
+Reference regression:
+
+| command | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|---:|
+| `run_pf_smoother_odaiba_reference.sh` | 1.63 m | 5.50 m | 1.34 m | 4.11 m |
+
+所見:
+- 100 epoch smoke では submeter に入ったが、full Odaiba では current best `SMTH P50=1.14 m` を超えず、P50 が悪化した。
+- default WL は RMS は reference guard 内 (`4.91 m`) だが P50 が `1.83 m` まで悪化する。
+- conservative 設定は P50 を `1.45 m` まで戻すが、RMS が `5.62 m` まで悪化し、submeter には届かない。
+- Shinjuku は `SMTH RMS=9.13 m` で handoff の `<9 m` 回帰条件をわずかに外す。
+- 原因候補は、WL fixed DD が GPS/QZSS L1-L2 のみで、既存 DD pseudorange の Galileo constraints を epoch 単位で置換してしまうこと。row-level merge または additional likelihood にしない限り、full-run の median を押し下げる拘束にならない。
+- `odaiba_widelane` preset への昇格なし。`odaiba_best_accuracy` は不変。
