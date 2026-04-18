@@ -5,6 +5,16 @@
 **ブランチ**: `feature/carrier-phase-imu` (PR #4 open, CI 全 pass)
 **作業ツリー**: dirty (DD pseudorange/carrier/quality/stop-detect/GSDC 評価が積み上がっている)
 **FGO**: メイン engine には使わない。ただし **PF の weak-DD window だけ局所 FGO** で救うハイブリッドは OK (2026-04-18 緩和)。
+
+**北極星目標 (2026-04-19 設定)**:
+**A Continuous-Time Rao-Blackwellized Particle Filter with Factor Graph Optimization** (CT-RBPF-FGO)
+
+- **CT**: B-spline trajectory (control points)、任意時刻で (R, p, v, a) を解析的に query (参考: https://qiita.com/NaokiAkai/items/dc77f8dd7fb514a75add)
+- **RB**: per-particle velocity/clock-bias を KF で marginalize (state を {x,y,z} と {v, cb} に分ける)
+- **PF**: per-particle NLOS rejection (satellite LOS/NLOS 判定を各 particle の hypothesized position で独立実施)
+- **FGO**: weak-DD window で two-step FGO overlay (velocity FGO → position+TDCP FGO、太郎式 https://github.com/taroz/gsdc2023)
+
+段階目標: Odaiba SMTH P50 < 1.00m (現 1.14m から)
 **PR #4**: 許可があるまで merge しない。
 
 ---
