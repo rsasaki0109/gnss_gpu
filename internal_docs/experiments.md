@@ -1217,3 +1217,43 @@ Particle scaling with best k=2.5:
 - Huber により DD carrier の強い局所拘束が弱まり、backward pass との平均で P50 が戻される傾向。
 - particle 増でも 1m 未満に入らず、現 best `SMTH P50=1.14m / RMS=4.36m` を超えない。
 - Odaiba で採用候補が無かったため、Shinjuku regression は未実施。
+
+### OSM road-centerline soft constraint negative
+
+HK で悪化した OSM map constraint を、Odaiba では soft + Huber に限定して再評価した。
+実装は `2d38959` (OSM module) と `5e4d62d` (PF integration) で追加し、
+full Odaiba sweep 後に `e50dc3b` で revert。preset への昇格なし。
+
+実装条件:
+- base preset: `odaiba_best_accuracy`
+- particles: `200K`
+- OSM bbox: Odaiba reference.csv から `lat 35.61372532-35.63492281`, `lon 139.76735488-139.79169916`
+- OSM source: Overpass mirror `overpass.kumi.systems`, road GeoJSON cache 191 KB / 2439 centerline segments
+- constraint: nearest road-centerline horizontal distance in local ENU, Huber soft penalty only
+- hard projection / particle rejection なし
+- limited-access road は separate class として sigma scale を緩めた
+- per-epoch GPU candidate segments: mean `25.6-25.9`
+
+Phase 1 sigma sweep (`k=2.0`):
+
+| sigma_road | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---:|---:|---:|---:|---:|
+| 1.0 | 1.79 | 4.36 | 1.75 | 3.98 |
+| 2.0 | 1.46 | 4.65 | 1.52 | 3.99 |
+| 3.0 | 1.44 | 5.29 | 1.48 | 4.25 |
+| 5.0 | 1.63 | 5.56 | 1.42 | 4.30 |
+
+Phase 2 Huber-k sweep (`sigma_road=5.0`):
+
+| huber_k | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---:|---:|---:|---:|---:|
+| 1.0 | 1.29 | 5.35 | 1.39 | 4.37 |
+| 2.0 | 1.63 | 5.56 | 1.42 | 4.30 |
+| 3.0 | 1.47 | 5.75 | 1.30 | 4.32 |
+
+所見:
+- best は `sigma=5.0,k=3.0` の `SMTH P50=1.30m / RMS=4.32m`。
+- RMS は current best `4.36m` と同等かわずかに良いが、目標指標の P50 は `1.14m -> 1.30m` に悪化。
+- tight sigma ほど wrong road pull が強くなり、soft + Huber でも median が崩れる。
+- Odaiba はHKよりopenだが、OSM centerline prior は車線内位置・高架/側道・停止/駐車/交差点形状の誤差を吸収しきれない。
+- HK に続いて Odaiba でも positive にならなかったため、OSM road-centerline constraint はこの形では卒業扱いにする。
