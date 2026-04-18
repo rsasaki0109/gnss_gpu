@@ -1761,6 +1761,10 @@ def run_pf_with_optional_smoother(
     dd_pseudorange_gate_spread_max_scale: float = 1.0,
     dd_pseudorange_gate_low_spread_m: float = 1.5,
     dd_pseudorange_gate_high_spread_m: float = 8.0,
+    widelane: bool = False,
+    widelane_min_fix_rate: float = 0.3,
+    widelane_ratio_threshold: float = 3.0,
+    widelane_dd_sigma: float = 0.1,
     mupf_dd: bool = False,
     mupf_dd_sigma_cycles: float = 0.05,
     mupf_dd_base_interp: bool = False,
@@ -1882,7 +1886,7 @@ def run_pf_with_optional_smoother(
                 if h is not None:
                     imu_filter.heading = h
 
-    base_obs_path = _find_base_obs_path(run_dir) if (dd_pseudorange or mupf_dd) else None
+    base_obs_path = _find_base_obs_path(run_dir) if (dd_pseudorange or mupf_dd or widelane) else None
 
     # --- DD pseudorange setup ---
     dd_pr_computer = None
@@ -1903,6 +1907,32 @@ def run_pf_with_optional_smoother(
             interpolate_base_epochs=dd_pseudorange_base_interp,
         )
         print(f"  [DD-PR] base_pos = {dd_pr_computer.base_position}")
+
+    # --- Wide-lane fixed DD pseudorange setup ---
+    wl_computer = None
+    n_wl_used = 0
+    n_wl_skip = 0
+    n_wl_candidate_pairs = 0
+    n_wl_fixed_pairs = 0
+    n_wl_low_fix_rate = 0
+    if widelane:
+        from gnss_gpu.widelane import WidelaneDDPseudorangeComputer
+
+        if base_obs_path is None:
+            raise RuntimeError(
+                f"widelane requires base station RINEX (expected base_trimble.obs or base.obs in {run_dir})"
+            )
+        wl_computer = WidelaneDDPseudorangeComputer(
+            base_obs_path,
+            rover_obs_path=run_dir / f"rover_{rover_source}.obs",
+            interpolate_base_epochs=bool(mupf_dd_base_interp or dd_pseudorange_base_interp),
+            ratio_threshold=widelane_ratio_threshold,
+            min_fix_rate=widelane_min_fix_rate,
+        )
+        print(
+            f"  [WL] base_pos = {wl_computer.base_position}, "
+            f"min_fix_rate={widelane_min_fix_rate:.2f}, ratio={widelane_ratio_threshold:.1f}"
+        )
 
     # --- DD carrier phase setup ---
     dd_computer = None
@@ -1994,6 +2024,12 @@ def run_pf_with_optional_smoother(
         dd_cp_input_pairs = 0
         dd_pr_raw_abs_res_median_m = None
         dd_pr_raw_abs_res_max_m = None
+        wl_stats = None
+        wl_fix_rate = None
+        wl_input_pairs = 0
+        wl_fixed_pairs = 0
+        used_widelane_epoch = False
+        dd_pr_sigma_epoch = float(dd_pseudorange_sigma)
         dd_cp_raw_abs_afv_median_cycles = None
         dd_cp_raw_abs_afv_max_cycles = None
         dd_cp_sigma_support_scale = 1.0
@@ -2168,7 +2204,7 @@ def run_pf_with_optional_smoother(
         gate_pf_est = None
         gate_ess_ratio = None
         gate_spread_m = None
-        need_gate_est = dd_pseudorange or mupf_dd
+        need_gate_est = dd_pseudorange or mupf_dd or widelane
         need_gate_ess = (
             (dd_pseudorange_gate_ess_min_scale != 1.0 or dd_pseudorange_gate_ess_max_scale != 1.0)
             or (mupf_dd_gate_ess_min_scale != 1.0 or mupf_dd_gate_ess_max_scale != 1.0)
@@ -2188,23 +2224,47 @@ def run_pf_with_optional_smoother(
             gate_ess_ratio = pf.get_ess() / float(pf.n_particles)
         if need_gate_spread and gate_pf_est is not None:
             gate_spread_m = pf.get_position_spread(center=gate_pf_est)
-        if dd_pseudorange and dd_pr_computer is not None:
-            pf_est = gate_pf_est
-            dd_pr_gate_scale = 1.0
-            if gate_ess_ratio is not None:
-                dd_pr_gate_scale *= ess_gate_scale(
-                    gate_ess_ratio,
-                    min_scale=dd_pseudorange_gate_ess_min_scale,
-                    max_scale=dd_pseudorange_gate_ess_max_scale,
-                )
-            if gate_spread_m is not None:
-                dd_pr_gate_scale *= spread_gate_scale(
-                    gate_spread_m,
-                    low_spread_m=dd_pseudorange_gate_low_spread_m,
-                    high_spread_m=dd_pseudorange_gate_high_spread_m,
-                    min_scale=dd_pseudorange_gate_spread_min_scale,
-                    max_scale=dd_pseudorange_gate_spread_max_scale,
-                )
+        pf_est = gate_pf_est
+        dd_pr_gate_scale = 1.0
+        if gate_ess_ratio is not None:
+            dd_pr_gate_scale *= ess_gate_scale(
+                gate_ess_ratio,
+                min_scale=dd_pseudorange_gate_ess_min_scale,
+                max_scale=dd_pseudorange_gate_ess_max_scale,
+            )
+        if gate_spread_m is not None:
+            dd_pr_gate_scale *= spread_gate_scale(
+                gate_spread_m,
+                low_spread_m=dd_pseudorange_gate_low_spread_m,
+                high_spread_m=dd_pseudorange_gate_high_spread_m,
+                min_scale=dd_pseudorange_gate_spread_min_scale,
+                max_scale=dd_pseudorange_gate_spread_max_scale,
+            )
+        if widelane and wl_computer is not None:
+            wl_result, wl_stats = wl_computer.compute_dd(
+                tow,
+                measurements,
+                gate_pf_est,
+                rover_weights=w,
+                min_fix_rate=widelane_min_fix_rate,
+            )
+            wl_input_pairs = int(wl_stats.n_candidate_pairs)
+            wl_fixed_pairs = int(wl_stats.n_fixed_pairs)
+            wl_fix_rate = float(wl_stats.fix_rate)
+            n_wl_candidate_pairs += wl_input_pairs
+            n_wl_fixed_pairs += wl_fixed_pairs
+            if wl_stats.reason == "low_fix_rate":
+                n_wl_low_fix_rate += 1
+            if wl_result is not None and wl_result.n_dd >= 3:
+                dd_pr_result = wl_result
+                dd_pr_input_pairs = int(wl_result.n_dd)
+                dd_pr_sigma_epoch = float(widelane_dd_sigma)
+                used_widelane_epoch = True
+                n_wl_used += 1
+            else:
+                n_wl_skip += 1
+
+        if dd_pr_result is None and dd_pseudorange and dd_pr_computer is not None:
             dd_pr_result = dd_pr_computer.compute_dd(
                 tow,
                 measurements,
@@ -2217,23 +2277,27 @@ def run_pf_with_optional_smoother(
                     dd_pr_abs_res = np.abs(dd_pseudorange_residuals_m(dd_pr_result, pf_est))
                     dd_pr_raw_abs_res_median_m = float(np.median(dd_pr_abs_res))
                     dd_pr_raw_abs_res_max_m = float(np.max(dd_pr_abs_res))
-            if dd_pr_result is not None and dd_pr_result.n_dd >= 3:
-                dd_pr_result, dd_pr_gate_stats = gate_dd_pseudorange(
-                    dd_pr_result,
-                    pf_est,
-                    pair_residual_max_m=dd_pseudorange_gate_residual_m,
-                    adaptive_pair_floor_m=dd_pseudorange_gate_adaptive_floor_m,
-                    adaptive_pair_mad_mult=dd_pseudorange_gate_adaptive_mad_mult,
-                    epoch_median_residual_max_m=dd_pseudorange_gate_epoch_median_m,
-                    threshold_scale=dd_pr_gate_scale,
-                    min_pairs=3,
-                )
-                n_dd_pr_gate_pairs_rejected += dd_pr_gate_stats.n_pair_rejected
-                if dd_pr_gate_stats.rejected_by_epoch:
-                    n_dd_pr_gate_epoch_skip += 1
+        if dd_pr_result is not None and dd_pr_result.n_dd >= 3:
+            if collect_epoch_diagnostics and dd_pr_raw_abs_res_median_m is None and pf_est is not None:
+                dd_pr_abs_res = np.abs(dd_pseudorange_residuals_m(dd_pr_result, pf_est))
+                dd_pr_raw_abs_res_median_m = float(np.median(dd_pr_abs_res))
+                dd_pr_raw_abs_res_max_m = float(np.max(dd_pr_abs_res))
+            dd_pr_result, dd_pr_gate_stats = gate_dd_pseudorange(
+                dd_pr_result,
+                pf_est,
+                pair_residual_max_m=dd_pseudorange_gate_residual_m,
+                adaptive_pair_floor_m=dd_pseudorange_gate_adaptive_floor_m,
+                adaptive_pair_mad_mult=dd_pseudorange_gate_adaptive_mad_mult,
+                epoch_median_residual_max_m=dd_pseudorange_gate_epoch_median_m,
+                threshold_scale=dd_pr_gate_scale,
+                min_pairs=3,
+            )
+            n_dd_pr_gate_pairs_rejected += dd_pr_gate_stats.n_pair_rejected
+            if dd_pr_gate_stats.rejected_by_epoch:
+                n_dd_pr_gate_epoch_skip += 1
 
         if dd_pr_result is not None and dd_pr_result.n_dd >= 3:
-            pf.update_dd_pseudorange(dd_pr_result, sigma_pr=dd_pseudorange_sigma)
+            pf.update_dd_pseudorange(dd_pr_result, sigma_pr=dd_pr_sigma_epoch)
             n_dd_pr_used += 1
         else:
             if dd_pseudorange:
@@ -2604,7 +2668,7 @@ def run_pf_with_optional_smoother(
                 spp_ref=spp_ref,
                 dd_pseudorange=dd_pr_result,
                 dd_pseudorange_sigma=(
-                    dd_pseudorange_sigma if dd_pr_result is not None and dd_pr_result.n_dd >= 3 else None
+                    dd_pr_sigma_epoch if dd_pr_result is not None and dd_pr_result.n_dd >= 3 else None
                 ),
                 dd_carrier=dd_carrier_result,
                 dd_carrier_sigma=(
@@ -2699,6 +2763,12 @@ def run_pf_with_optional_smoother(
                         "used_tdcp": bool(used_tdcp),
                         "used_imu_tight": bool(used_imu_tight_epoch),
                         "used_dd_pseudorange": bool(dd_pr_result is not None and dd_pr_result.n_dd >= 3),
+                        "used_widelane": bool(used_widelane_epoch),
+                        "widelane_input_pairs": int(wl_input_pairs),
+                        "widelane_fixed_pairs": int(wl_fixed_pairs),
+                        "widelane_fix_rate": _finite_float(wl_fix_rate),
+                        "widelane_reason": wl_stats.reason if wl_stats is not None else None,
+                        "dd_pr_sigma_m": _finite_float(dd_pr_sigma_epoch if dd_pr_result is not None else None),
                         "used_dd_carrier": bool(dd_carrier_result is not None and dd_carrier_result.n_dd >= 3),
                         "gate_ess_ratio": _finite_float(gate_ess_ratio),
                         "gate_spread_m": _finite_float(gate_spread_m),
@@ -2884,6 +2954,19 @@ def run_pf_with_optional_smoother(
                 f"epoch_skip={n_dd_pr_gate_epoch_skip}"
             )
 
+    if widelane:
+        total_wl = n_wl_used + n_wl_skip
+        wl_pair_rate = (
+            float(n_wl_fixed_pairs) / float(n_wl_candidate_pairs)
+            if n_wl_candidate_pairs > 0
+            else 0.0
+        )
+        print(
+            f"  [widelane] used {n_wl_used}/{total_wl} epochs, "
+            f"fixed_pairs={n_wl_fixed_pairs}/{n_wl_candidate_pairs} ({wl_pair_rate:.1%}), "
+            f"low_fix_rate_epochs={n_wl_low_fix_rate}"
+        )
+
     forward_pos_full = np.array(forward_aligned, dtype=np.float64)
     gt_arr = np.array(all_gt, dtype=np.float64)
 
@@ -2915,6 +2998,10 @@ def run_pf_with_optional_smoother(
         "dd_pseudorange_gate_spread_max_scale": dd_pseudorange_gate_spread_max_scale,
         "dd_pseudorange_gate_low_spread_m": dd_pseudorange_gate_low_spread_m,
         "dd_pseudorange_gate_high_spread_m": dd_pseudorange_gate_high_spread_m,
+        "widelane": widelane,
+        "widelane_min_fix_rate": widelane_min_fix_rate,
+        "widelane_ratio_threshold": widelane_ratio_threshold,
+        "widelane_dd_sigma": widelane_dd_sigma,
         "mupf_dd_base_interp": mupf_dd_base_interp,
         "mupf_dd_gate_afv_cycles": mupf_dd_gate_afv_cycles,
         "mupf_dd_gate_adaptive_floor_cycles": mupf_dd_gate_adaptive_floor_cycles,
@@ -2973,6 +3060,11 @@ def run_pf_with_optional_smoother(
         "n_dd_pr_skip": n_dd_pr_skip,
         "n_dd_pr_gate_pairs_rejected": n_dd_pr_gate_pairs_rejected,
         "n_dd_pr_gate_epoch_skip": n_dd_pr_gate_epoch_skip,
+        "n_wl_used": n_wl_used,
+        "n_wl_skip": n_wl_skip,
+        "n_wl_candidate_pairs": n_wl_candidate_pairs,
+        "n_wl_fixed_pairs": n_wl_fixed_pairs,
+        "n_wl_low_fix_rate": n_wl_low_fix_rate,
         "n_dd_used": n_dd_used,
         "n_dd_skip": n_dd_skip,
         "n_dd_gate_pairs_rejected": n_dd_gate_pairs_rejected,
@@ -3231,6 +3323,10 @@ def _namespace_to_run_kwargs(
         "dd_pseudorange_gate_spread_max_scale": args.dd_pseudorange_gate_spread_max_scale,
         "dd_pseudorange_gate_low_spread_m": args.dd_pseudorange_gate_low_spread_m,
         "dd_pseudorange_gate_high_spread_m": args.dd_pseudorange_gate_high_spread_m,
+        "widelane": args.widelane,
+        "widelane_min_fix_rate": args.widelane_min_fix_rate,
+        "widelane_ratio_threshold": args.widelane_ratio_threshold,
+        "widelane_dd_sigma": args.widelane_dd_sigma,
         "mupf_dd": args.mupf_dd,
         "mupf_dd_sigma_cycles": args.mupf_dd_sigma_cycles,
         "mupf_dd_base_interp": args.mupf_dd_base_interp,
@@ -3478,6 +3574,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Particle spread below this is treated as tightly converged for DD pseudorange gating")
     parser.add_argument("--dd-pseudorange-gate-high-spread-m", type=float, default=8.0,
                         help="Particle spread above this is treated as diffuse for DD pseudorange gating")
+    parser.add_argument("--widelane", action="store_true",
+                        help="Replace DD pseudorange with ratio-tested L1-L2 wide-lane fixed DD pseudorange when available")
+    parser.add_argument("--widelane-min-fix-rate", type=float, default=0.3,
+                        help="Minimum per-epoch fixed/candidate wide-lane DD pair rate before replacing DD pseudorange")
+    parser.add_argument("--widelane-ratio-threshold", type=float, default=3.0,
+                        help="Minimum LAMBDA ratio for accepting a wide-lane DD integer fix")
+    parser.add_argument("--widelane-dd-sigma", type=float, default=0.1,
+                        help="DD pseudorange sigma in meters for fixed wide-lane DD rows")
     parser.add_argument("--mupf-dd", action="store_true",
                         help="Use Double-Differenced carrier phase AFV (requires base station RINEX)")
     parser.add_argument("--mupf-dd-sigma-cycles", type=float, default=0.05,
@@ -3829,6 +3933,15 @@ def main(argv: list[str] | None = None) -> int:
                 "dd_pseudorange_gate_spread_max_scale": args.dd_pseudorange_gate_spread_max_scale,
                 "dd_pseudorange_gate_low_spread_m": args.dd_pseudorange_gate_low_spread_m,
                 "dd_pseudorange_gate_high_spread_m": args.dd_pseudorange_gate_high_spread_m,
+                "widelane": args.widelane,
+                "widelane_min_fix_rate": args.widelane_min_fix_rate,
+                "widelane_ratio_threshold": args.widelane_ratio_threshold,
+                "widelane_dd_sigma": args.widelane_dd_sigma,
+                "n_wl_used": int(out.get("n_wl_used", 0)),
+                "n_wl_skip": int(out.get("n_wl_skip", 0)),
+                "n_wl_candidate_pairs": int(out.get("n_wl_candidate_pairs", 0)),
+                "n_wl_fixed_pairs": int(out.get("n_wl_fixed_pairs", 0)),
+                "n_wl_low_fix_rate": int(out.get("n_wl_low_fix_rate", 0)),
                 "mupf": args.mupf,
                 "mupf_dd": args.mupf_dd,
                 "mupf_dd_base_interp": args.mupf_dd_base_interp,
