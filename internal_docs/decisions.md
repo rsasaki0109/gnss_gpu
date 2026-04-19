@@ -594,6 +594,31 @@
 - `odaiba_widelane` preset は作らない。
 - 次に試すなら、epoch-level replacement ではなく row-level merge または additional likelihood として、Galileo raw DD constraints を落とさない設計にする。
 
+## D-032: Region-aware widelane gate は full-run win なしで revert
+
+状態: 不採用
+
+根拠:
+- [widelane_gate_odaiba_sweep.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/widelane_gate_odaiba_sweep.csv)
+- [widelane_gate_validation.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/widelane_gate_validation.csv)
+- Odaiba baseline `odaiba_best_accuracy`: `SMTH P50=1.1435 m / RMS=4.3627 m`
+- handoff 推奨 dd17 + ratio5: `SMTH P50=1.4481 m / RMS=4.3590 m`, WL used `250/12252`
+- WL 実使用ケースの最良 dd17 + ratio7: `SMTH P50=1.2454 m / RMS=4.9972 m`, WL used `223/12252`
+- dd20 + ratio3/5/7 は WL used `0/12252` で baseline 同等
+- Shinjuku dd17 + ratio7 は WL used `0/20127` で baseline と同一、`SMTH P50=2.286 m / RMS=7.548 m`
+- `run_pf_smoother_odaiba_reference.sh` は `SMTH RMS=4.112 m` で `<=5.10 m` guard を維持
+
+理由:
+- 「強い DD epoch だけ WL 適用」の仮説は full Odaiba で current best を超えなかった。
+- DD support を強くすると WL 適用 epoch が少なくなり、dd20 では完全に baseline へ戻る。
+- DD support を緩めると WL は使われるが、P50 が `1.29-1.69 m` まで悪化する。
+- 最も近かった dd17 + ratio7 でも current best から +0.10 m 以上悪く、submeter には届かない。
+
+決定:
+- `odaiba_widelane_gated` preset は作らない。
+- region-aware WL gate CLI/logic/test は negative result として revert する。
+- codex9 の base `--widelane` hook は D-031 のとおり default-off 実験 surface として残す。
+
 ## 現在の未決定事項
 
 - `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか

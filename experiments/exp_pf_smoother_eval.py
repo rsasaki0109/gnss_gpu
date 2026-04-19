@@ -1269,76 +1269,6 @@ def _effective_dd_carrier_epoch_median_gate(
     return limit
 
 
-def _parse_widelane_gate_exclude_epochs(
-    specs: str | list[str] | tuple[str, ...] | None,
-) -> tuple[tuple[int, int], ...]:
-    """Parse inclusive epoch-index ranges such as ``2445:4890``."""
-
-    if specs is None:
-        return ()
-    if isinstance(specs, str):
-        raw_specs = [specs]
-    else:
-        raw_specs = list(specs)
-
-    ranges: list[tuple[int, int]] = []
-    for raw_spec in raw_specs:
-        if raw_spec is None:
-            continue
-        for item in str(raw_spec).split(","):
-            spec = item.strip()
-            if not spec:
-                continue
-            if ":" not in spec:
-                raise ValueError(f"widelane gate epoch range must be START:END, got {spec!r}")
-            left, right = spec.split(":", 1)
-            try:
-                start = int(left.strip())
-                end = int(right.strip())
-            except ValueError as exc:
-                raise ValueError(f"invalid widelane gate epoch range {spec!r}") from exc
-            if start < 0 or end < 0:
-                raise ValueError(f"widelane gate epoch range must be non-negative, got {spec!r}")
-            if start > end:
-                raise ValueError(f"widelane gate epoch range start exceeds end: {spec!r}")
-            ranges.append((start, end))
-    return tuple(ranges)
-
-
-def _format_widelane_gate_exclude_epochs(ranges: tuple[tuple[int, int], ...]) -> str:
-    return ",".join(f"{start}:{end}" for start, end in ranges)
-
-
-def _epoch_in_ranges(epoch_index: int, ranges: tuple[tuple[int, int], ...]) -> bool:
-    return any(start <= int(epoch_index) <= end for start, end in ranges)
-
-
-def _widelane_epoch_gate_reason(
-    *,
-    epoch_index: int,
-    dd_pairs: int | None,
-    ess_ratio: float | None,
-    min_dd_pairs: int | None,
-    min_ess_ratio: float | None,
-    exclude_ranges: tuple[tuple[int, int], ...],
-) -> str:
-    """Return ``ok`` or the first WL epoch gate reason."""
-
-    if exclude_ranges and _epoch_in_ranges(epoch_index, exclude_ranges):
-        return "excluded_epoch"
-    if min_ess_ratio is not None:
-        if ess_ratio is None or not np.isfinite(float(ess_ratio)):
-            return "missing_ess"
-        if float(ess_ratio) < float(min_ess_ratio):
-            return "low_ess"
-    if min_dd_pairs is not None:
-        if dd_pairs is None:
-            return "missing_dd_pairs"
-        if int(dd_pairs) < int(min_dd_pairs):
-            return "low_dd_pairs"
-    return "ok"
-
-
 def _propagate_carrier_bias_tracker_tdcp(
     tracker: dict[tuple[int, int], CarrierBiasState],
     carrier_rows: dict[tuple[int, int], dict[str, object]],
@@ -1835,10 +1765,6 @@ def run_pf_with_optional_smoother(
     widelane_min_fix_rate: float = 0.3,
     widelane_ratio_threshold: float = 3.0,
     widelane_dd_sigma: float = 0.1,
-    widelane_gate_min_dd_pairs: int | None = None,
-    widelane_gate_min_ratio: float | None = None,
-    widelane_gate_min_ess_ratio: float | None = None,
-    widelane_gate_exclude_epochs: str | list[str] | tuple[str, ...] | None = None,
     mupf_dd: bool = False,
     mupf_dd_sigma_cycles: float = 0.05,
     mupf_dd_base_interp: bool = False,
@@ -1929,13 +1855,6 @@ def run_pf_with_optional_smoother(
     our_times = ds["our_times"]
     first_pos = np.asarray(ds["first_pos"], dtype=np.float64)
     init_cb = float(ds["init_cb"])
-    widelane_gate_exclude_ranges = _parse_widelane_gate_exclude_epochs(
-        widelane_gate_exclude_epochs
-    )
-    widelane_gate_exclude_epochs_text = _format_widelane_gate_exclude_epochs(
-        widelane_gate_exclude_ranges
-    )
-    widelane_gate_needs_dd_support = widelane and widelane_gate_min_dd_pairs is not None
 
     # --- IMU setup (for predict_guide in {"imu", "imu_spp_blend"}) ---
     imu_filter: ComplementaryHeadingFilter | None = None
@@ -1996,13 +1915,6 @@ def run_pf_with_optional_smoother(
     n_wl_candidate_pairs = 0
     n_wl_fixed_pairs = 0
     n_wl_low_fix_rate = 0
-    n_wl_ratio_rejected_pairs = 0
-    n_wl_gate_skip = 0
-    n_wl_gate_low_dd_pairs = 0
-    n_wl_gate_low_ess = 0
-    n_wl_gate_excluded = 0
-    n_wl_gate_missing_dd_pairs = 0
-    n_wl_gate_missing_ess = 0
     if widelane:
         from gnss_gpu.widelane import WidelaneDDPseudorangeComputer
 
@@ -2010,36 +1922,17 @@ def run_pf_with_optional_smoother(
             raise RuntimeError(
                 f"widelane requires base station RINEX (expected base_trimble.obs or base.obs in {run_dir})"
             )
-        wl_resolver_ratio_threshold = max(
-            float(widelane_ratio_threshold),
-            float(widelane_gate_min_ratio)
-            if widelane_gate_min_ratio is not None
-            else float(widelane_ratio_threshold),
-        )
         wl_computer = WidelaneDDPseudorangeComputer(
             base_obs_path,
             rover_obs_path=run_dir / f"rover_{rover_source}.obs",
             interpolate_base_epochs=bool(mupf_dd_base_interp or dd_pseudorange_base_interp),
-            ratio_threshold=wl_resolver_ratio_threshold,
+            ratio_threshold=widelane_ratio_threshold,
             min_fix_rate=widelane_min_fix_rate,
         )
         print(
             f"  [WL] base_pos = {wl_computer.base_position}, "
-            f"min_fix_rate={widelane_min_fix_rate:.2f}, ratio={wl_resolver_ratio_threshold:.1f}"
+            f"min_fix_rate={widelane_min_fix_rate:.2f}, ratio={widelane_ratio_threshold:.1f}"
         )
-        if (
-            widelane_gate_min_dd_pairs is not None
-            or widelane_gate_min_ratio is not None
-            or widelane_gate_min_ess_ratio is not None
-            or widelane_gate_exclude_ranges
-        ):
-            print(
-                "  [WL gate] "
-                f"min_dd_pairs={widelane_gate_min_dd_pairs} "
-                f"min_ratio={widelane_gate_min_ratio} "
-                f"min_ess_ratio={widelane_gate_min_ess_ratio} "
-                f"exclude={widelane_gate_exclude_epochs_text or 'off'}"
-            )
 
     # --- DD carrier phase setup ---
     dd_computer = None
@@ -2057,7 +1950,7 @@ def run_pf_with_optional_smoother(
     n_dd_gate_pairs_rejected = 0
     n_dd_gate_epoch_skip = 0
     carrier_bias_tracker: dict[tuple[int, int], CarrierBiasState] = {}
-    if mupf_dd or widelane_gate_needs_dd_support:
+    if mupf_dd:
         from gnss_gpu.dd_carrier import DDCarrierComputer
         if base_obs_path is not None:
             dd_computer = DDCarrierComputer(
@@ -2135,9 +2028,6 @@ def run_pf_with_optional_smoother(
         wl_fix_rate = None
         wl_input_pairs = 0
         wl_fixed_pairs = 0
-        wl_ratio_rejected_pairs = 0
-        wl_gate_reason = "disabled" if not widelane else "not_evaluated"
-        wl_gate_dd_pairs = None
         used_widelane_epoch = False
         dd_pr_sigma_epoch = float(dd_pseudorange_sigma)
         dd_cp_raw_abs_afv_median_cycles = None
@@ -2321,7 +2211,6 @@ def run_pf_with_optional_smoother(
             or (mupf_dd_sigma_ess_low_ratio is not None and mupf_dd_sigma_ess_high_ratio is not None)
             or (mupf_dd_skip_low_support_ess_ratio is not None)
             or (mupf_dd_gate_low_ess_max_ratio is not None)
-            or (widelane_gate_min_ess_ratio is not None)
         )
         need_gate_spread = (
             (dd_pseudorange_gate_spread_min_scale != 1.0 or dd_pseudorange_gate_spread_max_scale != 1.0)
@@ -2352,100 +2241,28 @@ def run_pf_with_optional_smoother(
                 max_scale=dd_pseudorange_gate_spread_max_scale,
             )
         if widelane and wl_computer is not None:
-            wl_epoch_index = int(epochs_done)
-            if widelane_gate_min_dd_pairs is not None and dd_computer is not None:
-                dd_preview = dd_computer.compute_dd(tow, measurements, gate_pf_est)
-                if dd_preview is not None:
-                    wl_gate_dd_pairs = int(dd_preview.n_dd)
-                    if dd_preview.n_dd >= 3:
-                        dd_preview_gate_scale = 1.0
-                        if gate_ess_ratio is not None:
-                            dd_preview_gate_scale *= ess_gate_scale(
-                                gate_ess_ratio,
-                                min_scale=mupf_dd_gate_ess_min_scale,
-                                max_scale=mupf_dd_gate_ess_max_scale,
-                            )
-                        if gate_spread_m is not None:
-                            dd_preview_gate_scale *= spread_gate_scale(
-                                gate_spread_m,
-                                low_spread_m=mupf_dd_gate_low_spread_m,
-                                high_spread_m=mupf_dd_gate_high_spread_m,
-                                min_scale=mupf_dd_gate_spread_min_scale,
-                                max_scale=mupf_dd_gate_spread_max_scale,
-                            )
-                        dd_preview_epoch_median_cycles = _effective_dd_carrier_epoch_median_gate(
-                            None,
-                            base_epoch_median_cycles=mupf_dd_gate_epoch_median_cycles,
-                            ess_ratio=gate_ess_ratio,
-                            spread_m=gate_spread_m,
-                            low_ess_epoch_median_cycles=mupf_dd_gate_low_ess_epoch_median_cycles,
-                            low_ess_max_ratio=mupf_dd_gate_low_ess_max_ratio,
-                            low_ess_max_spread_m=mupf_dd_gate_low_ess_max_spread_m,
-                            low_ess_require_no_dd_pr=mupf_dd_gate_low_ess_require_no_dd_pr,
-                        )
-                        _dd_preview_result, dd_preview_stats = gate_dd_carrier(
-                            dd_preview,
-                            gate_pf_est,
-                            pair_afv_max_cycles=mupf_dd_gate_afv_cycles,
-                            adaptive_pair_floor_cycles=mupf_dd_gate_adaptive_floor_cycles,
-                            adaptive_pair_mad_mult=mupf_dd_gate_adaptive_mad_mult,
-                            epoch_median_afv_max_cycles=dd_preview_epoch_median_cycles,
-                            threshold_scale=dd_preview_gate_scale,
-                            min_pairs=3,
-                        )
-                        wl_gate_dd_pairs = (
-                            0
-                            if dd_preview_stats.rejected_by_epoch
-                            else int(dd_preview_stats.n_kept_pairs)
-                        )
-            wl_gate_reason = _widelane_epoch_gate_reason(
-                epoch_index=wl_epoch_index,
-                dd_pairs=wl_gate_dd_pairs,
-                ess_ratio=gate_ess_ratio,
-                min_dd_pairs=widelane_gate_min_dd_pairs,
-                min_ess_ratio=widelane_gate_min_ess_ratio,
-                exclude_ranges=widelane_gate_exclude_ranges,
+            wl_result, wl_stats = wl_computer.compute_dd(
+                tow,
+                measurements,
+                gate_pf_est,
+                rover_weights=w,
+                min_fix_rate=widelane_min_fix_rate,
             )
-            if wl_gate_reason != "ok":
-                n_wl_skip += 1
-                n_wl_gate_skip += 1
-                if wl_gate_reason == "low_dd_pairs":
-                    n_wl_gate_low_dd_pairs += 1
-                elif wl_gate_reason == "low_ess":
-                    n_wl_gate_low_ess += 1
-                elif wl_gate_reason == "excluded_epoch":
-                    n_wl_gate_excluded += 1
-                elif wl_gate_reason == "missing_dd_pairs":
-                    n_wl_gate_missing_dd_pairs += 1
-                elif wl_gate_reason == "missing_ess":
-                    n_wl_gate_missing_ess += 1
+            wl_input_pairs = int(wl_stats.n_candidate_pairs)
+            wl_fixed_pairs = int(wl_stats.n_fixed_pairs)
+            wl_fix_rate = float(wl_stats.fix_rate)
+            n_wl_candidate_pairs += wl_input_pairs
+            n_wl_fixed_pairs += wl_fixed_pairs
+            if wl_stats.reason == "low_fix_rate":
+                n_wl_low_fix_rate += 1
+            if wl_result is not None and wl_result.n_dd >= 3:
+                dd_pr_result = wl_result
+                dd_pr_input_pairs = int(wl_result.n_dd)
+                dd_pr_sigma_epoch = float(widelane_dd_sigma)
+                used_widelane_epoch = True
+                n_wl_used += 1
             else:
-                wl_result, wl_stats = wl_computer.compute_dd(
-                    tow,
-                    measurements,
-                    gate_pf_est,
-                    rover_weights=w,
-                    min_fix_rate=widelane_min_fix_rate,
-                    min_ratio=widelane_gate_min_ratio,
-                )
-                wl_input_pairs = int(wl_stats.n_candidate_pairs)
-                wl_fixed_pairs = int(wl_stats.n_fixed_pairs)
-                wl_ratio_rejected_pairs = int(wl_stats.n_ratio_rejected)
-                wl_fix_rate = float(wl_stats.fix_rate)
-                n_wl_candidate_pairs += wl_input_pairs
-                n_wl_fixed_pairs += wl_fixed_pairs
-                n_wl_ratio_rejected_pairs += wl_ratio_rejected_pairs
-                if wl_stats.reason == "low_fix_rate":
-                    n_wl_low_fix_rate += 1
-                if wl_result is not None and wl_result.n_dd >= 3:
-                    dd_pr_result = wl_result
-                    dd_pr_input_pairs = int(wl_result.n_dd)
-                    dd_pr_sigma_epoch = float(widelane_dd_sigma)
-                    used_widelane_epoch = True
-                    n_wl_used += 1
-                else:
-                    wl_gate_reason = wl_stats.reason
-                    n_wl_skip += 1
+                n_wl_skip += 1
 
         if dd_pr_result is None and dd_pseudorange and dd_pr_computer is not None:
             dd_pr_result = dd_pr_computer.compute_dd(
@@ -2949,24 +2766,8 @@ def run_pf_with_optional_smoother(
                         "used_widelane": bool(used_widelane_epoch),
                         "widelane_input_pairs": int(wl_input_pairs),
                         "widelane_fixed_pairs": int(wl_fixed_pairs),
-                        "widelane_ratio_rejected_pairs": int(wl_ratio_rejected_pairs),
                         "widelane_fix_rate": _finite_float(wl_fix_rate),
-                        "widelane_reason": wl_stats.reason if wl_stats is not None else wl_gate_reason,
-                        "widelane_gate_reason": wl_gate_reason,
-                        "widelane_gate_dd_pairs": (
-                            int(wl_gate_dd_pairs) if wl_gate_dd_pairs is not None else None
-                        ),
-                        "widelane_gate_min_dd_pairs": (
-                            int(widelane_gate_min_dd_pairs)
-                            if widelane_gate_min_dd_pairs is not None
-                            else None
-                        ),
-                        "widelane_gate_min_ratio": _finite_float(widelane_gate_min_ratio),
-                        "widelane_gate_min_ess_ratio": _finite_float(widelane_gate_min_ess_ratio),
-                        "widelane_gate_excluded": bool(
-                            widelane_gate_exclude_ranges
-                            and _epoch_in_ranges(int(epochs_done), widelane_gate_exclude_ranges)
-                        ),
+                        "widelane_reason": wl_stats.reason if wl_stats is not None else None,
                         "dd_pr_sigma_m": _finite_float(dd_pr_sigma_epoch if dd_pr_result is not None else None),
                         "used_dd_carrier": bool(dd_carrier_result is not None and dd_carrier_result.n_dd >= 3),
                         "gate_ess_ratio": _finite_float(gate_ess_ratio),
@@ -3165,17 +2966,6 @@ def run_pf_with_optional_smoother(
             f"fixed_pairs={n_wl_fixed_pairs}/{n_wl_candidate_pairs} ({wl_pair_rate:.1%}), "
             f"low_fix_rate_epochs={n_wl_low_fix_rate}"
         )
-        if n_wl_ratio_rejected_pairs > 0:
-            print(f"  [widelane_gate] ratio_rejected_pairs={n_wl_ratio_rejected_pairs}")
-        if n_wl_gate_skip > 0:
-            print(
-                f"  [widelane_gate] skipped={n_wl_gate_skip} "
-                f"low_dd_pairs={n_wl_gate_low_dd_pairs} "
-                f"low_ess={n_wl_gate_low_ess} "
-                f"excluded={n_wl_gate_excluded} "
-                f"missing_dd_pairs={n_wl_gate_missing_dd_pairs} "
-                f"missing_ess={n_wl_gate_missing_ess}"
-            )
 
     forward_pos_full = np.array(forward_aligned, dtype=np.float64)
     gt_arr = np.array(all_gt, dtype=np.float64)
@@ -3212,10 +3002,6 @@ def run_pf_with_optional_smoother(
         "widelane_min_fix_rate": widelane_min_fix_rate,
         "widelane_ratio_threshold": widelane_ratio_threshold,
         "widelane_dd_sigma": widelane_dd_sigma,
-        "widelane_gate_min_dd_pairs": widelane_gate_min_dd_pairs,
-        "widelane_gate_min_ratio": widelane_gate_min_ratio,
-        "widelane_gate_min_ess_ratio": widelane_gate_min_ess_ratio,
-        "widelane_gate_exclude_epochs": widelane_gate_exclude_epochs_text,
         "mupf_dd_base_interp": mupf_dd_base_interp,
         "mupf_dd_gate_afv_cycles": mupf_dd_gate_afv_cycles,
         "mupf_dd_gate_adaptive_floor_cycles": mupf_dd_gate_adaptive_floor_cycles,
@@ -3279,13 +3065,6 @@ def run_pf_with_optional_smoother(
         "n_wl_candidate_pairs": n_wl_candidate_pairs,
         "n_wl_fixed_pairs": n_wl_fixed_pairs,
         "n_wl_low_fix_rate": n_wl_low_fix_rate,
-        "n_wl_ratio_rejected_pairs": n_wl_ratio_rejected_pairs,
-        "n_wl_gate_skip": n_wl_gate_skip,
-        "n_wl_gate_low_dd_pairs": n_wl_gate_low_dd_pairs,
-        "n_wl_gate_low_ess": n_wl_gate_low_ess,
-        "n_wl_gate_excluded": n_wl_gate_excluded,
-        "n_wl_gate_missing_dd_pairs": n_wl_gate_missing_dd_pairs,
-        "n_wl_gate_missing_ess": n_wl_gate_missing_ess,
         "n_dd_used": n_dd_used,
         "n_dd_skip": n_dd_skip,
         "n_dd_gate_pairs_rejected": n_dd_gate_pairs_rejected,
@@ -3486,10 +3265,6 @@ def _namespace_requests_epoch_diagnostics(args: argparse.Namespace) -> bool:
         or args.smoother_tail_guard_dd_carrier_max_pairs is not None
         or args.smoother_tail_guard_dd_pseudorange_max_pairs is not None
         or args.smoother_tail_guard_min_shift_m is not None
-        or args.widelane_gate_min_dd_pairs is not None
-        or args.widelane_gate_min_ratio is not None
-        or args.widelane_gate_min_ess_ratio is not None
-        or bool(args.widelane_gate_exclude_epochs)
         or str(args.fgo_local_window).strip().lower() == "auto"
     )
 
@@ -3552,10 +3327,6 @@ def _namespace_to_run_kwargs(
         "widelane_min_fix_rate": args.widelane_min_fix_rate,
         "widelane_ratio_threshold": args.widelane_ratio_threshold,
         "widelane_dd_sigma": args.widelane_dd_sigma,
-        "widelane_gate_min_dd_pairs": args.widelane_gate_min_dd_pairs,
-        "widelane_gate_min_ratio": args.widelane_gate_min_ratio,
-        "widelane_gate_min_ess_ratio": args.widelane_gate_min_ess_ratio,
-        "widelane_gate_exclude_epochs": args.widelane_gate_exclude_epochs,
         "mupf_dd": args.mupf_dd,
         "mupf_dd_sigma_cycles": args.mupf_dd_sigma_cycles,
         "mupf_dd_base_interp": args.mupf_dd_base_interp,
@@ -3811,18 +3582,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Minimum LAMBDA ratio for accepting a wide-lane DD integer fix")
     parser.add_argument("--widelane-dd-sigma", type=float, default=0.1,
                         help="DD pseudorange sigma in meters for fixed wide-lane DD rows")
-    parser.add_argument("--widelane-gate-min-dd-pairs", type=int, default=None,
-                        help="Apply wide-lane only when same-epoch gated DD carrier support has at least this many pairs")
-    parser.add_argument("--widelane-gate-min-ratio", type=float, default=None,
-                        help="Drop fixed wide-lane DD pairs whose stored LAMBDA ratio is below this value")
-    parser.add_argument("--widelane-gate-min-ess-ratio", type=float, default=None,
-                        help="Apply wide-lane only when PF ESS ratio is at or above this value")
-    parser.add_argument(
-        "--widelane-gate-exclude-epochs",
-        action="append",
-        default=[],
-        help="Inclusive valid-epoch index range START:END where wide-lane is disabled; repeat or comma-separate ranges",
-    )
     parser.add_argument("--mupf-dd", action="store_true",
                         help="Use Double-Differenced carrier phase AFV (requires base station RINEX)")
     parser.add_argument("--mupf-dd-sigma-cycles", type=float, default=0.05,
@@ -4178,22 +3937,11 @@ def main(argv: list[str] | None = None) -> int:
                 "widelane_min_fix_rate": args.widelane_min_fix_rate,
                 "widelane_ratio_threshold": args.widelane_ratio_threshold,
                 "widelane_dd_sigma": args.widelane_dd_sigma,
-                "widelane_gate_min_dd_pairs": args.widelane_gate_min_dd_pairs,
-                "widelane_gate_min_ratio": args.widelane_gate_min_ratio,
-                "widelane_gate_min_ess_ratio": args.widelane_gate_min_ess_ratio,
-                "widelane_gate_exclude_epochs": ",".join(args.widelane_gate_exclude_epochs),
                 "n_wl_used": int(out.get("n_wl_used", 0)),
                 "n_wl_skip": int(out.get("n_wl_skip", 0)),
                 "n_wl_candidate_pairs": int(out.get("n_wl_candidate_pairs", 0)),
                 "n_wl_fixed_pairs": int(out.get("n_wl_fixed_pairs", 0)),
                 "n_wl_low_fix_rate": int(out.get("n_wl_low_fix_rate", 0)),
-                "n_wl_ratio_rejected_pairs": int(out.get("n_wl_ratio_rejected_pairs", 0)),
-                "n_wl_gate_skip": int(out.get("n_wl_gate_skip", 0)),
-                "n_wl_gate_low_dd_pairs": int(out.get("n_wl_gate_low_dd_pairs", 0)),
-                "n_wl_gate_low_ess": int(out.get("n_wl_gate_low_ess", 0)),
-                "n_wl_gate_excluded": int(out.get("n_wl_gate_excluded", 0)),
-                "n_wl_gate_missing_dd_pairs": int(out.get("n_wl_gate_missing_dd_pairs", 0)),
-                "n_wl_gate_missing_ess": int(out.get("n_wl_gate_missing_ess", 0)),
                 "mupf": args.mupf,
                 "mupf_dd": args.mupf_dd,
                 "mupf_dd_base_interp": args.mupf_dd_base_interp,

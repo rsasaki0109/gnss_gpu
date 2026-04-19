@@ -1338,3 +1338,43 @@ Reference regression:
 - Shinjuku は `SMTH RMS=9.13 m` で handoff の `<9 m` 回帰条件をわずかに外す。
 - 原因候補は、WL fixed DD が GPS/QZSS L1-L2 のみで、既存 DD pseudorange の Galileo constraints を epoch 単位で置換してしまうこと。row-level merge または additional likelihood にしない限り、full-run の median を押し下げる拘束にならない。
 - `odaiba_widelane` preset への昇格なし。`odaiba_best_accuracy` は不変。
+
+### Region-aware widelane gate negative
+
+codex10 handoff の仮説どおり、WL を強い DD epoch だけに限定する gate を試した。
+実装は `--widelane-gate-min-dd-pairs`, `--widelane-gate-min-ratio`,
+`--widelane-gate-min-ess-ratio`, `--widelane-gate-exclude-epochs` を追加し、
+DD carrier support preview で epoch ごとの WL 適用可否を判定した。full-run で
+current best を超えなかったため、最終的に gate CLI/logic/test は revert し、
+結果 CSV と negative note だけを残す。
+
+結果ファイル:
+- [widelane_gate_odaiba_sweep.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/widelane_gate_odaiba_sweep.csv)
+- [widelane_gate_validation.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/widelane_gate_validation.csv)
+
+Odaiba full sweep (`odaiba_best_accuracy`, 200K):
+
+| config | WL used | gate skip | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| baseline | 0 | 0 | 1.256 m | 5.683 m | **1.1435 m** | 4.3627 m | current best |
+| dd17 | 248 | 11988 | 1.314 m | 5.347 m | 1.4167 m | 4.3353 m | P50 悪化 |
+| dd17 + ratio5 | 250 | 11986 | 1.559 m | 6.168 m | 1.4481 m | 4.3590 m | P50 悪化 |
+| dd17 + ratio7 | 223 | 12011 | 1.263 m | 6.030 m | 1.2454 m | 4.9972 m | WL 実使用では最良だが未達 |
+| dd14 + ratio3 | 1873 | 10283 | 1.311 m | 5.749 m | 1.2939 m | 4.5472 m | 未達 |
+| dd10 + ratio7 | 6060 | 5545 | 1.265 m | 5.951 m | 1.3567 m | 4.5978 m | 未達 |
+| dd20 + ratio3/5/7 | 0 | 12252 | 1.256 m | 5.683 m | 1.1435 m | 4.3627 m | over-gate で baseline 同等 |
+
+Shinjuku / reference validation:
+
+| run | WL used | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---:|---|
+| Shinjuku baseline | 0 | 2.490 m | 7.057 m | 2.286 m | 7.548 m | baseline |
+| Shinjuku dd17 + ratio7 | 0 | 2.490 m | 7.057 m | 2.286 m | 7.548 m | gate で全停止、同等 |
+| `run_pf_smoother_odaiba_reference.sh` | 0 | 1.625 m | 5.502 m | 1.340 m | 4.112 m | SMTH RMS guard `<=5.10 m` 維持 |
+
+所見:
+- handoff 推奨の dd17 + ratio5 は `SMTH P50=1.448 m` で current best より悪い。
+- WL 実使用ケースの最良は dd17 + ratio7 の `SMTH P50=1.245 m` で、`1.14 m` も submeter も未達。
+- dd20 は DD support 条件が強すぎて WL が一度も使われず、実質 baseline に戻るだけだった。
+- Shinjuku は dd17 + ratio7 でも WL used `0/20127` で、regression は出ないが改善もない。
+- `odaiba_widelane_gated` preset への昇格なし。既存 preset は不変。

@@ -8,8 +8,6 @@ from gnss_gpu.widelane import (
     LAMBDA_WL,
     WidelaneAmbiguityResolver,
     WidelaneCandidate,
-    WidelaneDDPseudorangeComputer,
-    WidelaneFix,
     WidelaneObservation,
     _RawWidelaneObs,
     _dd_wl_float,
@@ -118,76 +116,3 @@ def test_dd_widelane_float_and_phase_recover_dd_range() -> None:
     fixed_dd_pr = _dd_wl_phase_m(rover_k, rover_ref, base_k, base_ref) - expected_dd_integer * LAMBDA_WL
 
     assert abs(fixed_dd_pr - expected_dd_range) < 1.0e-6
-
-
-def test_widelane_dd_computer_min_ratio_filters_fixed_pairs() -> None:
-    class _FakeResolver:
-        def __init__(self, ratio: float) -> None:
-            self.ratio = float(ratio)
-
-        def update(self, key, _dd_float):
-            return WidelaneFix(
-                key=key,
-                integer=0,
-                ratio=self.ratio,
-                residual_cycles=0.0,
-                n_epochs=5,
-                std_cycles=0.1,
-            )
-
-    class _Measurement:
-        def __init__(self, prn: int, ecef: tuple[float, float, float]) -> None:
-            self.system_id = 0
-            self.prn = prn
-            self.satellite_ecef = np.asarray(ecef, dtype=np.float64)
-            self.elevation = 0.7
-            self.weight = 1.0
-            self.snr = 45.0
-
-    comp = WidelaneDDPseudorangeComputer.__new__(WidelaneDDPseudorangeComputer)
-    comp._allowed_systems = ("G",)
-    comp._interpolate_base_epochs = False
-    comp._min_fix_rate = 0.0
-    comp._base_pos = np.zeros(3, dtype=np.float64)
-    comp._base_by_tow = {
-        100.0: {
-            "G01": _raw(19_900_000.0, 25, 21),
-            "G02": _raw(20_400_020.0, 33, 30),
-        }
-    }
-    comp._rover_by_tow = {
-        100.0: {
-            "G01": _raw(20_000_010.0, 30, 22),
-            "G02": _raw(20_500_000.0, 40, 31),
-        }
-    }
-    comp._base_tow_keys = np.array([100.0], dtype=np.float64)
-    measurements = [
-        _Measurement(1, (20_200_000.0, 100.0, 0.0)),
-        _Measurement(2, (21_200_000.0, 200.0, 0.0)),
-    ]
-
-    comp._resolver = _FakeResolver(ratio=4.0)
-    result, stats = comp.compute_dd(
-        100.0,
-        measurements,
-        min_common_sats=2,
-        min_fix_rate=0.0,
-        min_ratio=5.0,
-    )
-    assert result is None
-    assert stats.n_ratio_rejected == 1
-    assert stats.n_fixed_pairs == 0
-
-    comp._resolver = _FakeResolver(ratio=6.0)
-    result, stats = comp.compute_dd(
-        100.0,
-        measurements,
-        min_common_sats=2,
-        min_fix_rate=0.0,
-        min_ratio=5.0,
-    )
-    assert result is not None
-    assert result.n_dd == 1
-    assert stats.n_ratio_rejected == 0
-    assert stats.n_fixed_pairs == 1
