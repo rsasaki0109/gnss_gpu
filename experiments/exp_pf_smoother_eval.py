@@ -1761,6 +1761,10 @@ def run_pf_with_optional_smoother(
     dd_pseudorange_gate_spread_max_scale: float = 1.0,
     dd_pseudorange_gate_low_spread_m: float = 1.5,
     dd_pseudorange_gate_high_spread_m: float = 8.0,
+    per_particle_nlos_gate: bool = False,
+    per_particle_nlos_dd_pr_threshold_m: float = 10.0,
+    per_particle_nlos_dd_carrier_threshold_cycles: float = 0.5,
+    per_particle_nlos_undiff_pr_threshold_m: float = 30.0,
     widelane: bool = False,
     widelane_min_fix_rate: float = 0.3,
     widelane_ratio_threshold: float = 3.0,
@@ -1969,6 +1973,12 @@ def run_pf_with_optional_smoother(
         sigma_pr=sigma_pr,
         resampling=resampling,
         seed=42,
+        per_particle_nlos_gate=per_particle_nlos_gate,
+        per_particle_nlos_dd_pr_threshold_m=per_particle_nlos_dd_pr_threshold_m,
+        per_particle_nlos_dd_carrier_threshold_cycles=(
+            per_particle_nlos_dd_carrier_threshold_cycles
+        ),
+        per_particle_nlos_undiff_pr_threshold_m=per_particle_nlos_undiff_pr_threshold_m,
     )
     pf.initialize(first_pos, clock_bias=init_cb, spread_pos=10.0, spread_cb=100.0)
 
@@ -2998,6 +3008,12 @@ def run_pf_with_optional_smoother(
         "dd_pseudorange_gate_spread_max_scale": dd_pseudorange_gate_spread_max_scale,
         "dd_pseudorange_gate_low_spread_m": dd_pseudorange_gate_low_spread_m,
         "dd_pseudorange_gate_high_spread_m": dd_pseudorange_gate_high_spread_m,
+        "per_particle_nlos_gate": per_particle_nlos_gate,
+        "per_particle_nlos_dd_pr_threshold_m": per_particle_nlos_dd_pr_threshold_m,
+        "per_particle_nlos_dd_carrier_threshold_cycles": (
+            per_particle_nlos_dd_carrier_threshold_cycles
+        ),
+        "per_particle_nlos_undiff_pr_threshold_m": per_particle_nlos_undiff_pr_threshold_m,
         "widelane": widelane,
         "widelane_min_fix_rate": widelane_min_fix_rate,
         "widelane_ratio_threshold": widelane_ratio_threshold,
@@ -3323,6 +3339,12 @@ def _namespace_to_run_kwargs(
         "dd_pseudorange_gate_spread_max_scale": args.dd_pseudorange_gate_spread_max_scale,
         "dd_pseudorange_gate_low_spread_m": args.dd_pseudorange_gate_low_spread_m,
         "dd_pseudorange_gate_high_spread_m": args.dd_pseudorange_gate_high_spread_m,
+        "per_particle_nlos_gate": args.per_particle_nlos_gate,
+        "per_particle_nlos_dd_pr_threshold_m": args.per_particle_nlos_dd_pr_threshold_m,
+        "per_particle_nlos_dd_carrier_threshold_cycles": (
+            args.per_particle_nlos_dd_carrier_threshold_cycles
+        ),
+        "per_particle_nlos_undiff_pr_threshold_m": args.per_particle_nlos_undiff_pr_threshold_m,
         "widelane": args.widelane,
         "widelane_min_fix_rate": args.widelane_min_fix_rate,
         "widelane_ratio_threshold": args.widelane_ratio_threshold,
@@ -3574,6 +3596,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Particle spread below this is treated as tightly converged for DD pseudorange gating")
     parser.add_argument("--dd-pseudorange-gate-high-spread-m", type=float, default=8.0,
                         help="Particle spread above this is treated as diffuse for DD pseudorange gating")
+    parser.add_argument("--per-particle-nlos-gate", action="store_true",
+                        help="Reject large-residual observations independently for each particle inside PF kernels")
+    parser.add_argument("--per-particle-nlos-dd-pr-threshold-m", type=float, default=10.0,
+                        help="Per-particle DD pseudorange abs residual threshold in meters")
+    parser.add_argument("--per-particle-nlos-dd-carrier-threshold-cycles", type=float, default=0.5,
+                        help="Per-particle DD carrier AFV abs residual threshold in cycles")
+    parser.add_argument("--per-particle-nlos-undiff-pr-threshold-m", type=float, default=30.0,
+                        help="Per-particle undifferenced pseudorange abs residual threshold in meters")
     parser.add_argument("--widelane", action="store_true",
                         help="Replace DD pseudorange with ratio-tested L1-L2 wide-lane fixed DD pseudorange when available")
     parser.add_argument("--widelane-min-fix-rate", type=float, default=0.3,
@@ -3933,6 +3963,12 @@ def main(argv: list[str] | None = None) -> int:
                 "dd_pseudorange_gate_spread_max_scale": args.dd_pseudorange_gate_spread_max_scale,
                 "dd_pseudorange_gate_low_spread_m": args.dd_pseudorange_gate_low_spread_m,
                 "dd_pseudorange_gate_high_spread_m": args.dd_pseudorange_gate_high_spread_m,
+                "per_particle_nlos_gate": args.per_particle_nlos_gate,
+                "per_particle_nlos_dd_pr_threshold_m": args.per_particle_nlos_dd_pr_threshold_m,
+                "per_particle_nlos_dd_carrier_threshold_cycles": (
+                    args.per_particle_nlos_dd_carrier_threshold_cycles
+                ),
+                "per_particle_nlos_undiff_pr_threshold_m": args.per_particle_nlos_undiff_pr_threshold_m,
                 "widelane": args.widelane,
                 "widelane_min_fix_rate": args.widelane_min_fix_rate,
                 "widelane_ratio_threshold": args.widelane_ratio_threshold,

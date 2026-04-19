@@ -307,6 +307,105 @@ class TestParticleFilterDeviceWrapper:
         assert np.all(np.isfinite(est))
         assert np.linalg.norm(est[:3] - rover_pos) < 10.0
 
+    def test_per_particle_nlos_gate_skips_outlier_residuals(self):
+        """Per-particle NLOS gate ignores outlier rows in the device kernels."""
+        sat_ecef, pseudoranges, weights = _make_satellite_data(n_sat=5)
+        pseudoranges_outlier = pseudoranges.copy()
+        pseudoranges_outlier[0] += 100.0
+
+        pf = ParticleFilterDevice(
+            n_particles=1024,
+            sigma_pos=1.0,
+            sigma_cb=300.0,
+            sigma_pr=5.0,
+            resampling="systematic",
+            seed=SEED,
+            per_particle_nlos_gate=True,
+            per_particle_nlos_undiff_pr_threshold_m=30.0,
+        )
+        pf.initialize(TRUE_POS, clock_bias=TRUE_CB, spread_pos=0.0, spread_cb=0.0)
+        pf.update(sat_ecef, pseudoranges_outlier, weights, resample=False)
+        undiff_lw = pf.get_log_weights()
+        assert float(np.max(np.abs(undiff_lw))) < 1e-6
+
+        pf_reject_all = ParticleFilterDevice(
+            n_particles=1024,
+            sigma_pos=1.0,
+            sigma_cb=300.0,
+            sigma_pr=5.0,
+            resampling="systematic",
+            seed=SEED,
+            per_particle_nlos_gate=True,
+            per_particle_nlos_undiff_pr_threshold_m=30.0,
+        )
+        pf_reject_all.initialize(TRUE_POS, clock_bias=TRUE_CB, spread_pos=0.0, spread_cb=0.0)
+        pf_reject_all.update(sat_ecef, pseudoranges + 100.0, weights, resample=False)
+        reject_all_lw = pf_reject_all.get_log_weights()
+        assert float(np.max(reject_all_lw)) < -900.0
+
+        rover_pos = TRUE_POS.copy()
+        base_pos = np.array([120.0, -35.0, 18.0], dtype=np.float64)
+        rover_ranges = np.linalg.norm(sat_ecef - rover_pos, axis=1)
+        base_ranges = np.linalg.norm(sat_ecef - base_pos, axis=1)
+        ref = 0
+        dd_pr = (rover_ranges[1:] - rover_ranges[ref]) - (base_ranges[1:] - base_ranges[ref])
+        dd_pr[0] += 50.0
+        dd_pr_result = SimpleNamespace(
+            dd_pseudorange_m=dd_pr.astype(np.float64),
+            sat_ecef_k=sat_ecef[1:].astype(np.float64),
+            sat_ecef_ref=np.repeat(sat_ecef[[ref]], len(dd_pr), axis=0).astype(np.float64),
+            base_range_k=base_ranges[1:].astype(np.float64),
+            base_range_ref=np.repeat(base_ranges[ref], len(dd_pr)).astype(np.float64),
+            dd_weights=np.ones(len(dd_pr), dtype=np.float64),
+            ref_sat_ids=tuple(["G01"] * len(dd_pr)),
+            n_dd=len(dd_pr),
+        )
+        pf_dd_pr = ParticleFilterDevice(
+            n_particles=1024,
+            sigma_pos=1.0,
+            sigma_cb=300.0,
+            sigma_pr=5.0,
+            resampling="systematic",
+            seed=SEED,
+            per_particle_nlos_gate=True,
+            per_particle_nlos_dd_pr_threshold_m=10.0,
+        )
+        pf_dd_pr.initialize(rover_pos, clock_bias=0.0, spread_pos=0.0, spread_cb=0.0)
+        pf_dd_pr.update_dd_pseudorange(dd_pr_result, sigma_pr=0.5, resample=False)
+        dd_pr_lw = pf_dd_pr.get_log_weights()
+        assert float(np.max(np.abs(dd_pr_lw))) < 1e-6
+
+        wavelengths = np.full(len(dd_pr), 0.190293673, dtype=np.float64)
+        dd_carrier = (
+            (rover_ranges[1:] - rover_ranges[ref]) - (base_ranges[1:] - base_ranges[ref])
+        ) / wavelengths
+        dd_carrier[0] += 0.45
+        dd_cp_result = SimpleNamespace(
+            dd_carrier_cycles=dd_carrier.astype(np.float64),
+            sat_ecef_k=sat_ecef[1:].astype(np.float64),
+            sat_ecef_ref=np.repeat(sat_ecef[[ref]], len(dd_carrier), axis=0).astype(np.float64),
+            base_range_k=base_ranges[1:].astype(np.float64),
+            base_range_ref=np.repeat(base_ranges[ref], len(dd_carrier)).astype(np.float64),
+            dd_weights=np.ones(len(dd_carrier), dtype=np.float64),
+            wavelengths_m=wavelengths,
+            ref_sat_ids=tuple(["G01"] * len(dd_carrier)),
+            n_dd=len(dd_carrier),
+        )
+        pf_dd_cp = ParticleFilterDevice(
+            n_particles=1024,
+            sigma_pos=1.0,
+            sigma_cb=300.0,
+            sigma_pr=5.0,
+            resampling="systematic",
+            seed=SEED,
+            per_particle_nlos_gate=True,
+            per_particle_nlos_dd_carrier_threshold_cycles=0.3,
+        )
+        pf_dd_cp.initialize(rover_pos, clock_bias=0.0, spread_pos=0.0, spread_cb=0.0)
+        pf_dd_cp.update_dd_carrier_afv(dd_cp_result, sigma_cycles=0.05, resample=False)
+        dd_cp_lw = pf_dd_cp.get_log_weights()
+        assert float(np.max(np.abs(dd_cp_lw))) < 1e-6
+
     def test_smooth_with_dd_pseudorange_smoke(self):
         """Forward-backward smoothing replays stored DD pseudorange observations."""
         rng = np.random.RandomState(987)

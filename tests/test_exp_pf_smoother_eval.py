@@ -641,6 +641,28 @@ def test_parser_maps_low_support_skip_flags():
     assert run_kwargs["mupf_dd_skip_low_support_require_no_dd_pr"] is True
 
 
+def test_parser_maps_per_particle_nlos_gate_flags():
+    parser = build_arg_parser()
+    args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_best_accuracy",
+        "--per-particle-nlos-gate",
+        "--per-particle-nlos-dd-pr-threshold-m", "5.0",
+        "--per-particle-nlos-dd-carrier-threshold-cycles", "0.3",
+        "--per-particle-nlos-undiff-pr-threshold-m", "25.0",
+    ]))
+
+    run_kwargs = _namespace_to_run_kwargs(
+        args,
+        position_update_sigma=args.position_update_sigma,
+        use_smoother=args.smoother,
+    )
+    assert run_kwargs["per_particle_nlos_gate"] is True
+    assert run_kwargs["per_particle_nlos_dd_pr_threshold_m"] == 5.0
+    assert run_kwargs["per_particle_nlos_dd_carrier_threshold_cycles"] == 0.3
+    assert run_kwargs["per_particle_nlos_undiff_pr_threshold_m"] == 25.0
+
+
 def test_parser_maps_low_ess_dd_gate_flags():
     parser = build_arg_parser()
     args = parser.parse_args(_expand_cli_preset_argv([

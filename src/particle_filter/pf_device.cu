@@ -61,7 +61,8 @@ __global__ void pfd_weight_kernel(const double* px, const double* py,
                                   const double* weights_sat,
                                   double* log_weights,
                                   int N, int n_sat, double sigma_pr,
-                                  double nu) {
+                                  double nu,
+                                  double per_particle_nlos_threshold_m) {
     // Dynamic shared memory layout: [sat_ecef: n_sat*3] [pr: n_sat] [ws: n_sat]
     extern __shared__ double s_data[];
     double* s_sat = s_data;
@@ -94,6 +95,24 @@ __global__ void pfd_weight_kernel(const double* px, const double* py,
     int use_student_t = (nu > 0.0);
     double half_nup1 = 0.5 * (nu + 1.0);
     double inv_nu_sigma2 = (nu > 0.0) ? 1.0 / (nu * sigma_pr * sigma_pr) : 0.0;
+    bool use_per_particle_gate = per_particle_nlos_threshold_m > 0.0;
+    if (use_per_particle_gate) {
+        int kept = 0;
+        for (int s = 0; s < n_sat; s++) {
+            double dx = x - s_sat[s * 3 + 0];
+            double dy = y - s_sat[s * 3 + 1];
+            double dz = z - s_sat[s * 3 + 2];
+            double r = sqrt(dx * dx + dy * dy + dz * dz);
+            double residual = s_pr[s] - (r + cb);
+            if (fabs(residual) <= per_particle_nlos_threshold_m) {
+                kept++;
+            }
+        }
+        int min_kept = (n_sat < 4) ? n_sat : 4;
+        if (kept < min_kept) {
+            use_per_particle_gate = false;
+        }
+    }
 
     for (int s = 0; s < n_sat; s++) {
         double dx = x - s_sat[s * 3 + 0];
@@ -102,6 +121,10 @@ __global__ void pfd_weight_kernel(const double* px, const double* py,
         double r = sqrt(dx * dx + dy * dy + dz * dz);
         double pred_pr = r + cb;
         double residual = s_pr[s] - pred_pr;
+        if (use_per_particle_gate &&
+            fabs(residual) > per_particle_nlos_threshold_m) {
+            continue;
+        }
 
         if (use_student_t) {
             // Student's t: log p = -((nu+1)/2) * log(1 + r^2/(nu*sigma^2))
@@ -125,7 +148,8 @@ __global__ void pfd_weight_dd_pseudorange_kernel(
     const double* dd_data,      // layout: [sat_k: n_dd*3][ref: n_dd*3][dd_pr: n_dd][base_range_k: n_dd][base_range_ref: n_dd][weights: n_dd]
     double* log_weights,
     int N, int n_dd,
-    double sigma_pr) {
+    double sigma_pr,
+    double per_particle_nlos_threshold_m) {
 
     extern __shared__ double s_data[];
     double* s_sat_k = s_data;                   // n_dd * 3
@@ -150,6 +174,31 @@ __global__ void pfd_weight_dd_pseudorange_kernel(
 
     double inv_sigma2 = 1.0 / (sigma_pr * sigma_pr);
     double log_w = 0.0;
+    bool use_per_particle_gate = per_particle_nlos_threshold_m > 0.0;
+    if (use_per_particle_gate) {
+        int kept = 0;
+        for (int d = 0; d < n_dd; d++) {
+            double dx_k = x - s_sat_k[d * 3 + 0];
+            double dy_k = y - s_sat_k[d * 3 + 1];
+            double dz_k = z - s_sat_k[d * 3 + 2];
+            double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+
+            double dx_ref = x - s_ref[d * 3 + 0];
+            double dy_ref = y - s_ref[d * 3 + 1];
+            double dz_ref = z - s_ref[d * 3 + 2];
+            double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+
+            double dd_expected = r_k - r_ref - s_br_k[d] + s_br_ref[d];
+            double residual = s_dd_pr[d] - dd_expected;
+            if (fabs(residual) <= per_particle_nlos_threshold_m) {
+                kept++;
+            }
+        }
+        int min_kept = (n_dd < 3) ? n_dd : 3;
+        if (kept < min_kept) {
+            use_per_particle_gate = false;
+        }
+    }
 
     for (int d = 0; d < n_dd; d++) {
         double dx_k = x - s_sat_k[d * 3 + 0];
@@ -164,6 +213,10 @@ __global__ void pfd_weight_dd_pseudorange_kernel(
 
         double dd_expected = r_k - r_ref - s_br_k[d] + s_br_ref[d];
         double residual = s_dd_pr[d] - dd_expected;
+        if (use_per_particle_gate &&
+            fabs(residual) > per_particle_nlos_threshold_m) {
+            continue;
+        }
         log_w += -0.5 * s_ws[d] * residual * residual * inv_sigma2;
     }
 
@@ -308,7 +361,8 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
     const double* dd_data,      // layout: [sat_k: n_dd*3][ref: n_dd*3][dd_carrier: n_dd][base_range_k: n_dd][base_range_ref: n_dd][weights: n_dd][wavelengths: n_dd]
     double* log_weights,
     int N, int n_dd,
-    double sigma_cycles) {
+    double sigma_cycles,
+    double per_particle_nlos_threshold_cycles) {
 
     // Dynamic shared memory layout:
     // [sat_k_ecef: n_dd*3] [ref_ecef: n_dd*3] [dd_carrier: n_dd]
@@ -337,6 +391,33 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
 
     double inv_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
     double log_w = 0.0;
+    bool use_per_particle_gate = per_particle_nlos_threshold_cycles > 0.0;
+    if (use_per_particle_gate) {
+        int kept = 0;
+        for (int d = 0; d < n_dd; d++) {
+            double dx_k = x - s_sat_k[d * 3 + 0];
+            double dy_k = y - s_sat_k[d * 3 + 1];
+            double dz_k = z - s_sat_k[d * 3 + 2];
+            double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+
+            double dx_ref = x - s_ref[d * 3 + 0];
+            double dy_ref = y - s_ref[d * 3 + 1];
+            double dz_ref = z - s_ref[d * 3 + 2];
+            double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+
+            double inv_wl = 1.0 / s_wl[d];
+            double dd_expected = (r_k - r_ref - s_br_k[d] + s_br_ref[d]) * inv_wl;
+            double dd_residual = s_dd_cp[d] - dd_expected;
+            double afv = dd_residual - rint(dd_residual);
+            if (fabs(afv) <= per_particle_nlos_threshold_cycles) {
+                kept++;
+            }
+        }
+        int min_kept = (n_dd < 3) ? n_dd : 3;
+        if (kept < min_kept) {
+            use_per_particle_gate = false;
+        }
+    }
 
     for (int d = 0; d < n_dd; d++) {
         // Range from particle to satellite k
@@ -360,6 +441,10 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
 
         // AFV: fractional cycle
         double afv = dd_residual - rint(dd_residual);
+        if (use_per_particle_gate &&
+            fabs(afv) > per_particle_nlos_threshold_cycles) {
+            continue;
+        }
 
         log_w += -0.5 * s_ws[d] * (afv * afv) * inv_sigma2;
     }
@@ -865,7 +950,8 @@ void pf_device_predict(PFDeviceState* state,
 void pf_device_weight(PFDeviceState* state,
     const double* sat_ecef, const double* pseudoranges,
     const double* weights_sat,
-    int n_sat, double sigma_pr, double nu) {
+    int n_sat, double sigma_pr, double nu,
+    double per_particle_nlos_threshold_m) {
 
     int N = state->n_particles;
     int grid = state->grid_size;
@@ -914,7 +1000,7 @@ void pf_device_weight(PFDeviceState* state,
         state->d_px, state->d_py, state->d_pz, state->d_pcb,
         state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
         state->d_log_weights,
-        N, n_sat, sigma_pr, nu);
+        N, n_sat, sigma_pr, nu, per_particle_nlos_threshold_m);
     CUDA_CHECK_LAST();
 }
 
@@ -922,7 +1008,8 @@ void pf_device_weight_dd_pseudorange(PFDeviceState* state,
     const double* sat_ecef_k, const double* ref_ecef,
     const double* dd_pseudorange, const double* base_range_k,
     const double* base_range_ref, const double* weights_dd,
-    int n_dd, double sigma_pr) {
+    int n_dd, double sigma_pr,
+    double per_particle_nlos_threshold_m) {
 
     int N = state->n_particles;
     int grid = state->grid_size;
@@ -952,7 +1039,7 @@ void pf_device_weight_dd_pseudorange(PFDeviceState* state,
     pfd_weight_dd_pseudorange_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
         d_dd_data, state->d_log_weights,
-        N, n_dd, sigma_pr);
+        N, n_dd, sigma_pr, per_particle_nlos_threshold_m);
     CUDA_CHECK_LAST();
 
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
@@ -1396,7 +1483,8 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     const double* dd_carrier, const double* base_range_k,
     const double* base_range_ref, const double* weights_dd,
     const double* wavelengths_m,
-    int n_dd, double sigma_cycles) {
+    int n_dd, double sigma_cycles,
+    double per_particle_nlos_threshold_cycles) {
 
     int N = state->n_particles;
     int grid = state->grid_size;
@@ -1435,7 +1523,7 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     pfd_weight_dd_carrier_afv_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
         d_dd_data, state->d_log_weights,
-        N, n_dd, sigma_cycles);
+        N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles);
     CUDA_CHECK_LAST();
 
     // Free device buffer after kernel completes

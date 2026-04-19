@@ -77,7 +77,8 @@ void pf_device_predict(PFDeviceState* state,
 void pf_device_weight(PFDeviceState* state,
     const double* sat_ecef, const double* pseudoranges,
     const double* weights_sat,
-    int n_sat, double sigma_pr, double nu = 0.0);
+    int n_sat, double sigma_pr, double nu = 0.0,
+    double per_particle_nlos_threshold_m = 0.0);
 
 // Weight update using double-differenced pseudorange.
 // Eliminates receiver clock bias; uses satellite differencing geometry.
@@ -91,7 +92,8 @@ void pf_device_weight_dd_pseudorange(PFDeviceState* state,
     const double* sat_ecef_k, const double* ref_ecef,
     const double* dd_pseudorange, const double* base_range_k,
     const double* base_range_ref, const double* weights_dd,
-    int n_dd, double sigma_pr);
+    int n_dd, double sigma_pr,
+    double per_particle_nlos_threshold_m = 0.0);
 
 // Weight update using GMM likelihood (LOS + NLOS mixture components)
 // w_los: weight of LOS component (e.g. 0.7), sigma_pr is sigma_los
@@ -125,7 +127,8 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     const double* dd_carrier, const double* base_range_k,
     const double* base_range_ref, const double* weights_dd,
     const double* wavelengths_m,
-    int n_dd, double sigma_cycles = 0.05);
+    int n_dd, double sigma_cycles = 0.05,
+    double per_particle_nlos_threshold_cycles = 0.0);
 
 // Position-domain update - apply soft constraint from external position estimate
 void pf_device_position_update(PFDeviceState* state,

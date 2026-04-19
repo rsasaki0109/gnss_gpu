@@ -38,7 +38,10 @@ class ParticleFilterDevice:
 
     def __init__(self, n_particles=1_000_000, sigma_pos=1.0, sigma_cb=300.0,
                  sigma_pr=5.0, nu=0.0, resampling="megopolis", ess_threshold=0.5,
-                 seed=42):
+                 seed=42, per_particle_nlos_gate=False,
+                 per_particle_nlos_dd_pr_threshold_m=10.0,
+                 per_particle_nlos_dd_carrier_threshold_cycles=0.5,
+                 per_particle_nlos_undiff_pr_threshold_m=30.0):
         from gnss_gpu._gnss_gpu_pf_device import (
             pf_device_create,
             pf_device_destroy,
@@ -90,11 +93,25 @@ class ParticleFilterDevice:
         self.resampling = resampling
         self.ess_threshold = ess_threshold
         self.seed = seed
+        self.per_particle_nlos_gate = bool(per_particle_nlos_gate)
+        self.per_particle_nlos_dd_pr_threshold_m = float(per_particle_nlos_dd_pr_threshold_m)
+        self.per_particle_nlos_dd_carrier_threshold_cycles = float(
+            per_particle_nlos_dd_carrier_threshold_cycles
+        )
+        self.per_particle_nlos_undiff_pr_threshold_m = float(
+            per_particle_nlos_undiff_pr_threshold_m
+        )
 
         # Allocate GPU memory once
         self._state = self._pf_device_create(n_particles)
         self._initialized = False
         self._step = 0
+
+    def _per_particle_threshold(self, value):
+        if not self.per_particle_nlos_gate:
+            return 0.0
+        value = float(value)
+        return value if np.isfinite(value) and value > 0.0 else 0.0
 
     def __del__(self):
         # GPU resources are freed automatically by the pybind11 unique_ptr
@@ -200,7 +217,8 @@ class ParticleFilterDevice:
         self._pf_device_weight(
             self._state,
             sat.ravel(), pr, weights,
-            n_sat, sp, float(self.nu))
+            n_sat, sp, float(self.nu),
+            self._per_particle_threshold(self.per_particle_nlos_undiff_pr_threshold_m))
 
         if resample:
             _ = self.resample_if_needed()
@@ -282,6 +300,7 @@ class ParticleFilterDevice:
             dd_result.dd_weights,
             dd_result.n_dd,
             float(sigma_pr),
+            self._per_particle_threshold(self.per_particle_nlos_dd_pr_threshold_m),
         )
 
         if resample:
@@ -373,7 +392,8 @@ class ParticleFilterDevice:
             dd_result.dd_weights,
             wavelengths,
             dd_result.n_dd,
-            float(sigma_cycles))
+            float(sigma_cycles),
+            self._per_particle_threshold(self.per_particle_nlos_dd_carrier_threshold_cycles))
 
         if resample:
             _ = self.resample_if_needed()
@@ -771,6 +791,14 @@ class ParticleFilterDevice:
             resampling=self.resampling,
             ess_threshold=self.ess_threshold,
             seed=self.seed + 1,  # different seed for diversity
+            per_particle_nlos_gate=self.per_particle_nlos_gate,
+            per_particle_nlos_dd_pr_threshold_m=self.per_particle_nlos_dd_pr_threshold_m,
+            per_particle_nlos_dd_carrier_threshold_cycles=(
+                self.per_particle_nlos_dd_carrier_threshold_cycles
+            ),
+            per_particle_nlos_undiff_pr_threshold_m=(
+                self.per_particle_nlos_undiff_pr_threshold_m
+            ),
         )
         bwd_pf.initialize(init_pos, clock_bias=init_cb, spread_pos=10.0, spread_cb=100.0)
 

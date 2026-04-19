@@ -619,6 +619,30 @@
 - region-aware WL gate CLI/logic/test は negative result として revert する。
 - codex9 の base `--widelane` hook は D-031 のとおり default-off 実験 surface として残す。
 
+## D-033: Phase 1 per-particle NLOS rejection は preset 昇格しない
+
+状態: 不採用
+
+根拠:
+- [per_particle_nlos_phase1_summary.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/per_particle_nlos_phase1_summary.csv)
+- Odaiba baseline `odaiba_best_accuracy`: `SMTH P50=1.14 m / RMS=4.36 m`
+- default Phase 1 (`undiff PR 30 m`, `DD PR 10 m`, `DD carrier 0.5 cyc`): `SMTH P50=64.07 m / RMS=91.98 m`
+- no-undiff variant (`DD PR 10 m`, `DD carrier 0.5 cyc`): `SMTH P50=6.75 m / RMS=8.92 m`
+- safest DD-carrier-only variant (`DD carrier 0.3 cyc`): `SMTH P50=1.38 m / RMS=4.61 m`
+- Shinjuku DD-carrier-only regression: `SMTH P50=2.35 m / RMS=7.95 m`, below the `<9.5 m` RMS guard but not an Odaiba win
+- `run_pf_smoother_odaiba_reference.sh`: `SMTH RMS=4.11 m`, existing reference guard maintained
+
+理由:
+- Per-particle rejection is not free: particles can explain different satellite subsets, which preserves diversity but also lets wrong modes survive in weak-DD sections.
+- A minimum-inlier fallback is required to avoid reject-all particles, but even with that guard the Odaiba median degrades.
+- DD carrier-only is stable enough as an ablation surface, but it does not beat current best or reach submeter.
+
+決定:
+- `--per-particle-nlos-gate` remains a default-off experimental hook.
+- `odaiba_rbpf_nlos` preset は作らない。
+- `odaiba_best_accuracy` は変更しない。
+- 次に進むなら Phase 2 の per-particle velocity/RBPF 側で mode survival を制約する。
+
 ## 現在の未決定事項
 
 - `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか

@@ -1378,3 +1378,36 @@ Shinjuku / reference validation:
 - dd20 は DD support 条件が強すぎて WL が一度も使われず、実質 baseline に戻るだけだった。
 - Shinjuku は dd17 + ratio7 でも WL used `0/20127` で、regression は出ないが改善もない。
 - `odaiba_widelane_gated` preset への昇格なし。既存 preset は不変。
+
+### Phase 1 per-particle NLOS rejection negative
+
+CT-RBPF-FGO north star の Phase 1 として、device PF の SPP pseudorange、
+DD pseudorange、DD carrier AFV kernel に per-particle residual rejection を追加した。
+全観測 reject 粒子が無罰になる collapse を避けるため、kernel 内で最低 inlier 数
+(`SPP >= 4 sats`, `DD >= 3 pairs`) を満たす particle だけ per-particle reject を使い、
+満たさない particle は従来 likelihood にフォールバックする。
+
+結果ファイル:
+- [per_particle_nlos_phase1_summary.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/per_particle_nlos_phase1_summary.csv)
+
+Full Odaiba (`odaiba_best_accuracy`, 200K):
+
+| config | undiff PR gate | DD PR gate | DD carrier gate | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| baseline | off | off | off | 1.26 m | 5.68 m | **1.14 m** | 4.36 m | current best |
+| default Phase 1 | 30 m | 10 m | 0.5 cyc | 63.87 m | 91.85 m | 64.07 m | 91.98 m | negative |
+| no undiff PR gate | off | 10 m | 0.5 cyc | 6.11 m | 9.92 m | 6.75 m | 8.92 m | negative |
+| DD carrier only | off | off | 0.3 cyc | 1.41 m | 5.20 m | 1.38 m | 4.61 m | negative |
+
+Validation:
+
+| run | config | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---|---:|---:|---:|---:|---|
+| `run_pf_smoother_odaiba_reference.sh` | unchanged reference | 1.63 m | 5.50 m | 1.34 m | 4.11 m | guard pass (`<=5.10 m`) |
+| Shinjuku | DD carrier only 0.3 cyc | 2.51 m | 7.89 m | 2.35 m | 7.95 m | regression pass (`<9.5 m`) |
+
+所見:
+- default Phase 1 は、各 particle が観測 subset を自由に選びすぎて weak-DD 区間で誤った mode を保持し、full Odaiba で大きく悪化した。
+- undiff PR gate を切っても DD PR per-particle gate が median を大きく悪化させた。
+- 最も安全な DD carrier-only でも `SMTH P50=1.38 m` で current best `1.14 m` を超えず、submeter には届かなかった。
+- `odaiba_rbpf_nlos` preset への昇格なし。`odaiba_best_accuracy` は不変。
