@@ -1389,6 +1389,7 @@ DD pseudorange、DD carrier AFV kernel に per-particle residual rejection を�
 
 結果ファイル:
 - [per_particle_nlos_phase1_summary.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/per_particle_nlos_phase1_summary.csv)
+- [per_particle_nlos_phase1_sweep.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/per_particle_nlos_phase1_sweep.csv)
 
 Full Odaiba (`odaiba_best_accuracy`, 200K):
 
@@ -1398,6 +1399,10 @@ Full Odaiba (`odaiba_best_accuracy`, 200K):
 | default Phase 1 | 30 m | 10 m | 0.5 cyc | 63.87 m | 91.85 m | 64.07 m | 91.98 m | negative |
 | no undiff PR gate | off | 10 m | 0.5 cyc | 6.11 m | 9.92 m | 6.75 m | 8.92 m | negative |
 | DD carrier only | off | off | 0.3 cyc | 1.41 m | 5.20 m | 1.38 m | 4.61 m | negative |
+
+指定 sweep (`undiff PR gate=30 m`, `DD PR gate in {5,10,15,20} m`,
+`DD carrier gate in {0.3,0.5,0.7} cycles`) は全候補 negative。best は
+`DD PR=5 m / DD carrier=0.3 cycles` の `SMTH P50=59.62 m / RMS=63.12 m`。
 
 Validation:
 

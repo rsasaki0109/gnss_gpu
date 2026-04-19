@@ -625,8 +625,10 @@
 
 根拠:
 - [per_particle_nlos_phase1_summary.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/per_particle_nlos_phase1_summary.csv)
+- [per_particle_nlos_phase1_sweep.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/per_particle_nlos_phase1_sweep.csv)
 - Odaiba baseline `odaiba_best_accuracy`: `SMTH P50=1.14 m / RMS=4.36 m`
 - default Phase 1 (`undiff PR 30 m`, `DD PR 10 m`, `DD carrier 0.5 cyc`): `SMTH P50=64.07 m / RMS=91.98 m`
+- specified all-gate sweep (`DD PR in {5,10,15,20} m`, `DD carrier in {0.3,0.5,0.7} cycles`): best `SMTH P50=59.62 m / RMS=63.12 m`
 - no-undiff variant (`DD PR 10 m`, `DD carrier 0.5 cyc`): `SMTH P50=6.75 m / RMS=8.92 m`
 - safest DD-carrier-only variant (`DD carrier 0.3 cyc`): `SMTH P50=1.38 m / RMS=4.61 m`
 - Shinjuku DD-carrier-only regression: `SMTH P50=2.35 m / RMS=7.95 m`, below the `<9.5 m` RMS guard but not an Odaiba win
