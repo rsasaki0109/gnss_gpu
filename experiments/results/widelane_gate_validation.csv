@@ -1,0 +1,4 @@
+phase,label,run,dd_min,ratio_min,n_wl_used,n_wl_skip,n_wl_candidate_pairs,n_wl_fixed_pairs,n_wl_gate_skip,n_wl_gate_low_dd_pairs,n_wl_gate_missing_dd_pairs,forward_p50,forward_rms_2d,smoothed_p50,smoothed_rms_2d,n_epochs,ms_per_epoch
+phase4,shinjuku_baseline,Shinjuku,,,0,0,0,0,0,0,0,2.4896382307657956,7.05728952067469,2.286334504703438,7.548082275561525,20097,4.005874348317307
+phase4,shinjuku_dd17_ratio7,Shinjuku,17,7.0,0,20127,32,0,20123,19657,466,2.4896382307657956,7.05728952067469,2.286334504703438,7.548082275561525,20097,4.265251060355163
+validation,odaiba_reference,Odaiba,,,0,0,0,0,0,0,0,1.625177034101543,5.502186009997117,1.3396202755760296,4.111644939439184,12228,3.5862922836206295
