@@ -1,0 +1,6 @@
+run,config,dd_pr_k,dd_carrier_k,undiff_pr_k,forward_p50_m,forward_rms_2d_m,smoothed_p50_m,smoothed_rms_2d_m,n_epochs,n_tail_guard_applied,judgement,note
+Odaiba,baseline_odaiba_best_accuracy,off,off,off,1.256407230666574,5.683384999837067,1.14350637571882,4.362732151917381,12228,686,current_best,Gaussian baseline remains the Odaiba P50 reference.
+Odaiba,best_huber_p50_k1p5,1.5,1.5,1.5,1.2038759411139628,7.650836470046016,1.210824925402362,6.028417641960156,12228,794,negative,Best Huber P50 did not beat 1.14350637571882m and did not reach submeter.
+Odaiba,best_huber_rms_k2p5,2.5,2.5,2.5,1.2483759078525103,5.0114668709264025,1.3470394016764389,4.34520912774293,12228,626,negative_rms_only,RMS slightly improved but median accuracy regressed, so this is not a preset candidate.
+Odaiba,odaiba_reference_guard,off,off,off,1.625177034101543,5.502186009997117,1.3396202755760296,4.111644939439184,12228,0,verification_pass,run_pf_smoother_odaiba_reference.sh maintained SMTH RMS <= 5.10m.
+Shinjuku,no_adoption_candidate,,,,,,,,,,not_applicable,No Huber sweep row met the Odaiba adoption threshold SMTH P50 < 1.14m, so no Shinjuku candidate regression was promoted.
