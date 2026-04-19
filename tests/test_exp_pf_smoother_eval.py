@@ -663,6 +663,28 @@ def test_parser_maps_per_particle_nlos_gate_flags():
     assert run_kwargs["per_particle_nlos_undiff_pr_threshold_m"] == 25.0
 
 
+def test_parser_maps_per_particle_huber_flags():
+    parser = build_arg_parser()
+    args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_best_accuracy",
+        "--per-particle-huber",
+        "--per-particle-huber-dd-pr-k", "1.0",
+        "--per-particle-huber-dd-carrier-k", "2.0",
+        "--per-particle-huber-undiff-pr-k", "3.0",
+    ]))
+
+    run_kwargs = _namespace_to_run_kwargs(
+        args,
+        position_update_sigma=args.position_update_sigma,
+        use_smoother=args.smoother,
+    )
+    assert run_kwargs["per_particle_huber"] is True
+    assert run_kwargs["per_particle_huber_dd_pr_k"] == 1.0
+    assert run_kwargs["per_particle_huber_dd_carrier_k"] == 2.0
+    assert run_kwargs["per_particle_huber_undiff_pr_k"] == 3.0
+
+
 def test_parser_maps_low_ess_dd_gate_flags():
     parser = build_arg_parser()
     args = parser.parse_args(_expand_cli_preset_argv([

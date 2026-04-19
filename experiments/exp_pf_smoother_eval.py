@@ -1765,6 +1765,10 @@ def run_pf_with_optional_smoother(
     per_particle_nlos_dd_pr_threshold_m: float = 10.0,
     per_particle_nlos_dd_carrier_threshold_cycles: float = 0.5,
     per_particle_nlos_undiff_pr_threshold_m: float = 30.0,
+    per_particle_huber: bool = False,
+    per_particle_huber_dd_pr_k: float = 1.5,
+    per_particle_huber_dd_carrier_k: float = 1.5,
+    per_particle_huber_undiff_pr_k: float = 1.5,
     widelane: bool = False,
     widelane_min_fix_rate: float = 0.3,
     widelane_ratio_threshold: float = 3.0,
@@ -1979,6 +1983,10 @@ def run_pf_with_optional_smoother(
             per_particle_nlos_dd_carrier_threshold_cycles
         ),
         per_particle_nlos_undiff_pr_threshold_m=per_particle_nlos_undiff_pr_threshold_m,
+        per_particle_huber=per_particle_huber,
+        per_particle_huber_dd_pr_k=per_particle_huber_dd_pr_k,
+        per_particle_huber_dd_carrier_k=per_particle_huber_dd_carrier_k,
+        per_particle_huber_undiff_pr_k=per_particle_huber_undiff_pr_k,
     )
     pf.initialize(first_pos, clock_bias=init_cb, spread_pos=10.0, spread_cb=100.0)
 
@@ -3014,6 +3022,10 @@ def run_pf_with_optional_smoother(
             per_particle_nlos_dd_carrier_threshold_cycles
         ),
         "per_particle_nlos_undiff_pr_threshold_m": per_particle_nlos_undiff_pr_threshold_m,
+        "per_particle_huber": per_particle_huber,
+        "per_particle_huber_dd_pr_k": per_particle_huber_dd_pr_k,
+        "per_particle_huber_dd_carrier_k": per_particle_huber_dd_carrier_k,
+        "per_particle_huber_undiff_pr_k": per_particle_huber_undiff_pr_k,
         "widelane": widelane,
         "widelane_min_fix_rate": widelane_min_fix_rate,
         "widelane_ratio_threshold": widelane_ratio_threshold,
@@ -3345,6 +3357,10 @@ def _namespace_to_run_kwargs(
             args.per_particle_nlos_dd_carrier_threshold_cycles
         ),
         "per_particle_nlos_undiff_pr_threshold_m": args.per_particle_nlos_undiff_pr_threshold_m,
+        "per_particle_huber": args.per_particle_huber,
+        "per_particle_huber_dd_pr_k": args.per_particle_huber_dd_pr_k,
+        "per_particle_huber_dd_carrier_k": args.per_particle_huber_dd_carrier_k,
+        "per_particle_huber_undiff_pr_k": args.per_particle_huber_undiff_pr_k,
         "widelane": args.widelane,
         "widelane_min_fix_rate": args.widelane_min_fix_rate,
         "widelane_ratio_threshold": args.widelane_ratio_threshold,
@@ -3604,6 +3620,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Per-particle DD carrier AFV abs residual threshold in cycles")
     parser.add_argument("--per-particle-nlos-undiff-pr-threshold-m", type=float, default=30.0,
                         help="Per-particle undifferenced pseudorange abs residual threshold in meters")
+    parser.add_argument("--per-particle-huber", action="store_true",
+                        help="Use per-particle Huber soft cost in SPP PR, DD PR, and DD carrier AFV kernels")
+    parser.add_argument("--per-particle-huber-dd-pr-k", type=float, default=1.5,
+                        help="Huber k for per-particle DD pseudorange residuals")
+    parser.add_argument("--per-particle-huber-dd-carrier-k", type=float, default=1.5,
+                        help="Huber k for per-particle DD carrier AFV residuals")
+    parser.add_argument("--per-particle-huber-undiff-pr-k", type=float, default=1.5,
+                        help="Huber k for per-particle undifferenced pseudorange residuals")
     parser.add_argument("--widelane", action="store_true",
                         help="Replace DD pseudorange with ratio-tested L1-L2 wide-lane fixed DD pseudorange when available")
     parser.add_argument("--widelane-min-fix-rate", type=float, default=0.3,
@@ -3969,6 +3993,10 @@ def main(argv: list[str] | None = None) -> int:
                     args.per_particle_nlos_dd_carrier_threshold_cycles
                 ),
                 "per_particle_nlos_undiff_pr_threshold_m": args.per_particle_nlos_undiff_pr_threshold_m,
+                "per_particle_huber": args.per_particle_huber,
+                "per_particle_huber_dd_pr_k": args.per_particle_huber_dd_pr_k,
+                "per_particle_huber_dd_carrier_k": args.per_particle_huber_dd_carrier_k,
+                "per_particle_huber_undiff_pr_k": args.per_particle_huber_undiff_pr_k,
                 "widelane": args.widelane,
                 "widelane_min_fix_rate": args.widelane_min_fix_rate,
                 "widelane_ratio_threshold": args.widelane_ratio_threshold,
