@@ -1,7 +1,7 @@
 # gnss_gpu Performance Benchmark Results
 
 **Date**: 2026-04-01
-**GPU**: NVIDIA Ada Lovelace consumer GPU 
+**GPU**: NVIDIA Ada Lovelace consumer GPU
 **CUDA**: 12.0
 
 ## Summary
