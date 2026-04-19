@@ -41,7 +41,11 @@ class ParticleFilterDevice:
                  seed=42, per_particle_nlos_gate=False,
                  per_particle_nlos_dd_pr_threshold_m=10.0,
                  per_particle_nlos_dd_carrier_threshold_cycles=0.5,
-                 per_particle_nlos_undiff_pr_threshold_m=30.0):
+                 per_particle_nlos_undiff_pr_threshold_m=30.0,
+                 per_particle_huber=False,
+                 per_particle_huber_dd_pr_k=1.5,
+                 per_particle_huber_dd_carrier_k=1.5,
+                 per_particle_huber_undiff_pr_k=1.5):
         from gnss_gpu._gnss_gpu_pf_device import (
             pf_device_create,
             pf_device_destroy,
@@ -101,6 +105,10 @@ class ParticleFilterDevice:
         self.per_particle_nlos_undiff_pr_threshold_m = float(
             per_particle_nlos_undiff_pr_threshold_m
         )
+        self.per_particle_huber = bool(per_particle_huber)
+        self.per_particle_huber_dd_pr_k = float(per_particle_huber_dd_pr_k)
+        self.per_particle_huber_dd_carrier_k = float(per_particle_huber_dd_carrier_k)
+        self.per_particle_huber_undiff_pr_k = float(per_particle_huber_undiff_pr_k)
 
         # Allocate GPU memory once
         self._state = self._pf_device_create(n_particles)
@@ -112,6 +120,10 @@ class ParticleFilterDevice:
             return 0.0
         value = float(value)
         return value if np.isfinite(value) and value > 0.0 else 0.0
+
+    def _per_particle_huber_k(self, value):
+        value = float(value)
+        return value if np.isfinite(value) and value > 0.0 else 1.5
 
     def __del__(self):
         # GPU resources are freed automatically by the pybind11 unique_ptr
@@ -218,7 +230,9 @@ class ParticleFilterDevice:
             self._state,
             sat.ravel(), pr, weights,
             n_sat, sp, float(self.nu),
-            self._per_particle_threshold(self.per_particle_nlos_undiff_pr_threshold_m))
+            self._per_particle_threshold(self.per_particle_nlos_undiff_pr_threshold_m),
+            self.per_particle_huber,
+            self._per_particle_huber_k(self.per_particle_huber_undiff_pr_k))
 
         if resample:
             _ = self.resample_if_needed()
@@ -301,6 +315,8 @@ class ParticleFilterDevice:
             dd_result.n_dd,
             float(sigma_pr),
             self._per_particle_threshold(self.per_particle_nlos_dd_pr_threshold_m),
+            self.per_particle_huber,
+            self._per_particle_huber_k(self.per_particle_huber_dd_pr_k),
         )
 
         if resample:
@@ -393,7 +409,9 @@ class ParticleFilterDevice:
             wavelengths,
             dd_result.n_dd,
             float(sigma_cycles),
-            self._per_particle_threshold(self.per_particle_nlos_dd_carrier_threshold_cycles))
+            self._per_particle_threshold(self.per_particle_nlos_dd_carrier_threshold_cycles),
+            self.per_particle_huber,
+            self._per_particle_huber_k(self.per_particle_huber_dd_carrier_k))
 
         if resample:
             _ = self.resample_if_needed()
@@ -799,6 +817,10 @@ class ParticleFilterDevice:
             per_particle_nlos_undiff_pr_threshold_m=(
                 self.per_particle_nlos_undiff_pr_threshold_m
             ),
+            per_particle_huber=self.per_particle_huber,
+            per_particle_huber_dd_pr_k=self.per_particle_huber_dd_pr_k,
+            per_particle_huber_dd_carrier_k=self.per_particle_huber_dd_carrier_k,
+            per_particle_huber_undiff_pr_k=self.per_particle_huber_undiff_pr_k,
         )
         bwd_pf.initialize(init_pos, clock_bias=init_cb, spread_pos=10.0, spread_cb=100.0)
 
