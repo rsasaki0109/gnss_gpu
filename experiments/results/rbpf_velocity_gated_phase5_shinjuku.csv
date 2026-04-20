@@ -1,0 +1,2 @@
+phase,run,min_dd_pairs,min_ess_ratio,max_doppler_residual,forward_p50,forward_rms_2d,smoothed_p50,smoothed_rms_2d,n_epochs,n_doppler_kf_used,n_doppler_kf_skip,n_doppler_kf_gate_skip,elapsed_s
+phase5_shinjuku,Shinjuku,0,0.0,inf,2.2652642523613107,7.540452791568775,2.2697151958958153,7.738373236364849,20097,20127,0,0,300.286261345027

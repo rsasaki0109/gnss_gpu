@@ -1,0 +1,2 @@
+phase,run,max_epochs,skip_valid_epochs,min_dd_pairs,min_ess_ratio,max_doppler_residual,forward_p50,forward_rms_2d,smoothed_p50,smoothed_rms_2d,n_epochs,n_doppler_kf_used,n_doppler_kf_skip,n_doppler_kf_gate_skip,elapsed_s
+phase4_subset,Odaiba,3000,0,0,0.0,inf,0.87777889914661,1.967817731022357,0.8901532225748455,2.098117689367555,2998,3000,0,0,56.23438830510713

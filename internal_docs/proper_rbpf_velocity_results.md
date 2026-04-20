@@ -61,7 +61,8 @@ promoted preset.
 
 ## Next
 
-- Add Doppler residual gating against IMU/TDCP before the per-particle KF update.
+- Region-aware DD/ESS/Doppler residual gating was tried on 2026-04-21 and was
+  negative; see `internal_docs/rbpf_velocity_gated_results.md`.
 - Try TDCP-derived velocity rows for the KF update; raw Doppler appears helpful
   only in easier route segments.
 - Keep naive sampled velocity default off.
