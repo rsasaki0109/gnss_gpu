@@ -14,8 +14,6 @@ from experiments.exp_pf_smoother_eval import (
     CarrierBiasState,
     _apply_dd_carrier_undiff_fallback,
     _apply_local_fgo_postprocess,
-    _centered_doppler_residual_median_mps,
-    _decide_rbpf_velocity_kf_gate,
     _expand_cli_preset_argv,
     _namespace_to_run_kwargs,
     _attempt_carrier_anchor_pseudorange_update,
@@ -727,10 +725,6 @@ def test_parser_maps_rbpf_velocity_kf_flags():
         "--rbpf-velocity-init-sigma", "3.0",
         "--rbpf-velocity-process-noise", "0.25",
         "--rbpf-doppler-sigma", "0.8",
-        "--rbpf-velocity-kf-gate",
-        "--rbpf-velocity-kf-gate-min-dd-pairs", "17",
-        "--rbpf-velocity-kf-gate-min-ess-ratio", "0.015",
-        "--rbpf-velocity-kf-gate-max-doppler-residual", "2.5",
         "--doppler-min-sats", "6",
     ]))
 
@@ -743,81 +737,8 @@ def test_parser_maps_rbpf_velocity_kf_flags():
     assert run_kwargs["rbpf_velocity_init_sigma"] == 3.0
     assert run_kwargs["rbpf_velocity_process_noise"] == 0.25
     assert run_kwargs["rbpf_doppler_sigma"] == 0.8
-    assert run_kwargs["rbpf_velocity_kf_gate"] is True
-    assert run_kwargs["rbpf_velocity_kf_gate_min_dd_pairs"] == 17
-    assert run_kwargs["rbpf_velocity_kf_gate_min_ess_ratio"] == 0.015
-    assert run_kwargs["rbpf_velocity_kf_gate_max_doppler_residual"] == 2.5
     assert run_kwargs["doppler_per_particle"] is False
     assert run_kwargs["doppler_min_sats"] == 6
-
-
-def test_rbpf_velocity_kf_gate_decision_preserves_disabled_path():
-    decision = _decide_rbpf_velocity_kf_gate(
-        gate_enabled=False,
-        dd_pairs=0,
-        ess_ratio=None,
-        doppler_residual_median_mps=None,
-        min_dd_pairs=17,
-        min_ess_ratio=0.05,
-        max_doppler_residual_mps=1.0,
-    )
-
-    assert decision.apply_update is True
-    assert decision.reason == "disabled"
-
-
-def test_rbpf_velocity_kf_gate_decision_requires_all_enabled_conditions():
-    weak = _decide_rbpf_velocity_kf_gate(
-        gate_enabled=True,
-        dd_pairs=9,
-        ess_ratio=0.01,
-        doppler_residual_median_mps=4.0,
-        min_dd_pairs=10,
-        min_ess_ratio=0.02,
-        max_doppler_residual_mps=3.0,
-    )
-    strong = _decide_rbpf_velocity_kf_gate(
-        gate_enabled=True,
-        dd_pairs=17,
-        ess_ratio=0.04,
-        doppler_residual_median_mps=1.5,
-        min_dd_pairs=10,
-        min_ess_ratio=0.02,
-        max_doppler_residual_mps=3.0,
-    )
-
-    assert weak.apply_update is False
-    assert weak.reason == "dd_pairs,ess,doppler_residual"
-    assert strong.apply_update is True
-    assert strong.reason == "ok"
-
-
-def test_centered_doppler_residual_median_matches_kernel_clock_drift_centering():
-    sat = np.array([
-        [20_000_000.0, 0.0, 0.0],
-        [0.0, 20_000_000.0, 0.0],
-        [0.0, 0.0, 20_000_000.0],
-        [-20_000_000.0, 0.0, 0.0],
-    ])
-    sat_vel = np.zeros_like(sat)
-    rx = np.zeros(3, dtype=np.float64)
-    rx_vel = np.array([1.0, 2.0, 3.0], dtype=np.float64)
-    los = sat / np.linalg.norm(sat, axis=1).reshape(-1, 1)
-    clock_drift = 4.0
-    range_rate = -np.einsum("ij,j->i", los, rx_vel) + clock_drift
-    doppler_hz = -range_rate / WAVELENGTH_M
-
-    residual = _centered_doppler_residual_median_mps(
-        sat,
-        sat_vel,
-        doppler_hz,
-        np.ones(4, dtype=np.float64),
-        rx,
-        rx_vel,
-        wavelength_m=WAVELENGTH_M,
-    )
-
-    assert residual == pytest.approx(0.0, abs=1e-9)
 
 
 def test_parser_maps_low_ess_dd_gate_flags():

@@ -315,123 +315,6 @@ def _finite_float(value: object) -> float | None:
     return out
 
 
-@dataclass(frozen=True)
-class RbpfVelocityKfGateDecision:
-    apply_update: bool
-    reason: str
-    dd_pairs: int
-    ess_ratio: float | None
-    doppler_residual_median_mps: float | None
-
-
-def _centered_doppler_residual_median_mps(
-    sat_ecef: np.ndarray,
-    sat_vel: np.ndarray,
-    doppler_hz: np.ndarray,
-    weights: np.ndarray,
-    receiver_ecef: np.ndarray,
-    receiver_velocity_ecef: np.ndarray | None,
-    *,
-    wavelength_m: float,
-) -> float | None:
-    sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
-    sv = np.asarray(sat_vel, dtype=np.float64).reshape(-1, 3)
-    dop = np.asarray(doppler_hz, dtype=np.float64).ravel()
-    w = np.asarray(weights, dtype=np.float64).ravel()
-    rx = np.asarray(receiver_ecef, dtype=np.float64).ravel()[:3]
-    if receiver_velocity_ecef is None:
-        rv = np.zeros(3, dtype=np.float64)
-    else:
-        rv = np.asarray(receiver_velocity_ecef, dtype=np.float64).ravel()[:3]
-
-    if sat.shape != sv.shape or sat.shape[0] != dop.size or w.size != dop.size:
-        return None
-    if rx.size != 3 or rv.size != 3 or not np.isfinite(rx).all() or not np.isfinite(rv).all():
-        return None
-
-    los = sat - rx.reshape(1, 3)
-    ranges = np.linalg.norm(los, axis=1)
-    valid = (
-        np.isfinite(ranges)
-        & (ranges > 1.0)
-        & np.isfinite(dop)
-        & np.isfinite(w)
-        & (w > 0.0)
-        & np.isfinite(sat).all(axis=1)
-        & np.isfinite(sv).all(axis=1)
-    )
-    if not np.any(valid):
-        return None
-
-    los_unit = los[valid] / ranges[valid].reshape(-1, 1)
-    weights_valid = np.maximum(w[valid], 0.0)
-    weight_sum = float(np.sum(weights_valid))
-    if weight_sum <= 0.0:
-        return None
-
-    obs = -dop[valid] * float(wavelength_m)
-    sv_radial = np.einsum("ij,ij->i", sv[valid], los_unit)
-    y_obs = obs - sv_radial
-    h = -los_unit
-
-    y_mean = float(np.sum(weights_valid * y_obs) / weight_sum)
-    h_mean = np.sum(weights_valid.reshape(-1, 1) * h, axis=0) / weight_sum
-    residual = (y_obs - y_mean) - np.einsum("ij,j->i", h - h_mean.reshape(1, 3), rv)
-    residual = residual[np.isfinite(residual)]
-    if residual.size == 0:
-        return None
-    return float(np.median(np.abs(residual)))
-
-
-def _decide_rbpf_velocity_kf_gate(
-    *,
-    gate_enabled: bool,
-    dd_pairs: int,
-    ess_ratio: float | None,
-    doppler_residual_median_mps: float | None,
-    min_dd_pairs: int,
-    min_ess_ratio: float,
-    max_doppler_residual_mps: float | None,
-) -> RbpfVelocityKfGateDecision:
-    if not gate_enabled:
-        return RbpfVelocityKfGateDecision(
-            apply_update=True,
-            reason="disabled",
-            dd_pairs=int(dd_pairs),
-            ess_ratio=_finite_float(ess_ratio),
-            doppler_residual_median_mps=_finite_float(doppler_residual_median_mps),
-        )
-
-    failed: list[str] = []
-    min_pairs = max(0, int(min_dd_pairs))
-    if min_pairs > 0 and int(dd_pairs) < min_pairs:
-        failed.append("dd_pairs")
-
-    ess_min = float(min_ess_ratio)
-    ess_value = _finite_float(ess_ratio)
-    if np.isfinite(ess_min) and ess_min > 0.0:
-        if ess_value is None:
-            failed.append("ess_missing")
-        elif ess_value < ess_min:
-            failed.append("ess")
-
-    residual_limit = _finite_float(max_doppler_residual_mps)
-    residual_value = _finite_float(doppler_residual_median_mps)
-    if residual_limit is not None and residual_limit > 0.0:
-        if residual_value is None:
-            failed.append("doppler_residual_missing")
-        elif residual_value > residual_limit:
-            failed.append("doppler_residual")
-
-    return RbpfVelocityKfGateDecision(
-        apply_update=(len(failed) == 0),
-        reason=("ok" if not failed else ",".join(failed)),
-        dd_pairs=int(dd_pairs),
-        ess_ratio=ess_value,
-        doppler_residual_median_mps=residual_value,
-    )
-
-
 def _collect_undiff_carrier_afv_inputs(
     measurements,
     sat_ecef: np.ndarray,
@@ -1888,10 +1771,6 @@ def run_pf_with_optional_smoother(
     rbpf_velocity_init_sigma: float = 2.0,
     rbpf_velocity_process_noise: float = 1.0,
     rbpf_doppler_sigma: float | None = None,
-    rbpf_velocity_kf_gate: bool = False,
-    rbpf_velocity_kf_gate_min_dd_pairs: int = 10,
-    rbpf_velocity_kf_gate_min_ess_ratio: float = 0.02,
-    rbpf_velocity_kf_gate_max_doppler_residual: float | None = 3.0,
     pf_sigma_vel: float = 0.0,
     pf_velocity_guide_alpha: float = 1.0,
     pf_init_spread_vel: float = 0.0,
@@ -2177,7 +2056,6 @@ def run_pf_with_optional_smoother(
     n_doppler_pp_skip = 0
     n_doppler_kf_used = 0
     n_doppler_kf_skip = 0
-    n_doppler_kf_gate_skip = 0
     n_imu_tight_used = 0
     n_imu_tight_skip = 0
     # PR acceleration weighting: need per-satellite PR history
@@ -2233,9 +2111,6 @@ def run_pf_with_optional_smoother(
         carrier_anchor_rows = {}
         doppler_update_epoch = None
         doppler_sigma_epoch = None
-        rbpf_velocity_kf_applied = False
-        rbpf_velocity_kf_gate_decision = None
-        rbpf_velocity_kf_doppler_sats = 0
         anchor_attempt = CarrierAnchorAttempt()
         fallback_attempt = CarrierFallbackAttempt()
 
@@ -2818,14 +2693,13 @@ def run_pf_with_optional_smoother(
                 dop_obs.append(dop)
                 dop_weights.append(float(w[i_m]) if i_m < len(w) else 1.0)
 
-            rbpf_velocity_kf_doppler_sats = int(len(dop_obs))
             if len(dop_obs) >= int(doppler_min_sats):
                 doppler_sigma_epoch = (
                     float(rbpf_doppler_sigma)
                     if rbpf_velocity_kf and rbpf_doppler_sigma is not None
                     else float(doppler_sigma_mps)
                 )
-                doppler_candidate_epoch = {
+                doppler_update_epoch = {
                     "sat_ecef": np.asarray(dop_sat, dtype=np.float64),
                     "sat_vel": np.asarray(dop_sat_vel, dtype=np.float64),
                     "doppler_hz": np.asarray(dop_obs, dtype=np.float64),
@@ -2833,65 +2707,16 @@ def run_pf_with_optional_smoother(
                     "wavelength_m": _MUPF_L1_WAVELENGTH_M,
                 }
                 if rbpf_velocity_kf:
-                    rbpf_gate_dd_pairs = (
-                        int(dd_carrier_result.n_dd)
-                        if dd_carrier_result is not None and dd_carrier_result.n_dd >= 3
-                        else 0
+                    pf.update_doppler_kf(
+                        doppler_update_epoch["sat_ecef"],
+                        doppler_update_epoch["sat_vel"],
+                        doppler_update_epoch["doppler_hz"],
+                        weights=doppler_update_epoch["weights"],
+                        wavelength=_MUPF_L1_WAVELENGTH_M,
+                        sigma_mps=doppler_sigma_epoch,
                     )
-                    rbpf_gate_ess_ratio = (
-                        pf.get_ess() / float(pf.n_particles)
-                        if rbpf_velocity_kf_gate
-                        else None
-                    )
-                    rbpf_gate_residual_median = None
-                    residual_gate_limit = _finite_float(
-                        rbpf_velocity_kf_gate_max_doppler_residual
-                    )
-                    if (
-                        rbpf_velocity_kf_gate
-                        and residual_gate_limit is not None
-                        and residual_gate_limit > 0.0
-                    ):
-                        rbpf_gate_est = (
-                            gate_pf_est
-                            if gate_pf_est is not None
-                            else np.asarray(pf.estimate()[:3], dtype=np.float64)
-                        )
-                        rbpf_gate_residual_median = _centered_doppler_residual_median_mps(
-                            doppler_candidate_epoch["sat_ecef"],
-                            doppler_candidate_epoch["sat_vel"],
-                            doppler_candidate_epoch["doppler_hz"],
-                            doppler_candidate_epoch["weights"],
-                            rbpf_gate_est,
-                            velocity,
-                            wavelength_m=_MUPF_L1_WAVELENGTH_M,
-                        )
-                    rbpf_velocity_kf_gate_decision = _decide_rbpf_velocity_kf_gate(
-                        gate_enabled=rbpf_velocity_kf_gate,
-                        dd_pairs=rbpf_gate_dd_pairs,
-                        ess_ratio=rbpf_gate_ess_ratio,
-                        doppler_residual_median_mps=rbpf_gate_residual_median,
-                        min_dd_pairs=rbpf_velocity_kf_gate_min_dd_pairs,
-                        min_ess_ratio=rbpf_velocity_kf_gate_min_ess_ratio,
-                        max_doppler_residual_mps=rbpf_velocity_kf_gate_max_doppler_residual,
-                    )
-                    if rbpf_velocity_kf_gate_decision.apply_update:
-                        doppler_update_epoch = doppler_candidate_epoch
-                        pf.update_doppler_kf(
-                            doppler_update_epoch["sat_ecef"],
-                            doppler_update_epoch["sat_vel"],
-                            doppler_update_epoch["doppler_hz"],
-                            weights=doppler_update_epoch["weights"],
-                            wavelength=_MUPF_L1_WAVELENGTH_M,
-                            sigma_mps=doppler_sigma_epoch,
-                        )
-                        rbpf_velocity_kf_applied = True
-                        n_doppler_kf_used += 1
-                    else:
-                        n_doppler_kf_skip += 1
-                        n_doppler_kf_gate_skip += 1
+                    n_doppler_kf_used += 1
                 else:
-                    doppler_update_epoch = doppler_candidate_epoch
                     pf.update_doppler(
                         doppler_update_epoch["sat_ecef"],
                         doppler_update_epoch["sat_vel"],
@@ -3183,29 +3008,6 @@ def run_pf_with_optional_smoother(
                         ),
                         "dd_carrier_fallback_sigma_scale": _finite_float(fallback_attempt.sigma_scale),
                         "dd_carrier_fallback_sigma_cycles": _finite_float(fallback_attempt.sigma_cycles),
-                        "rbpf_velocity_kf_applied": bool(rbpf_velocity_kf_applied),
-                        "rbpf_velocity_kf_doppler_sats": int(rbpf_velocity_kf_doppler_sats),
-                        "rbpf_velocity_kf_gate_enabled": bool(rbpf_velocity_kf_gate),
-                        "rbpf_velocity_kf_gate_reason": (
-                            rbpf_velocity_kf_gate_decision.reason
-                            if rbpf_velocity_kf_gate_decision is not None
-                            else None
-                        ),
-                        "rbpf_velocity_kf_gate_dd_pairs": (
-                            int(rbpf_velocity_kf_gate_decision.dd_pairs)
-                            if rbpf_velocity_kf_gate_decision is not None
-                            else 0
-                        ),
-                        "rbpf_velocity_kf_gate_ess_ratio": (
-                            _finite_float(rbpf_velocity_kf_gate_decision.ess_ratio)
-                            if rbpf_velocity_kf_gate_decision is not None
-                            else None
-                        ),
-                        "rbpf_velocity_kf_doppler_residual_median_mps": (
-                            _finite_float(rbpf_velocity_kf_gate_decision.doppler_residual_median_mps)
-                            if rbpf_velocity_kf_gate_decision is not None
-                            else None
-                        ),
                         "forward_error_2d": None,
                         "forward_error_3d": None,
                         "smoothed_error_2d": None,
@@ -3246,13 +3048,6 @@ def run_pf_with_optional_smoother(
             f"  [rbpf_velocity_kf] Doppler KF used {n_doppler_kf_used}/{total_doppler_kf} epochs, "
             f"skip {n_doppler_kf_skip}/{total_doppler_kf}"
         )
-        if rbpf_velocity_kf_gate:
-            print(
-                f"  [rbpf_velocity_kf_gate] gate skip {n_doppler_kf_gate_skip}/{total_doppler_kf} epochs "
-                f"(min_dd_pairs={int(rbpf_velocity_kf_gate_min_dd_pairs)}, "
-                f"min_ess_ratio={float(rbpf_velocity_kf_gate_min_ess_ratio):.4g}, "
-                f"max_doppler_residual={rbpf_velocity_kf_gate_max_doppler_residual})"
-            )
 
     if predict_guide in ("imu", "imu_spp_blend"):
         total_imu = n_imu_used + n_imu_fallback
@@ -3368,16 +3163,11 @@ def run_pf_with_optional_smoother(
         "rbpf_velocity_init_sigma": rbpf_velocity_init_sigma,
         "rbpf_velocity_process_noise": rbpf_velocity_process_noise,
         "rbpf_doppler_sigma": rbpf_doppler_sigma,
-        "rbpf_velocity_kf_gate": rbpf_velocity_kf_gate,
-        "rbpf_velocity_kf_gate_min_dd_pairs": rbpf_velocity_kf_gate_min_dd_pairs,
-        "rbpf_velocity_kf_gate_min_ess_ratio": rbpf_velocity_kf_gate_min_ess_ratio,
-        "rbpf_velocity_kf_gate_max_doppler_residual": rbpf_velocity_kf_gate_max_doppler_residual,
         "pf_sigma_vel": pf_sigma_vel,
         "pf_velocity_guide_alpha": pf_velocity_guide_alpha,
         "pf_init_spread_vel": pf_init_spread_vel,
         "n_doppler_kf_used": n_doppler_kf_used,
         "n_doppler_kf_skip": n_doppler_kf_skip,
-        "n_doppler_kf_gate_skip": n_doppler_kf_gate_skip,
         "dd_pseudorange": dd_pseudorange,
         "dd_pseudorange_sigma": dd_pseudorange_sigma,
         "dd_pseudorange_base_interp": dd_pseudorange_base_interp,
@@ -3715,10 +3505,6 @@ def _namespace_to_run_kwargs(
         "rbpf_velocity_init_sigma": args.rbpf_velocity_init_sigma,
         "rbpf_velocity_process_noise": args.rbpf_velocity_process_noise,
         "rbpf_doppler_sigma": args.rbpf_doppler_sigma,
-        "rbpf_velocity_kf_gate": args.rbpf_velocity_kf_gate,
-        "rbpf_velocity_kf_gate_min_dd_pairs": args.rbpf_velocity_kf_gate_min_dd_pairs,
-        "rbpf_velocity_kf_gate_min_ess_ratio": args.rbpf_velocity_kf_gate_min_ess_ratio,
-        "rbpf_velocity_kf_gate_max_doppler_residual": args.rbpf_velocity_kf_gate_max_doppler_residual,
         "pf_sigma_vel": args.pf_sigma_vel,
         "pf_velocity_guide_alpha": args.pf_velocity_guide_alpha,
         "pf_init_spread_vel": args.pf_init_spread_vel,
@@ -4002,36 +3788,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help="Doppler range-rate sigma for proper RBPF velocity KF (m/s); defaults to --doppler-sigma-mps",
-    )
-    parser.add_argument(
-        "--rbpf-velocity-kf-gate",
-        action="store_true",
-        default=False,
-        help="Enable region-aware gates before applying the proper-RBPF Doppler KF update",
-    )
-    parser.add_argument(
-        "--rbpf-velocity-kf-gate-disable",
-        action="store_false",
-        dest="rbpf_velocity_kf_gate",
-        help="Disable all proper-RBPF Doppler KF region gates (default, preserves existing behavior)",
-    )
-    parser.add_argument(
-        "--rbpf-velocity-kf-gate-min-dd-pairs",
-        type=int,
-        default=10,
-        help="Minimum kept DD carrier pairs required for gated proper-RBPF Doppler KF update; 0 disables this gate",
-    )
-    parser.add_argument(
-        "--rbpf-velocity-kf-gate-min-ess-ratio",
-        type=float,
-        default=0.02,
-        help="Minimum current ESS ratio required for gated proper-RBPF Doppler KF update; 0 disables this gate",
-    )
-    parser.add_argument(
-        "--rbpf-velocity-kf-gate-max-doppler-residual",
-        type=float,
-        default=3.0,
-        help="Maximum centered Doppler residual median (m/s) for gated proper-RBPF Doppler KF update; inf disables this gate",
     )
     parser.add_argument(
         "--pf-sigma-vel",
@@ -4475,10 +4231,6 @@ def main(argv: list[str] | None = None) -> int:
                 "rbpf_velocity_init_sigma": args.rbpf_velocity_init_sigma,
                 "rbpf_velocity_process_noise": args.rbpf_velocity_process_noise,
                 "rbpf_doppler_sigma": args.rbpf_doppler_sigma,
-                "rbpf_velocity_kf_gate": args.rbpf_velocity_kf_gate,
-                "rbpf_velocity_kf_gate_min_dd_pairs": args.rbpf_velocity_kf_gate_min_dd_pairs,
-                "rbpf_velocity_kf_gate_min_ess_ratio": args.rbpf_velocity_kf_gate_min_ess_ratio,
-                "rbpf_velocity_kf_gate_max_doppler_residual": args.rbpf_velocity_kf_gate_max_doppler_residual,
                 "pf_sigma_vel": args.pf_sigma_vel,
                 "pf_velocity_guide_alpha": args.pf_velocity_guide_alpha,
                 "pf_init_spread_vel": args.pf_init_spread_vel,
@@ -4486,7 +4238,6 @@ def main(argv: list[str] | None = None) -> int:
                 "n_doppler_pp_skip": int(out.get("n_doppler_pp_skip", 0)),
                 "n_doppler_kf_used": int(out.get("n_doppler_kf_used", 0)),
                 "n_doppler_kf_skip": int(out.get("n_doppler_kf_skip", 0)),
-                "n_doppler_kf_gate_skip": int(out.get("n_doppler_kf_gate_skip", 0)),
                 "imu_tight_coupling": args.imu_tight_coupling,
                 "imu_stop_sigma_pos": args.imu_stop_sigma_pos,
                 "dd_pseudorange": args.dd_pseudorange,
