@@ -61,6 +61,7 @@ class ParticleFilterDevice:
             pf_device_weight_carrier_afv,
             pf_device_weight_dd_carrier_afv,
             pf_device_weight_doppler,
+            pf_device_doppler_kf_update,
             pf_device_position_update,
             pf_device_shift_clock_bias,
             pf_device_ess,
@@ -84,6 +85,7 @@ class ParticleFilterDevice:
         self._pf_device_weight_carrier_afv = pf_device_weight_carrier_afv
         self._pf_device_weight_dd_carrier_afv = pf_device_weight_dd_carrier_afv
         self._pf_device_weight_doppler = pf_device_weight_doppler
+        self._pf_device_doppler_kf_update = pf_device_doppler_kf_update
         self._pf_device_position_update = pf_device_position_update
         self._pf_device_shift_clock_bias = pf_device_shift_clock_bias
         self._pf_device_ess = pf_device_ess
@@ -529,6 +531,45 @@ class ParticleFilterDevice:
             float(sigma_mps),
             float(velocity_update_gain),
             float(max_velocity_update_mps),
+        )
+
+        if resample:
+            _ = self.resample_if_needed()
+
+    def update_doppler_kf(self, sat_ecef, sat_vel, doppler_hz, weights=None,
+                          wavelength=0.19029367279836488, sigma_mps=0.5,
+                          resample=True):
+        """Update per-particle velocity KF states from Doppler observations.
+
+        This is the proper RBPF path: velocity remains Gaussian per particle
+        and is not sampled. Receiver clock drift is eliminated inside the
+        update by weighted centering of each particle's Doppler geometry.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+        sv = np.asarray(sat_vel, dtype=np.float64).reshape(-1, 3)
+        dop = np.asarray(doppler_hz, dtype=np.float64).ravel()
+        if sat.shape != sv.shape:
+            raise ValueError("sat_ecef and sat_vel must have the same shape")
+        if sat.shape[0] != dop.size:
+            raise ValueError("doppler_hz length must match sat_ecef rows")
+        n_sat = int(dop.size)
+
+        if weights is None:
+            weights_arr = np.ones(n_sat, dtype=np.float64)
+        else:
+            weights_arr = np.asarray(weights, dtype=np.float64).ravel()
+        if weights_arr.size != n_sat:
+            raise ValueError("weights length must match doppler_hz")
+
+        self._pf_device_doppler_kf_update(
+            self._state,
+            sat.ravel(), sv.ravel(), dop, weights_arr,
+            n_sat,
+            float(wavelength),
+            float(sigma_mps),
         )
 
         if resample:

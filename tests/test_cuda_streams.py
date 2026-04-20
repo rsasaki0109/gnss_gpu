@@ -17,6 +17,7 @@ try:
         pf_device_predict,
         pf_device_weight,
         pf_device_weight_doppler,
+        pf_device_doppler_kf_update,
         pf_device_ess,
         pf_device_position_spread,
         pf_device_resample_systematic,
@@ -307,6 +308,34 @@ class TestStreamCorrectness:
         )
         pf_device_destroy(state)
 
+    def test_doppler_kf_update_marginalizes_velocity_without_sampling(self):
+        """Proper Doppler KF update moves mu_v and shrinks Sigma_v."""
+        rx_pos, sat_ecef, sat_vel, doppler, weights, true_vel = _make_doppler_data()
+        n = 2048
+        state = pf_device_create(n)
+        pf_device_initialize(
+            state,
+            float(rx_pos[0]), float(rx_pos[1]), float(rx_pos[2]), TRUE_CB,
+            0.0, 0.0, SEED,
+            0.0, 0.0, 0.0, 0.0, 10.0,
+        )
+        pf_device_doppler_kf_update(
+            state,
+            sat_ecef.ravel(), sat_vel.ravel(), doppler, weights,
+            len(doppler),
+            L1_WAVELENGTH, 0.5,
+        )
+
+        states = pf_device_get_particle_states(state)
+        np.testing.assert_allclose(
+            states[:, 4:7],
+            np.tile(true_vel, (n, 1)),
+            atol=2e-2,
+        )
+        assert np.all(states[:, [7, 11, 15]] < 100.0)
+        assert np.all(states[:, [7, 11, 15]] > 0.0)
+        pf_device_destroy(state)
+
     def test_many_satellites_exceeds_initial_capacity(self):
         """Handle more satellites than the initial pinned buffer capacity (64)."""
         n_sat = 80  # exceeds MAX_SATS=64 to trigger reallocation
@@ -425,6 +454,34 @@ class TestParticleFilterDeviceWrapper:
             np.tile(true_vel, (2048, 1)),
             atol=1e-3,
         )
+
+    def test_update_doppler_kf_wrapper_updates_velocity_gaussian(self):
+        """High-level wrapper exposes proper Doppler velocity KF updates."""
+        rx_pos, sat_ecef, sat_vel, doppler, weights, true_vel = _make_doppler_data()
+        pf = ParticleFilterDevice(n_particles=2048, seed=SEED, resampling="systematic")
+        pf.initialize(
+            position_ecef=rx_pos,
+            clock_bias=TRUE_CB,
+            spread_pos=0.0,
+            spread_cb=0.0,
+            velocity=np.zeros(3),
+            velocity_init_sigma=10.0,
+        )
+        pf.update_doppler_kf(
+            sat_ecef,
+            sat_vel,
+            doppler,
+            weights=weights,
+            sigma_mps=0.5,
+            resample=False,
+        )
+        states = pf.get_particle_states()
+        np.testing.assert_allclose(
+            states[:, 4:7],
+            np.tile(true_vel, (2048, 1)),
+            atol=2e-2,
+        )
+        assert np.all(states[:, [7, 11, 15]] < 100.0)
 
     def test_wrapper_rbpf_predict_passes_velocity_kf_controls(self):
         """High-level wrapper can enable covariance-based RBPF predict."""

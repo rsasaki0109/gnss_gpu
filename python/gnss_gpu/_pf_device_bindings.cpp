@@ -252,6 +252,31 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
        py::arg("velocity_update_gain") = 0.25,
        py::arg("max_velocity_update_mps") = 10.0);
 
+    m.def("pf_device_doppler_kf_update", [](gnss_gpu::PFDeviceState* state,
+                                 py::array_t<double> sat_ecef,
+                                 py::array_t<double> sat_vel,
+                                 py::array_t<double> doppler_hz,
+                                 py::array_t<double> weights_sat,
+                                 int n_sat, double wavelength_m,
+                                 double sigma_mps) {
+        py::buffer_info b_sat = sat_ecef.request();
+        py::buffer_info b_sat_vel = sat_vel.request();
+        py::buffer_info b_doppler = doppler_hz.request();
+        py::buffer_info b_weights = weights_sat.request();
+        gnss_gpu::pf_device_doppler_kf_update(state,
+            static_cast<double*>(b_sat.ptr),
+            static_cast<double*>(b_sat_vel.ptr),
+            static_cast<double*>(b_doppler.ptr),
+            static_cast<double*>(b_weights.ptr),
+            n_sat, wavelength_m, sigma_mps);
+    }, "Proper RBPF Doppler KF update over per-particle velocity Gaussian",
+       py::arg("state"),
+       py::arg("sat_ecef"), py::arg("sat_vel"),
+       py::arg("doppler_hz"), py::arg("weights_sat"),
+       py::arg("n_sat"),
+       py::arg("wavelength_m") = 0.19029367279836488,
+       py::arg("sigma_mps") = 0.5);
+
     m.def("pf_device_position_update", [](gnss_gpu::PFDeviceState* state,
                                          double ref_x, double ref_y, double ref_z,
                                          double sigma_pos) {

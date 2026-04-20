@@ -168,6 +168,15 @@ void pf_device_weight_doppler(PFDeviceState* state,
     double velocity_update_gain = 0.25,
     double max_velocity_update_mps = 10.0);
 
+// Proper RBPF Doppler update: velocity is a per-particle Gaussian KF state.
+// Unknown receiver clock drift is removed per particle by weighted centering,
+// so velocity is updated but never sampled.
+void pf_device_doppler_kf_update(PFDeviceState* state,
+    const double* sat_ecef, const double* sat_vel,
+    const double* doppler_hz, const double* weights_sat,
+    int n_sat, double wavelength_m = 0.19029367279836488,
+    double sigma_mps = 0.5);
+
 // Position-domain update - apply soft constraint from external position estimate
 void pf_device_position_update(PFDeviceState* state,
     double ref_x, double ref_y, double ref_z, double sigma_pos);
