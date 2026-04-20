@@ -695,6 +695,9 @@ def test_parser_maps_doppler_per_particle_flags():
         "--doppler-velocity-update-gain", "0.5",
         "--doppler-max-velocity-update-mps", "4.0",
         "--doppler-min-sats", "5",
+        "--pf-sigma-vel", "0.2",
+        "--pf-velocity-guide-alpha", "0.75",
+        "--pf-init-spread-vel", "1.5",
     ]))
 
     run_kwargs = _namespace_to_run_kwargs(
@@ -707,6 +710,9 @@ def test_parser_maps_doppler_per_particle_flags():
     assert run_kwargs["doppler_velocity_update_gain"] == 0.5
     assert run_kwargs["doppler_max_velocity_update_mps"] == 4.0
     assert run_kwargs["doppler_min_sats"] == 5
+    assert run_kwargs["pf_sigma_vel"] == 0.2
+    assert run_kwargs["pf_velocity_guide_alpha"] == 0.75
+    assert run_kwargs["pf_init_spread_vel"] == 1.5
 
 
 def test_parser_maps_low_ess_dd_gate_flags():
@@ -970,6 +976,9 @@ def test_expand_cli_preset_argv_inlines_odaiba_rbpf_velocity_flags():
     assert expanded[expanded.index("--doppler-velocity-update-gain") + 1] == "0.25"
     assert expanded[expanded.index("--doppler-max-velocity-update-mps") + 1] == "10.0"
     assert expanded[expanded.index("--doppler-min-sats") + 1] == "4"
+    assert expanded[expanded.index("--pf-sigma-vel") + 1] == "0.25"
+    assert expanded[expanded.index("--pf-velocity-guide-alpha") + 1] == "0.5"
+    assert expanded[expanded.index("--pf-init-spread-vel") + 1] == "1.0"
     assert expanded[-2:] == ["--max-epochs", "10"]
 
 

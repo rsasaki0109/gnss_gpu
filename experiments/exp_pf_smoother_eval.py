@@ -260,6 +260,9 @@ _CLI_PRESETS["odaiba_rbpf_velocity"] = {
         "--doppler-velocity-update-gain", "0.25",
         "--doppler-max-velocity-update-mps", "10.0",
         "--doppler-min-sats", "4",
+        "--pf-sigma-vel", "0.25",
+        "--pf-velocity-guide-alpha", "0.5",
+        "--pf-init-spread-vel", "1.0",
     ],
 }
 
@@ -1764,6 +1767,9 @@ def run_pf_with_optional_smoother(
     doppler_velocity_update_gain: float = 0.25,
     doppler_max_velocity_update_mps: float = 10.0,
     doppler_min_sats: int = 4,
+    pf_sigma_vel: float = 0.0,
+    pf_velocity_guide_alpha: float = 1.0,
+    pf_init_spread_vel: float = 0.0,
     imu_tight_coupling: bool = False,
     imu_stop_sigma_pos: float | None = None,
     tdcp_position_update: bool = False,
@@ -2012,8 +2018,16 @@ def run_pf_with_optional_smoother(
         per_particle_huber_dd_pr_k=per_particle_huber_dd_pr_k,
         per_particle_huber_dd_carrier_k=per_particle_huber_dd_carrier_k,
         per_particle_huber_undiff_pr_k=per_particle_huber_undiff_pr_k,
+        sigma_vel=pf_sigma_vel,
+        velocity_guide_alpha=pf_velocity_guide_alpha,
     )
-    pf.initialize(first_pos, clock_bias=init_cb, spread_pos=10.0, spread_cb=100.0)
+    pf.initialize(
+        first_pos,
+        clock_bias=init_cb,
+        spread_pos=10.0,
+        spread_cb=100.0,
+        spread_vel=pf_init_spread_vel,
+    )
 
     if use_smoother:
         pf.enable_smoothing()
@@ -3102,6 +3116,9 @@ def run_pf_with_optional_smoother(
         "doppler_velocity_update_gain": doppler_velocity_update_gain,
         "doppler_max_velocity_update_mps": doppler_max_velocity_update_mps,
         "doppler_min_sats": doppler_min_sats,
+        "pf_sigma_vel": pf_sigma_vel,
+        "pf_velocity_guide_alpha": pf_velocity_guide_alpha,
+        "pf_init_spread_vel": pf_init_spread_vel,
         "dd_pseudorange": dd_pseudorange,
         "dd_pseudorange_sigma": dd_pseudorange_sigma,
         "dd_pseudorange_base_interp": dd_pseudorange_base_interp,
@@ -3435,6 +3452,9 @@ def _namespace_to_run_kwargs(
         "doppler_velocity_update_gain": args.doppler_velocity_update_gain,
         "doppler_max_velocity_update_mps": args.doppler_max_velocity_update_mps,
         "doppler_min_sats": args.doppler_min_sats,
+        "pf_sigma_vel": args.pf_sigma_vel,
+        "pf_velocity_guide_alpha": args.pf_velocity_guide_alpha,
+        "pf_init_spread_vel": args.pf_init_spread_vel,
         "imu_tight_coupling": args.imu_tight_coupling,
         "imu_stop_sigma_pos": args.imu_stop_sigma_pos,
         "tdcp_position_update": args.tdcp_position_update,
@@ -3692,6 +3712,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=4,
         help="Minimum Doppler rows required for per-particle velocity update",
+    )
+    parser.add_argument(
+        "--pf-sigma-vel",
+        type=float,
+        default=0.0,
+        help="Per-axis particle velocity process noise for predict (m/s)",
+    )
+    parser.add_argument(
+        "--pf-velocity-guide-alpha",
+        type=float,
+        default=1.0,
+        help="Blend factor toward the shared velocity guide before propagation",
+    )
+    parser.add_argument(
+        "--pf-init-spread-vel",
+        type=float,
+        default=0.0,
+        help="Initial per-axis particle velocity spread (m/s)",
     )
     parser.add_argument(
         "--imu-tight-coupling",
@@ -4113,6 +4151,9 @@ def main(argv: list[str] | None = None) -> int:
                 "doppler_velocity_update_gain": args.doppler_velocity_update_gain,
                 "doppler_max_velocity_update_mps": args.doppler_max_velocity_update_mps,
                 "doppler_min_sats": args.doppler_min_sats,
+                "pf_sigma_vel": args.pf_sigma_vel,
+                "pf_velocity_guide_alpha": args.pf_velocity_guide_alpha,
+                "pf_init_spread_vel": args.pf_init_spread_vel,
                 "n_doppler_pp_used": int(out.get("n_doppler_pp_used", 0)),
                 "n_doppler_pp_skip": int(out.get("n_doppler_pp_skip", 0)),
                 "imu_tight_coupling": args.imu_tight_coupling,
