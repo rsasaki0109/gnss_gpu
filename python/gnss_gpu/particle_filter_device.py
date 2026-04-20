@@ -58,6 +58,7 @@ class ParticleFilterDevice:
             pf_device_weight_gmm,
             pf_device_weight_carrier_afv,
             pf_device_weight_dd_carrier_afv,
+            pf_device_weight_doppler,
             pf_device_position_update,
             pf_device_shift_clock_bias,
             pf_device_ess,
@@ -80,6 +81,7 @@ class ParticleFilterDevice:
         self._pf_device_weight_gmm = pf_device_weight_gmm
         self._pf_device_weight_carrier_afv = pf_device_weight_carrier_afv
         self._pf_device_weight_dd_carrier_afv = pf_device_weight_dd_carrier_afv
+        self._pf_device_weight_doppler = pf_device_weight_doppler
         self._pf_device_position_update = pf_device_position_update
         self._pf_device_shift_clock_bias = pf_device_shift_clock_bias
         self._pf_device_ess = pf_device_ess
@@ -445,6 +447,67 @@ class ParticleFilterDevice:
         if resample:
             _ = self.resample_if_needed()
 
+    def update_doppler(self, sat_ecef, sat_vel, doppler_hz, weights=None,
+                       wavelength=0.19029367279836488, sigma_mps=0.5,
+                       velocity_update_gain=0.25,
+                       max_velocity_update_mps=10.0,
+                       resample=True):
+        """Update weights and per-particle velocities from Doppler observations.
+
+        Parameters
+        ----------
+        sat_ecef : array_like, shape (n_sat, 3)
+            Satellite ECEF positions [m].
+        sat_vel : array_like, shape (n_sat, 3)
+            Satellite ECEF velocities [m/s].
+        doppler_hz : array_like, shape (n_sat,)
+            Doppler observations [Hz].
+        weights : array_like, shape (n_sat,), optional
+            Per-satellite weights. Defaults to ones.
+        wavelength : float
+            Carrier wavelength [m]. Defaults to GPS L1.
+        sigma_mps : float
+            Doppler range-rate observation sigma [m/s].
+        velocity_update_gain : float
+            Blend toward each particle's Doppler WLS velocity solution.
+            Use 0 for likelihood-only mode.
+        max_velocity_update_mps : float
+            Optional cap on each per-epoch velocity correction magnitude.
+        resample : bool
+            If True, run ESS-based adaptive resampling after the update.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+        sv = np.asarray(sat_vel, dtype=np.float64).reshape(-1, 3)
+        dop = np.asarray(doppler_hz, dtype=np.float64).ravel()
+        if sat.shape != sv.shape:
+            raise ValueError("sat_ecef and sat_vel must have the same shape")
+        if sat.shape[0] != dop.size:
+            raise ValueError("doppler_hz length must match sat_ecef rows")
+        n_sat = int(dop.size)
+
+        if weights is None:
+            weights_arr = np.ones(n_sat, dtype=np.float64)
+        else:
+            weights_arr = np.asarray(weights, dtype=np.float64).ravel()
+        if weights_arr.size != n_sat:
+            raise ValueError("weights length must match doppler_hz")
+
+        self._pf_device_weight_doppler(
+            self._state,
+            sat.ravel(), sv.ravel(), dop, weights_arr,
+            n_sat,
+            float(wavelength),
+            float(sigma_mps),
+            float(velocity_update_gain),
+            float(max_velocity_update_mps),
+        )
+
+        if resample:
+            _ = self.resample_if_needed()
+
     def position_update(self, ref_ecef, sigma_pos=30.0):
         """Apply position-domain soft constraint from external estimate.
 
@@ -691,6 +754,10 @@ class ParticleFilterDevice:
         carrier_afv=None,
         carrier_afv_sigma=None,
         carrier_afv_wavelength=None,
+        doppler_update=None,
+        doppler_sigma_mps=None,
+        doppler_velocity_update_gain=None,
+        doppler_max_velocity_update_mps=None,
     ):
         """Store observation data for the current epoch (call after update/estimate).
 
@@ -727,6 +794,8 @@ class ParticleFilterDevice:
             Sigma used for the forward undifferenced carrier AFV update.
         carrier_afv_wavelength : float or None
             Carrier wavelength used for the undifferenced AFV update.
+        doppler_update : dict or None
+            Per-particle Doppler velocity update used in the forward pass.
         """
         if not getattr(self, '_smooth_enabled', False):
             return
@@ -780,6 +849,16 @@ class ParticleFilterDevice:
                 'weights': np.asarray(carrier_afv['weights'], dtype=np.float64).copy(),
                 'n_sat': int(len(np.asarray(carrier_afv['carrier_phase_cycles']).ravel())),
             }
+        doppler_store = None
+        if doppler_update is not None:
+            doppler_store = {
+                'sat_ecef': np.asarray(doppler_update['sat_ecef'], dtype=np.float64).copy(),
+                'sat_vel': np.asarray(doppler_update['sat_vel'], dtype=np.float64).copy(),
+                'doppler_hz': np.asarray(doppler_update['doppler_hz'], dtype=np.float64).copy(),
+                'weights': np.asarray(doppler_update['weights'], dtype=np.float64).copy(),
+                'wavelength_m': float(doppler_update.get('wavelength_m', 0.19029367279836488)),
+                'n_sat': int(len(np.asarray(doppler_update['doppler_hz']).ravel())),
+            }
         self._smooth_epochs.append({
             'estimate': est[:3].copy(),
             'sat_ecef': np.asarray(sat_ecef, dtype=np.float64).copy(),
@@ -806,6 +885,20 @@ class ParticleFilterDevice:
             ),
             'carrier_afv_wavelength': (
                 None if carrier_afv_wavelength is None else float(carrier_afv_wavelength)
+            ),
+            'doppler_update': doppler_store,
+            'doppler_sigma_mps': (
+                None if doppler_sigma_mps is None else float(doppler_sigma_mps)
+            ),
+            'doppler_velocity_update_gain': (
+                None
+                if doppler_velocity_update_gain is None
+                else float(doppler_velocity_update_gain)
+            ),
+            'doppler_max_velocity_update_mps': (
+                None
+                if doppler_max_velocity_update_mps is None
+                else float(doppler_max_velocity_update_mps)
             ),
         })
 
@@ -881,6 +974,7 @@ class ParticleFilterDevice:
             dd_cp_ep = ep.get('dd_carrier')
             carrier_anchor_ep = ep.get('carrier_anchor_pseudorange')
             carrier_afv_ep = ep.get('carrier_afv')
+            doppler_ep = ep.get('doppler_update')
             if dd_ep is not None:
                 bwd_pf.update_dd_pseudorange(
                     SimpleNamespace(**dd_ep),
@@ -930,6 +1024,29 @@ class ParticleFilterDevice:
                         float(ep['carrier_afv_sigma'])
                         if ep.get('carrier_afv_sigma') is not None
                         else 0.05
+                    ),
+                )
+            if doppler_ep is not None:
+                bwd_pf.update_doppler(
+                    doppler_ep['sat_ecef'],
+                    doppler_ep['sat_vel'],
+                    doppler_ep['doppler_hz'],
+                    weights=doppler_ep['weights'],
+                    wavelength=float(doppler_ep.get('wavelength_m', 0.19029367279836488)),
+                    sigma_mps=(
+                        float(ep['doppler_sigma_mps'])
+                        if ep.get('doppler_sigma_mps') is not None
+                        else 0.5
+                    ),
+                    velocity_update_gain=(
+                        float(ep['doppler_velocity_update_gain'])
+                        if ep.get('doppler_velocity_update_gain') is not None
+                        else 0.25
+                    ),
+                    max_velocity_update_mps=(
+                        float(ep['doppler_max_velocity_update_mps'])
+                        if ep.get('doppler_max_velocity_update_mps') is not None
+                        else 10.0
                     ),
                 )
 

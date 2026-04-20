@@ -146,6 +146,22 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     bool per_particle_huber = false,
     double per_particle_huber_k = 1.5);
 
+// Velocity-domain update using Doppler observations.
+// sat_ecef: [n_sat, 3] satellite positions [m]
+// sat_vel: [n_sat, 3] satellite velocities [m/s]
+// doppler_hz: [n_sat] Doppler observations [Hz]
+// weights_sat: [n_sat] per-observation weights
+// sigma_mps is Doppler range-rate noise [m/s].
+// velocity_update_gain blends each particle velocity toward its per-particle
+// Doppler WLS solution; set to 0 to apply likelihood only.
+void pf_device_weight_doppler(PFDeviceState* state,
+    const double* sat_ecef, const double* sat_vel,
+    const double* doppler_hz, const double* weights_sat,
+    int n_sat, double wavelength_m = 0.19029367279836488,
+    double sigma_mps = 0.5,
+    double velocity_update_gain = 0.25,
+    double max_velocity_update_mps = 10.0);
+
 // Position-domain update - apply soft constraint from external position estimate
 void pf_device_position_update(PFDeviceState* state,
     double ref_x, double ref_y, double ref_z, double sigma_pos);

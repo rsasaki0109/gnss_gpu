@@ -243,6 +243,26 @@ _CLI_PRESETS: dict[str, dict[str, object]] = {
     },
 }
 
+for _preset_name in (
+    "odaiba_reference",
+    "odaiba_stop_detect",
+    "odaiba_reference_guarded",
+    "odaiba_best_accuracy",
+):
+    _CLI_PRESETS[_preset_name]["argv"].append("--no-doppler-per-particle")
+
+_CLI_PRESETS["odaiba_rbpf_velocity"] = {
+    "description": "Odaiba best-accuracy config plus per-particle Doppler velocity RBPF.",
+    "argv": [
+        *_CLI_PRESETS["odaiba_best_accuracy"]["argv"],
+        "--doppler-per-particle",
+        "--doppler-sigma-mps", "0.5",
+        "--doppler-velocity-update-gain", "0.25",
+        "--doppler-max-velocity-update-mps", "10.0",
+        "--doppler-min-sats", "4",
+    ],
+}
+
 
 @dataclass
 class CarrierBiasState:
@@ -1739,6 +1759,11 @@ def run_pf_with_optional_smoother(
     gmm_sigma_nlos: float = 30.0,
     doppler_position_update: bool = False,
     doppler_pu_sigma: float = 5.0,
+    doppler_per_particle: bool = False,
+    doppler_sigma_mps: float = 0.5,
+    doppler_velocity_update_gain: float = 0.25,
+    doppler_max_velocity_update_mps: float = 10.0,
+    doppler_min_sats: int = 4,
     imu_tight_coupling: bool = False,
     imu_stop_sigma_pos: float | None = None,
     tdcp_position_update: bool = False,
@@ -2004,6 +2029,8 @@ def run_pf_with_optional_smoother(
     stored_undiff_pr: list[UndiffPseudorangeEpoch | None] = []
     n_tdcp_used = 0
     n_tdcp_fallback = 0
+    n_doppler_pp_used = 0
+    n_doppler_pp_skip = 0
     n_imu_tight_used = 0
     n_imu_tight_skip = 0
     # PR acceleration weighting: need per-satellite PR history
@@ -2057,6 +2084,7 @@ def run_pf_with_optional_smoother(
         dd_cp_sigma_cycles = None
         dd_cp_support_skip = False
         carrier_anchor_rows = {}
+        doppler_update_epoch = None
         anchor_attempt = CarrierAnchorAttempt()
         fallback_attempt = CarrierFallbackAttempt()
 
@@ -2610,6 +2638,51 @@ def run_pf_with_optional_smoother(
             if fallback_attempt.used and fallback_attempt.replaced_weak_dd:
                 n_dd_fallback_weak_dd_replaced += 1
 
+        if doppler_per_particle:
+            dop_sat = []
+            dop_sat_vel = []
+            dop_obs = []
+            dop_weights = []
+            for i_m, m in enumerate(measurements):
+                dop = float(getattr(m, "doppler", 0.0))
+                sat_vel_m = np.asarray(
+                    getattr(m, "satellite_velocity", np.zeros(3, dtype=np.float64)),
+                    dtype=np.float64,
+                ).ravel()[:3]
+                if (
+                    not np.isfinite(dop)
+                    or dop == 0.0
+                    or sat_vel_m.shape[0] != 3
+                    or not np.isfinite(sat_vel_m).all()
+                ):
+                    continue
+                dop_sat.append(np.asarray(m.satellite_ecef, dtype=np.float64).ravel()[:3])
+                dop_sat_vel.append(sat_vel_m)
+                dop_obs.append(dop)
+                dop_weights.append(float(w[i_m]) if i_m < len(w) else 1.0)
+
+            if len(dop_obs) >= int(doppler_min_sats):
+                doppler_update_epoch = {
+                    "sat_ecef": np.asarray(dop_sat, dtype=np.float64),
+                    "sat_vel": np.asarray(dop_sat_vel, dtype=np.float64),
+                    "doppler_hz": np.asarray(dop_obs, dtype=np.float64),
+                    "weights": np.asarray(dop_weights, dtype=np.float64),
+                    "wavelength_m": _MUPF_L1_WAVELENGTH_M,
+                }
+                pf.update_doppler(
+                    doppler_update_epoch["sat_ecef"],
+                    doppler_update_epoch["sat_vel"],
+                    doppler_update_epoch["doppler_hz"],
+                    weights=doppler_update_epoch["weights"],
+                    wavelength=_MUPF_L1_WAVELENGTH_M,
+                    sigma_mps=doppler_sigma_mps,
+                    velocity_update_gain=doppler_velocity_update_gain,
+                    max_velocity_update_mps=doppler_max_velocity_update_mps,
+                )
+                n_doppler_pp_used += 1
+            else:
+                n_doppler_pp_skip += 1
+
         spp_pos = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
         if position_update_sigma is not None:
             if np.isfinite(spp_pos).all() and np.linalg.norm(spp_pos) > 1e6:
@@ -2702,6 +2775,20 @@ def run_pf_with_optional_smoother(
                 carrier_afv_sigma=fallback_attempt.sigma_cycles,
                 carrier_afv_wavelength=(
                     _MUPF_L1_WAVELENGTH_M if fallback_attempt.afv is not None else None
+                ),
+                doppler_update=doppler_update_epoch,
+                doppler_sigma_mps=(
+                    doppler_sigma_mps if doppler_update_epoch is not None else None
+                ),
+                doppler_velocity_update_gain=(
+                    doppler_velocity_update_gain
+                    if doppler_update_epoch is not None
+                    else None
+                ),
+                doppler_max_velocity_update_mps=(
+                    doppler_max_velocity_update_mps
+                    if doppler_update_epoch is not None
+                    else None
                 ),
             )
             if n_stored > 0:
@@ -2898,6 +2985,13 @@ def run_pf_with_optional_smoother(
             f"fallback {n_tdcp_fallback}/{total_tdcp} (rms_threshold={tdcp_rms_threshold:.1f}m)"
         )
 
+    if doppler_per_particle:
+        total_doppler_pp = n_doppler_pp_used + n_doppler_pp_skip
+        print(
+            f"  [doppler_per_particle] used {n_doppler_pp_used}/{total_doppler_pp} epochs, "
+            f"skip {n_doppler_pp_skip}/{total_doppler_pp}"
+        )
+
     if predict_guide in ("imu", "imu_spp_blend"):
         total_imu = n_imu_used + n_imu_fallback
         print(
@@ -3003,6 +3097,11 @@ def run_pf_with_optional_smoother(
         "tdcp_rms_threshold": tdcp_rms_threshold,
         "doppler_position_update": doppler_position_update,
         "doppler_pu_sigma": doppler_pu_sigma,
+        "doppler_per_particle": doppler_per_particle,
+        "doppler_sigma_mps": doppler_sigma_mps,
+        "doppler_velocity_update_gain": doppler_velocity_update_gain,
+        "doppler_max_velocity_update_mps": doppler_max_velocity_update_mps,
+        "doppler_min_sats": doppler_min_sats,
         "dd_pseudorange": dd_pseudorange,
         "dd_pseudorange_sigma": dd_pseudorange_sigma,
         "dd_pseudorange_base_interp": dd_pseudorange_base_interp,
@@ -3113,6 +3212,8 @@ def run_pf_with_optional_smoother(
         "n_imu_tight_skip": n_imu_tight_skip,
         "n_tdcp_used": n_tdcp_used,
         "n_tdcp_fallback": n_tdcp_fallback,
+        "n_doppler_pp_used": n_doppler_pp_used,
+        "n_doppler_pp_skip": n_doppler_pp_skip,
         "n_imu_used": n_imu_used,
         "n_imu_fallback": n_imu_fallback,
         "n_imu_stop_detected": n_imu_stop_detected,
@@ -3329,6 +3430,11 @@ def _namespace_to_run_kwargs(
         "gmm_sigma_nlos": args.gmm_sigma_nlos,
         "doppler_position_update": args.doppler_position_update,
         "doppler_pu_sigma": args.doppler_pu_sigma,
+        "doppler_per_particle": args.doppler_per_particle,
+        "doppler_sigma_mps": args.doppler_sigma_mps,
+        "doppler_velocity_update_gain": args.doppler_velocity_update_gain,
+        "doppler_max_velocity_update_mps": args.doppler_max_velocity_update_mps,
+        "doppler_min_sats": args.doppler_min_sats,
         "imu_tight_coupling": args.imu_tight_coupling,
         "imu_stop_sigma_pos": args.imu_stop_sigma_pos,
         "tdcp_position_update": args.tdcp_position_update,
@@ -3556,6 +3662,36 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=5.0,
         help="Sigma (m) for Doppler-predicted position_update constraint",
+    )
+    parser.add_argument(
+        "--doppler-per-particle",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Apply per-particle Doppler velocity likelihood/update (default: enabled)",
+    )
+    parser.add_argument(
+        "--doppler-sigma-mps",
+        type=float,
+        default=0.5,
+        help="Doppler range-rate sigma for per-particle velocity update (m/s)",
+    )
+    parser.add_argument(
+        "--doppler-velocity-update-gain",
+        type=float,
+        default=0.25,
+        help="Blend toward each particle's Doppler WLS velocity solution",
+    )
+    parser.add_argument(
+        "--doppler-max-velocity-update-mps",
+        type=float,
+        default=10.0,
+        help="Cap per-epoch Doppler velocity correction magnitude (m/s)",
+    )
+    parser.add_argument(
+        "--doppler-min-sats",
+        type=int,
+        default=4,
+        help="Minimum Doppler rows required for per-particle velocity update",
     )
     parser.add_argument(
         "--imu-tight-coupling",
@@ -3972,6 +4108,13 @@ def main(argv: list[str] | None = None) -> int:
                 "position_update_sigma": pos_sigma if pos_sigma is not None else "off",
                 "doppler_position_update": args.doppler_position_update,
                 "doppler_pu_sigma": args.doppler_pu_sigma,
+                "doppler_per_particle": args.doppler_per_particle,
+                "doppler_sigma_mps": args.doppler_sigma_mps,
+                "doppler_velocity_update_gain": args.doppler_velocity_update_gain,
+                "doppler_max_velocity_update_mps": args.doppler_max_velocity_update_mps,
+                "doppler_min_sats": args.doppler_min_sats,
+                "n_doppler_pp_used": int(out.get("n_doppler_pp_used", 0)),
+                "n_doppler_pp_skip": int(out.get("n_doppler_pp_skip", 0)),
                 "imu_tight_coupling": args.imu_tight_coupling,
                 "imu_stop_sigma_pos": args.imu_stop_sigma_pos,
                 "dd_pseudorange": args.dd_pseudorange,

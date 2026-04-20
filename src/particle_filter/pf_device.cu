@@ -25,6 +25,41 @@ __device__ __forceinline__ double pfd_weighted_huber_cost(
     return obs_weight * rho;
 }
 
+__device__ bool pfd_solve_4x4(double A[4][5], double* x) {
+    for (int col = 0; col < 4; col++) {
+        int max_row = col;
+        for (int row = col + 1; row < 4; row++) {
+            if (fabs(A[row][col]) > fabs(A[max_row][col])) {
+                max_row = row;
+            }
+        }
+        if (max_row != col) {
+            for (int k = 0; k < 5; k++) {
+                double tmp = A[col][k];
+                A[col][k] = A[max_row][k];
+                A[max_row][k] = tmp;
+            }
+        }
+        if (fabs(A[col][col]) < 1e-12) {
+            return false;
+        }
+        for (int row = col + 1; row < 4; row++) {
+            double factor = A[row][col] / A[col][col];
+            for (int k = col; k < 5; k++) {
+                A[row][k] -= factor * A[col][k];
+            }
+        }
+    }
+    for (int row = 3; row >= 0; row--) {
+        double value = A[row][4];
+        for (int col = row + 1; col < 4; col++) {
+            value -= A[row][col] * x[col];
+        }
+        x[row] = value / A[row][row];
+    }
+    return isfinite(x[0]) && isfinite(x[1]) && isfinite(x[2]) && isfinite(x[3]);
+}
+
 // ============================================================
 // Kernels (self-contained, no extern dependencies)
 // ============================================================
@@ -509,6 +544,149 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
     }
 
     log_weights[tid] += log_w;
+}
+
+// --- Doppler velocity-domain update kernel ---
+// Applies a per-particle Doppler likelihood using each particle's velocity
+// state, then optionally nudges velocity toward a per-particle WLS solution.
+__global__ void pfd_weight_doppler_kernel(
+    const double* px, const double* py, const double* pz,
+    double* vx, double* vy, double* vz,
+    const double* doppler_data,  // [sat_ecef: n*3][sat_vel: n*3][doppler_hz: n][weights: n]
+    double* log_weights,
+    int N, int n_sat,
+    double wavelength_m,
+    double sigma_mps,
+    double velocity_update_gain,
+    double max_velocity_update_mps) {
+
+    extern __shared__ double s_data[];
+    double* s_sat = s_data;                 // n_sat * 3
+    double* s_sat_vel = s_data + n_sat * 3; // n_sat * 3
+    double* s_doppler = s_data + n_sat * 6; // n_sat
+    double* s_weights = s_data + n_sat * 7; // n_sat
+
+    int total_shared = n_sat * 8;
+    for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
+        s_data[i] = doppler_data[i];
+    }
+    __syncthreads();
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    double x = px[tid];
+    double y = py[tid];
+    double z = pz[tid];
+    double vxi = vx[tid];
+    double vyi = vy[tid];
+    double vzi = vz[tid];
+
+    double weighted_cd = 0.0;
+    double weight_sum = 0.0;
+    for (int s = 0; s < n_sat; s++) {
+        double dx = s_sat[s * 3 + 0] - x;
+        double dy = s_sat[s * 3 + 1] - y;
+        double dz = s_sat[s * 3 + 2] - z;
+        double r = sqrt(dx * dx + dy * dy + dz * dz);
+        if (r < 1.0) continue;
+        double lx = dx / r;
+        double ly = dy / r;
+        double lz = dz / r;
+        double obs = s_doppler[s] * wavelength_m;
+        double sv_radial =
+            s_sat_vel[s * 3 + 0] * lx +
+            s_sat_vel[s * 3 + 1] * ly +
+            s_sat_vel[s * 3 + 2] * lz;
+        double rx_radial = vxi * lx + vyi * ly + vzi * lz;
+        double w = fmax(s_weights[s], 0.0);
+        weighted_cd += w * (obs - sv_radial + rx_radial);
+        weight_sum += w;
+    }
+    double cd = (weight_sum > 0.0) ? (weighted_cd / weight_sum) : 0.0;
+    if (weight_sum <= 0.0) {
+        return;
+    }
+
+    double inv_sigma2 = 1.0 / (sigma_mps * sigma_mps);
+    double log_w = 0.0;
+    for (int s = 0; s < n_sat; s++) {
+        double dx = s_sat[s * 3 + 0] - x;
+        double dy = s_sat[s * 3 + 1] - y;
+        double dz = s_sat[s * 3 + 2] - z;
+        double r = sqrt(dx * dx + dy * dy + dz * dz);
+        if (r < 1.0) continue;
+        double lx = dx / r;
+        double ly = dy / r;
+        double lz = dz / r;
+        double obs = s_doppler[s] * wavelength_m;
+        double pred =
+            (s_sat_vel[s * 3 + 0] - vxi) * lx +
+            (s_sat_vel[s * 3 + 1] - vyi) * ly +
+            (s_sat_vel[s * 3 + 2] - vzi) * lz +
+            cd;
+        double residual = obs - pred;
+        log_w += -0.5 * fmax(s_weights[s], 0.0) * residual * residual * inv_sigma2;
+    }
+    log_weights[tid] += log_w;
+
+    double gain = fmin(1.0, fmax(0.0, velocity_update_gain));
+    if (gain <= 0.0 || n_sat < 4) {
+        return;
+    }
+
+    double normal[4][5];
+    for (int row = 0; row < 4; row++) {
+        for (int col = 0; col < 5; col++) {
+            normal[row][col] = 0.0;
+        }
+    }
+    for (int s = 0; s < n_sat; s++) {
+        double dx = s_sat[s * 3 + 0] - x;
+        double dy = s_sat[s * 3 + 1] - y;
+        double dz = s_sat[s * 3 + 2] - z;
+        double r = sqrt(dx * dx + dy * dy + dz * dz);
+        if (r < 1.0) continue;
+        double lx = dx / r;
+        double ly = dy / r;
+        double lz = dz / r;
+        double h[4] = {-lx, -ly, -lz, 1.0};
+        double sv_radial =
+            s_sat_vel[s * 3 + 0] * lx +
+            s_sat_vel[s * 3 + 1] * ly +
+            s_sat_vel[s * 3 + 2] * lz;
+        double rhs = s_doppler[s] * wavelength_m - sv_radial;
+        double w = fmax(s_weights[s], 0.0);
+        for (int a = 0; a < 4; a++) {
+            normal[a][4] += h[a] * w * rhs;
+            for (int b = 0; b < 4; b++) {
+                normal[a][b] += h[a] * w * h[b];
+            }
+        }
+    }
+    for (int d = 0; d < 4; d++) {
+        normal[d][d] += 1e-9;
+    }
+
+    double solution[4] = {0.0, 0.0, 0.0, 0.0};
+    if (!pfd_solve_4x4(normal, solution)) {
+        return;
+    }
+
+    double dvx = solution[0] - vxi;
+    double dvy = solution[1] - vyi;
+    double dvz = solution[2] - vzi;
+    double dv_norm = sqrt(dvx * dvx + dvy * dvy + dvz * dvz);
+    if (max_velocity_update_mps > 0.0 && dv_norm > max_velocity_update_mps) {
+        double scale = max_velocity_update_mps / fmax(dv_norm, 1e-9);
+        dvx *= scale;
+        dvy *= scale;
+        dvz *= scale;
+    }
+
+    vx[tid] = vxi + gain * dvx;
+    vy[tid] = vyi + gain * dvy;
+    vz[tid] = vzi + gain * dvz;
 }
 
 // --- Position-domain update kernel ---
@@ -1689,6 +1867,55 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     // Free device buffer after kernel completes
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
     CUDA_CHECK(cudaFree(d_dd_data));
+    free(h_buf);
+}
+
+// ============================================================
+// Weight/update: Doppler velocity
+// ============================================================
+
+void pf_device_weight_doppler(PFDeviceState* state,
+    const double* sat_ecef, const double* sat_vel,
+    const double* doppler_hz, const double* weights_sat,
+    int n_sat, double wavelength_m,
+    double sigma_mps,
+    double velocity_update_gain,
+    double max_velocity_update_mps) {
+
+    if (n_sat <= 0 || sigma_mps <= 0.0 || wavelength_m <= 0.0) {
+        return;
+    }
+
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    int total_doubles = n_sat * 8;
+    size_t total_bytes = (size_t)total_doubles * sizeof(double);
+    double* h_buf = (double*)malloc(total_bytes);
+    if (!h_buf) return;
+
+    int off = 0;
+    memcpy(h_buf + off, sat_ecef, n_sat * 3 * sizeof(double)); off += n_sat * 3;
+    memcpy(h_buf + off, sat_vel, n_sat * 3 * sizeof(double)); off += n_sat * 3;
+    memcpy(h_buf + off, doppler_hz, n_sat * sizeof(double)); off += n_sat;
+    memcpy(h_buf + off, weights_sat, n_sat * sizeof(double)); off += n_sat;
+
+    double* d_doppler_data = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_doppler_data, total_bytes));
+    CUDA_CHECK(cudaMemcpyAsync(
+        d_doppler_data, h_buf, total_bytes, cudaMemcpyHostToDevice, state->stream));
+
+    size_t smem = (size_t)total_doubles * sizeof(double);
+    pfd_weight_doppler_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        state->d_vx, state->d_vy, state->d_vz,
+        d_doppler_data, state->d_log_weights,
+        N, n_sat, wavelength_m, sigma_mps,
+        velocity_update_gain, max_velocity_update_mps);
+    CUDA_CHECK_LAST();
+
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+    CUDA_CHECK(cudaFree(d_doppler_data));
     free(h_buf);
 }
 

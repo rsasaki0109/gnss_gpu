@@ -16,6 +16,7 @@ try:
         pf_device_initialize,
         pf_device_predict,
         pf_device_weight,
+        pf_device_weight_doppler,
         pf_device_ess,
         pf_device_position_spread,
         pf_device_resample_systematic,
@@ -35,6 +36,7 @@ pytestmark = pytest.mark.skipif(not HAS_GPU, reason="CUDA pf_device module not a
 SEED = 42
 N_PARTICLES = 100_000
 N_SAT = 8
+L1_WAVELENGTH = 0.19029367279836488
 
 # Simulated receiver at ECEF origin with clock bias
 TRUE_POS = np.array([0.0, 0.0, 0.0])
@@ -53,6 +55,37 @@ def _make_satellite_data(n_sat=N_SAT):
     pseudoranges = ranges + TRUE_CB
     weights = np.ones(n_sat, dtype=np.float64)
     return sat_ecef.astype(np.float64), pseudoranges.astype(np.float64), weights
+
+
+def _make_doppler_data():
+    """Create synthetic Doppler rows with a known receiver velocity."""
+    rx_pos = np.array([-3957199.0, 3310205.0, 3737911.0], dtype=np.float64)
+    true_vel = np.array([0.3, -0.5, 0.8], dtype=np.float64)
+    true_cd = 5.0
+    sat_ecef = np.array([
+        [-14985000.0, -3988000.0, 21474000.0],
+        [-9575000.0, 15498000.0, 19457000.0],
+        [7624000.0, -16218000.0, 19843000.0],
+        [16305000.0, 12037000.0, 17183000.0],
+        [-20889000.0, 13759000.0, 8291000.0],
+        [5463000.0, 24413000.0, 8934000.0],
+    ], dtype=np.float64)
+    sat_vel = np.array([
+        [1200.0, -2800.0, 500.0],
+        [-800.0, 1500.0, -2700.0],
+        [2500.0, 1800.0, -900.0],
+        [-1100.0, -2200.0, 2100.0],
+        [600.0, 2900.0, 1300.0],
+        [-2600.0, 400.0, -1800.0],
+    ], dtype=np.float64)
+    doppler = np.zeros(sat_ecef.shape[0], dtype=np.float64)
+    for i in range(sat_ecef.shape[0]):
+        los = sat_ecef[i] - rx_pos
+        los /= np.linalg.norm(los)
+        range_rate = float(np.dot(sat_vel[i] - true_vel, los) + true_cd)
+        doppler[i] = range_rate / L1_WAVELENGTH
+    weights = np.ones(sat_ecef.shape[0], dtype=np.float64)
+    return rx_pos, sat_ecef, sat_vel, doppler, weights, true_vel
 
 
 class TestStreamCorrectness:
@@ -215,6 +248,32 @@ class TestStreamCorrectness:
         np.testing.assert_allclose(states[:, 6], TRUE_CB)
         pf_device_destroy(state)
 
+    def test_doppler_update_moves_particle_velocity(self):
+        """Per-particle Doppler update nudges velocity toward the WLS solution."""
+        rx_pos, sat_ecef, sat_vel, doppler, weights, true_vel = _make_doppler_data()
+        n = 2048
+        state = pf_device_create(n)
+        pf_device_initialize(
+            state,
+            float(rx_pos[0]), float(rx_pos[1]), float(rx_pos[2]), TRUE_CB,
+            0.0, 0.0, SEED,
+            0.0, 0.0, 0.0, 0.0,
+        )
+        pf_device_weight_doppler(
+            state,
+            sat_ecef.ravel(), sat_vel.ravel(), doppler, weights,
+            len(doppler),
+            L1_WAVELENGTH, 0.5, 1.0, 100.0,
+        )
+
+        states = pf_device_get_particle_states(state)
+        np.testing.assert_allclose(
+            states[:, 3:6],
+            np.tile(true_vel, (n, 1)),
+            atol=1e-3,
+        )
+        pf_device_destroy(state)
+
     def test_many_satellites_exceeds_initial_capacity(self):
         """Handle more satellites than the initial pinned buffer capacity (64)."""
         n_sat = 80  # exceeds MAX_SATS=64 to trigger reallocation
@@ -300,6 +359,35 @@ class TestParticleFilterDeviceWrapper:
             np.tile([1.0, 0.5, -0.25], (2048, 1)),
         )
         assert pf.estimate().shape == (4,)
+
+    def test_update_doppler_wrapper_updates_velocity(self):
+        """High-level wrapper exposes Doppler per-particle velocity updates."""
+        rx_pos, sat_ecef, sat_vel, doppler, weights, true_vel = _make_doppler_data()
+        pf = ParticleFilterDevice(n_particles=2048, seed=SEED, resampling="systematic")
+        pf.initialize(
+            position_ecef=rx_pos,
+            clock_bias=TRUE_CB,
+            spread_pos=0.0,
+            spread_cb=0.0,
+            velocity=np.zeros(3),
+            spread_vel=0.0,
+        )
+        pf.update_doppler(
+            sat_ecef,
+            sat_vel,
+            doppler,
+            weights=weights,
+            sigma_mps=0.5,
+            velocity_update_gain=1.0,
+            max_velocity_update_mps=100.0,
+            resample=False,
+        )
+        states = pf.get_particle_states()
+        np.testing.assert_allclose(
+            states[:, 3:6],
+            np.tile(true_vel, (2048, 1)),
+            atol=1e-3,
+        )
 
     def test_get_position_spread_shrinks_after_update(self):
         """Position spread decreases after incorporating informative measurements."""

@@ -685,6 +685,30 @@ def test_parser_maps_per_particle_huber_flags():
     assert run_kwargs["per_particle_huber_undiff_pr_k"] == 3.0
 
 
+def test_parser_maps_doppler_per_particle_flags():
+    parser = build_arg_parser()
+    args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_best_accuracy",
+        "--doppler-per-particle",
+        "--doppler-sigma-mps", "0.75",
+        "--doppler-velocity-update-gain", "0.5",
+        "--doppler-max-velocity-update-mps", "4.0",
+        "--doppler-min-sats", "5",
+    ]))
+
+    run_kwargs = _namespace_to_run_kwargs(
+        args,
+        position_update_sigma=args.position_update_sigma,
+        use_smoother=args.smoother,
+    )
+    assert run_kwargs["doppler_per_particle"] is True
+    assert run_kwargs["doppler_sigma_mps"] == 0.75
+    assert run_kwargs["doppler_velocity_update_gain"] == 0.5
+    assert run_kwargs["doppler_max_velocity_update_mps"] == 4.0
+    assert run_kwargs["doppler_min_sats"] == 5
+
+
 def test_parser_maps_low_ess_dd_gate_flags():
     parser = build_arg_parser()
     args = parser.parse_args(_expand_cli_preset_argv([
@@ -925,6 +949,27 @@ def test_expand_cli_preset_argv_inlines_odaiba_best_accuracy_flags():
     assert expanded[expanded.index("--carrier-anchor-sigma-m") + 1] == "0.15"
     assert expanded[expanded.index("--mupf-dd-gate-adaptive-floor-cycles") + 1] == "0.18"
     assert "--smoother-tail-guard-ess-max-ratio" in expanded
+    assert "--no-doppler-per-particle" in expanded
+    assert expanded[-2:] == ["--max-epochs", "10"]
+
+
+def test_expand_cli_preset_argv_inlines_odaiba_rbpf_velocity_flags():
+    expanded = _expand_cli_preset_argv([
+        "--preset", "odaiba_rbpf_velocity",
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--max-epochs", "10",
+    ])
+
+    assert "--preset" not in expanded
+    assert expanded[expanded.index("--n-particles") + 1] == "200000"
+    assert expanded[expanded.index("--carrier-anchor-sigma-m") + 1] == "0.15"
+    assert "--no-doppler-per-particle" in expanded
+    assert "--doppler-per-particle" in expanded
+    assert expanded.index("--doppler-per-particle") > expanded.index("--no-doppler-per-particle")
+    assert expanded[expanded.index("--doppler-sigma-mps") + 1] == "0.5"
+    assert expanded[expanded.index("--doppler-velocity-update-gain") + 1] == "0.25"
+    assert expanded[expanded.index("--doppler-max-velocity-update-mps") + 1] == "10.0"
+    assert expanded[expanded.index("--doppler-min-sats") + 1] == "4"
     assert expanded[-2:] == ["--max-epochs", "10"]
 
 
