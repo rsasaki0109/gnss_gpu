@@ -47,7 +47,9 @@ class ParticleFilterDevice:
                  per_particle_huber_dd_carrier_k=1.5,
                  per_particle_huber_undiff_pr_k=1.5,
                  sigma_vel=0.0,
-                 velocity_guide_alpha=1.0):
+                 velocity_guide_alpha=1.0,
+                 rbpf_velocity_kf=False,
+                 velocity_process_noise=0.0):
         from gnss_gpu._gnss_gpu_pf_device import (
             pf_device_create,
             pf_device_destroy,
@@ -117,6 +119,8 @@ class ParticleFilterDevice:
         self.per_particle_huber_undiff_pr_k = float(per_particle_huber_undiff_pr_k)
         self.sigma_vel = float(sigma_vel)
         self.velocity_guide_alpha = float(velocity_guide_alpha)
+        self.rbpf_velocity_kf = bool(rbpf_velocity_kf)
+        self.velocity_process_noise = float(velocity_process_noise)
 
         # Allocate GPU memory once
         self._state = self._pf_device_create(n_particles)
@@ -183,7 +187,8 @@ class ParticleFilterDevice:
         self._step = 0
 
     def predict(self, velocity=None, dt=1.0, sigma_pos=None, sigma_vel=None,
-                velocity_guide_alpha=None):
+                velocity_guide_alpha=None, rbpf_velocity_kf=None,
+                velocity_process_noise=None):
         """Predict step with optional velocity.
 
         Only 24 bytes (velocity guide) transferred to GPU. Internally each
@@ -200,10 +205,15 @@ class ParticleFilterDevice:
             Per-step position random-walk sigma [m]. Defaults to ``self.sigma_pos``.
             Use a smaller value when a high-quality velocity guide (e.g. TDCP) is available.
         sigma_vel : float, optional
-            Per-axis velocity process noise [m/s]. Defaults to ``self.sigma_vel``.
+            Legacy sampled-velocity process noise [m/s]. Defaults to ``self.sigma_vel``.
         velocity_guide_alpha : float, optional
             Blend factor toward the supplied velocity guide. Defaults to
             ``self.velocity_guide_alpha``.
+        rbpf_velocity_kf : bool, optional
+            If True, propagate position with the per-particle velocity KF covariance
+            and do not sample velocity.
+        velocity_process_noise : float, optional
+            Velocity KF process noise scale Q_v [m^2/s^3].
         """
         if not self._initialized:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
@@ -221,13 +231,23 @@ class ParticleFilterDevice:
             if velocity_guide_alpha is None
             else velocity_guide_alpha
         )
+        use_velocity_kf = (
+            self.rbpf_velocity_kf
+            if rbpf_velocity_kf is None
+            else bool(rbpf_velocity_kf)
+        )
+        qv = float(
+            self.velocity_process_noise
+            if velocity_process_noise is None
+            else velocity_process_noise
+        )
 
         self._step += 1
         self._pf_device_predict(
             self._state,
             vx, vy, vz,
             float(dt), sp, float(self.sigma_cb),
-            self.seed, self._step, sv, alpha)
+            self.seed, self._step, sv, alpha, use_velocity_kf, qv)
 
     def update(self, sat_ecef, pseudoranges, weights=None, sigma_pr=None, resample=True):
         """Weight update with pseudorange observations.

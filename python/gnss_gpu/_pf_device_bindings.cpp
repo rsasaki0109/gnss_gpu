@@ -66,17 +66,22 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
                                   double dt, double sigma_pos, double sigma_cb,
                                   unsigned long long seed, int step,
                                   double sigma_vel,
-                                  double velocity_guide_alpha) {
+                                  double velocity_guide_alpha,
+                                  bool velocity_kf,
+                                  double velocity_process_noise) {
         gnss_gpu::pf_device_predict(
             state, vx, vy, vz, dt, sigma_pos, sigma_cb, seed, step,
-            sigma_vel, velocity_guide_alpha);
+            sigma_vel, velocity_guide_alpha, velocity_kf,
+            velocity_process_noise);
     }, "Predict step - operates entirely on device memory",
        py::arg("state"),
        py::arg("vx"), py::arg("vy"), py::arg("vz"),
        py::arg("dt"), py::arg("sigma_pos"), py::arg("sigma_cb"),
        py::arg("seed"), py::arg("step"),
        py::arg("sigma_vel") = 0.0,
-       py::arg("velocity_guide_alpha") = 1.0);
+       py::arg("velocity_guide_alpha") = 1.0,
+       py::arg("velocity_kf") = false,
+       py::arg("velocity_process_noise") = 0.0);
 
     m.def("pf_device_weight", [](gnss_gpu::PFDeviceState* state,
                                  py::array_t<double> sat_ecef,

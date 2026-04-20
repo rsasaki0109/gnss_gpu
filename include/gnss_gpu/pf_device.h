@@ -82,7 +82,9 @@ void pf_device_predict(PFDeviceState* state,
     double dt, double sigma_pos, double sigma_cb,
     unsigned long long seed, int step,
     double sigma_vel = 0.0,
-    double velocity_guide_alpha = 1.0);
+    double velocity_guide_alpha = 1.0,
+    bool velocity_kf = false,
+    double velocity_process_noise = 0.0);
 
 // Weight update - satellite data is small, only that gets H2D copied
 // nu: Student's t degrees of freedom. nu=0 means Gaussian (default).

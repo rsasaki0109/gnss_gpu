@@ -253,6 +253,34 @@ class TestStreamCorrectness:
         np.testing.assert_allclose(states[:, 4:7], np.tile([2.0, -1.0, 0.5], (n, 1)))
         pf_device_destroy(state)
 
+    def test_rbpf_predict_uses_velocity_covariance_without_sampling_velocity(self):
+        """Proper RBPF predict spreads position from Sigma_v while mu_v remains deterministic."""
+        n = 20_000
+        state = pf_device_create(n)
+        pf_device_initialize(
+            state,
+            0.0, 0.0, 0.0, TRUE_CB,
+            0.0, 0.0, SEED,
+            1.0, 0.0, 0.0, 0.0, 2.0,
+        )
+        pf_device_predict(
+            state,
+            1.0, 0.0, 0.0,
+            1.0, 0.0, 0.0,
+            SEED, 1,
+            100.0, 1.0, True, 0.5,
+        )
+
+        states = pf_device_get_particle_states(state)
+        np.testing.assert_allclose(states[:, 4:7], np.tile([1.0, 0.0, 0.0], (n, 1)))
+        assert 1.6 < float(np.std(states[:, 0] - 1.0)) < 2.4
+        assert 1.6 < float(np.std(states[:, 1])) < 2.4
+        assert 1.6 < float(np.std(states[:, 2])) < 2.4
+        np.testing.assert_allclose(states[:, 7], 4.5)
+        np.testing.assert_allclose(states[:, 11], 4.5)
+        np.testing.assert_allclose(states[:, 15], 4.5)
+        pf_device_destroy(state)
+
     def test_doppler_update_moves_particle_velocity(self):
         """Per-particle Doppler update nudges velocity toward the WLS solution."""
         rx_pos, sat_ecef, sat_vel, doppler, weights, true_vel = _make_doppler_data()
@@ -397,6 +425,27 @@ class TestParticleFilterDeviceWrapper:
             np.tile(true_vel, (2048, 1)),
             atol=1e-3,
         )
+
+    def test_wrapper_rbpf_predict_passes_velocity_kf_controls(self):
+        """High-level wrapper can enable covariance-based RBPF predict."""
+        pf = ParticleFilterDevice(
+            n_particles=4096,
+            seed=SEED,
+            rbpf_velocity_kf=True,
+            velocity_process_noise=0.25,
+        )
+        pf.initialize(
+            position_ecef=TRUE_POS,
+            clock_bias=TRUE_CB,
+            spread_pos=0.0,
+            spread_cb=0.0,
+            velocity=np.array([0.5, -0.25, 0.0]),
+            velocity_init_sigma=1.0,
+        )
+        pf.predict(velocity=np.array([0.5, -0.25, 0.0]), dt=2.0, sigma_pos=0.0)
+        states = pf.get_particle_states()
+        np.testing.assert_allclose(states[:, 4:7], np.tile([0.5, -0.25, 0.0], (4096, 1)))
+        np.testing.assert_allclose(states[:, [7, 11, 15]], 1.5)
 
     def test_get_position_spread_shrinks_after_update(self):
         """Position spread decreases after incorporating informative measurements."""

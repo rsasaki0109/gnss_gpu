@@ -105,10 +105,12 @@ __global__ void pfd_init_kernel(double* px, double* py, double* pz,
 
 __global__ void pfd_predict_kernel(double* px, double* py, double* pz,
                                    double* vx, double* vy, double* vz,
+                                   double* vcov,
                                    double* pcb,
                                    const double* vel_guide,  // [3]: vx, vy, vz
                                    double dt, double sigma_pos, double sigma_cb,
                                    double sigma_vel, double velocity_guide_alpha,
+                                   bool velocity_kf, double velocity_process_noise,
                                    int N, unsigned long long seed, int step) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= N) return;
@@ -124,7 +126,7 @@ __global__ void pfd_predict_kernel(double* px, double* py, double* pz,
     vxi = (1.0 - alpha) * vxi + alpha * vel_guide[0];
     vyi = (1.0 - alpha) * vyi + alpha * vel_guide[1];
     vzi = (1.0 - alpha) * vzi + alpha * vel_guide[2];
-    if (sigma_vel > 0.0) {
+    if (!velocity_kf && sigma_vel > 0.0) {
         vxi += curand_normal_double(&state) * sigma_vel;
         vyi += curand_normal_double(&state) * sigma_vel;
         vzi += curand_normal_double(&state) * sigma_vel;
@@ -133,9 +135,54 @@ __global__ void pfd_predict_kernel(double* px, double* py, double* pz,
     vy[tid] = vyi;
     vz[tid] = vzi;
 
-    px[tid] += vxi * dt + curand_normal_double(&state) * sigma_pos;
-    py[tid] += vyi * dt + curand_normal_double(&state) * sigma_pos;
-    pz[tid] += vzi * dt + curand_normal_double(&state) * sigma_pos;
+    double nx = 0.0;
+    double ny = 0.0;
+    double nz = 0.0;
+    if (velocity_kf) {
+        int cov_off = tid * 9;
+        double dt2 = dt * dt;
+        double sigma_pos2 = sigma_pos * sigma_pos;
+        double a00 = sigma_pos2 + dt2 * vcov[cov_off + 0];
+        double a01 = dt2 * vcov[cov_off + 1];
+        double a02 = dt2 * vcov[cov_off + 2];
+        double a11 = sigma_pos2 + dt2 * vcov[cov_off + 4];
+        double a12 = dt2 * vcov[cov_off + 5];
+        double a22 = sigma_pos2 + dt2 * vcov[cov_off + 8];
+
+        double l00 = sqrt(fmax(a00, 0.0));
+        double l10 = 0.0;
+        double l20 = 0.0;
+        if (l00 > 1e-12) {
+            l10 = a01 / l00;
+            l20 = a02 / l00;
+        }
+        double l11 = sqrt(fmax(a11 - l10 * l10, 0.0));
+        double l21 = 0.0;
+        if (l11 > 1e-12) {
+            l21 = (a12 - l20 * l10) / l11;
+        }
+        double l22 = sqrt(fmax(a22 - l20 * l20 - l21 * l21, 0.0));
+
+        double z0 = curand_normal_double(&state);
+        double z1 = curand_normal_double(&state);
+        double z2 = curand_normal_double(&state);
+        nx = l00 * z0;
+        ny = l10 * z0 + l11 * z1;
+        nz = l20 * z0 + l21 * z1 + l22 * z2;
+
+        double qdt = fmax(velocity_process_noise, 0.0) * fmax(dt, 0.0);
+        vcov[cov_off + 0] += qdt;
+        vcov[cov_off + 4] += qdt;
+        vcov[cov_off + 8] += qdt;
+    } else {
+        nx = curand_normal_double(&state) * sigma_pos;
+        ny = curand_normal_double(&state) * sigma_pos;
+        nz = curand_normal_double(&state) * sigma_pos;
+    }
+
+    px[tid] += vxi * dt + nx;
+    py[tid] += vyi * dt + ny;
+    pz[tid] += vzi * dt + nz;
     pcb[tid] += curand_normal_double(&state) * sigma_cb;
 }
 
@@ -1267,7 +1314,9 @@ void pf_device_predict(PFDeviceState* state,
     double dt, double sigma_pos, double sigma_cb,
     unsigned long long seed, int step,
     double sigma_vel,
-    double velocity_guide_alpha) {
+    double velocity_guide_alpha,
+    bool velocity_kf,
+    double velocity_process_noise) {
 
     int N = state->n_particles;
     int grid = state->grid_size;
@@ -1282,9 +1331,10 @@ void pf_device_predict(PFDeviceState* state,
 
     pfd_predict_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
-        state->d_vx, state->d_vy, state->d_vz, state->d_pcb,
+        state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
         state->d_vel,
         dt, sigma_pos, sigma_cb, sigma_vel, velocity_guide_alpha,
+        velocity_kf, velocity_process_noise,
         N, seed, step);
     CUDA_CHECK_LAST();
 }
