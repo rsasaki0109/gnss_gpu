@@ -1,21 +1,29 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-04-17 JST
-**現在の HEAD**: `ca73867` (`feature/carrier-phase-imu`)
-**ブランチ**: `feature/carrier-phase-imu` (PR #4 open, CI 全 pass)
-**作業ツリー**: dirty (DD pseudorange/carrier/quality/stop-detect/GSDC 評価が積み上がっている)
-**FGO**: メイン engine には使わない。ただし **PF の weak-DD window だけ局所 FGO** で救うハイブリッドは OK (2026-04-18 緩和)。
+**最終更新**: 2026-04-21 JST
+**現在の HEAD**: `7952456` (`feature/carrier-phase-imu`, origin 同期)
+**ブランチ**: `feature/carrier-phase-imu`
+**作業ツリー**: clean (未追跡の `.codex_handoff*.md` を除く、gitignore 済)
+**PR #4**: CLOSED (not merged、2026-04-16)。現在の 28+ commits はどの PR にも入っていない
 
 **北極星目標 (2026-04-19 設定)**:
 **A Continuous-Time Rao-Blackwellized Particle Filter with Factor Graph Optimization** (CT-RBPF-FGO)
 
 - **CT**: B-spline trajectory (control points)、任意時刻で (R, p, v, a) を解析的に query (参考: https://qiita.com/NaokiAkai/items/dc77f8dd7fb514a75add)
-- **RB**: per-particle velocity/clock-bias を KF で marginalize (state を {x,y,z} と {v, cb} に分ける)
+- **RB**: per-particle velocity を KF で marginalize (Doppler observation を per-particle linear-Gaussian update)
 - **PF**: per-particle NLOS rejection (satellite LOS/NLOS 判定を各 particle の hypothesized position で独立実施)
 - **FGO**: weak-DD window で two-step FGO overlay (velocity FGO → position+TDCP FGO、太郎式 https://github.com/taroz/gsdc2023)
 
 段階目標: Odaiba SMTH P50 < 1.00m (現 1.14m から)
-**PR #4**: 許可があるまで merge しない。
+
+**FGO**: メイン engine には使わない。ただし **PF の weak-DD window だけ局所 FGO** で救うハイブリッドは OK (2026-04-18 緩和)。
+
+## 0. 現状サマリ (2026-04-21)
+
+- **Best Odaiba SMTH P50 = 1.14m** (preset `odaiba_best_accuracy`、200K + anchor σ 0.15 + stop_sigma 0.1 + guarded tail guard)
+- **Submeter (<1m) は未達**。2026-04-17〜21 の 10 セッション (codex4-14) で多数の algo/architecture 試行、いずれも 1.14m を超えられず
+- **proper RBPF (codex14) の subset テストでのみ 0.89m (submeter) を達成**、full Odaiba では 1.20m 付近
+- MAP-collapse 問題は観測共通のため、FGO/LAMBDA の単独導入では解消しないことが empirical に判明
 
 ---
 
@@ -34,12 +42,24 @@
 
 ### 1.1 headline numbers
 
-#### UrbanNav Tokyo (dual-frequency Trimble, 100K particles, smoother)
+#### UrbanNav Tokyo Odaiba (dual-frequency Trimble, submeter 挑戦本戦場)
 
-| 場所 | PF P50 | PF RMS | Baseline | Baseline RMS | PF RMS 改善 |
-|---|---:|---:|---|---:|---:|
-| **Odaiba** | **1.36m** | **4.11m** | RTKLIB demo5 | 13.08m | **69%** |
-| **Shinjuku** | **2.52m** | **8.92m** | SPP | 18.12m | **51%** |
+| preset / 手法 | particles | SMTH P50 | SMTH RMS | 備考 |
+|---|---:|---:|---:|---|
+| `odaiba_reference` (100K baseline) | 100K | 1.38 | 5.08 | 以前の headline |
+| `odaiba_reference` (stop_sigma 昇格後) | 100K | 1.34 | 4.11 | 2026-04-17 改善 |
+| `odaiba_best_accuracy` | 200K | **1.14** | **4.36** | **current best** (2026-04-17〜) |
+| proper RBPF (subset 3k) | 200K | 0.89 | — | 部分区間のみ submeter 達成 |
+| proper RBPF (full Odaiba) | 200K | 1.20 | 4.29 | baseline 超え無し、subset 以外で悪化相殺 |
+| RTKLIB demo5 (reference) | — | 4.20 | 13.08 | 外部 baseline |
+
+#### UrbanNav Tokyo Shinjuku (cross-site 検証)
+
+| config | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|---:|
+| odaiba_reference (0.25 old floor) | 2.63 | 10.18 | 2.58 | 9.93 |
+| odaiba_reference (0.18 new floor) | 2.53 | 6.41 | 2.61 | 6.87 |
+| odaiba_best_accuracy (200K + stop_sigma) | 2.49 | 7.06 | 2.29 | 7.55 |
 
 #### UrbanNav HK (supplemental, single-frequency ublox)
 
@@ -128,23 +148,43 @@ CorrectedMeasurement に追加: prn, carrier_phase, doppler, snr, satellite_velo
 
 ## 3. 正直なネガティブ結果 (全部)
 
+### 3.1 Odaiba (1.14m 超えを目指した試行、全て 1.14m を超えられず)
+
+| 手法 | 実装担当 | 結果 | 原因 |
+|---|---|---|---|
+| Huber DD soft downweight | codex5 | 1.22m | 既存 adaptive gate が binary 版 Huber 相当、上積み無し |
+| OSM road constraint (soft) | codex6 | 1.30m | 2D road は urban で wrong match、Odaiba でも HK 同様悪化 |
+| Local FGO (window 2400:3500) | codex7 | 1.14m (同値) | PF smoother と同じ MAP 解に収束、factor error は削減するが GT 改善なし |
+| LAMBDA L1 integer fix | codex8 | 1.14m (同値) | partial fix 22 seg / 1093 obs、weak-DD 区間で fixable 少ない |
+| Widelane (region-less) | codex9 | 1.83m (悪化) | WL fix rate 高い (95%) が weak-DD で wrong fix 入って全体悪化 |
+| Widelane region-aware gate | codex10 | 1.29m | DD pairs / ratio gate 効くが baseline 未満 |
+| Per-particle hard NLOS reject | codex11 | 64m (壊滅) | reject に penalty 無く particle 漂流、density 崩壊 |
+| Per-particle Huber soft | codex12 | 1.21m (k=1.5 最良) | 既存 adaptive gate と等価、上積み無し |
+| Naive sampled velocity RBPF | codex13 | 1.22m | state 7D 化で curse of dimensionality、200K で密度不足 |
+| **Proper RBPF (velocity KF marginalize)** | codex14 | **1.20m full / 0.89m subset** | 局所的に効くが full で相殺、region-aware 化の余地あり |
+
+### 3.2 過去のネガティブ (引き続き NG)
+
 | 手法 | データ | 結果 | 原因 |
 |---|---|---|---|
-| Student's t likelihood | 全データ | 悪化 | urban canyon で Gaussian が安定 |
-| RTK carrier phase | Odaiba | float-only, 改善なし | NLOS で integer fix 不可 |
+| Student's t likelihood | 全データ | 悪化 | urban canyon で Gaussian が安定、重い尻尾で情報不足 |
+| RTK carrier phase (integer) | Odaiba | 改善なし | NLOS で integer fix 不可 |
 | Float carrier phase | HK | 効果なし | single-freq + NLOS で ambiguity 収束せず |
 | OSM map constraint | HK | 悪化 | wrong road matching |
-| DGNSS (base station 差分) | Odaiba | 改善なし | gnssplusplus 補正が既に十分 |
+| DGNSS (NOAA CORS) on GSDC | GSDC | 改善なし | coverage 不足、daily 30s RINEX では GSDC 1Hz rover に対応しきれない |
 | Hatch filter | Odaiba | 悪化 | urban canyon で carrier phase 途切れ diverge |
 | TDCP predict | Odaiba | IMU に負ける | IMU (wheel+gyro) の方が高精度 |
 | DD PR base interpolation | Odaiba | RMS 暴発 | 1Hz→10Hz 補間の品質が低い |
 | 1M + small sigma_pos | Odaiba | 崩壊 | particle depletion (sp<1) |
 | DD gate 緩和 | Odaiba | 悪化 | 品質の悪い pair を通すと P50 悪化 |
-| DD sigma support scaling | Odaiba | 変化なし | 閾値 sweep で改善しない |
 | sigma_pos < 1.0 (100K) | Odaiba | P50 悪化 | predict noise 不足 |
-| TDCP (GSDC smartphone) | Kaggle | 30.76m (悪化) | smartphone ADR の品質が低い |
-| Hatch filter (GSDC) | Kaggle | 10.15m (悪化) | 頻繁な cycle slip で diverge |
-| Carrier phase smoothing (GSDC) | Kaggle | 全て悪化 | smartphone carrier phase は信頼できない |
+| 500K particles | Odaiba | 1.40 (悪化) | 200K が sweet spot、過多は Smoother で overshoot |
+| tracked fallback preference | Odaiba weak-DD | 悪化 | coverage hole で fallback 品質不足 |
+| ESS-only weak-DD replacement | Odaiba | 悪化 | 過度に fallback |
+| Robust WLS (Huber) for GSDC | Kaggle | P50 -0.0004 (実質ゼロ) | WLS 既に良く Huber の余地少ない |
+| TDCP (GSDC smartphone) | Kaggle | 30.76m | smartphone ADR 品質低 |
+| Hatch filter (GSDC) | Kaggle | 10.15m | 頻繁 cycle slip |
+| Carrier phase smoothing (GSDC) | Kaggle | 全悪化 | smartphone carrier 信頼不可 |
 
 ---
 
@@ -210,11 +250,26 @@ PF wins: 21% (P50), 26% (RMS)
 
 ### 5.1 frozen presets
 
-| Preset | P50 | RMS | 用途 |
-|---|---:|---:|---|
-| odaiba_reference | 1.34m | 4.11m | DD adaptive floor `0.18` + stop detection `sigma_pos=0.1` に更新した current best |
-| odaiba_stop_detect | 1.36m | 4.11m | legacy stop-detection comparison。DD adaptive floor は `0.25` 維持 |
-| odaiba_reference_guarded | 1.38m | 5.36m | low-ESS tail guard + DD adaptive floor `0.18`。still not current best |
+| Preset | particles | P50 | RMS | 用途 |
+|---|---:|---:|---:|---|
+| odaiba_reference | 100K | 1.34 | 4.11 | DD floor `0.18` + stop detection 入り、smoother-first baseline |
+| odaiba_stop_detect | 100K | 1.36 | 4.11 | legacy stop-detection comparison、DD floor `0.25`、forward-stable |
+| odaiba_reference_guarded | 100K | 1.38 | 5.36 | low-ESS tail guard + DD floor `0.18`、weak tail 対策 |
+| **odaiba_best_accuracy** | **200K** | **1.14** | **4.36** | **current best**: guarded base + stop_sigma + carrier-anchor σ 0.15 |
+
+新 preset は 2026-04-17 追加。details:
+```
+--runs Odaiba --n-particles 200000 --sigma-pos 1.2 --position-update-sigma 1.9
+--predict-guide imu --imu-tight-coupling --imu-stop-sigma-pos 0.1
+--residual-downweight --pr-accel-downweight --smoother
+--dd-pseudorange --dd-pseudorange-sigma 0.5 (+ adaptive floor 4.0 / mad 3.0 / ess 0.9-1.1)
+--mupf-dd --mupf-dd-sigma-cycles 0.20 --mupf-dd-base-interp
+--mupf-dd-gate-adaptive-floor-cycles 0.18 --mupf-dd-gate-adaptive-mad-mult 3.0
+--mupf-dd-skip-low-support-ess-ratio 0.01 --mupf-dd-skip-low-support-max-pairs 4
+--mupf-dd-fallback-undiff --mupf-dd-fallback-sigma-cycles 0.10
+--carrier-anchor --carrier-anchor-sigma-m 0.15 --carrier-anchor-max-residual-m 0.80
+--smoother-tail-guard-ess-max-ratio 0.001 --smoother-tail-guard-min-shift-m 4.0
+```
 
 ### 5.2 DD carrier 統計 (Odaiba, 100K)
 
@@ -346,41 +401,62 @@ PYTHONPATH=python python3 -m pytest tests/test_exp_pf_smoother_eval.py -q
 
 ---
 
-## 10. 次にやるべきこと
+## 10. 次にやるべきこと (2026-04-21 大幅更新)
 
-### 10.1 PR #4 の merge 準備 (最優先)
+### 10.1 submeter 突破の優先順位
 
-CI 全 pass。README 最新。merge はユーザーの明示許可待ち。
+現状 1.14m、submeter (<1m) 未達。codex14 の proper RBPF が **subset で 0.89m 達成**しており、これを full Odaiba に拡張できるかが鍵。
 
-### 10.2 精度改善の方向 (もし続けるなら)
+#### AAA (最優先): Region-aware proper RBPF
+- codex14 の proper RBPF は 3k subset で 0.89m を達成、full で 1.20m (相殺悪化)
+- 強い DD 区間でのみ Doppler KF update を有効化する region gate を追加
+- gate 候補: DD pair 数 ≥ N、ESS ≥ threshold、Doppler residual median ≤ threshold
+- 実装: `python/gnss_gpu/particle_filter_device.py` の Doppler KF hook に epoch gate を追加
+- CLI: `--rbpf-velocity-kf-gate-min-dd-pairs 15`, `--rbpf-velocity-kf-gate-min-ess-ratio 0.02` など
+- subset 成功の再現と full 展開を検証
 
-**1m 切りに到達するには:**
-- DD pair 数を増やす (base station coverage 改善 — データの制約)
-- base station interpolation の品質改善 (1Hz→10Hz、現状は品質不足で RMS 暴発)
-- weak-DD epoch の fallback を DD=yes 並みの品質にする
+#### BBB: Phase 3 — Continuous-Time B-spline trajectory
+- B-spline control points で軌道を連続化、IMU 残差は spline 解析微分で計算
+- GNSS 観測は観測時刻で評価 (epoch snap 不要)
+- 参考: https://qiita.com/NaokiAkai/items/dc77f8dd7fb514a75add
+- 工数大、PF/FGO 両方に効く、北極星 CT 層
 
-**攻めて微改善が出る可能性:**
-- support_skip 閾値緩和 (max-pairs=2 で P50 0.01m 改善済み)
-- epoch 2445-4890 の特別扱い (base coverage 穴の区間)
+#### CCC: Phase 4 — Two-step FGO overlay (太郎式)
+- 既存 `python/gnss_gpu/local_fgo.py` を 2 段階に分解
+  1. velocity-first FGO (Doppler + IMU only)
+  2. position FGO + TDCP を state-to-state constraint として (velocity は loose prior)
+- 現在の single joint FGO と構造が違う、submeter を目指す
+- 参考: Suzuki 2023 Sensors https://www.mdpi.com/1424-8220/23/3/1205, https://github.com/taroz/gsdc2023
 
-**攻めても改善しないもの:**
-- sigma_pos 縮小 (100K では 1.2 が最適、これ以下は particle depletion)
-- DD gate 緩和 (品質の悪い pair を通すと P50 悪化)
-- stop-detect preset への DD adaptive floor `0.18` 適用 (smoother は横ばいだが forward が悪化)
-- TDCP predict (IMU に負ける)
-- smoother tail guard (ESS/shift guard は weak segment の局所改善はあるが、full Odaiba では悪化)
+#### 既に試し済み (再試行しない)
+- 上記 §3.1 表を参照。Huber / OSM / local FGO single-joint / LAMBDA L1 / widelane (region-less/aware) / per-particle hard NLOS / per-particle Huber / naive sampled velocity は全て 1.14m 超え不可
 
-### 10.3 GSDC 改善の方向 (もし続けるなら)
+### 10.2 既存 PF 機構の改善 (続けるなら小改善余地)
 
-- **DGNSS (基準局差分)** — CORS station のデータが必要。gsdc2023 1st place の主要因。
-- **Robust WLS (Huber)** — PF の代わりに robust WLS で前処理
-- carrier phase は smartphone では使えない (honest negative result)
+1.14m から届かないが、以下の細部チューニングは試す価値あり:
+- carrier anchor sigma の re-sweep (0.15 が現 best、0.12-0.18 の fine sweep)
+- smoother tail guard の threshold 再調整
+- IMU stop detection の robustness 改善 (信号停止判定精度)
+- sigma_doppler / Q_v sweep (proper RBPF 文脈で、region-aware 前提)
 
-### 10.4 論文/artifact 整備
+### 10.3 GSDC 改善の方向 (副次目標)
 
-- README は最新結果に更新済み
-- GSDC 結果を README に supplemental として追記
-- GIF は Odaiba/Shinjuku/HK 生成済み
+- **DGNSS (高 rate CORS)** — 実装検討した (codex F)、daily 30s では不足。1Hz / high-rate source 取得から必要
+- **Robust WLS (Huber)** — 試済、negligible 差
+- carrier phase は smartphone では使えない
+
+### 10.4 論文/artifact 整備 (完結させるなら)
+
+- README は 1.34m headline のまま、更新されていない → 1.14m (best_accuracy) へ更新要
+- 全 10+ negative 結果を supplemental として整理 (この plan.md §3 をベースに)
+- 北極星 CT-RBPF-FGO は論文の future work として記載
+- PR は feature/carrier-phase-imu → main が unrelated history (main と独立)、要判断
+
+### 10.5 PR の扱い
+
+- PR #4 は CLOSED かつ not merged (2026-04-16)
+- 2026-04-17 以降の 28+ commit はどの PR にも属さない
+- main と feature/carrier-phase-imu は共通祖先なしの独立履歴 — PR 作るには base 判断必要
 
 ---
 
@@ -418,7 +494,45 @@ CI 全 pass。README 最新。merge はユーザーの明示許可待ち。
 ## 12. ユーザーからの指示
 
 - **FGO はメイン engine には NG** (PF/smoother が軸)。ただし weak-DD window など局所救済に限って FGO を使うハイブリッドは OK (2026-04-18 緩和)
-- **PR #4 は merge 不可** — 明示許可が必要
-- **コミットに Co-Authored-By は付けない**
+- **PR #4 は merge 不可** — 明示許可が必要 (現状 CLOSED なので moot)
+- **コミットに Co-Authored-By は付けない** (私自身名義のみ)
 - **PR に AI 生成表記は入れない**
 - **完了時刻は具体的な時刻で答える**
+- **2026-04-20 redact 実施**: commit author を全て `gnss-gpu contributors <redacted@example.com>` に書き換え済み。以後のコミットも同じ author 情報で (設定するなら `git config user.name "gnss-gpu contributors"` + `user.email "redacted@example.com"`)
+- **ファイル内容の redact**: `(16GB VRAM)` は全履歴から削除済み、`redacted@example.com` / `gnss-gpu contributors` (pyproject.toml) → `gnss-gpu contributors` / `redacted@example.com` に置換済み
+
+---
+
+## 13. 次セッション向けメモ (2026-04-21 現在)
+
+### バックグラウンド codex セッション履歴 (2026-04-17〜21)
+最新のコミット群は `bee364f` (redact) を最終として、その前に以下の試行 (いずれも revert or negative note のみ残存):
+- codex4 algorithmic smoother tweaks → negative
+- codex5 Huber DD likelihood → negative (revert)
+- codex6 OSM road constraint → negative (revert)
+- codex7 local FGO hybrid → 同 MAP 解
+- codex8 LAMBDA L1 integer fix → partial fix、改善なし
+- codex9 widelane → negative
+- codex10 widelane region-aware → negative (revert)
+- codex11 per-particle hard NLOS → 壊滅 (revert)
+- codex12 per-particle Huber → negative (revert)
+- codex13 naive sampled velocity RBPF → 1.22m 悪化 (残存、default off)
+- codex14 proper RBPF (velocity KF) → 1.20m full / 0.89m subset (残存、default off、`--rbpf-velocity-kf`)
+
+### 本プランの読み方 (引き継ぐ codex へ)
+
+1. まず §0 現状サマリと §10 「次にやるべきこと」を読む
+2. §3 全ネガティブ結果を必ず確認 (再試行禁止)
+3. §5 Odaiba presets の `odaiba_best_accuracy` を baseline として使う
+4. AAA (region-aware proper RBPF) が最も promising、subset 0.89m の再現と full への展開が次タスク
+5. 北極星 (冒頭) の CT-RBPF-FGO を意識しつつ、Phase 毎に独立コミット
+
+### 既存 default-off 機能 (任意活用可)
+- `--rbpf-velocity-kf`: proper RBPF (codex14)、Q_v, Doppler sigma はまだ未最適
+- `--doppler-per-particle`: naive sampled velocity (codex13)、proper RBPF と排他
+- `--per-particle-huber` / `--per-particle-nlos-gate`: per-particle gate 系 (codex11/12)、全 negative
+- `--widelane`: widelane DD (codex9)、region-aware gate 付き (codex10)、default off
+- `--fgo-local-window` / `--fgo-local-lambda`: local FGO + LAMBDA (codex7/8)
+
+### 重要: codex への指示テンプレート
+各セッションは `.codex_handoff{N}.md` に詳細を書いて渡す形式。過去の例は gitignore されているため参照不可だが、plan.md §3 / §10 を元に構成すれば同等。
