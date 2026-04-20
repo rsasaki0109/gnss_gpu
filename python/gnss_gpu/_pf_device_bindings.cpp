@@ -234,7 +234,7 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
             static_cast<double*>(b_weights.ptr),
             n_sat, wavelength_m, sigma_mps,
             velocity_update_gain, max_velocity_update_mps);
-    }, "Velocity-domain update using Doppler observations",
+    }, "Velocity-domain update using Doppler observations (range-rate = -doppler * wavelength)",
        py::arg("state"),
        py::arg("sat_ecef"), py::arg("sat_vel"),
        py::arg("doppler_hz"), py::arg("weights_sat"),

@@ -151,6 +151,7 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
 // sat_vel: [n_sat, 3] satellite velocities [m/s]
 // doppler_hz: [n_sat] Doppler observations [Hz]
 // weights_sat: [n_sat] per-observation weights
+// Uses the common RINEX/receiver convention: range-rate = -doppler_hz * wavelength_m.
 // sigma_mps is Doppler range-rate noise [m/s].
 // velocity_update_gain blends each particle velocity toward its per-particle
 // Doppler WLS solution; set to 0 to apply likelihood only.

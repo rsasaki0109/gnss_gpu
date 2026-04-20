@@ -461,7 +461,8 @@ class ParticleFilterDevice:
         sat_vel : array_like, shape (n_sat, 3)
             Satellite ECEF velocities [m/s].
         doppler_hz : array_like, shape (n_sat,)
-            Doppler observations [Hz].
+            Doppler observations [Hz]. Negative means approaching; the update
+            uses ``range_rate = -wavelength * doppler_hz``.
         weights : array_like, shape (n_sat,), optional
             Per-satellite weights. Defaults to ones.
         wavelength : float

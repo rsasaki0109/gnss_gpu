@@ -549,6 +549,7 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
 // --- Doppler velocity-domain update kernel ---
 // Applies a per-particle Doppler likelihood using each particle's velocity
 // state, then optionally nudges velocity toward a per-particle WLS solution.
+// RINEX/receiver Doppler convention: observed range-rate = -doppler * wavelength.
 __global__ void pfd_weight_doppler_kernel(
     const double* px, const double* py, const double* pz,
     double* vx, double* vy, double* vz,
@@ -593,7 +594,7 @@ __global__ void pfd_weight_doppler_kernel(
         double lx = dx / r;
         double ly = dy / r;
         double lz = dz / r;
-        double obs = s_doppler[s] * wavelength_m;
+        double obs = -s_doppler[s] * wavelength_m;
         double sv_radial =
             s_sat_vel[s * 3 + 0] * lx +
             s_sat_vel[s * 3 + 1] * ly +
@@ -619,7 +620,7 @@ __global__ void pfd_weight_doppler_kernel(
         double lx = dx / r;
         double ly = dy / r;
         double lz = dz / r;
-        double obs = s_doppler[s] * wavelength_m;
+        double obs = -s_doppler[s] * wavelength_m;
         double pred =
             (s_sat_vel[s * 3 + 0] - vxi) * lx +
             (s_sat_vel[s * 3 + 1] - vyi) * ly +
@@ -655,7 +656,7 @@ __global__ void pfd_weight_doppler_kernel(
             s_sat_vel[s * 3 + 0] * lx +
             s_sat_vel[s * 3 + 1] * ly +
             s_sat_vel[s * 3 + 2] * lz;
-        double rhs = s_doppler[s] * wavelength_m - sv_radial;
+        double rhs = -s_doppler[s] * wavelength_m - sv_radial;
         double w = fmax(s_weights[s], 0.0);
         for (int a = 0; a < 4; a++) {
             normal[a][4] += h[a] * w * rhs;

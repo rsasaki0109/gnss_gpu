@@ -58,7 +58,7 @@ def _make_satellite_data(n_sat=N_SAT):
 
 
 def _make_doppler_data():
-    """Create synthetic Doppler rows with a known receiver velocity."""
+    """Create RINEX-style Doppler rows with a known receiver velocity."""
     rx_pos = np.array([-3957199.0, 3310205.0, 3737911.0], dtype=np.float64)
     true_vel = np.array([0.3, -0.5, 0.8], dtype=np.float64)
     true_cd = 5.0
@@ -83,7 +83,7 @@ def _make_doppler_data():
         los = sat_ecef[i] - rx_pos
         los /= np.linalg.norm(los)
         range_rate = float(np.dot(sat_vel[i] - true_vel, los) + true_cd)
-        doppler[i] = range_rate / L1_WAVELENGTH
+        doppler[i] = -range_rate / L1_WAVELENGTH
     weights = np.ones(sat_ecef.shape[0], dtype=np.float64)
     return rx_pos, sat_ecef, sat_vel, doppler, weights, true_vel
 
