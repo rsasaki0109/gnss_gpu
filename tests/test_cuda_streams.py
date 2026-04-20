@@ -212,22 +212,27 @@ class TestStreamCorrectness:
         assert np.all(np.isfinite(particles))
         pf_device_destroy(state)
 
-    def test_full_particle_states_include_velocity(self):
-        """Full device state exposes [x, y, z, vx, vy, vz, cb]."""
+    def test_full_particle_states_include_velocity_kf_state(self):
+        """Full device state exposes sampled position plus velocity KF state."""
         n = 2048
         state = pf_device_create(n)
         pf_device_initialize(
             state,
             10.0, 20.0, 30.0, TRUE_CB,
             0.0, 0.0, SEED,
-            1.5, -2.0, 0.25, 0.0,
+            1.5, -2.0, 0.25, 0.0, 2.0,
         )
 
         states = pf_device_get_particle_states(state)
-        assert states.shape == (n, 7)
+        assert states.shape == (n, 16)
         np.testing.assert_allclose(states[:, :3], np.tile([10.0, 20.0, 30.0], (n, 1)))
-        np.testing.assert_allclose(states[:, 3:6], np.tile([1.5, -2.0, 0.25], (n, 1)))
-        np.testing.assert_allclose(states[:, 6], TRUE_CB)
+        np.testing.assert_allclose(states[:, 3], TRUE_CB)
+        np.testing.assert_allclose(states[:, 4:7], np.tile([1.5, -2.0, 0.25], (n, 1)))
+        np.testing.assert_allclose(states[:, 7], 4.0)
+        np.testing.assert_allclose(states[:, 11], 4.0)
+        np.testing.assert_allclose(states[:, 15], 4.0)
+        off_diag = states[:, [8, 9, 10, 12, 13, 14]]
+        np.testing.assert_allclose(off_diag, 0.0)
         pf_device_destroy(state)
 
     def test_predict_uses_per_particle_velocity_state(self):
@@ -244,8 +249,8 @@ class TestStreamCorrectness:
 
         states = pf_device_get_particle_states(state)
         np.testing.assert_allclose(states[:, :3], np.tile([0.5, -0.25, 0.125], (n, 1)))
-        np.testing.assert_allclose(states[:, 3:6], np.tile([2.0, -1.0, 0.5], (n, 1)))
-        np.testing.assert_allclose(states[:, 6], TRUE_CB)
+        np.testing.assert_allclose(states[:, 3], TRUE_CB)
+        np.testing.assert_allclose(states[:, 4:7], np.tile([2.0, -1.0, 0.5], (n, 1)))
         pf_device_destroy(state)
 
     def test_doppler_update_moves_particle_velocity(self):
@@ -268,7 +273,7 @@ class TestStreamCorrectness:
 
         states = pf_device_get_particle_states(state)
         np.testing.assert_allclose(
-            states[:, 3:6],
+            states[:, 4:7],
             np.tile(true_vel, (n, 1)),
             atol=1e-3,
         )
@@ -342,7 +347,7 @@ class TestParticleFilterDeviceWrapper:
         pf.resample_if_needed()
 
     def test_get_particle_states_wrapper_shape(self):
-        """Wrapper exposes the 7D RBPF state without changing estimate()."""
+        """Wrapper exposes the 16D RBPF state without changing estimate()."""
         pf = ParticleFilterDevice(n_particles=2048, seed=SEED)
         pf.initialize(
             position_ecef=TRUE_POS,
@@ -351,13 +356,17 @@ class TestParticleFilterDeviceWrapper:
             spread_cb=0.0,
             velocity=np.array([1.0, 0.5, -0.25]),
             spread_vel=0.0,
+            velocity_init_sigma=3.0,
         )
         states = pf.get_particle_states()
-        assert states.shape == (2048, 7)
+        assert states.shape == (2048, 16)
         np.testing.assert_allclose(
-            states[:, 3:6],
+            states[:, 4:7],
             np.tile([1.0, 0.5, -0.25], (2048, 1)),
         )
+        np.testing.assert_allclose(states[:, 7], 9.0)
+        np.testing.assert_allclose(states[:, 11], 9.0)
+        np.testing.assert_allclose(states[:, 15], 9.0)
         assert pf.estimate().shape == (4,)
 
     def test_update_doppler_wrapper_updates_velocity(self):
@@ -384,7 +393,7 @@ class TestParticleFilterDeviceWrapper:
         )
         states = pf.get_particle_states()
         np.testing.assert_allclose(
-            states[:, 3:6],
+            states[:, 4:7],
             np.tile(true_vel, (2048, 1)),
             atol=1e-3,
         )

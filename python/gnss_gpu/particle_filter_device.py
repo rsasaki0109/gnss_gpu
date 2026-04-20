@@ -141,7 +141,8 @@ class ParticleFilterDevice:
         pass
 
     def initialize(self, position_ecef, clock_bias=0.0, spread_pos=100.0,
-                   spread_cb=1000.0, velocity=None, spread_vel=0.0):
+                   spread_cb=1000.0, velocity=None, spread_vel=0.0,
+                   velocity_init_sigma=0.0):
         """Scatter particles around an initial estimate.
 
         Runs entirely on GPU - no host-device transfer of particle data.
@@ -160,6 +161,9 @@ class ParticleFilterDevice:
             Initial ECEF velocity [m/s].
         spread_vel : float
             Standard deviation for initial per-particle velocity scatter [m/s].
+            This is legacy sampled-velocity behavior; leave at 0.0 for proper RBPF.
+        velocity_init_sigma : float
+            Initial per-particle velocity KF standard deviation [m/s].
         """
         pos = np.asarray(position_ecef, dtype=np.float64).ravel()
         if velocity is None:
@@ -172,7 +176,8 @@ class ParticleFilterDevice:
             float(pos[0]), float(pos[1]), float(pos[2]), float(clock_bias),
             float(spread_pos), float(spread_cb),
             self.seed,
-            float(vel[0]), float(vel[1]), float(vel[2]), float(spread_vel))
+            float(vel[0]), float(vel[1]), float(vel[2]), float(spread_vel),
+            float(velocity_init_sigma))
 
         self._initialized = True
         self._step = 0
@@ -637,8 +642,8 @@ class ParticleFilterDevice:
 
         Returns
         -------
-        states : ndarray, shape (n_particles, 7)
-            Each row is ``[x, y, z, vx, vy, vz, clock_bias]``.
+        states : ndarray, shape (n_particles, 16)
+            Each row is ``[x, y, z, clock_bias, mu_vx, mu_vy, mu_vz, Sigma_v...]``.
         """
         if not self._initialized:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")

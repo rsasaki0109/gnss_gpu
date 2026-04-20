@@ -47,16 +47,19 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
                                      double spread_pos, double spread_cb,
                                      unsigned long long seed,
                                      double init_vx, double init_vy, double init_vz,
-                                     double spread_vel) {
+                                     double spread_vel,
+                                     double init_vel_sigma) {
         gnss_gpu::pf_device_initialize(state, init_x, init_y, init_z, init_cb,
                                        spread_pos, spread_cb, seed,
-                                       init_vx, init_vy, init_vz, spread_vel);
+                                       init_vx, init_vy, init_vz, spread_vel,
+                                       init_vel_sigma);
     }, "Initialize particles on device (no H2D copy)",
        py::arg("state"),
        py::arg("init_x"), py::arg("init_y"), py::arg("init_z"), py::arg("init_cb"),
        py::arg("spread_pos"), py::arg("spread_cb"), py::arg("seed"),
        py::arg("init_vx") = 0.0, py::arg("init_vy") = 0.0, py::arg("init_vz") = 0.0,
-       py::arg("spread_vel") = 0.0);
+       py::arg("spread_vel") = 0.0,
+       py::arg("init_vel_sigma") = 0.0);
 
     m.def("pf_device_predict", [](gnss_gpu::PFDeviceState* state,
                                   double vx, double vy, double vz,
@@ -301,11 +304,11 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
 
     m.def("pf_device_get_particle_states", [](const gnss_gpu::PFDeviceState* state) {
         int N = state->n_particles;
-        auto output = py::array_t<double>({N, 7});
+        auto output = py::array_t<double>({N, 16});
         gnss_gpu::pf_device_get_particle_states(state,
             static_cast<double*>(output.request().ptr));
         return output;
-    }, "Copy full particle states [x,y,z,vx,vy,vz,cb] to host",
+    }, "Copy full particle states [x,y,z,cb,mu_vx,mu_vy,mu_vz,Sigma_v(3x3)] to host",
        py::arg("state"));
 
     m.def("pf_device_get_log_weights", [](const gnss_gpu::PFDeviceState* state,

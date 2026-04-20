@@ -66,11 +66,13 @@ __device__ bool pfd_solve_4x4(double A[4][5], double* x) {
 
 __global__ void pfd_init_kernel(double* px, double* py, double* pz,
                                 double* vx, double* vy, double* vz,
+                                double* vcov,
                                 double* pcb,
                                 double* log_weights,
                                 double init_x, double init_y, double init_z, double init_cb,
                                 double init_vx, double init_vy, double init_vz,
                                 double spread_pos, double spread_cb, double spread_vel,
+                                double init_vel_sigma,
                                 int N, unsigned long long seed) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= N) return;
@@ -89,6 +91,14 @@ __global__ void pfd_init_kernel(double* px, double* py, double* pz,
         vy[tid] += curand_normal_double(&state) * spread_vel;
         vz[tid] += curand_normal_double(&state) * spread_vel;
     }
+    double init_vel_var = init_vel_sigma * init_vel_sigma;
+    int cov_off = tid * 9;
+    for (int k = 0; k < 9; k++) {
+        vcov[cov_off + k] = 0.0;
+    }
+    vcov[cov_off + 0] = init_vel_var;
+    vcov[cov_off + 4] = init_vel_var;
+    vcov[cov_off + 8] = init_vel_var;
     pcb[tid] = init_cb + curand_normal_double(&state) * spread_cb;
     log_weights[tid] = 0.0;
 }
@@ -886,16 +896,22 @@ __global__ void pfd_get_particles_kernel(const double* px, const double* py,
 __global__ void pfd_get_particle_states_kernel(
     const double* px, const double* py, const double* pz,
     const double* vx, const double* vy, const double* vz,
+    const double* vcov,
     const double* pcb, double* output, int N) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= N) return;
-    output[tid * 7 + 0] = px[tid];
-    output[tid * 7 + 1] = py[tid];
-    output[tid * 7 + 2] = pz[tid];
-    output[tid * 7 + 3] = vx[tid];
-    output[tid * 7 + 4] = vy[tid];
-    output[tid * 7 + 5] = vz[tid];
-    output[tid * 7 + 6] = pcb[tid];
+    int out_off = tid * 16;
+    int cov_off = tid * 9;
+    output[out_off + 0] = px[tid];
+    output[out_off + 1] = py[tid];
+    output[out_off + 2] = pz[tid];
+    output[out_off + 3] = pcb[tid];
+    output[out_off + 4] = vx[tid];
+    output[out_off + 5] = vy[tid];
+    output[out_off + 6] = vz[tid];
+    for (int k = 0; k < 9; k++) {
+        output[out_off + 7 + k] = vcov[cov_off + k];
+    }
 }
 
 // --- Resampling helper kernels ---
@@ -948,11 +964,13 @@ __global__ void pfd_systematic_resample_kernel(const double* cdf,
                                                const double* pz_in,
                                                const double* vx_in, const double* vy_in,
                                                const double* vz_in,
+                                               const double* vcov_in,
                                                const double* pcb_in,
                                                double* px_out, double* py_out,
                                                double* pz_out,
                                                double* vx_out, double* vy_out,
                                                double* vz_out,
+                                               double* vcov_out,
                                                double* pcb_out,
                                                int* ancestor_out,
                                                int N, double u0) {
@@ -974,6 +992,11 @@ __global__ void pfd_systematic_resample_kernel(const double* cdf,
     vx_out[tid] = vx_in[lo];
     vy_out[tid] = vy_in[lo];
     vz_out[tid] = vz_in[lo];
+    int dst_cov = tid * 9;
+    int src_cov = lo * 9;
+    for (int k = 0; k < 9; k++) {
+        vcov_out[dst_cov + k] = vcov_in[src_cov + k];
+    }
     pcb_out[tid] = pcb_in[lo];
     if (ancestor_out != nullptr) {
         ancestor_out[tid] = lo;
@@ -990,9 +1013,11 @@ __global__ void pfd_reset_weights_kernel(double* log_weights, int N) {
 // --- Megopolis kernel ---
 __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
                                     double* vx_a, double* vy_a, double* vz_a,
+                                    double* vcov_a,
                                     double* pcb_a,
                                     double* px_b, double* py_b, double* pz_b,
                                     double* vx_b, double* vy_b, double* vz_b,
+                                    double* vcov_b,
                                     double* pcb_b,
                                     const double* log_weights,
                                     int N, unsigned long long seed, int iteration,
@@ -1009,6 +1034,7 @@ __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
     const double* src_vx = (src_buf == 0) ? vx_a : vx_b;
     const double* src_vy = (src_buf == 0) ? vy_a : vy_b;
     const double* src_vz = (src_buf == 0) ? vz_a : vz_b;
+    const double* src_vcov = (src_buf == 0) ? vcov_a : vcov_b;
     const double* src_pcb = (src_buf == 0) ? pcb_a : pcb_b;
     double* dst_px = (src_buf == 0) ? px_b : px_a;
     double* dst_py = (src_buf == 0) ? py_b : py_a;
@@ -1016,6 +1042,7 @@ __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
     double* dst_vx = (src_buf == 0) ? vx_b : vx_a;
     double* dst_vy = (src_buf == 0) ? vy_b : vy_a;
     double* dst_vz = (src_buf == 0) ? vz_b : vz_a;
+    double* dst_vcov = (src_buf == 0) ? vcov_b : vcov_a;
     double* dst_pcb = (src_buf == 0) ? pcb_b : pcb_a;
 
     int offset = (int)(curand_uniform_double(&state) * (N - 1)) + 1;
@@ -1032,6 +1059,11 @@ __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
         dst_vx[tid] = src_vx[j];
         dst_vy[tid] = src_vy[j];
         dst_vz[tid] = src_vz[j];
+        int dst_cov = tid * 9;
+        int src_cov = j * 9;
+        for (int k = 0; k < 9; k++) {
+            dst_vcov[dst_cov + k] = src_vcov[src_cov + k];
+        }
         dst_pcb[tid] = src_pcb[j];
     } else {
         dst_px[tid] = src_px[tid];
@@ -1040,6 +1072,10 @@ __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
         dst_vx[tid] = src_vx[tid];
         dst_vy[tid] = src_vy[tid];
         dst_vz[tid] = src_vz[tid];
+        int cov_off = tid * 9;
+        for (int k = 0; k < 9; k++) {
+            dst_vcov[cov_off + k] = src_vcov[cov_off + k];
+        }
         dst_pcb[tid] = src_pcb[tid];
     }
 }
@@ -1066,6 +1102,7 @@ PFDeviceState* pf_device_create(int n_particles) {
     CUDA_CHECK(cudaMalloc(&state->d_vx, sz));
     CUDA_CHECK(cudaMalloc(&state->d_vy, sz));
     CUDA_CHECK(cudaMalloc(&state->d_vz, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_vcov, (size_t)n_particles * 9 * sizeof(double)));
     CUDA_CHECK(cudaMalloc(&state->d_pcb, sz));
     CUDA_CHECK(cudaMalloc(&state->d_log_weights, sz));
 
@@ -1076,6 +1113,7 @@ PFDeviceState* pf_device_create(int n_particles) {
     CUDA_CHECK(cudaMalloc(&state->d_vx_tmp, sz));
     CUDA_CHECK(cudaMalloc(&state->d_vy_tmp, sz));
     CUDA_CHECK(cudaMalloc(&state->d_vz_tmp, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_vcov_tmp, (size_t)n_particles * 9 * sizeof(double)));
     CUDA_CHECK(cudaMalloc(&state->d_pcb_tmp, sz));
 
     // Reduction temporaries
@@ -1123,6 +1161,7 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     cudaFree(state->d_vx);
     cudaFree(state->d_vy);
     cudaFree(state->d_vz);
+    cudaFree(state->d_vcov);
     cudaFree(state->d_pcb);
     cudaFree(state->d_log_weights);
     cudaFree(state->d_px_tmp);
@@ -1131,6 +1170,7 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     cudaFree(state->d_vx_tmp);
     cudaFree(state->d_vy_tmp);
     cudaFree(state->d_vz_tmp);
+    cudaFree(state->d_vcov_tmp);
     cudaFree(state->d_pcb_tmp);
     cudaFree(state->d_partial_a);
     cudaFree(state->d_partial_b);
@@ -1157,6 +1197,7 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     state->d_vx = nullptr;
     state->d_vy = nullptr;
     state->d_vz = nullptr;
+    state->d_vcov = nullptr;
     state->d_pcb = nullptr;
     state->d_log_weights = nullptr;
     state->d_px_tmp = nullptr;
@@ -1165,6 +1206,7 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     state->d_vx_tmp = nullptr;
     state->d_vy_tmp = nullptr;
     state->d_vz_tmp = nullptr;
+    state->d_vcov_tmp = nullptr;
     state->d_pcb_tmp = nullptr;
     state->d_partial_a = nullptr;
     state->d_partial_b = nullptr;
@@ -1198,18 +1240,19 @@ void pf_device_initialize(PFDeviceState* state,
     double spread_pos, double spread_cb,
     unsigned long long seed,
     double init_vx, double init_vy, double init_vz,
-    double spread_vel) {
+    double spread_vel,
+    double init_vel_sigma) {
 
     int N = state->n_particles;
     int grid = state->grid_size;
 
     pfd_init_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
-        state->d_vx, state->d_vy, state->d_vz, state->d_pcb,
+        state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
         state->d_log_weights,
         init_x, init_y, init_z, init_cb,
         init_vx, init_vy, init_vz,
-        spread_pos, spread_cb, spread_vel,
+        spread_pos, spread_cb, spread_vel, init_vel_sigma,
         N, seed);
     CUDA_CHECK_LAST();
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
@@ -1582,9 +1625,9 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     pfd_systematic_resample_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_cdf,
         state->d_px, state->d_py, state->d_pz,
-        state->d_vx, state->d_vy, state->d_vz, state->d_pcb,
+        state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
         state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp,
-        state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_pcb_tmp,
+        state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_vcov_tmp, state->d_pcb_tmp,
         state->d_resample_ancestor,
         N, u0);
     CUDA_CHECK_LAST();
@@ -1596,6 +1639,7 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     std::swap(state->d_vx, state->d_vx_tmp);
     std::swap(state->d_vy, state->d_vy_tmp);
     std::swap(state->d_vz, state->d_vz_tmp);
+    std::swap(state->d_vcov, state->d_vcov_tmp);
     std::swap(state->d_pcb, state->d_pcb_tmp);
 
     // Step 9: Reset log weights to uniform
@@ -1618,9 +1662,9 @@ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsign
         int src_buf = iter % 2;
         pfd_megopolis_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
             state->d_px, state->d_py, state->d_pz,
-            state->d_vx, state->d_vy, state->d_vz, state->d_pcb,
+            state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
             state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp,
-            state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_pcb_tmp,
+            state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_vcov_tmp, state->d_pcb_tmp,
             state->d_log_weights,
             N, seed, iter, src_buf);
     }
@@ -1636,6 +1680,7 @@ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsign
         std::swap(state->d_vx, state->d_vx_tmp);
         std::swap(state->d_vy, state->d_vy_tmp);
         std::swap(state->d_vz, state->d_vz_tmp);
+        std::swap(state->d_vcov, state->d_vcov_tmp);
         std::swap(state->d_pcb, state->d_pcb_tmp);
     }
 
@@ -1721,13 +1766,13 @@ void pf_device_get_particles(const PFDeviceState* state, double* output) {
 void pf_device_get_particle_states(const PFDeviceState* state, double* output) {
     int N = state->n_particles;
     double* d_out;
-    size_t sz_out = (size_t)N * 7 * sizeof(double);
+    size_t sz_out = (size_t)N * 16 * sizeof(double);
     CUDA_CHECK(cudaMalloc(&d_out, sz_out));
 
     int grid = state->grid_size;
     pfd_get_particle_states_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
-        state->d_vx, state->d_vy, state->d_vz, state->d_pcb,
+        state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
         d_out, N);
     CUDA_CHECK_LAST();
 

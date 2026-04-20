@@ -11,6 +11,7 @@ struct PFDeviceState {
     double* d_vx;
     double* d_vy;
     double* d_vz;
+    double* d_vcov;  // [N * 9] per-particle velocity covariance, row-major 3x3
     double* d_pcb;
     double* d_log_weights;
 
@@ -21,6 +22,7 @@ struct PFDeviceState {
     double* d_vx_tmp;
     double* d_vy_tmp;
     double* d_vz_tmp;
+    double* d_vcov_tmp;
     double* d_pcb_tmp;
 
     // Persistent temp buffers for reductions (ESS, estimate)
@@ -71,7 +73,8 @@ void pf_device_initialize(PFDeviceState* state,
     double spread_pos, double spread_cb,
     unsigned long long seed,
     double init_vx = 0.0, double init_vy = 0.0, double init_vz = 0.0,
-    double spread_vel = 0.0);
+    double spread_vel = 0.0,
+    double init_vel_sigma = 0.0);
 
 // Predict - operates entirely on device memory
 void pf_device_predict(PFDeviceState* state,
@@ -188,7 +191,8 @@ void pf_device_estimate(const PFDeviceState* state, double* result);
 // Copy particles to host for visualization (only when needed)
 void pf_device_get_particles(const PFDeviceState* state, double* output);
 
-// Copy full particle states to host: [x, y, z, vx, vy, vz, cb].
+// Copy full particle states to host:
+// [x, y, z, cb, mu_vx, mu_vy, mu_vz, Sigma_v(3x3 row-major)].
 // Synchronizes the stream.
 void pf_device_get_particle_states(const PFDeviceState* state, double* output);
 
