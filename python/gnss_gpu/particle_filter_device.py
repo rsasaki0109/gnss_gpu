@@ -187,6 +187,7 @@ class ParticleFilterDevice:
 
         self._initialized = True
         self._step = 0
+        self._velocity_init_sigma = float(velocity_init_sigma)
 
     def predict(self, velocity=None, dt=1.0, sigma_pos=None, sigma_vel=None,
                 velocity_guide_alpha=None, rbpf_velocity_kf=None,
@@ -1025,8 +1026,16 @@ class ParticleFilterDevice:
             per_particle_huber_undiff_pr_k=self.per_particle_huber_undiff_pr_k,
             sigma_vel=self.sigma_vel,
             velocity_guide_alpha=self.velocity_guide_alpha,
+            rbpf_velocity_kf=self.rbpf_velocity_kf,
+            velocity_process_noise=self.velocity_process_noise,
         )
-        bwd_pf.initialize(init_pos, clock_bias=init_cb, spread_pos=10.0, spread_cb=100.0)
+        bwd_pf.initialize(
+            init_pos,
+            clock_bias=init_cb,
+            spread_pos=10.0,
+            spread_cb=100.0,
+            velocity_init_sigma=float(getattr(self, "_velocity_init_sigma", 0.0)),
+        )
 
         backward_pos = np.zeros((n_ep, 3))
         for i in range(n_ep - 1, -1, -1):

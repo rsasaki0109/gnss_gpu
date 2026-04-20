@@ -252,13 +252,13 @@ for _preset_name in (
     _CLI_PRESETS[_preset_name]["argv"].append("--no-doppler-per-particle")
 
 _CLI_PRESETS["odaiba_rbpf_velocity"] = {
-    "description": "Experimental Odaiba per-particle Doppler velocity RBPF probe.",
+    "description": "Experimental Odaiba proper RBPF velocity KF probe.",
     "argv": [
         *_CLI_PRESETS["odaiba_best_accuracy"]["argv"],
-        "--doppler-per-particle",
-        "--doppler-sigma-mps", "20.0",
-        "--doppler-velocity-update-gain", "0.0",
-        "--doppler-max-velocity-update-mps", "10.0",
+        "--rbpf-velocity-kf",
+        "--rbpf-velocity-init-sigma", "2.0",
+        "--rbpf-velocity-process-noise", "1.0",
+        "--rbpf-doppler-sigma", "0.5",
         "--doppler-min-sats", "4",
         "--pf-sigma-vel", "0.0",
         "--pf-velocity-guide-alpha", "1.0",
@@ -1767,6 +1767,10 @@ def run_pf_with_optional_smoother(
     doppler_velocity_update_gain: float = 0.25,
     doppler_max_velocity_update_mps: float = 10.0,
     doppler_min_sats: int = 4,
+    rbpf_velocity_kf: bool = False,
+    rbpf_velocity_init_sigma: float = 2.0,
+    rbpf_velocity_process_noise: float = 1.0,
+    rbpf_doppler_sigma: float | None = None,
     pf_sigma_vel: float = 0.0,
     pf_velocity_guide_alpha: float = 1.0,
     pf_init_spread_vel: float = 0.0,
@@ -1882,6 +1886,8 @@ def run_pf_with_optional_smoother(
 ) -> dict[str, object]:
     if dd_pseudorange and use_gmm:
         raise ValueError("dd_pseudorange cannot be combined with --gmm")
+    if rbpf_velocity_kf and doppler_per_particle:
+        raise ValueError("--rbpf-velocity-kf and --doppler-per-particle are mutually exclusive")
 
     if dataset is None:
         ds = load_pf_smoother_dataset(run_dir, rover_source)
@@ -2020,13 +2026,16 @@ def run_pf_with_optional_smoother(
         per_particle_huber_undiff_pr_k=per_particle_huber_undiff_pr_k,
         sigma_vel=pf_sigma_vel,
         velocity_guide_alpha=pf_velocity_guide_alpha,
+        rbpf_velocity_kf=rbpf_velocity_kf,
+        velocity_process_noise=rbpf_velocity_process_noise,
     )
     pf.initialize(
         first_pos,
         clock_bias=init_cb,
         spread_pos=10.0,
         spread_cb=100.0,
-        spread_vel=pf_init_spread_vel,
+        spread_vel=(0.0 if rbpf_velocity_kf else pf_init_spread_vel),
+        velocity_init_sigma=(rbpf_velocity_init_sigma if rbpf_velocity_kf else 0.0),
     )
 
     if use_smoother:
@@ -2045,6 +2054,8 @@ def run_pf_with_optional_smoother(
     n_tdcp_fallback = 0
     n_doppler_pp_used = 0
     n_doppler_pp_skip = 0
+    n_doppler_kf_used = 0
+    n_doppler_kf_skip = 0
     n_imu_tight_used = 0
     n_imu_tight_skip = 0
     # PR acceleration weighting: need per-satellite PR history
@@ -2099,6 +2110,7 @@ def run_pf_with_optional_smoother(
         dd_cp_support_skip = False
         carrier_anchor_rows = {}
         doppler_update_epoch = None
+        doppler_sigma_epoch = None
         anchor_attempt = CarrierAnchorAttempt()
         fallback_attempt = CarrierFallbackAttempt()
 
@@ -2217,7 +2229,13 @@ def run_pf_with_optional_smoother(
         ):
             sig_predict = float(sigma_pos_tdcp_tight)
 
-        pf.predict(velocity=velocity, dt=dt, sigma_pos=sig_predict)
+        pf.predict(
+            velocity=velocity,
+            dt=dt,
+            sigma_pos=sig_predict,
+            rbpf_velocity_kf=rbpf_velocity_kf,
+            velocity_process_noise=rbpf_velocity_process_noise,
+        )
 
         sat_ecef = np.array([m.satellite_ecef for m in measurements])
         pr = np.array([m.corrected_pseudorange for m in measurements])
@@ -2652,7 +2670,7 @@ def run_pf_with_optional_smoother(
             if fallback_attempt.used and fallback_attempt.replaced_weak_dd:
                 n_dd_fallback_weak_dd_replaced += 1
 
-        if doppler_per_particle:
+        if doppler_per_particle or rbpf_velocity_kf:
             dop_sat = []
             dop_sat_vel = []
             dop_obs = []
@@ -2676,6 +2694,11 @@ def run_pf_with_optional_smoother(
                 dop_weights.append(float(w[i_m]) if i_m < len(w) else 1.0)
 
             if len(dop_obs) >= int(doppler_min_sats):
+                doppler_sigma_epoch = (
+                    float(rbpf_doppler_sigma)
+                    if rbpf_velocity_kf and rbpf_doppler_sigma is not None
+                    else float(doppler_sigma_mps)
+                )
                 doppler_update_epoch = {
                     "sat_ecef": np.asarray(dop_sat, dtype=np.float64),
                     "sat_vel": np.asarray(dop_sat_vel, dtype=np.float64),
@@ -2683,19 +2706,33 @@ def run_pf_with_optional_smoother(
                     "weights": np.asarray(dop_weights, dtype=np.float64),
                     "wavelength_m": _MUPF_L1_WAVELENGTH_M,
                 }
-                pf.update_doppler(
-                    doppler_update_epoch["sat_ecef"],
-                    doppler_update_epoch["sat_vel"],
-                    doppler_update_epoch["doppler_hz"],
-                    weights=doppler_update_epoch["weights"],
-                    wavelength=_MUPF_L1_WAVELENGTH_M,
-                    sigma_mps=doppler_sigma_mps,
-                    velocity_update_gain=doppler_velocity_update_gain,
-                    max_velocity_update_mps=doppler_max_velocity_update_mps,
-                )
-                n_doppler_pp_used += 1
+                if rbpf_velocity_kf:
+                    pf.update_doppler_kf(
+                        doppler_update_epoch["sat_ecef"],
+                        doppler_update_epoch["sat_vel"],
+                        doppler_update_epoch["doppler_hz"],
+                        weights=doppler_update_epoch["weights"],
+                        wavelength=_MUPF_L1_WAVELENGTH_M,
+                        sigma_mps=doppler_sigma_epoch,
+                    )
+                    n_doppler_kf_used += 1
+                else:
+                    pf.update_doppler(
+                        doppler_update_epoch["sat_ecef"],
+                        doppler_update_epoch["sat_vel"],
+                        doppler_update_epoch["doppler_hz"],
+                        weights=doppler_update_epoch["weights"],
+                        wavelength=_MUPF_L1_WAVELENGTH_M,
+                        sigma_mps=doppler_sigma_epoch,
+                        velocity_update_gain=doppler_velocity_update_gain,
+                        max_velocity_update_mps=doppler_max_velocity_update_mps,
+                    )
+                    n_doppler_pp_used += 1
             else:
-                n_doppler_pp_skip += 1
+                if rbpf_velocity_kf:
+                    n_doppler_kf_skip += 1
+                else:
+                    n_doppler_pp_skip += 1
 
         spp_pos = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
         if position_update_sigma is not None:
@@ -2792,7 +2829,7 @@ def run_pf_with_optional_smoother(
                 ),
                 doppler_update=doppler_update_epoch,
                 doppler_sigma_mps=(
-                    doppler_sigma_mps if doppler_update_epoch is not None else None
+                    doppler_sigma_epoch if doppler_update_epoch is not None else None
                 ),
                 doppler_velocity_update_gain=(
                     doppler_velocity_update_gain
@@ -3005,6 +3042,12 @@ def run_pf_with_optional_smoother(
             f"  [doppler_per_particle] used {n_doppler_pp_used}/{total_doppler_pp} epochs, "
             f"skip {n_doppler_pp_skip}/{total_doppler_pp}"
         )
+    if rbpf_velocity_kf:
+        total_doppler_kf = n_doppler_kf_used + n_doppler_kf_skip
+        print(
+            f"  [rbpf_velocity_kf] Doppler KF used {n_doppler_kf_used}/{total_doppler_kf} epochs, "
+            f"skip {n_doppler_kf_skip}/{total_doppler_kf}"
+        )
 
     if predict_guide in ("imu", "imu_spp_blend"):
         total_imu = n_imu_used + n_imu_fallback
@@ -3116,9 +3159,15 @@ def run_pf_with_optional_smoother(
         "doppler_velocity_update_gain": doppler_velocity_update_gain,
         "doppler_max_velocity_update_mps": doppler_max_velocity_update_mps,
         "doppler_min_sats": doppler_min_sats,
+        "rbpf_velocity_kf": rbpf_velocity_kf,
+        "rbpf_velocity_init_sigma": rbpf_velocity_init_sigma,
+        "rbpf_velocity_process_noise": rbpf_velocity_process_noise,
+        "rbpf_doppler_sigma": rbpf_doppler_sigma,
         "pf_sigma_vel": pf_sigma_vel,
         "pf_velocity_guide_alpha": pf_velocity_guide_alpha,
         "pf_init_spread_vel": pf_init_spread_vel,
+        "n_doppler_kf_used": n_doppler_kf_used,
+        "n_doppler_kf_skip": n_doppler_kf_skip,
         "dd_pseudorange": dd_pseudorange,
         "dd_pseudorange_sigma": dd_pseudorange_sigma,
         "dd_pseudorange_base_interp": dd_pseudorange_base_interp,
@@ -3452,6 +3501,10 @@ def _namespace_to_run_kwargs(
         "doppler_velocity_update_gain": args.doppler_velocity_update_gain,
         "doppler_max_velocity_update_mps": args.doppler_max_velocity_update_mps,
         "doppler_min_sats": args.doppler_min_sats,
+        "rbpf_velocity_kf": args.rbpf_velocity_kf,
+        "rbpf_velocity_init_sigma": args.rbpf_velocity_init_sigma,
+        "rbpf_velocity_process_noise": args.rbpf_velocity_process_noise,
+        "rbpf_doppler_sigma": args.rbpf_doppler_sigma,
         "pf_sigma_vel": args.pf_sigma_vel,
         "pf_velocity_guide_alpha": args.pf_velocity_guide_alpha,
         "pf_init_spread_vel": args.pf_init_spread_vel,
@@ -3686,8 +3739,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--doppler-per-particle",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Apply per-particle Doppler velocity likelihood/update (default: enabled)",
+        default=False,
+        help="Apply legacy sampled per-particle Doppler velocity update (default: disabled)",
     )
     parser.add_argument(
         "--doppler-sigma-mps",
@@ -3712,6 +3765,29 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=4,
         help="Minimum Doppler rows required for per-particle velocity update",
+    )
+    parser.add_argument(
+        "--rbpf-velocity-kf",
+        action="store_true",
+        help="Enable proper RBPF velocity marginalization with a per-particle KF state",
+    )
+    parser.add_argument(
+        "--rbpf-velocity-init-sigma",
+        type=float,
+        default=2.0,
+        help="Initial proper-RBPF velocity KF sigma per axis (m/s)",
+    )
+    parser.add_argument(
+        "--rbpf-velocity-process-noise",
+        type=float,
+        default=1.0,
+        help="Proper-RBPF velocity process noise Q_v (m^2/s^3)",
+    )
+    parser.add_argument(
+        "--rbpf-doppler-sigma",
+        type=float,
+        default=None,
+        help="Doppler range-rate sigma for proper RBPF velocity KF (m/s); defaults to --doppler-sigma-mps",
     )
     parser.add_argument(
         "--pf-sigma-vel",
@@ -4151,11 +4227,17 @@ def main(argv: list[str] | None = None) -> int:
                 "doppler_velocity_update_gain": args.doppler_velocity_update_gain,
                 "doppler_max_velocity_update_mps": args.doppler_max_velocity_update_mps,
                 "doppler_min_sats": args.doppler_min_sats,
+                "rbpf_velocity_kf": args.rbpf_velocity_kf,
+                "rbpf_velocity_init_sigma": args.rbpf_velocity_init_sigma,
+                "rbpf_velocity_process_noise": args.rbpf_velocity_process_noise,
+                "rbpf_doppler_sigma": args.rbpf_doppler_sigma,
                 "pf_sigma_vel": args.pf_sigma_vel,
                 "pf_velocity_guide_alpha": args.pf_velocity_guide_alpha,
                 "pf_init_spread_vel": args.pf_init_spread_vel,
                 "n_doppler_pp_used": int(out.get("n_doppler_pp_used", 0)),
                 "n_doppler_pp_skip": int(out.get("n_doppler_pp_skip", 0)),
+                "n_doppler_kf_used": int(out.get("n_doppler_kf_used", 0)),
+                "n_doppler_kf_skip": int(out.get("n_doppler_kf_skip", 0)),
                 "imu_tight_coupling": args.imu_tight_coupling,
                 "imu_stop_sigma_pos": args.imu_stop_sigma_pos,
                 "dd_pseudorange": args.dd_pseudorange,

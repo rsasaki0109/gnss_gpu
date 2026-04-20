@@ -710,9 +710,35 @@ def test_parser_maps_doppler_per_particle_flags():
     assert run_kwargs["doppler_velocity_update_gain"] == 0.5
     assert run_kwargs["doppler_max_velocity_update_mps"] == 4.0
     assert run_kwargs["doppler_min_sats"] == 5
+    assert run_kwargs["rbpf_velocity_kf"] is False
     assert run_kwargs["pf_sigma_vel"] == 0.2
     assert run_kwargs["pf_velocity_guide_alpha"] == 0.75
     assert run_kwargs["pf_init_spread_vel"] == 1.5
+
+
+def test_parser_maps_rbpf_velocity_kf_flags():
+    parser = build_arg_parser()
+    args = parser.parse_args(_expand_cli_preset_argv([
+        "--data-root", "/tmp/UrbanNav-Tokyo",
+        "--preset", "odaiba_best_accuracy",
+        "--rbpf-velocity-kf",
+        "--rbpf-velocity-init-sigma", "3.0",
+        "--rbpf-velocity-process-noise", "0.25",
+        "--rbpf-doppler-sigma", "0.8",
+        "--doppler-min-sats", "6",
+    ]))
+
+    run_kwargs = _namespace_to_run_kwargs(
+        args,
+        position_update_sigma=args.position_update_sigma,
+        use_smoother=args.smoother,
+    )
+    assert run_kwargs["rbpf_velocity_kf"] is True
+    assert run_kwargs["rbpf_velocity_init_sigma"] == 3.0
+    assert run_kwargs["rbpf_velocity_process_noise"] == 0.25
+    assert run_kwargs["rbpf_doppler_sigma"] == 0.8
+    assert run_kwargs["doppler_per_particle"] is False
+    assert run_kwargs["doppler_min_sats"] == 6
 
 
 def test_parser_maps_low_ess_dd_gate_flags():
@@ -970,11 +996,11 @@ def test_expand_cli_preset_argv_inlines_odaiba_rbpf_velocity_flags():
     assert expanded[expanded.index("--n-particles") + 1] == "200000"
     assert expanded[expanded.index("--carrier-anchor-sigma-m") + 1] == "0.15"
     assert "--no-doppler-per-particle" in expanded
-    assert "--doppler-per-particle" in expanded
-    assert expanded.index("--doppler-per-particle") > expanded.index("--no-doppler-per-particle")
-    assert expanded[expanded.index("--doppler-sigma-mps") + 1] == "20.0"
-    assert expanded[expanded.index("--doppler-velocity-update-gain") + 1] == "0.0"
-    assert expanded[expanded.index("--doppler-max-velocity-update-mps") + 1] == "10.0"
+    assert "--doppler-per-particle" not in expanded
+    assert "--rbpf-velocity-kf" in expanded
+    assert expanded[expanded.index("--rbpf-velocity-init-sigma") + 1] == "2.0"
+    assert expanded[expanded.index("--rbpf-velocity-process-noise") + 1] == "1.0"
+    assert expanded[expanded.index("--rbpf-doppler-sigma") + 1] == "0.5"
     assert expanded[expanded.index("--doppler-min-sats") + 1] == "4"
     assert expanded[expanded.index("--pf-sigma-vel") + 1] == "0.0"
     assert expanded[expanded.index("--pf-velocity-guide-alpha") + 1] == "1.0"
