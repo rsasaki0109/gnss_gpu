@@ -972,13 +972,13 @@ def test_expand_cli_preset_argv_inlines_odaiba_rbpf_velocity_flags():
     assert "--no-doppler-per-particle" in expanded
     assert "--doppler-per-particle" in expanded
     assert expanded.index("--doppler-per-particle") > expanded.index("--no-doppler-per-particle")
-    assert expanded[expanded.index("--doppler-sigma-mps") + 1] == "0.5"
-    assert expanded[expanded.index("--doppler-velocity-update-gain") + 1] == "0.25"
+    assert expanded[expanded.index("--doppler-sigma-mps") + 1] == "20.0"
+    assert expanded[expanded.index("--doppler-velocity-update-gain") + 1] == "0.0"
     assert expanded[expanded.index("--doppler-max-velocity-update-mps") + 1] == "10.0"
     assert expanded[expanded.index("--doppler-min-sats") + 1] == "4"
-    assert expanded[expanded.index("--pf-sigma-vel") + 1] == "0.25"
-    assert expanded[expanded.index("--pf-velocity-guide-alpha") + 1] == "0.5"
-    assert expanded[expanded.index("--pf-init-spread-vel") + 1] == "1.0"
+    assert expanded[expanded.index("--pf-sigma-vel") + 1] == "0.0"
+    assert expanded[expanded.index("--pf-velocity-guide-alpha") + 1] == "1.0"
+    assert expanded[expanded.index("--pf-init-spread-vel") + 1] == "0.0"
     assert expanded[-2:] == ["--max-epochs", "10"]
 
 

@@ -252,17 +252,17 @@ for _preset_name in (
     _CLI_PRESETS[_preset_name]["argv"].append("--no-doppler-per-particle")
 
 _CLI_PRESETS["odaiba_rbpf_velocity"] = {
-    "description": "Odaiba best-accuracy config plus per-particle Doppler velocity RBPF.",
+    "description": "Experimental Odaiba per-particle Doppler velocity RBPF probe.",
     "argv": [
         *_CLI_PRESETS["odaiba_best_accuracy"]["argv"],
         "--doppler-per-particle",
-        "--doppler-sigma-mps", "0.5",
-        "--doppler-velocity-update-gain", "0.25",
+        "--doppler-sigma-mps", "20.0",
+        "--doppler-velocity-update-gain", "0.0",
         "--doppler-max-velocity-update-mps", "10.0",
         "--doppler-min-sats", "4",
-        "--pf-sigma-vel", "0.25",
-        "--pf-velocity-guide-alpha", "0.5",
-        "--pf-init-spread-vel", "1.0",
+        "--pf-sigma-vel", "0.0",
+        "--pf-velocity-guide-alpha", "1.0",
+        "--pf-init-spread-vel", "0.0",
     ],
 }
 
