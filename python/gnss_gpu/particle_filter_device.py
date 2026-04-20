@@ -975,7 +975,10 @@ class ParticleFilterDevice:
             dd_cp_ep = ep.get('dd_carrier')
             carrier_anchor_ep = ep.get('carrier_anchor_pseudorange')
             carrier_afv_ep = ep.get('carrier_afv')
-            doppler_ep = ep.get('doppler_update')
+            # Doppler constrains forward-time receiver velocity.  The backward
+            # PF runs with reversed velocity, so replaying the same Doppler rows
+            # would apply the wrong sign until a direction-aware model exists.
+            doppler_ep = None
             if dd_ep is not None:
                 bwd_pf.update_dd_pseudorange(
                     SimpleNamespace(**dd_ep),
