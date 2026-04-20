@@ -3,7 +3,7 @@
 Particle state lives on GPU. No H2D/D2H transfers except:
 - Satellite data per update (small: ~1KB for 8 satellites)
 - Estimate output (32 bytes)
-- Velocity per predict (24 bytes)
+- Velocity guide per predict (24 bytes)
 - Particle dump for visualization (on-demand)
 
 This eliminates the #1 performance bottleneck: cudaMalloc/cudaFree and
@@ -45,7 +45,9 @@ class ParticleFilterDevice:
                  per_particle_huber=False,
                  per_particle_huber_dd_pr_k=1.5,
                  per_particle_huber_dd_carrier_k=1.5,
-                 per_particle_huber_undiff_pr_k=1.5):
+                 per_particle_huber_undiff_pr_k=1.5,
+                 sigma_vel=0.0,
+                 velocity_guide_alpha=1.0):
         from gnss_gpu._gnss_gpu_pf_device import (
             pf_device_create,
             pf_device_destroy,
@@ -64,6 +66,7 @@ class ParticleFilterDevice:
             pf_device_resample_megopolis,
             pf_device_estimate,
             pf_device_get_particles,
+            pf_device_get_particle_states,
             pf_device_get_log_weights,
             pf_device_get_resample_ancestors,
             pf_device_sync,
@@ -85,6 +88,7 @@ class ParticleFilterDevice:
         self._pf_device_resample_megopolis = pf_device_resample_megopolis
         self._pf_device_estimate = pf_device_estimate
         self._pf_device_get_particles = pf_device_get_particles
+        self._pf_device_get_particle_states = pf_device_get_particle_states
         self._pf_device_get_log_weights = pf_device_get_log_weights
         self._pf_device_get_resample_ancestors = pf_device_get_resample_ancestors
         self._pf_device_sync = pf_device_sync
@@ -109,6 +113,8 @@ class ParticleFilterDevice:
         self.per_particle_huber_dd_pr_k = float(per_particle_huber_dd_pr_k)
         self.per_particle_huber_dd_carrier_k = float(per_particle_huber_dd_carrier_k)
         self.per_particle_huber_undiff_pr_k = float(per_particle_huber_undiff_pr_k)
+        self.sigma_vel = float(sigma_vel)
+        self.velocity_guide_alpha = float(velocity_guide_alpha)
 
         # Allocate GPU memory once
         self._state = self._pf_device_create(n_particles)
@@ -133,7 +139,7 @@ class ParticleFilterDevice:
         pass
 
     def initialize(self, position_ecef, clock_bias=0.0, spread_pos=100.0,
-                   spread_cb=1000.0):
+                   spread_cb=1000.0, velocity=None, spread_vel=0.0):
         """Scatter particles around an initial estimate.
 
         Runs entirely on GPU - no host-device transfer of particle data.
@@ -148,22 +154,34 @@ class ParticleFilterDevice:
             Standard deviation for initial position scatter [m].
         spread_cb : float
             Standard deviation for initial clock bias scatter [m].
+        velocity : array_like, shape (3,), optional
+            Initial ECEF velocity [m/s].
+        spread_vel : float
+            Standard deviation for initial per-particle velocity scatter [m/s].
         """
         pos = np.asarray(position_ecef, dtype=np.float64).ravel()
+        if velocity is None:
+            vel = np.zeros(3, dtype=np.float64)
+        else:
+            vel = np.asarray(velocity, dtype=np.float64).ravel()
 
         self._pf_device_initialize(
             self._state,
             float(pos[0]), float(pos[1]), float(pos[2]), float(clock_bias),
             float(spread_pos), float(spread_cb),
-            self.seed)
+            self.seed,
+            float(vel[0]), float(vel[1]), float(vel[2]), float(spread_vel))
 
         self._initialized = True
         self._step = 0
 
-    def predict(self, velocity=None, dt=1.0, sigma_pos=None):
+    def predict(self, velocity=None, dt=1.0, sigma_pos=None, sigma_vel=None,
+                velocity_guide_alpha=None):
         """Predict step with optional velocity.
 
-        Only 24 bytes (velocity) transferred to GPU.
+        Only 24 bytes (velocity guide) transferred to GPU. Internally each
+        particle carries its own velocity state; the guide can either reset it
+        (alpha=1.0, legacy behavior) or nudge it while preserving diversity.
 
         Parameters
         ----------
@@ -174,6 +192,11 @@ class ParticleFilterDevice:
         sigma_pos : float, optional
             Per-step position random-walk sigma [m]. Defaults to ``self.sigma_pos``.
             Use a smaller value when a high-quality velocity guide (e.g. TDCP) is available.
+        sigma_vel : float, optional
+            Per-axis velocity process noise [m/s]. Defaults to ``self.sigma_vel``.
+        velocity_guide_alpha : float, optional
+            Blend factor toward the supplied velocity guide. Defaults to
+            ``self.velocity_guide_alpha``.
         """
         if not self._initialized:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
@@ -185,13 +208,19 @@ class ParticleFilterDevice:
             vx, vy, vz = float(vel[0]), float(vel[1]), float(vel[2])
 
         sp = float(self.sigma_pos if sigma_pos is None else sigma_pos)
+        sv = float(self.sigma_vel if sigma_vel is None else sigma_vel)
+        alpha = float(
+            self.velocity_guide_alpha
+            if velocity_guide_alpha is None
+            else velocity_guide_alpha
+        )
 
         self._step += 1
         self._pf_device_predict(
             self._state,
             vx, vy, vz,
             float(dt), sp, float(self.sigma_cb),
-            self.seed, self._step)
+            self.seed, self._step, sv, alpha)
 
     def update(self, sat_ecef, pseudoranges, weights=None, sigma_pr=None, resample=True):
         """Weight update with pseudorange observations.
@@ -539,6 +568,19 @@ class ParticleFilterDevice:
 
         return self._pf_device_get_particles(self._state)
 
+    def get_particle_states(self):
+        """Get full per-particle RBPF states from GPU.
+
+        Returns
+        -------
+        states : ndarray, shape (n_particles, 7)
+            Each row is ``[x, y, z, vx, vy, vz, clock_bias]``.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        return self._pf_device_get_particle_states(self._state)
+
     def get_log_weights(self):
         """Copy per-particle log-weights from GPU (synchronizes stream).
 
@@ -821,6 +863,8 @@ class ParticleFilterDevice:
             per_particle_huber_dd_pr_k=self.per_particle_huber_dd_pr_k,
             per_particle_huber_dd_carrier_k=self.per_particle_huber_dd_carrier_k,
             per_particle_huber_undiff_pr_k=self.per_particle_huber_undiff_pr_k,
+            sigma_vel=self.sigma_vel,
+            velocity_guide_alpha=self.velocity_guide_alpha,
         )
         bwd_pf.initialize(init_pos, clock_bias=init_cb, spread_pos=10.0, spread_cb=100.0)
 

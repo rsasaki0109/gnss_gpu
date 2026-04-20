@@ -8,6 +8,9 @@ struct PFDeviceState {
     double* d_px;
     double* d_py;
     double* d_pz;
+    double* d_vx;
+    double* d_vy;
+    double* d_vz;
     double* d_pcb;
     double* d_log_weights;
 
@@ -15,6 +18,9 @@ struct PFDeviceState {
     double* d_px_tmp;
     double* d_py_tmp;
     double* d_pz_tmp;
+    double* d_vx_tmp;
+    double* d_vy_tmp;
+    double* d_vz_tmp;
     double* d_pcb_tmp;
 
     // Persistent temp buffers for reductions (ESS, estimate)
@@ -63,13 +69,17 @@ void pf_device_destroy_resources(PFDeviceState* state);
 void pf_device_initialize(PFDeviceState* state,
     double init_x, double init_y, double init_z, double init_cb,
     double spread_pos, double spread_cb,
-    unsigned long long seed);
+    unsigned long long seed,
+    double init_vx = 0.0, double init_vy = 0.0, double init_vz = 0.0,
+    double spread_vel = 0.0);
 
 // Predict - operates entirely on device memory
 void pf_device_predict(PFDeviceState* state,
     double vx, double vy, double vz,
     double dt, double sigma_pos, double sigma_cb,
-    unsigned long long seed, int step);
+    unsigned long long seed, int step,
+    double sigma_vel = 0.0,
+    double velocity_guide_alpha = 1.0);
 
 // Weight update - satellite data is small, only that gets H2D copied
 // nu: Student's t degrees of freedom. nu=0 means Gaussian (default).
@@ -160,6 +170,10 @@ void pf_device_estimate(const PFDeviceState* state, double* result);
 
 // Copy particles to host for visualization (only when needed)
 void pf_device_get_particles(const PFDeviceState* state, double* output);
+
+// Copy full particle states to host: [x, y, z, vx, vy, vz, cb].
+// Synchronizes the stream.
+void pf_device_get_particle_states(const PFDeviceState* state, double* output);
 
 // Copy log-weights to host (for FFBSi / diagnostics). Synchronizes the stream.
 void pf_device_get_log_weights(const PFDeviceState* state, double* output);

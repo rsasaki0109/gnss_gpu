@@ -45,24 +45,35 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
     m.def("pf_device_initialize", [](gnss_gpu::PFDeviceState* state,
                                      double init_x, double init_y, double init_z, double init_cb,
                                      double spread_pos, double spread_cb,
-                                     unsigned long long seed) {
+                                     unsigned long long seed,
+                                     double init_vx, double init_vy, double init_vz,
+                                     double spread_vel) {
         gnss_gpu::pf_device_initialize(state, init_x, init_y, init_z, init_cb,
-                                       spread_pos, spread_cb, seed);
+                                       spread_pos, spread_cb, seed,
+                                       init_vx, init_vy, init_vz, spread_vel);
     }, "Initialize particles on device (no H2D copy)",
        py::arg("state"),
        py::arg("init_x"), py::arg("init_y"), py::arg("init_z"), py::arg("init_cb"),
-       py::arg("spread_pos"), py::arg("spread_cb"), py::arg("seed"));
+       py::arg("spread_pos"), py::arg("spread_cb"), py::arg("seed"),
+       py::arg("init_vx") = 0.0, py::arg("init_vy") = 0.0, py::arg("init_vz") = 0.0,
+       py::arg("spread_vel") = 0.0);
 
     m.def("pf_device_predict", [](gnss_gpu::PFDeviceState* state,
                                   double vx, double vy, double vz,
                                   double dt, double sigma_pos, double sigma_cb,
-                                  unsigned long long seed, int step) {
-        gnss_gpu::pf_device_predict(state, vx, vy, vz, dt, sigma_pos, sigma_cb, seed, step);
+                                  unsigned long long seed, int step,
+                                  double sigma_vel,
+                                  double velocity_guide_alpha) {
+        gnss_gpu::pf_device_predict(
+            state, vx, vy, vz, dt, sigma_pos, sigma_cb, seed, step,
+            sigma_vel, velocity_guide_alpha);
     }, "Predict step - operates entirely on device memory",
        py::arg("state"),
        py::arg("vx"), py::arg("vy"), py::arg("vz"),
        py::arg("dt"), py::arg("sigma_pos"), py::arg("sigma_cb"),
-       py::arg("seed"), py::arg("step"));
+       py::arg("seed"), py::arg("step"),
+       py::arg("sigma_vel") = 0.0,
+       py::arg("velocity_guide_alpha") = 1.0);
 
     m.def("pf_device_weight", [](gnss_gpu::PFDeviceState* state,
                                  py::array_t<double> sat_ecef,
@@ -256,6 +267,15 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
             static_cast<double*>(output.request().ptr));
         return output;
     }, "Copy particles to host for visualization (only when needed)",
+       py::arg("state"));
+
+    m.def("pf_device_get_particle_states", [](const gnss_gpu::PFDeviceState* state) {
+        int N = state->n_particles;
+        auto output = py::array_t<double>({N, 7});
+        gnss_gpu::pf_device_get_particle_states(state,
+            static_cast<double*>(output.request().ptr));
+        return output;
+    }, "Copy full particle states [x,y,z,vx,vy,vz,cb] to host",
        py::arg("state"));
 
     m.def("pf_device_get_log_weights", [](const gnss_gpu::PFDeviceState* state,

@@ -22,6 +22,7 @@ try:
         pf_device_resample_megopolis,
         pf_device_estimate,
         pf_device_get_particles,
+        pf_device_get_particle_states,
         pf_device_sync,
     )
     from gnss_gpu.particle_filter_device import ParticleFilterDevice
@@ -178,6 +179,42 @@ class TestStreamCorrectness:
         assert np.all(np.isfinite(particles))
         pf_device_destroy(state)
 
+    def test_full_particle_states_include_velocity(self):
+        """Full device state exposes [x, y, z, vx, vy, vz, cb]."""
+        n = 2048
+        state = pf_device_create(n)
+        pf_device_initialize(
+            state,
+            10.0, 20.0, 30.0, TRUE_CB,
+            0.0, 0.0, SEED,
+            1.5, -2.0, 0.25, 0.0,
+        )
+
+        states = pf_device_get_particle_states(state)
+        assert states.shape == (n, 7)
+        np.testing.assert_allclose(states[:, :3], np.tile([10.0, 20.0, 30.0], (n, 1)))
+        np.testing.assert_allclose(states[:, 3:6], np.tile([1.5, -2.0, 0.25], (n, 1)))
+        np.testing.assert_allclose(states[:, 6], TRUE_CB)
+        pf_device_destroy(state)
+
+    def test_predict_uses_per_particle_velocity_state(self):
+        """Predict stores the velocity guide per particle before propagation."""
+        n = 2048
+        state = pf_device_create(n)
+        pf_device_initialize(state, 0.0, 0.0, 0.0, TRUE_CB, 0.0, 0.0, SEED)
+        pf_device_predict(
+            state,
+            2.0, -1.0, 0.5,
+            0.25, 0.0, 0.0,
+            SEED, 1,
+        )
+
+        states = pf_device_get_particle_states(state)
+        np.testing.assert_allclose(states[:, :3], np.tile([0.5, -0.25, 0.125], (n, 1)))
+        np.testing.assert_allclose(states[:, 3:6], np.tile([2.0, -1.0, 0.5], (n, 1)))
+        np.testing.assert_allclose(states[:, 6], TRUE_CB)
+        pf_device_destroy(state)
+
     def test_many_satellites_exceeds_initial_capacity(self):
         """Handle more satellites than the initial pinned buffer capacity (64)."""
         n_sat = 80  # exceeds MAX_SATS=64 to trigger reallocation
@@ -244,6 +281,25 @@ class TestParticleFilterDeviceWrapper:
         assert lw.shape == (1024,)
         assert np.all(np.isfinite(lw))
         pf.resample_if_needed()
+
+    def test_get_particle_states_wrapper_shape(self):
+        """Wrapper exposes the 7D RBPF state without changing estimate()."""
+        pf = ParticleFilterDevice(n_particles=2048, seed=SEED)
+        pf.initialize(
+            position_ecef=TRUE_POS,
+            clock_bias=TRUE_CB,
+            spread_pos=0.0,
+            spread_cb=0.0,
+            velocity=np.array([1.0, 0.5, -0.25]),
+            spread_vel=0.0,
+        )
+        states = pf.get_particle_states()
+        assert states.shape == (2048, 7)
+        np.testing.assert_allclose(
+            states[:, 3:6],
+            np.tile([1.0, 0.5, -0.25], (2048, 1)),
+        )
+        assert pf.estimate().shape == (4,)
 
     def test_get_position_spread_shrinks_after_update(self):
         """Position spread decreases after incorporating informative measurements."""
