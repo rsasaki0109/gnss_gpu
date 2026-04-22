@@ -22,9 +22,11 @@ if str(_PROJECT_ROOT / "python") not in sys.path:
 from evaluate import compute_metrics, ecef_errors_2d_3d
 from exp_ppc_tdcp_velocity import _epoch_measurements, _velocity_truth
 from exp_urbannav_baseline import run_wls
+from gnss_gpu.dd_likelihood import dd_log_likelihood_gradients
 from gnss_gpu.dd_pseudorange import DDPseudorangeComputer, DDPseudorangeResult
 from gnss_gpu.io.ppc import PPCDatasetLoader
 from gnss_gpu.ppc_score import ppc_3d_errors, ppc_score_dict, ppc_segment_distances
+from gnss_gpu.reservoir_stein import ReservoirSteinConfig, reservoir_stein_update
 from gnss_gpu.tdcp_velocity import L1_WAVELENGTH, estimate_velocity_from_tdcp_with_metrics
 from gnss_gpu.widelane import WidelaneDDPseudorangeComputer
 
@@ -103,6 +105,16 @@ def _blend_to_altitude(
     target = _llh_to_ecef(lat, lon, float(target_alt_m))
     corrected = pos + blend_alpha * (target - pos)
     return corrected, float(np.linalg.norm(corrected - pos))
+
+
+def _project_to_reference_radius(candidate: np.ndarray, reference: np.ndarray) -> np.ndarray:
+    cand = np.asarray(candidate, dtype=np.float64).reshape(3)
+    ref = np.asarray(reference, dtype=np.float64).reshape(3)
+    cand_norm = float(np.linalg.norm(cand))
+    ref_norm = float(np.linalg.norm(ref))
+    if cand_norm <= 0.0 or ref_norm <= 0.0:
+        return cand.copy()
+    return cand * (ref_norm / cand_norm)
 
 
 def _height_hold_effective_alpha(
@@ -283,6 +295,92 @@ def _try_dd_anchor(
     )
 
 
+def _try_rsp_correction(
+    dd_computer: DDPseudorangeComputer,
+    data: dict,
+    epoch_idx: int,
+    seed_ecef: np.ndarray,
+    *,
+    n_particles: int,
+    spread_m: float,
+    sigma_m: float,
+    huber_k_m: float,
+    stein_steps: int,
+    stein_step_size: float,
+    repulsion_scale: float,
+    random_seed: int,
+) -> tuple[np.ndarray | None, dict[str, object]]:
+    if n_particles <= 0 or spread_m <= 0.0 or sigma_m <= 0.0:
+        return None, _rsp_epoch_fields(False)
+
+    seed = np.asarray(seed_ecef, dtype=np.float64).reshape(3)
+    measurements = _dd_measurements(data, epoch_idx, seed)
+    dd = dd_computer.compute_dd(
+        float(data["times"][epoch_idx]),
+        measurements,
+        rover_position_approx=seed,
+        min_common_sats=4,
+    )
+    if dd is None or int(dd.n_dd) < 3:
+        return None, _rsp_epoch_fields(False, n_dd=0 if dd is None else int(dd.n_dd))
+
+    rng = np.random.default_rng(int(random_seed) + int(epoch_idx))
+    particles = seed.reshape(1, 3) + rng.normal(
+        0.0,
+        float(spread_m),
+        size=(int(n_particles), 3),
+    )
+    gradients = dd_log_likelihood_gradients(
+        dd,
+        particles,
+        sigma_m=float(sigma_m),
+        huber_k_m=float(huber_k_m),
+    )
+    log_weights = -0.5 * np.sum(np.square(particles - seed), axis=1) / (float(spread_m) ** 2)
+    result = reservoir_stein_update(
+        particles,
+        log_weights,
+        gradients,
+        ReservoirSteinConfig(
+            reservoir_size=int(n_particles),
+            elite_fraction=0.25,
+            stein_steps=int(stein_steps),
+            stein_step_size=float(stein_step_size),
+            repulsion_scale=float(repulsion_scale),
+            seed=int(random_seed) + int(epoch_idx),
+        ),
+    )
+    estimate = np.average(result.particles, axis=0, weights=result.weights)
+    corrected = _project_to_reference_radius(estimate, seed)
+    shift_m = float(np.linalg.norm(corrected - seed))
+    return corrected, _rsp_epoch_fields(
+        True,
+        n_dd=int(dd.n_dd),
+        shift_m=shift_m,
+        ess_before=float(result.ess_before),
+        mean_gradient_norm_m=float(np.mean(np.linalg.norm(gradients, axis=1))),
+    )
+
+
+def _rsp_epoch_fields(
+    used: bool,
+    *,
+    n_dd: int = 0,
+    shift_m: float = float("nan"),
+    ess_before: float = float("nan"),
+    mean_gradient_norm_m: float = float("nan"),
+) -> dict[str, object]:
+    return {
+        "rsp_correction_used": bool(used),
+        "rsp_n_dd": int(n_dd),
+        "rsp_shift_m": float(shift_m) if np.isfinite(shift_m) else "",
+        "rsp_ess_before": float(ess_before) if np.isfinite(ess_before) else "",
+        "rsp_mean_gradient_norm_m": (
+            float(mean_gradient_norm_m) if np.isfinite(mean_gradient_norm_m) else ""
+        ),
+    }
+
+
 def _empty_widelane_stats(reason: str = "disabled") -> SimpleNamespace:
     return SimpleNamespace(
         reason=reason,
@@ -431,6 +529,19 @@ def run_fusion_eval(
     height_hold_alpha: float,
     height_hold_release_on_last_velocity: bool,
     height_hold_release_min_dd_shift_m: float,
+    rsp_correction: bool,
+    rsp_n_particles: int,
+    rsp_spread_m: float,
+    rsp_sigma_m: float,
+    rsp_huber_k_m: float,
+    rsp_stein_steps: int,
+    rsp_stein_step_size: float,
+    rsp_repulsion_scale: float,
+    rsp_min_dd_shift_m: float,
+    rsp_max_dd_shift_m: float,
+    rsp_min_dd_rms_m: float,
+    rsp_max_dd_rms_m: float,
+    rsp_random_seed: int,
     last_velocity_max_age_s: float,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, np.ndarray]]:
     wls_pos, wls_ms = run_wls(data)
@@ -508,6 +619,7 @@ def run_fusion_eval(
     height_reference_alt_m = _ecef_to_llh(fused[0])[2]
     height_correction_m = 0.0
     height_effective_alpha = height_alpha
+    rsp_fields = _rsp_epoch_fields(False)
 
     per_epoch.append(
         {
@@ -526,6 +638,7 @@ def run_fusion_eval(
             "height_hold_effective_alpha": float(height_effective_alpha),
             "height_hold_reference_alt_m": float(height_reference_alt_m),
             "height_hold_correction_m": float(height_correction_m),
+            **rsp_fields,
             **_widelane_epoch_fields(
                 used=wl_used,
                 anchor_stats=wl_anchor_stats,
@@ -617,6 +730,37 @@ def run_fusion_eval(
                 height_reference_alt_m,
                 alpha=height_effective_alpha,
             )
+        rsp_fields = _rsp_epoch_fields(False)
+        rsp_gate = (
+            bool(rsp_correction)
+            and bool(tdcp_used)
+            and not bool(last_velocity_used)
+            and not bool(wl_used)
+            and height_effective_alpha > 0.0
+            and np.isfinite(anchor_stats.shift_m)
+            and float(rsp_min_dd_shift_m) <= anchor_stats.shift_m <= float(rsp_max_dd_shift_m)
+            and np.isfinite(anchor_stats.robust_rms_m)
+            and float(rsp_min_dd_rms_m)
+            <= anchor_stats.robust_rms_m
+            <= float(rsp_max_dd_rms_m)
+        )
+        if rsp_gate:
+            rsp_anchor, rsp_fields = _try_rsp_correction(
+                dd_computer,
+                data,
+                i,
+                pred,
+                n_particles=rsp_n_particles,
+                spread_m=rsp_spread_m,
+                sigma_m=rsp_sigma_m,
+                huber_k_m=rsp_huber_k_m,
+                stein_steps=rsp_stein_steps,
+                stein_step_size=rsp_stein_step_size,
+                repulsion_scale=rsp_repulsion_scale,
+                random_seed=rsp_random_seed,
+            )
+            if rsp_anchor is not None:
+                pred = rsp_anchor
         fused[i] = pred
 
         per_epoch.append(
@@ -647,6 +791,7 @@ def run_fusion_eval(
                 "height_hold_effective_alpha": float(height_effective_alpha),
                 "height_hold_reference_alt_m": float(height_reference_alt_m),
                 "height_hold_correction_m": float(height_correction_m),
+                **rsp_fields,
                 **_widelane_epoch_fields(
                     used=wl_used,
                     anchor_stats=wl_anchor_stats,
@@ -699,6 +844,18 @@ def run_fusion_eval(
             "height_hold_release_on_last_velocity": bool(height_hold_release_on_last_velocity),
             "height_hold_release_min_dd_shift_m": float(height_hold_release_min_dd_shift_m),
             "height_hold_reference_alt_m": float(height_reference_alt_m),
+            "rsp_correction_enabled": bool(rsp_correction),
+            "rsp_n_particles": int(rsp_n_particles),
+            "rsp_spread_m": float(rsp_spread_m),
+            "rsp_sigma_m": float(rsp_sigma_m),
+            "rsp_huber_k_m": float(rsp_huber_k_m),
+            "rsp_stein_steps": int(rsp_stein_steps),
+            "rsp_stein_step_size": float(rsp_stein_step_size),
+            "rsp_repulsion_scale": float(rsp_repulsion_scale),
+            "rsp_min_dd_shift_m": float(rsp_min_dd_shift_m),
+            "rsp_max_dd_shift_m": float(rsp_max_dd_shift_m),
+            "rsp_min_dd_rms_m": float(rsp_min_dd_rms_m),
+            "rsp_max_dd_rms_m": float(rsp_max_dd_rms_m),
             **ppc_score_dict(fused, truth),
             "rms_2d": float(fused_metrics["rms_2d"]),
             "p50": float(fused_metrics["p50"]),
@@ -768,6 +925,24 @@ def main() -> None:
         help="Release height hold when stale TDCP velocity and DD-PR strongly disagree",
     )
     parser.add_argument("--height-hold-release-min-dd-shift-m", type=float, default=1.0)
+    parser.add_argument(
+        "--rsp-correction",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Apply gated DD-gradient reservoir Stein horizontal corrections",
+    )
+    parser.add_argument("--rsp-n-particles", type=int, default=64)
+    parser.add_argument("--rsp-spread-m", type=float, default=1.0)
+    parser.add_argument("--rsp-sigma-m", type=float, default=1.0)
+    parser.add_argument("--rsp-huber-k-m", type=float, default=1.0)
+    parser.add_argument("--rsp-stein-steps", type=int, default=1)
+    parser.add_argument("--rsp-stein-step-size", type=float, default=0.1)
+    parser.add_argument("--rsp-repulsion-scale", type=float, default=0.25)
+    parser.add_argument("--rsp-min-dd-shift-m", type=float, default=0.85)
+    parser.add_argument("--rsp-max-dd-shift-m", type=float, default=1.4)
+    parser.add_argument("--rsp-min-dd-rms-m", type=float, default=0.45)
+    parser.add_argument("--rsp-max-dd-rms-m", type=float, default=0.7)
+    parser.add_argument("--rsp-random-seed", type=int, default=42)
     parser.add_argument("--last-velocity-max-age-s", type=float, default=8.0)
     parser.add_argument("--results-prefix", type=str, default="ppc_realtime_fusion")
     args = parser.parse_args()
@@ -824,6 +999,19 @@ def main() -> None:
         height_hold_alpha=args.height_hold_alpha,
         height_hold_release_on_last_velocity=args.height_hold_release_on_last_velocity,
         height_hold_release_min_dd_shift_m=args.height_hold_release_min_dd_shift_m,
+        rsp_correction=args.rsp_correction,
+        rsp_n_particles=args.rsp_n_particles,
+        rsp_spread_m=args.rsp_spread_m,
+        rsp_sigma_m=args.rsp_sigma_m,
+        rsp_huber_k_m=args.rsp_huber_k_m,
+        rsp_stein_steps=args.rsp_stein_steps,
+        rsp_stein_step_size=args.rsp_stein_step_size,
+        rsp_repulsion_scale=args.rsp_repulsion_scale,
+        rsp_min_dd_shift_m=args.rsp_min_dd_shift_m,
+        rsp_max_dd_shift_m=args.rsp_max_dd_shift_m,
+        rsp_min_dd_rms_m=args.rsp_min_dd_rms_m,
+        rsp_max_dd_rms_m=args.rsp_max_dd_rms_m,
+        rsp_random_seed=args.rsp_random_seed,
         last_velocity_max_age_s=args.last_velocity_max_age_s,
     )
 
