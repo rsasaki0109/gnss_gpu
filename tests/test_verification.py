@@ -117,8 +117,8 @@ class TestCoordinateConversion:
             x2, y2, z2 = lla_to_ecef(lat, lon, alt)
 
             assert abs(x - x2[0]) < 0.01, f"X roundtrip error at ({x},{y},{z})"
-            assert abs(y - y2[0]) < 0.01, "Y roundtrip error"
-            assert abs(z - z2[0]) < 0.01, "Z roundtrip error"
+            assert abs(y - y2[0]) < 0.01, f"Y roundtrip error"
+            assert abs(z - z2[0]) < 0.01, f"Z roundtrip error"
 
 
 # ============================================================

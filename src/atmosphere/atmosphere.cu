@@ -5,6 +5,8 @@
 
 namespace gnss_gpu {
 
+constexpr double kPi = 3.14159265358979323846;
+
 // ============================================================
 // CPU implementations
 // ============================================================
@@ -21,7 +23,7 @@ double tropo_saastamoinen(double lat, double alt, double el) {
   e *= 0.5;
 
   // Zenith tropospheric delay (simplified Saastamoinen)
-  double z = M_PI / 2.0 - el;  // zenith angle
+  double z = kPi / 2.0 - el;  // zenith angle
   double cos_z = cos(z);
 
   // Correction factor B (latitude/altitude dependent, simplified)
@@ -33,9 +35,9 @@ double tropo_saastamoinen(double lat, double alt, double el) {
                         (1.0 - 0.00266 * cos(2.0 * lat) - 0.00028 * alt_km);
 
   // Mapping function (Hopfield-style, avoids singularity at low elevation)
-  double el_min = 2.0 * M_PI / 180.0;  // minimum 2 degrees
+  double el_min = 2.0 * kPi / 180.0;  // minimum 2 degrees
   double el_eff = (el > el_min) ? el : el_min;
-  double sin_el = sin(sqrt(el_eff * el_eff + 6.25 * (M_PI / 180.0) * (M_PI / 180.0)));
+  double sin_el = sin(sqrt(el_eff * el_eff + 6.25 * (kPi / 180.0) * (kPi / 180.0)));
   double mapped = tropo_zenith / sin_el;
 
   return mapped;
@@ -45,7 +47,7 @@ double tropo_saastamoinen(double lat, double alt, double el) {
 double iono_klobuchar(const double alpha[4], const double beta[4],
                       double lat, double lon, double az, double el,
                       double gps_time) {
-  const double PI = M_PI;
+  const double PI = kPi;
 
   // Semi-circles conversion
   double lat_sc = lat / PI;  // latitude in semi-circles
@@ -122,16 +124,16 @@ __device__ double d_tropo_saastamoinen(double lat, double alt, double el) {
   double tropo_zenith = 0.002277 * (P + (1255.0 / T + 0.05) * e_wv) /
                         (1.0 - 0.00266 * cos(2.0 * lat) - 0.00028 * alt_km);
 
-  double el_min = 2.0 * M_PI / 180.0;
+  double el_min = 2.0 * kPi / 180.0;
   double el_eff = (el > el_min) ? el : el_min;
-  double sin_el = sin(sqrt(el_eff * el_eff + 6.25 * (M_PI / 180.0) * (M_PI / 180.0)));
+  double sin_el = sin(sqrt(el_eff * el_eff + 6.25 * (kPi / 180.0) * (kPi / 180.0)));
   return tropo_zenith / sin_el;
 }
 
 __device__ double d_iono_klobuchar(const double* alpha, const double* beta,
                                     double lat, double lon, double az, double el,
                                     double gps_time) {
-  const double PI = M_PI;
+  const double PI = kPi;
   double lat_sc = lat / PI;
   double lon_sc = lon / PI;
   double el_sc = el / PI;

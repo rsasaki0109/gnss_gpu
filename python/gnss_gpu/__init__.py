@@ -1,4 +1,37 @@
+# ruff: noqa: E402
+import os
+import sys
+
 from gnss_gpu._version import __version__
+
+_DLL_DIR_HANDLES = []
+
+
+def _register_windows_dll_dirs():
+    if sys.platform != "win32" or not hasattr(os, "add_dll_directory"):
+        return
+
+    package_dir = os.path.dirname(__file__)
+    candidate_dirs = [package_dir]
+
+    for env_var in ("CUDA_PATH", "CUDA_HOME"):
+        root = os.environ.get(env_var)
+        if root:
+            candidate_dirs.append(os.path.join(root, "bin"))
+
+    seen = set()
+    for dll_dir in candidate_dirs:
+        dll_dir = os.path.abspath(dll_dir)
+        if dll_dir in seen or not os.path.isdir(dll_dir):
+            continue
+        seen.add(dll_dir)
+        try:
+            _DLL_DIR_HANDLES.append(os.add_dll_directory(dll_dir))
+        except OSError:
+            pass
+
+
+_register_windows_dll_dirs()
 
 try:
     from gnss_gpu._gnss_gpu import (
@@ -45,6 +78,17 @@ from gnss_gpu.raim import raim_check, raim_fde
 from gnss_gpu.doppler import doppler_velocity, doppler_velocity_batch
 from gnss_gpu.signal_sim import SignalSimulator
 from gnss_gpu.urban_signal_sim import UrbanSignalSimulator
+from gnss_gpu.e2e_helpers import (
+    compute_e2e_wls_weights,
+    acquisition_lag_to_code_phase_chips,
+    code_phase_chips_to_acquisition_lag,
+    refine_acquisition_code_lag_dll,
+    refine_acquisition_code_lags_dll_batch,
+    refine_acquisition_code_lags_diagnostic_batch,
+    dump_e2e_diagnostics_csv,
+    pseudorange_to_code_phase_chips,
+    acquisition_code_phase_to_pseudorange,
+)
 
 __all__ = [
     # Core positioning
@@ -111,4 +155,14 @@ __all__ = [
     # Signal simulation
     "SignalSimulator",
     "UrbanSignalSimulator",
+    # E2E helpers (acquisition to pseudorange)
+    "compute_e2e_wls_weights",
+    "acquisition_lag_to_code_phase_chips",
+    "code_phase_chips_to_acquisition_lag",
+    "refine_acquisition_code_lag_dll",
+    "refine_acquisition_code_lags_dll_batch",
+    "refine_acquisition_code_lags_diagnostic_batch",
+    "dump_e2e_diagnostics_csv",
+    "pseudorange_to_code_phase_chips",
+    "acquisition_code_phase_to_pseudorange",
 ]

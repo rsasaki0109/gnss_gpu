@@ -19,7 +19,7 @@ PYBIND11_MODULE(_raytrace, m) {
     int n_tri = btri.shape[0];
 
     // Use int array for CUDA kernel output
-    auto is_los_int = py::array_t<int>(std::vector<ssize_t>{n_sat});
+    auto is_los_int = py::array_t<int>(std::vector<py::ssize_t>{n_sat});
     int* int_ptr = is_los_int.mutable_data();
 
     gnss_gpu::raytrace_los_check(
@@ -30,7 +30,7 @@ PYBIND11_MODULE(_raytrace, m) {
         n_sat, n_tri);
 
     // Convert to bool array
-    auto is_los = py::array_t<bool>(std::vector<ssize_t>{n_sat});
+    auto is_los = py::array_t<bool>(std::vector<py::ssize_t>{n_sat});
     bool* bool_ptr = is_los.mutable_data();
     for (int i = 0; i < n_sat; i++) bool_ptr[i] = (int_ptr[i] != 0);
     return is_los;
@@ -49,7 +49,7 @@ PYBIND11_MODULE(_raytrace, m) {
     int n_tri = btri.shape[0];
 
     auto reflection_points = py::array_t<double>({n_sat, 3});
-    auto excess_delays = py::array_t<double>(std::vector<ssize_t>{n_sat});
+    auto excess_delays = py::array_t<double>(std::vector<py::ssize_t>{n_sat});
 
     gnss_gpu::raytrace_multipath(
         static_cast<double*>(brx.ptr),

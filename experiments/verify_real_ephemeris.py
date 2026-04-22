@@ -174,7 +174,7 @@ def main():
         print(f"  [{fi+1}/{n_epochs}] TOW={gps_tow:.0f} sats={len(used_prns)}", end="")
         t0 = time.time()
         result = usim.compute_epoch(
-            rx_ecef=rx, sat_ecef=sat_ecef, prn_list=prn_ints)
+            rx_ecef=rx, sat_ecef=sat_ecef, sat_clk=sat_clk, prn_list=prn_ints)
         dt = time.time() - t0
         print(f"  LOS={result['n_los']} NLOS={result['n_nlos']} MP={result['n_multipath']} [{dt*1000:.0f}ms]")
 

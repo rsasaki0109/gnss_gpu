@@ -88,6 +88,7 @@ def render_epoch(rx_ecef, sat_ecef, prn_list, bvh, result, epoch_idx, traj_enu, 
     text_color = "#e0e0e0"
     los_color = "#00d4aa"
     nlos_color = "#ff6b6b"
+    mp_color = "#ffd93d"
     bg_color = "#16213e"
     n_sat = len(prn_list)
 
@@ -188,7 +189,7 @@ def render_epoch(rx_ecef, sat_ecef, prn_list, bvh, result, epoch_idx, traj_enu, 
             elif len(rows) > key[0] - 1 and rows[key[0] - 1][1] == "NLOS":
                 cell.set_facecolor("#2d1f1f")
 
-    summary = "249K triangles\nBVH ray-trace"
+    summary = f"249K triangles\nBVH ray-trace"
     ax3.text(0.5, 0.02, summary, transform=ax3.transAxes, fontsize=8,
              color=text_color, ha="center", va="bottom", fontfamily="monospace")
 

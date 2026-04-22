@@ -10,7 +10,8 @@ namespace gnss_gpu {
 static constexpr double GPS_L1_FREQ = 1575.42e6;       // Hz
 static constexpr double CA_CODE_RATE = 1.023e6;        // chips/s
 static constexpr int CA_CODE_LENGTH = 1023;             // chips
-static constexpr double TWO_PI = 2.0 * M_PI;
+static constexpr double PI = 3.14159265358979323846;
+static constexpr double TWO_PI = 2.0 * PI;
 
 // G2 delay taps for PRN 1-32 (1-indexed tap pairs)
 static const int G2_TAPS[32][2] = {

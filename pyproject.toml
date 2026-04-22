@@ -58,6 +58,7 @@ cmake.verbose = true
 CMAKE_CUDA_ARCHITECTURES = "native"
 
 [tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "gpu: requires compiled GPU-backed bindings",
     "cuda: requires CUDA-backed runtime support",

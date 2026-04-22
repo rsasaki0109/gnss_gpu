@@ -256,6 +256,7 @@ void wls_batch(const double* sat_ecef, const double* pseudoranges,
   }
 
   CUDA_CHECK(cudaFree(d_sat)); CUDA_CHECK(cudaFree(d_pr));
+  CUDA_CHECK(cudaFree(d_w)); CUDA_CHECK(cudaFree(d_res));
 }
 
 }  // namespace gnss_gpu

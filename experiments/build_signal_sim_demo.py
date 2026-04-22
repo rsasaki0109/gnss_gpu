@@ -86,6 +86,7 @@ def render_frame(rx_ecef, canyon, usim, acq, t, n_sat=10):
     text_color = "#e0e0e0"
     los_color = "#00d4aa"
     nlos_color = "#ff6b6b"
+    mp_color = "#ffd93d"
     grid_color = "#333355"
 
     # --- Skyplot ---
@@ -144,7 +145,7 @@ def render_frame(rx_ecef, canyon, usim, acq, t, n_sat=10):
     snrs = [r["snr"] for r in acq_results]
     acquired_mask = [r["acquired"] for r in acq_results]
     colors = [los_color if a else "#555577" for a in acquired_mask]
-    ax_acq.bar(prns, snrs, color=colors, width=0.7, edgecolor="none")
+    bars = ax_acq.bar(prns, snrs, color=colors, width=0.7, edgecolor="none")
     ax_acq.axhline(y=2.5, color=nlos_color, linestyle="--", alpha=0.7, linewidth=1)
     ax_acq.text(max(prns) + 0.5, 2.7, "threshold", color=nlos_color, fontsize=7, ha="right")
     ax_acq.set_xlabel("PRN", color=text_color, fontsize=9)

@@ -315,7 +315,7 @@ def _plot_ppc_holdout(output_path: Path) -> None:
     safe = {row["segment_label"]: row for row in rows if row["strategy"] == PPC_SAFE}
     best = {row["segment_label"]: row for row in rows if row["strategy"] == PPC_EXPLORATORY}
     segments = sorted(set(safe) & set(best))
-    np.arange(len(segments))
+    x = np.arange(len(segments))
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharex=True)
     for ax, metric, title in zip(

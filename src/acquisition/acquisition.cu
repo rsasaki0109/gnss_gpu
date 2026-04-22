@@ -12,6 +12,8 @@
 
 namespace gnss_gpu {
 
+constexpr double kPi = 3.14159265358979323846;
+
 // GPS C/A code chip rate
 static constexpr double CA_CHIP_RATE = 1.023e6;
 static constexpr int CA_CODE_LEN = 1023;
@@ -108,7 +110,7 @@ __global__ void carrier_wipeoff_kernel(const float* signal, float* out_i,
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= n) return;
 
-    double phase = 2.0 * M_PI * freq * (double)idx / fs;
+    double phase = 2.0 * kPi * freq * (double)idx / fs;
     float cos_val = cosf((float)phase);
     float sin_val = sinf((float)phase);
     out_i[idx] = signal[idx] * cos_val;
@@ -181,9 +183,10 @@ __global__ void find_peak_reduce_kernel(const float* data, float* max_val,
 }
 
 // Host helper: find peak and compute SNR using second-peak ratio with guard band
-// Returns the peak value, peak index, and SNR (peak / second_peak_excluding_guard)
+// Returns the peak value, integer peak index, refined peak code phase, and
+// SNR (peak / second_peak_excluding_guard).
 static void find_peak_and_snr(float* d_mag, int n, float& peak_val,
-                               int& peak_idx, float& snr) {
+                               int& peak_idx, double& peak_code_phase, float& snr) {
     int block = 256;
     int grid = (n + block - 1) / block;
     size_t smem_size = block * (sizeof(float) + sizeof(int) + sizeof(float));
@@ -226,6 +229,25 @@ static void find_peak_and_snr(float* d_mag, int n, float& peak_val,
     // Copy full magnitude array to host to find second peak with guard band
     float* h_mag = new float[n];
     CUDA_CHECK(cudaMemcpy(h_mag, d_mag, n * sizeof(float), cudaMemcpyDeviceToHost));
+
+    peak_code_phase = static_cast<double>(peak_idx);
+    if (n >= 3) {
+        int left = (peak_idx - 1 + n) % n;
+        int right = (peak_idx + 1) % n;
+        double y_left = h_mag[left];
+        double y_center = h_mag[peak_idx];
+        double y_right = h_mag[right];
+        double denom = y_left - 2.0 * y_center + y_right;
+
+        if (y_center >= y_left && y_center >= y_right && fabs(denom) > 1e-12) {
+            double delta = 0.5 * (y_left - y_right) / denom;
+            if (delta > 0.5) delta = 0.5;
+            if (delta < -0.5) delta = -0.5;
+            peak_code_phase += delta;
+            if (peak_code_phase < 0.0) peak_code_phase += n;
+            if (peak_code_phase >= n) peak_code_phase -= n;
+        }
+    }
 
     // Find second peak excluding a guard band of +-16 samples around the first peak
     // This ensures the "second peak" is a genuinely different correlation peak,
@@ -337,6 +359,7 @@ void acquire_parallel(
 
         float best_peak = 0;
         int best_peak_idx = 0;
+        double best_code_phase = 0.0;
         double best_doppler = 0;
         float best_snr = 0;
 
@@ -386,20 +409,26 @@ void acquire_parallel(
             // Find peak and compute SNR (peak / second_peak with guard band)
             float peak_val;
             int peak_idx;
+            double peak_code_phase;
             float snr;
-            find_peak_and_snr(d_mag, n_samples, peak_val, peak_idx, snr);
+            find_peak_and_snr(d_mag, n_samples, peak_val, peak_idx, peak_code_phase, snr);
 
             if (snr > best_snr) {
                 best_snr = snr;
                 best_peak = peak_val;
                 best_peak_idx = peak_idx;
+                best_code_phase = peak_code_phase;
                 best_doppler = doppler;
             }
         }
 
         results[p].snr = best_snr;
-        results[p].code_phase = (double)best_peak_idx;
-        results[p].doppler_hz = best_doppler;
+        results[p].code_phase = best_code_phase;
+        // Real zero-IF input is symmetric in +/- Doppler, so report magnitude
+        // instead of the arbitrary sign selected by the search order.
+        results[p].doppler_hz = (fabs(intermediate_freq) < 1e-12)
+            ? fabs(best_doppler)
+            : best_doppler;
         results[p].acquired = (best_snr > threshold);
     }
 

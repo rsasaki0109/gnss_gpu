@@ -131,6 +131,7 @@ def _build_poster() -> Image.Image:
     draw = ImageDraw.Draw(poster)
     ink = "#1f2724"
     muted = "#55615d"
+    teal = "#0f766e"
     rust = "#bc6c25"
 
     _draw_text_block(
