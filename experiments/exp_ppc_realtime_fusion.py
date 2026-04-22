@@ -105,6 +105,26 @@ def _blend_to_altitude(
     return corrected, float(np.linalg.norm(corrected - pos))
 
 
+def _height_hold_effective_alpha(
+    base_alpha: float,
+    *,
+    last_velocity_used: bool,
+    anchor_stats: _DDAnchorStats,
+    release_on_last_velocity: bool,
+    release_min_dd_shift_m: float,
+) -> float:
+    alpha = float(np.clip(base_alpha, 0.0, 1.0))
+    if (
+        alpha > 0.0
+        and release_on_last_velocity
+        and last_velocity_used
+        and np.isfinite(anchor_stats.shift_m)
+        and anchor_stats.shift_m >= float(release_min_dd_shift_m)
+    ):
+        return 0.0
+    return alpha
+
+
 def _sat_elevation(rx_ecef: np.ndarray, sat_ecef: np.ndarray) -> float:
     lat, lon, _alt = _ecef_to_llh(rx_ecef)
     sin_lat, cos_lat = math.sin(lat), math.cos(lat)
@@ -409,6 +429,8 @@ def run_fusion_eval(
     widelane_veto_min_kept_pairs: int,
     widelane_anchor_blend_alpha: float,
     height_hold_alpha: float,
+    height_hold_release_on_last_velocity: bool,
+    height_hold_release_min_dd_shift_m: float,
     last_velocity_max_age_s: float,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, np.ndarray]]:
     wls_pos, wls_ms = run_wls(data)
@@ -485,6 +507,7 @@ def run_fusion_eval(
         n_widelane_used += 1
     height_reference_alt_m = _ecef_to_llh(fused[0])[2]
     height_correction_m = 0.0
+    height_effective_alpha = height_alpha
 
     per_epoch.append(
         {
@@ -500,6 +523,7 @@ def run_fusion_eval(
                 float(anchor_stats.robust_rms_m) if np.isfinite(anchor_stats.robust_rms_m) else ""
             ),
             "height_hold_used": bool(height_alpha > 0.0),
+            "height_hold_effective_alpha": float(height_effective_alpha),
             "height_hold_reference_alt_m": float(height_reference_alt_m),
             "height_hold_correction_m": float(height_correction_m),
             **_widelane_epoch_fields(
@@ -580,11 +604,18 @@ def run_fusion_eval(
             pred = pred + wl_anchor_alpha * (wl_anchor - pred)
             n_widelane_used += 1
         height_correction_m = 0.0
-        if height_alpha > 0.0:
+        height_effective_alpha = _height_hold_effective_alpha(
+            height_alpha,
+            last_velocity_used=last_velocity_used,
+            anchor_stats=anchor_stats,
+            release_on_last_velocity=height_hold_release_on_last_velocity,
+            release_min_dd_shift_m=height_hold_release_min_dd_shift_m,
+        )
+        if height_effective_alpha > 0.0:
             pred, height_correction_m = _blend_to_altitude(
                 pred,
                 height_reference_alt_m,
-                alpha=height_alpha,
+                alpha=height_effective_alpha,
             )
         fused[i] = pred
 
@@ -613,6 +644,7 @@ def run_fusion_eval(
                     else ""
                 ),
                 "height_hold_used": bool(height_alpha > 0.0),
+                "height_hold_effective_alpha": float(height_effective_alpha),
                 "height_hold_reference_alt_m": float(height_reference_alt_m),
                 "height_hold_correction_m": float(height_correction_m),
                 **_widelane_epoch_fields(
@@ -664,6 +696,8 @@ def run_fusion_eval(
             "widelane_veto_rms_band_max_m": float(widelane_veto_rms_band_max_m),
             "widelane_veto_min_kept_pairs": int(widelane_veto_min_kept_pairs),
             "height_hold_alpha": float(height_alpha),
+            "height_hold_release_on_last_velocity": bool(height_hold_release_on_last_velocity),
+            "height_hold_release_min_dd_shift_m": float(height_hold_release_min_dd_shift_m),
             "height_hold_reference_alt_m": float(height_reference_alt_m),
             **ppc_score_dict(fused, truth),
             "rms_2d": float(fused_metrics["rms_2d"]),
@@ -727,6 +761,13 @@ def main() -> None:
         default=1.0,
         help="Causal blend toward the first fused ellipsoidal height",
     )
+    parser.add_argument(
+        "--height-hold-release-on-last-velocity",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Release height hold when stale TDCP velocity and DD-PR strongly disagree",
+    )
+    parser.add_argument("--height-hold-release-min-dd-shift-m", type=float, default=1.0)
     parser.add_argument("--last-velocity-max-age-s", type=float, default=8.0)
     parser.add_argument("--results-prefix", type=str, default="ppc_realtime_fusion")
     args = parser.parse_args()
@@ -781,6 +822,8 @@ def main() -> None:
         widelane_veto_min_kept_pairs=args.widelane_veto_min_kept_pairs,
         widelane_anchor_blend_alpha=args.widelane_anchor_blend_alpha,
         height_hold_alpha=args.height_hold_alpha,
+        height_hold_release_on_last_velocity=args.height_hold_release_on_last_velocity,
+        height_hold_release_min_dd_shift_m=args.height_hold_release_min_dd_shift_m,
         last_velocity_max_age_s=args.last_velocity_max_age_s,
     )
 

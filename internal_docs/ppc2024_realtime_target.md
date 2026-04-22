@@ -17,11 +17,17 @@ Implementation notes:
 - Use `gnss_gpu.ppc_score.score_ppc2024` for local scoring.
 - `experiments/exp_ppc_wls_sweep.py` ranks configurations by `ppc_score_pct`,
   not RMS/P95.
+- Current Tokyo/run1 realtime fusion smoke segment:
+  `start=1300,max_epochs=200` reaches 56.01% with TDCP + DD-PR/WL anchors,
+  causal height hold, and stale-velocity height release.
 - Use `experiments/exp_particle_visualization.py --renderer enu` for quick
   particle-cloud trajectory videos without depending on map tiles.
 - The initial scorer can derive distance weights from adjacent reference ECEF
   positions.  If `reference.csv` exposes official speed-derived distance
   weights, pass those weights into `score_ppc2024`.
+- For the next PF phase, consider Reservoir Stein Particle Filter as a
+  bounded-memory, diversity-preserving realtime update pattern before reviving
+  the heavier PF experiments.
 
 Example quick video:
 
