@@ -260,7 +260,7 @@ class TestBVHMatchesLinearScan:
         tris = _make_multi_building_mesh(n_boxes=105, seed=17)
         assert tris.shape[0] >= 1000, f"Expected >=1000 tris, got {tris.shape[0]}"
 
-        building = BuildingModel(tris)
+        BuildingModel(tris)
         bvh = BVHAccelerator(tris)
 
         n = 500
@@ -517,7 +517,7 @@ class TestBVHVsLinearPF:
         tris = _make_multi_building_mesh(n_boxes=100, seed=3)
         assert tris.shape[0] >= 1000
 
-        building = BuildingModel(tris)
+        BuildingModel(tris)
         bvh = BVHAccelerator(tris)
 
         n = 300

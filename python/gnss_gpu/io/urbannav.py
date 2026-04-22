@@ -143,6 +143,19 @@ _SYSTEM_DOPPLER_FALLBACKS = {
     "C": ("D1I", "D1X", "D2I"),
     "R": ("D1C", "D1P"),
 }
+_SYSTEM_L1_CARRIER_FALLBACKS = {
+    "G": ("L1C", "L1W", "L1X"),
+    "E": ("L1X", "L1C"),
+    "J": ("L1C", "L1X", "L1Z"),
+}
+_SYSTEM_L2_PR_FALLBACKS = {
+    "G": ("C2W", "C2X", "C2L"),
+    "J": ("C2X", "C2L"),
+}
+_SYSTEM_L2_CARRIER_FALLBACKS = {
+    "G": ("L2W", "L2X", "L2L"),
+    "J": ("L2X", "L2L"),
+}
 
 
 def _candidate_codes(system: str, requested_code: str, fallbacks: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
@@ -477,6 +490,9 @@ class UrbanNavLoader:
         systems: tuple[str, ...] = ("G",),
         time_tolerance: float = 0.15,
         rover_source: str = "ublox",
+        return_l1_carrier_per_epoch: bool = False,
+        return_l2_pr_per_epoch: bool = False,
+        return_l2_carrier_per_epoch: bool = False,
     ) -> dict:
         """Build experiment-ready arrays from an UrbanNav run."""
         from gnss_gpu.ephemeris import Ephemeris
@@ -504,6 +520,9 @@ class UrbanNavLoader:
         time_list: list[float] = []
         sat_id_list_per_epoch: list[list[str]] = []
         system_id_list: list[np.ndarray] = []
+        l1_carrier_list: list[dict[str, float]] = []
+        l2_pr_list: list[dict[str, float]] = []
+        l2_carrier_list: list[dict[str, float]] = []
         usable_epoch_index = 0
 
         for epoch in rover_obs.epochs:
@@ -513,6 +532,9 @@ class UrbanNavLoader:
             obs_code_list: list[str] = []
             snr_vals: list[float] = []
             doppler_vals: list[float] = []
+            l1_carrier_vals: dict[str, float] = {}
+            l2_pr_vals: dict[str, float] = {}
+            l2_carrier_vals: dict[str, float] = {}
 
             for sat_id in epoch.satellites:
                 if not sat_id or sat_id[0] not in systems:
@@ -543,6 +565,27 @@ class UrbanNavLoader:
                 obs_code_list.append(pr_code or obs_code)
                 snr_vals.append(snr if np.isfinite(snr) and snr > 0.0 else 1.0)
                 doppler_vals.append(doppler if np.isfinite(doppler) else np.nan)
+                _, l1_carrier = _pick_observation_value(
+                    sat_id[0],
+                    obs,
+                    "L1C",
+                    _SYSTEM_L1_CARRIER_FALLBACKS,
+                )
+                _, l2_pr = _pick_observation_value(
+                    sat_id[0],
+                    obs,
+                    "C2W",
+                    _SYSTEM_L2_PR_FALLBACKS,
+                )
+                _, l2_carrier = _pick_observation_value(
+                    sat_id[0],
+                    obs,
+                    "L2W",
+                    _SYSTEM_L2_CARRIER_FALLBACKS,
+                )
+                l1_carrier_vals[sat_id] = float(l1_carrier) if np.isfinite(l1_carrier) else float("nan")
+                l2_pr_vals[sat_id] = float(l2_pr) if np.isfinite(l2_pr) else float("nan")
+                l2_carrier_vals[sat_id] = float(l2_carrier) if np.isfinite(l2_carrier) else float("nan")
 
             if len(sat_id_list) < 4:
                 continue
@@ -577,6 +620,18 @@ class UrbanNavLoader:
                 [doppler_map.get(sat_id, np.nan) for sat_id in used_sat_ids],
                 dtype=np.float64,
             )
+            l1_carrier_map = {
+                sat_id: float(l1_carrier_vals.get(sat_id, float("nan")))
+                for sat_id in used_sat_ids
+            }
+            l2_pr_map = {
+                sat_id: float(l2_pr_vals.get(sat_id, float("nan")))
+                for sat_id in used_sat_ids
+            }
+            l2_carrier_map = {
+                sat_id: float(l2_carrier_vals.get(sat_id, float("nan")))
+                for sat_id in used_sat_ids
+            }
             sat_ecef_list.append(np.asarray(sat_ecef, dtype=np.float64))
             pseudorange_list.append(pr_corr)
             weight_list.append(weights)
@@ -585,6 +640,9 @@ class UrbanNavLoader:
             time_list.append(float(tow))
             sat_id_list_per_epoch.append(list(used_sat_ids))
             system_id_list.append(system_ids)
+            l1_carrier_list.append(l1_carrier_map)
+            l2_pr_list.append(l2_pr_map)
+            l2_carrier_list.append(l2_carrier_map)
             usable_epoch_index += 1
 
             if max_epochs is not None and len(time_list) >= max_epochs:
@@ -598,7 +656,7 @@ class UrbanNavLoader:
         sat_counts = np.array([len(sats) for sats in sat_id_list_per_epoch], dtype=np.int32)
         dt = float(np.median(np.diff(times))) if len(times) > 1 else 0.2
 
-        return {
+        result: dict[str, object] = {
             "dataset_name": f"UrbanNav {self.data_dir.name} ({rover_source})",
             "sat_ecef": sat_ecef_list,
             "pseudoranges": pseudorange_list,
@@ -617,6 +675,13 @@ class UrbanNavLoader:
             "constellations": tuple(sorted({sat_id[0] for sats in sat_id_list_per_epoch for sat_id in sats})),
             "rover_source": rover_source,
         }
+        if return_l1_carrier_per_epoch:
+            result["l1_carrier_per_epoch"] = l1_carrier_list
+        if return_l2_pr_per_epoch:
+            result["l2_pr_per_epoch"] = l2_pr_list
+        if return_l2_carrier_per_epoch:
+            result["l2_carrier_per_epoch"] = l2_carrier_list
+        return result
 
     def epochs(
         self,

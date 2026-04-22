@@ -27,20 +27,20 @@ class TestBVHBasic:
         """Satellite above with no building obstruction should be LOS."""
         sat = np.array([[0.0, 0.0, 20000000.0]], dtype=np.float64)
         is_los = self.bvh.check_los(self.rx_ecef, sat)
-        assert is_los[0] == True
+        assert is_los[0]
 
     def test_los_blocked(self):
         """Satellite behind building should be NLOS."""
         sat = np.array([[200.0, 0.0, 25.0]], dtype=np.float64)
         is_los = self.bvh.check_los(self.rx_ecef, sat)
-        assert is_los[0] == False
+        assert not is_los[0]
 
     def test_los_mixed(self):
         """Batch with both LOS and NLOS satellites."""
         sat_clear = np.array([[0.0, 0.0, 20000000.0]], dtype=np.float64)
         sat_blocked = np.array([[200.0, 0.0, 25.0]], dtype=np.float64)
-        assert self.bvh.check_los(self.rx_ecef, sat_clear)[0] == True
-        assert self.bvh.check_los(self.rx_ecef, sat_blocked)[0] == False
+        assert self.bvh.check_los(self.rx_ecef, sat_clear)[0]
+        assert not self.bvh.check_los(self.rx_ecef, sat_blocked)[0]
 
     def test_from_building_model(self):
         """Test construction from BuildingModel."""

@@ -1,0 +1,291 @@
+"""CSV result row construction for PF smoother experiment runs."""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def build_pf_smoother_result_row(
+    *,
+    args: Any,
+    out: dict[str, Any],
+    run_name: str,
+    label: str,
+    use_smoother: bool,
+    position_update_sigma: float | None,
+    forward_metrics: dict[str, Any] | None,
+    smoothed_metrics: dict[str, Any] | None,
+    n_epochs: int,
+    ms_per_epoch: float,
+) -> dict[str, Any]:
+    fgo_info_for_row = out.get("fgo_local_info") or {}
+    fgo_lambda_info_for_row = fgo_info_for_row.get("lambda") or {}
+    return {
+        "run": run_name,
+        "variant": label,
+        "seed": args.seed,
+        "predict_guide": args.predict_guide,
+        "sigma_pos": args.sigma_pos,
+        "sigma_pos_tdcp": args.sigma_pos_tdcp,
+        "sigma_pos_tdcp_tight": args.sigma_pos_tdcp_tight,
+        "tdcp_tight_rms_max_m": args.tdcp_tight_rms_max,
+        "skip_valid_epochs": args.skip_valid_epochs,
+        "tdcp_elevation_weight": args.tdcp_elevation_weight,
+        "tdcp_el_sin_floor": args.tdcp_el_sin_floor,
+        "tdcp_rms_threshold": args.tdcp_rms_threshold,
+        "tdcp_position_update": args.tdcp_position_update,
+        "tdcp_pu_sigma": args.tdcp_pu_sigma,
+        "tdcp_pu_rms_max": args.tdcp_pu_rms_max,
+        "tdcp_pu_spp_max_diff_mps": args.tdcp_pu_spp_max_diff_mps,
+        "tdcp_pu_gate_dd_carrier_min_pairs": args.tdcp_pu_gate_dd_carrier_min_pairs,
+        "tdcp_pu_gate_dd_carrier_max_pairs": args.tdcp_pu_gate_dd_carrier_max_pairs,
+        "tdcp_pu_gate_dd_pseudorange_max_pairs": args.tdcp_pu_gate_dd_pseudorange_max_pairs,
+        "tdcp_pu_gate_min_spread_m": args.tdcp_pu_gate_min_spread_m,
+        "tdcp_pu_gate_max_spread_m": args.tdcp_pu_gate_max_spread_m,
+        "tdcp_pu_gate_min_ess_ratio": args.tdcp_pu_gate_min_ess_ratio,
+        "tdcp_pu_gate_max_ess_ratio": args.tdcp_pu_gate_max_ess_ratio,
+        "tdcp_pu_gate_dd_pr_max_raw_median_m": args.tdcp_pu_gate_dd_pr_max_raw_median_m,
+        "tdcp_pu_gate_dd_cp_max_raw_afv_median_cycles": (
+            args.tdcp_pu_gate_dd_cp_max_raw_afv_median_cycles
+        ),
+        "tdcp_pu_gate_logic": args.tdcp_pu_gate_logic,
+        "tdcp_pu_gate_stop_mode": args.tdcp_pu_gate_stop_mode,
+        "n_tdcp_pu_used": int(out.get("n_tdcp_pu_used", 0)),
+        "n_tdcp_pu_skip": int(out.get("n_tdcp_pu_skip", 0)),
+        "n_tdcp_pu_gate_skip": int(out.get("n_tdcp_pu_gate_skip", 0)),
+        "residual_downweight": args.residual_downweight,
+        "residual_threshold": args.residual_threshold,
+        "pr_accel_downweight": args.pr_accel_downweight,
+        "pr_accel_threshold": args.pr_accel_threshold,
+        "position_update_sigma": position_update_sigma if position_update_sigma is not None else "off",
+        "doppler_position_update": args.doppler_position_update,
+        "doppler_pu_sigma": args.doppler_pu_sigma,
+        "doppler_per_particle": args.doppler_per_particle,
+        "doppler_sigma_mps": args.doppler_sigma_mps,
+        "doppler_velocity_update_gain": args.doppler_velocity_update_gain,
+        "doppler_max_velocity_update_mps": args.doppler_max_velocity_update_mps,
+        "doppler_min_sats": args.doppler_min_sats,
+        "rbpf_velocity_kf": args.rbpf_velocity_kf,
+        "rbpf_velocity_init_sigma": args.rbpf_velocity_init_sigma,
+        "rbpf_velocity_process_noise": args.rbpf_velocity_process_noise,
+        "rbpf_doppler_sigma": args.rbpf_doppler_sigma,
+        "rbpf_velocity_kf_gate_min_dd_pairs": args.rbpf_velocity_kf_gate_min_dd_pairs,
+        "rbpf_velocity_kf_gate_min_ess_ratio": args.rbpf_velocity_kf_gate_min_ess_ratio,
+        "rbpf_velocity_kf_gate_max_spread_m": args.rbpf_velocity_kf_gate_max_spread_m,
+        "pf_sigma_vel": args.pf_sigma_vel,
+        "pf_velocity_guide_alpha": args.pf_velocity_guide_alpha,
+        "pf_init_spread_vel": args.pf_init_spread_vel,
+        "n_doppler_pp_used": int(out.get("n_doppler_pp_used", 0)),
+        "n_doppler_pp_skip": int(out.get("n_doppler_pp_skip", 0)),
+        "n_doppler_kf_used": int(out.get("n_doppler_kf_used", 0)),
+        "n_doppler_kf_skip": int(out.get("n_doppler_kf_skip", 0)),
+        "n_doppler_kf_gate_skip": int(out.get("n_doppler_kf_gate_skip", 0)),
+        "imu_tight_coupling": args.imu_tight_coupling,
+        "imu_stop_sigma_pos": args.imu_stop_sigma_pos,
+        "dd_pseudorange": args.dd_pseudorange,
+        "dd_pseudorange_sigma": args.dd_pseudorange_sigma,
+        "dd_pseudorange_base_interp": args.dd_pseudorange_base_interp,
+        "dd_pseudorange_gate_residual_m": args.dd_pseudorange_gate_residual_m,
+        "dd_pseudorange_gate_adaptive_floor_m": args.dd_pseudorange_gate_adaptive_floor_m,
+        "dd_pseudorange_gate_adaptive_mad_mult": args.dd_pseudorange_gate_adaptive_mad_mult,
+        "dd_pseudorange_gate_epoch_median_m": args.dd_pseudorange_gate_epoch_median_m,
+        "dd_pseudorange_gate_ess_min_scale": args.dd_pseudorange_gate_ess_min_scale,
+        "dd_pseudorange_gate_ess_max_scale": args.dd_pseudorange_gate_ess_max_scale,
+        "dd_pseudorange_gate_spread_min_scale": args.dd_pseudorange_gate_spread_min_scale,
+        "dd_pseudorange_gate_spread_max_scale": args.dd_pseudorange_gate_spread_max_scale,
+        "dd_pseudorange_gate_low_spread_m": args.dd_pseudorange_gate_low_spread_m,
+        "dd_pseudorange_gate_high_spread_m": args.dd_pseudorange_gate_high_spread_m,
+        "per_particle_nlos_gate": args.per_particle_nlos_gate,
+        "per_particle_nlos_dd_pr_threshold_m": args.per_particle_nlos_dd_pr_threshold_m,
+        "per_particle_nlos_dd_carrier_threshold_cycles": (
+            args.per_particle_nlos_dd_carrier_threshold_cycles
+        ),
+        "per_particle_nlos_undiff_pr_threshold_m": args.per_particle_nlos_undiff_pr_threshold_m,
+        "per_particle_huber": args.per_particle_huber,
+        "per_particle_huber_dd_pr_k": args.per_particle_huber_dd_pr_k,
+        "per_particle_huber_dd_carrier_k": args.per_particle_huber_dd_carrier_k,
+        "per_particle_huber_undiff_pr_k": args.per_particle_huber_undiff_pr_k,
+        "widelane": args.widelane,
+        "widelane_min_fix_rate": args.widelane_min_fix_rate,
+        "widelane_ratio_threshold": args.widelane_ratio_threshold,
+        "widelane_dd_sigma": args.widelane_dd_sigma,
+        "smoother_skip_widelane_dd_pseudorange": args.smoother_skip_widelane_dd_pseudorange,
+        "smoother_widelane_forward_guard": args.smoother_widelane_forward_guard,
+        "smoother_widelane_forward_guard_min_shift_m": args.smoother_widelane_forward_guard_min_shift_m,
+        "n_wl_used": int(out.get("n_wl_used", 0)),
+        "n_wl_skip": int(out.get("n_wl_skip", 0)),
+        "n_wl_candidate_pairs": int(out.get("n_wl_candidate_pairs", 0)),
+        "n_wl_fixed_pairs": int(out.get("n_wl_fixed_pairs", 0)),
+        "n_wl_low_fix_rate": int(out.get("n_wl_low_fix_rate", 0)),
+        "mupf": args.mupf,
+        "mupf_dd": args.mupf_dd,
+        "mupf_dd_base_interp": args.mupf_dd_base_interp,
+        "mupf_dd_gate_afv_cycles": args.mupf_dd_gate_afv_cycles,
+        "mupf_dd_gate_adaptive_floor_cycles": args.mupf_dd_gate_adaptive_floor_cycles,
+        "mupf_dd_gate_adaptive_mad_mult": args.mupf_dd_gate_adaptive_mad_mult,
+        "mupf_dd_gate_epoch_median_cycles": args.mupf_dd_gate_epoch_median_cycles,
+        "mupf_dd_gate_low_ess_epoch_median_cycles": args.mupf_dd_gate_low_ess_epoch_median_cycles,
+        "mupf_dd_gate_low_ess_max_ratio": args.mupf_dd_gate_low_ess_max_ratio,
+        "mupf_dd_gate_low_ess_max_spread_m": args.mupf_dd_gate_low_ess_max_spread_m,
+        "mupf_dd_gate_low_ess_require_no_dd_pr": args.mupf_dd_gate_low_ess_require_no_dd_pr,
+        "mupf_dd_gate_ess_min_scale": args.mupf_dd_gate_ess_min_scale,
+        "mupf_dd_gate_ess_max_scale": args.mupf_dd_gate_ess_max_scale,
+        "mupf_dd_gate_spread_min_scale": args.mupf_dd_gate_spread_min_scale,
+        "mupf_dd_gate_spread_max_scale": args.mupf_dd_gate_spread_max_scale,
+        "mupf_dd_gate_low_spread_m": args.mupf_dd_gate_low_spread_m,
+        "mupf_dd_gate_high_spread_m": args.mupf_dd_gate_high_spread_m,
+        "mupf_dd_sigma_support_low_pairs": args.mupf_dd_sigma_support_low_pairs,
+        "mupf_dd_sigma_support_high_pairs": args.mupf_dd_sigma_support_high_pairs,
+        "mupf_dd_sigma_support_max_scale": args.mupf_dd_sigma_support_max_scale,
+        "mupf_dd_sigma_afv_good_cycles": args.mupf_dd_sigma_afv_good_cycles,
+        "mupf_dd_sigma_afv_bad_cycles": args.mupf_dd_sigma_afv_bad_cycles,
+        "mupf_dd_sigma_afv_max_scale": args.mupf_dd_sigma_afv_max_scale,
+        "mupf_dd_sigma_ess_low_ratio": args.mupf_dd_sigma_ess_low_ratio,
+        "mupf_dd_sigma_ess_high_ratio": args.mupf_dd_sigma_ess_high_ratio,
+        "mupf_dd_sigma_ess_max_scale": args.mupf_dd_sigma_ess_max_scale,
+        "mupf_dd_sigma_max_scale": args.mupf_dd_sigma_max_scale,
+        "carrier_anchor": args.carrier_anchor,
+        "carrier_anchor_sigma_m": args.carrier_anchor_sigma_m,
+        "carrier_anchor_min_sats": args.carrier_anchor_min_sats,
+        "carrier_anchor_max_age_s": args.carrier_anchor_max_age_s,
+        "carrier_anchor_max_residual_m": args.carrier_anchor_max_residual_m,
+        "carrier_anchor_max_continuity_residual_m": args.carrier_anchor_max_continuity_residual_m,
+        "carrier_anchor_min_stable_epochs": args.carrier_anchor_min_stable_epochs,
+        "carrier_anchor_blend_alpha": args.carrier_anchor_blend_alpha,
+        "carrier_anchor_reanchor_jump_cycles": args.carrier_anchor_reanchor_jump_cycles,
+        "carrier_anchor_seed_dd_min_pairs": args.carrier_anchor_seed_dd_min_pairs,
+        "mupf_dd_fallback_undiff": args.mupf_dd_fallback_undiff,
+        "mupf_dd_fallback_sigma_cycles": args.mupf_dd_fallback_sigma_cycles,
+        "mupf_dd_fallback_min_sats": args.mupf_dd_fallback_min_sats,
+        "mupf_dd_fallback_prefer_tracked": args.mupf_dd_fallback_prefer_tracked,
+        "mupf_dd_fallback_tracked_min_stable_epochs": args.mupf_dd_fallback_tracked_min_stable_epochs,
+        "mupf_dd_fallback_tracked_min_sats": args.mupf_dd_fallback_tracked_min_sats,
+        "mupf_dd_fallback_weak_dd_max_pairs": args.mupf_dd_fallback_weak_dd_max_pairs,
+        "mupf_dd_fallback_weak_dd_max_ess_ratio": args.mupf_dd_fallback_weak_dd_max_ess_ratio,
+        "mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles": args.mupf_dd_fallback_weak_dd_min_raw_afv_median_cycles,
+        "mupf_dd_fallback_weak_dd_require_no_dd_pr": args.mupf_dd_fallback_weak_dd_require_no_dd_pr,
+        "mupf_dd_skip_low_support_ess_ratio": args.mupf_dd_skip_low_support_ess_ratio,
+        "mupf_dd_skip_low_support_max_pairs": args.mupf_dd_skip_low_support_max_pairs,
+        "mupf_dd_skip_low_support_max_spread_m": args.mupf_dd_skip_low_support_max_spread_m,
+        "mupf_dd_skip_low_support_min_raw_afv_median_cycles": args.mupf_dd_skip_low_support_min_raw_afv_median_cycles,
+        "mupf_dd_skip_low_support_require_no_dd_pr": args.mupf_dd_skip_low_support_require_no_dd_pr,
+        "n_dd_skip_support_guard": int(out.get("n_dd_skip_support_guard", 0)),
+        "n_dd_sigma_relaxed": int(out.get("n_dd_sigma_relaxed", 0)),
+        "mean_dd_sigma_scale": out.get("mean_dd_sigma_scale"),
+        "n_carrier_anchor_used": int(out.get("n_carrier_anchor_used", 0)),
+        "n_carrier_anchor_propagated": int(out.get("n_carrier_anchor_propagated", 0)),
+        "n_dd_fallback_undiff_used": int(out.get("n_dd_fallback_undiff_used", 0)),
+        "n_dd_fallback_tracked_attempted": int(out.get("n_dd_fallback_tracked_attempted", 0)),
+        "n_dd_fallback_tracked_used": int(out.get("n_dd_fallback_tracked_used", 0)),
+        "n_dd_fallback_weak_dd_replaced": int(out.get("n_dd_fallback_weak_dd_replaced", 0)),
+        "smoother_position_update_sigma": args.smoother_position_update_sigma,
+        "smoother_tail_guard_ess_max_ratio": args.smoother_tail_guard_ess_max_ratio,
+        "smoother_tail_guard_dd_carrier_max_pairs": args.smoother_tail_guard_dd_carrier_max_pairs,
+        "smoother_tail_guard_dd_pseudorange_max_pairs": args.smoother_tail_guard_dd_pseudorange_max_pairs,
+        "smoother_tail_guard_min_shift_m": args.smoother_tail_guard_min_shift_m,
+        "smoother_tail_guard_expand_epochs": args.smoother_tail_guard_expand_epochs,
+        "smoother_tail_guard_expand_min_shift_m": args.smoother_tail_guard_expand_min_shift_m,
+        "smoother_tail_guard_expand_dd_pseudorange_max_pairs": (
+            args.smoother_tail_guard_expand_dd_pseudorange_max_pairs
+        ),
+        "n_tail_guard_applied": int(out.get("n_tail_guard_applied", 0)),
+        "n_widelane_forward_guard_applied": int(out.get("n_widelane_forward_guard_applied", 0)),
+        "stop_segment_constant": args.stop_segment_constant,
+        "stop_segment_min_epochs": args.stop_segment_min_epochs,
+        "stop_segment_source": args.stop_segment_source,
+        "stop_segment_max_radius_m": args.stop_segment_max_radius_m,
+        "stop_segment_blend": args.stop_segment_blend,
+        "stop_segment_density_neighbors": args.stop_segment_density_neighbors,
+        "n_stop_segment_epochs_applied": int(out.get("n_stop_segment_epochs_applied", 0)),
+        "stop_segment_static_gnss": args.stop_segment_static_gnss,
+        "stop_segment_static_min_observations": (
+            args.stop_segment_static_min_observations
+        ),
+        "stop_segment_static_prior_sigma_m": args.stop_segment_static_prior_sigma_m,
+        "stop_segment_static_pr_sigma_m": args.stop_segment_static_pr_sigma_m,
+        "stop_segment_static_dd_pr_sigma_m": args.stop_segment_static_dd_pr_sigma_m,
+        "stop_segment_static_dd_cp_sigma_cycles": (
+            args.stop_segment_static_dd_cp_sigma_cycles
+        ),
+        "stop_segment_static_max_update_m": args.stop_segment_static_max_update_m,
+        "stop_segment_static_blend": args.stop_segment_static_blend,
+        "n_stop_segment_static_epochs_applied": int(
+            out.get("n_stop_segment_static_epochs_applied", 0)
+        ),
+        "fgo_local_window": args.fgo_local_window,
+        "fgo_local_window_min_epochs": args.fgo_local_window_min_epochs,
+        "fgo_local_dd_max_pairs": args.fgo_local_dd_max_pairs,
+        "fgo_local_prior_sigma_m": args.fgo_local_prior_sigma_m,
+        "fgo_local_motion_sigma_m": args.fgo_local_motion_sigma_m,
+        "fgo_local_dd_huber_k": args.fgo_local_dd_huber_k,
+        "fgo_local_pr_huber_k": args.fgo_local_pr_huber_k,
+        "fgo_local_dd_sigma_cycles": args.fgo_local_dd_sigma_cycles,
+        "fgo_local_pr_sigma_m": args.fgo_local_pr_sigma_m,
+        "fgo_local_max_iterations": args.fgo_local_max_iterations,
+        "fgo_local_lambda": args.fgo_local_lambda,
+        "fgo_local_lambda_ratio_threshold": args.fgo_local_lambda_ratio_threshold,
+        "fgo_local_lambda_sigma_cycles": args.fgo_local_lambda_sigma_cycles,
+        "fgo_local_lambda_min_epochs": args.fgo_local_lambda_min_epochs,
+        "fgo_local_motion_source": args.fgo_local_motion_source,
+        "fgo_local_tdcp_rms_max_m": args.fgo_local_tdcp_rms_max_m,
+        "fgo_local_tdcp_spp_max_diff_mps": args.fgo_local_tdcp_spp_max_diff_mps,
+        "n_fgo_tdcp_motion_used": int(out.get("n_fgo_tdcp_motion_used", 0)),
+        "n_fgo_tdcp_motion_skip": int(out.get("n_fgo_tdcp_motion_skip", 0)),
+        "fgo_local_two_step": args.fgo_local_two_step,
+        "fgo_local_stage1_prior_sigma_m": args.fgo_local_stage1_prior_sigma_m,
+        "fgo_local_stage1_motion_sigma_m": args.fgo_local_stage1_motion_sigma_m,
+        "fgo_local_stage1_pr_sigma_m": args.fgo_local_stage1_pr_sigma_m,
+        "fgo_local_lambda_fixed": fgo_lambda_info_for_row.get("n_fixed"),
+        "fgo_local_lambda_fixed_observations": fgo_lambda_info_for_row.get("n_fixed_observations"),
+        "fgo_local_applied": bool(out.get("fgo_local_applied", False)),
+        "fgo_local_resolved_window": (
+            fgo_info_for_row.get("window")
+            if out.get("fgo_local_info") is not None
+            else None
+        ),
+        "fgo_local_solve_window": (
+            fgo_info_for_row.get("solve_window")
+            if out.get("fgo_local_info") is not None
+            else None
+        ),
+        "fgo_local_motion_tdcp_edges": (
+            fgo_info_for_row.get("motion_tdcp_edges")
+            if out.get("fgo_local_info") is not None
+            else None
+        ),
+        "fgo_local_motion_tdcp_selected_edges": (
+            fgo_info_for_row.get("motion_tdcp_selected_edges")
+            if out.get("fgo_local_info") is not None
+            else None
+        ),
+        "fgo_local_initial_error": (
+            fgo_info_for_row.get("initial_error")
+            if out.get("fgo_local_info") is not None
+            else None
+        ),
+        "fgo_local_final_error": (
+            fgo_info_for_row.get("final_error")
+            if out.get("fgo_local_info") is not None
+            else None
+        ),
+        "smoother": use_smoother,
+        "n_particles": args.n_particles,
+        "forward_p50": forward_metrics["p50"] if forward_metrics else None,
+        "forward_p95": forward_metrics["p95"] if forward_metrics else None,
+        "forward_rms_2d": forward_metrics["rms_2d"] if forward_metrics else None,
+        "smoothed_p50_before_fgo": (
+            out["smoothed_metrics_before_fgo"]["p50"]
+            if out.get("smoothed_metrics_before_fgo")
+            else None
+        ),
+        "smoothed_rms_2d_before_fgo": (
+            out["smoothed_metrics_before_fgo"]["rms_2d"]
+            if out.get("smoothed_metrics_before_fgo")
+            else None
+        ),
+        "smoothed_p50": smoothed_metrics["p50"] if smoothed_metrics else None,
+        "smoothed_p95": smoothed_metrics["p95"] if smoothed_metrics else None,
+        "smoothed_rms_2d": smoothed_metrics["rms_2d"] if smoothed_metrics else None,
+        "n_epochs": n_epochs,
+        "ms_per_epoch": ms_per_epoch,
+    }

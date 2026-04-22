@@ -221,7 +221,7 @@ def main() -> None:
         print(f"  converted {n_epochs} ground truth epochs to ECEF CSV")
 
         # 3. Try to download navigation ephemeris from BKG.
-        print(f"[3/3] Fetching broadcast ephemeris...")
+        print("[3/3] Fetching broadcast ephemeris...")
         year = int(seq["date"][:4])
         doy = seq["doy"]
         nav_path = run_dir / "base.nav"

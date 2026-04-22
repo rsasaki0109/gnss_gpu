@@ -28,7 +28,7 @@ class TestBuildingModel:
         # Satellite straight up (z-axis), no building in the way
         sat_ecef = np.array([[0.0, 0.0, 20000000.0]], dtype=np.float64)
         is_los = self.building.check_los(self.rx_ecef, sat_ecef)
-        assert is_los[0] == True
+        assert is_los[0]
 
     def test_los_blocked(self):
         """Satellite behind building should be NLOS."""
@@ -36,7 +36,7 @@ class TestBuildingModel:
         # Building spans x=[90,110], so satellite at x=200 behind it at z=25 (mid-height)
         sat_ecef = np.array([[200.0, 0.0, 25.0]], dtype=np.float64)
         is_los = self.building.check_los(self.rx_ecef, sat_ecef)
-        assert is_los[0] == False
+        assert not is_los[0]
 
     def test_los_mixed(self):
         """Test batch with both LOS and NLOS satellites."""
@@ -45,8 +45,8 @@ class TestBuildingModel:
         sat_blocked = np.array([[200.0, 0.0, 25.0]], dtype=np.float64)
         is_los_clear = self.building.check_los(self.rx_ecef, sat_clear)
         is_los_blocked = self.building.check_los(self.rx_ecef, sat_blocked)
-        assert is_los_clear[0] == True
-        assert is_los_blocked[0] == False
+        assert is_los_clear[0]
+        assert not is_los_blocked[0]
 
     def test_multipath_excess_delay(self):
         """Verify multipath excess delay is positive for reflected paths."""

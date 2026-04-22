@@ -363,6 +363,8 @@ def run_pf_standard(
     rescue_spread_pos: float = PF_RESCUE_SPREAD_POS,
     rescue_spread_cb: float = PF_RESCUE_SPREAD_CB,
     return_states: bool = False,
+    position_update_references: np.ndarray | None = None,
+    position_update_sigma: float = 30.0,
 ) -> tuple[np.ndarray, float, str]:
     n_epochs = data["n_epochs"]
     sat_ecef = data["sat_ecef"]
@@ -472,6 +474,13 @@ def run_pf_standard(
             kept_multi_epochs += int(use_multi)
             fallback_epochs += int(not use_multi)
             pf.update(sat_i, pr_i, weights=w_i)
+            if (
+                position_update_references is not None
+                and hasattr(pf, "position_update")
+            ):
+                ref = position_update_references[i]
+                if ref is not None and np.isfinite(ref[:3]).all():
+                    pf.position_update(ref[:3], sigma_pos=position_update_sigma)
             estimate = np.asarray(pf.estimate(), dtype=np.float64)
             positions[i] = estimate[:3]
             if states is not None:

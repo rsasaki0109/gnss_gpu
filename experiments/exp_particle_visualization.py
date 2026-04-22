@@ -109,7 +109,7 @@ def run_pf_with_particle_dumps(
             resampling="megopolis",
             seed=42,
         )
-        print(f"    Using PF3D+RobustClear (clear_nlos_prob=0.01)")
+        print("    Using PF3D+RobustClear (clear_nlos_prob=0.01)")
     except (ImportError, RuntimeError):
         from gnss_gpu import ParticleFilterDevice
         pf = ParticleFilterDevice(
@@ -120,7 +120,7 @@ def run_pf_with_particle_dumps(
             resampling="megopolis",
             seed=42,
         )
-        print(f"    Fallback to ParticleFilterDevice (Gaussian)")
+        print("    Fallback to ParticleFilterDevice (Gaussian)")
 
     init_pos = np.asarray(wls_init[0, :3], dtype=np.float64)
     init_cb = float(wls_init[0, 3])
@@ -213,6 +213,7 @@ def create_animation(
     fps: int = 10,
     trail_length: int = 50,
     zoom_radius_m: float = 80.0,
+    baseline_label: str = "RTKLIB demo5",
 ) -> None:
     """Create mp4 animation with particles on OpenStreetMap (full + zoom)."""
     import contextily as cx
@@ -336,13 +337,14 @@ def create_animation(
             ax_full.plot(gt[0], gt[1], "s", color="#3b82f6", markersize=9,
                         markeredgecolor="white", markeredgewidth=2, zorder=6)
             pf_rms_f = f.get("pf_rms", 0)
-            spp_rms_f = f.get("ekf_rms", 0)
+            f.get("ekf_rms", 0)
             rtk_rms_f = f.get("rtklib_rms", 0)
             if rtk_rms_f > 0:
+                bl = baseline_label.split()[0]  # first word e.g. "RTKLIB" or "SPP"
                 full_text = (
                     f"Epoch {f['epoch']} / {frames[-1]['epoch']}\n"
-                    f"PF     RMS: {pf_rms_f:.1f} m\n"
-                    f"RTKLIB RMS: {rtk_rms_f:.1f} m"
+                    f"PF{' '*(len(bl)-1)} RMS: {pf_rms_f:.1f} m\n"
+                    f"{bl} RMS: {rtk_rms_f:.1f} m"
                 )
             else:
                 full_text = (
@@ -377,7 +379,7 @@ def create_animation(
                             color="#16a34a", linewidth=4, alpha=0.9, zorder=5)
                 ax_zoom.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#16a34a",
                             markersize=16, markeredgecolor="white", markeredgewidth=2.5, zorder=7,
-                            label="RTKLIB demo5" if frame_idx == 0 else "")
+                            label=baseline_label if frame_idx == 0 else "")
             ax_zoom.plot(est[0], est[1], "o", color="#ef4444", markersize=16,
                         markeredgecolor="white", markeredgewidth=2.5, zorder=6,
                         label="PF estimate" if frame_idx == 0 else "")
@@ -387,15 +389,16 @@ def create_animation(
 
             # Metrics overlay (ENU-based)
             err_2d = f.get("error_2d", 0)
-            spp_err = f.get("ekf_error_2d", 0)
+            f.get("ekf_error_2d", 0)
             pf_rms = f.get("pf_rms", 0)
-            spp_rms = f.get("ekf_rms", 0)
+            f.get("ekf_rms", 0)
             rtk_err = f.get("rtklib_error_2d", 0)
             rtk_rms = f.get("rtklib_rms", 0)
             if rtk_rms > 0:
+                bl = baseline_label.split()[0]
                 metrics_text = (
-                    f"PF:     {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
-                    f"RTKLIB error: {rtk_err:6.1f} m  (RMS: {rtk_rms:.1f} m)\n"
+                    f"PF:  {err_2d:6.1f} m  (RMS: {pf_rms:.1f} m)\n"
+                    f"{bl}: {rtk_err:6.1f} m  (RMS: {rtk_rms:.1f} m)\n"
                     f"{len(particles)} particles"
                 )
             else:
@@ -465,7 +468,7 @@ def _run_pf_gnssplusplus(
     particle_frames = []
 
     prev_tow = None
-    prev_fused = np.array(first_pos[:3])
+    np.array(first_pos[:3])
     frame_count = 0
     for sol_epoch, measurements in epochs:
         if not sol_epoch.is_valid() or len(measurements) < 4:

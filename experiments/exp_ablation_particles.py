@@ -141,7 +141,7 @@ def run_pf_single_count(
                 positions[i] = pf.estimate()[:3]
             backend = "GPU"
             gpu_ok = True
-        except (ImportError, RuntimeError, Exception) as e:
+        except (ImportError, RuntimeError, Exception):
             pass
 
     if not gpu_ok:
@@ -206,7 +206,7 @@ def plot_accuracy_vs_particles(results: list[dict], output_path: Path) -> None:
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        print(f"[ablation_particles] matplotlib unavailable, skipping plot")
+        print("[ablation_particles] matplotlib unavailable, skipping plot")
         return
 
     counts = [r["n_particles"] for r in results]
@@ -311,7 +311,7 @@ def main():
     # ------------------------------------------------------------------
     # [3] PF sweep
     # ------------------------------------------------------------------
-    print(f"\n[3] Sweeping particle counts ...")
+    print("\n[3] Sweeping particle counts ...")
     print(f"    {'Count':>10s}  {'Backend':<14s}  "
           f"{'RMS':>8s}  {'P95':>8s}  {'ms/epoch':>10s}  {'Total [s]':>10s}")
     print(f"    {'-' * 66}")

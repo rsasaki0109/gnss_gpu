@@ -1,0 +1,14 @@
+{
+  "dataset": "UrbanNav Tokyo Odaiba",
+  "method": "PF 100K (DD + smoother + stop-detect)",
+  "variant": "odaiba_stop_detect",
+  "baseline_method": "RTKLIB demo5",
+  "pf_p50_m": 1.3633407342542703,
+  "pf_rms_2d_m": 4.105216545481291,
+  "baseline_p50_m": 2.67,
+  "baseline_rms_2d_m": 13.08,
+  "p50_improvement_pct": 49.0,
+  "rms_improvement_pct": 69.0,
+  "n_epochs": 12228,
+  "notes": "Frozen from the 2026-04-14 full-run odaiba_stop_detect evaluation."
+}

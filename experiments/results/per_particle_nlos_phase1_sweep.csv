@@ -1,0 +1,13 @@
+run,config,undiff_pr_gate_m,dd_pr_gate_m,dd_carrier_gate_cycles,forward_p50_m,forward_rms_2d_m,smoothed_p50_m,smoothed_rms_2d_m,n_epochs,n_tail_guard_applied,judgement
+Odaiba,phase1_all_gates_sweep,30.0,5.0,0.3,59.54,63.05,59.62,63.12,12228,11660,negative
+Odaiba,phase1_all_gates_sweep,30.0,5.0,0.5,65.84,76.35,66.38,77.00,12228,11560,negative
+Odaiba,phase1_all_gates_sweep,30.0,5.0,0.7,65.84,76.35,66.38,77.00,12228,11560,negative
+Odaiba,phase1_all_gates_sweep,30.0,10.0,0.3,69.19,88.73,69.22,88.76,12228,11876,negative
+Odaiba,phase1_all_gates_sweep,30.0,10.0,0.5,63.87,91.85,64.07,91.98,12228,11455,negative
+Odaiba,phase1_all_gates_sweep,30.0,10.0,0.7,63.87,91.85,64.07,91.98,12228,11455,negative
+Odaiba,phase1_all_gates_sweep,30.0,15.0,0.3,78.97,102.37,79.55,102.50,12228,12112,negative
+Odaiba,phase1_all_gates_sweep,30.0,15.0,0.5,100.76,106.82,100.67,106.85,12228,11069,negative
+Odaiba,phase1_all_gates_sweep,30.0,15.0,0.7,100.76,106.82,100.67,106.85,12228,11069,negative
+Odaiba,phase1_all_gates_sweep,30.0,20.0,0.3,91.88,104.05,91.95,104.36,12228,11753,negative
+Odaiba,phase1_all_gates_sweep,30.0,20.0,0.5,91.95,96.43,92.04,96.34,12228,11439,negative
+Odaiba,phase1_all_gates_sweep,30.0,20.0,0.7,91.95,96.43,92.04,96.34,12228,11439,negative

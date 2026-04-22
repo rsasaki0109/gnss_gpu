@@ -1,0 +1,2 @@
+run,n_particles,max_epochs,predict_guide,position_update_sigma,sigma_pos,sigma_pr,n_ffbsi_paths,smoother,resampling,forward_p50,forward_rms_2d,forward_n_epochs,forward_elapsed_ms,ffbsi_p50,ffbsi_rms_2d,ffbsi_n_epochs,ffbsi_elapsed_ms
+Odaiba,100000,500,spp,1.95,2.0,3.0,16,genealogy,systematic,1.9792579658026939,2.001707773377633,500,353.40850695502013,2.088929746371455,2.3225153369900835,500,2477.2396240150556
