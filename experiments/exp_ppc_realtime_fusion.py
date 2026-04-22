@@ -24,7 +24,7 @@ from exp_ppc_tdcp_velocity import _epoch_measurements, _velocity_truth
 from exp_urbannav_baseline import run_wls
 from gnss_gpu.dd_pseudorange import DDPseudorangeComputer, DDPseudorangeResult
 from gnss_gpu.io.ppc import PPCDatasetLoader
-from gnss_gpu.ppc_score import ppc_score_dict
+from gnss_gpu.ppc_score import ppc_3d_errors, ppc_score_dict, ppc_segment_distances
 from gnss_gpu.tdcp_velocity import L1_WAVELENGTH, estimate_velocity_from_tdcp_with_metrics
 from gnss_gpu.widelane import WidelaneDDPseudorangeComputer
 
@@ -73,6 +73,36 @@ def _ecef_to_llh(ecef: np.ndarray) -> tuple[float, float, float]:
     n = _WGS84_A / math.sqrt(1.0 - _WGS84_E2 * sin_lat * sin_lat)
     alt = p / max(math.cos(lat), 1.0e-12) - n
     return lat, lon, alt
+
+
+def _llh_to_ecef(lat: float, lon: float, alt: float) -> np.ndarray:
+    sin_lat = math.sin(float(lat))
+    cos_lat = math.cos(float(lat))
+    n = _WGS84_A / math.sqrt(1.0 - _WGS84_E2 * sin_lat * sin_lat)
+    return np.array(
+        [
+            (n + float(alt)) * cos_lat * math.cos(float(lon)),
+            (n + float(alt)) * cos_lat * math.sin(float(lon)),
+            (n * (1.0 - _WGS84_E2) + float(alt)) * sin_lat,
+        ],
+        dtype=np.float64,
+    )
+
+
+def _blend_to_altitude(
+    ecef: np.ndarray,
+    target_alt_m: float,
+    *,
+    alpha: float,
+) -> tuple[np.ndarray, float]:
+    pos = np.asarray(ecef, dtype=np.float64).reshape(3)
+    blend_alpha = float(np.clip(alpha, 0.0, 1.0))
+    if blend_alpha <= 0.0:
+        return pos.copy(), 0.0
+    lat, lon, _alt = _ecef_to_llh(pos)
+    target = _llh_to_ecef(lat, lon, float(target_alt_m))
+    corrected = pos + blend_alpha * (target - pos)
+    return corrected, float(np.linalg.norm(corrected - pos))
 
 
 def _sat_elevation(rx_ecef: np.ndarray, sat_ecef: np.ndarray) -> float:
@@ -319,6 +349,36 @@ def _widelane_epoch_fields(
     }
 
 
+def _attach_epoch_error_fields(
+    per_epoch: list[dict[str, object]],
+    wls_pos: np.ndarray,
+    fused: np.ndarray,
+    truth: np.ndarray,
+    *,
+    ppc_threshold_m: float = 0.5,
+) -> None:
+    wls_errors_2d, _ = ecef_errors_2d_3d(wls_pos[:, :3], truth)
+    fused_errors_2d, _ = ecef_errors_2d_3d(fused, truth)
+    wls_errors_3d = ppc_3d_errors(wls_pos[:, :3], truth)
+    fused_errors_3d = ppc_3d_errors(fused, truth)
+    segment_distances = ppc_segment_distances(truth)
+
+    for row in per_epoch:
+        idx = int(row["epoch"])
+        segment_distance = float(segment_distances[idx])
+        wls_pass = bool(wls_errors_3d[idx] <= ppc_threshold_m)
+        fused_pass = bool(fused_errors_3d[idx] <= ppc_threshold_m)
+        row["ppc_segment_distance_m"] = segment_distance
+        row["wls_error_2d_m"] = float(wls_errors_2d[idx])
+        row["wls_error_3d_m"] = float(wls_errors_3d[idx])
+        row["wls_ppc_pass"] = wls_pass
+        row["wls_ppc_pass_distance_m"] = segment_distance if wls_pass else 0.0
+        row["fused_error_2d_m"] = float(fused_errors_2d[idx])
+        row["fused_error_3d_m"] = float(fused_errors_3d[idx])
+        row["fused_ppc_pass"] = fused_pass
+        row["fused_ppc_pass_distance_m"] = segment_distance if fused_pass else 0.0
+
+
 def run_fusion_eval(
     data: dict,
     data_dir: Path,
@@ -348,6 +408,7 @@ def run_fusion_eval(
     widelane_veto_rms_band_max_m: float,
     widelane_veto_min_kept_pairs: int,
     widelane_anchor_blend_alpha: float,
+    height_hold_alpha: float,
     last_velocity_max_age_s: float,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, np.ndarray]]:
     wls_pos, wls_ms = run_wls(data)
@@ -387,6 +448,7 @@ def run_fusion_eval(
     last_velocity_age = float("inf")
     anchor_alpha = float(np.clip(dd_anchor_blend_alpha, 0.0, 1.0))
     wl_anchor_alpha = float(np.clip(widelane_anchor_blend_alpha, 0.0, 1.0))
+    height_alpha = float(np.clip(height_hold_alpha, 0.0, 1.0))
 
     anchor, anchor_stats = _try_dd_anchor(
         dd_computer,
@@ -421,6 +483,8 @@ def run_fusion_eval(
     if wl_used:
         fused[0] = fused[0] + wl_anchor_alpha * (wl_anchor - fused[0])
         n_widelane_used += 1
+    height_reference_alt_m = _ecef_to_llh(fused[0])[2]
+    height_correction_m = 0.0
 
     per_epoch.append(
         {
@@ -435,6 +499,9 @@ def run_fusion_eval(
             "dd_pr_robust_rms_m": (
                 float(anchor_stats.robust_rms_m) if np.isfinite(anchor_stats.robust_rms_m) else ""
             ),
+            "height_hold_used": bool(height_alpha > 0.0),
+            "height_hold_reference_alt_m": float(height_reference_alt_m),
+            "height_hold_correction_m": float(height_correction_m),
             **_widelane_epoch_fields(
                 used=wl_used,
                 anchor_stats=wl_anchor_stats,
@@ -512,6 +579,13 @@ def run_fusion_eval(
         if wl_used:
             pred = pred + wl_anchor_alpha * (wl_anchor - pred)
             n_widelane_used += 1
+        height_correction_m = 0.0
+        if height_alpha > 0.0:
+            pred, height_correction_m = _blend_to_altitude(
+                pred,
+                height_reference_alt_m,
+                alpha=height_alpha,
+            )
         fused[i] = pred
 
         per_epoch.append(
@@ -538,6 +612,9 @@ def run_fusion_eval(
                     if np.isfinite(anchor_stats.robust_rms_m)
                     else ""
                 ),
+                "height_hold_used": bool(height_alpha > 0.0),
+                "height_hold_reference_alt_m": float(height_reference_alt_m),
+                "height_hold_correction_m": float(height_correction_m),
                 **_widelane_epoch_fields(
                     used=wl_used,
                     anchor_stats=wl_anchor_stats,
@@ -548,12 +625,7 @@ def run_fusion_eval(
 
     wls_metrics = compute_metrics(wls_pos[:, :3], truth)
     fused_metrics = compute_metrics(fused, truth)
-    wls_errors_2d, _ = ecef_errors_2d_3d(wls_pos[:, :3], truth)
-    fused_errors_2d, _ = ecef_errors_2d_3d(fused, truth)
-    for row in per_epoch:
-        idx = int(row["epoch"])
-        row["wls_error_2d_m"] = float(wls_errors_2d[idx])
-        row["fused_error_2d_m"] = float(fused_errors_2d[idx])
+    _attach_epoch_error_fields(per_epoch, wls_pos[:, :3], fused, truth)
 
     tdcp_vel_rmse = (
         float(np.sqrt(np.mean(np.square(tdcp_errors)))) if tdcp_errors else float("nan")
@@ -591,6 +663,8 @@ def run_fusion_eval(
             "widelane_veto_rms_band_min_m": float(widelane_veto_rms_band_min_m),
             "widelane_veto_rms_band_max_m": float(widelane_veto_rms_band_max_m),
             "widelane_veto_min_kept_pairs": int(widelane_veto_min_kept_pairs),
+            "height_hold_alpha": float(height_alpha),
+            "height_hold_reference_alt_m": float(height_reference_alt_m),
             **ppc_score_dict(fused, truth),
             "rms_2d": float(fused_metrics["rms_2d"]),
             "p50": float(fused_metrics["p50"]),
@@ -647,6 +721,12 @@ def main() -> None:
     parser.add_argument("--widelane-veto-rms-band-max-m", type=float, default=0.35)
     parser.add_argument("--widelane-veto-min-kept-pairs", type=int, default=4)
     parser.add_argument("--widelane-anchor-blend-alpha", type=float, default=1.0)
+    parser.add_argument(
+        "--height-hold-alpha",
+        type=float,
+        default=1.0,
+        help="Causal blend toward the first fused ellipsoidal height",
+    )
     parser.add_argument("--last-velocity-max-age-s", type=float, default=8.0)
     parser.add_argument("--results-prefix", type=str, default="ppc_realtime_fusion")
     args = parser.parse_args()
@@ -700,6 +780,7 @@ def main() -> None:
         widelane_veto_rms_band_max_m=args.widelane_veto_rms_band_max_m,
         widelane_veto_min_kept_pairs=args.widelane_veto_min_kept_pairs,
         widelane_anchor_blend_alpha=args.widelane_anchor_blend_alpha,
+        height_hold_alpha=args.height_hold_alpha,
         last_velocity_max_age_s=args.last_velocity_max_age_s,
     )
 
