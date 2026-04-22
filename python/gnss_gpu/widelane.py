@@ -93,6 +93,11 @@ class WidelaneDDStats:
     n_fixed_pairs: int = 0
     n_dd: int = 0
     fix_rate: float = 0.0
+    ratio_min: float | None = None
+    ratio_median: float | None = None
+    residual_abs_median_cycles: float | None = None
+    residual_abs_max_cycles: float | None = None
+    std_median_cycles: float | None = None
     reason: str = "no_candidates"
 
 
@@ -388,6 +393,9 @@ class WidelaneDDPseudorangeComputer:
         ref_sat_ids: list[str] = []
         n_candidate_pairs = 0
         n_fixed_pairs = 0
+        fix_ratios: list[float] = []
+        fix_residual_abs_cycles: list[float] = []
+        fix_std_cycles: list[float] = []
 
         for sys_char, sys_sats in sorted(sats_by_system.items()):
             if len(sys_sats) < 2:
@@ -419,6 +427,9 @@ class WidelaneDDPseudorangeComputer:
                 if fix is None:
                     continue
                 n_fixed_pairs += 1
+                fix_ratios.append(float(fix.ratio))
+                fix_residual_abs_cycles.append(abs(float(fix.residual_cycles)))
+                fix_std_cycles.append(float(fix.std_cycles))
                 dd_phase_m = _dd_wl_phase_m(
                     rover_obs[sat_id],
                     rover_obs[ref_sat],
@@ -442,23 +453,27 @@ class WidelaneDDPseudorangeComputer:
                 ref_sat_ids.append(ref_sat)
 
         fix_rate = float(n_fixed_pairs) / float(n_candidate_pairs) if n_candidate_pairs else 0.0
+        stats_kwargs = _widelane_stats_kwargs(
+            n_candidate_pairs=n_candidate_pairs,
+            n_fixed_pairs=n_fixed_pairs,
+            fix_rate=fix_rate,
+            fix_ratios=fix_ratios,
+            fix_residual_abs_cycles=fix_residual_abs_cycles,
+            fix_std_cycles=fix_std_cycles,
+        )
         min_rate = self._min_fix_rate if min_fix_rate is None else float(min_fix_rate)
         if n_candidate_pairs == 0:
             return None, WidelaneDDStats(reason="no_candidate_pairs")
         if fix_rate < min_rate:
             return None, WidelaneDDStats(
-                n_candidate_pairs=n_candidate_pairs,
-                n_fixed_pairs=n_fixed_pairs,
-                fix_rate=fix_rate,
+                **stats_kwargs,
                 reason="low_fix_rate",
             )
         min_dd = max(1, int(min_common_sats) - 1)
         if len(dd_pr_list) < min_dd:
             return None, WidelaneDDStats(
-                n_candidate_pairs=n_candidate_pairs,
-                n_fixed_pairs=n_fixed_pairs,
+                **stats_kwargs,
                 n_dd=len(dd_pr_list),
-                fix_rate=fix_rate,
                 reason="too_few_fixed_pairs",
             )
 
@@ -474,10 +489,8 @@ class WidelaneDDPseudorangeComputer:
             n_dd=n_dd,
         )
         return result, WidelaneDDStats(
-            n_candidate_pairs=n_candidate_pairs,
-            n_fixed_pairs=n_fixed_pairs,
+            **stats_kwargs,
             n_dd=n_dd,
-            fix_rate=fix_rate,
             reason="ok",
         )
 
@@ -529,6 +542,37 @@ def _carrier_and_code(value: Any) -> tuple[float, float]:
     if isinstance(value, Mapping):
         return float(value["carrier"]), float(value["pseudorange"])
     return float(value[0]), float(value[1])
+
+
+def _widelane_stats_kwargs(
+    *,
+    n_candidate_pairs: int,
+    n_fixed_pairs: int,
+    fix_rate: float,
+    fix_ratios: Sequence[float],
+    fix_residual_abs_cycles: Sequence[float],
+    fix_std_cycles: Sequence[float],
+) -> dict[str, object]:
+    ratios = np.asarray(fix_ratios, dtype=np.float64)
+    residuals = np.asarray(fix_residual_abs_cycles, dtype=np.float64)
+    stds = np.asarray(fix_std_cycles, dtype=np.float64)
+    return {
+        "n_candidate_pairs": int(n_candidate_pairs),
+        "n_fixed_pairs": int(n_fixed_pairs),
+        "fix_rate": float(fix_rate),
+        "ratio_min": _finite_stat(ratios, np.min),
+        "ratio_median": _finite_stat(ratios, np.median),
+        "residual_abs_median_cycles": _finite_stat(residuals, np.median),
+        "residual_abs_max_cycles": _finite_stat(residuals, np.max),
+        "std_median_cycles": _finite_stat(stds, np.median),
+    }
+
+
+def _finite_stat(values: np.ndarray, fn) -> float | None:
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return None
+    return float(fn(finite))
 
 
 def _dd_wl_float(

@@ -815,6 +815,7 @@ class ParticleFilterDevice:
         spp_ref=None,
         dd_pseudorange=None,
         dd_pseudorange_sigma=None,
+        dd_pseudorange_source=None,
         dd_carrier=None,
         dd_carrier_sigma=None,
         carrier_anchor_pseudorange=None,
@@ -844,6 +845,8 @@ class ParticleFilterDevice:
             backward pass replays the same DD update instead of undifferenced PR.
         dd_pseudorange_sigma : float or None
             Sigma used for the forward DD pseudorange update.
+        dd_pseudorange_source : str or None
+            Optional source label for the DD pseudorange update.
         dd_carrier : object or None
             DD carrier AFV result used in the forward pass. When present, the
             backward pass replays the same DD carrier update after DD PR / PR.
@@ -939,6 +942,9 @@ class ParticleFilterDevice:
             'dd_pseudorange_sigma': (
                 None if dd_pseudorange_sigma is None else float(dd_pseudorange_sigma)
             ),
+            'dd_pseudorange_source': (
+                None if dd_pseudorange_source is None else str(dd_pseudorange_source)
+            ),
             'dd_carrier': dd_cp_store,
             'dd_carrier_sigma': (
                 None if dd_carrier_sigma is None else float(dd_carrier_sigma)
@@ -970,7 +976,7 @@ class ParticleFilterDevice:
             ),
         })
 
-    def smooth(self, position_update_sigma=None):
+    def smooth(self, position_update_sigma=None, skip_widelane_dd_pseudorange=False):
         """Run backward pass and return smoothed (forward+backward averaged) estimates.
 
         Must be called after a complete forward pass with ``enable_smoothing()``
@@ -981,6 +987,9 @@ class ParticleFilterDevice:
         position_update_sigma : float or None
             Sigma for SPP position-domain update in backward pass.
             If None, uses same as forward.
+        skip_widelane_dd_pseudorange : bool
+            If True, do not replay DD pseudorange updates tagged as wide-lane in
+            the backward pass; replay undifferenced pseudorange instead.
 
         Returns
         -------
@@ -1047,6 +1056,11 @@ class ParticleFilterDevice:
             pr = ep['pseudoranges']
             w = ep['weights']
             dd_ep = ep.get('dd_pseudorange')
+            dd_ep_source = ep.get('dd_pseudorange_source')
+            skip_dd_ep = (
+                bool(skip_widelane_dd_pseudorange)
+                and dd_ep_source == 'widelane'
+            )
             dd_cp_ep = ep.get('dd_carrier')
             carrier_anchor_ep = ep.get('carrier_anchor_pseudorange')
             carrier_afv_ep = ep.get('carrier_afv')
@@ -1054,7 +1068,7 @@ class ParticleFilterDevice:
             # PF runs with reversed velocity, so replaying the same Doppler rows
             # would apply the wrong sign until a direction-aware model exists.
             doppler_ep = None
-            if dd_ep is not None:
+            if dd_ep is not None and not skip_dd_ep:
                 bwd_pf.update_dd_pseudorange(
                     SimpleNamespace(**dd_ep),
                     sigma_pr=(

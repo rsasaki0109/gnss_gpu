@@ -362,6 +362,516 @@ def solve_fgo(
     )
 
 
+def _solve_local_fgo_numpy(
+    problem: LocalFgoProblem,
+    config: LocalFgoConfig | None = None,
+) -> LocalFgoResult:
+    """Small sparse LM fallback for environments without GTSAM.
+
+    The graph is position-only and local; when SciPy is available we assemble
+    sparse normal equations so wider rescue windows remain practical.
+    """
+
+    config = LocalFgoConfig() if config is None else config
+    initial_positions = _as_positions(problem.initial_positions_ecef)
+    window = problem.window.normalized(len(initial_positions))
+    prior_positions = (
+        initial_positions
+        if problem.prior_positions_ecef is None
+        else _as_positions(problem.prior_positions_ecef)
+    )
+    if len(prior_positions) != len(initial_positions):
+        raise ValueError("prior_positions_ecef must match initial_positions_ecef")
+
+    x = initial_positions[window.start : window.end + 1].copy()
+    counts = _numpy_factor_counts(problem, window)
+    initial_error, _r, _j = _numpy_linearization(
+        x,
+        problem,
+        config,
+        window,
+        initial_positions,
+        prior_positions,
+    )
+    current_error = initial_error
+    damping = 1e-3
+
+    for _iter in range(max(0, int(config.max_iterations))):
+        _cost, residuals, jacobian = _numpy_linearization(
+            x,
+            problem,
+            config,
+            window,
+            initial_positions,
+            prior_positions,
+        )
+        if residuals.size == 0:
+            break
+        hessian = jacobian.T @ jacobian
+        gradient = np.asarray(jacobian.T @ residuals, dtype=np.float64).ravel()
+        diag = _normal_matrix_diagonal(hessian)
+        accepted = False
+        for _attempt in range(8):
+            try:
+                step = _solve_lm_normal_equation(hessian, gradient, damping, diag)
+            except np.linalg.LinAlgError:
+                damping *= 10.0
+                continue
+            if not np.isfinite(step).all():
+                damping *= 10.0
+                continue
+            trial = x + step.reshape(x.shape)
+            trial_error, _trial_r, _trial_j = _numpy_linearization(
+                trial,
+                problem,
+                config,
+                window,
+                initial_positions,
+                prior_positions,
+            )
+            if np.isfinite(trial_error) and trial_error < current_error:
+                rel_improvement = (current_error - trial_error) / max(current_error, 1.0)
+                x = trial
+                current_error = trial_error
+                damping = max(damping * 0.3, 1e-9)
+                accepted = True
+                if rel_improvement < float(config.relative_error_tol):
+                    return LocalFgoResult(
+                        positions_ecef=x,
+                        window=window,
+                        factor_counts=counts,
+                        initial_error=float(initial_error),
+                        final_error=float(current_error),
+                    )
+                break
+            damping *= 10.0
+        if not accepted:
+            break
+
+    return LocalFgoResult(
+        positions_ecef=x,
+        window=window,
+        factor_counts=counts,
+        initial_error=float(initial_error),
+        final_error=float(current_error),
+    )
+
+
+def _numpy_factor_counts(
+    problem: LocalFgoProblem,
+    window: LocalFgoWindow,
+) -> dict[str, int]:
+    counts = {
+        "prior": 2 if window.size > 1 else 1,
+        "between": max(0, window.size - 1),
+        "dd_carrier": 0,
+        "dd_carrier_fixed": 0,
+        "dd_pseudorange": 0,
+        "undiff_pseudorange": 0,
+    }
+    for i in range(window.start, window.end + 1):
+        if problem.dd_carrier is not None and i < len(problem.dd_carrier):
+            obs = problem.dd_carrier[i]
+            if obs is not None:
+                fixed = _fixed_ambiguities(obs.fixed_ambiguities, obs.n)
+                counts["dd_carrier"] += int(obs.n)
+                counts["dd_carrier_fixed"] += int(np.count_nonzero(np.isfinite(fixed)))
+        if problem.dd_pseudorange is not None and i < len(problem.dd_pseudorange):
+            obs_pr = problem.dd_pseudorange[i]
+            if obs_pr is not None:
+                counts["dd_pseudorange"] += int(obs_pr.n)
+        if problem.undiff_pseudorange is not None and i < len(problem.undiff_pseudorange):
+            obs_ud = problem.undiff_pseudorange[i]
+            if obs_ud is not None:
+                counts["undiff_pseudorange"] += int(obs_ud.n)
+    return counts
+
+
+def _numpy_linearization(
+    positions: np.ndarray,
+    problem: LocalFgoProblem,
+    config: LocalFgoConfig,
+    window: LocalFgoWindow,
+    initial_positions: np.ndarray,
+    prior_positions: np.ndarray,
+) -> tuple[float, np.ndarray, Any]:
+    try:
+        import scipy.sparse as sparse  # type: ignore
+    except ImportError:
+        return _numpy_residuals_and_jacobian(
+            positions,
+            problem,
+            config,
+            window,
+            initial_positions,
+            prior_positions,
+        )
+    return _numpy_residuals_and_sparse_jacobian(
+        positions,
+        problem,
+        config,
+        window,
+        initial_positions,
+        prior_positions,
+        sparse,
+    )
+
+
+def _normal_matrix_diagonal(hessian: Any) -> np.ndarray:
+    if hasattr(hessian, "diagonal"):
+        diag = np.asarray(hessian.diagonal(), dtype=np.float64).ravel()
+    else:
+        diag = np.asarray(np.diag(hessian), dtype=np.float64).ravel()
+    return np.maximum(diag, 1e-12)
+
+
+def _solve_lm_normal_equation(
+    hessian: Any,
+    gradient: np.ndarray,
+    damping: float,
+    diag: np.ndarray,
+) -> np.ndarray:
+    try:
+        import scipy.sparse as sparse  # type: ignore
+        import scipy.sparse.linalg as sparse_linalg  # type: ignore
+    except ImportError:
+        return np.linalg.solve(
+            hessian + np.diag(float(damping) * diag),
+            -gradient,
+        )
+    if sparse.issparse(hessian):
+        damped = hessian + sparse.diags(float(damping) * diag, format="csr")
+        return np.asarray(sparse_linalg.spsolve(damped, -gradient), dtype=np.float64)
+    return np.linalg.solve(
+        hessian + np.diag(float(damping) * diag),
+        -gradient,
+    )
+
+
+def _numpy_residuals_and_sparse_jacobian(
+    positions: np.ndarray,
+    problem: LocalFgoProblem,
+    config: LocalFgoConfig,
+    window: LocalFgoWindow,
+    initial_positions: np.ndarray,
+    prior_positions: np.ndarray,
+    sparse: Any,
+) -> tuple[float, np.ndarray, Any]:
+    n = int(window.size)
+    n_vars = n * 3
+    residuals: list[float] = []
+    rows: list[int] = []
+    cols: list[int] = []
+    data: list[float] = []
+
+    def add_block(local_index: int, residual: np.ndarray, jac: np.ndarray, sigma: float, huber_k: float = 0.0) -> None:
+        if sigma <= 0.0 or not np.isfinite(sigma):
+            return
+        r = np.asarray(residual, dtype=np.float64).ravel() / float(sigma)
+        j = np.asarray(jac, dtype=np.float64).reshape(r.size, 3) / float(sigma)
+        if not (np.isfinite(r).all() and np.isfinite(j).all()):
+            return
+        scale = _huber_sqrt_weight(r, huber_k)
+        col0 = int(local_index) * 3
+        for rr in range(r.size):
+            row_idx = len(residuals)
+            residuals.append(float(r[rr] * scale))
+            for cc in range(3):
+                value = float(j[rr, cc] * scale)
+                if value == 0.0:
+                    continue
+                rows.append(row_idx)
+                cols.append(col0 + cc)
+                data.append(value)
+
+    def add_between(local_index: int, residual: np.ndarray, sigma: float) -> None:
+        if sigma <= 0.0 or not np.isfinite(sigma):
+            return
+        r = np.asarray(residual, dtype=np.float64).ravel() / float(sigma)
+        if not np.isfinite(r).all():
+            return
+        col0 = int(local_index) * 3
+        inv_sigma = 1.0 / float(sigma)
+        for rr in range(3):
+            row_idx = len(residuals)
+            residuals.append(float(r[rr]))
+            rows.extend((row_idx, row_idx))
+            cols.extend((col0 + rr, col0 + 3 + rr))
+            data.extend((-inv_sigma, inv_sigma))
+
+    _populate_numpy_linearization(
+        add_block,
+        add_between,
+        positions,
+        problem,
+        config,
+        window,
+        initial_positions,
+        prior_positions,
+    )
+
+    r_arr = np.asarray(residuals, dtype=np.float64)
+    jac = sparse.csr_matrix(
+        (np.asarray(data, dtype=np.float64), (rows, cols)),
+        shape=(len(residuals), n_vars),
+    )
+    return float(0.5 * np.dot(r_arr, r_arr)), r_arr, jac
+
+
+def _numpy_residuals_and_jacobian(
+    positions: np.ndarray,
+    problem: LocalFgoProblem,
+    config: LocalFgoConfig,
+    window: LocalFgoWindow,
+    initial_positions: np.ndarray,
+    prior_positions: np.ndarray,
+) -> tuple[float, np.ndarray, np.ndarray]:
+    n = int(window.size)
+    n_vars = n * 3
+    residual_blocks: list[np.ndarray] = []
+    jacobian_blocks: list[np.ndarray] = []
+
+    def add_block(local_index: int, residual: np.ndarray, jac: np.ndarray, sigma: float, huber_k: float = 0.0) -> None:
+        if sigma <= 0.0 or not np.isfinite(sigma):
+            return
+        r = np.asarray(residual, dtype=np.float64).ravel() / float(sigma)
+        j = np.asarray(jac, dtype=np.float64).reshape(r.size, 3) / float(sigma)
+        if not (np.isfinite(r).all() and np.isfinite(j).all()):
+            return
+        scale = _huber_sqrt_weight(r, huber_k)
+        row = np.zeros((r.size, n_vars), dtype=np.float64)
+        row[:, int(local_index) * 3 : int(local_index) * 3 + 3] = j * scale
+        residual_blocks.append(r * scale)
+        jacobian_blocks.append(row)
+
+    def add_between(local_index: int, residual: np.ndarray, sigma: float) -> None:
+        if sigma <= 0.0 or not np.isfinite(sigma):
+            return
+        r = np.asarray(residual, dtype=np.float64).ravel() / float(sigma)
+        if not np.isfinite(r).all():
+            return
+        row = np.zeros((3, n_vars), dtype=np.float64)
+        left = int(local_index) * 3
+        row[:, left : left + 3] = -np.eye(3, dtype=np.float64) / float(sigma)
+        row[:, left + 3 : left + 6] = np.eye(3, dtype=np.float64) / float(sigma)
+        residual_blocks.append(r)
+        jacobian_blocks.append(row)
+
+    _populate_numpy_linearization(
+        add_block,
+        add_between,
+        positions,
+        problem,
+        config,
+        window,
+        initial_positions,
+        prior_positions,
+    )
+
+    if not residual_blocks:
+        return 0.0, np.zeros(0, dtype=np.float64), np.zeros((0, n_vars), dtype=np.float64)
+    residuals = np.concatenate(residual_blocks)
+    jacobian = np.vstack(jacobian_blocks)
+    return float(0.5 * np.dot(residuals, residuals)), residuals, jacobian
+
+
+def _populate_numpy_linearization(
+    add_block: Any,
+    add_between: Any,
+    positions: np.ndarray,
+    problem: LocalFgoProblem,
+    config: LocalFgoConfig,
+    window: LocalFgoWindow,
+    initial_positions: np.ndarray,
+    prior_positions: np.ndarray,
+) -> None:
+    n = int(window.size)
+    endpoint_indices = (0,) if n == 1 else (0, n - 1)
+    for local_index in endpoint_indices:
+        epoch_index = window.start + local_index
+        add_block(
+            local_index,
+            positions[local_index] - prior_positions[epoch_index],
+            np.eye(3, dtype=np.float64),
+            float(config.prior_sigma_m),
+        )
+
+    motion_deltas = problem.motion_deltas_ecef
+    motion_sigmas = problem.motion_sigmas_m
+    for epoch_index in range(window.start, window.end):
+        local_index = epoch_index - window.start
+        if motion_deltas is None:
+            delta = initial_positions[epoch_index + 1] - initial_positions[epoch_index]
+        else:
+            delta = np.asarray(motion_deltas[epoch_index], dtype=np.float64).ravel()[:3]
+        if not np.isfinite(delta).all():
+            continue
+        sigma = float(config.motion_sigma_m)
+        if motion_sigmas is not None and epoch_index < len(motion_sigmas):
+            sigma_i = float(motion_sigmas[epoch_index])
+            if np.isfinite(sigma_i) and sigma_i > 0.0:
+                sigma = sigma_i
+        add_between(
+            local_index,
+            positions[local_index + 1] - positions[local_index] - delta,
+            sigma,
+        )
+
+    for epoch_index in range(window.start, window.end + 1):
+        local_index = epoch_index - window.start
+        x_i = positions[local_index]
+        if problem.dd_carrier is not None and epoch_index < len(problem.dd_carrier):
+            obs = problem.dd_carrier[epoch_index]
+            if obs is not None:
+                _add_numpy_dd_carrier_blocks(
+                    add_block,
+                    local_index,
+                    x_i,
+                    obs,
+                    config,
+                )
+        if problem.dd_pseudorange is not None and epoch_index < len(problem.dd_pseudorange):
+            obs_pr = problem.dd_pseudorange[epoch_index]
+            if obs_pr is not None:
+                _add_numpy_dd_pr_blocks(
+                    add_block,
+                    local_index,
+                    x_i,
+                    obs_pr,
+                    config,
+                )
+        if problem.undiff_pseudorange is not None and epoch_index < len(problem.undiff_pseudorange):
+            obs_ud = problem.undiff_pseudorange[epoch_index]
+            if obs_ud is not None:
+                _add_numpy_undiff_pr_blocks(
+                    add_block,
+                    local_index,
+                    x_i,
+                    obs_ud,
+                    config,
+                )
+
+
+def _add_numpy_dd_carrier_blocks(
+    add_block: Any,
+    local_index: int,
+    x_i: np.ndarray,
+    obs: DDCarrierEpoch,
+    config: LocalFgoConfig,
+) -> None:
+    dd = np.asarray(obs.dd_carrier_cycles, dtype=np.float64).ravel()
+    sat_k = np.asarray(obs.sat_ecef_k, dtype=np.float64).reshape(-1, 3)
+    sat_ref = np.asarray(obs.sat_ecef_ref, dtype=np.float64).reshape(-1, 3)
+    base_k = np.asarray(obs.base_range_k, dtype=np.float64).ravel()
+    base_ref = np.asarray(obs.base_range_ref, dtype=np.float64).ravel()
+    wavelengths = np.asarray(obs.wavelengths_m, dtype=np.float64).ravel()
+    weights = _weights(obs.weights, len(dd))
+    fixed = _fixed_ambiguities(obs.fixed_ambiguities, len(dd))
+    for j in range(len(dd)):
+        if not _valid_dd_row(dd[j], sat_k[j], sat_ref[j], base_k[j], base_ref[j], wavelengths[j]):
+            continue
+        expected_m, jac_m = _dd_expected_and_jacobian_m(
+            x_i,
+            sat_k[j],
+            sat_ref[j],
+            float(base_k[j]),
+            float(base_ref[j]),
+        )
+        if not np.isfinite(expected_m) or not np.isfinite(jac_m).all():
+            continue
+        is_fixed = bool(np.isfinite(fixed[j]))
+        residual_cycles = (
+            float(dd[j]) - expected_m / float(wavelengths[j]) - int(round(float(fixed[j])))
+            if is_fixed
+            else _wrap_cycles(float(dd[j]) - expected_m / float(wavelengths[j]))
+        )
+        sigma_cycles = (
+            float(config.dd_fixed_sigma_cycles)
+            if is_fixed and config.dd_fixed_sigma_cycles is not None
+            else float(config.dd_sigma_cycles)
+        )
+        add_block(
+            local_index,
+            np.asarray([residual_cycles], dtype=np.float64),
+            np.asarray([-jac_m / float(wavelengths[j])], dtype=np.float64),
+            _weighted_sigma(sigma_cycles, weights[j], config.min_weight),
+            float(config.dd_huber_k),
+        )
+
+
+def _add_numpy_dd_pr_blocks(
+    add_block: Any,
+    local_index: int,
+    x_i: np.ndarray,
+    obs: DDPseudorangeEpoch,
+    config: LocalFgoConfig,
+) -> None:
+    dd = np.asarray(obs.dd_pseudorange_m, dtype=np.float64).ravel()
+    sat_k = np.asarray(obs.sat_ecef_k, dtype=np.float64).reshape(-1, 3)
+    sat_ref = np.asarray(obs.sat_ecef_ref, dtype=np.float64).reshape(-1, 3)
+    base_k = np.asarray(obs.base_range_k, dtype=np.float64).ravel()
+    base_ref = np.asarray(obs.base_range_ref, dtype=np.float64).ravel()
+    weights = _weights(obs.weights, len(dd))
+    for j in range(len(dd)):
+        if not _valid_dd_row(dd[j], sat_k[j], sat_ref[j], base_k[j], base_ref[j], 1.0):
+            continue
+        expected_m, jac_m = _dd_expected_and_jacobian_m(
+            x_i,
+            sat_k[j],
+            sat_ref[j],
+            float(base_k[j]),
+            float(base_ref[j]),
+        )
+        if not np.isfinite(expected_m) or not np.isfinite(jac_m).all():
+            continue
+        add_block(
+            local_index,
+            np.asarray([expected_m - float(dd[j])], dtype=np.float64),
+            np.asarray([jac_m], dtype=np.float64),
+            _weighted_sigma(config.dd_pr_sigma_m, weights[j], config.min_weight),
+            float(config.pr_huber_k),
+        )
+
+
+def _add_numpy_undiff_pr_blocks(
+    add_block: Any,
+    local_index: int,
+    x_i: np.ndarray,
+    obs: UndiffPseudorangeEpoch,
+    config: LocalFgoConfig,
+) -> None:
+    sat = np.asarray(obs.sat_ecef, dtype=np.float64).reshape(-1, 3)
+    pr = np.asarray(obs.pseudoranges_m, dtype=np.float64).ravel()
+    weights = _weights(obs.weights, len(pr))
+    cb = float(obs.clock_bias_m)
+    for j in range(len(pr)):
+        if not (np.isfinite(pr[j]) and np.isfinite(cb) and np.isfinite(sat[j]).all()):
+            continue
+        rng, jac = _range_and_jacobian(x_i, sat[j])
+        if not np.isfinite(rng) or not np.isfinite(jac).all():
+            continue
+        add_block(
+            local_index,
+            np.asarray([rng + cb - float(pr[j])], dtype=np.float64),
+            np.asarray([jac], dtype=np.float64),
+            _weighted_sigma(config.undiff_pr_sigma_m, weights[j], config.min_weight),
+            float(config.pr_huber_k),
+        )
+
+
+def _wrap_cycles(value: float) -> float:
+    return float(value - np.round(value))
+
+
+def _huber_sqrt_weight(residual: np.ndarray, huber_k: float) -> float:
+    if huber_k <= 0.0:
+        return 1.0
+    norm = float(np.linalg.norm(np.asarray(residual, dtype=np.float64).ravel()))
+    if not np.isfinite(norm) or norm <= float(huber_k):
+        return 1.0
+    return float(np.sqrt(float(huber_k) / max(norm, 1e-12)))
+
+
 def inject_into_pf(
     pf_result: np.ndarray | dict[str, Any],
     fgo_trajectory: np.ndarray,
@@ -398,7 +908,10 @@ def solve_local_fgo(
 ) -> LocalFgoResult:
     """Convenience wrapper for ``build_factor_graph`` followed by ``solve_fgo``."""
 
-    return solve_fgo(build_factor_graph(problem, config), config)
+    try:
+        return solve_fgo(build_factor_graph(problem, config), config)
+    except ImportError:
+        return _solve_local_fgo_numpy(problem, config)
 
 
 def solve_local_fgo_with_lambda(
