@@ -1,0 +1,2 @@
+run,predict_guide,sigma_pos,sigma_pos_tdcp,sigma_pos_tdcp_tight,tdcp_tight_rms_max_m,position_update_sigma,n_particles,n_ffbsi_paths,forward_p50,forward_p95,forward_rms_2d,ffbsi_p50,ffbsi_p95,ffbsi_rms_2d,n_epochs,ms_per_epoch
+Odaiba,spp,2.0,,,1000000000.0,1.95,100000,8,1.4552518444861229,2.257986149632322,1.5523251538184275,1.6606497401751201,2.87762289353821,1.805929472531633,800,4.269858148763888

@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "gnss-gpu contributors", email = "redacted@example.com"},
+    {name = "gnss-gpu contributors"},
 ]
 keywords = ["gnss", "gpu", "cuda", "positioning", "satellite-navigation"]
 classifiers = [
@@ -28,6 +28,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
+    "gtsam>=4.3a0",
     "numpy>=1.21",
 ]
 
@@ -47,10 +48,6 @@ dev = [
 all = [
     "gnss-gpu[viz,dev]",
 ]
-
-[project.urls]
-Homepage = "https://github.com/redacted/gnss_gpu"
-Repository = "https://github.com/redacted/gnss_gpu"
 
 [tool.scikit-build]
 wheel.packages = ["python/gnss_gpu"]

@@ -1,15 +1,20 @@
 {
-  "generated_at_utc": "2026-04-10T06:32:12+00:00",
+  "generated_at_utc": "2026-04-14T22:21:26+00:00",
   "title": "gnss_gpu Artifact Snapshot",
-  "subtitle": "Best method: `PF+RobustClear-10K`. PF beats EKF across 5 sequences in 2 cities. Particle scaling reveals a phase transition at N~1,000 with tail improvement up to 1M.",
+  "subtitle": "Current Odaiba best: `PF 100K (DD + smoother + stop-detect)`. External mainline remains `PF+RobustClear-10K` across 5 sequences in 2 cities.",
   "status": {
     "label": "Current Read",
-    "value": "PF beats RTKLIB demo5 — RMS 6.72m vs 13.08m",
-    "detail": "With gnssplusplus-corrected pseudoranges, PF (1M particles) achieves RMS 6.72m on Odaiba — 49% better than RTKLIB demo5 (13.08m), 59% better P95, zero catastrophic failures. PF family outperforms EKF on all 5 evaluated sequences (Tokyo + Hong Kong). 24 cited references, gnssplusplus as submodule for GNSS corrections."
+    "value": "PF beats RTKLIB demo5 — RMS 4.11m vs 13.08m",
+    "detail": "On UrbanNav Tokyo Odaiba, `PF 100K (DD + smoother + stop-detect)` reaches P50 1.36m and RMS 4.11m against `RTKLIB demo5` at 2.67m / 13.08m. That is a 49% P50 gain and 69% RMS gain over 12228 aligned epochs."
   },
   "hero_cards": [
     {
-      "label": "Best Method",
+      "label": "Odaiba Current Best",
+      "value": "1.36 / 4.11 m",
+      "detail": "PF 100K with DD carrier, DD pseudorange, smoother, and IMU stop-detect."
+    },
+    {
+      "label": "External Mainline",
       "value": "PF+RobustClear-10K",
       "detail": "External winner on UrbanNav trimble + G,E,J."
     },
@@ -35,8 +40,8 @@
     },
     {
       "label": "PF vs RTKLIB demo5",
-      "value": "RMS 6.72 vs 13.08 m",
-      "detail": "PF (1M particles + gnssplusplus corrections) beats RTKLIB demo5 by 49% in RMS, 59% in P95, with zero >100m failures."
+      "value": "RMS 4.11 vs 13.08 m",
+      "detail": "`PF 100K (DD + smoother + stop-detect)` beats `RTKLIB demo5` by 69% in RMS and 49% in P50 on Odaiba."
     },
     {
       "label": "BVH Speedup",
@@ -46,10 +51,15 @@
   ],
   "repo_summary": [
     "This repo is not presenting a single heroic algorithm. It is an experiment-first GNSS package where comparable variants are built, measured, and either kept or discarded.",
-    "The accuracy headline is the UrbanNav external result with trimble + G,E,J. The PPC gate family remains useful as a design-discipline story, but not as the main empirical claim.",
+    "The README-facing current read is the Odaiba PF smoother result with IMU stop-detect, while the paper-facing external validation remains the UrbanNav trimble + G,E,J result.",
     "The 3D PF path is currently a systems contribution: BVH preserves PF3D accuracy on a real PLATEAU subset while making runtime practical."
   ],
   "quick_links": [
+    {
+      "label": "Odaiba Freeze JSON",
+      "href": "assets/data/odaiba_pf_smoother_freeze.json",
+      "detail": "Frozen PF smoother checkpoint for the current Odaiba README headline."
+    },
     {
       "label": "Paper Main Table",
       "href": "assets/data/paper_main_table.csv",
@@ -88,9 +98,14 @@
   ],
   "method_freeze": [
     {
-      "label": "Mainline",
+      "label": "README Current Best",
+      "value": "PF 100K (DD + smoother + stop-detect)",
+      "detail": "Odaiba full-run checkpoint at 1.36m P50 and 4.11m RMS. This now drives the README headline."
+    },
+    {
+      "label": "External Mainline",
       "value": "PF+RobustClear-10K",
-      "detail": "Best full-run external method on UrbanNav Tokyo. This is the number that drives the README, Pages, and paper assets."
+      "detail": "Best full-run external method on UrbanNav Tokyo. This still drives the paper table, external figure, and cross-sequence Pages sections."
     },
     {
       "label": "Exploratory PPC Gate",
@@ -265,6 +280,7 @@
     "PPC tuned split: the exploratory gate trims mean RMS from 80.02 m to 79.41 m, but mean P95 stays flat at 97.75 m.",
     "PPC holdout split: the same gate survives holdout with 66.92 -> 65.54 m RMS and 81.69 -> 81.22 m P95.",
     "UrbanNav external validation: `PF+RobustClear-10K` is the best method at 66.6 m RMS and 98.53 m P95, ahead of `EKF` at 93.25 m and 178.18 m.",
+    "Odaiba README checkpoint: `PF 100K (DD + smoother + stop-detect)` reaches 1.36 m P50 and 4.11 m RMS against `RTKLIB demo5` at 2.67 / 13.08 m.",
     "`PF-10K` remains a close ablation at 67.61 m RMS, which keeps the robust-clear story honest: the gain is real but not huge.",
     "`WLS+QualityVeto` is useful because it moved a stabilization policy into reusable core code, not because it became the best external method.",
     "Systems result: `PF3D-BVH-10K` keeps PF3D accuracy while cutting runtime from 1028.29 to 17.78 ms/epoch.",

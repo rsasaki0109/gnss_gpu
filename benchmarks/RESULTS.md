@@ -1,7 +1,7 @@
 # gnss_gpu Performance Benchmark Results
 
 **Date**: 2026-04-01
-**GPU**: generic GPU (16GB VRAM)
+**GPU**: generic GPU
 **CUDA**: 12.0
 
 ## Summary

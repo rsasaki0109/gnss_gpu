@@ -310,7 +310,7 @@ struct BVHNode {
 ## 6. 性能ベンチマーク
 
 ### 6.1 測定環境
-- **GPU**: 汎用GPU (16GB VRAM)
+- **GPU**: 汎用GPU
 - **CUDA**: 12.0
 
 ### 6.2 結果

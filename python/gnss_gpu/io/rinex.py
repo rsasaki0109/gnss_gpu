@@ -1,4 +1,10 @@
-"""RINEX 3.x observation file parser."""
+"""RINEX observation file parser.
+
+The parser covers the small observation subset used by the project: station
+metadata, observation-code headers, epoch timestamps, satellite IDs, and numeric
+observation values.  It supports RINEX 3.x and the RINEX 2.x files commonly
+published by NOAA CORS.
+"""
 
 from __future__ import annotations
 
@@ -64,8 +70,91 @@ class RinexObs:
         return times, pr_array, all_sats
 
 
+def _parse_two_digit_year(year: int) -> int:
+    return 2000 + year if year < 80 else 1900 + year
+
+
+def _rinex3_observation_codes(header: RinexHeader, lines: list[str], idx: int) -> int:
+    line = lines[idx]
+    sys_char = line[0].strip()
+    if not sys_char:
+        return idx
+    n_types = int(line[3:6])
+    obs_list = line[7:60].split()
+    while len(obs_list) < n_types:
+        idx += 1
+        obs_list.extend(lines[idx][7:60].split())
+    header.obs_types[sys_char] = obs_list[:n_types]
+    return idx
+
+
+def _rinex2_observation_codes(header: RinexHeader, lines: list[str], idx: int) -> int:
+    line = lines[idx]
+    n_types = int(line[:6])
+    obs_list = line[6:60].split()
+    while len(obs_list) < n_types:
+        idx += 1
+        obs_list.extend(lines[idx][6:60].split())
+    sys_char = header.sat_system or "G"
+    header.obs_types[sys_char] = obs_list[:n_types]
+    header.obs_types[""] = obs_list[:n_types]
+    return idx
+
+
+def _parse_rinex2_satellite_ids(
+    lines: list[str],
+    idx: int,
+    n_sat: int,
+    default_system: str,
+) -> tuple[list[str], int]:
+    sats: list[str] = []
+    line_idx = idx
+    while len(sats) < n_sat and line_idx < len(lines):
+        sat_field = lines[line_idx][32:68]
+        for pos in range(0, len(sat_field), 3):
+            sat = sat_field[pos : pos + 3].strip()
+            if not sat:
+                continue
+            if sat[0].isdigit() or sat[0] == " ":
+                if default_system:
+                    sat = f"{default_system}{int(sat):02d}"
+            elif len(sat) >= 2:
+                try:
+                    sat = f"{sat[0]}{int(sat[1:]):02d}"
+                except ValueError:
+                    pass
+            sats.append(sat)
+            if len(sats) >= n_sat:
+                break
+        if len(sats) < n_sat:
+            line_idx += 1
+    return sats, line_idx
+
+
+def _parse_rinex_obs_values(
+    lines: list[str],
+    idx: int,
+    obs_codes: list[str],
+) -> tuple[dict[str, float], int]:
+    n_lines = max(1, (len(obs_codes) + 4) // 5)
+    obs_text = ""
+    for offset in range(n_lines):
+        if idx + offset >= len(lines):
+            break
+        obs_text += lines[idx + offset].rstrip("\n")
+    sat_obs: dict[str, float] = {}
+    for obs_idx, obs_code in enumerate(obs_codes):
+        seg = obs_text[obs_idx * 16 : obs_idx * 16 + 16]
+        val_str = seg[:14].strip()
+        try:
+            sat_obs[obs_code] = float(val_str) if val_str else 0.0
+        except ValueError:
+            sat_obs[obs_code] = 0.0
+    return sat_obs, idx + n_lines
+
+
 def read_rinex_obs(filepath: str | Path) -> RinexObs:
-    """Parse a RINEX 3.x observation file."""
+    """Parse a RINEX observation file."""
     filepath = Path(filepath)
     header = RinexHeader()
     epochs: list[RinexEpoch] = []
@@ -88,17 +177,9 @@ def read_rinex_obs(filepath: str | Path) -> RinexObs:
             vals = line[:60].split()
             header.approx_position = np.array([float(v) for v in vals[:3]])
         elif label.startswith("SYS / # / OBS TYPES"):
-            sys_char = line[0].strip()
-            if sys_char:
-                n_types = int(line[3:6])
-                type_str = line[7:60]
-                obs_list = type_str.split()
-                # Handle continuation lines
-                while len(obs_list) < n_types:
-                    idx += 1
-                    type_str = lines[idx][7:60]
-                    obs_list.extend(type_str.split())
-                header.obs_types[sys_char] = obs_list[:n_types]
+            idx = _rinex3_observation_codes(header, lines, idx)
+        elif label == "# / TYPES OF OBSERV":
+            idx = _rinex2_observation_codes(header, lines, idx)
         elif label == "INTERVAL":
             header.interval = float(line[:10])
         elif label == "END OF HEADER":
@@ -106,9 +187,59 @@ def read_rinex_obs(filepath: str | Path) -> RinexObs:
             break
         idx += 1
 
+    is_rinex2 = header.version < 3.0
+
     # Parse epochs
     while idx < len(lines):
         line = lines[idx]
+        if is_rinex2:
+            parts = line[:32].split()
+            if len(parts) < 8:
+                idx += 1
+                continue
+            try:
+                year = _parse_two_digit_year(int(parts[0]))
+                month = int(parts[1])
+                day = int(parts[2])
+                hour = int(parts[3])
+                minute = int(parts[4])
+                sec = float(parts[5])
+                sec_int = int(sec)
+                usec = int(round((sec - sec_int) * 1e6))
+                if usec >= 1_000_000:
+                    sec_int += 1
+                    usec -= 1_000_000
+                epoch_time = datetime(year, month, day, hour, minute, sec_int, usec)
+                epoch_flag = int(parts[6])
+                n_sat = int(parts[7])
+            except (ValueError, IndexError):
+                idx += 1
+                continue
+
+            sat_ids, sat_list_end_idx = _parse_rinex2_satellite_ids(
+                lines,
+                idx,
+                n_sat,
+                header.sat_system or "G",
+            )
+            idx = sat_list_end_idx + 1
+            if epoch_flag > 1:
+                obs_codes = header.obs_types.get(header.sat_system or "G", header.obs_types.get("", []))
+                idx += n_sat * max(1, (len(obs_codes) + 4) // 5)
+                continue
+
+            observations: dict[str, dict[str, float]] = {}
+            for sat_id in sat_ids:
+                sys_char = sat_id[0] if sat_id and not sat_id[0].isdigit() else (header.sat_system or "G")
+                obs_codes = header.obs_types.get(sys_char, header.obs_types.get("", []))
+                sat_obs, idx = _parse_rinex_obs_values(lines, idx, obs_codes)
+                observations[sat_id] = sat_obs
+
+            epochs.append(
+                RinexEpoch(time=epoch_time, satellites=sat_ids, observations=observations)
+            )
+            continue
+
         if not line.startswith(">"):
             idx += 1
             continue

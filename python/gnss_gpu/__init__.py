@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 import os
 import sys
 
@@ -154,7 +155,7 @@ __all__ = [
     # Signal simulation
     "SignalSimulator",
     "UrbanSignalSimulator",
-    # E2E helpers (acquisition → pseudorange)
+    # E2E helpers (acquisition to pseudorange)
     "compute_e2e_wls_weights",
     "acquisition_lag_to_code_phase_chips",
     "code_phase_chips_to_acquisition_lag",

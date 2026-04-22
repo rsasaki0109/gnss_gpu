@@ -114,14 +114,14 @@ def main():
             wls_pos[i] = wls_pos[i - 1]
 
     # Run EKF
-    print(f"  Running EKF...")
+    print("  Running EKF...")
     ekf_pos, ekf_ms = run_ekf(data, wls_pos)
     ekf_metrics = compute_metrics(ekf_pos, gt)
     print(f"  EKF: RMS={ekf_metrics['rms_2d']:.2f} m, P95={ekf_metrics['p95']:.2f} m, "
           f">100m={ekf_metrics.get('outlier_rate_pct', 0):.2f}%")
 
     # Run PF without adaptive weight (baseline)
-    print(f"  Running PF (no adaptive weight)...")
+    print("  Running PF (no adaptive weight)...")
     from gnss_gpu import ParticleFilterDevice
     pf_base = ParticleFilterDevice(
         n_particles=args.n_particles,

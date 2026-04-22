@@ -207,7 +207,6 @@ class TestCoordinateConversion:
         # Use approximate plane-rect values for Tokyo Station
         y_north = -35295.0
         x_east = -2835.0
-        z_up = 5.0
 
         lat, lon = loader._gauss_kruger_inverse(
             y_north, x_east, loader._lat0, loader._lon0

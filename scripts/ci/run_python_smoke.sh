@@ -17,6 +17,8 @@ pytest -q \
   tests/test_fetch_urbannav_hk_subset.py \
   tests/test_fetch_urbannav_subset.py \
   tests/test_io.py \
+  tests/test_lambda_ambiguity.py \
+  tests/test_local_fgo.py \
   tests/test_nmea_writer.py \
   tests/test_ppc.py \
   tests/test_sbas.py \
