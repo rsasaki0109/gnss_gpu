@@ -43,7 +43,8 @@ Implementation notes:
   for integration into the realtime fusion path.
 - The realtime fusion path now enables gated DD-gradient reservoir Stein
   horizontal corrections by default.  On the same Tokyo/run1 smoke segment it
-  reaches 64.03% with 131/200 PPC 3D pass epochs.
+  reaches 66.21% with 135/200 PPC 3D pass epochs after lowering stale-velocity
+  height-release gating to 0.4 m DD-PR disagreement.
 
 Example quick video:
 
