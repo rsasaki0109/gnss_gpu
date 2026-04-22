@@ -1,0 +1,3 @@
+config,n_segments,aggregate_ppc_score_pct,mean_ppc_score_pct,median_ppc_score_pct,min_ppc_score_pct,aggregate_epoch_pass_pct,mean_rms_2d,mean_p95,total_pass_distance_m,total_distance_m,total_pass_epochs,total_epochs,rsp_correction_epochs,height_hold_release_min_dd_shift_m
+height_release_0.4m,6,2.746354801925545,2.389700122922118,0.0,0.0,7.5,5.1586515291107995,11.836313805666732,37.95367275168489,1381.9653864487766,90,1200,7,0.4
+height_release_1m,6,2.746354801925545,2.389700122922118,0.0,0.0,5.416666666666667,5.140904558372769,11.837253945256641,37.95367275168489,1381.9653864487766,65,1200,7,1.0

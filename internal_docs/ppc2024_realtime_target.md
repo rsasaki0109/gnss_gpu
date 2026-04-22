@@ -45,6 +45,13 @@ Implementation notes:
   horizontal corrections by default.  On the same Tokyo/run1 smoke segment it
   reaches 66.21% with 135/200 PPC 3D pass epochs after lowering stale-velocity
   height-release gating to 0.4 m DD-PR disagreement.
+- `experiments/exp_ppc_realtime_fusion_sweep.py` runs the realtime fusion over
+  fixed validation segments.  On the positive6 200-epoch smoke, the current
+  realtime path is still weak: aggregate PPC is 2.75%, mean per-segment PPC is
+  2.39%, and epoch pass is 90/1200.  The 0.4 m height-release gate improves
+  epoch pass versus 1.0 m (90 vs. 65) but not distance-weighted PPC.  A tested
+  wide-lane-aware height-release guard worsened aggregate PPC and should not be
+  used as a default.
 
 Example quick video:
 
