@@ -96,6 +96,12 @@ from gnss_gpu.reservoir_stein import (
     stein_rejuvenate_particles,
     weighted_reservoir_indices,
 )
+from gnss_gpu.dd_likelihood import (
+    DDLikelihoodGradient,
+    dd_log_likelihood_gradient,
+    dd_log_likelihood_gradients,
+    dd_pseudorange_residual_and_design,
+)
 from gnss_gpu.e2e_helpers import (
     compute_e2e_wls_weights,
     acquisition_lag_to_code_phase_chips,
@@ -190,6 +196,10 @@ __all__ = [
     "rbf_median_bandwidth",
     "stein_rejuvenate_particles",
     "weighted_reservoir_indices",
+    "DDLikelihoodGradient",
+    "dd_log_likelihood_gradient",
+    "dd_log_likelihood_gradients",
+    "dd_pseudorange_residual_and_design",
     # E2E helpers (acquisition to pseudorange)
     "compute_e2e_wls_weights",
     "acquisition_lag_to_code_phase_chips",
