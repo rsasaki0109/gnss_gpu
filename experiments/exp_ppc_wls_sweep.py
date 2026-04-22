@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Sweep PPC-Dataset runs for a fixed set of WLS constellation configurations.
 
 This script is meant for quick cross-run comparison after tuning multi-GNSS
@@ -22,6 +23,7 @@ if str(_PROJECT_ROOT / "python") not in sys.path:
 from evaluate import compute_metrics, save_results
 from exp_urbannav_baseline import _parse_weight_scale, load_real_data, run_wls
 from gnss_gpu.io.ppc import PPCDatasetLoader
+from gnss_gpu.ppc_score import ppc_score_dict
 
 RESULTS_DIR = _SCRIPT_DIR / "results"
 
@@ -74,12 +76,16 @@ def summarize_configs(rows: list[dict]) -> list[dict]:
         selected = [row for row in rows if row["config"] == label]
         rms = np.array([row["rms_2d"] for row in selected], dtype=np.float64)
         p95 = np.array([row["p95"] for row in selected], dtype=np.float64)
+        score = np.array([row["ppc_score_pct"] for row in selected], dtype=np.float64)
         summary_rows.append(
             {
                 "config": label,
                 "systems": selected[0]["systems"],
                 "weight_scale": selected[0]["weight_scale"],
                 "n_runs": len(selected),
+                "mean_ppc_score_pct": float(np.mean(score)),
+                "median_ppc_score_pct": float(np.median(score)),
+                "min_ppc_score_pct": float(np.min(score)),
                 "mean_rms_2d": float(np.mean(rms)),
                 "median_rms_2d": float(np.median(rms)),
                 "max_rms_2d": float(np.max(rms)),
@@ -94,7 +100,7 @@ def summarize_best(rows: list[dict]) -> list[dict]:
     best_rows: list[dict] = []
     for city, run in run_keys:
         selected = [row for row in rows if row["city"] == city and row["run"] == run]
-        best = min(selected, key=lambda row: row["rms_2d"])
+        best = max(selected, key=lambda row: row["ppc_score_pct"])
         best_rows.append(best)
     return best_rows
 
@@ -165,6 +171,7 @@ def main() -> None:
                 weight_scale_by_system=_parse_weight_scale(config.weight_scale),
             )
             metrics = compute_metrics(pos[:, :3], data["ground_truth"])
+            ppc_score = ppc_score_dict(pos[:, :3], data["ground_truth"])
             row = {
                 "city": run_dir.parent.name,
                 "run": run_dir.name,
@@ -173,13 +180,16 @@ def main() -> None:
                 "weight_scale": config.weight_scale or "-",
                 "n_epochs": int(data["n_epochs"]),
                 "median_satellites": int(data["n_satellites"]),
+                **ppc_score,
                 "rms_2d": float(metrics["rms_2d"]),
+                "rms_3d": float(metrics["rms_3d"]),
                 "p95": float(metrics["p95"]),
                 "time_ms": float(wls_ms),
             }
             rows.append(row)
             print(
-                f"    {config.label:<12} rms_2d={row['rms_2d']:.2f} m"
+                f"    {config.label:<12} ppc={row['ppc_score_pct']:.2f}%"
+                f"  rms_2d={row['rms_2d']:.2f} m"
                 f"  p95={row['p95']:.2f} m  sats={row['median_satellites']}"
             )
         print()
