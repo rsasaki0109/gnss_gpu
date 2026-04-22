@@ -56,7 +56,8 @@ int wls_position(const double* sat_ecef, const double* pseudoranges,
       double sy = sat_ecef[s * 3 + 1];
       double sz = sat_ecef[s * 3 + 2];
 
-      // Use the same receive-time ECEF range model as the batch solver.
+      // Keep the single-epoch solver consistent with wls_batch() and the
+      // Python fallback: inputs are expected to already be corrected upstream.
       double dx = x - sx, dy_v = y - sy, dz = z - sz;
       double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
       double pr_pred = r + cb;

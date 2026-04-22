@@ -1,0 +1,2 @@
+run,predict_guide,sigma_pos,sigma_pr,position_update_sigma,urban_rover,n_particles,forward_p50,forward_p95,forward_rms_2d,smoothed_p50,smoothed_p95,smoothed_rms_2d,n_epochs,ms_per_epoch,n_tdcp_used,n_tdcp_fallback,n_wl_fixed_sats,n_wl_candidates,n_wl_fixed,n_wl_replaced,wl_replaced_ratio
+Odaiba,spp,2.0,3.0,1.5,trimble,100000,1.7065699151045481,12.825262521269922,6.3059125854644735,1.696136348563686,12.789129359062853,6.3019310779539035,12228,1.0615543985081606,0,0,34,254027,108270,108270,0.42621453625008365

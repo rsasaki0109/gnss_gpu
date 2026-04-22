@@ -68,3 +68,31 @@ def test_rinex_header():
     assert obs.header.marker_name == "test"
     assert "G" in obs.header.obs_types
     assert obs.header.obs_types["G"] == ["C1C", "L1C", "D1C", "S1C"]
+
+
+def test_rinex2_observation_epochs(tmp_path):
+    path = tmp_path / "base.23o"
+    lines = [
+        "     2.11           OBSERVATION DATA    G                   RINEX VERSION / TYPE\n",
+        "NOAA CORS                                                   MARKER NAME         \n",
+        " -2695156.4450 -4299130.6400  3851527.4380                  APPROX POSITION XYZ \n",
+        "     3    C1    L1    S1                                      # / TYPES OF OBSERV\n",
+        "    30.000                                                  INTERVAL            \n",
+        "                                                            END OF HEADER       \n",
+        " 23  5 23  0  0  0.0000000  0  3G01G02G11\n",
+        "  20200001.000      110.000       45.000  \n",
+        "  20200002.000      120.000       46.000  \n",
+        "  20200011.000      130.000       47.000  \n",
+    ]
+    path.write_text("".join(lines))
+
+    obs = read_rinex_obs(path)
+
+    assert obs.header.version == 2.11
+    assert obs.header.approx_position.tolist() == [-2695156.445, -4299130.64, 3851527.438]
+    assert obs.header.interval == 30.0
+    assert obs.header.obs_types["G"] == ["C1", "L1", "S1"]
+    assert len(obs.epochs) == 1
+    assert obs.epochs[0].time.year == 2023
+    assert obs.epochs[0].satellites == ["G01", "G02", "G11"]
+    assert obs.epochs[0].observations["G02"]["C1"] == 20200002.0

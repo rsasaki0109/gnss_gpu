@@ -877,3 +877,542 @@ outputs:
 解釈:
 - これで paper の主結果は “その場で集めた表” ではなく、fixed CSV から再生成できる asset になった
 - reviewers 向けには、main table の主役は `PF+RobustClear-10K`, `PF-10K`, `EKF`, `PF3D-BVH` で十分で、`WLS+QualityVeto` は promoted utility として補助的に置くのが自然
+
+## Odaiba weak-DD adaptive-floor confirmation
+
+`internal_docs/plan.md` の weak-DD / coverage-hole 方針に沿って、Odaiba PF smoother preset の
+DD carrier adaptive floor を full-run で確認した。
+
+採用:
+- `odaiba_reference`: `--mupf-dd-gate-adaptive-floor-cycles 0.25 -> 0.18`
+- `odaiba_reference_guarded`: `0.25 -> 0.18`
+
+不採用:
+- `odaiba_stop_detect`: `0.18` は入れず、`0.25` を維持
+
+full-run 結果:
+
+| preset | floor | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---:|---|
+| `odaiba_reference` baseline | 0.25 | 1.46 m | 5.57 m | 1.38 m | 5.08 m | baseline |
+| `odaiba_reference` updated | 0.18 | 1.42 m | 5.46 m | 1.38 m | 5.02 m | 採用 |
+| `odaiba_reference_guarded` baseline | 0.25 | 1.46 m | 5.57 m | 1.38 m | 5.43 m | baseline |
+| `odaiba_reference_guarded` updated | 0.18 | 1.42 m | 5.46 m | 1.38 m | 5.36 m | 採用 |
+| `odaiba_stop_detect` baseline | 0.25 | 1.19 m | 4.57 m | 1.36 m | 4.11 m | 維持 |
+| `odaiba_stop_detect` trial | 0.18 | 1.63 m | 5.50 m | 1.34 m | 4.11 m | 不採用 |
+
+解釈:
+- coverage-hole は単純な “DD carrier absent” ではなく、mediocre DD carrier を信頼しすぎる epoch が混じる問題だった。
+- tracked fallback preference、ESS-only weak-DD replacement、spread-aware support-skip、contextual low-ESS epoch-median gate は promoted しない。
+- accepted change は、reference/guarded preset だけ DD carrier adaptive pair-floor を `0.18` に締めること。
+
+### Shinjuku クロスサイト検証
+
+`odaiba_reference` preset (`0.18`) と同 preset で floor だけ `0.25` に戻した変種を、Shinjuku 同一 config で比較した。
+
+| floor | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---:|---:|---:|---:|---:|
+| 0.25 (old) | 2.63 m | 10.18 m | 2.58 m | 9.93 m |
+| **0.18 (new)** | 2.63 m | **9.88 m** | 2.58 m | **9.65 m** |
+
+判定:
+- SMTH P50 は同一 (2.58 m)、SMTH RMS は `0.18` が 0.28 m 改善
+- FWD RMS も `0.18` が 0.30 m 改善
+- Shinjuku で回帰は観測されず、`reference` preset の `0.18` 化は Odaiba 以外にも安全
+
+再現コマンド:
+
+```bash
+PYTHONPATH="python:third_party/gnssplusplus/build/python:third_party/gnssplusplus/python" \
+  python3 experiments/exp_pf_smoother_eval.py \
+  --data-root /tmp/UrbanNav-Tokyo \
+  --preset odaiba_reference \
+  --runs Shinjuku \
+  --epoch-diagnostics-top-k 0
+# 0.25 との比較は末尾に --mupf-dd-gate-adaptive-floor-cycles 0.25 を追加
+```
+
+## Odaiba coverage-hole B-2 diagnostics
+
+`epoch 2445-4890` 近傍の base coverage hole を、handoff B-2 指定どおり `odaiba_reference`
+で 2400 epoch burn-in + 650 epoch 計測した。出力は `/tmp/odaiba_hole_diag.csv`。
+
+基準 window:
+
+```bash
+PYTHONPATH="python:third_party/gnssplusplus/build/python:third_party/gnssplusplus/python" \
+  python3 experiments/exp_pf_smoother_eval.py \
+  --data-root /tmp/UrbanNav-Tokyo \
+  --preset odaiba_reference \
+  --skip-valid-epochs 2400 --max-epochs 650 \
+  --epoch-diagnostics-out /tmp/odaiba_hole_diag.csv \
+  --epoch-diagnostics-top-k 20
+```
+
+基準結果:
+
+| scope | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|---:|
+| window baseline | 6.62 m | 7.93 m | 6.83 m | 7.53 m |
+
+診断:
+- 対象 window の worst epoch は TOW `273634.7-273669.3` に集中。
+- DD pseudorange は 583/648 epoch で 0 pair。DD carrier はむしろ高 support 側が悪く、`dd_cp_kept_pairs>=9`
+  は `SMTH P50=8.56 m / RMS=8.48 m`、`dd_cp_kept_pairs<=4` は `SMTH P50=1.99 m / RMS=4.51 m`。
+- `used_carrier_anchor` は 0/648、`used_dd_carrier_fallback` は 61/648。fallback が効いた epoch は
+  `SMTH P50=2.40 m / RMS=5.36 m` で、問題は fallback 不在というより、DD-PR 不在 + high-support DD carrier の低 ESS collapse。
+- worst epoch では ESS ratio が `1e-4` 前後まで落ちる一方、DD carrier raw AFV median は `0.18-0.33 cycles` 程度。
+
+window ablation:
+
+| trial | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---|
+| baseline | 6.62 m | 7.93 m | 6.83 m | 7.53 m | baseline |
+| low-ESS DD epoch median gate `0.18cy` | 6.97 m | 8.60 m | 6.65 m | 7.84 m | P50 のみ微改善、RMS 悪化 |
+| global DD epoch median gate `0.18cy` | 7.27 m | 8.86 m | 7.07 m | 8.33 m | 悪化 |
+| low-ESS DD sigma relax `x3` | 7.55 m | 10.50 m | 7.49 m | 9.70 m | 悪化 |
+| `sigma_pos=2.0` | 8.93 m | 10.69 m | 8.99 m | 10.14 m | 悪化 |
+| `position_update_sigma=1.5` | 6.77 m | 8.19 m | 6.99 m | 8.37 m | 悪化 |
+| `imu_stop_sigma_pos=0.1` | 1.83 m | 3.75 m | 4.66 m | 5.53 m | window 改善 |
+
+full Odaiba:
+
+| preset / trial | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---|
+| `odaiba_reference` baseline | 1.42 m | 5.46 m | 1.38 m | 5.02 m | baseline |
+| `odaiba_reference + --imu-stop-sigma-pos 0.1` | 1.63 m | 5.50 m | 1.34 m | 4.11 m | 採用 |
+
+結論:
+- base coverage hole は「DD pair 数 0」そのものではなく、DD-PR が無い stationary/near-stationary 区間で
+  high-support DD carrier が低 ESS collapse を起こす問題。
+- DD gate 締めや DD sigma 緩和は window または RMS で悪化したため不採用。
+- `imu_stop_sigma_pos=0.1` は full Odaiba の smoother P50 と RMS を同時に改善したので、
+  `odaiba_reference` preset に昇格した。
+
+## Odaiba preset G cleanup
+
+`odaiba_reference` と `odaiba_stop_detect` は両方 `--imu-stop-sigma-pos 0.1` を含む状態で、
+DD carrier adaptive floor だけ `0.18` / `0.25` が違う。current HEAD で full Odaiba を再実行し、
+preset の統合可否を確認した。
+
+再現コマンド:
+
+```bash
+URBANNAV_DATA_ROOT=/tmp/UrbanNav-Tokyo bash experiments/run_pf_smoother_odaiba_reference.sh
+
+cd experiments
+PYTHONPATH="../third_party/gnssplusplus/build/python:../third_party/gnssplusplus/python:../python:." \
+  python3 exp_pf_smoother_eval.py \
+  --data-root /tmp/UrbanNav-Tokyo \
+  --preset odaiba_stop_detect
+```
+
+結果:
+
+| preset | floor | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---:|---|
+| `odaiba_reference` | 0.18 | 1.63 m | 5.50 m | 1.34 m | 4.11 m | smoother-first reference |
+| `odaiba_stop_detect` | 0.25 | 1.19 m | 4.57 m | 1.36 m | 4.11 m | forward-stable sibling |
+
+判定:
+- smoother RMS は同等。`odaiba_reference` は smoother P50 が 0.02 m 良い。
+- `odaiba_stop_detect` は forward P50/RMS が `0.44 m / 0.93 m` 良く、config 差に意味がある。
+- よって統合せず、両方残す。description は use-case が分かるように更新した。
+- `odaiba_reference_guarded` への stop_sigma 適用は今回の昇格対象外。現 table では guarded ablation として維持する。
+
+Shinjuku 回帰確認:
+
+```bash
+cd experiments
+PYTHONPATH="../third_party/gnssplusplus/build/python:../third_party/gnssplusplus/python:../python:." \
+  python3 exp_pf_smoother_eval.py \
+  --data-root /tmp/UrbanNav-Tokyo \
+  --preset odaiba_reference \
+  --runs Shinjuku \
+  --epoch-diagnostics-top-k 0
+```
+
+| run | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---|
+| Shinjuku `odaiba_reference` | 2.53 m | 6.41 m | 2.61 m | 6.87 m | 既存 documented RMS より悪化なし |
+
+## GSDC 2023 C-1 robust WLS baseline
+
+GSDC 2023 train の Android WLS seed を、Huber IRLS で頑健化する Python prototype を追加した。
+目的は CUDA 実装に進む前に、単純な robust WLS が train baseline を超えるか確認すること。
+
+実装:
+- [exp_gsdc2023_robust_wls.py](/workspace/ai_coding_ws/gnss_gpu/experiments/exp_gsdc2023_robust_wls.py)
+- [gsdc2023_robust_wls_eval.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/gsdc2023_robust_wls_eval.csv)
+
+設定:
+- signals: `GPS_L1_CA`, `GPS_L5_Q`, `GAL_E1_C_P`, `GAL_E5A_Q`
+- Huber threshold: `20 m`
+- max IRLS iteration: `6`
+- max accepted shift from Android WLS: `30 m`
+- Android WLS position prior: `sigma=0.1 m`
+- train data: `/tmp/gsdc_data/gsdc2023/sdc2023/train`
+
+再現コマンド:
+
+```bash
+PYTHONPATH=python python3 experiments/exp_gsdc2023_robust_wls.py
+```
+
+full train 結果:
+
+| metric | Android WLS | Robust WLS | delta |
+|---|---:|---:|---:|
+| evaluated run/phone | 156 | 156 | - |
+| P50 wins | - | 85/156 | - |
+| mean P50 | 81.8046 m | 81.8038 m | -0.0007 m |
+| median P50 | 2.4221 m | 2.4229 m | +0.0008 m |
+| mean RMS | 1902.1422 m | 1902.1387 m | -0.0034 m |
+| mean P50, excluding `wls_p50 >= 100 m` | 2.6088 m | 2.6084 m | -0.0004 m |
+
+解釈:
+- Huber IRLS 単体は `2020-06-25-00-34-us-ca-mtv-sb-101/pixel4` で P50 `1.92 m -> 28.56 m`
+  まで悪化したため、そのままでは unsafe。
+- Android WLS prior を `0.1 m` に固定すると破綻は抑えられるが、改善量もほぼゼロになる。
+- P50 勝ち数は 85/156 と過半数だが、最大級の改善でも数 cm 程度で、mean/median では実質同等。
+- `2023-09-06-18-04-us-ca/sm-s908b` は Android WLS 自体が `P50=12357 m` 級で、mean を支配する。
+  この外れ値を除外しても robust WLS の mean P50 改善は `0.0004 m` しかない。
+- mean robust P50 は `2.62 m` threshold を超えないため、test submission は生成しない。
+
+結論:
+- C-1 の robust WLS prototype は再現可能な baseline として残す。
+- 現設定では Android WLS seed から独立した採用価値はないため、CUDA 化や submission promotion には進めない。
+
+## GSDC 2023 F: NOAA CORS DD pseudorange smoke
+
+GSDC 2023 向けに NOAA CORS daily RINEX を取得し、CORS raw pseudorange と GSDC raw
+L1/E1 pseudorange で DD pseudorange を形成する adapter と評価 script を追加した。
+
+実装:
+- [gsdc_dgnss.py](/workspace/ai_coding_ws/gnss_gpu/python/gnss_gpu/gsdc_dgnss.py)
+- [exp_gsdc2023_dgnss.py](/workspace/ai_coding_ws/gnss_gpu/experiments/exp_gsdc2023_dgnss.py)
+
+追加仕様:
+- NOAA CORS URL pattern: `https://noaa-cors-pds.s3.amazonaws.com/rinex/YYYY/DDD/ssss/ssssDDD0.YYd.gz`
+  を primary、NGS `https://geodesy.noaa.gov/corsdata/rinex/...` を fallback。
+- `.d.gz` は gzip 展開後、`crx2rnx` があれば Hatanaka -> RINEX 2 obs に変換。
+- `python/gnss_gpu/io/rinex.py` は NOAA daily CORS で必要な RINEX 2 observation parsing に対応。
+- station 候補は GSDC run token / trajectory centroid から `SLAC/P222`, `MHC2/MHCB/P222/P217`,
+  `TORP/CRHS`, `VDCY/JPLM` の順に選定。
+- CORS daily public file は多くが 30 s のため、GSDC の `*.438 s` epoch と合うよう
+  `DDPseudorangeComputer(base_epoch_tolerance_s=0.6)` を使い、coverage を明示記録。
+- CORS が raw RINEX pseudorange なので、GSDC rover 側も DD では raw pseudorange を使う。
+  GSDC satellite clock corrected pseudorange と CORS raw を混ぜると DD residual が 16 万 m 級になる。
+
+smoke コマンド:
+
+```bash
+PYTHONPATH=python python3 experiments/exp_gsdc2023_dgnss.py \
+  --single 2023-05-09-21-32-us-ca-mtv-pe1/pixel5 \
+  --cache-dir /tmp/gsdc_cors
+
+PYTHONPATH=python python3 experiments/exp_gsdc2023_dgnss.py \
+  --single 2021-12-09-17-06-us-ca-lax-e/pixel5 \
+  --cache-dir /tmp/gsdc_cors
+```
+
+smoke 結果:
+
+| run/phone | station | DD coverage | accepted | WLS P50 | DGNSS P50 | WLS RMS | DGNSS RMS | 判定 |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| `2023-05-09-21-32-us-ca-mtv-pe1/pixel5` | `SLAC` | 3.3% | 0.0% | 5.12 m | 5.12 m | 6.27 m | 6.28 m | 同等だが無効 |
+| `2021-12-09-17-06-us-ca-lax-e/pixel5` | `TORP` | 6.5% | 4.0% | 2.06 m | 2.09 m | 2.60 m | 3.94 m | 悪化 |
+
+追加確認:
+- `--max-shift-m 50` で MTV smoke の guard を緩めると accepted `2.3%` になるが、
+  `P50 5.12 -> 5.22 m`, `RMS 6.27 -> 8.43 m` に悪化。
+- 初回 DD epoch の residual は raw/raw にしても `~193 m RMS` 程度あり、30 s daily CORS の
+  nearest-epoch だけでは smartphone WLS seed を改善できない。
+
+結論:
+- public daily NOAA CORS 30 s RINEX を使う範囲では、PF-100K mean P50 `2.83 m` を下回る見込みがない。
+- full 156 run 展開と test submission 生成は行わない。
+- 次に進めるなら 1 Hz CORS/high-rate source と base satellite-clock/geometry correction を別途実装してから再評価する。
+
+## Odaiba best_accuracy preset 探索
+
+1m 切り目標に向けた parameter sweep。各実験は full Odaiba、smoother あり、stop_sigma=0.1 ベース。
+
+### Particle count scaling (`odaiba_reference`, sp=1.2)
+
+| particles | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---:|---:|---:|---:|---:|
+| 100K | 1.63 | 5.50 | 1.34 | 4.11 |
+| **200K** | **1.13** | 5.88 | **1.26** | 4.14 |
+| 500K | 1.27 | 4.91 | 1.40 | 4.11 |
+
+- 200K が sweet spot。500K は overshoot して SMTH P50 が悪化。
+- 200K sp=0.9 も試したが 1.43m と悪化 (particle depletion 寄り)。
+
+### 200K × preset / carrier-anchor sigma sweep
+
+| preset | anchor σ | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|
+| `odaiba_reference` | 0.25 (default) | 1.26 | 4.14 |
+| `odaiba_stop_detect` (floor=0.25) | 0.25 | 1.38 | 4.08 |
+| `odaiba_reference_guarded` + stop_sigma | 0.25 | 1.22 | 4.54 |
+| `odaiba_reference_guarded` + stop_sigma | 0.10 | 1.35 | 4.44 |
+| **`odaiba_reference_guarded` + stop_sigma** | **0.15** | **1.14** | **4.36** |
+| `odaiba_reference_guarded` + stop_sigma | 0.20 | 1.33 | 4.57 |
+
+carrier-anchor σ=0.15 が鋭い局所最適。0.10/0.20 で共に悪化する。
+
+### 追加に試して不採用
+
+| 変更 | SMTH P50 | 判定 |
+|---|---:|---|
+| DD carrier σ 0.20→0.15 | 1.26 | 悪化 |
+| anchor max_residual 0.80→1.00, continuity 0.50→0.75 | 1.31 | 悪化 |
+| anchor blend_alpha 0.5→0.7 | 1.29 | 悪化 |
+
+### 採用 preset: `odaiba_best_accuracy`
+
+- 200K particles
+- `--imu-stop-sigma-pos 0.1`
+- DD gate `floor=0.18` (reference 相当) + tail guard (guarded 相当)
+- `--carrier-anchor-sigma-m 0.15`
+- full Odaiba で **SMTH P50 = 1.14 m / SMTH RMS = 4.36 m**
+- Baseline `odaiba_reference` (100K) の `1.34 / 4.11` からは P50 -17%、RMS +6%
+
+1m 切りまで残り 0.14m。更なる改善は smoother / fallback / anchor 周辺の algorithmic
+変更が必要 (parameter sweep では届かない)。
+
+### DD carrier Huber soft-downweight negative
+
+FGO の Huber robust cost の核だけを PF DD carrier AFV likelihood に移す案を試した。
+実装は一度 `0961cac` で追加したが、full Odaiba で現 best を超えなかったため
+`844ad14` で revert。preset への昇格なし。
+
+条件:
+- base preset: `odaiba_best_accuracy`
+- DD carrier binary gate / adaptive floor / MAD gate は既存のまま
+- Huber は DD carrier AFV residual に対する standardized residual penalty
+- k は handoff 方針どおり緩め (`k >= 1.5`) のみ
+
+200K k sweep:
+
+| k | particles | sigma_pos | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1.5 | 200K | 1.2 | 1.12 | 4.76 | 1.40 | 4.23 |
+| 2.0 | 200K | 1.2 | 1.27 | 5.23 | 1.37 | 4.27 |
+| 2.5 | 200K | 1.2 | 1.40 | 5.83 | 1.22 | 4.35 |
+| 3.0 | 200K | 1.2 | 1.40 | 5.83 | 1.22 | 4.35 |
+
+Particle scaling with best k=2.5:
+
+| k | particles | sigma_pos | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---:|---:|---:|---:|---:|---:|---:|
+| 2.5 | 400K | 1.2 | 1.30 | 5.29 | 1.49 | 4.46 |
+| 2.5 | 800K | 1.2 | 1.11 | 5.36 | 1.29 | 4.62 |
+| 2.5 | 800K | 1.0 | 1.30 | 4.72 | 1.37 | 4.13 |
+| 2.5 | 800K | 0.9 | 1.51 | 6.16 | 1.35 | 5.53 |
+
+所見:
+- Forward-only は 200K/k=1.5 や 800K/k=2.5 で P50 が少し良くなるが、smoother が悪化する。
+- Huber により DD carrier の強い局所拘束が弱まり、backward pass との平均で P50 が戻される傾向。
+- particle 増でも 1m 未満に入らず、現 best `SMTH P50=1.14m / RMS=4.36m` を超えない。
+- Odaiba で採用候補が無かったため、Shinjuku regression は未実施。
+
+### OSM road-centerline soft constraint negative
+
+HK で悪化した OSM map constraint を、Odaiba では soft + Huber に限定して再評価した。
+実装は `2d38959` (OSM module) と `5e4d62d` (PF integration) で追加し、
+full Odaiba sweep 後に `e50dc3b` で revert。preset への昇格なし。
+
+実装条件:
+- base preset: `odaiba_best_accuracy`
+- particles: `200K`
+- OSM bbox: Odaiba reference.csv から `lat 35.61372532-35.63492281`, `lon 139.76735488-139.79169916`
+- OSM source: Overpass mirror `overpass.kumi.systems`, road GeoJSON cache 191 KB / 2439 centerline segments
+- constraint: nearest road-centerline horizontal distance in local ENU, Huber soft penalty only
+- hard projection / particle rejection なし
+- limited-access road は separate class として sigma scale を緩めた
+- per-epoch GPU candidate segments: mean `25.6-25.9`
+
+Phase 1 sigma sweep (`k=2.0`):
+
+| sigma_road | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---:|---:|---:|---:|---:|
+| 1.0 | 1.79 | 4.36 | 1.75 | 3.98 |
+| 2.0 | 1.46 | 4.65 | 1.52 | 3.99 |
+| 3.0 | 1.44 | 5.29 | 1.48 | 4.25 |
+| 5.0 | 1.63 | 5.56 | 1.42 | 4.30 |
+
+Phase 2 Huber-k sweep (`sigma_road=5.0`):
+
+| huber_k | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---:|---:|---:|---:|---:|
+| 1.0 | 1.29 | 5.35 | 1.39 | 4.37 |
+| 2.0 | 1.63 | 5.56 | 1.42 | 4.30 |
+| 3.0 | 1.47 | 5.75 | 1.30 | 4.32 |
+
+所見:
+- best は `sigma=5.0,k=3.0` の `SMTH P50=1.30m / RMS=4.32m`。
+- RMS は current best `4.36m` と同等かわずかに良いが、目標指標の P50 は `1.14m -> 1.30m` に悪化。
+- tight sigma ほど wrong road pull が強くなり、soft + Huber でも median が崩れる。
+- Odaiba はHKよりopenだが、OSM centerline prior は車線内位置・高架/側道・停止/駐車/交差点形状の誤差を吸収しきれない。
+- HK に続いて Odaiba でも positive にならなかったため、OSM road-centerline constraint はこの形では卒業扱いにする。
+
+### Local FGO LAMBDA ambiguity fix negative
+
+DD carrier integer ambiguity を local FGO window に統合して、Odaiba の 1m 切りを確認した。
+実装は `5a4fd7e` (LAMBDA/ILS solver) と `bcf2c78` (local FGO integration)。
+wrong fix 回避を優先し、ratio threshold は handoff 指定どおり `3.0` から緩めていない。
+
+条件:
+- base preset: `odaiba_best_accuracy`
+- command:
+  `exp_pf_smoother_eval.py --data-root /tmp/UrbanNav-Tokyo --preset odaiba_best_accuracy --fgo-local-window 2400:3500 --fgo-local-lambda`
+- local FGO target window: `2400:3500`, solve window: `2399:3501`
+- LAMBDA settings: ratio threshold `3.0`, fixed sigma `0.05 cycles`, min continuous epochs `20`
+- fixed DD carrier factors: `1093`
+- fixed ambiguity segments: `22` (`J:5`, `C:8`, `E:6`, `G:3`)
+
+Odaiba full result:
+
+| config | lambda fixed | FGO error | FWD P50 | FWD RMS | SMTH P50 before FGO | SMTH RMS before FGO | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| local FGO + LAMBDA | 22 / 1093 obs | `23453.63 -> 22554.61` | 1.256 m | 5.683 m | 1.1435 m | 4.3627 m | 1.1438 m | 4.3621 m |
+
+所見:
+- FGO objective は下がり、RMS は `4.3627 -> 4.3621 m` とごくわずかに良くなる。
+- 一方で target metric の P50 は `1.1435 -> 1.1438 m` と横ばいから微悪化で、1m 切りには届かない。
+- strict ratio test 下で fix できた ambiguity が window 内 `1093` observation に留まり、既存 PF smoother の MAP 解を動かすほどの拘束になっていない。
+- ratio threshold を緩める方向は wrong fix risk が高いため不採用。preset 昇格なし。
+
+Shinjuku regression:
+
+| run | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | tail guard |
+|---|---:|---:|---:|---:|---:|
+| `odaiba_best_accuracy --runs Shinjuku` | 2.490 m | 7.057 m | 2.286 m | 7.548 m | 3019 epochs |
+
+Shinjuku は LAMBDA 無効の既存 path で完走し、DD metadata 追加による実行時破綻は出ていない。
+
+### Widelane L1-L2 integer DD pseudorange negative
+
+Trimble の L1+L2 から Melbourne-Wuebbena wide-lane ambiguity を DD pair 単位で固定し、
+`exp_pf_smoother_eval.py` の DD pseudorange path に統合した。実装は default-off の
+`--widelane` hook とし、`odaiba_best_accuracy` 自体は変更していない。
+
+実装条件:
+- module: `python/gnss_gpu/widelane.py`
+- PF hook: `--widelane`, `--widelane-min-fix-rate`, `--widelane-ratio-threshold`, `--widelane-dd-sigma`
+- base preset: `odaiba_best_accuracy`
+- default WL settings: min fix rate `0.30`, ratio threshold `3.0`, DD sigma `0.1 m`
+- 対象 signal: GPS/QZSS L1-L2。Galileo E1/E5 は周波数ペアが異なるためこの hook では使わない。
+
+Smoke:
+
+| run | epochs | WL used | fixed pairs | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Odaiba 100 epoch | 100 | 96/100 | 568/600 (94.7%) | 1.44 m | 1.27 m | 0.80 m | 0.79 m |
+
+Full Odaiba:
+
+| config | WL used | fixed pairs | low-fix epochs | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | tail guard |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| default `0.30 / ratio 3 / sigma 0.1` | 8926/12252 | 50042/52665 (95.0%) | 290 | 1.80 m | 5.54 m | 1.83 m | 4.91 m | 553 |
+| conservative `0.80 / ratio 3 / sigma 0.3` | 8653/12252 | 50042/52665 (95.0%) | 1114 | 1.59 m | 6.92 m | 1.45 m | 5.62 m | 1022 |
+
+Shinjuku regression:
+
+| config | WL used | fixed pairs | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | tail guard |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| default `0.30 / ratio 3 / sigma 0.1` | 14035/20127 | 70478/75654 (93.2%) | 3.10 m | 8.99 m | 3.07 m | 9.13 m | 3448 |
+
+Reference regression:
+
+| command | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---|---:|---:|---:|---:|
+| `run_pf_smoother_odaiba_reference.sh` | 1.63 m | 5.50 m | 1.34 m | 4.11 m |
+
+所見:
+- 100 epoch smoke では submeter に入ったが、full Odaiba では current best `SMTH P50=1.14 m` を超えず、P50 が悪化した。
+- default WL は RMS は reference guard 内 (`4.91 m`) だが P50 が `1.83 m` まで悪化する。
+- conservative 設定は P50 を `1.45 m` まで戻すが、RMS が `5.62 m` まで悪化し、submeter には届かない。
+- Shinjuku は `SMTH RMS=9.13 m` で handoff の `<9 m` 回帰条件をわずかに外す。
+- 原因候補は、WL fixed DD が GPS/QZSS L1-L2 のみで、既存 DD pseudorange の Galileo constraints を epoch 単位で置換してしまうこと。row-level merge または additional likelihood にしない限り、full-run の median を押し下げる拘束にならない。
+- `odaiba_widelane` preset への昇格なし。`odaiba_best_accuracy` は不変。
+
+### Region-aware widelane gate negative
+
+codex10 handoff の仮説どおり、WL を強い DD epoch だけに限定する gate を試した。
+実装は `--widelane-gate-min-dd-pairs`, `--widelane-gate-min-ratio`,
+`--widelane-gate-min-ess-ratio`, `--widelane-gate-exclude-epochs` を追加し、
+DD carrier support preview で epoch ごとの WL 適用可否を判定した。full-run で
+current best を超えなかったため、最終的に gate CLI/logic/test は revert し、
+結果 CSV と negative note だけを残す。
+
+結果ファイル:
+- [widelane_gate_odaiba_sweep.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/widelane_gate_odaiba_sweep.csv)
+- [widelane_gate_validation.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/widelane_gate_validation.csv)
+
+Odaiba full sweep (`odaiba_best_accuracy`, 200K):
+
+| config | WL used | gate skip | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| baseline | 0 | 0 | 1.256 m | 5.683 m | **1.1435 m** | 4.3627 m | current best |
+| dd17 | 248 | 11988 | 1.314 m | 5.347 m | 1.4167 m | 4.3353 m | P50 悪化 |
+| dd17 + ratio5 | 250 | 11986 | 1.559 m | 6.168 m | 1.4481 m | 4.3590 m | P50 悪化 |
+| dd17 + ratio7 | 223 | 12011 | 1.263 m | 6.030 m | 1.2454 m | 4.9972 m | WL 実使用では最良だが未達 |
+| dd14 + ratio3 | 1873 | 10283 | 1.311 m | 5.749 m | 1.2939 m | 4.5472 m | 未達 |
+| dd10 + ratio7 | 6060 | 5545 | 1.265 m | 5.951 m | 1.3567 m | 4.5978 m | 未達 |
+| dd20 + ratio3/5/7 | 0 | 12252 | 1.256 m | 5.683 m | 1.1435 m | 4.3627 m | over-gate で baseline 同等 |
+
+Shinjuku / reference validation:
+
+| run | WL used | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---:|---|
+| Shinjuku baseline | 0 | 2.490 m | 7.057 m | 2.286 m | 7.548 m | baseline |
+| Shinjuku dd17 + ratio7 | 0 | 2.490 m | 7.057 m | 2.286 m | 7.548 m | gate で全停止、同等 |
+| `run_pf_smoother_odaiba_reference.sh` | 0 | 1.625 m | 5.502 m | 1.340 m | 4.112 m | SMTH RMS guard `<=5.10 m` 維持 |
+
+所見:
+- handoff 推奨の dd17 + ratio5 は `SMTH P50=1.448 m` で current best より悪い。
+- WL 実使用ケースの最良は dd17 + ratio7 の `SMTH P50=1.245 m` で、`1.14 m` も submeter も未達。
+- dd20 は DD support 条件が強すぎて WL が一度も使われず、実質 baseline に戻るだけだった。
+- Shinjuku は dd17 + ratio7 でも WL used `0/20127` で、regression は出ないが改善もない。
+- `odaiba_widelane_gated` preset への昇格なし。既存 preset は不変。
+
+### Phase 1 per-particle NLOS rejection negative
+
+CT-RBPF-FGO north star の Phase 1 として、device PF の SPP pseudorange、
+DD pseudorange、DD carrier AFV kernel に per-particle residual rejection を追加した。
+全観測 reject 粒子が無罰になる collapse を避けるため、kernel 内で最低 inlier 数
+(`SPP >= 4 sats`, `DD >= 3 pairs`) を満たす particle だけ per-particle reject を使い、
+満たさない particle は従来 likelihood にフォールバックする。
+
+結果ファイル:
+- [per_particle_nlos_phase1_summary.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/per_particle_nlos_phase1_summary.csv)
+- [per_particle_nlos_phase1_sweep.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/per_particle_nlos_phase1_sweep.csv)
+
+Full Odaiba (`odaiba_best_accuracy`, 200K):
+
+| config | undiff PR gate | DD PR gate | DD carrier gate | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| baseline | off | off | off | 1.26 m | 5.68 m | **1.14 m** | 4.36 m | current best |
+| default Phase 1 | 30 m | 10 m | 0.5 cyc | 63.87 m | 91.85 m | 64.07 m | 91.98 m | negative |
+| no undiff PR gate | off | 10 m | 0.5 cyc | 6.11 m | 9.92 m | 6.75 m | 8.92 m | negative |
+| DD carrier only | off | off | 0.3 cyc | 1.41 m | 5.20 m | 1.38 m | 4.61 m | negative |
+
+指定 sweep (`undiff PR gate=30 m`, `DD PR gate in {5,10,15,20} m`,
+`DD carrier gate in {0.3,0.5,0.7} cycles`) は全候補 negative。best は
+`DD PR=5 m / DD carrier=0.3 cycles` の `SMTH P50=59.62 m / RMS=63.12 m`。
+
+Validation:
+
+| run | config | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS | 判定 |
+|---|---|---:|---:|---:|---:|---|
+| `run_pf_smoother_odaiba_reference.sh` | unchanged reference | 1.63 m | 5.50 m | 1.34 m | 4.11 m | guard pass (`<=5.10 m`) |
+| Shinjuku | DD carrier only 0.3 cyc | 2.51 m | 7.89 m | 2.35 m | 7.95 m | regression pass (`<9.5 m`) |
+
+所見:
+- default Phase 1 は、各 particle が観測 subset を自由に選びすぎて weak-DD 区間で誤った mode を保持し、full Odaiba で大きく悪化した。
+- undiff PR gate を切っても DD PR per-particle gate が median を大きく悪化させた。
+- 最も安全な DD carrier-only でも `SMTH P50=1.38 m` で current best `1.14 m` を超えず、submeter には届かなかった。
+- `odaiba_rbpf_nlos` preset への昇格なし。`odaiba_best_accuracy` は不変。

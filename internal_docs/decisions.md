@@ -547,6 +547,104 @@
 - `PF+AdaptiveGuide-10K` は supplemental result として残す
 - GitHub Pages / paper main assets は現状の `PF+RobustClear-10K` 主体のまま維持する
 
+## D-030: Odaiba reference/guarded の DD carrier adaptive floor は `0.18`、stop-detect は `0.25` を維持する
+
+状態: 採用
+
+根拠:
+- [exp_pf_smoother_eval.py](/workspace/ai_coding_ws/gnss_gpu/experiments/exp_pf_smoother_eval.py)
+- [test_exp_pf_smoother_eval.py](/workspace/ai_coding_ws/gnss_gpu/tests/test_exp_pf_smoother_eval.py)
+- `odaiba_reference`: `0.25` baseline は `FWD 1.46 / 5.57 m`, `SMTH 1.38 / 5.08 m`。`0.18` は `FWD 1.42 / 5.46 m`, `SMTH 1.38 / 5.02 m`。
+- `odaiba_reference_guarded`: `0.25` baseline は `FWD 1.46 / 5.57 m`, `SMTH 1.38 / 5.43 m`。`0.18` は `FWD 1.42 / 5.46 m`, `SMTH 1.38 / 5.36 m`。
+- `odaiba_stop_detect`: `0.25` baseline は `FWD 1.19 / 4.57 m`, `SMTH 1.36 / 4.11 m`。`0.18` は `FWD 1.63 / 5.50 m`, `SMTH 1.34 / 4.11 m`。
+
+理由:
+- coverage-hole 調査では、tracked fallback preference、ESS-only weak-DD replacement、spread-aware support-skip、contextual low-ESS epoch-median gate は full Odaiba の win にならなかった。
+- reference/guarded では単純な adaptive floor tightening が forward と smoother RMS を少し改善した。
+- stop-detect では smoother RMS は変わらない一方で forward quality が大きく悪化したため、headline best preset には入れない方が安全。
+
+決定:
+- `odaiba_reference` と `odaiba_reference_guarded` は `--mupf-dd-gate-adaptive-floor-cycles 0.18` を使う。
+- `odaiba_stop_detect` は `--mupf-dd-gate-adaptive-floor-cycles 0.25` を維持する。
+- weak-DD 調査で追加した extra knobs は default-off の ablation surface として残すが、full-run win なしに preset へ昇格しない。
+
+## D-031: L1-L2 widelane DD pseudorange は default-off 実験 hook として残すが preset 昇格しない
+
+状態: 採用
+
+根拠:
+- [widelane.py](/workspace/ai_coding_ws/gnss_gpu/python/gnss_gpu/widelane.py)
+- [exp_pf_smoother_eval.py](/workspace/ai_coding_ws/gnss_gpu/experiments/exp_pf_smoother_eval.py)
+- [test_widelane.py](/workspace/ai_coding_ws/gnss_gpu/tests/test_widelane.py)
+- Odaiba 100 epoch smoke は `SMTH P50=0.80 m / RMS=0.79 m`、WL fixed pairs `568/600 (94.7%)`
+- full Odaiba default WL は `SMTH P50=1.83 m / RMS=4.91 m`、WL used `8926/12252`, fixed pairs `50042/52665 (95.0%)`
+- full Odaiba conservative WL は `SMTH P50=1.45 m / RMS=5.62 m`
+- Shinjuku WL regression は `SMTH P50=3.07 m / RMS=9.13 m`
+- non-WL `run_pf_smoother_odaiba_reference.sh` は `SMTH P50=1.34 m / RMS=4.11 m` で維持
+
+理由:
+- WL integer fix 自体の成立率は高いが、full-run の PF smoother median は改善しなかった。
+- 現実装は GPS/QZSS L1-L2 fixed DD を epoch 単位で DD pseudorange path に差し替えるため、既存 raw DD pseudorange の Galileo constraints を落とす。
+- sigma を弱めても current best `SMTH P50=1.14 m` には届かず、RMS/回帰条件が悪化する。
+- smoke の submeter は局所区間の結果で、full Odaiba の headline 指標へ一般化しない。
+
+決定:
+- `--widelane` hook と `gnss_gpu.widelane` module は default-off の実験 surface として残す。
+- `odaiba_best_accuracy` は変更しない。
+- `odaiba_widelane` preset は作らない。
+- 次に試すなら、epoch-level replacement ではなく row-level merge または additional likelihood として、Galileo raw DD constraints を落とさない設計にする。
+
+## D-032: Region-aware widelane gate は full-run win なしで revert
+
+状態: 不採用
+
+根拠:
+- [widelane_gate_odaiba_sweep.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/widelane_gate_odaiba_sweep.csv)
+- [widelane_gate_validation.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/widelane_gate_validation.csv)
+- Odaiba baseline `odaiba_best_accuracy`: `SMTH P50=1.1435 m / RMS=4.3627 m`
+- handoff 推奨 dd17 + ratio5: `SMTH P50=1.4481 m / RMS=4.3590 m`, WL used `250/12252`
+- WL 実使用ケースの最良 dd17 + ratio7: `SMTH P50=1.2454 m / RMS=4.9972 m`, WL used `223/12252`
+- dd20 + ratio3/5/7 は WL used `0/12252` で baseline 同等
+- Shinjuku dd17 + ratio7 は WL used `0/20127` で baseline と同一、`SMTH P50=2.286 m / RMS=7.548 m`
+- `run_pf_smoother_odaiba_reference.sh` は `SMTH RMS=4.112 m` で `<=5.10 m` guard を維持
+
+理由:
+- 「強い DD epoch だけ WL 適用」の仮説は full Odaiba で current best を超えなかった。
+- DD support を強くすると WL 適用 epoch が少なくなり、dd20 では完全に baseline へ戻る。
+- DD support を緩めると WL は使われるが、P50 が `1.29-1.69 m` まで悪化する。
+- 最も近かった dd17 + ratio7 でも current best から +0.10 m 以上悪く、submeter には届かない。
+
+決定:
+- `odaiba_widelane_gated` preset は作らない。
+- region-aware WL gate CLI/logic/test は negative result として revert する。
+- codex9 の base `--widelane` hook は D-031 のとおり default-off 実験 surface として残す。
+
+## D-033: Phase 1 per-particle NLOS rejection は preset 昇格しない
+
+状態: 不採用
+
+根拠:
+- [per_particle_nlos_phase1_summary.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/per_particle_nlos_phase1_summary.csv)
+- [per_particle_nlos_phase1_sweep.csv](/workspace/ai_coding_ws/gnss_gpu/experiments/results/per_particle_nlos_phase1_sweep.csv)
+- Odaiba baseline `odaiba_best_accuracy`: `SMTH P50=1.14 m / RMS=4.36 m`
+- default Phase 1 (`undiff PR 30 m`, `DD PR 10 m`, `DD carrier 0.5 cyc`): `SMTH P50=64.07 m / RMS=91.98 m`
+- specified all-gate sweep (`DD PR in {5,10,15,20} m`, `DD carrier in {0.3,0.5,0.7} cycles`): best `SMTH P50=59.62 m / RMS=63.12 m`
+- no-undiff variant (`DD PR 10 m`, `DD carrier 0.5 cyc`): `SMTH P50=6.75 m / RMS=8.92 m`
+- safest DD-carrier-only variant (`DD carrier 0.3 cyc`): `SMTH P50=1.38 m / RMS=4.61 m`
+- Shinjuku DD-carrier-only regression: `SMTH P50=2.35 m / RMS=7.95 m`, below the `<9.5 m` RMS guard but not an Odaiba win
+- `run_pf_smoother_odaiba_reference.sh`: `SMTH RMS=4.11 m`, existing reference guard maintained
+
+理由:
+- Per-particle rejection is not free: particles can explain different satellite subsets, which preserves diversity but also lets wrong modes survive in weak-DD sections.
+- A minimum-inlier fallback is required to avoid reject-all particles, but even with that guard the Odaiba median degrades.
+- DD carrier-only is stable enough as an ablation surface, but it does not beat current best or reach submeter.
+
+決定:
+- `--per-particle-nlos-gate` remains a default-off experimental hook.
+- `odaiba_rbpf_nlos` preset は作らない。
+- `odaiba_best_accuracy` は変更しない。
+- 次に進むなら Phase 2 の per-particle velocity/RBPF 側で mode survival を制約する。
+
 ## 現在の未決定事項
 
 - `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか

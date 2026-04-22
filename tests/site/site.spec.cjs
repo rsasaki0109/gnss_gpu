@@ -27,9 +27,9 @@ test("artifact snapshot renders cleanly", async ({ page }) => {
   const showcaseCards = page.locator("#showcase-media article");
   await expect(showcaseCards).toHaveCount(3);
   await expect(showcaseCards.filter({ hasText: "UrbanNav LOS/NLOS Map Sweep" })).toHaveCount(1);
-  await expect(page.locator("#hero-cards article")).toHaveCount(7);
-  await expect(page.locator("#method-freeze article")).toHaveCount(4);
-  await expect(page.locator("#quick-links article")).toHaveCount(7);
+  await expect(page.locator("#hero-cards article")).toHaveCount(8);
+  await expect(page.locator("#method-freeze article")).toHaveCount(5);
+  await expect(page.locator("#quick-links article")).toHaveCount(8);
   await expect(page.locator("#figures article")).toHaveCount(4);
   await expect(page.locator("#analysis-charts article")).toHaveCount(5);
   await expect(page.locator("#tables section")).toHaveCount(8);

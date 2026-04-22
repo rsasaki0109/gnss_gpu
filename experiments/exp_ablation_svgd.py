@@ -312,7 +312,7 @@ def plot_ess_trajectory(
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        print(f"[ablation_svgd] matplotlib unavailable, skipping ESS plot")
+        print("[ablation_svgd] matplotlib unavailable, skipping ESS plot")
         return
 
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -438,14 +438,14 @@ def main():
     print_comparison_table(all_metrics)
 
     # ESS summary
-    print(f"\n  Effective Sample Size (mean/N over all epochs):")
+    print("\n  Effective Sample Size (mean/N over all epochs):")
     print(f"    Systematic : {np.mean(sys_ess) / n_particles:.4f}")
     print(f"    Megopolis  : {np.mean(meg_ess) / n_particles:.4f}")
     print(f"    SVGD       : {np.mean(svgd_ess) / n_particles:.4f}  "
           f"(uniform by design)")
 
     # Computation time
-    print(f"\n  Computation time per epoch [ms]:")
+    print("\n  Computation time per epoch [ms]:")
     print(f"    Systematic : {sys_ms:.3f}")
     print(f"    Megopolis  : {meg_ms:.3f}")
     print(f"    SVGD       : {svgd_ms:.3f}")

@@ -3,7 +3,6 @@ build/
 dist/
 *.egg-info/
 *.so
-*.pyd
 *.o
 *.a
 
@@ -30,6 +29,13 @@ tmp/site_visual_check/
 *.fatbin
 *.ptx
 
+# Runtime cache
+cache/
+
+# Experiment artifacts
+experiments/results/*.log
+experiments/results/paper_assets/*.mp4
+
 # Experiment data (downloaded, not committed)
 experiments/data/
 
@@ -38,3 +44,8 @@ experiments/results/*/frame_*.png
 experiments/results/los_nlos_verification/odaiba_*.png
 experiments/results/los_nlos_verification/shinjuku_*.png
 experiments/results/los_nlos_verification/real_eph_*.png
+
+# Per-session codex handoff notes (not committed)
+.codex_handoff*.md
+plan.md
+experiments/results/pf_smoother_eval.csv.bak

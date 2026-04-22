@@ -310,7 +310,7 @@ struct BVHNode {
 ## 6. 性能ベンチマーク
 
 ### 6.1 測定環境
-- **GPU**: NVIDIA Ada Lovelace世代 消費者向けGPU (16GB VRAM)
+- **GPU**: NVIDIA Ada Lovelace世代 消費者向けGPU
 - **CUDA**: 12.0
 
 ### 6.2 結果
