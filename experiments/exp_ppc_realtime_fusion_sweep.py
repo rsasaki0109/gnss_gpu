@@ -32,6 +32,13 @@ class SegmentSpec:
     start_epoch: int
 
 
+@dataclass(frozen=True)
+class FusionConfig:
+    height_release_min_dd_shift_m: float
+    dd_anchor_blend_alpha: float
+    last_velocity_max_age_s: float
+
+
 POSITIVE_SEGMENTS = (
     SegmentSpec("tokyo", "run1", 1463),
     SegmentSpec("tokyo", "run2", 808),
@@ -68,15 +75,19 @@ def _write_rows(rows: list[dict[str, object]], path: Path) -> None:
         writer.writerows(rows)
 
 
-def _parse_release_thresholds(raw: str) -> tuple[float, ...]:
-    thresholds = tuple(float(part.strip()) for part in raw.split(",") if part.strip())
-    if not thresholds:
-        raise ValueError("at least one height-release threshold is required")
-    return thresholds
+def _parse_float_list(raw: str, label: str) -> tuple[float, ...]:
+    values = tuple(float(part.strip()) for part in raw.split(",") if part.strip())
+    if not values:
+        raise ValueError(f"at least one {label} value is required")
+    return values
 
 
-def _config_label(release_min_dd_shift_m: float) -> str:
-    return f"height_release_{release_min_dd_shift_m:g}m"
+def _config_label(config: FusionConfig) -> str:
+    return (
+        f"dd{config.dd_anchor_blend_alpha:g}_"
+        f"height_release_{config.height_release_min_dd_shift_m:g}m_"
+        f"age{config.last_velocity_max_age_s:g}s"
+    )
 
 
 def _segments_for_preset(preset: str, data_root: Path, start_epoch: int) -> tuple[SegmentSpec, ...]:
@@ -93,6 +104,7 @@ def _segments_for_preset(preset: str, data_root: Path, start_epoch: int) -> tupl
 def _fusion_kwargs(
     *,
     height_hold_release_min_dd_shift_m: float,
+    dd_anchor_blend_alpha: float,
     rsp_correction: bool,
     last_velocity_max_age_s: float,
 ) -> dict[str, object]:
@@ -107,7 +119,7 @@ def _fusion_kwargs(
         "dd_trim_m": 1.5,
         "dd_min_kept_pairs": 5,
         "dd_max_shift_m": 200.0,
-        "dd_anchor_blend_alpha": 0.3,
+        "dd_anchor_blend_alpha": float(dd_anchor_blend_alpha),
         "dd_interpolate_base_epochs": True,
         "widelane": True,
         "widelane_min_epochs": 5,
@@ -170,9 +182,11 @@ def _segment_row(
         "wls_rms_2d": float(wls["rms_2d"]),
         "tdcp_used_epochs": int(fused["tdcp_used_epochs"]),
         "dd_pr_anchor_epochs": int(fused["dd_pr_anchor_epochs"]),
+        "dd_anchor_blend_alpha": float(fused["dd_anchor_blend_alpha"]),
         "widelane_anchor_epochs": int(fused["widelane_anchor_epochs"]),
         "rsp_correction_epochs": int(fused["rsp_correction_epochs"]),
         "height_hold_release_min_dd_shift_m": float(fused["height_hold_release_min_dd_shift_m"]),
+        "last_velocity_max_age_s": float(fused["last_velocity_max_age_s"]),
     }
 
 
@@ -208,6 +222,8 @@ def _summarize_configs(rows: list[dict[str, object]]) -> list[dict[str, object]]
                 "height_hold_release_min_dd_shift_m": float(
                     selected[0]["height_hold_release_min_dd_shift_m"]
                 ),
+                "dd_anchor_blend_alpha": float(selected[0]["dd_anchor_blend_alpha"]),
+                "last_velocity_max_age_s": float(selected[0]["last_velocity_max_age_s"]),
             }
         )
     return summary
@@ -227,12 +243,23 @@ def main() -> None:
         help="Comma-separated stale-velocity height-release DD shift thresholds",
     )
     parser.add_argument(
+        "--dd-anchor-blend-alphas",
+        type=str,
+        default="0.3",
+        help="Comma-separated DD-PR anchor blend values",
+    )
+    parser.add_argument(
         "--rsp-correction",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Use gated reservoir Stein DD likelihood correction",
     )
-    parser.add_argument("--last-velocity-max-age-s", type=float, default=8.0)
+    parser.add_argument(
+        "--last-velocity-max-age-ss",
+        type=str,
+        default="8.0",
+        help="Comma-separated stale velocity bridge age limits",
+    )
     parser.add_argument("--results-prefix", type=str, default="ppc_realtime_fusion_sweep")
     args = parser.parse_args()
 
@@ -241,7 +268,19 @@ def main() -> None:
     segments = _segments_for_preset(args.segment_preset, data_root, args.start_epoch)
     if not segments:
         raise FileNotFoundError(f"no PPC run directories found under: {data_root}")
-    thresholds = _parse_release_thresholds(args.height_release_min_dd_shift_ms)
+    thresholds = _parse_float_list(args.height_release_min_dd_shift_ms, "height-release threshold")
+    dd_alphas = _parse_float_list(args.dd_anchor_blend_alphas, "DD anchor blend alpha")
+    last_velocity_ages = _parse_float_list(args.last_velocity_max_age_ss, "last-velocity age")
+    configs = tuple(
+        FusionConfig(
+            height_release_min_dd_shift_m=threshold,
+            dd_anchor_blend_alpha=dd_alpha,
+            last_velocity_max_age_s=last_velocity_age,
+        )
+        for threshold in thresholds
+        for dd_alpha in dd_alphas
+        for last_velocity_age in last_velocity_ages
+    )
     max_epochs = args.max_epochs if args.max_epochs and args.max_epochs > 0 else None
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -253,7 +292,7 @@ def main() -> None:
     print(f"  Segments  : {len(segments)}")
     print(f"  Max epochs: {max_epochs if max_epochs is not None else 'full'}")
     print(f"  Systems   : {','.join(systems)}")
-    print(f"  Gates     : {', '.join(str(value) for value in thresholds)}")
+    print(f"  Configs   : {len(configs)}")
     print(flush=True)
 
     rows: list[dict[str, object]] = []
@@ -271,16 +310,17 @@ def main() -> None:
                 include_sat_velocity=True,
             )
         data = data_cache[spec]
-        for threshold in thresholds:
-            config = _config_label(threshold)
+        for config_spec in configs:
+            config = _config_label(config_spec)
             summary_rows, per_epoch, _arrays = run_fusion_eval(
                 data,
                 run_dir,
                 systems,
                 **_fusion_kwargs(
-                    height_hold_release_min_dd_shift_m=threshold,
+                    height_hold_release_min_dd_shift_m=config_spec.height_release_min_dd_shift_m,
+                    dd_anchor_blend_alpha=config_spec.dd_anchor_blend_alpha,
                     rsp_correction=args.rsp_correction,
-                    last_velocity_max_age_s=args.last_velocity_max_age_s,
+                    last_velocity_max_age_s=config_spec.last_velocity_max_age_s,
                 ),
             )
             row = _segment_row(spec, config, summary_rows, per_epoch)
