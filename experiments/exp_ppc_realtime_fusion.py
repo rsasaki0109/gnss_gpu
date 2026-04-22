@@ -26,6 +26,7 @@ from gnss_gpu.dd_pseudorange import DDPseudorangeComputer, DDPseudorangeResult
 from gnss_gpu.io.ppc import PPCDatasetLoader
 from gnss_gpu.ppc_score import ppc_score_dict
 from gnss_gpu.tdcp_velocity import L1_WAVELENGTH, estimate_velocity_from_tdcp_with_metrics
+from gnss_gpu.widelane import WidelaneDDPseudorangeComputer
 
 RESULTS_DIR = _SCRIPT_DIR / "results"
 _SYSTEM_ID_MAP = {"G": 0, "R": 1, "E": 2, "C": 3, "J": 4}
@@ -232,6 +233,80 @@ def _try_dd_anchor(
     )
 
 
+def _empty_widelane_stats(reason: str = "disabled") -> SimpleNamespace:
+    return SimpleNamespace(
+        reason=reason,
+        n_candidate_pairs=0,
+        n_fixed_pairs=0,
+        fix_rate=0.0,
+        n_dd=0,
+    )
+
+
+def _try_widelane_anchor(
+    wl_computer: WidelaneDDPseudorangeComputer | None,
+    data: dict,
+    epoch_idx: int,
+    seed_ecef: np.ndarray,
+    *,
+    huber_k_m: float,
+    trim_m: float,
+    min_kept_pairs: int,
+    max_shift_m: float,
+    max_robust_rms_m: float,
+) -> tuple[np.ndarray | None, _DDAnchorStats, object]:
+    if wl_computer is None:
+        return None, _DDAnchorStats(), _empty_widelane_stats()
+
+    measurements = _dd_measurements(data, epoch_idx, seed_ecef)
+    wl_result, wl_stats = wl_computer.compute_dd(
+        float(data["times"][epoch_idx]),
+        measurements,
+        rover_position_approx=seed_ecef,
+        min_common_sats=max(int(min_kept_pairs) + 1, 4),
+    )
+    anchor, anchor_stats = _robust_dd_pr_anchor(
+        seed_ecef,
+        wl_result,
+        huber_k_m=huber_k_m,
+        trim_m=trim_m,
+        min_kept_pairs=min_kept_pairs,
+        max_shift_m=max_shift_m,
+    )
+    if (
+        anchor is not None
+        and np.isfinite(anchor_stats.robust_rms_m)
+        and anchor_stats.robust_rms_m > float(max_robust_rms_m)
+    ):
+        anchor = None
+    return anchor, anchor_stats, wl_stats
+
+
+def _widelane_epoch_fields(
+    *,
+    used: bool,
+    anchor_stats: _DDAnchorStats,
+    wl_stats: object,
+) -> dict[str, object]:
+    return {
+        "widelane_anchor_used": bool(used),
+        "widelane_reason": str(getattr(wl_stats, "reason", "")),
+        "widelane_candidate_pairs": int(getattr(wl_stats, "n_candidate_pairs", 0)),
+        "widelane_fixed_pairs": int(getattr(wl_stats, "n_fixed_pairs", 0)),
+        "widelane_fix_rate": float(getattr(wl_stats, "fix_rate", 0.0)),
+        "widelane_n_dd": int(getattr(wl_stats, "n_dd", 0)),
+        "widelane_anchor_kept": int(anchor_stats.kept_pairs),
+        "widelane_anchor_shift_m": (
+            float(anchor_stats.shift_m) if np.isfinite(anchor_stats.shift_m) else ""
+        ),
+        "widelane_anchor_robust_rms_m": (
+            float(anchor_stats.robust_rms_m)
+            if np.isfinite(anchor_stats.robust_rms_m)
+            else ""
+        ),
+    }
+
+
 def run_fusion_eval(
     data: dict,
     data_dir: Path,
@@ -249,6 +324,15 @@ def run_fusion_eval(
     dd_max_shift_m: float,
     dd_anchor_blend_alpha: float,
     dd_interpolate_base_epochs: bool,
+    widelane: bool,
+    widelane_min_epochs: int,
+    widelane_max_std_cycles: float,
+    widelane_ratio_threshold: float,
+    widelane_min_fix_rate: float,
+    widelane_min_kept_pairs: int,
+    widelane_max_shift_m: float,
+    widelane_max_robust_rms_m: float,
+    widelane_anchor_blend_alpha: float,
     last_velocity_max_age_s: float,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, np.ndarray]]:
     wls_pos, wls_ms = run_wls(data)
@@ -262,16 +346,32 @@ def run_fusion_eval(
         allowed_systems=systems,
         interpolate_base_epochs=dd_interpolate_base_epochs,
     )
+    wl_computer = (
+        WidelaneDDPseudorangeComputer(
+            data_dir / "base.obs",
+            data_dir / "rover.obs",
+            allowed_systems=systems,
+            interpolate_base_epochs=dd_interpolate_base_epochs,
+            min_epochs=widelane_min_epochs,
+            max_std_cycles=widelane_max_std_cycles,
+            ratio_threshold=widelane_ratio_threshold,
+            min_fix_rate=widelane_min_fix_rate,
+        )
+        if widelane
+        else None
+    )
 
     fused = np.zeros_like(truth)
     per_epoch: list[dict[str, object]] = []
     n_tdcp_used = 0
     n_dd_used = 0
+    n_widelane_used = 0
     tdcp_errors: list[float] = []
     tdcp_rms_values: list[float] = []
     last_velocity: np.ndarray | None = None
     last_velocity_age = float("inf")
     anchor_alpha = float(np.clip(dd_anchor_blend_alpha, 0.0, 1.0))
+    wl_anchor_alpha = float(np.clip(widelane_anchor_blend_alpha, 0.0, 1.0))
 
     anchor, anchor_stats = _try_dd_anchor(
         dd_computer,
@@ -288,6 +388,21 @@ def run_fusion_eval(
         n_dd_used += 1
     else:
         fused[0] = wls_pos[0, :3]
+    wl_anchor, wl_anchor_stats, wl_stats = _try_widelane_anchor(
+        wl_computer,
+        data,
+        0,
+        fused[0],
+        huber_k_m=dd_huber_k_m,
+        trim_m=dd_trim_m,
+        min_kept_pairs=widelane_min_kept_pairs,
+        max_shift_m=widelane_max_shift_m,
+        max_robust_rms_m=widelane_max_robust_rms_m,
+    )
+    wl_used = wl_anchor is not None
+    if wl_used:
+        fused[0] = fused[0] + wl_anchor_alpha * (wl_anchor - fused[0])
+        n_widelane_used += 1
 
     per_epoch.append(
         {
@@ -301,6 +416,11 @@ def run_fusion_eval(
             "dd_pr_shift_m": float(anchor_stats.shift_m) if np.isfinite(anchor_stats.shift_m) else "",
             "dd_pr_robust_rms_m": (
                 float(anchor_stats.robust_rms_m) if np.isfinite(anchor_stats.robust_rms_m) else ""
+            ),
+            **_widelane_epoch_fields(
+                used=wl_used,
+                anchor_stats=wl_anchor_stats,
+                wl_stats=wl_stats,
             ),
         }
     )
@@ -356,6 +476,21 @@ def run_fusion_eval(
         if dd_used:
             pred = pred + anchor_alpha * (anchor - pred)
             n_dd_used += 1
+        wl_anchor, wl_anchor_stats, wl_stats = _try_widelane_anchor(
+            wl_computer,
+            data,
+            i,
+            pred,
+            huber_k_m=dd_huber_k_m,
+            trim_m=dd_trim_m,
+            min_kept_pairs=widelane_min_kept_pairs,
+            max_shift_m=widelane_max_shift_m,
+            max_robust_rms_m=widelane_max_robust_rms_m,
+        )
+        wl_used = wl_anchor is not None
+        if wl_used:
+            pred = pred + wl_anchor_alpha * (wl_anchor - pred)
+            n_widelane_used += 1
         fused[i] = pred
 
         per_epoch.append(
@@ -381,6 +516,11 @@ def run_fusion_eval(
                     float(anchor_stats.robust_rms_m)
                     if np.isfinite(anchor_stats.robust_rms_m)
                     else ""
+                ),
+                **_widelane_epoch_fields(
+                    used=wl_used,
+                    anchor_stats=wl_anchor_stats,
+                    wl_stats=wl_stats,
                 ),
             }
         )
@@ -409,7 +549,7 @@ def run_fusion_eval(
             "max_2d": float(wls_metrics["max_2d"]),
         },
         {
-            "method": "TDCP + DD-PR anchors",
+            "method": "TDCP + DD-PR/WL anchors" if widelane else "TDCP + DD-PR anchors",
             "n_epochs": len(times),
             "tdcp_used_epochs": int(n_tdcp_used),
             "tdcp_use_rate_pct": float(100.0 * n_tdcp_used / max(len(times) - 1, 1)),
@@ -420,6 +560,12 @@ def run_fusion_eval(
             "dd_pr_anchor_epochs": int(n_dd_used),
             "dd_pr_anchor_rate_pct": float(100.0 * n_dd_used / max(len(times), 1)),
             "dd_anchor_blend_alpha": float(anchor_alpha),
+            "widelane_enabled": bool(widelane),
+            "widelane_anchor_epochs": int(n_widelane_used),
+            "widelane_anchor_rate_pct": float(100.0 * n_widelane_used / max(len(times), 1)),
+            "widelane_anchor_blend_alpha": float(wl_anchor_alpha),
+            "widelane_max_shift_m": float(widelane_max_shift_m),
+            "widelane_max_robust_rms_m": float(widelane_max_robust_rms_m),
             **ppc_score_dict(fused, truth),
             "rms_2d": float(fused_metrics["rms_2d"]),
             "p50": float(fused_metrics["p50"]),
@@ -450,7 +596,7 @@ def main() -> None:
     parser.add_argument(
         "--dd-anchor-blend-alpha",
         type=float,
-        default=0.4,
+        default=0.5,
         help="Causal blend from TDCP prediction toward accepted DD-PR anchor",
     )
     parser.add_argument(
@@ -459,6 +605,20 @@ def main() -> None:
         default=True,
         help="Interpolate 1 Hz base RINEX observations onto PPC rover epochs",
     )
+    parser.add_argument(
+        "--widelane",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use fixed L1-L2 wide-lane DD pseudorange anchors after DD-PR updates",
+    )
+    parser.add_argument("--widelane-min-epochs", type=int, default=5)
+    parser.add_argument("--widelane-max-std-cycles", type=float, default=0.75)
+    parser.add_argument("--widelane-ratio-threshold", type=float, default=3.0)
+    parser.add_argument("--widelane-min-fix-rate", type=float, default=0.3)
+    parser.add_argument("--widelane-min-kept-pairs", type=int, default=3)
+    parser.add_argument("--widelane-max-shift-m", type=float, default=5.0)
+    parser.add_argument("--widelane-max-robust-rms-m", type=float, default=0.8)
+    parser.add_argument("--widelane-anchor-blend-alpha", type=float, default=1.0)
     parser.add_argument("--last-velocity-max-age-s", type=float, default=5.0)
     parser.add_argument("--results-prefix", type=str, default="ppc_realtime_fusion")
     args = parser.parse_args()
@@ -500,6 +660,15 @@ def main() -> None:
         dd_max_shift_m=args.dd_max_shift_m,
         dd_anchor_blend_alpha=args.dd_anchor_blend_alpha,
         dd_interpolate_base_epochs=args.dd_interpolate_base_epochs,
+        widelane=args.widelane,
+        widelane_min_epochs=args.widelane_min_epochs,
+        widelane_max_std_cycles=args.widelane_max_std_cycles,
+        widelane_ratio_threshold=args.widelane_ratio_threshold,
+        widelane_min_fix_rate=args.widelane_min_fix_rate,
+        widelane_min_kept_pairs=args.widelane_min_kept_pairs,
+        widelane_max_shift_m=args.widelane_max_shift_m,
+        widelane_max_robust_rms_m=args.widelane_max_robust_rms_m,
+        widelane_anchor_blend_alpha=args.widelane_anchor_blend_alpha,
         last_velocity_max_age_s=args.last_velocity_max_age_s,
     )
 
