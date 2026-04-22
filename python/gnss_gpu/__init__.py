@@ -78,6 +78,13 @@ from gnss_gpu.raim import raim_check, raim_fde
 from gnss_gpu.doppler import doppler_velocity, doppler_velocity_batch
 from gnss_gpu.signal_sim import SignalSimulator
 from gnss_gpu.urban_signal_sim import UrbanSignalSimulator
+from gnss_gpu.ppc_score import (
+    PPCScore,
+    ppc_3d_errors,
+    ppc_segment_distances,
+    score_ppc2024,
+    ppc_score_dict,
+)
 from gnss_gpu.e2e_helpers import (
     compute_e2e_wls_weights,
     acquisition_lag_to_code_phase_chips,
@@ -155,6 +162,12 @@ __all__ = [
     # Signal simulation
     "SignalSimulator",
     "UrbanSignalSimulator",
+    # PPC2024 competition scoring
+    "PPCScore",
+    "ppc_3d_errors",
+    "ppc_segment_distances",
+    "score_ppc2024",
+    "ppc_score_dict",
     # E2E helpers (acquisition to pseudorange)
     "compute_e2e_wls_weights",
     "acquisition_lag_to_code_phase_chips",
