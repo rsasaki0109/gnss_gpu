@@ -54,7 +54,7 @@ def _write_rows(rows: list[dict[str, object]], path: Path) -> None:
                 seen.add(key)
                 fieldnames.append(key)
     with path.open("w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -247,6 +247,7 @@ def run_fusion_eval(
     dd_trim_m: float,
     dd_min_kept_pairs: int,
     dd_max_shift_m: float,
+    dd_anchor_blend_alpha: float,
     dd_interpolate_base_epochs: bool,
     last_velocity_max_age_s: float,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, np.ndarray]]:
@@ -270,6 +271,7 @@ def run_fusion_eval(
     tdcp_rms_values: list[float] = []
     last_velocity: np.ndarray | None = None
     last_velocity_age = float("inf")
+    anchor_alpha = float(np.clip(dd_anchor_blend_alpha, 0.0, 1.0))
 
     anchor, anchor_stats = _try_dd_anchor(
         dd_computer,
@@ -352,7 +354,7 @@ def run_fusion_eval(
         )
         dd_used = anchor is not None
         if dd_used:
-            pred = anchor
+            pred = pred + anchor_alpha * (anchor - pred)
             n_dd_used += 1
         fused[i] = pred
 
@@ -417,6 +419,7 @@ def run_fusion_eval(
             ),
             "dd_pr_anchor_epochs": int(n_dd_used),
             "dd_pr_anchor_rate_pct": float(100.0 * n_dd_used / max(len(times), 1)),
+            "dd_anchor_blend_alpha": float(anchor_alpha),
             **ppc_score_dict(fused, truth),
             "rms_2d": float(fused_metrics["rms_2d"]),
             "p50": float(fused_metrics["p50"]),
@@ -444,6 +447,12 @@ def main() -> None:
     parser.add_argument("--dd-trim-m", type=float, default=1.5)
     parser.add_argument("--dd-min-kept-pairs", type=int, default=5)
     parser.add_argument("--dd-max-shift-m", type=float, default=200.0)
+    parser.add_argument(
+        "--dd-anchor-blend-alpha",
+        type=float,
+        default=0.4,
+        help="Causal blend from TDCP prediction toward accepted DD-PR anchor",
+    )
     parser.add_argument(
         "--dd-interpolate-base-epochs",
         action=argparse.BooleanOptionalAction,
@@ -489,6 +498,7 @@ def main() -> None:
         dd_trim_m=args.dd_trim_m,
         dd_min_kept_pairs=args.dd_min_kept_pairs,
         dd_max_shift_m=args.dd_max_shift_m,
+        dd_anchor_blend_alpha=args.dd_anchor_blend_alpha,
         dd_interpolate_base_epochs=args.dd_interpolate_base_epochs,
         last_velocity_max_age_s=args.last_velocity_max_age_s,
     )
