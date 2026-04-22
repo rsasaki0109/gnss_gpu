@@ -28,6 +28,9 @@ Implementation notes:
 - For the next PF phase, consider Reservoir Stein Particle Filter as a
   bounded-memory, diversity-preserving realtime update pattern before reviving
   the heavier PF experiments.
+- `gnss_gpu.reservoir_stein` is the first local RSPF-style building block:
+  keep a bounded weighted reservoir, pin elite particles, then run a small
+  SVGD-style attraction/repulsion transport step before any CUDA integration.
 
 Example quick video:
 
