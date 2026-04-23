@@ -41,6 +41,9 @@ Implementation notes:
   correcting only epochs 153-174 with fused-height/radius projection improved
   the diagnostic score from 56.01% to 60.46%; use this as the next candidate
   for integration into the realtime fusion path.
+- The realtime fusion path now enables gated DD-gradient reservoir Stein
+  horizontal corrections by default.  On the same Tokyo/run1 smoke segment it
+  reaches 64.03% with 131/200 PPC 3D pass epochs.
 
 Example quick video:
 
