@@ -53,6 +53,20 @@ _IMU_ALIASES = {
 _WGS84_A = 6_378_137.0
 _WGS84_E2 = 6.694379990141316e-3
 _SYSTEM_ID_MAP = {"G": 0, "R": 1, "E": 2, "C": 3, "J": 4}
+_CARRIER_CODE_PREFERENCES = {
+    "G": ("L1C", "L1W", "L1X", "L1P", "L1S", "L1L", "L1Z"),
+    "E": ("L1C", "L1X", "L1A", "L1B", "L1Z"),
+    "J": ("L1C", "L1X", "L1Z", "L1S", "L1L"),
+    "C": ("L1P", "L1I", "L1D", "L1X", "L1Z"),
+    "R": ("L1C", "L1P"),
+}
+_DOPPLER_CODE_PREFERENCES = {
+    "G": ("D1C", "D1W", "D1X", "D1P", "D1S", "D1L", "D1Z"),
+    "E": ("D1C", "D1X", "D1A", "D1B", "D1Z"),
+    "J": ("D1C", "D1X", "D1Z", "D1S", "D1L"),
+    "C": ("D1P", "D1I", "D1D", "D1X", "D1Z"),
+    "R": ("D1C", "D1P"),
+}
 
 
 def _pick_col(header: list[str], aliases: tuple[str, ...]) -> str | None:
@@ -87,6 +101,89 @@ def _nearest_index(sorted_times: np.ndarray, t: float) -> int:
         return len(sorted_times) - 1
     prev_idx = idx - 1
     return idx if abs(sorted_times[idx] - t) < abs(sorted_times[prev_idx] - t) else prev_idx
+
+
+def _ordered_obs_codes(
+    sys_char: str,
+    sat_obs: dict[str, float],
+    preferred_code: str | None,
+    preferences: dict[str, tuple[str, ...]],
+    primary_prefix: str,
+) -> list[str]:
+    codes: list[str] = []
+    seen: set[str] = set()
+
+    def append(code: str | None) -> None:
+        if code and code not in seen:
+            seen.add(code)
+            codes.append(code)
+
+    append(preferred_code)
+    for code in preferences.get(sys_char, ()):
+        append(code)
+    for code in sorted(c for c in sat_obs if c.startswith(primary_prefix)):
+        append(code)
+    for code in sorted(c for c in sat_obs if c.startswith(primary_prefix[:1])):
+        append(code)
+    return codes
+
+
+def _pick_obs_value(
+    sys_char: str,
+    sat_obs: dict[str, float],
+    preferred_code: str | None,
+    preferences: dict[str, tuple[str, ...]],
+    primary_prefix: str,
+    min_abs: float = 0.0,
+) -> tuple[float, str]:
+    for code in _ordered_obs_codes(
+        sys_char,
+        sat_obs,
+        preferred_code,
+        preferences,
+        primary_prefix,
+    ):
+        value = float(sat_obs.get(code, 0.0))
+        if np.isfinite(value) and abs(value) > min_abs:
+            return value, code
+    return float("nan"), ""
+
+
+def _ephemeris_derivatives(
+    eph,
+    tow: float,
+    sat_ids: list[str],
+    obs_codes: list[str],
+    dt: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    if dt <= 0.0:
+        raise ValueError("sat_velocity_dt must be positive")
+    n_sat = len(sat_ids)
+    sat_vel = np.full((n_sat, 3), np.nan, dtype=np.float64)
+    clock_drift = np.full(n_sat, np.nan, dtype=np.float64)
+    if n_sat == 0:
+        return sat_vel, clock_drift
+
+    before_pos, before_clk, before_ids = eph.compute(tow - dt, sat_ids, obs_codes=obs_codes)
+    after_pos, after_clk, after_ids = eph.compute(tow + dt, sat_ids, obs_codes=obs_codes)
+    before = {
+        str(sat_id): (np.asarray(before_pos[i], dtype=np.float64), float(before_clk[i]))
+        for i, sat_id in enumerate(before_ids)
+    }
+    after = {
+        str(sat_id): (np.asarray(after_pos[i], dtype=np.float64), float(after_clk[i]))
+        for i, sat_id in enumerate(after_ids)
+    }
+    denom = 2.0 * float(dt)
+    for i, sat_id in enumerate(sat_ids):
+        key = str(sat_id)
+        if key not in before or key not in after:
+            continue
+        pos_before, clk_before = before[key]
+        pos_after, clk_after = after[key]
+        sat_vel[i] = (pos_after - pos_before) / denom
+        clock_drift[i] = (clk_after - clk_before) / denom
+    return sat_vel, clock_drift
 
 
 class PPCDatasetLoader:
@@ -179,6 +276,10 @@ class PPCDatasetLoader:
         start_epoch: int = 0,
         obs_code: str = "C1C",
         snr_code: str = "S1C",
+        carrier_obs_code: str | None = None,
+        doppler_obs_code: str | None = None,
+        include_sat_velocity: bool = False,
+        sat_velocity_dt: float = 0.5,
         systems: tuple[str, ...] = ("G",),
         time_tolerance: float = 0.15,
     ) -> dict:
@@ -201,6 +302,12 @@ class PPCDatasetLoader:
         time_list: list[float] = []
         sat_id_list_per_epoch: list[list[str]] = []
         system_id_list: list[np.ndarray] = []
+        carrier_phase_list: list[np.ndarray] = []
+        doppler_list: list[np.ndarray] = []
+        carrier_code_list_per_epoch: list[list[str]] = []
+        doppler_code_list_per_epoch: list[list[str]] = []
+        sat_velocity_list: list[np.ndarray] = []
+        clock_drift_list: list[np.ndarray] = []
         usable_epoch_index = 0
 
         for epoch in rover_obs.epochs:
@@ -242,6 +349,31 @@ class PPCDatasetLoader:
             )
             weights = np.array([max(snr_map[sat_id], 1.0) for sat_id in used_sat_ids], dtype=np.float64)
             system_ids = np.array([_SYSTEM_ID_MAP[sat_id[0]] for sat_id in used_sat_ids], dtype=np.int32)
+            carrier_phase = np.full(len(used_sat_ids), np.nan, dtype=np.float64)
+            doppler_hz = np.full(len(used_sat_ids), np.nan, dtype=np.float64)
+            carrier_codes: list[str] = []
+            doppler_codes: list[str] = []
+            for sat_idx, sat_id in enumerate(used_sat_ids):
+                sat_obs = epoch.observations.get(sat_id, {})
+                sys_char = sat_id[0]
+                carrier_phase[sat_idx], carrier_code = _pick_obs_value(
+                    sys_char,
+                    sat_obs,
+                    carrier_obs_code,
+                    _CARRIER_CODE_PREFERENCES,
+                    "L1",
+                    min_abs=1e3,
+                )
+                doppler_hz[sat_idx], doppler_code = _pick_obs_value(
+                    sys_char,
+                    sat_obs,
+                    doppler_obs_code,
+                    _DOPPLER_CODE_PREFERENCES,
+                    "D1",
+                    min_abs=0.0,
+                )
+                carrier_codes.append(carrier_code)
+                doppler_codes.append(doppler_code)
 
             gt_idx = _nearest_index(gt_times, tow)
             if abs(gt_times[gt_idx] - tow) > time_tolerance:
@@ -258,6 +390,20 @@ class PPCDatasetLoader:
             time_list.append(float(tow))
             sat_id_list_per_epoch.append(list(used_sat_ids))
             system_id_list.append(system_ids)
+            carrier_phase_list.append(carrier_phase)
+            doppler_list.append(doppler_hz)
+            carrier_code_list_per_epoch.append(carrier_codes)
+            doppler_code_list_per_epoch.append(doppler_codes)
+            if include_sat_velocity:
+                sat_vel, clock_drift = _ephemeris_derivatives(
+                    eph,
+                    tow,
+                    list(used_sat_ids),
+                    [obs_code] * len(used_sat_ids),
+                    sat_velocity_dt,
+                )
+                sat_velocity_list.append(sat_vel)
+                clock_drift_list.append(clock_drift)
             usable_epoch_index += 1
 
             if max_epochs is not None and len(time_list) >= max_epochs:
@@ -276,6 +422,10 @@ class PPCDatasetLoader:
             "sat_ecef": sat_ecef_list,
             "pseudoranges": pseudorange_list,
             "weights": weight_list,
+            "carrier_phase": carrier_phase_list,
+            "doppler_hz": doppler_list,
+            "carrier_codes": carrier_code_list_per_epoch,
+            "doppler_codes": doppler_code_list_per_epoch,
             "system_ids": system_id_list,
             "ground_truth": ground_truth,
             "times": times,
@@ -287,4 +437,12 @@ class PPCDatasetLoader:
             "dt": dt,
             "used_prns": sat_id_list_per_epoch,
             "constellations": tuple(sorted({sat_id[0] for sats in sat_id_list_per_epoch for sat_id in sats})),
+            **(
+                {
+                    "sat_velocity": sat_velocity_list,
+                    "clock_drift": clock_drift_list,
+                }
+                if include_sat_velocity
+                else {}
+            ),
         }

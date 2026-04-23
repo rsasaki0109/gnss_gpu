@@ -90,6 +90,80 @@ def test_tdcp_recovers_constant_velocity_zero_sat_motion():
     assert np.allclose(vel, delta_rx / dt, rtol=1e-5, atol=1e-5)
 
 
+def test_tdcp_supports_negative_carrier_phase_sign():
+    rng = np.random.default_rng(10)
+    rx = np.array([1.0e6, 2.0e6, 3.0e6])
+    dt = 1.0
+    delta_rx = np.array([2.5, -1.5, 0.7])
+    delta_cb = -0.4
+
+    sats = [
+        rx + np.array([20e6, 0.0, 0.0]),
+        rx + np.array([0.0, 21e6, 0.0]),
+        rx + np.array([0.0, 0.0, 22e6]),
+        rx + np.array([15e6, 15e6, 10e6]),
+    ]
+
+    prev: list[_Meas] = []
+    cur: list[_Meas] = []
+    base_cycles = rng.uniform(-1e4, 1e4, len(sats))
+    for i, sat in enumerate(sats):
+        los = _los(rx, sat)
+        corr = float(np.dot(los, delta_rx) + delta_cb)
+        d_cycles = -corr / LAM
+        prev.append(_Meas(0, i + 1, sat, base_cycles[i]))
+        cur.append(_Meas(0, i + 1, sat, base_cycles[i] + d_cycles))
+
+    vel = estimate_velocity_from_tdcp(
+        rx,
+        prev,
+        cur,
+        dt=dt,
+        wavelength=LAM,
+        carrier_phase_sign=-1.0,
+    )
+
+    assert vel is not None
+    assert np.allclose(vel, delta_rx / dt, rtol=1e-5, atol=1e-5)
+
+
+def test_tdcp_supports_negative_receiver_motion_sign():
+    rng = np.random.default_rng(11)
+    rx = np.array([1.0e6, 2.0e6, 3.0e6])
+    dt = 1.0
+    delta_rx = np.array([2.5, -1.5, 0.7])
+    delta_cb = -0.4
+
+    sats = [
+        rx + np.array([20e6, 0.0, 0.0]),
+        rx + np.array([0.0, 21e6, 0.0]),
+        rx + np.array([0.0, 0.0, 22e6]),
+        rx + np.array([15e6, 15e6, 10e6]),
+    ]
+
+    prev: list[_Meas] = []
+    cur: list[_Meas] = []
+    base_cycles = rng.uniform(-1e4, 1e4, len(sats))
+    for i, sat in enumerate(sats):
+        los = _los(rx, sat)
+        corr = float(-np.dot(los, delta_rx) + delta_cb)
+        d_cycles = corr / LAM
+        prev.append(_Meas(0, i + 1, sat, base_cycles[i]))
+        cur.append(_Meas(0, i + 1, sat, base_cycles[i] + d_cycles))
+
+    vel = estimate_velocity_from_tdcp(
+        rx,
+        prev,
+        cur,
+        dt=dt,
+        wavelength=LAM,
+        receiver_motion_sign=-1.0,
+    )
+
+    assert vel is not None
+    assert np.allclose(vel, delta_rx / dt, rtol=1e-5, atol=1e-5)
+
+
 def test_tdcp_with_satellite_motion_and_clock():
     """All satellites share the same ECEF velocity; include sat clock drift."""
     rx = np.array([1.0e6, 2.0e6, 3.0e6])
@@ -256,10 +330,14 @@ def test_tdcp_high_postfit_rms_returns_none():
 def test_tdcp_excessive_speed_returns_none():
     rx = np.array([1.0e6, 2.0e6, 3.0e6])
     dt = 0.1
-    delta_rx = np.array([600.0, 0.0, 0.0])
+    delta_rx = np.array([600.0, -50.0, 25.0])
     delta_cb = 0.0
-    sat = rx + np.array([20e6, 0.0, 0.0])
-    sats = [sat + np.array([0, k * 2e5, k * 2e5]) for k in range(4)]
+    sats = [
+        rx + np.array([20e6, 0.0, 0.0]),
+        rx + np.array([0.0, 21e6, 0.0]),
+        rx + np.array([0.0, 0.0, 22e6]),
+        rx + np.array([15e6, 15e6, 10e6]),
+    ]
 
     prev: list[_Meas] = []
     cur: list[_Meas] = []
@@ -270,6 +348,17 @@ def test_tdcp_excessive_speed_returns_none():
         cur.append(_Meas(0, i + 1, s, 1000.0 + i + corr / LAM))
 
     assert estimate_velocity_from_tdcp(rx, prev, cur, dt=dt, wavelength=LAM) is None
+
+    vel = estimate_velocity_from_tdcp(
+        rx,
+        prev,
+        cur,
+        dt=dt,
+        wavelength=LAM,
+        max_velocity_mps=10000.0,
+    )
+    assert vel is not None
+    assert np.allclose(vel, delta_rx / dt, rtol=1e-5, atol=1e-5)
 
 
 def test_estimate_velocity_from_tdcp_with_metrics():
