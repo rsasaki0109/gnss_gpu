@@ -557,6 +557,7 @@ def run_fusion_eval(
             "tdcp_postfit_rms_median": (
                 float(np.median(tdcp_rms_values)) if tdcp_rms_values else float("nan")
             ),
+            "last_velocity_max_age_s": float(last_velocity_max_age_s),
             "dd_pr_anchor_epochs": int(n_dd_used),
             "dd_pr_anchor_rate_pct": float(100.0 * n_dd_used / max(len(times), 1)),
             "dd_anchor_blend_alpha": float(anchor_alpha),
@@ -596,7 +597,7 @@ def main() -> None:
     parser.add_argument(
         "--dd-anchor-blend-alpha",
         type=float,
-        default=0.5,
+        default=0.3,
         help="Causal blend from TDCP prediction toward accepted DD-PR anchor",
     )
     parser.add_argument(
@@ -619,7 +620,7 @@ def main() -> None:
     parser.add_argument("--widelane-max-shift-m", type=float, default=5.0)
     parser.add_argument("--widelane-max-robust-rms-m", type=float, default=0.8)
     parser.add_argument("--widelane-anchor-blend-alpha", type=float, default=1.0)
-    parser.add_argument("--last-velocity-max-age-s", type=float, default=5.0)
+    parser.add_argument("--last-velocity-max-age-s", type=float, default=8.0)
     parser.add_argument("--results-prefix", type=str, default="ppc_realtime_fusion")
     args = parser.parse_args()
 
