@@ -29,6 +29,15 @@ def test_blend_to_altitude_moves_toward_target_height():
     assert correction_m == pytest.approx(4.0)
 
 
+def test_project_to_reference_radius_preserves_candidate_direction():
+    candidate = np.array([4.0, 0.0, 0.0], dtype=np.float64)
+    reference = np.array([2.0, 0.0, 0.0], dtype=np.float64)
+
+    projected = fusion._project_to_reference_radius(candidate, reference)
+
+    np.testing.assert_allclose(projected, [2.0, 0.0, 0.0])
+
+
 def test_height_hold_effective_alpha_releases_on_stale_velocity_disagreement():
     stats = fusion._DDAnchorStats(accepted=True, shift_m=1.5)
 
