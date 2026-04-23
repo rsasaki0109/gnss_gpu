@@ -254,6 +254,9 @@ def _try_widelane_anchor(
     min_kept_pairs: int,
     max_shift_m: float,
     max_robust_rms_m: float,
+    veto_rms_band_min_m: float,
+    veto_rms_band_max_m: float,
+    veto_min_kept_pairs: int,
 ) -> tuple[np.ndarray | None, _DDAnchorStats, object]:
     if wl_computer is None:
         return None, _DDAnchorStats(), _empty_widelane_stats()
@@ -277,6 +280,15 @@ def _try_widelane_anchor(
         anchor is not None
         and np.isfinite(anchor_stats.robust_rms_m)
         and anchor_stats.robust_rms_m > float(max_robust_rms_m)
+    ):
+        anchor = None
+    if (
+        anchor is not None
+        and int(anchor_stats.kept_pairs) >= int(veto_min_kept_pairs)
+        and np.isfinite(anchor_stats.robust_rms_m)
+        and float(veto_rms_band_min_m)
+        <= anchor_stats.robust_rms_m
+        <= float(veto_rms_band_max_m)
     ):
         anchor = None
     return anchor, anchor_stats, wl_stats
@@ -332,6 +344,9 @@ def run_fusion_eval(
     widelane_min_kept_pairs: int,
     widelane_max_shift_m: float,
     widelane_max_robust_rms_m: float,
+    widelane_veto_rms_band_min_m: float,
+    widelane_veto_rms_band_max_m: float,
+    widelane_veto_min_kept_pairs: int,
     widelane_anchor_blend_alpha: float,
     last_velocity_max_age_s: float,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, np.ndarray]]:
@@ -398,6 +413,9 @@ def run_fusion_eval(
         min_kept_pairs=widelane_min_kept_pairs,
         max_shift_m=widelane_max_shift_m,
         max_robust_rms_m=widelane_max_robust_rms_m,
+        veto_rms_band_min_m=widelane_veto_rms_band_min_m,
+        veto_rms_band_max_m=widelane_veto_rms_band_max_m,
+        veto_min_kept_pairs=widelane_veto_min_kept_pairs,
     )
     wl_used = wl_anchor is not None
     if wl_used:
@@ -486,6 +504,9 @@ def run_fusion_eval(
             min_kept_pairs=widelane_min_kept_pairs,
             max_shift_m=widelane_max_shift_m,
             max_robust_rms_m=widelane_max_robust_rms_m,
+            veto_rms_band_min_m=widelane_veto_rms_band_min_m,
+            veto_rms_band_max_m=widelane_veto_rms_band_max_m,
+            veto_min_kept_pairs=widelane_veto_min_kept_pairs,
         )
         wl_used = wl_anchor is not None
         if wl_used:
@@ -567,6 +588,9 @@ def run_fusion_eval(
             "widelane_anchor_blend_alpha": float(wl_anchor_alpha),
             "widelane_max_shift_m": float(widelane_max_shift_m),
             "widelane_max_robust_rms_m": float(widelane_max_robust_rms_m),
+            "widelane_veto_rms_band_min_m": float(widelane_veto_rms_band_min_m),
+            "widelane_veto_rms_band_max_m": float(widelane_veto_rms_band_max_m),
+            "widelane_veto_min_kept_pairs": int(widelane_veto_min_kept_pairs),
             **ppc_score_dict(fused, truth),
             "rms_2d": float(fused_metrics["rms_2d"]),
             "p50": float(fused_metrics["p50"]),
@@ -619,6 +643,9 @@ def main() -> None:
     parser.add_argument("--widelane-min-kept-pairs", type=int, default=3)
     parser.add_argument("--widelane-max-shift-m", type=float, default=5.0)
     parser.add_argument("--widelane-max-robust-rms-m", type=float, default=0.8)
+    parser.add_argument("--widelane-veto-rms-band-min-m", type=float, default=0.15)
+    parser.add_argument("--widelane-veto-rms-band-max-m", type=float, default=0.35)
+    parser.add_argument("--widelane-veto-min-kept-pairs", type=int, default=4)
     parser.add_argument("--widelane-anchor-blend-alpha", type=float, default=1.0)
     parser.add_argument("--last-velocity-max-age-s", type=float, default=8.0)
     parser.add_argument("--results-prefix", type=str, default="ppc_realtime_fusion")
@@ -669,6 +696,9 @@ def main() -> None:
         widelane_min_kept_pairs=args.widelane_min_kept_pairs,
         widelane_max_shift_m=args.widelane_max_shift_m,
         widelane_max_robust_rms_m=args.widelane_max_robust_rms_m,
+        widelane_veto_rms_band_min_m=args.widelane_veto_rms_band_min_m,
+        widelane_veto_rms_band_max_m=args.widelane_veto_rms_band_max_m,
+        widelane_veto_min_kept_pairs=args.widelane_veto_min_kept_pairs,
         widelane_anchor_blend_alpha=args.widelane_anchor_blend_alpha,
         last_velocity_max_age_s=args.last_velocity_max_age_s,
     )
