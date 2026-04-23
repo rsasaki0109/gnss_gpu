@@ -58,6 +58,7 @@ def _base_fusion_kwargs() -> dict[str, object]:
         "dd_max_shift_m": 200.0,
         "dd_anchor_blend_alpha": 0.3,
         "dd_anchor_high_blend_alpha": 0.3,
+        "dd_anchor_high_requires_untrusted_height": False,
         "dd_anchor_high_min_shift_m": float("inf"),
         "dd_anchor_high_max_robust_rms_m": 0.7,
         "dd_interpolate_base_epochs": True,
