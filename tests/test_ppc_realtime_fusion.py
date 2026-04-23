@@ -29,6 +29,34 @@ def test_blend_to_altitude_moves_toward_target_height():
     assert correction_m == pytest.approx(4.0)
 
 
+def test_height_hold_effective_alpha_releases_on_stale_velocity_disagreement():
+    stats = fusion._DDAnchorStats(accepted=True, shift_m=1.5)
+
+    alpha = fusion._height_hold_effective_alpha(
+        1.0,
+        last_velocity_used=True,
+        anchor_stats=stats,
+        release_on_last_velocity=True,
+        release_min_dd_shift_m=1.4,
+    )
+
+    assert alpha == pytest.approx(0.0)
+
+
+def test_height_hold_effective_alpha_keeps_fresh_tdcp_updates():
+    stats = fusion._DDAnchorStats(accepted=True, shift_m=2.0)
+
+    alpha = fusion._height_hold_effective_alpha(
+        1.0,
+        last_velocity_used=False,
+        anchor_stats=stats,
+        release_on_last_velocity=True,
+        release_min_dd_shift_m=1.4,
+    )
+
+    assert alpha == pytest.approx(1.0)
+
+
 def test_try_widelane_anchor_vetoes_mid_residual_band(monkeypatch):
     monkeypatch.setattr(fusion, "_dd_measurements", lambda *_args, **_kwargs: [])
     stats = fusion._DDAnchorStats(
