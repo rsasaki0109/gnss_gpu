@@ -5,6 +5,7 @@ import pytest
 
 from gnss_gpu.reservoir_stein import (
     ReservoirSteinConfig,
+    dead_particle_mask,
     effective_sample_size,
     normalize_log_weights,
     reservoir_stein_update,
@@ -24,6 +25,18 @@ def test_normalize_log_weights_is_stable_for_large_offsets():
 
 def test_effective_sample_size_matches_uniform_case():
     assert effective_sample_size(np.ones(5)) == pytest.approx(5.0)
+
+
+def test_dead_particle_mask_marks_collapsed_posterior_tail():
+    log_weights = np.array([0.0, np.log(1.0e-9), np.log(1.0e-20), -np.inf])
+
+    dead = dead_particle_mask(
+        log_weights,
+        min_normalized_weight=1.0e-8,
+        min_relative_likelihood=1.0e-16,
+    )
+
+    assert dead.tolist() == [False, True, True, True]
 
 
 def test_weighted_reservoir_indices_keeps_elites_and_unique_indices():

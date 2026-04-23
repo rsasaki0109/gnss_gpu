@@ -31,6 +31,11 @@ Implementation notes:
 - `gnss_gpu.reservoir_stein` is the first local RSPF-style building block:
   keep a bounded weighted reservoir, pin elite particles, then run a small
   SVGD-style attraction/repulsion transport step before any CUDA integration.
+- ICRA 2025 lead from `DoongLi/ICRA2025-Paper-List`: "Range-Based 6-DoF
+  Monte Carlo SLAM with Gradient-Guided Particle Filter on GPU" uses
+  likelihood-gradient particle updates, compact keyframe state, and dead
+  particle pruning.  For GNSS/PPC, map this to DD/WL likelihood gradients,
+  bounded anchor/keyframe history, and pruning only fully collapsed particles.
 
 Example quick video:
 
