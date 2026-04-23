@@ -575,6 +575,7 @@ def run_fusion_eval(
     n_tdcp_used = 0
     n_dd_used = 0
     n_widelane_used = 0
+    n_rsp_used = 0
     tdcp_errors: list[float] = []
     tdcp_rms_values: list[float] = []
     last_velocity: np.ndarray | None = None
@@ -761,6 +762,7 @@ def run_fusion_eval(
             )
             if rsp_anchor is not None:
                 pred = rsp_anchor
+                n_rsp_used += 1
         fused[i] = pred
 
         per_epoch.append(
@@ -845,6 +847,8 @@ def run_fusion_eval(
             "height_hold_release_min_dd_shift_m": float(height_hold_release_min_dd_shift_m),
             "height_hold_reference_alt_m": float(height_reference_alt_m),
             "rsp_correction_enabled": bool(rsp_correction),
+            "rsp_correction_epochs": int(n_rsp_used),
+            "rsp_correction_rate_pct": float(100.0 * n_rsp_used / max(len(times), 1)),
             "rsp_n_particles": int(rsp_n_particles),
             "rsp_spread_m": float(rsp_spread_m),
             "rsp_sigma_m": float(rsp_sigma_m),
@@ -924,7 +928,7 @@ def main() -> None:
         default=True,
         help="Release height hold when stale TDCP velocity and DD-PR strongly disagree",
     )
-    parser.add_argument("--height-hold-release-min-dd-shift-m", type=float, default=1.0)
+    parser.add_argument("--height-hold-release-min-dd-shift-m", type=float, default=0.4)
     parser.add_argument(
         "--rsp-correction",
         action=argparse.BooleanOptionalAction,
