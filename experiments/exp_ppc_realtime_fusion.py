@@ -123,18 +123,31 @@ def _height_hold_effective_alpha(
     last_velocity_used: bool,
     anchor_stats: _DDAnchorStats,
     release_on_last_velocity: bool,
+    release_on_dd_shift: bool,
     release_min_dd_shift_m: float,
 ) -> float:
     alpha = float(np.clip(base_alpha, 0.0, 1.0))
     if (
         alpha > 0.0
-        and release_on_last_velocity
-        and last_velocity_used
         and np.isfinite(anchor_stats.shift_m)
         and anchor_stats.shift_m >= float(release_min_dd_shift_m)
+        and (release_on_dd_shift or (release_on_last_velocity and last_velocity_used))
     ):
         return 0.0
     return alpha
+
+
+def _height_reference_trusted(
+    anchor_stats: _DDAnchorStats,
+    *,
+    max_initial_dd_rms_m: float,
+) -> bool:
+    if not np.isfinite(max_initial_dd_rms_m):
+        return True
+    return (
+        np.isfinite(anchor_stats.robust_rms_m)
+        and anchor_stats.robust_rms_m <= float(max_initial_dd_rms_m)
+    )
 
 
 def _dd_anchor_effective_alpha(
@@ -553,7 +566,9 @@ def run_fusion_eval(
     widelane_anchor_blend_alpha: float,
     height_hold_alpha: float,
     height_hold_release_on_last_velocity: bool,
+    height_hold_release_on_dd_shift: bool,
     height_hold_release_min_dd_shift_m: float,
+    height_hold_reference_max_dd_rms_m: float,
     rsp_correction: bool,
     rsp_n_particles: int,
     rsp_spread_m: float,
@@ -645,8 +660,12 @@ def run_fusion_eval(
         fused[0] = fused[0] + wl_anchor_alpha * (wl_anchor - fused[0])
         n_widelane_used += 1
     height_reference_alt_m = _ecef_to_llh(fused[0])[2]
+    height_reference_trusted = _height_reference_trusted(
+        anchor_stats,
+        max_initial_dd_rms_m=height_hold_reference_max_dd_rms_m,
+    )
     height_correction_m = 0.0
-    height_effective_alpha = height_alpha
+    height_effective_alpha = height_alpha if height_reference_trusted else 0.0
     rsp_fields = _rsp_epoch_fields(False)
 
     per_epoch.append(
@@ -666,6 +685,7 @@ def run_fusion_eval(
             "height_hold_used": bool(height_alpha > 0.0),
             "height_hold_effective_alpha": float(height_effective_alpha),
             "height_hold_reference_alt_m": float(height_reference_alt_m),
+            "height_hold_reference_trusted": bool(height_reference_trusted),
             "height_hold_correction_m": float(height_correction_m),
             **rsp_fields,
             **_widelane_epoch_fields(
@@ -761,8 +781,11 @@ def run_fusion_eval(
             last_velocity_used=last_velocity_used,
             anchor_stats=anchor_stats,
             release_on_last_velocity=height_hold_release_on_last_velocity,
+            release_on_dd_shift=height_hold_release_on_dd_shift,
             release_min_dd_shift_m=height_hold_release_min_dd_shift_m,
         )
+        if not height_reference_trusted:
+            height_effective_alpha = 0.0
         if height_effective_alpha > 0.0:
             pred, height_correction_m = _blend_to_altitude(
                 pred,
@@ -831,6 +854,7 @@ def run_fusion_eval(
                 "height_hold_used": bool(height_alpha > 0.0),
                 "height_hold_effective_alpha": float(height_effective_alpha),
                 "height_hold_reference_alt_m": float(height_reference_alt_m),
+                "height_hold_reference_trusted": bool(height_reference_trusted),
                 "height_hold_correction_m": float(height_correction_m),
                 **rsp_fields,
                 **_widelane_epoch_fields(
@@ -887,7 +911,10 @@ def run_fusion_eval(
             "widelane_veto_min_kept_pairs": int(widelane_veto_min_kept_pairs),
             "height_hold_alpha": float(height_alpha),
             "height_hold_release_on_last_velocity": bool(height_hold_release_on_last_velocity),
+            "height_hold_release_on_dd_shift": bool(height_hold_release_on_dd_shift),
             "height_hold_release_min_dd_shift_m": float(height_hold_release_min_dd_shift_m),
+            "height_hold_reference_max_dd_rms_m": float(height_hold_reference_max_dd_rms_m),
+            "height_hold_reference_trusted": bool(height_reference_trusted),
             "height_hold_reference_alt_m": float(height_reference_alt_m),
             "rsp_correction_enabled": bool(rsp_correction),
             "rsp_correction_epochs": int(n_rsp_used),
@@ -979,7 +1006,19 @@ def main() -> None:
         default=True,
         help="Release height hold when stale TDCP velocity and DD-PR strongly disagree",
     )
+    parser.add_argument(
+        "--height-hold-release-on-dd-shift",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Release height hold whenever accepted DD-PR shift exceeds the release threshold",
+    )
     parser.add_argument("--height-hold-release-min-dd-shift-m", type=float, default=0.4)
+    parser.add_argument(
+        "--height-hold-reference-max-dd-rms-m",
+        type=float,
+        default=float("inf"),
+        help="Disable height hold when the initial DD-PR height reference RMS exceeds this value",
+    )
     parser.add_argument(
         "--rsp-correction",
         action=argparse.BooleanOptionalAction,
@@ -1056,7 +1095,9 @@ def main() -> None:
         widelane_anchor_blend_alpha=args.widelane_anchor_blend_alpha,
         height_hold_alpha=args.height_hold_alpha,
         height_hold_release_on_last_velocity=args.height_hold_release_on_last_velocity,
+        height_hold_release_on_dd_shift=args.height_hold_release_on_dd_shift,
         height_hold_release_min_dd_shift_m=args.height_hold_release_min_dd_shift_m,
+        height_hold_reference_max_dd_rms_m=args.height_hold_reference_max_dd_rms_m,
         rsp_correction=args.rsp_correction,
         rsp_n_particles=args.rsp_n_particles,
         rsp_spread_m=args.rsp_spread_m,
