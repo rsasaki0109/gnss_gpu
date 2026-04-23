@@ -36,6 +36,11 @@ Implementation notes:
   likelihood-gradient particle updates, compact keyframe state, and dead
   particle pruning.  For GNSS/PPC, map this to DD/WL likelihood gradients,
   bounded anchor/keyframe history, and pruning only fully collapsed particles.
+- `experiments/exp_ppc_rsp_diagnostic.py` applies DD likelihood gradients to a
+  local reservoir Stein correction.  On Tokyo/run1 `start=1300,max_epochs=200`,
+  correcting only epochs 153-174 with fused-height/radius projection improved
+  the diagnostic score from 56.01% to 60.46%; use this as the next candidate
+  for integration into the realtime fusion path.
 
 Example quick video:
 
