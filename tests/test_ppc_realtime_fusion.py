@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import sys
 
 import numpy as np
+import pytest
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _EXPERIMENTS_DIR = _PROJECT_ROOT / "experiments"
@@ -16,6 +17,16 @@ import exp_ppc_realtime_fusion as fusion
 class _FakeWidelaneComputer:
     def compute_dd(self, *_args, **_kwargs):
         return object(), SimpleNamespace(reason="ok", n_candidate_pairs=6, n_fixed_pairs=6, fix_rate=1.0, n_dd=6)
+
+
+def test_blend_to_altitude_moves_toward_target_height():
+    pos = fusion._llh_to_ecef(0.0, 0.0, 10.0)
+
+    corrected, correction_m = fusion._blend_to_altitude(pos, 2.0, alpha=0.5)
+
+    _lat, _lon, alt = fusion._ecef_to_llh(corrected)
+    assert alt == pytest.approx(6.0)
+    assert correction_m == pytest.approx(4.0)
 
 
 def test_try_widelane_anchor_vetoes_mid_residual_band(monkeypatch):
@@ -85,3 +96,29 @@ def test_try_widelane_anchor_keeps_low_residual_fix(monkeypatch):
 
     np.testing.assert_allclose(anchor, np.ones(3))
     assert anchor_stats is stats
+
+
+def test_attach_epoch_error_fields_adds_ppc_distance_diagnostics():
+    truth = np.array(
+        [
+            [6378137.0, 0.0, 0.0],
+            [6378137.0, 3.0, 0.0],
+            [6378137.0, 7.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+    wls = truth.copy()
+    wls[2, 2] += 1.0
+    fused = truth.copy()
+    fused[1, 2] += 0.4
+    fused[2, 2] += 0.6
+    rows = [{"epoch": 0}, {"epoch": 1}, {"epoch": 2}]
+
+    fusion._attach_epoch_error_fields(rows, wls, fused, truth)
+
+    assert [row["ppc_segment_distance_m"] for row in rows] == pytest.approx([0.0, 3.0, 4.0])
+    assert [row["fused_ppc_pass"] for row in rows] == [True, True, False]
+    assert [row["fused_ppc_pass_distance_m"] for row in rows] == pytest.approx([0.0, 3.0, 0.0])
+    assert [row["wls_ppc_pass"] for row in rows] == [True, True, False]
+    assert rows[1]["fused_error_3d_m"] == pytest.approx(0.4)
+    assert rows[2]["wls_error_3d_m"] == pytest.approx(1.0)
