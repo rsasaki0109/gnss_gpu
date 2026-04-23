@@ -66,6 +66,34 @@ def test_height_hold_effective_alpha_keeps_fresh_tdcp_updates():
     assert alpha == pytest.approx(1.0)
 
 
+def test_dd_anchor_effective_alpha_uses_high_alpha_for_large_clean_shift():
+    stats = fusion._DDAnchorStats(accepted=True, shift_m=2.0, robust_rms_m=0.4)
+
+    alpha = fusion._dd_anchor_effective_alpha(
+        0.3,
+        high_alpha=1.0,
+        anchor_stats=stats,
+        high_min_shift_m=1.5,
+        high_max_robust_rms_m=0.7,
+    )
+
+    assert alpha == pytest.approx(1.0)
+
+
+def test_dd_anchor_effective_alpha_keeps_base_alpha_for_noisy_anchor():
+    stats = fusion._DDAnchorStats(accepted=True, shift_m=2.0, robust_rms_m=0.9)
+
+    alpha = fusion._dd_anchor_effective_alpha(
+        0.3,
+        high_alpha=1.0,
+        anchor_stats=stats,
+        high_min_shift_m=1.5,
+        high_max_robust_rms_m=0.7,
+    )
+
+    assert alpha == pytest.approx(0.3)
+
+
 def test_try_widelane_anchor_vetoes_mid_residual_band(monkeypatch):
     monkeypatch.setattr(fusion, "_dd_measurements", lambda *_args, **_kwargs: [])
     stats = fusion._DDAnchorStats(

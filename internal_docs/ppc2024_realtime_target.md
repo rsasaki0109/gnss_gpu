@@ -52,6 +52,14 @@ Implementation notes:
   epoch pass versus 1.0 m (90 vs. 65) but not distance-weighted PPC.  A tested
   wide-lane-aware height-release guard worsened aggregate PPC and should not be
   used as a default.
+- DD-PR anchor blend strength is now sweepable.  Global `dd_anchor_blend_alpha=1.0`
+  improved positive6 aggregate PPC from 2.75% to 3.84%, but regressed
+  `tokyo/run1@1463` and `nagoya/run2@983`.  A gated high-blend experiment with
+  base 0.3, high 1.0, RMS ceiling 0.7, and shift threshold 2.0 m reached 4.04%
+  positive6 aggregate, but it dropped the separate Tokyo/run1 `start=1300`
+  smoke from 66.21% to 61.49%.  Shift threshold 3.0 m preserved that local
+  smoke but fell to 3.54% positive6 aggregate.  Keep this as an experiment
+  surface; do not promote a high-DD blend default yet.
 
 Example quick video:
 
