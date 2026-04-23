@@ -60,6 +60,16 @@ Implementation notes:
   smoke from 66.21% to 61.49%.  Shift threshold 3.0 m preserved that local
   smoke but fell to 3.54% positive6 aggregate.  Keep this as an experiment
   surface; do not promote a high-DD blend default yet.
+- `experiments/exp_ppc_epoch_failure_diagnostic.py` summarizes per-epoch
+  realtime-fusion failures from `*_epochs.csv` files.  On `tokyo/run2@808`,
+  the diagnostic showed a structural height problem: high-DD shift3 + age15 had
+  16 horizontal-pass epochs but only 1 3D PPC pass because the initial height
+  reference was untrusted.  Fully disabling height hold raised that segment to
+  5.70% PPC.  The safer experiment `--height-hold-reference-max-dd-rms-m 0.7`
+  preserves the separate Tokyo/run1 `start=1300` smoke at 66.21% and raises
+  positive6 aggregate to 4.58%, but holdout6 is 0.77% versus 0.96% for the
+  current default.  Keep the initial-height-reference trust gate as a diagnostic
+  surface; do not promote it as the default until holdout behavior improves.
 
 Example quick video:
 

@@ -46,6 +46,7 @@ def test_height_hold_effective_alpha_releases_on_stale_velocity_disagreement():
         last_velocity_used=True,
         anchor_stats=stats,
         release_on_last_velocity=True,
+        release_on_dd_shift=False,
         release_min_dd_shift_m=1.4,
     )
 
@@ -60,10 +61,35 @@ def test_height_hold_effective_alpha_keeps_fresh_tdcp_updates():
         last_velocity_used=False,
         anchor_stats=stats,
         release_on_last_velocity=True,
+        release_on_dd_shift=False,
         release_min_dd_shift_m=1.4,
     )
 
     assert alpha == pytest.approx(1.0)
+
+
+def test_height_hold_effective_alpha_releases_on_any_dd_shift_when_enabled():
+    stats = fusion._DDAnchorStats(accepted=True, shift_m=2.0)
+
+    alpha = fusion._height_hold_effective_alpha(
+        1.0,
+        last_velocity_used=False,
+        anchor_stats=stats,
+        release_on_last_velocity=True,
+        release_on_dd_shift=True,
+        release_min_dd_shift_m=1.4,
+    )
+
+    assert alpha == pytest.approx(0.0)
+
+
+def test_height_reference_trusted_uses_initial_dd_rms_ceiling():
+    clean = fusion._DDAnchorStats(accepted=True, robust_rms_m=0.5)
+    noisy = fusion._DDAnchorStats(accepted=True, robust_rms_m=0.9)
+
+    assert fusion._height_reference_trusted(clean, max_initial_dd_rms_m=0.7)
+    assert not fusion._height_reference_trusted(noisy, max_initial_dd_rms_m=0.7)
+    assert fusion._height_reference_trusted(noisy, max_initial_dd_rms_m=float("inf"))
 
 
 def test_dd_anchor_effective_alpha_uses_high_alpha_for_large_clean_shift():
