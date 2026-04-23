@@ -36,6 +36,9 @@ class SegmentSpec:
 class FusionConfig:
     height_release_min_dd_shift_m: float
     dd_anchor_blend_alpha: float
+    dd_anchor_high_blend_alpha: float
+    dd_anchor_high_min_shift_m: float
+    dd_anchor_high_max_robust_rms_m: float
     last_velocity_max_age_s: float
 
 
@@ -85,6 +88,9 @@ def _parse_float_list(raw: str, label: str) -> tuple[float, ...]:
 def _config_label(config: FusionConfig) -> str:
     return (
         f"dd{config.dd_anchor_blend_alpha:g}_"
+        f"ddhi{config.dd_anchor_high_blend_alpha:g}_"
+        f"hishift{config.dd_anchor_high_min_shift_m:g}_"
+        f"hirms{config.dd_anchor_high_max_robust_rms_m:g}_"
         f"height_release_{config.height_release_min_dd_shift_m:g}m_"
         f"age{config.last_velocity_max_age_s:g}s"
     )
@@ -105,6 +111,9 @@ def _fusion_kwargs(
     *,
     height_hold_release_min_dd_shift_m: float,
     dd_anchor_blend_alpha: float,
+    dd_anchor_high_blend_alpha: float,
+    dd_anchor_high_min_shift_m: float,
+    dd_anchor_high_max_robust_rms_m: float,
     rsp_correction: bool,
     last_velocity_max_age_s: float,
 ) -> dict[str, object]:
@@ -120,6 +129,9 @@ def _fusion_kwargs(
         "dd_min_kept_pairs": 5,
         "dd_max_shift_m": 200.0,
         "dd_anchor_blend_alpha": float(dd_anchor_blend_alpha),
+        "dd_anchor_high_blend_alpha": float(dd_anchor_high_blend_alpha),
+        "dd_anchor_high_min_shift_m": float(dd_anchor_high_min_shift_m),
+        "dd_anchor_high_max_robust_rms_m": float(dd_anchor_high_max_robust_rms_m),
         "dd_interpolate_base_epochs": True,
         "widelane": True,
         "widelane_min_epochs": 5,
@@ -183,6 +195,10 @@ def _segment_row(
         "tdcp_used_epochs": int(fused["tdcp_used_epochs"]),
         "dd_pr_anchor_epochs": int(fused["dd_pr_anchor_epochs"]),
         "dd_anchor_blend_alpha": float(fused["dd_anchor_blend_alpha"]),
+        "dd_anchor_high_blend_alpha": float(fused["dd_anchor_high_blend_alpha"]),
+        "dd_anchor_high_min_shift_m": float(fused["dd_anchor_high_min_shift_m"]),
+        "dd_anchor_high_max_robust_rms_m": float(fused["dd_anchor_high_max_robust_rms_m"]),
+        "dd_anchor_high_blend_epochs": int(fused["dd_anchor_high_blend_epochs"]),
         "widelane_anchor_epochs": int(fused["widelane_anchor_epochs"]),
         "rsp_correction_epochs": int(fused["rsp_correction_epochs"]),
         "height_hold_release_min_dd_shift_m": float(fused["height_hold_release_min_dd_shift_m"]),
@@ -223,6 +239,16 @@ def _summarize_configs(rows: list[dict[str, object]]) -> list[dict[str, object]]
                     selected[0]["height_hold_release_min_dd_shift_m"]
                 ),
                 "dd_anchor_blend_alpha": float(selected[0]["dd_anchor_blend_alpha"]),
+                "dd_anchor_high_blend_alpha": float(selected[0]["dd_anchor_high_blend_alpha"]),
+                "dd_anchor_high_min_shift_m": float(
+                    selected[0]["dd_anchor_high_min_shift_m"]
+                ),
+                "dd_anchor_high_max_robust_rms_m": float(
+                    selected[0]["dd_anchor_high_max_robust_rms_m"]
+                ),
+                "dd_anchor_high_blend_epochs": int(
+                    sum(int(row["dd_anchor_high_blend_epochs"]) for row in selected)
+                ),
                 "last_velocity_max_age_s": float(selected[0]["last_velocity_max_age_s"]),
             }
         )
@@ -249,6 +275,24 @@ def main() -> None:
         help="Comma-separated DD-PR anchor blend values",
     )
     parser.add_argument(
+        "--dd-anchor-high-blend-alphas",
+        type=str,
+        default="0.3",
+        help="Comma-separated elevated DD-PR anchor blend values",
+    )
+    parser.add_argument(
+        "--dd-anchor-high-min-shift-ms",
+        type=str,
+        default="inf",
+        help="Comma-separated DD shift thresholds for elevated DD blend",
+    )
+    parser.add_argument(
+        "--dd-anchor-high-max-robust-rms-ms",
+        type=str,
+        default="0.7",
+        help="Comma-separated DD robust RMS ceilings for elevated DD blend",
+    )
+    parser.add_argument(
         "--rsp-correction",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -270,15 +314,33 @@ def main() -> None:
         raise FileNotFoundError(f"no PPC run directories found under: {data_root}")
     thresholds = _parse_float_list(args.height_release_min_dd_shift_ms, "height-release threshold")
     dd_alphas = _parse_float_list(args.dd_anchor_blend_alphas, "DD anchor blend alpha")
+    dd_high_alphas = _parse_float_list(
+        args.dd_anchor_high_blend_alphas,
+        "elevated DD anchor blend alpha",
+    )
+    dd_high_min_shifts = _parse_float_list(
+        args.dd_anchor_high_min_shift_ms,
+        "elevated DD anchor minimum shift",
+    )
+    dd_high_max_rms_values = _parse_float_list(
+        args.dd_anchor_high_max_robust_rms_ms,
+        "elevated DD anchor robust RMS ceiling",
+    )
     last_velocity_ages = _parse_float_list(args.last_velocity_max_age_ss, "last-velocity age")
     configs = tuple(
         FusionConfig(
             height_release_min_dd_shift_m=threshold,
             dd_anchor_blend_alpha=dd_alpha,
+            dd_anchor_high_blend_alpha=dd_high_alpha,
+            dd_anchor_high_min_shift_m=dd_high_min_shift,
+            dd_anchor_high_max_robust_rms_m=dd_high_max_rms,
             last_velocity_max_age_s=last_velocity_age,
         )
         for threshold in thresholds
         for dd_alpha in dd_alphas
+        for dd_high_alpha in dd_high_alphas
+        for dd_high_min_shift in dd_high_min_shifts
+        for dd_high_max_rms in dd_high_max_rms_values
         for last_velocity_age in last_velocity_ages
     )
     max_epochs = args.max_epochs if args.max_epochs and args.max_epochs > 0 else None
@@ -319,6 +381,11 @@ def main() -> None:
                 **_fusion_kwargs(
                     height_hold_release_min_dd_shift_m=config_spec.height_release_min_dd_shift_m,
                     dd_anchor_blend_alpha=config_spec.dd_anchor_blend_alpha,
+                    dd_anchor_high_blend_alpha=config_spec.dd_anchor_high_blend_alpha,
+                    dd_anchor_high_min_shift_m=config_spec.dd_anchor_high_min_shift_m,
+                    dd_anchor_high_max_robust_rms_m=(
+                        config_spec.dd_anchor_high_max_robust_rms_m
+                    ),
                     rsp_correction=args.rsp_correction,
                     last_velocity_max_age_s=config_spec.last_velocity_max_age_s,
                 ),

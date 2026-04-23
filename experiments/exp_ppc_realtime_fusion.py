@@ -137,6 +137,28 @@ def _height_hold_effective_alpha(
     return alpha
 
 
+def _dd_anchor_effective_alpha(
+    base_alpha: float,
+    *,
+    high_alpha: float,
+    anchor_stats: _DDAnchorStats,
+    high_min_shift_m: float,
+    high_max_robust_rms_m: float,
+) -> float:
+    alpha = float(np.clip(base_alpha, 0.0, 1.0))
+    elevated_alpha = float(np.clip(high_alpha, 0.0, 1.0))
+    if elevated_alpha <= alpha:
+        return alpha
+    if (
+        np.isfinite(anchor_stats.shift_m)
+        and np.isfinite(anchor_stats.robust_rms_m)
+        and anchor_stats.shift_m >= float(high_min_shift_m)
+        and anchor_stats.robust_rms_m <= float(high_max_robust_rms_m)
+    ):
+        return elevated_alpha
+    return alpha
+
+
 def _sat_elevation(rx_ecef: np.ndarray, sat_ecef: np.ndarray) -> float:
     lat, lon, _alt = _ecef_to_llh(rx_ecef)
     sin_lat, cos_lat = math.sin(lat), math.cos(lat)
@@ -513,6 +535,9 @@ def run_fusion_eval(
     dd_min_kept_pairs: int,
     dd_max_shift_m: float,
     dd_anchor_blend_alpha: float,
+    dd_anchor_high_blend_alpha: float,
+    dd_anchor_high_min_shift_m: float,
+    dd_anchor_high_max_robust_rms_m: float,
     dd_interpolate_base_epochs: bool,
     widelane: bool,
     widelane_min_epochs: int,
@@ -576,6 +601,7 @@ def run_fusion_eval(
     n_dd_used = 0
     n_widelane_used = 0
     n_rsp_used = 0
+    n_dd_high_blend_used = 0
     tdcp_errors: list[float] = []
     tdcp_rms_values: list[float] = []
     last_velocity: np.ndarray | None = None
@@ -599,6 +625,7 @@ def run_fusion_eval(
         n_dd_used += 1
     else:
         fused[0] = wls_pos[0, :3]
+    dd_effective_alpha = 1.0 if anchor is not None else 0.0
     wl_anchor, wl_anchor_stats, wl_stats = _try_widelane_anchor(
         wl_computer,
         data,
@@ -635,6 +662,7 @@ def run_fusion_eval(
             "dd_pr_robust_rms_m": (
                 float(anchor_stats.robust_rms_m) if np.isfinite(anchor_stats.robust_rms_m) else ""
             ),
+            "dd_anchor_effective_alpha": float(dd_effective_alpha),
             "height_hold_used": bool(height_alpha > 0.0),
             "height_hold_effective_alpha": float(height_effective_alpha),
             "height_hold_reference_alt_m": float(height_reference_alt_m),
@@ -696,8 +724,18 @@ def run_fusion_eval(
             max_shift_m=dd_max_shift_m,
         )
         dd_used = anchor is not None
+        dd_effective_alpha = 0.0
         if dd_used:
-            pred = pred + anchor_alpha * (anchor - pred)
+            dd_effective_alpha = _dd_anchor_effective_alpha(
+                anchor_alpha,
+                high_alpha=dd_anchor_high_blend_alpha,
+                anchor_stats=anchor_stats,
+                high_min_shift_m=dd_anchor_high_min_shift_m,
+                high_max_robust_rms_m=dd_anchor_high_max_robust_rms_m,
+            )
+            if dd_effective_alpha > anchor_alpha:
+                n_dd_high_blend_used += 1
+            pred = pred + dd_effective_alpha * (anchor - pred)
             n_dd_used += 1
         wl_anchor, wl_anchor_stats, wl_stats = _try_widelane_anchor(
             wl_computer,
@@ -789,6 +827,7 @@ def run_fusion_eval(
                     if np.isfinite(anchor_stats.robust_rms_m)
                     else ""
                 ),
+                "dd_anchor_effective_alpha": float(dd_effective_alpha),
                 "height_hold_used": bool(height_alpha > 0.0),
                 "height_hold_effective_alpha": float(height_effective_alpha),
                 "height_hold_reference_alt_m": float(height_reference_alt_m),
@@ -833,6 +872,10 @@ def run_fusion_eval(
             "dd_pr_anchor_epochs": int(n_dd_used),
             "dd_pr_anchor_rate_pct": float(100.0 * n_dd_used / max(len(times), 1)),
             "dd_anchor_blend_alpha": float(anchor_alpha),
+            "dd_anchor_high_blend_alpha": float(dd_anchor_high_blend_alpha),
+            "dd_anchor_high_min_shift_m": float(dd_anchor_high_min_shift_m),
+            "dd_anchor_high_max_robust_rms_m": float(dd_anchor_high_max_robust_rms_m),
+            "dd_anchor_high_blend_epochs": int(n_dd_high_blend_used),
             "widelane_enabled": bool(widelane),
             "widelane_anchor_epochs": int(n_widelane_used),
             "widelane_anchor_rate_pct": float(100.0 * n_widelane_used / max(len(times), 1)),
@@ -893,6 +936,14 @@ def main() -> None:
         default=0.3,
         help="Causal blend from TDCP prediction toward accepted DD-PR anchor",
     )
+    parser.add_argument(
+        "--dd-anchor-high-blend-alpha",
+        type=float,
+        default=0.3,
+        help="Elevated DD-PR blend when DD shift/RMS gate accepts",
+    )
+    parser.add_argument("--dd-anchor-high-min-shift-m", type=float, default=float("inf"))
+    parser.add_argument("--dd-anchor-high-max-robust-rms-m", type=float, default=0.7)
     parser.add_argument(
         "--dd-interpolate-base-epochs",
         action=argparse.BooleanOptionalAction,
@@ -987,6 +1038,9 @@ def main() -> None:
         dd_min_kept_pairs=args.dd_min_kept_pairs,
         dd_max_shift_m=args.dd_max_shift_m,
         dd_anchor_blend_alpha=args.dd_anchor_blend_alpha,
+        dd_anchor_high_blend_alpha=args.dd_anchor_high_blend_alpha,
+        dd_anchor_high_min_shift_m=args.dd_anchor_high_min_shift_m,
+        dd_anchor_high_max_robust_rms_m=args.dd_anchor_high_max_robust_rms_m,
         dd_interpolate_base_epochs=args.dd_interpolate_base_epochs,
         widelane=args.widelane,
         widelane_min_epochs=args.widelane_min_epochs,
