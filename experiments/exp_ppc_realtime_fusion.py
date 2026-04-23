@@ -154,11 +154,14 @@ def _dd_anchor_effective_alpha(
     base_alpha: float,
     *,
     high_alpha: float,
+    high_allowed: bool,
     anchor_stats: _DDAnchorStats,
     high_min_shift_m: float,
     high_max_robust_rms_m: float,
 ) -> float:
     alpha = float(np.clip(base_alpha, 0.0, 1.0))
+    if not high_allowed:
+        return alpha
     elevated_alpha = float(np.clip(high_alpha, 0.0, 1.0))
     if elevated_alpha <= alpha:
         return alpha
@@ -549,6 +552,7 @@ def run_fusion_eval(
     dd_max_shift_m: float,
     dd_anchor_blend_alpha: float,
     dd_anchor_high_blend_alpha: float,
+    dd_anchor_high_requires_untrusted_height: bool,
     dd_anchor_high_min_shift_m: float,
     dd_anchor_high_max_robust_rms_m: float,
     dd_interpolate_base_epochs: bool,
@@ -749,6 +753,10 @@ def run_fusion_eval(
             dd_effective_alpha = _dd_anchor_effective_alpha(
                 anchor_alpha,
                 high_alpha=dd_anchor_high_blend_alpha,
+                high_allowed=(
+                    not dd_anchor_high_requires_untrusted_height
+                    or not height_reference_trusted
+                ),
                 anchor_stats=anchor_stats,
                 high_min_shift_m=dd_anchor_high_min_shift_m,
                 high_max_robust_rms_m=dd_anchor_high_max_robust_rms_m,
@@ -897,6 +905,9 @@ def run_fusion_eval(
             "dd_pr_anchor_rate_pct": float(100.0 * n_dd_used / max(len(times), 1)),
             "dd_anchor_blend_alpha": float(anchor_alpha),
             "dd_anchor_high_blend_alpha": float(dd_anchor_high_blend_alpha),
+            "dd_anchor_high_requires_untrusted_height": bool(
+                dd_anchor_high_requires_untrusted_height
+            ),
             "dd_anchor_high_min_shift_m": float(dd_anchor_high_min_shift_m),
             "dd_anchor_high_max_robust_rms_m": float(dd_anchor_high_max_robust_rms_m),
             "dd_anchor_high_blend_epochs": int(n_dd_high_blend_used),
@@ -968,6 +979,12 @@ def main() -> None:
         type=float,
         default=0.3,
         help="Elevated DD-PR blend when DD shift/RMS gate accepts",
+    )
+    parser.add_argument(
+        "--dd-anchor-high-requires-untrusted-height",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Use elevated DD-PR blend only when the initial height reference is untrusted",
     )
     parser.add_argument("--dd-anchor-high-min-shift-m", type=float, default=float("inf"))
     parser.add_argument("--dd-anchor-high-max-robust-rms-m", type=float, default=0.7)
@@ -1078,6 +1095,7 @@ def main() -> None:
         dd_max_shift_m=args.dd_max_shift_m,
         dd_anchor_blend_alpha=args.dd_anchor_blend_alpha,
         dd_anchor_high_blend_alpha=args.dd_anchor_high_blend_alpha,
+        dd_anchor_high_requires_untrusted_height=args.dd_anchor_high_requires_untrusted_height,
         dd_anchor_high_min_shift_m=args.dd_anchor_high_min_shift_m,
         dd_anchor_high_max_robust_rms_m=args.dd_anchor_high_max_robust_rms_m,
         dd_interpolate_base_epochs=args.dd_interpolate_base_epochs,

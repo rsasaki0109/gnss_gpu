@@ -70,6 +70,13 @@ Implementation notes:
   positive6 aggregate to 4.58%, but holdout6 is 0.77% versus 0.96% for the
   current default.  Keep the initial-height-reference trust gate as a diagnostic
   surface; do not promote it as the default until holdout behavior improves.
+- High-DD is now optionally gated by initial-height trust with
+  `--dd-anchor-high-requires-untrusted-height`.  With high DD alpha 1.0, shift
+  3.0 m, RMS ceiling 0.7 m, age 15 s, and height-reference RMS ceiling 0.7 m,
+  this keeps Tokyo/run1 `start=1300` at 66.21%, positive6 at 3.92%, and improves
+  holdout6 from the default 0.96% to 1.40%.  This is the current best
+  generalization candidate, but still leave the default neutral until the next
+  validation pass confirms it on wider segments.
 
 Example quick video:
 

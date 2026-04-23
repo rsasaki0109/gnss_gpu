@@ -39,6 +39,7 @@ class FusionConfig:
     height_reference_max_dd_rms_m: float
     dd_anchor_blend_alpha: float
     dd_anchor_high_blend_alpha: float
+    dd_anchor_high_requires_untrusted_height: bool
     dd_anchor_high_min_shift_m: float
     dd_anchor_high_max_robust_rms_m: float
     last_velocity_max_age_s: float
@@ -91,6 +92,7 @@ def _config_label(config: FusionConfig) -> str:
     return (
         f"dd{config.dd_anchor_blend_alpha:g}_"
         f"ddhi{config.dd_anchor_high_blend_alpha:g}_"
+        f"{'ddhiuntrusted_' if config.dd_anchor_high_requires_untrusted_height else ''}"
         f"hishift{config.dd_anchor_high_min_shift_m:g}_"
         f"hirms{config.dd_anchor_high_max_robust_rms_m:g}_"
         f"height_release_{config.height_release_min_dd_shift_m:g}m_"
@@ -118,6 +120,7 @@ def _fusion_kwargs(
     height_hold_reference_max_dd_rms_m: float,
     dd_anchor_blend_alpha: float,
     dd_anchor_high_blend_alpha: float,
+    dd_anchor_high_requires_untrusted_height: bool,
     dd_anchor_high_min_shift_m: float,
     dd_anchor_high_max_robust_rms_m: float,
     rsp_correction: bool,
@@ -136,6 +139,9 @@ def _fusion_kwargs(
         "dd_max_shift_m": 200.0,
         "dd_anchor_blend_alpha": float(dd_anchor_blend_alpha),
         "dd_anchor_high_blend_alpha": float(dd_anchor_high_blend_alpha),
+        "dd_anchor_high_requires_untrusted_height": bool(
+            dd_anchor_high_requires_untrusted_height
+        ),
         "dd_anchor_high_min_shift_m": float(dd_anchor_high_min_shift_m),
         "dd_anchor_high_max_robust_rms_m": float(dd_anchor_high_max_robust_rms_m),
         "dd_interpolate_base_epochs": True,
@@ -204,6 +210,9 @@ def _segment_row(
         "dd_pr_anchor_epochs": int(fused["dd_pr_anchor_epochs"]),
         "dd_anchor_blend_alpha": float(fused["dd_anchor_blend_alpha"]),
         "dd_anchor_high_blend_alpha": float(fused["dd_anchor_high_blend_alpha"]),
+        "dd_anchor_high_requires_untrusted_height": bool(
+            fused["dd_anchor_high_requires_untrusted_height"]
+        ),
         "dd_anchor_high_min_shift_m": float(fused["dd_anchor_high_min_shift_m"]),
         "dd_anchor_high_max_robust_rms_m": float(fused["dd_anchor_high_max_robust_rms_m"]),
         "dd_anchor_high_blend_epochs": int(fused["dd_anchor_high_blend_epochs"]),
@@ -266,6 +275,9 @@ def _summarize_configs(rows: list[dict[str, object]]) -> list[dict[str, object]]
                 ),
                 "dd_anchor_blend_alpha": float(selected[0]["dd_anchor_blend_alpha"]),
                 "dd_anchor_high_blend_alpha": float(selected[0]["dd_anchor_high_blend_alpha"]),
+                "dd_anchor_high_requires_untrusted_height": bool(
+                    selected[0]["dd_anchor_high_requires_untrusted_height"]
+                ),
                 "dd_anchor_high_min_shift_m": float(
                     selected[0]["dd_anchor_high_min_shift_m"]
                 ),
@@ -317,6 +329,12 @@ def main() -> None:
         type=str,
         default="0.3",
         help="Comma-separated elevated DD-PR anchor blend values",
+    )
+    parser.add_argument(
+        "--dd-anchor-high-requires-untrusted-height",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Use elevated DD-PR blend only on segments with untrusted initial height",
     )
     parser.add_argument(
         "--dd-anchor-high-min-shift-ms",
@@ -376,6 +394,9 @@ def main() -> None:
             height_reference_max_dd_rms_m=height_reference_max_rms,
             dd_anchor_blend_alpha=dd_alpha,
             dd_anchor_high_blend_alpha=dd_high_alpha,
+            dd_anchor_high_requires_untrusted_height=bool(
+                args.dd_anchor_high_requires_untrusted_height
+            ),
             dd_anchor_high_min_shift_m=dd_high_min_shift,
             dd_anchor_high_max_robust_rms_m=dd_high_max_rms,
             last_velocity_max_age_s=last_velocity_age,
@@ -431,6 +452,9 @@ def main() -> None:
                     ),
                     dd_anchor_blend_alpha=config_spec.dd_anchor_blend_alpha,
                     dd_anchor_high_blend_alpha=config_spec.dd_anchor_high_blend_alpha,
+                    dd_anchor_high_requires_untrusted_height=(
+                        config_spec.dd_anchor_high_requires_untrusted_height
+                    ),
                     dd_anchor_high_min_shift_m=config_spec.dd_anchor_high_min_shift_m,
                     dd_anchor_high_max_robust_rms_m=(
                         config_spec.dd_anchor_high_max_robust_rms_m

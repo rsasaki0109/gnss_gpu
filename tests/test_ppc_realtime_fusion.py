@@ -98,6 +98,7 @@ def test_dd_anchor_effective_alpha_uses_high_alpha_for_large_clean_shift():
     alpha = fusion._dd_anchor_effective_alpha(
         0.3,
         high_alpha=1.0,
+        high_allowed=True,
         anchor_stats=stats,
         high_min_shift_m=1.5,
         high_max_robust_rms_m=0.7,
@@ -112,6 +113,22 @@ def test_dd_anchor_effective_alpha_keeps_base_alpha_for_noisy_anchor():
     alpha = fusion._dd_anchor_effective_alpha(
         0.3,
         high_alpha=1.0,
+        high_allowed=True,
+        anchor_stats=stats,
+        high_min_shift_m=1.5,
+        high_max_robust_rms_m=0.7,
+    )
+
+    assert alpha == pytest.approx(0.3)
+
+
+def test_dd_anchor_effective_alpha_keeps_base_alpha_when_high_disallowed():
+    stats = fusion._DDAnchorStats(accepted=True, shift_m=2.0, robust_rms_m=0.4)
+
+    alpha = fusion._dd_anchor_effective_alpha(
+        0.3,
+        high_alpha=1.0,
+        high_allowed=False,
         anchor_stats=stats,
         high_min_shift_m=1.5,
         high_max_robust_rms_m=0.7,
