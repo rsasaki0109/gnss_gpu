@@ -88,6 +88,7 @@ from gnss_gpu.ppc_score import (
 from gnss_gpu.reservoir_stein import (
     ReservoirSteinConfig,
     ReservoirSteinResult,
+    dead_particle_mask,
     effective_sample_size,
     normalize_log_weights,
     reservoir_stein_update,
@@ -182,6 +183,7 @@ __all__ = [
     "ppc_score_dict",
     "ReservoirSteinConfig",
     "ReservoirSteinResult",
+    "dead_particle_mask",
     "effective_sample_size",
     "normalize_log_weights",
     "reservoir_stein_update",

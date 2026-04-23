@@ -66,6 +66,43 @@ def effective_sample_size(weights: np.ndarray) -> float:
     return float(1.0 / np.sum(normalized * normalized))
 
 
+def dead_particle_mask(
+    log_weights: np.ndarray,
+    *,
+    min_normalized_weight: float = 1.0e-8,
+    min_relative_likelihood: float = 1.0e-16,
+) -> np.ndarray:
+    """Return particles too unlikely to keep except as reservoir filler.
+
+    The thresholds follow the gradient-guided PF paper's dead-particle pruning
+    idea: remove only particles whose posterior or relative likelihood has
+    collapsed, instead of resampling on every low-ESS event.
+    """
+    logw = np.asarray(log_weights, dtype=np.float64).reshape(-1)
+    if logw.size == 0:
+        raise ValueError("log_weights must not be empty")
+
+    finite = np.isfinite(logw)
+    if not np.any(finite):
+        return np.ones(logw.shape, dtype=bool)
+
+    weights = normalize_log_weights(logw)
+    max_logw = float(np.max(logw[finite]))
+    rel_floor = _log_floor(min_relative_likelihood)
+    rel_dead = np.ones(logw.shape, dtype=bool)
+    rel_dead[finite] = (logw[finite] - max_logw) < rel_floor
+    posterior_dead = weights < float(min_normalized_weight)
+    return (~finite) | rel_dead | posterior_dead
+
+
+def _log_floor(value: float) -> float:
+    """Return a finite log floor for positive thresholds."""
+    threshold = float(value)
+    if threshold <= 0.0:
+        return -np.inf
+    return float(np.log(threshold))
+
+
 def _elite_count(reservoir_size: int, elite_fraction: float) -> int:
     if reservoir_size <= 0:
         raise ValueError("reservoir_size must be positive")
