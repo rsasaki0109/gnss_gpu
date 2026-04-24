@@ -158,3 +158,65 @@ Artifacts for reproducibility:
 - `experiments/results/ppc_reflection_bvh_s200_tokyo_run2_per_epoch.csv`
 - `experiments/results/ppc_reflection_bvh_s200_tokyo_run2_per_sat.csv`
 - `experiments/results/ppc_reflection_bvh_s200_tokyo_run2_per_window.csv`
+
+## Final attempt: integrate BVH multipath features into the §7.16 stack
+
+After confirming the reflection features are weakly anti-correlated
+with §7.16 prediction error, the experiment was extended to all 6
+runs at stride 60 (~75 min total compute) and the resulting per-window
+reflection features were merged into the §7.16-augmented window CSV
+and the nested stack was re-trained.
+
+Pooled correlations across 197 LORO-merged windows:
+
+| feature | corr vs actual FIX | corr vs §7.16 error |
+| --- | --- | --- |
+| reflection_count_mean | +0.014 | +0.024 |
+| reflection_count_max | +0.003 | +0.042 |
+| excess_delay_m_max_mean | +0.179 | -0.193 |
+| excess_delay_m_max_max | +0.186 | -0.201 |
+| excess_delay_m_p90_mean | +0.179 | -0.193 |
+| nlos_count_mean | -0.142 | +0.110 |
+| sat_count_mean | +0.333 | -0.161 |
+
+`sat_count_mean` is the strongest single feature at +0.333 — but it
+is a basic visibility count that the §7.16 pipeline already has via
+many `sim_*` aggregates.
+
+Retrained §7.16 nested stack with the 7 reflection features added as
+`refl_*` columns:
+
+| variant | wmae pp | run MAE pp | corr |
+| --- | --- | --- | --- |
+| §7.16 adopted | **17.087** | **3.202** | **0.551** |
+| §7.16 + reflection features | 18.358 | 4.510 | 0.428 |
+
+Adding the reflection features **strictly worsens every metric**
+by 1.2-1.3 pp on wmae / run MAE.  This matches the §7.17 hold_age
+null where introducing additional correlated features dilutes the
+ridge feature sampling.
+
+Combined conclusion across every simulator-side approach in the
+session — brute-force OOM, canyon heuristic, BVH multipath
+correlation, BVH multipath retrain — is that §7.16 has fully
+extracted the deployable simulation signal in the current dataset
+and pipeline.  Further gain requires either:
+
+- 7+ days of UTD diffraction + antenna-pattern + signal-attenuation
+  modelling (Furukawa 2019's full machinery),
+- 3-5 days of LOD3 PLATEAU + manual elevated-road / monorail
+  geometry patching for each focus failure window, or
+- Additional run-level data growth (rejected by the user).
+
+§7.16 (`current_tight_hold + carry + alpha=0.75`,
+17.087 / **3.202** / **0.551**) remains the reported best strict
+research direction.  No further empirical improvements are
+achievable with the resources available in-session.
+
+Artifacts for the all-runs reflection experiment:
+- `experiments/exp_ppc_reflection_poc.py` (BVH multipath PoC)
+- `experiments/aggregate_reflection_features.py` (pooled correlation)
+- `experiments/augment_window_csv_with_reflection.py` (merge into §7.16 CSV)
+- `experiments/results/ppc_reflection_bvh_s60_<city>_<run>_per_*.csv` (× 6 runs × 3 levels)
+- `experiments/results/ppc_reflection_bvh_pooled_per_window.csv`
+- `experiments/results/ppc_window_fix_rate_model_..._with_reflection_alpha75_meta_run45_*.csv`
