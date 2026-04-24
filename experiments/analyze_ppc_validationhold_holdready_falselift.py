@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from train_ppc_solver_transition_surrogate_stack import _is_metadata_or_label
+from _common import _is_metadata_or_label
 
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"

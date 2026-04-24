@@ -80,27 +80,7 @@ def _read_reference_predictions(prefix: str, prediction_column: str) -> dict[str
     }
 
 
-def _is_metadata_or_label(name: str) -> bool:
-    metadata = {
-        "city",
-        "run",
-        "window_index",
-        "window_start_tow",
-        "window_end_tow",
-        "sim_matched_epochs",
-        "actual_fixed_epochs",
-        "actual_fix_rate_pct",
-        "actual_fix_rate_fraction",
-    }
-    if name in metadata:
-        return True
-    if name.startswith(("rtk_", "solver_")):
-        return True
-    if name.endswith("_pred_fix_rate_pct") or name.endswith("_error_pp"):
-        return True
-    if name.startswith("constant_global_rate"):
-        return True
-    return False
+from _common import _is_metadata_or_label  # canonical helper; re-exported for callers
 
 
 def _sim_feature_matrix(df: pd.DataFrame) -> tuple[np.ndarray, list[str]]:

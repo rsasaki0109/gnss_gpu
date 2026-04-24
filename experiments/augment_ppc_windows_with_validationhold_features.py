@@ -175,6 +175,23 @@ def main() -> None:
         feature_names = [name for name in feature_names if name not in overlap]
 
     merged = base.merge(vh_features, on=key_cols, how="left")
+    # first_*_rel_s columns carry a semantic NaN meaning "event never occurred in this window";
+    # zero-fill is applied for those but they are excluded from the data-quality check below.
+    semantic_nan_cols = {"first_validation_pass_rel_s", "first_hold_ready_rel_s"}
+    quality_cols = [c for c in feature_names if c not in semantic_nan_cols]
+    if quality_cols:
+        nan_rows = merged[quality_cols].isna().any(axis=1).sum()
+        nan_fraction = nan_rows / max(len(merged), 1)
+        if nan_fraction > 0.10:
+            print(
+                f"WARNING: {nan_rows}/{len(merged)} rows ({100*nan_fraction:.1f}%) are missing "
+                f"at least one validationhold feature (excluding semantic-NaN first_*_rel_s) "
+                f"after the left-join with {args.validationhold_csv.name}.  Zeros will be "
+                f"filled in but this may degrade training.  Check whether the validationhold "
+                f"summary CSV covers the same (city, run, window_index) set as the base window CSV."
+            )
+        elif nan_rows > 0:
+            print(f"note: {nan_rows} rows have missing validationhold features, filling with 0")
     merged[feature_names] = merged[feature_names].fillna(0.0)
 
     drop_flags = args.mode in {"noflags", "compound"}
