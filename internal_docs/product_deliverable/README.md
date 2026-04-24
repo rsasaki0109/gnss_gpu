@@ -129,6 +129,15 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   time-series plots.
 - `internal_docs/product_deliverable/EPOCH_CLASSIFIER.md` — null-result
   write-up for the epoch classifier and future-work notes.
+- `internal_docs/product_deliverable/PAPER_STYLE_EVAL.md` — evaluation
+  lined up with Furukawa & Kubo (2019) "Prediction of Fixing of
+  RTK-GNSS Positioning in Multipath Environment Using Radiowave
+  Propagation Simulation" (IPNTJ Vol.10 No.2).  Includes the
+  threshold-swept matching-rate table, Fig.9/10-style figures, and a
+  methodology comparison.
+- `experiments/build_paper_style_eval.py` — computes the pooled
+  matching-rate sweep and renders the side-by-side Fig.10-style
+  RTK-FIXED maps under `plots/{city}_{run}_fix_comparison_map.png`.
 - `experiments/_common.py` — shared helpers used across the experiment
   scripts (e.g. `_is_metadata_or_label`).
 - `experiments/build_product_dashboard.py` — script that produces the
