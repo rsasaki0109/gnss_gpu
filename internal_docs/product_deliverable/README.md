@@ -55,12 +55,19 @@ Per-route error on the test set (see
 
 | city / run | actual | predicted | \|err\| | confidence |
 | --- | --- | --- | --- | --- |
-| nagoya / run1 | 11.5 % | 14.5 % | 3.03 pp | high |
-| nagoya / run2 | 16.2 % | 21.0 % | 4.80 pp | medium |
+| nagoya / run1 | 11.5 % | 14.5 % | 3.03 pp | medium |
+| nagoya / run2 | 16.2 % | 21.0 % | 4.80 pp | low |
 | nagoya / run3 |  7.9 % |  6.8 % | 1.04 pp | high |
-| tokyo  / run1 | 10.9 % | 12.1 % | 1.15 pp | high |
+| tokyo  / run1 | 10.9 % | 12.1 % | 1.15 pp | low |
 | tokyo  / run2 | 29.0 % | 20.8 % | 8.25 pp | low  |
 | tokyo  / run3 | 24.0 % | 25.0 % | 0.94 pp | low  |
+
+Confidence tiers are auto-detected per route from the presence of
+focus-case windows (see `build_product_deliverable.py::_classify_window`
+thresholds).  A `high` tier means no material failure-mode window is
+present; `medium` means the route contains hidden-high windows
+(actual high, corrected under-predicts by 40+ pp); `low` means the
+route contains at least one false-high or false-lift window.
 
 Three of six routes are within 3 pp of actual (nagoya/run3, tokyo/run1,
 tokyo/run3); a fourth (nagoya/run1 at 3.03 pp) is borderline.  Five of
@@ -97,6 +104,11 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   chart, actual-vs-predicted scatter, and focus-case detail table.
 - `experiments/build_product_deliverable.py` — script that produces the
   two CSVs above from the adopted model's `window_predictions.csv`.
+  Focus-case windows are detected by threshold-based classification
+  (`_classify_window`), so new runs with similar failure archetypes
+  are tagged automatically without updating a hardcoded list.
+- `experiments/_common.py` — shared helpers used across the experiment
+  scripts (e.g. `_is_metadata_or_label`).
 - `experiments/build_product_dashboard.py` — script that produces the
   HTML dashboard from those CSVs.
 - `experiments/predict.py` — pipeline runner for fresh input data; see

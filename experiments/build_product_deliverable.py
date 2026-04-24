@@ -34,38 +34,64 @@ DEFAULT_PRED_CSV = (
     / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_window_predictions.csv"
 )
 
-# Known failure cases from plan.md §7.11 / §7.13 / §7.16 diagnostics.
-FOCUS_CASES = {
-    ("tokyo", "run2", 7): ("false_high", "reject partially absorbed; actual 0%, pred 39.5%"),
-    ("tokyo", "run2", 9): ("false_high", "reject partially absorbed; actual 0%, pred 71%"),
-    ("tokyo", "run2", 23): ("hidden_high", "under-lifted; actual 100%, pred 32%"),
-    ("tokyo", "run2", 24): ("hidden_high", "under-lifted; actual 100%, pred 20%"),
-    ("tokyo", "run2", 25): ("hidden_high", "better under §7.16; actual 100%, pred 48%"),
-    ("tokyo", "run2", 26): ("hidden_high", "better under §7.16; actual 97%, pred 50%"),
-    ("tokyo", "run2", 27): ("hidden_high", "better under §7.16; actual 75%, pred 39%"),
-    ("tokyo", "run3", 17): ("false_lift", "over-lifted; actual 0%, pred 19%"),
-    ("tokyo", "run3", 16): ("false_lift", "mild over-lift; actual 1%, pred 10%"),
-    ("nagoya", "run2", 17): ("false_lift_mild", "deployable readiness fires; actual 0%, pred 17%"),
-    ("nagoya", "run2", 27): ("false_lift_resolved", "successfully rejected; actual 0%, pred 9%"),
+# Threshold-based focus-case classification.  Applied per window to every
+# input row; no hardcoded window-index list, so new runs with similar
+# failure archetypes are tagged automatically.  Thresholds are chosen to
+# flag only the material failure modes after the §7.16 correction is
+# applied (mild residual error on low-actual windows is normal and is NOT
+# tagged).
+FOCUS_THRESHOLDS = {
+    "actual_low_pct": 5.0,             # actual FIX rate <= this counts as "actual low"
+    "actual_high_pct": 75.0,           # actual FIX rate >= this counts as "actual high"
+    "false_high_corrected_pct": 35.0,  # corrected >= this on an actual-low window
+    "hidden_high_gap_pp": 40.0,        # actual - corrected >= this on an actual-high window
+    "lift_pp": 15.0,                   # corrected - base >= this counts as a material lift
+    "lift_corrected_pct": 15.0,        # absolute corrected floor for lift classification
+    "reject_pp": 15.0,                 # base - corrected >= this counts as a material reject
+    "reject_base_pct": 25.0,           # minimum base for reject classification
 }
 
 
-def _confidence_tier(city: str, run: str, window_indices: list[int]) -> tuple[str, str]:
-    """Pick a qualitative confidence tier for a (city, run) based on focus cases present."""
-    tags = []
-    for wi in window_indices:
-        key = (city, run, wi)
-        if key in FOCUS_CASES:
-            tags.append(FOCUS_CASES[key][0])
+def _classify_window(row: "pd.Series") -> tuple[str, str]:
+    """Return (tag, note) for a window based on actual / base / corrected values.
+
+    Thresholds intentionally flag only material failures: everyday
+    ~15 pp residual noise on low-actual windows is NOT tagged.
+    """
+    actual = float(row["actual_fix_rate_pct"])
+    base = float(row["base_pred_fix_rate_pct"])
+    corrected = float(row["corrected_pred_fix_rate_pct"])
+    thr = FOCUS_THRESHOLDS
+    delta = corrected - base
+
+    # false_high: corrected prediction still inflates an actual-zero window
+    if actual <= thr["actual_low_pct"] and corrected >= thr["false_high_corrected_pct"]:
+        return "false_high", f"corrected prediction {corrected:.1f}% against actual {actual:.1f}%; deployable features misread"
+
+    # hidden_high: actual is high but corrected still under-predicts by a large gap
+    if actual >= thr["actual_high_pct"] and (actual - corrected) >= thr["hidden_high_gap_pp"]:
+        return "hidden_high", f"actual {actual:.1f}% but corrected only {corrected:.1f}%; under-predicted by {actual - corrected:.1f} pp"
+
+    # Remaining cases: actual-low windows where lift or rejection is material
+    if actual <= thr["actual_low_pct"]:
+        if delta >= thr["lift_pp"] and corrected >= thr["lift_corrected_pct"]:
+            return "false_lift", f"lifted by {delta:+.1f} pp against actual {actual:.1f}%; corrected {corrected:.1f}%"
+        if -delta >= thr["reject_pp"] and base >= thr["reject_base_pct"]:
+            return "false_lift_resolved", f"successfully rejected by {-delta:.1f} pp against actual {actual:.1f}% (base was {base:.1f}%)"
+
+    return "", ""
+
+
+def _confidence_tier(tags: list[str]) -> tuple[str, str]:
+    """Pick a qualitative confidence tier for a run based on the set of focus tags present."""
     if any(t == "false_high" for t in tags):
-        return "low", "run contains at least one false-high window (pred high, actual 0%); individual window trust low"
+        return "low", "run contains at least one false-high window (pred high, actual low); individual window trust low"
     if any(t == "false_lift" for t in tags):
-        return "low", "run contains at least one false-lift window (pred lifted, actual 0%); individual window trust low"
-    if any(t.startswith("hidden_high") for t in tags):
-        return "medium", "run contains hidden-high windows (actual 100%, pred under-lifted)"
-    if any(t.startswith("false_lift_mild") for t in tags):
-        return "medium", "mild false-lift risk"
-    return "high", "no focus-case windows"
+        return "low", "run contains at least one false-lift window (pred lifted, actual low); individual window trust low"
+    if any(t == "hidden_high" for t in tags):
+        return "medium", "run contains hidden-high windows (actual high, pred under-lifted)"
+    # false_lift_resolved is a positive outcome (model caught the lift) and does not downgrade the tier.
+    return "high", "no material focus-case windows"
 
 
 def parse_args() -> argparse.Namespace:
@@ -84,8 +110,7 @@ def main() -> None:
     # window-level details
     window_rows: list[dict[str, object]] = []
     for _, row in df.sort_values(["city", "run", "window_index"]).iterrows():
-        key = (row["city"], row["run"], int(row["window_index"]))
-        focus_tag, focus_note = FOCUS_CASES.get(key, ("", ""))
+        focus_tag, focus_note = _classify_window(row)
         window_rows.append(
             {
                 "city": row["city"],
@@ -104,6 +129,8 @@ def main() -> None:
     window_df.to_csv(window_path, index=False)
     print(f"saved: {window_path} ({len(window_df)} rows)")
 
+    tags_by_run = window_df.groupby(["city", "run"])["focus_case_tag"].apply(lambda s: [t for t in s if t]).to_dict()
+
     # route-level aggregate
     route_rows: list[dict[str, object]] = []
     for (city, run), group in df.groupby(["city", "run"], sort=True):
@@ -112,9 +139,9 @@ def main() -> None:
         actual = float(np.average(group["actual_fix_rate_pct"].to_numpy(dtype=np.float64), weights=weights))
         pred = float(np.average(group["corrected_pred_fix_rate_pct"].to_numpy(dtype=np.float64), weights=weights))
         base = float(np.average(group["base_pred_fix_rate_pct"].to_numpy(dtype=np.float64), weights=weights))
-        window_indices = sorted(int(v) for v in group["window_index"].tolist())
-        tier, note = _confidence_tier(str(city), str(run), window_indices)
-        n_focus = sum(1 for wi in window_indices if (str(city), str(run), wi) in FOCUS_CASES)
+        run_tags = tags_by_run.get((city, run), [])
+        tier, note = _confidence_tier(run_tags)
+        n_focus = len(run_tags)
         route_rows.append(
             {
                 "city": city,
