@@ -469,7 +469,17 @@ class Ephemeris:
             nav = self.select_ephemeris(prn, gps_time, obs_code)
             if nav is None:
                 continue
-            pos, clk = self._compute_single_cpu(nav, gps_time, obs_code)
+            # Skip degenerate nav records (sqrt_a==0 or non-finite) which would
+            # blow up `n0 = sqrt(mu / a**3)` inside _compute_single_cpu.
+            sqrt_a = float(getattr(nav, "sqrt_a", 0.0))
+            if not math.isfinite(sqrt_a) or sqrt_a <= 0.0:
+                continue
+            try:
+                pos, clk = self._compute_single_cpu(nav, gps_time, obs_code)
+            except (ZeroDivisionError, ValueError, FloatingPointError):
+                continue
+            if not np.all(np.isfinite(pos)) or not math.isfinite(float(clk)):
+                continue
             positions.append(pos)
             clocks.append(clk)
             used_prns.append(prn)
