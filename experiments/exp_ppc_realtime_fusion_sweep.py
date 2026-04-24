@@ -42,6 +42,15 @@ class FusionConfig:
     dd_anchor_high_requires_untrusted_height: bool
     dd_anchor_high_min_shift_m: float
     dd_anchor_high_max_robust_rms_m: float
+    dd_anchor_high_allow_on_last_velocity: bool
+    dd_anchor_high_no_widelane_min_gap_epochs: float
+    dd_anchor_high_persistence_window_epochs: int
+    dd_anchor_high_persistence_min_epochs: int
+    dd_anchor_high_big_shift_m: float
+    dd_anchor_high_tdcp_sparse_max_rate: float
+    dd_anchor_high_tdcp_sparse_window_epochs: int
+    dd_anchor_high_tdcp_sparse_min_shift_m: float
+    dd_anchor_high_tdcp_sparse_height_hold_alpha: float
     last_velocity_max_age_s: float
 
 
@@ -93,6 +102,11 @@ def _config_label(config: FusionConfig) -> str:
         f"dd{config.dd_anchor_blend_alpha:g}_"
         f"ddhi{config.dd_anchor_high_blend_alpha:g}_"
         f"{'ddhiuntrusted_' if config.dd_anchor_high_requires_untrusted_height else ''}"
+        f"{'ddhilv_' if config.dd_anchor_high_allow_on_last_velocity else ''}"
+        f"{'ddhiwlgap' + format(config.dd_anchor_high_no_widelane_min_gap_epochs, 'g') + '_' if np.isfinite(config.dd_anchor_high_no_widelane_min_gap_epochs) else ''}"
+        f"{'ddhipers' + str(config.dd_anchor_high_persistence_min_epochs) + 'of' + str(config.dd_anchor_high_persistence_window_epochs) + '_' if config.dd_anchor_high_persistence_min_epochs >= 1 else ''}"
+        f"{'ddhibig' + format(config.dd_anchor_high_big_shift_m, 'g') + '_' if np.isfinite(config.dd_anchor_high_big_shift_m) else ''}"
+        f"{'ddhitdcp' + format(config.dd_anchor_high_tdcp_sparse_max_rate, 'g') + 'shift' + format(config.dd_anchor_high_tdcp_sparse_min_shift_m, 'g') + ('hh' + format(config.dd_anchor_high_tdcp_sparse_height_hold_alpha, 'g') if config.dd_anchor_high_tdcp_sparse_height_hold_alpha < 1.0 else '') + '_' if config.dd_anchor_high_tdcp_sparse_max_rate >= 0.0 else ''}"
         f"hishift{config.dd_anchor_high_min_shift_m:g}_"
         f"hirms{config.dd_anchor_high_max_robust_rms_m:g}_"
         f"height_release_{config.height_release_min_dd_shift_m:g}m_"
@@ -123,6 +137,15 @@ def _fusion_kwargs(
     dd_anchor_high_requires_untrusted_height: bool,
     dd_anchor_high_min_shift_m: float,
     dd_anchor_high_max_robust_rms_m: float,
+    dd_anchor_high_allow_on_last_velocity: bool,
+    dd_anchor_high_no_widelane_min_gap_epochs: float,
+    dd_anchor_high_persistence_window_epochs: int,
+    dd_anchor_high_persistence_min_epochs: int,
+    dd_anchor_high_big_shift_m: float,
+    dd_anchor_high_tdcp_sparse_max_rate: float,
+    dd_anchor_high_tdcp_sparse_window_epochs: int,
+    dd_anchor_high_tdcp_sparse_min_shift_m: float,
+    dd_anchor_high_tdcp_sparse_height_hold_alpha: float,
     rsp_correction: bool,
     last_velocity_max_age_s: float,
 ) -> dict[str, object]:
@@ -144,6 +167,31 @@ def _fusion_kwargs(
         ),
         "dd_anchor_high_min_shift_m": float(dd_anchor_high_min_shift_m),
         "dd_anchor_high_max_robust_rms_m": float(dd_anchor_high_max_robust_rms_m),
+        "dd_anchor_high_allow_on_last_velocity": bool(
+            dd_anchor_high_allow_on_last_velocity
+        ),
+        "dd_anchor_high_no_widelane_min_gap_epochs": float(
+            dd_anchor_high_no_widelane_min_gap_epochs
+        ),
+        "dd_anchor_high_persistence_window_epochs": int(
+            dd_anchor_high_persistence_window_epochs
+        ),
+        "dd_anchor_high_persistence_min_epochs": int(
+            dd_anchor_high_persistence_min_epochs
+        ),
+        "dd_anchor_high_big_shift_m": float(dd_anchor_high_big_shift_m),
+        "dd_anchor_high_tdcp_sparse_max_rate": float(
+            dd_anchor_high_tdcp_sparse_max_rate
+        ),
+        "dd_anchor_high_tdcp_sparse_window_epochs": int(
+            dd_anchor_high_tdcp_sparse_window_epochs
+        ),
+        "dd_anchor_high_tdcp_sparse_min_shift_m": float(
+            dd_anchor_high_tdcp_sparse_min_shift_m
+        ),
+        "dd_anchor_high_tdcp_sparse_height_hold_alpha": float(
+            dd_anchor_high_tdcp_sparse_height_hold_alpha
+        ),
         "dd_interpolate_base_epochs": True,
         "widelane": True,
         "widelane_min_epochs": 5,
@@ -215,7 +263,50 @@ def _segment_row(
         ),
         "dd_anchor_high_min_shift_m": float(fused["dd_anchor_high_min_shift_m"]),
         "dd_anchor_high_max_robust_rms_m": float(fused["dd_anchor_high_max_robust_rms_m"]),
+        "dd_anchor_high_allow_on_last_velocity": bool(
+            fused["dd_anchor_high_allow_on_last_velocity"]
+        ),
+        "dd_anchor_high_no_widelane_min_gap_epochs": float(
+            fused["dd_anchor_high_no_widelane_min_gap_epochs"]
+        ),
+        "dd_anchor_high_persistence_window_epochs": int(
+            fused["dd_anchor_high_persistence_window_epochs"]
+        ),
+        "dd_anchor_high_persistence_min_epochs": int(
+            fused["dd_anchor_high_persistence_min_epochs"]
+        ),
+        "dd_anchor_high_big_shift_m": float(fused["dd_anchor_high_big_shift_m"]),
+        "dd_anchor_high_tdcp_sparse_max_rate": float(
+            fused["dd_anchor_high_tdcp_sparse_max_rate"]
+        ),
+        "dd_anchor_high_tdcp_sparse_window_epochs": int(
+            fused["dd_anchor_high_tdcp_sparse_window_epochs"]
+        ),
+        "dd_anchor_high_tdcp_sparse_min_shift_m": float(
+            fused["dd_anchor_high_tdcp_sparse_min_shift_m"]
+        ),
+        "dd_anchor_high_tdcp_sparse_height_hold_alpha": float(
+            fused["dd_anchor_high_tdcp_sparse_height_hold_alpha"]
+        ),
         "dd_anchor_high_blend_epochs": int(fused["dd_anchor_high_blend_epochs"]),
+        "dd_anchor_high_regime_untrusted_epochs": int(
+            fused["dd_anchor_high_regime_untrusted_epochs"]
+        ),
+        "dd_anchor_high_regime_last_velocity_epochs": int(
+            fused["dd_anchor_high_regime_last_velocity_epochs"]
+        ),
+        "dd_anchor_high_regime_widelane_gap_epochs": int(
+            fused["dd_anchor_high_regime_widelane_gap_epochs"]
+        ),
+        "dd_anchor_high_regime_persistence_epochs": int(
+            fused["dd_anchor_high_regime_persistence_epochs"]
+        ),
+        "dd_anchor_high_regime_big_shift_epochs": int(
+            fused["dd_anchor_high_regime_big_shift_epochs"]
+        ),
+        "dd_anchor_high_regime_tdcp_sparse_epochs": int(
+            fused["dd_anchor_high_regime_tdcp_sparse_epochs"]
+        ),
         "widelane_anchor_epochs": int(fused["widelane_anchor_epochs"]),
         "rsp_correction_epochs": int(fused["rsp_correction_epochs"]),
         "height_hold_release_min_dd_shift_m": float(fused["height_hold_release_min_dd_shift_m"]),
@@ -284,8 +375,71 @@ def _summarize_configs(rows: list[dict[str, object]]) -> list[dict[str, object]]
                 "dd_anchor_high_max_robust_rms_m": float(
                     selected[0]["dd_anchor_high_max_robust_rms_m"]
                 ),
+                "dd_anchor_high_allow_on_last_velocity": bool(
+                    selected[0]["dd_anchor_high_allow_on_last_velocity"]
+                ),
+                "dd_anchor_high_no_widelane_min_gap_epochs": float(
+                    selected[0]["dd_anchor_high_no_widelane_min_gap_epochs"]
+                ),
+                "dd_anchor_high_persistence_window_epochs": int(
+                    selected[0]["dd_anchor_high_persistence_window_epochs"]
+                ),
+                "dd_anchor_high_persistence_min_epochs": int(
+                    selected[0]["dd_anchor_high_persistence_min_epochs"]
+                ),
+                "dd_anchor_high_big_shift_m": float(
+                    selected[0]["dd_anchor_high_big_shift_m"]
+                ),
+                "dd_anchor_high_tdcp_sparse_max_rate": float(
+                    selected[0]["dd_anchor_high_tdcp_sparse_max_rate"]
+                ),
+                "dd_anchor_high_tdcp_sparse_window_epochs": int(
+                    selected[0]["dd_anchor_high_tdcp_sparse_window_epochs"]
+                ),
+                "dd_anchor_high_tdcp_sparse_min_shift_m": float(
+                    selected[0]["dd_anchor_high_tdcp_sparse_min_shift_m"]
+                ),
+                "dd_anchor_high_tdcp_sparse_height_hold_alpha": float(
+                    selected[0]["dd_anchor_high_tdcp_sparse_height_hold_alpha"]
+                ),
                 "dd_anchor_high_blend_epochs": int(
                     sum(int(row["dd_anchor_high_blend_epochs"]) for row in selected)
+                ),
+                "dd_anchor_high_regime_untrusted_epochs": int(
+                    sum(
+                        int(row["dd_anchor_high_regime_untrusted_epochs"])
+                        for row in selected
+                    )
+                ),
+                "dd_anchor_high_regime_last_velocity_epochs": int(
+                    sum(
+                        int(row["dd_anchor_high_regime_last_velocity_epochs"])
+                        for row in selected
+                    )
+                ),
+                "dd_anchor_high_regime_widelane_gap_epochs": int(
+                    sum(
+                        int(row["dd_anchor_high_regime_widelane_gap_epochs"])
+                        for row in selected
+                    )
+                ),
+                "dd_anchor_high_regime_persistence_epochs": int(
+                    sum(
+                        int(row["dd_anchor_high_regime_persistence_epochs"])
+                        for row in selected
+                    )
+                ),
+                "dd_anchor_high_regime_big_shift_epochs": int(
+                    sum(
+                        int(row["dd_anchor_high_regime_big_shift_epochs"])
+                        for row in selected
+                    )
+                ),
+                "dd_anchor_high_regime_tdcp_sparse_epochs": int(
+                    sum(
+                        int(row["dd_anchor_high_regime_tdcp_sparse_epochs"])
+                        for row in selected
+                    )
                 ),
                 "last_velocity_max_age_s": float(selected[0]["last_velocity_max_age_s"]),
             }
@@ -349,6 +503,84 @@ def main() -> None:
         help="Comma-separated DD robust RMS ceilings for elevated DD blend",
     )
     parser.add_argument(
+        "--dd-anchor-high-allow-on-last-velocity",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Also allow elevated DD-PR blend when the current epoch is using stale "
+            "TDCP last-velocity (sparse TDCP regime cue)"
+        ),
+    )
+    parser.add_argument(
+        "--dd-anchor-high-no-widelane-min-gap-epochss",
+        type=str,
+        default="inf",
+        help=(
+            "Comma-separated minimum epochs since last accepted wide-lane anchor "
+            "that enable elevated DD-PR blend (missing-WL regime cue)"
+        ),
+    )
+    parser.add_argument(
+        "--dd-anchor-high-persistence-window-epochs",
+        type=int,
+        default=5,
+        help=(
+            "Rolling window size (epochs) used by the persistence regime cue"
+        ),
+    )
+    parser.add_argument(
+        "--dd-anchor-high-persistence-min-epochss",
+        type=str,
+        default="0",
+        help=(
+            "Comma-separated minimum DD-shift hits in the persistence window "
+            "that enable elevated DD-PR blend (0 disables)"
+        ),
+    )
+    parser.add_argument(
+        "--dd-anchor-high-big-shift-ms",
+        type=str,
+        default="inf",
+        help=(
+            "Comma-separated single-epoch DD-PR shift thresholds that enable "
+            "elevated DD-PR blend regardless of other regime cues"
+        ),
+    )
+    parser.add_argument(
+        "--dd-anchor-high-tdcp-sparse-max-rates",
+        type=str,
+        default="-1",
+        help=(
+            "Comma-separated rolling TDCP use-rate thresholds that enable the "
+            "sparse-TDCP regime cue. Negative value disables the cue."
+        ),
+    )
+    parser.add_argument(
+        "--dd-anchor-high-tdcp-sparse-window-epochs",
+        type=int,
+        default=20,
+        help=(
+            "Rolling window size (epochs) used by the sparse-TDCP regime cue"
+        ),
+    )
+    parser.add_argument(
+        "--dd-anchor-high-tdcp-sparse-min-shift-ms",
+        type=str,
+        default="inf",
+        help=(
+            "Comma-separated minimum DD-PR shifts used by the sparse-TDCP cue"
+        ),
+    )
+    parser.add_argument(
+        "--dd-anchor-high-tdcp-sparse-height-hold-alphas",
+        type=str,
+        default="1.0",
+        help=(
+            "Comma-separated height-hold alpha caps applied at sparse-TDCP "
+            "epochs (default 1.0 leaves height hold unchanged)"
+        ),
+    )
+    parser.add_argument(
         "--rsp-correction",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -386,6 +618,33 @@ def main() -> None:
         args.dd_anchor_high_max_robust_rms_ms,
         "elevated DD anchor robust RMS ceiling",
     )
+    dd_high_wl_gap_values = _parse_float_list(
+        args.dd_anchor_high_no_widelane_min_gap_epochss,
+        "elevated DD anchor WL-gap epoch threshold",
+    )
+    persistence_min_values = tuple(
+        int(float(part.strip()))
+        for part in args.dd_anchor_high_persistence_min_epochss.split(",")
+        if part.strip()
+    )
+    if not persistence_min_values:
+        raise ValueError("at least one persistence-min-epochs value is required")
+    big_shift_values = _parse_float_list(
+        args.dd_anchor_high_big_shift_ms,
+        "elevated DD anchor single-epoch big-shift threshold",
+    )
+    tdcp_sparse_max_rate_values = _parse_float_list(
+        args.dd_anchor_high_tdcp_sparse_max_rates,
+        "elevated DD anchor sparse-TDCP max rate",
+    )
+    tdcp_sparse_min_shift_values = _parse_float_list(
+        args.dd_anchor_high_tdcp_sparse_min_shift_ms,
+        "elevated DD anchor sparse-TDCP min shift",
+    )
+    tdcp_sparse_hh_alpha_values = _parse_float_list(
+        args.dd_anchor_high_tdcp_sparse_height_hold_alphas,
+        "elevated DD anchor sparse-TDCP height-hold alpha",
+    )
     last_velocity_ages = _parse_float_list(args.last_velocity_max_age_ss, "last-velocity age")
     configs = tuple(
         FusionConfig(
@@ -399,6 +658,21 @@ def main() -> None:
             ),
             dd_anchor_high_min_shift_m=dd_high_min_shift,
             dd_anchor_high_max_robust_rms_m=dd_high_max_rms,
+            dd_anchor_high_allow_on_last_velocity=bool(
+                args.dd_anchor_high_allow_on_last_velocity
+            ),
+            dd_anchor_high_no_widelane_min_gap_epochs=dd_high_wl_gap,
+            dd_anchor_high_persistence_window_epochs=int(
+                args.dd_anchor_high_persistence_window_epochs
+            ),
+            dd_anchor_high_persistence_min_epochs=persistence_min_hits,
+            dd_anchor_high_big_shift_m=big_shift_value,
+            dd_anchor_high_tdcp_sparse_max_rate=tdcp_sparse_rate,
+            dd_anchor_high_tdcp_sparse_window_epochs=int(
+                args.dd_anchor_high_tdcp_sparse_window_epochs
+            ),
+            dd_anchor_high_tdcp_sparse_min_shift_m=tdcp_sparse_shift,
+            dd_anchor_high_tdcp_sparse_height_hold_alpha=tdcp_sparse_hh_alpha,
             last_velocity_max_age_s=last_velocity_age,
         )
         for threshold in thresholds
@@ -407,6 +681,12 @@ def main() -> None:
         for dd_high_alpha in dd_high_alphas
         for dd_high_min_shift in dd_high_min_shifts
         for dd_high_max_rms in dd_high_max_rms_values
+        for dd_high_wl_gap in dd_high_wl_gap_values
+        for persistence_min_hits in persistence_min_values
+        for big_shift_value in big_shift_values
+        for tdcp_sparse_rate in tdcp_sparse_max_rate_values
+        for tdcp_sparse_shift in tdcp_sparse_min_shift_values
+        for tdcp_sparse_hh_alpha in tdcp_sparse_hh_alpha_values
         for last_velocity_age in last_velocity_ages
     )
     max_epochs = args.max_epochs if args.max_epochs and args.max_epochs > 0 else None
@@ -458,6 +738,33 @@ def main() -> None:
                     dd_anchor_high_min_shift_m=config_spec.dd_anchor_high_min_shift_m,
                     dd_anchor_high_max_robust_rms_m=(
                         config_spec.dd_anchor_high_max_robust_rms_m
+                    ),
+                    dd_anchor_high_allow_on_last_velocity=(
+                        config_spec.dd_anchor_high_allow_on_last_velocity
+                    ),
+                    dd_anchor_high_no_widelane_min_gap_epochs=(
+                        config_spec.dd_anchor_high_no_widelane_min_gap_epochs
+                    ),
+                    dd_anchor_high_persistence_window_epochs=(
+                        config_spec.dd_anchor_high_persistence_window_epochs
+                    ),
+                    dd_anchor_high_persistence_min_epochs=(
+                        config_spec.dd_anchor_high_persistence_min_epochs
+                    ),
+                    dd_anchor_high_big_shift_m=(
+                        config_spec.dd_anchor_high_big_shift_m
+                    ),
+                    dd_anchor_high_tdcp_sparse_max_rate=(
+                        config_spec.dd_anchor_high_tdcp_sparse_max_rate
+                    ),
+                    dd_anchor_high_tdcp_sparse_window_epochs=(
+                        config_spec.dd_anchor_high_tdcp_sparse_window_epochs
+                    ),
+                    dd_anchor_high_tdcp_sparse_min_shift_m=(
+                        config_spec.dd_anchor_high_tdcp_sparse_min_shift_m
+                    ),
+                    dd_anchor_high_tdcp_sparse_height_hold_alpha=(
+                        config_spec.dd_anchor_high_tdcp_sparse_height_hold_alpha
                     ),
                     rsp_correction=args.rsp_correction,
                     last_velocity_max_age_s=config_spec.last_velocity_max_age_s,
