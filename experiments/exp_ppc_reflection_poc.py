@@ -95,8 +95,9 @@ def main() -> None:
     t0 = time.monotonic()
     subset_dir = ensure_subset(zip_url, expanded, args.subset_root)
     model = load_plateau(subset_dir, zone=args.plateau_zone)
-    accelerator = model  # BuildingModel directly: BVH multipath binding is not compiled.
-    print(f"  BuildingModel loaded in {time.monotonic() - t0:.1f}s ({len(model.triangles)} triangles, brute-force multipath)", flush=True)
+    from gnss_gpu.bvh import BVHAccelerator
+    accelerator = BVHAccelerator.from_building_model(model)
+    print(f"  BVH built in {time.monotonic() - t0:.1f}s ({accelerator.n_triangles} triangles, BVH multipath)", flush=True)
 
     epoch_rows: list[dict[str, object]] = []
     per_sat_rows: list[dict[str, object]] = []
