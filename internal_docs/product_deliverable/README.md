@@ -55,15 +55,18 @@ Per-route error on the test set (see
 
 | city / run | actual | predicted | \|err\| | confidence |
 | --- | --- | --- | --- | --- |
-| nagoya / run1 | 11.5 % | 14.5 % | 3.0 pp | high |
-| nagoya / run2 | 16.2 % | 21.0 % | 4.8 pp | medium |
-| nagoya / run3 |  7.9 % |  6.8 % | 1.0 pp | high |
-| tokyo  / run1 | 10.9 % | 12.1 % | 1.2 pp | high |
-| tokyo  / run2 | 29.0 % | 20.8 % | 8.2 pp | low  |
-| tokyo  / run3 | 24.0 % | 25.0 % | 0.9 pp | low  |
+| nagoya / run1 | 11.5 % | 14.5 % | 3.03 pp | high |
+| nagoya / run2 | 16.2 % | 21.0 % | 4.80 pp | medium |
+| nagoya / run3 |  7.9 % |  6.8 % | 1.04 pp | high |
+| tokyo  / run1 | 10.9 % | 12.1 % | 1.15 pp | high |
+| tokyo  / run2 | 29.0 % | 20.8 % | 8.25 pp | low  |
+| tokyo  / run3 | 24.0 % | 25.0 % | 0.94 pp | low  |
 
-Four of six routes are within 3 pp of actual.  The two low-confidence
-routes contain focus-case windows documented in section 5.
+Three of six routes are within 3 pp of actual (nagoya/run3, tokyo/run1,
+tokyo/run3); a fourth (nagoya/run1 at 3.03 pp) is borderline.  Five of
+six are within 5 pp.  The one exception is tokyo/run2 at 8.25 pp, which
+contains the Tokyo run2 w7-w9 false-high cluster documented in section
+5.
 
 ## 4. Inputs, outputs, and files
 

@@ -242,7 +242,24 @@ def main() -> None:
     weights = df["sim_matched_epochs"].to_numpy(dtype=np.float64)
     y = df["actual_fix_rate_pct"].to_numpy(dtype=np.float64) / 100.0
     reference = _read_reference_predictions(args.base_prefix, args.base_prediction_column)
-    base = np.asarray([reference[key] for key in _key_frame(df)], dtype=np.float64)
+    base_list: list[float] = []
+    missing_keys: list[str] = []
+    for key in _key_frame(df):
+        if key in reference:
+            base_list.append(reference[key])
+        else:
+            missing_keys.append(key)
+    if missing_keys:
+        preview = ", ".join(missing_keys[:5])
+        suffix = f" ... (+{len(missing_keys) - 5} more)" if len(missing_keys) > 5 else ""
+        raise KeyError(
+            f"{len(missing_keys)} (city, run, window_index) tuples in --window-csv are missing from "
+            f"the --base-prefix reference predictions ({args.base_prefix}_window_predictions.csv). "
+            f"Either the base-prefix points at a predictions file built on a different window set, "
+            f"or the window CSV contains rows the base model never scored. "
+            f"First missing keys: {preview}{suffix}"
+        )
+    base = np.asarray(base_list, dtype=np.float64)
     x, feature_names = _sim_feature_matrix(df)
     x, feature_names = _append_classifier_meta(
         df=df,

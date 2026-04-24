@@ -61,6 +61,16 @@ def run(cmd: list[str]) -> None:
         sys.exit(result.returncode)
 
 
+def _require(path: Path, producer: str) -> None:
+    if not path.exists():
+        sys.stderr.write(
+            f"\nERROR: expected output missing after running {producer}:\n  {path}\n"
+            f"The pipeline cannot continue.  Check the preceding command's output for\n"
+            f"silent failures (e.g. missing input columns, empty epoch CSV).\n"
+        )
+        sys.exit(1)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the adopted §7.16 FIX-rate prediction pipeline")
     parser.add_argument("--epochs-csv", type=Path, default=DEFAULT_EPOCHS_CSV)
@@ -86,6 +96,8 @@ def main() -> None:
         f"ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_windowopt_validationhold_{args.preset}_carry_window_predictions.csv"
     )
 
+    epochs_out_csv = RESULTS_DIR / "ppc_demo5_fix_rate_compare_fullsim_stride1_phase_proxy_stat_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_validationhold_epochs.csv"
+
     # 1. Epoch-level validationhold surrogate
     if not args.skip_epoch_augment:
         run([
@@ -93,6 +105,7 @@ def main() -> None:
             str(EXPERIMENTS_DIR / "augment_ppc_epochs_with_validation_hold_surrogate.py"),
             "--epochs-csv", str(args.epochs_csv),
         ])
+        _require(epochs_out_csv, "augment_ppc_epochs_with_validation_hold_surrogate.py")
 
     # 2. Window-level aggregation
     if not args.skip_window_aggregate:
@@ -101,6 +114,7 @@ def main() -> None:
             str(EXPERIMENTS_DIR / "analyze_ppc_validation_hold_surrogate_windows.py"),
             "--window-csv", str(args.window_csv),
         ])
+        _require(summary_csv, "analyze_ppc_validation_hold_surrogate_windows.py")
 
     # 3. Apply threshold preset and augment window CSV
     run([
@@ -110,6 +124,7 @@ def main() -> None:
         "--preset", args.preset,
         "--output-csv", str(preset_summary_csv),
     ])
+    _require(preset_summary_csv, "rebuild_validationhold_flag_thresholds.py")
     run([
         sys.executable,
         str(EXPERIMENTS_DIR / "augment_ppc_windows_with_validationhold_features.py"),
@@ -117,6 +132,7 @@ def main() -> None:
         "--validationhold-csv", str(preset_summary_csv),
         "--output-csv", str(augmented_window_csv),
     ])
+    _require(augmented_window_csv, "augment_ppc_windows_with_validationhold_features.py")
 
     # 4. Train nested stack and produce window predictions
     if not args.skip_training:
@@ -132,10 +148,13 @@ def main() -> None:
             "--max-abs-aggregate-error-pp", "2.0",
             "--results-prefix", args.results_prefix,
         ])
+        pred_csv = RESULTS_DIR / f"{args.results_prefix}_window_predictions.csv"
+        _require(pred_csv, "train_ppc_solver_transition_surrogate_nested_stack.py")
 
     # 5. Build product deliverable CSVs
     if not args.skip_deliverable:
         pred_csv = RESULTS_DIR / f"{args.results_prefix}_window_predictions.csv"
+        _require(pred_csv, "upstream training (did it run?)")
         run([
             sys.executable,
             str(EXPERIMENTS_DIR / "build_product_deliverable.py"),
