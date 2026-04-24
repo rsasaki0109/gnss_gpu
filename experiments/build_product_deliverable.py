@@ -21,13 +21,16 @@ known-failure windows:
 from __future__ import annotations
 
 import argparse
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 
-RESULTS_DIR = Path(__file__).resolve().parent / "results"
+EXPERIMENTS_DIR = Path(__file__).resolve().parent
+RESULTS_DIR = EXPERIMENTS_DIR / "results"
 DELIVERABLE_DIR = Path(__file__).resolve().parent.parent / "internal_docs" / "product_deliverable"
 DEFAULT_PRED_CSV = (
     RESULTS_DIR
@@ -40,7 +43,10 @@ DEFAULT_PRED_CSV = (
 # flag only the material failure modes after the §7.16 correction is
 # applied (mild residual error on low-actual windows is normal and is NOT
 # tagged).
-FOCUS_THRESHOLDS = {
+# Default thresholds; CLI overrides below in parse_args().
+# Applied per window to every input row; no hardcoded window-index list,
+# so new runs with similar failure archetypes are tagged automatically.
+DEFAULT_THRESHOLDS = {
     "actual_low_pct": 5.0,             # actual FIX rate <= this counts as "actual low"
     "actual_high_pct": 75.0,           # actual FIX rate >= this counts as "actual high"
     "false_high_corrected_pct": 35.0,  # corrected >= this on an actual-low window
@@ -52,7 +58,7 @@ FOCUS_THRESHOLDS = {
 }
 
 
-def _classify_window(row: "pd.Series") -> tuple[str, str]:
+def _classify_window(row: "pd.Series", thresholds: dict | None = None) -> tuple[str, str]:
     """Return (tag, note) for a window based on actual / base / corrected values.
 
     Thresholds intentionally flag only material failures: everyday
@@ -61,7 +67,7 @@ def _classify_window(row: "pd.Series") -> tuple[str, str]:
     actual = float(row["actual_fix_rate_pct"])
     base = float(row["base_pred_fix_rate_pct"])
     corrected = float(row["corrected_pred_fix_rate_pct"])
-    thr = FOCUS_THRESHOLDS
+    thr = thresholds if thresholds is not None else DEFAULT_THRESHOLDS
     delta = corrected - base
 
     # false_high: corrected prediction still inflates an actual-zero window
@@ -98,11 +104,40 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build product deliverable CSVs")
     parser.add_argument("--prediction-csv", type=Path, default=DEFAULT_PRED_CSV)
     parser.add_argument("--output-dir", type=Path, default=DELIVERABLE_DIR)
+    g = parser.add_argument_group("focus-case thresholds")
+    g.add_argument("--actual-low-pct", type=float, default=DEFAULT_THRESHOLDS["actual_low_pct"],
+                   help=f"actual FIX rate <= this counts as 'actual low' (default: {DEFAULT_THRESHOLDS['actual_low_pct']})")
+    g.add_argument("--actual-high-pct", type=float, default=DEFAULT_THRESHOLDS["actual_high_pct"],
+                   help=f"actual FIX rate >= this counts as 'actual high' (default: {DEFAULT_THRESHOLDS['actual_high_pct']})")
+    g.add_argument("--false-high-corrected-pct", type=float, default=DEFAULT_THRESHOLDS["false_high_corrected_pct"],
+                   help=f"corrected >= this on an actual-low window -> false_high (default: {DEFAULT_THRESHOLDS['false_high_corrected_pct']})")
+    g.add_argument("--hidden-high-gap-pp", type=float, default=DEFAULT_THRESHOLDS["hidden_high_gap_pp"],
+                   help=f"(actual - corrected) >= this on actual-high window -> hidden_high (default: {DEFAULT_THRESHOLDS['hidden_high_gap_pp']})")
+    g.add_argument("--lift-pp", type=float, default=DEFAULT_THRESHOLDS["lift_pp"],
+                   help=f"(corrected - base) >= this -> material lift (default: {DEFAULT_THRESHOLDS['lift_pp']})")
+    g.add_argument("--lift-corrected-pct", type=float, default=DEFAULT_THRESHOLDS["lift_corrected_pct"],
+                   help=f"absolute corrected floor for lift classification (default: {DEFAULT_THRESHOLDS['lift_corrected_pct']})")
+    g.add_argument("--reject-pp", type=float, default=DEFAULT_THRESHOLDS["reject_pp"],
+                   help=f"(base - corrected) >= this -> material reject (default: {DEFAULT_THRESHOLDS['reject_pp']})")
+    g.add_argument("--reject-base-pct", type=float, default=DEFAULT_THRESHOLDS["reject_base_pct"],
+                   help=f"minimum base for reject classification (default: {DEFAULT_THRESHOLDS['reject_base_pct']})")
+    parser.add_argument("--skip-dashboard", action="store_true",
+                        help="do not regenerate internal_docs/product_deliverable/dashboard.html")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    thresholds = {
+        "actual_low_pct": args.actual_low_pct,
+        "actual_high_pct": args.actual_high_pct,
+        "false_high_corrected_pct": args.false_high_corrected_pct,
+        "hidden_high_gap_pp": args.hidden_high_gap_pp,
+        "lift_pp": args.lift_pp,
+        "lift_corrected_pct": args.lift_corrected_pct,
+        "reject_pp": args.reject_pp,
+        "reject_base_pct": args.reject_base_pct,
+    }
     df = pd.read_csv(args.prediction_csv)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -110,7 +145,7 @@ def main() -> None:
     # window-level details
     window_rows: list[dict[str, object]] = []
     for _, row in df.sort_values(["city", "run", "window_index"]).iterrows():
-        focus_tag, focus_note = _classify_window(row)
+        focus_tag, focus_note = _classify_window(row, thresholds)
         window_rows.append(
             {
                 "city": row["city"],
@@ -171,6 +206,23 @@ def main() -> None:
     print(f"\nOverall actual FIX rate: {overall_actual:.3f} %")
     print(f"Overall adopted prediction: {overall_pred:.3f} %")
     print(f"Overall aggregate error: {overall_pred - overall_actual:+.3f} pp")
+
+    # Regenerate the dashboard HTML unless the operator opted out.
+    if not args.skip_dashboard:
+        dashboard_script = EXPERIMENTS_DIR / "build_product_dashboard.py"
+        if dashboard_script.exists():
+            print("\nregenerating dashboard.html...")
+            result = subprocess.run(
+                [sys.executable, str(dashboard_script),
+                 "--route-csv", str(route_path),
+                 "--window-csv", str(window_path),
+                 "--output", str(args.output_dir / "dashboard.html")],
+                check=False,
+            )
+            if result.returncode != 0:
+                print("WARNING: dashboard regeneration failed; CSVs are still up to date")
+        else:
+            print("note: build_product_dashboard.py not found; skipping dashboard regeneration")
 
 
 if __name__ == "__main__":

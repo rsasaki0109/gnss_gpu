@@ -31,7 +31,12 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
+
+
+_stage_counter = {"current": 0, "total": 5, "started": None}
 
 
 EXPERIMENTS_DIR = Path(__file__).resolve().parent
@@ -54,8 +59,26 @@ DEFAULT_RESULTS_PREFIX = (
 )
 
 
+def _timestamp() -> str:
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def stage(label: str) -> None:
+    _stage_counter["current"] += 1
+    _stage_counter["started"] = time.monotonic()
+    elapsed = ""
+    print(f"\n[{_timestamp()}] [{_stage_counter['current']}/{_stage_counter['total']}] {label}{elapsed}")
+
+
+def stage_done() -> None:
+    if _stage_counter["started"] is None:
+        return
+    dt = time.monotonic() - _stage_counter["started"]
+    print(f"[{_timestamp()}] [{_stage_counter['current']}/{_stage_counter['total']}] done in {dt:.1f}s")
+
+
 def run(cmd: list[str]) -> None:
-    print(f"\n$ {' '.join(cmd)}")
+    print(f"  $ {' '.join(cmd)}")
     result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         sys.exit(result.returncode)
@@ -98,25 +121,32 @@ def main() -> None:
 
     epochs_out_csv = RESULTS_DIR / "ppc_demo5_fix_rate_compare_fullsim_stride1_phase_proxy_stat_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_validationhold_epochs.csv"
 
+    overall_start = time.monotonic()
+
     # 1. Epoch-level validationhold surrogate
     if not args.skip_epoch_augment:
+        stage("epoch-level validationhold surrogate")
         run([
             sys.executable,
             str(EXPERIMENTS_DIR / "augment_ppc_epochs_with_validation_hold_surrogate.py"),
             "--epochs-csv", str(args.epochs_csv),
         ])
         _require(epochs_out_csv, "augment_ppc_epochs_with_validation_hold_surrogate.py")
+        stage_done()
 
     # 2. Window-level aggregation
     if not args.skip_window_aggregate:
+        stage("window-level aggregation")
         run([
             sys.executable,
             str(EXPERIMENTS_DIR / "analyze_ppc_validation_hold_surrogate_windows.py"),
             "--window-csv", str(args.window_csv),
         ])
         _require(summary_csv, "analyze_ppc_validation_hold_surrogate_windows.py")
+        stage_done()
 
     # 3. Apply threshold preset and augment window CSV
+    stage(f"apply threshold preset '{args.preset}' and augment window CSV")
     run([
         sys.executable,
         str(EXPERIMENTS_DIR / "rebuild_validationhold_flag_thresholds.py"),
@@ -133,9 +163,11 @@ def main() -> None:
         "--output-csv", str(augmented_window_csv),
     ])
     _require(augmented_window_csv, "augment_ppc_windows_with_validationhold_features.py")
+    stage_done()
 
     # 4. Train nested stack and produce window predictions
     if not args.skip_training:
+        stage(f"train nested stack (α={args.residual_alpha}, clip={args.residual_clip_pp} pp)")
         run([
             sys.executable,
             str(EXPERIMENTS_DIR / "train_ppc_solver_transition_surrogate_nested_stack.py"),
@@ -150,9 +182,11 @@ def main() -> None:
         ])
         pred_csv = RESULTS_DIR / f"{args.results_prefix}_window_predictions.csv"
         _require(pred_csv, "train_ppc_solver_transition_surrogate_nested_stack.py")
+        stage_done()
 
     # 5. Build product deliverable CSVs
     if not args.skip_deliverable:
+        stage("build product deliverable CSVs + dashboard")
         pred_csv = RESULTS_DIR / f"{args.results_prefix}_window_predictions.csv"
         _require(pred_csv, "upstream training (did it run?)")
         run([
@@ -160,8 +194,10 @@ def main() -> None:
             str(EXPERIMENTS_DIR / "build_product_deliverable.py"),
             "--prediction-csv", str(pred_csv),
         ])
+        stage_done()
 
-    print("\nDone.")
+    total_dt = time.monotonic() - overall_start
+    print(f"\n[{_timestamp()}] pipeline finished in {total_dt:.1f}s")
 
 
 if __name__ == "__main__":

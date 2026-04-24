@@ -66,14 +66,23 @@ def _key_frame(df: pd.DataFrame) -> pd.Series:
 
 
 def _read_reference_predictions(prefix: str, prediction_column: str) -> dict[str, float]:
-    rows = pd.read_csv(RESULTS_DIR / f"{prefix}_window_predictions.csv")
+    path = RESULTS_DIR / f"{prefix}_window_predictions.csv"
+    rows = pd.read_csv(path)
+    requested = prediction_column
     if prediction_column not in rows.columns:
-        if "corrected_pred_fix_rate_pct" in rows.columns:
-            prediction_column = "corrected_pred_fix_rate_pct"
-        elif "pred_fix_rate_pct" in rows.columns:
-            prediction_column = "pred_fix_rate_pct"
-        else:
-            raise ValueError(f"missing prediction column: {prediction_column}")
+        fallback_candidates = ["corrected_pred_fix_rate_pct", "pred_fix_rate_pct"]
+        available = [c for c in fallback_candidates if c in rows.columns]
+        if not available:
+            raise ValueError(
+                f"missing prediction column '{requested}' in {path.name}; "
+                f"none of the fallbacks {fallback_candidates} are present either. "
+                f"Available prediction columns: {[c for c in rows.columns if c.endswith('_pred_fix_rate_pct')]}"
+            )
+        prediction_column = available[0]
+        print(
+            f"note: requested prediction column '{requested}' not in {path.name}; "
+            f"falling back to '{prediction_column}'"
+        )
     return {
         key: float(value) / 100.0
         for key, value in zip(_key_frame(rows), rows[prediction_column].astype(float))

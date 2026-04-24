@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 """Mixture-of-experts meta-learner over the §7.11 / §7.13 / §7.16 experts.
 
+STATUS: experimental / null result.  NOT part of the adopted production
+pipeline.  The three MoE variants (full ridge, experts-only ridge, convex
+combination) were all dominated by the single best expert (§7.16) on the
+current 6-run dataset — see plan.md §7.20 on the source branch for the
+full null-result write-up.  This script is retained as a reference
+implementation for future experiments with structurally more diverse
+experts (e.g. different base models, different feature families).  Do
+not invoke from `predict.py` or the product deliverable pipeline.
+
 Each expert produces strict-nested-LORO window predictions using a
 different (threshold preset, residual alpha) combination.  Their failure
 modes are complementary:
