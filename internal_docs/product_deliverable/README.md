@@ -102,11 +102,24 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 - `internal_docs/product_deliverable/dashboard.html` — self-contained
   HTML report (open in a browser) with metrics summary, per-run bar
   chart, actual-vs-predicted scatter, and focus-case detail table.
+- `internal_docs/product_deliverable/plots/` — static PNG figures per
+  run that overlay the predicted FIX rate onto the actual demo5
+  per-epoch FIX/NO-FIX trajectory:
+  - `{city}_{run}_timeseries.png`: predicted vs actual FIX rate over
+    elapsed seconds, with the rolling per-epoch FIX fraction and a
+    quality-flag (Q) strip.
+  - `{city}_{run}_trajectory.png`: lat/lon scatter coloured by demo5 Q
+    (FIX = green, FLOAT = orange, DGPS = purple), with per-window
+    predicted FIX % annotated at each window start.
+  - `summary_grid.png`: 2x3 panel overview of all 6 runs.
 - `experiments/build_product_deliverable.py` — script that produces the
   two CSVs above from the adopted model's `window_predictions.csv`.
   Focus-case windows are detected by threshold-based classification
   (`_classify_window`), so new runs with similar failure archetypes
   are tagged automatically without updating a hardcoded list.
+- `experiments/build_simulation_vs_actual_plots.py` — renders the PNG
+  figures under `plots/` from the adopted predictions and the demo5
+  .pos files (`experiments/results/demo5_pos/<city>_<run>/rtklib.pos`).
 - `experiments/_common.py` — shared helpers used across the experiment
   scripts (e.g. `_is_metadata_or_label`).
 - `experiments/build_product_dashboard.py` — script that produces the
