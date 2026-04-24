@@ -80,6 +80,14 @@ _HOLDOUT_SEGMENTS = (
     ("nagoya", "run2", 1183, "loose"),
     ("nagoya", "run3", 35, "loose"),
 )
+_FULL_RUNS = (
+    ("tokyo", "run1", 0, "tokyo"),
+    ("tokyo", "run2", 0, "tokyo"),
+    ("tokyo", "run3", 0, "tokyo"),
+    ("nagoya", "run1", 0, "nagoya"),
+    ("nagoya", "run2", 0, "nagoya"),
+    ("nagoya", "run3", 0, "nagoya"),
+)
 
 
 def _ecef_to_lat_lon(ecef: np.ndarray) -> tuple[float, float]:
@@ -146,20 +154,22 @@ def run_segment(
     profile_key: str,
     out_dir: Path,
     extra_args: list[str] | None = None,
-    timeout_s: float = 120.0,
+    timeout_s: float = 600.0,
 ) -> dict[str, object]:
-    out_pos = out_dir / f"{data_dir.parent.name}_{data_dir.name}_{start_epoch}.pos"
+    suffix = f"_{start_epoch}" if max_epochs > 0 else "_full"
+    out_pos = out_dir / f"{data_dir.parent.name}_{data_dir.name}{suffix}.pos"
     cmd = [
         str(bin_path),
         "--rover", str(data_dir / "rover.obs"),
         "--base", str(data_dir / "base.obs"),
         "--nav", str(data_dir / "base.nav"),
         "--skip-epochs", str(int(start_epoch)),
-        "--max-epochs", str(int(max_epochs)),
         "--out", str(out_pos),
         "--no-kml",
         *list(_PROFILES[profile_key]),
     ]
+    if max_epochs > 0:
+        cmd += ["--max-epochs", str(int(max_epochs))]
     if extra_args:
         cmd.extend(extra_args)
     completed = subprocess.run(
@@ -248,6 +258,8 @@ def _segments_for_preset(preset: str) -> tuple[tuple[str, str, int, str], ...]:
         return _HOLDOUT_SEGMENTS
     if preset == "all":
         return _POSITIVE_SEGMENTS + _HOLDOUT_SEGMENTS
+    if preset == "full-runs":
+        return _FULL_RUNS
     raise ValueError(f"unknown preset: {preset}")
 
 
@@ -257,10 +269,15 @@ def main() -> None:
     parser.add_argument("--bin", type=Path, default=_DEFAULT_BIN)
     parser.add_argument(
         "--segment-preset",
-        choices=("positive", "holdout", "all"),
+        choices=("positive", "holdout", "all", "full-runs"),
         default="all",
     )
-    parser.add_argument("--max-epochs", type=int, default=200)
+    parser.add_argument(
+        "--max-epochs",
+        type=int,
+        default=200,
+        help="Max epochs per segment; set to 0 for full-run evaluation",
+    )
     parser.add_argument("--out-dir", type=Path, default=_SCRIPT_DIR / "results" / "libgnss_rtk_pos")
     parser.add_argument("--results-prefix", type=str, default="ppc_libgnss_rtk")
     parser.add_argument(
@@ -291,7 +308,7 @@ def main() -> None:
     print(flush=True)
 
     rows: list[dict[str, object]] = []
-    pos_pass = pos_total = hold_pass = hold_total = 0.0
+    pos_pass = pos_total = hold_pass = hold_total = full_pass = full_total = 0.0
     for city, run, start, profile in segments:
         data_dir = data_root / city / run
         if not data_dir.is_dir():
@@ -345,6 +362,9 @@ def main() -> None:
         elif (city, run, start, profile) in _HOLDOUT_SEGMENTS:
             hold_pass += pass_d
             hold_total += total_d
+        elif (city, run, start, profile) in _FULL_RUNS:
+            full_pass += pass_d
+            full_total += total_d
 
     run_path = RESULTS_DIR / f"{args.results_prefix}_runs.csv"
     _write_rows(rows, run_path)
@@ -357,6 +377,9 @@ def main() -> None:
     if hold_total > 0:
         print(f"  HOLDOUT6 aggregate : {100 * hold_pass / hold_total:.2f}%"
               f"  (pass {hold_pass:.1f}m / total {hold_total:.1f}m)")
+    if full_total > 0:
+        print(f"  FULL-RUNS aggregate: {100 * full_pass / full_total:.2f}%"
+              f"  (pass {full_pass:.1f}m / total {full_total:.1f}m)")
     print(f"  Saved: {run_path}")
     print("=" * 72)
 
