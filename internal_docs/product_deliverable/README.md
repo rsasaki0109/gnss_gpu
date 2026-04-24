@@ -120,6 +120,15 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 - `experiments/build_simulation_vs_actual_plots.py` — renders the PNG
   figures under `plots/` from the adopted predictions and the demo5
   .pos files (`experiments/results/demo5_pos/<city>_<run>/rtklib.pos`).
+  When the epoch classifier predictions CSV is present it also
+  overlays a blue line showing the per-epoch P(FIX) (15 s smoothed).
+- `experiments/train_ppc_epoch_fix_classifier.py` — experimental
+  per-epoch classifier (null result, see
+  `product_deliverable/EPOCH_CLASSIFIER.md`); NOT part of the adopted
+  pipeline.  Kept to produce the blue diagnostic line on the
+  time-series plots.
+- `internal_docs/product_deliverable/EPOCH_CLASSIFIER.md` — null-result
+  write-up for the epoch classifier and future-work notes.
 - `experiments/_common.py` — shared helpers used across the experiment
   scripts (e.g. `_is_metadata_or_label`).
 - `experiments/build_product_dashboard.py` — script that produces the
