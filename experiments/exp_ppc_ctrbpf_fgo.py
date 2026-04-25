@@ -371,6 +371,7 @@ def _run_ctrbpf_on_segment(
     wls_positions: np.ndarray,
     config: CTRBPFConfig,
     dd_computer=None,
+    dd_pr_computer=None,
     hybrid_pos: dict[float, np.ndarray] | None = None,
     hybrid_velocity: dict[float, np.ndarray] | None = None,
 ) -> tuple[np.ndarray, float, _DDStats, _RBPFGateStats, _HybridStats, _FGOStats]:
@@ -407,6 +408,7 @@ def _run_ctrbpf_on_segment(
         and len(hybrid_velocity) > 0
     )
     fgo_dd_cache: list = [None] * n_epochs  # holds DDCarrierEpoch | None
+    fgo_dd_pr_cache: list = [None] * n_epochs  # holds DDPseudorangeEpoch | None
     fgo_stats = _FGOStats()
 
     positions = np.zeros((n_epochs, 3), dtype=np.float64)
@@ -520,6 +522,28 @@ def _run_ctrbpf_on_segment(
                     from gnss_gpu.local_fgo import DDCarrierEpoch
 
                     fgo_dd_cache[i] = DDCarrierEpoch.from_result(dd_result)
+                    # Phase 4 v2: also cache DD pseudorange so FGO has an
+                    # absolute-position anchor (DD carrier alone is
+                    # cm-relative; the integer ambiguities can absorb a
+                    # systematic absolute bias and pass the ratio test).
+                    if dd_pr_computer is not None:
+                        try:
+                            dd_pr_result = dd_pr_computer.compute_dd(
+                                float(times[i]),
+                                measurements,
+                                rover_position_approx=rover_pos_now,
+                                min_common_sats=config.dd_min_pairs,
+                                rover_weights=[float(m.snr) for m in measurements],
+                            )
+                        except Exception:
+                            dd_pr_result = None
+                        if (
+                            dd_pr_result is not None
+                            and int(getattr(dd_pr_result, "n_dd", 0)) > 0
+                        ):
+                            from gnss_gpu.local_fgo import DDPseudorangeEpoch
+
+                            fgo_dd_pr_cache[i] = DDPseudorangeEpoch.from_result(dd_pr_result)
 
         if config.enable_rbpf_velocity_kf and sat_velocity is not None and doppler_hz is not None:
             sv_full = np.asarray(sat_velocity[i], dtype=np.float64)
@@ -628,6 +652,7 @@ def _run_ctrbpf_on_segment(
         positions = _apply_fgo_lambda(
             positions=positions,
             dd_cache=fgo_dd_cache,
+            dd_pr_cache=fgo_dd_pr_cache,
             config=config,
             stats=fgo_stats,
         )
@@ -639,6 +664,7 @@ def _apply_fgo_lambda(
     *,
     positions: np.ndarray,
     dd_cache: list,
+    dd_pr_cache: list | None,
     config: CTRBPFConfig,
     stats: _FGOStats,
 ) -> np.ndarray:
@@ -685,10 +711,14 @@ def _apply_fgo_lambda(
 
         stats.windows_attempted += 1
         slice_pos = np.asarray(out[start : end + 1], dtype=np.float64).copy()
+        window_dd_pr = (
+            dd_pr_cache[start : end + 1] if dd_pr_cache is not None else None
+        )
         problem = LocalFgoProblem(
             initial_positions_ecef=slice_pos,
             window=LocalFgoWindow(0, win_size - 1),
             dd_carrier=window_dd,
+            dd_pseudorange=window_dd_pr,
             prior_positions_ecef=slice_pos,
         )
         try:
@@ -1094,7 +1124,9 @@ def main() -> None:
         )
 
         dd_computer = None
-        if any_dd or any_dd_for_gate:
+        dd_pr_computer = None
+        any_fgo = any(v.enable_fgo_lambda for v in variants)
+        if any_dd or any_dd_for_gate or any_fgo:
             from gnss_gpu.dd_carrier import DDCarrierComputer
 
             base_obs_path = run_dir / "base.obs"
@@ -1115,6 +1147,20 @@ def main() -> None:
                     allowed_systems=dd_systems_run,
                     interpolate_base_epochs=bool(args.dd_base_interp),
                 )
+                if any_fgo:
+                    from gnss_gpu.dd_pseudorange import DDPseudorangeComputer
+
+                    dd_pr_computer = DDPseudorangeComputer(
+                        base_obs_path,
+                        rover_obs_path=rover_obs_path,
+                        base_position=np.asarray(data["base_ecef"], dtype=np.float64),
+                        allowed_systems=dd_systems_run,
+                        interpolate_base_epochs=bool(args.dd_base_interp),
+                    )
+                    print(
+                        f"  [DD-PR] Loaded for FGO absolute anchor: "
+                        f"base_systems={dd_systems_run}"
+                    )
 
         hybrid_pos_run: dict[float, np.ndarray] | None = None
         hybrid_velocity_run: dict[float, np.ndarray] | None = None
@@ -1150,6 +1196,7 @@ def main() -> None:
                 and variant.rbpf_kf_gate_min_dd_pairs is not None
             )
             dd_for_variant = dd_computer if need_dd_for_variant else None
+            dd_pr_for_variant = dd_pr_computer if variant.enable_fgo_lambda else None
             hybrid_for_variant = hybrid_pos_run if variant.enable_hybrid_pu else None
             hybrid_v_for_variant = (
                 hybrid_velocity_run if variant.enable_hybrid_velocity_guide else None
@@ -1157,6 +1204,7 @@ def main() -> None:
             positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
                 dd_computer=dd_for_variant,
+                dd_pr_computer=dd_pr_for_variant,
                 hybrid_pos=hybrid_for_variant,
                 hybrid_velocity=hybrid_v_for_variant,
             )
