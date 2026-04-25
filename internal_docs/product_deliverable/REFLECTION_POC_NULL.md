@@ -103,3 +103,58 @@ upgrades inside the current build / dataset.  §7.16 remains the
 reported best.  The PoC scripts are committed under `experiments/`
 so this null result is reproducible and the work does not need to be
 repeated for the next dataset increment.
+
+## Addendum: BVH multipath actually tested after rebuild
+
+The BVH multipath binding was subsequently rebuilt from source
+(`cmake --build build --target _bvh`) because the kernel and pybind
+registration both existed but the compiled `.so` was stale.  With
+the rebuilt binding, `BVHAccelerator.compute_multipath` runs
+successfully at ~6 s/epoch on the 2.2M-triangle Tokyo run2 PLATEAU
+set.
+
+Stride 200 (46 epochs) over Tokyo run2 gives per-window reflection
+features.  Correlations against demo5 actual FIX (n=24 windows after
+merge with §7.16 predictions):
+
+| feature | corr vs actual FIX | corr vs §7.16 error |
+| --- | --- | --- |
+| reflection_count_mean | **-0.08** | +0.04 |
+| excess_delay_m_max_mean | -0.19 | +0.12 |
+| nlos_count_mean | +0.04 | +0.16 |
+
+Focus-window decisive examples:
+
+- Tokyo run2 w9 (actual 0 %): reflection count = 0, excess delay = 0.
+  The simulator sees no multipath yet demo5 fails.
+- Tokyo run2 w24 / w25 (actual 100 %): reflection count = 16-18,
+  excess delay ~18 m.  Simulator sees heavy multipath yet demo5
+  fixes cleanly.
+- Tokyo run2 w26 (actual 97 %): reflection = 0, excess = 0.
+  Simulator agrees with demo5.
+
+The reflection count is nearly uncorrelated (and slightly
+anti-correlated on the focus windows) with demo5 FIX success.  Raw
+geometric reflections against the LOD2 building set do not
+distinguish where demo5 fails.
+
+Hypothesis for why: BVH multipath flags reflections against every
+triangle (including ground-plane facets and small features) without
+attenuation / antenna-pattern weighting.  demo5's ambiguity
+validation appears robust to most of the reflections that this
+model reports.  Furukawa 2019's 88 % result likely depends on the
+UTD diffraction + antenna gain + signal-attenuation modelling that
+the gnss_gpu BVH kernel does not implement, rather than on
+first-order geometric reflections alone.
+
+Consequence: even with BVH multipath successfully available, it does
+not provide a useful feature for the §7.16 nested stack on this
+dataset.  The combined conclusion across all simulator-side
+PoCs — brute-force OOM, canyon heuristic, BVH multipath — is that
+§7.16 has extracted the available simulation signal for this
+feature pipeline.
+
+Artifacts for reproducibility:
+- `experiments/results/ppc_reflection_bvh_s200_tokyo_run2_per_epoch.csv`
+- `experiments/results/ppc_reflection_bvh_s200_tokyo_run2_per_sat.csv`
+- `experiments/results/ppc_reflection_bvh_s200_tokyo_run2_per_window.csv`
