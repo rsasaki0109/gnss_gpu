@@ -98,20 +98,35 @@ sample size.
 
 ## Conclusion
 
-No additional gain is available from "free" open-data simulator
-upgrades inside the current build / dataset.  §7.16 remains the
-reported best.  The PoC scripts are committed under `experiments/`
-so this null result is reproducible and the work does not need to be
-repeated for the next dataset increment.
+Within the eight feature / model directions investigated in this
+PR, no additional gain is available without compiling new physics
+into the simulator (UTD diffraction, antenna pattern, signal
+attenuation) or extending the dataset.  §7.16 remains the reported
+best inside the explored search space.  The PoC scripts are
+committed under `experiments/` so this null is reproducible and
+does not need to be repeated for the next dataset increment.
 
 ## Addendum: BVH multipath actually tested after rebuild
 
-The BVH multipath binding was subsequently rebuilt from source
-(`cmake --build build --target _bvh`) because the kernel and pybind
-registration both existed but the compiled `.so` was stale.  With
-the rebuilt binding, `BVHAccelerator.compute_multipath` runs
-successfully at ~6 s/epoch on the 2.2M-triangle Tokyo run2 PLATEAU
-set.
+**Build prerequisite**: the multipath BVH kernel
+(`src/raytrace/bvh.cu`) and its pybind registration
+(`python/gnss_gpu/_bvh_bindings.cpp`) are both present in source,
+but earlier shipped `.so` artefacts did not include the multipath
+symbol.  To use the multipath features in this addendum:
+
+```bash
+cd <gnss_gpu_repo>/build
+cmake --build . --target _bvh -j4
+cp python/gnss_gpu/_bvh.cpython-*.so ../python/gnss_gpu/
+python3 -c "from gnss_gpu._bvh import raytrace_multipath_bvh"  # should import
+```
+
+CUDA toolchain (`nvcc`) and `pybind11` development headers must be
+installed.  This is the only build step required by this PR.
+
+With the rebuilt binding,
+`BVHAccelerator.compute_multipath` runs successfully at ~6 s/epoch
+on the 2.2M-triangle Tokyo run2 PLATEAU set.
 
 Stride 200 (46 epochs) over Tokyo run2 gives per-window reflection
 features.  Correlations against demo5 actual FIX (n=24 windows after
@@ -179,9 +194,18 @@ Pooled correlations across 197 LORO-merged windows:
 | nlos_count_mean | -0.142 | +0.110 |
 | sat_count_mean | +0.333 | -0.161 |
 
-`sat_count_mean` is the strongest single feature at +0.333 — but it
-is a basic visibility count that the §7.16 pipeline already has via
-many `sim_*` aggregates.
+**Multiplicity caveat.**  Seven features × two correlation targets
+= 14 parallel hypotheses.  Without Bonferroni adjustment a max
+correlation around 0.33 from 14 trials at n = 197 is **not strong
+evidence**: the next-strongest is +0.18, and all the others are
+near 0.  More importantly, when the seven features are jointly
+fed to the §7.16 nested stack the model strictly degrades on every
+metric (table below) — that is the multiplicity-corrected reality.
+
+`sat_count_mean` at +0.333 is the strongest single feature but it
+is a basic visibility count that the §7.16 pipeline already has
+via many `sim_*` aggregates, so the correlation is largely a
+restatement of existing signal.
 
 Retrained §7.16 nested stack with the 7 reflection features added as
 `refl_*` columns:
@@ -198,9 +222,15 @@ ridge feature sampling.
 
 Combined conclusion across every simulator-side approach in the
 session — brute-force OOM, canyon heuristic, BVH multipath
-correlation, BVH multipath retrain — is that §7.16 has fully
-extracted the deployable simulation signal in the current dataset
-and pipeline.  Further gain requires either:
+correlation, BVH multipath retrain — is that **within the explored
+search neighbourhood** (eight enumerated routes documented in this
+PR), §7.16 is the best available configuration.  This is not a
+proof of global optimality: feature directions not investigated
+include LASSO / sparse selection over the existing windowopt set,
+simplified attenuation + antenna-gain proxies, frequency-band-
+specific (L1 / L2) features, and ablations of individual §7.16
+ingredients.  Within what we did try, further gain would require
+either:
 
 - 7+ days of UTD diffraction + antenna-pattern + signal-attenuation
   modelling (Furukawa 2019's full machinery),
