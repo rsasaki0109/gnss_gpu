@@ -141,6 +141,12 @@ class CTRBPFConfig:
     # endpoint-only priors at ``fgo_prior_sigma_m``).
     fgo_anchor_sigma_m: float = 0.05
     fgo_loose_sigma_m: float = 5.0
+    # D2b "minimum-correction gate": skip rewrites where FGO output is
+    # within ``fgo_min_correction_m`` of the hybrid passthrough. Empirical
+    # evidence (tokyo/run2 first 2000 ep) showed Phase 4 nudges many
+    # cm-class hybrid passes (~5cm) across the 0.5m PPC threshold; small
+    # rewrites cost more pass than they recover. Set to 0.0 to disable.
+    fgo_min_correction_m: float = 0.5
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -806,11 +812,21 @@ def _apply_fgo_lambda(
             ):
                 # C2 per-epoch gate: only overwrite indices that are NOT
                 # protected (i.e., not Status=4 / cm-class hybrid).
+                # D2b: also skip rewrites where the FGO output disagrees
+                # with the hybrid passthrough by less than fgo_min_correction_m;
+                # those small rewrites tend to nudge cm-class hybrid passes
+                # across the 0.5 m PPC threshold without recovering far-fail
+                # epochs.
+                min_corr = float(config.fgo_min_correction_m)
                 replaced = 0
                 for rel_i in range(win_size):
                     abs_i = start + rel_i
                     if protect_indices is not None and abs_i in protect_indices:
                         continue
+                    if min_corr > 0.0:
+                        delta = float(np.linalg.norm(new_positions[rel_i] - slice_pos[rel_i]))
+                        if delta < min_corr:
+                            continue
                     out[abs_i] = new_positions[rel_i]
                     replaced += 1
                 if replaced > 0:
@@ -880,6 +896,7 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         ),
         fgo_anchor_sigma_m=args.fgo_anchor_sigma_m,
         fgo_loose_sigma_m=args.fgo_loose_sigma_m,
+        fgo_min_correction_m=args.fgo_min_correction_m,
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -1118,6 +1135,10 @@ def main() -> None:
     parser.add_argument("--fgo-loose-sigma-m", type=float, default=5.0,
                         help="Per-epoch FGO prior sigma [m] applied to rewritten Status epochs "
                              "(D2: loose, lets DD drive the solve, default 5.0).")
+    parser.add_argument("--fgo-min-correction-m", type=float, default=0.5,
+                        help="Minimum |FGO - hybrid| disagreement [m] required to overwrite the "
+                             "hybrid passthrough at a given epoch (D2b: filters out small noisy "
+                             "rewrites that cost cm-class passes; default 0.5, set 0 to disable).")
     parser.add_argument("--max-epochs", type=int, default=None,
                         help="Cap epochs per run (smoke / debug). None = full run.")
     parser.add_argument("--start-epoch", type=int, default=0)
