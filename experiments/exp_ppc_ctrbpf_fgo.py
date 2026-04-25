@@ -131,6 +131,16 @@ class CTRBPFConfig:
     # Default ``(1, 3)`` skips Status=4 (cm-class libgnss++ output) and only
     # rewrites Status=1/3 (m-class).
     fgo_apply_hybrid_statuses: tuple[int, ...] = (1, 3)
+    # D2: per-epoch prior sigmas inside the FGO solve. Status values that
+    # are NOT in ``fgo_apply_hybrid_statuses`` (e.g. Status=4 = cm-class
+    # hybrid) get the tight ``fgo_anchor_sigma_m`` so the FGO treats them
+    # as cm-class anchors. Status values that ARE in the apply set
+    # (m-class hybrid) get ``fgo_loose_sigma_m`` so DD carrier + DD PR
+    # drive the local solve. Set ``fgo_anchor_sigma_m`` to a non-positive
+    # value to disable per-epoch priors entirely (fall back to legacy
+    # endpoint-only priors at ``fgo_prior_sigma_m``).
+    fgo_anchor_sigma_m: float = 0.05
+    fgo_loose_sigma_m: float = 5.0
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -679,6 +689,23 @@ def _run_ctrbpf_on_segment(
                 # status NOT in the allowed-rewrite set.
                 if st is not None and st not in allowed:
                     protect_indices.add(i)
+
+        # D2: build per-epoch prior sigma array. Status values NOT in the
+        # apply set get the tight anchor sigma; Status values in the apply
+        # set get the loose sigma; missing-status epochs default to loose.
+        prior_sigmas_arr: np.ndarray | None = None
+        if (
+            hybrid_status is not None
+            and float(config.fgo_anchor_sigma_m) > 0.0
+            and config.fgo_apply_hybrid_statuses
+        ):
+            allowed = set(int(s) for s in config.fgo_apply_hybrid_statuses)
+            prior_sigmas_arr = np.full(n_epochs, float(config.fgo_loose_sigma_m), dtype=np.float64)
+            for i in range(n_epochs):
+                st = hybrid_status.get(round(float(times[i]), 1))
+                if st is not None and st not in allowed:
+                    prior_sigmas_arr[i] = float(config.fgo_anchor_sigma_m)
+
         positions = _apply_fgo_lambda(
             positions=positions,
             dd_cache=fgo_dd_cache,
@@ -686,6 +713,7 @@ def _run_ctrbpf_on_segment(
             config=config,
             stats=fgo_stats,
             protect_indices=protect_indices,
+            prior_sigmas=prior_sigmas_arr,
         )
 
     return positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats
@@ -699,6 +727,7 @@ def _apply_fgo_lambda(
     config: CTRBPFConfig,
     stats: _FGOStats,
     protect_indices: set[int] | None = None,
+    prior_sigmas: np.ndarray | None = None,
 ) -> np.ndarray:
     """Slide a window over the trajectory and run solve_local_fgo_with_lambda.
 
@@ -746,12 +775,18 @@ def _apply_fgo_lambda(
         window_dd_pr = (
             dd_pr_cache[start : end + 1] if dd_pr_cache is not None else None
         )
+        slice_prior_sigmas = (
+            np.asarray(prior_sigmas[start : end + 1], dtype=np.float64).copy()
+            if prior_sigmas is not None
+            else None
+        )
         problem = LocalFgoProblem(
             initial_positions_ecef=slice_pos,
             window=LocalFgoWindow(0, win_size - 1),
             dd_carrier=window_dd,
             dd_pseudorange=window_dd_pr,
             prior_positions_ecef=slice_pos,
+            prior_sigmas_m=slice_prior_sigmas,
         )
         try:
             result, summary = solve_local_fgo_with_lambda(problem, base_cfg, lam_cfg)
@@ -843,6 +878,8 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         fgo_apply_hybrid_statuses=tuple(
             int(s.strip()) for s in args.fgo_apply_hybrid_statuses.split(",") if s.strip()
         ),
+        fgo_anchor_sigma_m=args.fgo_anchor_sigma_m,
+        fgo_loose_sigma_m=args.fgo_loose_sigma_m,
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -1074,6 +1111,13 @@ def main() -> None:
                         help="Comma-separated hybrid Status values where Phase 4 may overwrite "
                              "the hybrid passthrough; default '1,3' protects Status=4 cm-class "
                              "epochs. Use empty string '' to disable the gate (apply everywhere).")
+    parser.add_argument("--fgo-anchor-sigma-m", type=float, default=0.05,
+                        help="Per-epoch FGO prior sigma [m] applied to non-rewritten Status epochs "
+                             "(D2: tight anchor, default 0.05). Set <=0 to fall back to legacy "
+                             "endpoint-only priors at --fgo-prior-sigma-m.")
+    parser.add_argument("--fgo-loose-sigma-m", type=float, default=5.0,
+                        help="Per-epoch FGO prior sigma [m] applied to rewritten Status epochs "
+                             "(D2: loose, lets DD drive the solve, default 5.0).")
     parser.add_argument("--max-epochs", type=int, default=None,
                         help="Cap epochs per run (smoke / debug). None = full run.")
     parser.add_argument("--start-epoch", type=int, default=0)
