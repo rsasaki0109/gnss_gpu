@@ -109,6 +109,21 @@ class CTRBPFConfig:
     # so the run can show whether DD-AFV / Doppler-KF correction beats
     # plain hybrid.
     hybrid_emit_pf_estimate: bool = False
+    # Phase 4: post-process FGO + LAMBDA partial fix. After the PF loop
+    # completes, slide a window over the trajectory and call
+    # ``solve_local_fgo_with_lambda`` per window using cached DD-carrier
+    # observations. Where LAMBDA accepts at least ``fgo_min_fixed_to_apply``
+    # integer fixes via the ratio test, the FGO positions replace the PF /
+    # hybrid output for that window. This is fixed-lag (not strictly
+    # realtime) but the latency = window_size * dt is bounded.
+    enable_fgo_lambda: bool = False
+    fgo_window_size: int = 30
+    fgo_window_stride: int = 15
+    fgo_lambda_ratio: float = 3.0
+    fgo_lambda_min_epochs: int = 10
+    fgo_min_fixed_to_apply: int = 3
+    fgo_prior_sigma_m: float = 0.5
+    fgo_dd_sigma_cycles: float = 0.20
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -218,6 +233,16 @@ class _HybridStats:
     epochs_attempted: int = 0
     epochs_applied: int = 0
     epochs_lookup_missing: int = 0
+
+
+@dataclass
+class _FGOStats:
+    windows_attempted: int = 0
+    windows_solved: int = 0
+    windows_applied: int = 0
+    n_fixed_total: int = 0
+    n_fixed_observations_total: int = 0
+    epochs_replaced: int = 0
 
 
 def _build_hybrid_velocity_guide(
@@ -348,7 +373,7 @@ def _run_ctrbpf_on_segment(
     dd_computer=None,
     hybrid_pos: dict[float, np.ndarray] | None = None,
     hybrid_velocity: dict[float, np.ndarray] | None = None,
-) -> tuple[np.ndarray, float, _DDStats, _RBPFGateStats, _HybridStats]:
+) -> tuple[np.ndarray, float, _DDStats, _RBPFGateStats, _HybridStats, _FGOStats]:
     """Run the PF on the loaded PPC segment and return (positions, ms/epoch).
 
     ``positions`` is shape ``(n_epochs, 3)``, aligned with ``data['times']``.
@@ -370,8 +395,10 @@ def _run_ctrbpf_on_segment(
         or config.rbpf_kf_gate_min_ess_ratio is not None
         or config.rbpf_kf_gate_max_spread_m is not None
     )
-    need_dd_compute = config.enable_dd_carrier_afv or (
-        gate_active and config.rbpf_kf_gate_min_dd_pairs is not None
+    need_dd_compute = (
+        config.enable_dd_carrier_afv
+        or (gate_active and config.rbpf_kf_gate_min_dd_pairs is not None)
+        or config.enable_fgo_lambda
     )
     use_hybrid = config.enable_hybrid_pu and hybrid_pos is not None
     use_vguide = (
@@ -379,6 +406,8 @@ def _run_ctrbpf_on_segment(
         and hybrid_velocity is not None
         and len(hybrid_velocity) > 0
     )
+    fgo_dd_cache: list = [None] * n_epochs  # holds DDCarrierEpoch | None
+    fgo_stats = _FGOStats()
 
     positions = np.zeros((n_epochs, 3), dtype=np.float64)
     init_pos = np.asarray(wls_positions[0, :3], dtype=np.float64)
@@ -481,6 +510,16 @@ def _run_ctrbpf_on_segment(
                     rover_position_approx=rover_pos_now,
                     min_common_sats=config.dd_min_pairs,
                 )
+                # Phase 4 cache: save the DD carrier observation for the
+                # post-process FGO + LAMBDA pass after the loop.
+                if (
+                    config.enable_fgo_lambda
+                    and dd_result is not None
+                    and int(getattr(dd_result, "n_dd", 0)) > 0
+                ):
+                    from gnss_gpu.local_fgo import DDCarrierEpoch
+
+                    fgo_dd_cache[i] = DDCarrierEpoch.from_result(dd_result)
 
         if config.enable_rbpf_velocity_kf and sat_velocity is not None and doppler_hz is not None:
             sv_full = np.asarray(sat_velocity[i], dtype=np.float64)
@@ -583,7 +622,97 @@ def _run_ctrbpf_on_segment(
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
-    return positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats
+
+    # Phase 4: post-process FGO + LAMBDA partial fix over sliding windows.
+    if config.enable_fgo_lambda and any(c is not None for c in fgo_dd_cache):
+        positions = _apply_fgo_lambda(
+            positions=positions,
+            dd_cache=fgo_dd_cache,
+            config=config,
+            stats=fgo_stats,
+        )
+
+    return positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats
+
+
+def _apply_fgo_lambda(
+    *,
+    positions: np.ndarray,
+    dd_cache: list,
+    config: CTRBPFConfig,
+    stats: _FGOStats,
+) -> np.ndarray:
+    """Slide a window over the trajectory and run solve_local_fgo_with_lambda.
+
+    Replaces ``positions[start:end+1]`` with the FGO output whenever LAMBDA
+    accepts at least ``fgo_min_fixed_to_apply`` integer fixes via the ratio
+    test. The replacement is per-window; overlapping windows write the most
+    recent solve, so a stride < window_size effectively re-solves earlier
+    epochs with potentially better integer support.
+    """
+    from gnss_gpu.local_fgo import (
+        LambdaFixConfig,
+        LocalFgoConfig,
+        LocalFgoProblem,
+        LocalFgoWindow,
+        solve_local_fgo_with_lambda,
+    )
+
+    n = int(positions.shape[0])
+    win_size = max(2, int(config.fgo_window_size))
+    stride = max(1, int(config.fgo_window_stride))
+    if win_size > n:
+        return positions
+
+    base_cfg = LocalFgoConfig(
+        prior_sigma_m=float(config.fgo_prior_sigma_m),
+        dd_sigma_cycles=float(config.fgo_dd_sigma_cycles),
+    )
+    lam_cfg = LambdaFixConfig(
+        ratio_threshold=float(config.fgo_lambda_ratio),
+        min_epochs=int(config.fgo_lambda_min_epochs),
+    )
+
+    out = positions.copy()
+    start = 0
+    while start + win_size <= n:
+        end = start + win_size - 1
+        window_dd = dd_cache[start : end + 1]
+        n_dd_epochs = sum(1 for d in window_dd if d is not None)
+        if n_dd_epochs < int(config.fgo_lambda_min_epochs):
+            start += stride
+            continue
+
+        stats.windows_attempted += 1
+        slice_pos = np.asarray(out[start : end + 1], dtype=np.float64).copy()
+        problem = LocalFgoProblem(
+            initial_positions_ecef=slice_pos,
+            window=LocalFgoWindow(0, win_size - 1),
+            dd_carrier=window_dd,
+            prior_positions_ecef=slice_pos,
+        )
+        try:
+            result, summary = solve_local_fgo_with_lambda(problem, base_cfg, lam_cfg)
+        except Exception:
+            start += stride
+            continue
+        stats.windows_solved += 1
+        n_fixed = int(summary.get("n_fixed", 0))
+        n_fixed_obs = int(summary.get("n_fixed_observations", 0))
+        stats.n_fixed_total += n_fixed
+        stats.n_fixed_observations_total += n_fixed_obs
+        if n_fixed >= int(config.fgo_min_fixed_to_apply):
+            new_positions = np.asarray(result.positions_ecef, dtype=np.float64)
+            if (
+                new_positions.shape == slice_pos.shape
+                and np.all(np.isfinite(new_positions))
+            ):
+                out[start : end + 1] = new_positions
+                stats.windows_applied += 1
+                stats.epochs_replaced += win_size
+        start += stride
+
+    return out
 
 
 def _write_pos_file(
@@ -633,6 +762,13 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         dd_systems=dd_systems,
         dd_base_interp=bool(args.dd_base_interp),
         hybrid_sigma_m=args.hybrid_sigma_m,
+        fgo_window_size=args.fgo_window_size,
+        fgo_window_stride=args.fgo_window_stride,
+        fgo_lambda_ratio=args.fgo_lambda_ratio,
+        fgo_lambda_min_epochs=args.fgo_lambda_min_epochs,
+        fgo_min_fixed_to_apply=args.fgo_min_fixed_to_apply,
+        fgo_prior_sigma_m=args.fgo_prior_sigma_m,
+        fgo_dd_sigma_cycles=args.fgo_dd_sigma_cycles,
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -752,6 +888,32 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             hybrid_emit_pf_estimate=True,
             method_label="RBPF-velKF+DD+gate+phase7",
         ))
+    # Phase 4: hybrid passthrough + post-process FGO + LAMBDA partial fix.
+    # The PF supplies cached DD carrier observations (no hybrid bias on the
+    # FGO solve), and where LAMBDA accepts integer fixes we replace the
+    # hybrid passthrough with the cm-pulled FGO trajectory.
+    if "rbpf+dd+gate+hybrid+phase4" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_fgo_lambda=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+phase4",
+        ))
+    # Phase 4 without hybrid: pure PF + FGO + LAMBDA. Useful to see whether
+    # LAMBDA alone (independent of hybrid) is enough to cm-pull the
+    # trajectory.
+    if "rbpf+dd+gate+phase4" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_fgo_lambda=True,
+            method_label="RBPF-velKF+DD+gate+phase4",
+        ))
     if not variants:
         raise ValueError(f"no valid methods: {args.methods}")
     return variants
@@ -786,7 +948,8 @@ def main() -> None:
             "Comma-separated subset of {pf, pf+pu, rbpf, rbpf+pu, pf+dd, "
             "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+gate+pu, "
             "pf+hybrid, rbpf+dd+hybrid, rbpf+dd+gate+hybrid, "
-            "rbpf+dd+gate+phase7}"
+            "rbpf+dd+gate+phase7, rbpf+dd+gate+phase4, "
+            "rbpf+dd+gate+hybrid+phase4}"
         ),
     )
     parser.add_argument("--dd-sigma-cycles", type=float, default=0.05,
@@ -818,6 +981,21 @@ def main() -> None:
                         help="Sigma [m] for the hybrid position_update soft constraint (default 1.0)")
     parser.add_argument("--hybrid-vguide-max-dt-s", type=float, default=0.5,
                         help="Max gap [s] between consecutive hybrid samples for finite-diff velocity (default 0.5)")
+    # Phase 4: post-process FGO + LAMBDA partial fix
+    parser.add_argument("--fgo-window-size", type=int, default=30,
+                        help="FGO window size in epochs (default 30)")
+    parser.add_argument("--fgo-window-stride", type=int, default=15,
+                        help="FGO window stride in epochs (default 15, 50% overlap)")
+    parser.add_argument("--fgo-lambda-ratio", type=float, default=3.0,
+                        help="LAMBDA ratio test threshold (default 3.0)")
+    parser.add_argument("--fgo-lambda-min-epochs", type=int, default=10,
+                        help="Min epochs with DD obs in window to run LAMBDA (default 10)")
+    parser.add_argument("--fgo-min-fixed-to-apply", type=int, default=3,
+                        help="Min ratio-passed integer fixes per window to apply FGO output (default 3)")
+    parser.add_argument("--fgo-prior-sigma-m", type=float, default=0.5,
+                        help="FGO prior sigma [m] for initial positions (default 0.5)")
+    parser.add_argument("--fgo-dd-sigma-cycles", type=float, default=0.20,
+                        help="FGO DD carrier float sigma [cycles] (default 0.20)")
     parser.add_argument("--max-epochs", type=int, default=None,
                         help="Cap epochs per run (smoke / debug). None = full run.")
     parser.add_argument("--start-epoch", type=int, default=0)
@@ -976,7 +1154,7 @@ def main() -> None:
             hybrid_v_for_variant = (
                 hybrid_velocity_run if variant.enable_hybrid_velocity_guide else None
             )
-            positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats = _run_ctrbpf_on_segment(
+            positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
                 dd_computer=dd_for_variant,
                 hybrid_pos=hybrid_for_variant,
@@ -1036,6 +1214,12 @@ def main() -> None:
                 "hybrid_attempted": int(hybrid_stats.epochs_attempted),
                 "hybrid_applied": int(hybrid_stats.epochs_applied),
                 "hybrid_lookup_missing": int(hybrid_stats.epochs_lookup_missing),
+                "fgo_lambda": int(variant.enable_fgo_lambda),
+                "fgo_windows_attempted": int(fgo_stats.windows_attempted),
+                "fgo_windows_solved": int(fgo_stats.windows_solved),
+                "fgo_windows_applied": int(fgo_stats.windows_applied),
+                "fgo_n_fixed_total": int(fgo_stats.n_fixed_total),
+                "fgo_epochs_replaced": int(fgo_stats.epochs_replaced),
             }
             rows.append(row)
             agg_pass[variant.method_label] += row["honest_pass_m"]
@@ -1065,10 +1249,17 @@ def main() -> None:
                     f"{hybrid_stats.epochs_attempted} "
                     f"(missing {hybrid_stats.epochs_lookup_missing})"
                 )
+            fgo_msg = ""
+            if variant.enable_fgo_lambda and fgo_stats.windows_attempted > 0:
+                fgo_msg = (
+                    f", FGO solved {fgo_stats.windows_solved}/"
+                    f"{fgo_stats.windows_attempted} applied {fgo_stats.windows_applied} "
+                    f"(fixed {fgo_stats.n_fixed_total}, replaced {fgo_stats.epochs_replaced} ep)"
+                )
             print(
                 f"    PPC honest: {row['honest_ppc_pct']:5.2f}%  "
                 f"(pass {row['honest_pass_m']:.0f} / total {row['honest_total_m']:.0f}m, "
-                f"{ms_per_epoch:.1f} ms/epoch{dd_msg}{gate_msg}{hybrid_msg})",
+                f"{ms_per_epoch:.1f} ms/epoch{dd_msg}{gate_msg}{hybrid_msg}{fgo_msg})",
                 flush=True,
             )
 
