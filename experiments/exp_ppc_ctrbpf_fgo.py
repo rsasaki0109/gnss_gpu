@@ -160,6 +160,29 @@ class CTRBPFConfig:
     tdcp_obs_anchor_sigma_m: float = 0.05
     tdcp_obs_loose_sigma_m: float = 5.0
     tdcp_obs_missing_sigma_m: float = 1000.0
+    # Phase 9a: ZUPT (zero-velocity update) using PPC IMU. Per rover epoch
+    # we look at the specific-force / angular-rate norms over the IMU
+    # samples that fall in [t_i, t_{i+1}). When the accel norm is close
+    # to gravity AND the gyro norm is small, the vehicle is stopped and
+    # the rover position must equal the last position. We use this to
+    # damp hybrid jitter on Status=1/3 epochs that sit inside a stop.
+    enable_zupt: bool = False
+    zupt_acc_norm_low_mps2: float = 9.78
+    zupt_acc_norm_high_mps2: float = 9.85
+    zupt_gyro_norm_max_dps: float = 0.3
+    # Number of consecutive static epochs required (including the current
+    # one) before ZUPT actually rewrites. Single-epoch static glitches are
+    # discarded; 5 epochs at 5 Hz = 1 s of confirmed stop.
+    zupt_min_consecutive: int = 5
+    # Maximum |base - anchor| disagreement [m] tolerated before ZUPT
+    # rewrites. If the current passthrough already differs from the static
+    # anchor by more than this, the anchor is probably stale and we skip
+    # the rewrite (we cannot tell at runtime whether base drifted or the
+    # vehicle moved).
+    zupt_max_anchor_drift_m: float = 0.5
+    # Only ZUPT-rewrite epochs whose hybrid Status is in this set; the
+    # Status=4 cm-class epochs stay fixed to their hybrid value.
+    zupt_apply_hybrid_statuses: tuple[int, ...] = (1, 3)
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -287,6 +310,163 @@ class _TDCPSmootherStats:
     pairs_accepted: int = 0
     pairs_rejected_min_sats: int = 0
     pairs_rejected_postfit: int = 0
+
+
+@dataclass
+class _ZUPTStats:
+    epochs_evaluated: int = 0
+    epochs_static: int = 0
+    epochs_rewritten: int = 0
+    epochs_no_imu: int = 0
+
+
+def _build_imu_per_epoch_stats(
+    imu: dict[str, np.ndarray],
+    times: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per rover-epoch accel norm, gyro norm and sample count.
+
+    Each rover epoch ``i`` aggregates the IMU samples whose timestamp falls in
+    ``[times[i] - dt/2, times[i] + dt/2)`` where ``dt`` is the median rover
+    epoch spacing. Epochs with zero IMU samples have NaN stats.
+    """
+    n = int(times.size)
+    acc_norm_per = np.full(n, np.nan, dtype=np.float64)
+    gyro_norm_per = np.full(n, np.nan, dtype=np.float64)
+    n_samples = np.zeros(n, dtype=np.int32)
+    if not imu or "time" not in imu or imu["time"].size == 0:
+        return acc_norm_per, gyro_norm_per, n_samples
+
+    t_imu = np.asarray(imu["time"], dtype=np.float64)
+    ax = np.asarray(imu.get("acc_x", np.full_like(t_imu, np.nan)), dtype=np.float64)
+    ay = np.asarray(imu.get("acc_y", np.full_like(t_imu, np.nan)), dtype=np.float64)
+    az = np.asarray(imu.get("acc_z", np.full_like(t_imu, np.nan)), dtype=np.float64)
+    gx = np.asarray(imu.get("gyro_x", np.full_like(t_imu, np.nan)), dtype=np.float64)
+    gy = np.asarray(imu.get("gyro_y", np.full_like(t_imu, np.nan)), dtype=np.float64)
+    gz = np.asarray(imu.get("gyro_z", np.full_like(t_imu, np.nan)), dtype=np.float64)
+    acc_norm_imu = np.sqrt(ax * ax + ay * ay + az * az)
+    gyro_norm_imu = np.sqrt(gx * gx + gy * gy + gz * gz)
+
+    if n >= 2:
+        dt_med = float(np.median(np.diff(times)))
+    else:
+        dt_med = 0.2
+    half = 0.5 * dt_med
+
+    for i in range(n):
+        t = float(times[i])
+        lo = t - half
+        hi = t + half
+        # Binary search for sample range.
+        i0 = int(np.searchsorted(t_imu, lo, side="left"))
+        i1 = int(np.searchsorted(t_imu, hi, side="left"))
+        if i1 <= i0:
+            continue
+        a_slice = acc_norm_imu[i0:i1]
+        g_slice = gyro_norm_imu[i0:i1]
+        finite_a = np.isfinite(a_slice)
+        finite_g = np.isfinite(g_slice)
+        if finite_a.any():
+            acc_norm_per[i] = float(np.mean(a_slice[finite_a]))
+        if finite_g.any():
+            gyro_norm_per[i] = float(np.mean(g_slice[finite_g]))
+        n_samples[i] = int(min(int(np.sum(finite_a)), int(np.sum(finite_g))))
+    return acc_norm_per, gyro_norm_per, n_samples
+
+
+def _apply_zupt(
+    *,
+    positions: np.ndarray,
+    times: np.ndarray,
+    imu: dict[str, np.ndarray] | None,
+    config: CTRBPFConfig,
+    hybrid_status: dict[float, int] | None,
+    stats: _ZUPTStats,
+) -> np.ndarray:
+    """Hold position constant on rover epochs where IMU reports static.
+
+    ``positions[i] := positions[i-1]`` when:
+      - ``imu`` provides finite accel / gyro norms for epoch ``i``,
+      - the accel norm is in ``[zupt_acc_norm_low_mps2, zupt_acc_norm_high_mps2]``,
+      - the gyro norm is below ``zupt_gyro_norm_max_dps``,
+      - the hybrid Status at this epoch is in ``zupt_apply_hybrid_statuses``
+        (so cm-class Status=4 anchors are never moved).
+
+    ``positions`` is treated as the hybrid passthrough output; this
+    function returns a modified copy.
+    """
+    if imu is None or "time" not in imu or imu["time"].size == 0:
+        return positions
+
+    n = int(positions.shape[0])
+    if n < 2:
+        return positions
+
+    acc_per, gyro_per, _ = _build_imu_per_epoch_stats(imu, times)
+
+    rewrite_set = set(int(s) for s in config.zupt_apply_hybrid_statuses)
+    out = np.array(positions, dtype=np.float64, copy=True)
+
+    # ZUPT can only copy from a past anchor position if the vehicle has
+    # been continuously static since that anchor. Track:
+    #   - last_static_anchor: pos at the most recent Status=4 epoch where
+    #     the vehicle was also IMU-static
+    #   - static_streak: consecutive static epochs since last motion
+    last_static_anchor: np.ndarray | None = None
+    static_streak: int = 0
+    min_streak = max(1, int(config.zupt_min_consecutive))
+    max_drift = float(config.zupt_max_anchor_drift_m)
+
+    for i in range(n):
+        anchor_here = False
+        if hybrid_status is not None and config.zupt_apply_hybrid_statuses:
+            t_key = round(float(times[i]), 1)
+            st = hybrid_status.get(t_key)
+            if st is not None and st not in rewrite_set:
+                anchor_here = True
+
+        a = acc_per[i] if i < acc_per.size else float("nan")
+        g = gyro_per[i] if i < gyro_per.size else float("nan")
+        is_static = (
+            np.isfinite(a)
+            and np.isfinite(g)
+            and float(config.zupt_acc_norm_low_mps2) <= a <= float(config.zupt_acc_norm_high_mps2)
+            and g <= float(config.zupt_gyro_norm_max_dps)
+        )
+
+        if i > 0:
+            stats.epochs_evaluated += 1
+            if not (np.isfinite(a) and np.isfinite(g)):
+                stats.epochs_no_imu += 1
+            elif is_static:
+                stats.epochs_static += 1
+
+        if not is_static:
+            last_static_anchor = None
+            static_streak = 0
+            continue
+
+        static_streak += 1
+
+        if anchor_here:
+            last_static_anchor = np.asarray(out[i], dtype=np.float64).copy()
+            continue
+
+        if (
+            last_static_anchor is None
+            or static_streak < min_streak
+            or i == 0
+        ):
+            continue
+        # Skip the rewrite if base drifted away from the anchor by more
+        # than the allowed tolerance -- the anchor is probably stale.
+        drift = float(np.linalg.norm(out[i] - last_static_anchor))
+        if drift > max_drift:
+            continue
+        out[i] = last_static_anchor
+        stats.epochs_rewritten += 1
+
+    return out
 
 
 @dataclass
@@ -686,7 +866,8 @@ def _run_ctrbpf_on_segment(
     hybrid_pos: dict[float, np.ndarray] | None = None,
     hybrid_velocity: dict[float, np.ndarray] | None = None,
     hybrid_status: dict[float, int] | None = None,
-) -> tuple[np.ndarray, float, _DDStats, _RBPFGateStats, _HybridStats, _FGOStats, _TDCPSmootherStats]:
+    imu: dict[str, np.ndarray] | None = None,
+) -> tuple[np.ndarray, float, _DDStats, _RBPFGateStats, _HybridStats, _FGOStats, _TDCPSmootherStats, _ZUPTStats]:
     """Run the PF on the loaded PPC segment and return (positions, ms/epoch).
 
     ``positions`` is shape ``(n_epochs, 3)``, aligned with ``data['times']``.
@@ -723,6 +904,7 @@ def _run_ctrbpf_on_segment(
     fgo_dd_pr_cache: list = [None] * n_epochs  # holds DDPseudorangeEpoch | None
     fgo_stats = _FGOStats()
     tdcp_stats = _TDCPSmootherStats()
+    zupt_stats = _ZUPTStats()
 
     positions = np.zeros((n_epochs, 3), dtype=np.float64)
     init_pos = np.asarray(wls_positions[0, :3], dtype=np.float64)
@@ -960,6 +1142,18 @@ def _run_ctrbpf_on_segment(
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
 
+    # Phase 9a: ZUPT before any smoother / FGO so jitter on stops is
+    # damped first.
+    if config.enable_zupt:
+        positions = _apply_zupt(
+            positions=positions,
+            times=times,
+            imu=imu,
+            config=config,
+            hybrid_status=hybrid_status,
+            stats=zupt_stats,
+        )
+
     # Phase 8: TDCP-anchored hybrid smoother. Runs BEFORE Phase 4 so
     # Phase 4 can operate on the smoothed trajectory. With TDCP off this
     # is a no-op.
@@ -1015,7 +1209,7 @@ def _run_ctrbpf_on_segment(
             prior_sigmas=prior_sigmas_arr,
         )
 
-    return positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats
+    return positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats, zupt_stats
 
 
 def _apply_fgo_lambda(
@@ -1196,6 +1390,14 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         tdcp_obs_anchor_sigma_m=args.tdcp_obs_anchor_sigma_m,
         tdcp_obs_loose_sigma_m=args.tdcp_obs_loose_sigma_m,
         tdcp_obs_missing_sigma_m=args.tdcp_obs_missing_sigma_m,
+        zupt_acc_norm_low_mps2=args.zupt_acc_norm_low_mps2,
+        zupt_acc_norm_high_mps2=args.zupt_acc_norm_high_mps2,
+        zupt_gyro_norm_max_dps=args.zupt_gyro_norm_max_dps,
+        zupt_apply_hybrid_statuses=tuple(
+            int(s.strip()) for s in args.zupt_apply_hybrid_statuses.split(",") if s.strip()
+        ),
+        zupt_min_consecutive=args.zupt_min_consecutive,
+        zupt_max_anchor_drift_m=args.zupt_max_anchor_drift_m,
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -1315,6 +1517,29 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             hybrid_emit_pf_estimate=True,
             method_label="RBPF-velKF+DD+gate+phase7",
         ))
+    # Phase 9a: hybrid passthrough + ZUPT (IMU stop detection).
+    if "rbpf+dd+gate+hybrid+zupt" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_zupt=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+zupt",
+        ))
+    # Phase 9a + Phase 8 stacked.
+    if "rbpf+dd+gate+hybrid+zupt+tdcp" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_zupt=True,
+            enable_tdcp_smoother=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+zupt+tdcp",
+        ))
     # Phase 8: hybrid passthrough + TDCP-anchored Kalman smoother.
     if "rbpf+dd+gate+hybrid+tdcp" in args.methods:
         variant_kwargs = {**base, **aaa_gate}
@@ -1400,7 +1625,8 @@ def main() -> None:
             "pf+hybrid, rbpf+dd+hybrid, rbpf+dd+gate+hybrid, "
             "rbpf+dd+gate+phase7, rbpf+dd+gate+phase4, "
             "rbpf+dd+gate+hybrid+phase4, "
-            "rbpf+dd+gate+hybrid+tdcp, rbpf+dd+gate+hybrid+tdcp+phase4}"
+            "rbpf+dd+gate+hybrid+tdcp, rbpf+dd+gate+hybrid+tdcp+phase4, "
+            "rbpf+dd+gate+hybrid+zupt, rbpf+dd+gate+hybrid+zupt+tdcp}"
         ),
     )
     parser.add_argument("--dd-sigma-cycles", type=float, default=0.05,
@@ -1476,6 +1702,19 @@ def main() -> None:
                         help="Smoother observation sigma [m] for rewritable hybrid epochs (default 5.0)")
     parser.add_argument("--tdcp-obs-missing-sigma-m", type=float, default=1000.0,
                         help="Smoother observation sigma [m] when hybrid is missing entirely (default 1000)")
+    # Phase 9a: ZUPT (zero-velocity update) using PPC IMU
+    parser.add_argument("--zupt-acc-norm-low-mps2", type=float, default=9.6,
+                        help="Lower bound on accel norm [m/s^2] for static detection (default 9.6)")
+    parser.add_argument("--zupt-acc-norm-high-mps2", type=float, default=9.95,
+                        help="Upper bound on accel norm [m/s^2] for static detection (default 9.95)")
+    parser.add_argument("--zupt-gyro-norm-max-dps", type=float, default=1.5,
+                        help="Max gyro norm [deg/s] for static detection (default 1.5)")
+    parser.add_argument("--zupt-apply-hybrid-statuses", type=str, default="1,3",
+                        help="Hybrid Status values where ZUPT may overwrite (default '1,3', protects 4)")
+    parser.add_argument("--zupt-min-consecutive", type=int, default=5,
+                        help="Min consecutive static epochs (incl. current) required before ZUPT rewrites (default 5)")
+    parser.add_argument("--zupt-max-anchor-drift-m", type=float, default=0.5,
+                        help="Max |base - anchor| disagreement [m] tolerated before ZUPT skips (default 0.5)")
     parser.add_argument("--max-epochs", type=int, default=None,
                         help="Cap epochs per run (smoke / debug). None = full run.")
     parser.add_argument("--start-epoch", type=int, default=0)
@@ -1618,6 +1857,13 @@ def main() -> None:
         hybrid_pos_run: dict[float, np.ndarray] | None = None
         hybrid_velocity_run: dict[float, np.ndarray] | None = None
         hybrid_status_run: dict[float, int] | None = None
+        imu_run: dict[str, np.ndarray] | None = None
+        if any(v.enable_zupt for v in variants):
+            try:
+                imu_run = loader.load_imu()
+            except FileNotFoundError as exc:
+                print(f"  [IMU] WARNING: {exc}, ZUPT disabled for this run")
+                imu_run = None
         if (any_hybrid or any_fgo) and args.hybrid_pos_dir is not None:
             hybrid_path = args.hybrid_pos_dir / f"{city}_{run}{args.hybrid_pos_suffix}"
             if not hybrid_path.is_file():
@@ -1659,16 +1905,22 @@ def main() -> None:
             )
             hybrid_status_for_variant = (
                 hybrid_status_run
-                if (variant.enable_fgo_lambda or variant.enable_tdcp_smoother)
+                if (
+                    variant.enable_fgo_lambda
+                    or variant.enable_tdcp_smoother
+                    or variant.enable_zupt
+                )
                 else None
             )
-            positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats = _run_ctrbpf_on_segment(
+            imu_for_variant = imu_run if variant.enable_zupt else None
+            positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats, zupt_stats = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
                 dd_computer=dd_for_variant,
                 dd_pr_computer=dd_pr_for_variant,
                 hybrid_pos=hybrid_for_variant,
                 hybrid_velocity=hybrid_v_for_variant,
                 hybrid_status=hybrid_status_for_variant,
+                imu=imu_for_variant,
             )
             score = score_ppc2024(
                 np.asarray([p for p in _aligned_positions(full_ref, data["times"], positions)],
@@ -1735,6 +1987,11 @@ def main() -> None:
                 "tdcp_pairs_accepted": int(tdcp_stats.pairs_accepted),
                 "tdcp_pairs_rejected_min_sats": int(tdcp_stats.pairs_rejected_min_sats),
                 "tdcp_pairs_rejected_postfit": int(tdcp_stats.pairs_rejected_postfit),
+                "zupt": int(variant.enable_zupt),
+                "zupt_evaluated": int(zupt_stats.epochs_evaluated),
+                "zupt_static": int(zupt_stats.epochs_static),
+                "zupt_rewritten": int(zupt_stats.epochs_rewritten),
+                "zupt_no_imu": int(zupt_stats.epochs_no_imu),
             }
             rows.append(row)
             agg_pass[variant.method_label] += row["honest_pass_m"]
@@ -1764,6 +2021,13 @@ def main() -> None:
                     f"{hybrid_stats.epochs_attempted} "
                     f"(missing {hybrid_stats.epochs_lookup_missing})"
                 )
+            zupt_msg = ""
+            if variant.enable_zupt and zupt_stats.epochs_evaluated > 0:
+                zupt_msg = (
+                    f", ZUPT static {zupt_stats.epochs_static}/"
+                    f"{zupt_stats.epochs_evaluated} "
+                    f"(rewritten {zupt_stats.epochs_rewritten}, no_imu {zupt_stats.epochs_no_imu})"
+                )
             tdcp_msg = ""
             if variant.enable_tdcp_smoother and tdcp_stats.pairs_attempted > 0:
                 tdcp_msg = (
@@ -1782,7 +2046,7 @@ def main() -> None:
             print(
                 f"    PPC honest: {row['honest_ppc_pct']:5.2f}%  "
                 f"(pass {row['honest_pass_m']:.0f} / total {row['honest_total_m']:.0f}m, "
-                f"{ms_per_epoch:.1f} ms/epoch{dd_msg}{gate_msg}{hybrid_msg}{tdcp_msg}{fgo_msg})",
+                f"{ms_per_epoch:.1f} ms/epoch{dd_msg}{gate_msg}{hybrid_msg}{zupt_msg}{tdcp_msg}{fgo_msg})",
                 flush=True,
             )
 
