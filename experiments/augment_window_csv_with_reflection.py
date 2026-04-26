@@ -13,8 +13,8 @@ import pandas as pd
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 DEFAULT_BASE_CSV = (
-    "/media/sasaki/aiueo/ai_coding_ws/gnss_cuda_sim_ws/gnss_gpu/experiments/results/"
-    "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_windowopt_validationhold_current_tight_hold_carry_window_predictions.csv"
+    RESULTS_DIR
+    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_windowopt_validationhold_current_tight_hold_carry_window_predictions.csv"
 )
 DEFAULT_REFL_CSV = RESULTS_DIR / "ppc_reflection_bvh_pooled_per_window.csv"
 DEFAULT_OUT_CSV = (
