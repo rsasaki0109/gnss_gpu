@@ -124,6 +124,13 @@ class CTRBPFConfig:
     fgo_min_fixed_to_apply: int = 3
     fgo_prior_sigma_m: float = 0.5
     fgo_dd_sigma_cycles: float = 0.20
+    # C2: per-epoch gate. If non-empty, FGO output is only written back to
+    # ``positions[i]`` when the hybrid Status at ``times[i]`` is one of these
+    # values; epochs with other Status values keep the hybrid passthrough.
+    # Empty tuple = apply Phase 4 to every epoch (legacy behavior).
+    # Default ``(1, 3)`` skips Status=4 (cm-class libgnss++ output) and only
+    # rewrites Status=1/3 (m-class).
+    fgo_apply_hybrid_statuses: tuple[int, ...] = (1, 3)
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -292,16 +299,25 @@ def _build_hybrid_velocity_guide(
     return out
 
 
-def _load_hybrid_pos_file(path: Path) -> dict[float, np.ndarray]:
-    """Parse a libgnss++ ``.pos`` file into a TOW-keyed ECEF lookup.
+def _load_hybrid_pos_file(
+    path: Path,
+) -> tuple[dict[float, np.ndarray], dict[float, int]]:
+    """Parse a libgnss++ ``.pos`` file into TOW-keyed ECEF + Status lookups.
 
     File format (whitespace-separated, '%' comments):
         GPS_Week  GPS_TOW  X  Y  Z  Lat  Lon  Height  Status  ...
 
-    Rows with non-finite coords or status==0 (no fix) are dropped. Keys are
-    rounded to 0.1 s to match the rover-epoch TOW grid used elsewhere.
+    Returns ``(positions, statuses)``. Rows with non-finite coords or
+    status==0 (no fix) are dropped. Keys are rounded to 0.1 s to match
+    the rover-epoch TOW grid used elsewhere.
+
+    Note: libgnss++ Status semantics are inverted from RTKLIB; on the
+    Phase 6 baseline pos files Status=4 is the high-quality (cm-class)
+    bucket, while Status in {1, 3} are m-class regions where Phase 4
+    FGO+LAMBDA is more likely to help than to hurt.
     """
-    out: dict[float, np.ndarray] = {}
+    positions: dict[float, np.ndarray] = {}
+    statuses: dict[float, int] = {}
     with path.open() as fh:
         for line in fh:
             line = line.strip()
@@ -322,8 +338,9 @@ def _load_hybrid_pos_file(path: Path) -> dict[float, np.ndarray]:
                 continue
             if not (np.isfinite(x) and np.isfinite(y) and np.isfinite(z)):
                 continue
-            out[tow] = np.array([x, y, z], dtype=np.float64)
-    return out
+            positions[tow] = np.array([x, y, z], dtype=np.float64)
+            statuses[tow] = int(status)
+    return positions, statuses
 
 
 def _load_full_reference(path: Path) -> list[tuple[float, np.ndarray]]:
@@ -374,6 +391,7 @@ def _run_ctrbpf_on_segment(
     dd_pr_computer=None,
     hybrid_pos: dict[float, np.ndarray] | None = None,
     hybrid_velocity: dict[float, np.ndarray] | None = None,
+    hybrid_status: dict[float, int] | None = None,
 ) -> tuple[np.ndarray, float, _DDStats, _RBPFGateStats, _HybridStats, _FGOStats]:
     """Run the PF on the loaded PPC segment and return (positions, ms/epoch).
 
@@ -649,12 +667,25 @@ def _run_ctrbpf_on_segment(
 
     # Phase 4: post-process FGO + LAMBDA partial fix over sliding windows.
     if config.enable_fgo_lambda and any(c is not None for c in fgo_dd_cache):
+        # Build per-epoch indices that are eligible for FGO replacement
+        # based on the hybrid Status gate (C2). When the gate is empty or
+        # no hybrid status was loaded, every epoch is eligible.
+        protect_indices: set[int] = set()
+        if hybrid_status is not None and config.fgo_apply_hybrid_statuses:
+            allowed = set(int(s) for s in config.fgo_apply_hybrid_statuses)
+            for i in range(n_epochs):
+                st = hybrid_status.get(round(float(times[i]), 1))
+                # Protect epoch (keep hybrid passthrough) when it has a
+                # status NOT in the allowed-rewrite set.
+                if st is not None and st not in allowed:
+                    protect_indices.add(i)
         positions = _apply_fgo_lambda(
             positions=positions,
             dd_cache=fgo_dd_cache,
             dd_pr_cache=fgo_dd_pr_cache,
             config=config,
             stats=fgo_stats,
+            protect_indices=protect_indices,
         )
 
     return positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats
@@ -667,6 +698,7 @@ def _apply_fgo_lambda(
     dd_pr_cache: list | None,
     config: CTRBPFConfig,
     stats: _FGOStats,
+    protect_indices: set[int] | None = None,
 ) -> np.ndarray:
     """Slide a window over the trajectory and run solve_local_fgo_with_lambda.
 
@@ -737,9 +769,18 @@ def _apply_fgo_lambda(
                 new_positions.shape == slice_pos.shape
                 and np.all(np.isfinite(new_positions))
             ):
-                out[start : end + 1] = new_positions
-                stats.windows_applied += 1
-                stats.epochs_replaced += win_size
+                # C2 per-epoch gate: only overwrite indices that are NOT
+                # protected (i.e., not Status=4 / cm-class hybrid).
+                replaced = 0
+                for rel_i in range(win_size):
+                    abs_i = start + rel_i
+                    if protect_indices is not None and abs_i in protect_indices:
+                        continue
+                    out[abs_i] = new_positions[rel_i]
+                    replaced += 1
+                if replaced > 0:
+                    stats.windows_applied += 1
+                    stats.epochs_replaced += replaced
         start += stride
 
     return out
@@ -799,6 +840,9 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         fgo_min_fixed_to_apply=args.fgo_min_fixed_to_apply,
         fgo_prior_sigma_m=args.fgo_prior_sigma_m,
         fgo_dd_sigma_cycles=args.fgo_dd_sigma_cycles,
+        fgo_apply_hybrid_statuses=tuple(
+            int(s.strip()) for s in args.fgo_apply_hybrid_statuses.split(",") if s.strip()
+        ),
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -1026,6 +1070,10 @@ def main() -> None:
                         help="FGO prior sigma [m] for initial positions (default 0.5)")
     parser.add_argument("--fgo-dd-sigma-cycles", type=float, default=0.20,
                         help="FGO DD carrier float sigma [cycles] (default 0.20)")
+    parser.add_argument("--fgo-apply-hybrid-statuses", type=str, default="1,3",
+                        help="Comma-separated hybrid Status values where Phase 4 may overwrite "
+                             "the hybrid passthrough; default '1,3' protects Status=4 cm-class "
+                             "epochs. Use empty string '' to disable the gate (apply everywhere).")
     parser.add_argument("--max-epochs", type=int, default=None,
                         help="Cap epochs per run (smoke / debug). None = full run.")
     parser.add_argument("--start-epoch", type=int, default=0)
@@ -1164,17 +1212,20 @@ def main() -> None:
 
         hybrid_pos_run: dict[float, np.ndarray] | None = None
         hybrid_velocity_run: dict[float, np.ndarray] | None = None
-        if any_hybrid:
+        hybrid_status_run: dict[float, int] | None = None
+        if (any_hybrid or any_fgo) and args.hybrid_pos_dir is not None:
             hybrid_path = args.hybrid_pos_dir / f"{city}_{run}{args.hybrid_pos_suffix}"
             if not hybrid_path.is_file():
                 print(
                     f"  [hybrid] WARNING: missing {hybrid_path}, hybrid PU disabled for this run"
                 )
             else:
-                hybrid_pos_run = _load_hybrid_pos_file(hybrid_path)
+                hybrid_pos_run, hybrid_status_run = _load_hybrid_pos_file(hybrid_path)
+                from collections import Counter
+                status_dist = Counter(hybrid_status_run.values())
                 print(
                     f"  [hybrid] {hybrid_path.name}: "
-                    f"{len(hybrid_pos_run)} usable rows"
+                    f"{len(hybrid_pos_run)} usable rows, status={dict(status_dist)}"
                 )
                 hybrid_velocity_run = _build_hybrid_velocity_guide(
                     hybrid_pos_run,
@@ -1201,12 +1252,16 @@ def main() -> None:
             hybrid_v_for_variant = (
                 hybrid_velocity_run if variant.enable_hybrid_velocity_guide else None
             )
+            hybrid_status_for_variant = (
+                hybrid_status_run if variant.enable_fgo_lambda else None
+            )
             positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
                 dd_computer=dd_for_variant,
                 dd_pr_computer=dd_pr_for_variant,
                 hybrid_pos=hybrid_for_variant,
                 hybrid_velocity=hybrid_v_for_variant,
+                hybrid_status=hybrid_status_for_variant,
             )
             score = score_ppc2024(
                 np.asarray([p for p in _aligned_positions(full_ref, data["times"], positions)],
