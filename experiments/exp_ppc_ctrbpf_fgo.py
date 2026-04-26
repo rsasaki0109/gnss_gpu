@@ -147,6 +147,19 @@ class CTRBPFConfig:
     # cm-class hybrid passes (~5cm) across the 0.5m PPC threshold; small
     # rewrites cost more pass than they recover. Set to 0.0 to disable.
     fgo_min_correction_m: float = 0.5
+    # Phase 8: TDCP-anchored hybrid smoother. After the PF loop, run a
+    # per-coordinate forward+backward Kalman smoother over the trajectory,
+    # using the rover-side TDCP velocity as the motion model and the hybrid
+    # passthrough as the observation. Each epoch's observation sigma is
+    # derived from its hybrid Status (anchor sigma for "good" Status, loose
+    # sigma for "rewritable" Status, huge sigma when hybrid is missing).
+    enable_tdcp_smoother: bool = False
+    tdcp_sigma_mps: float = 0.05
+    tdcp_postfit_max_m: float = 1.0
+    tdcp_min_sats: int = 5
+    tdcp_obs_anchor_sigma_m: float = 0.05
+    tdcp_obs_loose_sigma_m: float = 5.0
+    tdcp_obs_missing_sigma_m: float = 1000.0
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -266,6 +279,271 @@ class _FGOStats:
     n_fixed_total: int = 0
     n_fixed_observations_total: int = 0
     epochs_replaced: int = 0
+
+
+@dataclass
+class _TDCPSmootherStats:
+    pairs_attempted: int = 0
+    pairs_accepted: int = 0
+    pairs_rejected_min_sats: int = 0
+    pairs_rejected_postfit: int = 0
+
+
+@dataclass
+class _TDCPMeasurement:
+    """Light-weight measurement object compatible with the TDCP module.
+
+    The TDCP solver pulls ``system_id``, ``prn``, ``satellite_ecef``,
+    ``carrier_phase`` (cycles), ``satellite_velocity`` (m/s), and
+    ``clock_drift`` (s/s). The PPC loader supplies all of these when
+    ``include_sat_velocity=True``.
+    """
+
+    system_id: int
+    prn: int
+    satellite_ecef: np.ndarray
+    carrier_phase: float
+    satellite_velocity: np.ndarray
+    clock_drift: float
+    elevation: float = 0.0
+
+
+def _build_tdcp_measurements(
+    sat_ecef: np.ndarray,
+    system_ids: np.ndarray,
+    sat_id_strs: list[str],
+    carrier_phase: np.ndarray,
+    sat_velocity: np.ndarray,
+    clock_drift: np.ndarray,
+    rover_pos: np.ndarray,
+) -> list[_TDCPMeasurement]:
+    out: list[_TDCPMeasurement] = []
+    sids = np.asarray(system_ids, dtype=np.int32)
+    for k in range(int(sat_ecef.shape[0])):
+        sys_char = _SYS_ID_TO_CHAR.get(int(sids[k]))
+        if sys_char is None:
+            continue
+        sat_id_str = sat_id_strs[k] if k < len(sat_id_strs) else ""
+        prn_str = sat_id_str[1:].lstrip("0") if sat_id_str else ""
+        try:
+            prn = int(prn_str) if prn_str else 0
+        except ValueError:
+            prn = 0
+        if prn <= 0:
+            continue
+        sat_pos = np.asarray(sat_ecef[k], dtype=np.float64)
+        if sat_pos.size != 3 or not np.all(np.isfinite(sat_pos)):
+            continue
+        cp = float(carrier_phase[k]) if k < len(carrier_phase) else float("nan")
+        if not np.isfinite(cp) or abs(cp) < 1e3:
+            continue
+        sv = (
+            np.asarray(sat_velocity[k], dtype=np.float64)
+            if k < len(sat_velocity)
+            else np.zeros(3, dtype=np.float64)
+        )
+        if sv.size != 3 or not np.all(np.isfinite(sv)):
+            continue
+        cd = float(clock_drift[k]) if k < len(clock_drift) else 0.0
+        if not np.isfinite(cd):
+            cd = 0.0
+        elev = _elevation_rad(rover_pos, sat_pos)
+        out.append(
+            _TDCPMeasurement(
+                system_id=int(sids[k]),
+                prn=prn,
+                satellite_ecef=sat_pos,
+                carrier_phase=cp,
+                satellite_velocity=sv,
+                clock_drift=cd,
+                elevation=float(elev),
+            )
+        )
+    return out
+
+
+def _apply_tdcp_smoother(
+    *,
+    positions: np.ndarray,
+    times: np.ndarray,
+    data: dict,
+    config: CTRBPFConfig,
+    hybrid_pos: dict[float, np.ndarray] | None,
+    hybrid_status: dict[float, int] | None,
+    stats: _TDCPSmootherStats,
+) -> np.ndarray:
+    """Forward+backward Kalman smoother over ``positions`` using TDCP velocity.
+
+    State per coordinate is scalar (position only). The motion model is
+    ``x[t+1] = x[t] + v_tdcp[t] * dt[t]`` and the observation is the
+    hybrid passthrough (``hybrid_pos[t]``) with sigma derived from the
+    hybrid Status field. Where TDCP is rejected we fall through to a
+    very loose motion model (sigma = 10 m) so the observation alone
+    drives the state. Where hybrid is missing we use a huge observation
+    sigma so the prediction propagates unchanged.
+
+    Decoupled per-coordinate scalar Kalman/RTS — fine for trajectory
+    smoothing on the 0.5 m PPC threshold question; cross-axis
+    correlations from satellite geometry are second-order at this scale.
+    """
+    from gnss_gpu.tdcp_velocity import estimate_velocity_from_tdcp_with_metrics
+
+    n = int(positions.shape[0])
+    if n < 2:
+        return positions
+
+    sat_ecef = data["sat_ecef"]
+    system_ids = data.get("system_ids")
+    used_prns = data.get("used_prns") or [[] for _ in range(n)]
+    carrier_phase = data.get("carrier_phase")
+    sat_velocity = data.get("sat_velocity")
+    clock_drift = data.get("clock_drift")
+    if (
+        carrier_phase is None
+        or sat_velocity is None
+        or clock_drift is None
+        or system_ids is None
+    ):
+        return positions
+
+    # TDCP velocity per consecutive pair (between epoch i and i+1).
+    tdcp_v = [None] * (n - 1)
+    for i in range(n - 1):
+        stats.pairs_attempted += 1
+        dt_i = float(times[i + 1] - times[i])
+        if not np.isfinite(dt_i) or dt_i <= 0.0:
+            continue
+        prev_meas = _build_tdcp_measurements(
+            np.asarray(sat_ecef[i], dtype=np.float64),
+            np.asarray(system_ids[i], dtype=np.int32),
+            list(used_prns[i]) if i < len(used_prns) else [],
+            np.asarray(carrier_phase[i], dtype=np.float64),
+            np.asarray(sat_velocity[i], dtype=np.float64),
+            np.asarray(clock_drift[i], dtype=np.float64),
+            np.asarray(positions[i], dtype=np.float64),
+        )
+        cur_meas = _build_tdcp_measurements(
+            np.asarray(sat_ecef[i + 1], dtype=np.float64),
+            np.asarray(system_ids[i + 1], dtype=np.int32),
+            list(used_prns[i + 1]) if (i + 1) < len(used_prns) else [],
+            np.asarray(carrier_phase[i + 1], dtype=np.float64),
+            np.asarray(sat_velocity[i + 1], dtype=np.float64),
+            np.asarray(clock_drift[i + 1], dtype=np.float64),
+            np.asarray(positions[i + 1], dtype=np.float64),
+        )
+        if len(prev_meas) < int(config.tdcp_min_sats) or len(cur_meas) < int(config.tdcp_min_sats):
+            stats.pairs_rejected_min_sats += 1
+            continue
+        v, postfit = estimate_velocity_from_tdcp_with_metrics(
+            np.asarray(positions[i], dtype=np.float64),
+            prev_meas,
+            cur_meas,
+            dt_i,
+            min_sats=int(config.tdcp_min_sats),
+            max_postfit_rms_m=float(config.tdcp_postfit_max_m),
+        )
+        if v is None:
+            stats.pairs_rejected_postfit += 1
+            continue
+        tdcp_v[i] = (v, dt_i, float(postfit))
+        stats.pairs_accepted += 1
+
+    # Per-epoch observation sigma from hybrid Status.
+    obs_sigma = np.full(n, float(config.tdcp_obs_missing_sigma_m), dtype=np.float64)
+    if hybrid_pos is not None:
+        anchor_set = set(int(s) for s in config.fgo_apply_hybrid_statuses)
+        for i in range(n):
+            t_key = round(float(times[i]), 1)
+            if t_key not in hybrid_pos:
+                continue
+            st = hybrid_status.get(t_key) if hybrid_status is not None else None
+            if st is None:
+                obs_sigma[i] = float(config.tdcp_obs_loose_sigma_m)
+            elif st in anchor_set:
+                obs_sigma[i] = float(config.tdcp_obs_loose_sigma_m)
+            else:
+                obs_sigma[i] = float(config.tdcp_obs_anchor_sigma_m)
+
+    # Anchor mask: Status=4 (or any status NOT in fgo_apply_hybrid_statuses)
+    # are HARD-PINNED to the hybrid passthrough. The Kalman smoother only
+    # operates on non-anchor epochs, bridging them via TDCP velocity from
+    # the surrounding anchors. This protects cm-class hybrid passes from
+    # being corrupted by TDCP postfit noise.
+    anchor_mask = np.zeros(n, dtype=bool)
+    if hybrid_pos is not None and hybrid_status is not None:
+        rewrite_set = set(int(s) for s in config.fgo_apply_hybrid_statuses)
+        for i in range(n):
+            t_key = round(float(times[i]), 1)
+            st = hybrid_status.get(t_key)
+            if st is not None and st not in rewrite_set:
+                anchor_mask[i] = True
+
+    # Per-coordinate scalar Kalman forward + RTS backward.
+    sigma_v = float(config.tdcp_sigma_mps)
+    out = np.array(positions, dtype=np.float64, copy=True)
+    for axis in range(3):
+        x = np.zeros(n, dtype=np.float64)
+        P = np.zeros(n, dtype=np.float64)
+        # Initialise: anchors get the hybrid value at near-zero variance,
+        # non-anchors take the passthrough as initial state with the
+        # status-derived obs sigma.
+        x[0] = positions[0, axis]
+        P[0] = (1e-3) ** 2 if anchor_mask[0] else float(obs_sigma[0]) ** 2
+
+        for i in range(1, n):
+            tv = tdcp_v[i - 1]
+            if tv is not None:
+                v_axis = float(tv[0][axis])
+                dt_i = tv[1]
+                Q = (sigma_v * dt_i) ** 2
+                x_pred = x[i - 1] + v_axis * dt_i
+            else:
+                # No TDCP: predict by inheriting last state, big process noise.
+                Q = 100.0
+                x_pred = x[i - 1]
+            P_pred = P[i - 1] + Q
+            if anchor_mask[i]:
+                # Hard pin to hybrid value.
+                x[i] = positions[i, axis]
+                P[i] = (1e-3) ** 2
+            else:
+                R = obs_sigma[i] ** 2
+                K = P_pred / (P_pred + R)
+                z = positions[i, axis]
+                x[i] = x_pred + K * (z - x_pred)
+                P[i] = (1.0 - K) * P_pred
+
+        # Backward (RTS smoother) — keep anchors hard-pinned.
+        xs = np.array(x, copy=True)
+        Ps = np.array(P, copy=True)
+        for i in range(n - 2, -1, -1):
+            if anchor_mask[i]:
+                xs[i] = positions[i, axis]
+                Ps[i] = (1e-3) ** 2
+                continue
+            tv = tdcp_v[i]
+            if tv is not None:
+                v_axis = float(tv[0][axis])
+                dt_i = tv[1]
+                Q = (sigma_v * dt_i) ** 2
+                x_pred = x[i] + v_axis * dt_i
+            else:
+                Q = 100.0
+                x_pred = x[i]
+            P_pred = P[i] + Q
+            if P_pred > 0.0:
+                G = P[i] / P_pred
+                xs[i] = x[i] + G * (xs[i + 1] - x_pred)
+                Ps[i] = P[i] + G * G * (Ps[i + 1] - P_pred)
+        out[:, axis] = xs
+
+    # Hard pin anchors in the final output (defensive; the loop above
+    # already keeps them at the hybrid value).
+    for i in range(n):
+        if anchor_mask[i]:
+            out[i] = positions[i]
+
+    return out
 
 
 def _build_hybrid_velocity_guide(
@@ -408,7 +686,7 @@ def _run_ctrbpf_on_segment(
     hybrid_pos: dict[float, np.ndarray] | None = None,
     hybrid_velocity: dict[float, np.ndarray] | None = None,
     hybrid_status: dict[float, int] | None = None,
-) -> tuple[np.ndarray, float, _DDStats, _RBPFGateStats, _HybridStats, _FGOStats]:
+) -> tuple[np.ndarray, float, _DDStats, _RBPFGateStats, _HybridStats, _FGOStats, _TDCPSmootherStats]:
     """Run the PF on the loaded PPC segment and return (positions, ms/epoch).
 
     ``positions`` is shape ``(n_epochs, 3)``, aligned with ``data['times']``.
@@ -444,6 +722,7 @@ def _run_ctrbpf_on_segment(
     fgo_dd_cache: list = [None] * n_epochs  # holds DDCarrierEpoch | None
     fgo_dd_pr_cache: list = [None] * n_epochs  # holds DDPseudorangeEpoch | None
     fgo_stats = _FGOStats()
+    tdcp_stats = _TDCPSmootherStats()
 
     positions = np.zeros((n_epochs, 3), dtype=np.float64)
     init_pos = np.asarray(wls_positions[0, :3], dtype=np.float64)
@@ -681,6 +960,20 @@ def _run_ctrbpf_on_segment(
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
 
+    # Phase 8: TDCP-anchored hybrid smoother. Runs BEFORE Phase 4 so
+    # Phase 4 can operate on the smoothed trajectory. With TDCP off this
+    # is a no-op.
+    if config.enable_tdcp_smoother:
+        positions = _apply_tdcp_smoother(
+            positions=positions,
+            times=times,
+            data=data,
+            config=config,
+            hybrid_pos=hybrid_pos,
+            hybrid_status=hybrid_status,
+            stats=tdcp_stats,
+        )
+
     # Phase 4: post-process FGO + LAMBDA partial fix over sliding windows.
     if config.enable_fgo_lambda and any(c is not None for c in fgo_dd_cache):
         # Build per-epoch indices that are eligible for FGO replacement
@@ -722,7 +1015,7 @@ def _run_ctrbpf_on_segment(
             prior_sigmas=prior_sigmas_arr,
         )
 
-    return positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats
+    return positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats
 
 
 def _apply_fgo_lambda(
@@ -897,6 +1190,12 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         fgo_anchor_sigma_m=args.fgo_anchor_sigma_m,
         fgo_loose_sigma_m=args.fgo_loose_sigma_m,
         fgo_min_correction_m=args.fgo_min_correction_m,
+        tdcp_sigma_mps=args.tdcp_sigma_mps,
+        tdcp_postfit_max_m=args.tdcp_postfit_max_m,
+        tdcp_min_sats=args.tdcp_min_sats,
+        tdcp_obs_anchor_sigma_m=args.tdcp_obs_anchor_sigma_m,
+        tdcp_obs_loose_sigma_m=args.tdcp_obs_loose_sigma_m,
+        tdcp_obs_missing_sigma_m=args.tdcp_obs_missing_sigma_m,
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -1016,6 +1315,29 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             hybrid_emit_pf_estimate=True,
             method_label="RBPF-velKF+DD+gate+phase7",
         ))
+    # Phase 8: hybrid passthrough + TDCP-anchored Kalman smoother.
+    if "rbpf+dd+gate+hybrid+tdcp" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_tdcp_smoother=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+tdcp",
+        ))
+    # Phase 8 + Phase 4 stacked.
+    if "rbpf+dd+gate+hybrid+tdcp+phase4" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_tdcp_smoother=True,
+            enable_fgo_lambda=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+tdcp+phase4",
+        ))
     # Phase 4: hybrid passthrough + post-process FGO + LAMBDA partial fix.
     # The PF supplies cached DD carrier observations (no hybrid bias on the
     # FGO solve), and where LAMBDA accepts integer fixes we replace the
@@ -1077,7 +1399,8 @@ def main() -> None:
             "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+gate+pu, "
             "pf+hybrid, rbpf+dd+hybrid, rbpf+dd+gate+hybrid, "
             "rbpf+dd+gate+phase7, rbpf+dd+gate+phase4, "
-            "rbpf+dd+gate+hybrid+phase4}"
+            "rbpf+dd+gate+hybrid+phase4, "
+            "rbpf+dd+gate+hybrid+tdcp, rbpf+dd+gate+hybrid+tdcp+phase4}"
         ),
     )
     parser.add_argument("--dd-sigma-cycles", type=float, default=0.05,
@@ -1139,6 +1462,20 @@ def main() -> None:
                         help="Minimum |FGO - hybrid| disagreement [m] required to overwrite the "
                              "hybrid passthrough at a given epoch (D2b: filters out small noisy "
                              "rewrites that cost cm-class passes; default 0.5, set 0 to disable).")
+    # Phase 8: TDCP-anchored hybrid smoother
+    parser.add_argument("--tdcp-sigma-mps", type=float, default=0.05,
+                        help="TDCP velocity sigma [m/s] used as the smoother process noise (default 0.05)")
+    parser.add_argument("--tdcp-postfit-max-m", type=float, default=1.0,
+                        help="Reject TDCP velocity if postfit RMS exceeds this [m] (default 1.0)")
+    parser.add_argument("--tdcp-min-sats", type=int, default=5,
+                        help="Min satellites tracked through both epochs for TDCP (default 5)")
+    parser.add_argument("--tdcp-obs-anchor-sigma-m", type=float, default=0.05,
+                        help="Smoother observation sigma [m] for protected hybrid epochs "
+                             "(Status NOT in --fgo-apply-hybrid-statuses; default 0.05)")
+    parser.add_argument("--tdcp-obs-loose-sigma-m", type=float, default=5.0,
+                        help="Smoother observation sigma [m] for rewritable hybrid epochs (default 5.0)")
+    parser.add_argument("--tdcp-obs-missing-sigma-m", type=float, default=1000.0,
+                        help="Smoother observation sigma [m] when hybrid is missing entirely (default 1000)")
     parser.add_argument("--max-epochs", type=int, default=None,
                         help="Cap epochs per run (smoke / debug). None = full run.")
     parser.add_argument("--start-epoch", type=int, default=0)
@@ -1225,7 +1562,10 @@ def main() -> None:
             max_epochs=args.max_epochs,
             start_epoch=args.start_epoch,
             systems=args.systems_tuple,
-            include_sat_velocity=any(v.enable_rbpf_velocity_kf for v in variants),
+            include_sat_velocity=any(
+                v.enable_rbpf_velocity_kf or v.enable_tdcp_smoother
+                for v in variants
+            ),
         )
         full_ref = _load_full_reference(run_dir / "reference.csv")
         n_emit = _emission_count(full_ref, np.asarray(data["times"], dtype=np.float64))
@@ -1318,9 +1658,11 @@ def main() -> None:
                 hybrid_velocity_run if variant.enable_hybrid_velocity_guide else None
             )
             hybrid_status_for_variant = (
-                hybrid_status_run if variant.enable_fgo_lambda else None
+                hybrid_status_run
+                if (variant.enable_fgo_lambda or variant.enable_tdcp_smoother)
+                else None
             )
-            positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats = _run_ctrbpf_on_segment(
+            positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
                 dd_computer=dd_for_variant,
                 dd_pr_computer=dd_pr_for_variant,
@@ -1388,6 +1730,11 @@ def main() -> None:
                 "fgo_windows_applied": int(fgo_stats.windows_applied),
                 "fgo_n_fixed_total": int(fgo_stats.n_fixed_total),
                 "fgo_epochs_replaced": int(fgo_stats.epochs_replaced),
+                "tdcp_smoother": int(variant.enable_tdcp_smoother),
+                "tdcp_pairs_attempted": int(tdcp_stats.pairs_attempted),
+                "tdcp_pairs_accepted": int(tdcp_stats.pairs_accepted),
+                "tdcp_pairs_rejected_min_sats": int(tdcp_stats.pairs_rejected_min_sats),
+                "tdcp_pairs_rejected_postfit": int(tdcp_stats.pairs_rejected_postfit),
             }
             rows.append(row)
             agg_pass[variant.method_label] += row["honest_pass_m"]
@@ -1417,6 +1764,14 @@ def main() -> None:
                     f"{hybrid_stats.epochs_attempted} "
                     f"(missing {hybrid_stats.epochs_lookup_missing})"
                 )
+            tdcp_msg = ""
+            if variant.enable_tdcp_smoother and tdcp_stats.pairs_attempted > 0:
+                tdcp_msg = (
+                    f", TDCP {tdcp_stats.pairs_accepted}/"
+                    f"{tdcp_stats.pairs_attempted} pairs "
+                    f"(reject min_sats={tdcp_stats.pairs_rejected_min_sats}, "
+                    f"postfit={tdcp_stats.pairs_rejected_postfit})"
+                )
             fgo_msg = ""
             if variant.enable_fgo_lambda and fgo_stats.windows_attempted > 0:
                 fgo_msg = (
@@ -1427,7 +1782,7 @@ def main() -> None:
             print(
                 f"    PPC honest: {row['honest_ppc_pct']:5.2f}%  "
                 f"(pass {row['honest_pass_m']:.0f} / total {row['honest_total_m']:.0f}m, "
-                f"{ms_per_epoch:.1f} ms/epoch{dd_msg}{gate_msg}{hybrid_msg}{fgo_msg})",
+                f"{ms_per_epoch:.1f} ms/epoch{dd_msg}{gate_msg}{hybrid_msg}{tdcp_msg}{fgo_msg})",
                 flush=True,
             )
 
