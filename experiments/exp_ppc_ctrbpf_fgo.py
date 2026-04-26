@@ -183,6 +183,53 @@ class CTRBPFConfig:
     # Only ZUPT-rewrite epochs whose hybrid Status is in this set; the
     # Status=4 cm-class epochs stay fixed to their hybrid value.
     zupt_apply_hybrid_statuses: tuple[int, ...] = (1, 3)
+    # Phase 9b: tight-coupled IMU. Unlike Phase 9a (post-process ZUPT) or
+    # Phase 4/8 (post-process FGO/TDCP), IMU evidence enters the PF *during*
+    # the loop as a per-particle position pseudo-observation
+    # (``pf.position_update(imu_predicted_pos, sigma=imu_sigma)``). The
+    # IMU prediction is derived from a sliding pre-integration window
+    # anchored at the most recent Status=4 (cm-class) hybrid epoch:
+    #   - body-frame accel is rotated into ENU using a yaw derived from the
+    #     anchor's recent velocity (course-over-ground, pitch/roll = 0),
+    #   - gravity (9.81 m/s^2) is removed from the body-z axis,
+    #   - acceleration is double-integrated to give Δp_imu since anchor.
+    # Output emission is gated on hybrid Status: Status=4 epochs always emit
+    # the hybrid passthrough (cm-class anchor); Status in
+    # ``imu_tc_emit_pf_hybrid_statuses`` (default (1, 3)) emit the PF
+    # estimate so the IMU likelihood actually surfaces in the PPC score.
+    enable_imu_tc: bool = False
+    imu_tc_emit_pf_hybrid_statuses: tuple[int, ...] = (1, 3)
+    # Position pseudo-observation sigma at t=0s after the anchor reset.
+    imu_tc_pos_sigma_base_m: float = 0.5
+    # Sigma growth per second of dead-reckoning (linear; reflects
+    # accel-bias drift). At 5s elapsed, default sigma = 0.5 + 5*0.5 = 3.0 m.
+    imu_tc_pos_sigma_per_s: float = 0.5
+    # Maximum dead-reckoning duration [s]. Past this, IMU drift dominates
+    # and we skip the PU + emission switch (epoch falls back to hybrid).
+    imu_tc_max_dr_seconds: float = 5.0
+    # If |IMU-predicted pos - hybrid pos| exceeds this when both are
+    # available, the IMU prediction is presumed wrong (yaw drift, axis
+    # error) and we skip the PU + emission switch. Conservative default
+    # 30 m: PPC NLOS hybrid jumps can exceed 20 m, so this is loose.
+    imu_tc_max_disagreement_m: float = 30.0
+    # When the emission switch fires we still bound the PF estimate to the
+    # hybrid ± this distance; if the PF wandered farther we keep hybrid.
+    # Protects against PF cloud collapse drift in long NLOS gaps.
+    imu_tc_emit_max_diff_m: float = 20.0
+    # Hybrid PU sigma override on Status values that ARE in
+    # ``imu_tc_emit_pf_hybrid_statuses``. When set > 0, the hybrid pos
+    # update on those (m-class) epochs uses this sigma instead of
+    # ``hybrid_sigma_m`` (default 1.0). Looser hybrid PU lets the IMU
+    # pre-integration drive the cloud through NLOS without being clamped
+    # to the m-class hybrid baseline. Set to 0 to keep the global sigma.
+    imu_tc_hybrid_loose_sigma_m: float = 5.0
+    # Static-detection thresholds for the *anchor*: when the vehicle is
+    # IMU-static at a Status=4 epoch, we set the anchor velocity to zero
+    # (instead of a noisy hybrid finite difference). Reuses the Phase 9a
+    # ZUPT thresholds so a single `--zupt-*` knob set covers both.
+    imu_tc_anchor_static_acc_low_mps2: float = 9.6
+    imu_tc_anchor_static_acc_high_mps2: float = 9.95
+    imu_tc_anchor_static_gyro_max_dps: float = 1.5
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -318,6 +365,31 @@ class _ZUPTStats:
     epochs_static: int = 0
     epochs_rewritten: int = 0
     epochs_no_imu: int = 0
+
+
+@dataclass
+class _IMUTCStats:
+    """Per-run counters for Phase 9b tight-coupled IMU."""
+
+    epochs_evaluated: int = 0  # rover epochs reached after the first anchor
+    anchor_resets: int = 0  # Status=4 epochs that re-set the anchor
+    anchor_resets_static: int = 0  # subset where the anchor was IMU-static
+    pu_applied: int = 0  # epochs where pf.position_update(imu_pred) fired
+    pu_skipped_no_imu: int = 0
+    pu_skipped_no_anchor: int = 0
+    pu_skipped_dr_too_long: int = 0
+    pu_skipped_disagreement: int = 0
+    emit_pf_estimate: int = 0  # epochs where output[i] = pf.estimate (vs hybrid)
+    emit_skipped_pf_drift: int = 0  # PF wandered too far from hybrid; kept hybrid
+    avg_dr_seconds: float = 0.0
+    _dr_seconds_sum: float = 0.0
+    _dr_seconds_n: int = 0
+
+    def record_dr_seconds(self, dr: float) -> None:
+        if not (dr is None or dr != dr):  # noqa: SIM114 — NaN safe
+            self._dr_seconds_sum += float(dr)
+            self._dr_seconds_n += 1
+            self.avg_dr_seconds = self._dr_seconds_sum / max(self._dr_seconds_n, 1)
 
 
 def _build_imu_per_epoch_stats(
@@ -467,6 +539,177 @@ def _apply_zupt(
         stats.epochs_rewritten += 1
 
     return out
+
+
+# ---------------------------------------------------------------------------
+# Phase 9b: tight-coupled IMU helpers
+# ---------------------------------------------------------------------------
+
+
+def _ecef_to_enu_rotation(lat: float, lon: float) -> np.ndarray:
+    """3x3 rotation matrix that maps an ECEF delta to local ENU at (lat, lon)."""
+    sl, cl = math.sin(lat), math.cos(lat)
+    so, co = math.sin(lon), math.cos(lon)
+    return np.array(
+        [
+            [-so,             co,            0.0],
+            [-sl * co, -sl * so,  cl],
+            [ cl * co,  cl * so,  sl],
+        ],
+        dtype=np.float64,
+    )
+
+
+def _ecef_velocity_to_enu(pos_ecef: np.ndarray, vel_ecef: np.ndarray) -> np.ndarray:
+    lat, lon, _ = _ecef_to_llh(float(pos_ecef[0]), float(pos_ecef[1]), float(pos_ecef[2]))
+    R = _ecef_to_enu_rotation(lat, lon)
+    return R @ np.asarray(vel_ecef, dtype=np.float64)
+
+
+def _enu_delta_to_ecef(pos_ecef: np.ndarray, enu: np.ndarray) -> np.ndarray:
+    lat, lon, _ = _ecef_to_llh(float(pos_ecef[0]), float(pos_ecef[1]), float(pos_ecef[2]))
+    R = _ecef_to_enu_rotation(lat, lon)
+    return R.T @ np.asarray(enu, dtype=np.float64)
+
+
+@dataclass
+class _IMUAnchor:
+    """State of the IMU dead-reckoning anchor.
+
+    The anchor is the most recent rover epoch where the position is trusted
+    (Status=4 hybrid, or first epoch). Pre-integration accumulates body-frame
+    accelerometer samples since this time and projects them into ENU using
+    the anchor's heading (yaw). The first ``valid_yaw`` is set as soon as we
+    have a usable course-over-ground estimate; until then the IMU PU is
+    skipped.
+    """
+
+    pos_ecef: np.ndarray
+    time: float
+    yaw_enu_rad: float  # CCW from East in ENU; vehicle forward = +yaw direction
+    valid_yaw: bool
+    velocity_enu: np.ndarray  # (east, north, up) m/s, used as initial dr velocity
+
+
+def _heading_from_velocity_enu(vel_enu: np.ndarray, min_speed_mps: float = 0.7) -> tuple[float, bool]:
+    """Yaw (CCW from East) derived from ENU velocity.
+
+    Returns (yaw_rad, valid). ``valid`` is False when the planar speed is
+    below ``min_speed_mps`` (heading cannot be reliably inferred).
+    """
+    east = float(vel_enu[0]) if vel_enu.size > 0 else 0.0
+    north = float(vel_enu[1]) if vel_enu.size > 1 else 0.0
+    speed = math.hypot(east, north)
+    if not math.isfinite(speed) or speed < float(min_speed_mps):
+        return 0.0, False
+    return math.atan2(north, east), True
+
+
+def _build_imu_segment_index(imu: dict[str, np.ndarray] | None) -> np.ndarray | None:
+    """Sorted IMU timestamp array used for binary search; ``None`` if no IMU."""
+    if imu is None or "time" not in imu:
+        return None
+    t = np.asarray(imu["time"], dtype=np.float64)
+    if t.size == 0:
+        return None
+    return t
+
+
+def _integrate_imu_between(
+    imu: dict[str, np.ndarray],
+    imu_t: np.ndarray,
+    t_start: float,
+    t_end: float,
+    yaw_enu_rad: float,
+    initial_velocity_enu: np.ndarray,
+    *,
+    gravity_mps2: float = 9.81,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Pre-integrate body-frame IMU between two rover epochs.
+
+    Returns ``(delta_pos_enu, end_velocity_enu, n_samples)``. The body frame
+    convention assumed: x=forward, y=left, z=up (right-handed, +z aligned
+    with gravity reaction). Pitch and roll are taken as zero so accel_z is
+    just the vertical specific force. Yaw rotates the horizontal body axes
+    into ENU (east, north).
+
+    Returns zero deltas (and propagated initial velocity * dt) when no
+    samples fall in [t_start, t_end).
+    """
+    dt_total = float(t_end - t_start)
+    if not math.isfinite(dt_total) or dt_total <= 0.0:
+        return np.zeros(3, dtype=np.float64), np.asarray(initial_velocity_enu, dtype=np.float64).copy(), 0
+
+    i0 = int(np.searchsorted(imu_t, t_start, side="left"))
+    i1 = int(np.searchsorted(imu_t, t_end, side="left"))
+    if i1 <= i0:
+        # No IMU samples in window -- propagate at constant velocity.
+        v = np.asarray(initial_velocity_enu, dtype=np.float64).copy()
+        dp = v * dt_total
+        return dp, v, 0
+
+    ax = np.asarray(imu["acc_x"][i0:i1], dtype=np.float64)
+    ay = np.asarray(imu["acc_y"][i0:i1], dtype=np.float64)
+    az = np.asarray(imu["acc_z"][i0:i1], dtype=np.float64)
+    ts = np.asarray(imu_t[i0:i1], dtype=np.float64)
+
+    # Replace NaNs with zeros (rare, treat as no acceleration sample).
+    ax = np.where(np.isfinite(ax), ax, 0.0)
+    ay = np.where(np.isfinite(ay), ay, 0.0)
+    az = np.where(np.isfinite(az), az, 0.0)
+
+    # Body -> ENU (yaw only; pitch/roll = 0). x=forward, y=left, z=up.
+    cy = math.cos(yaw_enu_rad)
+    sy = math.sin(yaw_enu_rad)
+    east_acc = ax * cy - ay * sy
+    north_acc = ax * sy + ay * cy
+    up_acc = az - float(gravity_mps2)
+
+    # Per-sample dt: use the gaps between successive timestamps, plus an
+    # opening dt from t_start to ts[0] and a closing dt from ts[-1] to t_end.
+    n = ts.size
+    dts = np.empty(n, dtype=np.float64)
+    if n == 1:
+        dts[0] = dt_total
+    else:
+        # Each sample is "valid" for the time slice ending at the next sample.
+        diffs = np.diff(ts)
+        dts[:-1] = diffs
+        # Last sample carries from ts[-1] to t_end.
+        dts[-1] = max(0.0, t_end - float(ts[-1]))
+        # Adjust the first sample to also cover t_start..ts[0] so we don't
+        # lose the opening fraction.
+        opening = max(0.0, float(ts[0]) - t_start)
+        dts[0] = dts[0] + opening
+    # Clamp negative dts (out-of-order samples) to zero.
+    dts = np.where(dts > 0.0, dts, 0.0)
+
+    # Trapezoidal-ish integration: assume the sample's accel applies for its
+    # owned dt. v_end = v_start + sum(a * dt); p_end = p_start + sum(v_mid * dt).
+    v_east = float(initial_velocity_enu[0])
+    v_north = float(initial_velocity_enu[1])
+    v_up = float(initial_velocity_enu[2])
+    dp_east = 0.0
+    dp_north = 0.0
+    dp_up = 0.0
+    for k in range(n):
+        dt_k = float(dts[k])
+        if dt_k <= 0.0:
+            continue
+        # Mid-point velocity for position step (trapezoidal rule).
+        ve_mid = v_east + 0.5 * float(east_acc[k]) * dt_k
+        vn_mid = v_north + 0.5 * float(north_acc[k]) * dt_k
+        vu_mid = v_up + 0.5 * float(up_acc[k]) * dt_k
+        dp_east += ve_mid * dt_k
+        dp_north += vn_mid * dt_k
+        dp_up += vu_mid * dt_k
+        v_east += float(east_acc[k]) * dt_k
+        v_north += float(north_acc[k]) * dt_k
+        v_up += float(up_acc[k]) * dt_k
+
+    delta = np.array([dp_east, dp_north, dp_up], dtype=np.float64)
+    v_end = np.array([v_east, v_north, v_up], dtype=np.float64)
+    return delta, v_end, int(n)
 
 
 @dataclass
@@ -867,7 +1110,17 @@ def _run_ctrbpf_on_segment(
     hybrid_velocity: dict[float, np.ndarray] | None = None,
     hybrid_status: dict[float, int] | None = None,
     imu: dict[str, np.ndarray] | None = None,
-) -> tuple[np.ndarray, float, _DDStats, _RBPFGateStats, _HybridStats, _FGOStats, _TDCPSmootherStats, _ZUPTStats]:
+) -> tuple[
+    np.ndarray,
+    float,
+    _DDStats,
+    _RBPFGateStats,
+    _HybridStats,
+    _FGOStats,
+    _TDCPSmootherStats,
+    _ZUPTStats,
+    _IMUTCStats,
+]:
     """Run the PF on the loaded PPC segment and return (positions, ms/epoch).
 
     ``positions`` is shape ``(n_epochs, 3)``, aligned with ``data['times']``.
@@ -905,6 +1158,24 @@ def _run_ctrbpf_on_segment(
     fgo_stats = _FGOStats()
     tdcp_stats = _TDCPSmootherStats()
     zupt_stats = _ZUPTStats()
+    imu_tc_stats = _IMUTCStats()
+
+    # Phase 9b: tight-coupled IMU state (in-loop pre-integration since the
+    # last Status=4 hybrid anchor). Initialized lazily on the first epoch
+    # we have a usable position + heading.
+    use_imu_tc = config.enable_imu_tc and imu is not None
+    imu_t = _build_imu_segment_index(imu) if use_imu_tc else None
+    if use_imu_tc and imu_t is None:
+        use_imu_tc = False  # IMU file present but empty
+    imu_tc_anchor: _IMUAnchor | None = None
+    imu_tc_anchor_acc: np.ndarray | None = None
+    imu_tc_anchor_gyro: np.ndarray | None = None
+    imu_tc_emit_set = set(int(s) for s in config.imu_tc_emit_pf_hybrid_statuses)
+    imu_tc_anchor_set = set(int(s) for s in config.zupt_apply_hybrid_statuses)
+    if use_imu_tc and hybrid_status is not None:
+        # Pre-compute per-epoch IMU stats so the anchor-static check matches
+        # the Phase 9a ZUPT logic (re-using the same windowing).
+        imu_tc_anchor_acc, imu_tc_anchor_gyro, _ = _build_imu_per_epoch_stats(imu, times)
 
     positions = np.zeros((n_epochs, 3), dtype=np.float64)
     init_pos = np.asarray(wls_positions[0, :3], dtype=np.float64)
@@ -1121,11 +1392,197 @@ def _run_ctrbpf_on_segment(
             if hp is None:
                 hybrid_stats.epochs_lookup_missing += 1
             elif np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
-                pf.position_update(hp, sigma_pos=float(config.hybrid_sigma_m))
+                # Phase 9b: relax the hybrid PU sigma on m-class Status
+                # epochs so IMU pre-integration can dominate. Without this
+                # the tight 1m hybrid PU clamps the cloud to the (wrong-by-
+                # several-meters) hybrid passthrough and the IMU rescue
+                # never surfaces in pf.estimate().
+                hybrid_sigma_now = float(config.hybrid_sigma_m)
+                if (
+                    config.enable_imu_tc
+                    and float(config.imu_tc_hybrid_loose_sigma_m) > 0.0
+                    and hybrid_status is not None
+                ):
+                    st_now_pu = hybrid_status.get(round(float(times[i]), 1))
+                    if (
+                        st_now_pu is not None
+                        and int(st_now_pu) in {int(s) for s in config.imu_tc_emit_pf_hybrid_statuses}
+                    ):
+                        hybrid_sigma_now = float(config.imu_tc_hybrid_loose_sigma_m)
+                pf.position_update(hp, sigma_pos=hybrid_sigma_now)
                 hybrid_stats.epochs_applied += 1
 
+        # Phase 9b: tight-coupled IMU. After hybrid PU but BEFORE estimate /
+        # emission, integrate IMU since the anchor and apply a per-particle
+        # position pseudo-observation. This is the "tight" piece: every
+        # particle gets an IMU log-likelihood, not a global rewrite. We
+        # also evaluate whether to emit the PF estimate (vs hybrid) on
+        # this epoch based on the hybrid Status.
+        imu_tc_emit_pf_here = False
+        if use_imu_tc:
+            t_now = float(times[i])
+            st_now = (
+                hybrid_status.get(round(t_now, 1)) if hybrid_status is not None else None
+            )
+            anchor_eligible_here = (
+                hp is not None
+                and np.all(np.isfinite(hp))
+                and not np.all(hp == 0.0)
+                and (
+                    st_now is None
+                    or imu_tc_anchor_set
+                    and st_now not in {int(s) for s in config.imu_tc_emit_pf_hybrid_statuses}
+                )
+            )
+            # Lazily seed the anchor on the very first epoch with a usable
+            # position so the loop has something to integrate against.
+            if imu_tc_anchor is None:
+                seed_pos = None
+                if hp is not None and np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
+                    seed_pos = np.asarray(hp, dtype=np.float64)
+                elif np.all(np.isfinite(positions[i])) and not np.all(positions[i] == 0.0):
+                    seed_pos = np.asarray(positions[i], dtype=np.float64)
+                if seed_pos is not None:
+                    imu_tc_anchor = _IMUAnchor(
+                        pos_ecef=seed_pos.copy(),
+                        time=t_now,
+                        yaw_enu_rad=0.0,
+                        valid_yaw=False,
+                        velocity_enu=np.zeros(3, dtype=np.float64),
+                    )
+                    imu_tc_stats.anchor_resets += 1
+
+            if imu_tc_anchor is not None:
+                imu_tc_stats.epochs_evaluated += 1
+
+                # Refresh yaw from a recent velocity when we don't have one yet.
+                if not imu_tc_anchor.valid_yaw:
+                    v_guide_now = (
+                        hybrid_velocity.get(round(t_now, 1)) if hybrid_velocity else None
+                    )
+                    if v_guide_now is not None and np.all(np.isfinite(v_guide_now)):
+                        v_enu = _ecef_velocity_to_enu(imu_tc_anchor.pos_ecef, v_guide_now)
+                        yaw, valid = _heading_from_velocity_enu(v_enu)
+                        if valid:
+                            imu_tc_anchor = _IMUAnchor(
+                                pos_ecef=imu_tc_anchor.pos_ecef,
+                                time=imu_tc_anchor.time,
+                                yaw_enu_rad=yaw,
+                                valid_yaw=True,
+                                velocity_enu=v_enu,
+                            )
+
+                dr_seconds = t_now - imu_tc_anchor.time
+                imu_tc_stats.record_dr_seconds(dr_seconds)
+
+                run_pu = imu_tc_anchor.valid_yaw
+                if not run_pu:
+                    imu_tc_stats.pu_skipped_no_anchor += 1
+                if run_pu and dr_seconds > float(config.imu_tc_max_dr_seconds):
+                    imu_tc_stats.pu_skipped_dr_too_long += 1
+                    run_pu = False
+
+                imu_pred_pos = None
+                if run_pu and imu_t is not None and imu is not None:
+                    delta_enu, _vel_enu_end, n_samp = _integrate_imu_between(
+                        imu,
+                        imu_t,
+                        imu_tc_anchor.time,
+                        t_now,
+                        imu_tc_anchor.yaw_enu_rad,
+                        imu_tc_anchor.velocity_enu,
+                    )
+                    if n_samp == 0:
+                        imu_tc_stats.pu_skipped_no_imu += 1
+                        run_pu = False
+                    else:
+                        delta_ecef = _enu_delta_to_ecef(imu_tc_anchor.pos_ecef, delta_enu)
+                        imu_pred_pos = imu_tc_anchor.pos_ecef + delta_ecef
+                        if hp is not None and np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
+                            disagreement = float(np.linalg.norm(imu_pred_pos - hp))
+                            if disagreement > float(config.imu_tc_max_disagreement_m):
+                                imu_tc_stats.pu_skipped_disagreement += 1
+                                run_pu = False
+
+                if run_pu and imu_pred_pos is not None:
+                    sigma_imu = (
+                        float(config.imu_tc_pos_sigma_base_m)
+                        + float(config.imu_tc_pos_sigma_per_s) * float(max(dr_seconds, 0.0))
+                    )
+                    pf.position_update(imu_pred_pos, sigma_pos=max(sigma_imu, 0.05))
+                    imu_tc_stats.pu_applied += 1
+
+                # Decide emission policy for this epoch (post-IMU-PU).
+                if (
+                    st_now is not None
+                    and int(st_now) in imu_tc_emit_set
+                ):
+                    imu_tc_emit_pf_here = True
+
+                # Anchor-reset on Status=4 (or anything NOT in the emit-PF set).
+                if (
+                    anchor_eligible_here
+                    and st_now is not None
+                    and int(st_now) not in imu_tc_emit_set
+                ):
+                    # Derive anchor velocity from hybrid velocity guide when
+                    # available; otherwise fall back to whatever the previous
+                    # anchor velocity was (will get refreshed lazily).
+                    v_anchor_enu = imu_tc_anchor.velocity_enu
+                    yaw_anchor = imu_tc_anchor.yaw_enu_rad
+                    valid_yaw_anchor = imu_tc_anchor.valid_yaw
+                    v_guide_now = (
+                        hybrid_velocity.get(round(t_now, 1)) if hybrid_velocity else None
+                    )
+                    if v_guide_now is not None and np.all(np.isfinite(v_guide_now)):
+                        v_anchor_enu = _ecef_velocity_to_enu(
+                            np.asarray(hp, dtype=np.float64), v_guide_now
+                        )
+                        yaw_new, valid_new = _heading_from_velocity_enu(v_anchor_enu)
+                        if valid_new:
+                            yaw_anchor = yaw_new
+                            valid_yaw_anchor = True
+                    # Static check: if IMU says vehicle is stopped at this
+                    # anchor, force zero velocity (matches Phase 9a logic).
+                    is_static_anchor = False
+                    if imu_tc_anchor_acc is not None and imu_tc_anchor_gyro is not None and i < imu_tc_anchor_acc.size:
+                        a = imu_tc_anchor_acc[i]
+                        g = imu_tc_anchor_gyro[i]
+                        if (
+                            np.isfinite(a)
+                            and np.isfinite(g)
+                            and float(config.imu_tc_anchor_static_acc_low_mps2) <= a <= float(config.imu_tc_anchor_static_acc_high_mps2)
+                            and g <= float(config.imu_tc_anchor_static_gyro_max_dps)
+                        ):
+                            is_static_anchor = True
+                            v_anchor_enu = np.zeros(3, dtype=np.float64)
+                    imu_tc_anchor = _IMUAnchor(
+                        pos_ecef=np.asarray(hp, dtype=np.float64).copy(),
+                        time=t_now,
+                        yaw_enu_rad=yaw_anchor,
+                        valid_yaw=valid_yaw_anchor,
+                        velocity_enu=v_anchor_enu,
+                    )
+                    imu_tc_stats.anchor_resets += 1
+                    if is_static_anchor:
+                        imu_tc_stats.anchor_resets_static += 1
+
         est = np.asarray(pf.estimate(), dtype=np.float64)
-        if (
+        if imu_tc_emit_pf_here:
+            # Phase 9b: emit PF estimate on Status in emit_pf set, as long as
+            # the PF didn't wander too far from hybrid (cloud-collapse guard).
+            if (
+                hp is not None
+                and np.all(np.isfinite(hp))
+                and not np.all(hp == 0.0)
+                and float(np.linalg.norm(est[:3] - hp)) > float(config.imu_tc_emit_max_diff_m)
+            ):
+                positions[i] = np.asarray(hp, dtype=np.float64)
+                imu_tc_stats.emit_skipped_pf_drift += 1
+            else:
+                positions[i] = est[:3]
+                imu_tc_stats.emit_pf_estimate += 1
+        elif (
             use_hybrid
             and not config.hybrid_emit_pf_estimate
             and hp is not None
@@ -1209,7 +1666,7 @@ def _run_ctrbpf_on_segment(
             prior_sigmas=prior_sigmas_arr,
         )
 
-    return positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats, zupt_stats
+    return positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats, zupt_stats, imu_tc_stats
 
 
 def _apply_fgo_lambda(
@@ -1398,6 +1855,18 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         ),
         zupt_min_consecutive=args.zupt_min_consecutive,
         zupt_max_anchor_drift_m=args.zupt_max_anchor_drift_m,
+        imu_tc_emit_pf_hybrid_statuses=tuple(
+            int(s.strip()) for s in args.imu_tc_emit_pf_hybrid_statuses.split(",") if s.strip()
+        ),
+        imu_tc_pos_sigma_base_m=args.imu_tc_pos_sigma_base_m,
+        imu_tc_pos_sigma_per_s=args.imu_tc_pos_sigma_per_s,
+        imu_tc_max_dr_seconds=args.imu_tc_max_dr_seconds,
+        imu_tc_max_disagreement_m=args.imu_tc_max_disagreement_m,
+        imu_tc_emit_max_diff_m=args.imu_tc_emit_max_diff_m,
+        imu_tc_hybrid_loose_sigma_m=args.imu_tc_hybrid_loose_sigma_m,
+        imu_tc_anchor_static_acc_low_mps2=args.zupt_acc_norm_low_mps2,
+        imu_tc_anchor_static_acc_high_mps2=args.zupt_acc_norm_high_mps2,
+        imu_tc_anchor_static_gyro_max_dps=args.zupt_gyro_norm_max_dps,
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -1528,6 +1997,32 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_zupt=True,
             method_label="RBPF-velKF+DD+gate+hybrid+zupt",
         ))
+    # Phase 9b: tight-coupled IMU (in-loop pre-integration; per-particle
+    # position pseudo-observation; emission switches to PF estimate on
+    # Status=1/3 epochs). Requires hybrid for the Status=4 anchor reset.
+    if "rbpf+dd+gate+hybrid+imu_tc" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_imu_tc=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+imu_tc",
+        ))
+    # Phase 9a + Phase 9b stacked. ZUPT damps stops, IMU-TC handles motion
+    # NLOS rescue. Same anchor IMU-static thresholds for both.
+    if "rbpf+dd+gate+hybrid+zupt+imu_tc" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_zupt=True,
+            enable_imu_tc=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+zupt+imu_tc",
+        ))
     # Phase 9a + Phase 8 stacked.
     if "rbpf+dd+gate+hybrid+zupt+tdcp" in args.methods:
         variant_kwargs = {**base, **aaa_gate}
@@ -1626,7 +2121,8 @@ def main() -> None:
             "rbpf+dd+gate+phase7, rbpf+dd+gate+phase4, "
             "rbpf+dd+gate+hybrid+phase4, "
             "rbpf+dd+gate+hybrid+tdcp, rbpf+dd+gate+hybrid+tdcp+phase4, "
-            "rbpf+dd+gate+hybrid+zupt, rbpf+dd+gate+hybrid+zupt+tdcp}"
+            "rbpf+dd+gate+hybrid+zupt, rbpf+dd+gate+hybrid+zupt+tdcp, "
+            "rbpf+dd+gate+hybrid+imu_tc, rbpf+dd+gate+hybrid+zupt+imu_tc}"
         ),
     )
     parser.add_argument("--dd-sigma-cycles", type=float, default=0.05,
@@ -1662,7 +2158,7 @@ def main() -> None:
     parser.add_argument("--fgo-window-size", type=int, default=30,
                         help="FGO window size in epochs (default 30)")
     parser.add_argument("--fgo-window-stride", type=int, default=15,
-                        help="FGO window stride in epochs (default 15, 50% overlap)")
+                        help="FGO window stride in epochs (default 15, 50%% overlap)")
     parser.add_argument("--fgo-lambda-ratio", type=float, default=3.0,
                         help="LAMBDA ratio test threshold (default 3.0)")
     parser.add_argument("--fgo-lambda-min-epochs", type=int, default=10,
@@ -1715,6 +2211,22 @@ def main() -> None:
                         help="Min consecutive static epochs (incl. current) required before ZUPT rewrites (default 5)")
     parser.add_argument("--zupt-max-anchor-drift-m", type=float, default=0.5,
                         help="Max |base - anchor| disagreement [m] tolerated before ZUPT skips (default 0.5)")
+    # Phase 9b: tight-coupled IMU. In-loop pre-integration; per-particle
+    # position pseudo-observation; emission switch on Status=1/3.
+    parser.add_argument("--imu-tc-emit-pf-hybrid-statuses", type=str, default="1,3",
+                        help="Hybrid Status values where IMU-TC emits the PF estimate (default '1,3', protects 4)")
+    parser.add_argument("--imu-tc-pos-sigma-base-m", type=float, default=0.5,
+                        help="IMU position pseudo-obs sigma at t=0s after anchor reset (default 0.5)")
+    parser.add_argument("--imu-tc-pos-sigma-per-s", type=float, default=0.5,
+                        help="IMU sigma growth per s of dead-reckoning (default 0.5)")
+    parser.add_argument("--imu-tc-max-dr-seconds", type=float, default=5.0,
+                        help="Max IMU dead-reckoning duration before falling back to hybrid (default 5.0)")
+    parser.add_argument("--imu-tc-max-disagreement-m", type=float, default=30.0,
+                        help="Skip IMU PU when |IMU-pred - hybrid| > this [m] (default 30)")
+    parser.add_argument("--imu-tc-emit-max-diff-m", type=float, default=20.0,
+                        help="Bound PF emission to hybrid +- this [m]; else keep hybrid (default 20)")
+    parser.add_argument("--imu-tc-hybrid-loose-sigma-m", type=float, default=5.0,
+                        help="Hybrid PU sigma on m-class Status epochs when IMU-TC is on (default 5.0; 0 disables)")
     parser.add_argument("--max-epochs", type=int, default=None,
                         help="Cap epochs per run (smoke / debug). None = full run.")
     parser.add_argument("--start-epoch", type=int, default=0)
@@ -1858,11 +2370,14 @@ def main() -> None:
         hybrid_velocity_run: dict[float, np.ndarray] | None = None
         hybrid_status_run: dict[float, int] | None = None
         imu_run: dict[str, np.ndarray] | None = None
-        if any(v.enable_zupt for v in variants):
+        if any(v.enable_zupt or v.enable_imu_tc for v in variants):
             try:
                 imu_run = loader.load_imu()
             except FileNotFoundError as exc:
-                print(f"  [IMU] WARNING: {exc}, ZUPT disabled for this run")
+                print(
+                    f"  [IMU] WARNING: {exc}, ZUPT / Phase 9b IMU-TC "
+                    "disabled for this run"
+                )
                 imu_run = None
         if (any_hybrid or any_fgo) and args.hybrid_pos_dir is not None:
             hybrid_path = args.hybrid_pos_dir / f"{city}_{run}{args.hybrid_pos_suffix}"
@@ -1900,8 +2415,16 @@ def main() -> None:
             dd_for_variant = dd_computer if need_dd_for_variant else None
             dd_pr_for_variant = dd_pr_computer if variant.enable_fgo_lambda else None
             hybrid_for_variant = hybrid_pos_run if variant.enable_hybrid_pu else None
+            # Phase 9b also consumes the hybrid velocity guide -- it derives
+            # the IMU anchor yaw from the rover's course-over-ground at the
+            # most recent Status=4 anchor. The PF predict step only uses it
+            # when ``enable_hybrid_velocity_guide=True``; for IMU-TC alone we
+            # pass the dict but the predict path stays on its constant-velocity
+            # default (variant.enable_hybrid_velocity_guide=False).
             hybrid_v_for_variant = (
-                hybrid_velocity_run if variant.enable_hybrid_velocity_guide else None
+                hybrid_velocity_run
+                if (variant.enable_hybrid_velocity_guide or variant.enable_imu_tc)
+                else None
             )
             hybrid_status_for_variant = (
                 hybrid_status_run
@@ -1909,11 +2432,14 @@ def main() -> None:
                     variant.enable_fgo_lambda
                     or variant.enable_tdcp_smoother
                     or variant.enable_zupt
+                    or variant.enable_imu_tc
                 )
                 else None
             )
-            imu_for_variant = imu_run if variant.enable_zupt else None
-            positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats, zupt_stats = _run_ctrbpf_on_segment(
+            imu_for_variant = (
+                imu_run if (variant.enable_zupt or variant.enable_imu_tc) else None
+            )
+            positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats, zupt_stats, imu_tc_stats = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
                 dd_computer=dd_for_variant,
                 dd_pr_computer=dd_pr_for_variant,
@@ -1992,6 +2518,18 @@ def main() -> None:
                 "zupt_static": int(zupt_stats.epochs_static),
                 "zupt_rewritten": int(zupt_stats.epochs_rewritten),
                 "zupt_no_imu": int(zupt_stats.epochs_no_imu),
+                "imu_tc": int(variant.enable_imu_tc),
+                "imu_tc_evaluated": int(imu_tc_stats.epochs_evaluated),
+                "imu_tc_anchor_resets": int(imu_tc_stats.anchor_resets),
+                "imu_tc_anchor_resets_static": int(imu_tc_stats.anchor_resets_static),
+                "imu_tc_pu_applied": int(imu_tc_stats.pu_applied),
+                "imu_tc_pu_skipped_no_imu": int(imu_tc_stats.pu_skipped_no_imu),
+                "imu_tc_pu_skipped_no_anchor": int(imu_tc_stats.pu_skipped_no_anchor),
+                "imu_tc_pu_skipped_dr_too_long": int(imu_tc_stats.pu_skipped_dr_too_long),
+                "imu_tc_pu_skipped_disagreement": int(imu_tc_stats.pu_skipped_disagreement),
+                "imu_tc_emit_pf_estimate": int(imu_tc_stats.emit_pf_estimate),
+                "imu_tc_emit_skipped_pf_drift": int(imu_tc_stats.emit_skipped_pf_drift),
+                "imu_tc_avg_dr_seconds": float(imu_tc_stats.avg_dr_seconds),
             }
             rows.append(row)
             agg_pass[variant.method_label] += row["honest_pass_m"]
@@ -2028,6 +2566,20 @@ def main() -> None:
                     f"{zupt_stats.epochs_evaluated} "
                     f"(rewritten {zupt_stats.epochs_rewritten}, no_imu {zupt_stats.epochs_no_imu})"
                 )
+            imu_tc_msg = ""
+            if variant.enable_imu_tc and imu_tc_stats.epochs_evaluated > 0:
+                imu_tc_msg = (
+                    f", IMU-TC pu={imu_tc_stats.pu_applied}/"
+                    f"{imu_tc_stats.epochs_evaluated} "
+                    f"emit_pf={imu_tc_stats.emit_pf_estimate} "
+                    f"(anchors={imu_tc_stats.anchor_resets} "
+                    f"static={imu_tc_stats.anchor_resets_static}, "
+                    f"skip dr={imu_tc_stats.pu_skipped_dr_too_long} "
+                    f"dis={imu_tc_stats.pu_skipped_disagreement} "
+                    f"no_anc={imu_tc_stats.pu_skipped_no_anchor}, "
+                    f"avg_dr={imu_tc_stats.avg_dr_seconds:.2f}s, "
+                    f"pf_drift_skip={imu_tc_stats.emit_skipped_pf_drift})"
+                )
             tdcp_msg = ""
             if variant.enable_tdcp_smoother and tdcp_stats.pairs_attempted > 0:
                 tdcp_msg = (
@@ -2046,7 +2598,7 @@ def main() -> None:
             print(
                 f"    PPC honest: {row['honest_ppc_pct']:5.2f}%  "
                 f"(pass {row['honest_pass_m']:.0f} / total {row['honest_total_m']:.0f}m, "
-                f"{ms_per_epoch:.1f} ms/epoch{dd_msg}{gate_msg}{hybrid_msg}{zupt_msg}{tdcp_msg}{fgo_msg})",
+                f"{ms_per_epoch:.1f} ms/epoch{dd_msg}{gate_msg}{hybrid_msg}{zupt_msg}{imu_tc_msg}{tdcp_msg}{fgo_msg})",
                 flush=True,
             )
 
