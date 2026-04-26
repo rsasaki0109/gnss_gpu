@@ -122,6 +122,14 @@ class LocalFgoProblem:
     dd_pseudorange: Sequence[DDPseudorangeEpoch | None] | None = None
     undiff_pseudorange: Sequence[UndiffPseudorangeEpoch | None] | None = None
     prior_positions_ecef: np.ndarray | None = None
+    # Optional per-epoch prior sigma override (shape ``(n_epochs,)``). When
+    # provided, each epoch in the window gets its own ``PriorFactorPoint3``
+    # with the supplied sigma instead of the default endpoint-only priors
+    # at ``LocalFgoConfig.prior_sigma_m``. Use sigma ~= 0 (e.g. 0.05 m) to
+    # turn an external high-quality fix into a near-hard anchor, and
+    # sigma >> baseline to effectively drop the prior on a low-quality
+    # epoch. Sigmas <= 0 or non-finite skip the per-epoch prior.
+    prior_sigmas_m: np.ndarray | None = None
 
 
 @dataclass
@@ -255,16 +263,34 @@ def build_factor_graph(
     for i in range(window.start, window.end + 1):
         values.insert(key_by_index[i], _point3(gtsam, initial_positions[i]))
 
-    prior_model = gtsam.noiseModel.Isotropic.Sigma(3, float(config.prior_sigma_m))
-    for i in (window.start, window.end):
-        graph.add(
-            gtsam.PriorFactorPoint3(
-                key_by_index[i],
-                _point3(gtsam, prior_positions[i]),
-                prior_model,
+    prior_sigmas = problem.prior_sigmas_m
+    if prior_sigmas is not None:
+        prior_sigmas_arr = np.asarray(prior_sigmas, dtype=np.float64).ravel()
+        if prior_sigmas_arr.size != len(initial_positions):
+            raise ValueError("prior_sigmas_m must match initial_positions_ecef")
+        for i in range(window.start, window.end + 1):
+            sigma_i = float(prior_sigmas_arr[i])
+            if not np.isfinite(sigma_i) or sigma_i <= 0.0:
+                continue
+            graph.add(
+                gtsam.PriorFactorPoint3(
+                    key_by_index[i],
+                    _point3(gtsam, prior_positions[i]),
+                    gtsam.noiseModel.Isotropic.Sigma(3, sigma_i),
+                )
             )
-        )
-        counts["prior"] += 1
+            counts["prior"] += 1
+    else:
+        prior_model = gtsam.noiseModel.Isotropic.Sigma(3, float(config.prior_sigma_m))
+        for i in (window.start, window.end):
+            graph.add(
+                gtsam.PriorFactorPoint3(
+                    key_by_index[i],
+                    _point3(gtsam, prior_positions[i]),
+                    prior_model,
+                )
+            )
+            counts["prior"] += 1
 
     motion_deltas = problem.motion_deltas_ecef
     motion_sigmas = problem.motion_sigmas_m
@@ -461,8 +487,18 @@ def _numpy_factor_counts(
     problem: LocalFgoProblem,
     window: LocalFgoWindow,
 ) -> dict[str, int]:
+    if problem.prior_sigmas_m is not None:
+        sigmas = np.asarray(problem.prior_sigmas_m, dtype=np.float64).ravel()
+        n_priors = 0
+        for epoch_index in range(window.start, window.end + 1):
+            if epoch_index < sigmas.size:
+                sigma_i = float(sigmas[epoch_index])
+                if np.isfinite(sigma_i) and sigma_i > 0.0:
+                    n_priors += 1
+    else:
+        n_priors = 2 if window.size > 1 else 1
     counts = {
-        "prior": 2 if window.size > 1 else 1,
+        "prior": n_priors,
         "between": max(0, window.size - 1),
         "dd_carrier": 0,
         "dd_carrier_fixed": 0,
@@ -686,15 +722,32 @@ def _populate_numpy_linearization(
     prior_positions: np.ndarray,
 ) -> None:
     n = int(window.size)
-    endpoint_indices = (0,) if n == 1 else (0, n - 1)
-    for local_index in endpoint_indices:
-        epoch_index = window.start + local_index
-        add_block(
-            local_index,
-            positions[local_index] - prior_positions[epoch_index],
-            np.eye(3, dtype=np.float64),
-            float(config.prior_sigma_m),
-        )
+    prior_sigmas = problem.prior_sigmas_m
+    if prior_sigmas is not None:
+        prior_sigmas_arr = np.asarray(prior_sigmas, dtype=np.float64).ravel()
+        if prior_sigmas_arr.size != len(initial_positions):
+            raise ValueError("prior_sigmas_m must match initial_positions_ecef")
+        for local_index in range(n):
+            epoch_index = window.start + local_index
+            sigma_i = float(prior_sigmas_arr[epoch_index])
+            if not np.isfinite(sigma_i) or sigma_i <= 0.0:
+                continue
+            add_block(
+                local_index,
+                positions[local_index] - prior_positions[epoch_index],
+                np.eye(3, dtype=np.float64),
+                sigma_i,
+            )
+    else:
+        endpoint_indices = (0,) if n == 1 else (0, n - 1)
+        for local_index in endpoint_indices:
+            epoch_index = window.start + local_index
+            add_block(
+                local_index,
+                positions[local_index] - prior_positions[epoch_index],
+                np.eye(3, dtype=np.float64),
+                float(config.prior_sigma_m),
+            )
 
     motion_deltas = problem.motion_deltas_ecef
     motion_sigmas = problem.motion_sigmas_m
