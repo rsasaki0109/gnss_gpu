@@ -102,11 +102,55 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 - `internal_docs/product_deliverable/dashboard.html` — self-contained
   HTML report (open in a browser) with metrics summary, per-run bar
   chart, actual-vs-predicted scatter, and focus-case detail table.
+- `internal_docs/product_deliverable/plots/` — static PNG figures per
+  run that overlay the predicted FIX rate onto the actual demo5
+  per-epoch FIX/NO-FIX trajectory:
+  - `{city}_{run}_timeseries.png`: predicted vs actual FIX rate over
+    elapsed seconds, with the rolling per-epoch FIX fraction and a
+    quality-flag (Q) strip.
+  - `{city}_{run}_trajectory.png`: lat/lon scatter coloured by demo5 Q
+    (FIX = green, FLOAT = orange, DGPS = purple), with per-window
+    predicted FIX % annotated at each window start.
+  - `summary_grid.png`: 2x3 panel overview of all 6 runs.
 - `experiments/build_product_deliverable.py` — script that produces the
   two CSVs above from the adopted model's `window_predictions.csv`.
   Focus-case windows are detected by threshold-based classification
   (`_classify_window`), so new runs with similar failure archetypes
   are tagged automatically without updating a hardcoded list.
+- `experiments/build_simulation_vs_actual_plots.py` — renders the PNG
+  figures under `plots/` from the adopted predictions and the demo5
+  .pos files (`experiments/results/demo5_pos/<city>_<run>/rtklib.pos`).
+  When the epoch classifier predictions CSV is present it also
+  overlays a blue line showing the per-epoch P(FIX) (15 s smoothed).
+- `experiments/train_ppc_epoch_fix_classifier.py` — experimental
+  per-epoch classifier (null result, see
+  `product_deliverable/EPOCH_CLASSIFIER.md`); NOT part of the adopted
+  pipeline.  Kept to produce the blue diagnostic line on the
+  time-series plots.
+- `internal_docs/product_deliverable/EPOCH_CLASSIFIER.md` — null-result
+  write-up for the epoch classifier and future-work notes.
+- `internal_docs/product_deliverable/PAPER_STYLE_EVAL.md` — evaluation
+  lined up with Furukawa & Kubo (2019) "Prediction of Fixing of
+  RTK-GNSS Positioning in Multipath Environment Using Radiowave
+  Propagation Simulation" (IPNTJ Vol.10 No.2).  Includes the
+  threshold-swept matching-rate table, Fig.9/10-style figures, and a
+  methodology comparison.
+- `internal_docs/product_deliverable/REFLECTION_POC_NULL.md` —
+  null-result write-up for the canyon proxy, BVH multipath, and
+  simplified antenna gain + NLoS attenuation probes.  These are
+  research diagnostics only; none replace the adopted §7.16 model.
+- `experiments/build_paper_style_eval.py` — computes the pooled
+  matching-rate sweep and renders the side-by-side Fig.10-style
+  RTK-FIXED maps under `plots/{city}_{run}_fix_comparison_map.png`.
+- `experiments/exp_ppc_reflection_poc.py`,
+  `experiments/aggregate_reflection_features.py`, and
+  `experiments/augment_window_csv_with_reflection.py` — reflection
+  feature extraction, pooling, and §7.16 merge scripts for the null
+  BVH multipath probe.
+- `experiments/exp_ppc_antenna_attenuation_features.py` and
+  `experiments/augment_window_csv_with_antenna.py` — simplified
+  antenna gain + -25 dB NLoS attenuation extraction and §7.16 merge
+  scripts for the §7.25 null probe.
 - `experiments/_common.py` — shared helpers used across the experiment
   scripts (e.g. `_is_metadata_or_label`).
 - `experiments/build_product_dashboard.py` — script that produces the

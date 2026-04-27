@@ -1,0 +1,350 @@
+# Reflection / canyon proxy PoC (null result)
+
+Tested two routes for adding multipath / diffraction information to the
+gnss_gpu PPC simulator after the §7.20 plateau and the §6 paper-style
+spatial-disagreement diagnostic.  Both ended as null.
+
+## Test 1: BVH first-order multipath via `compute_multipath`
+
+Script: `experiments/exp_ppc_reflection_poc.py`
+
+Result: **infrastructure blocker.**
+
+- `gnss_gpu/bvh.py::BVHAccelerator.compute_multipath` exists but
+  imports `gnss_gpu._bvh.raytrace_multipath_bvh`, which is **not
+  present in the compiled `_bvh.cpython-*.so`**.  ImportError.
+- Falling back to `gnss_gpu.raytrace.BuildingModel.compute_multipath`
+  (no BVH, brute-force ray-vs-all-triangles in CUDA) hits **CUDA OOM
+  at the first epoch** with 2.2M triangles × ~25 satellites.  Even on
+  a 16 GB device the kernel allocates more than the available free
+  memory.
+- Two valid recovery paths exist but were declined for this PoC:
+  - Compile the BVH multipath C++ kernel (build-system change, 30-60
+    min if `nvcc` and `pybind11` are wired up).
+  - Per-epoch triangle filtering (keep only triangles within ~500 m
+    of the receiver before passing to brute-force multipath).
+
+## Test 2: Heuristic canyon / edge proxy (BVH check_los only)
+
+Script: `experiments/exp_ppc_canyon_proxy_poc.py`
+
+This avoids the multipath kernel by using only the BVH `check_los`
+primitive that *is* compiled.  Two deployable proxies are computed:
+
+- **`canyon_blocked_count`**: cast 16 low-elevation rays in a circle
+  from the receiver, count how many are blocked by buildings within
+  150 m.  0 = open sky, 16 = surrounded.
+- **`edge_near_sat_count`**: for each tracked satellite, also test
+  `check_los` at +/- 3° azimuth perturbations.  A satellite whose
+  three samples disagree is "near a building edge" → diffraction or
+  multipath risk.
+
+Tokyo run2, stride 5, 1822 epochs, 21 min wall (BVH build 3 min +
+loop 21 min for ~165k LoS calls; Python per-call overhead dominates).
+
+### Numbers
+
+Per-window pooled correlations against demo5 actual FIX rate:
+
+| feature | corr vs actual_fix_rate_pct | corr vs §7.16 error (corrected − actual) |
+| --- | --- | --- |
+| canyon_blocked_count_mean | -0.01 | +0.07 |
+| canyon_blocked_count_max | -0.08 | +0.16 |
+| canyon_blocked_fraction_mean | -0.01 | +0.07 |
+| edge_near_sat_count_mean | **-0.18** | **+0.24** |
+| edge_near_sat_fraction_mean | -0.12 | +0.17 |
+| edge_near_sat_count_max | -0.16 | +0.22 |
+
+Focus-window inspection:
+
+| window | actual | §7.16 corrected | canyon mean / max | edge mean |
+| --- | --- | --- | --- | --- |
+| w7 (false-high) | 0.0 % | 39.5 % | 7.47 / 8 | 2.70 |
+| w9 (false-high) | 0.0 % | 56.7 % | 3.67 / 8 | 0.57 |
+| w23 (hidden-high) | 100.0 % | 32.0 % | 2.03 / 4 | 1.07 |
+| w24 (hidden-high) | 100.0 % | 32.0 % | 4.00 / 4 | 1.90 |
+| w25 (hidden-high) | 100.0 % | 48.1 % | 5.13 / 7 | 1.47 |
+| w26 (hidden-high) | 96.7 % | 50.3 % | 4.83 / 7 | 0.30 |
+| w27 (hidden-high) | 75.3 % | 39.2 % | 4.00 / 4 | 0.00 |
+
+w7 alone has the predicted "deep canyon → multipath → demo5 fails"
+signature: 7.47 of 16 azimuth bins blocked plus 2.7 sats near building
+edges, while actual FIX is 0 %.  But w9 (also a false-high window in
+the same area) is moderate, and the hidden-high cluster w23-w27 is
+inconsistent — w24 has high canyon score and high edge density yet
+demo5 successfully fixes.
+
+The aggregate correlations of -0.01 to -0.18 against actual FIX, and
++0.07 to +0.24 against §7.16 prediction error, are far below the
+useful-feature threshold for a 30-window LORO regression at this
+sample size.
+
+### Interpretation
+
+- The §7.16 failures on Tokyo run2 are **not dominated by simple
+  geometric multipath risk** that a heuristic LoS-only proxy can
+  capture.
+- The remaining gap to demo5's behaviour likely involves **validation
+  / hold internal state** (already partially captured by the
+  validationhold surrogate adopted in §7) rather than residual
+  multipath geometry.
+- Closing the rest of the gap empirically would require either:
+  - real first-order multipath modelling at scale (compile the BVH
+    multipath kernel),
+  - UTD-style diffraction modelling (Furukawa 2019's approach;
+    significant engineering), or
+  - 3D model patches for elevated-road / monorail structures
+    omitted from PLATEAU LOD2.
+
+## Conclusion
+
+Within the eight feature / model directions investigated in this
+PR, no additional gain is available without compiling new physics
+into the simulator (UTD diffraction, antenna pattern, signal
+attenuation) or extending the dataset.  §7.16 remains the reported
+best inside the explored search space.  The PoC scripts are
+committed under `experiments/` so this null is reproducible and
+does not need to be repeated for the next dataset increment.
+
+## Addendum: BVH multipath actually tested after rebuild
+
+**Build prerequisite**: the multipath BVH kernel
+(`src/raytrace/bvh.cu`) and its pybind registration
+(`python/gnss_gpu/_bvh_bindings.cpp`) are both present in source,
+but earlier shipped `.so` artefacts did not include the multipath
+symbol.  To use the multipath features in this addendum:
+
+```bash
+cd <gnss_gpu_repo>/build
+cmake --build . --target _bvh -j4
+cp python/gnss_gpu/_bvh.cpython-*.so ../python/gnss_gpu/
+python3 -c "from gnss_gpu._bvh import raytrace_multipath_bvh"  # should import
+```
+
+CUDA toolchain (`nvcc`) and `pybind11` development headers must be
+installed.  This is the only build step required by this PR.
+
+With the rebuilt binding,
+`BVHAccelerator.compute_multipath` runs successfully at ~6 s/epoch
+on the 2.2M-triangle Tokyo run2 PLATEAU set.
+
+Stride 200 (46 epochs) over Tokyo run2 gives per-window reflection
+features.  Correlations against demo5 actual FIX (n=24 windows after
+merge with §7.16 predictions):
+
+| feature | corr vs actual FIX | corr vs §7.16 error |
+| --- | --- | --- |
+| reflection_count_mean | **-0.08** | +0.04 |
+| excess_delay_m_max_mean | -0.19 | +0.12 |
+| nlos_count_mean | +0.04 | +0.16 |
+
+Focus-window decisive examples:
+
+- Tokyo run2 w9 (actual 0 %): reflection count = 0, excess delay = 0.
+  The simulator sees no multipath yet demo5 fails.
+- Tokyo run2 w24 / w25 (actual 100 %): reflection count = 16-18,
+  excess delay ~18 m.  Simulator sees heavy multipath yet demo5
+  fixes cleanly.
+- Tokyo run2 w26 (actual 97 %): reflection = 0, excess = 0.
+  Simulator agrees with demo5.
+
+The reflection count is nearly uncorrelated (and slightly
+anti-correlated on the focus windows) with demo5 FIX success.  Raw
+geometric reflections against the LOD2 building set do not
+distinguish where demo5 fails.
+
+Hypothesis for why: BVH multipath flags reflections against every
+triangle (including ground-plane facets and small features) without
+attenuation / antenna-pattern weighting.  demo5's ambiguity
+validation appears robust to most of the reflections that this
+model reports.  Furukawa 2019's 88 % result likely depends on the
+UTD diffraction + antenna gain + signal-attenuation modelling that
+the gnss_gpu BVH kernel does not implement, rather than on
+first-order geometric reflections alone.
+
+Consequence: even with BVH multipath successfully available, it does
+not provide a useful feature for the §7.16 nested stack on this
+dataset.  The combined conclusion across all simulator-side
+PoCs — brute-force OOM, canyon heuristic, BVH multipath — is that
+§7.16 has extracted the available simulation signal for this
+feature pipeline.
+
+Artifacts for reproducibility:
+- `experiments/results/ppc_reflection_bvh_s200_tokyo_run2_per_epoch.csv`
+- `experiments/results/ppc_reflection_bvh_s200_tokyo_run2_per_sat.csv`
+- `experiments/results/ppc_reflection_bvh_s200_tokyo_run2_per_window.csv`
+
+## Final attempt: integrate BVH multipath features into the §7.16 stack
+
+After confirming the reflection features are weakly anti-correlated
+with §7.16 prediction error, the experiment was extended to all 6
+runs at stride 60 (~75 min total compute) and the resulting per-window
+reflection features were merged into the §7.16-augmented window CSV
+and the nested stack was re-trained.
+
+Pooled correlations across 197 LORO-merged windows:
+
+| feature | corr vs actual FIX | corr vs §7.16 error |
+| --- | --- | --- |
+| reflection_count_mean | +0.014 | +0.024 |
+| reflection_count_max | +0.003 | +0.042 |
+| excess_delay_m_max_mean | +0.179 | -0.193 |
+| excess_delay_m_max_max | +0.186 | -0.201 |
+| excess_delay_m_p90_mean | +0.179 | -0.193 |
+| nlos_count_mean | -0.142 | +0.110 |
+| sat_count_mean | +0.333 | -0.161 |
+
+**Multiplicity caveat.**  Seven features × two correlation targets
+= 14 parallel hypotheses.  Without Bonferroni adjustment a max
+correlation around 0.33 from 14 trials at n = 197 is **not strong
+evidence**: the next-strongest is +0.18, and all the others are
+near 0.  More importantly, when the seven features are jointly
+fed to the §7.16 nested stack the model strictly degrades on every
+metric (table below) — that is the multiplicity-corrected reality.
+
+`sat_count_mean` at +0.333 is the strongest single feature but it
+is a basic visibility count that the §7.16 pipeline already has
+via many `sim_*` aggregates, so the correlation is largely a
+restatement of existing signal.
+
+Retrained §7.16 nested stack with the 7 reflection features added as
+`refl_*` columns:
+
+| variant | wmae pp | run MAE pp | corr |
+| --- | --- | --- | --- |
+| §7.16 adopted | **17.087** | **3.202** | **0.551** |
+| §7.16 + reflection features | 18.358 | 4.510 | 0.428 |
+
+Adding the reflection features **strictly worsens every metric**
+by 1.2-1.3 pp on wmae / run MAE.  This matches the §7.17 hold_age
+null where introducing additional correlated features dilutes the
+ridge feature sampling.
+
+Combined conclusion across every simulator-side approach in the
+session through the reflection retrain — brute-force OOM, canyon
+heuristic, BVH multipath correlation, BVH multipath retrain — is that
+**within the explored search neighbourhood** (eight enumerated routes
+documented in this PR), §7.16 is the best available configuration.
+This is not a proof of global optimality: feature directions not yet
+investigated at this point included LASSO / sparse selection over the
+existing windowopt set, simplified attenuation + antenna-gain proxies,
+frequency-band-specific (L1 / L2) features, and ablations of individual
+§7.16 ingredients.  Within what we did try, further gain would require
+either:
+
+- 7+ days of UTD diffraction + antenna-pattern + signal-attenuation
+  modelling (Furukawa 2019's full machinery),
+- 3-5 days of LOD3 PLATEAU + manual elevated-road / monorail
+  geometry patching for each focus failure window, or
+- Additional run-level data growth (rejected by the user).
+
+§7.16 (`current_tight_hold + carry + alpha=0.75`,
+17.087 / **3.202** / **0.551**) remains the reported best strict
+research direction.  No further empirical improvements are
+achievable with the resources available in-session.
+
+Artifacts for the all-runs reflection experiment:
+- `experiments/exp_ppc_reflection_poc.py` (BVH multipath PoC)
+- `experiments/aggregate_reflection_features.py` (pooled correlation)
+- `experiments/augment_window_csv_with_reflection.py` (merge into §7.16 CSV)
+- `experiments/results/ppc_reflection_bvh_s60_<city>_<run>_per_*.csv` (× 6 runs × 3 levels)
+- `experiments/results/ppc_reflection_bvh_pooled_per_window.csv`
+- `experiments/results/ppc_window_fix_rate_model_..._with_reflection_alpha75_meta_run45_*.csv`
+
+## Addendum: simplified antenna gain + NLoS attenuation tested
+
+The final PR-#12-era physics probe tested the previously-open
+simplified signal-quality direction: RHCP cos^2 receiver antenna gain
+combined with a fixed -25 dB penalty for NLoS satellites.
+
+Script pair:
+
+- `experiments/exp_ppc_antenna_attenuation_features.py`: per-run
+  extractor using PLATEAU BVH LoS checks and the simplified effective
+  signal model.
+- `experiments/augment_window_csv_with_antenna.py`: pools the six
+  per-run window CSVs, prefixes the features as `ant_*`, merges them
+  into the §7.16 augmented window CSV, and prints correlations against
+  `actual_fix_rate_pct`.
+
+Physical model:
+
+```text
+effective_dB = 10 * log10(sin(elevation)^2 + epsilon)
+             + (0 if LoS else -25)
+```
+
+Per-window features include effective-dB quantiles, usable and marginal
+satellite counts, high-elevation NLoS counts, mean antenna gain, and
+median elevation.  The all-six-run extraction used epoch stride 5 and
+produced 197 merged LORO windows.
+
+Univariate correlations against demo5 actual FIX rate
+(n = 197 windows, multiplicity-uncorrected):
+
+| feature | r |
+| --- | --- |
+| ant_marginal_count_mean | +0.292 |
+| ant_elev_deg_p50_mean | -0.253 |
+| ant_usable_count_mean | +0.227 |
+| ant_usable_count_min | +0.208 |
+| ant_eff_db_p10_mean | +0.166 |
+| ant_gain_db_mean_mean | -0.163 |
+| ant_eff_db_max_mean | +0.147 |
+| ant_eff_db_max_max | +0.145 |
+| ant_eff_db_p10_min | +0.146 |
+| ant_nlos_at_high_elev_count_mean | -0.134 |
+| ant_nlos_at_high_elev_count_max | -0.134 |
+| ant_eff_db_mean_mean | +0.115 |
+| ant_eff_db_p50_mean | -0.051 |
+| ant_eff_db_p90_mean | -0.050 |
+
+Fourteen parallel feature correlations means a Bonferroni-adjusted
+alpha=0.05 bar is about |r| >= 0.20.  Only the first four features
+clear that univariate bar, and they are ordinary visibility/elevation
+signals already represented by the §7.16 `sim_los_*` and validationhold
+feature families.
+
+Retrained §7.16 nested stack with the 14 antenna features added:
+
+| variant | wmae pp | run MAE pp | corr |
+| --- | --- | --- | --- |
+| §7.16 adopted (no antenna) | **17.087** | **3.202** | **0.551** |
+| §7.25 antenna-augmented alpha=0.75 | 17.886 | 4.795 | 0.459 |
+| conservative baseline (no model) | 18.046 | 4.436 | 0.401 |
+
+The antenna-augmented stack regresses on §7.16 by +0.80 pp weighted
+MAE, +1.59 pp run MAE, and -0.092 window correlation.  It also exceeds
+the `--max-run-mae-pp 4.5` selection guardrail (4.795 > 4.5), so it is
+not adoptable even as a relaxed replacement for §7.16.
+
+Diagnosis matches the §7.17 and BVH multipath retrain nulls: the new
+features mostly restate elevation and LoS visibility.  ExtraTrees
+feature subsampling then sees more correlated versions of an already
+available signal, and the ridge residual head shrinks toward the
+baseline after receiving a noisier classifier residual.
+
+Combined conclusion after the antenna attempt: all four PR-#12-era
+structural probes are null relative to §7.16:
+
+- epoch-level classifier: AUC 0.54, no useful window aggregate;
+- canyon / edge proxy: weak aggregate correlation, no model lift;
+- BVH multipath: weak correlation and retrain regression to 18.358 /
+  4.510 / 0.428;
+- simplified antenna gain + -25 dB NLoS attenuation: retrain regression
+  to 17.886 / 4.795 / 0.459.
+
+§7.16 (`current_tight_hold + carry + alpha=0.75`, 17.087 / 3.202 /
+0.551) remains the reported strict best.  Remaining plausible upside is
+outside this simplified neighbourhood: UTD diffraction, real antenna
+pattern / signal attenuation, PLATEAU LOD3 plus elevated-road geometry
+patching, more run-level data, or sparse selection over the existing
+5867-feature input set.
+
+Artifacts for the antenna experiment:
+
+- `experiments/exp_ppc_antenna_attenuation_features.py`
+- `experiments/augment_window_csv_with_antenna.py`
+- `experiments/results/ppc_antenna_features_s5_<city>_<run>_per_{epoch,window}.csv`
+- `experiments/results/ppc_antenna_features_pooled_per_window.csv`
+- `experiments/results/ppc_window_fix_rate_model_..._antenna_alpha75_meta_run45_*.csv`
