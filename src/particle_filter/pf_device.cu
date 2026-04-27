@@ -60,6 +60,66 @@ __device__ bool pfd_solve_4x4(double A[4][5], double* x) {
     return isfinite(x[0]) && isfinite(x[1]) && isfinite(x[2]) && isfinite(x[3]);
 }
 
+__device__ __forceinline__ void pfd_quat_normalize(
+    double& qx, double& qy, double& qz, double& qw) {
+    double n = sqrt(qx * qx + qy * qy + qz * qz + qw * qw);
+    if (!(n > 0.0) || !isfinite(n)) {
+        qx = 0.0;
+        qy = 0.0;
+        qz = 0.0;
+        qw = 1.0;
+        return;
+    }
+    double inv = 1.0 / n;
+    qx *= inv;
+    qy *= inv;
+    qz *= inv;
+    qw *= inv;
+}
+
+__device__ __forceinline__ void pfd_quat_multiply(
+    double ax, double ay, double az, double aw,
+    double bx, double by, double bz, double bw,
+    double& ox, double& oy, double& oz, double& ow) {
+    ox = aw * bx + ax * bw + ay * bz - az * by;
+    oy = aw * by - ax * bz + ay * bw + az * bx;
+    oz = aw * bz + ax * by - ay * bx + az * bw;
+    ow = aw * bw - ax * bx - ay * by - az * bz;
+}
+
+__device__ __forceinline__ void pfd_delta_quat(
+    double rx, double ry, double rz,
+    double& qx, double& qy, double& qz, double& qw) {
+    double angle = sqrt(rx * rx + ry * ry + rz * rz);
+    if (!(angle > 1e-14) || !isfinite(angle)) {
+        qx = 0.0;
+        qy = 0.0;
+        qz = 0.0;
+        qw = 1.0;
+        return;
+    }
+    double half = 0.5 * angle;
+    double s = sin(half) / angle;
+    qx = rx * s;
+    qy = ry * s;
+    qz = rz * s;
+    qw = cos(half);
+    pfd_quat_normalize(qx, qy, qz, qw);
+}
+
+__device__ __forceinline__ void pfd_rotate_body_to_nav(
+    double qx, double qy, double qz, double qw,
+    double bx, double by, double bz,
+    double& nx, double& ny, double& nz) {
+    pfd_quat_normalize(qx, qy, qz, qw);
+    double xx = qx * qx, yy = qy * qy, zz = qz * qz;
+    double xy = qx * qy, xz = qx * qz, yz = qy * qz;
+    double wx = qw * qx, wy = qw * qy, wz = qw * qz;
+    nx = (1.0 - 2.0 * (yy + zz)) * bx + 2.0 * (xy - wz) * by + 2.0 * (xz + wy) * bz;
+    ny = 2.0 * (xy + wz) * bx + (1.0 - 2.0 * (xx + zz)) * by + 2.0 * (yz - wx) * bz;
+    nz = 2.0 * (xz - wy) * bx + 2.0 * (yz + wx) * by + (1.0 - 2.0 * (xx + yy)) * bz;
+}
+
 // ============================================================
 // Kernels (self-contained, no extern dependencies)
 // ============================================================
@@ -67,6 +127,9 @@ __device__ bool pfd_solve_4x4(double A[4][5], double* x) {
 __global__ void pfd_init_kernel(double* px, double* py, double* pz,
                                 double* vx, double* vy, double* vz,
                                 double* vcov,
+                                double* qx, double* qy, double* qz, double* qw,
+                                double* bax, double* bay, double* baz,
+                                double* bgx, double* bgy, double* bgz,
                                 double* pcb,
                                 double* log_weights,
                                 double init_x, double init_y, double init_z, double init_cb,
@@ -99,6 +162,16 @@ __global__ void pfd_init_kernel(double* px, double* py, double* pz,
     vcov[cov_off + 0] = init_vel_var;
     vcov[cov_off + 4] = init_vel_var;
     vcov[cov_off + 8] = init_vel_var;
+    qx[tid] = 0.0;
+    qy[tid] = 0.0;
+    qz[tid] = 0.0;
+    qw[tid] = 1.0;
+    bax[tid] = 0.0;
+    bay[tid] = 0.0;
+    baz[tid] = 0.0;
+    bgx[tid] = 0.0;
+    bgy[tid] = 0.0;
+    bgz[tid] = 0.0;
     pcb[tid] = init_cb + curand_normal_double(&state) * spread_cb;
     log_weights[tid] = 0.0;
 }
@@ -183,6 +256,150 @@ __global__ void pfd_predict_kernel(double* px, double* py, double* pz,
     px[tid] += vxi * dt + nx;
     py[tid] += vyi * dt + ny;
     pz[tid] += vzi * dt + nz;
+    pcb[tid] += curand_normal_double(&state) * sigma_cb;
+}
+
+__global__ void pfd_set_inertial_state_kernel(
+    double* vx, double* vy, double* vz,
+    double* qx, double* qy, double* qz, double* qw,
+    double* bax, double* bay, double* baz,
+    double* bgx, double* bgy, double* bgz,
+    const double* imu_state,  // [q(4), ba(3), bg(3), v(3), spreads(4)]
+    int N, unsigned long long seed, int step) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    curandStatePhilox4_32_10_t state;
+    curand_init(seed, tid, step, &state);
+
+    double iqx = imu_state[0];
+    double iqy = imu_state[1];
+    double iqz = imu_state[2];
+    double iqw = imu_state[3];
+    pfd_quat_normalize(iqx, iqy, iqz, iqw);
+
+    double attitude_spread = fmax(imu_state[13], 0.0);
+    if (attitude_spread > 0.0) {
+        double dqx, dqy, dqz, dqw;
+        pfd_delta_quat(
+            curand_normal_double(&state) * attitude_spread,
+            curand_normal_double(&state) * attitude_spread,
+            curand_normal_double(&state) * attitude_spread,
+            dqx, dqy, dqz, dqw);
+        double oqx, oqy, oqz, oqw;
+        pfd_quat_multiply(iqx, iqy, iqz, iqw, dqx, dqy, dqz, dqw, oqx, oqy, oqz, oqw);
+        iqx = oqx;
+        iqy = oqy;
+        iqz = oqz;
+        iqw = oqw;
+        pfd_quat_normalize(iqx, iqy, iqz, iqw);
+    }
+
+    qx[tid] = iqx;
+    qy[tid] = iqy;
+    qz[tid] = iqz;
+    qw[tid] = iqw;
+
+    double acc_bias_spread = fmax(imu_state[14], 0.0);
+    bax[tid] = imu_state[4] + curand_normal_double(&state) * acc_bias_spread;
+    bay[tid] = imu_state[5] + curand_normal_double(&state) * acc_bias_spread;
+    baz[tid] = imu_state[6] + curand_normal_double(&state) * acc_bias_spread;
+
+    double gyro_bias_spread = fmax(imu_state[15], 0.0);
+    bgx[tid] = imu_state[7] + curand_normal_double(&state) * gyro_bias_spread;
+    bgy[tid] = imu_state[8] + curand_normal_double(&state) * gyro_bias_spread;
+    bgz[tid] = imu_state[9] + curand_normal_double(&state) * gyro_bias_spread;
+
+    double velocity_spread = fmax(imu_state[16], 0.0);
+    vx[tid] = imu_state[10] + curand_normal_double(&state) * velocity_spread;
+    vy[tid] = imu_state[11] + curand_normal_double(&state) * velocity_spread;
+    vz[tid] = imu_state[12] + curand_normal_double(&state) * velocity_spread;
+}
+
+__global__ void pfd_predict_imu_kernel(
+    double* px, double* py, double* pz,
+    double* vx, double* vy, double* vz,
+    double* vcov,
+    double* qx, double* qy, double* qz, double* qw,
+    double* bax, double* bay, double* baz,
+    double* bgx, double* bgy, double* bgz,
+    double* pcb,
+    const double* imu,  // [accel(3), gyro(3), gravity(3), dt, sigmas(6)]
+    int N, unsigned long long seed, int step) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    double dt = imu[9];
+    if (!(dt > 0.0) || !isfinite(dt)) return;
+    if (dt > 0.5) dt = 0.5;
+
+    curandStatePhilox4_32_10_t state;
+    curand_init(seed, tid, step, &state);
+
+    double sigma_pos = fmax(imu[10], 0.0);
+    double sigma_cb = fmax(imu[11], 0.0);
+    double sigma_acc = fmax(imu[12], 0.0);
+    double sigma_gyro = fmax(imu[13], 0.0);
+    double sigma_acc_bias_rw = fmax(imu[14], 0.0);
+    double sigma_gyro_bias_rw = fmax(imu[15], 0.0);
+
+    double qxi = qx[tid];
+    double qyi = qy[tid];
+    double qzi = qz[tid];
+    double qwi = qw[tid];
+    pfd_quat_normalize(qxi, qyi, qzi, qwi);
+
+    double sqrtdt = sqrt(dt);
+    double baxi = bax[tid] + curand_normal_double(&state) * sigma_acc_bias_rw * sqrtdt;
+    double bayi = bay[tid] + curand_normal_double(&state) * sigma_acc_bias_rw * sqrtdt;
+    double bazi = baz[tid] + curand_normal_double(&state) * sigma_acc_bias_rw * sqrtdt;
+    double bgxi = bgx[tid] + curand_normal_double(&state) * sigma_gyro_bias_rw * sqrtdt;
+    double bgyi = bgy[tid] + curand_normal_double(&state) * sigma_gyro_bias_rw * sqrtdt;
+    double bgzi = bgz[tid] + curand_normal_double(&state) * sigma_gyro_bias_rw * sqrtdt;
+
+    double wx = imu[3] - bgxi + curand_normal_double(&state) * sigma_gyro;
+    double wy = imu[4] - bgyi + curand_normal_double(&state) * sigma_gyro;
+    double wz = imu[5] - bgzi + curand_normal_double(&state) * sigma_gyro;
+
+    double dqx, dqy, dqz, dqw;
+    pfd_delta_quat(wx * dt, wy * dt, wz * dt, dqx, dqy, dqz, dqw);
+    double nqx, nqy, nqz, nqw;
+    pfd_quat_multiply(qxi, qyi, qzi, qwi, dqx, dqy, dqz, dqw, nqx, nqy, nqz, nqw);
+    pfd_quat_normalize(nqx, nqy, nqz, nqw);
+
+    double fax = imu[0] - baxi + curand_normal_double(&state) * sigma_acc;
+    double fay = imu[1] - bayi + curand_normal_double(&state) * sigma_acc;
+    double faz = imu[2] - bazi + curand_normal_double(&state) * sigma_acc;
+    double ax_nav, ay_nav, az_nav;
+    pfd_rotate_body_to_nav(nqx, nqy, nqz, nqw, fax, fay, faz, ax_nav, ay_nav, az_nav);
+    ax_nav += imu[6];
+    ay_nav += imu[7];
+    az_nav += imu[8];
+
+    double vxi = vx[tid];
+    double vyi = vy[tid];
+    double vzi = vz[tid];
+    px[tid] += vxi * dt + 0.5 * ax_nav * dt * dt + curand_normal_double(&state) * sigma_pos;
+    py[tid] += vyi * dt + 0.5 * ay_nav * dt * dt + curand_normal_double(&state) * sigma_pos;
+    pz[tid] += vzi * dt + 0.5 * az_nav * dt * dt + curand_normal_double(&state) * sigma_pos;
+    vx[tid] = vxi + ax_nav * dt;
+    vy[tid] = vyi + ay_nav * dt;
+    vz[tid] = vzi + az_nav * dt;
+    int cov_off = tid * 9;
+    double qv = sigma_acc * sigma_acc * dt;
+    vcov[cov_off + 0] += qv;
+    vcov[cov_off + 4] += qv;
+    vcov[cov_off + 8] += qv;
+    qx[tid] = nqx;
+    qy[tid] = nqy;
+    qz[tid] = nqz;
+    qw[tid] = nqw;
+    bax[tid] = baxi;
+    bay[tid] = bayi;
+    baz[tid] = bazi;
+    bgx[tid] = bgxi;
+    bgy[tid] = bgyi;
+    bgz[tid] = bgzi;
     pcb[tid] += curand_normal_double(&state) * sigma_cb;
 }
 
@@ -899,6 +1116,19 @@ __global__ void pfd_position_update_kernel(
     log_weights[tid] += -0.5 * (dx*dx + dy*dy + dz*dz) * inv_sigma2;
 }
 
+// --- Position shift kernel ---
+// Translates the full particle cloud by a common ECEF delta.
+__global__ void pfd_shift_position_kernel(
+    double* px, double* py, double* pz,
+    double dx, double dy, double dz,
+    int N) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+    px[tid] += dx;
+    py[tid] += dy;
+    pz[tid] += dz;
+}
+
 // --- Clock bias shift kernel ---
 // Shifts all particles' clock bias by a constant offset.
 // Used to re-center cb around an external estimate each epoch.
@@ -1148,12 +1378,24 @@ __global__ void pfd_systematic_resample_kernel(const double* cdf,
                                                const double* vx_in, const double* vy_in,
                                                const double* vz_in,
                                                const double* vcov_in,
+                                               const double* qx_in, const double* qy_in,
+                                               const double* qz_in, const double* qw_in,
+                                               const double* bax_in, const double* bay_in,
+                                               const double* baz_in,
+                                               const double* bgx_in, const double* bgy_in,
+                                               const double* bgz_in,
                                                const double* pcb_in,
                                                double* px_out, double* py_out,
                                                double* pz_out,
                                                double* vx_out, double* vy_out,
                                                double* vz_out,
                                                double* vcov_out,
+                                               double* qx_out, double* qy_out,
+                                               double* qz_out, double* qw_out,
+                                               double* bax_out, double* bay_out,
+                                               double* baz_out,
+                                               double* bgx_out, double* bgy_out,
+                                               double* bgz_out,
                                                double* pcb_out,
                                                int* ancestor_out,
                                                int N, double u0) {
@@ -1180,6 +1422,16 @@ __global__ void pfd_systematic_resample_kernel(const double* cdf,
     for (int k = 0; k < 9; k++) {
         vcov_out[dst_cov + k] = vcov_in[src_cov + k];
     }
+    qx_out[tid] = qx_in[lo];
+    qy_out[tid] = qy_in[lo];
+    qz_out[tid] = qz_in[lo];
+    qw_out[tid] = qw_in[lo];
+    bax_out[tid] = bax_in[lo];
+    bay_out[tid] = bay_in[lo];
+    baz_out[tid] = baz_in[lo];
+    bgx_out[tid] = bgx_in[lo];
+    bgy_out[tid] = bgy_in[lo];
+    bgz_out[tid] = bgz_in[lo];
     pcb_out[tid] = pcb_in[lo];
     if (ancestor_out != nullptr) {
         ancestor_out[tid] = lo;
@@ -1197,10 +1449,16 @@ __global__ void pfd_reset_weights_kernel(double* log_weights, int N) {
 __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
                                     double* vx_a, double* vy_a, double* vz_a,
                                     double* vcov_a,
+                                    double* qx_a, double* qy_a, double* qz_a, double* qw_a,
+                                    double* bax_a, double* bay_a, double* baz_a,
+                                    double* bgx_a, double* bgy_a, double* bgz_a,
                                     double* pcb_a,
                                     double* px_b, double* py_b, double* pz_b,
                                     double* vx_b, double* vy_b, double* vz_b,
                                     double* vcov_b,
+                                    double* qx_b, double* qy_b, double* qz_b, double* qw_b,
+                                    double* bax_b, double* bay_b, double* baz_b,
+                                    double* bgx_b, double* bgy_b, double* bgz_b,
                                     double* pcb_b,
                                     const double* log_weights,
                                     int N, unsigned long long seed, int iteration,
@@ -1218,6 +1476,16 @@ __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
     const double* src_vy = (src_buf == 0) ? vy_a : vy_b;
     const double* src_vz = (src_buf == 0) ? vz_a : vz_b;
     const double* src_vcov = (src_buf == 0) ? vcov_a : vcov_b;
+    const double* src_qx = (src_buf == 0) ? qx_a : qx_b;
+    const double* src_qy = (src_buf == 0) ? qy_a : qy_b;
+    const double* src_qz = (src_buf == 0) ? qz_a : qz_b;
+    const double* src_qw = (src_buf == 0) ? qw_a : qw_b;
+    const double* src_bax = (src_buf == 0) ? bax_a : bax_b;
+    const double* src_bay = (src_buf == 0) ? bay_a : bay_b;
+    const double* src_baz = (src_buf == 0) ? baz_a : baz_b;
+    const double* src_bgx = (src_buf == 0) ? bgx_a : bgx_b;
+    const double* src_bgy = (src_buf == 0) ? bgy_a : bgy_b;
+    const double* src_bgz = (src_buf == 0) ? bgz_a : bgz_b;
     const double* src_pcb = (src_buf == 0) ? pcb_a : pcb_b;
     double* dst_px = (src_buf == 0) ? px_b : px_a;
     double* dst_py = (src_buf == 0) ? py_b : py_a;
@@ -1226,6 +1494,16 @@ __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
     double* dst_vy = (src_buf == 0) ? vy_b : vy_a;
     double* dst_vz = (src_buf == 0) ? vz_b : vz_a;
     double* dst_vcov = (src_buf == 0) ? vcov_b : vcov_a;
+    double* dst_qx = (src_buf == 0) ? qx_b : qx_a;
+    double* dst_qy = (src_buf == 0) ? qy_b : qy_a;
+    double* dst_qz = (src_buf == 0) ? qz_b : qz_a;
+    double* dst_qw = (src_buf == 0) ? qw_b : qw_a;
+    double* dst_bax = (src_buf == 0) ? bax_b : bax_a;
+    double* dst_bay = (src_buf == 0) ? bay_b : bay_a;
+    double* dst_baz = (src_buf == 0) ? baz_b : baz_a;
+    double* dst_bgx = (src_buf == 0) ? bgx_b : bgx_a;
+    double* dst_bgy = (src_buf == 0) ? bgy_b : bgy_a;
+    double* dst_bgz = (src_buf == 0) ? bgz_b : bgz_a;
     double* dst_pcb = (src_buf == 0) ? pcb_b : pcb_a;
 
     int offset = (int)(curand_uniform_double(&state) * (N - 1)) + 1;
@@ -1247,6 +1525,16 @@ __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
         for (int k = 0; k < 9; k++) {
             dst_vcov[dst_cov + k] = src_vcov[src_cov + k];
         }
+        dst_qx[tid] = src_qx[j];
+        dst_qy[tid] = src_qy[j];
+        dst_qz[tid] = src_qz[j];
+        dst_qw[tid] = src_qw[j];
+        dst_bax[tid] = src_bax[j];
+        dst_bay[tid] = src_bay[j];
+        dst_baz[tid] = src_baz[j];
+        dst_bgx[tid] = src_bgx[j];
+        dst_bgy[tid] = src_bgy[j];
+        dst_bgz[tid] = src_bgz[j];
         dst_pcb[tid] = src_pcb[j];
     } else {
         dst_px[tid] = src_px[tid];
@@ -1259,6 +1547,16 @@ __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
         for (int k = 0; k < 9; k++) {
             dst_vcov[cov_off + k] = src_vcov[cov_off + k];
         }
+        dst_qx[tid] = src_qx[tid];
+        dst_qy[tid] = src_qy[tid];
+        dst_qz[tid] = src_qz[tid];
+        dst_qw[tid] = src_qw[tid];
+        dst_bax[tid] = src_bax[tid];
+        dst_bay[tid] = src_bay[tid];
+        dst_baz[tid] = src_baz[tid];
+        dst_bgx[tid] = src_bgx[tid];
+        dst_bgy[tid] = src_bgy[tid];
+        dst_bgz[tid] = src_bgz[tid];
         dst_pcb[tid] = src_pcb[tid];
     }
 }
@@ -1286,6 +1584,16 @@ PFDeviceState* pf_device_create(int n_particles) {
     CUDA_CHECK(cudaMalloc(&state->d_vy, sz));
     CUDA_CHECK(cudaMalloc(&state->d_vz, sz));
     CUDA_CHECK(cudaMalloc(&state->d_vcov, (size_t)n_particles * 9 * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&state->d_qx, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_qy, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_qz, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_qw, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_bax, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_bay, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_baz, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_bgx, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_bgy, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_bgz, sz));
     CUDA_CHECK(cudaMalloc(&state->d_pcb, sz));
     CUDA_CHECK(cudaMalloc(&state->d_log_weights, sz));
 
@@ -1297,6 +1605,16 @@ PFDeviceState* pf_device_create(int n_particles) {
     CUDA_CHECK(cudaMalloc(&state->d_vy_tmp, sz));
     CUDA_CHECK(cudaMalloc(&state->d_vz_tmp, sz));
     CUDA_CHECK(cudaMalloc(&state->d_vcov_tmp, (size_t)n_particles * 9 * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&state->d_qx_tmp, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_qy_tmp, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_qz_tmp, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_qw_tmp, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_bax_tmp, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_bay_tmp, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_baz_tmp, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_bgx_tmp, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_bgy_tmp, sz));
+    CUDA_CHECK(cudaMalloc(&state->d_bgz_tmp, sz));
     CUDA_CHECK(cudaMalloc(&state->d_pcb_tmp, sz));
 
     // Reduction temporaries
@@ -1312,6 +1630,7 @@ PFDeviceState* pf_device_create(int n_particles) {
 
     // Velocity buffer (3 doubles)
     CUDA_CHECK(cudaMalloc(&state->d_vel, 3 * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&state->d_imu, 17 * sizeof(double)));
 
     // CUDA stream for pipelined execution
     CUDA_CHECK(cudaStreamCreate(&state->stream));
@@ -1325,6 +1644,7 @@ PFDeviceState* pf_device_create(int n_particles) {
     // Pinned host memory for async transfers
     CUDA_CHECK(cudaMallocHost(&state->h_sat_pinned, MAX_SATS * 5 * sizeof(double)));
     CUDA_CHECK(cudaMallocHost(&state->h_result_pinned, 4 * sizeof(double)));
+    CUDA_CHECK(cudaMallocHost(&state->h_imu_pinned, 17 * sizeof(double)));
     CUDA_CHECK(cudaMallocHost(&state->h_reduction_pinned, grid * 6 * sizeof(double)));
 
     state->allocated = true;
@@ -1345,6 +1665,16 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     cudaFree(state->d_vy);
     cudaFree(state->d_vz);
     cudaFree(state->d_vcov);
+    cudaFree(state->d_qx);
+    cudaFree(state->d_qy);
+    cudaFree(state->d_qz);
+    cudaFree(state->d_qw);
+    cudaFree(state->d_bax);
+    cudaFree(state->d_bay);
+    cudaFree(state->d_baz);
+    cudaFree(state->d_bgx);
+    cudaFree(state->d_bgy);
+    cudaFree(state->d_bgz);
     cudaFree(state->d_pcb);
     cudaFree(state->d_log_weights);
     cudaFree(state->d_px_tmp);
@@ -1354,6 +1684,16 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     cudaFree(state->d_vy_tmp);
     cudaFree(state->d_vz_tmp);
     cudaFree(state->d_vcov_tmp);
+    cudaFree(state->d_qx_tmp);
+    cudaFree(state->d_qy_tmp);
+    cudaFree(state->d_qz_tmp);
+    cudaFree(state->d_qw_tmp);
+    cudaFree(state->d_bax_tmp);
+    cudaFree(state->d_bay_tmp);
+    cudaFree(state->d_baz_tmp);
+    cudaFree(state->d_bgx_tmp);
+    cudaFree(state->d_bgy_tmp);
+    cudaFree(state->d_bgz_tmp);
     cudaFree(state->d_pcb_tmp);
     cudaFree(state->d_partial_a);
     cudaFree(state->d_partial_b);
@@ -1362,6 +1702,7 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     cudaFree(state->d_cdf);
     cudaFree(state->d_resample_ancestor);
     cudaFree(state->d_vel);
+    cudaFree(state->d_imu);
 
     // Free persistent satellite device buffers
     cudaFree(state->d_sat_ecef);
@@ -1371,6 +1712,7 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     // Free pinned host memory
     cudaFreeHost(state->h_sat_pinned);
     cudaFreeHost(state->h_result_pinned);
+    cudaFreeHost(state->h_imu_pinned);
     cudaFreeHost(state->h_reduction_pinned);
 
     // Null out all pointers to prevent use-after-free
@@ -1381,6 +1723,16 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     state->d_vy = nullptr;
     state->d_vz = nullptr;
     state->d_vcov = nullptr;
+    state->d_qx = nullptr;
+    state->d_qy = nullptr;
+    state->d_qz = nullptr;
+    state->d_qw = nullptr;
+    state->d_bax = nullptr;
+    state->d_bay = nullptr;
+    state->d_baz = nullptr;
+    state->d_bgx = nullptr;
+    state->d_bgy = nullptr;
+    state->d_bgz = nullptr;
     state->d_pcb = nullptr;
     state->d_log_weights = nullptr;
     state->d_px_tmp = nullptr;
@@ -1390,6 +1742,16 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     state->d_vy_tmp = nullptr;
     state->d_vz_tmp = nullptr;
     state->d_vcov_tmp = nullptr;
+    state->d_qx_tmp = nullptr;
+    state->d_qy_tmp = nullptr;
+    state->d_qz_tmp = nullptr;
+    state->d_qw_tmp = nullptr;
+    state->d_bax_tmp = nullptr;
+    state->d_bay_tmp = nullptr;
+    state->d_baz_tmp = nullptr;
+    state->d_bgx_tmp = nullptr;
+    state->d_bgy_tmp = nullptr;
+    state->d_bgz_tmp = nullptr;
     state->d_pcb_tmp = nullptr;
     state->d_partial_a = nullptr;
     state->d_partial_b = nullptr;
@@ -1398,11 +1760,13 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     state->d_cdf = nullptr;
     state->d_resample_ancestor = nullptr;
     state->d_vel = nullptr;
+    state->d_imu = nullptr;
     state->d_sat_ecef = nullptr;
     state->d_pseudoranges = nullptr;
     state->d_weights_sat = nullptr;
     state->h_sat_pinned = nullptr;
     state->h_result_pinned = nullptr;
+    state->h_imu_pinned = nullptr;
     state->h_reduction_pinned = nullptr;
 
     state->allocated = false;
@@ -1431,7 +1795,11 @@ void pf_device_initialize(PFDeviceState* state,
 
     pfd_init_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
-        state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
+        state->d_vx, state->d_vy, state->d_vz, state->d_vcov,
+        state->d_qx, state->d_qy, state->d_qz, state->d_qw,
+        state->d_bax, state->d_bay, state->d_baz,
+        state->d_bgx, state->d_bgy, state->d_bgz,
+        state->d_pcb,
         state->d_log_weights,
         init_x, init_y, init_z, init_cb,
         init_vx, init_vy, init_vz,
@@ -1472,6 +1840,78 @@ void pf_device_predict(PFDeviceState* state,
         dt, sigma_pos, sigma_cb, sigma_vel, velocity_guide_alpha,
         velocity_kf, velocity_process_noise,
         N, seed, step);
+    CUDA_CHECK_LAST();
+}
+
+void pf_device_set_inertial_state(PFDeviceState* state,
+    double qx, double qy, double qz, double qw,
+    double bax, double bay, double baz,
+    double bgx, double bgy, double bgz,
+    double vx, double vy, double vz,
+    double attitude_spread_rad,
+    double accel_bias_spread,
+    double gyro_bias_spread,
+    double velocity_spread,
+    unsigned long long seed, int step) {
+
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    double* h = state->h_imu_pinned;
+    h[0] = qx; h[1] = qy; h[2] = qz; h[3] = qw;
+    h[4] = bax; h[5] = bay; h[6] = baz;
+    h[7] = bgx; h[8] = bgy; h[9] = bgz;
+    h[10] = vx; h[11] = vy; h[12] = vz;
+    h[13] = attitude_spread_rad;
+    h[14] = accel_bias_spread;
+    h[15] = gyro_bias_spread;
+    h[16] = velocity_spread;
+    CUDA_CHECK(cudaMemcpyAsync(state->d_imu, h, 17 * sizeof(double),
+                               cudaMemcpyHostToDevice, state->stream));
+
+    pfd_set_inertial_state_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_vx, state->d_vy, state->d_vz,
+        state->d_qx, state->d_qy, state->d_qz, state->d_qw,
+        state->d_bax, state->d_bay, state->d_baz,
+        state->d_bgx, state->d_bgy, state->d_bgz,
+        state->d_imu, N, seed, step);
+    CUDA_CHECK_LAST();
+}
+
+void pf_device_predict_imu(PFDeviceState* state,
+    double ax, double ay, double az,
+    double gx, double gy, double gz,
+    double gravity_x, double gravity_y, double gravity_z,
+    double dt, double sigma_pos, double sigma_cb,
+    double sigma_acc, double sigma_gyro,
+    double sigma_acc_bias_rw, double sigma_gyro_bias_rw,
+    unsigned long long seed, int step) {
+
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    double* h = state->h_imu_pinned;
+    h[0] = ax; h[1] = ay; h[2] = az;
+    h[3] = gx; h[4] = gy; h[5] = gz;
+    h[6] = gravity_x; h[7] = gravity_y; h[8] = gravity_z;
+    h[9] = dt;
+    h[10] = sigma_pos;
+    h[11] = sigma_cb;
+    h[12] = sigma_acc;
+    h[13] = sigma_gyro;
+    h[14] = sigma_acc_bias_rw;
+    h[15] = sigma_gyro_bias_rw;
+    h[16] = 0.0;
+    CUDA_CHECK(cudaMemcpyAsync(state->d_imu, h, 17 * sizeof(double),
+                               cudaMemcpyHostToDevice, state->stream));
+
+    pfd_predict_imu_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        state->d_vx, state->d_vy, state->d_vz, state->d_vcov,
+        state->d_qx, state->d_qy, state->d_qz, state->d_qw,
+        state->d_bax, state->d_bay, state->d_baz,
+        state->d_bgx, state->d_bgy, state->d_bgz,
+        state->d_pcb, state->d_imu, N, seed, step);
     CUDA_CHECK_LAST();
 }
 
@@ -1659,6 +2099,22 @@ void pf_device_position_update(PFDeviceState* state,
 }
 
 // ============================================================
+// Position shift
+// ============================================================
+
+void pf_device_shift_position(PFDeviceState* state, double dx, double dy, double dz) {
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    pfd_shift_position_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz, dx, dy, dz, N);
+    CUDA_CHECK_LAST();
+    pfd_reset_weights_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_log_weights, N);
+    CUDA_CHECK_LAST();
+}
+
+// ============================================================
 // Clock bias shift
 // ============================================================
 
@@ -1811,9 +2267,17 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     pfd_systematic_resample_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_cdf,
         state->d_px, state->d_py, state->d_pz,
-        state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
+        state->d_vx, state->d_vy, state->d_vz, state->d_vcov,
+        state->d_qx, state->d_qy, state->d_qz, state->d_qw,
+        state->d_bax, state->d_bay, state->d_baz,
+        state->d_bgx, state->d_bgy, state->d_bgz,
+        state->d_pcb,
         state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp,
-        state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_vcov_tmp, state->d_pcb_tmp,
+        state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_vcov_tmp,
+        state->d_qx_tmp, state->d_qy_tmp, state->d_qz_tmp, state->d_qw_tmp,
+        state->d_bax_tmp, state->d_bay_tmp, state->d_baz_tmp,
+        state->d_bgx_tmp, state->d_bgy_tmp, state->d_bgz_tmp,
+        state->d_pcb_tmp,
         state->d_resample_ancestor,
         N, u0);
     CUDA_CHECK_LAST();
@@ -1826,6 +2290,16 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     std::swap(state->d_vy, state->d_vy_tmp);
     std::swap(state->d_vz, state->d_vz_tmp);
     std::swap(state->d_vcov, state->d_vcov_tmp);
+    std::swap(state->d_qx, state->d_qx_tmp);
+    std::swap(state->d_qy, state->d_qy_tmp);
+    std::swap(state->d_qz, state->d_qz_tmp);
+    std::swap(state->d_qw, state->d_qw_tmp);
+    std::swap(state->d_bax, state->d_bax_tmp);
+    std::swap(state->d_bay, state->d_bay_tmp);
+    std::swap(state->d_baz, state->d_baz_tmp);
+    std::swap(state->d_bgx, state->d_bgx_tmp);
+    std::swap(state->d_bgy, state->d_bgy_tmp);
+    std::swap(state->d_bgz, state->d_bgz_tmp);
     std::swap(state->d_pcb, state->d_pcb_tmp);
 
     // Step 9: Reset log weights to uniform
@@ -1848,9 +2322,17 @@ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsign
         int src_buf = iter % 2;
         pfd_megopolis_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
             state->d_px, state->d_py, state->d_pz,
-            state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
+            state->d_vx, state->d_vy, state->d_vz, state->d_vcov,
+            state->d_qx, state->d_qy, state->d_qz, state->d_qw,
+            state->d_bax, state->d_bay, state->d_baz,
+            state->d_bgx, state->d_bgy, state->d_bgz,
+            state->d_pcb,
             state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp,
-            state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_vcov_tmp, state->d_pcb_tmp,
+            state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_vcov_tmp,
+            state->d_qx_tmp, state->d_qy_tmp, state->d_qz_tmp, state->d_qw_tmp,
+            state->d_bax_tmp, state->d_bay_tmp, state->d_baz_tmp,
+            state->d_bgx_tmp, state->d_bgy_tmp, state->d_bgz_tmp,
+            state->d_pcb_tmp,
             state->d_log_weights,
             N, seed, iter, src_buf);
     }
@@ -1867,6 +2349,16 @@ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsign
         std::swap(state->d_vy, state->d_vy_tmp);
         std::swap(state->d_vz, state->d_vz_tmp);
         std::swap(state->d_vcov, state->d_vcov_tmp);
+        std::swap(state->d_qx, state->d_qx_tmp);
+        std::swap(state->d_qy, state->d_qy_tmp);
+        std::swap(state->d_qz, state->d_qz_tmp);
+        std::swap(state->d_qw, state->d_qw_tmp);
+        std::swap(state->d_bax, state->d_bax_tmp);
+        std::swap(state->d_bay, state->d_bay_tmp);
+        std::swap(state->d_baz, state->d_baz_tmp);
+        std::swap(state->d_bgx, state->d_bgx_tmp);
+        std::swap(state->d_bgy, state->d_bgy_tmp);
+        std::swap(state->d_bgz, state->d_bgz_tmp);
         std::swap(state->d_pcb, state->d_pcb_tmp);
     }
 

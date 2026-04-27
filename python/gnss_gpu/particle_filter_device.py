@@ -63,6 +63,7 @@ class ParticleFilterDevice:
             pf_device_weight_doppler,
             pf_device_doppler_kf_update,
             pf_device_position_update,
+            pf_device_shift_position,
             pf_device_shift_clock_bias,
             pf_device_ess,
             pf_device_position_spread,
@@ -75,10 +76,20 @@ class ParticleFilterDevice:
             pf_device_get_resample_ancestors,
             pf_device_sync,
         )
+        try:
+            from gnss_gpu._gnss_gpu_pf_device import (
+                pf_device_set_inertial_state,
+                pf_device_predict_imu,
+            )
+        except ImportError:
+            pf_device_set_inertial_state = None
+            pf_device_predict_imu = None
         self._pf_device_create = pf_device_create
         self._pf_device_destroy = pf_device_destroy
         self._pf_device_initialize = pf_device_initialize
         self._pf_device_predict = pf_device_predict
+        self._pf_device_set_inertial_state = pf_device_set_inertial_state
+        self._pf_device_predict_imu = pf_device_predict_imu
         self._pf_device_weight = pf_device_weight
         self._pf_device_weight_dd_pseudorange = pf_device_weight_dd_pseudorange
         self._pf_device_weight_gmm = pf_device_weight_gmm
@@ -87,6 +98,7 @@ class ParticleFilterDevice:
         self._pf_device_weight_doppler = pf_device_weight_doppler
         self._pf_device_doppler_kf_update = pf_device_doppler_kf_update
         self._pf_device_position_update = pf_device_position_update
+        self._pf_device_shift_position = pf_device_shift_position
         self._pf_device_shift_clock_bias = pf_device_shift_clock_bias
         self._pf_device_ess = pf_device_ess
         self._pf_device_position_spread = pf_device_position_spread
@@ -251,6 +263,68 @@ class ParticleFilterDevice:
             vx, vy, vz,
             float(dt), sp, float(self.sigma_cb),
             self.seed, self._step, sv, alpha, use_velocity_kf, qv)
+
+    def set_inertial_state(self, q_body_to_ecef, accel_bias_body, gyro_bias_body,
+                           velocity_ecef, attitude_spread_rad=0.0,
+                           accel_bias_spread=0.0, gyro_bias_spread=0.0,
+                           velocity_spread=0.0):
+        """Initialize per-particle strapdown INS state used by ``predict_imu``."""
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        if self._pf_device_set_inertial_state is None:
+            raise RuntimeError("pf_device_set_inertial_state is unavailable; rebuild the CUDA bindings.")
+
+        q = np.asarray(q_body_to_ecef, dtype=np.float64).ravel()
+        ba = np.asarray(accel_bias_body, dtype=np.float64).ravel()
+        bg = np.asarray(gyro_bias_body, dtype=np.float64).ravel()
+        vel = np.asarray(velocity_ecef, dtype=np.float64).ravel()
+        if q.size < 4 or ba.size < 3 or bg.size < 3 or vel.size < 3:
+            raise ValueError("q, accel_bias_body, gyro_bias_body, and velocity_ecef have invalid shape")
+
+        self._pf_device_set_inertial_state(
+            self._state,
+            float(q[0]), float(q[1]), float(q[2]), float(q[3]),
+            float(ba[0]), float(ba[1]), float(ba[2]),
+            float(bg[0]), float(bg[1]), float(bg[2]),
+            float(vel[0]), float(vel[1]), float(vel[2]),
+            float(attitude_spread_rad),
+            float(accel_bias_spread),
+            float(gyro_bias_spread),
+            float(velocity_spread),
+            self.seed,
+            self._step + 1,
+        )
+
+    def predict_imu(self, accel_body, gyro_body_radps, gravity_ecef, dt,
+                    sigma_pos=0.0, sigma_acc=0.0, sigma_gyro=0.0,
+                    sigma_acc_bias_rw=0.0, sigma_gyro_bias_rw=0.0):
+        """Predict particles with raw IMU in body frame.
+
+        ``accel_body`` is specific force [m/s^2], ``gyro_body_radps`` is
+        angular rate [rad/s], and ``gravity_ecef`` is acceleration in ECEF.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        if self._pf_device_predict_imu is None:
+            raise RuntimeError("pf_device_predict_imu is unavailable; rebuild the CUDA bindings.")
+
+        acc = np.asarray(accel_body, dtype=np.float64).ravel()
+        gyro = np.asarray(gyro_body_radps, dtype=np.float64).ravel()
+        grav = np.asarray(gravity_ecef, dtype=np.float64).ravel()
+        if acc.size < 3 or gyro.size < 3 or grav.size < 3:
+            raise ValueError("accel_body, gyro_body_radps, and gravity_ecef must be 3-vectors")
+
+        self._step += 1
+        self._pf_device_predict_imu(
+            self._state,
+            float(acc[0]), float(acc[1]), float(acc[2]),
+            float(gyro[0]), float(gyro[1]), float(gyro[2]),
+            float(grav[0]), float(grav[1]), float(grav[2]),
+            float(dt), float(sigma_pos), float(self.sigma_cb),
+            float(sigma_acc), float(sigma_gyro),
+            float(sigma_acc_bias_rw), float(sigma_gyro_bias_rw),
+            self.seed, self._step,
+        )
 
     def update(self, sat_ecef, pseudoranges, weights=None, sigma_pr=None, resample=True):
         """Weight update with pseudorange observations.
@@ -599,6 +673,31 @@ class ParticleFilterDevice:
             self._state,
             float(ref[0]), float(ref[1]), float(ref[2]),
             float(sigma_pos))
+
+    def shift_position(self, delta_ecef):
+        """Translate all particles by a common ECEF delta and reset weights."""
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        delta = np.asarray(delta_ecef, dtype=np.float64).ravel()
+        if delta.size < 3:
+            raise ValueError("delta_ecef must be a 3-vector")
+        self._pf_device_shift_position(
+            self._state,
+            float(delta[0]), float(delta[1]), float(delta[2]),
+        )
+
+    def recenter_position(self, ref_ecef, max_shift_m=None):
+        """Shift the particle cloud so its weighted mean matches ``ref_ecef``."""
+        ref = np.asarray(ref_ecef, dtype=np.float64).ravel()
+        if ref.size < 3:
+            raise ValueError("ref_ecef must be a 3-vector")
+        est = np.asarray(self.estimate(), dtype=np.float64)
+        delta = ref[:3] - est[:3]
+        shift_norm = float(np.linalg.norm(delta))
+        if max_shift_m is not None and shift_norm > float(max_shift_m):
+            return shift_norm, False
+        self.shift_position(delta)
+        return shift_norm, True
 
     def shift_clock_bias(self, shift: float):
         """Shift all particles' clock bias by a constant offset.

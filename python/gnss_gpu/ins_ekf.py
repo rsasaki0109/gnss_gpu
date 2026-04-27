@@ -349,10 +349,27 @@ class INSEKF:
     def position_enu(self) -> np.ndarray:
         return self.p.copy()
 
+    def velocity_enu(self) -> np.ndarray:
+        return self.v.copy()
+
     def position_ecef(self, origin_ecef: np.ndarray, origin_lat: float, origin_lon: float) -> np.ndarray:
         origin = np.asarray(origin_ecef, dtype=np.float64).reshape(3)
         R = _ecef_to_enu_rotation(float(origin_lat), float(origin_lon))
         return origin + R.T @ self.p
+
+    def velocity_ecef(self, origin_lat: float, origin_lon: float) -> np.ndarray:
+        R = _ecef_to_enu_rotation(float(origin_lat), float(origin_lon))
+        return R.T @ self.v
+
+    def attitude_quat_body_to_ecef(self, origin_lat: float, origin_lon: float) -> np.ndarray:
+        R_enu_to_ecef = _ecef_to_enu_rotation(float(origin_lat), float(origin_lon)).T
+        return _rotmat_to_quat(R_enu_to_ecef @ _quat_to_rotmat(self.q))
+
+    def accel_bias_body(self) -> np.ndarray:
+        return self.b_a.copy()
+
+    def gyro_bias_body_radps(self) -> np.ndarray:
+        return self.b_g.copy()
 
     def yaw_rad(self) -> float:
         R = _quat_to_rotmat(self.q)

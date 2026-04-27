@@ -83,6 +83,54 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
        py::arg("velocity_kf") = false,
        py::arg("velocity_process_noise") = 0.0);
 
+    m.def("pf_device_set_inertial_state", [](gnss_gpu::PFDeviceState* state,
+                                             double qx, double qy, double qz, double qw,
+                                             double bax, double bay, double baz,
+                                             double bgx, double bgy, double bgz,
+                                             double vx, double vy, double vz,
+                                             double attitude_spread_rad,
+                                             double accel_bias_spread,
+                                             double gyro_bias_spread,
+                                             double velocity_spread,
+                                             unsigned long long seed, int step) {
+        gnss_gpu::pf_device_set_inertial_state(
+            state, qx, qy, qz, qw, bax, bay, baz, bgx, bgy, bgz,
+            vx, vy, vz, attitude_spread_rad, accel_bias_spread,
+            gyro_bias_spread, velocity_spread, seed, step);
+    }, "Initialize per-particle inertial state",
+       py::arg("state"),
+       py::arg("qx"), py::arg("qy"), py::arg("qz"), py::arg("qw"),
+       py::arg("bax"), py::arg("bay"), py::arg("baz"),
+       py::arg("bgx"), py::arg("bgy"), py::arg("bgz"),
+       py::arg("vx"), py::arg("vy"), py::arg("vz"),
+       py::arg("attitude_spread_rad"),
+       py::arg("accel_bias_spread"),
+       py::arg("gyro_bias_spread"),
+       py::arg("velocity_spread"),
+       py::arg("seed"), py::arg("step"));
+
+    m.def("pf_device_predict_imu", [](gnss_gpu::PFDeviceState* state,
+                                      double ax, double ay, double az,
+                                      double gx, double gy, double gz,
+                                      double gravity_x, double gravity_y, double gravity_z,
+                                      double dt, double sigma_pos, double sigma_cb,
+                                      double sigma_acc, double sigma_gyro,
+                                      double sigma_acc_bias_rw, double sigma_gyro_bias_rw,
+                                      unsigned long long seed, int step) {
+        gnss_gpu::pf_device_predict_imu(
+            state, ax, ay, az, gx, gy, gz, gravity_x, gravity_y, gravity_z,
+            dt, sigma_pos, sigma_cb, sigma_acc, sigma_gyro,
+            sigma_acc_bias_rw, sigma_gyro_bias_rw, seed, step);
+    }, "Strapdown IMU predict - operates entirely on device memory",
+       py::arg("state"),
+       py::arg("ax"), py::arg("ay"), py::arg("az"),
+       py::arg("gx"), py::arg("gy"), py::arg("gz"),
+       py::arg("gravity_x"), py::arg("gravity_y"), py::arg("gravity_z"),
+       py::arg("dt"), py::arg("sigma_pos"), py::arg("sigma_cb"),
+       py::arg("sigma_acc"), py::arg("sigma_gyro"),
+       py::arg("sigma_acc_bias_rw"), py::arg("sigma_gyro_bias_rw"),
+       py::arg("seed"), py::arg("step"));
+
     m.def("pf_device_weight", [](gnss_gpu::PFDeviceState* state,
                                  py::array_t<double> sat_ecef,
                                  py::array_t<double> pseudoranges,
@@ -285,6 +333,12 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
        py::arg("state"),
        py::arg("ref_x"), py::arg("ref_y"), py::arg("ref_z"),
        py::arg("sigma_pos"));
+
+    m.def("pf_device_shift_position", [](gnss_gpu::PFDeviceState* state,
+                                         double dx, double dy, double dz) {
+        gnss_gpu::pf_device_shift_position(state, dx, dy, dz);
+    }, "Translate all particle positions by an ECEF delta and reset weights",
+       py::arg("state"), py::arg("dx"), py::arg("dy"), py::arg("dz"));
 
     m.def("pf_device_shift_clock_bias", [](gnss_gpu::PFDeviceState* state,
                                            double shift) {

@@ -239,9 +239,24 @@ class CTRBPFConfig:
     ins_tc_obs_status_3_sigma_m: float = 0.0
     ins_tc_max_dr_seconds: float = 10.0
     ins_tc_max_disagreement_m: float = 30.0
-    ins_tc_emit_max_diff_m: float = 20.0
+    ins_tc_emit_max_diff_m: float = 1.0
     ins_tc_pf_pu_floor_sigma_m: float = 0.1
     ins_tc_pf_pu_ceiling_sigma_m: float = 5.0
+    ins_tc_use_particle_imu_predict: bool = True
+    ins_tc_particle_imu_sigma_pos_m: float = 0.02
+    ins_tc_particle_imu_sigma_acc_mps2: float = 0.10
+    ins_tc_particle_imu_sigma_gyro_rps: float = 0.005
+    ins_tc_particle_imu_acc_bias_rw: float = 1.0e-4
+    ins_tc_particle_imu_gyro_bias_rw: float = 1.0e-5
+    ins_tc_particle_imu_att_spread_rad: float = math.radians(2.0)
+    ins_tc_particle_imu_acc_bias_spread: float = 0.05
+    ins_tc_particle_imu_gyro_bias_spread_rps: float = math.radians(0.1)
+    ins_tc_particle_imu_velocity_spread_mps: float = 0.5
+    ins_tc_recenter_status4: bool = False
+    ins_tc_recenter_max_shift_m: float = 5000.0
+    ins_tc_use_motion_predict: bool = True
+    ins_tc_predict_sigma_pos_m: float = 0.2
+    ins_tc_predict_velocity_alpha: float = 1.0
     ins_tc_align_acc_low: float = 9.6
     ins_tc_align_acc_high: float = 9.95
     ins_tc_align_gyro_max_dps: float = 1.5
@@ -421,6 +436,12 @@ class _INSTCStats:
     pu_skipped_no_yaw: int = 0
     pu_skipped_dr_too_long: int = 0
     pu_skipped_disagreement: int = 0
+    particle_imu_initialized: int = 0
+    particle_imu_predict_used: int = 0
+    recenter_applied: int = 0
+    recenter_skipped: int = 0
+    recenter_shift_sum_m: float = 0.0
+    motion_predict_used: int = 0
     obs_status_4_used: int = 0
     obs_status_3_used: int = 0
     emit_pf_estimate: int = 0
@@ -630,6 +651,20 @@ def _ecef_velocity_to_enu_at_origin(
 ) -> np.ndarray:
     R = _ecef_to_enu_rotation(float(origin_lat), float(origin_lon))
     return R @ np.asarray(vel_ecef, dtype=np.float64).reshape(3)
+
+
+def _enu_velocity_to_ecef_at_origin(
+    vel_enu: np.ndarray,
+    origin_lat: float,
+    origin_lon: float,
+) -> np.ndarray:
+    R = _ecef_to_enu_rotation(float(origin_lat), float(origin_lon))
+    return R.T @ np.asarray(vel_enu, dtype=np.float64).reshape(3)
+
+
+def _gravity_ecef_at_origin(origin_lat: float, origin_lon: float) -> np.ndarray:
+    R = _ecef_to_enu_rotation(float(origin_lat), float(origin_lon))
+    return R.T @ np.array([0.0, 0.0, -9.81], dtype=np.float64)
 
 
 def _slice_imu_samples(
@@ -1275,6 +1310,12 @@ def _run_ctrbpf_on_segment(
     ins_origin_lat: float | None = None
     ins_origin_lon: float | None = None
     ins_last_obs_t: float | None = None
+    ins_particle_imu_initialized = False
+    ins_particle_imu_last_t: float | None = None
+    ins_particle_imu_last_accel: np.ndarray | None = None
+    ins_particle_imu_last_gyro_dps: np.ndarray | None = None
+    ins_gravity_ecef: np.ndarray | None = None
+    ins_particle_imu_available = bool(config.ins_tc_use_particle_imu_predict)
     ins_tc_emit_set = set(int(s) for s in config.ins_tc_emit_pf_hybrid_statuses)
     if use_ins_tc:
         from gnss_gpu.ins_ekf import INSEKF, INSConfig
@@ -1312,6 +1353,15 @@ def _run_ctrbpf_on_segment(
 
     t0 = time.perf_counter()
     for i in range(n_epochs):
+        t_now = float(times[i])
+        t_key = round(t_now, 1)
+        hp_prefetched = hybrid_pos.get(t_key) if use_hybrid else None
+        hp_prefetched_valid = (
+            hp_prefetched is not None
+            and np.all(np.isfinite(hp_prefetched))
+            and not np.all(np.asarray(hp_prefetched, dtype=np.float64) == 0.0)
+        )
+
         if i == 0:
             dt = float(data.get("dt", 0.2))
         else:
@@ -1319,13 +1369,199 @@ def _run_ctrbpf_on_segment(
             if not np.isfinite(dt) or dt <= 0.0:
                 dt = float(data.get("dt", 0.2))
 
+        ins_epoch_prepared = False
+        if use_ins_tc and ins_ekf is not None:
+            if ins_origin_ecef is None and hp_prefetched_valid:
+                ins_origin_ecef = np.asarray(hp_prefetched, dtype=np.float64).copy()
+                lat, lon, _ = _ecef_to_llh(
+                    float(ins_origin_ecef[0]),
+                    float(ins_origin_ecef[1]),
+                    float(ins_origin_ecef[2]),
+                )
+                ins_origin_lat = lat
+                ins_origin_lon = lon
+                ins_gravity_ecef = _gravity_ecef_at_origin(lat, lon)
+                ins_ekf.initialize_position(np.zeros(3, dtype=np.float64))
+                ins_last_obs_t = t_now
+
+            if (
+                ins_origin_ecef is not None
+                and ins_origin_lat is not None
+                and ins_origin_lon is not None
+            ):
+                ins_tc_stats.epochs_evaluated += 1
+                if i > 0 and imu_t is not None and imu is not None:
+                    imu_window = _slice_imu_samples(
+                        imu,
+                        imu_t,
+                        float(times[i - 1]),
+                        t_now,
+                    )
+                else:
+                    imu_window = np.empty((0, 7), dtype=np.float64)
+
+                if not ins_ekf.aligned:
+                    for sample in imu_window:
+                        ins_ekf.feed_imu_for_alignment(sample[0], sample[1:4], sample[4:7])
+                    if ins_ekf.aligned:
+                        if ins_tc_stats.aligned_at_epoch < 0:
+                            ins_tc_stats.aligned_at_epoch = i
+                        if hp_prefetched_valid:
+                            ins_ekf.initialize_position(
+                                _ecef_to_enu_at_origin(
+                                    np.asarray(hp_prefetched, dtype=np.float64),
+                                    ins_origin_ecef,
+                                    ins_origin_lat,
+                                    ins_origin_lon,
+                                )
+                            )
+                            ins_last_obs_t = t_now
+
+                if ins_ekf.aligned and imu_window.size > 0:
+                    ins_ekf.propagate(imu_window)
+
+                if ins_ekf.aligned and not ins_ekf.yaw_initialized:
+                    v_guide_now = hybrid_velocity.get(t_key) if hybrid_velocity else None
+                    if v_guide_now is not None and np.all(np.isfinite(v_guide_now)):
+                        v_enu = _ecef_velocity_to_enu_at_origin(
+                            np.asarray(v_guide_now, dtype=np.float64),
+                            ins_origin_lat,
+                            ins_origin_lon,
+                        )
+                        if ins_ekf.initialize_yaw_from_velocity(v_enu):
+                            if ins_tc_stats.yaw_initialized_at_epoch < 0:
+                                ins_tc_stats.yaw_initialized_at_epoch = i
+
+                ins_epoch_prepared = True
+
+        pf_predict_done = False
+        if (
+            use_ins_tc
+            and ins_particle_imu_available
+            and ins_ekf is not None
+            and ins_ekf.aligned
+            and ins_ekf.yaw_initialized
+            and ins_origin_lat is not None
+            and ins_origin_lon is not None
+            and ins_gravity_ecef is not None
+        ):
+            if not ins_particle_imu_initialized:
+                q_body_to_ecef = ins_ekf.attitude_quat_body_to_ecef(
+                    ins_origin_lat,
+                    ins_origin_lon,
+                )
+                v_body_ecef = ins_ekf.velocity_ecef(ins_origin_lat, ins_origin_lon)
+                try:
+                    pf.set_inertial_state(
+                        q_body_to_ecef,
+                        ins_ekf.accel_bias_body(),
+                        ins_ekf.gyro_bias_body_radps(),
+                        v_body_ecef,
+                        attitude_spread_rad=float(config.ins_tc_particle_imu_att_spread_rad),
+                        accel_bias_spread=float(config.ins_tc_particle_imu_acc_bias_spread),
+                        gyro_bias_spread=float(config.ins_tc_particle_imu_gyro_bias_spread_rps),
+                        velocity_spread=float(config.ins_tc_particle_imu_velocity_spread_mps),
+                    )
+                    ins_particle_imu_initialized = True
+                    ins_tc_stats.particle_imu_initialized += 1
+                    ins_particle_imu_last_t = t_now
+                    if imu_window.size > 0:
+                        last_sample = imu_window[-1]
+                        ins_particle_imu_last_accel = np.asarray(last_sample[1:4], dtype=np.float64)
+                        ins_particle_imu_last_gyro_dps = np.asarray(last_sample[4:7], dtype=np.float64)
+                except RuntimeError:
+                    ins_particle_imu_available = False
+            elif ins_particle_imu_initialized:
+                if imu_window.size > 0:
+                    for sample in imu_window:
+                        sample_t = float(sample[0])
+                        sample_accel = np.asarray(sample[1:4], dtype=np.float64)
+                        sample_gyro_dps = np.asarray(sample[4:7], dtype=np.float64)
+                        if (
+                            ins_particle_imu_last_t is not None
+                            and ins_particle_imu_last_accel is not None
+                            and ins_particle_imu_last_gyro_dps is not None
+                            and sample_t > ins_particle_imu_last_t
+                        ):
+                            dt_imu = sample_t - float(ins_particle_imu_last_t)
+                            pf.predict_imu(
+                                ins_particle_imu_last_accel,
+                                ins_particle_imu_last_gyro_dps * (math.pi / 180.0),
+                                ins_gravity_ecef,
+                                dt_imu,
+                                sigma_pos=float(config.ins_tc_particle_imu_sigma_pos_m),
+                                sigma_acc=float(config.ins_tc_particle_imu_sigma_acc_mps2),
+                                sigma_gyro=float(config.ins_tc_particle_imu_sigma_gyro_rps),
+                                sigma_acc_bias_rw=float(config.ins_tc_particle_imu_acc_bias_rw),
+                                sigma_gyro_bias_rw=float(config.ins_tc_particle_imu_gyro_bias_rw),
+                            )
+                            ins_tc_stats.particle_imu_predict_used += 1
+                            pf_predict_done = True
+                        ins_particle_imu_last_t = sample_t
+                        ins_particle_imu_last_accel = sample_accel
+                        ins_particle_imu_last_gyro_dps = sample_gyro_dps
+                if (
+                    ins_particle_imu_last_t is not None
+                    and ins_particle_imu_last_accel is not None
+                    and ins_particle_imu_last_gyro_dps is not None
+                    and t_now > ins_particle_imu_last_t
+                ):
+                    pf.predict_imu(
+                        ins_particle_imu_last_accel,
+                        ins_particle_imu_last_gyro_dps * (math.pi / 180.0),
+                        ins_gravity_ecef,
+                        t_now - float(ins_particle_imu_last_t),
+                        sigma_pos=float(config.ins_tc_particle_imu_sigma_pos_m),
+                        sigma_acc=float(config.ins_tc_particle_imu_sigma_acc_mps2),
+                        sigma_gyro=float(config.ins_tc_particle_imu_sigma_gyro_rps),
+                        sigma_acc_bias_rw=float(config.ins_tc_particle_imu_acc_bias_rw),
+                        sigma_gyro_bias_rw=float(config.ins_tc_particle_imu_gyro_bias_rw),
+                    )
+                    ins_tc_stats.particle_imu_predict_used += 1
+                    pf_predict_done = True
+                    ins_particle_imu_last_t = t_now
+
         v_guide = None
+        v_guide_from_ins = False
+        if (
+            not pf_predict_done
+            and
+            use_ins_tc
+            and bool(config.ins_tc_use_motion_predict)
+            and ins_ekf is not None
+            and ins_ekf.aligned
+            and ins_ekf.yaw_initialized
+            and ins_origin_lat is not None
+            and ins_origin_lon is not None
+        ):
+            v_ins_ecef = _enu_velocity_to_ecef_at_origin(
+                ins_ekf.velocity_enu(),
+                ins_origin_lat,
+                ins_origin_lon,
+            )
+            if np.all(np.isfinite(v_ins_ecef)):
+                v_guide = v_ins_ecef
+                v_guide_from_ins = True
+                ins_tc_stats.motion_predict_used += 1
         if use_vguide:
-            v_guide = hybrid_velocity.get(round(float(times[i]), 1))
-        if v_guide is not None and np.all(np.isfinite(v_guide)):
+            if v_guide is None:
+                v_guide = hybrid_velocity.get(round(float(times[i]), 1))
+        if pf_predict_done:
+            pass
+        elif v_guide is not None and np.all(np.isfinite(v_guide)):
             pf.predict(
                 velocity=np.asarray(v_guide, dtype=np.float64),
                 dt=dt,
+                sigma_pos=(
+                    float(config.ins_tc_predict_sigma_pos_m)
+                    if v_guide_from_ins
+                    else None
+                ),
+                velocity_guide_alpha=(
+                    float(config.ins_tc_predict_velocity_alpha)
+                    if v_guide_from_ins
+                    else None
+                ),
                 rbpf_velocity_kf=config.enable_rbpf_velocity_kf,
                 velocity_process_noise=config.velocity_process_noise,
             )
@@ -1500,7 +1736,7 @@ def _run_ctrbpf_on_segment(
         hp = None
         if use_hybrid:
             hybrid_stats.epochs_attempted += 1
-            hp = hybrid_pos.get(round(float(times[i]), 1))
+            hp = hp_prefetched
             if hp is None:
                 hybrid_stats.epochs_lookup_missing += 1
             elif np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
@@ -1693,66 +1929,11 @@ def _run_ctrbpf_on_segment(
                 and not np.all(np.asarray(hp, dtype=np.float64) == 0.0)
             )
 
-            if ins_origin_ecef is None and hp_valid:
-                ins_origin_ecef = np.asarray(hp, dtype=np.float64).copy()
-                lat, lon, _ = _ecef_to_llh(
-                    float(ins_origin_ecef[0]),
-                    float(ins_origin_ecef[1]),
-                    float(ins_origin_ecef[2]),
-                )
-                ins_origin_lat = lat
-                ins_origin_lon = lon
-                ins_ekf.initialize_position(np.zeros(3, dtype=np.float64))
-                ins_last_obs_t = t_now
-
             if (
                 ins_origin_ecef is not None
                 and ins_origin_lat is not None
                 and ins_origin_lon is not None
             ):
-                ins_tc_stats.epochs_evaluated += 1
-                if i > 0 and imu_t is not None and imu is not None:
-                    imu_window = _slice_imu_samples(
-                        imu,
-                        imu_t,
-                        float(times[i - 1]),
-                        t_now,
-                    )
-                else:
-                    imu_window = np.empty((0, 7), dtype=np.float64)
-
-                if not ins_ekf.aligned:
-                    for sample in imu_window:
-                        ins_ekf.feed_imu_for_alignment(sample[0], sample[1:4], sample[4:7])
-                    if ins_ekf.aligned:
-                        if ins_tc_stats.aligned_at_epoch < 0:
-                            ins_tc_stats.aligned_at_epoch = i
-                        if hp_valid:
-                            ins_ekf.initialize_position(
-                                _ecef_to_enu_at_origin(
-                                    np.asarray(hp, dtype=np.float64),
-                                    ins_origin_ecef,
-                                    ins_origin_lat,
-                                    ins_origin_lon,
-                                )
-                            )
-                            ins_last_obs_t = t_now
-
-                if ins_ekf.aligned and imu_window.size > 0:
-                    ins_ekf.propagate(imu_window)
-
-                if ins_ekf.aligned and not ins_ekf.yaw_initialized:
-                    v_guide_now = hybrid_velocity.get(t_key) if hybrid_velocity else None
-                    if v_guide_now is not None and np.all(np.isfinite(v_guide_now)):
-                        v_enu = _ecef_velocity_to_enu_at_origin(
-                            np.asarray(v_guide_now, dtype=np.float64),
-                            ins_origin_lat,
-                            ins_origin_lon,
-                        )
-                        if ins_ekf.initialize_yaw_from_velocity(v_enu):
-                            if ins_tc_stats.yaw_initialized_at_epoch < 0:
-                                ins_tc_stats.yaw_initialized_at_epoch = i
-
                 if ins_ekf.aligned and hp_valid:
                     p_meas_enu = _ecef_to_enu_at_origin(
                         np.asarray(hp, dtype=np.float64),
@@ -1765,6 +1946,16 @@ def _run_ctrbpf_on_segment(
                         ins_ekf.update_position_enu(p_meas_enu, (sigma, sigma, sigma * 2.0))
                         ins_last_obs_t = t_now
                         ins_tc_stats.obs_status_4_used += 1
+                        if bool(config.ins_tc_recenter_status4):
+                            shift_norm, recentered = pf.recenter_position(
+                                np.asarray(hp, dtype=np.float64),
+                                max_shift_m=float(config.ins_tc_recenter_max_shift_m),
+                            )
+                            if recentered:
+                                ins_tc_stats.recenter_applied += 1
+                                ins_tc_stats.recenter_shift_sum_m += float(shift_norm)
+                            else:
+                                ins_tc_stats.recenter_skipped += 1
                     elif st_now == 3 and float(config.ins_tc_obs_status_3_sigma_m) > 0.0:
                         sigma = float(config.ins_tc_obs_status_3_sigma_m)
                         ins_ekf.update_position_enu(p_meas_enu, (sigma, sigma, sigma * 2.0))
@@ -2152,6 +2343,21 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         ins_tc_emit_max_diff_m=args.ins_tc_emit_max_diff_m,
         ins_tc_pf_pu_floor_sigma_m=args.ins_tc_pf_pu_floor_sigma_m,
         ins_tc_pf_pu_ceiling_sigma_m=args.ins_tc_pf_pu_ceiling_sigma_m,
+        ins_tc_use_particle_imu_predict=not args.ins_tc_disable_particle_imu_predict,
+        ins_tc_particle_imu_sigma_pos_m=args.ins_tc_particle_imu_sigma_pos_m,
+        ins_tc_particle_imu_sigma_acc_mps2=args.ins_tc_particle_imu_sigma_acc_mps2,
+        ins_tc_particle_imu_sigma_gyro_rps=args.ins_tc_particle_imu_sigma_gyro_rps,
+        ins_tc_particle_imu_acc_bias_rw=args.ins_tc_particle_imu_acc_bias_rw,
+        ins_tc_particle_imu_gyro_bias_rw=args.ins_tc_particle_imu_gyro_bias_rw,
+        ins_tc_particle_imu_att_spread_rad=args.ins_tc_particle_imu_att_spread_rad,
+        ins_tc_particle_imu_acc_bias_spread=args.ins_tc_particle_imu_acc_bias_spread,
+        ins_tc_particle_imu_gyro_bias_spread_rps=args.ins_tc_particle_imu_gyro_bias_spread_rps,
+        ins_tc_particle_imu_velocity_spread_mps=args.ins_tc_particle_imu_velocity_spread_mps,
+        ins_tc_recenter_status4=bool(args.ins_tc_enable_recenter_status4),
+        ins_tc_recenter_max_shift_m=args.ins_tc_recenter_max_shift_m,
+        ins_tc_use_motion_predict=not args.ins_tc_disable_motion_predict,
+        ins_tc_predict_sigma_pos_m=args.ins_tc_predict_sigma_pos_m,
+        ins_tc_predict_velocity_alpha=args.ins_tc_predict_velocity_alpha,
         ins_tc_align_acc_low=args.ins_tc_align_acc_low,
         ins_tc_align_acc_high=args.ins_tc_align_acc_high,
         ins_tc_align_gyro_max_dps=args.ins_tc_align_gyro_max_dps,
@@ -2554,12 +2760,42 @@ def main() -> None:
                         help="Max INS dead-reckoning time since a position observation (default 10)")
     parser.add_argument("--ins-tc-max-disagreement-m", type=float, default=30.0,
                         help="Skip INS PF PU when |INS - hybrid| > this [m] (default 30)")
-    parser.add_argument("--ins-tc-emit-max-diff-m", type=float, default=20.0,
-                        help="Bound PF emission to hybrid +- this [m]; else keep hybrid (default 20)")
+    parser.add_argument("--ins-tc-emit-max-diff-m", type=float, default=1.0,
+                        help="Bound PF emission to hybrid +- this [m]; else keep hybrid (default 1)")
     parser.add_argument("--ins-tc-pf-pu-floor-sigma-m", type=float, default=0.1,
                         help="Lower bound on sigma fed to pf.position_update from INS (default 0.1)")
     parser.add_argument("--ins-tc-pf-pu-ceiling-sigma-m", type=float, default=5.0,
                         help="Upper bound on sigma fed to pf.position_update from INS (default 5.0)")
+    parser.add_argument("--ins-tc-disable-particle-imu-predict", action="store_true",
+                        help="Disable per-particle PF strapdown IMU prediction")
+    parser.add_argument("--ins-tc-particle-imu-sigma-pos-m", type=float, default=0.02,
+                        help="Per IMU-step PF position noise for strapdown predict [m] (default 0.02)")
+    parser.add_argument("--ins-tc-particle-imu-sigma-acc-mps2", type=float, default=0.10,
+                        help="PF strapdown accelerometer noise [m/s^2] (default 0.10)")
+    parser.add_argument("--ins-tc-particle-imu-sigma-gyro-rps", type=float, default=0.005,
+                        help="PF strapdown gyro noise [rad/s] (default 0.005)")
+    parser.add_argument("--ins-tc-particle-imu-acc-bias-rw", type=float, default=1.0e-4,
+                        help="PF accel-bias random walk [m/s^2/sqrt(s)] (default 1e-4)")
+    parser.add_argument("--ins-tc-particle-imu-gyro-bias-rw", type=float, default=1.0e-5,
+                        help="PF gyro-bias random walk [rad/s/sqrt(s)] (default 1e-5)")
+    parser.add_argument("--ins-tc-particle-imu-att-spread-rad", type=float, default=math.radians(2.0),
+                        help="Initial per-particle attitude spread [rad] (default 2deg)")
+    parser.add_argument("--ins-tc-particle-imu-acc-bias-spread", type=float, default=0.05,
+                        help="Initial accel-bias particle spread [m/s^2] (default 0.05)")
+    parser.add_argument("--ins-tc-particle-imu-gyro-bias-spread-rps", type=float, default=math.radians(0.1),
+                        help="Initial gyro-bias particle spread [rad/s] (default 0.1deg/s)")
+    parser.add_argument("--ins-tc-particle-imu-velocity-spread-mps", type=float, default=0.5,
+                        help="Initial PF inertial velocity spread [m/s] (default 0.5)")
+    parser.add_argument("--ins-tc-enable-recenter-status4", action="store_true",
+                        help="Enable PF cloud recentering on trusted Status=4 INS/GNSS anchors")
+    parser.add_argument("--ins-tc-recenter-max-shift-m", type=float, default=5000.0,
+                        help="Skip Status=4 PF recenter if required shift exceeds this [m] (default 5000)")
+    parser.add_argument("--ins-tc-disable-motion-predict", action="store_true",
+                        help="Disable INS velocity as the PF predict motion guide")
+    parser.add_argument("--ins-tc-predict-sigma-pos-m", type=float, default=0.2,
+                        help="PF predict position noise [m] when using INS velocity guide (default 0.2)")
+    parser.add_argument("--ins-tc-predict-velocity-alpha", type=float, default=1.0,
+                        help="Blend factor for INS velocity in PF predict (default 1.0)")
     parser.add_argument("--ins-tc-align-acc-low", type=float, default=9.6,
                         help="Lower accel-norm bound for INS static alignment (default 9.6)")
     parser.add_argument("--ins-tc-align-acc-high", type=float, default=9.95,
@@ -2889,6 +3125,14 @@ def main() -> None:
                 "ins_tc_pu_skipped_no_yaw": int(ins_tc_stats.pu_skipped_no_yaw),
                 "ins_tc_pu_skipped_dr_too_long": int(ins_tc_stats.pu_skipped_dr_too_long),
                 "ins_tc_pu_skipped_disagreement": int(ins_tc_stats.pu_skipped_disagreement),
+                "ins_tc_particle_imu_initialized": int(ins_tc_stats.particle_imu_initialized),
+                "ins_tc_particle_imu_predict_used": int(ins_tc_stats.particle_imu_predict_used),
+                "ins_tc_recenter_applied": int(ins_tc_stats.recenter_applied),
+                "ins_tc_recenter_skipped": int(ins_tc_stats.recenter_skipped),
+                "ins_tc_recenter_avg_shift_m": (
+                    float(ins_tc_stats.recenter_shift_sum_m) / max(int(ins_tc_stats.recenter_applied), 1)
+                ),
+                "ins_tc_motion_predict_used": int(ins_tc_stats.motion_predict_used),
                 "ins_tc_obs_status_4_used": int(ins_tc_stats.obs_status_4_used),
                 "ins_tc_obs_status_3_used": int(ins_tc_stats.obs_status_3_used),
                 "ins_tc_emit_pf_estimate": int(ins_tc_stats.emit_pf_estimate),
@@ -2953,7 +3197,11 @@ def main() -> None:
                     f"yaw={ins_tc_stats.yaw_initialized_at_epoch} "
                     f"pu={ins_tc_stats.pu_applied}/{ins_tc_stats.epochs_evaluated} "
                     f"emit_pf={ins_tc_stats.emit_pf_estimate} "
-                    f"(obs4={ins_tc_stats.obs_status_4_used}, "
+                    f"(pimu_init={ins_tc_stats.particle_imu_initialized}, "
+                    f"pimu={ins_tc_stats.particle_imu_predict_used}, "
+                    f"rec={ins_tc_stats.recenter_applied}/{ins_tc_stats.recenter_skipped}, "
+                    f"motion={ins_tc_stats.motion_predict_used}, "
+                    f"obs4={ins_tc_stats.obs_status_4_used}, "
                     f"obs3={ins_tc_stats.obs_status_3_used}, "
                     f"skip align={ins_tc_stats.pu_skipped_not_aligned} "
                     f"yaw={ins_tc_stats.pu_skipped_no_yaw} "

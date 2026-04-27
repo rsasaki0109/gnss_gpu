@@ -12,6 +12,16 @@ struct PFDeviceState {
     double* d_vy;
     double* d_vz;
     double* d_vcov;  // [N * 9] per-particle velocity covariance, row-major 3x3
+    double* d_qx;    // body-to-ECEF inertial attitude, scalar-last quaternion
+    double* d_qy;
+    double* d_qz;
+    double* d_qw;
+    double* d_bax;   // accelerometer bias in body frame [m/s^2]
+    double* d_bay;
+    double* d_baz;
+    double* d_bgx;   // gyro bias in body frame [rad/s]
+    double* d_bgy;
+    double* d_bgz;
     double* d_pcb;
     double* d_log_weights;
 
@@ -23,6 +33,16 @@ struct PFDeviceState {
     double* d_vy_tmp;
     double* d_vz_tmp;
     double* d_vcov_tmp;
+    double* d_qx_tmp;
+    double* d_qy_tmp;
+    double* d_qz_tmp;
+    double* d_qw_tmp;
+    double* d_bax_tmp;
+    double* d_bay_tmp;
+    double* d_baz_tmp;
+    double* d_bgx_tmp;
+    double* d_bgy_tmp;
+    double* d_bgz_tmp;
     double* d_pcb_tmp;
 
     // Persistent temp buffers for reductions (ESS, estimate)
@@ -38,6 +58,7 @@ struct PFDeviceState {
 
     // Velocity buffer (3 doubles, persistent)
     double* d_vel;
+    double* d_imu;  // persistent IMU input buffer
 
     // CUDA stream for pipelined execution
     cudaStream_t stream;
@@ -50,6 +71,7 @@ struct PFDeviceState {
     // Pinned host memory for async H2D transfers
     double* h_sat_pinned;    // pinned memory for satellite data
     double* h_result_pinned; // pinned memory for estimate result (4 doubles)
+    double* h_imu_pinned;    // pinned memory for IMU state/input transfers
     // Scratch for ESS / estimate / systematic-resample CPU reductions (6 * grid doubles)
     double* h_reduction_pinned;
     int pinned_capacity;     // max satellites supported without realloc
@@ -85,6 +107,29 @@ void pf_device_predict(PFDeviceState* state,
     double velocity_guide_alpha = 1.0,
     bool velocity_kf = false,
     double velocity_process_noise = 0.0);
+
+// Initialize per-particle inertial state used by pf_device_predict_imu.
+void pf_device_set_inertial_state(PFDeviceState* state,
+    double qx, double qy, double qz, double qw,
+    double bax, double bay, double baz,
+    double bgx, double bgy, double bgz,
+    double vx, double vy, double vz,
+    double attitude_spread_rad,
+    double accel_bias_spread,
+    double gyro_bias_spread,
+    double velocity_spread,
+    unsigned long long seed, int step);
+
+// Strapdown IMU predict on each particle. accel_body is specific force [m/s^2],
+// gyro_body is angular rate [rad/s], and gravity_ecef is acceleration [m/s^2].
+void pf_device_predict_imu(PFDeviceState* state,
+    double ax, double ay, double az,
+    double gx, double gy, double gz,
+    double gravity_x, double gravity_y, double gravity_z,
+    double dt, double sigma_pos, double sigma_cb,
+    double sigma_acc, double sigma_gyro,
+    double sigma_acc_bias_rw, double sigma_gyro_bias_rw,
+    unsigned long long seed, int step);
 
 // Weight update - satellite data is small, only that gets H2D copied
 // nu: Student's t degrees of freedom. nu=0 means Gaussian (default).
@@ -180,6 +225,9 @@ void pf_device_doppler_kf_update(PFDeviceState* state,
 // Position-domain update - apply soft constraint from external position estimate
 void pf_device_position_update(PFDeviceState* state,
     double ref_x, double ref_y, double ref_z, double sigma_pos);
+
+// Translate every particle by the same ECEF delta and reset log-weights.
+void pf_device_shift_position(PFDeviceState* state, double dx, double dy, double dz);
 
 // Shift all particles' clock bias by a constant offset
 void pf_device_shift_clock_bias(PFDeviceState* state, double shift);

@@ -426,6 +426,45 @@ class TestParticleFilterDeviceWrapper:
         np.testing.assert_allclose(states[:, 15], 9.0)
         assert pf.estimate().shape == (4,)
 
+    def test_predict_imu_wrapper_propagates_particles(self):
+        """Per-particle IMU predict integrates specific force through attitude."""
+        pf = ParticleFilterDevice(n_particles=2048, seed=SEED)
+        pf.initialize(
+            position_ecef=np.zeros(3),
+            clock_bias=0.0,
+            spread_pos=0.0,
+            spread_cb=0.0,
+        )
+        pf.set_inertial_state(
+            q_body_to_ecef=np.array([0.0, 0.0, 0.0, 1.0]),
+            accel_bias_body=np.zeros(3),
+            gyro_bias_body=np.zeros(3),
+            velocity_ecef=np.zeros(3),
+        )
+        pf.predict_imu(
+            accel_body=np.array([1.0, 0.0, 9.81]),
+            gyro_body_radps=np.zeros(3),
+            gravity_ecef=np.array([0.0, 0.0, -9.81]),
+            dt=0.2,
+        )
+        states = pf.get_particle_states()
+        np.testing.assert_allclose(pf.estimate()[:3], [0.02, 0.0, 0.0], atol=1e-6)
+        np.testing.assert_allclose(states[:, 4:7], np.tile([0.2, 0.0, 0.0], (2048, 1)))
+
+    def test_recenter_position_shifts_particle_cloud(self):
+        """Wrapper can translate all particles to a trusted external anchor."""
+        pf = ParticleFilterDevice(n_particles=2048, seed=SEED)
+        pf.initialize(
+            position_ecef=np.zeros(3),
+            clock_bias=0.0,
+            spread_pos=0.0,
+            spread_cb=0.0,
+        )
+        shift_norm, applied = pf.recenter_position(np.array([3.0, -2.0, 1.0]))
+        assert applied
+        assert shift_norm == pytest.approx(np.sqrt(14.0))
+        np.testing.assert_allclose(pf.estimate()[:3], [3.0, -2.0, 1.0], atol=1e-9)
+
     def test_update_doppler_wrapper_updates_velocity(self):
         """High-level wrapper exposes Doppler per-particle velocity updates."""
         rx_pos, sat_ecef, sat_vel, doppler, weights, true_vel = _make_doppler_data()
