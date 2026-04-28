@@ -12,9 +12,10 @@ single-model artifact in one operator command.  `--prepare-inference`
 and `--inference` keep the same stages split for debugging and
 intermediate inspection.
 
-`--source-bundle-inference` starts from a source manifest that binds raw
-PPC run directories to the derived epoch/window/base CSVs, validates the
-source-to-product contract, then runs the same batch inference path.
+`--source-bundle-prepare` starts from raw PPC RINEX/reference run
+directories and writes bootstrap, label-free epoch/window/base CSVs plus
+a derived source manifest for the product flow.  `--source-bundle-inference`
+validates that derived manifest and runs the same batch inference path.
 
 `--retrain` runs the research/training pipeline that created the adopted
 predictions.  It requires the large preprocessed epoch/window CSVs and a
@@ -59,6 +60,13 @@ Usage (source-manifest validation + one-shot inference):
     python3 experiments/predict.py \\
         --source-bundle-inference \\
         --source-manifest path/to/source_manifest.json
+
+Usage (raw PPC source preparation + derived manifest):
+
+    python3 experiments/predict.py \\
+        --source-bundle-prepare \\
+        --source-manifest path/to/raw_source_manifest.json \\
+        --source-output-prefix experiments/results/my_raw_source
 
 Usage (score prepared fresh-data window CSV without retraining):
 
@@ -346,6 +354,8 @@ def _merge_base_prediction_column(
 
 
 def _planned_stage_count(args: argparse.Namespace) -> int:
+    if args.source_bundle_prepare:
+        return 1
     if args.source_bundle_inference:
         return 6
     if args.source_bundle_check:
@@ -457,10 +467,12 @@ def parse_args() -> argparse.Namespace:
                         help="run the full LORO training pipeline instead of the frozen product flow")
     parser.add_argument("--batch-inference", action="store_true",
                         help="prepare fresh-data inference inputs and score them in one command; no retraining")
+    parser.add_argument("--source-bundle-prepare", action="store_true",
+                        help="derive bootstrap product CSVs from raw PPC source runs")
     parser.add_argument("--source-bundle-check", action="store_true",
-                        help="validate a raw PPC source manifest and derived product CSV contract")
+                        help="validate a derived PPC source manifest and product CSV contract")
     parser.add_argument("--source-bundle-inference", action="store_true",
-                        help="validate --source-manifest, then run one-shot batch inference; no retraining")
+                        help="validate derived --source-manifest, then run one-shot batch inference; no retraining")
     parser.add_argument("--inference", action="store_true",
                         help="score --window-csv with a saved single-model artifact; no retraining")
     parser.add_argument("--online-inference", action="store_true",
@@ -482,7 +494,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prepared-window-csv", type=Path,
                         help="prepared window CSV output; default is <prepare-prefix>_window_predictions.csv")
     parser.add_argument("--source-manifest", type=Path,
-                        help="JSON manifest binding raw PPC source runs to derived product input CSVs")
+                        help="JSON manifest for raw source preparation or derived source-bundle inference")
+    parser.add_argument("--source-output-prefix", type=Path,
+                        help="prefix for --source-bundle-prepare epoch/window/base CSV outputs")
+    parser.add_argument("--source-derived-manifest", type=Path,
+                        help="output manifest for --source-bundle-prepare; defaults next to --source-output-prefix")
+    parser.add_argument("--raw-source-systems", default="G,E,J",
+                        help="constellation list for --source-bundle-prepare, e.g. G,E,J")
+    parser.add_argument("--raw-source-window-duration-s", type=float, default=30.0,
+                        help="window duration for bootstrap raw-source preparation")
+    parser.add_argument("--raw-source-max-epochs-per-run", type=int,
+                        help="debug cap per run for --source-bundle-prepare")
     parser.add_argument("--calibration-prediction-csv", type=Path,
                         help="optional LORO prediction CSV used to calibrate the saved residual corrector")
     parser.add_argument("--use-window-base-prediction", action="store_true",
@@ -516,6 +538,7 @@ def parse_args() -> argparse.Namespace:
         for v in (
             args.retrain,
             args.batch_inference,
+            args.source_bundle_prepare,
             args.source_bundle_check,
             args.source_bundle_inference,
             args.inference,
@@ -527,11 +550,15 @@ def parse_args() -> argparse.Namespace:
     if active_modes > 1:
         parser.error(
             "--retrain, --batch-inference, --inference, --prepare-inference, "
-            "--online-inference, --source-bundle-check, --source-bundle-inference, "
-            "and --fit-inference-model are mutually exclusive"
+            "--online-inference, --source-bundle-prepare, --source-bundle-check, "
+            "--source-bundle-inference, and --fit-inference-model are mutually exclusive"
         )
-    if (args.source_bundle_check or args.source_bundle_inference) and args.source_manifest is None:
-        parser.error("--source-bundle-check/--source-bundle-inference require --source-manifest")
+    if (
+        args.source_bundle_prepare
+        or args.source_bundle_check
+        or args.source_bundle_inference
+    ) and args.source_manifest is None:
+        parser.error("--source-bundle-prepare/check/inference require --source-manifest")
     return args
 
 
@@ -550,6 +577,54 @@ def main() -> None:
     _stage_counter["total"] = _planned_stage_count(args)
     _stage_counter["started"] = None
     overall_start = time.monotonic()
+
+    if args.source_bundle_prepare:
+        stage("derive bootstrap product CSVs from raw PPC source bundle")
+        from product_raw_source_prepare import (
+            _parse_systems,
+            prepare_raw_source_bundle,
+            preflight_raw_source_bundle,
+        )
+
+        max_epochs = (
+            args.raw_source_max_epochs_per_run
+            if args.raw_source_max_epochs_per_run and args.raw_source_max_epochs_per_run > 0
+            else None
+        )
+        if args.check_only:
+            _parse_systems(args.raw_source_systems)
+            run_count, feature_count = preflight_raw_source_bundle(
+                manifest_path=args.source_manifest,
+                model_path=args.inference_model,
+            )
+            stage_done()
+            print(
+                "preflight ok: raw source preparation can read "
+                f"{run_count} run(s) and {feature_count} model features"
+            )
+            return
+        outputs = prepare_raw_source_bundle(
+            manifest_path=args.source_manifest,
+            output_prefix=args.source_output_prefix,
+            output_manifest=args.source_derived_manifest,
+            model_path=args.inference_model,
+            systems=_parse_systems(args.raw_source_systems),
+            window_duration_s=args.raw_source_window_duration_s,
+            max_epochs_per_run=max_epochs,
+        )
+        stage_done()
+        total_dt = time.monotonic() - overall_start
+        print(f"\n[{_timestamp()}] raw source bundle preparation finished in {total_dt:.1f}s")
+        print(f"epochs CSV: {outputs.epochs_csv}")
+        print(f"window CSV: {outputs.window_csv}")
+        print(f"base CSV: {outputs.base_prediction_csv}")
+        print(f"derived source manifest: {outputs.source_manifest}")
+        print("\nnext command:")
+        print(
+            "  python3 experiments/predict.py "
+            f"--source-bundle-inference --source-manifest {outputs.source_manifest}"
+        )
+        return
 
     if args.source_bundle_check or args.source_bundle_inference:
         stage("validate PPC source manifest and derived product inputs")
