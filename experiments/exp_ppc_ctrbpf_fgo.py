@@ -79,6 +79,11 @@ class CTRBPFConfig:
     pr_weight_ref_cn0: float = 45.0
     pr_weight_min: float = 0.25
     pr_weight_max: float = 1.5
+    pr_prefit_gate_m: float = 0.0
+    pr_prefit_gate_min_sats: int = 6
+    pr_prefit_gate_keep_best: int = 0
+    pr_prefit_ref: str = "pf"
+    pr_skip_statuses: tuple[int, ...] = ()
     defer_epoch_resample: bool = False
     sigma_pos: float = 2.0
     sigma_cb: float = 50.0
@@ -374,6 +379,10 @@ class _PRObsStats:
     epochs_gaussian: int = 0
     epochs_gmm: int = 0
     deferred_resample_epochs: int = 0
+    prefit_epochs: int = 0
+    prefit_sats_kept: int = 0
+    prefit_sats_dropped: int = 0
+    epochs_skipped: int = 0
 
 
 @dataclass
@@ -1247,6 +1256,48 @@ def _pr_likelihood_weights(weights: np.ndarray, config: CTRBPFConfig) -> np.ndar
     return out.astype(np.float64, copy=False)
 
 
+def _pr_prefit_gate_mask(
+    sat_ecef: np.ndarray,
+    pseudoranges: np.ndarray,
+    ref_pos_ecef: np.ndarray,
+    *,
+    gate_m: float,
+    clock_quantile: float,
+    min_sats: int,
+    keep_best: int,
+) -> np.ndarray:
+    """Gate pseudoranges by robust prefit residual around a reference position."""
+    n_sat = int(len(pseudoranges))
+    mask = np.ones(n_sat, dtype=bool)
+    if n_sat < 4 or float(gate_m) <= 0.0:
+        return mask
+
+    sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+    pr = np.asarray(pseudoranges, dtype=np.float64).ravel()
+    ref = np.asarray(ref_pos_ecef, dtype=np.float64).ravel()
+    ranges = np.linalg.norm(sat - ref[:3], axis=1)
+    residuals = pr - ranges
+    finite = np.isfinite(residuals)
+    if int(finite.sum()) < 4:
+        return mask
+
+    q = float(np.clip(float(clock_quantile), 0.0, 1.0))
+    cb = float(np.quantile(residuals[finite], q))
+    abs_prefit = np.abs(residuals - cb)
+    mask = finite & (abs_prefit <= float(gate_m))
+
+    min_keep = max(4, min(int(min_sats), n_sat))
+    finite_order = np.argsort(np.where(finite, abs_prefit, np.inf))
+    if int(mask.sum()) < min_keep:
+        mask = np.zeros(n_sat, dtype=bool)
+        mask[finite_order[:min_keep]] = True
+    elif int(keep_best) > 0 and int(mask.sum()) > int(keep_best):
+        gated_order = np.array([idx for idx in finite_order if mask[idx]], dtype=np.int32)
+        mask = np.zeros(n_sat, dtype=bool)
+        mask[gated_order[: int(keep_best)]] = True
+    return mask
+
+
 def _build_pf(config: CTRBPFConfig):
     from gnss_gpu import ParticleFilterDevice
 
@@ -1635,20 +1686,51 @@ def _run_ctrbpf_on_segment(
         pr_i = pr_i[finite]
         w_i = w_i[finite]
         sids_i = None if system_ids is None else np.asarray(system_ids[i])[finite]
+        st_obs = hybrid_status.get(t_key) if hybrid_status is not None else None
+        skip_pr_here = (
+            st_obs is not None
+            and int(st_obs) in {int(s) for s in config.pr_skip_statuses}
+        )
 
-        if config.enable_correct_clock_bias and i % 5 == 0:
-            clock_quantile = (
-                float(config.pr_gmm_clock_quantile)
-                if bool(config.enable_pr_gmm)
-                else 0.5
+        clock_quantile = (
+            float(config.pr_gmm_clock_quantile)
+            if bool(config.enable_pr_gmm)
+            else 0.5
+        )
+        if (not skip_pr_here) and float(config.pr_prefit_gate_m) > 0.0:
+            ref_mode = str(config.pr_prefit_ref).strip().lower()
+            if ref_mode == "hybrid" and hp_prefetched_valid:
+                prefit_ref = np.asarray(hp_prefetched, dtype=np.float64)
+            else:
+                prefit_ref = np.asarray(pf.estimate(), dtype=np.float64)[:3]
+            gate_mask = _pr_prefit_gate_mask(
+                sat_i,
+                pr_i,
+                prefit_ref,
+                gate_m=float(config.pr_prefit_gate_m),
+                clock_quantile=clock_quantile,
+                min_sats=int(config.pr_prefit_gate_min_sats),
+                keep_best=int(config.pr_prefit_gate_keep_best),
             )
+            if int(gate_mask.sum()) >= 4 and int(gate_mask.sum()) < int(gate_mask.size):
+                pr_obs_stats.prefit_epochs += 1
+                pr_obs_stats.prefit_sats_kept += int(gate_mask.sum())
+                pr_obs_stats.prefit_sats_dropped += int(gate_mask.size - gate_mask.sum())
+                sat_i = sat_i[gate_mask]
+                pr_i = pr_i[gate_mask]
+                w_i = w_i[gate_mask]
+                if sids_i is not None:
+                    sids_i = sids_i[gate_mask]
+
+        if (not skip_pr_here) and config.enable_correct_clock_bias and i % 5 == 0:
             pf.correct_clock_bias(sat_i, pr_i, quantile=clock_quantile)
 
-        st_obs = hybrid_status.get(t_key) if hybrid_status is not None else None
         use_pr_gmm_here = bool(config.enable_pr_gmm)
         if use_pr_gmm_here and st_obs is not None and config.pr_gmm_statuses:
             use_pr_gmm_here = int(st_obs) in {int(s) for s in config.pr_gmm_statuses}
-        if use_pr_gmm_here:
+        if skip_pr_here:
+            pr_obs_stats.epochs_skipped += 1
+        elif use_pr_gmm_here:
             pf.update_gmm(
                 sat_i,
                 pr_i,
@@ -2378,6 +2460,13 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         pr_weight_ref_cn0=args.pr_weight_ref_cn0,
         pr_weight_min=args.pr_weight_min,
         pr_weight_max=args.pr_weight_max,
+        pr_prefit_gate_m=args.pr_prefit_gate_m,
+        pr_prefit_gate_min_sats=args.pr_prefit_gate_min_sats,
+        pr_prefit_gate_keep_best=args.pr_prefit_gate_keep_best,
+        pr_prefit_ref=args.pr_prefit_ref,
+        pr_skip_statuses=tuple(
+            int(s.strip()) for s in args.pr_skip_statuses.split(",") if s.strip()
+        ),
         defer_epoch_resample=bool(args.defer_epoch_resample),
         sigma_pos=args.sigma_pos,
         sigma_cb=args.sigma_cb,
@@ -2778,6 +2867,16 @@ def main() -> None:
                         help="Minimum transformed PR likelihood weight when clipping is active (default 0.25)")
     parser.add_argument("--pr-weight-max", type=float, default=1.5,
                         help="Maximum transformed PR likelihood weight when clipping is active (default 1.5)")
+    parser.add_argument("--pr-prefit-gate-m", type=float, default=0.0,
+                        help="Drop satellites whose robust clock-centered PR prefit residual exceeds this [m]; <=0 disables")
+    parser.add_argument("--pr-prefit-gate-min-sats", type=int, default=6,
+                        help="Minimum satellites kept by the PR prefit gate (default 6)")
+    parser.add_argument("--pr-prefit-gate-keep-best", type=int, default=0,
+                        help="If >0, keep at most this many smallest-prefit satellites after gating")
+    parser.add_argument("--pr-prefit-ref", choices=("pf", "hybrid"), default="pf",
+                        help="Reference position for PR prefit residuals (default pf; hybrid uses libgnss++ position when available)")
+    parser.add_argument("--pr-skip-statuses", type=str, default="",
+                        help="Comma-separated hybrid Status values where undifferenced PR update is skipped")
     parser.add_argument("--defer-epoch-resample", action="store_true",
                         help="Accumulate PR/DD/Doppler/PU likelihoods within an epoch and resample only after emission")
     parser.add_argument("--sigma-pos", type=float, default=2.0)
@@ -3180,6 +3279,11 @@ def main() -> None:
                     or variant.enable_imu_tc
                     or variant.enable_ins_tc
                     or variant.enable_pr_gmm
+                    or variant.pr_skip_statuses
+                    or (
+                        float(variant.pr_prefit_gate_m) > 0.0
+                        and str(variant.pr_prefit_ref).strip().lower() == "hybrid"
+                    )
                 )
                 else None
             )
@@ -3230,6 +3334,15 @@ def main() -> None:
                 "pr_weight_ref_cn0": float(variant.pr_weight_ref_cn0),
                 "pr_weight_min": float(variant.pr_weight_min),
                 "pr_weight_max": float(variant.pr_weight_max),
+                "pr_prefit_gate_m": float(variant.pr_prefit_gate_m),
+                "pr_prefit_gate_min_sats": int(variant.pr_prefit_gate_min_sats),
+                "pr_prefit_gate_keep_best": int(variant.pr_prefit_gate_keep_best),
+                "pr_prefit_ref": str(variant.pr_prefit_ref),
+                "pr_prefit_epochs": int(pr_obs_stats.prefit_epochs),
+                "pr_prefit_sats_kept": int(pr_obs_stats.prefit_sats_kept),
+                "pr_prefit_sats_dropped": int(pr_obs_stats.prefit_sats_dropped),
+                "pr_skip_statuses": ",".join(str(int(s)) for s in variant.pr_skip_statuses),
+                "pr_skipped_epochs": int(pr_obs_stats.epochs_skipped),
                 "pr_gmm": int(variant.enable_pr_gmm),
                 "pr_gmm_epochs": int(pr_obs_stats.epochs_gmm),
                 "pr_gaussian_epochs": int(pr_obs_stats.epochs_gaussian),
@@ -3348,6 +3461,19 @@ def main() -> None:
             pr_weight_msg = ""
             if str(variant.pr_weight_mode) != "raw":
                 pr_weight_msg = f", prw={variant.pr_weight_mode}"
+            prefit_msg = ""
+            if float(variant.pr_prefit_gate_m) > 0.0:
+                avg_drop = (
+                    pr_obs_stats.prefit_sats_dropped
+                    / max(pr_obs_stats.prefit_epochs, 1)
+                )
+                prefit_msg = (
+                    f", PR-prefit {pr_obs_stats.prefit_epochs}ep "
+                    f"(drop {avg_drop:.1f}/ep, ref={variant.pr_prefit_ref})"
+                )
+            pr_skip_msg = ""
+            if variant.pr_skip_statuses:
+                pr_skip_msg = f", PR-skip {pr_obs_stats.epochs_skipped}"
             gate_msg = ""
             if variant_gate_active and gate_stats.epochs_attempted > 0:
                 gate_msg = (
@@ -3425,7 +3551,7 @@ def main() -> None:
             print(
                 f"    PPC honest: {row['honest_ppc_pct']:5.2f}%  "
                 f"(pass {row['honest_pass_m']:.0f} / total {row['honest_total_m']:.0f}m, "
-                f"{ms_per_epoch:.1f} ms/epoch{pr_msg}{pr_weight_msg}{defer_msg}{dd_msg}{gate_msg}{hybrid_msg}{zupt_msg}{imu_tc_msg}{ins_tc_msg}{tdcp_msg}{fgo_msg})",
+                f"{ms_per_epoch:.1f} ms/epoch{pr_msg}{pr_weight_msg}{prefit_msg}{pr_skip_msg}{defer_msg}{dd_msg}{gate_msg}{hybrid_msg}{zupt_msg}{imu_tc_msg}{ins_tc_msg}{tdcp_msg}{fgo_msg})",
                 flush=True,
             )
 
