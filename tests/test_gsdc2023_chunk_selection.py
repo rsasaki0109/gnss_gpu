@@ -175,6 +175,35 @@ def test_select_gated_chunk_source_rejects_high_baseline_raw_wls_with_implausibl
     assert select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
 
 
+def test_select_gated_chunk_source_rejects_extreme_raw_wls_mse():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=100,
+        auto_source="raw_wls",
+        candidates={
+            "baseline": _quality(2_809_337_861.644, 1.0, step_p95=120.0),
+            "raw_wls": _quality(
+                2_246_680_695.226,
+                0.1,
+                gap_p95=41.438,
+                gap_max=48.0,
+                step_p95=100.0,
+            ),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+
+
+def test_select_auto_chunk_source_rejects_extreme_raw_wls_mse():
+    candidates = {
+        "baseline": _quality(2_809_337_861.644, 1.0),
+        "raw_wls": _quality(2_246_680_695.226, 0.1, step_p95=8.0),
+    }
+
+    assert select_auto_chunk_source(candidates) == "baseline"
+
+
 def test_select_gated_chunk_source_prefers_raw_wls_when_high_baseline_fgo_has_worse_pr_mse():
     record = ChunkSelectionRecord(
         start_epoch=0,
