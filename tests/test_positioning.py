@@ -3,6 +3,8 @@
 import numpy as np
 import pytest
 
+from gnss_gpu.range_model import geometric_ranges_sagnac
+
 try:
     from gnss_gpu._gnss_gpu import wls_position, wls_batch, ecef_to_lla, lla_to_ecef
     HAS_GPU = True
@@ -35,8 +37,8 @@ def _make_test_scenario():
         [-11527000.0, -19421000.0,  13682000.0],  # G22
     ])
 
-    # Compute pseudoranges = geometric range + clock bias
-    ranges = np.sqrt(np.sum((sat_ecef - true_pos) ** 2, axis=1))
+    # Compute pseudoranges with the same Sagnac range model used by native WLS.
+    ranges = geometric_ranges_sagnac(true_pos, sat_ecef)
     pseudoranges = ranges + true_cb
 
     weights = np.ones(len(sat_ecef))

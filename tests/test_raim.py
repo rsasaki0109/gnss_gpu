@@ -3,6 +3,8 @@
 import numpy as np
 import pytest
 
+from gnss_gpu.range_model import geometric_ranges_sagnac
+
 try:
     from gnss_gpu._gnss_gpu import wls_position
     from gnss_gpu._gnss_gpu_raim import raim_check, raim_fde
@@ -32,7 +34,7 @@ def _make_test_scenario():
         [-11527000.0, -19421000.0,  13682000.0],
     ])
 
-    ranges = np.sqrt(np.sum((sat_ecef - true_pos) ** 2, axis=1))
+    ranges = geometric_ranges_sagnac(true_pos, sat_ecef)
     pseudoranges = ranges + true_cb
 
     weights = np.ones(len(sat_ecef))

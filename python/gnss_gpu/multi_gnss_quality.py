@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from gnss_gpu.multi_gnss import SYSTEM_GPS
+from gnss_gpu.range_model import geometric_ranges_sagnac
 
 
 @dataclass(frozen=True)
@@ -54,7 +55,7 @@ def _residual_stats(
     if len(pseudoranges) == 0:
         return float("inf"), float("inf")
 
-    ranges = np.linalg.norm(sat_ecef - position.reshape(1, 3), axis=1)
+    ranges = geometric_ranges_sagnac(position, sat_ecef)
     pred = np.array(
         [
             ranges[i] + float(bias_by_system.get(int(system_ids[i]), 0.0))

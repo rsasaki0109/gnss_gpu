@@ -111,7 +111,8 @@ class TestAcquisition:
         assert abs(r["code_phase"] - true_code_phase) < 5, (
             f"Code phase error: {r['code_phase']} vs {true_code_phase}"
         )
-        assert abs(r["doppler_hz"] - true_doppler) <= 500, (
+        # Real-valued cosine input has a Doppler sign ambiguity.
+        assert abs(abs(r["doppler_hz"]) - abs(true_doppler)) <= 500, (
             f"Doppler error: {r['doppler_hz']} vs {true_doppler}"
         )
 
