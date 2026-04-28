@@ -22,6 +22,7 @@ from experiments.gsdc2023_raw_bridge import (  # noqa: E402
     BridgeResult,
     DEFAULT_ROOT,
     DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M,
+    DEFAULT_TDCP_GEOMETRY_CORRECTION,
     DEFAULT_TDCP_WEIGHT_SCALE,
     GATED_BASELINE_THRESHOLD_DEFAULT,
     OBS_MASK_DOPPLER_RESIDUAL_THRESHOLD_MPS,
@@ -341,7 +342,11 @@ def main() -> None:
     parser.add_argument("--tdcp", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--tdcp-consistency-threshold-m", type=float, default=DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M)
     parser.add_argument("--tdcp-weight-scale", type=float, default=DEFAULT_TDCP_WEIGHT_SCALE)
-    parser.add_argument("--tdcp-geometry-correction", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument(
+        "--tdcp-geometry-correction",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_TDCP_GEOMETRY_CORRECTION,
+    )
     parser.add_argument("--observation-mask", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--observation-min-cn0-dbhz", type=float, default=OBS_MASK_MIN_CN0_DBHZ)
     parser.add_argument("--observation-min-elevation-deg", type=float, default=OBS_MASK_MIN_ELEVATION_DEG)

@@ -14,6 +14,8 @@ if str(_REPO) not in sys.path:
 from experiments.gsdc2023_raw_bridge import (
     BridgeConfig,
     DEFAULT_ROOT,
+    DEFAULT_TDCP_GEOMETRY_CORRECTION,
+    DEFAULT_TDCP_WEIGHT_SCALE,
     FACTOR_DT_MAX_S,
     GATED_BASELINE_THRESHOLD_DEFAULT,
     OBS_MASK_DOPPLER_RESIDUAL_THRESHOLD_MPS,
@@ -226,13 +228,13 @@ def main() -> None:
     p.add_argument(
         "--tdcp-weight-scale",
         type=float,
-        default=1.0,
+        default=DEFAULT_TDCP_WEIGHT_SCALE,
         help="multiply final TDCP weights by this factor; <=0 keeps TDCP arrays but disables their weight",
     )
     p.add_argument(
         "--tdcp-geometry-correction",
         action=argparse.BooleanOptionalAction,
-        default=False,
+        default=DEFAULT_TDCP_GEOMETRY_CORRECTION,
         help="subtract baseline satellite-range delta from TDCP measurements, approximating MATLAB resL differencing",
     )
     p.add_argument(

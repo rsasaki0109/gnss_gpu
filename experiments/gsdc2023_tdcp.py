@@ -9,7 +9,9 @@ from experiments.gsdc2023_residual_model import geometric_range_with_sagnac
 
 DEFAULT_TDCP_SIGMA_M = 0.03
 DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M = 1.5
-DEFAULT_TDCP_WEIGHT_SCALE = 1.0
+TDCP_WEIGHT_SCALE_IDENTITY = 1.0
+DEFAULT_TDCP_WEIGHT_SCALE = 3.0e-7
+DEFAULT_TDCP_GEOMETRY_CORRECTION = True
 TDCP_LOFFSET_M = 1.117
 TDCP_DISABLE_PHONES = {"sm-a325f", "samsunga32"}
 TDCP_LOFFSET_PHONES = {"sm-a205u", "sm-a217m", "sm-a505g", "sm-a600t", "sm-a505u"}
@@ -135,7 +137,7 @@ def apply_tdcp_weight_scale(tdcp_weights: np.ndarray | None, scale: float) -> No
     if scale <= 0.0:
         tdcp_weights[:, :] = 0.0
         return
-    if scale != DEFAULT_TDCP_WEIGHT_SCALE:
+    if scale != TDCP_WEIGHT_SCALE_IDENTITY:
         tdcp_weights *= scale
 
 

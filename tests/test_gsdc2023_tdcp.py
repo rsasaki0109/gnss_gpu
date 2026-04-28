@@ -10,6 +10,7 @@ from experiments.gsdc2023_tdcp import (
     ADR_STATE_VALID,
     DEFAULT_TDCP_WEIGHT_SCALE,
     TDCP_LOFFSET_M,
+    TDCP_WEIGHT_SCALE_IDENTITY,
     apply_tdcp_geometry_correction,
     apply_tdcp_weight_scale,
     build_tdcp_arrays,
@@ -117,9 +118,13 @@ def test_build_tdcp_arrays_uses_matlab_scalar_interval_for_consistency_direct():
 def test_apply_tdcp_weight_scale_direct():
     weights = np.array([[2.0, 3.0]], dtype=np.float64)
 
-    apply_tdcp_weight_scale(weights, DEFAULT_TDCP_WEIGHT_SCALE)
+    apply_tdcp_weight_scale(weights, TDCP_WEIGHT_SCALE_IDENTITY)
     np.testing.assert_allclose(weights, np.array([[2.0, 3.0]]))
 
+    apply_tdcp_weight_scale(weights, DEFAULT_TDCP_WEIGHT_SCALE)
+    np.testing.assert_allclose(weights, np.array([[2.0, 3.0]]) * DEFAULT_TDCP_WEIGHT_SCALE)
+
+    weights = np.array([[2.0, 3.0]], dtype=np.float64)
     apply_tdcp_weight_scale(weights, 0.5)
     np.testing.assert_allclose(weights, np.array([[1.0, 1.5]]))
 

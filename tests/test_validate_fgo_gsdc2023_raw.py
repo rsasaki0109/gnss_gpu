@@ -1880,6 +1880,7 @@ def test_build_trip_arrays_applies_tdcp_loffset_for_samsung_a_family(tmp_path):
         weight_mode="sin2el",
         use_tdcp=True,
         tdcp_consistency_threshold_m=0.2,
+        tdcp_geometry_correction=False,
     )
 
     assert batch.tdcp_meas is not None
@@ -2142,7 +2143,7 @@ def test_build_trip_arrays_applies_tdcp_geometry_correction(tmp_path):
         use_tdcp=True,
         tdcp_consistency_threshold_m=1e9,
     )
-    raw = _build_trip_arrays(trip, **kwargs)
+    raw = _build_trip_arrays(trip, tdcp_geometry_correction=False, **kwargs)
     corrected = _build_trip_arrays(trip, tdcp_geometry_correction=True, **kwargs)
 
     assert raw.tdcp_meas is not None
@@ -3354,6 +3355,7 @@ def test_build_trip_arrays_multi_gnss_with_tdcp(tmp_path):
         multi_gnss=True,
         use_tdcp=True,
         tdcp_consistency_threshold_m=1e9,
+        tdcp_geometry_correction=False,
     )
 
     assert batch.n_clock == 3

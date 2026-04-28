@@ -8,6 +8,7 @@ from experiments.gsdc2023_bridge_config import (
     FACTOR_DT_MAX_S,
     should_refine_outlier_result,
 )
+from experiments.gsdc2023_tdcp import DEFAULT_TDCP_GEOMETRY_CORRECTION, DEFAULT_TDCP_WEIGHT_SCALE
 
 
 def test_bridge_config_defaults_match_public_factor_dt() -> None:
@@ -16,6 +17,8 @@ def test_bridge_config_defaults_match_public_factor_dt() -> None:
     assert cfg.factor_dt_max_s == FACTOR_DT_MAX_S
     assert cfg.position_source == "baseline"
     assert cfg.imu_frame == "body"
+    assert cfg.tdcp_weight_scale == DEFAULT_TDCP_WEIGHT_SCALE
+    assert cfg.tdcp_geometry_correction is DEFAULT_TDCP_GEOMETRY_CORRECTION
 
 
 def test_bridge_config_rejects_invalid_position_source() -> None:
