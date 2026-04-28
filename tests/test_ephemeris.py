@@ -8,7 +8,7 @@ from datetime import datetime
 import numpy as np
 import pytest
 
-from gnss_gpu.io.nav_rinex import NavMessage, read_nav_rinex, _parse_nav_float
+from gnss_gpu.io.nav_rinex import NavMessage, read_gps_klobuchar_from_nav_header, read_nav_rinex, _parse_nav_float
 from gnss_gpu.ephemeris import (
     Ephemeris,
     GPS_MU,
@@ -136,6 +136,20 @@ class TestSatellitePosition:
         np.testing.assert_array_equal(pos1, pos2)
         np.testing.assert_array_equal(clk1, clk2)
 
+    def test_compute_single_can_omit_group_delay_for_rtklib_satposs_parity(self):
+        """MatRTKLIB satposs exposes satellite clock without TGD/BGD code bias."""
+        nav = _make_reference_nav()
+
+        _pos_with_delay, clk_with_delay = Ephemeris._compute_single_cpu(nav, nav.toe, "C1")
+        _pos_without_delay, clk_without_delay = Ephemeris._compute_single_cpu(
+            nav,
+            nav.toe,
+            "C1",
+            apply_group_delay=False,
+        )
+
+        assert np.isclose(clk_without_delay - clk_with_delay, nav.tgd)
+
     def test_position_changes_with_time(self):
         """Satellite position should change over time."""
         nav = _make_reference_nav()
@@ -258,6 +272,21 @@ class TestNavRinexParsing:
         assert abs(_parse_nav_float("5.153637939453D+03") - 5153.637939453) < 1e-9
         assert _parse_nav_float("") == 0.0
         assert abs(_parse_nav_float("1.23E+02") - 123.0) < 1e-10
+
+    def test_read_gps_klobuchar_from_rinex2_header(self, tmp_path):
+        nav_content = textwrap.dedent("""\
+             2.11           N: GPS NAV DATA                         RINEX VERSION / TYPE
+                4.6566D-09  1.4901D-08 -5.9605D-08 -5.9605D-08          ION ALPHA
+                7.7824D+04  4.9152D+04 -6.5536D+04 -3.2768D+05          ION BETA
+                                                                    END OF HEADER
+        """)
+        nav_file = tmp_path / "rinex2.nav"
+        nav_file.write_text(nav_content)
+
+        alpha, beta = read_gps_klobuchar_from_nav_header(nav_file)
+
+        np.testing.assert_allclose(alpha, [4.6566e-09, 1.4901e-08, -5.9605e-08, -5.9605e-08])
+        np.testing.assert_allclose(beta, [7.7824e04, 4.9152e04, -6.5536e04, -3.2768e05])
 
     def test_parse_v3_nav_file(self, tmp_path):
         """Test parsing a RINEX 3 navigation file."""
