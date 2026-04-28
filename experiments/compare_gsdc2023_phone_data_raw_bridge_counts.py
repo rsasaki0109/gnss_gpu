@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Compare ``phone_data.mat`` finite counts against raw-bridge counts.
+"""Compare MATLAB phone-data factor counts against raw-bridge counts.
 
 This utility is intentionally narrow: it scans local trips, extracts the finite
 observation counts stored in ``phone_data.mat`` for ``P/D/L/resPc/resD/resL``
 on ``L1`` and ``L5``, then compares them against counts produced by the raw
 bridge path that mirrors ``build_trip_arrays(... apply_observation_mask=True,
-dual_frequency=True, use_tdcp=True, multi_gnss=True)``.
+dual_frequency=True, use_tdcp=True)``.
+
+The MATLAB ``phone_data_factor_counts.csv`` exports currently used by this
+audit are GPS L1/L5 counts.  The default comparison scope is therefore GPS-only;
+use ``--multi-gnss`` to include Galileo/QZSS bridge observations for a separate
+coverage audit.
 
 Trips without ``phone_data.mat`` are still included. Their phone-side counts are
 left empty and the raw-bridge counts are still reported when ``device_gnss.csv``
@@ -389,7 +394,7 @@ def build_comparison_frames(
     offset: int = 0,
     limit: int = 0,
     max_epochs: int = 0,
-    multi_gnss: bool = True,
+    multi_gnss: bool = False,
     pseudorange_residual_mask_m: float = OBS_MASK_RESIDUAL_THRESHOLD_M,
     pseudorange_residual_mask_l5_m: float = OBS_MASK_RESIDUAL_THRESHOLD_L5_M,
     doppler_residual_mask_mps: float = 3.0,
@@ -515,6 +520,8 @@ def build_comparison_frames(
         "trip_filters": sorted(str(trip).strip().strip("/") for trip in trips or [] if str(trip).strip()),
         "offset": int(max(offset, 0)),
         "multi_gnss": bool(multi_gnss),
+        "matlab_count_scope": "gps_l1_l5",
+        "bridge_count_scope": "multi_gnss_l1_l5" if multi_gnss else "gps_l1_l5",
         "pseudorange_residual_mask_m": float(pseudorange_residual_mask_m),
         "pseudorange_residual_mask_l5_m": float(pseudorange_residual_mask_l5_m),
         "doppler_residual_mask_mps": float(doppler_residual_mask_mps),
@@ -562,8 +569,8 @@ def main() -> None:
     )
     _add_multi_gnss_arg(
         parser,
-        default=True,
-        help_text="compare GPS+Galileo/QZSS when true; use --no-multi-gnss for MATLAB GPS-only parity checks",
+        default=False,
+        help_text="include Galileo/QZSS bridge observations; default GPS-only scope matches MATLAB factor-count exports",
     )
     parser.add_argument("--limit", type=int, default=0, help="limit the number of discovered trips; 0 means no limit")
     parser.add_argument("--offset", type=int, default=0, help="skip this many discovered trips before applying --limit")
