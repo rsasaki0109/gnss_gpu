@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import sys
 import tempfile
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 
 import pandas as pd
@@ -18,8 +20,14 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common import _is_metadata_or_label
-from build_product_deliverable import _classify_window, _confidence_tier
-from predict import _require
+from build_product_deliverable import (
+    REQUIRED_PREDICTION_COLUMNS,
+    _classify_window,
+    _confidence_tier,
+    _require_prediction_columns,
+)
+from predict import DEFAULT_PREDICTION_CSV, RESULTS_DIR, _base_prediction_path, _read_columns, _require
+from train_ppc_solver_transition_surrogate_stack import _reference_prediction_path
 
 
 FAILURES: list[str] = []
@@ -123,10 +131,57 @@ def test_require() -> None:
         # _require on missing path should SystemExit with nonzero code
         missing = tmpdir / "missing.csv"
         try:
-            _require(missing, "test_producer")
+            with redirect_stderr(StringIO()):
+                _require(missing, "test_producer")
             check("_require exits on missing file", True, False)
         except SystemExit as exc:
             check("_require exits on missing file", True, exc.code != 0)
+
+
+def test_prediction_contract() -> None:
+    print("test_prediction_contract")
+    columns = _read_columns(DEFAULT_PREDICTION_CSV)
+    check("default adopted prediction CSV exists", True, DEFAULT_PREDICTION_CSV.exists())
+    check("default adopted prediction CSV has required columns", True, REQUIRED_PREDICTION_COLUMNS.issubset(columns))
+    try:
+        _require_prediction_columns(pd.DataFrame(columns=sorted(REQUIRED_PREDICTION_COLUMNS)), DEFAULT_PREDICTION_CSV)
+        check("_require_prediction_columns passes complete schema", True, True)
+    except SystemExit:
+        check("_require_prediction_columns passes complete schema", True, False)
+    try:
+        _require_prediction_columns(pd.DataFrame(columns=["city"]), DEFAULT_PREDICTION_CSV)
+        check("_require_prediction_columns exits on missing schema", True, False)
+    except SystemExit:
+        check("_require_prediction_columns exits on missing schema", True, True)
+
+
+def test_base_prediction_path() -> None:
+    print("test_base_prediction_path")
+    check(
+        "bare base prefix resolves under results",
+        RESULTS_DIR / "foo_window_predictions.csv",
+        _base_prediction_path("foo"),
+    )
+    check(
+        "relative base prefix path appends window suffix",
+        Path("tmp/foo_window_predictions.csv"),
+        _base_prediction_path("tmp/foo"),
+    )
+    check(
+        "csv base path passes through",
+        Path("tmp/foo.csv"),
+        _base_prediction_path("tmp/foo.csv"),
+    )
+    check(
+        "trainer uses same bare-prefix resolution",
+        RESULTS_DIR / "foo_window_predictions.csv",
+        _reference_prediction_path("foo"),
+    )
+    check(
+        "trainer accepts explicit CSV path",
+        Path("tmp/foo.csv"),
+        _reference_prediction_path("tmp/foo.csv"),
+    )
 
 
 def main() -> None:
@@ -134,6 +189,8 @@ def main() -> None:
     test_is_metadata_or_label()
     test_confidence_tier()
     test_require()
+    test_prediction_contract()
+    test_base_prediction_path()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILURE(S):")
         for name in FAILURES:
