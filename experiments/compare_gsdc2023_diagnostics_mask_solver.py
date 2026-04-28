@@ -20,6 +20,7 @@ if str(_REPO) not in sys.path:
 from experiments.gsdc2023_raw_bridge import (  # noqa: E402
     BridgeConfig,
     BridgeResult,
+    DEFAULT_MOTION_SIGMA_M,
     DEFAULT_ROOT,
     DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M,
     DEFAULT_TDCP_GEOMETRY_CORRECTION,
@@ -328,7 +329,7 @@ def main() -> None:
     parser.add_argument("--diagnostics", type=Path, default=None, help="phone_data_residual_diagnostics.csv")
     _add_max_epochs_arg(parser, default=200, help_text="0 means all usable epochs")
     parser.add_argument("--start-epoch", type=int, default=0)
-    parser.add_argument("--motion-sigma-m", type=float, default=3.0)
+    parser.add_argument("--motion-sigma-m", type=float, default=DEFAULT_MOTION_SIGMA_M)
     parser.add_argument("--fgo-iters", type=int, default=8)
     parser.add_argument("--clock-drift-sigma-m", type=float, default=1.0)
     parser.add_argument("--position-source", choices=POSITION_SOURCES, default="fgo")
