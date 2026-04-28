@@ -7,6 +7,13 @@ import zipfile
 import numpy as np
 from scipy.io import savemat
 
+from experiments.audit_gsdc2023_preprocessing_gap import (
+    discover_trip_specs,
+    preprocessing_gap_rows,
+    rows_to_markdown,
+    summary_from_records,
+    trip_gap_records,
+)
 from experiments.validate_gsdc2023_phone_data import discover_trip_dirs, validate_trip
 
 
@@ -175,3 +182,47 @@ def test_validate_trip_falls_back_to_raw_device_gnss_zip(tmp_path):
     assert result.gt_epochs == 2
     assert result.baseline_metrics is not None
     assert result.baseline_metrics.matched_epochs == 2
+
+
+def test_preprocessing_gap_table_has_expected_stage_coverage():
+    rows = preprocessing_gap_rows()
+    by_id = {row.stage_id: row for row in rows}
+
+    assert by_id["base_pseudorange_correction"].status == "experimental"
+    assert by_id["dual_frequency_model"].status == "experimental"
+    assert by_id["imu_preintegration"].status == "experimental"
+    assert by_id["height_constraints"].status == "experimental"
+    assert by_id["submission_offset"].status == "implemented"
+
+    markdown = rows_to_markdown(rows[:2])
+    assert markdown.startswith("| stage_id | matlab_stage |")
+    assert "raw_gnss_conversion" in markdown
+
+    summary = summary_from_records()
+    assert summary["static_stage_count"] == len(rows)
+    assert summary["static_status_counts"]["partial"] >= 1
+    assert summary["static_status_counts"]["experimental"] >= 1
+
+
+def test_preprocessing_gap_discovers_settings_trips_and_records(tmp_path):
+    data_root = tmp_path / "dataset_2023"
+    trip_dir = data_root / "train" / "courseA" / "phoneX"
+    trip_dir.mkdir(parents=True)
+    (data_root / "settings_train.csv").write_text(
+        "Course,Phone,Base1,RINEX\ncourseA,phoneX,SLAC,V3\n",
+        encoding="utf-8",
+    )
+
+    specs = discover_trip_specs(data_root, ["train"])
+    assert len(specs) == 1
+    assert specs[0].trip == "train/courseA/phoneX"
+    assert specs[0].source == "settings_train.csv"
+
+    records = trip_gap_records(data_root, ["train"], limit=1, include_validation=False)
+    assert records.shape[0] == 1
+    row = records.iloc[0].to_dict()
+    assert row["trip"] == "train/courseA/phoneX"
+    assert bool(row["trip_dir_present"]) is True
+    assert bool(row["phone_data_present"]) is False
+    assert bool(row["settings_csv_present"]) is True
+    assert row["base_correction_status"] == "base_metadata_missing"

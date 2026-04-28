@@ -27,6 +27,10 @@ from dataclasses import dataclass
 from io import TextIOWrapper
 from pathlib import Path
 from typing import Any
+
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from experiments.gsdc2023_raw_bridge import resolve_gsdc2023_data_root
 import zipfile
 
 import numpy as np
@@ -34,7 +38,7 @@ from scipy.io import loadmat
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_DEFAULT_ROOT = _REPO.parent / "ref" / "gsdc2023" / "dataset_2023"
+_DEFAULT_ROOT = resolve_gsdc2023_data_root()
 _WGS84_A = 6_378_137.0
 _WGS84_F = 1.0 / 298.257223563
 _WGS84_B = _WGS84_A * (1.0 - _WGS84_F)

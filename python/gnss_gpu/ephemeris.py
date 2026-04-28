@@ -386,6 +386,8 @@ class Ephemeris:
         nav: NavMessage,
         gps_time: float,
         obs_code: str | None = None,
+        *,
+        apply_group_delay: bool = True,
     ) -> tuple[np.ndarray, float]:
         """Compute single satellite position on CPU."""
         mu, omega_e, rel_f = _constellation_constants(nav.system)
@@ -444,7 +446,8 @@ class Ephemeris:
         if dt < -GPS_WEEK_SEC / 2.0:
             dt += GPS_WEEK_SEC
         dtr = rel_f * nav.e * nav.sqrt_a * sinE
-        clk = nav.af0 + nav.af1 * dt + nav.af2 * dt * dt + dtr - _group_delay(nav, obs_code)
+        group_delay = _group_delay(nav, obs_code) if apply_group_delay else 0.0
+        clk = nav.af0 + nav.af1 * dt + nav.af2 * dt * dt + dtr - group_delay
 
         return pos, clk
 
