@@ -147,6 +147,28 @@ __device__ void solve_4x4(double A[4][5], double* delta) {
   }
 }
 
+static __device__ inline void sagnac_los_device(
+    const double* sat_ecef, int s, double x, double y, double z,
+    double* dx, double* dy, double* dz, double* r) {
+  double sx = sat_ecef[s * 3 + 0];
+  double sy = sat_ecef[s * 3 + 1];
+  double sz = sat_ecef[s * 3 + 2];
+
+  double dx0 = x - sx;
+  double dy0 = y - sy;
+  double dz0 = z - sz;
+  double range_approx = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+  double theta = 7.2921151467e-5 * (range_approx / 299792458.0);
+  double sx_rot = sx * cos(theta) + sy * sin(theta);
+  double sy_rot = -sx * sin(theta) + sy * cos(theta);
+
+  *dx = x - sx_rot;
+  *dy = y - sy_rot;
+  *dz = z - sz;
+  *r = sqrt((*dx) * (*dx) + (*dy) * (*dy) + (*dz) * (*dz));
+  if (*r < 1e-12) *r = 1e-12;
+}
+
 __global__ void wls_batch_kernel(const double* sat_ecef, const double* pseudoranges,
                                   const double* weights, double* results, int* iters,
                                   int n_epoch, int n_sat, int max_iter, double tol) {
@@ -170,10 +192,8 @@ __global__ void wls_batch_kernel(const double* sat_ecef, const double* pseudoran
   double x = cx * scale, y = cy * scale, z = cz * scale;
   double cb = 0;
   for (int s = 0; s < n_sat; s++) {
-    double dx = x - my_sat[s * 3 + 0];
-    double dy_v = y - my_sat[s * 3 + 1];
-    double dz = z - my_sat[s * 3 + 2];
-    double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+    double dx, dy_v, dz, r;
+    sagnac_los_device(my_sat, s, x, y, z, &dx, &dy_v, &dz, &r);
     cb += my_pr[s] - r;
   }
   cb /= n_sat;
@@ -184,10 +204,8 @@ __global__ void wls_batch_kernel(const double* sat_ecef, const double* pseudoran
     double HTWdy[4] = {};
 
     for (int s = 0; s < n_sat; s++) {
-      double dx = x - my_sat[s * 3 + 0];
-      double dy_v = y - my_sat[s * 3 + 1];
-      double dz = z - my_sat[s * 3 + 2];
-      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      double dx, dy_v, dz, r;
+      sagnac_los_device(my_sat, s, x, y, z, &dx, &dy_v, &dz, &r);
       double residual = my_pr[s] - (r + cb);
       double w = my_w[s];
       double H[4] = {dx / r, dy_v / r, dz / r, 1.0};
