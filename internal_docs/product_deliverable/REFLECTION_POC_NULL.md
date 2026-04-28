@@ -221,15 +221,15 @@ null where introducing additional correlated features dilutes the
 ridge feature sampling.
 
 Combined conclusion across every simulator-side approach in the
-session — brute-force OOM, canyon heuristic, BVH multipath
-correlation, BVH multipath retrain — is that **within the explored
-search neighbourhood** (eight enumerated routes documented in this
-PR), §7.16 is the best available configuration.  This is not a
-proof of global optimality: feature directions not investigated
-include LASSO / sparse selection over the existing windowopt set,
-simplified attenuation + antenna-gain proxies, frequency-band-
-specific (L1 / L2) features, and ablations of individual §7.16
-ingredients.  Within what we did try, further gain would require
+session through the reflection retrain — brute-force OOM, canyon
+heuristic, BVH multipath correlation, BVH multipath retrain — is that
+**within the explored search neighbourhood** (eight enumerated routes
+documented in this PR), §7.16 is the best available configuration.
+This is not a proof of global optimality: feature directions not yet
+investigated at this point included LASSO / sparse selection over the
+existing windowopt set, simplified attenuation + antenna-gain proxies,
+frequency-band-specific (L1 / L2) features, and ablations of individual
+§7.16 ingredients.  Within what we did try, further gain would require
 either:
 
 - 7+ days of UTD diffraction + antenna-pattern + signal-attenuation
@@ -250,3 +250,101 @@ Artifacts for the all-runs reflection experiment:
 - `experiments/results/ppc_reflection_bvh_s60_<city>_<run>_per_*.csv` (× 6 runs × 3 levels)
 - `experiments/results/ppc_reflection_bvh_pooled_per_window.csv`
 - `experiments/results/ppc_window_fix_rate_model_..._with_reflection_alpha75_meta_run45_*.csv`
+
+## Addendum: simplified antenna gain + NLoS attenuation tested
+
+The final PR-#12-era physics probe tested the previously-open
+simplified signal-quality direction: RHCP cos^2 receiver antenna gain
+combined with a fixed -25 dB penalty for NLoS satellites.
+
+Script pair:
+
+- `experiments/exp_ppc_antenna_attenuation_features.py`: per-run
+  extractor using PLATEAU BVH LoS checks and the simplified effective
+  signal model.
+- `experiments/augment_window_csv_with_antenna.py`: pools the six
+  per-run window CSVs, prefixes the features as `ant_*`, merges them
+  into the §7.16 augmented window CSV, and prints correlations against
+  `actual_fix_rate_pct`.
+
+Physical model:
+
+```text
+effective_dB = 10 * log10(sin(elevation)^2 + epsilon)
+             + (0 if LoS else -25)
+```
+
+Per-window features include effective-dB quantiles, usable and marginal
+satellite counts, high-elevation NLoS counts, mean antenna gain, and
+median elevation.  The all-six-run extraction used epoch stride 5 and
+produced 197 merged LORO windows.
+
+Univariate correlations against demo5 actual FIX rate
+(n = 197 windows, multiplicity-uncorrected):
+
+| feature | r |
+| --- | --- |
+| ant_marginal_count_mean | +0.292 |
+| ant_elev_deg_p50_mean | -0.253 |
+| ant_usable_count_mean | +0.227 |
+| ant_usable_count_min | +0.208 |
+| ant_eff_db_p10_mean | +0.166 |
+| ant_gain_db_mean_mean | -0.163 |
+| ant_eff_db_max_mean | +0.147 |
+| ant_eff_db_max_max | +0.145 |
+| ant_eff_db_p10_min | +0.146 |
+| ant_nlos_at_high_elev_count_mean | -0.134 |
+| ant_nlos_at_high_elev_count_max | -0.134 |
+| ant_eff_db_mean_mean | +0.115 |
+| ant_eff_db_p50_mean | -0.051 |
+| ant_eff_db_p90_mean | -0.050 |
+
+Fourteen parallel feature correlations means a Bonferroni-adjusted
+alpha=0.05 bar is about |r| >= 0.20.  Only the first four features
+clear that univariate bar, and they are ordinary visibility/elevation
+signals already represented by the §7.16 `sim_los_*` and validationhold
+feature families.
+
+Retrained §7.16 nested stack with the 14 antenna features added:
+
+| variant | wmae pp | run MAE pp | corr |
+| --- | --- | --- | --- |
+| §7.16 adopted (no antenna) | **17.087** | **3.202** | **0.551** |
+| §7.25 antenna-augmented alpha=0.75 | 17.886 | 4.795 | 0.459 |
+| conservative baseline (no model) | 18.046 | 4.436 | 0.401 |
+
+The antenna-augmented stack regresses on §7.16 by +0.80 pp weighted
+MAE, +1.59 pp run MAE, and -0.092 window correlation.  It also exceeds
+the `--max-run-mae-pp 4.5` selection guardrail (4.795 > 4.5), so it is
+not adoptable even as a relaxed replacement for §7.16.
+
+Diagnosis matches the §7.17 and BVH multipath retrain nulls: the new
+features mostly restate elevation and LoS visibility.  ExtraTrees
+feature subsampling then sees more correlated versions of an already
+available signal, and the ridge residual head shrinks toward the
+baseline after receiving a noisier classifier residual.
+
+Combined conclusion after the antenna attempt: all four PR-#12-era
+structural probes are null relative to §7.16:
+
+- epoch-level classifier: AUC 0.54, no useful window aggregate;
+- canyon / edge proxy: weak aggregate correlation, no model lift;
+- BVH multipath: weak correlation and retrain regression to 18.358 /
+  4.510 / 0.428;
+- simplified antenna gain + -25 dB NLoS attenuation: retrain regression
+  to 17.886 / 4.795 / 0.459.
+
+§7.16 (`current_tight_hold + carry + alpha=0.75`, 17.087 / 3.202 /
+0.551) remains the reported strict best.  Remaining plausible upside is
+outside this simplified neighbourhood: UTD diffraction, real antenna
+pattern / signal attenuation, PLATEAU LOD3 plus elevated-road geometry
+patching, more run-level data, or sparse selection over the existing
+5867-feature input set.
+
+Artifacts for the antenna experiment:
+
+- `experiments/exp_ppc_antenna_attenuation_features.py`
+- `experiments/augment_window_csv_with_antenna.py`
+- `experiments/results/ppc_antenna_features_s5_<city>_<run>_per_{epoch,window}.csv`
+- `experiments/results/ppc_antenna_features_pooled_per_window.csv`
+- `experiments/results/ppc_window_fix_rate_model_..._antenna_alpha75_meta_run45_*.csv`

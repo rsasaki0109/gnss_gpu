@@ -135,9 +135,22 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   Propagation Simulation" (IPNTJ Vol.10 No.2).  Includes the
   threshold-swept matching-rate table, Fig.9/10-style figures, and a
   methodology comparison.
+- `internal_docs/product_deliverable/REFLECTION_POC_NULL.md` —
+  null-result write-up for the canyon proxy, BVH multipath, and
+  simplified antenna gain + NLoS attenuation probes.  These are
+  research diagnostics only; none replace the adopted §7.16 model.
 - `experiments/build_paper_style_eval.py` — computes the pooled
   matching-rate sweep and renders the side-by-side Fig.10-style
   RTK-FIXED maps under `plots/{city}_{run}_fix_comparison_map.png`.
+- `experiments/exp_ppc_reflection_poc.py`,
+  `experiments/aggregate_reflection_features.py`, and
+  `experiments/augment_window_csv_with_reflection.py` — reflection
+  feature extraction, pooling, and §7.16 merge scripts for the null
+  BVH multipath probe.
+- `experiments/exp_ppc_antenna_attenuation_features.py` and
+  `experiments/augment_window_csv_with_antenna.py` — simplified
+  antenna gain + -25 dB NLoS attenuation extraction and §7.16 merge
+  scripts for the §7.25 null probe.
 - `experiments/_common.py` — shared helpers used across the experiment
   scripts (e.g. `_is_metadata_or_label`).
 - `experiments/build_product_dashboard.py` — script that produces the
