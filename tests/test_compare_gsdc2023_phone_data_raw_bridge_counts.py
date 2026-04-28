@@ -95,6 +95,24 @@ def _raw_rows():
     return rows
 
 
+def _raw_rows_with_multignss_extra():
+    rows = _raw_rows()
+    extras = []
+    for row in rows:
+        if row["Svid"] != 1:
+            continue
+        for constellation, svid, signal_type in (
+            (6, 11, "GAL_E1_C_P"),
+            (6, 11, "GAL_E5A_Q"),
+        ):
+            extra = dict(row)
+            extra["ConstellationType"] = constellation
+            extra["Svid"] = svid
+            extra["SignalType"] = signal_type
+            extras.append(extra)
+    return rows + extras
+
+
 def test_compare_phone_data_counts_against_raw_bridge(tmp_path):
     data_root = tmp_path / "dataset_2023"
     trip_dir = data_root / "train" / "courseA" / "phoneA"
@@ -125,6 +143,40 @@ def test_compare_phone_data_counts_against_raw_bridge(tmp_path):
     assert int(l1["bridge_count"]) == 8
     assert int(l5["phone_count"]) == 4
     assert int(l5["bridge_count"]) == 4
+
+
+def test_compare_phone_data_counts_defaults_to_gps_only_scope(tmp_path):
+    data_root = tmp_path / "dataset_2023"
+    trip_dir = data_root / "train" / "courseA" / "phoneA"
+    trip_dir.mkdir(parents=True)
+
+    savemat(trip_dir / "phone_data.mat", _phone_data_obs())
+    rows = _raw_rows_with_multignss_extra()
+    _write_zipped_csv(trip_dir / "device_gnss.csv", rows, list(rows[0].keys()))
+
+    default_df, _default_summary_df, default_summary = build_comparison_frames(
+        data_root,
+        ["train"],
+        limit=1,
+        max_epochs=10,
+    )
+    multi_df, _multi_summary_df, multi_summary = build_comparison_frames(
+        data_root,
+        ["train"],
+        limit=1,
+        max_epochs=10,
+        multi_gnss=True,
+    )
+
+    assert default_summary["multi_gnss"] is False
+    assert default_summary["bridge_count_scope"] == "gps_l1_l5"
+    assert default_summary["matched_abs_delta_total"] == 0
+    assert default_df["count_delta"].fillna(0).eq(0).all()
+
+    assert multi_summary["multi_gnss"] is True
+    assert multi_summary["bridge_count_scope"] == "multi_gnss_l1_l5"
+    assert multi_summary["matched_bridge_count_total"] > multi_summary["matched_phone_count_total"]
+    assert multi_df["count_delta"].fillna(0).gt(0).any()
 
 
 def test_compare_phone_data_counts_gracefully_handles_missing_phone_data(tmp_path):
