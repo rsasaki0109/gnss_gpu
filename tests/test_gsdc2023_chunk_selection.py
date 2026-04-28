@@ -75,6 +75,15 @@ def test_select_auto_chunk_source_prefers_clear_quality_gain():
     assert select_auto_chunk_source(candidates) == "fgo"
 
 
+def test_select_auto_chunk_source_rejects_high_mse_fgo():
+    candidates = {
+        "baseline": _quality(1000.0, 1.0),
+        "fgo": _quality(450.0, 0.1, gap_p95=2.0, gap_max=3.0),
+    }
+
+    assert select_auto_chunk_source(candidates) == "baseline"
+
+
 def test_select_gated_chunk_source_keeps_safe_tdcp_candidate_when_tdcp_off_tied():
     record = ChunkSelectionRecord(
         start_epoch=0,
@@ -84,6 +93,34 @@ def test_select_gated_chunk_source_keeps_safe_tdcp_candidate_when_tdcp_off_tied(
             "baseline": _quality(20.0, 1.0),
             "fgo": _quality(18.6, 0.864, gap_p95=9.1, gap_max=12.0),
             "fgo_no_tdcp": _quality(18.5, 0.861, gap_p95=9.0, gap_max=12.0),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "fgo"
+
+
+def test_select_gated_chunk_source_rejects_high_mse_fgo():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=200,
+        auto_source="fgo",
+        candidates={
+            "baseline": _quality(1000.0, 1.0, step_p95=12.0),
+            "fgo": _quality(450.0, 0.1, gap_p95=10.0, gap_max=12.0, step_p95=10.0),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+
+
+def test_select_gated_chunk_source_keeps_bounded_high_baseline_fgo():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=200,
+        auto_source="fgo",
+        candidates={
+            "baseline": _quality(1000.0, 1.0, step_p95=12.0),
+            "fgo": _quality(350.0, 0.1, gap_p95=10.0, gap_max=12.0, step_p95=10.0),
         },
     )
 
