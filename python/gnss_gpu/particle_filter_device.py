@@ -715,7 +715,7 @@ class ParticleFilterDevice:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
         self._pf_device_shift_clock_bias(self._state, float(shift))
 
-    def correct_clock_bias(self, sat_ecef, pseudoranges):
+    def correct_clock_bias(self, sat_ecef, pseudoranges, quantile=0.5):
         """Re-center particles' clock bias using pseudorange residuals.
 
         Computes the expected cb from the current position estimate and
@@ -727,6 +727,9 @@ class ParticleFilterDevice:
             Satellite ECEF positions [m].
         pseudoranges : array_like, shape (n_sat,)
             Observed pseudoranges [m].
+        quantile : float
+            Residual quantile used as receiver clock bias. Values below 0.5
+            are useful when pseudoranges contain positive NLOS biases.
         """
         if not self._initialized:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
@@ -740,7 +743,8 @@ class ParticleFilterDevice:
 
         ranges = np.linalg.norm(sat - pos, axis=1)
         residuals = pr - ranges
-        expected_cb = float(np.median(residuals))
+        q = float(np.clip(float(quantile), 0.0, 1.0))
+        expected_cb = float(np.quantile(residuals, q))
 
         shift = expected_cb - current_cb
         self._pf_device_shift_clock_bias(self._state, shift)

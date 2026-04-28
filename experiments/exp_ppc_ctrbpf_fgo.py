@@ -68,6 +68,18 @@ _WGS84_E2 = 6.694379990141316e-3
 class CTRBPFConfig:
     n_particles: int = 50_000
     sigma_pr: float = 8.0
+    enable_pr_gmm: bool = False
+    pr_gmm_statuses: tuple[int, ...] = (1, 3)
+    pr_gmm_w_los: float = 0.7
+    pr_gmm_mu_nlos_m: float = 15.0
+    pr_gmm_sigma_nlos_m: float = 30.0
+    pr_gmm_hybrid_loose_sigma_m: float = 5.0
+    pr_gmm_clock_quantile: float = 0.35
+    pr_weight_mode: str = "raw"
+    pr_weight_ref_cn0: float = 45.0
+    pr_weight_min: float = 0.25
+    pr_weight_max: float = 1.5
+    defer_epoch_resample: bool = False
     sigma_pos: float = 2.0
     sigma_cb: float = 50.0
     spread_pos_init: float = 50.0
@@ -355,6 +367,13 @@ class _DDStats:
     epochs_attempted: int = 0
     epochs_applied: int = 0
     pairs_total: int = 0
+
+
+@dataclass
+class _PRObsStats:
+    epochs_gaussian: int = 0
+    epochs_gmm: int = 0
+    deferred_resample_epochs: int = 0
 
 
 @dataclass
@@ -1207,6 +1226,27 @@ def _scale_weights_per_system(weights: np.ndarray, system_ids: np.ndarray) -> np
     return out
 
 
+def _pr_likelihood_weights(weights: np.ndarray, config: CTRBPFConfig) -> np.ndarray:
+    """Convert PPC C/N0-like values into PF likelihood multipliers."""
+    w = np.asarray(weights, dtype=np.float64)
+    mode = str(config.pr_weight_mode).strip().lower()
+    if mode == "raw":
+        return w.astype(np.float64, copy=True)
+    elif mode == "unit":
+        out = np.ones_like(w, dtype=np.float64)
+    elif mode in {"cn0-relative", "relative"}:
+        ref = max(float(config.pr_weight_ref_cn0), 1.0)
+        out = w / ref
+    else:
+        raise ValueError(f"unsupported pr_weight_mode: {config.pr_weight_mode}")
+
+    lo = float(config.pr_weight_min)
+    hi = float(config.pr_weight_max)
+    if np.isfinite(lo) and np.isfinite(hi) and hi > lo:
+        out = np.clip(out, lo, hi)
+    return out.astype(np.float64, copy=False)
+
+
 def _build_pf(config: CTRBPFConfig):
     from gnss_gpu import ParticleFilterDevice
 
@@ -1234,6 +1274,7 @@ def _run_ctrbpf_on_segment(
 ) -> tuple[
     np.ndarray,
     float,
+    _PRObsStats,
     _DDStats,
     _RBPFGateStats,
     _HybridStats,
@@ -1256,6 +1297,7 @@ def _run_ctrbpf_on_segment(
     doppler_hz = data.get("doppler_hz")
     used_prns = data.get("used_prns") or [[] for _ in range(n_epochs)]
     times = np.asarray(data["times"], dtype=np.float64)
+    pr_obs_stats = _PRObsStats()
     dd_stats = _DDStats()
     gate_stats = _RBPFGateStats()
     hybrid_stats = _HybridStats()
@@ -1577,6 +1619,7 @@ def _run_ctrbpf_on_segment(
         w_i = np.asarray(weights[i], dtype=np.float64)
         if system_ids is not None:
             w_i = _scale_weights_per_system(w_i, system_ids[i])
+        w_i = _pr_likelihood_weights(w_i, config)
 
         finite = (
             np.all(np.isfinite(sat_i), axis=1)
@@ -1594,9 +1637,37 @@ def _run_ctrbpf_on_segment(
         sids_i = None if system_ids is None else np.asarray(system_ids[i])[finite]
 
         if config.enable_correct_clock_bias and i % 5 == 0:
-            pf.correct_clock_bias(sat_i, pr_i)
+            clock_quantile = (
+                float(config.pr_gmm_clock_quantile)
+                if bool(config.enable_pr_gmm)
+                else 0.5
+            )
+            pf.correct_clock_bias(sat_i, pr_i, quantile=clock_quantile)
 
-        pf.update(sat_i, pr_i, weights=w_i)
+        st_obs = hybrid_status.get(t_key) if hybrid_status is not None else None
+        use_pr_gmm_here = bool(config.enable_pr_gmm)
+        if use_pr_gmm_here and st_obs is not None and config.pr_gmm_statuses:
+            use_pr_gmm_here = int(st_obs) in {int(s) for s in config.pr_gmm_statuses}
+        if use_pr_gmm_here:
+            pf.update_gmm(
+                sat_i,
+                pr_i,
+                weights=w_i,
+                sigma_pr=float(config.sigma_pr),
+                w_los=float(config.pr_gmm_w_los),
+                mu_nlos=float(config.pr_gmm_mu_nlos_m),
+                sigma_nlos=float(config.pr_gmm_sigma_nlos_m),
+                resample=not bool(config.defer_epoch_resample),
+            )
+            pr_obs_stats.epochs_gmm += 1
+        else:
+            pf.update(
+                sat_i,
+                pr_i,
+                weights=w_i,
+                resample=not bool(config.defer_epoch_resample),
+            )
+            pr_obs_stats.epochs_gaussian += 1
 
         # Phase 1+2: compute DD once (cached) so both the Doppler-KF gate and
         # the AFV update can read its pair count.
@@ -1700,6 +1771,7 @@ def _run_ctrbpf_on_segment(
                         weights=w_full[dop_finite],
                         wavelength=_GPS_L1_WAVELENGTH_M,
                         sigma_mps=config.sigma_doppler_mps,
+                        resample=not bool(config.defer_epoch_resample),
                     )
                     if gate_active:
                         gate_stats.epochs_applied += 1
@@ -1713,6 +1785,7 @@ def _run_ctrbpf_on_segment(
                 pf.update_dd_carrier_afv(
                     dd_result,
                     sigma_cycles=float(config.dd_sigma_cycles),
+                    resample=not bool(config.defer_epoch_resample),
                 )
                 dd_stats.epochs_applied += 1
                 dd_stats.pairs_total += int(dd_result.n_dd)
@@ -1746,12 +1819,21 @@ def _run_ctrbpf_on_segment(
                 # several-meters) hybrid passthrough and the IMU rescue
                 # never surfaces in pf.estimate().
                 hybrid_sigma_now = float(config.hybrid_sigma_m)
+                st_now_pu = hybrid_status.get(round(float(times[i]), 1)) if hybrid_status is not None else None
+                if (
+                    config.enable_pr_gmm
+                    and float(config.pr_gmm_hybrid_loose_sigma_m) > 0.0
+                ):
+                    gmm_status_match = True
+                    if st_now_pu is not None and config.pr_gmm_statuses:
+                        gmm_status_match = int(st_now_pu) in {int(s) for s in config.pr_gmm_statuses}
+                    if gmm_status_match:
+                        hybrid_sigma_now = float(config.pr_gmm_hybrid_loose_sigma_m)
                 if (
                     config.enable_imu_tc
                     and float(config.imu_tc_hybrid_loose_sigma_m) > 0.0
                     and hybrid_status is not None
                 ):
-                    st_now_pu = hybrid_status.get(round(float(times[i]), 1))
                     if (
                         st_now_pu is not None
                         and int(st_now_pu) in {int(s) for s in config.imu_tc_emit_pf_hybrid_statuses}
@@ -1992,7 +2074,8 @@ def _run_ctrbpf_on_segment(
                                 ),
                             )
                             pf.position_update(p_ins_ecef, sigma_pos=sigma_ins)
-                            pf.resample_if_needed()
+                            if not bool(config.defer_epoch_resample):
+                                pf.resample_if_needed()
                             ins_tc_stats.pu_applied += 1
                             ins_valid_for_emit = True
 
@@ -2043,6 +2126,9 @@ def _run_ctrbpf_on_segment(
             # Phase 7 / non-hybrid: emit the PF's own weighted-mean estimate
             # so any DD-AFV / Doppler-KF correction shows up in the score.
             positions[i] = est[:3]
+
+        if config.defer_epoch_resample and pf.resample_if_needed():
+            pr_obs_stats.deferred_resample_epochs += 1
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
@@ -2124,6 +2210,7 @@ def _run_ctrbpf_on_segment(
     return (
         positions,
         ms_per_epoch,
+        pr_obs_stats,
         dd_stats,
         gate_stats,
         hybrid_stats,
@@ -2279,6 +2366,19 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
     base = dict(
         n_particles=args.n_particles,
         sigma_pr=args.sigma_pr,
+        pr_gmm_statuses=tuple(
+            int(s.strip()) for s in args.pr_gmm_statuses.split(",") if s.strip()
+        ),
+        pr_gmm_w_los=args.pr_gmm_w_los,
+        pr_gmm_mu_nlos_m=args.pr_gmm_mu_nlos_m,
+        pr_gmm_sigma_nlos_m=args.pr_gmm_sigma_nlos_m,
+        pr_gmm_hybrid_loose_sigma_m=args.pr_gmm_hybrid_loose_sigma_m,
+        pr_gmm_clock_quantile=args.pr_gmm_clock_quantile,
+        pr_weight_mode=args.pr_weight_mode,
+        pr_weight_ref_cn0=args.pr_weight_ref_cn0,
+        pr_weight_min=args.pr_weight_min,
+        pr_weight_max=args.pr_weight_max,
+        defer_epoch_resample=bool(args.defer_epoch_resample),
         sigma_pos=args.sigma_pos,
         sigma_cb=args.sigma_cb,
         spread_pos_init=args.spread_pos_init,
@@ -2468,6 +2568,18 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_hybrid_pu=True,
             method_label="RBPF-velKF+DD+gate+hybrid",
         ))
+    # Phase 10a: switch Status=1/3 pseudorange likelihood from Gaussian to
+    # LOS/NLOS positive-bias GMM, while keeping Status=4 on the sharp model.
+    if "rbpf+dd+gate+hybrid+gmm" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_pr_gmm=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+gmm",
+        ))
     # Phase 7: full stack (vguide + hybrid PU + DD AFV + RBPF gate) emitting
     # the PF's own estimate. Goal: show DD-AFV cm-correction beat the hybrid
     # baseline floor (Phase 6 passthrough).
@@ -2481,6 +2593,18 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_hybrid_velocity_guide=True,
             hybrid_emit_pf_estimate=True,
             method_label="RBPF-velKF+DD+gate+phase7",
+        ))
+    if "rbpf+dd+gate+phase7+gmm" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            hybrid_emit_pf_estimate=True,
+            enable_pr_gmm=True,
+            method_label="RBPF-velKF+DD+gate+phase7+gmm",
         ))
     # Phase 9a: hybrid passthrough + ZUPT (IMU stop detection).
     if "rbpf+dd+gate+hybrid+zupt" in args.methods:
@@ -2530,6 +2654,19 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_hybrid_velocity_guide=True,
             enable_ins_tc=True,
             method_label="RBPF-velKF+DD+gate+hybrid+ins_tc",
+        ))
+    # Phase 10a stacked with per-particle INS/IMU propagation.
+    if "rbpf+dd+gate+hybrid+gmm+ins_tc" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            enable_pr_gmm=True,
+            enable_ins_tc=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+gmm+ins_tc",
         ))
     # Phase 9a + Phase 9c stacked.
     if "rbpf+dd+gate+hybrid+zupt+ins_tc" in args.methods:
@@ -2621,6 +2758,28 @@ def main() -> None:
     )
     parser.add_argument("--n-particles", type=int, default=50_000)
     parser.add_argument("--sigma-pr", type=float, default=8.0)
+    parser.add_argument("--pr-gmm-statuses", type=str, default="1,3",
+                        help="Hybrid Status values where PR-GMM likelihood is used (default '1,3'; empty means all)")
+    parser.add_argument("--pr-gmm-w-los", type=float, default=0.7,
+                        help="LOS mixture weight for PR-GMM likelihood (default 0.7)")
+    parser.add_argument("--pr-gmm-mu-nlos-m", type=float, default=15.0,
+                        help="Positive NLOS pseudorange bias mean for PR-GMM [m] (default 15)")
+    parser.add_argument("--pr-gmm-sigma-nlos-m", type=float, default=30.0,
+                        help="NLOS pseudorange sigma for PR-GMM [m] (default 30)")
+    parser.add_argument("--pr-gmm-hybrid-loose-sigma-m", type=float, default=5.0,
+                        help="Hybrid PU sigma on PR-GMM statuses; <=0 keeps global hybrid sigma (default 5)")
+    parser.add_argument("--pr-gmm-clock-quantile", type=float, default=0.35,
+                        help="Clock-bias correction residual quantile when PR-GMM is active (default 0.35)")
+    parser.add_argument("--pr-weight-mode", choices=("raw", "unit", "cn0-relative"), default="raw",
+                        help="PF pseudorange likelihood weight transform. raw preserves legacy C/N0-as-weight behavior")
+    parser.add_argument("--pr-weight-ref-cn0", type=float, default=45.0,
+                        help="Reference C/N0 for --pr-weight-mode cn0-relative (default 45)")
+    parser.add_argument("--pr-weight-min", type=float, default=0.25,
+                        help="Minimum transformed PR likelihood weight when clipping is active (default 0.25)")
+    parser.add_argument("--pr-weight-max", type=float, default=1.5,
+                        help="Maximum transformed PR likelihood weight when clipping is active (default 1.5)")
+    parser.add_argument("--defer-epoch-resample", action="store_true",
+                        help="Accumulate PR/DD/Doppler/PU likelihoods within an epoch and resample only after emission")
     parser.add_argument("--sigma-pos", type=float, default=2.0)
     parser.add_argument("--sigma-cb", type=float, default=50.0)
     parser.add_argument("--spread-pos-init", type=float, default=50.0)
@@ -2639,12 +2798,15 @@ def main() -> None:
             "Comma-separated subset of {pf, pf+pu, rbpf, rbpf+pu, pf+dd, "
             "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+gate+pu, "
             "pf+hybrid, rbpf+dd+hybrid, rbpf+dd+gate+hybrid, "
-            "rbpf+dd+gate+phase7, rbpf+dd+gate+phase4, "
+            "rbpf+dd+gate+hybrid+gmm, "
+            "rbpf+dd+gate+phase7, rbpf+dd+gate+phase7+gmm, "
+            "rbpf+dd+gate+phase4, "
             "rbpf+dd+gate+hybrid+phase4, "
             "rbpf+dd+gate+hybrid+tdcp, rbpf+dd+gate+hybrid+tdcp+phase4, "
             "rbpf+dd+gate+hybrid+zupt, rbpf+dd+gate+hybrid+zupt+tdcp, "
             "rbpf+dd+gate+hybrid+imu_tc, rbpf+dd+gate+hybrid+zupt+imu_tc, "
-            "rbpf+dd+gate+hybrid+ins_tc, rbpf+dd+gate+hybrid+zupt+ins_tc}"
+            "rbpf+dd+gate+hybrid+ins_tc, rbpf+dd+gate+hybrid+gmm+ins_tc, "
+            "rbpf+dd+gate+hybrid+zupt+ins_tc}"
         ),
     )
     parser.add_argument("--dd-sigma-cycles", type=float, default=0.05,
@@ -3017,6 +3179,7 @@ def main() -> None:
                     or variant.enable_zupt
                     or variant.enable_imu_tc
                     or variant.enable_ins_tc
+                    or variant.enable_pr_gmm
                 )
                 else None
             )
@@ -3025,7 +3188,7 @@ def main() -> None:
                 if (variant.enable_zupt or variant.enable_imu_tc or variant.enable_ins_tc)
                 else None
             )
-            positions, ms_per_epoch, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats, zupt_stats, imu_tc_stats, ins_tc_stats = _run_ctrbpf_on_segment(
+            positions, ms_per_epoch, pr_obs_stats, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats, zupt_stats, imu_tc_stats, ins_tc_stats = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
                 dd_computer=dd_for_variant,
                 dd_pr_computer=dd_pr_for_variant,
@@ -3061,6 +3224,20 @@ def main() -> None:
                 "ms_per_epoch": float(ms_per_epoch),
                 "rbpf_velocity_kf": int(variant.enable_rbpf_velocity_kf),
                 "position_update": int(variant.enable_position_update),
+                "defer_epoch_resample": int(variant.defer_epoch_resample),
+                "deferred_resample_epochs": int(pr_obs_stats.deferred_resample_epochs),
+                "pr_weight_mode": str(variant.pr_weight_mode),
+                "pr_weight_ref_cn0": float(variant.pr_weight_ref_cn0),
+                "pr_weight_min": float(variant.pr_weight_min),
+                "pr_weight_max": float(variant.pr_weight_max),
+                "pr_gmm": int(variant.enable_pr_gmm),
+                "pr_gmm_epochs": int(pr_obs_stats.epochs_gmm),
+                "pr_gaussian_epochs": int(pr_obs_stats.epochs_gaussian),
+                "pr_gmm_w_los": float(variant.pr_gmm_w_los),
+                "pr_gmm_mu_nlos_m": float(variant.pr_gmm_mu_nlos_m),
+                "pr_gmm_sigma_nlos_m": float(variant.pr_gmm_sigma_nlos_m),
+                "pr_gmm_hybrid_loose_sigma_m": float(variant.pr_gmm_hybrid_loose_sigma_m),
+                "pr_gmm_clock_quantile": float(variant.pr_gmm_clock_quantile),
                 "dd_carrier_afv": int(variant.enable_dd_carrier_afv),
                 "dd_epochs_attempted": int(dd_stats.epochs_attempted),
                 "dd_epochs_applied": int(dd_stats.epochs_applied),
@@ -3153,6 +3330,24 @@ def main() -> None:
                     f", DD applied {applied}/{dd_stats.epochs_attempted} "
                     f"({100.0 * applied / attempted:.1f}%, avg pairs={avg_pairs:.1f})"
                 )
+            pr_msg = ""
+            if variant.enable_pr_gmm:
+                pr_total = max(pr_obs_stats.epochs_gmm + pr_obs_stats.epochs_gaussian, 1)
+                pr_msg = (
+                    f", PR-GMM {pr_obs_stats.epochs_gmm}/{pr_total} "
+                    f"(w_los={variant.pr_gmm_w_los:.2f}, "
+                    f"mu={variant.pr_gmm_mu_nlos_m:.1f}m, "
+                    f"hloose={variant.pr_gmm_hybrid_loose_sigma_m:.1f}m, "
+                    f"cbq={variant.pr_gmm_clock_quantile:.2f})"
+                )
+            defer_msg = ""
+            if variant.defer_epoch_resample:
+                defer_msg = (
+                    f", defer-resample {pr_obs_stats.deferred_resample_epochs}"
+                )
+            pr_weight_msg = ""
+            if str(variant.pr_weight_mode) != "raw":
+                pr_weight_msg = f", prw={variant.pr_weight_mode}"
             gate_msg = ""
             if variant_gate_active and gate_stats.epochs_attempted > 0:
                 gate_msg = (
@@ -3230,7 +3425,7 @@ def main() -> None:
             print(
                 f"    PPC honest: {row['honest_ppc_pct']:5.2f}%  "
                 f"(pass {row['honest_pass_m']:.0f} / total {row['honest_total_m']:.0f}m, "
-                f"{ms_per_epoch:.1f} ms/epoch{dd_msg}{gate_msg}{hybrid_msg}{zupt_msg}{imu_tc_msg}{ins_tc_msg}{tdcp_msg}{fgo_msg})",
+                f"{ms_per_epoch:.1f} ms/epoch{pr_msg}{pr_weight_msg}{defer_msg}{dd_msg}{gate_msg}{hybrid_msg}{zupt_msg}{imu_tc_msg}{ins_tc_msg}{tdcp_msg}{fgo_msg})",
                 flush=True,
             )
 

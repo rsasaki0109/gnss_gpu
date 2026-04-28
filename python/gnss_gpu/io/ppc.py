@@ -53,6 +53,10 @@ _IMU_ALIASES = {
 _WGS84_A = 6_378_137.0
 _WGS84_E2 = 6.694379990141316e-3
 _SYSTEM_ID_MAP = {"G": 0, "R": 1, "E": 2, "C": 3, "J": 4}
+_MIN_PSEUDORANGE_M = 1.0e6
+_MAX_PSEUDORANGE_M = 1.0e8
+_MIN_SAT_ECEF_NORM_M = 1.0e7
+_MAX_SAT_ECEF_NORM_M = 5.0e7
 _CARRIER_CODE_PREFERENCES = {
     "G": ("L1C", "L1W", "L1X", "L1P", "L1S", "L1L", "L1Z"),
     "E": ("L1C", "L1X", "L1A", "L1B", "L1Z"),
@@ -147,6 +151,27 @@ def _pick_obs_value(
         if np.isfinite(value) and abs(value) > min_abs:
             return value, code
     return float("nan"), ""
+
+
+def _valid_nav_obs_mask(
+    sat_ecef: np.ndarray,
+    pseudoranges: np.ndarray,
+    weights: np.ndarray,
+) -> np.ndarray:
+    """Return rows with physically plausible satellite state and pseudorange."""
+    sat = np.asarray(sat_ecef, dtype=np.float64)
+    pr = np.asarray(pseudoranges, dtype=np.float64)
+    w = np.asarray(weights, dtype=np.float64)
+    sat_norm = np.linalg.norm(sat, axis=1)
+    return (
+        np.all(np.isfinite(sat), axis=1)
+        & np.isfinite(pr)
+        & np.isfinite(w)
+        & (pr >= _MIN_PSEUDORANGE_M)
+        & (pr <= _MAX_PSEUDORANGE_M)
+        & (sat_norm >= _MIN_SAT_ECEF_NORM_M)
+        & (sat_norm <= _MAX_SAT_ECEF_NORM_M)
+    )
 
 
 def _ephemeris_derivatives(
@@ -349,6 +374,18 @@ class PPCDatasetLoader:
             )
             weights = np.array([max(snr_map[sat_id], 1.0) for sat_id in used_sat_ids], dtype=np.float64)
             system_ids = np.array([_SYSTEM_ID_MAP[sat_id[0]] for sat_id in used_sat_ids], dtype=np.int32)
+            sat_ecef = np.asarray(sat_ecef, dtype=np.float64)
+            valid_nav_obs = _valid_nav_obs_mask(sat_ecef, pr_corr, weights)
+            if int(valid_nav_obs.sum()) < 4:
+                continue
+            if not bool(np.all(valid_nav_obs)):
+                sat_ecef = sat_ecef[valid_nav_obs]
+                pr_corr = pr_corr[valid_nav_obs]
+                weights = weights[valid_nav_obs]
+                system_ids = system_ids[valid_nav_obs]
+                used_sat_ids = [
+                    sat_id for sat_id, valid in zip(used_sat_ids, valid_nav_obs) if bool(valid)
+                ]
             carrier_phase = np.full(len(used_sat_ids), np.nan, dtype=np.float64)
             doppler_hz = np.full(len(used_sat_ids), np.nan, dtype=np.float64)
             carrier_codes: list[str] = []

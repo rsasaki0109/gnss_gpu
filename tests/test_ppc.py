@@ -9,7 +9,12 @@ import numpy as np
 import pytest
 
 from gnss_gpu.io.ppc import PPCDatasetLoader
-from gnss_gpu.io.ppc import _CARRIER_CODE_PREFERENCES, _DOPPLER_CODE_PREFERENCES, _pick_obs_value
+from gnss_gpu.io.ppc import (
+    _CARRIER_CODE_PREFERENCES,
+    _DOPPLER_CODE_PREFERENCES,
+    _pick_obs_value,
+    _valid_nav_obs_mask,
+)
 
 
 def _write(directory: Path, filename: str, content: str) -> Path:
@@ -124,3 +129,20 @@ def test_pick_ppc_doppler_returns_nan_when_missing():
 
     assert np.isnan(value)
     assert code == ""
+
+
+def test_valid_nav_obs_mask_rejects_unphysical_satellite_rows():
+    sat_ecef = np.array(
+        [
+            [15_600_000.0, 20_100_000.0, 21_700_000.0],
+            [1.0, 2.0, 3.0],
+            [15_600_000.0, 20_100_000.0, 21_700_000.0],
+        ],
+        dtype=np.float64,
+    )
+    pseudoranges = np.array([24_000_000.0, 24_000_000.0, 1.0e21], dtype=np.float64)
+    weights = np.array([45.0, 45.0, 45.0], dtype=np.float64)
+
+    mask = _valid_nav_obs_mask(sat_ecef, pseudoranges, weights)
+
+    assert mask.tolist() == [True, False, False]
