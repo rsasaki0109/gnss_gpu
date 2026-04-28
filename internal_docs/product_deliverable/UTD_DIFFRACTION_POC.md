@@ -102,7 +102,56 @@ Compare against the adopted §7.16 row:
 | variant | wmae pp | run MAE pp | corr |
 | --- | --- | --- | --- |
 | §7.16 adopted | **17.087** | **3.202** | **0.551** |
-| §7.16 + UTD edge candidates | TBD | TBD | TBD |
+| §7.16 + UTD edge candidates, ridge alpha=0.75 | 18.264 | 5.168 | 0.471 |
+| §7.16 + UTD edge candidates, ExtraTrees alpha=0.75 | 18.275 | 5.168 | 0.404 |
+| selected under guardrails | 18.046 | 4.436 | 0.401 |
+
+The guardrail-selected row falls back to the conservative base model
+because both UTD-augmented residual variants exceed
+`--max-run-mae-pp 4.5`.  Relative to §7.16, the UTD edge features are a
+clear null / regression: weighted MAE worsens by at least +1.18 pp, run
+MAE worsens by +1.97 pp, and correlation drops by at least -0.080.
+
+## Full six-run result
+
+All six runs were extracted at epoch stride 60 with
+`--edge-voxel-size-m 5` and `--max-candidate-edges 50000`.
+
+| run | sampled epochs | windows | retained edges | notes |
+| --- | ---: | ---: | ---: | --- |
+| nagoya/run1 | 126 | 26 | 50,000 | 4,494 boundary |
+| nagoya/run2 | 158 | 32 | 50,000 | 5,980 boundary |
+| nagoya/run3 | 87 | 18 | 50,000 | 8,250 boundary |
+| tokyo/run1 | 198 | 40 | 50,000 | one trailing window is outside the §7.16 product CSV |
+| tokyo/run2 | 152 | 31 | 50,000 | focus run |
+| tokyo/run3 | 255 | 51 | 50,000 | 12 boundary |
+
+The pooled UTD CSV has 198 windows; 197 join with the adopted §7.16
+product-deliverable window set.
+
+Univariate pooled correlations against demo5 actual FIX rate and §7.16
+prediction error are weak:
+
+| feature | r vs actual FIX | r vs §7.16 error |
+| --- | ---: | ---: |
+| `utd_candidate_nlos_sat_count_max` | -0.195 | +0.044 |
+| `utd_candidate_nlos_sat_count_mean` | -0.184 | +0.037 |
+| `utd_candidate_sat_count_mean` | -0.176 | -0.023 |
+| `utd_score_nlos_sum_max` | -0.171 | +0.018 |
+| `utd_score_sum_max` | -0.156 | -0.028 |
+| `utd_min_excess_path_m_mean` | +0.147 | -0.051 |
+
+No UTD edge feature reaches |r| = 0.20 on the pooled 197-window set.
+That is already below the useful-feature threshold before considering
+the 20 parallel feature correlations.  The retrain result above is the
+decisive selection test: the features do not improve the nested stack.
+
+Artifacts:
+
+- `experiments/results/ppc_utd_edges_s60_<city>_<run>_per_epoch.csv`
+- `experiments/results/ppc_utd_edges_s60_<city>_<run>_per_window.csv`
+- `experiments/results/ppc_utd_edges_pooled_per_window.csv`
+- `experiments/results/ppc_window_fix_rate_model_..._utd_alpha75_meta_run45_*.csv`
 
 ## Initial Tokyo run2 smoke result
 
@@ -129,12 +178,10 @@ Runtime on Tokyo run2:
 | epoch scoring | 18.1 s, 152 sampled epochs |
 | output windows | 31 windows |
 
-The per-window output is committed as:
+The initial per-window smoke outputs are committed as:
 
 - `experiments/results/ppc_utd_edges_s60_tokyo_run2_per_epoch.csv`
 - `experiments/results/ppc_utd_edges_s60_tokyo_run2_per_window.csv`
-- `experiments/results/ppc_utd_edges_pooled_per_window.csv` (Tokyo run2
-  only so far)
 
 Tokyo run2-only correlations are not a model-selection result, but they
 are a useful early diagnostic:
@@ -160,8 +207,9 @@ Focus windows:
 
 Interpretation: the features are active and directionally related to
 some Tokyo run2 residuals, but they do not cleanly separate false-high
-w7/w9 from hidden-high w23-w27.  Do not call this null or non-null until
-the all-six-run pool and §7.16 retrain are run.
+w7/w9 from hidden-high w23-w27.  The all-six-run pool and §7.16 retrain
+above supersede this smoke diagnostic and make the UTD edge-candidate
+family a null result for the current product model.
 
 ## Implementation limits
 
