@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from gnss_gpu.range_model import geometric_ranges_sagnac, rotate_satellites_sagnac
+
 SYSTEM_GPS = 0
 SYSTEM_GLONASS = 1
 SYSTEM_GALILEO = 2
@@ -177,7 +179,7 @@ class MultiGNSSSolver:
         for k in range(self.n_systems):
             mask = mapped_ids == k
             if mask.any():
-                diffs = np.linalg.norm(pos - sat[mask], axis=1)
+                diffs = geometric_ranges_sagnac(pos, sat[mask])
                 cb[k] = np.mean(pseudoranges[mask] - diffs)
 
         state = np.concatenate([pos, cb])
@@ -185,7 +187,8 @@ class MultiGNSSSolver:
         for it in range(self.max_iter):
             pos = state[:3]
             cb = state[3:]
-            dx_all = pos - sat  # [n_sat, 3]
+            sat_rot = rotate_satellites_sagnac(pos, sat)
+            dx_all = pos - sat_rot  # [n_sat, 3]
             r = np.linalg.norm(dx_all, axis=1)
             pr_pred = r + cb[mapped_ids]
             residual = pseudoranges - pr_pred

@@ -7,6 +7,29 @@
 
 namespace gnss_gpu {
 
+static void sagnac_los(const double* sat_ecef, int s,
+                       double x, double y, double z,
+                       double* dx, double* dy, double* dz, double* r) {
+  double sx = sat_ecef[s * 3 + 0];
+  double sy = sat_ecef[s * 3 + 1];
+  double sz = sat_ecef[s * 3 + 2];
+
+  double dx0 = x - sx;
+  double dy0 = y - sy;
+  double dz0 = z - sz;
+  double range_approx = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+  double transit_time = range_approx / 299792458.0;
+  double theta = 7.2921151467e-5 * transit_time;
+  double sx_rot = sx * cos(theta) + sy * sin(theta);
+  double sy_rot = -sx * sin(theta) + sy * cos(theta);
+
+  *dx = x - sx_rot;
+  *dy = y - sy_rot;
+  *dz = z - sz;
+  *r = sqrt((*dx) * (*dx) + (*dy) * (*dy) + (*dz) * (*dz));
+  if (*r < 1e-12) *r = 1e-12;
+}
+
 // Chi-squared critical values for degrees of freedom 1..20 at common p_fa levels.
 // We use a simple lookup + interpolation for p_fa = {1e-3, 1e-5, 1e-7}.
 // For other p_fa values, use Wilson-Hilferty approximation.
@@ -44,10 +67,8 @@ static double compute_sse(const double* sat_ecef, const double* pseudoranges,
   double x = position[0], y = position[1], z = position[2], cb = position[3];
   double sse = 0.0;
   for (int s = 0; s < n_sat; s++) {
-    double dx = x - sat_ecef[s * 3 + 0];
-    double dy = y - sat_ecef[s * 3 + 1];
-    double dz = z - sat_ecef[s * 3 + 2];
-    double r = sqrt(dx * dx + dy * dy + dz * dz);
+    double dx, dy, dz, r;
+    sagnac_los(sat_ecef, s, x, y, z, &dx, &dy, &dz, &r);
     double residual = pseudoranges[s] - (r + cb);
     sse += weights[s] * residual * residual;
   }
@@ -62,10 +83,8 @@ static double compute_sse_excluding(const double* sat_ecef, const double* pseudo
   double sse = 0.0;
   for (int s = 0; s < n_sat; s++) {
     if (s == exclude) continue;
-    double dx = x - sat_ecef[s * 3 + 0];
-    double dy = y - sat_ecef[s * 3 + 1];
-    double dz = z - sat_ecef[s * 3 + 2];
-    double r = sqrt(dx * dx + dy * dy + dz * dz);
+    double dx, dy, dz, r;
+    sagnac_los(sat_ecef, s, x, y, z, &dx, &dy, &dz, &r);
     double residual = pseudoranges[s] - (r + cb);
     sse += weights[s] * residual * residual;
   }
@@ -121,10 +140,8 @@ static void compute_protection_levels(const double* sat_ecef, const double* weig
   // Build H^T W H
   double HTWH[16] = {};
   for (int s = 0; s < n_sat; s++) {
-    double dx = x - sat_ecef[s * 3 + 0];
-    double dy = y - sat_ecef[s * 3 + 1];
-    double dz = z - sat_ecef[s * 3 + 2];
-    double r = sqrt(dx * dx + dy * dy + dz * dz);
+    double dx, dy, dz, r;
+    sagnac_los(sat_ecef, s, x, y, z, &dx, &dy, &dz, &r);
     double H[4] = {dx / r, dy / r, dz / r, 1.0};
     double w = weights[s];
     for (int a = 0; a < 4; a++)

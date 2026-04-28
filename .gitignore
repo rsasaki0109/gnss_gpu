@@ -1,5 +1,6 @@
 # Build
 build/
+_cmake_build/
 dist/
 *.egg-info/
 *.so
@@ -33,8 +34,12 @@ tmp/site_visual_check/
 cache/
 
 # Experiment artifacts
+experiments/results/*/
+!experiments/results/paper_assets/
+!experiments/results/paper_assets/**
 experiments/results/*.log
 experiments/results/paper_assets/*.mp4
+experiments/results/gsdc2023_bridge_diag_*.csv
 
 # Experiment data (downloaded, not committed)
 experiments/data/

@@ -154,7 +154,7 @@ def _parse_rinex_obs_values(
 
 
 def read_rinex_obs(filepath: str | Path) -> RinexObs:
-    """Parse a RINEX observation file."""
+    """Parse a RINEX 2.x/3.x observation file."""
     filepath = Path(filepath)
     header = RinexHeader()
     epochs: list[RinexEpoch] = []
@@ -187,59 +187,12 @@ def read_rinex_obs(filepath: str | Path) -> RinexObs:
             break
         idx += 1
 
-    is_rinex2 = header.version < 3.0
+    if header.version < 3.0:
+        return RinexObs(header=header, epochs=_parse_v2_epochs(lines, idx, header))
 
     # Parse epochs
     while idx < len(lines):
         line = lines[idx]
-        if is_rinex2:
-            parts = line[:32].split()
-            if len(parts) < 8:
-                idx += 1
-                continue
-            try:
-                year = _parse_two_digit_year(int(parts[0]))
-                month = int(parts[1])
-                day = int(parts[2])
-                hour = int(parts[3])
-                minute = int(parts[4])
-                sec = float(parts[5])
-                sec_int = int(sec)
-                usec = int(round((sec - sec_int) * 1e6))
-                if usec >= 1_000_000:
-                    sec_int += 1
-                    usec -= 1_000_000
-                epoch_time = datetime(year, month, day, hour, minute, sec_int, usec)
-                epoch_flag = int(parts[6])
-                n_sat = int(parts[7])
-            except (ValueError, IndexError):
-                idx += 1
-                continue
-
-            sat_ids, sat_list_end_idx = _parse_rinex2_satellite_ids(
-                lines,
-                idx,
-                n_sat,
-                header.sat_system or "G",
-            )
-            idx = sat_list_end_idx + 1
-            if epoch_flag > 1:
-                obs_codes = header.obs_types.get(header.sat_system or "G", header.obs_types.get("", []))
-                idx += n_sat * max(1, (len(obs_codes) + 4) // 5)
-                continue
-
-            observations: dict[str, dict[str, float]] = {}
-            for sat_id in sat_ids:
-                sys_char = sat_id[0] if sat_id and not sat_id[0].isdigit() else (header.sat_system or "G")
-                obs_codes = header.obs_types.get(sys_char, header.obs_types.get("", []))
-                sat_obs, idx = _parse_rinex_obs_values(lines, idx, obs_codes)
-                observations[sat_id] = sat_obs
-
-            epochs.append(
-                RinexEpoch(time=epoch_time, satellites=sat_ids, observations=observations)
-            )
-            continue
-
         if not line.startswith(">"):
             idx += 1
             continue
@@ -283,10 +236,19 @@ def read_rinex_obs(filepath: str | Path) -> RinexObs:
 
             sys_char = sat_id[0] if sat_id else ""
             obs_codes = header.obs_types.get(sys_char, [])
+            obs_record = obs_line.rstrip("\n")
+            target_len = 3 + 16 * len(obs_codes)
+            while len(obs_record) < target_len and idx + 1 < len(lines):
+                next_line = lines[idx + 1]
+                next_id = next_line[:3].strip()
+                if next_line.startswith(">") or _looks_like_sat_id(next_id):
+                    break
+                idx += 1
+                obs_record += lines[idx][3:].rstrip("\n")
             sat_obs: dict[str, float] = {}
             pos = 3
             for oc in obs_codes:
-                val_str = obs_line[pos : pos + 14].strip() if pos + 14 <= len(obs_line) else ""
+                val_str = obs_record[pos : pos + 14].strip() if pos + 14 <= len(obs_record) else ""
                 try:
                     sat_obs[oc] = float(val_str) if val_str else 0.0
                 except ValueError:
@@ -299,3 +261,82 @@ def read_rinex_obs(filepath: str | Path) -> RinexObs:
         idx += 1
 
     return RinexObs(header=header, epochs=epochs)
+
+
+def _parse_v2_epochs(lines: list[str], idx: int, header: RinexHeader) -> list[RinexEpoch]:
+    epochs: list[RinexEpoch] = []
+    obs_codes = header.obs_types.get("", [])
+    n_obs_lines = max(1, (len(obs_codes) + 4) // 5)
+
+    while idx < len(lines):
+        line = lines[idx]
+        if not line.strip():
+            idx += 1
+            continue
+
+        try:
+            year = int(line[1:3])
+            year += 2000 if year < 80 else 1900
+            month = int(line[4:6])
+            day = int(line[7:9])
+            hour = int(line[10:12])
+            minute = int(line[13:15])
+            sec = float(line[15:26])
+            sec_int = int(sec)
+            usec = int(round((sec - sec_int) * 1e6))
+            epoch_flag = int(line[28:29])
+            n_sat = int(line[29:32])
+        except (ValueError, IndexError):
+            idx += 1
+            continue
+
+        sat_blob = line[32:].rstrip("\n")
+        while len(sat_blob) < 3 * n_sat and idx + 1 < len(lines):
+            idx += 1
+            sat_blob += lines[idx][32:].rstrip("\n")
+        satellites = [sat_blob[i : i + 3].strip() for i in range(0, 3 * n_sat, 3)]
+        satellites = [_normalize_v2_sat_id(sat) for sat in satellites if sat.strip()]
+
+        observations: dict[str, dict[str, float]] = {}
+        idx += 1
+        if epoch_flag > 1:
+            idx += n_sat * n_obs_lines
+            continue
+
+        for sat_id in satellites:
+            obs_record = ""
+            for _ in range(n_obs_lines):
+                if idx >= len(lines):
+                    break
+                obs_record += lines[idx].rstrip("\n")
+                idx += 1
+
+            sat_obs: dict[str, float] = {}
+            pos = 0
+            for oc in obs_codes:
+                val_str = obs_record[pos : pos + 14].strip() if pos + 14 <= len(obs_record) else ""
+                try:
+                    sat_obs[oc] = float(val_str) if val_str else 0.0
+                except ValueError:
+                    sat_obs[oc] = 0.0
+                pos += 16
+            observations[sat_id] = sat_obs
+
+        epoch_time = datetime(year, month, day, hour, minute, sec_int, usec)
+        epochs.append(RinexEpoch(time=epoch_time, satellites=satellites, observations=observations))
+
+    return epochs
+
+
+def _normalize_v2_sat_id(sat_id: str) -> str:
+    sat_id = sat_id.strip().upper()
+    if not sat_id:
+        return sat_id
+    if sat_id[0].isalpha():
+        return f"{sat_id[0]}{int(sat_id[1:]):02d}" if sat_id[1:].strip().isdigit() else sat_id
+    return f"G{int(sat_id):02d}" if sat_id.isdigit() else sat_id
+
+
+def _looks_like_sat_id(text: str) -> bool:
+    text = text.strip().upper()
+    return len(text) >= 2 and text[0].isalpha() and text[1:].strip().isdigit()
