@@ -1,7 +1,7 @@
 # PPC demo5 FIX-Rate Predictor — Product Deliverable
 
 **Status**: internal research prototype, route-level deliverable
-**Last updated**: 2026-04-24
+**Last updated**: 2026-04-29
 **Adopted model**: §7.16 `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
 
@@ -77,7 +77,15 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 
 ## 4. Inputs, outputs, and files
 
-### Inputs required at training time
+### Inputs required by the product command
+
+- Committed adopted §7.16 window prediction CSV:
+  `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv`.
+  `python3 experiments/predict.py` uses this frozen artifact by default
+  to refresh `route_level_fix_rate_prediction.csv`,
+  `window_level_details.csv`, and `dashboard.html`.
+
+### Inputs required for full retraining
 
 - Processed PPC epoch CSV with `gnss_gpu` simulator features, RINEX
   aggregates, demo5 solver state (for targets), and demo5 actual FIX
@@ -102,6 +110,9 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 - `internal_docs/product_deliverable/dashboard.html` — self-contained
   HTML report (open in a browser) with metrics summary, per-run bar
   chart, actual-vs-predicted scatter, and focus-case detail table.
+- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_window_predictions.csv`
+  — committed frozen §7.16 window prediction artifact used by
+  `experiments/predict.py` in default product mode.
 - `internal_docs/product_deliverable/plots/` — static PNG figures per
   run that overlay the predicted FIX rate onto the actual demo5
   per-epoch FIX/NO-FIX trajectory:
@@ -155,8 +166,9 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   scripts (e.g. `_is_metadata_or_label`).
 - `experiments/build_product_dashboard.py` — script that produces the
   HTML dashboard from those CSVs.
-- `experiments/predict.py` — pipeline runner for fresh input data; see
-  section 6.
+- `experiments/predict.py` — product entrypoint.  Default mode refreshes
+  deliverable outputs from the frozen §7.16 predictions; `--retrain`
+  runs the full LORO pipeline for fresh preprocessed input data.
 
 ## 5. Known failure modes
 
@@ -185,44 +197,36 @@ under `focus_case_tag`.
 
 ## 6. How to reproduce
 
-### From scratch (full retrain + deliverable build)
+### Product refresh from the frozen adopted predictions
 
 ```bash
-# 1. Epoch-level validationhold surrogate
-python3 experiments/augment_ppc_epochs_with_validation_hold_surrogate.py
+python3 experiments/predict.py
+```
 
-# 2. Window-level aggregation
-python3 experiments/analyze_ppc_validation_hold_surrogate_windows.py
+Use `--check-only` for a no-write preflight.  This is the recommended
+operator path from a clean checkout.
 
-# 3. Build window CSV with current_tight_hold preset
-python3 experiments/rebuild_validationhold_flag_thresholds.py \
-  --preset current_tight_hold \
-  --output-csv experiments/results/ppc_validationhold_window_summary_current_tight_hold.csv
-python3 experiments/augment_ppc_windows_with_validationhold_features.py \
-  --validationhold-csv experiments/results/ppc_validationhold_window_summary_current_tight_hold.csv \
-  --output-csv experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_windowopt_validationhold_current_tight_hold_carry_window_predictions.csv
+### From scratch (full retrain + deliverable build)
 
-# 4. Train adopted strict-best model with residual alpha=0.75
-python3 experiments/train_ppc_solver_transition_surrogate_nested_stack.py \
-  --window-csv experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_windowopt_validationhold_current_tight_hold_carry_window_predictions.csv \
-  --base-prefix ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_windowopt_baseerror15_refinedgrid \
-  --classifier-include-run-position \
-  --alphas 0.75 \
-  --residual-clip-pp 50 \
-  --max-run-mae-pp 4.5 \
-  --max-abs-aggregate-error-pp 2.0 \
-  --results-prefix ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45
+The full retrain path requires the large preprocessed epoch/window CSVs
+and refined-grid base prediction CSV, which are not part of the compact
+product deliverable.
 
-# 5. Build deliverable CSVs
-python3 experiments/build_product_deliverable.py
+```bash
+python3 experiments/predict.py \
+  --retrain \
+  --epochs-csv path/to/epochs.csv \
+  --window-csv path/to/window_predictions.csv \
+  --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
+  --results-prefix ppc_..._my_run
 ```
 
 ### Inference on a new epoch CSV
 
-See `experiments/predict.py --help`.  Caveat: the pipeline retrains the
-nested stack from scratch with the new data included as an additional
-LORO outer fold.  True single-model inference requires saving a
-full-data-fit stack, which is not currently implemented.
+See `experiments/predict.py --help`.  Caveat: the current fresh-data
+path retrains the nested stack from scratch with the new data included
+as an additional LORO outer fold.  True single-model inference requires
+saving a full-data-fit stack, which is not currently implemented.
 
 ## 7. Maintainer notes
 
