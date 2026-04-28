@@ -1,6 +1,6 @@
 # PPC FIX-Rate Predictor — Operational Runbook
 
-**Last updated**: 2026-04-24
+**Last updated**: 2026-04-29
 **Target audience**: operator running the predictor on new PPC/taroz data
 **Prerequisites**: familiar with the `gnss_gpu` repository layout and Python 3.12 environment
 
@@ -19,26 +19,35 @@ Run the predictor when any of these happen:
 Do NOT run just because time has passed.  The model is frozen per
 D-030; re-running without new data gives identical output.
 
-## 2. One-shot reproduction (bundled 6-run test set)
+## 2. One-shot product refresh (bundled 6-run test set)
 
 ```bash
 cd /media/sasaki/aiueo/ai_coding_ws/gnss_cuda_sim_ws/gnss_gpu
 python3 experiments/predict.py
-python3 experiments/build_product_dashboard.py  # refresh dashboard.html
 ```
 
-Takes 2-4 minutes.  Outputs land in:
+This is the frozen product path.  It reads the committed adopted §7.16
+window predictions and refreshes the operator-facing outputs.  It
+should finish in a few seconds from a clean checkout.
 
-- `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv`
+Outputs land in:
+
+- `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv` — frozen input artifact
 - `internal_docs/product_deliverable/route_level_fix_rate_prediction.csv`
 - `internal_docs/product_deliverable/window_level_details.csv`
 - `internal_docs/product_deliverable/dashboard.html` — open in a browser
 
-## 3. Running on new data
+For a preflight-only check:
+
+```bash
+python3 experiments/predict.py --check-only
+```
+
+## 3. Full retrain / scoring on new data
 
 ### 3.1 Prerequisites
 
-Before calling `predict.py`, the new run's data must already be
+Before calling `predict.py --retrain`, the new run's data must already be
 preprocessed through the upstream pipeline into:
 
 - an epoch CSV with `gnss_gpu` simulator features, RINEX aggregates,
@@ -55,20 +64,23 @@ This preprocessing is out of scope for this runbook.  See
 
 ```bash
 python3 experiments/predict.py \
+  --retrain \
   --epochs-csv path/to/new_epochs.csv \
   --window-csv path/to/new_window_predictions.csv \
-  --base-prefix <prefix_of_refinedgrid_predictions> \
+  --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
   --results-prefix <custom_prefix_for_this_run>
 ```
 
-All four paths are required when running on new data.
+All four values are required when running on new data.  `--base-prefix`
+accepts either a bare prefix under `experiments/results`, an explicit
+prefix path, or the full `*_window_predictions.csv` path.
 
 ### 3.3 Caveat about LORO retraining
 
-`predict.py` retrains the nested stack from scratch each call.  When
-new runs are included, they participate as additional LORO outer folds.
-This means "prediction for the new run" is produced while the new run
-is held out and the rest of the dataset trains the stack.
+`predict.py --retrain` retrains the nested stack from scratch each call.
+When new runs are included, they participate as additional LORO outer
+folds.  This means "prediction for the new run" is produced while the
+new run is held out and the rest of the dataset trains the stack.
 
 There is no saved single-model artefact.  If runtime becomes a concern,
 refactor `train_ppc_solver_transition_surrogate_nested_stack.py` to
@@ -132,7 +144,7 @@ Per D-030 / D-033:
 
 - ≤ 1-2 new runs: do nothing.  Expect prediction quality to match the
   reported metrics.
-- 3-9 new runs: re-run `predict.py`, check whether aggregate metrics
+- 3-9 new runs: re-run `predict.py --retrain`, check whether aggregate metrics
   stay within the documented ranges (run MAE ~3.2 pp, corr ~0.55).
 - ≥ 10 new runs: re-scan the `hold_ready_thr` dimension
   (§7.13 / §7.14) and the residual alpha (§7.16).  The current
@@ -147,7 +159,8 @@ Per D-030 / D-033:
 
 | Path | Purpose |
 | --- | --- |
-| `experiments/predict.py` | pipeline entrypoint |
+| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--retrain` runs the full LORO pipeline |
+| `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv` | committed adopted §7.16 window predictions used by default product mode |
 | `experiments/build_product_deliverable.py` | deliverable CSV builder |
 | `experiments/build_product_dashboard.py` | HTML dashboard renderer |
 | `internal_docs/product_deliverable/dashboard.html` | generated dashboard (open in browser) |
@@ -173,8 +186,9 @@ Per D-030 / D-033:
 
 - The nested stack is randomness-sensitive via `--random-state`
   (default 2034).  If you need deterministic reruns on the same data,
-  keep the default and do not pass `--random-state` on the command
-  line.
+  keep the default and do not pass `--random-state` on the command line.
+  This only applies to `predict.py --retrain`; the default frozen
+  product flow is deterministic and does not train.
 - The `rebuild_validationhold_flag_thresholds.py` script overwrites
   its output CSV silently.  If you experiment with alternate presets,
   name the output files explicitly and do not point them at the

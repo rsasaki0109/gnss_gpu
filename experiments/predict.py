@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""Product-mode pipeline runner for the adopted §7.16 FIX-rate predictor.
+"""Product-mode runner for the adopted §7.16 FIX-rate predictor.
 
-This wrapper chains the four pipeline steps that produce the adopted
-`transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
-predictions.  The default behaviour reproduces the adopted outputs on
-the bundled 6-run test set.  For new data, pass `--epochs-csv` and
-`--window-csv` pointing at your preprocessed inputs; the pipeline will
-include them as additional LORO outer folds.
+The default mode is the frozen product inference flow: it rebuilds the
+route/window deliverable CSVs and dashboard from the committed adopted
+§7.16 window predictions.  This works from a clean checkout and is the
+operator-facing one-command path.
 
-Caveat: the nested stack uses strict leave-one-run-out validation, so a
-"prediction" for a new run means that run is held out while the rest of
-the dataset trains the stack.  There is no single pretrained model
-artefact saved to disk; the stack is retrained end-to-end each call.
-Total runtime is typically 2-4 minutes on the bundled 6-run dataset.
+`--retrain` runs the research/training pipeline that created the adopted
+predictions.  It requires the large preprocessed epoch/window CSVs and a
+refined-grid base prediction CSV.  The nested stack uses strict
+leave-one-run-out validation, so a "prediction" for a new run means that
+run is held out while the rest of the dataset trains the stack.
 
-Usage (default: reproduce bundled outputs):
+Usage (default: refresh product deliverables from frozen predictions):
 
     python3 experiments/predict.py
 
-Usage (with new data):
+Usage (full LORO retrain with new preprocessed data):
 
     python3 experiments/predict.py \\
+        --retrain \\
         --epochs-csv path/to/new_epochs.csv \\
         --window-csv path/to/new_window_predictions.csv \\
+        --base-prefix path/to/refinedgrid_prefix \\
         --results-prefix ppc_..._my_run
 """
 
@@ -32,11 +32,12 @@ import argparse
 import subprocess
 import sys
 import time
+from csv import DictReader
 from datetime import datetime
 from pathlib import Path
 
 
-_stage_counter = {"current": 0, "total": 5, "started": None}
+_stage_counter = {"current": 0, "total": 1, "started": None}
 
 
 EXPERIMENTS_DIR = Path(__file__).resolve().parent
@@ -57,6 +58,43 @@ DEFAULT_PRESET = "current_tight_hold"
 DEFAULT_RESULTS_PREFIX = (
     "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45"
 )
+DEFAULT_PREDICTION_CSV = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_window_predictions.csv"
+DEFAULT_OUTPUT_DIR = EXPERIMENTS_DIR.parent / "internal_docs" / "product_deliverable"
+
+PREDICTION_REQUIRED_COLUMNS = {
+    "city",
+    "run",
+    "window_index",
+    "sim_matched_epochs",
+    "actual_fix_rate_pct",
+    "base_pred_fix_rate_pct",
+    "corrected_pred_fix_rate_pct",
+}
+BASE_PREDICTION_REQUIRED_COLUMNS = {
+    "city",
+    "run",
+    "window_index",
+}
+BASE_PREDICTION_VALUE_COLUMNS = {
+    "corrected_pred_fix_rate_pct",
+    "pred_fix_rate_pct",
+}
+
+EPOCH_REQUIRED_COLUMNS = {
+    "city",
+    "run",
+    "gps_tow",
+}
+
+WINDOW_REQUIRED_COLUMNS = {
+    "city",
+    "run",
+    "window_index",
+    "window_start_tow",
+    "window_end_tow",
+    "actual_fix_rate_pct",
+    "base_pred_fix_rate_pct",
+}
 
 
 def _timestamp() -> str:
@@ -67,18 +105,18 @@ def stage(label: str) -> None:
     _stage_counter["current"] += 1
     _stage_counter["started"] = time.monotonic()
     elapsed = ""
-    print(f"\n[{_timestamp()}] [{_stage_counter['current']}/{_stage_counter['total']}] {label}{elapsed}")
+    print(f"\n[{_timestamp()}] [{_stage_counter['current']}/{_stage_counter['total']}] {label}{elapsed}", flush=True)
 
 
 def stage_done() -> None:
     if _stage_counter["started"] is None:
         return
     dt = time.monotonic() - _stage_counter["started"]
-    print(f"[{_timestamp()}] [{_stage_counter['current']}/{_stage_counter['total']}] done in {dt:.1f}s")
+    print(f"[{_timestamp()}] [{_stage_counter['current']}/{_stage_counter['total']}] done in {dt:.1f}s", flush=True)
 
 
 def run(cmd: list[str]) -> None:
-    print(f"  $ {' '.join(cmd)}")
+    print(f"  $ {' '.join(cmd)}", flush=True)
     result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         sys.exit(result.returncode)
@@ -94,8 +132,91 @@ def _require(path: Path, producer: str) -> None:
         sys.exit(1)
 
 
+def _read_columns(path: Path) -> set[str]:
+    with path.open(newline="", encoding="utf-8") as fh:
+        reader = DictReader(fh)
+        return set(reader.fieldnames or [])
+
+
+def _require_input(path: Path, label: str, required_columns: set[str] | None = None) -> None:
+    if not path.exists():
+        sys.stderr.write(f"\nERROR: missing {label}:\n  {path}\n")
+        sys.exit(1)
+    if required_columns is None:
+        return
+    columns = _read_columns(path)
+    missing = sorted(required_columns - columns)
+    if missing:
+        sys.stderr.write(
+            f"\nERROR: {label} is missing required columns:\n"
+            f"  {path}\n"
+            f"  missing: {', '.join(missing)}\n"
+        )
+        sys.exit(1)
+
+
+def _require_base_prediction(path: Path) -> None:
+    _require_input(path, "refined-grid base prediction CSV", BASE_PREDICTION_REQUIRED_COLUMNS)
+    columns = _read_columns(path)
+    if not (BASE_PREDICTION_VALUE_COLUMNS & columns):
+        sys.stderr.write(
+            "\nERROR: refined-grid base prediction CSV needs one prediction column:\n"
+            f"  {path}\n"
+            f"  expected one of: {', '.join(sorted(BASE_PREDICTION_VALUE_COLUMNS))}\n"
+        )
+        sys.exit(1)
+
+
+def _base_prediction_path(base_prefix: str) -> Path:
+    """Resolve a refined-grid base prediction prefix or CSV path."""
+    path = Path(base_prefix)
+    if path.suffix == ".csv":
+        return path
+    if path.is_absolute() or path.parent != Path("."):
+        return path.with_name(f"{path.name}_window_predictions.csv")
+    return RESULTS_DIR / f"{base_prefix}_window_predictions.csv"
+
+
+def _planned_stage_count(args: argparse.Namespace) -> int:
+    if not args.retrain:
+        return 1
+    total = 1  # threshold preset + window augmentation always runs in retrain mode
+    if not args.skip_epoch_augment:
+        total += 1
+    if not args.skip_window_aggregate:
+        total += 1
+    if not args.skip_training:
+        total += 1
+    if not args.skip_deliverable:
+        total += 1
+    return total
+
+
+def _preflight_frozen(args: argparse.Namespace) -> None:
+    _require_input(args.prediction_csv, "frozen adopted prediction CSV", PREDICTION_REQUIRED_COLUMNS)
+
+
+def _preflight_retrain(args: argparse.Namespace, summary_csv: Path, epochs_out_csv: Path) -> None:
+    if not args.skip_epoch_augment:
+        _require_input(args.epochs_csv, "epoch input CSV", EPOCH_REQUIRED_COLUMNS)
+    elif not args.skip_window_aggregate:
+        _require_input(epochs_out_csv, "existing validationhold epoch CSV")
+    if not args.skip_window_aggregate or not args.skip_training:
+        _require_input(args.window_csv, "window input CSV", WINDOW_REQUIRED_COLUMNS)
+    if args.skip_window_aggregate:
+        _require_input(summary_csv, "existing validationhold window summary CSV")
+    if not args.skip_training:
+        _require_base_prediction(_base_prediction_path(args.base_prefix))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the adopted §7.16 FIX-rate prediction pipeline")
+    parser.add_argument("--retrain", action="store_true",
+                        help="run the full LORO training pipeline instead of the frozen product flow")
+    parser.add_argument("--prediction-csv", type=Path, default=DEFAULT_PREDICTION_CSV,
+                        help="adopted window prediction CSV used by the frozen product flow")
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR,
+                        help="directory for route/window deliverable CSVs and dashboard")
     parser.add_argument("--epochs-csv", type=Path, default=DEFAULT_EPOCHS_CSV)
     parser.add_argument("--window-csv", type=Path, default=DEFAULT_WINDOW_CSV)
     parser.add_argument("--base-prefix", default=DEFAULT_BASE_PREFIX)
@@ -107,6 +228,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-window-aggregate", action="store_true")
     parser.add_argument("--skip-training", action="store_true")
     parser.add_argument("--skip-deliverable", action="store_true")
+    parser.add_argument("--skip-dashboard", action="store_true",
+                        help="do not regenerate dashboard.html when building deliverables")
+    parser.add_argument("--check-only", action="store_true",
+                        help="validate required inputs and exit without writing outputs")
     return parser.parse_args()
 
 
@@ -121,7 +246,35 @@ def main() -> None:
 
     epochs_out_csv = RESULTS_DIR / "ppc_demo5_fix_rate_compare_fullsim_stride1_phase_proxy_stat_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_validationhold_epochs.csv"
 
+    _stage_counter["current"] = 0
+    _stage_counter["total"] = _planned_stage_count(args)
+    _stage_counter["started"] = None
     overall_start = time.monotonic()
+
+    if not args.retrain:
+        _preflight_frozen(args)
+        if args.check_only:
+            print(f"preflight ok: frozen product flow can use {args.prediction_csv}")
+            return
+        stage("build product deliverable CSVs + dashboard from frozen predictions")
+        cmd = [
+            sys.executable,
+            str(EXPERIMENTS_DIR / "build_product_deliverable.py"),
+            "--prediction-csv", str(args.prediction_csv),
+            "--output-dir", str(args.output_dir),
+        ]
+        if args.skip_dashboard:
+            cmd.append("--skip-dashboard")
+        run(cmd)
+        stage_done()
+        total_dt = time.monotonic() - overall_start
+        print(f"\n[{_timestamp()}] frozen product flow finished in {total_dt:.1f}s")
+        return
+
+    _preflight_retrain(args, summary_csv, epochs_out_csv)
+    if args.check_only:
+        print("preflight ok: retrain inputs are present")
+        return
 
     # 1. Epoch-level validationhold surrogate
     if not args.skip_epoch_augment:
@@ -193,6 +346,8 @@ def main() -> None:
             sys.executable,
             str(EXPERIMENTS_DIR / "build_product_deliverable.py"),
             "--prediction-csv", str(pred_csv),
+            "--output-dir", str(args.output_dir),
+            *(["--skip-dashboard"] if args.skip_dashboard else []),
         ])
         stage_done()
 
