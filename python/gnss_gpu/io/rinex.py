@@ -243,8 +243,6 @@ def read_rinex_obs(filepath: str | Path) -> RinexObs:
                 next_id = next_line[:3].strip()
                 if next_line.startswith(">") or _looks_like_sat_id(next_id):
                     break
-                if idx + 1 >= len(lines):
-                    break
                 idx += 1
                 obs_record += lines[idx][3:].rstrip("\n")
             sat_obs: dict[str, float] = {}
@@ -337,3 +335,8 @@ def _normalize_v2_sat_id(sat_id: str) -> str:
     if sat_id[0].isalpha():
         return f"{sat_id[0]}{int(sat_id[1:]):02d}" if sat_id[1:].strip().isdigit() else sat_id
     return f"G{int(sat_id):02d}" if sat_id.isdigit() else sat_id
+
+
+def _looks_like_sat_id(text: str) -> bool:
+    text = text.strip().upper()
+    return len(text) >= 2 and text[0].isalpha() and text[1:].strip().isdigit()
