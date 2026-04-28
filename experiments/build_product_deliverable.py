@@ -36,6 +36,15 @@ DEFAULT_PRED_CSV = (
     RESULTS_DIR
     / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_window_predictions.csv"
 )
+REQUIRED_PREDICTION_COLUMNS = {
+    "city",
+    "run",
+    "window_index",
+    "sim_matched_epochs",
+    "actual_fix_rate_pct",
+    "base_pred_fix_rate_pct",
+    "corrected_pred_fix_rate_pct",
+}
 
 # Threshold-based focus-case classification.  Applied per window to every
 # input row; no hardcoded window-index list, so new runs with similar
@@ -100,6 +109,15 @@ def _confidence_tier(tags: list[str]) -> tuple[str, str]:
     return "high", "no material focus-case windows"
 
 
+def _require_prediction_columns(df: pd.DataFrame, path: Path) -> None:
+    missing = sorted(REQUIRED_PREDICTION_COLUMNS - set(df.columns))
+    if missing:
+        raise SystemExit(
+            f"prediction CSV is missing required columns: {', '.join(missing)}\n"
+            f"path: {path}"
+        )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build product deliverable CSVs")
     parser.add_argument("--prediction-csv", type=Path, default=DEFAULT_PRED_CSV)
@@ -139,6 +157,7 @@ def main() -> None:
         "reject_base_pct": args.reject_base_pct,
     }
     df = pd.read_csv(args.prediction_csv)
+    _require_prediction_columns(df, args.prediction_csv)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -162,7 +181,7 @@ def main() -> None:
     window_df = pd.DataFrame(window_rows)
     window_path = args.output_dir / "window_level_details.csv"
     window_df.to_csv(window_path, index=False)
-    print(f"saved: {window_path} ({len(window_df)} rows)")
+    print(f"saved: {window_path} ({len(window_df)} rows)", flush=True)
 
     tags_by_run = window_df.groupby(["city", "run"])["focus_case_tag"].apply(lambda s: [t for t in s if t]).to_dict()
 
@@ -195,23 +214,36 @@ def main() -> None:
     route_df = pd.DataFrame(route_rows)
     route_path = args.output_dir / "route_level_fix_rate_prediction.csv"
     route_df.to_csv(route_path, index=False)
-    print(f"saved: {route_path} ({len(route_df)} rows)")
+    print(f"saved: {route_path} ({len(route_df)} rows)", flush=True)
 
     # summary stats
-    print("\nRoute-level summary (adopted §7.16):")
-    print(route_df[["city", "run", "window_count", "actual_fix_rate_pct", "adopted_pred_fix_rate_pct", "adopted_abs_error_pp", "confidence_tier"]].to_string(index=False))
+    print("\nRoute-level summary (adopted §7.16):", flush=True)
+    print(
+        route_df[
+            [
+                "city",
+                "run",
+                "window_count",
+                "actual_fix_rate_pct",
+                "adopted_pred_fix_rate_pct",
+                "adopted_abs_error_pp",
+                "confidence_tier",
+            ]
+        ].to_string(index=False),
+        flush=True,
+    )
 
     overall_actual = float(np.average(window_df["actual_fix_rate_pct"], weights=df["sim_matched_epochs"].fillna(1.0).clip(lower=1.0)))
     overall_pred = float(np.average(window_df["adopted_pred_fix_rate_pct"], weights=df["sim_matched_epochs"].fillna(1.0).clip(lower=1.0)))
-    print(f"\nOverall actual FIX rate: {overall_actual:.3f} %")
-    print(f"Overall adopted prediction: {overall_pred:.3f} %")
-    print(f"Overall aggregate error: {overall_pred - overall_actual:+.3f} pp")
+    print(f"\nOverall actual FIX rate: {overall_actual:.3f} %", flush=True)
+    print(f"Overall adopted prediction: {overall_pred:.3f} %", flush=True)
+    print(f"Overall aggregate error: {overall_pred - overall_actual:+.3f} pp", flush=True)
 
     # Regenerate the dashboard HTML unless the operator opted out.
     if not args.skip_dashboard:
         dashboard_script = EXPERIMENTS_DIR / "build_product_dashboard.py"
         if dashboard_script.exists():
-            print("\nregenerating dashboard.html...")
+            print("\nregenerating dashboard.html...", flush=True)
             result = subprocess.run(
                 [sys.executable, str(dashboard_script),
                  "--route-csv", str(route_path),
@@ -220,9 +252,9 @@ def main() -> None:
                 check=False,
             )
             if result.returncode != 0:
-                print("WARNING: dashboard regeneration failed; CSVs are still up to date")
+                print("WARNING: dashboard regeneration failed; CSVs are still up to date", flush=True)
         else:
-            print("note: build_product_dashboard.py not found; skipping dashboard regeneration")
+            print("note: build_product_dashboard.py not found; skipping dashboard regeneration", flush=True)
 
 
 if __name__ == "__main__":

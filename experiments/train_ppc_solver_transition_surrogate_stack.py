@@ -65,8 +65,23 @@ def _key_frame(df: pd.DataFrame) -> pd.Series:
     return df["city"].astype(str) + "\t" + df["run"].astype(str) + "\t" + df["window_index"].astype(int).astype(str)
 
 
+def _reference_prediction_path(prefix: str) -> Path:
+    """Resolve a base prediction prefix.
+
+    Historical experiments pass a bare prefix under `experiments/results`.
+    Product runs may pass either an absolute/relative prefix path or the CSV
+    path itself.
+    """
+    path = Path(prefix)
+    if path.suffix == ".csv":
+        return path
+    if path.is_absolute() or path.parent != Path("."):
+        return path.with_name(f"{path.name}_window_predictions.csv")
+    return RESULTS_DIR / f"{prefix}_window_predictions.csv"
+
+
 def _read_reference_predictions(prefix: str, prediction_column: str) -> dict[str, float]:
-    path = RESULTS_DIR / f"{prefix}_window_predictions.csv"
+    path = _reference_prediction_path(prefix)
     rows = pd.read_csv(path)
     requested = prediction_column
     if prediction_column not in rows.columns:
