@@ -96,3 +96,40 @@ def test_rinex2_observation_epochs(tmp_path):
     assert obs.epochs[0].time.year == 2023
     assert obs.epochs[0].satellites == ["G01", "G02", "G11"]
     assert obs.epochs[0].observations["G02"]["C1"] == 20200002.0
+
+
+def test_rinex3_long_observation_rows_do_not_consume_next_satellite(tmp_path):
+    def _header(body, label):
+        return f"{body:<60}{label}\n"
+
+    def _field(value):
+        return f"{value:14.3f}  "
+
+    obs_types = [
+        "C1C", "L1C", "D1C", "S1C",
+        "C2W", "L2W", "D2W", "S2W",
+        "C5Q", "L5Q", "D5Q", "S5Q",
+    ]
+    rinex_path = tmp_path / "long_rows.obs"
+    rinex_path.write_text(
+        "".join(
+            [
+                _header("     3.04           OBSERVATION DATA    G", "RINEX VERSION / TYPE"),
+                _header(f"G   {len(obs_types):2d} " + " ".join(obs_types), "SYS / # / OBS TYPES"),
+                _header("", "END OF HEADER"),
+                "> 2024 07 20 09 52 30.0000000  0  2\n",
+                "G10" + "".join(_field(v) for v in range(1, 13)) + "\n",
+                "G15" + "".join(_field(v) for v in range(101, 113)) + "\n",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    obs = read_rinex_obs(rinex_path)
+
+    assert len(obs.epochs) == 1
+    assert obs.epochs[0].satellites == ["G10", "G15"]
+    assert obs.epochs[0].observations["G10"]["C1C"] == 1.0
+    assert obs.epochs[0].observations["G10"]["S5Q"] == 12.0
+    assert obs.epochs[0].observations["G15"]["C1C"] == 101.0
+    assert obs.epochs[0].observations["G15"]["S5Q"] == 112.0

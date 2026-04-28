@@ -5,7 +5,7 @@ Validates that:
    accuracy envelope.
 2. FGO with RTKLIB varerr weights stays close to RTKLIB rnx2rtkp SPP on matched
    epochs.
-3. The legacy ``correct_pseudoranges`` path remains tracked as known debt.
+3. The legacy ``correct_pseudoranges`` path gives the known ~36 m RMS gap.
 4. ``export_spp_meas`` CSV output has the expected schema (el_rad, var_total).
 
 Datasets are parametrized so future RINEX clips can be added to ``DATASETS``.
@@ -322,13 +322,6 @@ def test_fgo_rtklib_weight_consistency(ds):
 # ===================================================================
 
 @pytest.mark.slow
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Legacy gnss_gpu RINEX/correct_pseudoranges path currently diverges "
-        "from the RTKLIB-export path; keep this as explicit follow-up debt."
-    ),
-)
 @pytest.mark.parametrize("ds", DATASETS, ids=[d["name"] for d in DATASETS])
 def test_legacy_spp_path(ds):
     """Legacy correct_pseudoranges path should give ~36 m RMS (known model gap)."""
