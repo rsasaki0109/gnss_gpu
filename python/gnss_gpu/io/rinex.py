@@ -162,10 +162,12 @@ def read_rinex_obs(filepath: str | Path) -> RinexObs:
 
             sys_char = sat_id[0] if sat_id else ""
             obs_codes = header.obs_types.get(sys_char, [])
-            n_obs_lines = max(1, (len(obs_codes) + 4) // 5)
-            obs_record = obs_line
-            for _cont in range(1, n_obs_lines):
-                if idx + 1 >= len(lines):
+            obs_record = obs_line.rstrip("\n")
+            target_len = 3 + 16 * len(obs_codes)
+            while len(obs_record) < target_len and idx + 1 < len(lines):
+                next_line = lines[idx + 1]
+                next_id = next_line[:3].strip()
+                if next_line.startswith(">") or _looks_like_sat_id(next_id):
                     break
                 idx += 1
                 obs_record += lines[idx][3:].rstrip("\n")
@@ -259,3 +261,8 @@ def _normalize_v2_sat_id(sat_id: str) -> str:
     if sat_id[0].isalpha():
         return f"{sat_id[0]}{int(sat_id[1:]):02d}" if sat_id[1:].strip().isdigit() else sat_id
     return f"G{int(sat_id):02d}" if sat_id.isdigit() else sat_id
+
+
+def _looks_like_sat_id(text: str) -> bool:
+    text = text.strip().upper()
+    return len(text) >= 2 and text[0].isalpha() and text[1:].strip().isdigit()
