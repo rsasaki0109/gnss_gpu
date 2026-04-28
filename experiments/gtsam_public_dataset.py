@@ -381,6 +381,20 @@ def build_public_gtsam_arrays(
         pseudorange[t, :ns] = pr_row[:ns]
         raw_weights[t, :ns] = w_row[:ns]
 
+    valid_epoch = np.count_nonzero(raw_weights > 0.0, axis=1) >= 4
+    if not np.all(valid_epoch):
+        sat_ecef = sat_ecef[valid_epoch]
+        pseudorange = pseudorange[valid_epoch]
+        raw_weights = raw_weights[valid_epoch]
+        epochs_data = [
+            epoch for epoch, keep in zip(epochs_data, valid_epoch, strict=False) if keep
+        ]
+        if sys_kind_arr is not None:
+            sys_kind_arr = sys_kind_arr[valid_epoch]
+        n_epoch = len(epochs_data)
+        if n_epoch < 5:
+            raise RuntimeError("Not enough epochs with >=4 weighted observations.")
+
     ref_tow, ref_ecef = load_reference_csv(ref_p)
     return PublicGtsamBatch(
         data_dir=data_dir,
