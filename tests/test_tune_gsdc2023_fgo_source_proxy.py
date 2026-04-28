@@ -9,6 +9,7 @@ from experiments.tune_gsdc2023_fgo_source_proxy import (
     candidate_thresholds,
     dataset_summary,
     evaluate_conditions,
+    filter_rules,
     search_rules,
 )
 
@@ -52,6 +53,18 @@ def test_evaluate_conditions_scores_fgo_selection_gain() -> None:
     assert result.loo_min_gain_score_m == pytest.approx(1.0)
 
 
+def test_evaluate_conditions_omits_loo_for_single_group() -> None:
+    frame = _chunks()
+    frame["trip_slug"] = "a"
+    condition = Condition("fgo_candidate_quality_score", "<=", 0.6)
+
+    result = evaluate_conditions(frame, (condition,), group_column="trip_slug")
+
+    assert result.gain_score_m == 2.0
+    assert result.loo_min_gain_score_m is None
+    assert result.loo_mean_gain_score_m is None
+
+
 def test_search_rules_ranks_positive_gain_rules_first() -> None:
     results = search_rules(
         _chunks(),
@@ -64,6 +77,22 @@ def test_search_rules_ranks_positive_gain_rules_first() -> None:
     assert results[0].gain_score_m == 2.0
     assert results[0].false_positive_chunks == 0
     assert "fgo_candidate_quality_score" in results[0].payload()["rule"]
+
+
+def test_filter_rules_limits_false_positives_and_selection_count() -> None:
+    results = search_rules(
+        _chunks(),
+        features=("fgo_candidate_quality_score", "fgo_candidate_gap_p95_m"),
+        max_cuts_per_feature=8,
+        max_conditions=2,
+        group_column="trip_slug",
+    )
+
+    filtered = filter_rules(results, min_selected_chunks=2, max_false_positive_chunks=0)
+
+    assert filtered
+    assert all(result.selected_chunks >= 2 for result in filtered)
+    assert all(result.false_positive_chunks == 0 for result in filtered)
 
 
 def test_dataset_summary_reports_oracle_gain() -> None:
