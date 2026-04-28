@@ -34,6 +34,36 @@ def _geometric_range_sagnacrcv(xyz: np.ndarray, sat: np.ndarray) -> float:
     return float(np.sqrt(dx * dx + dy_v * dy_v + dz * dz))
 
 
+def _geometric_range_rate_sagnac(
+    rx: np.ndarray,
+    sat: np.ndarray,
+    rv: np.ndarray,
+    sat_vel: np.ndarray,
+) -> float:
+    delta = sat - rx
+    ranges = float(np.linalg.norm(delta))
+    los = delta / ranges
+    euclidean_rate = float(np.dot(los, sat_vel - rv))
+    sagnac_rate = OMEGA_E * (
+        sat_vel[0] * rx[1]
+        + sat[0] * rv[1]
+        - sat_vel[1] * rx[0]
+        - sat[1] * rv[0]
+    ) / C_LIGHT
+    return float(euclidean_rate - sagnac_rate)
+
+
+def _doppler_model_sagnac(
+    rx: np.ndarray,
+    sat: np.ndarray,
+    rv: np.ndarray,
+    sat_vel: np.ndarray,
+    drift: float,
+    sat_clock_drift: float = 0.0,
+) -> float:
+    return float(drift - (_geometric_range_rate_sagnac(rx, sat, rv, sat_vel) - sat_clock_drift))
+
+
 def _assemble_pr_h_g(
     sat_ecef: np.ndarray,
     pseudorange: np.ndarray,
@@ -329,6 +359,41 @@ def test_fgo_zero_residual_stationary():
     assert step < 1e-4
 
 
+def test_fgo_accepts_matlab_seven_signal_clocks():
+    rng = np.random.Generator(np.random.PCG64(7007))
+    n_epoch, n_sat, nc = 1, 10, 7
+    true = np.array([-3.81e6, 3.51e6, 3.64e6], dtype=np.float64)
+    clocks = np.array([120.0, 4.0, -7.0, 3.0, 11.0, -5.0, 2.0], dtype=np.float64)
+    sys_kind = np.array([[0, 1, 2, 3, 4, 5, 6, 0, 4, 5]], dtype=np.int32)
+    sat = rng.normal(0.0, 5e6, (n_epoch, n_sat, 3))
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for s in range(n_sat):
+        hc = np.zeros(nc, dtype=np.float64)
+        _fill_hc(nc, int(sys_kind[0, s]), hc)
+        pr[0, s] = _geometric_range_sagnacrcv(true, sat[0, s]) + float(np.dot(hc, clocks))
+    w = np.ones((n_epoch, n_sat), dtype=np.float64) * 0.3
+    st = np.zeros((n_epoch, 3 + nc), dtype=np.float64)
+    st[0, :3] = true
+    st[0, 3:] = clocks
+
+    st2 = st.copy()
+    iters, _ = fgo_gnss_lm(
+        sat,
+        pr,
+        w,
+        st2,
+        motion_sigma_m=0.0,
+        max_iter=1,
+        tol=0.0,
+        enable_line_search=0,
+        sys_kind=sys_kind,
+        n_clock=nc,
+    )
+
+    assert iters == 1
+    np.testing.assert_allclose(st2, st, atol=1e-4)
+
+
 def test_fgo_rejects_oversized_window():
     n_epoch = 2050
     n_sat = 4
@@ -514,6 +579,74 @@ def test_fgo_vd_motion_factor():
 
 
 @pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_motion_factor_reduces_standalone_residual():
+    """Standalone VD motion factor must move along the cost-reducing direction."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd = 7 + nc
+    sat = np.ones((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    dt = np.array([1.0, 0.0], dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[0, 3] = 1.0
+
+    before = float(state[0, 0] + state[0, 3] * dt[0] - state[1, 0])
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.1,
+        clock_drift_sigma_m=0.0,
+        max_iter=5,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+    )
+
+    after = float(state[0, 0] + state[0, 3] * dt[0] - state[1, 0])
+    assert iters > 0
+    assert abs(after) < abs(before) * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_clock_drift_factor_reduces_standalone_residual():
+    """Standalone clock drift factor must reduce c_t - c_t1 + drift*dt."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd = 7 + nc
+    sat = np.ones((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    dt = np.array([1.0, 0.0], dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[0, 6 + nc] = 1.0
+
+    before = float(state[0, 6] - state[1, 6] + state[0, 6 + nc] * dt[0])
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.1,
+        max_iter=5,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+    )
+
+    after = float(state[0, 6] - state[1, 6] + state[0, 6 + nc] * dt[0])
+    assert iters > 0
+    assert abs(after) < abs(before) * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
 def test_fgo_vd_doppler_constrains_velocity():
     """Doppler factor modifies velocity state (different from no-Doppler baseline)."""
     rng = np.random.Generator(np.random.PCG64(123))
@@ -533,10 +666,9 @@ def test_fgo_vd_doppler_constrains_velocity():
     for t in range(n_epoch):
         for s in range(n_sat):
             pr[t, s] = _geometric_range_sagnacrcv(true_pos, sat[t, s]) + true_clk
-            dx = true_pos - sat[t, s]
-            r = np.linalg.norm(dx)
-            e = dx / r
-            dop[t, s] = np.dot(e, sat_vel[t, s] - true_vel) + true_drift
+            dop[t, s] = _doppler_model_sagnac(
+                true_pos, sat[t, s], true_vel, sat_vel[t, s], true_drift
+            )
 
     pr += rng.normal(0, 2.0, pr.shape)
     dop += rng.normal(0, 0.3, dop.shape)
@@ -588,6 +720,94 @@ def test_fgo_vd_doppler_constrains_velocity():
     assert vel_change_with_dop > 0.1, (
         f"Doppler should change velocity: max change = {vel_change_with_dop:.4f}"
     )
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_doppler_uses_sagnac_range_rate():
+    rng = np.random.Generator(np.random.PCG64(321))
+    n_epoch, n_sat, nc = 1, 8, 1
+    ss_vd = 7 + nc
+    true_pos = np.array([2.3e6, -4.1e6, 4.2e6], dtype=np.float64)
+    true_vel = np.array([14.0, -8.0, 3.0], dtype=np.float64)
+    true_drift = -0.45
+
+    directions = rng.normal(size=(n_sat, 3))
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    sat = (directions * 2.65e7).reshape(n_epoch, n_sat, 3).astype(np.float64)
+    # Large synthetic satellite velocities make the range-rate Sagnac term observable.
+    sat_vel = rng.normal(0.0, 4.0e4, (n_epoch, n_sat, 3)).astype(np.float64)
+
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w_pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    dop = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for s in range(n_sat):
+        dop[0, s] = _doppler_model_sagnac(
+            true_pos, sat[0, s], true_vel, sat_vel[0, s], true_drift
+        )
+    w_dop = np.ones((n_epoch, n_sat), dtype=np.float64) * 1e6
+
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[0, :3] = true_pos
+    state[0, 3:6] = true_vel + np.array([3.0, -2.0, 1.0], dtype=np.float64)
+    state[0, 7] = true_drift + 0.8
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat, pr, w_pr, state,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=5, tol=1e-10, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1,
+        sat_vel=sat_vel, doppler=dop, doppler_weights=w_dop,
+    )
+    assert iters > 0
+    assert np.linalg.norm(state[0, 3:6] - true_vel) < 1e-3
+    assert abs(state[0, 7] - true_drift) < 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_doppler_uses_satellite_clock_drift():
+    rng = np.random.Generator(np.random.PCG64(654))
+    n_epoch, n_sat, nc = 1, 9, 1
+    ss_vd = 7 + nc
+    true_pos = np.array([2.1e6, -4.3e6, 4.0e6], dtype=np.float64)
+    true_vel = np.array([7.0, -4.0, 2.5], dtype=np.float64)
+    true_drift = 0.25
+
+    directions = rng.normal(size=(n_sat, 3))
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    sat = (directions * 2.58e7).reshape(n_epoch, n_sat, 3).astype(np.float64)
+    sat_vel = rng.normal(0.0, 3.0e3, (n_epoch, n_sat, 3)).astype(np.float64)
+    sat_clock_drift = np.linspace(-1.2, 1.4, n_sat, dtype=np.float64).reshape(n_epoch, n_sat)
+
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w_pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    dop = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for s in range(n_sat):
+        dop[0, s] = _doppler_model_sagnac(
+            true_pos,
+            sat[0, s],
+            true_vel,
+            sat_vel[0, s],
+            true_drift,
+            sat_clock_drift[0, s],
+        )
+    w_dop = np.ones((n_epoch, n_sat), dtype=np.float64) * 1e5
+
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[0, :3] = true_pos
+    state[0, 3:6] = true_vel + np.array([2.0, -1.0, 0.5], dtype=np.float64)
+    state[0, 7] = true_drift - 0.6
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat, pr, w_pr, state,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=5, tol=1e-10, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1,
+        sat_vel=sat_vel, doppler=dop, doppler_weights=w_dop,
+        sat_clock_drift=sat_clock_drift,
+    )
+    assert iters > 0
+    assert np.linalg.norm(state[0, 3:6] - true_vel) < 1e-3
+    assert abs(state[0, 7] - true_drift) < 1e-3
 
 
 @pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
@@ -654,6 +874,96 @@ def test_fgo_vd_clock_drift_factor():
         assert err_vd < err_old + 10.0, (
             f"Epoch {t}: VD error {err_vd:.1f}m vs old {err_old:.1f}m"
         )
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_stop_velocity_factor_zeroes_stopped_epochs():
+    rng = np.random.Generator(np.random.PCG64(505))
+    n_epoch, n_sat, nc = 5, 8, 1
+    ss_vd = 7 + nc
+    sat = rng.normal(0, 5e6, (n_epoch, n_sat, 3))
+    true_pos = np.array([-3.8e6, 3.5e6, 3.6e6], dtype=np.float64)
+    true_clk = 150.0
+
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pr[t, s] = _geometric_range_sagnacrcv(true_pos, sat[t, s]) + true_clk
+    pr += rng.normal(0, 2.0, pr.shape)
+    w = np.ones((n_epoch, n_sat), dtype=np.float64) * 0.3
+
+    state_no_stop = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state_no_stop[:, :3] = true_pos + rng.normal(0, 500, (n_epoch, 3))
+    state_no_stop[:, 3:6] = rng.normal(0.0, 2.0, (n_epoch, 3))
+    state_no_stop[:, 6] = true_clk + rng.normal(0, 3.0, n_epoch)
+    state_with_stop = state_no_stop.copy()
+    stop_mask = np.array([1, 1, 0, 1, 1], dtype=np.uint8)
+
+    iters_no, _ = fgo_gnss_lm_vd(
+        sat, pr, w, state_no_stop,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1,
+    )
+    assert iters_no > 0
+
+    iters_stop, _ = fgo_gnss_lm_vd(
+        sat, pr, w, state_with_stop,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.01,
+        max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1, stop_mask=stop_mask,
+    )
+    assert iters_stop > 0
+
+    vel_norm_no = np.linalg.norm(state_no_stop[stop_mask.astype(bool), 3:6], axis=1)
+    vel_norm_stop = np.linalg.norm(state_with_stop[stop_mask.astype(bool), 3:6], axis=1)
+    assert float(np.mean(vel_norm_stop)) < float(np.mean(vel_norm_no)) * 0.1
+    assert float(np.max(vel_norm_stop)) < 0.02
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_stop_position_factor_holds_consecutive_stop_positions():
+    rng = np.random.Generator(np.random.PCG64(606))
+    n_epoch, n_sat, nc = 6, 8, 1
+    ss_vd = 7 + nc
+    sat = rng.normal(0, 5e6, (n_epoch, n_sat, 3))
+    true_pos = np.array([-3.8e6, 3.5e6, 3.6e6], dtype=np.float64)
+    true_clk = 150.0
+
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pr[t, s] = _geometric_range_sagnacrcv(true_pos, sat[t, s]) + true_clk
+    pr += rng.normal(0, 6.0, pr.shape)
+    w = np.ones((n_epoch, n_sat), dtype=np.float64) * 0.3
+
+    state_no_hold = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state_no_hold[:, :3] = true_pos + rng.normal(0, 500, (n_epoch, 3))
+    state_no_hold[:, 6] = true_clk + rng.normal(0, 3.0, n_epoch)
+    state_hold = state_no_hold.copy()
+    stop_mask = np.ones(n_epoch, dtype=np.uint8)
+
+    iters_no, _ = fgo_gnss_lm_vd(
+        sat, pr, w, state_no_hold,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1,
+    )
+    assert iters_no > 0
+
+    iters_hold, _ = fgo_gnss_lm_vd(
+        sat, pr, w, state_hold,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        stop_position_sigma_m=0.02,
+        max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1, stop_mask=stop_mask,
+    )
+    assert iters_hold > 0
+
+    diff_no = np.linalg.norm(np.diff(state_no_hold[:, :3], axis=0), axis=1)
+    diff_hold = np.linalg.norm(np.diff(state_hold[:, :3], axis=0), axis=1)
+    assert float(np.mean(diff_hold)) < float(np.mean(diff_no)) * 0.5
 
 
 @pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
@@ -1017,3 +1327,297 @@ def test_tdcp_vd_reduces_position_noise():
         f"TDCP should reduce inter-epoch jitter: "
         f"mean_diff without={np.mean(diff_no):.3f}m, with={np.mean(diff_tdcp):.3f}m"
     )
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_tdcp_vd_xxdd_matches_drift_model_better_than_xxcc():
+    """MATLAB XXDD variant should fit drift-driven TDCP sequences better than XXCC."""
+    rng = np.random.Generator(np.random.PCG64(5050))
+    n_epoch, n_sat, nc = 6, 10, 1
+    ss_old = 3 + nc
+    ss_vd = 7 + nc
+    dt_arr = np.ones(n_epoch, dtype=np.float64)
+
+    sat = rng.normal(0, 2.5e7, (n_epoch, n_sat, 3))
+    true_pos = np.tile(np.array([[-3.8e6, 3.5e6, 3.6e6]], dtype=np.float64), (n_epoch, 1))
+    true_drift = np.array([0.4, 1.2, -0.3, 0.9, 0.2, 0.6], dtype=np.float64)
+    true_clk = np.zeros(n_epoch, dtype=np.float64)
+    true_clk[0] = 150.0
+    for t in range(n_epoch - 1):
+        true_clk[t + 1] = true_clk[t] + 0.5 * (true_drift[t] + true_drift[t + 1]) * dt_arr[t]
+
+    pr_noise_sigma = 2.0
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pr[t, s] = _geometric_range_sagnacrcv(true_pos[t], sat[t, s]) + true_clk[t]
+    pr += rng.normal(0, pr_noise_sigma, pr.shape)
+    w_pr = np.ones((n_epoch, n_sat), dtype=np.float64) / (pr_noise_sigma ** 2)
+
+    tdcp_noise_sigma = 0.01
+    tdcp_meas = np.zeros((n_epoch - 1, n_sat), dtype=np.float64)
+    for t in range(n_epoch - 1):
+        tdcp_meas[t, :] = 0.5 * (true_drift[t] + true_drift[t + 1]) * dt_arr[t]
+    tdcp_meas += rng.normal(0, tdcp_noise_sigma, tdcp_meas.shape)
+    tdcp_w = np.ones_like(tdcp_meas) / (tdcp_noise_sigma ** 2)
+
+    state_old = np.zeros((n_epoch, ss_old), dtype=np.float64)
+    state_old[:, :3] = true_pos + rng.normal(0, 300.0, (n_epoch, 3))
+    state_old[:, 3] = true_clk + rng.normal(0, 4.0, n_epoch)
+    fgo_gnss_lm(
+        sat, pr, w_pr, state_old,
+        motion_sigma_m=0.0, max_iter=25, tol=1e-7,
+        enable_line_search=1, sys_kind=None, n_clock=1,
+    )
+
+    state_xxcc = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state_xxcc[:, :3] = state_old[:, :3]
+    state_xxcc[:, 6] = state_old[:, 3]
+    state_xxcc[:, 7] = rng.normal(0, 0.5, n_epoch)
+
+    state_xxdd = state_xxcc.copy()
+
+    # Keep the clock-drift factor disabled here so this compares the TDCP
+    # parameterization itself. Clock-drift coupling is covered by a standalone
+    # factor-direction regression above.
+    iters_cc, _ = fgo_gnss_lm_vd(
+        sat, pr, w_pr, state_xxcc,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        clock_use_average_drift=False,
+        max_iter=20, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1, dt=dt_arr,
+        tdcp_meas=tdcp_meas, tdcp_weights=tdcp_w, tdcp_use_drift=False,
+    )
+    iters_dd, _ = fgo_gnss_lm_vd(
+        sat, pr, w_pr, state_xxdd,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        clock_use_average_drift=True,
+        max_iter=20, tol=1e-7, huber_k=0.0, enable_line_search=1,
+        sys_kind=None, n_clock=1, dt=dt_arr,
+        tdcp_meas=tdcp_meas, tdcp_weights=tdcp_w, tdcp_use_drift=True,
+    )
+    assert iters_cc > 0
+    assert iters_dd > 0
+
+    drift_err_xxcc = float(np.mean(np.abs(state_xxcc[:, 7] - true_drift)))
+    drift_err_xxdd = float(np.mean(np.abs(state_xxdd[:, 7] - true_drift)))
+    assert drift_err_xxdd < drift_err_xxcc, (
+        f"XXDD should recover drift better: xxdd={drift_err_xxdd:.4f}, xxcc={drift_err_xxcc:.4f}"
+    )
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_tdcp_vd_uses_signal_clock_for_dual_frequency():
+    """L5 TDCP must use the same c0+ISB clock design as L5 pseudorange."""
+    rng = np.random.Generator(np.random.PCG64(6060))
+    n_epoch, n_sat, nc = 4, 8, 2
+    ss_vd = 7 + nc
+    true_pos = np.tile(np.array([[-3.8e6, 3.5e6, 3.6e6]], dtype=np.float64), (n_epoch, 1))
+    c0 = np.full(n_epoch, 120.0, dtype=np.float64)
+    isb = np.array([0.0, 6.0, 12.0, 18.0], dtype=np.float64)
+
+    sat = rng.normal(0, 2.5e7, (n_epoch, n_sat, 3))
+    sys_kind = np.zeros((n_epoch, n_sat), dtype=np.int32)
+    sys_kind[:, 1::2] = 1
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            clk = c0[t] + (isb[t] if sys_kind[t, s] == 1 else 0.0)
+            pr[t, s] = _geometric_range_sagnacrcv(true_pos[t], sat[t, s]) + clk
+    w_pr = np.ones((n_epoch, n_sat), dtype=np.float64)
+
+    tdcp_meas = np.zeros((n_epoch - 1, n_sat), dtype=np.float64)
+    for t in range(n_epoch - 1):
+        tdcp_meas[t, 1::2] = isb[t + 1] - isb[t]
+    tdcp_w = np.ones_like(tdcp_meas) * 1.0e4
+
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[:, :3] = true_pos
+    state[:, 6] = c0
+    state[:, 7] = isb
+    state_before = state.copy()
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat, pr, w_pr, state,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=3, tol=1e-10, huber_k=0.0, enable_line_search=1,
+        sys_kind=sys_kind, n_clock=nc,
+        tdcp_meas=tdcp_meas, tdcp_weights=tdcp_w,
+    )
+
+    assert iters > 0
+    np.testing.assert_allclose(state[:, :3], state_before[:, :3], atol=1e-4)
+    np.testing.assert_allclose(state[:, 6:8], state_before[:, 6:8], atol=1e-4)
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_relative_height_factor_runs():
+    """Graph relative-height factor (ENU-up loop closure) runs without error."""
+    rng = np.random.Generator(np.random.PCG64(303))
+    n_epoch, n_sat, nc = 3, 8, 1
+    ss_vd = 7 + nc
+    sat = rng.normal(0, 5e6, (n_epoch, n_sat, 3))
+    true_pos = np.array([-3.8e6, 3.5e6, 3.6e6], dtype=np.float64)
+    true_clk = 150.0
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pr[t, s] = _geometric_range_sagnacrcv(true_pos, sat[t, s]) + true_clk
+    w = np.ones((n_epoch, n_sat)) * 0.3
+    state_vd = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state_vd[:, :3] = true_pos + rng.normal(0, 2.0, (n_epoch, 3))
+    state_vd[:, 6] = true_clk
+    dt_arr = np.ones(n_epoch, dtype=np.float64)
+    lat = np.arctan2(true_pos[2], np.sqrt(true_pos[0] ** 2 + true_pos[1] ** 2))
+    lon = np.arctan2(true_pos[1], true_pos[0])
+    up = np.array(
+        [
+            np.cos(lat) * np.cos(lon),
+            np.cos(lat) * np.sin(lon),
+            np.sin(lat),
+        ],
+        dtype=np.float64,
+    )
+    ei = np.array([0], dtype=np.int32)
+    ej = np.array([2], dtype=np.int32)
+    iters, mse = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state_vd,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=15,
+        tol=1e-7,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt_arr,
+        relative_height_sigma_m=0.5,
+        enu_up_ecef=up,
+        rel_height_edge_i=ei,
+        rel_height_edge_j=ej,
+    )
+    assert iters > 0
+    assert np.isfinite(mse)
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_relative_height_factor_reduces_standalone_residual():
+    """Standalone relative-height factor should reduce the ENU-up difference."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd = 7 + nc
+    sat = np.ones((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[0, 0] = 1.0
+    up = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    edge_i = np.array([0], dtype=np.int32)
+    edge_j = np.array([1], dtype=np.int32)
+
+    before = float(state[0, 0] - state[1, 0])
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=5,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        relative_height_sigma_m=0.1,
+        enu_up_ecef=up,
+        rel_height_edge_i=edge_i,
+        rel_height_edge_j=edge_j,
+    )
+
+    after = float(state[0, 0] - state[1, 0])
+    assert iters > 0
+    assert abs(after) < abs(before) * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_absolute_height_factor_pulls_up_component_to_reference():
+    """Absolute-height factor constrains only the ENU-up component."""
+    n_epoch, n_sat, nc = 1, 4, 1
+    ss_vd = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    ref = np.array([[-3.8e6, 3.5e6, 3.6e6]], dtype=np.float64)
+    state_vd = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state_vd[:, :3] = ref
+    state_vd[0, 2] += 10.0
+
+    iters, mse = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state_vd,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=5,
+        tol=1e-9,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        enu_up_ecef=np.array([0.0, 0.0, 1.0], dtype=np.float64),
+        absolute_height_ref_ecef=ref,
+        absolute_height_sigma_m=0.1,
+    )
+
+    assert iters > 0
+    assert np.isfinite(mse)
+    assert abs(state_vd[0, 2] - ref[0, 2]) < 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_accel_bias_state_reduces_delta_v_residual():
+    """Optional accel-bias state should absorb biased IMU velocity deltas."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_bias = 10 + nc
+    bias_idx = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_bias), dtype=np.float64)
+    dt = np.ones(n_epoch, dtype=np.float64)
+    stop_mask = np.ones(n_epoch, dtype=np.uint8)
+    imu_delta_v = np.array([[1.0, 0.0, 0.0]], dtype=np.float64)
+
+    def residual_x(s: np.ndarray) -> float:
+        return float(s[0, 3] + imu_delta_v[0, 0] - dt[0] * s[0, bias_idx] - s[1, 3])
+
+    before = residual_x(state)
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.001,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        stop_mask=stop_mask,
+        imu_delta_v=imu_delta_v,
+        imu_velocity_sigma_mps=0.01,
+        imu_accel_bias_prior_sigma_mps2=10.0,
+    )
+
+    after = residual_x(state)
+    assert iters > 0
+    assert abs(after) < abs(before) * 1e-3
+    assert state[0, bias_idx] > 0.5

@@ -1,5 +1,6 @@
 # Build
 build/
+_cmake_build/
 dist/
 *.egg-info/
 *.so
@@ -28,3 +29,9 @@ tmp/site_visual_check/
 *.cubin
 *.fatbin
 *.ptx
+
+# Generated experiment artifacts
+experiments/results/*/
+!experiments/results/paper_assets/
+!experiments/results/paper_assets/**
+experiments/results/gsdc2023_bridge_diag_*.csv
