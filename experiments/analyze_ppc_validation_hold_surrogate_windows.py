@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import math
 from pathlib import Path
 
 import numpy as np
@@ -42,9 +41,14 @@ def _write_rows(path: Path, rows: list[dict[str, object]]) -> None:
     print(f"saved: {path}")
 
 
-def _prediction_column(df: pd.DataFrame) -> str:
+def _prediction_column(df: pd.DataFrame, preferred: str | None = None) -> str:
+    if preferred:
+        if preferred not in df.columns:
+            raise ValueError(f"missing requested prediction column: {preferred}")
+        return preferred
     for name in (
         "corrected_pred_fix_rate_pct",
+        "base_pred_fix_rate_pct",
         "extra_trees_cal_to_proxy_window_mae_rate_bounded_pred_fix_rate_pct",
         "pred_fix_rate_pct",
         "extra_trees_pred_fix_rate_pct",
@@ -95,7 +99,7 @@ def _corr(a: np.ndarray, b: np.ndarray) -> float:
 
 def _metrics(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     df = pd.DataFrame(rows)
-    if df.empty:
+    if df.empty or "actual_fix_rate_pct" not in df.columns:
         return []
     actual = df["actual_fix_rate_pct"].to_numpy(dtype=np.float64)
     weight = df["epoch_count"].to_numpy(dtype=np.float64)
@@ -168,6 +172,8 @@ def _diagnostic_prediction(row: dict[str, object]) -> tuple[float, str]:
 
 def _window_rows(windows: pd.DataFrame, epochs: pd.DataFrame, pred_col: str) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
+    has_window_actual = "actual_fix_rate_pct" in windows.columns
+    has_epoch_actual = "actual_fixed" in epochs.columns
     epoch_groups = {key: group.sort_values("gps_tow") for key, group in epochs.groupby(["city", "run"], sort=False)}
     for _, window in windows.sort_values(["city", "run", "window_index"]).iterrows():
         city = str(window["city"])
@@ -187,12 +193,12 @@ def _window_rows(windows: pd.DataFrame, epochs: pd.DataFrame, pred_col: str) -> 
             "window_start_tow": start,
             "window_end_tow": end,
             "epoch_count": int(len(g)),
-            "actual_fix_rate_pct": float(window["actual_fix_rate_pct"]),
             "base_pred_fix_rate_pct": float(window[pred_col]),
         }
+        if has_window_actual:
+            row["actual_fix_rate_pct"] = float(window["actual_fix_rate_pct"])
         if g.empty:
             for name in (
-                "demo5_fix_rate_pct",
                 "validation_pass_frac",
                 "validation_soft_pass_frac",
                 "validation_hard_block_frac",
@@ -238,7 +244,6 @@ def _window_rows(windows: pd.DataFrame, epochs: pd.DataFrame, pred_col: str) -> 
         else:
             row.update(
                 {
-                    "demo5_fix_rate_pct": 100.0 * _mean(g["actual_fixed"]),
                     "validation_pass_frac": _mean(g["validation_pass"]),
                     "validation_soft_pass_frac": _mean(g["validation_soft_pass"]),
                     "validation_hard_block_frac": _mean(g["validation_hard_block"]),
@@ -281,6 +286,8 @@ def _window_rows(windows: pd.DataFrame, epochs: pd.DataFrame, pred_col: str) -> 
                     "hold_since_reset_s_max": _max(g["hold_since_reset_s"]) if "hold_since_reset_s" in g.columns else float("nan"),
                 }
             )
+            if has_epoch_actual:
+                row["demo5_fix_rate_pct"] = 100.0 * _mean(g["actual_fixed"])
 
         high_pred = float(row["base_pred_fix_rate_pct"]) >= 50.0
         low_pred = float(row["base_pred_fix_rate_pct"]) <= 30.0
@@ -309,11 +316,13 @@ def _window_rows(windows: pd.DataFrame, epochs: pd.DataFrame, pred_col: str) -> 
         diag, reason = _diagnostic_prediction(row)
         row["validationhold_diag_pred_pct"] = diag
         row["validationhold_diag_reason"] = reason
-        row["base_abs_error_pp"] = abs(float(row["base_pred_fix_rate_pct"]) - float(row["actual_fix_rate_pct"]))
-        row["validationhold_diag_abs_error_pp"] = abs(diag - float(row["actual_fix_rate_pct"]))
-        row["validationhold_diag_delta_abs_error_pp"] = row["validationhold_diag_abs_error_pp"] - row["base_abs_error_pp"]
-        row["hidden_high_case"] = 1.0 if float(row["actual_fix_rate_pct"]) >= 75.0 and low_pred else 0.0
-        row["false_high_case"] = 1.0 if float(row["actual_fix_rate_pct"]) <= 5.0 and high_pred else 0.0
+        if has_window_actual:
+            actual = float(row["actual_fix_rate_pct"])
+            row["base_abs_error_pp"] = abs(float(row["base_pred_fix_rate_pct"]) - actual)
+            row["validationhold_diag_abs_error_pp"] = abs(diag - actual)
+            row["validationhold_diag_delta_abs_error_pp"] = row["validationhold_diag_abs_error_pp"] - row["base_abs_error_pp"]
+            row["hidden_high_case"] = 1.0 if actual >= 75.0 and low_pred else 0.0
+            row["false_high_case"] = 1.0 if actual <= 5.0 and high_pred else 0.0
         rows.append(row)
     return rows
 
@@ -322,6 +331,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Aggregate validation/hold surrogate features to PPC windows")
     parser.add_argument("--window-csv", type=Path, default=DEFAULT_WINDOW_CSV)
     parser.add_argument("--epoch-csv", type=Path, default=DEFAULT_EPOCH_CSV)
+    parser.add_argument("--prediction-column",
+                        help="prediction column to use for validationhold reject/lift flag construction")
     parser.add_argument("--results-prefix", default=DEFAULT_PREFIX)
     return parser.parse_args()
 
@@ -329,12 +340,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     windows = pd.read_csv(args.window_csv)
-    pred_col = _prediction_column(windows)
+    pred_col = _prediction_column(windows, args.prediction_column)
     needed = {
         "city",
         "run",
         "gps_tow",
-        "actual_fixed",
         "validation_pass",
         "validation_soft_pass",
         "validation_hard_block",
@@ -355,6 +365,10 @@ def main() -> None:
         "clean_streak_s",
         "strict_clean_streak_s",
     }
+    with args.epoch_csv.open(newline="", encoding="utf-8") as fh:
+        available_epoch_columns = set((csv.DictReader(fh).fieldnames or []))
+    if "actual_fixed" in available_epoch_columns:
+        needed.add("actual_fixed")
     epochs = pd.read_csv(args.epoch_csv, usecols=lambda col: col in needed)
     rows = _window_rows(windows, epochs, pred_col)
 
@@ -370,11 +384,14 @@ def main() -> None:
         if row["city"] == "tokyo" and row["run"] == "run2" and 0 <= int(row["window_index"]) <= 30
     ]
     _write_rows(focus_path, focus)
-    extreme = [row for row in rows if row["hidden_high_case"] or row["false_high_case"]]
+    extreme = [row for row in rows if row.get("hidden_high_case", 0.0) or row.get("false_high_case", 0.0)]
     _write_rows(extreme_path, extreme)
     metric_rows = _metrics(rows)
     _write_rows(metrics_path, metric_rows)
-    print(pd.DataFrame(metric_rows).to_string(index=False))
+    if metric_rows:
+        print(pd.DataFrame(metric_rows).to_string(index=False))
+    else:
+        print("metrics skipped: actual_fix_rate_pct not present in window CSV")
 
 
 if __name__ == "__main__":
