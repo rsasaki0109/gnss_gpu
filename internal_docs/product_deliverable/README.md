@@ -1,6 +1,6 @@
 # PPC demo5 FIX-Rate Predictor — Product Deliverable
 
-**Status**: internal research prototype, route-level deliverable with saved fresh-data inference preparation
+**Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference
 **Last updated**: 2026-04-29
 **Adopted model**: §7.16 `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
@@ -26,11 +26,11 @@ classification targets during training.
   higher demo5 FIX rate.
 - Dataset-level aggregate prediction: across a set of similar runs,
   predict the overall FIX rate within a few percentage points.
-- Fresh-data offline inference: score a new pre-augmented PPC/taroz
-  window CSV with the committed full-data-fit model artifact, without
-  retraining the nested LORO stack.
-- Inference input preparation: build that pre-augmented window CSV from
-  preprocessed epoch/window/base CSVs without demo5 actual labels.
+- Fresh-data offline inference: prepare and score new PPC/taroz
+  preprocessed epoch/window/base CSVs with the committed full-data-fit
+  model artifact, without retraining the nested LORO stack.
+- Split inference input preparation: build the pre-augmented window CSV
+  separately when debugging intermediate validationhold features.
 
 ### Out-of-scope use cases
 
@@ -100,8 +100,9 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   `window_level_details.csv`, and `dashboard.html`.
 - Committed full-data-fit product model artifact:
   `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz`.
-  `python3 experiments/predict.py --inference` loads this artifact to
-  score fresh pre-augmented window CSVs without training.
+  `python3 experiments/predict.py --batch-inference` loads this artifact
+  after preparing fresh inputs; split `--inference` can also score an
+  already prepared window CSV without training.
 
 ### Inputs required for fresh-data preparation / inference
 
@@ -130,7 +131,8 @@ These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
   confidence tier.
 - `window_level_details.csv` — per-window predictions with focus-case
   annotations, intended for diagnostics.
-- In `--inference` mode, `<prefix>_route_predictions.csv` and
+- In `--batch-inference` or `--inference` mode,
+  `<prefix>_route_predictions.csv` and
   `<prefix>_window_predictions.csv` are written.  When labels are not
   present, these files contain predictions only and omit actual/error
   columns.
@@ -215,9 +217,9 @@ These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
   HTML dashboard from those CSVs.
 - `experiments/predict.py` — product entrypoint.  Default mode refreshes
   deliverable outputs from the frozen §7.16 predictions;
-  `--prepare-inference` builds fresh inference inputs; `--inference`
-  scores them without training; `--retrain` remains the research LORO
-  pipeline.
+  `--batch-inference` prepares and scores fresh inputs in one command;
+  split `--prepare-inference` / `--inference` are available for
+  debugging; `--retrain` remains the research LORO pipeline.
 
 ## 5. Known failure modes
 
@@ -270,7 +272,29 @@ python3 experiments/predict.py \
   --results-prefix ppc_..._my_run
 ```
 
-### Prepare inference inputs from new preprocessed CSVs
+### One-shot inference from new preprocessed CSVs
+
+```bash
+python3 experiments/predict.py \
+  --batch-inference \
+  --epochs-csv path/to/preprocessed_epochs.csv \
+  --window-csv path/to/window_features.csv \
+  --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
+  --prepare-prefix experiments/results/my_run_prepare \
+  --prepared-window-csv experiments/results/my_run_prepared_window_predictions.csv \
+  --inference-output-prefix experiments/results/my_run_product
+```
+
+This produces a label-free prepared window CSV containing
+`base_pred_fix_rate_pct` and validationhold features, then scores it
+with the committed `*_product_model.pkl.gz` artifact.  It does not run
+demo5 and does not require actual labels.  The output files are
+`experiments/results/my_run_product_route_predictions.csv` and
+`experiments/results/my_run_product_window_predictions.csv`.
+The prepared CSV path must be distinct from the final
+`*_window_predictions.csv` output path.
+
+### Split preparation for debugging
 
 ```bash
 python3 experiments/predict.py \
@@ -282,9 +306,7 @@ python3 experiments/predict.py \
   --prepared-window-csv experiments/results/my_run_prepared_window_predictions.csv
 ```
 
-This produces a label-free prepared window CSV containing
-`base_pred_fix_rate_pct` and validationhold features.  It does not run
-demo5 and does not require actual labels.
+This is the same preparation stage used by `--batch-inference`.
 
 ### Inference on a prepared window CSV
 
