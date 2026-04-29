@@ -32,6 +32,7 @@ from fetch_plateau_subset import (
     extract_entries,
     mesh3_code,
     select_bldg_entries,
+    select_brid_entries,
 )
 
 
@@ -71,8 +72,23 @@ def ensure_subset(
     zip_url: str,
     meshes: list[str],
     subset_root: Path,
+    *,
+    kinds: tuple[str, ...] = ("bldg",),
 ) -> Path:
-    mesh_key = hashlib.sha1(",".join(meshes).encode("utf-8")).hexdigest()[:16]
+    """Extract a subset of PLATEAU GML tiles for the given meshes.
+
+    Parameters
+    ----------
+    kinds : tuple of str
+        Which CityGML kinds to fetch.  ``("bldg",)`` (default) preserves
+        existing call sites.  Pass ``("bldg", "brid")`` to also fetch
+        bridges.  The cache directory key includes ``kinds`` so a
+        bldg-only fetch and a bldg+brid fetch coexist without
+        clobbering each other.
+    """
+    cache_key_parts = [",".join(meshes), "kinds=" + ",".join(sorted(kinds))]
+    cache_key = "|".join(cache_key_parts)
+    mesh_key = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()[:16]
     out_dir = subset_root / mesh_key
     manifest = out_dir / "manifest.txt"
     gml_files = list(out_dir.glob("*.gml"))
@@ -81,11 +97,28 @@ def ensure_subset(
 
     out_dir.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(HTTPRangeReader(zip_url)) as zf:
-        entries = select_bldg_entries(zf, meshes)
-        if not entries:
-            raise RuntimeError(f"no PLATEAU building tiles matched meshes: {meshes}")
-        extract_entries(zf, entries, out_dir)
-        manifest.write_text("\n".join(entries) + "\n", encoding="utf-8")
+        all_entries: list[str] = []
+        if "bldg" in kinds:
+            entries = select_bldg_entries(zf, meshes)
+            if not entries:
+                raise RuntimeError(
+                    f"no PLATEAU building tiles matched meshes: {meshes}"
+                )
+            extract_entries(zf, entries, out_dir)
+            all_entries.extend(entries)
+        if "brid" in kinds:
+            brid_entries = select_brid_entries(zf, meshes)
+            # Bridges are sparse -- empty result is OK; just don't add to manifest.
+            if brid_entries:
+                extract_entries(zf, brid_entries, out_dir)
+                all_entries.extend(brid_entries)
+        unsupported = set(kinds) - {"bldg", "brid"}
+        if unsupported:
+            raise ValueError(
+                f"ensure_subset: unsupported kinds {sorted(unsupported)}; "
+                "supported: bldg, brid"
+            )
+        manifest.write_text("\n".join(all_entries) + "\n", encoding="utf-8")
     return out_dir
 
 

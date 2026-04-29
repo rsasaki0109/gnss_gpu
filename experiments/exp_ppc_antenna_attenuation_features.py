@@ -122,7 +122,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--nlos-attenuation-db", type=float, default=-25.0)
     parser.add_argument("--gain-epsilon", type=float, default=1e-3)
     parser.add_argument("--results-prefix", default=None)
+    parser.add_argument(
+        "--include-bridges",
+        action="store_true",
+        help="Also fetch and load PLATEAU bridge geometry (kinds=('bldg','brid'))",
+    )
+    parser.add_argument(
+        "--geoid-correction",
+        default="egm96",
+        help=(
+            "PLATEAU height datum correction (DEFAULT 'egm96'): 'egm96' "
+            "(pyproj-driven EGM96 lookup, recommended), 'none' (legacy "
+            "no-correction; produces the silent ~37 m mesh-below-rover "
+            "bug in Tokyo), or a constant float in metres."
+        ),
+    )
     return parser.parse_args()
+
+
+def _resolve_geoid_arg(value: str):
+    if value is None or value.strip().lower() in ("none", ""):
+        return None
+    if value.lower() == "egm96":
+        return "egm96"
+    try:
+        return float(value)
+    except ValueError as exc:  # pragma: no cover -- CLI guard
+        raise SystemExit(
+            f"--geoid-correction: expected 'none', 'egm96', or float; got {value!r}"
+        ) from exc
 
 
 def main() -> None:
@@ -143,11 +171,19 @@ def main() -> None:
 
     print("loading PLATEAU + BVH...", flush=True)
     t0 = time.monotonic()
-    subset_dir = ensure_subset(PRESET_URLS[args.preset], expanded, args.subset_root)
-    model = load_plateau(subset_dir, zone=args.plateau_zone)
+    kinds = ("bldg", "brid") if args.include_bridges else ("bldg",)
+    geoid_corr = _resolve_geoid_arg(args.geoid_correction)
+    subset_dir = ensure_subset(
+        PRESET_URLS[args.preset], expanded, args.subset_root, kinds=kinds,
+    )
+    model = load_plateau(
+        subset_dir, zone=args.plateau_zone, kinds=kinds,
+        geoid_correction=geoid_corr,
+    )
     from gnss_gpu.bvh import BVHAccelerator
     accelerator = BVHAccelerator.from_building_model(model)
-    print(f"  BVH built in {time.monotonic() - t0:.1f}s ({accelerator.n_triangles} triangles)", flush=True)
+    print(f"  BVH built in {time.monotonic() - t0:.1f}s ({accelerator.n_triangles} triangles); "
+          f"kinds={kinds} geoid={geoid_corr!r}", flush=True)
 
     epoch_rows: list[dict[str, object]] = []
     n_epochs = len(data["times"])
