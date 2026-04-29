@@ -45,6 +45,7 @@ from predict import (
     _require,
     _require_distinct_batch_outputs,
 )
+import product_raw_source_prepare as raw_source_prepare
 from product_inference_model import (
     _append_classifier_meta_online,
     _base_from_frame_or_reference,
@@ -444,6 +445,89 @@ def test_product_source_bundle_validation() -> None:
             check("source bundle rejects missing base window", True, exc.code != 0)
 
 
+def test_raw_source_prepare_manifest_metadata_counts() -> None:
+    print("test_raw_source_prepare_manifest_metadata_counts")
+    rows_by_run = {
+        ("nagoya", "run1"): [
+            {"gps_tow": 100.0, "epoch": 0, "sat": 6.0, "phase_fraction": 0.5, "los_fraction": 0.75},
+            {"gps_tow": 110.0, "epoch": 1, "sat": 8.0, "phase_fraction": 0.75, "los_fraction": 0.875},
+            {"gps_tow": 135.0, "epoch": 2, "sat": 7.0, "phase_fraction": 1.0, "los_fraction": 1.0},
+        ],
+        ("tokyo", "run2"): [
+            {"gps_tow": 200.0, "epoch": 0, "sat": 5.0, "phase_fraction": 0.25, "los_fraction": 0.5},
+            {"gps_tow": 210.0, "epoch": 1, "sat": 9.0, "phase_fraction": 0.5, "los_fraction": 0.75},
+        ],
+    }
+
+    def fake_epoch_rows_for_run(run: SourceRun, *, systems: tuple[str, ...], max_epochs: int | None):
+        key = (run.city, run.run)
+        rows = []
+        for row in rows_by_run[key][:max_epochs]:
+            rows.append({"city": run.city, "run": run.run, **row})
+        return rows
+
+    original_load_model_feature_names = raw_source_prepare._load_model_feature_names
+    original_epoch_rows_for_run = raw_source_prepare._epoch_rows_for_run
+    raw_source_prepare._load_model_feature_names = lambda _path: [
+        "sat_mean",
+        "phase_fraction_mean",
+        "los_fraction_mean",
+    ]
+    raw_source_prepare._epoch_rows_for_run = fake_epoch_rows_for_run
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            runs = []
+            for city, run in rows_by_run:
+                run_dir = tmpdir / "data" / city / run
+                run_dir.mkdir(parents=True)
+                for name in ("rover.obs", "base.obs", "base.nav", "reference.csv"):
+                    (run_dir / name).write_text("fixture\n", encoding="utf-8")
+                runs.append({"city": city, "run": run, "run_dir": str(run_dir)})
+            manifest = tmpdir / "raw_manifest.json"
+            manifest.write_text(json.dumps({"runs": runs}), encoding="utf-8")
+
+            outputs = raw_source_prepare.prepare_raw_source_bundle(
+                manifest_path=manifest,
+                output_prefix=tmpdir / "raw_out",
+                output_manifest=None,
+                model_path=tmpdir / "model.pkl.gz",
+                systems=("G",),
+                window_duration_s=30.0,
+                max_epochs_per_run=None,
+            )
+            payload = json.loads(outputs.source_manifest.read_text(encoding="utf-8"))
+            metadata = payload["raw_source_prepare"]
+            epoch_rows = list(DictReader(outputs.epochs_csv.open(newline="", encoding="utf-8")))
+            window_rows = list(DictReader(outputs.window_csv.open(newline="", encoding="utf-8")))
+            base_rows = list(DictReader(outputs.base_prediction_csv.open(newline="", encoding="utf-8")))
+
+            check("raw manifest epoch total", len(epoch_rows), metadata["epoch_count"])
+            check("raw manifest window total", len(window_rows), metadata["window_count"])
+            check("raw manifest base total", len(base_rows), metadata["base_prediction_count"])
+            check("raw manifest model feature count", 3, metadata["model_feature_count"])
+            check("raw manifest systems", ["G"], metadata["systems"])
+            check("raw manifest mode", "bootstrap_neutral_fill", metadata["mode"])
+
+            summaries = {(row["city"], row["run"]): row for row in metadata["runs"]}
+            check("raw manifest per-run summary count", 2, len(summaries))
+            check("raw manifest nagoya epoch count", 3, summaries[("nagoya", "run1")]["epoch_count"])
+            check("raw manifest nagoya window count", 2, summaries[("nagoya", "run1")]["window_count"])
+            check("raw manifest tokyo epoch count", 2, summaries[("tokyo", "run2")]["epoch_count"])
+            check("raw manifest tokyo window count", 1, summaries[("tokyo", "run2")]["window_count"])
+            check(
+                "raw manifest elapsed finite",
+                True,
+                all(np.isfinite(float(row["elapsed_s"])) and float(row["elapsed_s"]) >= 0.0 for row in summaries.values()),
+            )
+
+            validated = validate_source_bundle(load_source_bundle(outputs.source_manifest))
+            check("raw manifest validates as source bundle", 2, validated.run_count)
+    finally:
+        raw_source_prepare._load_model_feature_names = original_load_model_feature_names
+        raw_source_prepare._epoch_rows_for_run = original_epoch_rows_for_run
+
+
 def test_raw_source_prepare_window_rows() -> None:
     print("test_raw_source_prepare_window_rows")
     epoch_rows = [
@@ -693,6 +777,7 @@ def main() -> None:
     test_online_classifier_meta_matches_batch_run_position()
     test_batch_output_paths()
     test_product_source_bundle_validation()
+    test_raw_source_prepare_manifest_metadata_counts()
     test_raw_source_prepare_window_rows()
     test_raw_source_prepare_streaming_epoch_rows()
     test_merge_base_prediction_column()
