@@ -406,6 +406,67 @@ class TestCoordinateConversion:
         assert abs(ecef[1] - 3352000) < 5000, f"Y={ecef[1]}"
         assert abs(ecef[2] - 3697000) < 5000, f"Z={ecef[2]}"
 
+    def test_geoid_correction_constant_shifts_alt(self):
+        """A constant geoid_correction must add N to the alt before
+        the ellipsoidal-to-ECEF conversion.  At 5 m TP + N=36.7 m the
+        ECEF radial offset along the local up vector should equal the
+        difference vs the no-correction reference, to within numerics."""
+        loader_off = PlateauLoader(zone=9)
+        loader_on = PlateauLoader(zone=9, geoid_correction=36.7)
+        lat = np.radians(35.6812)
+        lon = np.radians(139.7671)
+        ecef_off = loader_off._lla_to_ecef(lat, lon, 5.0)
+        ecef_on = loader_on._lla_to_ecef(lat, lon, 5.0)
+        delta = np.linalg.norm(ecef_on - ecef_off)
+        assert abs(delta - 36.7) < 1e-3, f"|delta|={delta:.6f}"
+        assert np.linalg.norm(ecef_on) > np.linalg.norm(ecef_off)
+
+    def test_geoid_correction_no_warning_when_supplied(self):
+        """Supplying any geoid_correction must suppress the
+        PLATEAU-orthometric UserWarning (the user has acknowledged
+        the datum)."""
+        import warnings as _w
+        with _w.catch_warnings():
+            _w.simplefilter("error")
+            PlateauLoader(zone=9, geoid_correction=36.7)
+            PlateauLoader(zone=9, geoid_correction=lambda lat, lon: 36.7)
+
+    def test_geoid_correction_callable(self):
+        """A callable geoid model must be invoked with (lat_deg, lon_deg)."""
+        seen = []
+
+        def _model(lat_deg, lon_deg):
+            seen.append((lat_deg, lon_deg))
+            return 10.0
+
+        loader = PlateauLoader(zone=9, geoid_correction=_model)
+        loader._lla_to_ecef(np.radians(35.65), np.radians(139.78), 0.0)
+        assert seen and abs(seen[0][0] - 35.65) < 1e-9
+        assert abs(seen[0][1] - 139.78) < 1e-9
+
+    def test_geoid_correction_egm96_tokyo(self):
+        """Regression: with EGM96, a PLATEAU mesh ground-level vertex
+        in Tokyo Hamamatsucho (TP ~ 0 m) must end up within ~3 m of
+        the rover's ellipsoidal ground level (~40 m).  Without the
+        correction it sat 36-37 m below."""
+        try:
+            import pyproj  # noqa: F401
+        except ImportError:
+            pytest.skip("pyproj not available")
+        loader = PlateauLoader(zone=9, geoid_correction="egm96")
+        lat = np.radians(35.65); lon = np.radians(139.78)
+        ecef_ground = loader._lla_to_ecef(lat, lon, 0.0)
+        # Reference rover at the same lat/lon but with ellipsoidal
+        # alt = 40 m (matches reference.csv at this trajectory).
+        loader_ref = PlateauLoader(zone=9)  # no correction
+        ecef_rover = loader_ref._lla_to_ecef(lat, lon, 40.0)
+        delta_radial = np.linalg.norm(ecef_ground) - np.linalg.norm(ecef_rover)
+        # |TP_0 - rover_40| should be ~|N - 40| = ~|36.5 - 40| = ~3.5m
+        assert abs(delta_radial) < 5.0, (
+            f"corrected ground vs rover_40 radial diff = {delta_radial:.2f} m; "
+            "expected within 5 m"
+        )
+
     def test_invalid_zone(self):
         with pytest.raises(ValueError, match="zone must be 1-19"):
             PlateauLoader(zone=0)

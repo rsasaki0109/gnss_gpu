@@ -7,33 +7,132 @@ PLATEAU distributes LOD1/LOD2 building data in CityGML format using the
 Japanese plane rectangular coordinate system (Gauss-Kruger transverse
 Mercator, EPSG:6669-6687).
 
-Height datum note (EPSG:6697):
+Height datum (EPSG:6697):
     PLATEAU CityGML EPSG:6697 carries **orthometric heights above Tokyo
-    Bay mean sea level (TP)**, NOT ellipsoidal heights.  This loader
-    currently treats the published height as an ellipsoidal alt and
-    feeds it directly to ``_lla_to_ecef``, which places the mesh ~37 m
-    below the WGS-84 ellipsoidal ground in the Tokyo area.  Callers
-    that need a geometrically accurate mesh (e.g. LoS ray tracing
-    against a rover position from RTKLIB / Septentrio reference.csv,
-    which is ellipsoidal) must compensate -- either by pre-shifting
-    the rover, by monkey-patching ``PlateauLoader._lla_to_ecef`` to
-    add a constant geoid undulation N, or (preferred) by calling a
-    GSI Geoid 2011 lookup before ECEF conversion.  See
-    ``experiments/check_bldg_vs_brid_los_v2.py`` for an example of
-    the constant-N workaround.  This is tracked as a follow-up; the
-    fix should bake a real geoid grid into this loader.
+    Bay mean sea level (TP)**, NOT ellipsoidal heights.  Without
+    correction, the loaded mesh sits ~36-37 m below the WGS-84
+    ellipsoidal ground in Tokyo, which silently invalidates any LoS
+    check against a rover position read from a RTKLIB / Septentrio
+    reference.csv (which IS ellipsoidal).  See
+    `internal_docs/product_deliverable/PLATEAU_BRIDGE_INTEGRATION.md`
+    for the incident that revealed this.
+
+    Pass ``geoid_correction="egm96"`` to ``PlateauLoader`` /
+    ``load_plateau`` to opt in to a pyproj-driven EGM96 lookup.  Other
+    options:
+        - ``None`` (default for back-compat): no correction; emits a
+          one-time UserWarning so silent mismatches stop happening.
+        - ``<float>``: a constant N in metres (use 36.7 for Tokyo
+          quick-and-dirty work).
+        - callable ``N(lat_deg, lon_deg) -> float``: custom geoid model
+          (e.g. a GSI Geoid 2011 grid lookup if the user has the file).
 """
 
 import glob as _glob
 import os
 import warnings
 from pathlib import Path
-from typing import Iterable, Optional, Union
+from typing import Callable, Iterable, Optional, Union
 
 import numpy as np
 
 from gnss_gpu.io.citygml import SUPPORTED_KINDS, parse_citygml
 from gnss_gpu.raytrace import BuildingModel
+
+# Type alias for any caller-supplied geoid model.
+# Accepts ``"egm96"`` (uses pyproj if available), a constant float (m),
+# a callable ``N(lat_deg, lon_deg) -> float``, or ``None`` (no correction).
+GeoidCorrection = Union[None, str, float, Callable[[float, float], float]]
+
+
+def _make_egm96_lookup() -> Callable[[float, float], float]:
+    """Return a callable ``N(lat_deg, lon_deg) -> float`` backed by EGM96.
+
+    Requires ``pyproj`` and the bundled ``egm96_15.gtx`` grid (ships with
+    most pyproj installs).  Raises ``ImportError`` if pyproj is missing
+    or ``RuntimeError`` if the grid is not findable.
+
+    Note on accuracy in Japan: EGM96 differs from the official GSI
+    Geoid 2011 by up to ~1 m, which is well below the typical PLATEAU
+    LoD2 building height (5-30 m) and adequate for LoS ray tracing.
+    For sub-metre work, supply a callable that consults the GSI grid.
+    """
+    try:
+        import pyproj  # noqa: F401
+    except ImportError as exc:  # pragma: no cover -- exercised by skip
+        raise ImportError(
+            "geoid_correction='egm96' requires pyproj; install with "
+            "`pip install pyproj`"
+        ) from exc
+
+    src = pyproj.CRS.from_proj4(
+        "+proj=longlat +ellps=WGS84 +geoidgrids=egm96_15.gtx +vunits=m"
+    )
+    tgt = pyproj.CRS.from_epsg(4979)
+    transformer = pyproj.Transformer.from_crs(src, tgt, always_xy=True)
+
+    # Prime the transformer once so a missing grid surfaces here, not
+    # deep inside _lla_to_ecef.
+    _, _, probe_h = transformer.transform(139.78, 35.65, 0.0)
+    if not np.isfinite(probe_h):
+        raise RuntimeError(
+            "EGM96 lookup returned non-finite at (35.65 N, 139.78 E); "
+            "the egm96_15.gtx grid is probably missing from the pyproj "
+            "data directory"
+        )
+
+    def _n(lat_deg: float, lon_deg: float) -> float:
+        _, _, h = transformer.transform(lon_deg, lat_deg, 0.0)
+        return float(h)
+
+    return _n
+
+
+def _resolve_geoid_correction(spec: GeoidCorrection):
+    """Turn a user-facing spec into an internal callable or None.
+
+    Returns ``(callable or None, label)`` where ``label`` is a short
+    human-readable description used in warnings and logs.
+    """
+    if spec is None:
+        return None, "none"
+    if callable(spec):
+        return spec, "callable"
+    if isinstance(spec, (int, float)):
+        n = float(spec)
+        return (lambda _lat, _lon, _n=n: _n), f"constant {n:+.2f}m"
+    if isinstance(spec, str):
+        if spec.lower() == "egm96":
+            return _make_egm96_lookup(), "egm96"
+        raise ValueError(
+            f"unknown geoid_correction string {spec!r}; "
+            "supported: 'egm96', a float (constant N), or a callable"
+        )
+    raise TypeError(
+        f"geoid_correction must be None, str, float, or callable; "
+        f"got {type(spec).__name__}"
+    )
+
+
+_DATUM_WARN_EMITTED = False
+
+
+def _warn_no_geoid_correction_once() -> None:
+    """Emit a one-time UserWarning when no geoid correction is supplied."""
+    global _DATUM_WARN_EMITTED
+    if _DATUM_WARN_EMITTED:
+        return
+    _DATUM_WARN_EMITTED = True
+    warnings.warn(
+        "PlateauLoader: no geoid_correction supplied. PLATEAU CityGML "
+        "EPSG:6697 carries orthometric heights (above Tokyo Bay MSL); "
+        "without correction the mesh sits ~37 m below the WGS-84 "
+        "ellipsoidal ground in Tokyo and any LoS check against an "
+        "ellipsoidal rover position will be wrong. Pass "
+        'geoid_correction="egm96" or a constant float to fix.',
+        UserWarning,
+        stacklevel=4,
+    )
 
 # PLATEAU CityGML filenames embed the feature kind as ``_<kind>_`` between
 # the mesh code and the CRS code (e.g. ``53393683_brid_6697_op.gml``).
@@ -127,7 +226,12 @@ class PlateauLoader:
 
     _FALSE_EASTING = 0.0  # PLATEAU data is already in metres from origin
 
-    def __init__(self, zone: int = 9):
+    def __init__(
+        self,
+        zone: int = 9,
+        *,
+        geoid_correction: GeoidCorrection = None,
+    ):
         if zone not in self.ORIGINS:
             raise ValueError(
                 f"zone must be 1-19, got {zone}"
@@ -136,6 +240,12 @@ class PlateauLoader:
         self._lat0_deg, self._lon0_deg = self.ORIGINS[zone]
         self._lat0 = np.radians(self._lat0_deg)
         self._lon0 = np.radians(self._lon0_deg)
+
+        self._geoid_fn, self._geoid_label = _resolve_geoid_correction(
+            geoid_correction
+        )
+        if self._geoid_fn is None:
+            _warn_no_geoid_correction_once()
 
     # ------------------------------------------------------------------
     # Public API
@@ -478,9 +588,19 @@ class PlateauLoader:
     # Coordinate helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _lla_to_ecef(lat, lon, alt):
-        """Convert geodetic (lat, lon in radians, alt in metres) to ECEF."""
+    def _lla_to_ecef(self, lat, lon, alt):
+        """Convert geodetic (lat, lon in radians, alt in metres) to ECEF.
+
+        If a ``geoid_correction`` was supplied at construction time,
+        ``alt`` is interpreted as orthometric height and shifted by
+        ``+N(lat, lon)`` (where N is geoid undulation in metres) before
+        the ellipsoidal-to-ECEF conversion.  Without correction the
+        value is treated as ellipsoidal -- which is what PLATEAU
+        callers historically did, but is wrong for EPSG:6697 data.
+        """
+        if self._geoid_fn is not None:
+            n = self._geoid_fn(np.degrees(lat), np.degrees(lon))
+            alt = alt + n
         sin_lat = np.sin(lat)
         cos_lat = np.cos(lat)
         sin_lon = np.sin(lon)
@@ -491,10 +611,9 @@ class PlateauLoader:
         z = (N * (1.0 - _E2) + alt) * sin_lat
         return np.array([x, y, z], dtype=np.float64)
 
-    @classmethod
-    def _geodetic_degrees_to_ecef(cls, lat_deg, lon_deg, alt):
+    def _geodetic_degrees_to_ecef(self, lat_deg, lon_deg, alt):
         """Convert geodetic degrees to ECEF."""
-        return cls._lla_to_ecef(np.radians(lat_deg), np.radians(lon_deg), alt)
+        return self._lla_to_ecef(np.radians(lat_deg), np.radians(lon_deg), alt)
 
 
 def load_plateau(
@@ -503,6 +622,7 @@ def load_plateau(
     *,
     kinds: Iterable[str] = ("bldg",),
     include_bridges: Optional[bool] = None,
+    geoid_correction: GeoidCorrection = None,
 ):
     """Convenience function to load PLATEAU CityGML data.
 
@@ -519,13 +639,18 @@ def load_plateau(
         ``("bldg",)``; pass ``("bldg", "brid")`` to also load bridges.
     include_bridges : bool, optional
         Deprecated.  ``True`` is equivalent to adding ``"brid"`` to ``kinds``.
+    geoid_correction : None | str | float | callable, optional
+        How to convert PLATEAU orthometric heights (TP) into ellipsoidal
+        heights before ECEF conversion.  See module docstring for the
+        supported values.  Default is ``None`` (no correction, with a
+        one-time UserWarning).
 
     Returns
     -------
     BuildingModel
     """
     p = Path(filepath_or_dir)
-    loader = PlateauLoader(zone=zone)
+    loader = PlateauLoader(zone=zone, geoid_correction=geoid_correction)
     if p.is_dir():
         return loader.load_directory(
             p, kinds=kinds, include_bridges=include_bridges
