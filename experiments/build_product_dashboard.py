@@ -267,7 +267,7 @@ def main() -> None:
         ".metadata { color: #7f8c8d; font-size: 12px; margin-bottom: 20px; }",
         "</style></head><body>",
         "<h1>PPC demo5 FIX-Rate Predictor — Dashboard</h1>",
-        f"<p class='metadata'>Adopted model: <code>current_tight_hold + carry + α=0.75 + isotonic blend 0.75</code> · strict nested LORO on 6 runs / {total_windows} windows</p>",
+        f"<p class='metadata'>Adopted model: <code>current_tight_hold + carry + α=0.75 + isotonic blend 0.75 + phase-delta guard</code> · strict nested LORO on 6 runs / {total_windows} windows</p>",
         "<div class='summary'>",
         f"<div class='cell'><div class='label'>run MAE</div><div class='value'>{run_mae:.2f} pp</div></div>",
         f"<div class='cell'><div class='label'>window MAE</div><div class='value'>{wmae:.2f} pp</div></div>",

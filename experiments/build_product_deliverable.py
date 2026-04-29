@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the product deliverable package for the adopted strict-best model.
 
-Reads the adopted `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_meta_run45`
+Reads the adopted `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45`
 window predictions and emits:
 
 1. `internal_docs/product_deliverable/route_level_fix_rate_prediction.csv`
@@ -35,7 +35,7 @@ RESULTS_DIR = EXPERIMENTS_DIR / "results"
 DELIVERABLE_DIR = Path(__file__).resolve().parent.parent / "internal_docs" / "product_deliverable"
 DEFAULT_PRED_CSV = (
     RESULTS_DIR
-    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_meta_run45_window_predictions.csv"
+    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45_window_predictions.csv"
 )
 REQUIRED_PREDICTION_COLUMNS = {
     "city",

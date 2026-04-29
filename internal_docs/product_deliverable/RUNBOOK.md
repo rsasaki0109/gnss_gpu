@@ -29,13 +29,13 @@ python3 experiments/predict.py
 ```
 
 This is the frozen product path.  It reads the committed adopted
-alpha75+isotonic window predictions and refreshes the operator-facing
+alpha75+isotonic+phaseguard window predictions and refreshes the operator-facing
 outputs.  It should finish in a few seconds from a clean checkout.
 
 Outputs land in:
 
-- `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_meta_run45_window_predictions.csv` — frozen input artifact
-- `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_meta_run45_product_model.pkl.gz` — saved inference model artifact
+- `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_meta_run45_window_predictions.csv` — frozen input artifact
+- `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_meta_run45_product_model.pkl.gz` — saved inference model artifact
 - `internal_docs/product_deliverable/route_level_fix_rate_prediction.csv`
 - `internal_docs/product_deliverable/window_level_details.csv`
 - `internal_docs/product_deliverable/dashboard.html` — open in a browser
@@ -304,7 +304,7 @@ One row per `(city, run)` with columns:
 
 - `actual_fix_rate_pct` — demo5 observed FIX rate
 - `baseline_pred_fix_rate_pct` — §2.2 conservative deployable baseline
-- `adopted_pred_fix_rate_pct` — adopted alpha75+isotonic model prediction
+- `adopted_pred_fix_rate_pct` — adopted alpha75+isotonic+phaseguard model prediction
 - `adopted_abs_error_pp` — absolute error of the adopted prediction
 - `confidence_tier` — `high` / `medium` / `low`
 - `confidence_note` — reason for the tier
@@ -412,7 +412,7 @@ Per D-030 / D-033:
 - ≤ 1-2 new runs: do nothing.  Expect prediction quality to match the
   reported metrics.
 - 3-9 new runs: re-run `predict.py --retrain`, check whether aggregate metrics
-  stay within the documented ranges (run MAE ~2.7 pp, corr ~0.54).
+  stay within the documented ranges (run MAE ~1.8 pp, corr ~0.56).
 - ≥ 10 new runs: re-scan the `hold_ready_thr` dimension
   (§7.13 / §7.14) and the residual alpha (§7.16).  The current
   thresholds were informed by Tokyo run2 behaviour and may drift.
@@ -430,8 +430,8 @@ Per D-030 / D-033:
 | `experiments/product_inference_model.py` | fit/run saved single-model product inference artifact, including online-compatible scoring |
 | `experiments/product_source_bundle.py` | validate source manifests that bind raw PPC run directories to derived epoch/window/base product input CSVs |
 | `experiments/product_raw_source_prepare.py` | bootstrap raw PPC source preparation into model-schema-compatible epoch/window/base CSVs and a derived source manifest; neutral-fills unsupported simulator/refinedgrid-only features |
-| `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_meta_run45_window_predictions.csv` | committed adopted calibrated window predictions used by default product mode |
-| `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact with 0.75-blended final isotonic calibration used by `predict.py --inference` |
+| `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_meta_run45_window_predictions.csv` | committed adopted calibrated window predictions used by default product mode |
+| `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact with 0.75-blended final isotonic calibration and phase-delta prediction guard used by `predict.py --inference` |
 | `experiments/build_product_deliverable.py` | deliverable CSV builder |
 | `experiments/build_product_dashboard.py` | HTML dashboard renderer |
 | `internal_docs/product_deliverable/dashboard.html` | generated dashboard (open in browser) |
@@ -494,6 +494,6 @@ Per D-030 / D-033:
   name the output files explicitly and do not point them at the
   canonical `ppc_validationhold_window_summary_current_tight_hold.csv`
   path unless you intend to replace it.
-- Aggregate error on the dataset is about +0.03 pp after blended final
-  isotonic calibration.  Do not re-bias it with a post-hoc offset without
-  understanding the per-route distribution first.
+- Aggregate error on the dataset is about -1.16 pp after blended final
+  isotonic calibration plus phase-delta guard.  Do not re-bias it with a
+  post-hoc offset without understanding the per-route distribution first.

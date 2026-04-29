@@ -52,6 +52,7 @@ import product_raw_source_prepare as raw_source_prepare
 from product_inference_model import (
     _append_classifier_meta_online,
     _apply_final_calibrator,
+    _apply_prediction_guards,
     _base_from_frame_or_reference,
     _prediction_rows as _product_prediction_rows,
     _planned_counts_from_column,
@@ -831,6 +832,32 @@ def test_product_inference_final_calibrator() -> None:
     check("final isotonic calibrator supports blending", [0.0, 0.375, 1.0], blended.tolist())
 
 
+def test_product_inference_prediction_guards() -> None:
+    print("test_product_inference_prediction_guards")
+    frame = pd.DataFrame(
+        {
+            "rinex_phase_raw_delta_cycles_p50_p75": [500.0, 100.0, 500.0],
+        }
+    )
+    corrected = np.array([0.55, 0.55, 0.10], dtype=np.float64)
+    guarded = _apply_prediction_guards(
+        frame,
+        corrected,
+        {
+            "prediction_guards": [
+                {
+                    "name": "phase_delta_cap20",
+                    "feature": "rinex_phase_raw_delta_cycles_p50_p75",
+                    "operator": ">=",
+                    "threshold": 426.419,
+                    "cap": 0.20,
+                }
+            ]
+        },
+    )
+    check("prediction guard caps only active high predictions", [0.2, 0.55, 0.1], guarded.tolist())
+
+
 def main() -> None:
     test_classify_window()
     test_is_metadata_or_label()
@@ -850,6 +877,7 @@ def main() -> None:
     test_validationhold_window_rows_label_free()
     test_product_inference_label_free_output()
     test_product_inference_final_calibrator()
+    test_product_inference_prediction_guards()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILURE(S):")
         for name in FAILURES:

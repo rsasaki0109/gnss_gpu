@@ -48,9 +48,18 @@ from train_ppc_solver_transition_surrogate_stack import (
 SCHEMA_VERSION = 1
 DEFAULT_MODEL_PATH = (
     RESULTS_DIR
-    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_meta_run45_product_model.pkl.gz"
+    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45_product_model.pkl.gz"
 )
 KEY_COLUMNS = {"city", "run", "window_index"}
+PREDICTION_GUARD_PRESETS: dict[str, dict[str, object]] = {
+    "phase_delta_cap20": {
+        "name": "phase_delta_cap20",
+        "feature": "rinex_phase_raw_delta_cycles_p50_p75",
+        "operator": ">=",
+        "threshold": 426.419,
+        "cap": 0.20,
+    },
+}
 REQUIRED_FIT_COLUMNS = KEY_COLUMNS | {
     "sim_matched_epochs",
     "actual_fix_rate_pct",
@@ -367,6 +376,53 @@ def _apply_final_calibrator(corrected: np.ndarray, artifact: dict[str, object]) 
     return np.clip(values, 0.0, 1.0)
 
 
+def _prediction_guard_specs(names: list[str]) -> list[dict[str, object]]:
+    specs: list[dict[str, object]] = []
+    for name in names:
+        if name == "none":
+            continue
+        if name not in PREDICTION_GUARD_PRESETS:
+            raise SystemExit(f"unsupported prediction guard: {name}")
+        specs.append(dict(PREDICTION_GUARD_PRESETS[name]))
+    return specs
+
+
+def _apply_prediction_guards(df: pd.DataFrame, corrected: np.ndarray, artifact: dict[str, object]) -> np.ndarray:
+    guards = artifact.get("prediction_guards", [])
+    if not guards:
+        return corrected
+    values = np.asarray(corrected, dtype=np.float64).copy()
+    for guard in guards:
+        if not isinstance(guard, dict):
+            raise SystemExit("product model prediction_guards must be dictionaries")
+        feature = str(guard.get("feature", ""))
+        if feature not in df.columns:
+            raise SystemExit(f"window CSV is missing prediction guard feature column: {feature}")
+        threshold = float(guard.get("threshold", np.nan))
+        if not np.isfinite(threshold):
+            raise SystemExit(f"prediction guard {guard.get('name', feature)} has non-finite threshold")
+        operator = str(guard.get("operator", ">="))
+        feature_values = df[feature].to_numpy(dtype=np.float64)
+        finite = np.isfinite(feature_values)
+        if operator == ">=":
+            active = finite & (feature_values >= threshold)
+        elif operator == "<=":
+            active = finite & (feature_values <= threshold)
+        else:
+            raise SystemExit(f"unsupported prediction guard operator: {operator}")
+        if "cap" in guard:
+            cap = float(guard["cap"])
+            if not np.isfinite(cap) or cap < 0.0 or cap > 1.0:
+                raise SystemExit(f"prediction guard {guard.get('name', feature)} cap must be in [0, 1]")
+            values = np.where(active & (values > cap), cap, values)
+        if "floor" in guard:
+            floor = float(guard["floor"])
+            if not np.isfinite(floor) or floor < 0.0 or floor > 1.0:
+                raise SystemExit(f"prediction guard {guard.get('name', feature)} floor must be in [0, 1]")
+            values = np.where(active & (values < floor), floor, values)
+    return np.clip(values, 0.0, 1.0)
+
+
 def fit_model(args: argparse.Namespace) -> None:
     df = _sort_windows(pd.read_csv(args.window_csv))
     _require_columns(df, REQUIRED_FIT_COLUMNS, "training window CSV")
@@ -449,6 +505,7 @@ def fit_model(args: argparse.Namespace) -> None:
         "final_calibrator": final_calibrator,
         "final_calibrator_source": final_calibrator_source,
         "final_calibrator_blend": float(args.final_calibrator_blend),
+        "prediction_guards": _prediction_guard_specs(args.prediction_guard),
     }
     _save_pickle_gz(args.model_output, payload)
 
@@ -499,6 +556,7 @@ def predict_frame(
     alpha = float(artifact["residual_alpha"])
     corrected = np.clip(base + alpha * np.clip(residual, -clip, clip), 0.0, 1.0)
     corrected = _apply_final_calibrator(corrected, artifact)
+    corrected = _apply_prediction_guards(df, corrected, artifact)
     return residual, corrected, probabilities
 
 
@@ -621,6 +679,13 @@ def parse_args() -> argparse.Namespace:
     fit.add_argument("--residual-max-features", type=float, default=0.75)
     fit.add_argument("--final-calibrator", choices=("none", "isotonic"), default="none")
     fit.add_argument("--final-calibrator-blend", type=float, default=1.0)
+    fit.add_argument(
+        "--prediction-guard",
+        action="append",
+        choices=("none", *PREDICTION_GUARD_PRESETS),
+        default=[],
+        help="optional deployable post-calibration prediction guard; can be passed more than once",
+    )
     fit.add_argument("--random-state", type=int, default=2034)
 
     infer = sub.add_parser("infer", help="score a window CSV with a saved product model")
