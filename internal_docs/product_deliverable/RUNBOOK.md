@@ -137,7 +137,29 @@ Outputs:
 When the inference input has no actual labels, the output omits
 actual/error columns and contains predictions only.
 
-### 3.5 Full retrain / research scoring
+### 3.5 Online-compatible inference command
+
+Use this when prepared windows arrive in route order and the planned
+route length is known:
+
+```bash
+python3 experiments/predict.py \
+  --online-inference \
+  --window-csv experiments/results/<custom_prefix_for_this_run>_prepared_window_predictions.csv \
+  --use-window-base-prediction \
+  --planned-window-count 32 \
+  --inference-output-prefix experiments/results/<custom_prefix_for_this_run>_online
+```
+
+The online scorer uses only the current window and previous windows for
+the product model's temporal probability features.  The adopted model
+also uses route-position meta features, so it needs either
+`--planned-window-count` for a single route or a `planned_window_count`
+column for multi-route inputs.  Use `--online-use-input-run-length`
+only for offline parity/smoke checks where the complete input file is
+already available.
+
+### 3.6 Full retrain / research scoring
 
 Use `predict.py --retrain` only when deliberately rebuilding the
 research LORO pipeline:
@@ -262,8 +284,8 @@ Per D-030 / D-033:
 
 | Path | Purpose |
 | --- | --- |
-| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--batch-inference` prepares and scores fresh data in one command, split `--prepare-inference` / `--inference` are available for debugging, `--retrain` runs the full LORO pipeline |
-| `experiments/product_inference_model.py` | fit/run saved single-model product inference artifact |
+| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--batch-inference` prepares and scores fresh data in one command, `--online-inference` scores prepared windows causally with planned route length, split `--prepare-inference` / `--inference` are available for debugging, `--retrain` runs the full LORO pipeline |
+| `experiments/product_inference_model.py` | fit/run saved single-model product inference artifact, including online-compatible scoring |
 | `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv` | committed adopted §7.16 window predictions used by default product mode |
 | `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact used by `predict.py --inference` |
 | `experiments/build_product_deliverable.py` | deliverable CSV builder |
@@ -306,6 +328,14 @@ Per D-030 / D-033:
   final `<prefix>_window_predictions.csv` output.  Use a name such as
   `*_prepared_window_predictions.csv` so the prepared feature file and
   final prediction file remain separate.
+- `--online-inference` is online for the saved product scoring stage,
+  not for raw feature extraction.  The window row must already contain
+  deployable simulator/RINEX features and `base_pred_fix_rate_pct` (or
+  be paired with `--base-prefix`).
+- The adopted product artifact uses planned route position.  If the
+  route length is not known at runtime, do not use online mode as a
+  strict live predictor; first provide a planned window count from the
+  route plan.
 - The `rebuild_validationhold_flag_thresholds.py` script overwrites
   its output CSV silently.  If you experiment with alternate presets,
   name the output files explicitly and do not point them at the
