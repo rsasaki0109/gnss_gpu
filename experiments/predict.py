@@ -12,6 +12,10 @@ single-model artifact in one operator command.  `--prepare-inference`
 and `--inference` keep the same stages split for debugging and
 intermediate inspection.
 
+`--source-bundle-inference` starts from a source manifest that binds raw
+PPC run directories to the derived epoch/window/base CSVs, validates the
+source-to-product contract, then runs the same batch inference path.
+
 `--retrain` runs the research/training pipeline that created the adopted
 predictions.  It requires the large preprocessed epoch/window CSVs and a
 refined-grid base prediction CSV.  The nested stack uses strict
@@ -50,6 +54,12 @@ Usage (one-shot fresh-data preparation + inference without retraining):
         --prepared-window-csv experiments/results/my_run_prepared_window_predictions.csv \\
         --inference-output-prefix experiments/results/my_run_product
 
+Usage (source-manifest validation + one-shot inference):
+
+    python3 experiments/predict.py \\
+        --source-bundle-inference \\
+        --source-manifest path/to/source_manifest.json
+
 Usage (score prepared fresh-data window CSV without retraining):
 
     python3 experiments/predict.py \\
@@ -77,6 +87,8 @@ import time
 from csv import DictReader, DictWriter
 from datetime import datetime
 from pathlib import Path
+
+from product_source_bundle import load_source_bundle, validate_source_bundle
 
 
 _stage_counter = {"current": 0, "total": 1, "started": None}
@@ -334,6 +346,10 @@ def _merge_base_prediction_column(
 
 
 def _planned_stage_count(args: argparse.Namespace) -> int:
+    if args.source_bundle_inference:
+        return 6
+    if args.source_bundle_check:
+        return 1
     if args.batch_inference:
         return 5
     if args.prepare_inference:
@@ -415,12 +431,36 @@ def _preflight_batch_inference(args: argparse.Namespace) -> None:
     _require_input(args.inference_model, "saved product inference model")
 
 
+def _apply_source_bundle(args: argparse.Namespace) -> None:
+    validated = validate_source_bundle(load_source_bundle(args.source_manifest))
+    args.epochs_csv = validated.epochs_csv
+    args.window_csv = validated.window_csv
+    args.base_prefix = str(validated.base_prediction_csv)
+    if validated.prepare_prefix is not None:
+        args.prepare_prefix = validated.prepare_prefix
+    if validated.prepared_window_csv is not None:
+        args.prepared_window_csv = validated.prepared_window_csv
+    if validated.inference_output_prefix is not None:
+        args.inference_output_prefix = validated.inference_output_prefix
+    print(
+        "source bundle ok: "
+        f"{validated.run_count} run(s), "
+        f"epochs={validated.epochs_csv}, "
+        f"windows={validated.window_csv}, "
+        f"base={validated.base_prediction_csv}"
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the adopted §7.16 FIX-rate prediction pipeline")
     parser.add_argument("--retrain", action="store_true",
                         help="run the full LORO training pipeline instead of the frozen product flow")
     parser.add_argument("--batch-inference", action="store_true",
                         help="prepare fresh-data inference inputs and score them in one command; no retraining")
+    parser.add_argument("--source-bundle-check", action="store_true",
+                        help="validate a raw PPC source manifest and derived product CSV contract")
+    parser.add_argument("--source-bundle-inference", action="store_true",
+                        help="validate --source-manifest, then run one-shot batch inference; no retraining")
     parser.add_argument("--inference", action="store_true",
                         help="score --window-csv with a saved single-model artifact; no retraining")
     parser.add_argument("--online-inference", action="store_true",
@@ -441,6 +481,8 @@ def parse_args() -> argparse.Namespace:
                         help="prefix for intermediate --batch-inference/--prepare-inference artifacts")
     parser.add_argument("--prepared-window-csv", type=Path,
                         help="prepared window CSV output; default is <prepare-prefix>_window_predictions.csv")
+    parser.add_argument("--source-manifest", type=Path,
+                        help="JSON manifest binding raw PPC source runs to derived product input CSVs")
     parser.add_argument("--calibration-prediction-csv", type=Path,
                         help="optional LORO prediction CSV used to calibrate the saved residual corrector")
     parser.add_argument("--use-window-base-prediction", action="store_true",
@@ -474,6 +516,8 @@ def parse_args() -> argparse.Namespace:
         for v in (
             args.retrain,
             args.batch_inference,
+            args.source_bundle_check,
+            args.source_bundle_inference,
             args.inference,
             args.online_inference,
             args.prepare_inference,
@@ -483,8 +527,11 @@ def parse_args() -> argparse.Namespace:
     if active_modes > 1:
         parser.error(
             "--retrain, --batch-inference, --inference, --prepare-inference, "
-            "--online-inference, and --fit-inference-model are mutually exclusive"
+            "--online-inference, --source-bundle-check, --source-bundle-inference, "
+            "and --fit-inference-model are mutually exclusive"
         )
+    if (args.source_bundle_check or args.source_bundle_inference) and args.source_manifest is None:
+        parser.error("--source-bundle-check/--source-bundle-inference require --source-manifest")
     return args
 
 
@@ -503,6 +550,16 @@ def main() -> None:
     _stage_counter["total"] = _planned_stage_count(args)
     _stage_counter["started"] = None
     overall_start = time.monotonic()
+
+    if args.source_bundle_check or args.source_bundle_inference:
+        stage("validate PPC source manifest and derived product inputs")
+        _apply_source_bundle(args)
+        stage_done()
+        if args.source_bundle_check:
+            total_dt = time.monotonic() - overall_start
+            print(f"\n[{_timestamp()}] source bundle validation finished in {total_dt:.1f}s")
+            return
+        args.batch_inference = True
 
     if args.prepare_inference or args.batch_inference:
         if args.batch_inference:
