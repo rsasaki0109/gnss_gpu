@@ -7,7 +7,9 @@ the adopted configuration into a deployable single-model artifact:
 - ``fit`` trains transition-surrogate classifiers on all training windows and
   fits the adopted residual corrector from calibration probabilities.
 - ``infer`` loads that artifact and scores a new pre-augmented window CSV
-  without retraining.
+  without retraining.  With ``--online``, it scores the same artifact in
+  causal route order using a planned route window count for run-position
+  meta features.
 
 The input window CSV for inference must already contain the deployable window
 features used by the adopted product model, including validationhold features.
@@ -152,6 +154,104 @@ def _probabilities_from_models(classifiers: dict[str, object], x: np.ndarray) ->
     return {name: _positive_probability(model, x) for name, model in classifiers.items()}
 
 
+def _append_classifier_meta_online(
+    *,
+    df: pd.DataFrame,
+    x: np.ndarray,
+    names: list[str],
+    base: np.ndarray,
+    include_base: bool,
+    include_city: bool,
+    include_run_position: bool,
+    planned_window_counts: dict[tuple[str, str], int],
+) -> tuple[np.ndarray, list[str]]:
+    columns = [x]
+    out_names = list(names)
+    if include_base:
+        columns.append(base.reshape(-1, 1))
+        columns.append(_logit(base).reshape(-1, 1))
+        out_names.extend(["meta_base_pred", "meta_base_logit"])
+    if include_run_position:
+        run_pos = np.zeros(len(df), dtype=np.float64)
+        run_frac = np.zeros(len(df), dtype=np.float64)
+        run_remaining = np.zeros(len(df), dtype=np.float64)
+        run_len = np.zeros(len(df), dtype=np.float64)
+        for (city, run), group in df.groupby(["city", "run"], sort=False):
+            key = (str(city), str(run))
+            planned = int(planned_window_counts.get(key, 0))
+            if planned <= 0:
+                raise SystemExit(
+                    "online inference requires planned window counts for every route; "
+                    f"missing {city}/{run}"
+                )
+            indices = list(group.sort_values("window_index").index)
+            if len(indices) > planned:
+                raise SystemExit(
+                    f"online inference received {len(indices)} rows for {city}/{run}, "
+                    f"but planned_window_count is {planned}"
+                )
+            denom = max(planned - 1, 1)
+            for pos, idx in enumerate(indices):
+                run_pos[idx] = float(pos)
+                run_frac[idx] = float(pos / denom)
+                run_remaining[idx] = float(max(planned - 1 - pos, 0) / denom)
+                run_len[idx] = float(planned)
+        columns.extend(
+            [
+                run_pos.reshape(-1, 1),
+                run_frac.reshape(-1, 1),
+                run_remaining.reshape(-1, 1),
+                run_len.reshape(-1, 1),
+            ]
+        )
+        out_names.extend(["meta_run_pos", "meta_run_fraction", "meta_run_remaining_fraction", "meta_run_window_count"])
+    if include_city:
+        for city in sorted(df["city"].astype(str).unique()):
+            columns.append((df["city"].astype(str).to_numpy() == city).astype(np.float64).reshape(-1, 1))
+            out_names.append(f"meta_city_{city}")
+    return np.column_stack(columns), out_names
+
+
+def _planned_counts_from_input(df: pd.DataFrame) -> dict[tuple[str, str], int]:
+    return {
+        (str(city), str(run)): int(len(group))
+        for (city, run), group in df.groupby(["city", "run"], sort=False)
+    }
+
+
+def _planned_counts_from_column(df: pd.DataFrame, column: str) -> dict[tuple[str, str], int]:
+    if column not in df.columns:
+        raise SystemExit(
+            "online inference needs a planned route length. "
+            f"Add column '{column}', pass --planned-window-count, or use --online-use-input-run-length."
+        )
+    counts: dict[tuple[str, str], int] = {}
+    for (city, run), group in df.groupby(["city", "run"], sort=False):
+        values = pd.to_numeric(group[column], errors="coerce").dropna().unique()
+        if len(values) != 1:
+            raise SystemExit(f"{column} must have exactly one value for {city}/{run}")
+        value = float(values[0])
+        if not np.isfinite(value) or value <= 0.0 or not value.is_integer():
+            raise SystemExit(f"{column} must be a positive integer for {city}/{run}")
+        counts[(str(city), str(run))] = int(value)
+    return counts
+
+
+def _online_planned_window_counts(args: argparse.Namespace, df: pd.DataFrame, artifact: dict[str, object]) -> dict[tuple[str, str], int] | None:
+    if not args.online:
+        return None
+    if not bool(artifact["classifier_include_run_position"]):
+        return {}
+    if args.online_use_input_run_length:
+        return _planned_counts_from_input(df)
+    if args.planned_window_count is not None:
+        count = int(args.planned_window_count)
+        if count <= 0:
+            raise SystemExit("--planned-window-count must be positive")
+        return {key: count for key in _planned_counts_from_input(df)}
+    return _planned_counts_from_column(df, args.planned_window_count_column)
+
+
 def _calibration_probabilities(
     *,
     calibration_prediction_csv: Path | None,
@@ -290,20 +390,38 @@ def fit_model(args: argparse.Namespace) -> None:
     _save_pickle_gz(args.model_output, payload)
 
 
-def predict_frame(df: pd.DataFrame, artifact: dict[str, object], base: np.ndarray) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+def predict_frame(
+    df: pd.DataFrame,
+    artifact: dict[str, object],
+    base: np.ndarray,
+    *,
+    online_planned_window_counts: dict[tuple[str, str], int] | None = None,
+) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
     if int(artifact.get("schema_version", -1)) != SCHEMA_VERSION:
         raise SystemExit(f"unsupported product model schema: {artifact.get('schema_version')}")
     raw_feature_names = list(artifact["raw_feature_names"])
     x_raw = _feature_matrix_for_names(df, raw_feature_names)
-    x_classifier, classifier_feature_names = _append_classifier_meta(
-        df=df,
-        x=x_raw,
-        names=raw_feature_names,
-        base=base,
-        include_base=bool(artifact["classifier_include_base"]),
-        include_city=bool(artifact["classifier_include_city"]),
-        include_run_position=bool(artifact["classifier_include_run_position"]),
-    )
+    if online_planned_window_counts is None:
+        x_classifier, classifier_feature_names = _append_classifier_meta(
+            df=df,
+            x=x_raw,
+            names=raw_feature_names,
+            base=base,
+            include_base=bool(artifact["classifier_include_base"]),
+            include_city=bool(artifact["classifier_include_city"]),
+            include_run_position=bool(artifact["classifier_include_run_position"]),
+        )
+    else:
+        x_classifier, classifier_feature_names = _append_classifier_meta_online(
+            df=df,
+            x=x_raw,
+            names=raw_feature_names,
+            base=base,
+            include_base=bool(artifact["classifier_include_base"]),
+            include_city=bool(artifact["classifier_include_city"]),
+            include_run_position=bool(artifact["classifier_include_run_position"]),
+            planned_window_counts=online_planned_window_counts,
+        )
     expected_names = list(artifact["classifier_feature_names"])
     if classifier_feature_names != expected_names:
         raise SystemExit("classifier feature schema mismatch; check city/meta options and input columns")
@@ -395,7 +513,13 @@ def run_inference(args: argparse.Namespace) -> None:
         base_prefix=args.base_prefix,
         base_prediction_column=args.base_prediction_column,
     )
-    residual, corrected, probabilities = predict_frame(df, artifact, base)
+    planned_counts = _online_planned_window_counts(args, df, artifact)
+    residual, corrected, probabilities = predict_frame(
+        df,
+        artifact,
+        base,
+        online_planned_window_counts=planned_counts,
+    )
     window_rows = _prediction_rows(
         df=df,
         base=base,
@@ -439,6 +563,26 @@ def parse_args() -> argparse.Namespace:
     infer.add_argument("--base-prediction-column", default="corrected_pred_fix_rate_pct")
     infer.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
     infer.add_argument("--output-prefix", type=Path, required=True)
+    infer.add_argument(
+        "--online",
+        action="store_true",
+        help="score in causal online-compatible mode using planned route window counts",
+    )
+    infer.add_argument(
+        "--planned-window-count",
+        type=int,
+        help="planned window count for every route when --online is used",
+    )
+    infer.add_argument(
+        "--planned-window-count-column",
+        default="planned_window_count",
+        help="per-route planned window count column used by --online",
+    )
+    infer.add_argument(
+        "--online-use-input-run-length",
+        action="store_true",
+        help="offline smoke/backfill mode: use input row count as planned route length",
+    )
     return parser.parse_args()
 
 
