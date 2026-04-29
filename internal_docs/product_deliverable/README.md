@@ -29,6 +29,9 @@ classification targets during training.
 - Fresh-data offline inference: prepare and score new PPC/taroz
   preprocessed epoch/window/base CSVs with the committed full-data-fit
   model artifact, without retraining the nested LORO stack.
+- Online-compatible scoring: score prepared windows in route order using
+  only current/past model probability state, when the planned route
+  window count is known.
 - Split inference input preparation: build the pre-augmented window CSV
   separately when debugging intermediate validationhold features.
 
@@ -38,8 +41,9 @@ classification targets during training.
   MAE is 17 pp and tail errors reach 60+ pp on known failure cases.
 - Raw GNSS/RINEX/simulator extraction from source files.  The product
   path starts from preprocessed epoch/window/base CSVs.
-- Real-time / online inference.  The current pipeline is still offline
-  batch inference; see section 6 below.
+- Full real-time feature extraction from raw RINEX/simulator source
+  files.  The product model can score prepared windows online, but the
+  upstream feature extraction is still batch/offline.
 - Data sources different from taroz/PPC Tokyo/Nagoya.  The model was
   tuned on 6 runs across 2 cities; generalisation to other
   cities/environments is untested.
@@ -131,7 +135,7 @@ These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
   confidence tier.
 - `window_level_details.csv` — per-window predictions with focus-case
   annotations, intended for diagnostics.
-- In `--batch-inference` or `--inference` mode,
+- In `--batch-inference`, `--inference`, or `--online-inference` mode,
   `<prefix>_route_predictions.csv` and
   `<prefix>_window_predictions.csv` are written.  When labels are not
   present, these files contain predictions only and omit actual/error
@@ -218,8 +222,10 @@ These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
 - `experiments/predict.py` — product entrypoint.  Default mode refreshes
   deliverable outputs from the frozen §7.16 predictions;
   `--batch-inference` prepares and scores fresh inputs in one command;
-  split `--prepare-inference` / `--inference` are available for
-  debugging; `--retrain` remains the research LORO pipeline.
+  `--online-inference` scores prepared windows in causal mode with a
+  planned route length; split `--prepare-inference` / `--inference` are
+  available for debugging; `--retrain` remains the research LORO
+  pipeline.
 
 ## 5. Known failure modes
 
@@ -326,6 +332,23 @@ not retrain.  The output files are
 If the prepared window CSV does not contain `base_pred_fix_rate_pct`,
 use `--base-prefix path/to/refinedgrid_prefix_or_predictions.csv`
 instead of `--use-window-base-prediction`.
+
+### Online-compatible inference on prepared windows
+
+```bash
+python3 experiments/predict.py \
+  --online-inference \
+  --window-csv experiments/results/my_run_prepared_window_predictions.csv \
+  --use-window-base-prediction \
+  --planned-window-count 32 \
+  --inference-output-prefix experiments/results/my_run_online_product
+```
+
+This scores the same saved product model with causal current/past
+probability state.  The adopted artifact uses route-position meta
+features, so online mode needs a planned route length.  For multi-route
+inputs, add a `planned_window_count` column to the prepared window CSV
+instead of passing a single `--planned-window-count`.
 
 Raw source-file feature extraction is still upstream of this command.
 

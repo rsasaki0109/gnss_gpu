@@ -57,6 +57,15 @@ Usage (score prepared fresh-data window CSV without retraining):
         --window-csv experiments/results/my_run_prepared_window_predictions.csv \\
         --use-window-base-prediction \\
         --inference-output-prefix experiments/results/my_run_product
+
+Usage (causal online-compatible scoring on prepared windows):
+
+    python3 experiments/predict.py \\
+        --online-inference \\
+        --window-csv experiments/results/my_run_prepared_window_predictions.csv \\
+        --use-window-base-prediction \\
+        --planned-window-count 32 \\
+        --inference-output-prefix experiments/results/my_run_online_product
 """
 
 from __future__ import annotations
@@ -329,7 +338,7 @@ def _planned_stage_count(args: argparse.Namespace) -> int:
         return 5
     if args.prepare_inference:
         return 4
-    if args.inference or args.fit_inference_model:
+    if args.inference or args.online_inference or args.fit_inference_model:
         return 1
     if not args.retrain:
         return 1
@@ -372,6 +381,22 @@ def _preflight_inference(args: argparse.Namespace) -> None:
         _require_base_prediction(_base_prediction_path(args.base_prefix))
 
 
+def _preflight_online_inference(args: argparse.Namespace) -> None:
+    _preflight_inference(args)
+    if args.online_use_input_run_length or args.planned_window_count is not None:
+        return
+    columns = _read_columns(args.window_csv)
+    if args.planned_window_count_column not in columns:
+        sys.stderr.write(
+            "\nERROR: --online-inference needs a planned route length:\n"
+            f"  missing column: {args.planned_window_count_column}\n"
+            "Pass --planned-window-count for a single route, add a per-route\n"
+            "planned_window_count column, or use --online-use-input-run-length\n"
+            "for offline parity/smoke checks.\n"
+        )
+        sys.exit(1)
+
+
 def _preflight_fit_inference_model(args: argparse.Namespace) -> None:
     _require_input(args.window_csv, "training window CSV", FIT_INFERENCE_MODEL_REQUIRED_COLUMNS)
     _require_base_prediction(_base_prediction_path(args.base_prefix))
@@ -398,6 +423,8 @@ def parse_args() -> argparse.Namespace:
                         help="prepare fresh-data inference inputs and score them in one command; no retraining")
     parser.add_argument("--inference", action="store_true",
                         help="score --window-csv with a saved single-model artifact; no retraining")
+    parser.add_argument("--online-inference", action="store_true",
+                        help="score --window-csv in causal online-compatible mode; no retraining")
     parser.add_argument("--prepare-inference", action="store_true",
                         help="build a pre-augmented inference window CSV from epoch/window/base inputs")
     parser.add_argument("--fit-inference-model", action="store_true",
@@ -417,7 +444,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--calibration-prediction-csv", type=Path,
                         help="optional LORO prediction CSV used to calibrate the saved residual corrector")
     parser.add_argument("--use-window-base-prediction", action="store_true",
-                        help="in --inference mode, use base_pred_fix_rate_pct from --window-csv instead of --base-prefix")
+                        help="in inference modes, use base_pred_fix_rate_pct from --window-csv instead of --base-prefix")
+    parser.add_argument("--planned-window-count", type=int,
+                        help="planned route window count for --online-inference on a single route")
+    parser.add_argument("--planned-window-count-column", default="planned_window_count",
+                        help="per-route planned window count column for --online-inference")
+    parser.add_argument("--online-use-input-run-length", action="store_true",
+                        help="for offline parity/smoke checks, use input row count as the planned window count")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="directory for route/window deliverable CSVs and dashboard")
     parser.add_argument("--epochs-csv", type=Path, default=DEFAULT_EPOCHS_CSV)
@@ -442,6 +475,7 @@ def parse_args() -> argparse.Namespace:
             args.retrain,
             args.batch_inference,
             args.inference,
+            args.online_inference,
             args.prepare_inference,
             args.fit_inference_model,
         )
@@ -449,7 +483,7 @@ def parse_args() -> argparse.Namespace:
     if active_modes > 1:
         parser.error(
             "--retrain, --batch-inference, --inference, --prepare-inference, "
-            "and --fit-inference-model are mutually exclusive"
+            "--online-inference, and --fit-inference-model are mutually exclusive"
         )
     return args
 
@@ -575,12 +609,23 @@ def main() -> None:
         print(f"window predictions: {window_csv}")
         return
 
-    if args.inference:
-        _preflight_inference(args)
+    if args.inference or args.online_inference:
+        if args.online_inference:
+            _preflight_online_inference(args)
+        else:
+            _preflight_inference(args)
         if args.check_only:
-            print(f"preflight ok: inference can use {args.inference_model}")
+            if args.online_inference:
+                print(f"preflight ok: online inference can use {args.inference_model}")
+            else:
+                print(f"preflight ok: inference can use {args.inference_model}")
             return
-        stage("score fresh window CSV with saved product inference model")
+        stage_label = (
+            "score prepared window CSV with saved product model in online mode"
+            if args.online_inference
+            else "score fresh window CSV with saved product inference model"
+        )
+        stage(stage_label)
         cmd = [
             sys.executable,
             str(EXPERIMENTS_DIR / "product_inference_model.py"),
@@ -592,10 +637,19 @@ def main() -> None:
         ]
         if not args.use_window_base_prediction:
             cmd.extend(["--base-prefix", args.base_prefix])
+        if args.online_inference:
+            cmd.append("--online")
+            if args.planned_window_count is not None:
+                cmd.extend(["--planned-window-count", str(args.planned_window_count)])
+            if args.planned_window_count_column:
+                cmd.extend(["--planned-window-count-column", args.planned_window_count_column])
+            if args.online_use_input_run_length:
+                cmd.append("--online-use-input-run-length")
         run(cmd)
         stage_done()
         total_dt = time.monotonic() - overall_start
-        print(f"\n[{_timestamp()}] fresh-data inference finished in {total_dt:.1f}s")
+        label = "online inference" if args.online_inference else "fresh-data inference"
+        print(f"\n[{_timestamp()}] {label} finished in {total_dt:.1f}s")
         return
 
     if args.fit_inference_model:
