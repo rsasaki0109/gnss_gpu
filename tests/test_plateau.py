@@ -106,6 +106,92 @@ GEOGRAPHIC_CITYGML = _make_minimal_citygml("bldg", "geo_bldg_1", lod=1, polygons
 MINIMAL_BRIDGE_CITYGML = _make_minimal_citygml("brid", "test_brid_1", lod=2, polygons=_BRIDGE_DECK)
 
 
+# Hand-rolled fixture with multiple ``cityObjectMember`` entries and
+# non-canonical namespace prefix names / declaration order.  Exercises
+# parser paths the factory above does not (factory always uses
+# canonical prefixes ``core/bldg/brid/gml`` and a single member).
+_MULTI_MEMBER_NONCANONICAL_CITYGML = textwrap.dedent("""\
+    <?xml version="1.0" encoding="UTF-8"?>
+    <c:CityModel
+      xmlns:g="http://www.opengis.net/gml"
+      xmlns:b="http://www.opengis.net/citygml/building/2.0"
+      xmlns:c="http://www.opengis.net/citygml/2.0">
+      <c:cityObjectMember>
+        <b:Building g:id="b_one">
+          <b:lod1Solid>
+            <g:Solid>
+              <g:exterior>
+                <g:CompositeSurface>
+                  <g:surfaceMember>
+                    <g:Polygon>
+                      <g:exterior>
+                        <g:LinearRing>
+                          <g:posList>0 0 0 1 0 0 1 1 0 0 1 0 0 0 0</g:posList>
+                        </g:LinearRing>
+                      </g:exterior>
+                    </g:Polygon>
+                  </g:surfaceMember>
+                </g:CompositeSurface>
+              </g:exterior>
+            </g:Solid>
+          </b:lod1Solid>
+        </b:Building>
+      </c:cityObjectMember>
+      <c:cityObjectMember>
+        <b:Building g:id="b_two">
+          <b:lod2Solid>
+            <g:Solid>
+              <g:exterior>
+                <g:CompositeSurface>
+                  <g:surfaceMember>
+                    <g:Polygon>
+                      <g:exterior>
+                        <g:LinearRing>
+                          <g:posList>10 10 0 11 10 0 11 11 0 10 11 0 10 10 0</g:posList>
+                        </g:LinearRing>
+                      </g:exterior>
+                    </g:Polygon>
+                  </g:surfaceMember>
+                  <g:surfaceMember>
+                    <g:Polygon>
+                      <g:exterior>
+                        <g:LinearRing>
+                          <g:posList>10 10 5 10 11 5 11 11 5 11 10 5 10 10 5</g:posList>
+                        </g:LinearRing>
+                      </g:exterior>
+                    </g:Polygon>
+                  </g:surfaceMember>
+                </g:CompositeSurface>
+              </g:exterior>
+            </g:Solid>
+          </b:lod2Solid>
+        </b:Building>
+      </c:cityObjectMember>
+      <c:cityObjectMember>
+        <b:Building g:id="b_three">
+          <b:lod1Solid>
+            <g:Solid>
+              <g:exterior>
+                <g:CompositeSurface>
+                  <g:surfaceMember>
+                    <g:Polygon>
+                      <g:exterior>
+                        <g:LinearRing>
+                          <g:posList>20 20 0 21 20 0 21 21 0 20 21 0 20 20 0</g:posList>
+                        </g:LinearRing>
+                      </g:exterior>
+                    </g:Polygon>
+                  </g:surfaceMember>
+                </g:CompositeSurface>
+              </g:exterior>
+            </g:Solid>
+          </b:lod1Solid>
+        </b:Building>
+      </c:cityObjectMember>
+    </c:CityModel>
+""")
+
+
 @pytest.fixture
 def citygml_file(tmp_path):
     """Write the minimal CityGML to a temporary file."""
@@ -194,6 +280,22 @@ class TestCityGMLParser:
     def test_supported_kinds_constant(self):
         assert SUPPORTED_KINDS == frozenset({"bldg", "brid"})
 
+    def test_parse_multi_member_noncanonical_prefixes(self, tmp_path):
+        """Parser must handle multiple ``cityObjectMember`` entries and
+        non-canonical namespace prefix names (``c:``/``b:``/``g:``
+        instead of ``core:``/``bldg:``/``gml:``) and a non-canonical
+        declaration order on the root element."""
+        p = tmp_path / "multi.gml"
+        p.write_text(_MULTI_MEMBER_NONCANONICAL_CITYGML, encoding="utf-8")
+        buildings = parse_citygml(p)
+        ids = sorted(b.id for b in buildings)
+        assert ids == ["b_one", "b_three", "b_two"]
+        # b_two has 2 polygons (lod2), the other two have 1 each (lod1)
+        polys_per_id = {b.id: len(b.polygons) for b in buildings}
+        assert polys_per_id == {"b_one": 1, "b_two": 2, "b_three": 1}
+        lod_per_id = {b.id: b.lod for b in buildings}
+        assert lod_per_id == {"b_one": 1, "b_two": 2, "b_three": 1}
+
 
 class TestBridgeLoaderIntegration:
 
@@ -228,6 +330,21 @@ class TestBridgeLoaderIntegration:
         directory = self._stage(citygml_file, bridge_citygml_file)
         with pytest.raises(ValueError):
             load_plateau(directory, zone=9, kinds=("bldg", "tran"))
+
+    def test_include_bridges_false_with_brid_in_kinds_warns(
+        self, citygml_file, bridge_citygml_file
+    ):
+        """``include_bridges=False`` is additive-only; it must not silently
+        suppress 'brid' from ``kinds``.  A UserWarning is emitted to flag
+        the misuse, and bridges remain loaded."""
+        directory = self._stage(citygml_file, bridge_citygml_file)
+        with pytest.warns(UserWarning, match="additive-only"):
+            model = load_plateau(
+                directory, zone=9, kinds=("bldg", "brid"), include_bridges=False
+            )
+        # Bridges still loaded -> tris > bldg-only.
+        bldg_only = load_plateau(directory, zone=9, kinds=("bldg",))
+        assert model.triangles.shape[0] > bldg_only.triangles.shape[0]
 
 
 # ---------------------------------------------------------------------------
