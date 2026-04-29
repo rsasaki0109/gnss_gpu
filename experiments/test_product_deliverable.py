@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import json
+from argparse import Namespace
 from contextlib import redirect_stderr
+from csv import DictReader
 from io import StringIO
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 
 # Make the experiments directory importable when this file is run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -26,8 +30,32 @@ from build_product_deliverable import (
     _confidence_tier,
     _require_prediction_columns,
 )
-from predict import DEFAULT_PREDICTION_CSV, RESULTS_DIR, _base_prediction_path, _read_columns, _require
-from train_ppc_solver_transition_surrogate_stack import _reference_prediction_path
+from analyze_ppc_validation_hold_surrogate_windows import _window_rows as _validationhold_window_rows
+from predict import (
+    DEFAULT_PREDICTION_CSV,
+    RESULTS_DIR,
+    _base_prediction_path,
+    _inference_route_output_path,
+    _inference_window_output_path,
+    _merge_base_prediction_column,
+    _planned_stage_count,
+    _prefix_output_path,
+    _read_columns,
+    _require,
+    _require_distinct_batch_outputs,
+)
+from product_inference_model import (
+    _append_classifier_meta_online,
+    _base_from_frame_or_reference,
+    _prediction_rows as _product_prediction_rows,
+    _planned_counts_from_column,
+    _route_rows,
+)
+from product_source_bundle import load_source_bundle, validate_source_bundle
+from train_ppc_solver_transition_surrogate_stack import (
+    _append_classifier_meta as _append_classifier_meta_batch,
+    _reference_prediction_path,
+)
 
 
 FAILURES: list[str] = []
@@ -182,6 +210,336 @@ def test_base_prediction_path() -> None:
         Path("tmp/foo.csv"),
         _reference_prediction_path("tmp/foo.csv"),
     )
+    check(
+        "bare prepare prefix resolves under results",
+        RESULTS_DIR / "foo_window_predictions.csv",
+        _prefix_output_path("foo", "_window_predictions.csv"),
+    )
+    check(
+        "absolute prepare prefix resolves next to prefix",
+        Path("/tmp/foo_window_predictions.csv"),
+        _prefix_output_path("/tmp/foo", "_window_predictions.csv"),
+    )
+
+
+def test_prediction_mode_stage_counts() -> None:
+    print("test_prediction_mode_stage_counts")
+    base_args = {
+        "batch_inference": False,
+        "source_bundle_check": False,
+        "source_bundle_inference": False,
+        "prepare_inference": False,
+        "inference": False,
+        "online_inference": False,
+        "fit_inference_model": False,
+        "retrain": False,
+    }
+    check("frozen product flow stage count", 1, _planned_stage_count(Namespace(**base_args)))
+    check(
+        "batch inference stage count",
+        5,
+        _planned_stage_count(Namespace(**{**base_args, "batch_inference": True})),
+    )
+    check(
+        "prepare inference stage count",
+        4,
+        _planned_stage_count(Namespace(**{**base_args, "prepare_inference": True})),
+    )
+    check(
+        "split inference stage count",
+        1,
+        _planned_stage_count(Namespace(**{**base_args, "inference": True})),
+    )
+    check(
+        "online inference stage count",
+        1,
+        _planned_stage_count(Namespace(**{**base_args, "online_inference": True})),
+    )
+    check(
+        "source bundle check stage count",
+        1,
+        _planned_stage_count(Namespace(**{**base_args, "source_bundle_check": True})),
+    )
+    check(
+        "source bundle inference stage count",
+        6,
+        _planned_stage_count(Namespace(**{**base_args, "source_bundle_inference": True})),
+    )
+
+
+def test_online_classifier_meta_matches_batch_run_position() -> None:
+    print("test_online_classifier_meta_matches_batch_run_position")
+    frame = pd.DataFrame(
+        [
+            {"city": "tokyo", "run": "run1", "window_index": 0, "planned_window_count": 3},
+            {"city": "tokyo", "run": "run1", "window_index": 1, "planned_window_count": 3},
+            {"city": "tokyo", "run": "run1", "window_index": 2, "planned_window_count": 3},
+        ]
+    )
+    x = np.asarray([[1.0], [2.0], [3.0]], dtype=np.float64)
+    base = np.asarray([0.1, 0.2, 0.3], dtype=np.float64)
+    batch_x, batch_names = _append_classifier_meta_batch(
+        df=frame,
+        x=x,
+        names=["feature"],
+        base=base,
+        include_base=False,
+        include_city=False,
+        include_run_position=True,
+    )
+    online_x, online_names = _append_classifier_meta_online(
+        df=frame,
+        x=x,
+        names=["feature"],
+        base=base,
+        include_base=False,
+        include_city=False,
+        include_run_position=True,
+        planned_window_counts=_planned_counts_from_column(frame, "planned_window_count"),
+    )
+    check("online meta names match batch", batch_names, online_names)
+    check("online meta values match batch", True, bool(np.allclose(batch_x, online_x)))
+    try:
+        with redirect_stderr(StringIO()):
+            _append_classifier_meta_online(
+                df=frame,
+                x=x,
+                names=["feature"],
+                base=base,
+                include_base=False,
+                include_city=False,
+                include_run_position=True,
+                planned_window_counts={("tokyo", "run1"): 2},
+            )
+        check("online meta rejects too-short planned count", True, False)
+    except SystemExit as exc:
+        check("online meta rejects too-short planned count", True, exc.code != 0)
+
+
+def test_batch_output_paths() -> None:
+    print("test_batch_output_paths")
+    prefix = Path("/tmp/product_run")
+    check("batch route output path", Path("/tmp/product_run_route_predictions.csv"), _inference_route_output_path(prefix))
+    check(
+        "batch window output path",
+        Path("/tmp/product_run_window_predictions.csv"),
+        _inference_window_output_path(prefix),
+    )
+    try:
+        with redirect_stderr(StringIO()):
+            _require_distinct_batch_outputs(
+                prepared_window_csv=Path("/tmp/product_run_prepared_window_predictions.csv"),
+                inference_output_prefix=prefix,
+            )
+        check("batch output path accepts distinct files", True, True)
+    except SystemExit:
+        check("batch output path accepts distinct files", True, False)
+    try:
+        with redirect_stderr(StringIO()):
+            _require_distinct_batch_outputs(
+                prepared_window_csv=Path("/tmp/product_run_window_predictions.csv"),
+                inference_output_prefix=prefix,
+            )
+        check("batch output path rejects overwrite", True, False)
+    except SystemExit as exc:
+        check("batch output path rejects overwrite", True, exc.code != 0)
+
+
+def test_product_source_bundle_validation() -> None:
+    print("test_product_source_bundle_validation")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        run_dir = tmpdir / "data" / "nagoya" / "run1"
+        run_dir.mkdir(parents=True)
+        for name in ("rover.obs", "base.obs", "base.nav", "reference.csv"):
+            (run_dir / name).write_text("fixture\n", encoding="utf-8")
+
+        epochs = tmpdir / "epochs.csv"
+        windows = tmpdir / "windows.csv"
+        base = tmpdir / "base_predictions.csv"
+        prepared = tmpdir / "product_prepared_window_predictions.csv"
+        epochs.write_text(
+            "city,run,gps_tow\n"
+            "nagoya,run1,1.0\n",
+            encoding="utf-8",
+        )
+        windows.write_text(
+            "city,run,window_index,window_start_tow,window_end_tow,sim_matched_epochs\n"
+            "nagoya,run1,0,1.0,2.0,1\n",
+            encoding="utf-8",
+        )
+        base.write_text(
+            "city,run,window_index,corrected_pred_fix_rate_pct\n"
+            "nagoya,run1,0,12.5\n",
+            encoding="utf-8",
+        )
+        manifest = tmpdir / "manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "runs": [{"city": "nagoya", "run": "run1", "run_dir": str(run_dir)}],
+                    "derived_inputs": {
+                        "epochs_csv": str(epochs),
+                        "window_csv": str(windows),
+                        "base_prediction_csv": str(base),
+                    },
+                    "outputs": {
+                        "prepare_prefix": str(tmpdir / "product_prepare"),
+                        "prepared_window_csv": str(prepared),
+                        "inference_output_prefix": str(tmpdir / "product"),
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        validated = validate_source_bundle(load_source_bundle(manifest))
+        check("source bundle run count", 1, validated.run_count)
+        check("source bundle key", (("nagoya", "run1"),), validated.run_keys)
+        check("source bundle epochs path", epochs, validated.epochs_csv)
+        check("source bundle prepare prefix", str(tmpdir / "product_prepare"), validated.prepare_prefix)
+        check("source bundle prepared path", prepared, validated.prepared_window_csv)
+
+        extra_windows = tmpdir / "extra_windows.csv"
+        extra_windows.write_text(
+            "city,run,window_index,window_start_tow,window_end_tow,sim_matched_epochs\n"
+            "nagoya,run1,0,1.0,2.0,1\n"
+            "tokyo,run9,0,1.0,2.0,1\n",
+            encoding="utf-8",
+        )
+        bad_manifest = json.loads(manifest.read_text(encoding="utf-8"))
+        bad_manifest["derived_inputs"]["window_csv"] = str(extra_windows)
+        manifest.write_text(json.dumps(bad_manifest), encoding="utf-8")
+        try:
+            with redirect_stderr(StringIO()):
+                validate_source_bundle(load_source_bundle(manifest))
+            check("source bundle rejects undeclared window run", True, False)
+        except SystemExit as exc:
+            check("source bundle rejects undeclared window run", True, exc.code != 0)
+
+        bad_base = tmpdir / "bad_base_predictions.csv"
+        bad_base.write_text(
+            "city,run,window_index,corrected_pred_fix_rate_pct\n"
+            "nagoya,run1,1,12.5\n",
+            encoding="utf-8",
+        )
+        bad_manifest = json.loads(manifest.read_text(encoding="utf-8"))
+        bad_manifest["derived_inputs"]["window_csv"] = str(windows)
+        bad_manifest["derived_inputs"]["base_prediction_csv"] = str(bad_base)
+        manifest.write_text(json.dumps(bad_manifest), encoding="utf-8")
+        try:
+            with redirect_stderr(StringIO()):
+                validate_source_bundle(load_source_bundle(manifest))
+            check("source bundle rejects missing base window", True, False)
+        except SystemExit as exc:
+            check("source bundle rejects missing base window", True, exc.code != 0)
+
+
+def test_merge_base_prediction_column() -> None:
+    print("test_merge_base_prediction_column")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        window = tmpdir / "window.csv"
+        base = tmpdir / "base.csv"
+        out = tmpdir / "out.csv"
+        window.write_text(
+            "city,run,window_index,window_start_tow,window_end_tow,sim_matched_epochs,feature\n"
+            "tokyo,run1,0,1,2,2,7\n",
+            encoding="utf-8",
+        )
+        base.write_text(
+            "city,run,window_index,corrected_pred_fix_rate_pct\n"
+            "tokyo,run1,0,12.5\n",
+            encoding="utf-8",
+        )
+        _merge_base_prediction_column(window_csv=window, base_prediction_csv=base, output_csv=out)
+        rows = list(DictReader(out.open(newline="", encoding="utf-8")))
+        check("base merge rows", 1, len(rows))
+        check("base merge value", "12.5", rows[0]["base_pred_fix_rate_pct"])
+
+
+def test_validationhold_window_rows_label_free() -> None:
+    print("test_validationhold_window_rows_label_free")
+    windows = pd.DataFrame(
+        [
+            {
+                "city": "tokyo",
+                "run": "run1",
+                "window_index": 0,
+                "window_start_tow": 10.0,
+                "window_end_tow": 11.0,
+                "base_pred_fix_rate_pct": 12.0,
+            }
+        ]
+    )
+    epochs = pd.DataFrame(
+        [
+            {
+                "city": "tokyo",
+                "run": "run1",
+                "gps_tow": 10.5,
+                "validation_pass": 1.0,
+                "validation_soft_pass": 1.0,
+                "validation_hard_block": 0.0,
+                "validation_severe_block": 0.0,
+                "validation_reject_block": 0.0,
+                "validation_block_spike": 0.0,
+                "validation_block_score": 0.0,
+                "validation_block_ewma_30s": 0.0,
+                "validation_block_cooldown_s": 0.0,
+                "validation_reject_recent_s": 0.0,
+                "validation_quality_score": 7.0,
+                "hold_state": 1.0,
+                "hold_ready": 1.0,
+                "hold_strict_ready": 1.0,
+                "hold_carry_score": 3.0,
+                "hold_age_s": 20.0,
+                "hold_since_reset_s": 20.0,
+                "clean_streak_s": 20.0,
+                "strict_clean_streak_s": 20.0,
+            }
+        ]
+    )
+    rows = _validationhold_window_rows(windows, epochs, "base_pred_fix_rate_pct")
+    check("label-free validationhold rows", 1, len(rows))
+    check("label-free validationhold omits actual", False, "actual_fix_rate_pct" in rows[0])
+    check("label-free validationhold omits demo5", False, "demo5_fix_rate_pct" in rows[0])
+    check("label-free validationhold has lift flag", True, "validationhold_low_pred_lift_signal" in rows[0])
+
+
+def test_product_inference_label_free_output() -> None:
+    print("test_product_inference_label_free_output")
+    frame = pd.DataFrame(
+        [
+            {
+                "city": "tokyo",
+                "run": "run1",
+                "window_index": 0,
+                "sim_matched_epochs": 2,
+                "base_pred_fix_rate_pct": 10.0,
+            },
+            {
+                "city": "tokyo",
+                "run": "run1",
+                "window_index": 1,
+                "sim_matched_epochs": 1,
+                "base_pred_fix_rate_pct": 40.0,
+            },
+        ]
+    )
+    base = _base_from_frame_or_reference(frame, base_prefix=None, base_prediction_column="corrected_pred_fix_rate_pct")
+    rows = _product_prediction_rows(
+        df=frame,
+        base=base,
+        residual=pd.Series([0.01, -0.02]).to_numpy(),
+        corrected=pd.Series([0.11, 0.38]).to_numpy(),
+        probabilities={"ratio_mean_ge3": pd.Series([0.2, 0.8]).to_numpy()},
+    )
+    route = _route_rows(rows)
+    check("label-free window omits actual", False, "actual_fix_rate_pct" in rows[0])
+    check("label-free window omits error", False, "corrected_error_pp" in rows[0])
+    check("label-free route count", 1, len(route))
+    check("label-free route omits actual", False, "actual_fix_rate_pct" in route[0])
+    check("label-free weighted route pred", 20.0, float(route[0]["adopted_pred_fix_rate_pct"]))
 
 
 def main() -> None:
@@ -191,6 +549,13 @@ def main() -> None:
     test_require()
     test_prediction_contract()
     test_base_prediction_path()
+    test_prediction_mode_stage_counts()
+    test_online_classifier_meta_matches_batch_run_position()
+    test_batch_output_paths()
+    test_product_source_bundle_validation()
+    test_merge_base_prediction_column()
+    test_validationhold_window_rows_label_free()
+    test_product_inference_label_free_output()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILURE(S):")
         for name in FAILURES:

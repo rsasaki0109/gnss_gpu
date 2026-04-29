@@ -1,6 +1,6 @@
 # PPC demo5 FIX-Rate Predictor — Product Deliverable
 
-**Status**: internal research prototype, route-level deliverable
+**Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference and source-manifest validation
 **Last updated**: 2026-04-29
 **Adopted model**: §7.16 `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
@@ -26,13 +26,30 @@ classification targets during training.
   higher demo5 FIX rate.
 - Dataset-level aggregate prediction: across a set of similar runs,
   predict the overall FIX rate within a few percentage points.
+- Fresh-data offline inference: prepare and score new PPC/taroz
+  preprocessed epoch/window/base CSVs with the committed full-data-fit
+  model artifact, without retraining the nested LORO stack.
+- Online-compatible scoring: score prepared windows in route order using
+  only current/past model probability state, when the planned route
+  window count is known.
+- Source bundle contract validation: bind raw PPC source run
+  directories to derived epoch/window/base CSVs, check that their
+  route/window keys match, and run product batch inference from the
+  manifest.
+- Split inference input preparation: build the pre-augmented window CSV
+  separately when debugging intermediate validationhold features.
 
 ### Out-of-scope use cases
 
 - Individual 30 s window FIX-rate predictions.  Typical window weighted
   MAE is 17 pp and tail errors reach 60+ pp on known failure cases.
-- Real-time / online inference.  The current pipeline is an offline
-  batch chain; see section 6 below.
+- Raw GNSS/RINEX/simulator feature extraction from source files.  The
+  product path can validate that raw PPC run directories match the
+  derived epoch/window/base CSV bundle, but building those CSVs remains
+  upstream.
+- Full real-time feature extraction from raw RINEX/simulator source
+  files.  The product model can score prepared windows online, but the
+  upstream feature extraction is still batch/offline.
 - Data sources different from taroz/PPC Tokyo/Nagoya.  The model was
   tuned on 6 runs across 2 cities; generalisation to other
   cities/environments is untested.
@@ -49,6 +66,13 @@ Under product-relevant metrics:
 | window correlation | **0.551** | 0.401 |
 | overall aggregate error | **+0.26 pp** on 17.90 % dataset FIX rate | — |
 | window weighted MAE | 17.087 pp | 18.046 pp |
+
+The committed single-model artifact is a full-data fit for deployment,
+not an independent validation fold.  As a smoke check on the bundled
+labelled 6-run set, `predict.py --inference` gives route MAE 2.090 pp,
+route max error 5.670 pp, window weighted MAE 10.596 pp, and window
+correlation 0.878.  Use the strict nested LORO table above as the
+generalisation estimate.
 
 Per-route error on the test set (see
 `route_level_fix_rate_prediction.csv`):
@@ -84,6 +108,35 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   `python3 experiments/predict.py` uses this frozen artifact by default
   to refresh `route_level_fix_rate_prediction.csv`,
   `window_level_details.csv`, and `dashboard.html`.
+- Committed full-data-fit product model artifact:
+  `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz`.
+  `python3 experiments/predict.py --batch-inference` loads this artifact
+  after preparing fresh inputs; split `--inference` can also score an
+  already prepared window CSV without training.
+
+### Inputs required for fresh-data preparation / inference
+
+- Epoch feature CSV with deployable simulator/RINEX columns and
+  `(city, run, gps_tow)`.
+- Window feature CSV with matching `(city, run, window_index)`,
+  `window_start_tow`, `window_end_tow`, and `sim_matched_epochs`.
+- Refined-grid base prediction CSV with matching `(city, run,
+  window_index)` keys.
+
+These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
+`rtk_*`, or `solver_demo5_*` columns at inference time.
+
+### Optional source manifest for fresh-data inference
+
+`--source-bundle-check` and `--source-bundle-inference` accept a JSON
+manifest that declares the raw PPC source run directories and the
+derived product input CSVs.  The manifest validator checks that each raw
+run directory has the PPC source files (`rover.obs`, `base.obs`,
+`base.nav`, `reference.csv`), that the derived epoch/window CSVs contain
+those `(city, run)` keys, that every product window has a matching base
+prediction row, and that prepared/final output paths do not collide.
+Relative paths in the manifest resolve from the manifest file's
+directory.
 
 ### Inputs required for full retraining
 
@@ -100,6 +153,15 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   confidence tier.
 - `window_level_details.csv` — per-window predictions with focus-case
   annotations, intended for diagnostics.
+- In `--batch-inference`, `--inference`, or `--online-inference` mode,
+  `<prefix>_route_predictions.csv` and
+  `<prefix>_window_predictions.csv` are written.  When labels are not
+  present, these files contain predictions only and omit actual/error
+  columns.
+- In `--prepare-inference` mode, a prepared window CSV is written.  It
+  contains the deployable window features, validationhold aggregates,
+  and `base_pred_fix_rate_pct` for direct use with
+  `--inference --use-window-base-prediction`.
 
 ### Files shipped with this deliverable
 
@@ -113,6 +175,9 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 - `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_window_predictions.csv`
   — committed frozen §7.16 window prediction artifact used by
   `experiments/predict.py` in default product mode.
+- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_product_model.pkl.gz`
+  — committed saved full-data-fit model artifact used by
+  `experiments/predict.py --inference`.
 - `internal_docs/product_deliverable/plots/` — static PNG figures per
   run that overlay the predicted FIX rate onto the actual demo5
   per-epoch FIX/NO-FIX trajectory:
@@ -128,6 +193,15 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   Focus-case windows are detected by threshold-based classification
   (`_classify_window`), so new runs with similar failure archetypes
   are tagged automatically without updating a hardcoded list.
+- `experiments/product_inference_model.py` — fits and runs the saved
+  single-model product inference artifact.
+- `experiments/product_source_bundle.py` — validates source manifests
+  that bind raw PPC run directories to derived epoch/window/base product
+  input CSVs.
+- `experiments/analyze_ppc_validation_hold_surrogate_windows.py` —
+  aggregates validationhold epoch state to windows.  It supports
+  label-free inference inputs; strict metrics are written only when
+  actual labels are present.
 - `experiments/build_simulation_vs_actual_plots.py` — renders the PNG
   figures under `plots/` from the adopted predictions and the demo5
   .pos files (`experiments/results/demo5_pos/<city>_<run>/rtklib.pos`).
@@ -167,8 +241,14 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 - `experiments/build_product_dashboard.py` — script that produces the
   HTML dashboard from those CSVs.
 - `experiments/predict.py` — product entrypoint.  Default mode refreshes
-  deliverable outputs from the frozen §7.16 predictions; `--retrain`
-  runs the full LORO pipeline for fresh preprocessed input data.
+  deliverable outputs from the frozen §7.16 predictions;
+  `--batch-inference` prepares and scores fresh inputs in one command;
+  `--source-bundle-inference` validates a source manifest before
+  running the same batch path;
+  `--online-inference` scores prepared windows in causal mode with a
+  planned route length; split `--prepare-inference` / `--inference` are
+  available for debugging; `--retrain` remains the research LORO
+  pipeline.
 
 ## 5. Known failure modes
 
@@ -221,12 +301,108 @@ python3 experiments/predict.py \
   --results-prefix ppc_..._my_run
 ```
 
-### Inference on a new epoch CSV
+### One-shot inference from new preprocessed CSVs
 
-See `experiments/predict.py --help`.  Caveat: the current fresh-data
-path retrains the nested stack from scratch with the new data included
-as an additional LORO outer fold.  True single-model inference requires
-saving a full-data-fit stack, which is not currently implemented.
+```bash
+python3 experiments/predict.py \
+  --batch-inference \
+  --epochs-csv path/to/preprocessed_epochs.csv \
+  --window-csv path/to/window_features.csv \
+  --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
+  --prepare-prefix experiments/results/my_run_prepare \
+  --prepared-window-csv experiments/results/my_run_prepared_window_predictions.csv \
+  --inference-output-prefix experiments/results/my_run_product
+```
+
+This produces a label-free prepared window CSV containing
+`base_pred_fix_rate_pct` and validationhold features, then scores it
+with the committed `*_product_model.pkl.gz` artifact.  It does not run
+demo5 and does not require actual labels.  The output files are
+`experiments/results/my_run_product_route_predictions.csv` and
+`experiments/results/my_run_product_window_predictions.csv`.
+The prepared CSV path must be distinct from the final
+`*_window_predictions.csv` output path.
+
+### Source-manifest inference from a PPC source bundle
+
+Create an example manifest:
+
+```bash
+python3 experiments/product_source_bundle.py template \
+  --output source_manifest.example.json
+```
+
+Validate the raw source runs and derived product CSV contract:
+
+```bash
+python3 experiments/predict.py \
+  --source-bundle-check \
+  --source-manifest path/to/source_manifest.json
+```
+
+Validate and then run the same one-shot batch inference path:
+
+```bash
+python3 experiments/predict.py \
+  --source-bundle-inference \
+  --source-manifest path/to/source_manifest.json
+```
+
+The manifest does not extract features from raw RINEX/simulator files.
+It fixes the product input bundle by proving the raw source directories
+and derived epoch/window/base CSVs refer to the same PPC runs/windows.
+
+### Split preparation for debugging
+
+```bash
+python3 experiments/predict.py \
+  --prepare-inference \
+  --epochs-csv path/to/preprocessed_epochs.csv \
+  --window-csv path/to/window_features.csv \
+  --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
+  --prepare-prefix experiments/results/my_run_prepare \
+  --prepared-window-csv experiments/results/my_run_prepared_window_predictions.csv
+```
+
+This is the same preparation stage used by `--batch-inference`.
+
+### Inference on a prepared window CSV
+
+```bash
+python3 experiments/predict.py \
+  --inference \
+  --window-csv experiments/results/my_run_prepared_window_predictions.csv \
+  --use-window-base-prediction \
+  --inference-output-prefix experiments/results/my_run_product
+```
+
+This path loads the committed `*_product_model.pkl.gz` artifact and does
+not retrain.  The output files are
+`experiments/results/my_run_product_route_predictions.csv` and
+`experiments/results/my_run_product_window_predictions.csv`.
+
+If the prepared window CSV does not contain `base_pred_fix_rate_pct`,
+use `--base-prefix path/to/refinedgrid_prefix_or_predictions.csv`
+instead of `--use-window-base-prediction`.
+
+### Online-compatible inference on prepared windows
+
+```bash
+python3 experiments/predict.py \
+  --online-inference \
+  --window-csv experiments/results/my_run_prepared_window_predictions.csv \
+  --use-window-base-prediction \
+  --planned-window-count 32 \
+  --inference-output-prefix experiments/results/my_run_online_product
+```
+
+This scores the same saved product model with causal current/past
+probability state.  The adopted artifact uses route-position meta
+features, so online mode needs a planned route length.  For multi-route
+inputs, add a `planned_window_count` column to the prepared window CSV
+instead of passing a single `--planned-window-count`.
+
+Raw source-file feature extraction is still upstream of this command.
 
 ## 7. Maintainer notes
 
