@@ -44,6 +44,42 @@ RESULTS_DIR = _SCRIPT_DIR / "results"
 STAT_NAMES = ("mean", "std", "min", "p10", "p25", "p50", "p75", "p90", "p95", "max")
 KEY_COLUMNS = {"city", "run", "gps_tow", "epoch", "_window_index"}
 DEFAULT_SYSTEMS = ("G", "E", "J")
+DEFERRED_VALIDATIONHOLD_FEATURES = {
+    "validation_pass_frac",
+    "validation_soft_pass_frac",
+    "validation_hard_block_frac",
+    "validation_severe_block_frac",
+    "validation_reject_block_frac",
+    "validation_block_spike_frac",
+    "validation_block_score_mean",
+    "validation_block_score_p90",
+    "validation_block_score_max",
+    "validation_block_ewma30_mean",
+    "validation_block_cooldown_max",
+    "validation_reject_recent_max",
+    "validation_quality_mean",
+    "validation_quality_p90",
+    "hold_state_mean",
+    "hold_state_max",
+    "hold_ready_frac",
+    "hold_strict_ready_frac",
+    "hold_carry_score_mean",
+    "hold_carry_score_max",
+    "first_validation_pass_rel_s",
+    "first_hold_ready_rel_s",
+    "clean_streak_s_at_start",
+    "clean_streak_s_mean",
+    "clean_streak_s_p50",
+    "clean_streak_s_p90",
+    "clean_streak_s_max",
+    "strict_clean_streak_s_at_start",
+    "strict_clean_streak_s_mean",
+    "strict_clean_streak_s_p50",
+    "strict_clean_streak_s_p90",
+    "strict_clean_streak_s_max",
+    "validationhold_high_pred_reject_flag",
+    "validationhold_low_pred_lift_flag",
+}
 
 
 @dataclass(frozen=True)
@@ -389,7 +425,11 @@ def build_window_rows(
             selected = [row for idx, row in enumerate(rows) if window_indices[idx] == window_index]
             w_start = start_tow + window_index * window_duration_s
             w_end = w_start + window_duration_s
-            out: dict[str, object] = {name: 0.0 for name in model_feature_names}
+            out: dict[str, object] = {
+                name: 0.0
+                for name in model_feature_names
+                if name not in DEFERRED_VALIDATIONHOLD_FEATURES
+            }
             out.update(
                 {
                     "city": city,
