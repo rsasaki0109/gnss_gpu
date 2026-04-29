@@ -51,6 +51,7 @@ from product_inference_model import (
     _planned_counts_from_column,
     _route_rows,
 )
+from product_raw_source_prepare import build_window_rows
 from product_source_bundle import load_source_bundle, validate_source_bundle
 from train_ppc_solver_transition_surrogate_stack import (
     _append_classifier_meta as _append_classifier_meta_batch,
@@ -226,6 +227,7 @@ def test_prediction_mode_stage_counts() -> None:
     print("test_prediction_mode_stage_counts")
     base_args = {
         "batch_inference": False,
+        "source_bundle_prepare": False,
         "source_bundle_check": False,
         "source_bundle_inference": False,
         "prepare_inference": False,
@@ -254,6 +256,11 @@ def test_prediction_mode_stage_counts() -> None:
         "online inference stage count",
         1,
         _planned_stage_count(Namespace(**{**base_args, "online_inference": True})),
+    )
+    check(
+        "source bundle prepare stage count",
+        1,
+        _planned_stage_count(Namespace(**{**base_args, "source_bundle_prepare": True})),
     )
     check(
         "source bundle check stage count",
@@ -434,6 +441,69 @@ def test_product_source_bundle_validation() -> None:
             check("source bundle rejects missing base window", True, exc.code != 0)
 
 
+def test_raw_source_prepare_window_rows() -> None:
+    print("test_raw_source_prepare_window_rows")
+    epoch_rows = [
+        {
+            "city": "nagoya",
+            "run": "run1",
+            "epoch": 0,
+            "gps_tow": 100.0,
+            "sat": 6.0,
+            "phase_fraction": 0.5,
+            "los_fraction": 0.75,
+            "rinex_phase_jump_ge0p5cy_count": 0.0,
+            "snr_p50": 32.0,
+        },
+        {
+            "city": "nagoya",
+            "run": "run1",
+            "epoch": 1,
+            "gps_tow": 110.0,
+            "sat": 8.0,
+            "phase_fraction": 0.75,
+            "los_fraction": 0.875,
+            "rinex_phase_jump_ge0p5cy_count": 1.0,
+            "snr_p50": 34.0,
+        },
+        {
+            "city": "nagoya",
+            "run": "run1",
+            "epoch": 2,
+            "gps_tow": 135.0,
+            "sat": 7.0,
+            "phase_fraction": 1.0,
+            "los_fraction": 1.0,
+            "rinex_phase_jump_ge0p5cy_count": 0.0,
+            "snr_p50": 36.0,
+        },
+    ]
+    model_features = [
+        "sat_mean",
+        "phase_fraction_mean",
+        "los_fraction_mean",
+        "rinex_phase_jump_ge0p5cy_count_max",
+        "sat_delta_pos_count",
+        "unsupported_model_feature",
+    ]
+    window_rows, base_rows = build_window_rows(
+        epoch_rows,
+        model_feature_names=model_features,
+        window_duration_s=30.0,
+    )
+    check("raw prepare window count", 2, len(window_rows))
+    check("raw prepare base count", 2, len(base_rows))
+    first = window_rows[0]
+    check("raw prepare first key", ("nagoya", "run1", 0), (first["city"], first["run"], first["window_index"]))
+    check("raw prepare sat mean", 7.0, first["sat_mean"])
+    check("raw prepare phase fraction mean", 0.625, first["phase_fraction_mean"])
+    check("raw prepare jump max", 1.0, first["rinex_phase_jump_ge0p5cy_count_max"])
+    check("raw prepare delta pos count", 1, first["sat_delta_pos_count"])
+    check("raw prepare neutral fill", 0.0, first["unsupported_model_feature"])
+    check("raw prepare base prediction column", True, "corrected_pred_fix_rate_pct" in base_rows[0])
+    check("raw prepare no labels", False, "actual_fix_rate_pct" in first)
+
+
 def test_merge_base_prediction_column() -> None:
     print("test_merge_base_prediction_column")
     with tempfile.TemporaryDirectory() as tmp:
@@ -553,6 +623,7 @@ def main() -> None:
     test_online_classifier_meta_matches_batch_run_position()
     test_batch_output_paths()
     test_product_source_bundle_validation()
+    test_raw_source_prepare_window_rows()
     test_merge_base_prediction_column()
     test_validationhold_window_rows_label_free()
     test_product_inference_label_free_output()

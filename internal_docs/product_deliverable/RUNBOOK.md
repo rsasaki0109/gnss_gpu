@@ -10,7 +10,9 @@
 
 Run the predictor when any of these happen:
 
-- A new PPC/taroz run has been processed through the epoch CSV pipeline.
+- A new PPC/taroz run has been processed through the epoch CSV pipeline,
+  or you need the bootstrap raw-source bridge to derive product CSVs
+  from PPC RINEX/reference run directories.
 - You want to re-score the existing 6 runs after any upstream pipeline
   change (validationhold surrogate, refinedgrid base model).
 - The last deliverable CSV is older than one month and you want to
@@ -61,7 +63,55 @@ These files do not need `actual_fix_rate_pct`, `actual_fixed`, `rtk_*`,
 or `solver_demo5_*` columns.  Those are training/evaluation labels, not
 runtime inputs.
 
-### 3.2 Source manifest check
+### 3.2 Bootstrap raw-source preparation
+
+Use `--source-bundle-prepare` when the operator receives raw PPC
+RINEX/reference run directories but not derived product CSVs yet.  The
+command emits label-free epoch/window/base CSVs and a derived source
+manifest for the normal source-bundle inference path.
+
+Raw manifest shape:
+
+```json
+{
+  "runs": [
+    {
+      "city": "nagoya",
+      "run": "run1",
+      "run_dir": "/path/to/PPC-Dataset/nagoya/run1"
+    }
+  ],
+  "outputs": {
+    "prepare_prefix": "experiments/results/my_run_prepare",
+    "prepared_window_csv": "experiments/results/my_run_prepared_window_predictions.csv",
+    "inference_output_prefix": "experiments/results/my_run_product"
+  }
+}
+```
+
+Prepare bootstrap CSVs and the derived manifest:
+
+```bash
+python3 experiments/predict.py \
+  --source-bundle-prepare \
+  --source-manifest raw_source_manifest.json \
+  --source-output-prefix experiments/results/my_raw_source
+```
+
+Outputs:
+
+- `experiments/results/my_raw_source_epochs.csv`
+- `experiments/results/my_raw_source_window_features.csv`
+- `experiments/results/my_raw_source_base_window_predictions.csv`
+- `experiments/results/my_raw_source_source_manifest.json`
+
+This path parses raw PPC RINEX/reference inputs, but it is intentionally
+degraded: features that require the calibrated simulator/refinedgrid
+research pipeline are neutral-filled so the saved product model can run.
+Use it to fix the product inference wiring from raw source bundles, not
+as a replacement for the upstream calibrated feature pipeline.
+
+### 3.3 Source manifest check
 
 Use a source manifest when the operator receives a PPC source bundle and
 derived product CSVs together.  The manifest binds raw PPC run
@@ -115,12 +165,12 @@ python3 experiments/predict.py \
   --source-manifest path/to/source_manifest.json
 ```
 
-This does not parse raw RINEX or run the simulator.  The source manifest
-confirms that the raw PPC source directories and already-derived
-epoch/window/base CSVs describe the same product input bundle.  Relative
-paths in the manifest resolve from the manifest file's directory.
+The derived source manifest confirms that the raw PPC source directories
+and derived epoch/window/base CSVs describe the same product input
+bundle.  Relative paths in the manifest resolve from the manifest file's
+directory.
 
-### 3.3 One-shot batch command
+### 3.4 One-shot batch command
 
 ```bash
 python3 experiments/predict.py \
@@ -343,9 +393,10 @@ Per D-030 / D-033:
 
 | Path | Purpose |
 | --- | --- |
-| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--batch-inference` prepares and scores fresh data in one command, `--source-bundle-inference` validates a raw-source manifest before running the same batch path, `--online-inference` scores prepared windows causally with planned route length, split `--prepare-inference` / `--inference` are available for debugging, `--retrain` runs the full LORO pipeline |
+| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--batch-inference` prepares and scores fresh data in one command, `--source-bundle-prepare` derives bootstrap CSVs and a manifest from raw PPC source runs, `--source-bundle-inference` validates a derived source manifest before running the same batch path, `--online-inference` scores prepared windows causally with planned route length, split `--prepare-inference` / `--inference` are available for debugging, `--retrain` runs the full LORO pipeline |
 | `experiments/product_inference_model.py` | fit/run saved single-model product inference artifact, including online-compatible scoring |
 | `experiments/product_source_bundle.py` | validate source manifests that bind raw PPC run directories to derived epoch/window/base product input CSVs |
+| `experiments/product_raw_source_prepare.py` | bootstrap raw PPC source preparation into model-schema-compatible epoch/window/base CSVs and a derived source manifest; neutral-fills unsupported simulator/refinedgrid-only features |
 | `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv` | committed adopted §7.16 window predictions used by default product mode |
 | `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact used by `predict.py --inference` |
 | `experiments/build_product_deliverable.py` | deliverable CSV builder |
@@ -366,8 +417,10 @@ Per D-030 / D-033:
 - Model / algorithm questions: see `internal_docs/plan.md` sections 7.7
   through 7.20 first.  Adoption rationale is in `decisions.md` D-030
   through D-033.
-- Upstream pipeline questions (epoch CSV / refinedgrid base): out of
-  scope for this runbook.
+- Calibrated upstream pipeline questions (simulator extraction /
+  refinedgrid base): out of scope for this runbook.  The bootstrap
+  raw-source bridge exists only to derive product-compatible CSVs with
+  neutral-filled unsupported features.
 
 ## 9. Known operational gotchas
 
@@ -380,11 +433,14 @@ Per D-030 / D-033:
   deployment.  Use the strict nested LORO metrics in `README.md` as the
   generalisation estimate; do not treat full-data smoke metrics as an
   independent validation result.
+- `--source-bundle-prepare` is label-free and parses raw PPC
+  RINEX/reference inputs, but it does not run the calibrated simulator
+  or refinedgrid base pipeline.  Unsupported features are neutral-filled.
 - `--batch-inference`, `--source-bundle-inference`, and
-  `--prepare-inference` are label-free, but they still assume the
-  upstream epoch/window feature extraction has already run.  They do
-  not parse raw RINEX, run the simulator, or build refinedgrid base
-  predictions from source files.
+  `--prepare-inference` are label-free, but they assume the
+  epoch/window/base product CSVs already exist.  Use
+  `--source-bundle-prepare` first when starting from raw source
+  directories only.
 - `--source-bundle-check` validates source-file presence and
   route/window key consistency.  It is a bundle-contract check, not a
   raw-feature extraction pipeline.

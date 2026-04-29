@@ -1,6 +1,6 @@
 # PPC demo5 FIX-Rate Predictor — Product Deliverable
 
-**Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference and source-manifest validation
+**Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference, bootstrap raw-source preparation, and source-manifest validation
 **Last updated**: 2026-04-29
 **Adopted model**: §7.16 `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
@@ -36,6 +36,12 @@ classification targets during training.
   directories to derived epoch/window/base CSVs, check that their
   route/window keys match, and run product batch inference from the
   manifest.
+- Bootstrap raw-source preparation: parse PPC RINEX/reference run
+  directories into label-free epoch/window/base CSVs and a derived
+  manifest that the product inference path can consume.  Simulator and
+  refinedgrid-only features are neutral-filled, so this is a degraded
+  bridge for product wiring, not the calibrated upstream feature
+  pipeline.
 - Split inference input preparation: build the pre-augmented window CSV
   separately when debugging intermediate validationhold features.
 
@@ -43,10 +49,9 @@ classification targets during training.
 
 - Individual 30 s window FIX-rate predictions.  Typical window weighted
   MAE is 17 pp and tail errors reach 60+ pp on known failure cases.
-- Raw GNSS/RINEX/simulator feature extraction from source files.  The
-  product path can validate that raw PPC run directories match the
-  derived epoch/window/base CSV bundle, but building those CSVs remains
-  upstream.
+- Full calibrated GNSS/RINEX/simulator feature extraction from source
+  files.  The product path includes a bootstrap raw-source bridge, but
+  the research simulator/refinedgrid extraction remains upstream.
 - Full real-time feature extraction from raw RINEX/simulator source
   files.  The product model can score prepared windows online, but the
   upstream feature extraction is still batch/offline.
@@ -128,15 +133,20 @@ These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
 
 ### Optional source manifest for fresh-data inference
 
-`--source-bundle-check` and `--source-bundle-inference` accept a JSON
-manifest that declares the raw PPC source run directories and the
-derived product input CSVs.  The manifest validator checks that each raw
-run directory has the PPC source files (`rover.obs`, `base.obs`,
+`--source-bundle-prepare` accepts a raw JSON manifest with PPC run
+directories, parses their RINEX/reference inputs, and writes bootstrap
+epoch/window/base CSVs plus a derived source manifest.  Unsupported
+simulator/refinedgrid features are neutral-filled so the saved product
+model can run.
+
+`--source-bundle-check` and `--source-bundle-inference` accept the
+derived JSON manifest that declares raw PPC source run directories and
+the derived product input CSVs.  The manifest validator checks that each
+raw run directory has the PPC source files (`rover.obs`, `base.obs`,
 `base.nav`, `reference.csv`), that the derived epoch/window CSVs contain
 those `(city, run)` keys, that every product window has a matching base
 prediction row, and that prepared/final output paths do not collide.
-Relative paths in the manifest resolve from the manifest file's
-directory.
+Relative paths in manifests resolve from the manifest file's directory.
 
 ### Inputs required for full retraining
 
@@ -198,6 +208,10 @@ directory.
 - `experiments/product_source_bundle.py` — validates source manifests
   that bind raw PPC run directories to derived epoch/window/base product
   input CSVs.
+- `experiments/product_raw_source_prepare.py` — bootstrap raw PPC
+  source preparation into model-schema-compatible epoch/window/base CSVs
+  and a derived source manifest.  Neutral-fills unsupported
+  simulator/refinedgrid-only features.
 - `experiments/analyze_ppc_validation_hold_surrogate_windows.py` —
   aggregates validationhold epoch state to windows.  It supports
   label-free inference inputs; strict metrics are written only when
@@ -243,6 +257,8 @@ directory.
 - `experiments/predict.py` — product entrypoint.  Default mode refreshes
   deliverable outputs from the frozen §7.16 predictions;
   `--batch-inference` prepares and scores fresh inputs in one command;
+  `--source-bundle-prepare` derives bootstrap CSVs and a manifest from
+  raw PPC source runs;
   `--source-bundle-inference` validates a source manifest before
   running the same batch path;
   `--online-inference` scores prepared windows in causal mode with a
@@ -325,12 +341,28 @@ The prepared CSV path must be distinct from the final
 
 ### Source-manifest inference from a PPC source bundle
 
-Create an example manifest:
+Create an example derived manifest:
 
 ```bash
 python3 experiments/product_source_bundle.py template \
   --output source_manifest.example.json
 ```
+
+To start from raw PPC run directories, prepare bootstrap product CSVs
+first:
+
+```bash
+python3 experiments/predict.py \
+  --source-bundle-prepare \
+  --source-manifest raw_source_manifest.json \
+  --source-output-prefix experiments/results/my_raw_source
+```
+
+The command writes
+`experiments/results/my_raw_source_source_manifest.json`, which can be
+used by the validation and inference commands below.  This raw-source
+bridge is label-free and product-schema-compatible, but it neutral-fills
+features that require the full simulator/refinedgrid research pipeline.
 
 Validate the raw source runs and derived product CSV contract:
 
@@ -348,9 +380,9 @@ python3 experiments/predict.py \
   --source-manifest path/to/source_manifest.json
 ```
 
-The manifest does not extract features from raw RINEX/simulator files.
-It fixes the product input bundle by proving the raw source directories
-and derived epoch/window/base CSVs refer to the same PPC runs/windows.
+The derived manifest fixes the product input bundle by proving the raw
+source directories and derived epoch/window/base CSVs refer to the same
+PPC runs/windows.
 
 ### Split preparation for debugging
 
