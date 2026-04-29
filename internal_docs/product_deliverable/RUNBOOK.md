@@ -1,6 +1,6 @@
 # PPC FIX-Rate Predictor — Operational Runbook
 
-**Last updated**: 2026-04-29
+**Last updated**: 2026-04-30
 **Target audience**: operator running the predictor on new PPC/taroz data
 **Prerequisites**: familiar with the `gnss_gpu` repository layout and Python 3.12 environment
 
@@ -112,6 +112,15 @@ Use it to fix the product inference wiring from raw source bundles, not
 as a replacement for the upstream calibrated feature pipeline.  It
 validates that `base.nav` exists, but does not run broadcast-ephemeris
 satellite propagation or refinedgrid base prediction.
+
+Latest full raw-source E2E smoke on the local 6-run PPC dataset
+(2026-04-30 JST):
+
+- Prepare command: `python3 experiments/predict.py --source-bundle-prepare --source-manifest /tmp/ppc_raw_harden_manifest.json --source-output-prefix /tmp/ppc_raw_full_harden`
+- Prepare result: 58,571 epoch rows, 396 window rows, and 396 base prediction rows; elapsed 2:49.65, max RSS 442,416 KB.
+- Derived manifest metadata: `raw_source_prepare.epoch_count=58571`, `window_count=396`, `base_prediction_count=396`, with per-run counts and elapsed seconds.
+- Inference command: `python3 experiments/predict.py --source-bundle-inference --source-manifest /tmp/ppc_raw_full_harden_source_manifest.json`
+- Inference result: 396 prepared windows, `vh_added=34`, 6 route prediction rows, 396 window prediction rows; elapsed 0:13.48, max RSS 498,352 KB. Route/window prediction CSVs had no null cells in this smoke.
 
 ### 3.3 Source manifest check
 
