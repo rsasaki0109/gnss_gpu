@@ -132,11 +132,36 @@ def candidate_thresholds(values: pd.Series, *, max_cuts: int) -> list[float]:
     return [float(value) for value in np.unique(np.quantile(mids, quantiles))]
 
 
+def group_codes_for_frame(frame: pd.DataFrame, group_column: str) -> tuple[np.ndarray | None, int | None]:
+    if group_column not in frame:
+        return None, None
+    codes, groups = pd.factorize(frame[group_column].astype(str), sort=True)
+    if len(groups) <= 1:
+        return None, None
+    return np.asarray(codes, dtype=np.int64), int(len(groups))
+
+
+def loo_gain_stats(
+    selected_gains: np.ndarray,
+    total_gain: float,
+    *,
+    group_codes: np.ndarray | None,
+    group_count: int | None,
+) -> tuple[float | None, float | None]:
+    if group_codes is None or group_count is None:
+        return None, None
+    group_sums = np.bincount(group_codes, weights=selected_gains, minlength=group_count)
+    loo_gains = total_gain - group_sums
+    return float(np.min(loo_gains)), float(np.mean(loo_gains))
+
+
 def evaluate_conditions(
     frame: pd.DataFrame,
     conditions: tuple[Condition, ...],
     *,
     group_column: str,
+    group_codes: np.ndarray | None = None,
+    group_count: int | None = None,
 ) -> RuleResult:
     if not conditions:
         raise ValueError("at least one condition is required")
@@ -148,13 +173,14 @@ def evaluate_conditions(
     gains = frame["fgo_gain_score_m"].to_numpy(dtype=np.float64)
     selected_gains = np.where(selected & np.isfinite(gains), gains, 0.0)
     total_gain = float(np.sum(selected_gains))
-    loo_gains: list[float] = []
-    if group_column in frame:
-        groups = frame[group_column].astype(str).to_numpy()
-        for group in sorted(set(groups)):
-            keep = groups != group
-            if np.any(keep):
-                loo_gains.append(float(np.sum(selected_gains[keep])))
+    if group_codes is None and group_count is None:
+        group_codes, group_count = group_codes_for_frame(frame, group_column)
+    loo_min, loo_mean = loo_gain_stats(
+        selected_gains,
+        total_gain,
+        group_codes=group_codes,
+        group_count=group_count,
+    )
 
     return RuleResult(
         conditions=conditions,
@@ -163,8 +189,8 @@ def evaluate_conditions(
         true_positive_chunks=int(np.count_nonzero(selected & wins)),
         false_positive_chunks=int(np.count_nonzero(selected & ~wins)),
         false_negative_chunks=int(np.count_nonzero(~selected & wins)),
-        loo_min_gain_score_m=float(min(loo_gains)) if loo_gains else None,
-        loo_mean_gain_score_m=float(np.mean(loo_gains)) if loo_gains else None,
+        loo_min_gain_score_m=loo_min,
+        loo_mean_gain_score_m=loo_mean,
     )
 
 
@@ -188,9 +214,18 @@ def search_rules(
         ]
 
     results: list[RuleResult] = []
+    group_codes, group_count = group_codes_for_frame(frame, group_column)
     for feature, conditions in conditions_by_feature.items():
         for condition in conditions:
-            results.append(evaluate_conditions(frame, (condition,), group_column=group_column))
+            results.append(
+                evaluate_conditions(
+                    frame,
+                    (condition,),
+                    group_column=group_column,
+                    group_codes=group_codes,
+                    group_count=group_count,
+                ),
+            )
 
     if max_conditions >= 2:
         feature_names = list(conditions_by_feature)
@@ -198,7 +233,15 @@ def search_rules(
             for second_feature in feature_names[i + 1 :]:
                 for first in conditions_by_feature[first_feature]:
                     for second in conditions_by_feature[second_feature]:
-                        results.append(evaluate_conditions(frame, (first, second), group_column=group_column))
+                        results.append(
+                            evaluate_conditions(
+                                frame,
+                                (first, second),
+                                group_column=group_column,
+                                group_codes=group_codes,
+                                group_count=group_count,
+                            ),
+                        )
 
     results.sort(
         key=lambda result: (
@@ -210,6 +253,23 @@ def search_rules(
         reverse=True,
     )
     return results
+
+
+def filter_rules(
+    results: list[RuleResult],
+    *,
+    min_selected_chunks: int = 0,
+    max_false_positive_chunks: int | None = None,
+) -> list[RuleResult]:
+    return [
+        result
+        for result in results
+        if result.selected_chunks >= min_selected_chunks
+        and (
+            max_false_positive_chunks is None
+            or result.false_positive_chunks <= max_false_positive_chunks
+        )
+    ]
 
 
 def dataset_summary(frame: pd.DataFrame) -> dict[str, object]:
@@ -235,6 +295,8 @@ def main() -> None:
     parser.add_argument("--max-conditions", type=int, choices=(1, 2), default=2)
     parser.add_argument("--top-k", type=int, default=20)
     parser.add_argument("--group-column", default="trip_slug")
+    parser.add_argument("--min-selected-chunks", type=int, default=0)
+    parser.add_argument("--max-false-positive-chunks", type=int, default=None)
     parser.add_argument("--output-json", type=Path, default=None)
     args = parser.parse_args()
 
@@ -248,10 +310,19 @@ def main() -> None:
         max_conditions=args.max_conditions,
         group_column=args.group_column,
     )
+    filtered_results = filter_rules(
+        results,
+        min_selected_chunks=args.min_selected_chunks,
+        max_false_positive_chunks=args.max_false_positive_chunks,
+    )
     payload = {
         "inputs": [str(path) for path in paths],
         "dataset": dataset_summary(frame),
-        "top_rules": [result.payload() for result in results[: args.top_k]],
+        "filters": {
+            "min_selected_chunks": int(args.min_selected_chunks),
+            "max_false_positive_chunks": args.max_false_positive_chunks,
+        },
+        "top_rules": [result.payload() for result in filtered_results[: args.top_k]],
     }
     print(json.dumps(payload, indent=2))
     if args.output_json is not None:
