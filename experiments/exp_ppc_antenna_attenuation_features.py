@@ -129,10 +129,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--geoid-correction",
-        default="none",
+        default="egm96",
         help=(
-            "PLATEAU height datum correction: 'none' (back-compat, default), "
-            "'egm96' (pyproj-driven EGM96 lookup), or a constant float in metres."
+            "PLATEAU height datum correction (DEFAULT 'egm96'): 'egm96' "
+            "(pyproj-driven EGM96 lookup, recommended), 'none' (legacy "
+            "no-correction; produces the silent ~37 m mesh-below-rover "
+            "bug in Tokyo), or a constant float in metres."
         ),
     )
     return parser.parse_args()

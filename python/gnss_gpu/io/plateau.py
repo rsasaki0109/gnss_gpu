@@ -17,15 +17,19 @@ Height datum (EPSG:6697):
     `internal_docs/product_deliverable/PLATEAU_BRIDGE_INTEGRATION.md`
     for the incident that revealed this.
 
-    Pass ``geoid_correction="egm96"`` to ``PlateauLoader`` /
-    ``load_plateau`` to opt in to a pyproj-driven EGM96 lookup.  Other
-    options:
-        - ``None`` (default for back-compat): no correction; emits a
-          one-time UserWarning so silent mismatches stop happening.
+    The ``geoid_correction`` kwarg on ``PlateauLoader`` / ``load_plateau``
+    selects the model:
+        - ``"egm96"`` (**default**): pyproj-driven EGM96 lookup.  Raises
+          ``ImportError`` if pyproj is not installed -- this is
+          intentional ("fail loud") since the silent no-correction
+          path produced the original Phase 2 abort bug.
         - ``<float>``: a constant N in metres (use 36.7 for Tokyo
           quick-and-dirty work).
         - callable ``N(lat_deg, lon_deg) -> float``: custom geoid model
           (e.g. a GSI Geoid 2011 grid lookup if the user has the file).
+        - ``None``: explicit opt-out, no correction.  Emits a one-time
+          UserWarning so the silent mismatch is at least audible if a
+          caller really needs the legacy behaviour.
 """
 
 import glob as _glob
@@ -43,6 +47,11 @@ from gnss_gpu.raytrace import BuildingModel
 # Accepts ``"egm96"`` (uses pyproj if available), a constant float (m),
 # a callable ``N(lat_deg, lon_deg) -> float``, or ``None`` (no correction).
 GeoidCorrection = Union[None, str, float, Callable[[float, float], float]]
+
+# Default for new callers.  See module docstring for the rationale --
+# silent no-correction (``None``) caused the original Phase 2 abort bug
+# (Codex review round 2, P1 #1).
+GEOID_CORRECTION_DEFAULT: str = "egm96"
 
 
 def _make_egm96_lookup() -> Callable[[float, float], float]:
@@ -230,7 +239,7 @@ class PlateauLoader:
         self,
         zone: int = 9,
         *,
-        geoid_correction: GeoidCorrection = None,
+        geoid_correction: GeoidCorrection = GEOID_CORRECTION_DEFAULT,
     ):
         if zone not in self.ORIGINS:
             raise ValueError(
@@ -622,7 +631,7 @@ def load_plateau(
     *,
     kinds: Iterable[str] = ("bldg",),
     include_bridges: Optional[bool] = None,
-    geoid_correction: GeoidCorrection = None,
+    geoid_correction: GeoidCorrection = GEOID_CORRECTION_DEFAULT,
 ):
     """Convenience function to load PLATEAU CityGML data.
 

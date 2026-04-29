@@ -52,15 +52,21 @@ class CityFeature:
 
     Attributes:
         id: ``gml:id`` attribute of the feature element (may be *None*).
-        kind: ``"bldg"`` or ``"brid"`` — see :data:`SUPPORTED_KINDS`.
         lod: Level of detail (1, 2, 3, or 4).  ``0`` if unknown.
         polygons: List of polygon coordinate arrays, each with shape ``(N, 3)``.
+        kind: ``"bldg"`` or ``"brid"`` — see :data:`SUPPORTED_KINDS`.
+
+    Field order note: ``kind`` is intentionally last so that the
+    historical positional signature ``Building(id, lod, polygons)``
+    keeps producing a building feature.  Inserting ``kind`` between
+    ``id`` and ``lod`` would silently shift caller arguments and drop
+    geometry (Codex review round 2, P1 #2).
     """
 
     id: Optional[str] = None
-    kind: str = "bldg"
     lod: int = 0
     polygons: List[np.ndarray] = field(default_factory=list)
+    kind: str = "bldg"
 
 
 # Back-compat alias: callers historically imported ``Building``.

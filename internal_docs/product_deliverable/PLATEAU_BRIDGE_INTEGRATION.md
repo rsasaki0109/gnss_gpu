@@ -249,14 +249,18 @@ Conclusion for Phase 2 (revised, weaker than original):
 Follow-ups (open after v3 dense-sampling):
 
 1. ~~Add a real geoid model to `PlateauLoader._lla_to_ecef`.~~ Done.
-   `PlateauLoader` and `load_plateau` now accept a `geoid_correction`
-   kwarg accepting `None` / `"egm96"` (pyproj-driven) / a constant
-   float / a callable.  Without it, a one-time UserWarning fires.
-   The v2/v3 scripts use `geoid_correction="egm96"`; results match
-   the previous `+36.7 m` monkey-patch within ~0.5 m (EGM96 vs
-   GSI Geoid 2011 difference in Tokyo).  A Tokyo regression test
-   asserts that an EGM96-corrected mesh ground tri is within 5 m
-   of the rover's ellipsoidal ground.
+   `PlateauLoader` and `load_plateau` accept a `geoid_correction`
+   kwarg with **default `"egm96"`** (Codex review round 2 P1 #1: the
+   silent no-correction path is what produced the original Phase 2
+   abort bug, so the default was hardened from `None` to `"egm96"`).
+   Other accepted values: a constant float (m), a callable
+   `N(lat_deg, lon_deg)`, or `None` (explicit opt-out, fires a
+   one-time `UserWarning`).  Missing pyproj → `ImportError` from the
+   default path -- intentional "fail loud".  v2/v3 scripts use
+   `geoid_correction="egm96"`; results match the previous `+36.7 m`
+   monkey-patch within ~0.5 m (EGM96 vs GSI Geoid 2011 in Tokyo).
+   A Tokyo regression test asserts that an EGM96-corrected mesh
+   ground tri is within 5 m of the rover's ellipsoidal ground.
 2. **Phase 2 retrain is now justified.**  See "Antenna feature
    pipeline propagation" below for the antenna-feature evidence
    that bridges produce a measurable signal at the input layer
