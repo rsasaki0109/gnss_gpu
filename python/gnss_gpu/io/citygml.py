@@ -8,9 +8,11 @@ conversion so that it can be reused with non-PLATEAU CityGML data.
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import numpy as np
+
+CityGmlKind = Literal["bldg", "brid"]
 
 # Common CityGML / GML namespaces (order of preference when auto-detecting)
 _NS_CANDIDATES = {
@@ -36,25 +38,33 @@ _NS_CANDIDATES = {
 }
 
 # Mapping from feature kind to (namespace family, root element name).
-_FEATURE_KINDS = {
+_FEATURE_KINDS: dict[str, tuple[str, str]] = {
     "bldg": ("bldg", "Building"),
     "brid": ("brid", "Bridge"),
 }
 
+SUPPORTED_KINDS: frozenset[str] = frozenset(_FEATURE_KINDS)
+
 
 @dataclass
-class Building:
-    """A parsed building from CityGML.
+class CityFeature:
+    """A parsed CityGML feature (building or bridge).
 
     Attributes:
-        id: ``gml:id`` attribute of the building element (may be *None*).
+        id: ``gml:id`` attribute of the feature element (may be *None*).
+        kind: ``"bldg"`` or ``"brid"`` — see :data:`SUPPORTED_KINDS`.
         lod: Level of detail (1, 2, 3, or 4).  ``0`` if unknown.
         polygons: List of polygon coordinate arrays, each with shape ``(N, 3)``.
     """
 
     id: Optional[str] = None
+    kind: str = "bldg"
     lod: int = 0
     polygons: List[np.ndarray] = field(default_factory=list)
+
+
+# Back-compat alias: callers historically imported ``Building``.
+Building = CityFeature
 
 
 def _detect_namespaces(root):
@@ -134,13 +144,17 @@ def _extract_polygons(element, ns):
     return polygons
 
 
-def _determine_lod(elem, ns, ns_family="bldg"):
-    """Determine the LoD of a CityGML feature element."""
-    family_uri = ns.get(
+def _resolve_family_uri(ns: dict, ns_family: str) -> str:
+    """Return the namespace URI for a CityGML family, with a 2.0 fallback."""
+    return ns.get(
         ns_family,
         f"http://www.opengis.net/citygml/{ns_family}/2.0",
     )
 
+
+def _determine_lod(elem, ns, ns_family: str = "bldg") -> int:
+    """Determine the LoD of a CityGML feature element."""
+    family_uri = _resolve_family_uri(ns, ns_family)
     for lod in (4, 3, 2, 1):
         for suffix in ("Solid", "MultiSurface"):
             tag = f"{{{family_uri}}}lod{lod}{suffix}"
@@ -149,8 +163,8 @@ def _determine_lod(elem, ns, ns_family="bldg"):
     return 0
 
 
-def parse_citygml(filepath, kind="bldg"):
-    """Parse a CityGML file and return a list of :class:`Building` objects.
+def parse_citygml(filepath, kind: CityGmlKind = "bldg") -> List[CityFeature]:
+    """Parse a CityGML file and return a list of :class:`CityFeature` objects.
 
     Parameters
     ----------
@@ -159,17 +173,20 @@ def parse_citygml(filepath, kind="bldg"):
     kind : str
         Feature kind to extract.  ``"bldg"`` (default) extracts
         ``bldg:Building`` elements; ``"brid"`` extracts ``brid:Bridge``.
-        Both are returned as :class:`Building` objects since the geometry
-        representation (LoD-tagged polygon set) is identical.
+        Both share the same LoD-tagged polygon-set serialisation, so they
+        are returned through one :class:`CityFeature` dataclass with the
+        ``kind`` field set accordingly.
 
     Returns
     -------
-    list[Building]
-        Each item carries its ``id``, ``lod``, and a list of polygon
-        coordinate arrays (each ``(N, 3)``).
+    list[CityFeature]
+        Each item carries its ``id``, ``kind``, ``lod``, and polygons
+        (each ``(N, 3)``).
     """
     if kind not in _FEATURE_KINDS:
-        raise ValueError(f"unsupported CityGML kind: {kind!r}")
+        raise ValueError(
+            f"unsupported CityGML kind: {kind!r}; supported: {sorted(SUPPORTED_KINDS)}"
+        )
     ns_family, root_tag = _FEATURE_KINDS[kind]
 
     filepath = Path(filepath)
@@ -177,19 +194,18 @@ def parse_citygml(filepath, kind="bldg"):
     root = tree.getroot()
 
     ns = _detect_namespaces(root)
-    feature_uri = ns.get(
-        ns_family,
-        f"http://www.opengis.net/citygml/{ns_family}/2.0",
-    )
+    feature_uri = _resolve_family_uri(ns, ns_family)
     gml_uri = ns.get("gml", "http://www.opengis.net/gml")
 
-    features = []
-
+    features: List[CityFeature] = []
     for feat_elem in root.iter(f"{{{feature_uri}}}{root_tag}"):
         gml_id = feat_elem.get(f"{{{gml_uri}}}id") or feat_elem.get("id")
-        lod = _determine_lod(feat_elem, ns, ns_family=ns_family)
-        polygons = _extract_polygons(feat_elem, ns)
-
-        features.append(Building(id=gml_id, lod=lod, polygons=polygons))
-
+        features.append(
+            CityFeature(
+                id=gml_id,
+                kind=kind,
+                lod=_determine_lod(feat_elem, ns, ns_family=ns_family),
+                polygons=_extract_polygons(feat_elem, ns),
+            )
+        )
     return features

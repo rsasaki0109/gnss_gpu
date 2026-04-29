@@ -11,12 +11,40 @@ Mercator, EPSG:6669-6687).
 import glob as _glob
 import os
 from pathlib import Path
-from typing import Union
+from typing import Iterable, Optional, Union
 
 import numpy as np
 
-from gnss_gpu.io.citygml import parse_citygml
+from gnss_gpu.io.citygml import SUPPORTED_KINDS, parse_citygml
 from gnss_gpu.raytrace import BuildingModel
+
+# PLATEAU CityGML filenames embed the feature kind as ``_<kind>_`` between
+# the mesh code and the CRS code (e.g. ``53393683_brid_6697_op.gml``).
+_KIND_FILENAME_INFIX = {kind: f"_{kind}_" for kind in SUPPORTED_KINDS}
+
+
+def _infer_kind_from_filename(name: str) -> Optional[str]:
+    """Return the CityGML kind embedded in a PLATEAU filename, or None."""
+    for kind, infix in _KIND_FILENAME_INFIX.items():
+        if infix in name:
+            return kind
+    return None
+
+
+def _normalise_kinds(
+    kinds: Iterable[str], *, include_bridges: Optional[bool] = None
+) -> tuple[str, ...]:
+    """Resolve ``kinds`` (and the deprecated ``include_bridges`` shim) to a tuple."""
+    normalised = set(kinds)
+    if include_bridges is True:
+        normalised.add("brid")
+    unsupported = normalised - SUPPORTED_KINDS
+    if unsupported:
+        raise ValueError(
+            f"unsupported CityGML kinds: {sorted(unsupported)}; "
+            f"supported: {sorted(SUPPORTED_KINDS)}"
+        )
+    return tuple(sorted(normalised))
 
 # WGS-84 ellipsoid constants
 _A = 6378137.0
@@ -105,7 +133,9 @@ class PlateauLoader:
         self,
         dirpath: Union[str, Path],
         pattern: str = "*.gml",
-        include_bridges: bool = False,
+        *,
+        kinds: Iterable[str] = ("bldg",),
+        include_bridges: Optional[bool] = None,
     ) -> BuildingModel:
         """Load CityGML features from a directory tree.
 
@@ -115,17 +145,21 @@ class PlateauLoader:
             Root directory to search.
         pattern : str
             Glob pattern for CityGML files.  PLATEAU naming convention puts
-            ``_bldg_`` in building filenames and ``_brid_`` in bridge
-            filenames; the kind is inferred from that.
-        include_bridges : bool
-            If True, also load files matching ``_brid_`` and merge their
-            geometry with the building mesh.  Default False preserves the
-            historical building-only behaviour.
+            ``_<kind>_`` in filenames (e.g. ``_bldg_``, ``_brid_``); the
+            kind is inferred from that.
+        kinds : iterable of str
+            CityGML kinds to load.  Defaults to ``("bldg",)`` for back-compat.
+            Pass e.g. ``("bldg", "brid")`` to also load PLATEAU bridges.
+        include_bridges : bool, optional
+            Deprecated.  ``True`` is equivalent to adding ``"brid"`` to
+            ``kinds``; preserved for the v1 API of this loader.
 
         Returns
         -------
         BuildingModel
         """
+        active_kinds = set(_normalise_kinds(kinds, include_bridges=include_bridges))
+
         dirpath = Path(dirpath)
         files = sorted(dirpath.rglob(pattern))
         if not files:
@@ -135,16 +169,11 @@ class PlateauLoader:
 
         all_triangles = []
         for f in files:
-            name = f.name
-            if "_bldg_" in name:
-                kind = "bldg"
-            elif "_brid_" in name:
-                if not include_bridges:
-                    continue
-                kind = "brid"
-            else:
-                # Fall back to building-style parsing for unknown layouts.
-                kind = "bldg"
+            # Files without a ``_<kind>_`` infix (e.g. legacy single-feature
+            # exports) are treated as buildings to preserve historical behaviour.
+            kind = _infer_kind_from_filename(f.name) or "bldg"
+            if kind not in active_kinds:
+                continue
             features = parse_citygml(f, kind=kind)
             tri = self._buildings_to_triangles(features)
             if tri.size > 0:
@@ -436,7 +465,13 @@ class PlateauLoader:
         return cls._lla_to_ecef(np.radians(lat_deg), np.radians(lon_deg), alt)
 
 
-def load_plateau(filepath_or_dir, zone=9, include_bridges=False):
+def load_plateau(
+    filepath_or_dir,
+    zone: int = 9,
+    *,
+    kinds: Iterable[str] = ("bldg",),
+    include_bridges: Optional[bool] = None,
+):
     """Convenience function to load PLATEAU CityGML data.
 
     Parameters
@@ -447,9 +482,11 @@ def load_plateau(filepath_or_dir, zone=9, include_bridges=False):
     zone : int
         Japanese plane rectangular coordinate system zone (1--19).
         Default is 9 (Tokyo / Kanagawa).
-    include_bridges : bool
-        Directory mode only: also load PLATEAU bridge GML files
-        (``_brid_*.gml``) and merge their triangles with the building mesh.
+    kinds : iterable of str
+        Directory mode only: CityGML kinds to load.  Defaults to
+        ``("bldg",)``; pass ``("bldg", "brid")`` to also load bridges.
+    include_bridges : bool, optional
+        Deprecated.  ``True`` is equivalent to adding ``"brid"`` to ``kinds``.
 
     Returns
     -------
@@ -458,8 +495,9 @@ def load_plateau(filepath_or_dir, zone=9, include_bridges=False):
     p = Path(filepath_or_dir)
     loader = PlateauLoader(zone=zone)
     if p.is_dir():
-        return loader.load_directory(p, include_bridges=include_bridges)
+        return loader.load_directory(
+            p, kinds=kinds, include_bridges=include_bridges
+        )
     # Single-file mode infers kind from filename prefix.
-    name = p.name
-    kind = "brid" if "_brid_" in name else "bldg"
-    return loader.load_citygml(p, kind=kind)
+    inferred = _infer_kind_from_filename(p.name) or "bldg"
+    return loader.load_citygml(p, kind=inferred)

@@ -11,7 +11,12 @@ import pytest
 # Ensure the package is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
-from gnss_gpu.io.citygml import parse_citygml, Building
+from gnss_gpu.io.citygml import (
+    Building,
+    CityFeature,
+    SUPPORTED_KINDS,
+    parse_citygml,
+)
 from gnss_gpu.io.plateau import PlateauLoader, load_plateau
 from gnss_gpu.raytrace import BuildingModel
 
@@ -19,161 +24,86 @@ from gnss_gpu.raytrace import BuildingModel
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
 
-MINIMAL_CITYGML = textwrap.dedent("""\
-    <?xml version="1.0" encoding="UTF-8"?>
-    <core:CityModel
-      xmlns:core="http://www.opengis.net/citygml/2.0"
-      xmlns:bldg="http://www.opengis.net/citygml/building/2.0"
-      xmlns:gml="http://www.opengis.net/gml">
-      <core:cityObjectMember>
-        <bldg:Building gml:id="test_bldg_1">
-          <bldg:lod1Solid>
-            <gml:Solid>
-              <gml:exterior>
-                <gml:CompositeSurface>
-                  <gml:surfaceMember>
-                    <gml:Polygon>
-                      <gml:exterior>
-                        <gml:LinearRing>
-                          <gml:posList>
-                            0.0 0.0 0.0
-                            0.0 10.0 0.0
-                            10.0 10.0 0.0
-                            10.0 0.0 0.0
-                            0.0 0.0 0.0
-                          </gml:posList>
-                        </gml:LinearRing>
-                      </gml:exterior>
-                    </gml:Polygon>
-                  </gml:surfaceMember>
-                  <gml:surfaceMember>
-                    <gml:Polygon>
-                      <gml:exterior>
-                        <gml:LinearRing>
-                          <gml:posList>
-                            0.0 0.0 20.0
-                            10.0 0.0 20.0
-                            10.0 10.0 20.0
-                            0.0 10.0 20.0
-                            0.0 0.0 20.0
-                          </gml:posList>
-                        </gml:LinearRing>
-                      </gml:exterior>
-                    </gml:Polygon>
-                  </gml:surfaceMember>
-                </gml:CompositeSurface>
-              </gml:exterior>
-            </gml:Solid>
-          </bldg:lod1Solid>
-        </bldg:Building>
-      </core:cityObjectMember>
-    </core:CityModel>
-""")
+_KIND_TO_NS = {
+    "bldg": ("http://www.opengis.net/citygml/building/2.0", "Building"),
+    "brid": ("http://www.opengis.net/citygml/bridge/2.0", "Bridge"),
+}
 
 
-GEOGRAPHIC_CITYGML = textwrap.dedent("""\
-    <?xml version="1.0" encoding="UTF-8"?>
-    <core:CityModel
-      xmlns:core="http://www.opengis.net/citygml/2.0"
-      xmlns:bldg="http://www.opengis.net/citygml/building/2.0"
-      xmlns:gml="http://www.opengis.net/gml">
-      <core:cityObjectMember>
-        <bldg:Building gml:id="geo_bldg_1">
-          <bldg:lod1Solid>
-            <gml:Solid>
-              <gml:exterior>
-                <gml:CompositeSurface>
-                  <gml:surfaceMember>
+def _make_minimal_citygml(
+    kind: str,
+    gml_id: str,
+    lod: int,
+    polygons: list[list[tuple[float, float, float]]],
+) -> str:
+    """Build a minimal CityGML 2.0 document for one feature.
+
+    ``polygons`` is a list of closed rings.  The function emits one
+    ``surfaceMember`` per ring inside a ``lod<N>Solid`` of the given kind.
+    """
+    ns_uri, root_tag = _KIND_TO_NS[kind]
+
+    def fmt_pos(p):
+        return " ".join(f"{v:.5f}".rstrip("0").rstrip(".") or "0" for v in p)
+
+    surface_members = "\n".join(
+        f"""                  <gml:surfaceMember>
                     <gml:Polygon>
                       <gml:exterior>
                         <gml:LinearRing>
                           <gml:posList>
-                            35.68120 139.76710 5.0
-                            35.68120 139.76720 5.0
-                            35.68130 139.76720 5.0
-                            35.68130 139.76710 5.0
-                            35.68120 139.76710 5.0
+                            {' '.join(fmt_pos(p) for p in ring)}
                           </gml:posList>
                         </gml:LinearRing>
                       </gml:exterior>
                     </gml:Polygon>
-                  </gml:surfaceMember>
-                  <gml:surfaceMember>
-                    <gml:Polygon>
-                      <gml:exterior>
-                        <gml:LinearRing>
-                          <gml:posList>
-                            35.68120 139.76710 25.0
-                            35.68130 139.76710 25.0
-                            35.68130 139.76720 25.0
-                            35.68120 139.76720 25.0
-                            35.68120 139.76710 25.0
-                          </gml:posList>
-                        </gml:LinearRing>
-                      </gml:exterior>
-                    </gml:Polygon>
-                  </gml:surfaceMember>
-                </gml:CompositeSurface>
-              </gml:exterior>
-            </gml:Solid>
-          </bldg:lod1Solid>
-        </bldg:Building>
-      </core:cityObjectMember>
-    </core:CityModel>
-""")
+                  </gml:surfaceMember>"""
+        for ring in polygons
+    )
+
+    return textwrap.dedent(f"""\
+        <?xml version="1.0" encoding="UTF-8"?>
+        <core:CityModel
+          xmlns:core="http://www.opengis.net/citygml/2.0"
+          xmlns:{kind}="{ns_uri}"
+          xmlns:gml="http://www.opengis.net/gml">
+          <core:cityObjectMember>
+            <{kind}:{root_tag} gml:id="{gml_id}">
+              <{kind}:lod{lod}Solid>
+                <gml:Solid>
+                  <gml:exterior>
+                    <gml:CompositeSurface>
+{surface_members}
+                    </gml:CompositeSurface>
+                  </gml:exterior>
+                </gml:Solid>
+              </{kind}:lod{lod}Solid>
+            </{kind}:{root_tag}>
+          </core:cityObjectMember>
+        </core:CityModel>
+    """)
 
 
-MINIMAL_BRIDGE_CITYGML = textwrap.dedent("""\
-    <?xml version="1.0" encoding="UTF-8"?>
-    <core:CityModel
-      xmlns:core="http://www.opengis.net/citygml/2.0"
-      xmlns:bldg="http://www.opengis.net/citygml/building/2.0"
-      xmlns:brid="http://www.opengis.net/citygml/bridge/2.0"
-      xmlns:gml="http://www.opengis.net/gml">
-      <core:cityObjectMember>
-        <brid:Bridge gml:id="test_brid_1">
-          <brid:lod2Solid>
-            <gml:Solid>
-              <gml:exterior>
-                <gml:CompositeSurface>
-                  <gml:surfaceMember>
-                    <gml:Polygon>
-                      <gml:exterior>
-                        <gml:LinearRing>
-                          <gml:posList>
-                            0.0 0.0 10.0
-                            0.0 5.0 10.0
-                            20.0 5.0 10.0
-                            20.0 0.0 10.0
-                            0.0 0.0 10.0
-                          </gml:posList>
-                        </gml:LinearRing>
-                      </gml:exterior>
-                    </gml:Polygon>
-                  </gml:surfaceMember>
-                  <gml:surfaceMember>
-                    <gml:Polygon>
-                      <gml:exterior>
-                        <gml:LinearRing>
-                          <gml:posList>
-                            0.0 0.0 12.0
-                            20.0 0.0 12.0
-                            20.0 5.0 12.0
-                            0.0 5.0 12.0
-                            0.0 0.0 12.0
-                          </gml:posList>
-                        </gml:LinearRing>
-                      </gml:exterior>
-                    </gml:Polygon>
-                  </gml:surfaceMember>
-                </gml:CompositeSurface>
-              </gml:exterior>
-            </gml:Solid>
-          </brid:lod2Solid>
-        </brid:Bridge>
-      </core:cityObjectMember>
-    </core:CityModel>
-""")
+_BOX_LOCAL = [
+    [(0.0, 0.0, 0.0), (0.0, 10.0, 0.0), (10.0, 10.0, 0.0), (10.0, 0.0, 0.0), (0.0, 0.0, 0.0)],
+    [(0.0, 0.0, 20.0), (10.0, 0.0, 20.0), (10.0, 10.0, 20.0), (0.0, 10.0, 20.0), (0.0, 0.0, 20.0)],
+]
+_BOX_GEO = [
+    [(35.68120, 139.76710, 5.0), (35.68120, 139.76720, 5.0),
+     (35.68130, 139.76720, 5.0), (35.68130, 139.76710, 5.0),
+     (35.68120, 139.76710, 5.0)],
+    [(35.68120, 139.76710, 25.0), (35.68130, 139.76710, 25.0),
+     (35.68130, 139.76720, 25.0), (35.68120, 139.76720, 25.0),
+     (35.68120, 139.76710, 25.0)],
+]
+_BRIDGE_DECK = [
+    [(0.0, 0.0, 10.0), (0.0, 5.0, 10.0), (20.0, 5.0, 10.0), (20.0, 0.0, 10.0), (0.0, 0.0, 10.0)],
+    [(0.0, 0.0, 12.0), (20.0, 0.0, 12.0), (20.0, 5.0, 12.0), (0.0, 5.0, 12.0), (0.0, 0.0, 12.0)],
+]
+
+MINIMAL_CITYGML = _make_minimal_citygml("bldg", "test_bldg_1", lod=1, polygons=_BOX_LOCAL)
+GEOGRAPHIC_CITYGML = _make_minimal_citygml("bldg", "geo_bldg_1", lod=1, polygons=_BOX_GEO)
+MINIMAL_BRIDGE_CITYGML = _make_minimal_citygml("brid", "test_brid_1", lod=2, polygons=_BRIDGE_DECK)
 
 
 @pytest.fixture
@@ -245,41 +175,59 @@ class TestCityGMLParser:
             assert len(b.polygons) == 6
 
     def test_parse_bridge_kind(self, bridge_citygml_file):
-        # The default kind="bldg" must not pick up bridges.
-        empty = parse_citygml(bridge_citygml_file)
-        assert empty == []
-        # Explicit kind="brid" returns the Bridge as a Building dataclass.
+        # Default kind="bldg" must not pick up bridges.
+        assert parse_citygml(bridge_citygml_file) == []
         bridges = parse_citygml(bridge_citygml_file, kind="brid")
         assert len(bridges) == 1
         b = bridges[0]
         assert b.id == "test_brid_1"
+        assert b.kind == "brid"
         assert b.lod == 2
         assert len(b.polygons) == 2
+        # Building remains as a back-compat alias for CityFeature.
+        assert isinstance(b, CityFeature) and b.__class__ is Building
 
     def test_parse_unsupported_kind_raises(self, bridge_citygml_file):
         with pytest.raises(ValueError):
             parse_citygml(bridge_citygml_file, kind="tran")
 
+    def test_supported_kinds_constant(self):
+        assert SUPPORTED_KINDS == frozenset({"bldg", "brid"})
+
 
 class TestBridgeLoaderIntegration:
+
+    def _stage(self, citygml_file, bridge_citygml_file):
+        # The bldg fixture writes test.gml; rename it to match PLATEAU
+        # ``_bldg_`` naming so the directory loader infers kind correctly.
+        directory = bridge_citygml_file.parent
+        renamed = directory / "53393683_bldg_6697_op.gml"
+        os.rename(citygml_file, renamed)
+        return directory
 
     def test_directory_loader_skips_bridges_by_default(
         self, citygml_file, bridge_citygml_file
     ):
-        # Move the two test files into a single directory so the directory
-        # loader is exercised on both at once.
-        directory = bridge_citygml_file.parent
-        # The bldg fixture writes test.gml; force it to use the bldg
-        # naming convention so the loader infers kind correctly.
-        renamed = directory / "53393683_bldg_6697_op.gml"
-        os.rename(citygml_file, renamed)
-
+        directory = self._stage(citygml_file, bridge_citygml_file)
         bldg_only = load_plateau(directory, zone=9)
-        bldg_plus_brid = load_plateau(directory, zone=9, include_bridges=True)
+        bldg_plus_brid = load_plateau(directory, zone=9, kinds=("bldg", "brid"))
         assert bldg_plus_brid.triangles.shape[0] > bldg_only.triangles.shape[0]
-        # The bridge alone contributes at least one triangle per polygon.
+        # Single-file load infers the bridge kind from the filename.
         bridges_only = load_plateau(bridge_citygml_file, zone=9)
         assert bridges_only.triangles.shape[0] >= 2
+
+    def test_include_bridges_alias_matches_kinds(
+        self, citygml_file, bridge_citygml_file
+    ):
+        directory = self._stage(citygml_file, bridge_citygml_file)
+        via_kinds = load_plateau(directory, zone=9, kinds=("bldg", "brid"))
+        via_alias = load_plateau(directory, zone=9, include_bridges=True)
+        assert via_kinds.triangles.shape == via_alias.triangles.shape
+
+    def test_unsupported_kind_in_loader_raises(self, citygml_file, bridge_citygml_file):
+        directory = self._stage(citygml_file, bridge_citygml_file)
+        with pytest.raises(ValueError):
+            load_plateau(directory, zone=9, kinds=("bldg", "tran"))
 
 
 # ---------------------------------------------------------------------------
