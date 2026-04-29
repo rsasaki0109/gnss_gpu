@@ -6,11 +6,14 @@ route/window deliverable CSVs and dashboard from the committed adopted
 §7.16 window predictions.  This works from a clean checkout and is the
 operator-facing one-command path.
 
+`--inference` scores a new pre-augmented window CSV with a saved
+single-model artifact and does not retrain.  This is the product path for
+fresh PPC/taroz data once upstream window/base features exist.
+
 `--retrain` runs the research/training pipeline that created the adopted
 predictions.  It requires the large preprocessed epoch/window CSVs and a
 refined-grid base prediction CSV.  The nested stack uses strict
-leave-one-run-out validation, so a "prediction" for a new run means that
-run is held out while the rest of the dataset trains the stack.
+leave-one-run-out validation and is not the operator path for new runs.
 
 Usage (default: refresh product deliverables from frozen predictions):
 
@@ -24,6 +27,14 @@ Usage (full LORO retrain with new preprocessed data):
         --window-csv path/to/new_window_predictions.csv \\
         --base-prefix path/to/refinedgrid_prefix \\
         --results-prefix ppc_..._my_run
+
+Usage (fresh-data inference without retraining):
+
+    python3 experiments/predict.py \\
+        --inference \\
+        --window-csv path/to/pre_augmented_window_predictions.csv \\
+        --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \\
+        --inference-output-prefix experiments/results/my_run_product
 """
 
 from __future__ import annotations
@@ -59,6 +70,8 @@ DEFAULT_RESULTS_PREFIX = (
     "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45"
 )
 DEFAULT_PREDICTION_CSV = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_window_predictions.csv"
+DEFAULT_INFERENCE_MODEL = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_product_model.pkl.gz"
+DEFAULT_INFERENCE_OUTPUT_PREFIX = RESULTS_DIR / "ppc_product_inference"
 DEFAULT_OUTPUT_DIR = EXPERIMENTS_DIR.parent / "internal_docs" / "product_deliverable"
 
 PREDICTION_REQUIRED_COLUMNS = {
@@ -94,6 +107,21 @@ WINDOW_REQUIRED_COLUMNS = {
     "window_end_tow",
     "actual_fix_rate_pct",
     "base_pred_fix_rate_pct",
+}
+INFERENCE_WINDOW_REQUIRED_COLUMNS = {
+    "city",
+    "run",
+    "window_index",
+    "sim_matched_epochs",
+}
+FIT_INFERENCE_MODEL_REQUIRED_COLUMNS = INFERENCE_WINDOW_REQUIRED_COLUMNS | {
+    "actual_fix_rate_pct",
+    "solver_demo5_ratio_mean",
+    "solver_demo5_ratio_p90",
+    "solver_demo5_ratio_p95",
+    "solver_demo5_ratio_mean_past_delta",
+    "rtk_lock_p90_p50",
+    "rtk_lock_p90_p50_past_delta",
 }
 
 
@@ -178,6 +206,8 @@ def _base_prediction_path(base_prefix: str) -> Path:
 
 
 def _planned_stage_count(args: argparse.Namespace) -> int:
+    if args.inference or args.fit_inference_model:
+        return 1
     if not args.retrain:
         return 1
     total = 1  # threshold preset + window augmentation always runs in retrain mode
@@ -209,12 +239,43 @@ def _preflight_retrain(args: argparse.Namespace, summary_csv: Path, epochs_out_c
         _require_base_prediction(_base_prediction_path(args.base_prefix))
 
 
+def _preflight_inference(args: argparse.Namespace) -> None:
+    _require_input(args.inference_model, "saved product inference model")
+    required = set(INFERENCE_WINDOW_REQUIRED_COLUMNS)
+    if args.use_window_base_prediction:
+        required.add("base_pred_fix_rate_pct")
+    _require_input(args.window_csv, "inference window CSV", required)
+    if not args.use_window_base_prediction:
+        _require_base_prediction(_base_prediction_path(args.base_prefix))
+
+
+def _preflight_fit_inference_model(args: argparse.Namespace) -> None:
+    _require_input(args.window_csv, "training window CSV", FIT_INFERENCE_MODEL_REQUIRED_COLUMNS)
+    _require_base_prediction(_base_prediction_path(args.base_prefix))
+    if args.calibration_prediction_csv is not None:
+        _require_input(args.calibration_prediction_csv, "calibration prediction CSV", PREDICTION_REQUIRED_COLUMNS)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the adopted §7.16 FIX-rate prediction pipeline")
     parser.add_argument("--retrain", action="store_true",
                         help="run the full LORO training pipeline instead of the frozen product flow")
+    parser.add_argument("--inference", action="store_true",
+                        help="score --window-csv with a saved single-model artifact; no retraining")
+    parser.add_argument("--fit-inference-model", action="store_true",
+                        help="fit and save the single-model product inference artifact")
     parser.add_argument("--prediction-csv", type=Path, default=DEFAULT_PREDICTION_CSV,
                         help="adopted window prediction CSV used by the frozen product flow")
+    parser.add_argument("--inference-model", type=Path, default=DEFAULT_INFERENCE_MODEL,
+                        help="saved product inference model artifact")
+    parser.add_argument("--model-output", type=Path, default=DEFAULT_INFERENCE_MODEL,
+                        help="output path for --fit-inference-model")
+    parser.add_argument("--inference-output-prefix", type=Path, default=DEFAULT_INFERENCE_OUTPUT_PREFIX,
+                        help="prefix for --inference route/window prediction CSVs")
+    parser.add_argument("--calibration-prediction-csv", type=Path,
+                        help="optional LORO prediction CSV used to calibrate the saved residual corrector")
+    parser.add_argument("--use-window-base-prediction", action="store_true",
+                        help="in --inference mode, use base_pred_fix_rate_pct from --window-csv instead of --base-prefix")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="directory for route/window deliverable CSVs and dashboard")
     parser.add_argument("--epochs-csv", type=Path, default=DEFAULT_EPOCHS_CSV)
@@ -232,7 +293,11 @@ def parse_args() -> argparse.Namespace:
                         help="do not regenerate dashboard.html when building deliverables")
     parser.add_argument("--check-only", action="store_true",
                         help="validate required inputs and exit without writing outputs")
-    return parser.parse_args()
+    args = parser.parse_args()
+    active_modes = sum(bool(v) for v in (args.retrain, args.inference, args.fit_inference_model))
+    if active_modes > 1:
+        parser.error("--retrain, --inference, and --fit-inference-model are mutually exclusive")
+    return args
 
 
 def main() -> None:
@@ -250,6 +315,56 @@ def main() -> None:
     _stage_counter["total"] = _planned_stage_count(args)
     _stage_counter["started"] = None
     overall_start = time.monotonic()
+
+    if args.inference:
+        _preflight_inference(args)
+        if args.check_only:
+            print(f"preflight ok: inference can use {args.inference_model}")
+            return
+        stage("score fresh window CSV with saved product inference model")
+        cmd = [
+            sys.executable,
+            str(EXPERIMENTS_DIR / "product_inference_model.py"),
+            "infer",
+            "--window-csv", str(args.window_csv),
+            "--model", str(args.inference_model),
+            "--output-prefix", str(args.inference_output_prefix),
+            "--base-prediction-column", "corrected_pred_fix_rate_pct",
+        ]
+        if not args.use_window_base_prediction:
+            cmd.extend(["--base-prefix", args.base_prefix])
+        run(cmd)
+        stage_done()
+        total_dt = time.monotonic() - overall_start
+        print(f"\n[{_timestamp()}] fresh-data inference finished in {total_dt:.1f}s")
+        return
+
+    if args.fit_inference_model:
+        _preflight_fit_inference_model(args)
+        if args.check_only:
+            print(f"preflight ok: inference model can be fit to {args.window_csv}")
+            return
+        stage("fit saved product inference model")
+        cmd = [
+            sys.executable,
+            str(EXPERIMENTS_DIR / "product_inference_model.py"),
+            "fit",
+            "--window-csv", str(args.window_csv),
+            "--base-prefix", args.base_prefix,
+            "--base-prediction-column", "corrected_pred_fix_rate_pct",
+            "--model-output", str(args.model_output),
+            "--classifier-include-run-position",
+            "--residual-model", "ridge",
+            "--residual-alpha", str(args.residual_alpha),
+            "--residual-clip-pp", str(args.residual_clip_pp),
+        ]
+        if args.calibration_prediction_csv is not None:
+            cmd.extend(["--calibration-prediction-csv", str(args.calibration_prediction_csv)])
+        run(cmd)
+        stage_done()
+        total_dt = time.monotonic() - overall_start
+        print(f"\n[{_timestamp()}] inference model fit finished in {total_dt:.1f}s")
+        return
 
     if not args.retrain:
         _preflight_frozen(args)
