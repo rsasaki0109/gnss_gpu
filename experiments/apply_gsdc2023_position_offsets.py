@@ -125,6 +125,22 @@ def scale_map_for_policy(policy: str, uniform_scale: float) -> dict[str, float]:
     raise ValueError(f"unsupported policy: {policy}")
 
 
+def parse_phone_scale_override(value: str) -> tuple[str, float]:
+    phone, sep, scale_text = value.partition("=")
+    if sep == "":
+        raise argparse.ArgumentTypeError("expected PHONE=SCALE")
+    phone = phone.strip().lower()
+    if not phone:
+        raise argparse.ArgumentTypeError("phone name must not be empty")
+    try:
+        scale = float(scale_text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid scale for {phone!r}: {scale_text!r}") from exc
+    if scale < 0.0:
+        raise argparse.ArgumentTypeError("scale must be non-negative")
+    return phone, scale
+
+
 def apply_offsets(source: pd.DataFrame, scales: dict[str, float]) -> tuple[pd.DataFrame, pd.DataFrame]:
     output = source.copy()
     trip_rows: list[dict[str, Any]] = []
@@ -170,6 +186,14 @@ def main() -> None:
     parser.add_argument("--trip-summary", type=Path, default=None)
     parser.add_argument("--policy", choices=("supported", "phone-tuned"), default="supported")
     parser.add_argument("--scale", type=float, default=1.0, help="uniform scale for --policy supported")
+    parser.add_argument(
+        "--phone-scale",
+        action="append",
+        default=[],
+        type=parse_phone_scale_override,
+        metavar="PHONE=SCALE",
+        help="override one phone scale after applying --policy; can be repeated",
+    )
     args = parser.parse_args()
 
     source = pd.read_csv(args.input)
@@ -179,6 +203,8 @@ def main() -> None:
         raise SystemExit(f"{args.input} is missing required columns: {sorted(missing)}")
 
     scales = scale_map_for_policy(args.policy, args.scale)
+    for phone, scale in args.phone_scale:
+        scales[phone] = scale
     output, trip_summary = apply_offsets(source, scales)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     output.to_csv(args.output, index=False)
@@ -201,6 +227,9 @@ def main() -> None:
         "sha256": sha256_file(args.output),
         "policy": args.policy,
         "scale": float(args.scale),
+        "phone_scale_overrides": {
+            phone: scale for phone, scale in sorted(dict(args.phone_scale).items()) if scale > 0.0
+        },
         "scales": {phone: scale for phone, scale in sorted(scales.items()) if scale > 0.0},
         "rows": int(len(output)),
         "nan_lat_lon_rows": int(output[["LatitudeDegrees", "LongitudeDegrees"]].isna().any(axis=1).sum()),

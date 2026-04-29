@@ -1,8 +1,14 @@
+import argparse
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from experiments.apply_gsdc2023_position_offsets import apply_offsets, scale_map_for_policy
+from experiments.apply_gsdc2023_position_offsets import (
+    apply_offsets,
+    parse_phone_scale_override,
+    scale_map_for_policy,
+)
 from experiments.smooth_gsdc2023_submission import haversine_m
 
 
@@ -20,6 +26,15 @@ def test_scale_map_for_policy():
 
     with pytest.raises(ValueError):
         scale_map_for_policy("bad-policy", 1.0)
+
+
+def test_parse_phone_scale_override():
+    assert parse_phone_scale_override("Pixel6Pro=3.25") == ("pixel6pro", 3.25)
+    assert parse_phone_scale_override("sm-s908b=0") == ("sm-s908b", 0.0)
+
+    for value in ["pixel6pro", "=3.0", "pixel6pro=bad", "pixel6pro=-1"]:
+        with pytest.raises(argparse.ArgumentTypeError):
+            parse_phone_scale_override(value)
 
 
 def test_apply_offsets_changes_only_configured_phones():
