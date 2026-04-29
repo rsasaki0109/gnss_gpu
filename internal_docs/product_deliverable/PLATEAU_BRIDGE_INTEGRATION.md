@@ -128,6 +128,84 @@ retrained.  In rough order:
    Targeted success criterion: Tokyo run2 route error from 8.13 pp
    to <= 5 pp without regression on the other five runs.
 
+## Phase 2 outcome — early-abort fired (2026-04-30)
+
+The Phase 2 step 4 early-abort check was run end-to-end the same day
+PR #38 opened, against the actual Tokyo run2 dataset.  It returned a
+**clean abort signal**.
+
+Script: `experiments/check_bldg_vs_brid_los.py` (committed alongside
+this doc).  Standalone, only depends on `gnss_gpu.io.rinex`,
+`gnss_gpu.io.nav_rinex`, `gnss_gpu.ephemeris`, `gnss_gpu.bvh`, and
+the new `gnss_gpu.io.plateau` bridge support — does not pull in any
+of the missing-from-sister-tree experiments helpers.
+
+Inputs:
+- 9 representative epochs covering both clusters: w7 (TOW 177210,
+  177230), w9 (177270, 177290), w23 (177700, 177750), w26-w27
+  (177800, 177810, 177830).
+- bldg-only mesh: 796,809 triangles from 6 PLATEAU `_bldg_` GML files
+  spanning meshes 53393683 (w23-w27 area) and 53393692 (w7-w9 area).
+- bldg+brid mesh: 807,893 triangles after adding 2 `_brid_` GMLs
+  (53393683 = 7,376 tris, 53393692 = 3,708 tris).  Bridge contribution
+  is +11,084 tris, ~1.4 % of the building volume but located on the
+  trajectory.
+
+Result table (per-epoch):
+
+| TOW | n_sat (elev > 5°) | LoS bldg | LoS bldg+brid | flips LoS→NLoS |
+| ---: | ---: | ---: | ---: | ---: |
+| 177210 (w7)  | 32 | 23 | 23 | **0** |
+| 177230 (w7)  | 34 | 18 | 18 | **0** |
+| 177270 (w9)  | 28 | 27 | 27 | **0** |
+| 177290 (w9)  | 35 | 35 | 35 | **0** |
+| 177700 (w23) | 29 | 26 | 26 | **0** |
+| 177750 (w23) | 31 | 25 | 25 | **0** |
+| 177800 (w26) | 34 | 34 | 34 | **0** |
+| 177810 (w27) | 38 | 37 | 37 | **0** |
+| 177830 (w27) | 38 | 37 | 37 | **0** |
+| **total** | 299 | 252 | 252 | **0** |
+
+Across 299 satellite-epoch slots, the bridge mesh produces zero new
+NLoS results.  Every satellite that is geometrically blocked under
+bldg+brid is already blocked by the building mesh alone.
+
+Interpretation: the LoD2 PLATEAU bridge geometry in this Tokyo
+trajectory area sits at heights (median 9 m, p90 ~19 m) that are
+either (a) shorter than the surrounding LoD2 buildings (median 21 m,
+p90 ~77 m), so any sky cone they would block is already blocked by a
+nearby taller building, or (b) at ground / receiver level, so they
+sit below the receiver and contribute no occluder volume in the
+upward hemisphere.
+
+Conclusion for Phase 2:
+
+- **Do not pursue the full 6-run feature extraction or §7.16 retrain
+  on bldg+brid.**  The early-abort criterion in step 4 above was
+  designed exactly to spare that ~1-2 hour compute when the geometric
+  signal is absent, and it fired cleanly.
+- The Tokyo run2 8.13 pp residual is therefore *not* explainable by
+  the missing-elevated-structure hypothesis at the LoS-check level.
+  The remaining error must be in solver state or calibration tail
+  behaviour rather than in coarse occluder geometry.
+- The Phase 1 loader and `--include-bridges` plumbing remain useful
+  as infrastructure for future probes (e.g. UTD diffraction off
+  bridge edges, or NLoS multipath specifically off bridge underside
+  / pillars), where the absence-of-occlusion-flip itself does not
+  rule out a contribution.  They cost nothing when not enabled.
+
+To re-run the abort check after a future change to the loader or to
+the trajectory:
+
+```bash
+python3 experiments/check_bldg_vs_brid_los.py
+```
+
+It will print the same per-epoch table and either `EARLY ABORT` or
+`PROCEED` based on the total flip count.  No retrain is triggered
+from this script; that decision still needs an explicit `make` /
+pipeline invocation by the user.
+
 ## Implementation notes
 
 - The bridge fixture in `tests/test_plateau.py` deliberately uses the
