@@ -50,6 +50,7 @@ from experiments.gsdc2023_chunk_selection import (
 )
 from experiments.gsdc2023_bridge_config import (
     BridgeConfig,
+    DEFAULT_MOTION_SIGMA_M,
     FACTOR_DT_MAX_S,
     OUTLIER_REFINEMENT_CHUNK_EPOCHS,
     OUTLIER_REFINEMENT_MSE_PR_THRESHOLD,
@@ -1478,6 +1479,7 @@ __all__ = [
     "PseudorangeDopplerStageProducts",
     "PseudorangeResidualStageProducts",
     "SolverExecutionContext",
+    "DEFAULT_MOTION_SIGMA_M",
     "DEFAULT_TDCP_GEOMETRY_CORRECTION",
     "DEFAULT_TDCP_WEIGHT_SCALE",
     "IMU_ACCEL_BIAS_PRIOR_SIGMA_MPS2",

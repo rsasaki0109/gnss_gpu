@@ -14,6 +14,7 @@ if str(_REPO) not in sys.path:
 from experiments.gsdc2023_raw_bridge import (
     BridgeConfig,
     DEFAULT_ROOT,
+    DEFAULT_MOTION_SIGMA_M,
     DEFAULT_TDCP_GEOMETRY_CORRECTION,
     DEFAULT_TDCP_WEIGHT_SCALE,
     FACTOR_DT_MAX_S,
@@ -46,7 +47,7 @@ def main() -> None:
     p.add_argument("--trip", type=str, required=True, help="relative trip path under data root")
     p.add_argument("--max-epochs", type=int, default=200)
     p.add_argument("--start-epoch", type=int, default=0)
-    p.add_argument("--motion-sigma-m", type=float, default=3.0)
+    p.add_argument("--motion-sigma-m", type=float, default=DEFAULT_MOTION_SIGMA_M)
     p.add_argument(
         "--factor-dt-max-s",
         type=float,

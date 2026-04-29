@@ -31,11 +31,12 @@ from experiments.gsdc2023_tdcp import (
 
 OUTLIER_REFINEMENT_MSE_PR_THRESHOLD = 1000.0
 OUTLIER_REFINEMENT_CHUNK_EPOCHS = 30
+DEFAULT_MOTION_SIGMA_M = 0.2
 
 
 @dataclass(frozen=True)
 class BridgeConfig:
-    motion_sigma_m: float = 3.0
+    motion_sigma_m: float = DEFAULT_MOTION_SIGMA_M
     clock_drift_sigma_m: float = 1.0
     factor_dt_max_s: float = FACTOR_DT_MAX_S
     fgo_iters: int = 8
@@ -100,6 +101,7 @@ def should_refine_outlier_result(position_source: str, chunk_epochs: int, select
 
 __all__ = [
     "BridgeConfig",
+    "DEFAULT_MOTION_SIGMA_M",
     "FACTOR_DT_MAX_S",
     "OUTLIER_REFINEMENT_CHUNK_EPOCHS",
     "OUTLIER_REFINEMENT_MSE_PR_THRESHOLD",

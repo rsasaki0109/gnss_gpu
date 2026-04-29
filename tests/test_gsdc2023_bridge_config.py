@@ -5,6 +5,7 @@ import pytest
 
 from experiments.gsdc2023_bridge_config import (
     BridgeConfig,
+    DEFAULT_MOTION_SIGMA_M,
     FACTOR_DT_MAX_S,
     should_refine_outlier_result,
 )
@@ -15,6 +16,7 @@ def test_bridge_config_defaults_match_public_factor_dt() -> None:
     cfg = BridgeConfig()
 
     assert cfg.factor_dt_max_s == FACTOR_DT_MAX_S
+    assert cfg.motion_sigma_m == DEFAULT_MOTION_SIGMA_M
     assert cfg.position_source == "baseline"
     assert cfg.imu_frame == "body"
     assert cfg.tdcp_weight_scale == DEFAULT_TDCP_WEIGHT_SCALE
