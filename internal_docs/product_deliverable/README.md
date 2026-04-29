@@ -1,6 +1,6 @@
 # PPC demo5 FIX-Rate Predictor — Product Deliverable
 
-**Status**: internal research prototype, route-level deliverable
+**Status**: internal research prototype, route-level deliverable with saved fresh-data inference
 **Last updated**: 2026-04-29
 **Adopted model**: §7.16 `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
@@ -26,13 +26,19 @@ classification targets during training.
   higher demo5 FIX rate.
 - Dataset-level aggregate prediction: across a set of similar runs,
   predict the overall FIX rate within a few percentage points.
+- Fresh-data offline inference: score a new pre-augmented PPC/taroz
+  window CSV with the committed full-data-fit model artifact, without
+  retraining the nested LORO stack.
 
 ### Out-of-scope use cases
 
 - Individual 30 s window FIX-rate predictions.  Typical window weighted
   MAE is 17 pp and tail errors reach 60+ pp on known failure cases.
-- Real-time / online inference.  The current pipeline is an offline
-  batch chain; see section 6 below.
+- End-to-end raw epoch ingestion.  Fresh-data inference starts after
+  upstream preprocessing has produced the window feature CSV and
+  refined-grid base prediction CSV.
+- Real-time / online inference.  The current pipeline is still offline
+  batch inference; see section 6 below.
 - Data sources different from taroz/PPC Tokyo/Nagoya.  The model was
   tuned on 6 runs across 2 cities; generalisation to other
   cities/environments is untested.
@@ -49,6 +55,13 @@ Under product-relevant metrics:
 | window correlation | **0.551** | 0.401 |
 | overall aggregate error | **+0.26 pp** on 17.90 % dataset FIX rate | — |
 | window weighted MAE | 17.087 pp | 18.046 pp |
+
+The committed single-model artifact is a full-data fit for deployment,
+not an independent validation fold.  As a smoke check on the bundled
+labelled 6-run set, `predict.py --inference` gives route MAE 2.090 pp,
+route max error 5.670 pp, window weighted MAE 10.596 pp, and window
+correlation 0.878.  Use the strict nested LORO table above as the
+generalisation estimate.
 
 Per-route error on the test set (see
 `route_level_fix_rate_prediction.csv`):
@@ -84,6 +97,20 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   `python3 experiments/predict.py` uses this frozen artifact by default
   to refresh `route_level_fix_rate_prediction.csv`,
   `window_level_details.csv`, and `dashboard.html`.
+- Committed full-data-fit product model artifact:
+  `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz`.
+  `python3 experiments/predict.py --inference` loads this artifact to
+  score fresh pre-augmented window CSVs without training.
+
+### Inputs required for fresh-data inference
+
+- Pre-augmented window feature CSV containing the same deployable
+  feature schema used by the adopted model, including validationhold
+  features.  It does not need `actual_fix_rate_pct`, `rtk_*`, or
+  `solver_demo5_*` columns at inference time.
+- Refined-grid base prediction CSV with matching `(city, run,
+  window_index)` keys, or a `base_pred_fix_rate_pct` column in the
+  window CSV with `--use-window-base-prediction`.
 
 ### Inputs required for full retraining
 
@@ -100,6 +127,10 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   confidence tier.
 - `window_level_details.csv` — per-window predictions with focus-case
   annotations, intended for diagnostics.
+- In `--inference` mode, `<prefix>_route_predictions.csv` and
+  `<prefix>_window_predictions.csv` are written.  When labels are not
+  present, these files contain predictions only and omit actual/error
+  columns.
 
 ### Files shipped with this deliverable
 
@@ -113,6 +144,9 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 - `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_window_predictions.csv`
   — committed frozen §7.16 window prediction artifact used by
   `experiments/predict.py` in default product mode.
+- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_product_model.pkl.gz`
+  — committed saved full-data-fit model artifact used by
+  `experiments/predict.py --inference`.
 - `internal_docs/product_deliverable/plots/` — static PNG figures per
   run that overlay the predicted FIX rate onto the actual demo5
   per-epoch FIX/NO-FIX trajectory:
@@ -128,6 +162,8 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   Focus-case windows are detected by threshold-based classification
   (`_classify_window`), so new runs with similar failure archetypes
   are tagged automatically without updating a hardcoded list.
+- `experiments/product_inference_model.py` — fits and runs the saved
+  single-model product inference artifact.
 - `experiments/build_simulation_vs_actual_plots.py` — renders the PNG
   figures under `plots/` from the adopted predictions and the demo5
   .pos files (`experiments/results/demo5_pos/<city>_<run>/rtklib.pos`).
@@ -167,8 +203,9 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 - `experiments/build_product_dashboard.py` — script that produces the
   HTML dashboard from those CSVs.
 - `experiments/predict.py` — product entrypoint.  Default mode refreshes
-  deliverable outputs from the frozen §7.16 predictions; `--retrain`
-  runs the full LORO pipeline for fresh preprocessed input data.
+  deliverable outputs from the frozen §7.16 predictions; `--inference`
+  scores fresh preprocessed window data without training; `--retrain`
+  remains the research LORO pipeline.
 
 ## 5. Known failure modes
 
@@ -221,12 +258,25 @@ python3 experiments/predict.py \
   --results-prefix ppc_..._my_run
 ```
 
-### Inference on a new epoch CSV
+### Inference on a new preprocessed window CSV
 
-See `experiments/predict.py --help`.  Caveat: the current fresh-data
-path retrains the nested stack from scratch with the new data included
-as an additional LORO outer fold.  True single-model inference requires
-saving a full-data-fit stack, which is not currently implemented.
+```bash
+python3 experiments/predict.py \
+  --inference \
+  --window-csv path/to/pre_augmented_window_predictions.csv \
+  --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
+  --inference-output-prefix experiments/results/my_run_product
+```
+
+This path loads the committed `*_product_model.pkl.gz` artifact and does
+not retrain.  The output files are
+`experiments/results/my_run_product_route_predictions.csv` and
+`experiments/results/my_run_product_window_predictions.csv`.
+
+If the pre-augmented window CSV already contains `base_pred_fix_rate_pct`,
+replace `--base-prefix ...` with `--use-window-base-prediction`.
+
+Raw epoch-to-window preprocessing is still upstream of this command.
 
 ## 7. Maintainer notes
 

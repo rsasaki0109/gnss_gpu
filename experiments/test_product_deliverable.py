@@ -27,6 +27,11 @@ from build_product_deliverable import (
     _require_prediction_columns,
 )
 from predict import DEFAULT_PREDICTION_CSV, RESULTS_DIR, _base_prediction_path, _read_columns, _require
+from product_inference_model import (
+    _base_from_frame_or_reference,
+    _prediction_rows as _product_prediction_rows,
+    _route_rows,
+)
 from train_ppc_solver_transition_surrogate_stack import _reference_prediction_path
 
 
@@ -184,6 +189,42 @@ def test_base_prediction_path() -> None:
     )
 
 
+def test_product_inference_label_free_output() -> None:
+    print("test_product_inference_label_free_output")
+    frame = pd.DataFrame(
+        [
+            {
+                "city": "tokyo",
+                "run": "run1",
+                "window_index": 0,
+                "sim_matched_epochs": 2,
+                "base_pred_fix_rate_pct": 10.0,
+            },
+            {
+                "city": "tokyo",
+                "run": "run1",
+                "window_index": 1,
+                "sim_matched_epochs": 1,
+                "base_pred_fix_rate_pct": 40.0,
+            },
+        ]
+    )
+    base = _base_from_frame_or_reference(frame, base_prefix=None, base_prediction_column="corrected_pred_fix_rate_pct")
+    rows = _product_prediction_rows(
+        df=frame,
+        base=base,
+        residual=pd.Series([0.01, -0.02]).to_numpy(),
+        corrected=pd.Series([0.11, 0.38]).to_numpy(),
+        probabilities={"ratio_mean_ge3": pd.Series([0.2, 0.8]).to_numpy()},
+    )
+    route = _route_rows(rows)
+    check("label-free window omits actual", False, "actual_fix_rate_pct" in rows[0])
+    check("label-free window omits error", False, "corrected_error_pp" in rows[0])
+    check("label-free route count", 1, len(route))
+    check("label-free route omits actual", False, "actual_fix_rate_pct" in route[0])
+    check("label-free weighted route pred", 20.0, float(route[0]["adopted_pred_fix_rate_pct"]))
+
+
 def main() -> None:
     test_classify_window()
     test_is_metadata_or_label()
@@ -191,6 +232,7 @@ def main() -> None:
     test_require()
     test_prediction_contract()
     test_base_prediction_path()
+    test_product_inference_label_free_output()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILURE(S):")
         for name in FAILURES:
