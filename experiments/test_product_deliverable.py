@@ -17,6 +17,7 @@ from io import StringIO
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 
 # Make the experiments directory importable when this file is run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -43,11 +44,16 @@ from predict import (
     _require_distinct_batch_outputs,
 )
 from product_inference_model import (
+    _append_classifier_meta_online,
     _base_from_frame_or_reference,
     _prediction_rows as _product_prediction_rows,
+    _planned_counts_from_column,
     _route_rows,
 )
-from train_ppc_solver_transition_surrogate_stack import _reference_prediction_path
+from train_ppc_solver_transition_surrogate_stack import (
+    _append_classifier_meta as _append_classifier_meta_batch,
+    _reference_prediction_path,
+)
 
 
 FAILURES: list[str] = []
@@ -220,6 +226,7 @@ def test_prediction_mode_stage_counts() -> None:
         "batch_inference": False,
         "prepare_inference": False,
         "inference": False,
+        "online_inference": False,
         "fit_inference_model": False,
         "retrain": False,
     }
@@ -239,6 +246,60 @@ def test_prediction_mode_stage_counts() -> None:
         1,
         _planned_stage_count(Namespace(**{**base_args, "inference": True})),
     )
+    check(
+        "online inference stage count",
+        1,
+        _planned_stage_count(Namespace(**{**base_args, "online_inference": True})),
+    )
+
+
+def test_online_classifier_meta_matches_batch_run_position() -> None:
+    print("test_online_classifier_meta_matches_batch_run_position")
+    frame = pd.DataFrame(
+        [
+            {"city": "tokyo", "run": "run1", "window_index": 0, "planned_window_count": 3},
+            {"city": "tokyo", "run": "run1", "window_index": 1, "planned_window_count": 3},
+            {"city": "tokyo", "run": "run1", "window_index": 2, "planned_window_count": 3},
+        ]
+    )
+    x = np.asarray([[1.0], [2.0], [3.0]], dtype=np.float64)
+    base = np.asarray([0.1, 0.2, 0.3], dtype=np.float64)
+    batch_x, batch_names = _append_classifier_meta_batch(
+        df=frame,
+        x=x,
+        names=["feature"],
+        base=base,
+        include_base=False,
+        include_city=False,
+        include_run_position=True,
+    )
+    online_x, online_names = _append_classifier_meta_online(
+        df=frame,
+        x=x,
+        names=["feature"],
+        base=base,
+        include_base=False,
+        include_city=False,
+        include_run_position=True,
+        planned_window_counts=_planned_counts_from_column(frame, "planned_window_count"),
+    )
+    check("online meta names match batch", batch_names, online_names)
+    check("online meta values match batch", True, bool(np.allclose(batch_x, online_x)))
+    try:
+        with redirect_stderr(StringIO()):
+            _append_classifier_meta_online(
+                df=frame,
+                x=x,
+                names=["feature"],
+                base=base,
+                include_base=False,
+                include_city=False,
+                include_run_position=True,
+                planned_window_counts={("tokyo", "run1"): 2},
+            )
+        check("online meta rejects too-short planned count", True, False)
+    except SystemExit as exc:
+        check("online meta rejects too-short planned count", True, exc.code != 0)
 
 
 def test_batch_output_paths() -> None:
@@ -386,6 +447,7 @@ def main() -> None:
     test_prediction_contract()
     test_base_prediction_path()
     test_prediction_mode_stage_counts()
+    test_online_classifier_meta_matches_batch_run_position()
     test_batch_output_paths()
     test_merge_base_prediction_column()
     test_validationhold_window_rows_label_free()
