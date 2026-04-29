@@ -13,6 +13,7 @@ from experiments.gsdc2023_base_correction import (
     filter_matrtklib_duplicate_gps_nav_messages,
     matlab_base_time_span_mask,
     read_base_station_xyz,
+    rinex_header_base_xyz_or_metadata,
     select_base_pseudorange_observation,
     select_gps_nav_message,
     signal_type_iono_scale,
@@ -193,6 +194,30 @@ def test_base_position_offset_direct(tmp_path):
 
     np.testing.assert_allclose(no_offset, np.array([-2700112.7, -4292747.3, 3855195.5]))
     assert np.linalg.norm(with_offset - no_offset) > 1.0
+
+
+def test_rinex_header_base_xyz_preferred_when_valid():
+    metadata_xyz = np.array([1.0, 2.0, 3.0])
+    header_xyz = np.array([-2703115.266, -4291768.344, 3854247.955])
+    base_obs = SimpleNamespace(header=SimpleNamespace(approx_position=header_xyz))
+
+    selected_xyz = rinex_header_base_xyz_or_metadata(base_obs, metadata_xyz)
+
+    np.testing.assert_allclose(selected_xyz, header_xyz)
+
+
+def test_rinex_header_base_xyz_falls_back_to_metadata_when_missing_or_invalid():
+    metadata_xyz = np.array([-2700729.3481, -4293104.2572, 3854473.9477])
+
+    missing_header = SimpleNamespace()
+    small_header = SimpleNamespace(header=SimpleNamespace(approx_position=np.array([1.0, 2.0, 3.0])))
+    nan_header = SimpleNamespace(
+        header=SimpleNamespace(approx_position=np.array([np.nan, -4291768.344, 3854247.955])),
+    )
+
+    for base_obs in [missing_header, small_header, nan_header]:
+        selected_xyz = rinex_header_base_xyz_or_metadata(base_obs, metadata_xyz)
+        np.testing.assert_allclose(selected_xyz, metadata_xyz)
 
 
 def test_base_time_span_mask_direct():
