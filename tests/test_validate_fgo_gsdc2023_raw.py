@@ -2446,6 +2446,37 @@ def test_collect_matlab_parity_audit_reports_missing_base1(tmp_path):
     assert audit["base_correction_ready"] is False
 
 
+def test_collect_matlab_parity_audit_quick_skips_raw_imu_parsing(tmp_path):
+    data_root = tmp_path / "dataset_2023"
+    trip = data_root / "train" / "course" / "phone"
+    trip.mkdir(parents=True)
+    (trip / "device_imu.csv").write_text("not,a,valid,imu\n", encoding="utf-8")
+    (trip / "device_gnss.csv").write_text("not,a,valid,gnss\n", encoding="utf-8")
+    pd.DataFrame(
+        [
+            {
+                "Course": "course",
+                "Phone": "phone",
+                "Type": "Street",
+                "L5": 0,
+                "BDS": 0,
+                "RINEX": "V3",
+                "Base1": np.nan,
+                "IdxStart": 1,
+                "IdxEnd": 5,
+                "RPYReset": 0,
+            },
+        ],
+    ).to_csv(data_root / "settings_train.csv", index=False)
+
+    audit = collect_matlab_parity_audit(data_root, "train/course/phone", include_imu_sync=False)
+
+    assert audit["device_imu_present"] is True
+    assert audit["imu_rows_acc"] == 0
+    assert audit["gnss_elapsed_present"] is False
+    assert audit["imu_sync_ready"] is False
+
+
 def test_collect_matlab_parity_audit_detects_ready_base_correction_inputs(tmp_path):
     data_root = tmp_path / "dataset_2023"
     course_dir = data_root / "train" / "course"
