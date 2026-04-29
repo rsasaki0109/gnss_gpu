@@ -29,6 +29,14 @@ TIER_COLOR = {
     "low": "#e74c3c",
 }
 
+ACTION_COLOR = {
+    "ok": "#27ae60",
+    "review": "#f39c12",
+    "review_required": "#c0392b",
+    "use": "#27ae60",
+    "abstain": "#c0392b",
+}
+
 FOCUS_COLOR = {
     "": "#95a5a6",
     "false_high": "#c0392b",
@@ -151,12 +159,24 @@ def _render_window_scatter(window_df: pd.DataFrame) -> str:
 def _render_table(route_df: pd.DataFrame) -> str:
     rows = []
     rows.append("<table><thead><tr>")
-    for col in ["city", "run", "actual_fix_rate_pct", "adopted_pred_fix_rate_pct", "adopted_abs_error_pp", "confidence_tier", "focus_case_window_count"]:
+    for col in [
+        "city",
+        "run",
+        "actual_fix_rate_pct",
+        "adopted_pred_fix_rate_pct",
+        "adopted_abs_error_pp",
+        "confidence_tier",
+        "route_action",
+        "focus_case_window_count",
+        "abstain_window_count",
+    ]:
         rows.append(f'<th>{html.escape(col)}</th>')
     rows.append("<th>note</th></tr></thead><tbody>")
     for _, r in route_df.iterrows():
         tier = r["confidence_tier"]
         color = TIER_COLOR.get(tier, "#aaa")
+        action = str(r.get("route_action", ""))
+        action_color = ACTION_COLOR.get(action, "#aaa")
         rows.append("<tr>")
         rows.append(f'<td>{html.escape(str(r["city"]))}</td>')
         rows.append(f'<td>{html.escape(str(r["run"]))}</td>')
@@ -164,7 +184,9 @@ def _render_table(route_df: pd.DataFrame) -> str:
         rows.append(f'<td>{r["adopted_pred_fix_rate_pct"]:.2f} %</td>')
         rows.append(f'<td>{r["adopted_abs_error_pp"]:.2f} pp</td>')
         rows.append(f'<td><span class="tier" style="background:{color}">{html.escape(str(tier))}</span></td>')
+        rows.append(f'<td><span class="tier" style="background:{action_color}">{html.escape(action)}</span></td>')
         rows.append(f'<td>{int(r["focus_case_window_count"])}</td>')
+        rows.append(f'<td>{int(r.get("abstain_window_count", 0))}</td>')
         rows.append(f'<td>{html.escape(str(r["confidence_note"]))}</td>')
         rows.append("</tr>")
     rows.append("</tbody></table>")
@@ -176,12 +198,14 @@ def _render_focus_cases(window_df: pd.DataFrame) -> str:
     if focus.empty:
         return "<p>No focus-case windows detected.</p>"
     rows = ["<table><thead><tr>"]
-    for col in ["city", "run", "window_index", "actual_fix_rate_pct", "adopted_pred_fix_rate_pct", "abs_error_pp", "focus_case_tag"]:
+    for col in ["city", "run", "window_index", "actual_fix_rate_pct", "adopted_pred_fix_rate_pct", "abs_error_pp", "focus_case_tag", "window_action"]:
         rows.append(f'<th>{html.escape(col)}</th>')
     rows.append("<th>note</th></tr></thead><tbody>")
     for _, r in focus.iterrows():
         tag = str(r["focus_case_tag"])
         color = FOCUS_COLOR.get(tag, "#aaa")
+        action = str(r.get("window_action", ""))
+        action_color = ACTION_COLOR.get(action, "#aaa")
         rows.append("<tr>")
         rows.append(f'<td>{html.escape(str(r["city"]))}</td>')
         rows.append(f'<td>{html.escape(str(r["run"]))}</td>')
@@ -190,6 +214,7 @@ def _render_focus_cases(window_df: pd.DataFrame) -> str:
         rows.append(f'<td>{r["adopted_pred_fix_rate_pct"]:.2f} %</td>')
         rows.append(f'<td>{r["abs_error_pp"]:.2f} pp</td>')
         rows.append(f'<td><span class="tier" style="background:{color}">{html.escape(tag)}</span></td>')
+        rows.append(f'<td><span class="tier" style="background:{action_color}">{html.escape(action)}</span></td>')
         rows.append(f'<td>{html.escape(str(r["focus_case_note"]))}</td>')
         rows.append("</tr>")
     rows.append("</tbody></table>")
@@ -207,11 +232,14 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     route_df = pd.read_csv(args.route_csv)
-    window_df = pd.read_csv(args.window_csv).fillna({"focus_case_tag": "", "focus_case_note": ""})
+    window_df = pd.read_csv(args.window_csv).fillna(
+        {"focus_case_tag": "", "focus_case_note": "", "window_action": "", "window_action_note": ""}
+    )
 
     # aggregate stats
     total_windows = len(window_df)
     focus_windows = int((window_df["focus_case_tag"] != "").sum())
+    abstain_windows = int((window_df.get("window_action", pd.Series(dtype=str)) == "abstain").sum())
     agg_actual = float((window_df["actual_fix_rate_pct"] * 1.0).mean())
     agg_pred = float((window_df["adopted_pred_fix_rate_pct"] * 1.0).mean())
     wmae = float((window_df["adopted_pred_fix_rate_pct"] - window_df["actual_fix_rate_pct"]).abs().mean())
@@ -239,7 +267,7 @@ def main() -> None:
         ".metadata { color: #7f8c8d; font-size: 12px; margin-bottom: 20px; }",
         "</style></head><body>",
         "<h1>PPC demo5 FIX-Rate Predictor — Dashboard</h1>",
-        f"<p class='metadata'>Adopted model: §7.16 <code>current_tight_hold + carry + α=0.75</code> · strict nested LORO on 6 runs / {total_windows} windows</p>",
+        f"<p class='metadata'>Adopted model: <code>current_tight_hold + carry + α=0.75 + isotonic blend 0.75 + phase-delta guard</code> · strict nested LORO on 6 runs / {total_windows} windows</p>",
         "<div class='summary'>",
         f"<div class='cell'><div class='label'>run MAE</div><div class='value'>{run_mae:.2f} pp</div></div>",
         f"<div class='cell'><div class='label'>window MAE</div><div class='value'>{wmae:.2f} pp</div></div>",
@@ -247,8 +275,9 @@ def main() -> None:
         f"<div class='cell'><div class='label'>aggregate predicted</div><div class='value'>{agg_pred:.2f} %</div></div>",
         "</div>",
         "<p>",
-        f"Confidence tiers: high={tier_counts.get('high', 0)} · medium={tier_counts.get('medium', 0)} · low={tier_counts.get('low', 0)}  &nbsp;|&nbsp;  ",
-        f"Focus-case windows: {focus_windows} / {total_windows}",
+        f"Confidence tiers: high={tier_counts.get('high', 0)} · medium={tier_counts.get('medium', 0)} · low={tier_counts.get('low', 0)} &nbsp;|&nbsp;",
+        f"Focus-case windows: {focus_windows} / {total_windows} &nbsp;|&nbsp;",
+        f"Abstained windows: {abstain_windows}",
         "</p>",
         "<h2>Route-level predictions</h2>",
         _render_table(route_df),
@@ -264,6 +293,7 @@ def main() -> None:
         "<li><b>high</b> tier (green): trust the route-level prediction directly; error expected &le; 3 pp.</li>",
         "<li><b>medium</b> tier (orange): use with caution near decision boundaries; error 3-8 pp expected.</li>",
         "<li><b>low</b> tier (red): contains focus-case windows.  Drill into the scatter / focus table before acting.</li>",
+        "<li><b>review_required</b> route action: at least one window is abstained from automated window-level action.</li>",
         "<li>False-high markers (red dots on bottom-left): adopted model partially suppresses but residual inflation remains (Tokyo run2 w7/w9).</li>",
         "<li>Hidden-high markers (purple on top-left): adopted model lifts but still undershoots (Tokyo run2 w23-w27).</li>",
         "<li>False-lift markers (orange, upper-left): adopted model partially rejects (Nagoya run2) or still over-predicts (Tokyo run3 w17).</li>",

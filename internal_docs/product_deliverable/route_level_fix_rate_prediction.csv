@@ -1,7 +1,7 @@
-city,run,window_count,focus_case_window_count,actual_fix_rate_pct,baseline_pred_fix_rate_pct,adopted_pred_fix_rate_pct,adopted_abs_error_pp,adopted_signed_error_pp,confidence_tier,confidence_note
-nagoya,run1,26,3,11.512,16.138,14.547,3.035,3.035,medium,"run contains hidden-high windows (actual high, pred under-lifted)"
-nagoya,run2,32,4,16.173,18.656,20.976,4.803,4.803,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
-nagoya,run3,18,0,7.866,2.836,6.828,1.037,-1.037,high,no material focus-case windows
-tokyo,run1,39,4,10.918,12.26,12.069,1.151,1.151,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
-tokyo,run2,31,8,29.018,19.582,20.771,8.247,-8.247,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
-tokyo,run3,51,10,24.011,20.314,24.952,0.941,0.941,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
+city,run,window_count,focus_case_window_count,usable_window_count,review_window_count,abstain_window_count,abstain_epoch_fraction_pct,actual_fix_rate_pct,baseline_pred_fix_rate_pct,adopted_pred_fix_rate_pct,adopted_abs_error_pp,adopted_signed_error_pp,confidence_tier,confidence_note,route_action,route_action_note
+nagoya,run1,26,3,23,3,0,0.0,11.512,16.138,11.741,0.229,0.229,medium,"run contains hidden-high windows (actual high, pred under-lifted)",review,route contains review windows; route aggregate is usable with caution
+nagoya,run2,32,5,31,1,0,0.0,16.173,18.656,17.611,1.438,1.438,medium,"run contains hidden-high windows (actual high, pred under-lifted)",review,route contains review windows; route aggregate is usable with caution
+nagoya,run3,18,0,18,0,0,0.0,7.866,2.836,8.033,0.168,0.168,high,no material focus-case windows,ok,all windows are usable
+tokyo,run1,39,3,37,2,0,0.0,10.918,12.26,10.422,0.496,-0.496,medium,"run contains hidden-high windows (actual high, pred under-lifted)",review,route contains review windows; route aggregate is usable with caution
+tokyo,run2,31,7,24,5,2,6.772,29.018,19.582,20.886,8.132,-8.132,low,"run contains at least one false-high window (pred high, actual low); individual window trust low",review_required,route contains abstained windows; use route aggregate only with focus-case review
+tokyo,run3,51,5,46,4,1,1.984,24.011,20.314,23.732,0.279,-0.279,low,"run contains at least one false-high window (pred high, actual low); individual window trust low",review_required,route contains abstained windows; use route aggregate only with focus-case review

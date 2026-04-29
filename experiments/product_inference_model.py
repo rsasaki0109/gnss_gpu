@@ -26,6 +26,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.isotonic import IsotonicRegression
 from sklearn.pipeline import Pipeline
 
 from train_ppc_solver_transition_surrogate_stack import (
@@ -47,9 +48,18 @@ from train_ppc_solver_transition_surrogate_stack import (
 SCHEMA_VERSION = 1
 DEFAULT_MODEL_PATH = (
     RESULTS_DIR
-    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_product_model.pkl.gz"
+    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45_product_model.pkl.gz"
 )
 KEY_COLUMNS = {"city", "run", "window_index"}
+PREDICTION_GUARD_PRESETS: dict[str, dict[str, object]] = {
+    "phase_delta_cap20": {
+        "name": "phase_delta_cap20",
+        "feature": "rinex_phase_raw_delta_cycles_p50_p75",
+        "operator": ">=",
+        "threshold": 426.419,
+        "cap": 0.20,
+    },
+}
 REQUIRED_FIT_COLUMNS = KEY_COLUMNS | {
     "sim_matched_epochs",
     "actual_fix_rate_pct",
@@ -313,6 +323,106 @@ def _fit_residual_corrector(
     return model
 
 
+def _fit_final_calibrator(
+    *,
+    df: pd.DataFrame,
+    calibration_prediction_csv: Path | None,
+    calibrator_name: str,
+) -> tuple[object | None, str]:
+    if calibrator_name == "none":
+        return None, ""
+    if calibrator_name != "isotonic":
+        raise SystemExit(f"unsupported final calibrator: {calibrator_name}")
+    if calibration_prediction_csv is None:
+        raise SystemExit("--final-calibrator isotonic requires --calibration-prediction-csv")
+
+    cal = _sort_windows(pd.read_csv(calibration_prediction_csv))
+    if list(_key_frame(cal)) != list(_key_frame(df)):
+        raise SystemExit(
+            "calibration prediction CSV keys do not match the training window CSV; "
+            "use the adopted LORO prediction CSV for this training set"
+        )
+    _require_columns(
+        cal,
+        {"actual_fix_rate_pct", "corrected_pred_fix_rate_pct", "sim_matched_epochs"},
+        "calibration prediction CSV",
+    )
+    x = cal["corrected_pred_fix_rate_pct"].to_numpy(dtype=np.float64) / 100.0
+    y = cal["actual_fix_rate_pct"].to_numpy(dtype=np.float64) / 100.0
+    weights = cal["sim_matched_epochs"].to_numpy(dtype=np.float64)
+    finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(weights) & (weights > 0.0)
+    if np.count_nonzero(finite) < 2:
+        raise SystemExit("calibration prediction CSV has too few finite rows for isotonic calibration")
+    order = np.argsort(x[finite])
+    model = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
+    model.fit(x[finite][order], y[finite][order], sample_weight=weights[finite][order])
+    return model, str(calibration_prediction_csv)
+
+
+def _apply_final_calibrator(corrected: np.ndarray, artifact: dict[str, object]) -> np.ndarray:
+    name = str(artifact.get("final_calibrator_name", "none"))
+    if name in ("", "none"):
+        return corrected
+    if name != "isotonic":
+        raise SystemExit(f"unsupported final calibrator in product model: {name}")
+    model = artifact.get("final_calibrator")
+    if model is None:
+        raise SystemExit("product model is missing final_calibrator")
+    blend = float(artifact.get("final_calibrator_blend", 1.0))
+    if not np.isfinite(blend) or blend < 0.0 or blend > 1.0:
+        raise SystemExit("product model final_calibrator_blend must be in [0, 1]")
+    calibrated = np.asarray(model.predict(corrected), dtype=np.float64)
+    values = (1.0 - blend) * corrected + blend * calibrated
+    return np.clip(values, 0.0, 1.0)
+
+
+def _prediction_guard_specs(names: list[str]) -> list[dict[str, object]]:
+    specs: list[dict[str, object]] = []
+    for name in names:
+        if name == "none":
+            continue
+        if name not in PREDICTION_GUARD_PRESETS:
+            raise SystemExit(f"unsupported prediction guard: {name}")
+        specs.append(dict(PREDICTION_GUARD_PRESETS[name]))
+    return specs
+
+
+def _apply_prediction_guards(df: pd.DataFrame, corrected: np.ndarray, artifact: dict[str, object]) -> np.ndarray:
+    guards = artifact.get("prediction_guards", [])
+    if not guards:
+        return corrected
+    values = np.asarray(corrected, dtype=np.float64).copy()
+    for guard in guards:
+        if not isinstance(guard, dict):
+            raise SystemExit("product model prediction_guards must be dictionaries")
+        feature = str(guard.get("feature", ""))
+        if feature not in df.columns:
+            raise SystemExit(f"window CSV is missing prediction guard feature column: {feature}")
+        threshold = float(guard.get("threshold", np.nan))
+        if not np.isfinite(threshold):
+            raise SystemExit(f"prediction guard {guard.get('name', feature)} has non-finite threshold")
+        operator = str(guard.get("operator", ">="))
+        feature_values = df[feature].to_numpy(dtype=np.float64)
+        finite = np.isfinite(feature_values)
+        if operator == ">=":
+            active = finite & (feature_values >= threshold)
+        elif operator == "<=":
+            active = finite & (feature_values <= threshold)
+        else:
+            raise SystemExit(f"unsupported prediction guard operator: {operator}")
+        if "cap" in guard:
+            cap = float(guard["cap"])
+            if not np.isfinite(cap) or cap < 0.0 or cap > 1.0:
+                raise SystemExit(f"prediction guard {guard.get('name', feature)} cap must be in [0, 1]")
+            values = np.where(active & (values > cap), cap, values)
+        if "floor" in guard:
+            floor = float(guard["floor"])
+            if not np.isfinite(floor) or floor < 0.0 or floor > 1.0:
+                raise SystemExit(f"prediction guard {guard.get('name', feature)} floor must be in [0, 1]")
+            values = np.where(active & (values < floor), floor, values)
+    return np.clip(values, 0.0, 1.0)
+
+
 def fit_model(args: argparse.Namespace) -> None:
     df = _sort_windows(pd.read_csv(args.window_csv))
     _require_columns(df, REQUIRED_FIT_COLUMNS, "training window CSV")
@@ -363,6 +473,11 @@ def fit_model(args: argparse.Namespace) -> None:
         residual_max_features=args.residual_max_features,
         random_state=args.random_state,
     )
+    final_calibrator, final_calibrator_source = _fit_final_calibrator(
+        df=df,
+        calibration_prediction_csv=args.calibration_prediction_csv,
+        calibrator_name=args.final_calibrator,
+    )
     payload: dict[str, object] = {
         "schema_version": SCHEMA_VERSION,
         "training_rows": int(len(df)),
@@ -386,6 +501,11 @@ def fit_model(args: argparse.Namespace) -> None:
         "random_state": int(args.random_state),
         "base_prediction_column": args.base_prediction_column,
         "calibration_source": calibration_source,
+        "final_calibrator_name": args.final_calibrator,
+        "final_calibrator": final_calibrator,
+        "final_calibrator_source": final_calibrator_source,
+        "final_calibrator_blend": float(args.final_calibrator_blend),
+        "prediction_guards": _prediction_guard_specs(args.prediction_guard),
     }
     _save_pickle_gz(args.model_output, payload)
 
@@ -435,6 +555,8 @@ def predict_frame(
     clip = float(artifact["residual_clip_pp"]) / 100.0
     alpha = float(artifact["residual_alpha"])
     corrected = np.clip(base + alpha * np.clip(residual, -clip, clip), 0.0, 1.0)
+    corrected = _apply_final_calibrator(corrected, artifact)
+    corrected = _apply_prediction_guards(df, corrected, artifact)
     return residual, corrected, probabilities
 
 
@@ -555,6 +677,15 @@ def parse_args() -> argparse.Namespace:
     fit.add_argument("--residual-estimators", type=int, default=80)
     fit.add_argument("--residual-min-leaf", type=int, default=3)
     fit.add_argument("--residual-max-features", type=float, default=0.75)
+    fit.add_argument("--final-calibrator", choices=("none", "isotonic"), default="none")
+    fit.add_argument("--final-calibrator-blend", type=float, default=1.0)
+    fit.add_argument(
+        "--prediction-guard",
+        action="append",
+        choices=("none", *PREDICTION_GUARD_PRESETS),
+        default=[],
+        help="optional deployable post-calibration prediction guard; can be passed more than once",
+    )
     fit.add_argument("--random-state", type=int, default=2034)
 
     infer = sub.add_parser("infer", help="score a window CSV with a saved product model")

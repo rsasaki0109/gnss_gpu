@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
+from sklearn.isotonic import IsotonicRegression
 
 # Make the experiments directory importable when this file is run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -30,6 +31,8 @@ from build_product_deliverable import (
     _classify_window,
     _confidence_tier,
     _require_prediction_columns,
+    _route_action,
+    _window_action,
 )
 from analyze_ppc_validation_hold_surrogate_windows import _window_rows as _validationhold_window_rows
 from predict import (
@@ -45,8 +48,11 @@ from predict import (
     _require,
     _require_distinct_batch_outputs,
 )
+import product_raw_source_prepare as raw_source_prepare
 from product_inference_model import (
     _append_classifier_meta_online,
+    _apply_final_calibrator,
+    _apply_prediction_guards,
     _base_from_frame_or_reference,
     _prediction_rows as _product_prediction_rows,
     _planned_counts_from_column,
@@ -146,6 +152,27 @@ def test_confidence_tier() -> None:
     check("mixed with false_high -> low (takes precedence)", "low", tier)
     tier, _ = _confidence_tier(["hidden_high", "false_lift_resolved"])
     check("mixed without low-tier trigger -> medium", "medium", tier)
+
+
+def test_actionability_labels() -> None:
+    print("test_actionability_labels")
+    action, _ = _window_action("")
+    check("normal window action -> use", "use", action)
+    action, _ = _window_action("false_lift_resolved")
+    check("resolved false lift action -> use", "use", action)
+    action, _ = _window_action("hidden_high")
+    check("hidden high action -> review", "review", action)
+    action, _ = _window_action("false_high")
+    check("false high action -> abstain", "abstain", action)
+    action, _ = _window_action("false_lift")
+    check("false lift action -> abstain", "abstain", action)
+
+    route_action, _ = _route_action(["use", "use"])
+    check("all use route action -> ok", "ok", route_action)
+    route_action, _ = _route_action(["use", "review"])
+    check("review route action -> review", "review", route_action)
+    route_action, _ = _route_action(["use", "review", "abstain"])
+    check("abstain route action -> review_required", "review_required", route_action)
 
 
 def test_require() -> None:
@@ -444,6 +471,109 @@ def test_product_source_bundle_validation() -> None:
             check("source bundle rejects missing base window", True, exc.code != 0)
 
 
+def test_raw_source_prepare_manifest_metadata_counts() -> None:
+    print("test_raw_source_prepare_manifest_metadata_counts")
+    rows_by_run = {
+        ("nagoya", "run1"): [
+            {"gps_tow": 100.0, "epoch": 0, "sat": 6.0, "phase_fraction": 0.5, "los_fraction": 0.75},
+            {"gps_tow": 110.0, "epoch": 1, "sat": 8.0, "phase_fraction": 0.75, "los_fraction": 0.875},
+            {"gps_tow": 135.0, "epoch": 2, "sat": 7.0, "phase_fraction": 1.0, "los_fraction": 1.0},
+        ],
+        ("tokyo", "run2"): [
+            {"gps_tow": 200.0, "epoch": 0, "sat": 5.0, "phase_fraction": 0.25, "los_fraction": 0.5},
+            {"gps_tow": 210.0, "epoch": 1, "sat": 9.0, "phase_fraction": 0.5, "los_fraction": 0.75},
+        ],
+    }
+
+    def fake_epoch_rows_for_run(run: SourceRun, *, systems: tuple[str, ...], max_epochs: int | None):
+        key = (run.city, run.run)
+        rows = []
+        for row in rows_by_run[key][:max_epochs]:
+            rows.append({"city": run.city, "run": run.run, **row})
+        return rows
+
+    original_load_model_feature_names = raw_source_prepare._load_model_feature_names
+    original_epoch_rows_for_run = raw_source_prepare._epoch_rows_for_run
+    raw_source_prepare._load_model_feature_names = lambda _path: [
+        "sat_mean",
+        "phase_fraction_mean",
+        "los_fraction_mean",
+    ]
+    raw_source_prepare._epoch_rows_for_run = fake_epoch_rows_for_run
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            runs = []
+            for city, run in rows_by_run:
+                run_dir = tmpdir / "data" / city / run
+                run_dir.mkdir(parents=True)
+                for name in ("rover.obs", "base.obs", "base.nav", "reference.csv"):
+                    (run_dir / name).write_text("fixture\n", encoding="utf-8")
+                runs.append({"city": city, "run": run, "run_dir": str(run_dir)})
+            manifest = tmpdir / "raw_manifest.json"
+            manifest.write_text(json.dumps({"runs": runs}), encoding="utf-8")
+
+            outputs = raw_source_prepare.prepare_raw_source_bundle(
+                manifest_path=manifest,
+                output_prefix=tmpdir / "raw_out",
+                output_manifest=None,
+                model_path=tmpdir / "model.pkl.gz",
+                systems=("G",),
+                window_duration_s=30.0,
+                max_epochs_per_run=None,
+            )
+            payload = json.loads(outputs.source_manifest.read_text(encoding="utf-8"))
+            metadata = payload["raw_source_prepare"]
+            epoch_rows = list(DictReader(outputs.epochs_csv.open(newline="", encoding="utf-8")))
+            window_rows = list(DictReader(outputs.window_csv.open(newline="", encoding="utf-8")))
+            base_rows = list(DictReader(outputs.base_prediction_csv.open(newline="", encoding="utf-8")))
+
+            check("raw manifest epoch total", len(epoch_rows), metadata["epoch_count"])
+            check("raw manifest window total", len(window_rows), metadata["window_count"])
+            check("raw manifest base total", len(base_rows), metadata["base_prediction_count"])
+            check("raw manifest model feature count", 3, metadata["model_feature_count"])
+            check("raw manifest systems", ["G"], metadata["systems"])
+            check("raw manifest mode", "bootstrap_neutral_fill", metadata["mode"])
+
+            summaries = {(row["city"], row["run"]): row for row in metadata["runs"]}
+            check("raw manifest per-run summary count", 2, len(summaries))
+            check("raw manifest nagoya epoch count", 3, summaries[("nagoya", "run1")]["epoch_count"])
+            check("raw manifest nagoya window count", 2, summaries[("nagoya", "run1")]["window_count"])
+            check("raw manifest tokyo epoch count", 2, summaries[("tokyo", "run2")]["epoch_count"])
+            check("raw manifest tokyo window count", 1, summaries[("tokyo", "run2")]["window_count"])
+            check(
+                "raw manifest elapsed finite",
+                True,
+                all(np.isfinite(float(row["elapsed_s"])) and float(row["elapsed_s"]) >= 0.0 for row in summaries.values()),
+            )
+
+            validated = validate_source_bundle(load_source_bundle(outputs.source_manifest))
+            check("raw manifest validates as source bundle", 2, validated.run_count)
+
+            bad_payload = json.loads(json.dumps(payload))
+            bad_payload["raw_source_prepare"]["epoch_count"] += 1
+            outputs.source_manifest.write_text(json.dumps(bad_payload), encoding="utf-8")
+            try:
+                with redirect_stderr(StringIO()):
+                    validate_source_bundle(load_source_bundle(outputs.source_manifest))
+                check("raw manifest rejects bad total count", True, False)
+            except SystemExit as exc:
+                check("raw manifest rejects bad total count", True, exc.code != 0)
+
+            bad_payload = json.loads(json.dumps(payload))
+            bad_payload["raw_source_prepare"]["runs"][0]["window_count"] += 1
+            outputs.source_manifest.write_text(json.dumps(bad_payload), encoding="utf-8")
+            try:
+                with redirect_stderr(StringIO()):
+                    validate_source_bundle(load_source_bundle(outputs.source_manifest))
+                check("raw manifest rejects bad per-run count", True, False)
+            except SystemExit as exc:
+                check("raw manifest rejects bad per-run count", True, exc.code != 0)
+    finally:
+        raw_source_prepare._load_model_feature_names = original_load_model_feature_names
+        raw_source_prepare._epoch_rows_for_run = original_epoch_rows_for_run
+
+
 def test_raw_source_prepare_window_rows() -> None:
     print("test_raw_source_prepare_window_rows")
     epoch_rows = [
@@ -682,10 +812,57 @@ def test_product_inference_label_free_output() -> None:
     check("label-free weighted route pred", 20.0, float(route[0]["adopted_pred_fix_rate_pct"]))
 
 
+def test_product_inference_final_calibrator() -> None:
+    print("test_product_inference_final_calibrator")
+    corrected = np.array([0.0, 0.5, 1.0], dtype=np.float64)
+    unchanged = _apply_final_calibrator(corrected, {})
+    check("final calibrator absent leaves prediction unchanged", [0.0, 0.5, 1.0], unchanged.tolist())
+
+    model = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
+    model.fit(np.array([0.0, 0.5, 1.0]), np.array([0.0, 0.25, 1.0]))
+    calibrated = _apply_final_calibrator(
+        corrected,
+        {"final_calibrator_name": "isotonic", "final_calibrator": model},
+    )
+    check("final isotonic calibrator applies mapping", [0.0, 0.25, 1.0], calibrated.tolist())
+    blended = _apply_final_calibrator(
+        corrected,
+        {"final_calibrator_name": "isotonic", "final_calibrator": model, "final_calibrator_blend": 0.5},
+    )
+    check("final isotonic calibrator supports blending", [0.0, 0.375, 1.0], blended.tolist())
+
+
+def test_product_inference_prediction_guards() -> None:
+    print("test_product_inference_prediction_guards")
+    frame = pd.DataFrame(
+        {
+            "rinex_phase_raw_delta_cycles_p50_p75": [500.0, 100.0, 500.0],
+        }
+    )
+    corrected = np.array([0.55, 0.55, 0.10], dtype=np.float64)
+    guarded = _apply_prediction_guards(
+        frame,
+        corrected,
+        {
+            "prediction_guards": [
+                {
+                    "name": "phase_delta_cap20",
+                    "feature": "rinex_phase_raw_delta_cycles_p50_p75",
+                    "operator": ">=",
+                    "threshold": 426.419,
+                    "cap": 0.20,
+                }
+            ]
+        },
+    )
+    check("prediction guard caps only active high predictions", [0.2, 0.55, 0.1], guarded.tolist())
+
+
 def main() -> None:
     test_classify_window()
     test_is_metadata_or_label()
     test_confidence_tier()
+    test_actionability_labels()
     test_require()
     test_prediction_contract()
     test_base_prediction_path()
@@ -693,11 +870,14 @@ def main() -> None:
     test_online_classifier_meta_matches_batch_run_position()
     test_batch_output_paths()
     test_product_source_bundle_validation()
+    test_raw_source_prepare_manifest_metadata_counts()
     test_raw_source_prepare_window_rows()
     test_raw_source_prepare_streaming_epoch_rows()
     test_merge_base_prediction_column()
     test_validationhold_window_rows_label_free()
     test_product_inference_label_free_output()
+    test_product_inference_final_calibrator()
+    test_product_inference_prediction_guards()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILURE(S):")
         for name in FAILURES:

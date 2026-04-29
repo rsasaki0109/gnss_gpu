@@ -1,6 +1,6 @@
 # PPC FIX-Rate Predictor — Operational Runbook
 
-**Last updated**: 2026-04-29
+**Last updated**: 2026-04-30
 **Target audience**: operator running the predictor on new PPC/taroz data
 **Prerequisites**: familiar with the `gnss_gpu` repository layout and Python 3.12 environment
 
@@ -28,14 +28,14 @@ cd <repo_root>
 python3 experiments/predict.py
 ```
 
-This is the frozen product path.  It reads the committed adopted §7.16
-window predictions and refreshes the operator-facing outputs.  It
-should finish in a few seconds from a clean checkout.
+This is the frozen product path.  It reads the committed adopted
+alpha75+isotonic+phaseguard window predictions and refreshes the operator-facing
+outputs.  It should finish in a few seconds from a clean checkout.
 
 Outputs land in:
 
-- `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv` — frozen input artifact
-- `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz` — saved inference model artifact
+- `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_meta_run45_window_predictions.csv` — frozen input artifact
+- `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_meta_run45_product_model.pkl.gz` — saved inference model artifact
 - `internal_docs/product_deliverable/route_level_fix_rate_prediction.csv`
 - `internal_docs/product_deliverable/window_level_details.csv`
 - `internal_docs/product_deliverable/dashboard.html` — open in a browser
@@ -112,6 +112,15 @@ Use it to fix the product inference wiring from raw source bundles, not
 as a replacement for the upstream calibrated feature pipeline.  It
 validates that `base.nav` exists, but does not run broadcast-ephemeris
 satellite propagation or refinedgrid base prediction.
+
+Latest full raw-source E2E smoke on the local 6-run PPC dataset
+(2026-04-30 JST):
+
+- Prepare command: `python3 experiments/predict.py --source-bundle-prepare --source-manifest /tmp/ppc_raw_harden_manifest.json --source-output-prefix /tmp/ppc_raw_full_harden`
+- Prepare result: 58,571 epoch rows, 396 window rows, and 396 base prediction rows; elapsed 2:49.65, max RSS 442,416 KB.
+- Derived manifest metadata: `raw_source_prepare.epoch_count=58571`, `window_count=396`, `base_prediction_count=396`, with per-run counts and elapsed seconds.
+- Inference command: `python3 experiments/predict.py --source-bundle-inference --source-manifest /tmp/ppc_raw_full_harden_source_manifest.json`
+- Inference result: 396 prepared windows, `vh_added=34`, 6 route prediction rows, 396 window prediction rows; elapsed 0:14.16, max RSS 498,360 KB. Route/window prediction CSVs had no null cells in this smoke.
 
 ### 3.3 Source manifest check
 
@@ -295,10 +304,16 @@ One row per `(city, run)` with columns:
 
 - `actual_fix_rate_pct` — demo5 observed FIX rate
 - `baseline_pred_fix_rate_pct` — §2.2 conservative deployable baseline
-- `adopted_pred_fix_rate_pct` — §7.16 adopted model prediction
+- `adopted_pred_fix_rate_pct` — adopted alpha75+isotonic+phaseguard model prediction
 - `adopted_abs_error_pp` — absolute error of the adopted prediction
 - `confidence_tier` — `high` / `medium` / `low`
 - `confidence_note` — reason for the tier
+- `usable_window_count`, `review_window_count`,
+  `abstain_window_count` — actionability breakdown across route windows
+- `abstain_epoch_fraction_pct` — epoch-weighted share of route windows
+  excluded from automated window-level actions
+- `route_action` — `ok`, `review`, or `review_required`
+- `route_action_note` — reason for the action label
 
 ### 4.2 Confidence tiers
 
@@ -311,12 +326,27 @@ One row per `(city, run)` with columns:
   can exceed 8 pp.  Review `window_level_details.csv` for the specific
   focus cases.
 
+Route action is stricter than confidence tier:
+
+- `ok`: all windows have `window_action == use`.
+- `review`: hidden-high windows are present; use the route aggregate
+  with caution and inspect affected windows.
+- `review_required`: at least one window is `abstain`; do not automate
+  window-level actions until the focus cases are reviewed.
+
 ### 4.3 window_level_details.csv
 
 One row per window.  Use for diagnostics when a `low` tier run needs
 drilling down.  The `focus_case_tag` column marks known failure
 archetypes (`false_high`, `hidden_high`, `false_lift`,
 `false_lift_mild`, `false_lift_resolved`).
+
+The `window_action` column is the product-facing screen:
+
+- `use`: usable for route aggregation and normal diagnostics.
+- `review`: prediction likely underestimates a high-FIX window.
+- `abstain`: exclude from automated window-level action and inspect the
+  focus-case note.
 
 ### 4.4 Inference route/window prediction files
 
@@ -358,8 +388,9 @@ Important columns:
 If the adopted model's prediction on a new run deviates more than 5 pp
 from actual, investigate in this order:
 
-1. Check `window_level_details.csv` for unexpected `focus_case_tag` hits
-   — are the failures in known archetypes or new?
+1. Check `window_level_details.csv` for `window_action == abstain` or
+   unexpected `focus_case_tag` hits — are the failures in known
+   archetypes or new?
 2. Check the validationhold window summary
    (`experiments/results/ppc_validationhold_window_summary.csv`)
    for the run: are `clean_streak_s_at_start`, `hold_ready_frac`,
@@ -381,7 +412,7 @@ Per D-030 / D-033:
 - ≤ 1-2 new runs: do nothing.  Expect prediction quality to match the
   reported metrics.
 - 3-9 new runs: re-run `predict.py --retrain`, check whether aggregate metrics
-  stay within the documented ranges (run MAE ~3.2 pp, corr ~0.55).
+  stay within the documented ranges (run MAE ~1.8 pp, corr ~0.56).
 - ≥ 10 new runs: re-scan the `hold_ready_thr` dimension
   (§7.13 / §7.14) and the residual alpha (§7.16).  The current
   thresholds were informed by Tokyo run2 behaviour and may drift.
@@ -399,8 +430,8 @@ Per D-030 / D-033:
 | `experiments/product_inference_model.py` | fit/run saved single-model product inference artifact, including online-compatible scoring |
 | `experiments/product_source_bundle.py` | validate source manifests that bind raw PPC run directories to derived epoch/window/base product input CSVs |
 | `experiments/product_raw_source_prepare.py` | bootstrap raw PPC source preparation into model-schema-compatible epoch/window/base CSVs and a derived source manifest; neutral-fills unsupported simulator/refinedgrid-only features |
-| `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv` | committed adopted §7.16 window predictions used by default product mode |
-| `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact used by `predict.py --inference` |
+| `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_meta_run45_window_predictions.csv` | committed adopted calibrated window predictions used by default product mode |
+| `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact with 0.75-blended final isotonic calibration and phase-delta prediction guard used by `predict.py --inference` |
 | `experiments/build_product_deliverable.py` | deliverable CSV builder |
 | `experiments/build_product_dashboard.py` | HTML dashboard renderer |
 | `internal_docs/product_deliverable/dashboard.html` | generated dashboard (open in browser) |
@@ -463,7 +494,6 @@ Per D-030 / D-033:
   name the output files explicitly and do not point them at the
   canonical `ppc_validationhold_window_summary_current_tight_hold.csv`
   path unless you intend to replace it.
-- Aggregate error on the dataset is +0.26 pp (not 0).  This is the
-  expected calibration of the adopted model; do not try to re-bias
-  it away with a post-hoc offset without understanding the per-route
-  distribution first.
+- Aggregate error on the dataset is about -1.16 pp after blended final
+  isotonic calibration plus phase-delta guard.  Do not re-bias it with a
+  post-hoc offset without understanding the per-route distribution first.

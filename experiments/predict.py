@@ -118,10 +118,13 @@ DEFAULT_BASE_PREFIX = (
 )
 DEFAULT_PRESET = "current_tight_hold"
 DEFAULT_RESULTS_PREFIX = (
-    "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45"
+    "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45"
 )
 DEFAULT_PREDICTION_CSV = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_window_predictions.csv"
 DEFAULT_INFERENCE_MODEL = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_product_model.pkl.gz"
+DEFAULT_CALIBRATION_PREDICTION_CSV = RESULTS_DIR / (
+    "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_window_predictions.csv"
+)
 DEFAULT_INFERENCE_OUTPUT_PREFIX = RESULTS_DIR / "ppc_product_inference"
 DEFAULT_PREPARE_PREFIX = "ppc_product_inference_prepare"
 DEFAULT_OUTPUT_DIR = EXPERIMENTS_DIR.parent / "internal_docs" / "product_deliverable"
@@ -505,8 +508,14 @@ def parse_args() -> argparse.Namespace:
                         help="window duration for bootstrap raw-source preparation")
     parser.add_argument("--raw-source-max-epochs-per-run", type=int,
                         help="debug cap per run for --source-bundle-prepare")
-    parser.add_argument("--calibration-prediction-csv", type=Path,
+    parser.add_argument("--calibration-prediction-csv", type=Path, default=DEFAULT_CALIBRATION_PREDICTION_CSV,
                         help="optional LORO prediction CSV used to calibrate the saved residual corrector")
+    parser.add_argument("--final-calibrator", choices=("none", "isotonic"), default="isotonic",
+                        help="optional final prediction calibrator for --fit-inference-model")
+    parser.add_argument("--final-calibrator-blend", type=float, default=0.75,
+                        help="blend between residual prediction and final calibrated prediction")
+    parser.add_argument("--prediction-guard", action="append", default=None,
+                        help="prediction guard preset for --fit-inference-model; pass 'none' to disable")
     parser.add_argument("--use-window-base-prediction", action="store_true",
                         help="in inference modes, use base_pred_fix_rate_pct from --window-csv instead of --base-prefix")
     parser.add_argument("--planned-window-count", type=int,
@@ -559,6 +568,10 @@ def parse_args() -> argparse.Namespace:
         or args.source_bundle_inference
     ) and args.source_manifest is None:
         parser.error("--source-bundle-prepare/check/inference require --source-manifest")
+    if args.prediction_guard is None:
+        args.prediction_guard = ["phase_delta_cap20"]
+    elif "none" in args.prediction_guard:
+        args.prediction_guard = ["none"]
     return args
 
 
@@ -802,7 +815,11 @@ def main() -> None:
             "--residual-model", "ridge",
             "--residual-alpha", str(args.residual_alpha),
             "--residual-clip-pp", str(args.residual_clip_pp),
+            "--final-calibrator", args.final_calibrator,
+            "--final-calibrator-blend", str(args.final_calibrator_blend),
         ]
+        for guard_name in args.prediction_guard:
+            cmd.extend(["--prediction-guard", guard_name])
         if args.calibration_prediction_csv is not None:
             cmd.extend(["--calibration-prediction-csv", str(args.calibration_prediction_csv)])
         run(cmd)

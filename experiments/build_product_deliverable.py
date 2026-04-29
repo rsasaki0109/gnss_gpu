@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Build the product deliverable package for the adopted strict-best model.
 
-Reads the §7.16 adopted `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
+Reads the adopted `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45`
 window predictions and emits:
 
 1. `internal_docs/product_deliverable/route_level_fix_rate_prediction.csv`
    - One row per (city, run), epoch-weighted aggregate predicted FIX rate,
      actual FIX rate, aggregate error, and qualitative confidence tier.
 2. `internal_docs/product_deliverable/window_level_details.csv`
-   - Per-window predictions with flags for known failure cases.
+   - Per-window predictions with flags for known failure cases and
+     actionability annotations.
 
-Confidence tiers derive from the §7.16 LORO metrics and the presence of
+Confidence tiers derive from the strict LORO metrics and the presence of
 known-failure windows:
 
 - high: no focus-case windows, expected error <= 3 pp
@@ -34,7 +35,7 @@ RESULTS_DIR = EXPERIMENTS_DIR / "results"
 DELIVERABLE_DIR = Path(__file__).resolve().parent.parent / "internal_docs" / "product_deliverable"
 DEFAULT_PRED_CSV = (
     RESULTS_DIR
-    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_window_predictions.csv"
+    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45_window_predictions.csv"
 )
 REQUIRED_PREDICTION_COLUMNS = {
     "city",
@@ -49,7 +50,7 @@ REQUIRED_PREDICTION_COLUMNS = {
 # Threshold-based focus-case classification.  Applied per window to every
 # input row; no hardcoded window-index list, so new runs with similar
 # failure archetypes are tagged automatically.  Thresholds are chosen to
-# flag only the material failure modes after the §7.16 correction is
+# flag only the material failure modes after the adopted correction is
 # applied (mild residual error on low-actual windows is normal and is NOT
 # tagged).
 # Default thresholds; CLI overrides below in parse_args().
@@ -65,6 +66,24 @@ DEFAULT_THRESHOLDS = {
     "reject_pp": 15.0,                 # base - corrected >= this counts as a material reject
     "reject_base_pct": 25.0,           # minimum base for reject classification
 }
+
+
+def _window_action(tag: str) -> tuple[str, str]:
+    """Return (action, note) for a window focus-case tag."""
+    if tag in {"false_high", "false_lift"}:
+        return "abstain", "exclude from automated window-level action; inspect focus-case diagnostics"
+    if tag == "hidden_high":
+        return "review", "prediction likely underestimates a high-FIX window; review before window-level action"
+    return "use", "usable for route aggregation and normal diagnostics"
+
+
+def _route_action(actions: list[str]) -> tuple[str, str]:
+    """Return (action, note) for a route from its window-level actions."""
+    if any(action == "abstain" for action in actions):
+        return "review_required", "route contains abstained windows; use route aggregate only with focus-case review"
+    if any(action == "review" for action in actions):
+        return "review", "route contains review windows; route aggregate is usable with caution"
+    return "ok", "all windows are usable"
 
 
 def _classify_window(row: "pd.Series", thresholds: dict | None = None) -> tuple[str, str]:
@@ -165,17 +184,21 @@ def main() -> None:
     window_rows: list[dict[str, object]] = []
     for _, row in df.sort_values(["city", "run", "window_index"]).iterrows():
         focus_tag, focus_note = _classify_window(row, thresholds)
+        window_action, action_note = _window_action(focus_tag)
         window_rows.append(
             {
                 "city": row["city"],
                 "run": row["run"],
                 "window_index": int(row["window_index"]),
+                "sim_matched_epochs": float(row["sim_matched_epochs"]),
                 "actual_fix_rate_pct": float(row["actual_fix_rate_pct"]),
                 "base_pred_fix_rate_pct": float(row["base_pred_fix_rate_pct"]),
                 "adopted_pred_fix_rate_pct": float(row["corrected_pred_fix_rate_pct"]),
                 "abs_error_pp": float(abs(row["corrected_pred_fix_rate_pct"] - row["actual_fix_rate_pct"])),
                 "focus_case_tag": focus_tag,
                 "focus_case_note": focus_note,
+                "window_action": window_action,
+                "window_action_note": action_note,
             }
         )
     window_df = pd.DataFrame(window_rows)
@@ -184,6 +207,7 @@ def main() -> None:
     print(f"saved: {window_path} ({len(window_df)} rows)", flush=True)
 
     tags_by_run = window_df.groupby(["city", "run"])["focus_case_tag"].apply(lambda s: [t for t in s if t]).to_dict()
+    actions_by_run = window_df.groupby(["city", "run"])["window_action"].apply(list).to_dict()
 
     # route-level aggregate
     route_rows: list[dict[str, object]] = []
@@ -196,12 +220,30 @@ def main() -> None:
         run_tags = tags_by_run.get((city, run), [])
         tier, note = _confidence_tier(run_tags)
         n_focus = len(run_tags)
+        run_actions = actions_by_run.get((city, run), [])
+        route_action, route_action_note = _route_action(run_actions)
+        usable_windows = sum(1 for action in run_actions if action == "use")
+        review_windows = sum(1 for action in run_actions if action == "review")
+        abstain_windows = sum(1 for action in run_actions if action == "abstain")
+        action_group = window_df[(window_df["city"] == city) & (window_df["run"] == run)]
+        action_weights = action_group["sim_matched_epochs"].to_numpy(dtype=np.float64)
+        action_weights = np.where(np.isfinite(action_weights) & (action_weights > 0.0), action_weights, 1.0)
+        abstain_mask = action_group["window_action"].to_numpy() == "abstain"
+        abstain_epoch_fraction = (
+            float(100.0 * action_weights[abstain_mask].sum() / action_weights.sum())
+            if action_weights.sum() > 0.0
+            else 0.0
+        )
         route_rows.append(
             {
                 "city": city,
                 "run": run,
                 "window_count": len(group),
                 "focus_case_window_count": n_focus,
+                "usable_window_count": usable_windows,
+                "review_window_count": review_windows,
+                "abstain_window_count": abstain_windows,
+                "abstain_epoch_fraction_pct": round(abstain_epoch_fraction, 3),
                 "actual_fix_rate_pct": round(actual, 3),
                 "baseline_pred_fix_rate_pct": round(base, 3),
                 "adopted_pred_fix_rate_pct": round(pred, 3),
@@ -209,6 +251,8 @@ def main() -> None:
                 "adopted_signed_error_pp": round(pred - actual, 3),
                 "confidence_tier": tier,
                 "confidence_note": note,
+                "route_action": route_action,
+                "route_action_note": route_action_note,
             }
         )
     route_df = pd.DataFrame(route_rows)
@@ -217,7 +261,7 @@ def main() -> None:
     print(f"saved: {route_path} ({len(route_df)} rows)", flush=True)
 
     # summary stats
-    print("\nRoute-level summary (adopted §7.16):", flush=True)
+    print("\nRoute-level summary (adopted model):", flush=True)
     print(
         route_df[
             [
@@ -228,6 +272,8 @@ def main() -> None:
                 "adopted_pred_fix_rate_pct",
                 "adopted_abs_error_pp",
                 "confidence_tier",
+                "route_action",
+                "abstain_window_count",
             ]
         ].to_string(index=False),
         flush=True,
