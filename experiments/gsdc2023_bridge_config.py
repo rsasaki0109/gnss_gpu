@@ -24,6 +24,7 @@ from experiments.gsdc2023_observation_matrix import (
 from experiments.gsdc2023_output import FACTOR_DT_MAX_S, validate_position_source
 from experiments.gsdc2023_tdcp import (
     DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M,
+    DEFAULT_TDCP_GEOMETRY_CORRECTION,
     DEFAULT_TDCP_WEIGHT_SCALE,
 )
 
@@ -49,7 +50,7 @@ class BridgeConfig:
     tdcp_enabled: bool = True
     tdcp_consistency_threshold_m: float = DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
-    tdcp_geometry_correction: bool = False
+    tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION
     stop_velocity_sigma_mps: float = 0.0
     stop_position_sigma_m: float = 0.0
     apply_imu_prior: bool = False
