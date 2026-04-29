@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
+from argparse import Namespace
 from contextlib import redirect_stderr
 from csv import DictReader
 from io import StringIO
@@ -32,10 +33,14 @@ from predict import (
     DEFAULT_PREDICTION_CSV,
     RESULTS_DIR,
     _base_prediction_path,
+    _inference_route_output_path,
+    _inference_window_output_path,
     _merge_base_prediction_column,
+    _planned_stage_count,
     _prefix_output_path,
     _read_columns,
     _require,
+    _require_distinct_batch_outputs,
 )
 from product_inference_model import (
     _base_from_frame_or_reference,
@@ -209,6 +214,62 @@ def test_base_prediction_path() -> None:
     )
 
 
+def test_prediction_mode_stage_counts() -> None:
+    print("test_prediction_mode_stage_counts")
+    base_args = {
+        "batch_inference": False,
+        "prepare_inference": False,
+        "inference": False,
+        "fit_inference_model": False,
+        "retrain": False,
+    }
+    check("frozen product flow stage count", 1, _planned_stage_count(Namespace(**base_args)))
+    check(
+        "batch inference stage count",
+        5,
+        _planned_stage_count(Namespace(**{**base_args, "batch_inference": True})),
+    )
+    check(
+        "prepare inference stage count",
+        4,
+        _planned_stage_count(Namespace(**{**base_args, "prepare_inference": True})),
+    )
+    check(
+        "split inference stage count",
+        1,
+        _planned_stage_count(Namespace(**{**base_args, "inference": True})),
+    )
+
+
+def test_batch_output_paths() -> None:
+    print("test_batch_output_paths")
+    prefix = Path("/tmp/product_run")
+    check("batch route output path", Path("/tmp/product_run_route_predictions.csv"), _inference_route_output_path(prefix))
+    check(
+        "batch window output path",
+        Path("/tmp/product_run_window_predictions.csv"),
+        _inference_window_output_path(prefix),
+    )
+    try:
+        with redirect_stderr(StringIO()):
+            _require_distinct_batch_outputs(
+                prepared_window_csv=Path("/tmp/product_run_prepared_window_predictions.csv"),
+                inference_output_prefix=prefix,
+            )
+        check("batch output path accepts distinct files", True, True)
+    except SystemExit:
+        check("batch output path accepts distinct files", True, False)
+    try:
+        with redirect_stderr(StringIO()):
+            _require_distinct_batch_outputs(
+                prepared_window_csv=Path("/tmp/product_run_window_predictions.csv"),
+                inference_output_prefix=prefix,
+            )
+        check("batch output path rejects overwrite", True, False)
+    except SystemExit as exc:
+        check("batch output path rejects overwrite", True, exc.code != 0)
+
+
 def test_merge_base_prediction_column() -> None:
     print("test_merge_base_prediction_column")
     with tempfile.TemporaryDirectory() as tmp:
@@ -324,6 +385,8 @@ def main() -> None:
     test_require()
     test_prediction_contract()
     test_base_prediction_path()
+    test_prediction_mode_stage_counts()
+    test_batch_output_paths()
     test_merge_base_prediction_column()
     test_validationhold_window_rows_label_free()
     test_product_inference_label_free_output()

@@ -44,11 +44,11 @@ For a preflight-only check:
 python3 experiments/predict.py --check-only
 ```
 
-## 3. Fresh-data preparation and inference without retraining
+## 3. Fresh-data batch inference without retraining
 
 ### 3.1 Prerequisites
 
-Before calling `predict.py --prepare-inference`, the new run's data must already be
+Before calling `predict.py --batch-inference`, the new run's data must already be
 preprocessed through the upstream pipeline into:
 
 - an epoch feature CSV with deployable simulator/RINEX columns and
@@ -61,7 +61,51 @@ These files do not need `actual_fix_rate_pct`, `actual_fixed`, `rtk_*`,
 or `solver_demo5_*` columns.  Those are training/evaluation labels, not
 runtime inputs.
 
-### 3.2 Prepare command
+### 3.2 One-shot batch command
+
+```bash
+python3 experiments/predict.py \
+  --batch-inference \
+  --epochs-csv path/to/preprocessed_epochs.csv \
+  --window-csv path/to/window_features.csv \
+  --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
+  --prepare-prefix experiments/results/<custom_prefix_for_this_run>_prepare \
+  --prepared-window-csv experiments/results/<custom_prefix_for_this_run>_prepared_window_predictions.csv \
+  --inference-output-prefix experiments/results/<custom_prefix_for_this_run>
+```
+
+`--base-prefix`
+accepts either a bare prefix under `experiments/results`, an explicit
+prefix path, or the full `*_window_predictions.csv` path.
+
+Outputs:
+
+- `<custom_prefix_for_this_run>_route_predictions.csv`
+- `<custom_prefix_for_this_run>_window_predictions.csv`
+- `<custom_prefix_for_this_run>_prepared_window_predictions.csv`
+
+The prepared CSV contains the original window features, validationhold
+aggregates/flags, and `base_pred_fix_rate_pct`.  The route/window
+prediction files are the operator-facing fresh-data result.
+Keep `--prepared-window-csv` distinct from the final
+`<custom_prefix_for_this_run>_window_predictions.csv`; the command
+errors rather than overwrite the prepared feature file.
+
+For a preflight-only check:
+
+```bash
+python3 experiments/predict.py \
+  --batch-inference \
+  --epochs-csv path/to/preprocessed_epochs.csv \
+  --window-csv path/to/window_features.csv \
+  --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
+  --check-only
+```
+
+### 3.3 Split prepare command
+
+Use this when inspecting intermediate validationhold features before
+scoring:
 
 ```bash
 python3 experiments/predict.py \
@@ -73,14 +117,9 @@ python3 experiments/predict.py \
   --prepared-window-csv experiments/results/<custom_prefix_for_this_run>_prepared_window_predictions.csv
 ```
 
-`--base-prefix`
-accepts either a bare prefix under `experiments/results`, an explicit
-prefix path, or the full `*_window_predictions.csv` path.
+### 3.4 Split inference command
 
-The prepared CSV contains the original window features, validationhold
-aggregates/flags, and `base_pred_fix_rate_pct`.
-
-### 3.3 Inference command
+Use this when the prepared CSV already exists:
 
 ```bash
 python3 experiments/predict.py \
@@ -98,7 +137,7 @@ Outputs:
 When the inference input has no actual labels, the output omits
 actual/error columns and contains predictions only.
 
-### 3.4 Full retrain / research scoring
+### 3.5 Full retrain / research scoring
 
 Use `predict.py --retrain` only when deliberately rebuilding the
 research LORO pipeline:
@@ -223,7 +262,7 @@ Per D-030 / D-033:
 
 | Path | Purpose |
 | --- | --- |
-| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--prepare-inference` builds fresh inference inputs, `--inference` scores fresh window data, `--retrain` runs the full LORO pipeline |
+| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--batch-inference` prepares and scores fresh data in one command, split `--prepare-inference` / `--inference` are available for debugging, `--retrain` runs the full LORO pipeline |
 | `experiments/product_inference_model.py` | fit/run saved single-model product inference artifact |
 | `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv` | committed adopted §7.16 window predictions used by default product mode |
 | `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact used by `predict.py --inference` |
@@ -259,10 +298,14 @@ Per D-030 / D-033:
   deployment.  Use the strict nested LORO metrics in `README.md` as the
   generalisation estimate; do not treat full-data smoke metrics as an
   independent validation result.
-- `--prepare-inference` is label-free, but it still assumes the upstream
+- `--batch-inference` and `--prepare-inference` are label-free, but they still assume the upstream
   epoch/window feature extraction has already run.  It does not parse raw
   RINEX, run the simulator, or build refinedgrid base predictions from
   source files.
+- In `--batch-inference`, do not point `--prepared-window-csv` at the
+  final `<prefix>_window_predictions.csv` output.  Use a name such as
+  `*_prepared_window_predictions.csv` so the prepared feature file and
+  final prediction file remain separate.
 - The `rebuild_validationhold_flag_thresholds.py` script overwrites
   its output CSV silently.  If you experiment with alternate presets,
   name the output files explicitly and do not point them at the
