@@ -2,7 +2,7 @@
 
 **Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference, bootstrap raw-source preparation, and source-manifest validation
 **Last updated**: 2026-04-30
-**Adopted model**: §7.16 transition stack + final isotonic calibration `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45`
+**Adopted model**: §7.16 transition stack + 0.75-blended isotonic calibration `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
 
 ---
@@ -65,31 +65,31 @@ classification targets during training.
 
 Under product-relevant metrics:
 
-| metric | adopted isotonic | baseline §2.2 |
+| metric | adopted isotonic75 | baseline §2.2 |
 | --- | --- | --- |
-| run MAE | **2.764 pp** | 4.436 pp |
-| window correlation | **0.518** | 0.401 |
-| overall aggregate error | **-0.05 pp** on 17.90 % dataset FIX rate | — |
-| window weighted MAE | **16.437 pp** | 18.046 pp |
+| run MAE | **2.746 pp** | 4.436 pp |
+| window correlation | **0.535** | 0.401 |
+| overall aggregate error | **+0.03 pp** on 17.90 % dataset FIX rate | — |
+| window weighted MAE | **16.461 pp** | 18.046 pp |
 
 The committed single-model artifact is a full-data fit for deployment,
 not an independent validation fold.  The final isotonic calibration is
 selected on strict leave-one-run-out predictions from the previous
-§7.16 model, then fitted into the deployment artifact as a monotonic
-post-calibrator.  Use the strict nested LORO table above as the
-generalisation estimate.
+§7.16 model, then blended 0.75 with the original alpha75 prediction to
+keep correlation and tail error closer to the pre-calibrated model.
+Use the strict nested LORO table above as the generalisation estimate.
 
 Per-route error on the test set (see
 `route_level_fix_rate_prediction.csv`):
 
 | city / run | actual | predicted | \|err\| | confidence |
 | --- | --- | --- | --- | --- |
-| nagoya / run1 | 11.5 % | 13.5 % | 1.94 pp | low |
-| nagoya / run2 | 16.2 % | 21.5 % | 5.28 pp | low |
-| nagoya / run3 |  7.9 % |  8.4 % | 0.57 pp | high |
-| tokyo  / run1 | 10.9 % | 11.5 % | 0.53 pp | low |
-| tokyo  / run2 | 29.0 % | 20.9 % | 8.09 pp | low  |
-| tokyo  / run3 | 24.0 % | 23.8 % | 0.17 pp | low  |
+| nagoya / run1 | 11.5 % | 13.7 % | 2.22 pp | low |
+| nagoya / run2 | 16.2 % | 21.3 % | 5.16 pp | low |
+| nagoya / run3 |  7.9 % |  8.0 % | 0.17 pp | high |
+| tokyo  / run1 | 10.9 % | 11.6 % | 0.69 pp | low |
+| tokyo  / run2 | 29.0 % | 20.9 % | 8.13 pp | low  |
+| tokyo  / run3 | 24.0 % | 24.1 % | 0.10 pp | low  |
 
 Confidence tiers are auto-detected per route from the presence of
 focus-case windows (see `build_product_deliverable.py::_classify_window`
@@ -100,7 +100,7 @@ route contains at least one false-high or false-lift window.
 
 Four of six routes are within 3 pp of actual (nagoya/run1, nagoya/run3,
 tokyo/run1, tokyo/run3).  Five of six are within 6 pp.  The one
-exception is tokyo/run2 at 8.09 pp, which
+exception is tokyo/run2 at 8.13 pp, which
 contains the Tokyo run2 w7-w9 false-high cluster documented in section
 5.
 
@@ -109,12 +109,12 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 ### Inputs required by the product command
 
 - Committed adopted window prediction CSV:
-  `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic_meta_run45_window_predictions.csv`.
+  `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_meta_run45_window_predictions.csv`.
   `python3 experiments/predict.py` uses this frozen artifact by default
   to refresh `route_level_fix_rate_prediction.csv`,
   `window_level_details.csv`, and `dashboard.html`.
 - Committed full-data-fit product model artifact:
-  `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic_meta_run45_product_model.pkl.gz`.
+  `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_meta_run45_product_model.pkl.gz`.
   `python3 experiments/predict.py --batch-inference` loads this artifact
   after preparing fresh inputs; split `--inference` can also score an
   already prepared window CSV without training.
@@ -185,12 +185,12 @@ Relative paths in manifests resolve from the manifest file's directory.
 - `internal_docs/product_deliverable/dashboard.html` — self-contained
   HTML report (open in a browser) with metrics summary, per-run bar
   chart, actual-vs-predicted scatter, and focus-case detail table.
-- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45_window_predictions.csv`
+- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_meta_run45_window_predictions.csv`
   — committed frozen calibrated window prediction artifact used by
   `experiments/predict.py` in default product mode.
-- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45_product_model.pkl.gz`
-  — committed saved full-data-fit model artifact with final isotonic
-  calibration, used by
+- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_meta_run45_product_model.pkl.gz`
+  — committed saved full-data-fit model artifact with 0.75-blended
+  final isotonic calibration, used by
   `experiments/predict.py --inference`.
 - `internal_docs/product_deliverable/plots/` — static PNG figures per
   run that overlay the predicted FIX rate onto the actual demo5
@@ -452,10 +452,11 @@ Raw source-file feature extraction is still upstream of this command.
   hold_strict, 1.25 block_p90) is a local optimum on this dataset
   (§7.14 / §7.15).  Re-scan if the training data grows by more than
   a couple of runs.
-- The final isotonic calibrator improves run MAE and weighted MAE over
-  raw §7.16 alpha=0.75 predictions, at the cost of a small window
-  correlation drop.  Re-evaluate this post-calibrator when the training
-  set grows.
+- The 0.75-blended final isotonic calibrator improves run MAE and
+  weighted MAE over raw §7.16 alpha=0.75 predictions, while keeping
+  window correlation closer to the pre-calibrated model than pure
+  isotonic.  Re-evaluate this post-calibrator when the training set
+  grows.
 - The `clean_streak_s` carry counter (§7.11) is the single most
   impactful deployable feature added since the baseline.  Any further
   epoch-level surrogate redesign should preserve a pure cumulative-

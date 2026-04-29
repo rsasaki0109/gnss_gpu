@@ -49,9 +49,9 @@ Window-level aggregation (mean of per-epoch predictions within each
 
 | metric | epoch classifier | adopted isotonic |
 | --- | --- | --- |
-| weighted window MAE | 20.30 pp | **16.44 pp** |
-| run MAE | 8.90 pp | **2.76 pp** |
-| window correlation | 0.162 | **0.518** |
+| weighted window MAE | 20.30 pp | **16.46 pp** |
+| run MAE | 8.90 pp | **2.75 pp** |
+| window correlation | 0.162 | **0.535** |
 
 The epoch classifier is strictly worse on every aggregate metric than
 the adopted window-level calibrated model.

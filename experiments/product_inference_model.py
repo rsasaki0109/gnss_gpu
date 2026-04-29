@@ -48,7 +48,7 @@ from train_ppc_solver_transition_surrogate_stack import (
 SCHEMA_VERSION = 1
 DEFAULT_MODEL_PATH = (
     RESULTS_DIR
-    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45_product_model.pkl.gz"
+    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_meta_run45_product_model.pkl.gz"
 )
 KEY_COLUMNS = {"city", "run", "window_index"}
 REQUIRED_FIT_COLUMNS = KEY_COLUMNS | {
@@ -359,7 +359,11 @@ def _apply_final_calibrator(corrected: np.ndarray, artifact: dict[str, object]) 
     model = artifact.get("final_calibrator")
     if model is None:
         raise SystemExit("product model is missing final_calibrator")
-    values = np.asarray(model.predict(corrected), dtype=np.float64)
+    blend = float(artifact.get("final_calibrator_blend", 1.0))
+    if not np.isfinite(blend) or blend < 0.0 or blend > 1.0:
+        raise SystemExit("product model final_calibrator_blend must be in [0, 1]")
+    calibrated = np.asarray(model.predict(corrected), dtype=np.float64)
+    values = (1.0 - blend) * corrected + blend * calibrated
     return np.clip(values, 0.0, 1.0)
 
 
@@ -444,6 +448,7 @@ def fit_model(args: argparse.Namespace) -> None:
         "final_calibrator_name": args.final_calibrator,
         "final_calibrator": final_calibrator,
         "final_calibrator_source": final_calibrator_source,
+        "final_calibrator_blend": float(args.final_calibrator_blend),
     }
     _save_pickle_gz(args.model_output, payload)
 
@@ -615,6 +620,7 @@ def parse_args() -> argparse.Namespace:
     fit.add_argument("--residual-min-leaf", type=int, default=3)
     fit.add_argument("--residual-max-features", type=float, default=0.75)
     fit.add_argument("--final-calibrator", choices=("none", "isotonic"), default="none")
+    fit.add_argument("--final-calibrator-blend", type=float, default=1.0)
     fit.add_argument("--random-state", type=int, default=2034)
 
     infer = sub.add_parser("infer", help="score a window CSV with a saved product model")

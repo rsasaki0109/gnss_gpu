@@ -801,6 +801,11 @@ def test_product_inference_final_calibrator() -> None:
         {"final_calibrator_name": "isotonic", "final_calibrator": model},
     )
     check("final isotonic calibrator applies mapping", [0.0, 0.25, 1.0], calibrated.tolist())
+    blended = _apply_final_calibrator(
+        corrected,
+        {"final_calibrator_name": "isotonic", "final_calibrator": model, "final_calibrator_blend": 0.5},
+    )
+    check("final isotonic calibrator supports blending", [0.0, 0.375, 1.0], blended.tolist())
 
 
 def main() -> None:

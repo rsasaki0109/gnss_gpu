@@ -118,7 +118,7 @@ DEFAULT_BASE_PREFIX = (
 )
 DEFAULT_PRESET = "current_tight_hold"
 DEFAULT_RESULTS_PREFIX = (
-    "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45"
+    "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_meta_run45"
 )
 DEFAULT_PREDICTION_CSV = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_window_predictions.csv"
 DEFAULT_INFERENCE_MODEL = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_product_model.pkl.gz"
@@ -512,6 +512,8 @@ def parse_args() -> argparse.Namespace:
                         help="optional LORO prediction CSV used to calibrate the saved residual corrector")
     parser.add_argument("--final-calibrator", choices=("none", "isotonic"), default="isotonic",
                         help="optional final prediction calibrator for --fit-inference-model")
+    parser.add_argument("--final-calibrator-blend", type=float, default=0.75,
+                        help="blend between residual prediction and final calibrated prediction")
     parser.add_argument("--use-window-base-prediction", action="store_true",
                         help="in inference modes, use base_pred_fix_rate_pct from --window-csv instead of --base-prefix")
     parser.add_argument("--planned-window-count", type=int,
@@ -808,6 +810,7 @@ def main() -> None:
             "--residual-alpha", str(args.residual_alpha),
             "--residual-clip-pp", str(args.residual_clip_pp),
             "--final-calibrator", args.final_calibrator,
+            "--final-calibrator-blend", str(args.final_calibrator_blend),
         ]
         if args.calibration_prediction_csv is not None:
             cmd.extend(["--calibration-prediction-csv", str(args.calibration_prediction_csv)])

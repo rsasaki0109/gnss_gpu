@@ -34,8 +34,8 @@ outputs.  It should finish in a few seconds from a clean checkout.
 
 Outputs land in:
 
-- `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic_meta_run45_window_predictions.csv` — frozen input artifact
-- `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic_meta_run45_product_model.pkl.gz` — saved inference model artifact
+- `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_meta_run45_window_predictions.csv` — frozen input artifact
+- `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_meta_run45_product_model.pkl.gz` — saved inference model artifact
 - `internal_docs/product_deliverable/route_level_fix_rate_prediction.csv`
 - `internal_docs/product_deliverable/window_level_details.csv`
 - `internal_docs/product_deliverable/dashboard.html` — open in a browser
@@ -120,7 +120,7 @@ Latest full raw-source E2E smoke on the local 6-run PPC dataset
 - Prepare result: 58,571 epoch rows, 396 window rows, and 396 base prediction rows; elapsed 2:49.65, max RSS 442,416 KB.
 - Derived manifest metadata: `raw_source_prepare.epoch_count=58571`, `window_count=396`, `base_prediction_count=396`, with per-run counts and elapsed seconds.
 - Inference command: `python3 experiments/predict.py --source-bundle-inference --source-manifest /tmp/ppc_raw_full_harden_source_manifest.json`
-- Inference result: 396 prepared windows, `vh_added=34`, 6 route prediction rows, 396 window prediction rows; elapsed 0:13.48, max RSS 498,352 KB. Route/window prediction CSVs had no null cells in this smoke.
+- Inference result: 396 prepared windows, `vh_added=34`, 6 route prediction rows, 396 window prediction rows; elapsed 0:14.16, max RSS 498,360 KB. Route/window prediction CSVs had no null cells in this smoke.
 
 ### 3.3 Source manifest check
 
@@ -390,7 +390,7 @@ Per D-030 / D-033:
 - ≤ 1-2 new runs: do nothing.  Expect prediction quality to match the
   reported metrics.
 - 3-9 new runs: re-run `predict.py --retrain`, check whether aggregate metrics
-  stay within the documented ranges (run MAE ~2.8 pp, corr ~0.52).
+  stay within the documented ranges (run MAE ~2.7 pp, corr ~0.54).
 - ≥ 10 new runs: re-scan the `hold_ready_thr` dimension
   (§7.13 / §7.14) and the residual alpha (§7.16).  The current
   thresholds were informed by Tokyo run2 behaviour and may drift.
@@ -408,8 +408,8 @@ Per D-030 / D-033:
 | `experiments/product_inference_model.py` | fit/run saved single-model product inference artifact, including online-compatible scoring |
 | `experiments/product_source_bundle.py` | validate source manifests that bind raw PPC run directories to derived epoch/window/base product input CSVs |
 | `experiments/product_raw_source_prepare.py` | bootstrap raw PPC source preparation into model-schema-compatible epoch/window/base CSVs and a derived source manifest; neutral-fills unsupported simulator/refinedgrid-only features |
-| `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic_meta_run45_window_predictions.csv` | committed adopted calibrated window predictions used by default product mode |
-| `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact with final isotonic calibration used by `predict.py --inference` |
+| `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_meta_run45_window_predictions.csv` | committed adopted calibrated window predictions used by default product mode |
+| `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact with 0.75-blended final isotonic calibration used by `predict.py --inference` |
 | `experiments/build_product_deliverable.py` | deliverable CSV builder |
 | `experiments/build_product_dashboard.py` | HTML dashboard renderer |
 | `internal_docs/product_deliverable/dashboard.html` | generated dashboard (open in browser) |
@@ -472,6 +472,6 @@ Per D-030 / D-033:
   name the output files explicitly and do not point them at the
   canonical `ppc_validationhold_window_summary_current_tight_hold.csv`
   path unless you intend to replace it.
-- Aggregate error on the dataset is about -0.05 pp after final isotonic
-  calibration.  Do not re-bias it with a post-hoc offset without
+- Aggregate error on the dataset is about +0.03 pp after blended final
+  isotonic calibration.  Do not re-bias it with a post-hoc offset without
   understanding the per-route distribution first.
