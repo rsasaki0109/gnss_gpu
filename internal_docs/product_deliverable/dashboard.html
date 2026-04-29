@@ -26,7 +26,8 @@ p { color: #555; line-height: 1.5; }
 </div>
 <p>
 Confidence tiers: high=1 · medium=0 · low=5 &nbsp;|&nbsp;
-Focus-case windows: 26 / 197
+Focus-case windows: 26 / 197 &nbsp;|&nbsp;
+Abstained windows: 9
 </p>
 <h2>Route-level predictions</h2>
 <table><thead><tr>
@@ -36,7 +37,9 @@ Focus-case windows: 26 / 197
 <th>adopted_pred_fix_rate_pct</th>
 <th>adopted_abs_error_pp</th>
 <th>confidence_tier</th>
+<th>route_action</th>
 <th>focus_case_window_count</th>
+<th>abstain_window_count</th>
 <th>note</th></tr></thead><tbody>
 <tr>
 <td>nagoya</td>
@@ -45,7 +48,9 @@ Focus-case windows: 26 / 197
 <td>13.73 %</td>
 <td>2.22 pp</td>
 <td><span class="tier" style="background:#e74c3c">low</span></td>
+<td><span class="tier" style="background:#c0392b">review_required</span></td>
 <td>4</td>
+<td>1</td>
 <td>run contains at least one false-high window (pred high, actual low); individual window trust low</td>
 </tr>
 <tr>
@@ -55,7 +60,9 @@ Focus-case windows: 26 / 197
 <td>21.34 %</td>
 <td>5.16 pp</td>
 <td><span class="tier" style="background:#e74c3c">low</span></td>
+<td><span class="tier" style="background:#c0392b">review_required</span></td>
 <td>6</td>
+<td>3</td>
 <td>run contains at least one false-high window (pred high, actual low); individual window trust low</td>
 </tr>
 <tr>
@@ -65,6 +72,8 @@ Focus-case windows: 26 / 197
 <td>8.03 %</td>
 <td>0.17 pp</td>
 <td><span class="tier" style="background:#2ecc71">high</span></td>
+<td><span class="tier" style="background:#27ae60">ok</span></td>
+<td>0</td>
 <td>0</td>
 <td>no material focus-case windows</td>
 </tr>
@@ -75,7 +84,9 @@ Focus-case windows: 26 / 197
 <td>11.61 %</td>
 <td>0.69 pp</td>
 <td><span class="tier" style="background:#e74c3c">low</span></td>
+<td><span class="tier" style="background:#c0392b">review_required</span></td>
 <td>3</td>
+<td>1</td>
 <td>run contains at least one false-high window (pred high, actual low); individual window trust low</td>
 </tr>
 <tr>
@@ -85,7 +96,9 @@ Focus-case windows: 26 / 197
 <td>20.89 %</td>
 <td>8.13 pp</td>
 <td><span class="tier" style="background:#e74c3c">low</span></td>
+<td><span class="tier" style="background:#c0392b">review_required</span></td>
 <td>7</td>
+<td>2</td>
 <td>run contains at least one false-high window (pred high, actual low); individual window trust low</td>
 </tr>
 <tr>
@@ -95,7 +108,9 @@ Focus-case windows: 26 / 197
 <td>24.12 %</td>
 <td>0.11 pp</td>
 <td><span class="tier" style="background:#e74c3c">low</span></td>
+<td><span class="tier" style="background:#c0392b">review_required</span></td>
 <td>6</td>
+<td>2</td>
 <td>run contains at least one false-high window (pred high, actual low); individual window trust low</td>
 </tr>
 </tbody></table>
@@ -396,6 +411,7 @@ Focus-case windows: 26 / 197
 <th>adopted_pred_fix_rate_pct</th>
 <th>abs_error_pp</th>
 <th>focus_case_tag</th>
+<th>window_action</th>
 <th>note</th></tr></thead><tbody>
 <tr>
 <td>nagoya</td>
@@ -405,6 +421,7 @@ Focus-case windows: 26 / 197
 <td>36.70 %</td>
 <td>43.30 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 80.0% but corrected only 36.7%; under-predicted by 43.3 pp</td>
 </tr>
 <tr>
@@ -415,6 +432,7 @@ Focus-case windows: 26 / 197
 <td>36.26 %</td>
 <td>63.74 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 100.0% but corrected only 36.3%; under-predicted by 63.7 pp</td>
 </tr>
 <tr>
@@ -425,6 +443,7 @@ Focus-case windows: 26 / 197
 <td>15.55 %</td>
 <td>61.55 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 77.1% but corrected only 15.6%; under-predicted by 61.5 pp</td>
 </tr>
 <tr>
@@ -435,6 +454,7 @@ Focus-case windows: 26 / 197
 <td>35.70 %</td>
 <td>35.70 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td><span class="tier" style="background:#c0392b">abstain</span></td>
 <td>corrected prediction 35.7% against actual 0.0%; deployable features misread</td>
 </tr>
 <tr>
@@ -445,6 +465,7 @@ Focus-case windows: 26 / 197
 <td>15.04 %</td>
 <td>66.29 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 81.3% but corrected only 15.0%; under-predicted by 66.3 pp</td>
 </tr>
 <tr>
@@ -455,6 +476,7 @@ Focus-case windows: 26 / 197
 <td>42.30 %</td>
 <td>37.63 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td><span class="tier" style="background:#c0392b">abstain</span></td>
 <td>corrected prediction 42.3% against actual 4.7%; deployable features misread</td>
 </tr>
 <tr>
@@ -465,6 +487,7 @@ Focus-case windows: 26 / 197
 <td>8.68 %</td>
 <td>8.68 pp</td>
 <td><span class="tier" style="background:#27ae60">false_lift_resolved</span></td>
+<td><span class="tier" style="background:#27ae60">use</span></td>
 <td>successfully rejected by 18.6 pp against actual 0.0% (base was 27.3%)</td>
 </tr>
 <tr>
@@ -475,6 +498,7 @@ Focus-case windows: 26 / 197
 <td>54.12 %</td>
 <td>54.12 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td><span class="tier" style="background:#c0392b">abstain</span></td>
 <td>corrected prediction 54.1% against actual 0.0%; deployable features misread</td>
 </tr>
 <tr>
@@ -485,6 +509,7 @@ Focus-case windows: 26 / 197
 <td>17.01 %</td>
 <td>17.01 pp</td>
 <td><span class="tier" style="background:#27ae60">false_lift_resolved</span></td>
+<td><span class="tier" style="background:#27ae60">use</span></td>
 <td>successfully rejected by 15.1 pp against actual 0.0% (base was 32.1%)</td>
 </tr>
 <tr>
@@ -495,6 +520,7 @@ Focus-case windows: 26 / 197
 <td>55.00 %</td>
 <td>55.00 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td><span class="tier" style="background:#c0392b">abstain</span></td>
 <td>corrected prediction 55.0% against actual 0.0%; deployable features misread</td>
 </tr>
 <tr>
@@ -505,6 +531,7 @@ Focus-case windows: 26 / 197
 <td>35.20 %</td>
 <td>41.47 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 76.7% but corrected only 35.2%; under-predicted by 41.5 pp</td>
 </tr>
 <tr>
@@ -515,6 +542,7 @@ Focus-case windows: 26 / 197
 <td>48.04 %</td>
 <td>47.71 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td><span class="tier" style="background:#c0392b">abstain</span></td>
 <td>corrected prediction 48.0% against actual 0.3%; deployable features misread</td>
 </tr>
 <tr>
@@ -525,6 +553,7 @@ Focus-case windows: 26 / 197
 <td>11.13 %</td>
 <td>65.54 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 76.7% but corrected only 11.1%; under-predicted by 65.5 pp</td>
 </tr>
 <tr>
@@ -535,6 +564,7 @@ Focus-case windows: 26 / 197
 <td>8.56 %</td>
 <td>75.11 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 83.7% but corrected only 8.6%; under-predicted by 75.1 pp</td>
 </tr>
 <tr>
@@ -545,6 +575,7 @@ Focus-case windows: 26 / 197
 <td>47.82 %</td>
 <td>47.82 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td><span class="tier" style="background:#c0392b">abstain</span></td>
 <td>corrected prediction 47.8% against actual 0.0%; deployable features misread</td>
 </tr>
 <tr>
@@ -555,6 +586,7 @@ Focus-case windows: 26 / 197
 <td>76.62 %</td>
 <td>76.62 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td><span class="tier" style="background:#c0392b">abstain</span></td>
 <td>corrected prediction 76.6% against actual 0.0%; deployable features misread</td>
 </tr>
 <tr>
@@ -565,6 +597,7 @@ Focus-case windows: 26 / 197
 <td>18.69 %</td>
 <td>81.31 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 100.0% but corrected only 18.7%; under-predicted by 81.3 pp</td>
 </tr>
 <tr>
@@ -575,6 +608,7 @@ Focus-case windows: 26 / 197
 <td>18.67 %</td>
 <td>81.33 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 100.0% but corrected only 18.7%; under-predicted by 81.3 pp</td>
 </tr>
 <tr>
@@ -585,6 +619,7 @@ Focus-case windows: 26 / 197
 <td>49.97 %</td>
 <td>50.03 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 100.0% but corrected only 50.0%; under-predicted by 50.0 pp</td>
 </tr>
 <tr>
@@ -595,6 +630,7 @@ Focus-case windows: 26 / 197
 <td>54.85 %</td>
 <td>41.81 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 96.7% but corrected only 54.9%; under-predicted by 41.8 pp</td>
 </tr>
 <tr>
@@ -605,6 +641,7 @@ Focus-case windows: 26 / 197
 <td>3.38 %</td>
 <td>83.62 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 87.0% but corrected only 3.4%; under-predicted by 83.6 pp</td>
 </tr>
 <tr>
@@ -615,6 +652,7 @@ Focus-case windows: 26 / 197
 <td>13.72 %</td>
 <td>70.95 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 84.7% but corrected only 13.7%; under-predicted by 71.0 pp</td>
 </tr>
 <tr>
@@ -625,6 +663,7 @@ Focus-case windows: 26 / 197
 <td>61.29 %</td>
 <td>59.96 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td><span class="tier" style="background:#c0392b">abstain</span></td>
 <td>corrected prediction 61.3% against actual 1.3%; deployable features misread</td>
 </tr>
 <tr>
@@ -635,6 +674,7 @@ Focus-case windows: 26 / 197
 <td>40.63 %</td>
 <td>59.37 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 100.0% but corrected only 40.6%; under-predicted by 59.4 pp</td>
 </tr>
 <tr>
@@ -645,6 +685,7 @@ Focus-case windows: 26 / 197
 <td>40.96 %</td>
 <td>59.04 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
+<td><span class="tier" style="background:#f39c12">review</span></td>
 <td>actual 100.0% but corrected only 41.0%; under-predicted by 59.0 pp</td>
 </tr>
 <tr>
@@ -655,6 +696,7 @@ Focus-case windows: 26 / 197
 <td>39.65 %</td>
 <td>37.99 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td><span class="tier" style="background:#c0392b">abstain</span></td>
 <td>corrected prediction 39.7% against actual 1.7%; deployable features misread</td>
 </tr>
 </tbody></table>
@@ -663,6 +705,7 @@ Focus-case windows: 26 / 197
 <li><b>high</b> tier (green): trust the route-level prediction directly; error expected &le; 3 pp.</li>
 <li><b>medium</b> tier (orange): use with caution near decision boundaries; error 3-8 pp expected.</li>
 <li><b>low</b> tier (red): contains focus-case windows.  Drill into the scatter / focus table before acting.</li>
+<li><b>review_required</b> route action: at least one window is abstained from automated window-level action.</li>
 <li>False-high markers (red dots on bottom-left): adopted model partially suppresses but residual inflation remains (Tokyo run2 w7/w9).</li>
 <li>Hidden-high markers (purple on top-left): adopted model lifts but still undershoots (Tokyo run2 w23-w27).</li>
 <li>False-lift markers (orange, upper-left): adopted model partially rejects (Nagoya run2) or still over-predicts (Tokyo run3 w17).</li>

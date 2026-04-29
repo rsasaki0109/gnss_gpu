@@ -1,6 +1,6 @@
 # PPC demo5 FIX-Rate Predictor — Product Deliverable
 
-**Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference, bootstrap raw-source preparation, and source-manifest validation
+**Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference, bootstrap raw-source preparation, source-manifest validation, and actionability annotations
 **Last updated**: 2026-04-30
 **Adopted model**: §7.16 transition stack + 0.75-blended isotonic calibration `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
@@ -44,11 +44,16 @@ classification targets during training.
   pipeline.
 - Split inference input preparation: build the pre-augmented window CSV
   separately when debugging intermediate validationhold features.
+- Window-level operational screening: use `window_action == "use"` for
+  normal diagnostics, `review` for hidden-high windows, and `abstain`
+  to remove known false-high/false-lift windows from automated
+  window-level actions.
 
 ### Out-of-scope use cases
 
-- Individual 30 s window FIX-rate predictions.  Typical window weighted
-  MAE is 17 pp and tail errors reach 60+ pp on known failure cases.
+- Unscreened individual 30 s window FIX-rate predictions.  Typical
+  window weighted MAE is 17 pp and tail errors reach 60+ pp on known
+  failure cases; use `window_action` before acting on a window.
 - Full calibrated GNSS/RINEX/simulator feature extraction from source
   files.  The product path includes a bootstrap raw-source bridge, but
   the research simulator/refinedgrid extraction remains upstream.
@@ -82,14 +87,14 @@ Use the strict nested LORO table above as the generalisation estimate.
 Per-route error on the test set (see
 `route_level_fix_rate_prediction.csv`):
 
-| city / run | actual | predicted | \|err\| | confidence |
-| --- | --- | --- | --- | --- |
-| nagoya / run1 | 11.5 % | 13.7 % | 2.22 pp | low |
-| nagoya / run2 | 16.2 % | 21.3 % | 5.16 pp | low |
-| nagoya / run3 |  7.9 % |  8.0 % | 0.17 pp | high |
-| tokyo  / run1 | 10.9 % | 11.6 % | 0.69 pp | low |
-| tokyo  / run2 | 29.0 % | 20.9 % | 8.13 pp | low  |
-| tokyo  / run3 | 24.0 % | 24.1 % | 0.10 pp | low  |
+| city / run | actual | predicted | \|err\| | confidence | action |
+| --- | --- | --- | --- | --- | --- |
+| nagoya / run1 | 11.5 % | 13.7 % | 2.22 pp | low | review_required |
+| nagoya / run2 | 16.2 % | 21.3 % | 5.16 pp | low | review_required |
+| nagoya / run3 |  7.9 % |  8.0 % | 0.17 pp | high | ok |
+| tokyo  / run1 | 10.9 % | 11.6 % | 0.69 pp | low | review_required |
+| tokyo  / run2 | 29.0 % | 20.9 % | 8.13 pp | low | review_required |
+| tokyo  / run3 | 24.0 % | 24.1 % | 0.10 pp | low | review_required |
 
 Confidence tiers are auto-detected per route from the presence of
 focus-case windows (see `build_product_deliverable.py::_classify_window`
@@ -97,6 +102,10 @@ thresholds).  A `high` tier means no material failure-mode window is
 present; `medium` means the route contains hidden-high windows
 (actual high, corrected under-predicts by 40+ pp); `low` means the
 route contains at least one false-high or false-lift window.
+`route_action` is separate from the numeric prediction: `ok` means all
+windows are usable, `review` means hidden-high windows are present, and
+`review_required` means at least one window is abstained from automated
+window-level action.
 
 Four of six routes are within 3 pp of actual (nagoya/run1, nagoya/run3,
 tokyo/run1, tokyo/run3).  Five of six are within 6 pp.  The one
@@ -163,9 +172,10 @@ Relative paths in manifests resolve from the manifest file's directory.
 
 - `route_level_fix_rate_prediction.csv` — one row per `(city, run)`:
   actual vs predicted FIX rate, aggregate error, qualitative
-  confidence tier.
+  confidence tier, actionability counts, and route action.
 - `window_level_details.csv` — per-window predictions with focus-case
-  annotations, intended for diagnostics.
+  annotations plus `window_action` (`use`, `review`, or `abstain`),
+  intended for diagnostics and operational screening.
 - In `--batch-inference`, `--inference`, or `--online-inference` mode,
   `<prefix>_route_predictions.csv` and
   `<prefix>_window_predictions.csv` are written.  When labels are not
@@ -273,7 +283,9 @@ Relative paths in manifests resolve from the manifest file's directory.
 ## 5. Known failure modes
 
 All focus-case windows are documented in `window_level_details.csv`
-under `focus_case_tag`.
+under `focus_case_tag`.  The adjacent `window_action` column marks
+`false_high` / `false_lift` as `abstain`, `hidden_high` as `review`,
+and normal or resolved windows as `use`.
 
 - **Tokyo run2 w7 / w9** (`false_high`): base prediction is high
   because simulator continuity looks clean, but demo5 refuses to FIX
