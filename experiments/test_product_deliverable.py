@@ -484,6 +484,7 @@ def test_raw_source_prepare_window_rows() -> None:
         "los_fraction_mean",
         "rinex_phase_jump_ge0p5cy_count_max",
         "sat_delta_pos_count",
+        "validation_pass_frac",
         "unsupported_model_feature",
     ]
     window_rows, base_rows = build_window_rows(
@@ -500,6 +501,7 @@ def test_raw_source_prepare_window_rows() -> None:
     check("raw prepare jump max", 1.0, first["rinex_phase_jump_ge0p5cy_count_max"])
     check("raw prepare delta pos count", 1, first["sat_delta_pos_count"])
     check("raw prepare neutral fill", 0.0, first["unsupported_model_feature"])
+    check("raw prepare defers validationhold", False, "validation_pass_frac" in first)
     check("raw prepare base prediction column", True, "corrected_pred_fix_rate_pct" in base_rows[0])
     check("raw prepare no labels", False, "actual_fix_rate_pct" in first)
 
