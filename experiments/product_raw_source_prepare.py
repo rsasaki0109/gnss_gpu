@@ -22,6 +22,7 @@ import math
 import pickle
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +35,7 @@ if str(_PROJECT_ROOT / "python") not in sys.path:
 
 from gnss_gpu.io.nav_rinex import _datetime_to_gps_seconds_of_week  # noqa: E402
 from gnss_gpu.io.ppc import PPCDatasetLoader  # noqa: E402
-from gnss_gpu.io.rinex import read_rinex_obs  # noqa: E402
+from gnss_gpu.io.rinex import RinexEpoch, RinexHeader, read_rinex_obs  # noqa: E402
 
 from product_inference_model import DEFAULT_MODEL_PATH  # noqa: E402
 from product_source_bundle import SourceRun  # noqa: E402
@@ -234,73 +235,208 @@ def _count(values: list[float] | np.ndarray, predicate) -> int:
     return int(np.count_nonzero(predicate(arr)))
 
 
-def _phase_epoch_rows(run: SourceRun, systems: tuple[str, ...]) -> dict[float, dict[str, float]]:
-    obs = read_rinex_obs(run.run_dir / "rover.obs")
-    previous_phase: dict[str, float] = {}
-    previous_tow: dict[str, float] = {}
-    streak_s: dict[str, float] = {}
-    rows: dict[float, dict[str, float]] = {}
-    for epoch in obs.epochs:
-        tow = float(_datetime_to_gps_seconds_of_week(epoch.time))
-        phase_deltas: list[float] = []
-        doppler_residuals: list[float] = []
-        present_sats: set[str] = set()
-        lli_count = 0
-        for sat_id in epoch.satellites:
-            if not sat_id or sat_id[0] not in systems:
+def _nearest_index(sorted_times: np.ndarray, t: float) -> int:
+    idx = int(np.searchsorted(sorted_times, t))
+    if idx <= 0:
+        return 0
+    if idx >= len(sorted_times):
+        return len(sorted_times) - 1
+    prev_idx = idx - 1
+    return idx if abs(sorted_times[idx] - t) < abs(sorted_times[prev_idx] - t) else prev_idx
+
+
+def _looks_like_sat_id(text: str) -> bool:
+    text = text.strip().upper()
+    return len(text) >= 2 and text[0].isalpha() and text[1:].strip().isdigit()
+
+
+def _read_rinex_header_stream(fh: Any) -> RinexHeader:
+    header = RinexHeader()
+    while True:
+        line = fh.readline()
+        if not line:
+            return header
+        label = line[60:].strip() if len(line) > 60 else ""
+        if label == "RINEX VERSION / TYPE":
+            header.version = float(line[:9])
+            header.sat_system = line[40:41].strip()
+        elif label == "MARKER NAME":
+            header.marker_name = line[:60].strip()
+        elif label == "APPROX POSITION XYZ":
+            vals = line[:60].split()
+            header.approx_position = np.array([float(v) for v in vals[:3]])
+        elif label.startswith("SYS / # / OBS TYPES"):
+            sys_char = line[0].strip()
+            if not sys_char:
                 continue
-            sat_obs = epoch.observations.get(sat_id, {})
-            phase = _first_obs(sat_obs, ("L",))
-            doppler = _first_obs(sat_obs, ("D",))
-            if not math.isfinite(phase) or phase == 0.0:
+            n_types = int(line[3:6])
+            obs_list = line[7:60].split()
+            while len(obs_list) < n_types:
+                line = fh.readline()
+                if not line:
+                    break
+                obs_list.extend(line[7:60].split())
+            header.obs_types[sys_char] = obs_list[:n_types]
+        elif label == "# / TYPES OF OBSERV":
+            n_types = int(line[:6])
+            obs_list = line[6:60].split()
+            while len(obs_list) < n_types:
+                line = fh.readline()
+                if not line:
+                    break
+                obs_list.extend(line[6:60].split())
+            sys_char = header.sat_system or "G"
+            header.obs_types[sys_char] = obs_list[:n_types]
+            header.obs_types[""] = obs_list[:n_types]
+        elif label == "INTERVAL":
+            header.interval = float(line[:10])
+        elif label == "END OF HEADER":
+            return header
+
+
+def _iter_rover_epochs(filepath: Path) -> Any:
+    with filepath.open(encoding="utf-8") as fh:
+        header = _read_rinex_header_stream(fh)
+        if header.version < 3.0:
+            for epoch in read_rinex_obs(filepath).epochs:
+                yield epoch
+            return
+        while True:
+            line = fh.readline()
+            if not line:
+                return
+            if not line.startswith(">"):
                 continue
-            present_sats.add(sat_id)
-            if sat_id in previous_phase and sat_id in previous_tow:
-                dt = max(tow - previous_tow[sat_id], 0.0)
-                delta = phase - previous_phase[sat_id]
-                phase_deltas.append(abs(delta))
-                if math.isfinite(doppler) and dt > 0.0:
-                    doppler_residuals.append(abs(delta + doppler * dt))
-                if abs(delta) <= 0.25:
-                    streak_s[sat_id] = streak_s.get(sat_id, 0.0) + dt
-                else:
-                    streak_s[sat_id] = 0.0
+            parts = line[2:].split()
+            if len(parts) < 7:
+                continue
+            try:
+                year = int(parts[0])
+                month = int(parts[1])
+                day = int(parts[2])
+                hour = int(parts[3])
+                minute = int(parts[4])
+                sec = float(parts[5])
+                sec_int = int(sec)
+                usec = int((sec - sec_int) * 1e6)
+                epoch_flag = int(parts[6])
+                n_sat = int(parts[7]) if len(parts) > 7 else 0
+            except (ValueError, IndexError):
+                continue
+            if epoch_flag > 1:
+                for _ in range(n_sat):
+                    if not fh.readline():
+                        return
+                continue
+
+            satellites: list[str] = []
+            observations: dict[str, dict[str, float]] = {}
+            for _ in range(n_sat):
+                obs_line = fh.readline()
+                if not obs_line:
+                    break
+                sat_id = obs_line[:3].strip()
+                satellites.append(sat_id)
+                sys_char = sat_id[0] if sat_id else ""
+                obs_codes = header.obs_types.get(sys_char, [])
+                obs_record = obs_line.rstrip("\n")
+                target_len = 3 + 16 * len(obs_codes)
+                while len(obs_record) < target_len:
+                    pos = fh.tell()
+                    next_line = fh.readline()
+                    if not next_line:
+                        break
+                    next_id = next_line[:3].strip()
+                    if next_line.startswith(">") or _looks_like_sat_id(next_id):
+                        fh.seek(pos)
+                        break
+                    obs_record += next_line[3:].rstrip("\n")
+
+                sat_obs: dict[str, float] = {}
+                obs_pos = 3
+                for obs_code in obs_codes:
+                    val_str = obs_record[obs_pos : obs_pos + 14].strip() if obs_pos + 14 <= len(obs_record) else ""
+                    try:
+                        sat_obs[obs_code] = float(val_str) if val_str else 0.0
+                    except ValueError:
+                        sat_obs[obs_code] = 0.0
+                    obs_pos += 16
+                observations[sat_id] = sat_obs
+
+            yield RinexEpoch(
+                time=datetime(year, month, day, hour, minute, sec_int, usec),
+                satellites=satellites,
+                observations=observations,
+            )
+
+
+def _phase_features_for_epoch(
+    epoch: RinexEpoch,
+    tow: float,
+    systems: tuple[str, ...],
+    *,
+    previous_phase: dict[str, float],
+    previous_tow: dict[str, float],
+    streak_s: dict[str, float],
+) -> dict[str, float]:
+    phase_deltas: list[float] = []
+    doppler_residuals: list[float] = []
+    present_sats: set[str] = set()
+    lli_count = 0
+    for sat_id in epoch.satellites:
+        if not sat_id or sat_id[0] not in systems:
+            continue
+        sat_obs = epoch.observations.get(sat_id, {})
+        phase = _first_obs(sat_obs, ("L",))
+        doppler = _first_obs(sat_obs, ("D",))
+        if not math.isfinite(phase) or phase == 0.0:
+            continue
+        present_sats.add(sat_id)
+        if sat_id in previous_phase and sat_id in previous_tow:
+            dt = max(tow - previous_tow[sat_id], 0.0)
+            delta = phase - previous_phase[sat_id]
+            phase_deltas.append(abs(delta))
+            if math.isfinite(doppler) and dt > 0.0:
+                doppler_residuals.append(abs(delta + doppler * dt))
+            if abs(delta) <= 0.25:
+                streak_s[sat_id] = streak_s.get(sat_id, 0.0) + dt
             else:
                 streak_s[sat_id] = 0.0
-            previous_phase[sat_id] = phase
-            previous_tow[sat_id] = tow
+        else:
+            streak_s[sat_id] = 0.0
+        previous_phase[sat_id] = phase
+        previous_tow[sat_id] = tow
 
-        disappeared = set(previous_phase) - present_sats
-        break_count = len([sat for sat in disappeared if previous_tow.get(sat, tow) < tow])
-        for sat_id in disappeared:
-            previous_phase.pop(sat_id, None)
-            previous_tow.pop(sat_id, None)
-            streak_s.pop(sat_id, None)
-        raw_stats = _stats(phase_deltas)
-        dop_stats = _stats(doppler_residuals)
-        rows[round(tow, 3)] = {
-            "rinex_phase_present_count": float(len(present_sats)),
-            "rinex_phase_fraction": float(len(present_sats) / max(len(epoch.satellites), 1)),
-            "rinex_phase_streak_ge30p0s_count": float(sum(1 for sat in present_sats if streak_s.get(sat, 0.0) >= 30.0)),
-            "rinex_phase_streak_ge60p0s_count": float(sum(1 for sat in present_sats if streak_s.get(sat, 0.0) >= 60.0)),
-            "rinex_gf_streak_ge30p0s_count": 0.0,
-            "rinex_gf_streak_ge60p0s_count": 0.0,
-            "rinex_phase_jump_ge0p25cy_count": float(_count(phase_deltas, lambda arr: arr >= 0.25)),
-            "rinex_phase_jump_ge0p5cy_count": float(_count(phase_deltas, lambda arr: arr >= 0.5)),
-            "rinex_phase_jump_ge1p0cy_count": float(_count(phase_deltas, lambda arr: arr >= 1.0)),
-            "rinex_gf_slip_ge0p2m_count": 0.0,
-            "rinex_gf_slip_ge0p5m_count": 0.0,
-            "rinex_phase_break_count": float(break_count),
-            "rinex_phase_lost_count": 0.0,
-            "rinex_phase_lli_count": float(lli_count),
-            "rinex_phase_raw_delta_cycles_p50": raw_stats["p50"],
-            "rinex_phase_raw_delta_cycles_p90": raw_stats["p90"],
-            "rinex_phase_raw_delta_cycles_max": raw_stats["max"],
-            "rinex_phase_doppler_min_residual_cycles_p50": dop_stats["p50"],
-            "rinex_phase_doppler_min_residual_cycles_p90": dop_stats["p90"],
-            "rinex_phase_doppler_min_residual_cycles_max": dop_stats["max"],
-        }
-    return rows
+    disappeared = set(previous_phase) - present_sats
+    break_count = len([sat for sat in disappeared if previous_tow.get(sat, tow) < tow])
+    for sat_id in disappeared:
+        previous_phase.pop(sat_id, None)
+        previous_tow.pop(sat_id, None)
+        streak_s.pop(sat_id, None)
+    raw_stats = _stats(phase_deltas)
+    dop_stats = _stats(doppler_residuals)
+    return {
+        "rinex_phase_present_count": float(len(present_sats)),
+        "rinex_phase_fraction": float(len(present_sats) / max(len(epoch.satellites), 1)),
+        "rinex_phase_streak_ge30p0s_count": float(sum(1 for sat in present_sats if streak_s.get(sat, 0.0) >= 30.0)),
+        "rinex_phase_streak_ge60p0s_count": float(sum(1 for sat in present_sats if streak_s.get(sat, 0.0) >= 60.0)),
+        "rinex_gf_streak_ge30p0s_count": 0.0,
+        "rinex_gf_streak_ge60p0s_count": 0.0,
+        "rinex_phase_jump_ge0p25cy_count": float(_count(phase_deltas, lambda arr: arr >= 0.25)),
+        "rinex_phase_jump_ge0p5cy_count": float(_count(phase_deltas, lambda arr: arr >= 0.5)),
+        "rinex_phase_jump_ge1p0cy_count": float(_count(phase_deltas, lambda arr: arr >= 1.0)),
+        "rinex_gf_slip_ge0p2m_count": 0.0,
+        "rinex_gf_slip_ge0p5m_count": 0.0,
+        "rinex_phase_break_count": float(break_count),
+        "rinex_phase_lost_count": 0.0,
+        "rinex_phase_lli_count": float(lli_count),
+        "rinex_phase_raw_delta_cycles_p50": raw_stats["p50"],
+        "rinex_phase_raw_delta_cycles_p90": raw_stats["p90"],
+        "rinex_phase_raw_delta_cycles_max": raw_stats["max"],
+        "rinex_phase_doppler_min_residual_cycles_p50": dop_stats["p50"],
+        "rinex_phase_doppler_min_residual_cycles_p90": dop_stats["p90"],
+        "rinex_phase_doppler_min_residual_cycles_max": dop_stats["max"],
+    }
 
 
 def _epoch_rows_for_run(
@@ -312,14 +448,45 @@ def _epoch_rows_for_run(
     if not PPCDatasetLoader.is_run_directory(run.run_dir):
         missing = [name for name in PPCDatasetLoader.REQUIRED_FILES if not (run.run_dir / name).exists()]
         _die(f"invalid PPC run directory for {run.city}/{run.run}: missing {', '.join(missing)}\n  {run.run_dir}")
-    data = PPCDatasetLoader(run.run_dir).load_experiment_data(max_epochs=max_epochs, systems=systems)
-    phase_by_tow = _phase_epoch_rows(run, systems)
+    loader = PPCDatasetLoader(run.run_dir)
+    gt_times, _gt_ecef = loader.load_ground_truth()
+    if len(gt_times) == 0:
+        _die(f"reference.csv is empty for {run.city}/{run.run}: {run.run_dir / 'reference.csv'}")
     sat_streak_s: dict[str, float] = {}
+    previous_phase: dict[str, float] = {}
+    previous_phase_tow: dict[str, float] = {}
+    phase_streak_s: dict[str, float] = {}
     prev_tow: float | None = None
     rows: list[dict[str, object]] = []
-    for idx, tow in enumerate(np.asarray(data["times"], dtype=np.float64)):
+    for epoch in _iter_rover_epochs(run.run_dir / "rover.obs"):
+        tow = float(_datetime_to_gps_seconds_of_week(epoch.time))
+        phase = _phase_features_for_epoch(
+            epoch,
+            tow,
+            systems,
+            previous_phase=previous_phase,
+            previous_tow=previous_phase_tow,
+            streak_s=phase_streak_s,
+        )
+        gt_idx = _nearest_index(gt_times, tow)
+        if abs(gt_times[gt_idx] - tow) > 0.15:
+            continue
+        sat_ids: list[str] = []
+        snr_values: list[float] = []
+        for sat_id in epoch.satellites:
+            if not sat_id or sat_id[0] not in systems:
+                continue
+            sat_obs = epoch.observations.get(sat_id, {})
+            pseudorange = _first_obs(sat_obs, ("C",))
+            if not math.isfinite(pseudorange) or pseudorange < 1e6:
+                continue
+            sat_ids.append(sat_id)
+            snr = _first_obs(sat_obs, ("S",))
+            snr_values.append(snr if math.isfinite(snr) and snr > 0.0 else 1.0)
+        if len(sat_ids) < 4:
+            continue
+        idx = len(rows)
         dt = 0.0 if prev_tow is None else max(float(tow - prev_tow), 0.0)
-        sat_ids = [str(sat) for sat in data["used_prns"][idx]]
         sat_set = set(sat_ids)
         for sat_id in list(sat_streak_s):
             if sat_id not in sat_set:
@@ -327,9 +494,7 @@ def _epoch_rows_for_run(
         for sat_id in sat_ids:
             sat_streak_s[sat_id] = sat_streak_s.get(sat_id, 0.0) + dt
         sat_count = float(len(sat_ids))
-        weights = np.asarray(data["weights"][idx], dtype=np.float64)
-        snr_stats = _stats(weights)
-        phase = phase_by_tow.get(round(float(tow), 3), {})
+        snr_stats = _stats(snr_values)
         los30 = float(sum(1 for sat_id in sat_ids if sat_streak_s.get(sat_id, 0.0) >= 30.0))
         los60 = float(sum(1 for sat_id in sat_ids if sat_streak_s.get(sat_id, 0.0) >= 60.0))
         # ADOP is not available in this bootstrap path.  Use a monotonic
@@ -374,6 +539,10 @@ def _epoch_rows_for_run(
         row.update(phase)
         rows.append(row)
         prev_tow = float(tow)
+        if max_epochs is not None and len(rows) >= max_epochs:
+            break
+    if not rows:
+        _die(f"no usable PPC epochs found for {run.city}/{run.run}: {run.run_dir}")
     return rows
 
 

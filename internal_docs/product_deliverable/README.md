@@ -137,7 +137,10 @@ These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
 directories, parses their RINEX/reference inputs, and writes bootstrap
 epoch/window/base CSVs plus a derived source manifest.  Unsupported
 simulator/refinedgrid features are neutral-filled so the saved product
-model can run.
+model can run.  This bootstrap path validates `base.nav` presence as
+part of the PPC source bundle, but it does not run broadcast-ephemeris
+satellite propagation, the calibrated simulator, or refinedgrid base
+prediction.
 
 `--source-bundle-check` and `--source-bundle-inference` accept the
 derived JSON manifest that declares raw PPC source run directories and

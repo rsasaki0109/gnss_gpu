@@ -14,6 +14,7 @@ import json
 from argparse import Namespace
 from contextlib import redirect_stderr
 from csv import DictReader
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
 
@@ -52,7 +53,9 @@ from product_inference_model import (
     _route_rows,
 )
 from product_raw_source_prepare import build_window_rows
-from product_source_bundle import load_source_bundle, validate_source_bundle
+from product_raw_source_prepare import _epoch_rows_for_run as _raw_epoch_rows_for_run
+from product_source_bundle import SourceRun, load_source_bundle, validate_source_bundle
+from gnss_gpu.io.nav_rinex import _datetime_to_gps_seconds_of_week
 from train_ppc_solver_transition_surrogate_stack import (
     _append_classifier_meta as _append_classifier_meta_batch,
     _reference_prediction_path,
@@ -506,6 +509,71 @@ def test_raw_source_prepare_window_rows() -> None:
     check("raw prepare no labels", False, "actual_fix_rate_pct" in first)
 
 
+def test_raw_source_prepare_streaming_epoch_rows() -> None:
+    print("test_raw_source_prepare_streaming_epoch_rows")
+
+    def rinex_line(prefix: str, label: str) -> str:
+        return f"{prefix:<60}{label}\n"
+
+    def obs_line(sat_id: str, pseudorange: float, phase: float, doppler: float, snr: float) -> str:
+        return (
+            f"{sat_id:<3}"
+            f"{pseudorange:14.3f}  "
+            f"{phase:14.3f}  "
+            f"{doppler:14.3f}  "
+            f"{snr:14.3f}  "
+            "\n"
+        )
+
+    t0 = datetime(2024, 1, 7, 0, 0, 10)
+    t1 = datetime(2024, 1, 7, 0, 0, 10, 200000)
+    tow0 = _datetime_to_gps_seconds_of_week(t0)
+    tow1 = _datetime_to_gps_seconds_of_week(t1)
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp) / "nagoya" / "run1"
+        run_dir.mkdir(parents=True)
+        (run_dir / "base.obs").write_text("fixture\n", encoding="utf-8")
+        (run_dir / "base.nav").write_text("fixture\n", encoding="utf-8")
+        (run_dir / "reference.csv").write_text(
+            "GPS TOW (s),ECEF X (m),ECEF Y (m),ECEF Z (m)\n"
+            f"{tow0},1,2,3\n"
+            f"{tow1},1,2,3\n",
+            encoding="utf-8",
+        )
+        obs_header = (
+            rinex_line("     3.04           OBSERVATION DATA    M", "RINEX VERSION / TYPE")
+            + rinex_line("TEST", "MARKER NAME")
+            + rinex_line("G    4 C1C L1C D1C S1C", "SYS / # / OBS TYPES")
+            + rinex_line("", "END OF HEADER")
+        )
+        epoch0 = (
+            "> 2024 01 07 00 00 10.0000000  0  4\n"
+            + obs_line("G01", 22_000_001.0, 100.0, -0.1, 35.0)
+            + obs_line("G02", 22_000_002.0, 101.0, -0.1, 36.0)
+            + obs_line("G03", 22_000_003.0, 102.0, -0.1, 37.0)
+            + obs_line("G04", 22_000_004.0, 103.0, -0.1, 38.0)
+        )
+        epoch1 = (
+            "> 2024 01 07 00 00 10.2000000  0  4\n"
+            + obs_line("G01", 22_000_001.5, 100.1, -0.5, 35.0)
+            + obs_line("G02", 22_000_002.5, 101.1, -0.5, 36.0)
+            + obs_line("G03", 22_000_003.5, 102.1, -0.5, 37.0)
+            + obs_line("G04", 22_000_004.5, 103.1, -0.5, 38.0)
+        )
+        (run_dir / "rover.obs").write_text(obs_header + epoch0 + epoch1, encoding="utf-8")
+
+        rows = _raw_epoch_rows_for_run(
+            SourceRun(city="nagoya", run="run1", run_dir=run_dir),
+            systems=("G",),
+            max_epochs=None,
+        )
+    check("raw streaming epoch row count", 2, len(rows))
+    check("raw streaming sat count", 4.0, rows[0]["sat"])
+    check("raw streaming phase count", 4.0, rows[0]["rinex_phase_present_count"])
+    check("raw streaming snr p50", 36.5, rows[0]["snr_p50"])
+    check("raw streaming phase delta second row", 0.1, round(rows[1]["rinex_phase_raw_delta_cycles_p50"], 1))
+
+
 def test_merge_base_prediction_column() -> None:
     print("test_merge_base_prediction_column")
     with tempfile.TemporaryDirectory() as tmp:
@@ -626,6 +694,7 @@ def main() -> None:
     test_batch_output_paths()
     test_product_source_bundle_validation()
     test_raw_source_prepare_window_rows()
+    test_raw_source_prepare_streaming_epoch_rows()
     test_merge_base_prediction_column()
     test_validationhold_window_rows_label_free()
     test_product_inference_label_free_output()
