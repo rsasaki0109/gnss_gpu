@@ -6,9 +6,11 @@ route/window deliverable CSVs and dashboard from the committed adopted
 §7.16 window predictions.  This works from a clean checkout and is the
 operator-facing one-command path.
 
-`--inference` scores a new pre-augmented window CSV with a saved
-single-model artifact and does not retrain.  This is the product path for
-fresh PPC/taroz data once upstream window/base features exist.
+`--prepare-inference` builds the product-ready window CSV from
+preprocessed epoch/window/base CSVs.  `--inference` scores that prepared
+window CSV with a saved single-model artifact and does not retrain.
+Together these are the product path for fresh PPC/taroz data once
+upstream feature extraction exists.
 
 `--retrain` runs the research/training pipeline that created the adopted
 predictions.  It requires the large preprocessed epoch/window CSVs and a
@@ -28,12 +30,21 @@ Usage (full LORO retrain with new preprocessed data):
         --base-prefix path/to/refinedgrid_prefix \\
         --results-prefix ppc_..._my_run
 
-Usage (fresh-data inference without retraining):
+Usage (prepare fresh-data inference input without retraining):
+
+    python3 experiments/predict.py \\
+        --prepare-inference \\
+        --epochs-csv path/to/preprocessed_epochs.csv \\
+        --window-csv path/to/window_features.csv \\
+        --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \\
+        --prepared-window-csv experiments/results/my_run_prepared_window_predictions.csv
+
+Usage (score prepared fresh-data window CSV without retraining):
 
     python3 experiments/predict.py \\
         --inference \\
-        --window-csv path/to/pre_augmented_window_predictions.csv \\
-        --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \\
+        --window-csv experiments/results/my_run_prepared_window_predictions.csv \\
+        --use-window-base-prediction \\
         --inference-output-prefix experiments/results/my_run_product
 """
 
@@ -43,7 +54,7 @@ import argparse
 import subprocess
 import sys
 import time
-from csv import DictReader
+from csv import DictReader, DictWriter
 from datetime import datetime
 from pathlib import Path
 
@@ -72,6 +83,7 @@ DEFAULT_RESULTS_PREFIX = (
 DEFAULT_PREDICTION_CSV = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_window_predictions.csv"
 DEFAULT_INFERENCE_MODEL = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_product_model.pkl.gz"
 DEFAULT_INFERENCE_OUTPUT_PREFIX = RESULTS_DIR / "ppc_product_inference"
+DEFAULT_PREPARE_PREFIX = "ppc_product_inference_prepare"
 DEFAULT_OUTPUT_DIR = EXPERIMENTS_DIR.parent / "internal_docs" / "product_deliverable"
 
 PREDICTION_REQUIRED_COLUMNS = {
@@ -112,6 +124,14 @@ INFERENCE_WINDOW_REQUIRED_COLUMNS = {
     "city",
     "run",
     "window_index",
+    "sim_matched_epochs",
+}
+PREPARE_WINDOW_REQUIRED_COLUMNS = {
+    "city",
+    "run",
+    "window_index",
+    "window_start_tow",
+    "window_end_tow",
     "sim_matched_epochs",
 }
 FIT_INFERENCE_MODEL_REQUIRED_COLUMNS = INFERENCE_WINDOW_REQUIRED_COLUMNS | {
@@ -205,7 +225,75 @@ def _base_prediction_path(base_prefix: str) -> Path:
     return RESULTS_DIR / f"{base_prefix}_window_predictions.csv"
 
 
+def _prefix_output_path(prefix: str, suffix: str) -> Path:
+    path = Path(prefix)
+    if path.is_absolute() or path.parent != Path("."):
+        return path.with_name(f"{path.name}{suffix}")
+    return RESULTS_DIR / f"{prefix}{suffix}"
+
+
+def _merge_base_prediction_column(
+    *,
+    window_csv: Path,
+    base_prediction_csv: Path,
+    output_csv: Path,
+    prediction_column: str = "corrected_pred_fix_rate_pct",
+) -> None:
+    """Write a window CSV with `base_pred_fix_rate_pct` merged by window key."""
+    with base_prediction_csv.open(newline="", encoding="utf-8") as fh:
+        reader = DictReader(fh)
+        base_fields = set(reader.fieldnames or [])
+        pred_col = prediction_column
+        if pred_col not in base_fields:
+            for candidate in ("corrected_pred_fix_rate_pct", "pred_fix_rate_pct", "base_pred_fix_rate_pct"):
+                if candidate in base_fields:
+                    pred_col = candidate
+                    break
+            else:
+                sys.stderr.write(
+                    "\nERROR: base prediction CSV needs one prediction column:\n"
+                    f"  {base_prediction_csv}\n"
+                    "  expected one of: corrected_pred_fix_rate_pct, pred_fix_rate_pct, base_pred_fix_rate_pct\n"
+                )
+                sys.exit(1)
+        base_by_key = {
+            (row["city"], row["run"], str(int(float(row["window_index"])))): row[pred_col]
+            for row in reader
+        }
+
+    with window_csv.open(newline="", encoding="utf-8") as fh:
+        reader = DictReader(fh)
+        fieldnames = list(reader.fieldnames or [])
+        if "base_pred_fix_rate_pct" not in fieldnames:
+            fieldnames.append("base_pred_fix_rate_pct")
+        rows: list[dict[str, str]] = []
+        missing: list[str] = []
+        for row in reader:
+            key = (row["city"], row["run"], str(int(float(row["window_index"]))))
+            if key not in base_by_key:
+                missing.append("\t".join(key))
+                continue
+            row["base_pred_fix_rate_pct"] = base_by_key[key]
+            rows.append(row)
+    if missing:
+        preview = ", ".join(missing[:5])
+        suffix = f" ... (+{len(missing) - 5} more)" if len(missing) > 5 else ""
+        sys.stderr.write(
+            f"\nERROR: {len(missing)} window rows are missing from base prediction CSV:\n"
+            f"  {preview}{suffix}\n"
+        )
+        sys.exit(1)
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    with output_csv.open("w", newline="", encoding="utf-8") as fh:
+        writer = DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"saved: {output_csv}")
+
+
 def _planned_stage_count(args: argparse.Namespace) -> int:
+    if args.prepare_inference:
+        return 4
     if args.inference or args.fit_inference_model:
         return 1
     if not args.retrain:
@@ -256,12 +344,20 @@ def _preflight_fit_inference_model(args: argparse.Namespace) -> None:
         _require_input(args.calibration_prediction_csv, "calibration prediction CSV", PREDICTION_REQUIRED_COLUMNS)
 
 
+def _preflight_prepare_inference(args: argparse.Namespace) -> None:
+    _require_input(args.epochs_csv, "epoch input CSV", EPOCH_REQUIRED_COLUMNS)
+    _require_input(args.window_csv, "window input CSV", PREPARE_WINDOW_REQUIRED_COLUMNS)
+    _require_base_prediction(_base_prediction_path(args.base_prefix))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the adopted §7.16 FIX-rate prediction pipeline")
     parser.add_argument("--retrain", action="store_true",
                         help="run the full LORO training pipeline instead of the frozen product flow")
     parser.add_argument("--inference", action="store_true",
                         help="score --window-csv with a saved single-model artifact; no retraining")
+    parser.add_argument("--prepare-inference", action="store_true",
+                        help="build a pre-augmented inference window CSV from epoch/window/base inputs")
     parser.add_argument("--fit-inference-model", action="store_true",
                         help="fit and save the single-model product inference artifact")
     parser.add_argument("--prediction-csv", type=Path, default=DEFAULT_PREDICTION_CSV,
@@ -272,6 +368,10 @@ def parse_args() -> argparse.Namespace:
                         help="output path for --fit-inference-model")
     parser.add_argument("--inference-output-prefix", type=Path, default=DEFAULT_INFERENCE_OUTPUT_PREFIX,
                         help="prefix for --inference route/window prediction CSVs")
+    parser.add_argument("--prepare-prefix", default=DEFAULT_PREPARE_PREFIX,
+                        help="prefix for intermediate --prepare-inference artifacts")
+    parser.add_argument("--prepared-window-csv", type=Path,
+                        help="output CSV from --prepare-inference; default is <prepare-prefix>_window_predictions.csv")
     parser.add_argument("--calibration-prediction-csv", type=Path,
                         help="optional LORO prediction CSV used to calibrate the saved residual corrector")
     parser.add_argument("--use-window-base-prediction", action="store_true",
@@ -294,9 +394,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--check-only", action="store_true",
                         help="validate required inputs and exit without writing outputs")
     args = parser.parse_args()
-    active_modes = sum(bool(v) for v in (args.retrain, args.inference, args.fit_inference_model))
+    active_modes = sum(bool(v) for v in (args.retrain, args.inference, args.prepare_inference, args.fit_inference_model))
     if active_modes > 1:
-        parser.error("--retrain, --inference, and --fit-inference-model are mutually exclusive")
+        parser.error("--retrain, --inference, --prepare-inference, and --fit-inference-model are mutually exclusive")
     return args
 
 
@@ -315,6 +415,75 @@ def main() -> None:
     _stage_counter["total"] = _planned_stage_count(args)
     _stage_counter["started"] = None
     overall_start = time.monotonic()
+
+    if args.prepare_inference:
+        _preflight_prepare_inference(args)
+        base_csv = _base_prediction_path(args.base_prefix)
+        base_window_csv = _prefix_output_path(args.prepare_prefix, "_base_window_predictions.csv")
+        epoch_prefix = f"{args.prepare_prefix}_validationhold"
+        vh_epochs_csv = _prefix_output_path(epoch_prefix, "_epochs.csv")
+        summary_prefix = f"{args.prepare_prefix}_validationhold"
+        summary_csv = _prefix_output_path(summary_prefix, "_window_summary.csv")
+        preset_summary_csv = _prefix_output_path(f"{args.prepare_prefix}_validationhold_{args.preset}", "_window_summary.csv")
+        prepared_window_csv = args.prepared_window_csv or _prefix_output_path(args.prepare_prefix, "_window_predictions.csv")
+        if args.check_only:
+            print(f"preflight ok: inference input preparation can write {prepared_window_csv}")
+            return
+
+        stage("merge base prediction into window CSV")
+        _merge_base_prediction_column(
+            window_csv=args.window_csv,
+            base_prediction_csv=base_csv,
+            output_csv=base_window_csv,
+        )
+        _require(base_window_csv, "base prediction merge")
+        stage_done()
+
+        stage("epoch-level validationhold surrogate")
+        run([
+            sys.executable,
+            str(EXPERIMENTS_DIR / "augment_ppc_epochs_with_validation_hold_surrogate.py"),
+            "--epochs-csv", str(args.epochs_csv),
+            "--results-prefix", epoch_prefix,
+        ])
+        _require(vh_epochs_csv, "augment_ppc_epochs_with_validation_hold_surrogate.py")
+        stage_done()
+
+        stage("window-level validationhold aggregation")
+        run([
+            sys.executable,
+            str(EXPERIMENTS_DIR / "analyze_ppc_validation_hold_surrogate_windows.py"),
+            "--window-csv", str(base_window_csv),
+            "--epoch-csv", str(vh_epochs_csv),
+            "--prediction-column", "base_pred_fix_rate_pct",
+            "--results-prefix", summary_prefix,
+        ])
+        _require(summary_csv, "analyze_ppc_validation_hold_surrogate_windows.py")
+        stage_done()
+
+        stage(f"apply threshold preset '{args.preset}' and prepare inference window CSV")
+        run([
+            sys.executable,
+            str(EXPERIMENTS_DIR / "rebuild_validationhold_flag_thresholds.py"),
+            "--input-csv", str(summary_csv),
+            "--preset", args.preset,
+            "--output-csv", str(preset_summary_csv),
+        ])
+        _require(preset_summary_csv, "rebuild_validationhold_flag_thresholds.py")
+        run([
+            sys.executable,
+            str(EXPERIMENTS_DIR / "augment_ppc_windows_with_validationhold_features.py"),
+            "--window-csv", str(base_window_csv),
+            "--validationhold-csv", str(preset_summary_csv),
+            "--output-csv", str(prepared_window_csv),
+        ])
+        _require(prepared_window_csv, "augment_ppc_windows_with_validationhold_features.py")
+        stage_done()
+
+        total_dt = time.monotonic() - overall_start
+        print(f"\n[{_timestamp()}] inference input preparation finished in {total_dt:.1f}s")
+        print(f"prepared window CSV: {prepared_window_csv}")
+        return
 
     if args.inference:
         _preflight_inference(args)
