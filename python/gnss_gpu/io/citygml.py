@@ -22,6 +22,10 @@ _NS_CANDIDATES = {
         "http://www.opengis.net/citygml/building/2.0",
         "http://www.opengis.net/citygml/building/1.0",
     ],
+    "brid": [
+        "http://www.opengis.net/citygml/bridge/2.0",
+        "http://www.opengis.net/citygml/bridge/1.0",
+    ],
     "gml": [
         "http://www.opengis.net/gml",
     ],
@@ -29,6 +33,12 @@ _NS_CANDIDATES = {
         "http://www.opengis.net/citygml/generics/2.0",
         "http://www.opengis.net/citygml/generics/1.0",
     ],
+}
+
+# Mapping from feature kind to (namespace family, root element name).
+_FEATURE_KINDS = {
+    "bldg": ("bldg", "Building"),
+    "brid": ("brid", "Bridge"),
 }
 
 
@@ -124,47 +134,62 @@ def _extract_polygons(element, ns):
     return polygons
 
 
-def _determine_lod(building_elem, ns):
-    """Determine the LoD of a building element."""
-    bldg = ns.get("bldg", "http://www.opengis.net/citygml/building/2.0")
+def _determine_lod(elem, ns, ns_family="bldg"):
+    """Determine the LoD of a CityGML feature element."""
+    family_uri = ns.get(
+        ns_family,
+        f"http://www.opengis.net/citygml/{ns_family}/2.0",
+    )
 
     for lod in (4, 3, 2, 1):
         for suffix in ("Solid", "MultiSurface"):
-            tag = f"{{{bldg}}}lod{lod}{suffix}"
-            if building_elem.find(f".//{tag}") is not None:
+            tag = f"{{{family_uri}}}lod{lod}{suffix}"
+            if elem.find(f".//{tag}") is not None:
                 return lod
     return 0
 
 
-def parse_citygml(filepath):
+def parse_citygml(filepath, kind="bldg"):
     """Parse a CityGML file and return a list of :class:`Building` objects.
 
     Parameters
     ----------
     filepath : str or Path
         Path to a CityGML ``.gml`` file.
+    kind : str
+        Feature kind to extract.  ``"bldg"`` (default) extracts
+        ``bldg:Building`` elements; ``"brid"`` extracts ``brid:Bridge``.
+        Both are returned as :class:`Building` objects since the geometry
+        representation (LoD-tagged polygon set) is identical.
 
     Returns
     -------
     list[Building]
-        Each building carries its ``id``, ``lod``, and a list of polygon
+        Each item carries its ``id``, ``lod``, and a list of polygon
         coordinate arrays (each ``(N, 3)``).
     """
+    if kind not in _FEATURE_KINDS:
+        raise ValueError(f"unsupported CityGML kind: {kind!r}")
+    ns_family, root_tag = _FEATURE_KINDS[kind]
+
     filepath = Path(filepath)
     tree = ET.parse(filepath)
     root = tree.getroot()
 
     ns = _detect_namespaces(root)
-    bldg_uri = ns.get("bldg", "http://www.opengis.net/citygml/building/2.0")
+    feature_uri = ns.get(
+        ns_family,
+        f"http://www.opengis.net/citygml/{ns_family}/2.0",
+    )
     gml_uri = ns.get("gml", "http://www.opengis.net/gml")
 
-    buildings = []
+    features = []
 
-    for bldg_elem in root.iter(f"{{{bldg_uri}}}Building"):
-        gml_id = bldg_elem.get(f"{{{gml_uri}}}id") or bldg_elem.get("id")
-        lod = _determine_lod(bldg_elem, ns)
-        polygons = _extract_polygons(bldg_elem, ns)
+    for feat_elem in root.iter(f"{{{feature_uri}}}{root_tag}"):
+        gml_id = feat_elem.get(f"{{{gml_uri}}}id") or feat_elem.get("id")
+        lod = _determine_lod(feat_elem, ns, ns_family=ns_family)
+        polygons = _extract_polygons(feat_elem, ns)
 
-        buildings.append(Building(id=gml_id, lod=lod, polygons=polygons))
+        features.append(Building(id=gml_id, lod=lod, polygons=polygons))
 
-    return buildings
+    return features

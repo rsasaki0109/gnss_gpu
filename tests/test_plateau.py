@@ -123,11 +123,77 @@ GEOGRAPHIC_CITYGML = textwrap.dedent("""\
 """)
 
 
+MINIMAL_BRIDGE_CITYGML = textwrap.dedent("""\
+    <?xml version="1.0" encoding="UTF-8"?>
+    <core:CityModel
+      xmlns:core="http://www.opengis.net/citygml/2.0"
+      xmlns:bldg="http://www.opengis.net/citygml/building/2.0"
+      xmlns:brid="http://www.opengis.net/citygml/bridge/2.0"
+      xmlns:gml="http://www.opengis.net/gml">
+      <core:cityObjectMember>
+        <brid:Bridge gml:id="test_brid_1">
+          <brid:lod2Solid>
+            <gml:Solid>
+              <gml:exterior>
+                <gml:CompositeSurface>
+                  <gml:surfaceMember>
+                    <gml:Polygon>
+                      <gml:exterior>
+                        <gml:LinearRing>
+                          <gml:posList>
+                            0.0 0.0 10.0
+                            0.0 5.0 10.0
+                            20.0 5.0 10.0
+                            20.0 0.0 10.0
+                            0.0 0.0 10.0
+                          </gml:posList>
+                        </gml:LinearRing>
+                      </gml:exterior>
+                    </gml:Polygon>
+                  </gml:surfaceMember>
+                  <gml:surfaceMember>
+                    <gml:Polygon>
+                      <gml:exterior>
+                        <gml:LinearRing>
+                          <gml:posList>
+                            0.0 0.0 12.0
+                            20.0 0.0 12.0
+                            20.0 5.0 12.0
+                            0.0 5.0 12.0
+                            0.0 0.0 12.0
+                          </gml:posList>
+                        </gml:LinearRing>
+                      </gml:exterior>
+                    </gml:Polygon>
+                  </gml:surfaceMember>
+                </gml:CompositeSurface>
+              </gml:exterior>
+            </gml:Solid>
+          </brid:lod2Solid>
+        </brid:Bridge>
+      </core:cityObjectMember>
+    </core:CityModel>
+""")
+
+
 @pytest.fixture
 def citygml_file(tmp_path):
     """Write the minimal CityGML to a temporary file."""
     p = tmp_path / "test.gml"
     p.write_text(MINIMAL_CITYGML, encoding="utf-8")
+    return p
+
+
+@pytest.fixture
+def bridge_citygml_file(tmp_path):
+    """Write the minimal bridge CityGML to a temporary file.
+
+    PLATEAU naming convention: bridge GMLs contain ``_brid_`` in the
+    filename, which the directory loader uses to dispatch to the bridge
+    parser.
+    """
+    p = tmp_path / "53393683_brid_6697_op.gml"
+    p.write_text(MINIMAL_BRIDGE_CITYGML, encoding="utf-8")
     return p
 
 
@@ -177,6 +243,43 @@ class TestCityGMLParser:
         # Each building should have 6 polygons (6 faces of a box)
         for b in buildings:
             assert len(b.polygons) == 6
+
+    def test_parse_bridge_kind(self, bridge_citygml_file):
+        # The default kind="bldg" must not pick up bridges.
+        empty = parse_citygml(bridge_citygml_file)
+        assert empty == []
+        # Explicit kind="brid" returns the Bridge as a Building dataclass.
+        bridges = parse_citygml(bridge_citygml_file, kind="brid")
+        assert len(bridges) == 1
+        b = bridges[0]
+        assert b.id == "test_brid_1"
+        assert b.lod == 2
+        assert len(b.polygons) == 2
+
+    def test_parse_unsupported_kind_raises(self, bridge_citygml_file):
+        with pytest.raises(ValueError):
+            parse_citygml(bridge_citygml_file, kind="tran")
+
+
+class TestBridgeLoaderIntegration:
+
+    def test_directory_loader_skips_bridges_by_default(
+        self, citygml_file, bridge_citygml_file
+    ):
+        # Move the two test files into a single directory so the directory
+        # loader is exercised on both at once.
+        directory = bridge_citygml_file.parent
+        # The bldg fixture writes test.gml; force it to use the bldg
+        # naming convention so the loader infers kind correctly.
+        renamed = directory / "53393683_bldg_6697_op.gml"
+        os.rename(citygml_file, renamed)
+
+        bldg_only = load_plateau(directory, zone=9)
+        bldg_plus_brid = load_plateau(directory, zone=9, include_bridges=True)
+        assert bldg_plus_brid.triangles.shape[0] > bldg_only.triangles.shape[0]
+        # The bridge alone contributes at least one triangle per polygon.
+        bridges_only = load_plateau(bridge_citygml_file, zone=9)
+        assert bridges_only.triangles.shape[0] >= 2
 
 
 # ---------------------------------------------------------------------------
