@@ -23,8 +23,10 @@ from _common import _is_metadata_or_label
 from build_product_deliverable import (
     REQUIRED_PREDICTION_COLUMNS,
     _classify_window,
+    _classify_window_confidence,
     _confidence_tier,
     _require_prediction_columns,
+    _window_confidence_summary,
 )
 from predict import DEFAULT_PREDICTION_CSV, RESULTS_DIR, _base_prediction_path, _read_columns, _require
 from train_ppc_solver_transition_surrogate_stack import _reference_prediction_path
@@ -81,6 +83,54 @@ def test_classify_window() -> None:
     # Edge: actual >= 75 with gap >= 40 -> hidden_high
     tag, _ = _classify_window(_row(75.0, 20.0, 34.9))
     check("boundary: actual=75 gap=40.1 -> hidden_high", "hidden_high", tag)
+
+
+def test_classify_window_confidence() -> None:
+    print("test_classify_window_confidence")
+    tier, use, _ = _classify_window_confidence(_row(0.0, 13.0, 12.0))
+    check("stable low prediction -> high", ("high", "low_fix_screen"), (tier, use))
+    tier, use, _ = _classify_window_confidence(_row(0.0, 12.0, 16.0))
+    check("above low threshold -> diagnostic", ("diagnostic", "route_aggregate_only"), (tier, use))
+    tier, use, _ = _classify_window_confidence(_row(0.0, 3.0, 12.0))
+    check("large base/adopted delta -> diagnostic", ("diagnostic", "route_aggregate_only"), (tier, use))
+
+
+def test_window_confidence_summary() -> None:
+    print("test_window_confidence_summary")
+    rows = pd.DataFrame(
+        [
+            {
+                "window_confidence_tier": "high",
+                "window_product_use": "low_fix_screen",
+                "sim_matched_epochs": 2,
+                "abs_error_pp": 5.0,
+                "actual_fix_rate_pct": 0.0,
+                "adopted_pred_fix_rate_pct": 5.0,
+            },
+            {
+                "window_confidence_tier": "high",
+                "window_product_use": "low_fix_screen",
+                "sim_matched_epochs": 1,
+                "abs_error_pp": 20.0,
+                "actual_fix_rate_pct": 20.0,
+                "adopted_pred_fix_rate_pct": 0.0,
+            },
+            {
+                "window_confidence_tier": "diagnostic",
+                "window_product_use": "route_aggregate_only",
+                "sim_matched_epochs": 1,
+                "abs_error_pp": 30.0,
+                "actual_fix_rate_pct": 50.0,
+                "adopted_pred_fix_rate_pct": 20.0,
+            },
+        ]
+    )
+    summary = _window_confidence_summary(rows)
+    high = summary[summary["window_confidence_tier"] == "high"].iloc[0]
+    check("high summary count", 2, int(high["window_count"]))
+    check("high summary coverage", 66.667, float(high["coverage_pct"]))
+    check("high weighted MAE", 10.0, float(high["weighted_mae_pp"]))
+    check("high within 15pp", 50.0, float(high["within_15pp_pct"]))
 
 
 def test_is_metadata_or_label() -> None:
@@ -186,6 +236,8 @@ def test_base_prediction_path() -> None:
 
 def main() -> None:
     test_classify_window()
+    test_classify_window_confidence()
+    test_window_confidence_summary()
     test_is_metadata_or_label()
     test_confidence_tier()
     test_require()

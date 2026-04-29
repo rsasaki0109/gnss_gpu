@@ -35,6 +35,7 @@ Outputs land in:
 - `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv` — frozen input artifact
 - `internal_docs/product_deliverable/route_level_fix_rate_prediction.csv`
 - `internal_docs/product_deliverable/window_level_details.csv`
+- `internal_docs/product_deliverable/window_confidence_summary.csv`
 - `internal_docs/product_deliverable/dashboard.html` — open in a browser
 
 For a preflight-only check:
@@ -110,12 +111,40 @@ One row per `(city, run)` with columns:
   can exceed 8 pp.  Review `window_level_details.csv` for the specific
   focus cases.
 
-### 4.3 window_level_details.csv
+### 4.3 window_confidence_summary.csv
+
+This file validates the prediction-time window product-use split:
+
+- `window_product_use=low_fix_screen`: supported individual-window use.
+  Treat these 30 s windows as likely poor-FIX intervals.  Current
+  bundled validation is 35/197 windows, 5.390 pp weighted MAE, and
+  97.143 % within 15 pp.
+- `window_product_use=route_aggregate_only`: diagnostic only.  These
+  windows contribute to route-level aggregates, but are not supported
+  as standalone product predictions.
+
+The split is based only on prediction-time columns:
+`adopted_pred_fix_rate_pct <= 15.0` and
+`abs(adopted_pred_fix_rate_pct - base_pred_fix_rate_pct) <= 3.0`.
+It does not use actual FIX labels or `focus_case_tag`.
+
+### 4.4 window_level_details.csv
 
 One row per window.  Use for diagnostics when a `low` tier run needs
 drilling down.  The `focus_case_tag` column marks known failure
 archetypes (`false_high`, `hidden_high`, `false_lift`,
 `false_lift_mild`, `false_lift_resolved`).
+
+The prediction-time product fields are:
+
+- `window_confidence_tier` — `high` for the supported low-FIX screen,
+  `diagnostic` otherwise.
+- `window_product_use` — `low_fix_screen` or `route_aggregate_only`.
+- `window_confidence_note` — threshold reason for the assignment.
+
+Do not report a `route_aggregate_only` row as an individual 30 s product
+prediction.  Use it only for route-level aggregation and failure
+analysis.
 
 ## 5. What to report when predictions look off
 
@@ -164,6 +193,7 @@ Per D-030 / D-033:
 | `experiments/build_product_deliverable.py` | deliverable CSV builder |
 | `experiments/build_product_dashboard.py` | HTML dashboard renderer |
 | `internal_docs/product_deliverable/dashboard.html` | generated dashboard (open in browser) |
+| `internal_docs/product_deliverable/window_confidence_summary.csv` | validation summary for prediction-time window product-use tiers |
 | `experiments/augment_ppc_epochs_with_validation_hold_surrogate.py` | epoch-level surrogate |
 | `experiments/analyze_ppc_validation_hold_surrogate_windows.py` | window aggregation |
 | `experiments/rebuild_validationhold_flag_thresholds.py` | threshold preset switcher |

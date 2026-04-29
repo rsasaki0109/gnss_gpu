@@ -1,0 +1,3 @@
+window_confidence_tier,window_product_use,window_count,coverage_pct,weighted_mae_pp,median_abs_error_pp,p90_abs_error_pp,max_abs_error_pp,within_10pp_pct,within_15pp_pct,actual_fix_rate_pct,adopted_pred_fix_rate_pct
+high,low_fix_screen,35,17.766,5.39,5.0,10.934,19.283,85.714,97.143,5.458,6.157
+diagnostic,route_aggregate_only,162,82.234,19.615,15.229,43.749,87.0,39.506,50.0,20.587,20.754

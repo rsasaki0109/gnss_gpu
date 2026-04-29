@@ -1,6 +1,6 @@
 # PPC demo5 FIX-Rate Predictor — Product Deliverable
 
-**Status**: internal research prototype, route-level deliverable
+**Status**: internal research prototype, route-level deliverable with conservative low-FIX window screening
 **Last updated**: 2026-04-29
 **Adopted model**: §7.16 `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
@@ -26,11 +26,17 @@ classification targets during training.
   higher demo5 FIX rate.
 - Dataset-level aggregate prediction: across a set of similar runs,
   predict the overall FIX rate within a few percentage points.
+- High-confidence 30 s low-FIX screening: windows tagged
+  `window_product_use=low_fix_screen` may be used to flag likely poor
+  FIX intervals.  Current strict nested LORO slice: 35/197 windows
+  (17.8 % coverage), weighted MAE 5.390 pp, 85.7 % within 10 pp,
+  97.1 % within 15 pp, max error 19.3 pp.
 
 ### Out-of-scope use cases
 
-- Individual 30 s window FIX-rate predictions.  Typical window weighted
-  MAE is 17 pp and tail errors reach 60+ pp on known failure cases.
+- Unrestricted individual 30 s window FIX-rate predictions.  Windows
+  tagged `window_product_use=route_aggregate_only` remain diagnostic;
+  this slice has 19.615 pp weighted MAE and tail errors up to 87 pp.
 - Real-time / online inference.  The current pipeline is an offline
   batch chain; see section 6 below.
 - Data sources different from taroz/PPC Tokyo/Nagoya.  The model was
@@ -49,6 +55,13 @@ Under product-relevant metrics:
 | window correlation | **0.551** | 0.401 |
 | overall aggregate error | **+0.26 pp** on 17.90 % dataset FIX rate | — |
 | window weighted MAE | 17.087 pp | 18.046 pp |
+
+Prediction-time window confidence split:
+
+| window product use | windows | coverage | weighted MAE | within 10 pp | within 15 pp | max error |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `low_fix_screen` | 35 | 17.8 % | **5.390 pp** | 85.7 % | 97.1 % | 19.3 pp |
+| `route_aggregate_only` | 162 | 82.2 % | 19.615 pp | 39.5 % | 50.0 % | 87.0 pp |
 
 Per-route error on the test set (see
 `route_level_fix_rate_prediction.csv`):
@@ -83,7 +96,8 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv`.
   `python3 experiments/predict.py` uses this frozen artifact by default
   to refresh `route_level_fix_rate_prediction.csv`,
-  `window_level_details.csv`, and `dashboard.html`.
+  `window_level_details.csv`, `window_confidence_summary.csv`, and
+  `dashboard.html`.
 
 ### Inputs required for full retraining
 
@@ -99,7 +113,10 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   actual vs predicted FIX rate, aggregate error, qualitative
   confidence tier.
 - `window_level_details.csv` — per-window predictions with focus-case
-  annotations, intended for diagnostics.
+  annotations plus prediction-time confidence / product-use columns.
+- `window_confidence_summary.csv` — validation summary for the window
+  confidence tiers.  Only `window_product_use=low_fix_screen` is
+  supported for individual-window product use.
 
 ### Files shipped with this deliverable
 
@@ -107,6 +124,7 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 - `internal_docs/product_deliverable/RUNBOOK.md` — operational runbook.
 - `internal_docs/product_deliverable/route_level_fix_rate_prediction.csv`
 - `internal_docs/product_deliverable/window_level_details.csv`
+- `internal_docs/product_deliverable/window_confidence_summary.csv`
 - `internal_docs/product_deliverable/dashboard.html` — self-contained
   HTML report (open in a browser) with metrics summary, per-run bar
   chart, actual-vs-predicted scatter, and focus-case detail table.
@@ -124,10 +142,12 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
     predicted FIX % annotated at each window start.
   - `summary_grid.png`: 2x3 panel overview of all 6 runs.
 - `experiments/build_product_deliverable.py` — script that produces the
-  two CSVs above from the adopted model's `window_predictions.csv`.
+  CSV outputs above from the adopted model's `window_predictions.csv`.
   Focus-case windows are detected by threshold-based classification
   (`_classify_window`), so new runs with similar failure archetypes
-  are tagged automatically without updating a hardcoded list.
+  are tagged automatically without updating a hardcoded list.  Window
+  product-use tiers are prediction-time rules based only on base/adopted
+  predictions, not actual labels.
 - `experiments/build_simulation_vs_actual_plots.py` — renders the PNG
   figures under `plots/` from the adopted predictions and the demo5
   .pos files (`experiments/results/demo5_pos/<city>_<run>/rtklib.pos`).
@@ -173,7 +193,9 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 ## 5. Known failure modes
 
 All focus-case windows are documented in `window_level_details.csv`
-under `focus_case_tag`.
+under `focus_case_tag`.  Focus-case tags are post-hoc diagnostics;
+product use for individual windows is controlled separately by
+`window_product_use`.
 
 - **Tokyo run2 w7 / w9** (`false_high`): base prediction is 63-74 %
   because simulator continuity looks clean, but demo5 refuses to FIX
