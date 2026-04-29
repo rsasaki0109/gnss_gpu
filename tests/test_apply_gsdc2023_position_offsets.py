@@ -7,6 +7,7 @@ import pytest
 from experiments.apply_gsdc2023_position_offsets import (
     apply_offsets,
     parse_phone_scale_override,
+    parse_trip_scale_override,
     scale_map_for_policy,
 )
 from experiments.smooth_gsdc2023_submission import haversine_m
@@ -35,6 +36,18 @@ def test_parse_phone_scale_override():
     for value in ["pixel6pro", "=3.0", "pixel6pro=bad", "pixel6pro=-1"]:
         with pytest.raises(argparse.ArgumentTypeError):
             parse_phone_scale_override(value)
+
+
+def test_parse_trip_scale_override():
+    assert parse_trip_scale_override("2023-05-25/test/pixel6pro=3.25") == (
+        "2023-05-25/test/pixel6pro",
+        3.25,
+    )
+    assert parse_trip_scale_override("trip/phone=0") == ("trip/phone", 0.0)
+
+    for value in ["trip/phone", "=3.0", "trip/phone=bad", "trip/phone=-1"]:
+        with pytest.raises(argparse.ArgumentTypeError):
+            parse_trip_scale_override(value)
 
 
 def test_apply_offsets_changes_only_configured_phones():
@@ -72,3 +85,47 @@ def test_apply_offsets_changes_only_configured_phones():
     assert np.all(mi8_delta > 0.1)
     assert np.allclose(pixel5_delta, 0.0)
     assert dict(zip(trip_summary["phone"], trip_summary["scale"])) == {"mi8": 2.0, "pixel5": 0.0}
+
+
+def test_apply_offsets_trip_scale_overrides_phone_scale():
+    source = pd.DataFrame(
+        {
+            "tripId": [
+                "2021-01-01-00-00-us-ca-test-a/mi8",
+                "2021-01-01-00-00-us-ca-test-a/mi8",
+                "2021-01-01-00-00-us-ca-test-b/mi8",
+                "2021-01-01-00-00-us-ca-test-b/mi8",
+            ],
+            "UnixTimeMillis": [1000, 2000, 1000, 2000],
+            "LatitudeDegrees": [37.0, 37.00001, 37.1, 37.10001],
+            "LongitudeDegrees": [-122.0, -121.99999, -122.1, -122.09999],
+        },
+    )
+
+    output, trip_summary = apply_offsets(
+        source,
+        {"mi8": 0.0},
+        {"2021-01-01-00-00-us-ca-test-a/mi8": 2.0},
+    )
+
+    trip_a = source["tripId"].str.contains("test-a").to_numpy()
+    trip_b = source["tripId"].str.contains("test-b").to_numpy()
+    trip_a_delta = haversine_m(
+        source.loc[trip_a, "LatitudeDegrees"].to_numpy(),
+        source.loc[trip_a, "LongitudeDegrees"].to_numpy(),
+        output.loc[trip_a, "LatitudeDegrees"].to_numpy(),
+        output.loc[trip_a, "LongitudeDegrees"].to_numpy(),
+    )
+    trip_b_delta = haversine_m(
+        source.loc[trip_b, "LatitudeDegrees"].to_numpy(),
+        source.loc[trip_b, "LongitudeDegrees"].to_numpy(),
+        output.loc[trip_b, "LatitudeDegrees"].to_numpy(),
+        output.loc[trip_b, "LongitudeDegrees"].to_numpy(),
+    )
+
+    assert np.all(trip_a_delta > 0.1)
+    assert np.allclose(trip_b_delta, 0.0)
+    assert dict(zip(trip_summary["tripId"], trip_summary["scale"])) == {
+        "2021-01-01-00-00-us-ca-test-a/mi8": 2.0,
+        "2021-01-01-00-00-us-ca-test-b/mi8": 0.0,
+    }
