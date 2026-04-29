@@ -215,6 +215,66 @@ def test_select_gated_chunk_source_rejects_high_baseline_raw_wls_with_weak_quali
     assert select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
 
 
+def test_select_gated_chunk_source_rejects_marginal_high_baseline_raw_wls_quality():
+    record = ChunkSelectionRecord(
+        start_epoch=200,
+        end_epoch=400,
+        auto_source="baseline",
+        candidates={
+            "baseline": _quality(521.037, 1.0, step_p95=16.057),
+            "raw_wls": _quality(
+                440.066,
+                1.838,
+                gap_p95=76.200,
+                gap_max=86.750,
+                step_p95=18.101,
+            ),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+
+
+def test_select_gated_chunk_source_rejects_high_baseline_raw_wls_with_extreme_gap_p95():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=200,
+        auto_source="raw_wls",
+        candidates={
+            "baseline": _quality(3_546_611.397, 1.0, step_p95=8_151.345),
+            "raw_wls": _quality(
+                20.644,
+                0.164,
+                gap_p95=6_635.967,
+                gap_max=30_767.303,
+                step_p95=19.204,
+            ),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+
+
+def test_select_gated_chunk_source_rejects_high_baseline_fgo_with_extreme_gap_p95():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=200,
+        auto_source="fgo_no_tdcp",
+        candidates={
+            "baseline": _quality(3_546_611.397, 1.0, step_p95=8_151.345),
+            "fgo_no_tdcp": _quality(
+                33.467,
+                0.163,
+                gap_p95=6_629.535,
+                gap_max=30_773.423,
+                step_p95=9.125,
+            ),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+
+
 def test_select_auto_chunk_source_rejects_extreme_raw_wls_mse():
     candidates = {
         "baseline": _quality(2_809_337_861.644, 1.0),
