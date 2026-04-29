@@ -21,6 +21,7 @@ import json
 import math
 import pickle
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -692,15 +693,26 @@ def prepare_raw_source_bundle(
     base_csv = prefix.with_name(prefix.name + "_base_window_predictions.csv")
 
     epoch_rows: list[dict[str, object]] = []
+    run_summaries: list[dict[str, object]] = []
     for run in runs:
         print(f"[raw] {run.city}/{run.run}: {run.run_dir}", flush=True)
-        epoch_rows.extend(
-            _epoch_rows_for_run(
-                run,
-                systems=systems,
-                max_epochs=max_epochs_per_run,
-            )
+        run_started = time.monotonic()
+        run_epoch_rows = _epoch_rows_for_run(
+            run,
+            systems=systems,
+            max_epochs=max_epochs_per_run,
         )
+        elapsed_s = time.monotonic() - run_started
+        epoch_rows.extend(run_epoch_rows)
+        run_summaries.append(
+            {
+                "city": run.city,
+                "run": run.run,
+                "epoch_count": len(run_epoch_rows),
+                "elapsed_s": round(elapsed_s, 3),
+            }
+        )
+        print(f"[raw] {run.city}/{run.run}: {len(run_epoch_rows)} epochs in {elapsed_s:.1f}s", flush=True)
     if not epoch_rows:
         _die("raw source preparation produced no epochs")
     window_rows, base_rows = build_window_rows(
@@ -708,6 +720,18 @@ def prepare_raw_source_bundle(
         model_feature_names=model_feature_names,
         window_duration_s=window_duration_s,
     )
+    run_windows: dict[tuple[str, str], int] = {}
+    for row in window_rows:
+        key = (str(row["city"]), str(row["run"]))
+        run_windows[key] = run_windows.get(key, 0) + 1
+    run_base_predictions: dict[tuple[str, str], int] = {}
+    for row in base_rows:
+        key = (str(row["city"]), str(row["run"]))
+        run_base_predictions[key] = run_base_predictions.get(key, 0) + 1
+    for summary in run_summaries:
+        key = (str(summary["city"]), str(summary["run"]))
+        summary["window_count"] = run_windows.get(key, 0)
+        summary["base_prediction_count"] = run_base_predictions.get(key, 0)
     _write_rows(epochs_csv, epoch_rows)
     _write_rows(window_csv, window_rows)
     _write_rows(base_csv, base_rows)
@@ -734,6 +758,10 @@ def prepare_raw_source_bundle(
         "raw_source_prepare": {
             "source_manifest": str(manifest_path.expanduser().resolve()),
             "model_feature_count": len(model_feature_names),
+            "epoch_count": len(epoch_rows),
+            "window_count": len(window_rows),
+            "base_prediction_count": len(base_rows),
+            "runs": run_summaries,
             "systems": list(systems),
             "window_duration_s": float(window_duration_s),
             "max_epochs_per_run": max_epochs_per_run,
