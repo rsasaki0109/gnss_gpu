@@ -413,6 +413,16 @@ def read_base_station_xyz(data_root: Path, course: str, base_name: str, *, apply
     return enu_to_ecef_relative(enu_offset, xyz)
 
 
+def rinex_header_base_xyz_or_metadata(base_obs: object, metadata_xyz: np.ndarray) -> np.ndarray:
+    """Prefer the RINEX header station coordinate when it is present."""
+
+    header = getattr(base_obs, "header", None)
+    header_xyz = np.asarray(getattr(header, "approx_position", np.zeros(3)), dtype=np.float64)
+    if header_xyz.shape == (3,) and np.isfinite(header_xyz).all() and np.linalg.norm(header_xyz) > 1.0e6:
+        return header_xyz
+    return np.asarray(metadata_xyz, dtype=np.float64)
+
+
 def moving_nanmean(values: np.ndarray, window: int) -> np.ndarray:
     arr = np.asarray(values, dtype=np.float64)
     return (
@@ -530,8 +540,11 @@ def load_base_residual_series_cached(
     data_root = Path(data_root_str)
     base_obs_path = course_base_obs_path(data_root, split, course, base_name, rinex_type)
     nav_path = course_nav_path(data_root, split, course)
-    base_xyz = read_base_station_xyz(data_root, course, base_name, apply_offset=False)
     base_obs = read_rinex_obs(base_obs_path)
+    base_xyz = rinex_header_base_xyz_or_metadata(
+        base_obs,
+        read_base_station_xyz(data_root, course, base_name, apply_offset=False),
+    )
     nav_messages = read_nav_rinex_multi(nav_path, systems=("G", "E", "J"))
     for sat_id, messages in list(nav_messages.items()):
         system = str(getattr(messages[0], "system", "")).upper() if messages else str(sat_id).upper()[:1]
