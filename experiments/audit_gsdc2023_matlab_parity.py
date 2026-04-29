@@ -69,6 +69,10 @@ def main() -> None:
     base1_nonempty = 0
     if "base_name" in audit.columns:
         base1_nonempty = int(audit["base_name"].notna().sum())
+    imu_sync_checked = int(
+        audit.get("imu_sync_checked", pd.Series(False, index=audit.index)).sum(),
+    )
+    imu_sync_skipped = int(len(audit) - imu_sync_checked)
     summary = {
         "data_root": str(data_root),
         "quick": bool(args.quick),
@@ -77,7 +81,11 @@ def main() -> None:
         "status_counts": status_counts,
         "settings_base1_nonempty_count": base1_nonempty,
         "device_imu_present": int(audit["device_imu_present"].sum()),
-        "imu_sync_ready": int(audit["imu_sync_ready"].sum()),
+        "imu_sync_checked": imu_sync_checked,
+        "imu_sync_skipped": imu_sync_skipped,
+        "imu_sync_ready": None
+        if imu_sync_checked == 0
+        else int(audit["imu_sync_ready"].sum()),
         "ref_height_present": int(audit["ref_height_present"].sum()),
         "ground_truth_present": int(audit["ground_truth_present"].sum()),
     }
