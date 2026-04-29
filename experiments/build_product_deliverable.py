@@ -8,7 +8,10 @@ window predictions and emits:
    - One row per (city, run), epoch-weighted aggregate predicted FIX rate,
      actual FIX rate, aggregate error, and qualitative confidence tier.
 2. `internal_docs/product_deliverable/window_level_details.csv`
-   - Per-window predictions with flags for known failure cases.
+   - Per-window predictions with flags for known failure cases and a
+     prediction-time confidence tier.
+3. `internal_docs/product_deliverable/window_confidence_summary.csv`
+   - Empirical validation of those window confidence tiers.
 
 Confidence tiers derive from the §7.16 LORO metrics and the presence of
 known-failure windows:
@@ -65,6 +68,10 @@ DEFAULT_THRESHOLDS = {
     "reject_pp": 15.0,                 # base - corrected >= this counts as a material reject
     "reject_base_pct": 25.0,           # minimum base for reject classification
 }
+WINDOW_CONFIDENCE_RULES = {
+    "stable_low_pred_pct": 15.0,
+    "stable_low_abs_delta_pp": 3.0,
+}
 
 
 def _classify_window(row: "pd.Series", thresholds: dict | None = None) -> tuple[str, str]:
@@ -109,6 +116,34 @@ def _confidence_tier(tags: list[str]) -> tuple[str, str]:
     return "high", "no material focus-case windows"
 
 
+def _classify_window_confidence(row: "pd.Series", rules: dict | None = None) -> tuple[str, str, str]:
+    """Return a prediction-time confidence tier for a single window.
+
+    This deliberately uses only prediction columns, not actual FIX labels
+    or post-hoc focus-case tags.  The first product-supported window use
+    is conservative low-FIX screening.
+    """
+    cfg = rules if rules is not None else WINDOW_CONFIDENCE_RULES
+    base = float(row["base_pred_fix_rate_pct"])
+    adopted = float(row["corrected_pred_fix_rate_pct"])
+    abs_delta = abs(adopted - base)
+    if adopted <= cfg["stable_low_pred_pct"] and abs_delta <= cfg["stable_low_abs_delta_pp"]:
+        return (
+            "high",
+            "low_fix_screen",
+            (
+                f"stable low-FIX prediction: adopted {adopted:.1f}% <= "
+                f"{cfg['stable_low_pred_pct']:.1f}% and |adopted-base| "
+                f"{abs_delta:.1f} pp <= {cfg['stable_low_abs_delta_pp']:.1f} pp"
+            ),
+        )
+    return (
+        "diagnostic",
+        "route_aggregate_only",
+        "window is outside the validated high-confidence low-FIX screening subset",
+    )
+
+
 def _require_prediction_columns(df: pd.DataFrame, path: Path) -> None:
     missing = sorted(REQUIRED_PREDICTION_COLUMNS - set(df.columns))
     if missing:
@@ -116,6 +151,36 @@ def _require_prediction_columns(df: pd.DataFrame, path: Path) -> None:
             f"prediction CSV is missing required columns: {', '.join(missing)}\n"
             f"path: {path}"
         )
+
+
+def _window_confidence_summary(window_df: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    total = max(len(window_df), 1)
+    for (tier, use), group in window_df.groupby(["window_confidence_tier", "window_product_use"], sort=True):
+        abs_err = group["abs_error_pp"].to_numpy(dtype=np.float64)
+        weights = group["sim_matched_epochs"].to_numpy(dtype=np.float64)
+        weights = np.where(np.isfinite(weights) & (weights > 0.0), weights, 1.0)
+        rows.append(
+            {
+                "window_confidence_tier": tier,
+                "window_product_use": use,
+                "window_count": int(len(group)),
+                "coverage_pct": round(100.0 * len(group) / total, 3),
+                "weighted_mae_pp": round(float(np.average(abs_err, weights=weights)), 3),
+                "median_abs_error_pp": round(float(np.median(abs_err)), 3),
+                "p90_abs_error_pp": round(float(np.quantile(abs_err, 0.90)), 3),
+                "max_abs_error_pp": round(float(np.max(abs_err)), 3),
+                "within_10pp_pct": round(100.0 * float(np.mean(abs_err <= 10.0)), 3),
+                "within_15pp_pct": round(100.0 * float(np.mean(abs_err <= 15.0)), 3),
+                "actual_fix_rate_pct": round(float(np.average(group["actual_fix_rate_pct"], weights=weights)), 3),
+                "adopted_pred_fix_rate_pct": round(float(np.average(group["adopted_pred_fix_rate_pct"], weights=weights)), 3),
+            }
+        )
+    order = {"high": 0, "diagnostic": 1}
+    return pd.DataFrame(rows).sort_values(
+        by=["window_confidence_tier", "window_product_use"],
+        key=lambda col: col.map(order).fillna(99) if col.name == "window_confidence_tier" else col,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -165,15 +230,23 @@ def main() -> None:
     window_rows: list[dict[str, object]] = []
     for _, row in df.sort_values(["city", "run", "window_index"]).iterrows():
         focus_tag, focus_note = _classify_window(row, thresholds)
+        window_tier, window_use, window_note = _classify_window_confidence(row)
+        pred_delta = float(row["corrected_pred_fix_rate_pct"] - row["base_pred_fix_rate_pct"])
         window_rows.append(
             {
                 "city": row["city"],
                 "run": row["run"],
                 "window_index": int(row["window_index"]),
+                "sim_matched_epochs": int(row["sim_matched_epochs"]),
                 "actual_fix_rate_pct": float(row["actual_fix_rate_pct"]),
                 "base_pred_fix_rate_pct": float(row["base_pred_fix_rate_pct"]),
                 "adopted_pred_fix_rate_pct": float(row["corrected_pred_fix_rate_pct"]),
+                "prediction_delta_pp": pred_delta,
+                "abs_prediction_delta_pp": abs(pred_delta),
                 "abs_error_pp": float(abs(row["corrected_pred_fix_rate_pct"] - row["actual_fix_rate_pct"])),
+                "window_confidence_tier": window_tier,
+                "window_product_use": window_use,
+                "window_confidence_note": window_note,
                 "focus_case_tag": focus_tag,
                 "focus_case_note": focus_note,
             }
@@ -182,6 +255,11 @@ def main() -> None:
     window_path = args.output_dir / "window_level_details.csv"
     window_df.to_csv(window_path, index=False)
     print(f"saved: {window_path} ({len(window_df)} rows)", flush=True)
+
+    summary_df = _window_confidence_summary(window_df)
+    summary_path = args.output_dir / "window_confidence_summary.csv"
+    summary_df.to_csv(summary_path, index=False)
+    print(f"saved: {summary_path} ({len(summary_df)} rows)", flush=True)
 
     tags_by_run = window_df.groupby(["city", "run"])["focus_case_tag"].apply(lambda s: [t for t in s if t]).to_dict()
 
@@ -238,6 +316,8 @@ def main() -> None:
     print(f"\nOverall actual FIX rate: {overall_actual:.3f} %", flush=True)
     print(f"Overall adopted prediction: {overall_pred:.3f} %", flush=True)
     print(f"Overall aggregate error: {overall_pred - overall_actual:+.3f} pp", flush=True)
+    print("\nWindow confidence summary:", flush=True)
+    print(summary_df.to_string(index=False), flush=True)
 
     # Regenerate the dashboard HTML unless the operator opted out.
     if not args.skip_dashboard:
