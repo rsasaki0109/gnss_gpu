@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 import tempfile
 from contextlib import redirect_stderr
+from csv import DictReader
 from io import StringIO
 from pathlib import Path
 
@@ -26,7 +27,16 @@ from build_product_deliverable import (
     _confidence_tier,
     _require_prediction_columns,
 )
-from predict import DEFAULT_PREDICTION_CSV, RESULTS_DIR, _base_prediction_path, _read_columns, _require
+from analyze_ppc_validation_hold_surrogate_windows import _window_rows as _validationhold_window_rows
+from predict import (
+    DEFAULT_PREDICTION_CSV,
+    RESULTS_DIR,
+    _base_prediction_path,
+    _merge_base_prediction_column,
+    _prefix_output_path,
+    _read_columns,
+    _require,
+)
 from product_inference_model import (
     _base_from_frame_or_reference,
     _prediction_rows as _product_prediction_rows,
@@ -187,6 +197,88 @@ def test_base_prediction_path() -> None:
         Path("tmp/foo.csv"),
         _reference_prediction_path("tmp/foo.csv"),
     )
+    check(
+        "bare prepare prefix resolves under results",
+        RESULTS_DIR / "foo_window_predictions.csv",
+        _prefix_output_path("foo", "_window_predictions.csv"),
+    )
+    check(
+        "absolute prepare prefix resolves next to prefix",
+        Path("/tmp/foo_window_predictions.csv"),
+        _prefix_output_path("/tmp/foo", "_window_predictions.csv"),
+    )
+
+
+def test_merge_base_prediction_column() -> None:
+    print("test_merge_base_prediction_column")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        window = tmpdir / "window.csv"
+        base = tmpdir / "base.csv"
+        out = tmpdir / "out.csv"
+        window.write_text(
+            "city,run,window_index,window_start_tow,window_end_tow,sim_matched_epochs,feature\n"
+            "tokyo,run1,0,1,2,2,7\n",
+            encoding="utf-8",
+        )
+        base.write_text(
+            "city,run,window_index,corrected_pred_fix_rate_pct\n"
+            "tokyo,run1,0,12.5\n",
+            encoding="utf-8",
+        )
+        _merge_base_prediction_column(window_csv=window, base_prediction_csv=base, output_csv=out)
+        rows = list(DictReader(out.open(newline="", encoding="utf-8")))
+        check("base merge rows", 1, len(rows))
+        check("base merge value", "12.5", rows[0]["base_pred_fix_rate_pct"])
+
+
+def test_validationhold_window_rows_label_free() -> None:
+    print("test_validationhold_window_rows_label_free")
+    windows = pd.DataFrame(
+        [
+            {
+                "city": "tokyo",
+                "run": "run1",
+                "window_index": 0,
+                "window_start_tow": 10.0,
+                "window_end_tow": 11.0,
+                "base_pred_fix_rate_pct": 12.0,
+            }
+        ]
+    )
+    epochs = pd.DataFrame(
+        [
+            {
+                "city": "tokyo",
+                "run": "run1",
+                "gps_tow": 10.5,
+                "validation_pass": 1.0,
+                "validation_soft_pass": 1.0,
+                "validation_hard_block": 0.0,
+                "validation_severe_block": 0.0,
+                "validation_reject_block": 0.0,
+                "validation_block_spike": 0.0,
+                "validation_block_score": 0.0,
+                "validation_block_ewma_30s": 0.0,
+                "validation_block_cooldown_s": 0.0,
+                "validation_reject_recent_s": 0.0,
+                "validation_quality_score": 7.0,
+                "hold_state": 1.0,
+                "hold_ready": 1.0,
+                "hold_strict_ready": 1.0,
+                "hold_carry_score": 3.0,
+                "hold_age_s": 20.0,
+                "hold_since_reset_s": 20.0,
+                "clean_streak_s": 20.0,
+                "strict_clean_streak_s": 20.0,
+            }
+        ]
+    )
+    rows = _validationhold_window_rows(windows, epochs, "base_pred_fix_rate_pct")
+    check("label-free validationhold rows", 1, len(rows))
+    check("label-free validationhold omits actual", False, "actual_fix_rate_pct" in rows[0])
+    check("label-free validationhold omits demo5", False, "demo5_fix_rate_pct" in rows[0])
+    check("label-free validationhold has lift flag", True, "validationhold_low_pred_lift_signal" in rows[0])
 
 
 def test_product_inference_label_free_output() -> None:
@@ -232,6 +324,8 @@ def main() -> None:
     test_require()
     test_prediction_contract()
     test_base_prediction_path()
+    test_merge_base_prediction_column()
+    test_validationhold_window_rows_label_free()
     test_product_inference_label_free_output()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILURE(S):")
