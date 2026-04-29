@@ -72,8 +72,8 @@ the Furukawa paper's best result of 83.9 % beats its own dataset
 baseline more convincingly.  This is an honest statement about our
 current model's discriminative power at the epoch level: aggregated
 accuracy against a 0/1 label does not highlight the model's real
-value, which is in **rate** prediction (§7.16 run MAE 3.2 pp,
-correlation 0.55 — see `README.md`).
+value, which is in **rate** prediction (adopted isotonic model run MAE
+2.8 pp, correlation 0.52 — see `README.md`).
 
 Per-run matching rates at the 50 % threshold are saved in
 `paper_style_per_run_accuracy.csv`.  The full threshold sweep is in
@@ -124,7 +124,7 @@ failure case (w23-w27 under-predicted despite demo5 holding FIX).
 | simulator evidence | 3D building model + ray-tracing + diffraction | `gnss_gpu` LoS/ADOP continuity + RINEX phase aggregates + validationhold surrogate |
 | dataset | 1 course, 30 min, Tokyo Hibiya | 6 courses, ~3 hours, Tokyo (3) + Nagoya (3) |
 | best matching rate (pooled) | 83.9 % | 82.5 % (window §7.16) |
-| headline metric in the deliverable | (not explicit in abstract) | run MAE 3.202 pp, window correlation 0.551 |
+| headline metric in the deliverable | (not explicit in abstract) | run MAE 2.764 pp, window correlation 0.518 |
 
 The methods are not directly comparable because Furukawa uses a
 3D-model-based ray-tracing simulator while we use feature-based

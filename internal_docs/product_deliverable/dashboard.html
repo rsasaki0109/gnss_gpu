@@ -17,16 +17,16 @@ p { color: #555; line-height: 1.5; }
 .metadata { color: #7f8c8d; font-size: 12px; margin-bottom: 20px; }
 </style></head><body>
 <h1>PPC demo5 FIX-Rate Predictor — Dashboard</h1>
-<p class='metadata'>Adopted model: §7.16 <code>current_tight_hold + carry + α=0.75</code> · strict nested LORO on 6 runs / 197 windows</p>
+<p class='metadata'>Adopted model: <code>current_tight_hold + carry + α=0.75 + isotonic</code> · strict nested LORO on 6 runs / 197 windows</p>
 <div class='summary'>
-<div class='cell'><div class='label'>run MAE</div><div class='value'>3.20 pp</div></div>
-<div class='cell'><div class='label'>window MAE</div><div class='value'>16.79 pp</div></div>
+<div class='cell'><div class='label'>run MAE</div><div class='value'>2.76 pp</div></div>
+<div class='cell'><div class='label'>window MAE</div><div class='value'>16.13 pp</div></div>
 <div class='cell'><div class='label'>aggregate actual</div><div class='value'>17.42 %</div></div>
-<div class='cell'><div class='label'>aggregate predicted</div><div class='value'>17.79 %</div></div>
+<div class='cell'><div class='label'>aggregate predicted</div><div class='value'>17.49 %</div></div>
 </div>
 <p>
-Confidence tiers: high=1 · medium=1 · low=4  &nbsp;|&nbsp;  
-Focus-case windows: 29 / 197
+Confidence tiers: high=1 · medium=0 · low=5 &nbsp;|&nbsp;
+Focus-case windows: 27 / 197
 </p>
 <h2>Route-level predictions</h2>
 <table><thead><tr>
@@ -42,28 +42,28 @@ Focus-case windows: 29 / 197
 <td>nagoya</td>
 <td>run1</td>
 <td>11.51 %</td>
-<td>14.55 %</td>
-<td>3.04 pp</td>
-<td><span class="tier" style="background:#f39c12">medium</span></td>
-<td>3</td>
-<td>run contains hidden-high windows (actual high, pred under-lifted)</td>
+<td>13.45 %</td>
+<td>1.94 pp</td>
+<td><span class="tier" style="background:#e74c3c">low</span></td>
+<td>5</td>
+<td>run contains at least one false-high window (pred high, actual low); individual window trust low</td>
 </tr>
 <tr>
 <td>nagoya</td>
 <td>run2</td>
 <td>16.17 %</td>
-<td>20.98 %</td>
-<td>4.80 pp</td>
+<td>21.45 %</td>
+<td>5.28 pp</td>
 <td><span class="tier" style="background:#e74c3c">low</span></td>
-<td>4</td>
+<td>6</td>
 <td>run contains at least one false-high window (pred high, actual low); individual window trust low</td>
 </tr>
 <tr>
 <td>nagoya</td>
 <td>run3</td>
 <td>7.87 %</td>
-<td>6.83 %</td>
-<td>1.04 pp</td>
+<td>8.44 %</td>
+<td>0.57 pp</td>
 <td><span class="tier" style="background:#2ecc71">high</span></td>
 <td>0</td>
 <td>no material focus-case windows</td>
@@ -72,30 +72,30 @@ Focus-case windows: 29 / 197
 <td>tokyo</td>
 <td>run1</td>
 <td>10.92 %</td>
-<td>12.07 %</td>
-<td>1.15 pp</td>
+<td>11.45 %</td>
+<td>0.53 pp</td>
 <td><span class="tier" style="background:#e74c3c">low</span></td>
-<td>4</td>
+<td>3</td>
 <td>run contains at least one false-high window (pred high, actual low); individual window trust low</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run2</td>
 <td>29.02 %</td>
-<td>20.77 %</td>
-<td>8.25 pp</td>
+<td>20.92 %</td>
+<td>8.09 pp</td>
 <td><span class="tier" style="background:#e74c3c">low</span></td>
-<td>8</td>
+<td>7</td>
 <td>run contains at least one false-high window (pred high, actual low); individual window trust low</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run3</td>
 <td>24.01 %</td>
-<td>24.95 %</td>
-<td>0.94 pp</td>
+<td>23.85 %</td>
+<td>0.17 pp</td>
 <td><span class="tier" style="background:#e74c3c">low</span></td>
-<td>10</td>
+<td>6</td>
 <td>run contains at least one false-high window (pred high, actual low); individual window trust low</td>
 </tr>
 </tbody></table>
@@ -113,29 +113,29 @@ Focus-case windows: 29 / 197
 <text x="82" y="61.1" font-size="11" text-anchor="end" fill="#555">30</text>
 <text x="20" y="125.0" font-size="12" fill="#555" transform="rotate(-90 20 125.0)" text-anchor="middle">FIX rate (%)</text>
 <rect x="95.0" y="157.5" width="45.8" height="62.5" fill="#34495e" />
-<rect x="142.8" y="141.0" width="45.8" height="79.0" fill="#f39c12" />
+<rect x="142.8" y="147.0" width="45.8" height="73.0" fill="#e74c3c" />
 <text x="140.8" y="235" font-size="11" text-anchor="middle" fill="#333">nagoya run1</text>
-<text x="140.8" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=3.0 pp</text>
+<text x="140.8" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=1.9 pp</text>
 <rect x="196.7" y="132.2" width="45.8" height="87.8" fill="#34495e" />
-<rect x="244.5" y="106.1" width="45.8" height="113.9" fill="#e74c3c" />
+<rect x="244.5" y="103.5" width="45.8" height="116.5" fill="#e74c3c" />
 <text x="242.5" y="235" font-size="11" text-anchor="middle" fill="#333">nagoya run2</text>
-<text x="242.5" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=4.8 pp</text>
+<text x="242.5" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=5.3 pp</text>
 <rect x="298.3" y="177.3" width="45.8" height="42.7" fill="#34495e" />
-<rect x="346.2" y="182.9" width="45.8" height="37.1" fill="#2ecc71" />
+<rect x="346.2" y="174.2" width="45.8" height="45.8" fill="#2ecc71" />
 <text x="344.2" y="235" font-size="11" text-anchor="middle" fill="#333">nagoya run3</text>
-<text x="344.2" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=1.0 pp</text>
+<text x="344.2" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=0.6 pp</text>
 <rect x="400.0" y="160.7" width="45.8" height="59.3" fill="#34495e" />
-<rect x="447.8" y="154.5" width="45.8" height="65.5" fill="#e74c3c" />
+<rect x="447.8" y="157.8" width="45.8" height="62.2" fill="#e74c3c" />
 <text x="445.8" y="235" font-size="11" text-anchor="middle" fill="#333">tokyo run1</text>
-<text x="445.8" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=1.2 pp</text>
+<text x="445.8" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=0.5 pp</text>
 <rect x="501.7" y="62.5" width="45.8" height="157.5" fill="#34495e" />
-<rect x="549.5" y="107.2" width="45.8" height="112.8" fill="#e74c3c" />
+<rect x="549.5" y="106.4" width="45.8" height="113.6" fill="#e74c3c" />
 <text x="547.5" y="235" font-size="11" text-anchor="middle" fill="#333">tokyo run2</text>
-<text x="547.5" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=8.2 pp</text>
+<text x="547.5" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=8.1 pp</text>
 <rect x="603.3" y="89.7" width="45.8" height="130.3" fill="#34495e" />
-<rect x="651.2" y="84.5" width="45.8" height="135.5" fill="#e74c3c" />
+<rect x="651.2" y="90.6" width="45.8" height="129.4" fill="#e74c3c" />
 <text x="649.2" y="235" font-size="11" text-anchor="middle" fill="#333">tokyo run3</text>
-<text x="649.2" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=0.9 pp</text>
+<text x="649.2" y="252" font-size="10" text-anchor="middle" fill="#777">|err|=0.2 pp</text>
 <rect x="90" y="8" width="10" height="10" fill="#34495e" />
 <text x="104" y="17" font-size="11" fill="#333">actual</text>
 <rect x="160" y="8" width="10" height="10" fill="#2ecc71" />
@@ -177,203 +177,203 @@ Focus-case windows: 29 / 197
 <text x="55" y="64.0" font-size="10" text-anchor="end" fill="#555">100</text>
 <text x="360.0" y="505" font-size="12" text-anchor="middle" fill="#333">actual FIX rate (%)</text>
 <text x="20" y="260.0" font-size="12" fill="#333" transform="rotate(-90 20 260.0)" text-anchor="middle">adopted prediction (%)</text>
-<circle cx="60.0" cy="401.5" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="540.0" cy="305.3" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="660.0" cy="312.3" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="522.6" cy="374.4" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="60.0" cy="421.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="80.0" cy="422.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="62.0" cy="407.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="335.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="134.0" cy="440.5" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="66.7" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="80.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="85.6" cy="453.1" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="73.4" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="92.0" cy="445.1" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="98.6" cy="400.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="405.1" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="365.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="430.5" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="92.0" cy="362.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="94.0" cy="405.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="378.6" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="321.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="393.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="409.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="548.0" cy="379.8" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="660.0" cy="192.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="572.0" cy="233.1" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="446.0" cy="210.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="105.1" cy="416.1" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="443.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="148.0" cy="445.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="114.5" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="162.0" cy="424.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="131.4" cy="402.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="98.5" cy="419.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="106.0" cy="422.1" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="367.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="88.0" cy="331.5" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="220.0" cy="327.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="405.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="425.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="392.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="104.1" cy="436.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="126.4" cy="443.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="87.2" cy="433.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="66.0" cy="385.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="184.0" cy="392.1" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="364.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="76.2" cy="335.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="158.0" cy="385.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="424.6" r="5" fill="#27ae60" opacity="0.75" />
-<circle cx="60.0" cy="304.7" r="5" fill="#c0392b" opacity="0.75" />
-<circle cx="60.0" cy="348.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="290.7" r="5" fill="#c0392b" opacity="0.75" />
-<circle cx="60.0" cy="413.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="387.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="62.0" cy="394.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="384.1" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="74.3" cy="414.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="96.1" cy="422.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="105.1" cy="450.6" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="76.0" cy="448.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="346.0" cy="413.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="118.0" cy="413.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="64.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="141.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="102.6" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="182.5" cy="455.5" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="107.1" cy="453.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="90.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="68.1" cy="416.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="143.2" cy="442.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="520.0" cy="322.7" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="200.0" cy="337.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="62.0" cy="312.1" r="5" fill="#c0392b" opacity="0.75" />
-<circle cx="90.0" cy="402.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="84.0" cy="419.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="100.0" cy="395.5" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="314.0" cy="420.6" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="520.0" cy="389.7" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="66.0" cy="349.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="73.0" cy="378.2" r="5" fill="#d35400" opacity="0.75" />
-<circle cx="150.7" cy="419.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="377.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="352.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="244.0" cy="412.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="162.1" cy="404.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="76.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="121.4" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="278.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="408.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="432.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="82.5" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="93.5" cy="392.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="332.5" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="74.0" cy="422.1" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="76.0" cy="405.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="108.0" cy="393.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="134.0" cy="426.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="96.7" cy="404.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="104.0" cy="413.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="88.0" cy="418.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="67.2" cy="393.1" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="562.0" cy="409.3" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="66.0" cy="379.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="326.0" cy="345.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="82.0" cy="341.9" r="5" fill="#d35400" opacity="0.75" />
-<circle cx="72.5" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="98.0" cy="446.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="70.0" cy="383.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="302.0" r="5" fill="#c0392b" opacity="0.75" />
-<circle cx="60.0" cy="357.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="233.2" r="5" fill="#c0392b" opacity="0.75" />
-<circle cx="60.0" cy="445.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="72.1" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="154.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="376.0" cy="423.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="584.0" cy="170.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="415.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="457.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="62.0" cy="422.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="374.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="136.3" cy="323.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="110.0" cy="457.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="156.0" cy="412.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="660.0" cy="331.8" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="660.0" cy="332.1" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="660.0" cy="267.6" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="640.0" cy="258.6" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="512.0" cy="303.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="262.0" cy="436.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="146.0" cy="460.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="447.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="560.0" cy="240.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="176.0" cy="270.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="371.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="391.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="85.6" cy="397.5" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="68.0" cy="440.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="108.0" cy="374.6" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="582.0" cy="460.0" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="568.0" cy="386.2" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="60.0" cy="421.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="98.7" cy="377.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="86.0" cy="347.3" r="5" fill="#d35400" opacity="0.75" />
-<circle cx="660.0" cy="235.1" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="316.0" cy="280.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="70.0" cy="410.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="393.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="64.0" cy="418.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="384.1" r="5" fill="#d35400" opacity="0.75" />
-<circle cx="358.0" cy="262.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="242.0" cy="325.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="94.0" cy="430.8" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="74.8" cy="426.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="62.0" cy="368.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="392.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="320.0" cy="370.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="172.4" cy="379.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="72.0" cy="351.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="112.0" cy="391.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="68.0" cy="266.0" r="5" fill="#c0392b" opacity="0.75" />
-<circle cx="282.0" cy="362.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="395.6" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="441.6" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="129.5" cy="428.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="308.0" cy="371.7" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="660.0" cy="303.8" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="660.0" cy="298.4" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="488.0" cy="182.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="70.0" cy="319.3" r="5" fill="#c0392b" opacity="0.75" />
-<circle cx="80.0" cy="365.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="84.0" cy="424.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="122.0" cy="418.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="88.0" cy="373.3" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="117.5" cy="418.6" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="66.1" cy="424.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="92.0" cy="363.4" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="184.0" cy="353.9" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="318.0" cy="262.5" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="656.0" cy="268.4" r="5" fill="#8e44ad" opacity="0.75" />
-<circle cx="325.7" cy="327.2" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="68.0" cy="369.0" r="2.5" fill="#95a5a6" opacity="0.75" />
-<circle cx="60.0" cy="345.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="416.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="540.0" cy="315.8" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="660.0" cy="315.8" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="522.6" cy="405.6" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="60.0" cy="420.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="80.0" cy="420.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="62.0" cy="416.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="400.7" r="5" fill="#27ae60" opacity="0.75" />
+<circle cx="134.0" cy="428.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="66.7" cy="428.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="80.0" cy="428.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="85.6" cy="428.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="73.4" cy="428.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="92.0" cy="428.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="428.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="98.6" cy="416.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="416.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="405.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="428.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="92.0" cy="405.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="94.0" cy="416.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="405.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="315.8" r="5" fill="#c0392b" opacity="0.75" />
+<circle cx="60.0" cy="416.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="416.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="428.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="548.0" cy="406.5" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="660.0" cy="175.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="572.0" cy="180.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="446.0" cy="177.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="105.1" cy="422.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="431.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="148.0" cy="431.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="114.5" cy="426.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="162.0" cy="426.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="131.4" cy="422.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="98.5" cy="422.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="106.0" cy="422.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="406.5" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="88.0" cy="277.2" r="5" fill="#c0392b" opacity="0.75" />
+<circle cx="220.0" cy="277.2" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="422.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="426.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="422.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="104.1" cy="426.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="126.4" cy="431.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="87.2" cy="426.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="66.0" cy="406.5" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="184.0" cy="422.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="406.5" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="76.2" cy="402.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="158.0" cy="406.5" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="431.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="425.5" r="5" fill="#27ae60" opacity="0.75" />
+<circle cx="60.0" cy="223.1" r="5" fill="#c0392b" opacity="0.75" />
+<circle cx="60.0" cy="406.5" r="5" fill="#27ae60" opacity="0.75" />
+<circle cx="60.0" cy="223.1" r="5" fill="#c0392b" opacity="0.75" />
+<circle cx="60.0" cy="422.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="402.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="62.0" cy="424.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="402.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="74.3" cy="424.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="96.1" cy="424.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="105.1" cy="432.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="76.0" cy="432.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="346.0" cy="424.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="118.0" cy="424.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="64.0" cy="432.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="141.0" cy="432.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="432.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="102.6" cy="432.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="182.5" cy="432.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="107.1" cy="432.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="90.0" cy="432.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="68.1" cy="424.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="143.2" cy="432.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="520.0" cy="318.1" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="200.0" cy="405.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="62.0" cy="253.1" r="5" fill="#c0392b" opacity="0.75" />
+<circle cx="90.0" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="84.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="100.0" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="314.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="520.0" cy="424.1" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="66.0" cy="405.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="73.0" cy="405.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="150.7" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="405.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="405.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="244.0" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="162.1" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="76.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="121.4" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="278.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="82.5" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="93.5" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="326.5" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="74.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="76.0" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="108.0" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="134.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="96.7" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="104.0" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="88.0" cy="429.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="67.2" cy="424.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="562.0" cy="431.3" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="66.0" cy="403.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="326.0" cy="403.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="82.0" cy="403.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="72.5" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="98.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="70.0" cy="403.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="257.6" r="5" fill="#c0392b" opacity="0.75" />
+<circle cx="60.0" cy="403.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="127.0" r="5" fill="#c0392b" opacity="0.75" />
+<circle cx="60.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="72.1" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="154.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="376.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="584.0" cy="117.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="431.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="62.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="403.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="136.3" cy="338.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="110.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="156.0" cy="431.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="660.0" cy="403.1" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="660.0" cy="403.1" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="660.0" cy="257.6" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="640.0" cy="234.6" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="512.0" cy="257.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="262.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="146.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="433.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="560.0" cy="197.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="176.0" cy="211.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="412.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="85.6" cy="416.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="68.0" cy="424.2" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="108.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="582.0" cy="442.0" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="568.0" cy="411.4" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="60.0" cy="419.5" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="98.7" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="86.0" cy="411.1" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="660.0" cy="197.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="316.0" cy="253.9" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="70.0" cy="416.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="416.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="64.0" cy="419.5" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="358.0" cy="197.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="242.0" cy="295.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="94.0" cy="424.2" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="74.8" cy="424.2" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="62.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="414.2" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="320.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="172.4" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="72.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="112.0" cy="412.7" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="68.0" cy="197.8" r="5" fill="#c0392b" opacity="0.75" />
+<circle cx="282.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="416.6" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="424.2" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="129.5" cy="424.2" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="308.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="660.0" cy="295.4" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="660.0" cy="295.4" r="5" fill="#8e44ad" opacity="0.75" />
+<circle cx="488.0" cy="85.3" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="70.0" cy="295.4" r="5" fill="#c0392b" opacity="0.75" />
+<circle cx="80.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="84.0" cy="424.2" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="122.0" cy="419.5" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="88.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="117.5" cy="419.5" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="66.1" cy="424.2" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="92.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="184.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="318.0" cy="197.8" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="656.0" cy="201.0" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="325.7" cy="295.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="68.0" cy="411.4" r="2.5" fill="#95a5a6" opacity="0.75" />
+<circle cx="60.0" cy="410.7" r="2.5" fill="#95a5a6" opacity="0.75" />
 <circle cx="60" cy="18" r="4" fill="#95a5a6" />
 <text x="68" y="22" font-size="10" fill="#333">baseline window</text>
 <circle cx="175" cy="18" r="4" fill="#c0392b" />
@@ -402,290 +402,270 @@ Focus-case windows: 29 / 197
 <td>run1</td>
 <td>1</td>
 <td>80.00 %</td>
-<td>38.68 %</td>
-<td>41.32 pp</td>
+<td>36.04 %</td>
+<td>43.96 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 80.0% but corrected only 38.7%; under-predicted by 41.3 pp</td>
+<td>actual 80.0% but corrected only 36.0%; under-predicted by 44.0 pp</td>
 </tr>
 <tr>
 <td>nagoya</td>
 <td>run1</td>
 <td>2</td>
 <td>100.00 %</td>
-<td>36.91 %</td>
-<td>63.09 pp</td>
+<td>36.04 %</td>
+<td>63.96 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 100.0% but corrected only 36.9%; under-predicted by 63.1 pp</td>
+<td>actual 100.0% but corrected only 36.0%; under-predicted by 64.0 pp</td>
 </tr>
 <tr>
 <td>nagoya</td>
 <td>run1</td>
 <td>3</td>
 <td>77.10 %</td>
-<td>21.41 %</td>
-<td>55.70 pp</td>
+<td>13.60 %</td>
+<td>63.50 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 77.1% but corrected only 21.4%; under-predicted by 55.7 pp</td>
+<td>actual 77.1% but corrected only 13.6%; under-predicted by 63.5 pp</td>
+</tr>
+<tr>
+<td>nagoya</td>
+<td>run1</td>
+<td>7</td>
+<td>0.00 %</td>
+<td>14.83 %</td>
+<td>14.83 pp</td>
+<td><span class="tier" style="background:#27ae60">false_lift_resolved</span></td>
+<td>successfully rejected by 18.9 pp against actual 0.0% (base was 33.7%)</td>
+</tr>
+<tr>
+<td>nagoya</td>
+<td>run1</td>
+<td>22</td>
+<td>0.00 %</td>
+<td>36.04 %</td>
+<td>36.04 pp</td>
+<td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td>corrected prediction 36.0% against actual 0.0%; deployable features misread</td>
 </tr>
 <tr>
 <td>nagoya</td>
 <td>run2</td>
 <td>0</td>
 <td>81.33 %</td>
-<td>20.05 %</td>
-<td>61.28 pp</td>
+<td>13.37 %</td>
+<td>67.96 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 81.3% but corrected only 20.1%; under-predicted by 61.3 pp</td>
+<td>actual 81.3% but corrected only 13.4%; under-predicted by 68.0 pp</td>
+</tr>
+<tr>
+<td>nagoya</td>
+<td>run2</td>
+<td>13</td>
+<td>4.67 %</td>
+<td>45.69 %</td>
+<td>41.02 pp</td>
+<td><span class="tier" style="background:#c0392b">false_high</span></td>
+<td>corrected prediction 45.7% against actual 4.7%; deployable features misread</td>
 </tr>
 <tr>
 <td>nagoya</td>
 <td>run2</td>
 <td>27</td>
 <td>0.00 %</td>
-<td>8.86 %</td>
-<td>8.86 pp</td>
+<td>8.62 %</td>
+<td>8.62 pp</td>
 <td><span class="tier" style="background:#27ae60">false_lift_resolved</span></td>
-<td>successfully rejected by 18.4 pp against actual 0.0% (base was 27.3%)</td>
+<td>successfully rejected by 18.6 pp against actual 0.0% (base was 27.3%)</td>
 </tr>
 <tr>
 <td>nagoya</td>
 <td>run2</td>
 <td>28</td>
 <td>0.00 %</td>
-<td>38.83 %</td>
-<td>38.83 pp</td>
+<td>59.22 %</td>
+<td>59.22 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
-<td>corrected prediction 38.8% against actual 0.0%; deployable features misread</td>
+<td>corrected prediction 59.2% against actual 0.0%; deployable features misread</td>
+</tr>
+<tr>
+<td>nagoya</td>
+<td>run2</td>
+<td>29</td>
+<td>0.00 %</td>
+<td>13.37 %</td>
+<td>13.37 pp</td>
+<td><span class="tier" style="background:#27ae60">false_lift_resolved</span></td>
+<td>successfully rejected by 18.7 pp against actual 0.0% (base was 32.1%)</td>
 </tr>
 <tr>
 <td>nagoya</td>
 <td>run2</td>
 <td>30</td>
 <td>0.00 %</td>
-<td>42.33 %</td>
-<td>42.33 pp</td>
+<td>59.22 %</td>
+<td>59.22 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
-<td>corrected prediction 42.3% against actual 0.0%; deployable features misread</td>
+<td>corrected prediction 59.2% against actual 0.0%; deployable features misread</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run1</td>
 <td>0</td>
 <td>76.67 %</td>
-<td>34.32 %</td>
-<td>42.34 pp</td>
+<td>35.49 %</td>
+<td>41.18 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 76.7% but corrected only 34.3%; under-predicted by 42.3 pp</td>
+<td>actual 76.7% but corrected only 35.5%; under-predicted by 41.2 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run1</td>
 <td>2</td>
 <td>0.33 %</td>
-<td>36.97 %</td>
-<td>36.63 pp</td>
+<td>51.73 %</td>
+<td>51.40 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
-<td>corrected prediction 37.0% against actual 0.3%; deployable features misread</td>
+<td>corrected prediction 51.7% against actual 0.3%; deployable features misread</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run1</td>
 <td>7</td>
 <td>76.67 %</td>
-<td>17.57 %</td>
-<td>59.10 pp</td>
+<td>8.98 %</td>
+<td>67.69 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 76.7% but corrected only 17.6%; under-predicted by 59.1 pp</td>
-</tr>
-<tr>
-<td>tokyo</td>
-<td>run1</td>
-<td>9</td>
-<td>2.16 %</td>
-<td>20.45 %</td>
-<td>18.29 pp</td>
-<td><span class="tier" style="background:#d35400">false_lift</span></td>
-<td>lifted by +17.5 pp against actual 2.2%; corrected 20.5%</td>
+<td>actual 76.7% but corrected only 9.0%; under-predicted by 67.7 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run2</td>
 <td>0</td>
 <td>83.67 %</td>
-<td>12.68 %</td>
-<td>70.99 pp</td>
+<td>7.18 %</td>
+<td>76.48 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 83.7% but corrected only 12.7%; under-predicted by 71.0 pp</td>
-</tr>
-<tr>
-<td>tokyo</td>
-<td>run2</td>
-<td>3</td>
-<td>3.67 %</td>
-<td>29.51 %</td>
-<td>25.85 pp</td>
-<td><span class="tier" style="background:#d35400">false_lift</span></td>
-<td>lifted by +17.1 pp against actual 3.7%; corrected 29.5%</td>
+<td>actual 83.7% but corrected only 7.2%; under-predicted by 76.5 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run2</td>
 <td>7</td>
 <td>0.00 %</td>
-<td>39.51 %</td>
-<td>39.51 pp</td>
+<td>50.59 %</td>
+<td>50.59 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
-<td>corrected prediction 39.5% against actual 0.0%; deployable features misread</td>
+<td>corrected prediction 50.6% against actual 0.0%; deployable features misread</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run2</td>
 <td>9</td>
 <td>0.00 %</td>
-<td>56.71 %</td>
-<td>56.71 pp</td>
+<td>83.25 %</td>
+<td>83.25 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
-<td>corrected prediction 56.7% against actual 0.0%; deployable features misread</td>
+<td>corrected prediction 83.2% against actual 0.0%; deployable features misread</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run2</td>
 <td>23</td>
 <td>100.00 %</td>
-<td>32.05 %</td>
-<td>67.95 pp</td>
+<td>14.23 %</td>
+<td>85.77 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 100.0% but corrected only 32.0%; under-predicted by 68.0 pp</td>
+<td>actual 100.0% but corrected only 14.2%; under-predicted by 85.8 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run2</td>
 <td>24</td>
 <td>100.00 %</td>
-<td>31.97 %</td>
-<td>68.03 pp</td>
+<td>14.23 %</td>
+<td>85.77 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 100.0% but corrected only 32.0%; under-predicted by 68.0 pp</td>
+<td>actual 100.0% but corrected only 14.2%; under-predicted by 85.8 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run2</td>
 <td>25</td>
 <td>100.00 %</td>
-<td>48.10 %</td>
-<td>51.90 pp</td>
+<td>50.59 %</td>
+<td>49.41 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 100.0% but corrected only 48.1%; under-predicted by 51.9 pp</td>
+<td>actual 100.0% but corrected only 50.6%; under-predicted by 49.4 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run2</td>
 <td>26</td>
 <td>96.67 %</td>
-<td>50.34 %</td>
-<td>46.33 pp</td>
+<td>56.36 %</td>
+<td>40.31 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 96.7% but corrected only 50.3%; under-predicted by 46.3 pp</td>
+<td>actual 96.7% but corrected only 56.4%; under-predicted by 40.3 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run3</td>
 <td>7</td>
 <td>87.00 %</td>
-<td>0.00 %</td>
-<td>87.00 pp</td>
+<td>4.51 %</td>
+<td>82.49 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 87.0% but corrected only 0.0%; under-predicted by 87.0 pp</td>
+<td>actual 87.0% but corrected only 4.5%; under-predicted by 82.5 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run3</td>
 <td>8</td>
 <td>84.67 %</td>
-<td>18.44 %</td>
-<td>66.22 pp</td>
+<td>12.14 %</td>
+<td>72.53 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 84.7% but corrected only 18.4%; under-predicted by 66.2 pp</td>
-</tr>
-<tr>
-<td>tokyo</td>
-<td>run3</td>
-<td>11</td>
-<td>4.33 %</td>
-<td>28.18 %</td>
-<td>23.85 pp</td>
-<td><span class="tier" style="background:#d35400">false_lift</span></td>
-<td>lifted by +16.1 pp against actual 4.3%; corrected 28.2%</td>
-</tr>
-<tr>
-<td>tokyo</td>
-<td>run3</td>
-<td>12</td>
-<td>100.00 %</td>
-<td>56.24 %</td>
-<td>43.76 pp</td>
-<td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 100.0% but corrected only 56.2%; under-predicted by 43.8 pp</td>
-</tr>
-<tr>
-<td>tokyo</td>
-<td>run3</td>
-<td>17</td>
-<td>0.00 %</td>
-<td>18.99 %</td>
-<td>18.99 pp</td>
-<td><span class="tier" style="background:#d35400">false_lift</span></td>
-<td>lifted by +19.0 pp against actual 0.0%; corrected 19.0%</td>
+<td>actual 84.7% but corrected only 12.1%; under-predicted by 72.5 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run3</td>
 <td>28</td>
 <td>1.33 %</td>
-<td>48.49 %</td>
-<td>47.16 pp</td>
+<td>65.56 %</td>
+<td>64.22 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
-<td>corrected prediction 48.5% against actual 1.3%; deployable features misread</td>
+<td>corrected prediction 65.6% against actual 1.3%; deployable features misread</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run3</td>
 <td>34</td>
 <td>100.00 %</td>
-<td>39.06 %</td>
-<td>60.94 pp</td>
+<td>41.15 %</td>
+<td>58.85 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 100.0% but corrected only 39.1%; under-predicted by 60.9 pp</td>
+<td>actual 100.0% but corrected only 41.1%; under-predicted by 58.9 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run3</td>
 <td>35</td>
 <td>100.00 %</td>
-<td>40.40 %</td>
-<td>59.60 pp</td>
+<td>41.15 %</td>
+<td>58.85 pp</td>
 <td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 100.0% but corrected only 40.4%; under-predicted by 59.6 pp</td>
+<td>actual 100.0% but corrected only 41.1%; under-predicted by 58.9 pp</td>
 </tr>
 <tr>
 <td>tokyo</td>
 <td>run3</td>
 <td>37</td>
 <td>1.67 %</td>
-<td>35.17 %</td>
-<td>33.50 pp</td>
+<td>41.15 %</td>
+<td>39.48 pp</td>
 <td><span class="tier" style="background:#c0392b">false_high</span></td>
-<td>corrected prediction 35.2% against actual 1.7%; deployable features misread</td>
-</tr>
-<tr>
-<td>tokyo</td>
-<td>run3</td>
-<td>47</td>
-<td>99.33 %</td>
-<td>47.91 %</td>
-<td>51.42 pp</td>
-<td><span class="tier" style="background:#8e44ad">hidden_high</span></td>
-<td>actual 99.3% but corrected only 47.9%; under-predicted by 51.4 pp</td>
+<td>corrected prediction 41.1% against actual 1.7%; deployable features misread</td>
 </tr>
 </tbody></table>
 <h2>Interpretation cheatsheet</h2>

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the product deliverable package for the adopted strict-best model.
 
-Reads the §7.16 adopted `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
+Reads the adopted `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45`
 window predictions and emits:
 
 1. `internal_docs/product_deliverable/route_level_fix_rate_prediction.csv`
@@ -10,7 +10,7 @@ window predictions and emits:
 2. `internal_docs/product_deliverable/window_level_details.csv`
    - Per-window predictions with flags for known failure cases.
 
-Confidence tiers derive from the §7.16 LORO metrics and the presence of
+Confidence tiers derive from the strict LORO metrics and the presence of
 known-failure windows:
 
 - high: no focus-case windows, expected error <= 3 pp
@@ -34,7 +34,7 @@ RESULTS_DIR = EXPERIMENTS_DIR / "results"
 DELIVERABLE_DIR = Path(__file__).resolve().parent.parent / "internal_docs" / "product_deliverable"
 DEFAULT_PRED_CSV = (
     RESULTS_DIR
-    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_window_predictions.csv"
+    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45_window_predictions.csv"
 )
 REQUIRED_PREDICTION_COLUMNS = {
     "city",
@@ -49,7 +49,7 @@ REQUIRED_PREDICTION_COLUMNS = {
 # Threshold-based focus-case classification.  Applied per window to every
 # input row; no hardcoded window-index list, so new runs with similar
 # failure archetypes are tagged automatically.  Thresholds are chosen to
-# flag only the material failure modes after the §7.16 correction is
+# flag only the material failure modes after the adopted correction is
 # applied (mild residual error on low-actual windows is normal and is NOT
 # tagged).
 # Default thresholds; CLI overrides below in parse_args().
@@ -217,7 +217,7 @@ def main() -> None:
     print(f"saved: {route_path} ({len(route_df)} rows)", flush=True)
 
     # summary stats
-    print("\nRoute-level summary (adopted §7.16):", flush=True)
+    print("\nRoute-level summary (adopted model):", flush=True)
     print(
         route_df[
             [

@@ -1,7 +1,7 @@
 city,run,window_count,focus_case_window_count,actual_fix_rate_pct,baseline_pred_fix_rate_pct,adopted_pred_fix_rate_pct,adopted_abs_error_pp,adopted_signed_error_pp,confidence_tier,confidence_note
-nagoya,run1,26,3,11.512,16.138,14.547,3.035,3.035,medium,"run contains hidden-high windows (actual high, pred under-lifted)"
-nagoya,run2,32,4,16.173,18.656,20.976,4.803,4.803,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
-nagoya,run3,18,0,7.866,2.836,6.828,1.037,-1.037,high,no material focus-case windows
-tokyo,run1,39,4,10.918,12.26,12.069,1.151,1.151,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
-tokyo,run2,31,8,29.018,19.582,20.771,8.247,-8.247,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
-tokyo,run3,51,10,24.011,20.314,24.952,0.941,0.941,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
+nagoya,run1,26,5,11.512,16.138,13.454,1.942,1.942,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
+nagoya,run2,32,6,16.173,18.656,21.454,5.281,5.281,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
+nagoya,run3,18,0,7.866,2.836,8.435,0.569,0.569,high,no material focus-case windows
+tokyo,run1,39,3,10.918,12.26,11.452,0.534,0.534,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
+tokyo,run2,31,7,29.018,19.582,20.924,8.094,-8.094,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"
+tokyo,run3,51,6,24.011,20.314,23.846,0.165,-0.165,low,"run contains at least one false-high window (pred high, actual low); individual window trust low"

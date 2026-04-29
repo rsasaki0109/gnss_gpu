@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
+from sklearn.isotonic import IsotonicRegression
 
 # Make the experiments directory importable when this file is run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -48,6 +49,7 @@ from predict import (
 import product_raw_source_prepare as raw_source_prepare
 from product_inference_model import (
     _append_classifier_meta_online,
+    _apply_final_calibrator,
     _base_from_frame_or_reference,
     _prediction_rows as _product_prediction_rows,
     _planned_counts_from_column,
@@ -786,6 +788,21 @@ def test_product_inference_label_free_output() -> None:
     check("label-free weighted route pred", 20.0, float(route[0]["adopted_pred_fix_rate_pct"]))
 
 
+def test_product_inference_final_calibrator() -> None:
+    print("test_product_inference_final_calibrator")
+    corrected = np.array([0.0, 0.5, 1.0], dtype=np.float64)
+    unchanged = _apply_final_calibrator(corrected, {})
+    check("final calibrator absent leaves prediction unchanged", [0.0, 0.5, 1.0], unchanged.tolist())
+
+    model = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
+    model.fit(np.array([0.0, 0.5, 1.0]), np.array([0.0, 0.25, 1.0]))
+    calibrated = _apply_final_calibrator(
+        corrected,
+        {"final_calibrator_name": "isotonic", "final_calibrator": model},
+    )
+    check("final isotonic calibrator applies mapping", [0.0, 0.25, 1.0], calibrated.tolist())
+
+
 def main() -> None:
     test_classify_window()
     test_is_metadata_or_label()
@@ -803,6 +820,7 @@ def main() -> None:
     test_merge_base_prediction_column()
     test_validationhold_window_rows_label_free()
     test_product_inference_label_free_output()
+    test_product_inference_final_calibrator()
     if FAILURES:
         print(f"\n{len(FAILURES)} FAILURE(S):")
         for name in FAILURES:

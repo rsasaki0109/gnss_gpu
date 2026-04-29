@@ -47,14 +47,14 @@ transfer across the city/run boundary.
 Window-level aggregation (mean of per-epoch predictions within each
 30-s window) gives:
 
-| metric | epoch classifier | §7.16 adopted |
+| metric | epoch classifier | adopted isotonic |
 | --- | --- | --- |
-| weighted window MAE | 20.30 pp | **17.09 pp** |
-| run MAE | 8.90 pp | **3.20 pp** |
-| window correlation | 0.162 | **0.551** |
+| weighted window MAE | 20.30 pp | **16.44 pp** |
+| run MAE | 8.90 pp | **2.76 pp** |
+| window correlation | 0.162 | **0.518** |
 
 The epoch classifier is strictly worse on every aggregate metric than
-the adopted window-level §7.16 model.
+the adopted window-level calibrated model.
 
 ## Why the epoch classifier is worse
 

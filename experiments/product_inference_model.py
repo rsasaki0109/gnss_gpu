@@ -26,6 +26,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.isotonic import IsotonicRegression
 from sklearn.pipeline import Pipeline
 
 from train_ppc_solver_transition_surrogate_stack import (
@@ -47,7 +48,7 @@ from train_ppc_solver_transition_surrogate_stack import (
 SCHEMA_VERSION = 1
 DEFAULT_MODEL_PATH = (
     RESULTS_DIR
-    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_product_model.pkl.gz"
+    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45_product_model.pkl.gz"
 )
 KEY_COLUMNS = {"city", "run", "window_index"}
 REQUIRED_FIT_COLUMNS = KEY_COLUMNS | {
@@ -313,6 +314,55 @@ def _fit_residual_corrector(
     return model
 
 
+def _fit_final_calibrator(
+    *,
+    df: pd.DataFrame,
+    calibration_prediction_csv: Path | None,
+    calibrator_name: str,
+) -> tuple[object | None, str]:
+    if calibrator_name == "none":
+        return None, ""
+    if calibrator_name != "isotonic":
+        raise SystemExit(f"unsupported final calibrator: {calibrator_name}")
+    if calibration_prediction_csv is None:
+        raise SystemExit("--final-calibrator isotonic requires --calibration-prediction-csv")
+
+    cal = _sort_windows(pd.read_csv(calibration_prediction_csv))
+    if list(_key_frame(cal)) != list(_key_frame(df)):
+        raise SystemExit(
+            "calibration prediction CSV keys do not match the training window CSV; "
+            "use the adopted LORO prediction CSV for this training set"
+        )
+    _require_columns(
+        cal,
+        {"actual_fix_rate_pct", "corrected_pred_fix_rate_pct", "sim_matched_epochs"},
+        "calibration prediction CSV",
+    )
+    x = cal["corrected_pred_fix_rate_pct"].to_numpy(dtype=np.float64) / 100.0
+    y = cal["actual_fix_rate_pct"].to_numpy(dtype=np.float64) / 100.0
+    weights = cal["sim_matched_epochs"].to_numpy(dtype=np.float64)
+    finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(weights) & (weights > 0.0)
+    if np.count_nonzero(finite) < 2:
+        raise SystemExit("calibration prediction CSV has too few finite rows for isotonic calibration")
+    order = np.argsort(x[finite])
+    model = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
+    model.fit(x[finite][order], y[finite][order], sample_weight=weights[finite][order])
+    return model, str(calibration_prediction_csv)
+
+
+def _apply_final_calibrator(corrected: np.ndarray, artifact: dict[str, object]) -> np.ndarray:
+    name = str(artifact.get("final_calibrator_name", "none"))
+    if name in ("", "none"):
+        return corrected
+    if name != "isotonic":
+        raise SystemExit(f"unsupported final calibrator in product model: {name}")
+    model = artifact.get("final_calibrator")
+    if model is None:
+        raise SystemExit("product model is missing final_calibrator")
+    values = np.asarray(model.predict(corrected), dtype=np.float64)
+    return np.clip(values, 0.0, 1.0)
+
+
 def fit_model(args: argparse.Namespace) -> None:
     df = _sort_windows(pd.read_csv(args.window_csv))
     _require_columns(df, REQUIRED_FIT_COLUMNS, "training window CSV")
@@ -363,6 +413,11 @@ def fit_model(args: argparse.Namespace) -> None:
         residual_max_features=args.residual_max_features,
         random_state=args.random_state,
     )
+    final_calibrator, final_calibrator_source = _fit_final_calibrator(
+        df=df,
+        calibration_prediction_csv=args.calibration_prediction_csv,
+        calibrator_name=args.final_calibrator,
+    )
     payload: dict[str, object] = {
         "schema_version": SCHEMA_VERSION,
         "training_rows": int(len(df)),
@@ -386,6 +441,9 @@ def fit_model(args: argparse.Namespace) -> None:
         "random_state": int(args.random_state),
         "base_prediction_column": args.base_prediction_column,
         "calibration_source": calibration_source,
+        "final_calibrator_name": args.final_calibrator,
+        "final_calibrator": final_calibrator,
+        "final_calibrator_source": final_calibrator_source,
     }
     _save_pickle_gz(args.model_output, payload)
 
@@ -435,6 +493,7 @@ def predict_frame(
     clip = float(artifact["residual_clip_pp"]) / 100.0
     alpha = float(artifact["residual_alpha"])
     corrected = np.clip(base + alpha * np.clip(residual, -clip, clip), 0.0, 1.0)
+    corrected = _apply_final_calibrator(corrected, artifact)
     return residual, corrected, probabilities
 
 
@@ -555,6 +614,7 @@ def parse_args() -> argparse.Namespace:
     fit.add_argument("--residual-estimators", type=int, default=80)
     fit.add_argument("--residual-min-leaf", type=int, default=3)
     fit.add_argument("--residual-max-features", type=float, default=0.75)
+    fit.add_argument("--final-calibrator", choices=("none", "isotonic"), default="none")
     fit.add_argument("--random-state", type=int, default=2034)
 
     infer = sub.add_parser("infer", help="score a window CSV with a saved product model")

@@ -2,7 +2,7 @@
 
 **Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference, bootstrap raw-source preparation, and source-manifest validation
 **Last updated**: 2026-04-30
-**Adopted model**: §7.16 `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
+**Adopted model**: §7.16 transition stack + final isotonic calibration `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
 
 ---
@@ -65,18 +65,18 @@ classification targets during training.
 
 Under product-relevant metrics:
 
-| metric | adopted §7.16 | baseline §2.2 |
+| metric | adopted isotonic | baseline §2.2 |
 | --- | --- | --- |
-| run MAE | **3.202 pp** | 4.436 pp |
-| window correlation | **0.551** | 0.401 |
-| overall aggregate error | **+0.26 pp** on 17.90 % dataset FIX rate | — |
-| window weighted MAE | 17.087 pp | 18.046 pp |
+| run MAE | **2.764 pp** | 4.436 pp |
+| window correlation | **0.518** | 0.401 |
+| overall aggregate error | **-0.05 pp** on 17.90 % dataset FIX rate | — |
+| window weighted MAE | **16.437 pp** | 18.046 pp |
 
 The committed single-model artifact is a full-data fit for deployment,
-not an independent validation fold.  As a smoke check on the bundled
-labelled 6-run set, `predict.py --inference` gives route MAE 2.090 pp,
-route max error 5.670 pp, window weighted MAE 10.596 pp, and window
-correlation 0.878.  Use the strict nested LORO table above as the
+not an independent validation fold.  The final isotonic calibration is
+selected on strict leave-one-run-out predictions from the previous
+§7.16 model, then fitted into the deployment artifact as a monotonic
+post-calibrator.  Use the strict nested LORO table above as the
 generalisation estimate.
 
 Per-route error on the test set (see
@@ -84,12 +84,12 @@ Per-route error on the test set (see
 
 | city / run | actual | predicted | \|err\| | confidence |
 | --- | --- | --- | --- | --- |
-| nagoya / run1 | 11.5 % | 14.5 % | 3.03 pp | medium |
-| nagoya / run2 | 16.2 % | 21.0 % | 4.80 pp | low |
-| nagoya / run3 |  7.9 % |  6.8 % | 1.04 pp | high |
-| tokyo  / run1 | 10.9 % | 12.1 % | 1.15 pp | low |
-| tokyo  / run2 | 29.0 % | 20.8 % | 8.25 pp | low  |
-| tokyo  / run3 | 24.0 % | 25.0 % | 0.94 pp | low  |
+| nagoya / run1 | 11.5 % | 13.5 % | 1.94 pp | low |
+| nagoya / run2 | 16.2 % | 21.5 % | 5.28 pp | low |
+| nagoya / run3 |  7.9 % |  8.4 % | 0.57 pp | high |
+| tokyo  / run1 | 10.9 % | 11.5 % | 0.53 pp | low |
+| tokyo  / run2 | 29.0 % | 20.9 % | 8.09 pp | low  |
+| tokyo  / run3 | 24.0 % | 23.8 % | 0.17 pp | low  |
 
 Confidence tiers are auto-detected per route from the presence of
 focus-case windows (see `build_product_deliverable.py::_classify_window`
@@ -98,9 +98,9 @@ present; `medium` means the route contains hidden-high windows
 (actual high, corrected under-predicts by 40+ pp); `low` means the
 route contains at least one false-high or false-lift window.
 
-Three of six routes are within 3 pp of actual (nagoya/run3, tokyo/run1,
-tokyo/run3); a fourth (nagoya/run1 at 3.03 pp) is borderline.  Five of
-six are within 5 pp.  The one exception is tokyo/run2 at 8.25 pp, which
+Four of six routes are within 3 pp of actual (nagoya/run1, nagoya/run3,
+tokyo/run1, tokyo/run3).  Five of six are within 6 pp.  The one
+exception is tokyo/run2 at 8.09 pp, which
 contains the Tokyo run2 w7-w9 false-high cluster documented in section
 5.
 
@@ -108,13 +108,13 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 
 ### Inputs required by the product command
 
-- Committed adopted §7.16 window prediction CSV:
-  `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv`.
+- Committed adopted window prediction CSV:
+  `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic_meta_run45_window_predictions.csv`.
   `python3 experiments/predict.py` uses this frozen artifact by default
   to refresh `route_level_fix_rate_prediction.csv`,
   `window_level_details.csv`, and `dashboard.html`.
 - Committed full-data-fit product model artifact:
-  `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz`.
+  `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic_meta_run45_product_model.pkl.gz`.
   `python3 experiments/predict.py --batch-inference` loads this artifact
   after preparing fresh inputs; split `--inference` can also score an
   already prepared window CSV without training.
@@ -185,11 +185,12 @@ Relative paths in manifests resolve from the manifest file's directory.
 - `internal_docs/product_deliverable/dashboard.html` — self-contained
   HTML report (open in a browser) with metrics summary, per-run bar
   chart, actual-vs-predicted scatter, and focus-case detail table.
-- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_window_predictions.csv`
-  — committed frozen §7.16 window prediction artifact used by
+- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45_window_predictions.csv`
+  — committed frozen calibrated window prediction artifact used by
   `experiments/predict.py` in default product mode.
-- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45_product_model.pkl.gz`
-  — committed saved full-data-fit model artifact used by
+- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic_meta_run45_product_model.pkl.gz`
+  — committed saved full-data-fit model artifact with final isotonic
+  calibration, used by
   `experiments/predict.py --inference`.
 - `internal_docs/product_deliverable/plots/` — static PNG figures per
   run that overlay the predicted FIX rate onto the actual demo5
@@ -258,7 +259,7 @@ Relative paths in manifests resolve from the manifest file's directory.
 - `experiments/build_product_dashboard.py` — script that produces the
   HTML dashboard from those CSVs.
 - `experiments/predict.py` — product entrypoint.  Default mode refreshes
-  deliverable outputs from the frozen §7.16 predictions;
+  deliverable outputs from the frozen calibrated predictions;
   `--batch-inference` prepares and scores fresh inputs in one command;
   `--source-bundle-prepare` derives bootstrap CSVs and a manifest from
   raw PPC source runs;
@@ -274,20 +275,21 @@ Relative paths in manifests resolve from the manifest file's directory.
 All focus-case windows are documented in `window_level_details.csv`
 under `focus_case_tag`.
 
-- **Tokyo run2 w7 / w9** (`false_high`): base prediction is 63-74 %
+- **Tokyo run2 w7 / w9** (`false_high`): base prediction is high
   because simulator continuity looks clean, but demo5 refuses to FIX
-  due to RINEX phase jumps.  Adopted model reduces to 39.5 / 71.3 %;
-  still inflated.  A diagnostic reject rule
+  due to RINEX phase jumps.  The adopted model remains inflated on
+  these windows.  A diagnostic reject rule
   (`rinex_phase_jump_ge0p5cy_count_max >= 1`) catches both cleanly but
   cannot be validated as a learned LORO model (only these two
   positives exist in the dataset) and is therefore declared a domain
   prior in §5.3.
 - **Tokyo run2 w23 - w27** (`hidden_high`): actual FIX is 75-100 % but
-  deployable features under-predict.  Adopted model lifts to 32-50 %,
-  a significant gain over baseline 16 %, but still far from actual.
+  deployable features under-predict.  The adopted model lifts part of
+  this segment, but still under-predicts several high-FIX windows.
 - **Tokyo run3 w17** (`false_lift`): deployable readiness peaks
-  (`hold_carry_score_mean = 11.68`) but demo5 refuses.  Adopted model
-  lifts to 19 % against 0 % actual.  A stricter hold_ready threshold
+  (`hold_carry_score_mean = 11.68`) but demo5 refuses.  The adopted
+  model can still lift low-actual windows in this archetype.  A
+  stricter hold_ready threshold
   (0.55) catches this case at the cost of the w25-w27 lifts; see
   §7.14.
 - **Nagoya run2 false-lift cluster**: partially absorbed by the
@@ -450,9 +452,10 @@ Raw source-file feature extraction is still upstream of this command.
   hold_strict, 1.25 block_p90) is a local optimum on this dataset
   (§7.14 / §7.15).  Re-scan if the training data grows by more than
   a couple of runs.
-- The `alpha=0.75` residual setting is Pareto-optimal on run MAE +
-  correlation but 0.09 pp worse on wmae than `alpha=0.5`.  Switch via
-  the `--alphas` argument if the consumer metric changes.
+- The final isotonic calibrator improves run MAE and weighted MAE over
+  raw §7.16 alpha=0.75 predictions, at the cost of a small window
+  correlation drop.  Re-evaluate this post-calibrator when the training
+  set grows.
 - The `clean_streak_s` carry counter (§7.11) is the single most
   impactful deployable feature added since the baseline.  Any further
   epoch-level surrogate redesign should preserve a pure cumulative-
