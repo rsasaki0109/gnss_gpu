@@ -1,7 +1,7 @@
 # PPC demo5 FIX-Rate Predictor — Product Deliverable
 
 **Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference, bootstrap raw-source preparation, and source-manifest validation
-**Last updated**: 2026-04-29
+**Last updated**: 2026-04-30
 **Adopted model**: §7.16 `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
 
@@ -366,6 +366,11 @@ The command writes
 used by the validation and inference commands below.  This raw-source
 bridge is label-free and product-schema-compatible, but it neutral-fills
 features that require the full simulator/refinedgrid research pipeline.
+The derived manifest also records `raw_source_prepare` metadata,
+including total and per-run epoch/window/base row counts.  The
+source-bundle validator checks those counts when the metadata is
+present, so stale or partially replaced derived CSVs fail before
+scoring.
 
 Validate the raw source runs and derived product CSV contract:
 
