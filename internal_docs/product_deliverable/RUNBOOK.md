@@ -44,34 +44,51 @@ For a preflight-only check:
 python3 experiments/predict.py --check-only
 ```
 
-## 3. Fresh-data inference without retraining
+## 3. Fresh-data preparation and inference without retraining
 
 ### 3.1 Prerequisites
 
-Before calling `predict.py --inference`, the new run's data must already be
+Before calling `predict.py --prepare-inference`, the new run's data must already be
 preprocessed through the upstream pipeline into:
 
-- a pre-augmented window feature CSV with the full deployable windowopt
-  and validationhold feature set
+- an epoch feature CSV with deployable simulator/RINEX columns and
+  `(city, run, gps_tow)`
+- a window feature CSV with `(city, run, window_index)`,
+  `window_start_tow`, `window_end_tow`, and `sim_matched_epochs`
 - a refinedgrid base prediction CSV (same city/run keys)
 
-The inference window CSV does not need `actual_fix_rate_pct`, `rtk_*`,
+These files do not need `actual_fix_rate_pct`, `actual_fixed`, `rtk_*`,
 or `solver_demo5_*` columns.  Those are training/evaluation labels, not
 runtime inputs.
 
-### 3.2 Command
+### 3.2 Prepare command
 
 ```bash
 python3 experiments/predict.py \
-  --inference \
-  --window-csv path/to/pre_augmented_window_predictions.csv \
+  --prepare-inference \
+  --epochs-csv path/to/preprocessed_epochs.csv \
+  --window-csv path/to/window_features.csv \
   --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
-  --inference-output-prefix experiments/results/<custom_prefix_for_this_run>
+  --prepare-prefix experiments/results/<custom_prefix_for_this_run>_prepare \
+  --prepared-window-csv experiments/results/<custom_prefix_for_this_run>_prepared_window_predictions.csv
 ```
 
 `--base-prefix`
 accepts either a bare prefix under `experiments/results`, an explicit
 prefix path, or the full `*_window_predictions.csv` path.
+
+The prepared CSV contains the original window features, validationhold
+aggregates/flags, and `base_pred_fix_rate_pct`.
+
+### 3.3 Inference command
+
+```bash
+python3 experiments/predict.py \
+  --inference \
+  --window-csv experiments/results/<custom_prefix_for_this_run>_prepared_window_predictions.csv \
+  --use-window-base-prediction \
+  --inference-output-prefix experiments/results/<custom_prefix_for_this_run>
+```
 
 Outputs:
 
@@ -81,7 +98,7 @@ Outputs:
 When the inference input has no actual labels, the output omits
 actual/error columns and contains predictions only.
 
-### 3.3 Full retrain / research scoring
+### 3.4 Full retrain / research scoring
 
 Use `predict.py --retrain` only when deliberately rebuilding the
 research LORO pipeline:
@@ -148,6 +165,22 @@ Window file columns:
 - transition-surrogate probability columns ending in `_prob`
 - actual/error columns only when labels were provided
 
+### 4.5 Prepared inference window CSV
+
+`predict.py --prepare-inference` writes a window CSV suitable for
+`--inference --use-window-base-prediction`.
+
+Important columns:
+
+- `base_pred_fix_rate_pct` — refined-grid base prediction merged by
+  `(city, run, window_index)`
+- `validationhold_high_pred_reject_flag`,
+  `validationhold_low_pred_lift_flag` — deployable flags after the
+  selected preset
+- validationhold aggregate columns such as `hold_ready_frac`,
+  `hold_strict_ready_frac`, `clean_streak_s_at_start`, and
+  `validation_block_score_p90`
+
 ## 5. What to report when predictions look off
 
 If the adopted model's prediction on a new run deviates more than 5 pp
@@ -190,7 +223,7 @@ Per D-030 / D-033:
 
 | Path | Purpose |
 | --- | --- |
-| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--inference` scores fresh window data, `--retrain` runs the full LORO pipeline |
+| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--prepare-inference` builds fresh inference inputs, `--inference` scores fresh window data, `--retrain` runs the full LORO pipeline |
 | `experiments/product_inference_model.py` | fit/run saved single-model product inference artifact |
 | `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv` | committed adopted §7.16 window predictions used by default product mode |
 | `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact used by `predict.py --inference` |
@@ -226,6 +259,10 @@ Per D-030 / D-033:
   deployment.  Use the strict nested LORO metrics in `README.md` as the
   generalisation estimate; do not treat full-data smoke metrics as an
   independent validation result.
+- `--prepare-inference` is label-free, but it still assumes the upstream
+  epoch/window feature extraction has already run.  It does not parse raw
+  RINEX, run the simulator, or build refinedgrid base predictions from
+  source files.
 - The `rebuild_validationhold_flag_thresholds.py` script overwrites
   its output CSV silently.  If you experiment with alternate presets,
   name the output files explicitly and do not point them at the

@@ -1,6 +1,6 @@
 # PPC demo5 FIX-Rate Predictor — Product Deliverable
 
-**Status**: internal research prototype, route-level deliverable with saved fresh-data inference
+**Status**: internal research prototype, route-level deliverable with saved fresh-data inference preparation
 **Last updated**: 2026-04-29
 **Adopted model**: §7.16 `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
@@ -29,14 +29,15 @@ classification targets during training.
 - Fresh-data offline inference: score a new pre-augmented PPC/taroz
   window CSV with the committed full-data-fit model artifact, without
   retraining the nested LORO stack.
+- Inference input preparation: build that pre-augmented window CSV from
+  preprocessed epoch/window/base CSVs without demo5 actual labels.
 
 ### Out-of-scope use cases
 
 - Individual 30 s window FIX-rate predictions.  Typical window weighted
   MAE is 17 pp and tail errors reach 60+ pp on known failure cases.
-- End-to-end raw epoch ingestion.  Fresh-data inference starts after
-  upstream preprocessing has produced the window feature CSV and
-  refined-grid base prediction CSV.
+- Raw GNSS/RINEX/simulator extraction from source files.  The product
+  path starts from preprocessed epoch/window/base CSVs.
 - Real-time / online inference.  The current pipeline is still offline
   batch inference; see section 6 below.
 - Data sources different from taroz/PPC Tokyo/Nagoya.  The model was
@@ -102,15 +103,17 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   `python3 experiments/predict.py --inference` loads this artifact to
   score fresh pre-augmented window CSVs without training.
 
-### Inputs required for fresh-data inference
+### Inputs required for fresh-data preparation / inference
 
-- Pre-augmented window feature CSV containing the same deployable
-  feature schema used by the adopted model, including validationhold
-  features.  It does not need `actual_fix_rate_pct`, `rtk_*`, or
-  `solver_demo5_*` columns at inference time.
+- Epoch feature CSV with deployable simulator/RINEX columns and
+  `(city, run, gps_tow)`.
+- Window feature CSV with matching `(city, run, window_index)`,
+  `window_start_tow`, `window_end_tow`, and `sim_matched_epochs`.
 - Refined-grid base prediction CSV with matching `(city, run,
-  window_index)` keys, or a `base_pred_fix_rate_pct` column in the
-  window CSV with `--use-window-base-prediction`.
+  window_index)` keys.
+
+These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
+`rtk_*`, or `solver_demo5_*` columns at inference time.
 
 ### Inputs required for full retraining
 
@@ -131,6 +134,10 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   `<prefix>_window_predictions.csv` are written.  When labels are not
   present, these files contain predictions only and omit actual/error
   columns.
+- In `--prepare-inference` mode, a prepared window CSV is written.  It
+  contains the deployable window features, validationhold aggregates,
+  and `base_pred_fix_rate_pct` for direct use with
+  `--inference --use-window-base-prediction`.
 
 ### Files shipped with this deliverable
 
@@ -164,6 +171,10 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
   are tagged automatically without updating a hardcoded list.
 - `experiments/product_inference_model.py` — fits and runs the saved
   single-model product inference artifact.
+- `experiments/analyze_ppc_validation_hold_surrogate_windows.py` —
+  aggregates validationhold epoch state to windows.  It supports
+  label-free inference inputs; strict metrics are written only when
+  actual labels are present.
 - `experiments/build_simulation_vs_actual_plots.py` — renders the PNG
   figures under `plots/` from the adopted predictions and the demo5
   .pos files (`experiments/results/demo5_pos/<city>_<run>/rtklib.pos`).
@@ -203,9 +214,10 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 - `experiments/build_product_dashboard.py` — script that produces the
   HTML dashboard from those CSVs.
 - `experiments/predict.py` — product entrypoint.  Default mode refreshes
-  deliverable outputs from the frozen §7.16 predictions; `--inference`
-  scores fresh preprocessed window data without training; `--retrain`
-  remains the research LORO pipeline.
+  deliverable outputs from the frozen §7.16 predictions;
+  `--prepare-inference` builds fresh inference inputs; `--inference`
+  scores them without training; `--retrain` remains the research LORO
+  pipeline.
 
 ## 5. Known failure modes
 
@@ -258,13 +270,29 @@ python3 experiments/predict.py \
   --results-prefix ppc_..._my_run
 ```
 
-### Inference on a new preprocessed window CSV
+### Prepare inference inputs from new preprocessed CSVs
+
+```bash
+python3 experiments/predict.py \
+  --prepare-inference \
+  --epochs-csv path/to/preprocessed_epochs.csv \
+  --window-csv path/to/window_features.csv \
+  --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
+  --prepare-prefix experiments/results/my_run_prepare \
+  --prepared-window-csv experiments/results/my_run_prepared_window_predictions.csv
+```
+
+This produces a label-free prepared window CSV containing
+`base_pred_fix_rate_pct` and validationhold features.  It does not run
+demo5 and does not require actual labels.
+
+### Inference on a prepared window CSV
 
 ```bash
 python3 experiments/predict.py \
   --inference \
-  --window-csv path/to/pre_augmented_window_predictions.csv \
-  --base-prefix path/to/refinedgrid_prefix_or_predictions.csv \
+  --window-csv experiments/results/my_run_prepared_window_predictions.csv \
+  --use-window-base-prediction \
   --inference-output-prefix experiments/results/my_run_product
 ```
 
@@ -273,10 +301,11 @@ not retrain.  The output files are
 `experiments/results/my_run_product_route_predictions.csv` and
 `experiments/results/my_run_product_window_predictions.csv`.
 
-If the pre-augmented window CSV already contains `base_pred_fix_rate_pct`,
-replace `--base-prefix ...` with `--use-window-base-prediction`.
+If the prepared window CSV does not contain `base_pred_fix_rate_pct`,
+use `--base-prefix path/to/refinedgrid_prefix_or_predictions.csv`
+instead of `--use-window-base-prediction`.
 
-Raw epoch-to-window preprocessing is still upstream of this command.
+Raw source-file feature extraction is still upstream of this command.
 
 ## 7. Maintainer notes
 
