@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import json
 from argparse import Namespace
 from contextlib import redirect_stderr
 from csv import DictReader
@@ -50,6 +51,7 @@ from product_inference_model import (
     _planned_counts_from_column,
     _route_rows,
 )
+from product_source_bundle import load_source_bundle, validate_source_bundle
 from train_ppc_solver_transition_surrogate_stack import (
     _append_classifier_meta as _append_classifier_meta_batch,
     _reference_prediction_path,
@@ -224,6 +226,8 @@ def test_prediction_mode_stage_counts() -> None:
     print("test_prediction_mode_stage_counts")
     base_args = {
         "batch_inference": False,
+        "source_bundle_check": False,
+        "source_bundle_inference": False,
         "prepare_inference": False,
         "inference": False,
         "online_inference": False,
@@ -250,6 +254,16 @@ def test_prediction_mode_stage_counts() -> None:
         "online inference stage count",
         1,
         _planned_stage_count(Namespace(**{**base_args, "online_inference": True})),
+    )
+    check(
+        "source bundle check stage count",
+        1,
+        _planned_stage_count(Namespace(**{**base_args, "source_bundle_check": True})),
+    )
+    check(
+        "source bundle inference stage count",
+        6,
+        _planned_stage_count(Namespace(**{**base_args, "source_bundle_inference": True})),
     )
 
 
@@ -329,6 +343,95 @@ def test_batch_output_paths() -> None:
         check("batch output path rejects overwrite", True, False)
     except SystemExit as exc:
         check("batch output path rejects overwrite", True, exc.code != 0)
+
+
+def test_product_source_bundle_validation() -> None:
+    print("test_product_source_bundle_validation")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        run_dir = tmpdir / "data" / "nagoya" / "run1"
+        run_dir.mkdir(parents=True)
+        for name in ("rover.obs", "base.obs", "base.nav", "reference.csv"):
+            (run_dir / name).write_text("fixture\n", encoding="utf-8")
+
+        epochs = tmpdir / "epochs.csv"
+        windows = tmpdir / "windows.csv"
+        base = tmpdir / "base_predictions.csv"
+        prepared = tmpdir / "product_prepared_window_predictions.csv"
+        epochs.write_text(
+            "city,run,gps_tow\n"
+            "nagoya,run1,1.0\n",
+            encoding="utf-8",
+        )
+        windows.write_text(
+            "city,run,window_index,window_start_tow,window_end_tow,sim_matched_epochs\n"
+            "nagoya,run1,0,1.0,2.0,1\n",
+            encoding="utf-8",
+        )
+        base.write_text(
+            "city,run,window_index,corrected_pred_fix_rate_pct\n"
+            "nagoya,run1,0,12.5\n",
+            encoding="utf-8",
+        )
+        manifest = tmpdir / "manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "runs": [{"city": "nagoya", "run": "run1", "run_dir": str(run_dir)}],
+                    "derived_inputs": {
+                        "epochs_csv": str(epochs),
+                        "window_csv": str(windows),
+                        "base_prediction_csv": str(base),
+                    },
+                    "outputs": {
+                        "prepare_prefix": str(tmpdir / "product_prepare"),
+                        "prepared_window_csv": str(prepared),
+                        "inference_output_prefix": str(tmpdir / "product"),
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        validated = validate_source_bundle(load_source_bundle(manifest))
+        check("source bundle run count", 1, validated.run_count)
+        check("source bundle key", (("nagoya", "run1"),), validated.run_keys)
+        check("source bundle epochs path", epochs, validated.epochs_csv)
+        check("source bundle prepare prefix", str(tmpdir / "product_prepare"), validated.prepare_prefix)
+        check("source bundle prepared path", prepared, validated.prepared_window_csv)
+
+        extra_windows = tmpdir / "extra_windows.csv"
+        extra_windows.write_text(
+            "city,run,window_index,window_start_tow,window_end_tow,sim_matched_epochs\n"
+            "nagoya,run1,0,1.0,2.0,1\n"
+            "tokyo,run9,0,1.0,2.0,1\n",
+            encoding="utf-8",
+        )
+        bad_manifest = json.loads(manifest.read_text(encoding="utf-8"))
+        bad_manifest["derived_inputs"]["window_csv"] = str(extra_windows)
+        manifest.write_text(json.dumps(bad_manifest), encoding="utf-8")
+        try:
+            with redirect_stderr(StringIO()):
+                validate_source_bundle(load_source_bundle(manifest))
+            check("source bundle rejects undeclared window run", True, False)
+        except SystemExit as exc:
+            check("source bundle rejects undeclared window run", True, exc.code != 0)
+
+        bad_base = tmpdir / "bad_base_predictions.csv"
+        bad_base.write_text(
+            "city,run,window_index,corrected_pred_fix_rate_pct\n"
+            "nagoya,run1,1,12.5\n",
+            encoding="utf-8",
+        )
+        bad_manifest = json.loads(manifest.read_text(encoding="utf-8"))
+        bad_manifest["derived_inputs"]["window_csv"] = str(windows)
+        bad_manifest["derived_inputs"]["base_prediction_csv"] = str(bad_base)
+        manifest.write_text(json.dumps(bad_manifest), encoding="utf-8")
+        try:
+            with redirect_stderr(StringIO()):
+                validate_source_bundle(load_source_bundle(manifest))
+            check("source bundle rejects missing base window", True, False)
+        except SystemExit as exc:
+            check("source bundle rejects missing base window", True, exc.code != 0)
 
 
 def test_merge_base_prediction_column() -> None:
@@ -449,6 +552,7 @@ def main() -> None:
     test_prediction_mode_stage_counts()
     test_online_classifier_meta_matches_batch_run_position()
     test_batch_output_paths()
+    test_product_source_bundle_validation()
     test_merge_base_prediction_column()
     test_validationhold_window_rows_label_free()
     test_product_inference_label_free_output()

@@ -61,7 +61,66 @@ These files do not need `actual_fix_rate_pct`, `actual_fixed`, `rtk_*`,
 or `solver_demo5_*` columns.  Those are training/evaluation labels, not
 runtime inputs.
 
-### 3.2 One-shot batch command
+### 3.2 Source manifest check
+
+Use a source manifest when the operator receives a PPC source bundle and
+derived product CSVs together.  The manifest binds raw PPC run
+directories to the epoch/window/base CSVs so the product command can
+reject mismatched bundles before scoring.
+
+Create a template:
+
+```bash
+python3 experiments/product_source_bundle.py template \
+  --output source_manifest.example.json
+```
+
+Minimal manifest shape:
+
+```json
+{
+  "runs": [
+    {
+      "city": "nagoya",
+      "run": "run1",
+      "run_dir": "/path/to/PPC-Dataset/nagoya/run1"
+    }
+  ],
+  "derived_inputs": {
+    "epochs_csv": "/path/to/preprocessed_epochs.csv",
+    "window_csv": "/path/to/window_features.csv",
+    "base_prediction_csv": "/path/to/refinedgrid_window_predictions.csv"
+  },
+  "outputs": {
+    "prepare_prefix": "experiments/results/my_run_prepare",
+    "prepared_window_csv": "experiments/results/my_run_prepared_window_predictions.csv",
+    "inference_output_prefix": "experiments/results/my_run_product"
+  }
+}
+```
+
+Validate only:
+
+```bash
+python3 experiments/predict.py \
+  --source-bundle-check \
+  --source-manifest path/to/source_manifest.json
+```
+
+Validate and run one-shot batch inference:
+
+```bash
+python3 experiments/predict.py \
+  --source-bundle-inference \
+  --source-manifest path/to/source_manifest.json
+```
+
+This does not parse raw RINEX or run the simulator.  The source manifest
+confirms that the raw PPC source directories and already-derived
+epoch/window/base CSVs describe the same product input bundle.  Relative
+paths in the manifest resolve from the manifest file's directory.
+
+### 3.3 One-shot batch command
 
 ```bash
 python3 experiments/predict.py \
@@ -102,7 +161,7 @@ python3 experiments/predict.py \
   --check-only
 ```
 
-### 3.3 Split prepare command
+### 3.4 Split prepare command
 
 Use this when inspecting intermediate validationhold features before
 scoring:
@@ -117,7 +176,7 @@ python3 experiments/predict.py \
   --prepared-window-csv experiments/results/<custom_prefix_for_this_run>_prepared_window_predictions.csv
 ```
 
-### 3.4 Split inference command
+### 3.5 Split inference command
 
 Use this when the prepared CSV already exists:
 
@@ -137,7 +196,7 @@ Outputs:
 When the inference input has no actual labels, the output omits
 actual/error columns and contains predictions only.
 
-### 3.5 Online-compatible inference command
+### 3.6 Online-compatible inference command
 
 Use this when prepared windows arrive in route order and the planned
 route length is known:
@@ -159,7 +218,7 @@ column for multi-route inputs.  Use `--online-use-input-run-length`
 only for offline parity/smoke checks where the complete input file is
 already available.
 
-### 3.6 Full retrain / research scoring
+### 3.7 Full retrain / research scoring
 
 Use `predict.py --retrain` only when deliberately rebuilding the
 research LORO pipeline:
@@ -284,8 +343,9 @@ Per D-030 / D-033:
 
 | Path | Purpose |
 | --- | --- |
-| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--batch-inference` prepares and scores fresh data in one command, `--online-inference` scores prepared windows causally with planned route length, split `--prepare-inference` / `--inference` are available for debugging, `--retrain` runs the full LORO pipeline |
+| `experiments/predict.py` | product entrypoint; default is frozen deliverable refresh, `--batch-inference` prepares and scores fresh data in one command, `--source-bundle-inference` validates a raw-source manifest before running the same batch path, `--online-inference` scores prepared windows causally with planned route length, split `--prepare-inference` / `--inference` are available for debugging, `--retrain` runs the full LORO pipeline |
 | `experiments/product_inference_model.py` | fit/run saved single-model product inference artifact, including online-compatible scoring |
+| `experiments/product_source_bundle.py` | validate source manifests that bind raw PPC run directories to derived epoch/window/base product input CSVs |
 | `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_window_predictions.csv` | committed adopted §7.16 window predictions used by default product mode |
 | `experiments/results/ppc_window_fix_rate_model_..._alpha75_meta_run45_product_model.pkl.gz` | committed full-data-fit inference artifact used by `predict.py --inference` |
 | `experiments/build_product_deliverable.py` | deliverable CSV builder |
@@ -320,10 +380,14 @@ Per D-030 / D-033:
   deployment.  Use the strict nested LORO metrics in `README.md` as the
   generalisation estimate; do not treat full-data smoke metrics as an
   independent validation result.
-- `--batch-inference` and `--prepare-inference` are label-free, but they still assume the upstream
-  epoch/window feature extraction has already run.  It does not parse raw
-  RINEX, run the simulator, or build refinedgrid base predictions from
-  source files.
+- `--batch-inference`, `--source-bundle-inference`, and
+  `--prepare-inference` are label-free, but they still assume the
+  upstream epoch/window feature extraction has already run.  They do
+  not parse raw RINEX, run the simulator, or build refinedgrid base
+  predictions from source files.
+- `--source-bundle-check` validates source-file presence and
+  route/window key consistency.  It is a bundle-contract check, not a
+  raw-feature extraction pipeline.
 - In `--batch-inference`, do not point `--prepared-window-csv` at the
   final `<prefix>_window_predictions.csv` output.  Use a name such as
   `*_prepared_window_predictions.csv` so the prepared feature file and

@@ -1,6 +1,6 @@
 # PPC demo5 FIX-Rate Predictor — Product Deliverable
 
-**Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference
+**Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference and source-manifest validation
 **Last updated**: 2026-04-29
 **Adopted model**: §7.16 `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
@@ -32,6 +32,10 @@ classification targets during training.
 - Online-compatible scoring: score prepared windows in route order using
   only current/past model probability state, when the planned route
   window count is known.
+- Source bundle contract validation: bind raw PPC source run
+  directories to derived epoch/window/base CSVs, check that their
+  route/window keys match, and run product batch inference from the
+  manifest.
 - Split inference input preparation: build the pre-augmented window CSV
   separately when debugging intermediate validationhold features.
 
@@ -39,8 +43,10 @@ classification targets during training.
 
 - Individual 30 s window FIX-rate predictions.  Typical window weighted
   MAE is 17 pp and tail errors reach 60+ pp on known failure cases.
-- Raw GNSS/RINEX/simulator extraction from source files.  The product
-  path starts from preprocessed epoch/window/base CSVs.
+- Raw GNSS/RINEX/simulator feature extraction from source files.  The
+  product path can validate that raw PPC run directories match the
+  derived epoch/window/base CSV bundle, but building those CSVs remains
+  upstream.
 - Full real-time feature extraction from raw RINEX/simulator source
   files.  The product model can score prepared windows online, but the
   upstream feature extraction is still batch/offline.
@@ -120,6 +126,18 @@ contains the Tokyo run2 w7-w9 false-high cluster documented in section
 These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
 `rtk_*`, or `solver_demo5_*` columns at inference time.
 
+### Optional source manifest for fresh-data inference
+
+`--source-bundle-check` and `--source-bundle-inference` accept a JSON
+manifest that declares the raw PPC source run directories and the
+derived product input CSVs.  The manifest validator checks that each raw
+run directory has the PPC source files (`rover.obs`, `base.obs`,
+`base.nav`, `reference.csv`), that the derived epoch/window CSVs contain
+those `(city, run)` keys, that every product window has a matching base
+prediction row, and that prepared/final output paths do not collide.
+Relative paths in the manifest resolve from the manifest file's
+directory.
+
 ### Inputs required for full retraining
 
 - Processed PPC epoch CSV with `gnss_gpu` simulator features, RINEX
@@ -177,6 +195,9 @@ These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
   are tagged automatically without updating a hardcoded list.
 - `experiments/product_inference_model.py` — fits and runs the saved
   single-model product inference artifact.
+- `experiments/product_source_bundle.py` — validates source manifests
+  that bind raw PPC run directories to derived epoch/window/base product
+  input CSVs.
 - `experiments/analyze_ppc_validation_hold_surrogate_windows.py` —
   aggregates validationhold epoch state to windows.  It supports
   label-free inference inputs; strict metrics are written only when
@@ -222,6 +243,8 @@ These inputs do not need `actual_fix_rate_pct`, `actual_fixed`,
 - `experiments/predict.py` — product entrypoint.  Default mode refreshes
   deliverable outputs from the frozen §7.16 predictions;
   `--batch-inference` prepares and scores fresh inputs in one command;
+  `--source-bundle-inference` validates a source manifest before
+  running the same batch path;
   `--online-inference` scores prepared windows in causal mode with a
   planned route length; split `--prepare-inference` / `--inference` are
   available for debugging; `--retrain` remains the research LORO
@@ -299,6 +322,35 @@ demo5 and does not require actual labels.  The output files are
 `experiments/results/my_run_product_window_predictions.csv`.
 The prepared CSV path must be distinct from the final
 `*_window_predictions.csv` output path.
+
+### Source-manifest inference from a PPC source bundle
+
+Create an example manifest:
+
+```bash
+python3 experiments/product_source_bundle.py template \
+  --output source_manifest.example.json
+```
+
+Validate the raw source runs and derived product CSV contract:
+
+```bash
+python3 experiments/predict.py \
+  --source-bundle-check \
+  --source-manifest path/to/source_manifest.json
+```
+
+Validate and then run the same one-shot batch inference path:
+
+```bash
+python3 experiments/predict.py \
+  --source-bundle-inference \
+  --source-manifest path/to/source_manifest.json
+```
+
+The manifest does not extract features from raw RINEX/simulator files.
+It fixes the product input bundle by proving the raw source directories
+and derived epoch/window/base CSVs refer to the same PPC runs/windows.
 
 ### Split preparation for debugging
 
