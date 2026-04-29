@@ -523,6 +523,26 @@ def test_raw_source_prepare_manifest_metadata_counts() -> None:
 
             validated = validate_source_bundle(load_source_bundle(outputs.source_manifest))
             check("raw manifest validates as source bundle", 2, validated.run_count)
+
+            bad_payload = json.loads(json.dumps(payload))
+            bad_payload["raw_source_prepare"]["epoch_count"] += 1
+            outputs.source_manifest.write_text(json.dumps(bad_payload), encoding="utf-8")
+            try:
+                with redirect_stderr(StringIO()):
+                    validate_source_bundle(load_source_bundle(outputs.source_manifest))
+                check("raw manifest rejects bad total count", True, False)
+            except SystemExit as exc:
+                check("raw manifest rejects bad total count", True, exc.code != 0)
+
+            bad_payload = json.loads(json.dumps(payload))
+            bad_payload["raw_source_prepare"]["runs"][0]["window_count"] += 1
+            outputs.source_manifest.write_text(json.dumps(bad_payload), encoding="utf-8")
+            try:
+                with redirect_stderr(StringIO()):
+                    validate_source_bundle(load_source_bundle(outputs.source_manifest))
+                check("raw manifest rejects bad per-run count", True, False)
+            except SystemExit as exc:
+                check("raw manifest rejects bad per-run count", True, exc.code != 0)
     finally:
         raw_source_prepare._load_model_feature_names = original_load_model_feature_names
         raw_source_prepare._epoch_rows_for_run = original_epoch_rows_for_run

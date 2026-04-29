@@ -60,6 +60,7 @@ class SourceBundle:
     prepare_prefix: str | None = None
     prepared_window_csv: Path | None = None
     inference_output_prefix: Path | None = None
+    raw_source_prepare: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -137,10 +138,36 @@ def _route_keys(path: Path) -> set[tuple[str, str]]:
         return {(str(row["city"]), str(row["run"])) for row in reader}
 
 
+def _route_counts(path: Path) -> dict[tuple[str, str], int]:
+    counts: dict[tuple[str, str], int] = {}
+    with path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            key = (str(row["city"]), str(row["run"]))
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def _window_keys(path: Path) -> set[tuple[str, str, int]]:
     with path.open(newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         return {_normalize_window_key(row, path) for row in reader}
+
+
+def _window_route_counts(path: Path) -> dict[tuple[str, str], int]:
+    counts: dict[tuple[str, str], int] = {}
+    with path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            key = (str(row["city"]), str(row["run"]))
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _count_rows(path: Path) -> int:
+    with path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        return sum(1 for _row in reader)
 
 
 def _preview(items: set[tuple[Any, ...]], limit: int = 5) -> str:
@@ -225,6 +252,11 @@ def load_source_bundle(manifest_path: Path) -> SourceBundle:
             base_dir,
             "outputs.inference_output_prefix",
         ),
+        raw_source_prepare=(
+            _as_mapping(data.get("raw_source_prepare"), "raw_source_prepare")
+            if "raw_source_prepare" in data
+            else None
+        ),
     )
 
 
@@ -255,6 +287,83 @@ def _validate_output_paths(bundle: SourceBundle) -> None:
             f"  prepared: {bundle.prepared_window_csv}\n"
             f"  final:    {final_window}"
         )
+
+
+def _metadata_count(value: Any, label: str) -> int:
+    if isinstance(value, bool):
+        _die(f"{label} must be an integer count")
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        _die(f"{label} must be an integer count")
+    if count != value and not (isinstance(value, float) and value.is_integer()):
+        _die(f"{label} must be an integer count")
+    if count < 0:
+        _die(f"{label} must be non-negative")
+    return count
+
+
+def _validate_raw_source_prepare_metadata(bundle: SourceBundle, raw_keys: set[tuple[str, str]]) -> None:
+    metadata = bundle.raw_source_prepare
+    if metadata is None:
+        return
+
+    expected_totals = {
+        "epoch_count": _count_rows(bundle.epochs_csv),
+        "window_count": _count_rows(bundle.window_csv),
+        "base_prediction_count": _count_rows(bundle.base_prediction_csv),
+    }
+    for field, actual in expected_totals.items():
+        if field not in metadata:
+            _die(f"raw_source_prepare.{field} is missing from source manifest metadata")
+        recorded = _metadata_count(metadata[field], f"raw_source_prepare.{field}")
+        if recorded != actual:
+            _die(
+                f"raw_source_prepare.{field} does not match derived CSV rows:\n"
+                f"  recorded: {recorded}\n"
+                f"  actual:   {actual}"
+            )
+
+    summaries = metadata.get("runs")
+    if not isinstance(summaries, list):
+        _die("raw_source_prepare.runs must be a list")
+    epoch_counts = _route_counts(bundle.epochs_csv)
+    window_counts = _window_route_counts(bundle.window_csv)
+    base_counts = _window_route_counts(bundle.base_prediction_csv)
+    summary_keys: set[tuple[str, str]] = set()
+    for idx, value in enumerate(summaries):
+        row = _as_mapping(value, f"raw_source_prepare.runs[{idx}]")
+        key = (str(row.get("city", "")), str(row.get("run", "")))
+        if not key[0] or not key[1]:
+            _die(f"raw_source_prepare.runs[{idx}] needs city and run")
+        if key in summary_keys:
+            _die(f"raw_source_prepare.runs contains duplicate run: {key[0]}/{key[1]}")
+        summary_keys.add(key)
+        for field, counts in (
+            ("epoch_count", epoch_counts),
+            ("window_count", window_counts),
+            ("base_prediction_count", base_counts),
+        ):
+            if field not in row:
+                _die(f"raw_source_prepare.runs[{idx}].{field} is missing")
+            recorded = _metadata_count(row[field], f"raw_source_prepare.runs[{idx}].{field}")
+            actual = counts.get(key, 0)
+            if recorded != actual:
+                _die(
+                    f"raw_source_prepare.runs[{idx}].{field} does not match derived CSV rows for {key[0]}/{key[1]}:\n"
+                    f"  recorded: {recorded}\n"
+                    f"  actual:   {actual}"
+                )
+
+    if summary_keys != raw_keys:
+        missing = raw_keys - summary_keys
+        extra = summary_keys - raw_keys
+        details: list[str] = []
+        if missing:
+            details.append(f"missing: {_preview(missing)}")
+        if extra:
+            details.append(f"extra: {_preview(extra)}")
+        _die(f"raw_source_prepare.runs does not match manifest runs: {'; '.join(details)}")
 
 
 def validate_source_bundle(bundle: SourceBundle) -> ValidatedSourceBundle:
@@ -307,6 +416,7 @@ def validate_source_bundle(bundle: SourceBundle) -> ValidatedSourceBundle:
             f"  {_preview(missing_base)}"
         )
 
+    _validate_raw_source_prepare_metadata(bundle, raw_keys)
     _validate_output_paths(bundle)
 
     return ValidatedSourceBundle(
