@@ -109,7 +109,9 @@ This path parses raw PPC RINEX/reference inputs, but it is intentionally
 degraded: features that require the calibrated simulator/refinedgrid
 research pipeline are neutral-filled so the saved product model can run.
 Use it to fix the product inference wiring from raw source bundles, not
-as a replacement for the upstream calibrated feature pipeline.
+as a replacement for the upstream calibrated feature pipeline.  It
+validates that `base.nav` exists, but does not run broadcast-ephemeris
+satellite propagation or refinedgrid base prediction.
 
 ### 3.3 Source manifest check
 
