@@ -24,6 +24,10 @@ GATED_RAW_WLS_RESCUE_BASELINE_MSE_PR_MIN = 50.0
 GATED_RAW_WLS_RESCUE_MSE_PR_MAX = 20.0
 GATED_RAW_WLS_RESCUE_MSE_PR_RATIO_MAX = 0.35
 GATED_RAW_WLS_RESCUE_BASELINE_GAP_MAX_M = 150.0
+# Guard only extreme raw-WLS PR-MSE failures.  The train broad probe found no
+# raw-WLS-winning chunks in this range, while moderate high-baseline rescues
+# remain covered by motion/gap checks below.
+RAW_WLS_CANDIDATE_MSE_PR_MAX = 100_000.0
 GATED_HIGH_BASELINE_CANDIDATE_STEP_P95_RATIO_MAX = 2.0
 GATED_HIGH_BASELINE_CANDIDATE_STEP_P95_FLOOR_M = 100.0
 GATED_HIGH_BASELINE_CANDIDATE_GAP_P95_RATIO_MAX = 3.0
@@ -156,6 +160,8 @@ def catastrophic_baseline_alternative(
     for name, quality in candidates.items():
         if name == "baseline":
             continue
+        if name == "raw_wls" and not raw_wls_candidate_passes_mse_guard(quality):
+            continue
         if name == "raw_wls" and not raw_wls_candidate_passes_max_gap_guard(quality, raw_wls_max_gap_m):
             continue
         if is_fgo_candidate_source(name) and not fgo_candidate_passes_mse_guard(quality):
@@ -185,6 +191,8 @@ def select_auto_chunk_source(candidates: dict[str, ChunkCandidateQuality]) -> st
     for name, quality in candidates.items():
         if name == "baseline":
             continue
+        if name == "raw_wls" and not raw_wls_candidate_passes_mse_guard(quality):
+            continue
         if is_fgo_candidate_source(name) and not fgo_candidate_passes_mse_guard(quality):
             continue
         if quality.mse_pr > baseline.mse_pr * 1.5:
@@ -201,6 +209,10 @@ def is_fgo_candidate_source(name: str) -> bool:
 
 def fgo_candidate_passes_mse_guard(quality: ChunkCandidateQuality) -> bool:
     return np.isfinite(quality.mse_pr) and quality.mse_pr <= FGO_CANDIDATE_MSE_PR_MAX
+
+
+def raw_wls_candidate_passes_mse_guard(quality: ChunkCandidateQuality) -> bool:
+    return np.isfinite(quality.mse_pr) and quality.mse_pr <= RAW_WLS_CANDIDATE_MSE_PR_MAX
 
 
 def fgo_candidate_passes_baseline_gap_guard(
@@ -302,6 +314,8 @@ def select_gated_chunk_source(
     if baseline.mse_pr > float(baseline_threshold):
         raw_wls = record.candidates.get("raw_wls")
         for _score, name, quality in candidate_order:
+            if name == "raw_wls" and not raw_wls_candidate_passes_mse_guard(quality):
+                continue
             if name == "raw_wls" and not raw_wls_candidate_passes_max_gap_guard(quality, raw_wls_max_gap_m):
                 continue
             if is_fgo_candidate_source(name) and not fgo_candidate_passes_mse_guard(quality):
@@ -313,6 +327,8 @@ def select_gated_chunk_source(
         return "baseline"
     for _score, name, quality in candidate_order:
         if name == "raw_wls":
+            if not raw_wls_candidate_passes_mse_guard(quality):
+                continue
             if not raw_wls_candidate_passes_max_gap_guard(quality, raw_wls_max_gap_m):
                 continue
             if raw_wls_candidate_passes_high_pr_mse_rescue(quality, baseline):
