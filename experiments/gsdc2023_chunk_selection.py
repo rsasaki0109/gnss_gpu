@@ -28,11 +28,16 @@ GATED_RAW_WLS_RESCUE_BASELINE_GAP_MAX_M = 150.0
 # raw-WLS-winning chunks in this range, while moderate high-baseline rescues
 # remain covered by motion/gap checks below.
 RAW_WLS_CANDIDATE_MSE_PR_MAX = 100_000.0
-GATED_HIGH_BASELINE_RAW_WLS_QUALITY_MAX = 2.0
+# Direct Kaggle A/B after the raw-WLS MSE guards showed marginal high-baseline
+# raw-WLS chunks can preserve the local PR proxy while hurting leaderboard
+# score.  Keep only tighter, train-backed high-baseline raw-WLS rescues.
+GATED_HIGH_BASELINE_RAW_WLS_QUALITY_MAX = 1.7
+GATED_HIGH_BASELINE_RAW_WLS_GAP_P95_MAX_M = 200.0
 GATED_HIGH_BASELINE_CANDIDATE_STEP_P95_RATIO_MAX = 2.0
 GATED_HIGH_BASELINE_CANDIDATE_STEP_P95_FLOOR_M = 100.0
 GATED_HIGH_BASELINE_CANDIDATE_GAP_P95_RATIO_MAX = 3.0
 GATED_HIGH_BASELINE_CANDIDATE_GAP_P95_FLOOR_M = 150.0
+GATED_HIGH_BASELINE_CANDIDATE_GAP_P95_MAX_M = 200.0
 GATED_MI8_BASELINE_JUMP_STEP_P95_M = 100.0
 GATED_MI8_RAW_WLS_BASELINE_GAP_MAX_M = 200.0
 # Pixel5 raw_wls high-baseline chunks improved the local PR proxy but worsened
@@ -145,6 +150,7 @@ def candidate_passes_high_baseline_mse_motion_guard(
             baseline.step_p95_m * GATED_HIGH_BASELINE_CANDIDATE_GAP_P95_RATIO_MAX,
             GATED_HIGH_BASELINE_CANDIDATE_GAP_P95_FLOOR_M,
         )
+        and quality.baseline_gap_p95_m <= GATED_HIGH_BASELINE_CANDIDATE_GAP_P95_MAX_M
     )
 
 
@@ -219,7 +225,12 @@ def raw_wls_candidate_passes_mse_guard(quality: ChunkCandidateQuality) -> bool:
 
 
 def raw_wls_candidate_passes_high_baseline_quality_guard(quality: ChunkCandidateQuality) -> bool:
-    return np.isfinite(quality.quality_score) and quality.quality_score <= GATED_HIGH_BASELINE_RAW_WLS_QUALITY_MAX
+    return (
+        np.isfinite(quality.quality_score)
+        and quality.quality_score <= GATED_HIGH_BASELINE_RAW_WLS_QUALITY_MAX
+        and np.isfinite(quality.baseline_gap_p95_m)
+        and quality.baseline_gap_p95_m <= GATED_HIGH_BASELINE_RAW_WLS_GAP_P95_MAX_M
+    )
 
 
 def fgo_candidate_passes_baseline_gap_guard(
