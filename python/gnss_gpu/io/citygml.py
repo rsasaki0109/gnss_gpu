@@ -64,6 +64,24 @@ class CityFeature:
 
 
 # Back-compat alias: callers historically imported ``Building``.
+#
+# This is **source-compatible** for ``isinstance`` checks and attribute
+# access, but it is **not** a guarantee of:
+#
+# * **Pickle round-trip with old data.**  Instances now serialise as
+#   ``gnss_gpu.io.citygml.CityFeature``; pickles produced before the
+#   bridge refactor reference ``gnss_gpu.io.citygml.Building`` and will
+#   either fail to load or load as the alias depending on Python
+#   version.  Do not rely on cross-version pickle compatibility.
+# * **Equality semantics.**  ``CityFeature`` is a dataclass with an
+#   auto-generated ``__eq__`` that includes the new ``kind`` field, so
+#   two instances that previously compared equal as ``Building`` may now
+#   compare unequal if their ``kind`` differs (in practice both will be
+#   ``"bldg"`` for old code paths, so this is mostly theoretical).
+#
+# If you need a true ``Building`` subclass for serialisation
+# compatibility, we'd add it here -- this alias deliberately does not
+# attempt that.
 Building = CityFeature
 
 
