@@ -837,6 +837,7 @@ def test_product_inference_prediction_guards() -> None:
     frame = pd.DataFrame(
         {
             "rinex_phase_raw_delta_cycles_p50_p75": [500.0, 100.0, 500.0],
+            "rinex_gf_streak_ge10p0s_count_std": [4.0, 4.0, 1.0],
         }
     )
     corrected = np.array([0.55, 0.55, 0.10], dtype=np.float64)
@@ -856,6 +857,31 @@ def test_product_inference_prediction_guards() -> None:
         },
     )
     check("prediction guard caps only active high predictions", [0.2, 0.55, 0.1], guarded.tolist())
+
+    guarded = _apply_prediction_guards(
+        frame,
+        np.array([0.55, 0.10, 0.10], dtype=np.float64),
+        {
+            "prediction_guards": [
+                {
+                    "name": "phase_delta_cap20",
+                    "feature": "rinex_phase_raw_delta_cycles_p50_p75",
+                    "operator": ">=",
+                    "threshold": 426.419,
+                    "cap": 0.20,
+                },
+                {
+                    "name": "gf_streak_recovery_floor60",
+                    "feature": "rinex_gf_streak_ge10p0s_count_std",
+                    "operator": ">=",
+                    "threshold": 3.8,
+                    "input_max": 0.15,
+                    "floor": 0.60,
+                },
+            ]
+        },
+    )
+    check("prediction guards floor only original low predictions after cap", [0.2, 0.6, 0.1], guarded.tolist())
 
 
 def main() -> None:

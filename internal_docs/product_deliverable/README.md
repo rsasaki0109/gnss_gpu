@@ -2,7 +2,7 @@
 
 **Status**: internal research prototype, route-level deliverable with saved one-shot fresh-data batch inference, bootstrap raw-source preparation, source-manifest validation, and actionability annotations
 **Last updated**: 2026-04-30
-**Adopted model**: §7.16 transition stack + 0.75-blended isotonic calibration + phase-delta guard `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45`
+**Adopted model**: §7.16 transition stack + 0.75-blended isotonic calibration + GF recovery floor + phase-delta guard `transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_recovery_meta_run45`
 **Source plan**: `internal_docs/plan.md` sections 7.7 through 7.16
 
 ---
@@ -70,21 +70,26 @@ classification targets during training.
 
 Under product-relevant metrics:
 
-| metric | adopted phaseguard | baseline §2.2 |
+| metric | adopted phaseguard-recovery | baseline §2.2 |
 | --- | --- | --- |
-| run MAE | **1.790 pp** | 4.436 pp |
-| window correlation | **0.559** | 0.401 |
-| overall aggregate error | **-1.16 pp** on 17.90 % dataset FIX rate | — |
-| window weighted MAE | **15.847 pp** | 18.046 pp |
+| run MAE | **1.202 pp** | 4.436 pp |
+| window correlation | **0.596** | 0.401 |
+| overall aggregate error | **-0.61 pp** on 17.90 % dataset FIX rate | — |
+| window weighted MAE | **15.372 pp** | 18.046 pp |
 
 The committed single-model artifact is a full-data fit for deployment,
 not an independent validation fold.  The final isotonic calibration is
 selected on strict leave-one-run-out predictions from the previous
 §7.16 model, then blended 0.75 with the original alpha75 prediction to
 keep correlation and tail error closer to the pre-calibrated model.
-A deployable phase-delta guard then caps predictions at 20 % when
+A deployable GF recovery guard floors originally low predictions
+(<= 15 %) to 60 % when `rinex_gf_streak_ge10p0s_count_std >= 3.8`,
+capturing two Tokyo run2 recovery windows.  A phase-delta guard caps
+high predictions at 20 % when
 `rinex_phase_raw_delta_cycles_p50_p75 >= 426.419`, selected on strict
-LORO as a RINEX phase-instability prior.
+LORO as a RINEX phase-instability prior.  The floor is gated by the
+original low prediction so it does not undo phase caps on high original
+predictions.
 Use the strict nested LORO table above as the generalisation estimate.
 
 Per-route error on the test set (see
@@ -96,7 +101,7 @@ Per-route error on the test set (see
 | nagoya / run2 | 16.2 % | 17.6 % | 1.44 pp | medium | review |
 | nagoya / run3 |  7.9 % |  8.0 % | 0.17 pp | high | ok |
 | tokyo  / run1 | 10.9 % | 10.4 % | 0.50 pp | medium | review |
-| tokyo  / run2 | 29.0 % | 20.9 % | 8.13 pp | low | review_required |
+| tokyo  / run2 | 29.0 % | 24.4 % | 4.60 pp | low | review_required |
 | tokyo  / run3 | 24.0 % | 23.7 % | 0.28 pp | low | review_required |
 
 Confidence tiers are auto-detected per route from the presence of
@@ -111,23 +116,25 @@ windows are usable, `review` means hidden-high windows are present, and
 window-level action.
 
 Five of six routes are within 1.5 pp of actual.  The one exception is
-tokyo/run2 at 8.13 pp, which contains the Tokyo run2 w7/w9 false-high
-cluster and the w23-w27 hidden-high cluster documented in section 5.
+tokyo/run2 at 4.60 pp, which contains the Tokyo run2 w7/w9 false-high
+cluster and residual hidden-high windows documented in section 5.
 Compared with the previous isotonic75 artifact, the phase-delta guard
 reduces focus false-high windows from 9 to 3, abstain windows from 9 to
-3, and low-confidence routes from 5 to 2.
+3, and low-confidence routes from 5 to 2.  The GF recovery floor lifts
+two under-predicted Tokyo run2 recovery windows and reduces hidden-high
+windows from 15 to 14.
 
 ## 4. Inputs, outputs, and files
 
 ### Inputs required by the product command
 
 - Committed adopted window prediction CSV:
-  `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_meta_run45_window_predictions.csv`.
+  `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_recovery_meta_run45_window_predictions.csv`.
   `python3 experiments/predict.py` uses this frozen artifact by default
   to refresh `route_level_fix_rate_prediction.csv`,
   `window_level_details.csv`, and `dashboard.html`.
 - Committed full-data-fit product model artifact:
-  `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_meta_run45_product_model.pkl.gz`.
+  `experiments/results/ppc_window_fix_rate_model_..._alpha75_isotonic75_phaseguard_recovery_meta_run45_product_model.pkl.gz`.
   `python3 experiments/predict.py --batch-inference` loads this artifact
   after preparing fresh inputs; split `--inference` can also score an
   already prepared window CSV without training.
@@ -199,13 +206,13 @@ Relative paths in manifests resolve from the manifest file's directory.
 - `internal_docs/product_deliverable/dashboard.html` — self-contained
   HTML report (open in a browser) with metrics summary, per-run bar
   chart, actual-vs-predicted scatter, and focus-case detail table.
-- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45_window_predictions.csv`
+- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_recovery_meta_run45_window_predictions.csv`
   — committed frozen calibrated window prediction artifact used by
   `experiments/predict.py` in default product mode.
-- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45_product_model.pkl.gz`
+- `experiments/results/ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_recovery_meta_run45_product_model.pkl.gz`
   — committed saved full-data-fit model artifact with 0.75-blended
-  final isotonic calibration and phase-delta prediction guard, used by
-  `experiments/predict.py --inference`.
+  final isotonic calibration, GF recovery floor, and phase-delta
+  prediction guard, used by `experiments/predict.py --inference`.
 - `internal_docs/product_deliverable/plots/` — static PNG figures per
   run that overlay the predicted FIX rate onto the actual demo5
   per-epoch FIX/NO-FIX trajectory:
@@ -298,7 +305,8 @@ and normal or resolved windows as `use`.
   the selected phase-delta cap condition.
 - **Tokyo run2 w23 - w27** (`hidden_high`): actual FIX is 75-100 % but
   deployable features under-predict.  The adopted model lifts part of
-  this segment, but still under-predicts several high-FIX windows.
+  the broader Tokyo run2 recovery pattern, but still under-predicts
+  several high-FIX windows.
 - **Tokyo run3 w28** (`false_high`): residual inflated prediction on a
   low-actual window after isotonic calibration and the phase-delta
   guard.
@@ -462,10 +470,10 @@ Raw source-file feature extraction is still upstream of this command.
   hold_strict, 1.25 block_p90) is a local optimum on this dataset
   (§7.14 / §7.15).  Re-scan if the training data grows by more than
   a couple of runs.
-- The 0.75-blended final isotonic calibrator plus phase-delta guard
-  improves run MAE and weighted MAE over raw §7.16 alpha=0.75
-  predictions.  Re-evaluate this post-calibrator/guard pair when the
-  training set grows.
+- The 0.75-blended final isotonic calibrator plus GF recovery floor and
+  phase-delta guard improves run MAE and weighted MAE over raw §7.16
+  alpha=0.75 predictions.  Re-evaluate this post-calibrator/guard set
+  when the training set grows.
 - The `clean_streak_s` carry counter (§7.11) is the single most
   impactful deployable feature added since the baseline.  Any further
   epoch-level surrogate redesign should preserve a pure cumulative-

@@ -48,10 +48,18 @@ from train_ppc_solver_transition_surrogate_stack import (
 SCHEMA_VERSION = 1
 DEFAULT_MODEL_PATH = (
     RESULTS_DIR
-    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45_product_model.pkl.gz"
+    / "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_recovery_meta_run45_product_model.pkl.gz"
 )
 KEY_COLUMNS = {"city", "run", "window_index"}
 PREDICTION_GUARD_PRESETS: dict[str, dict[str, object]] = {
+    "gf_streak_recovery_floor60": {
+        "name": "gf_streak_recovery_floor60",
+        "feature": "rinex_gf_streak_ge10p0s_count_std",
+        "operator": ">=",
+        "threshold": 3.8,
+        "input_max": 0.15,
+        "floor": 0.60,
+    },
     "phase_delta_cap20": {
         "name": "phase_delta_cap20",
         "feature": "rinex_phase_raw_delta_cycles_p50_p75",
@@ -392,6 +400,7 @@ def _apply_prediction_guards(df: pd.DataFrame, corrected: np.ndarray, artifact: 
     if not guards:
         return corrected
     values = np.asarray(corrected, dtype=np.float64).copy()
+    original_values = values.copy()
     for guard in guards:
         if not isinstance(guard, dict):
             raise SystemExit("product model prediction_guards must be dictionaries")
@@ -410,6 +419,16 @@ def _apply_prediction_guards(df: pd.DataFrame, corrected: np.ndarray, artifact: 
             active = finite & (feature_values <= threshold)
         else:
             raise SystemExit(f"unsupported prediction guard operator: {operator}")
+        if "input_min" in guard:
+            input_min = float(guard["input_min"])
+            if not np.isfinite(input_min) or input_min < 0.0 or input_min > 1.0:
+                raise SystemExit(f"prediction guard {guard.get('name', feature)} input_min must be in [0, 1]")
+            active &= original_values >= input_min
+        if "input_max" in guard:
+            input_max = float(guard["input_max"])
+            if not np.isfinite(input_max) or input_max < 0.0 or input_max > 1.0:
+                raise SystemExit(f"prediction guard {guard.get('name', feature)} input_max must be in [0, 1]")
+            active &= original_values <= input_max
         if "cap" in guard:
             cap = float(guard["cap"])
             if not np.isfinite(cap) or cap < 0.0 or cap > 1.0:
