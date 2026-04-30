@@ -297,6 +297,76 @@ sats and includes low-elevation ones, where bridges are most
 effective occluders.  This is the input-layer signal that will
 feed the §7.16 retrain.
 
+### 6-run sweep (all PPC runs, 2026-04-30)
+
+After the Tokyo run2 spot check, the same bldg vs bldg+brid antenna
+extraction was run on all six PPC runs (stride 5, EGM96 correction
+in both arms).  Result by run:
+
+| run | epochs | ΔNLoS | Δhigh-elev-NLoS | Δeff_p50 |
+| --- | ---: | ---: | ---: | ---: |
+| tokyo/run1   | 2369 | +224 (+2.8 %)  | +181 (+3.5 %)    | −0.21 dB |
+| tokyo/run2   | 1822 | **+3 227 (+57 %)**  | **+2 353 (+105 %)** | **−3.36 dB** |
+| tokyo/run3   | 3059 | **+6 129 (+88 %)**  | **+4 713 (+165 %)** | **−3.61 dB** |
+| nagoya/run1  | 1508 | 0              | 0                | 0        |
+| nagoya/run2  | 1886 | 0              | 0                | 0        |
+| nagoya/run3  | 1041 | 0              | 0                | 0        |
+| **all 6**    | **11 685** | **+9 580 (+25 %)** | **+7 247 (+35 %)** | **−1.51 dB** |
+
+Two clean signals:
+- **Tokyo run2/run3 are heavily bridge-affected** (Tokyo Monorail,
+  Yurikamome, Shuto Expressway viaducts on the trajectory).
+- **Nagoya runs have zero bridge contribution** (no elevated
+  structures crossed by the trajectory, as predicted by the
+  Phase 1 README note).
+- Tokyo run1 sits in between (+2.8 %).
+
+This is the cleanest "do bridges matter at all in this dataset"
+result we can produce without committing to a full retrain.
+
+### Predictive power of bridge-aware features
+
+The 14 antenna `_per_window` features were correlated against
+`actual_fix_rate_pct` on the 197 evaluation windows in the §7.16
+augmented window CSV.  Comparing bldg-only vs bldg+brid (both
+EGM96), seven of fourteen features become measurably better
+predictors when the bridge mesh is included:
+
+| feature | r(bldg) | r(bldg+brid) | Δr |
+| --- | ---: | ---: | ---: |
+| eff_db_p10_mean              | +0.207 | +0.212 | +0.005 |
+| eff_db_p50_mean              | +0.028 | +0.071 | **+0.043** |
+| eff_db_p90_mean              | −0.013 | +0.044 | +0.031 |
+| eff_db_mean_mean             | +0.132 | +0.158 | +0.026 |
+| usable_count_mean            | +0.253 | +0.277 | +0.024 |
+| marginal_count_mean          | +0.290 | +0.324 | +0.034 |
+| nlos_at_high_elev_count_mean | −0.188 | −0.209 | +0.022 |
+| **usable_count_min**         | +0.219 | +0.106 | **−0.113** |
+| **eff_db_max_max**           | +0.144 | +0.081 | −0.063 |
+| nlos_at_high_elev_count_max  | −0.139 | −0.070 | −0.069 |
+
+`_mean` aggregations consistently improve (Δr ≈ +0.02..+0.04 each).
+`_min` / `_max` aggregations degrade, because bridge effects spike
+the per-window distribution and break aggregations the model had
+learned over a smoother bldg-only signal.  Net: **weak positive**.
+
+This is consistent with the LoS-check result: bridges are real
+occluders that the input layer can see, but the absolute
+correlation with FIX rate is modest (|r| < 0.33 in either case),
+so the route-MAE delta from a full §7.16 retrain on bldg+brid
+features is bounded above by a few hundredths of a percentage
+point per run, not a percentage point.
+
+Open follow-up (operator-driven): merge the 6 `*_BRID_egm96_*_per_window.csv`
+files into the master window CSV (preserving the existing
+`ant_*` schema) and run `predict.py --retrain --window-csv <new>
+--epochs-csv <preprocessed phasejump epochs.csv>
+--base-prefix <refinedgrid prefix>` with `--max-run-mae-pp 4.5`
+as the guardrail.  Compare against the adopted model's run MAE
+(1.79 pp) and route MAE.  The preprocessed epochs.csv is in
+`/tmp/ppc_plots_worktree/experiments/results/` (177 MB), so this
+is a single operator-side command, not a from-scratch rebuild.
+
 To re-run the dense check:
 
 ```bash
