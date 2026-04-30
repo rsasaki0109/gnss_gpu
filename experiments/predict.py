@@ -118,7 +118,7 @@ DEFAULT_BASE_PREFIX = (
 )
 DEFAULT_PRESET = "current_tight_hold"
 DEFAULT_RESULTS_PREFIX = (
-    "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_meta_run45"
+    "ppc_window_fix_rate_model_stride1_stat_sim_rinex_phasejump_t0p25_gf0p2_simloscont_focused_simadop_nowt_solver_transition_surrogate_nested_et80_validationhold_current_tight_hold_carry_alpha75_isotonic75_phaseguard_recovery_meta_run45"
 )
 DEFAULT_PREDICTION_CSV = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_window_predictions.csv"
 DEFAULT_INFERENCE_MODEL = RESULTS_DIR / f"{DEFAULT_RESULTS_PREFIX}_product_model.pkl.gz"
@@ -569,7 +569,7 @@ def parse_args() -> argparse.Namespace:
     ) and args.source_manifest is None:
         parser.error("--source-bundle-prepare/check/inference require --source-manifest")
     if args.prediction_guard is None:
-        args.prediction_guard = ["phase_delta_cap20"]
+        args.prediction_guard = ["phase_delta_cap20", "gf_streak_recovery_floor60"]
     elif "none" in args.prediction_guard:
         args.prediction_guard = ["none"]
     return args
