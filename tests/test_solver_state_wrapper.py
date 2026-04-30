@@ -104,3 +104,28 @@ def test_default_product_gatekeeper_still_drops_uncurated_solver_columns():
     assert _is_metadata_or_label("rtk_pos") is True
     assert _is_metadata_or_label("solver_demo5_ratio_mean") is True
     assert _is_metadata_or_label("solver_demo5_ratio_p99") is True
+
+
+def test_constructor_rejects_columns_kwarg():
+    """The allowlist is fixed; passing ``columns=...`` must fail so callers
+    cannot widen the curated six-column contract."""
+    with pytest.raises(TypeError):
+        SolverStateWrapper(columns=("rtk_lock_p90_p50",))  # type: ignore[call-arg]
+
+
+def test_curate_rejects_non_finite_neutral_value():
+    df = _frame_with_curated()
+    wrapper = SolverStateWrapper()
+    with pytest.raises(ValueError, match="neutral_value must be finite"):
+        wrapper.curate(df, neutral_value=float("nan"))
+    with pytest.raises(ValueError, match="neutral_value must be finite"):
+        wrapper.curate(df, neutral_value=float("inf"))
+
+
+def test_validate_rejects_duplicate_curated_columns():
+    df = _frame_with_curated()
+    df["dup"] = [1.0, 2.0, 3.0, 4.0]
+    df = df.rename(columns={"dup": "rtk_lock_p90_p50"})
+    assert (df.columns == "rtk_lock_p90_p50").sum() == 2
+    with pytest.raises(ValueError, match="duplicate curated columns"):
+        SolverStateWrapper().validate(df)

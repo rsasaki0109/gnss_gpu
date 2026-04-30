@@ -25,9 +25,11 @@ augmented window CSV and used as training targets in
 * ``rtk_lock_p90_p50``
 * ``rtk_lock_p90_p50_past_delta``
 
-No other ``rtk_*`` / ``solver_*`` column is exposed; the default gatekeeper
-``experiments/_common._is_metadata_or_label`` continues to drop everything
-outside this allowlist.
+No other ``rtk_*`` / ``solver_*`` column is exposed.  The default gatekeeper
+``experiments/_common._is_metadata_or_label`` keeps dropping every
+``rtk_*`` / ``solver_*`` column (including the curated six); this wrapper
+is the only mechanism by which a research script can selectively
+re-introduce the allowlist as runtime features.
 
 Usage
 -----
@@ -73,15 +75,30 @@ CURATED_SOLVER_STATE_COLUMNS: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class SolverStateWrapper:
-    """Curate solver state for opt-in runtime feature exposure."""
+    """Curate solver state for opt-in runtime feature exposure.
 
-    columns: tuple[str, ...] = CURATED_SOLVER_STATE_COLUMNS
+    The curated allowlist is fixed at the module level via
+    ``CURATED_SOLVER_STATE_COLUMNS``.  The constructor takes no arguments;
+    custom column lists are intentionally not supported, so that the
+    six-column contract cannot be widened by a caller.
+    """
 
     def runtime_feature_columns(self) -> tuple[str, ...]:
-        return self.columns
+        return CURATED_SOLVER_STATE_COLUMNS
 
     def validate(self, df: pd.DataFrame) -> None:
-        missing = [c for c in self.columns if c not in df.columns]
+        duplicates = sorted(
+            c for c in CURATED_SOLVER_STATE_COLUMNS if (df.columns == c).sum() > 1
+        )
+        if duplicates:
+            raise ValueError(
+                "SolverStateWrapper.validate: duplicate curated columns in "
+                f"input DataFrame: {duplicates}.  Drop or rename duplicates "
+                "before validation; pandas returns a DataFrame rather than a "
+                "Series for duplicated labels and the curator cannot reason "
+                "about which copy is authoritative."
+            )
+        missing = [c for c in CURATED_SOLVER_STATE_COLUMNS if c not in df.columns]
         if missing:
             raise KeyError(
                 "SolverStateWrapper.validate: input DataFrame is missing "
@@ -89,7 +106,7 @@ class SolverStateWrapper:
                 "ambiguity-fix-state indicators produced by the PPC "
                 "augmentation pipeline."
             )
-        for col in self.columns:
+        for col in CURATED_SOLVER_STATE_COLUMNS:
             ser = df[col]
             if not pd.api.types.is_numeric_dtype(ser):
                 raise TypeError(
@@ -108,10 +125,19 @@ class SolverStateWrapper:
 
         Default ``0.0`` lets linear and tree models treat missing solver state
         as "no information".  Callers that prefer column-median imputation
-        must pre-process before calling.
+        must pre-process before calling.  ``neutral_value`` itself must be
+        finite; otherwise the wrapper would emit non-finite values while
+        claiming sanitisation.
         """
+        if not np.isfinite(neutral_value):
+            raise ValueError(
+                "SolverStateWrapper.curate: neutral_value must be finite, "
+                f"got {neutral_value!r}.  The curator's contract is that the "
+                "returned DataFrame has no NaN/Inf in curated columns; "
+                "passing a non-finite replacement would silently violate it."
+            )
         self.validate(df)
-        sub = df.loc[:, list(self.columns)]
+        sub = df.loc[:, list(CURATED_SOLVER_STATE_COLUMNS)]
         arr = sub.to_numpy(dtype=float, copy=True)
         non_finite = ~np.isfinite(arr)
         if non_finite.any():
@@ -124,7 +150,9 @@ class SolverStateWrapper:
                 neutral_value,
             )
             arr[non_finite] = float(neutral_value)
-        return pd.DataFrame(arr, columns=list(self.columns), index=sub.index)
+        return pd.DataFrame(
+            arr, columns=list(CURATED_SOLVER_STATE_COLUMNS), index=sub.index
+        )
 
 
 def is_curated_solver_state_column(name: str) -> bool:
