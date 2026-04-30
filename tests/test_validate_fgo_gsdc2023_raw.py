@@ -2472,6 +2472,7 @@ def test_collect_matlab_parity_audit_quick_skips_raw_imu_parsing(tmp_path):
     audit = collect_matlab_parity_audit(data_root, "train/course/phone", include_imu_sync=False)
 
     assert audit["device_imu_present"] is True
+    assert audit["imu_sync_checked"] is False
     assert audit["imu_rows_acc"] == 0
     assert audit["gnss_elapsed_present"] is False
     assert audit["imu_sync_ready"] is False
@@ -3016,6 +3017,7 @@ def test_collect_matlab_parity_audit_reports_imu_sync_ready(tmp_path):
     audit = collect_matlab_parity_audit(data_root, "train/course/phone")
 
     assert audit["device_imu_present"] is True
+    assert audit["imu_sync_checked"] is True
     assert audit["gnss_elapsed_present"] is True
     assert audit["imu_sync_ready"] is True
     assert audit["stop_epoch_count"] >= 1
