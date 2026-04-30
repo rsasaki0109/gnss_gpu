@@ -645,9 +645,31 @@
 - `odaiba_best_accuracy` は変更しない。
 - 次に進むなら Phase 2 の per-particle velocity/RBPF 側で mode survival を制約する。
 
+## D-034: Solver-state lightweight wrapper を opt-in research module として追加
+
+状態: 採用 (interface only)
+
+根拠:
+- PR #42 (`docs: tokyo/run2 8.13pp residual is an accepted modeling ceiling`) が tokyo/run2 8.13 pp 残差の3つ取り組み (linear correction / hidden-high classifier / abstention) を null result としてクローズし、ceiling lift の3つの out-of-scope path を列挙した。
+- `PLATEAU_BRIDGE_INTEGRATION.md` "Why the residual is not closeable": 1番目の path "Solver-state lightweight wrapper" は medium-size PR であり model input contract を変更するもの。
+- 現状の product 契約 (`product_deliverable/README.md` §1) は `rtk_*` / `solver_demo5_*` を runtime feature から除外、6 列はすべて training target としてのみ使用。
+- `experiments/_common._is_metadata_or_label` が `rtk_*` / `solver_*` を gate して runtime feature 入りを防いでいる。
+
+決定:
+- `experiments/solver_state_wrapper.py` を追加: 6列 (`solver_demo5_ratio_{mean,p90,p95,mean_past_delta}`, `rtk_lock_p90_p50{,_past_delta}`) の curated allowlist + `SolverStateWrapper.validate` / `curate` / `runtime_feature_columns`。
+- `experiments/augment_window_csv_with_solver_state_wrapper.py` を追加: window CSV → curated subset を sanitise した CSV を出す CLI (research input prep).
+- `tests/test_solver_state_wrapper.py` で allowlist / non-finite handling / default gatekeeper 不変性 を検証。
+- 既存の `train_ppc_solver_transition_surrogate_stack.py` / `product_inference_model.py` は wrapper を import せず、deployed run-MAE 1.79 pp は維持。
+- ceiling lift を実証する training script + LORO 評価は follow-up PR に分離 (target leakage 注意点を wrapper module docstring に記載済み)。
+
+理由:
+- Path 1 を opt-in interface として確保することで、follow-up での research path を ready にしつつ、deployed contract と adopted artefact の両方を変更しない。
+- 既に existing 6 列が training target として材料化されているため、wrapper は新規 column 計算でなく allowlist + sanitiser に責任が限られ、medium-size PR として収まる。
+
 ## 現在の未決定事項
 
 - `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか
 - strategy 差分が出る epoch をどの figure で見せるか
 - `blocked score` は完全に不要か、それとも veto 付きなら使えるか
 - readability/extensibility proxy をどこまで信頼するか
+- Solver-state wrapper を opt-in する research training script の設計 (target leakage 回避: 6列を runtime feature にした場合、`_transition_targets` から外して別 target に置換する)

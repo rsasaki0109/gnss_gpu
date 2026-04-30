@@ -16,6 +16,13 @@ The model does **not** use any demo5 solver internals (`rtk_*`,
 `solver_demo5_*`) as runtime features; those columns appear only as
 classification targets during training.
 
+An opt-in research wrapper, `experiments/solver_state_wrapper.py`, exposes
+a curated six-column subset of those internals as runtime features for
+ceiling-lift experiments (the "solver-state lightweight wrapper" path
+flagged in `PLATEAU_BRIDGE_INTEGRATION.md`).  The default product training
+and inference paths do not import the wrapper; the deployed metric
+(run MAE 1.79 pp) is unaffected until a research script opts in.
+
 ## 2. Scope and confidence
 
 ### In-scope use cases (confidence `high` or `medium`)
