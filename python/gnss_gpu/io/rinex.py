@@ -141,7 +141,7 @@ def _parse_rinex_obs_values(
     for offset in range(n_lines):
         if idx + offset >= len(lines):
             break
-        obs_text += lines[idx + offset].rstrip("\n")
+        obs_text += lines[idx + offset].rstrip("\n").ljust(80)
     sat_obs: dict[str, float] = {}
     for obs_idx, obs_code in enumerate(obs_codes):
         seg = obs_text[obs_idx * 16 : obs_idx * 16 + 16]
@@ -308,7 +308,7 @@ def _parse_v2_epochs(lines: list[str], idx: int, header: RinexHeader) -> list[Ri
             for _ in range(n_obs_lines):
                 if idx >= len(lines):
                     break
-                obs_record += lines[idx].rstrip("\n")
+                obs_record += lines[idx].rstrip("\n").ljust(80)
                 idx += 1
 
             sat_obs: dict[str, float] = {}

@@ -98,6 +98,39 @@ def test_rinex2_observation_epochs(tmp_path):
     assert obs.epochs[0].observations["G02"]["C1"] == 20200002.0
 
 
+def test_rinex2_blank_trailing_observation_field_keeps_width(tmp_path):
+    def _header(body, label):
+        return f"{body:<60}{label}\n"
+
+    def _field(value):
+        if value is None:
+            return " " * 16
+        return f"{value:14.3f}  "
+
+    path = tmp_path / "base.20o"
+    path.write_text(
+        "".join(
+            [
+                _header("     2.11           OBSERVATION DATA    M (MIXED)", "RINEX VERSION / TYPE"),
+                _header("     6    L1    L2    C1    P2    P1    C5", "# / TYPES OF OBSERV"),
+                _header("    30.000", "INTERVAL"),
+                _header("", "END OF HEADER"),
+                " 20  8  4  0  0  0.0000000  0  1G08\n",
+                "".join(_field(value) for value in [117.0, 91.0, 22_372_270.0, 22_372_280.0, None]) + "\n",
+                _field(22_372_279.0) + "\n",
+            ],
+        ),
+        encoding="utf-8",
+    )
+
+    obs = read_rinex_obs(path)
+    sat_obs = obs.epochs[0].observations["G08"]
+
+    assert sat_obs["C1"] == 22_372_270.0
+    assert sat_obs["P1"] == 0.0
+    assert sat_obs["C5"] == 22_372_279.0
+
+
 def test_rinex3_long_observation_rows_do_not_consume_next_satellite(tmp_path):
     def _header(body, label):
         return f"{body:<60}{label}\n"
