@@ -31,6 +31,8 @@ from build_product_deliverable import (
     _classify_window,
     _confidence_tier,
     _require_prediction_columns,
+    _route_action,
+    _window_action,
 )
 from analyze_ppc_validation_hold_surrogate_windows import _window_rows as _validationhold_window_rows
 from predict import (
@@ -149,6 +151,27 @@ def test_confidence_tier() -> None:
     check("mixed with false_high -> low (takes precedence)", "low", tier)
     tier, _ = _confidence_tier(["hidden_high", "false_lift_resolved"])
     check("mixed without low-tier trigger -> medium", "medium", tier)
+
+
+def test_actionability_labels() -> None:
+    print("test_actionability_labels")
+    action, _ = _window_action("")
+    check("normal window action -> use", "use", action)
+    action, _ = _window_action("false_lift_resolved")
+    check("resolved false lift action -> use", "use", action)
+    action, _ = _window_action("hidden_high")
+    check("hidden high action -> review", "review", action)
+    action, _ = _window_action("false_high")
+    check("false high action -> abstain", "abstain", action)
+    action, _ = _window_action("false_lift")
+    check("false lift action -> abstain", "abstain", action)
+
+    route_action, _ = _route_action(["use", "use"])
+    check("all use route action -> ok", "ok", route_action)
+    route_action, _ = _route_action(["use", "review"])
+    check("review route action -> review", "review", route_action)
+    route_action, _ = _route_action(["use", "review", "abstain"])
+    check("abstain route action -> review_required", "review_required", route_action)
 
 
 def test_require() -> None:
@@ -812,6 +835,7 @@ def main() -> None:
     test_classify_window()
     test_is_metadata_or_label()
     test_confidence_tier()
+    test_actionability_labels()
     test_require()
     test_prediction_contract()
     test_base_prediction_path()

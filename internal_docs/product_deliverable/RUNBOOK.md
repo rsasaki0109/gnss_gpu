@@ -308,6 +308,12 @@ One row per `(city, run)` with columns:
 - `adopted_abs_error_pp` — absolute error of the adopted prediction
 - `confidence_tier` — `high` / `medium` / `low`
 - `confidence_note` — reason for the tier
+- `usable_window_count`, `review_window_count`,
+  `abstain_window_count` — actionability breakdown across route windows
+- `abstain_epoch_fraction_pct` — epoch-weighted share of route windows
+  excluded from automated window-level actions
+- `route_action` — `ok`, `review`, or `review_required`
+- `route_action_note` — reason for the action label
 
 ### 4.2 Confidence tiers
 
@@ -320,12 +326,27 @@ One row per `(city, run)` with columns:
   can exceed 8 pp.  Review `window_level_details.csv` for the specific
   focus cases.
 
+Route action is stricter than confidence tier:
+
+- `ok`: all windows have `window_action == use`.
+- `review`: hidden-high windows are present; use the route aggregate
+  with caution and inspect affected windows.
+- `review_required`: at least one window is `abstain`; do not automate
+  window-level actions until the focus cases are reviewed.
+
 ### 4.3 window_level_details.csv
 
 One row per window.  Use for diagnostics when a `low` tier run needs
 drilling down.  The `focus_case_tag` column marks known failure
 archetypes (`false_high`, `hidden_high`, `false_lift`,
 `false_lift_mild`, `false_lift_resolved`).
+
+The `window_action` column is the product-facing screen:
+
+- `use`: usable for route aggregation and normal diagnostics.
+- `review`: prediction likely underestimates a high-FIX window.
+- `abstain`: exclude from automated window-level action and inspect the
+  focus-case note.
 
 ### 4.4 Inference route/window prediction files
 
@@ -367,8 +388,9 @@ Important columns:
 If the adopted model's prediction on a new run deviates more than 5 pp
 from actual, investigate in this order:
 
-1. Check `window_level_details.csv` for unexpected `focus_case_tag` hits
-   — are the failures in known archetypes or new?
+1. Check `window_level_details.csv` for `window_action == abstain` or
+   unexpected `focus_case_tag` hits — are the failures in known
+   archetypes or new?
 2. Check the validationhold window summary
    (`experiments/results/ppc_validationhold_window_summary.csv`)
    for the run: are `clean_streak_s_at_start`, `hold_ready_frac`,
