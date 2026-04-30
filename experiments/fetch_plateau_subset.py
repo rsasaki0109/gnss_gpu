@@ -184,11 +184,22 @@ def load_reference_meshes(
 
 
 def select_bldg_entries(zf: zipfile.ZipFile, meshes: list[str]) -> list[str]:
+    return _select_udx_entries(zf, meshes, kind="bldg")
+
+
+def select_brid_entries(zf: zipfile.ZipFile, meshes: list[str]) -> list[str]:
+    return _select_udx_entries(zf, meshes, kind="brid")
+
+
+def _select_udx_entries(
+    zf: zipfile.ZipFile, meshes: list[str], kind: str
+) -> list[str]:
+    needle = f"udx/{kind}/"
     names = zf.namelist()
     selected = [
         name
         for name in names
-        if ("udx/bldg/" in name or "/udx/bldg/" in name)
+        if (needle in name or f"/{needle}" in name)
         and name.endswith(".gml")
         and any(f"/{mesh}_" in name for mesh in meshes)
     ]
@@ -252,6 +263,11 @@ def main() -> None:
         help="Expand each trajectory mesh by this many neighboring third-level tiles",
     )
     parser.add_argument(
+        "--include-bridges",
+        action="store_true",
+        help="Also extract udx/brid bridge GML files for the same meshes",
+    )
+    parser.add_argument(
         "--manifest",
         type=Path,
         default=None,
@@ -275,12 +291,17 @@ def main() -> None:
     )
     print(f"trajectory meshes ({len(meshes)}): {', '.join(meshes)}")
 
+    bridge_entries: list[str] = []
     with zipfile.ZipFile(HTTPRangeReader(zip_url)) as zf:
         entries = select_bldg_entries(zf, meshes)
         if not entries:
             raise RuntimeError("no matching building GML files found in the remote ZIP")
         print(f"matched {len(entries)} building tiles")
         extract_entries(zf, entries, args.output_dir)
+        if args.include_bridges:
+            bridge_entries = select_brid_entries(zf, meshes)
+            print(f"matched {len(bridge_entries)} bridge tiles")
+            extract_entries(zf, bridge_entries, args.output_dir)
 
     manifest = {
         "run_dir": str(args.run_dir),
@@ -292,6 +313,9 @@ def main() -> None:
         "meshes": meshes,
         "n_entries": len(entries),
         "entries": entries,
+        "include_bridges": args.include_bridges,
+        "n_bridge_entries": len(bridge_entries),
+        "bridge_entries": bridge_entries,
         "output_dir": str(args.output_dir),
     }
 

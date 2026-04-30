@@ -81,33 +81,46 @@ class PlateauLoader:
     # Public API
     # ------------------------------------------------------------------
 
-    def load_citygml(self, filepath: Union[str, Path]) -> BuildingModel:
-        """Load buildings from a single CityGML file.
+    def load_citygml(
+        self, filepath: Union[str, Path], kind: str = "bldg"
+    ) -> BuildingModel:
+        """Load CityGML features from a single file.
 
         Parameters
         ----------
         filepath : str or Path
             Path to a ``.gml`` file.
+        kind : str
+            CityGML feature kind: ``"bldg"`` (default) or ``"brid"``.
 
         Returns
         -------
         BuildingModel
         """
-        buildings = parse_citygml(filepath)
-        triangles = self._buildings_to_triangles(buildings)
+        features = parse_citygml(filepath, kind=kind)
+        triangles = self._buildings_to_triangles(features)
         return BuildingModel(triangles)
 
     def load_directory(
-        self, dirpath: Union[str, Path], pattern: str = "*.gml"
+        self,
+        dirpath: Union[str, Path],
+        pattern: str = "*.gml",
+        include_bridges: bool = False,
     ) -> BuildingModel:
-        """Load all CityGML files from a directory tree.
+        """Load CityGML features from a directory tree.
 
         Parameters
         ----------
         dirpath : str or Path
             Root directory to search.
         pattern : str
-            Glob pattern for CityGML files.
+            Glob pattern for CityGML files.  PLATEAU naming convention puts
+            ``_bldg_`` in building filenames and ``_brid_`` in bridge
+            filenames; the kind is inferred from that.
+        include_bridges : bool
+            If True, also load files matching ``_brid_`` and merge their
+            geometry with the building mesh.  Default False preserves the
+            historical building-only behaviour.
 
         Returns
         -------
@@ -122,8 +135,18 @@ class PlateauLoader:
 
         all_triangles = []
         for f in files:
-            buildings = parse_citygml(f)
-            tri = self._buildings_to_triangles(buildings)
+            name = f.name
+            if "_bldg_" in name:
+                kind = "bldg"
+            elif "_brid_" in name:
+                if not include_bridges:
+                    continue
+                kind = "brid"
+            else:
+                # Fall back to building-style parsing for unknown layouts.
+                kind = "bldg"
+            features = parse_citygml(f, kind=kind)
+            tri = self._buildings_to_triangles(features)
             if tri.size > 0:
                 all_triangles.append(tri)
 
@@ -413,7 +436,7 @@ class PlateauLoader:
         return cls._lla_to_ecef(np.radians(lat_deg), np.radians(lon_deg), alt)
 
 
-def load_plateau(filepath_or_dir, zone=9):
+def load_plateau(filepath_or_dir, zone=9, include_bridges=False):
     """Convenience function to load PLATEAU CityGML data.
 
     Parameters
@@ -424,6 +447,9 @@ def load_plateau(filepath_or_dir, zone=9):
     zone : int
         Japanese plane rectangular coordinate system zone (1--19).
         Default is 9 (Tokyo / Kanagawa).
+    include_bridges : bool
+        Directory mode only: also load PLATEAU bridge GML files
+        (``_brid_*.gml``) and merge their triangles with the building mesh.
 
     Returns
     -------
@@ -432,6 +458,8 @@ def load_plateau(filepath_or_dir, zone=9):
     p = Path(filepath_or_dir)
     loader = PlateauLoader(zone=zone)
     if p.is_dir():
-        return loader.load_directory(p)
-    else:
-        return loader.load_citygml(p)
+        return loader.load_directory(p, include_bridges=include_bridges)
+    # Single-file mode infers kind from filename prefix.
+    name = p.name
+    kind = "brid" if "_brid_" in name else "bldg"
+    return loader.load_citygml(p, kind=kind)
