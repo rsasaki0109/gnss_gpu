@@ -497,6 +497,11 @@ Three out-of-scope paths to lift this ceiling:
    demo5 ambiguity-fix-state indicators as runtime features.
    Medium-size PR, but
    it changes the model's input contract.
+   The opt-in interface for this path now lives at
+   `experiments/solver_state_wrapper.py` (curated six-column allowlist,
+   validator, NaN sanitiser).  No research script consumes it yet, so the
+   adopted product metric is unchanged; wiring a training script that
+   opts in is left to a follow-up PR.
 2. **Additional PPC data collection**: more runs in viaduct-heavy
    trajectories so the hidden-high cluster stops being 5/197 and
    becomes statistically learnable.  Operator-side.
