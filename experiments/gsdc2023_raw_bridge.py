@@ -542,6 +542,7 @@ def collect_matlab_parity_audit(data_root: Path, trip: str, *, include_imu_sync:
         "device_imu_present": bool(has_device_imu),
         "ground_truth_present": bool(has_ground_truth),
         "ref_height_present": bool(has_ref_height),
+        "imu_sync_checked": bool(include_imu_sync),
         "gnss_elapsed_present": bool(gnss_elapsed_present),
         "imu_rows_acc": imu_rows_acc,
         "imu_rows_gyro": imu_rows_gyro,
