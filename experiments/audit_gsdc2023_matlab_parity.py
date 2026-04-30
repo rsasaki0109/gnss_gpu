@@ -22,7 +22,7 @@ def _settings_path(data_root: Path, split: str) -> Path:
     return data_root / f"settings_{split}.csv"
 
 
-def _audit_split(data_root: Path, split: str) -> pd.DataFrame:
+def _audit_split(data_root: Path, split: str, *, include_imu_sync: bool = True) -> pd.DataFrame:
     settings_path = _settings_path(data_root, split)
     if not settings_path.is_file():
         return pd.DataFrame()
@@ -30,7 +30,7 @@ def _audit_split(data_root: Path, split: str) -> pd.DataFrame:
     rows = []
     for row in settings.itertuples(index=False):
         trip = f"{split}/{row.Course}/{row.Phone}"
-        rows.append(collect_matlab_parity_audit(data_root, trip))
+        rows.append(collect_matlab_parity_audit(data_root, trip, include_imu_sync=include_imu_sync))
     return pd.DataFrame(rows)
 
 
@@ -40,6 +40,11 @@ def main() -> None:
     parser.add_argument("--datasets", nargs="*", default=["train", "test"])
     parser.add_argument("--output-dir", type=Path, default=Path(__file__).resolve().parent / "results")
     parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="skip expensive raw GNSS/IMU parsing and audit file availability only",
+    )
+    parser.add_argument(
         "--explain",
         action="store_true",
         help="print why base_correction is blocked and required file layout (after JSON)",
@@ -48,8 +53,9 @@ def main() -> None:
 
     data_root = args.data_root.resolve()
     frames = []
+    include_imu_sync = not args.quick
     for split in args.datasets:
-        frame = _audit_split(data_root, split)
+        frame = _audit_split(data_root, split, include_imu_sync=include_imu_sync)
         if not frame.empty:
             frames.append(frame)
     if not frames:
@@ -65,6 +71,7 @@ def main() -> None:
         base1_nonempty = int(audit["base_name"].notna().sum())
     summary = {
         "data_root": str(data_root),
+        "quick": bool(args.quick),
         "n_trips": int(len(audit)),
         "base_correction_ready": int(audit["base_correction_ready"].sum()),
         "status_counts": status_counts,

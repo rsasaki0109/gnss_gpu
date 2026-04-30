@@ -445,7 +445,7 @@ def compute_base_pseudorange_correction_matrix(
     )
 
 
-def collect_matlab_parity_audit(data_root: Path, trip: str) -> dict:
+def collect_matlab_parity_audit(data_root: Path, trip: str, *, include_imu_sync: bool = True) -> dict:
     split, course, phone = _trip_course_phone(trip)
     trip_dir = data_root / trip
     course_dir = trip_dir.parent if course is not None else trip_dir.parent
@@ -486,28 +486,29 @@ def collect_matlab_parity_audit(data_root: Path, trip: str) -> dict:
     imu_sync_ready = False
     stop_epoch_count = 0
     gnss_elapsed_present = False
-    try:
-        acc, gyro, mag = load_device_imu_measurements(trip_dir)
-        imu_rows_acc = int(acc.times_ms.size) if acc is not None else 0
-        imu_rows_gyro = int(gyro.times_ms.size) if gyro is not None else 0
-        imu_rows_mag = int(mag.times_ms.size) if mag is not None else 0
-    except Exception:  # noqa: BLE001
-        acc = gyro = mag = None
-    raw_path = trip_dir / "device_gnss.csv"
-    if raw_path.is_file():
+    if include_imu_sync:
         try:
-            raw_df = _load_raw_gnss_frame(raw_path)
-            epoch_meta = _build_epoch_metadata_frame(raw_df)
-            if "ChipsetElapsedRealtimeNanos" in epoch_meta.columns:
-                gnss_elapsed = epoch_meta["ChipsetElapsedRealtimeNanos"].to_numpy(dtype=np.float64)
-                gnss_times = epoch_meta["utcTimeMillis"].to_numpy(dtype=np.float64)
-                gnss_elapsed_present = np.isfinite(gnss_elapsed).any()
-                if acc is not None and gyro is not None:
-                    acc_proc, _, idx_stop = process_device_imu(acc, gyro, gnss_times, gnss_elapsed)
-                    imu_sync_ready = True
-                    stop_epoch_count = int(project_stop_to_epochs(acc_proc.times_ms, idx_stop, gnss_times).sum())
+            acc, gyro, mag = load_device_imu_measurements(trip_dir)
+            imu_rows_acc = int(acc.times_ms.size) if acc is not None else 0
+            imu_rows_gyro = int(gyro.times_ms.size) if gyro is not None else 0
+            imu_rows_mag = int(mag.times_ms.size) if mag is not None else 0
         except Exception:  # noqa: BLE001
-            pass
+            acc = gyro = mag = None
+        raw_path = trip_dir / "device_gnss.csv"
+        if raw_path.is_file():
+            try:
+                raw_df = _load_raw_gnss_frame(raw_path)
+                epoch_meta = _build_epoch_metadata_frame(raw_df)
+                if "ChipsetElapsedRealtimeNanos" in epoch_meta.columns:
+                    gnss_elapsed = epoch_meta["ChipsetElapsedRealtimeNanos"].to_numpy(dtype=np.float64)
+                    gnss_times = epoch_meta["utcTimeMillis"].to_numpy(dtype=np.float64)
+                    gnss_elapsed_present = np.isfinite(gnss_elapsed).any()
+                    if acc is not None and gyro is not None:
+                        acc_proc, _, idx_stop = process_device_imu(acc, gyro, gnss_times, gnss_elapsed)
+                        imu_sync_ready = True
+                        stop_epoch_count = int(project_stop_to_epochs(acc_proc.times_ms, idx_stop, gnss_times).sum())
+            except Exception:  # noqa: BLE001
+                pass
 
     if not settings_csv_present:
         status = "settings_csv_missing"
