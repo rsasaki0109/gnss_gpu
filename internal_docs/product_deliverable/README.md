@@ -299,6 +299,13 @@ and normal or resolved windows as `use`.
 - **Tokyo run2 w23 - w27** (`hidden_high`): actual FIX is 75-100 % but
   deployable features under-predict.  The adopted model lifts part of
   this segment, but still under-predicts several high-FIX windows.
+  The "missing elevated structure" hypothesis (Tokyo Monorail / 首都高
+  viaducts in 浜松町〜芝浦) was tested end-to-end via the Phase 1
+  bridge loader and the early-abort check in
+  `PLATEAU_BRIDGE_INTEGRATION.md` ("Phase 2 outcome"); the bldg+brid
+  mesh produces zero new NLoS flips at 9 representative epochs in
+  this cluster, so the residual is *not* explained by occluder
+  geometry at the LoS-check level.
 - **Tokyo run3 w28** (`false_high`): residual inflated prediction on a
   low-actual window after isotonic calibration and the phase-delta
   guard.
