@@ -183,19 +183,40 @@ def load_reference_meshes(
     return expand_meshes(base_meshes, mesh_radius)
 
 
-def select_bldg_entries(zf: zipfile.ZipFile, meshes: list[str]) -> list[str]:
-    return _select_udx_entries(zf, meshes, kind="bldg")
+def select_bldg_entries(
+    zf: zipfile.ZipFile,
+    meshes: list[str],
+    *,
+    names: list[str] | None = None,
+) -> list[str]:
+    return _select_udx_entries(zf, meshes, kind="bldg", names=names)
 
 
-def select_brid_entries(zf: zipfile.ZipFile, meshes: list[str]) -> list[str]:
-    return _select_udx_entries(zf, meshes, kind="brid")
+def select_brid_entries(
+    zf: zipfile.ZipFile,
+    meshes: list[str],
+    *,
+    names: list[str] | None = None,
+) -> list[str]:
+    return _select_udx_entries(zf, meshes, kind="brid", names=names)
 
 
 def _select_udx_entries(
-    zf: zipfile.ZipFile, meshes: list[str], kind: str
+    zf: zipfile.ZipFile,
+    meshes: list[str],
+    kind: str,
+    *,
+    names: list[str] | None = None,
 ) -> list[str]:
+    """Select PLATEAU GML entries for ``kind`` overlapping the given meshes.
+
+    ``names`` may be supplied by the caller to avoid repeated
+    ``zf.namelist()`` scans (each scan re-walks the central directory and,
+    for HTTP-range readers, may trigger an extra round trip).
+    """
     needle = f"udx/{kind}/"
-    names = zf.namelist()
+    if names is None:
+        names = zf.namelist()
     selected = [
         name
         for name in names
@@ -293,13 +314,14 @@ def main() -> None:
 
     bridge_entries: list[str] = []
     with zipfile.ZipFile(HTTPRangeReader(zip_url)) as zf:
-        entries = select_bldg_entries(zf, meshes)
+        zip_names = zf.namelist()
+        entries = select_bldg_entries(zf, meshes, names=zip_names)
         if not entries:
             raise RuntimeError("no matching building GML files found in the remote ZIP")
         print(f"matched {len(entries)} building tiles")
         extract_entries(zf, entries, args.output_dir)
         if args.include_bridges:
-            bridge_entries = select_brid_entries(zf, meshes)
+            bridge_entries = select_brid_entries(zf, meshes, names=zip_names)
             print(f"matched {len(bridge_entries)} bridge tiles")
             extract_entries(zf, bridge_entries, args.output_dir)
 

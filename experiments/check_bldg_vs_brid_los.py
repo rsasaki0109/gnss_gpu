@@ -228,18 +228,17 @@ def main():
 
     print("loading bldg-only mesh + BVH...")
     t0 = time.monotonic()
-    m_bldg = load_plateau(bldg_only_dir, zone=9, include_bridges=False)
+    m_bldg = load_plateau(bldg_only_dir, zone=9, kinds=("bldg",))
     bvh_bldg = BVHAccelerator.from_building_model(m_bldg)
     print(f"  {m_bldg.triangles.shape[0]} tris in {time.monotonic()-t0:.1f}s")
 
     print("loading bldg+brid mesh + BVH...")
     t0 = time.monotonic()
-    m_both = load_plateau(bldg_brid_dir, zone=9, include_bridges=True)
+    m_both = load_plateau(bldg_brid_dir, zone=9, kinds=("bldg", "brid"))
     bvh_both = BVHAccelerator.from_building_model(m_both)
     print(f"  {m_both.triangles.shape[0]} tris ({m_both.triangles.shape[0]-m_bldg.triangles.shape[0]} new) "
           f"in {time.monotonic()-t0:.1f}s")
 
-    # For each target epoch: compute sat ECEF, run check_los on both
     print("\n" + "=" * 80)
     print("LoS comparison at target epochs (bldg vs bldg+brid)")
     print("=" * 80)
