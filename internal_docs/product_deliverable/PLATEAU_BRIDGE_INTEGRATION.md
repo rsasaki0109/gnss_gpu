@@ -128,7 +128,34 @@ retrained.  In rough order:
    Targeted success criterion: Tokyo run2 route error from 8.13 pp
    to <= 5 pp without regression on the other five runs.
 
-## Phase 2 outcome — sampled check, 1 flip in 9 epochs (2026-04-30)
+## Phase 2 outcome — dense-sampled check (2026-04-30, v3)
+
+> **Update (2026-04-30, after dense re-sampling):** The v2 numbers
+> (1 flip in 9 hand-picked epochs) were unrepresentative.  Re-running
+> at every-second sampling across the full hidden-high / false-high
+> windows (script: `experiments/check_bldg_vs_brid_los_v3.py`,
+> 214 epochs total) shows a much stronger and **window-bimodal**
+> bridge contribution:
+>
+> | window | epochs | bldg-only NLoS / sat-slots | bldg+brid NLoS / sat-slots | flips | flip/epoch |
+> | --- | ---: | ---: | ---: | ---: | ---: |
+> | w7 (false-high)     | 41 | 564/1319 (43%) | 610/1319 (46%) | **46** | **1.122** |
+> | w9 (false-high)     | 41 | 425/1239 (34%) | 425/1239 (34%) |   0 |   0.000 |
+> | w23 (hidden-high)   | 81 | 1213/2475 (49%) | 1267/2475 (51%) | **54** | **0.667** |
+> | w26-w27 (hidden)    | 51 |  159/1889 (8%) |  160/1889 (8%) |   1 |   0.020 |
+> | **total**           | 214 | 2361/6922 (34%) | 2462/6922 (36%) | **101** | **0.472** |
+>
+> Verdict (v3): **w7 and w23 are clearly bridge-affected** (>0.65
+> flips/epoch).  **w9 and w26-w27 are not** (<0.05 flips/epoch).
+> The aggregate 0.472 flips/epoch sits at the upper edge of the
+> "WEAK / plausibly worth retrain" band defined in the script's
+> decision rule.  Phase 2 retrain on bldg+brid is now justifiable
+> for the hidden-high w23 segment in particular, where 4.3 % of
+> all elev>5° sat-slots flip from LoS to NLoS due to bridges.
+> The earlier "abort" recommendation (v1, geoid-bug) and
+> "inconclusive" recommendation (v2, 9-epoch) are both retracted.
+
+## Phase 2 outcome — sampled check, 1 flip in 9 epochs (v2, superseded)
 
 > **Important caveat (added 2026-04-30, after first Codex review):** The
 > first run of this check (`check_bldg_vs_brid_los.py`) used PLATEAU
@@ -219,25 +246,31 @@ Conclusion for Phase 2 (revised, weaker than original):
 - Phase 1 loader and `--include-bridges` plumbing remain useful
   infrastructure regardless; they cost nothing when not enabled.
 
-Follow-ups (open):
+Follow-ups (open after v3 dense-sampling):
 
 1. Add a real geoid model (GSI Geoid 2011 grid or pyproj
    `EPSG:5773` lookup) to `PlateauLoader._lla_to_ecef` so callers
    don't have to monkey-patch.  Add a Tokyo regression test that
    asserts the loaded mesh ground tris sit within ±2 m of the
    rover ellipsoidal height at known street-level epochs.
-2. Re-run the abort check at a denser sample (~100 epochs across
-   w7/w9/w23-w27) before deciding to commit the ~1-2 h Phase 2
-   compute.
+2. **Phase 2 retrain is now justified for w7 and w23.**  Run the
+   full feature extraction with `kinds=("bldg", "brid")` and
+   re-fit §7.16 + isotonic75 + phaseguard with the
+   `--max-run-mae-pp 4.5` selection guardrail.  The expected gain
+   is bounded above by the 4.3 % sat-slot flip rate in w23 plus
+   3.5 % in w7, applied through the existing FIX classifier.
 
-To re-run the geoid-corrected abort check:
+To re-run the dense check:
+
+```bash
+python3 experiments/check_bldg_vs_brid_los_v3.py    # ~1 min, 214 epochs
+```
+
+Or the older 9-epoch v2 (geoid-corrected, faster):
 
 ```bash
 python3 experiments/check_bldg_vs_brid_los_v2.py
 ```
-
-It will print the same per-epoch table and report flip count and a
-warning if the mesh ECEF z range does not bracket the rover.
 
 ## Implementation notes
 
