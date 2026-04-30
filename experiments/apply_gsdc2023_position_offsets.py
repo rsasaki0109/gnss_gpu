@@ -141,12 +141,34 @@ def parse_phone_scale_override(value: str) -> tuple[str, float]:
     return phone, scale
 
 
-def apply_offsets(source: pd.DataFrame, scales: dict[str, float]) -> tuple[pd.DataFrame, pd.DataFrame]:
+def parse_trip_scale_override(value: str) -> tuple[str, float]:
+    trip_id, sep, scale_text = value.partition("=")
+    if sep == "":
+        raise argparse.ArgumentTypeError("expected TRIP=SCALE")
+    trip_id = trip_id.strip()
+    if not trip_id:
+        raise argparse.ArgumentTypeError("trip id must not be empty")
+    try:
+        scale = float(scale_text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid scale for {trip_id!r}: {scale_text!r}") from exc
+    if scale < 0.0:
+        raise argparse.ArgumentTypeError("scale must be non-negative")
+    return trip_id, scale
+
+
+def apply_offsets(
+    source: pd.DataFrame,
+    scales: dict[str, float],
+    trip_scales: dict[str, float] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    trip_scales = trip_scales or {}
     output = source.copy()
     trip_rows: list[dict[str, Any]] = []
     for trip_id, index in source.groupby("tripId", sort=False).groups.items():
+        trip_id = str(trip_id)
         phone = phone_from_trip(str(trip_id))
-        scale = float(scales.get(phone, 0.0))
+        scale = float(trip_scales.get(trip_id, scales.get(phone, 0.0)))
         indices = np.asarray(list(index), dtype=np.int64)
         if scale > 0.0:
             xyz = lla_to_ecef_rows(
@@ -194,6 +216,14 @@ def main() -> None:
         metavar="PHONE=SCALE",
         help="override one phone scale after applying --policy; can be repeated",
     )
+    parser.add_argument(
+        "--trip-scale",
+        action="append",
+        default=[],
+        type=parse_trip_scale_override,
+        metavar="TRIP=SCALE",
+        help="override one exact tripId scale after phone scales; can be repeated",
+    )
     args = parser.parse_args()
 
     source = pd.read_csv(args.input)
@@ -205,7 +235,8 @@ def main() -> None:
     scales = scale_map_for_policy(args.policy, args.scale)
     for phone, scale in args.phone_scale:
         scales[phone] = scale
-    output, trip_summary = apply_offsets(source, scales)
+    trip_scales = dict(args.trip_scale)
+    output, trip_summary = apply_offsets(source, scales, trip_scales)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     output.to_csv(args.output, index=False)
 
@@ -229,6 +260,9 @@ def main() -> None:
         "scale": float(args.scale),
         "phone_scale_overrides": {
             phone: scale for phone, scale in sorted(dict(args.phone_scale).items()) if scale > 0.0
+        },
+        "trip_scale_overrides": {
+            trip_id: scale for trip_id, scale in sorted(trip_scales.items()) if scale > 0.0
         },
         "scales": {phone: scale for phone, scale in sorted(scales.items()) if scale > 0.0},
         "rows": int(len(output)),
