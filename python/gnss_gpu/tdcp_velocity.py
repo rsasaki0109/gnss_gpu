@@ -63,11 +63,14 @@ def _solve_tdcp_wls(
     cur_measurements: Sequence[Any],
     dt: float,
     wavelength: float,
+    carrier_phase_sign: float,
     min_sats: int,
     max_cycle_jump: float,
     max_postfit_rms_m: float,
     elevation_weight: bool = False,
     el_sin_floor: float = 0.1,
+    receiver_motion_sign: float = 1.0,
+    max_velocity_mps: float = 50.0,
 ) -> tuple[np.ndarray, float] | None:
     """Internal: return (velocity [m/s], unweighted postfit RMS [m]) or None."""
     if dt <= 0 or prev_measurements is None or len(prev_measurements) == 0:
@@ -106,7 +109,7 @@ def _solve_tdcp_wls(
             continue
         los = dx / rng
 
-        d_l_m = float(lc - lp) * float(wavelength)
+        d_l_m = float(carrier_phase_sign) * float(lc - lp) * float(wavelength)
         v_avg = 0.5 * (vp + vc)
         sat_range_change = float(np.dot(los, v_avg) * dt)
         drift_p = float(getattr(mp, "clock_drift"))
@@ -130,7 +133,7 @@ def _solve_tdcp_wls(
                 s = max(float(np.sin(el)), float(el_sin_floor))
                 w *= s * s
 
-        h_rows.append(np.concatenate([los, np.ones(1)]))
+        h_rows.append(np.concatenate([float(receiver_motion_sign) * los, np.ones(1)]))
         y_vals.append(corrected)
         w_vals.append(w)
 
@@ -160,7 +163,7 @@ def _solve_tdcp_wls(
     if not np.all(np.isfinite(delta_rx)):
         return None
     vel = delta_rx / dt
-    if np.linalg.norm(vel) > 50.0:
+    if float(max_velocity_mps) > 0.0 and np.linalg.norm(vel) > float(max_velocity_mps):
         return None
     return vel, rms_res
 
@@ -171,11 +174,14 @@ def estimate_velocity_from_tdcp(
     cur_measurements: Sequence[Any],
     dt: float,
     wavelength: float = L1_WAVELENGTH,
+    carrier_phase_sign: float = 1.0,
     min_sats: int = 4,
     max_cycle_jump: float = 20000.0,
     max_postfit_rms_m: float = 12.0,
     elevation_weight: bool = False,
     el_sin_floor: float = 0.1,
+    receiver_motion_sign: float = 1.0,
+    max_velocity_mps: float = 50.0,
 ) -> np.ndarray | None:
     """Estimate ECEF velocity from TDCP using satellite motion / clock corrections.
 
@@ -186,8 +192,8 @@ def estimate_velocity_from_tdcp(
     - ``sat_clock_change = 0.5*(drift_prev + drift_cur) * c * dt``
     - ``corrected = delta_L_m - sat_range_change + sat_clock_change``
 
-    Solve ``los · delta_rx + delta_cb = corrected`` (meters) via WLS, then
-    ``velocity = delta_rx / dt``.
+    Solve ``receiver_motion_sign * los · delta_rx + delta_cb = corrected``
+    (meters) via WLS, then ``velocity = delta_rx / dt``.
 
     Parameters
     ----------
@@ -202,6 +208,10 @@ def estimate_velocity_from_tdcp(
         Receiver time step [s]; must be positive.
     wavelength : float
         Carrier wavelength [m]. Default: GPS L1.
+    carrier_phase_sign : float
+        Sign applied to ``L_cur - L_prev`` before multiplying by wavelength.
+        Keep ``+1`` for the historical helper convention; use ``-1`` only for
+        streams whose accumulated phase delta is inverted before TDCP.
     min_sats : int
         Minimum number of satellites after filtering.
     max_cycle_jump : float
@@ -216,6 +226,12 @@ def estimate_velocity_from_tdcp(
         downweighted; urban NLOS heuristic).
     el_sin_floor : float
         Minimum ``sin(elevation)`` when ``elevation_weight`` is active.
+    receiver_motion_sign : float
+        Sign applied to the receiver displacement columns. ``+1`` preserves the
+        historical helper convention. ``-1`` matches the physical range
+        derivative when ``los`` points from receiver to satellite.
+    max_velocity_mps : float
+        Reject solutions above this speed. Set <= 0 to disable the speed gate.
 
     Returns
     -------
@@ -228,11 +244,14 @@ def estimate_velocity_from_tdcp(
         cur_measurements,
         dt,
         wavelength,
+        carrier_phase_sign,
         min_sats,
         max_cycle_jump,
         max_postfit_rms_m,
         elevation_weight,
         el_sin_floor,
+        receiver_motion_sign,
+        max_velocity_mps,
     )
     return None if r is None else r[0]
 
@@ -243,11 +262,14 @@ def estimate_velocity_from_tdcp_with_metrics(
     cur_measurements: Sequence[Any],
     dt: float,
     wavelength: float = L1_WAVELENGTH,
+    carrier_phase_sign: float = 1.0,
     min_sats: int = 4,
     max_cycle_jump: float = 20000.0,
     max_postfit_rms_m: float = 12.0,
     elevation_weight: bool = False,
     el_sin_floor: float = 0.1,
+    receiver_motion_sign: float = 1.0,
+    max_velocity_mps: float = 50.0,
 ) -> tuple[np.ndarray | None, float]:
     """Same as ``estimate_velocity_from_tdcp`` but also returns postfit RMS (meters).
 
@@ -259,11 +281,14 @@ def estimate_velocity_from_tdcp_with_metrics(
         cur_measurements,
         dt,
         wavelength,
+        carrier_phase_sign,
         min_sats,
         max_cycle_jump,
         max_postfit_rms_m,
         elevation_weight,
         el_sin_floor,
+        receiver_motion_sign,
+        max_velocity_mps,
     )
     if r is None:
         return None, float("nan")

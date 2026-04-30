@@ -1,0 +1,89 @@
+# PPC2024 Realtime Target
+
+Goal: optimize PPC2024 before returning to Kaggle/GSDC.  The benchmark target is
+to beat TURING's PPC2024 winning private score of 85.6%.
+
+Constraints:
+
+- Processing must be realtime/causal.  Do not use future observations.
+- Backward smoothers and post-run smoothing are out of scope for this target.
+- Fixed-lag methods must declare their latency before being compared with the
+  realtime target.
+- Primary score is the PPC2024 traveled-distance ratio with 3D error at or below
+  0.5 m, averaged across the six official runs.
+
+Implementation notes:
+
+- Use `gnss_gpu.ppc_score.score_ppc2024` for local scoring.
+- `experiments/exp_ppc_wls_sweep.py` ranks configurations by `ppc_score_pct`,
+  not RMS/P95.
+- Current Tokyo/run1 realtime fusion smoke segment:
+  `start=1300,max_epochs=200` reaches 56.01% with TDCP + DD-PR/WL anchors,
+  causal height hold, and stale-velocity height release.
+- Use `experiments/exp_particle_visualization.py --renderer enu` for quick
+  particle-cloud trajectory videos without depending on map tiles.
+- The initial scorer can derive distance weights from adjacent reference ECEF
+  positions.  If `reference.csv` exposes official speed-derived distance
+  weights, pass those weights into `score_ppc2024`.
+- For the next PF phase, consider Reservoir Stein Particle Filter as a
+  bounded-memory, diversity-preserving realtime update pattern before reviving
+  the heavier PF experiments.
+- `gnss_gpu.reservoir_stein` is the first local RSPF-style building block:
+  keep a bounded weighted reservoir, pin elite particles, then run a small
+  SVGD-style attraction/repulsion transport step before any CUDA integration.
+- ICRA 2025 lead from `DoongLi/ICRA2025-Paper-List`: "Range-Based 6-DoF
+  Monte Carlo SLAM with Gradient-Guided Particle Filter on GPU" uses
+  likelihood-gradient particle updates, compact keyframe state, and dead
+  particle pruning.  For GNSS/PPC, map this to DD/WL likelihood gradients,
+  bounded anchor/keyframe history, and pruning only fully collapsed particles.
+- `experiments/exp_ppc_rsp_diagnostic.py` applies DD likelihood gradients to a
+  local reservoir Stein correction.  On Tokyo/run1 `start=1300,max_epochs=200`,
+  correcting only epochs 153-174 with fused-height/radius projection improved
+  the diagnostic score from 56.01% to 60.46%; use this as the next candidate
+  for integration into the realtime fusion path.
+- The realtime fusion path now enables gated DD-gradient reservoir Stein
+  horizontal corrections by default.  On the same Tokyo/run1 smoke segment it
+  reaches 66.21% with 135/200 PPC 3D pass epochs after lowering stale-velocity
+  height-release gating to 0.4 m DD-PR disagreement.
+- `experiments/exp_ppc_realtime_fusion_sweep.py` runs the realtime fusion over
+  fixed validation segments.  On the positive6 200-epoch smoke, the current
+  realtime path is still weak: aggregate PPC is 2.75%, mean per-segment PPC is
+  2.39%, and epoch pass is 90/1200.  The 0.4 m height-release gate improves
+  epoch pass versus 1.0 m (90 vs. 65) but not distance-weighted PPC.  A tested
+  wide-lane-aware height-release guard worsened aggregate PPC and should not be
+  used as a default.
+- DD-PR anchor blend strength is now sweepable.  Global `dd_anchor_blend_alpha=1.0`
+  improved positive6 aggregate PPC from 2.75% to 3.84%, but regressed
+  `tokyo/run1@1463` and `nagoya/run2@983`.  A gated high-blend experiment with
+  base 0.3, high 1.0, RMS ceiling 0.7, and shift threshold 2.0 m reached 4.04%
+  positive6 aggregate, but it dropped the separate Tokyo/run1 `start=1300`
+  smoke from 66.21% to 61.49%.  Shift threshold 3.0 m preserved that local
+  smoke but fell to 3.54% positive6 aggregate.  Keep this as an experiment
+  surface; do not promote a high-DD blend default yet.
+- `experiments/exp_ppc_epoch_failure_diagnostic.py` summarizes per-epoch
+  realtime-fusion failures from `*_epochs.csv` files.  On `tokyo/run2@808`,
+  the diagnostic showed a structural height problem: high-DD shift3 + age15 had
+  16 horizontal-pass epochs but only 1 3D PPC pass because the initial height
+  reference was untrusted.  Fully disabling height hold raised that segment to
+  5.70% PPC.  The safer experiment `--height-hold-reference-max-dd-rms-m 0.7`
+  preserves the separate Tokyo/run1 `start=1300` smoke at 66.21% and raises
+  positive6 aggregate to 4.58%, but holdout6 is 0.77% versus 0.96% for the
+  current default.  Keep the initial-height-reference trust gate as a diagnostic
+  surface; do not promote it as the default until holdout behavior improves.
+- High-DD is now optionally gated by initial-height trust with
+  `--dd-anchor-high-requires-untrusted-height`.  With high DD alpha 1.0, shift
+  3.0 m, RMS ceiling 0.7 m, age 15 s, and height-reference RMS ceiling 0.7 m,
+  this keeps Tokyo/run1 `start=1300` at 66.21%, positive6 at 3.92%, and improves
+  holdout6 from the default 0.96% to 1.40%.  This is the current best
+  generalization candidate, but still leave the default neutral until the next
+  validation pass confirms it on wider segments.
+
+Example quick video:
+
+```bash
+PYTHONPATH=python:experiments python3 experiments/exp_particle_visualization.py \
+  --data-root /media/sasaki/aiueo/ai_coding_ws/datasets/PPC-Dataset-data/nagoya \
+  --run run2 --systems G,E,J --renderer enu --max-epochs 300 \
+  --n-particles 5000 --dump-every 5 --max-dump-particles 1200 \
+  --output experiments/results/paper_assets/particle_viz_ppc_nagoya_run2_300ep.mp4
+```

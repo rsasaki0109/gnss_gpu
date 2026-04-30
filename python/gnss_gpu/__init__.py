@@ -79,6 +79,30 @@ from gnss_gpu.doppler import doppler_velocity, doppler_velocity_batch
 from gnss_gpu.fgo import fgo_gnss_lm, fgo_gnss_lm_vd
 from gnss_gpu.signal_sim import SignalSimulator
 from gnss_gpu.urban_signal_sim import UrbanSignalSimulator
+from gnss_gpu.ppc_score import (
+    PPCScore,
+    ppc_3d_errors,
+    ppc_segment_distances,
+    score_ppc2024,
+    ppc_score_dict,
+)
+from gnss_gpu.reservoir_stein import (
+    ReservoirSteinConfig,
+    ReservoirSteinResult,
+    dead_particle_mask,
+    effective_sample_size,
+    normalize_log_weights,
+    reservoir_stein_update,
+    rbf_median_bandwidth,
+    stein_rejuvenate_particles,
+    weighted_reservoir_indices,
+)
+from gnss_gpu.dd_likelihood import (
+    DDLikelihoodGradient,
+    dd_log_likelihood_gradient,
+    dd_log_likelihood_gradients,
+    dd_pseudorange_residual_and_design,
+)
 from gnss_gpu.e2e_helpers import (
     compute_e2e_wls_weights,
     acquisition_lag_to_code_phase_chips,
@@ -92,6 +116,7 @@ from gnss_gpu.e2e_helpers import (
 )
 
 __all__ = [
+    "__version__",
     # Core positioning
     "ecef_to_lla",
     "lla_to_ecef",
@@ -120,6 +145,7 @@ __all__ = [
     "VectorTracker",
     # Particle filter
     "ParticleFilter",
+    "ParticleFilterDevice",
     # SVGD particle filter
     "SVGDParticleFilter",
     # 3D particle filter
@@ -158,6 +184,25 @@ __all__ = [
     # Signal simulation
     "SignalSimulator",
     "UrbanSignalSimulator",
+    # PPC2024 competition scoring
+    "PPCScore",
+    "ppc_3d_errors",
+    "ppc_segment_distances",
+    "score_ppc2024",
+    "ppc_score_dict",
+    "ReservoirSteinConfig",
+    "ReservoirSteinResult",
+    "dead_particle_mask",
+    "effective_sample_size",
+    "normalize_log_weights",
+    "reservoir_stein_update",
+    "rbf_median_bandwidth",
+    "stein_rejuvenate_particles",
+    "weighted_reservoir_indices",
+    "DDLikelihoodGradient",
+    "dd_log_likelihood_gradient",
+    "dd_log_likelihood_gradients",
+    "dd_pseudorange_residual_and_design",
     # E2E helpers (acquisition to pseudorange)
     "compute_e2e_wls_weights",
     "acquisition_lag_to_code_phase_chips",
