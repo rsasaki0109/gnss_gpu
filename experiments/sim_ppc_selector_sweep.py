@@ -1,0 +1,394 @@
+#!/usr/bin/env python3
+"""Offline selector sweep on Phase 11v candidate pool.
+
+Phase 11v phase score = 61.6039%, gated_oracle = 63.21% (gap +1.60pp).
+With emit_mode=candidate the selector directly determines the output for
+gate-passing epochs, so we can replay the trajectory offline by:
+  1. Loading hybrid floor per run.
+  2. For each gate-passing epoch, picking the candidate that minimises the
+     given sort key (residual / ratio / score / maxabs / nrows).
+  3. Falling back to hybrid otherwise.
+This avoids the slow PF and shows directly which select_mode is best per
+run.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _SCRIPT_DIR.parent
+if str(_PROJECT_ROOT / "python") not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT / "python"))
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from exp_ppc_ctrbpf_fgo import (  # noqa: E402
+    CTRBPFConfig,
+    _apply_rtkdiag_run_index_policy,
+    _filter_rtkdiag_candidates_by_policy,
+    _load_full_reference,
+    _load_hybrid_pos_file,
+    _load_rtk_diag_file,
+    _rtkdiag_candidate_gate,
+    _rtkdiag_candidate_sort_key,
+)
+from gnss_gpu.ppc_score import score_ppc2024  # noqa: E402
+
+RESULTS_DIR = _SCRIPT_DIR / "results"
+_DEFAULT_DATA_ROOT = Path("datasets/PPC-Dataset-data")
+
+_FULL_RUNS = (
+    ("tokyo", "run1"),
+    ("tokyo", "run2"),
+    ("tokyo", "run3"),
+    ("nagoya", "run1"),
+    ("nagoya", "run2"),
+    ("nagoya", "run3"),
+)
+
+# Phase 11v candidate set (label, pos/diag dir, run-specific filter)
+_CANDIDATES_PHASE11V: list[tuple[str, str, set[tuple[str, str]] | None]] = [
+    # (label, dir under libgnss_diag_phase10/, restrict_runs or None)
+    ("r15", "full_ratio15_lock3_trustedseed", None),
+    ("r20", "full_ratio2_lock3_trustedseed", None),
+    ("r25", "full_ratio25_lock3_trustedseed", None),
+    ("r30", "full_ratio3_lock3_trustedseed", None),
+    ("r15nh", "full_ratio15_lock3_trustedseed_nohold", None),
+    ("r20g", "full_ratio2_lock3_trustedseed_gate30_min6", None),
+    ("r15g", "full_ratio15_lock3_trustedseed_gate30_min6", None),
+    ("r25g", "full_ratio25_lock3_trustedseed_gate30_min6", None),
+    ("r30g", "full_ratio3_lock3_trustedseed_gate30_min6", None),
+    ("r20g20", "full_ratio2_lock3_trustedseed_gate20_min6", None),
+    ("r20g40", "full_ratio2_lock3_trustedseed_gate40_min6", None),
+    ("r15g20", "full_ratio15_lock3_trustedseed_gate20_min6", None),
+    ("r25g20", "full_ratio25_lock3_trustedseed_gate20_min6", None),
+    ("r20g15", "full_ratio2_lock3_trustedseed_gate15_min6", None),
+    ("r15g15", "full_ratio15_lock3_trustedseed_gate15_min6", None),
+    ("r25g15", "full_ratio25_lock3_trustedseed_gate15_min6", None),
+    ("r20g10", "full_ratio2_lock3_trustedseed_gate10_min6", None),
+    ("r15g10", "full_ratio15_lock3_trustedseed_gate10_min6", None),
+    ("r25g10", "full_ratio25_lock3_trustedseed_gate10_min6", None),
+    # Run-specific
+    ("n1loose", "n1_loose_hold4_ratio15_gate10_min6", {("nagoya", "run1")}),
+    ("n1loose2", "n1_loose_hold5_ratio20_gate10_min6", {("nagoya", "run1")}),
+    ("n1loose3", "n1_loose_hold5_ratio20_gate8_min6", {("nagoya", "run1")}),
+    ("n2loose", "n2_loose_hold4_ratio15_gate10_min6", {("nagoya", "run2")}),
+    ("n2loose2", "n2_loose_hold5_ratio20_gate10_min6", {("nagoya", "run2")}),
+    ("n2loose3", "n2_loose_hold5_ratio20_gate8_min6", {("nagoya", "run2")}),
+    ("n3tight", "n3_tight_ratio40_gate5_min8", {("nagoya", "run3")}),
+    ("n3tight2", "n3_tight2_ratio50_gate4", {("nagoya", "run3")}),
+    ("t1tight", "t1_tight_ratio40_gate5_min8", {("tokyo", "run1")}),
+    ("t1tight2", "t1_tight2_ratio50_gate4", {("tokyo", "run1")}),
+    ("t3tight", "t3_tight_ratio40_gate5_min8", {("tokyo", "run3")}),
+    # Phase 11ab: --glonass-ar autocal candidates restricted to runs where
+    # offline simulation showed positive aggregate (tokyo/run3 +56.6m,
+    # nagoya/run1 +31.6m). Other runs are net-neutral or negative.
+    ("r15ga", "full_ratio15_lock3_trustedseed_glonassar",
+     {("tokyo", "run3"), ("nagoya", "run1")}),
+    # Phase 11ac: ratio2.0 + glonass-ar helps tokyo/run3 (+12.6m on top of
+    # r15ga) and nagoya/run2 (+47.7m alone). Hurts nagoya/run1 by -69m, so
+    # restrict accordingly. r25ga / out30 are neutral or negative.
+    ("r20ga", "full_ratio2_lock3_trustedseed_glonassar",
+     {("tokyo", "run3"), ("nagoya", "run2")}),
+    # Phase 11ac: --elevation-mask-deg 10 gives +21m on tokyo/run3 (admits
+    # low-elevation sats that fix), +2.0m on nagoya/run1. Other runs near-zero
+    # or negative.
+    ("em10", "full_ratio15_lock3_trustedseed_elevmask10",
+     {("tokyo", "run3"), ("nagoya", "run1")}),
+    # Phase 11ad: --pseudorange-sigma 1.0 (looser PR weight) gives +125m on
+    # tokyo/run3 (massive), +4.1m on nagoya/run3. Near-zero on nagoya/run1+run2.
+    ("psig1", "full_ratio15_lock3_trustedseed_psig1",
+     {("tokyo", "run3"), ("nagoya", "run3")}),
+    # Phase 11ad: --min-hold-count 3 --hold-ratio-threshold 1.5 (relaxed
+    # hold ambiguity) gives +72m on tokyo/run3. Slightly negative on
+    # nagoya runs.
+    ("holdrlx", "full_ratio15_lock3_trustedseed_holdrlx",
+     {("tokyo", "run3")}),
+    # Phase 11ae: --ratio 1.2 + --glonass-ar autocal gives +103m on
+    # tokyo/run3 (additive after psig1+holdrlx). -65m on nagoya/run1,
+    # neutral elsewhere.
+    ("r12ga", "full_ratio12_lock3_trustedseed_glonassar",
+     {("tokyo", "run3")}),
+    # Phase 11ae: --pseudorange-sigma 2.0 gives +44.5m on tokyo/run3
+    # (smaller than psig1 +125m but additive). Near-zero on nagoya runs.
+    ("psig2", "full_ratio15_lock3_trustedseed_psig2",
+     {("tokyo", "run3")}),
+    # Phase 11af: psig1 + holdrlx combined config: +90.8m on tokyo/run3
+    # offline (better than psig1 or holdrlx alone). Restrict to tokyo/run3
+    # only since nagoya runs go negative.
+    ("psig1hr", "full_ratio15_lock3_trustedseed_psig1_holdrlx",
+     {("tokyo", "run3")}),
+    # Phase 11af: --no-beidou gives +29.7m on nagoya/run2, +9.8m on tokyo/run3,
+    # +4.2m on tokyo/run1. Negative on nagoya/run1, run3 — restrict accordingly.
+    ("nobds", "full_ratio15_lock3_trustedseed_nobds",
+     {("nagoya", "run2"), ("tokyo", "run3"), ("tokyo", "run1")}),
+    # Phase 11ag/am: --carrier-phase-sigma 0.0005 gives massive gains:
+    # tokyo/run3 +95.8m, nagoya/run2 +95.8m, tokyo/run1 +9.8m. Phase 11am also
+    # adds nagoya/run3 (+2.6m additive after all the other csig05* variants).
+    ("csig05", "full_ratio15_lock3_trustedseed_csig05",
+     {("tokyo", "run3"), ("nagoya", "run2"), ("tokyo", "run1"), ("nagoya", "run3")}),
+    # Phase 11ag: --no-glonass gives +40.5m on tokyo/run1 (largest non-zero
+    # variant for that gate-saturated run). Negative or zero elsewhere.
+    ("noglo", "full_ratio15_lock3_trustedseed_noglo",
+     {("tokyo", "run1")}),
+    # Phase 11ag/ah: --carrier-phase-sigma 0.001 gives +0.6m on nagoya/run1,
+    # +18.1m on nagoya/run2, +9.5m on tokyo/run3 (additive after csig05).
+    ("csig1", "full_ratio15_lock3_trustedseed_csig1",
+     {("nagoya", "run1"), ("nagoya", "run2"), ("tokyo", "run3")}),
+    # Phase 11ah: --rtk-update-outlier-threshold 30 gives +3.6m on nagoya/run3
+    # (tightening from default 60 to 30 rejects bad RTK updates earlier).
+    ("rout30", "full_ratio15_lock3_trustedseed_rout30",
+     {("nagoya", "run3")}),
+    # Phase 11ah: --rtk-update-outlier-threshold 20 gives +2.2m on nagoya/run1
+    # (very tight RTK update gate, only helps the strict-gated run).
+    ("rout20", "full_ratio15_lock3_trustedseed_rout20",
+     {("nagoya", "run1")}),
+    # Phase 11ai: csig05 + holdrlx combined config (--carrier-phase-sigma
+    # 0.0005 --min-hold-count 3 --hold-ratio-threshold 1.5) gives massive
+    # gains: tokyo/run1 +509.8m, tokyo/run3 +147.1m, nagoya/run3 +128.3m.
+    # Negative on nagoya/run2 (-7.7m), tiny +0.4 on nagoya/run1 (skip).
+    ("csig05hr", "full_ratio15_lock3_trustedseed_csig05_holdrlx",
+     {("tokyo", "run1"), ("tokyo", "run3"), ("nagoya", "run3")}),
+    # Phase 11ai/aj: csig05 + psig1 combo. Phase 11ai: {tokyo/run3, nagoya/run1}.
+    # Phase 11aj also adds nagoya/run3 (+11.7m additive after csig05_holdrlx).
+    ("csig05ps", "full_ratio15_lock3_trustedseed_csig05_psig1",
+     {("tokyo", "run3"), ("nagoya", "run1"), ("nagoya", "run3")}),
+    # Phase 11aj: csig01 (--carrier-phase-sigma 0.0001 — even tighter than
+    # csig05) gives +27.2m on tokyo/run3, +48.8m on nagoya/run2, +4.9m on
+    # nagoya/run3 (additive after all the other csig05* variants).
+    ("csig01", "full_ratio15_lock3_trustedseed_csig01",
+     {("tokyo", "run3"), ("nagoya", "run2"), ("nagoya", "run3")}),
+    # Phase 11aj: rout100 (--rtk-update-outlier-threshold 100, looser gate)
+    # gives +1.4m on nagoya/run1 only.
+    ("rout100", "full_ratio15_lock3_trustedseed_rout100",
+     {("nagoya", "run1")}),
+    # Phase 11aj: csig05 + nobds combo gives +0.8m on tokyo/run1 only.
+    ("csig05nb", "full_ratio15_lock3_trustedseed_csig05_nobds",
+     {("tokyo", "run1")}),
+    # Phase 11ak/am: csig05 + holdvrlx. Phase 11ak: {tokyo/run1} +53.2m.
+    # Phase 11am also adds tokyo/run3 +29.4m offline.
+    ("csig05hvr", "full_ratio15_lock3_trustedseed_csig05_holdvrlx",
+     {("tokyo", "run1"), ("tokyo", "run3")}),
+    # Phase 11ak/am: csig05 + psig1 + holdrlx triple. Phase 11ak: tokyo/run3
+    # +44m, nagoya/run3 +21.5m. Phase 11am also adds tokyo/run1 +4.1m.
+    ("csig05psh", "full_ratio15_lock3_trustedseed_csig05_psig1_holdrlx",
+     {("tokyo", "run3"), ("nagoya", "run3"), ("tokyo", "run1")}),
+    # Phase 11ak/am: csig05 + em10 (elev mask 10°). Phase 11ak: nagoya/run1
+    # +2.5m offline but PF -1.46pp (selector misled). Phase 11am: tokyo/run3
+    # only (+20.5m offline, untested in PF).
+    ("csig05em", "full_ratio15_lock3_trustedseed_csig05_em10",
+     {("tokyo", "run3")}),
+    # Phase 11ak/am: csig01 + holdrlx. Phase 11ak: nagoya/run2 +42.8m.
+    # Phase 11am also adds tokyo/run1 +7.2m, tokyo/run3 +23.1m.
+    ("csig01hr", "full_ratio15_lock3_trustedseed_csig01_holdrlx",
+     {("nagoya", "run2"), ("tokyo", "run1"), ("tokyo", "run3")}),
+    # Phase 11an: csig05 + psig1 + holdvrlx (4-knob quad combo). HUGE win on
+    # tokyo/run1 (+104.6m offline, hybrid_anchor pool) and nagoya/run3
+    # (+28.4m offline, score pool). Negative on nagoya/run2 (-53.3m) and
+    # tokyo/run3 (-4.2m); restrict.
+    ("c5p1hvr", "full_ratio15_lock3_trustedseed_csig05_psig1_holdvrlx",
+     {("tokyo", "run1"), ("nagoya", "run3")}),
+    # Phase 11an: csig01 + psig1 + holdrlx triple. Modest win on tokyo/run3
+    # (+7.3m offline). Negative on nagoya/run1 (-8.4m), nagoya/run3 (-5.1m).
+    ("c1p1hr", "full_ratio15_lock3_trustedseed_csig01_psig1_holdrlx",
+     {("tokyo", "run3")}),
+    # Phase 11an: csig05 + holdrlx + em10 triple. Win on tokyo/run3 (+18.2m
+    # offline). Negative on nagoya/run2 (-11.0m).
+    ("c5hrem", "full_ratio15_lock3_trustedseed_csig05_holdrlx_em10",
+     {("tokyo", "run3")}),
+    # Phase 11ao: csig005 (--carrier-phase-sigma 0.00005, super-tight) gives
+    # +36.1m on nagoya/run2 (which is hardest run). Marginal elsewhere.
+    ("csig005", "full_ratio15_lock3_trustedseed_csig005",
+     {("nagoya", "run2")}),
+    # Phase 11ao: csig05 + nobds + holdrlx triple. Marginal on tokyo/run1
+    # (+9.8m) and nagoya/run1 (+6.8m). Negative elsewhere.
+    ("c5nbhr", "full_ratio15_lock3_trustedseed_csig05_nobds_holdrlx",
+     {("tokyo", "run1"), ("nagoya", "run1")}),
+    # Phase 11ap: csig005 + holdrlx (super-tight csig + holdrlx). Small win on
+    # tokyo/run1 (+2.6m) and nagoya/run1 (+9.5m). Negative elsewhere.
+    ("c005hr", "full_ratio15_lock3_trustedseed_csig005_holdrlx",
+     {("tokyo", "run1"), ("nagoya", "run1")}),
+    # Phase 11aq: r05 (--ratio 0.5, super-loose underlying RTK ratio). Marginal
+    # +5.0m/+3.9m/+2.3m on tokyo/run1, tokyo/run3, nagoya/run1 (extra epochs gated
+    # via different LAMBDA path). Negative on nagoya/run2 (-10.2m), nagoya/run3 (-6.0m).
+    ("r05", "full_ratio15_lock3_trustedseed_r05",
+     {("tokyo", "run1"), ("tokyo", "run3"), ("nagoya", "run1")}),
+    # Phase 11aq: csig005 + glonass-ar autocal. Small +1.8m/+3.3m on tokyo/run1
+    # and tokyo/run3. Big negative -46.3m on nagoya/run1; restrict.
+    ("c005ga", "full_ratio15_lock3_trustedseed_csig005_glonassar",
+     {("tokyo", "run1"), ("tokyo", "run3")}),
+]
+
+_DIAG_ROOT = Path("experiments/results/libgnss_diag_phase10")
+_SELECT_MODES = ("residual", "ratio", "score", "maxabs", "nrows")
+
+
+@dataclass
+class RunResult:
+    city: str
+    run: str
+    mode: str
+    ppc_pct: float
+    pass_m: float
+    total_m: float
+    n_gated: int
+    n_selected: int
+
+
+def _eligible_for_run(city: str, run: str, restrict: set[tuple[str, str]] | None) -> bool:
+    if restrict is None:
+        return True
+    return (city, run) in restrict
+
+
+def _load_candidates_for_run(city: str, run: str) -> list[tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]]:
+    out: list[tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]] = []
+    for label, dir_name, restrict in _CANDIDATES_PHASE11V:
+        if not _eligible_for_run(city, run, restrict):
+            continue
+        pos_path = _PROJECT_ROOT / _DIAG_ROOT / dir_name / f"{city}_{run}_full.pos"
+        diag_path = _PROJECT_ROOT / _DIAG_ROOT / dir_name / f"{city}_{run}_full.csv"
+        if not pos_path.is_file() or not diag_path.is_file():
+            continue
+        pos, _ = _load_hybrid_pos_file(pos_path)
+        diag = _load_rtk_diag_file(diag_path)
+        out.append((label, pos, diag))
+    return out
+
+
+def _simulate(
+    city: str,
+    run: str,
+    mode: str,
+    *,
+    hybrid_pos: dict[float, np.ndarray],
+    candidates: list[tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]],
+    ref: list[tuple[float, np.ndarray]],
+    ratio_min: float,
+    rms_max: float,
+) -> RunResult:
+    truth = np.asarray([t for _, t in ref], dtype=np.float64)
+    est = np.zeros((len(ref), 3), dtype=np.float64)
+    n_gated = 0
+    n_selected = 0
+    for i, (tow, _) in enumerate(ref):
+        t_key = round(float(tow), 1)
+        # Default to hybrid floor.
+        hp = hybrid_pos.get(t_key)
+        if hp is not None and np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
+            est[i] = np.asarray(hp, dtype=np.float64)
+        # Try gated candidates.
+        best_key = None
+        best_pos = None
+        any_gated = False
+        for label, cand_pos, cand_diag in candidates:
+            row = cand_diag.get(t_key)
+            if not _rtkdiag_candidate_gate(row, ratio_min=ratio_min, residual_rms_max=rms_max):
+                continue
+            any_gated = True
+            cand = cand_pos.get(t_key)
+            if cand is None or not np.all(np.isfinite(cand)) or np.all(cand == 0.0):
+                continue
+            sort_key = _rtkdiag_candidate_sort_key(row, mode=mode)
+            if best_key is None or sort_key < best_key:
+                best_key = sort_key
+                best_pos = np.asarray(cand, dtype=np.float64)
+        if any_gated:
+            n_gated += 1
+        if best_pos is not None:
+            est[i] = best_pos
+            n_selected += 1
+    score = score_ppc2024(est, truth)
+    return RunResult(
+        city=city, run=run, mode=mode,
+        ppc_pct=float(score.score_pct),
+        pass_m=float(score.pass_distance_m),
+        total_m=float(score.total_distance_m),
+        n_gated=n_gated,
+        n_selected=n_selected,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Offline selector sweep for Phase 11v")
+    parser.add_argument("--data-root", type=Path, default=_DEFAULT_DATA_ROOT)
+    parser.add_argument("--hybrid-pos-dir", type=Path, default=RESULTS_DIR / "libgnss_rtk_pos_v5")
+    parser.add_argument("--policy", type=str, default="phase11n")
+    parser.add_argument("--out-csv", type=Path, default=RESULTS_DIR / "ppc_selector_sweep_phase11v.csv")
+    args = parser.parse_args()
+
+    rows: list[RunResult] = []
+    for city, run in _FULL_RUNS:
+        ref = _load_full_reference(args.data_root / city / run / "reference.csv")
+        hybrid_pos, _ = _load_hybrid_pos_file(args.hybrid_pos_dir / f"{city}_{run}_full.pos")
+        # Resolve per-run policy gate.
+        variant = _apply_rtkdiag_run_index_policy(
+            CTRBPFConfig(enable_rtkdiag_pf_rescue=True),
+            run=run,
+            policy=str(args.policy),
+            city=city,
+        )
+        ratio_min = float(variant.rtkdiag_candidate_ratio_min)
+        rms_max = float(variant.rtkdiag_candidate_residual_rms_max)
+        # Apply the same blocked-label filter as the policy.
+        all_cands = _load_candidates_for_run(city, run)
+        kept = _filter_rtkdiag_candidates_by_policy(
+            all_cands,
+            city=city, run=run, policy=str(args.policy),
+        )
+        kept_labels = sorted(c[0] for c in kept)
+        print(f"\n{city}/{run}: ratio_min={ratio_min}, rms_max={rms_max}, candidates={len(kept)} ({','.join(kept_labels)})")
+        per_mode: dict[str, RunResult] = {}
+        for mode in _SELECT_MODES:
+            res = _simulate(city, run, mode,
+                            hybrid_pos=hybrid_pos, candidates=kept, ref=ref,
+                            ratio_min=ratio_min, rms_max=rms_max)
+            per_mode[mode] = res
+            print(f"  mode={mode:<9s}: ppc={res.ppc_pct:.4f}%, pass={res.pass_m:.1f}/{res.total_m:.1f}, gated={res.n_gated}, sel={res.n_selected}")
+        # Highlight current policy mode.
+        cur_mode = str(variant.rtkdiag_candidate_select_mode)
+        cur = per_mode.get(cur_mode)
+        if cur is not None:
+            best_mode = max(per_mode.values(), key=lambda r: r.pass_m)
+            delta = best_mode.pass_m - cur.pass_m
+            print(f"  current policy mode={cur_mode}: ppc={cur.ppc_pct:.4f}%, best_alt={best_mode.mode} ppc={best_mode.ppc_pct:.4f}% (delta_pass={delta:+.1f}m)")
+        rows.extend(per_mode.values())
+
+    args.out_csv.parent.mkdir(parents=True, exist_ok=True)
+    with args.out_csv.open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["city", "run", "mode", "ppc_pct", "pass_m", "total_m", "n_gated", "n_selected"])
+        for r in rows:
+            w.writerow([r.city, r.run, r.mode, f"{r.ppc_pct:.6f}", f"{r.pass_m:.4f}", f"{r.total_m:.4f}", r.n_gated, r.n_selected])
+    # Aggregates per mode.
+    print("\nAggregate per uniform mode (apply same mode across all runs):")
+    by_mode: dict[str, list[RunResult]] = {}
+    for r in rows:
+        by_mode.setdefault(r.mode, []).append(r)
+    for mode, items in by_mode.items():
+        pass_sum = sum(r.pass_m for r in items)
+        total_sum = sum(r.total_m for r in items)
+        print(f"  mode={mode:<9s}: ppc={100*pass_sum/total_sum:.4f}% (pass {pass_sum:.1f}/{total_sum:.1f})")
+    print("\nAggregate per per-run-best (oracle on selector):")
+    pass_sum = 0.0
+    total_sum = 0.0
+    best_modes: list[str] = []
+    for city, run in _FULL_RUNS:
+        run_rows = [r for r in rows if r.city == city and r.run == run]
+        best = max(run_rows, key=lambda r: r.pass_m)
+        pass_sum += best.pass_m
+        total_sum += best.total_m
+        best_modes.append(f"{city}/{run}={best.mode}")
+    print(f"  ppc={100*pass_sum/total_sum:.4f}% (pass {pass_sum:.1f}/{total_sum:.1f})")
+    print(f"  per-run best mode: {', '.join(best_modes)}")
+
+
+if __name__ == "__main__":
+    main()

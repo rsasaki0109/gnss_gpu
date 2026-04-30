@@ -24,7 +24,7 @@ import csv
 import math
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -85,6 +85,18 @@ class CTRBPFConfig:
     pr_prefit_ref: str = "pf"
     pr_skip_statuses: tuple[int, ...] = ()
     defer_epoch_resample: bool = False
+    # Phase 10i: RTK-diagnostic candidate as a PF pseudo-observation.
+    # The v5 libgnss++ hybrid remains the passthrough floor. A relaxed RTK
+    # candidate is injected into the PF only when its diagnostics pass the
+    # residual gate, and only those epochs emit the PF estimate.
+    enable_rtkdiag_pf_rescue: bool = False
+    rtkdiag_candidate_sigma_m: float = 0.02
+    rtkdiag_candidate_ratio_min: float = 1.5
+    rtkdiag_candidate_residual_rms_max: float = 1.8
+    rtkdiag_candidate_emit_max_diff_m: float = 0.4
+    rtkdiag_candidate_recenter_max_shift_m: float = 10000.0
+    rtkdiag_candidate_select_mode: str = "residual"
+    rtkdiag_candidate_emit_mode: str = "pf"
     sigma_pos: float = 2.0
     sigma_cb: float = 50.0
     spread_pos_init: float = 50.0
@@ -399,6 +411,21 @@ class _HybridStats:
     epochs_attempted: int = 0
     epochs_applied: int = 0
     epochs_lookup_missing: int = 0
+
+
+@dataclass
+class _RTKDiagPFStats:
+    epochs_evaluated: int = 0
+    gate_pass: int = 0
+    candidate_missing: int = 0
+    candidate_options_total: int = 0
+    pu_applied: int = 0
+    recenter_applied: int = 0
+    recenter_skipped: int = 0
+    emit_pf_estimate: int = 0
+    emit_candidate: int = 0
+    emit_skipped_pf_drift: int = 0
+    selected_counts: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -1209,6 +1236,69 @@ def _load_hybrid_pos_file(
     return positions, statuses
 
 
+def _load_rtk_diag_file(path: Path) -> dict[float, dict[str, str]]:
+    """Parse gnss_solve --diagnostics-csv output keyed by rounded TOW."""
+    rows: dict[float, dict[str, str]] = {}
+    with path.open() as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            try:
+                tow = round(float(row["tow"]), 1)
+            except (KeyError, TypeError, ValueError):
+                continue
+            rows[tow] = row
+    return rows
+
+
+def _diag_float(row: dict[str, str], key: str) -> float:
+    try:
+        return float(row[key])
+    except (KeyError, TypeError, ValueError):
+        return float("nan")
+
+
+def _rtkdiag_candidate_gate(
+    row: dict[str, str] | None,
+    *,
+    ratio_min: float,
+    residual_rms_max: float,
+) -> bool:
+    if row is None:
+        return False
+    try:
+        output_added = int(row.get("output_added", "0")) == 1
+        final_status = int(row.get("final_status", "0")) == 4
+    except ValueError:
+        return False
+    return (
+        output_added
+        and final_status
+        and _diag_float(row, "final_ratio") >= float(ratio_min)
+        and _diag_float(row, "final_residual_rms") <= float(residual_rms_max)
+    )
+
+
+def _rtkdiag_candidate_sort_key(
+    row: dict[str, str],
+    *,
+    mode: str,
+) -> tuple[float, float]:
+    """Rank gated RTK diagnostic candidates; smaller tuple is better."""
+    ratio = _diag_float(row, "final_ratio")
+    residual = _diag_float(row, "final_residual_rms")
+    update_rows = _diag_float(row, "final_update_rows")
+    if mode == "ratio":
+        return (-ratio, residual)
+    if mode == "score":
+        return (residual / max(ratio, 1.0e-6), residual)
+    if mode == "maxabs":
+        return (_diag_float(row, "final_residual_abs_max"), residual)
+    if mode == "nrows":
+        return (-update_rows, residual)
+    # Conservative default: prefer the tightest measurement update residual.
+    return (residual, -ratio)
+
+
 def _load_full_reference(path: Path) -> list[tuple[float, np.ndarray]]:
     """Load every reference.csv row in order (TOW seconds, ECEF)."""
     rows: list[tuple[float, np.ndarray]] = []
@@ -1321,6 +1411,9 @@ def _run_ctrbpf_on_segment(
     hybrid_pos: dict[float, np.ndarray] | None = None,
     hybrid_velocity: dict[float, np.ndarray] | None = None,
     hybrid_status: dict[float, int] | None = None,
+    rtkdiag_candidates: list[
+        tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]
+    ] | None = None,
     imu: dict[str, np.ndarray] | None = None,
 ) -> tuple[
     np.ndarray,
@@ -1329,6 +1422,7 @@ def _run_ctrbpf_on_segment(
     _DDStats,
     _RBPFGateStats,
     _HybridStats,
+    _RTKDiagPFStats,
     _FGOStats,
     _TDCPSmootherStats,
     _ZUPTStats,
@@ -1352,6 +1446,7 @@ def _run_ctrbpf_on_segment(
     dd_stats = _DDStats()
     gate_stats = _RBPFGateStats()
     hybrid_stats = _HybridStats()
+    rtkdiag_pf_stats = _RTKDiagPFStats()
     gate_active = config.enable_rbpf_velocity_kf and (
         config.rbpf_kf_gate_min_dd_pairs is not None
         or config.rbpf_kf_gate_min_ess_ratio is not None
@@ -1363,6 +1458,11 @@ def _run_ctrbpf_on_segment(
         or config.enable_fgo_lambda
     )
     use_hybrid = config.enable_hybrid_pu and hybrid_pos is not None
+    use_rtkdiag_pf = (
+        bool(config.enable_rtkdiag_pf_rescue)
+        and rtkdiag_candidates is not None
+        and len(rtkdiag_candidates) > 0
+    )
     use_vguide = (
         config.enable_hybrid_velocity_guide
         and hybrid_velocity is not None
@@ -1924,6 +2024,68 @@ def _run_ctrbpf_on_segment(
                 pf.position_update(hp, sigma_pos=hybrid_sigma_now)
                 hybrid_stats.epochs_applied += 1
 
+        rtkdiag_pf_emit_here = False
+        rtkdiag_pf_ref: np.ndarray | None = None
+        if use_rtkdiag_pf:
+            rtkdiag_pf_stats.epochs_evaluated += 1
+            best_candidate: tuple[str, np.ndarray, dict[str, str]] | None = None
+            best_key: tuple[float, float] | None = None
+            gated_options = 0
+            for label, candidate_pos, candidate_diag in rtkdiag_candidates or []:
+                diag_row = candidate_diag.get(t_key)
+                if not _rtkdiag_candidate_gate(
+                    diag_row,
+                    ratio_min=float(config.rtkdiag_candidate_ratio_min),
+                    residual_rms_max=float(config.rtkdiag_candidate_residual_rms_max),
+                ):
+                    continue
+                gated_options += 1
+                cand = candidate_pos.get(t_key)
+                if cand is None or not np.all(np.isfinite(cand)) or np.all(cand == 0.0):
+                    continue
+                select_mode = str(config.rtkdiag_candidate_select_mode)
+                if select_mode == "hybrid_anchor" and hp is not None and np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
+                    cand_arr = np.asarray(cand, dtype=np.float64)
+                    dist_to_hyb = float(np.linalg.norm(cand_arr - np.asarray(hp, dtype=np.float64)))
+                    candidate_key = (dist_to_hyb, _diag_float(diag_row, "final_residual_rms"))
+                else:
+                    if select_mode == "hybrid_anchor":
+                        # Hybrid floor missing — fall back to residual.
+                        candidate_key = _rtkdiag_candidate_sort_key(diag_row, mode="residual")
+                    else:
+                        candidate_key = _rtkdiag_candidate_sort_key(diag_row, mode=select_mode)
+                if best_key is None or candidate_key < best_key:
+                    best_key = candidate_key
+                    best_candidate = (label, np.asarray(cand, dtype=np.float64), diag_row)
+
+            if gated_options > 0:
+                rtkdiag_pf_stats.gate_pass += 1
+                rtkdiag_pf_stats.candidate_options_total += int(gated_options)
+                if best_candidate is None:
+                    rtkdiag_pf_stats.candidate_missing += 1
+                else:
+                    label, selected_pos, _selected_diag = best_candidate
+                    rtkdiag_pf_ref = selected_pos
+                    rtkdiag_pf_stats.selected_counts[label] = (
+                        rtkdiag_pf_stats.selected_counts.get(label, 0) + 1
+                    )
+                    recenter_max = float(config.rtkdiag_candidate_recenter_max_shift_m)
+                    if recenter_max > 0.0:
+                        shift_norm, recentered = pf.recenter_position(
+                            rtkdiag_pf_ref,
+                            max_shift_m=recenter_max,
+                        )
+                        if recentered:
+                            rtkdiag_pf_stats.recenter_applied += 1
+                        else:
+                            rtkdiag_pf_stats.recenter_skipped += 1
+                    pf.position_update(
+                        rtkdiag_pf_ref,
+                        sigma_pos=max(float(config.rtkdiag_candidate_sigma_m), 0.01),
+                    )
+                    rtkdiag_pf_stats.pu_applied += 1
+                    rtkdiag_pf_emit_here = True
+
         # Phase 9b: tight-coupled IMU. After hybrid PU but BEFORE estimate /
         # emission, integrate IMU since the anchor and apply a per-particle
         # position pseudo-observation. This is the "tight" piece: every
@@ -2195,6 +2357,33 @@ def _run_ctrbpf_on_segment(
             else:
                 positions[i] = est[:3]
                 imu_tc_stats.emit_pf_estimate += 1
+        elif rtkdiag_pf_emit_here and rtkdiag_pf_ref is not None:
+            # Phase 10i: a trusted relaxed-RTK candidate is a PF
+            # pseudo-observation. The conservative default emits the PF only
+            # when the weighted cloud follows the candidate; newer modes let
+            # diagnostics-passing candidates fill the epochs the PF guard would
+            # otherwise throw back to the hybrid floor.
+            emit_mode = str(config.rtkdiag_candidate_emit_mode)
+            candidate_delta_m = float(np.linalg.norm(est[:3] - rtkdiag_pf_ref))
+            pf_close_to_candidate = candidate_delta_m <= float(
+                config.rtkdiag_candidate_emit_max_diff_m
+            )
+            if emit_mode == "candidate":
+                positions[i] = np.asarray(rtkdiag_pf_ref, dtype=np.float64)
+                rtkdiag_pf_stats.emit_candidate += 1
+            elif pf_close_to_candidate:
+                positions[i] = est[:3]
+                rtkdiag_pf_stats.emit_pf_estimate += 1
+            elif emit_mode == "candidate-on-drift":
+                positions[i] = np.asarray(rtkdiag_pf_ref, dtype=np.float64)
+                rtkdiag_pf_stats.emit_candidate += 1
+                rtkdiag_pf_stats.emit_skipped_pf_drift += 1
+            else:
+                if hp is not None and np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
+                    positions[i] = np.asarray(hp, dtype=np.float64)
+                else:
+                    positions[i] = est[:3]
+                rtkdiag_pf_stats.emit_skipped_pf_drift += 1
         elif (
             use_hybrid
             and not config.hybrid_emit_pf_estimate
@@ -2296,6 +2485,7 @@ def _run_ctrbpf_on_segment(
         dd_stats,
         gate_stats,
         hybrid_stats,
+        rtkdiag_pf_stats,
         fgo_stats,
         tdcp_stats,
         zupt_stats,
@@ -2434,6 +2624,39 @@ def _write_pos_file(
             )
 
 
+def _parse_path_list(raw: str) -> list[Path]:
+    return [Path(p.strip()) for p in raw.split(",") if p.strip()]
+
+
+def _parse_label_list(raw: str) -> list[str]:
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def _parse_run_label_blocks(raw: str) -> dict[tuple[str, str], set[str]]:
+    blocks: dict[tuple[str, str], set[str]] = {}
+    for spec in raw.split(";"):
+        spec = spec.strip()
+        if not spec:
+            continue
+        if "=" not in spec:
+            raise ValueError(
+                f"invalid run label block spec {spec!r}; expected city/run=label+label"
+            )
+        run_key, labels_raw = spec.split("=", 1)
+        if "/" not in run_key:
+            raise ValueError(
+                f"invalid run label block key {run_key!r}; expected city/run"
+            )
+        city, run = (part.strip() for part in run_key.split("/", 1))
+        labels = {p.strip() for p in labels_raw.replace(",", "+").split("+") if p.strip()}
+        if not city or not run or not labels:
+            raise ValueError(
+                f"invalid run label block spec {spec!r}; expected city/run=label+label"
+            )
+        blocks[(city, run)] = set(labels)
+    return blocks
+
+
 def _emission_count(
     full_ref_rows: list[tuple[float, np.ndarray]],
     times_used: np.ndarray,
@@ -2468,6 +2691,13 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             int(s.strip()) for s in args.pr_skip_statuses.split(",") if s.strip()
         ),
         defer_epoch_resample=bool(args.defer_epoch_resample),
+        rtkdiag_candidate_sigma_m=args.rtkdiag_candidate_sigma_m,
+        rtkdiag_candidate_ratio_min=args.rtkdiag_candidate_ratio_min,
+        rtkdiag_candidate_residual_rms_max=args.rtkdiag_candidate_residual_rms_max,
+        rtkdiag_candidate_emit_max_diff_m=args.rtkdiag_candidate_emit_max_diff_m,
+        rtkdiag_candidate_recenter_max_shift_m=args.rtkdiag_candidate_recenter_max_shift_m,
+        rtkdiag_candidate_select_mode=args.rtkdiag_candidate_select_mode,
+        rtkdiag_candidate_emit_mode=args.rtkdiag_candidate_emit_mode,
         sigma_pos=args.sigma_pos,
         sigma_cb=args.sigma_cb,
         spread_pos_init=args.spread_pos_init,
@@ -2669,6 +2899,20 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_pr_gmm=True,
             method_label="RBPF-velKF+DD+gate+hybrid+gmm",
         ))
+    # Phase 10i: keep v5 hybrid as the floor, but inject the relaxed RTK
+    # candidate into the PF on diagnostics-passing epochs and emit PF only
+    # there. This is the PF version of the Phase 10h dual-profile chooser.
+    if "rbpf+dd+gate+hybrid+rtkdiag_pf" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            enable_rtkdiag_pf_rescue=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+rtkdiag_pf",
+        ))
     # Phase 7: full stack (vguide + hybrid PU + DD AFV + RBPF gate) emitting
     # the PF's own estimate. Goal: show DD-AFV cm-correction beat the hybrid
     # baseline floor (Phase 6 passthrough).
@@ -2836,6 +3080,467 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
     return variants
 
 
+_RTKDIAG_POLICIES = {
+    "phase10o", "phase10p", "phase10r",
+    "phase11h", "phase11i", "phase11l", "phase11n",
+    "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq",
+}
+
+
+def _apply_rtkdiag_run_index_policy(
+    variant: CTRBPFConfig,
+    *,
+    run: str,
+    policy: str,
+    city: str | None = None,
+) -> CTRBPFConfig:
+    if (
+        policy not in _RTKDIAG_POLICIES
+        or not bool(variant.enable_rtkdiag_pf_rescue)
+    ):
+        return variant
+    if policy in {"phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"}:
+        # Phase 11aa: extends Phase 11z by switching tokyo/run1 selector
+        # to hybrid_anchor (consensus selector showed +0.20pp on this run /
+        # +0.05pp aggregate). Other runs unchanged from Phase 11z.
+        # Phase 11ab: same gates as 11aa, but r15ga (--glonass-ar autocal,
+        # ratio 1.5) is added to the candidate pool — restricted via
+        # blocked_labels to {(tokyo, run3), (nagoya, run1)} where offline
+        # simulation showed positive aggregate (+88m / +0.19pp).
+        # Phase 11ac: extends 11ab with two more selectively-eligible
+        # candidates: r20ga (ratio2.0 + glonass-ar) for {(tokyo, run3),
+        # (nagoya, run2)} and em10 (--elevation-mask-deg 10) for {(tokyo,
+        # run3)}. Combined offline gain over 11ab is +81m / +0.18pp.
+        # Phase 11ad: extends 11ac with two more candidates restricted to
+        # {(tokyo, run3)}: psig1 (--pseudorange-sigma 1.0) and holdrlx
+        # (--min-hold-count 3 --hold-ratio-threshold 1.5). Offline shows
+        # +146m on tokyo/run3 alone (additive).
+        if city == "tokyo" and run == "run1":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="hybrid_anchor",
+                rtkdiag_candidate_ratio_min=2.5,
+                rtkdiag_candidate_residual_rms_max=1.4,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "tokyo" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=10.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run1":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="nrows",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=1.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=30.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        # Fall through to phase11z logic if city unknown.
+    if policy == "phase11z":
+        # Phase 11z: extends Phase 11y by pushing rms_max to 50 on
+        # tokyo/run3 + nagoya/run2 and rms_max=30 on nagoya/run3 (extended2
+        # gate sweep showed plateau between rms=50 and rms=100, with most
+        # gain on nagoya/run2 +0.79pp).
+        if city == "tokyo" and run == "run1":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="nrows",
+                rtkdiag_candidate_ratio_min=2.5,
+                rtkdiag_candidate_residual_rms_max=1.4,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "tokyo" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=10.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run1":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="nrows",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=1.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=30.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        # Fall through to phase11y/phase11x logic if city unknown.
+    if policy == "phase11y":
+        # Phase 11y: extends Phase 11x by widening rms_max to 20 on the
+        # heavy-NLOS runs (tokyo/run3, nagoya/run2, nagoya/run3) and
+        # dropping ratio_min to 1.0 where the extended gate sweep showed
+        # selector improvement. Other runs unchanged from Phase 11x.
+        if city == "tokyo" and run == "run1":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="nrows",
+                rtkdiag_candidate_ratio_min=2.5,
+                rtkdiag_candidate_residual_rms_max=1.4,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "tokyo" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=10.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=20.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run1":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="nrows",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=1.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=20.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=20.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        # Fall through to phase11x logic if city unknown.
+    if policy == "phase11x":
+        # Phase 11x: city x run gate from offline gate sweep on Phase 11v
+        # candidate pool. Selector mode is unchanged from phase11n.
+        if city == "tokyo" and run == "run1":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="nrows",
+                rtkdiag_candidate_ratio_min=2.5,
+                rtkdiag_candidate_residual_rms_max=1.4,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "tokyo" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=10.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.3,
+                rtkdiag_candidate_residual_rms_max=10.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run1":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="nrows",
+                rtkdiag_candidate_ratio_min=1.5,
+                rtkdiag_candidate_residual_rms_max=1.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.5,
+                rtkdiag_candidate_residual_rms_max=7.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=10.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        # Fall through: city unknown, behave like phase11n.
+    if run == "run1":
+        return replace(
+            variant,
+            rtkdiag_candidate_select_mode="nrows",
+            rtkdiag_candidate_ratio_min=1.5,
+            rtkdiag_candidate_residual_rms_max=1.4,
+            rtkdiag_candidate_emit_mode="candidate",
+        )
+    if run == "run2":
+        if policy in {"phase10r", "phase11h", "phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa"}:
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="score",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=6.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        return replace(
+            variant,
+            rtkdiag_candidate_select_mode="maxabs",
+            rtkdiag_candidate_ratio_min=1.5,
+            rtkdiag_candidate_residual_rms_max=6.0 if policy == "phase10p" else 5.0,
+            rtkdiag_candidate_emit_mode="candidate",
+        )
+    if run == "run3":
+        return replace(
+            variant,
+            rtkdiag_candidate_select_mode="score",
+            rtkdiag_candidate_ratio_min=1.5,
+            rtkdiag_candidate_residual_rms_max=7.0 if policy in {"phase10r", "phase11h", "phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa"} else (
+                6.0 if policy == "phase10p" else 5.0
+            ),
+            rtkdiag_candidate_emit_mode="candidate",
+        )
+    return variant
+
+
+def _filter_rtkdiag_candidates_by_policy(
+    candidates: list[tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]],
+    *,
+    city: str,
+    run: str,
+    policy: str,
+    blocked_labels: set[str] | None = None,
+) -> list[tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]]:
+    effective_blocked_labels = set(blocked_labels or set())
+    if policy in {"phase11h", "phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and city == "nagoya" and run == "run2":
+        effective_blocked_labels.update({"r15g15", "r20g15", "r25g15", "r30g15"})
+    if policy in {"phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (
+        (city, run) in {("tokyo", "run2"), ("nagoya", "run1"), ("nagoya", "run2")}
+    ):
+        effective_blocked_labels.update({"r30", "r30g"})
+    if policy in {"phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (
+        (city, run) in {("nagoya", "run1"), ("nagoya", "run2")}
+    ):
+        effective_blocked_labels.add("r20g10")
+    if policy in {"phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and city == "nagoya":
+        effective_blocked_labels.update({"r15g10", "r25g10"})
+    # Phase 11ab: r15ga (--glonass-ar autocal ratio 1.5) only helps tokyo/run3
+    # and nagoya/run1 in offline simulation; block on the other 4 runs to
+    # avoid the -30/-19/-5/-2 m/run regressions seen in the sim.
+    if policy in {"phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1")}:
+        effective_blocked_labels.add("r15ga")
+    # Phase 11ac: r20ga only helps tokyo/run3 (+12.6m) and nagoya/run2
+    # (+47.7m) on top of 11ab base. Block elsewhere.
+    if policy in {"phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2")}:
+        effective_blocked_labels.add("r20ga")
+    # Phase 11ac: em10 (elev mask 10°) only helps tokyo/run3 (+21m). Block
+    # elsewhere. Phase 11af also allows em10 on nagoya/run1 (+2.0m offline).
+    if policy in {"phase11ac", "phase11ad", "phase11ae"} and (city, run) != ("tokyo", "run3"):
+        effective_blocked_labels.add("em10")
+    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1")}:
+        effective_blocked_labels.add("em10")
+    # Phase 11ad: psig1 (--pseudorange-sigma 1.0) gives +125m only on
+    # tokyo/run3. Phase 11af also allows psig1 on nagoya/run3 (+4.1m offline).
+    if policy in {"phase11ad", "phase11ae"} and (city, run) != ("tokyo", "run3"):
+        effective_blocked_labels.add("psig1")
+    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run3")}:
+        effective_blocked_labels.add("psig1")
+    # Phase 11ad: holdrlx (relaxed hold ambiguity) gives +72m only on
+    # tokyo/run3.
+    if policy in {"phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("tokyo", "run3"):
+        effective_blocked_labels.add("holdrlx")
+    # Phase 11ae: r12ga (--ratio 1.2 + --glonass-ar autocal) gives +103m
+    # additive on tokyo/run3 only. Phase 11af keeps it (no harm).
+    if policy in {"phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("tokyo", "run3"):
+        effective_blocked_labels.add("r12ga")
+    # Phase 11ae: psig2 (--pseudorange-sigma 2.0) gives +44.5m additive on
+    # tokyo/run3 only. Phase 11af/ag keeps it (no harm).
+    if policy in {"phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("tokyo", "run3"):
+        effective_blocked_labels.add("psig2")
+    # Phase 11af: psig1hr (psig1 + holdrlx combined config) gives +90.8m
+    # additive on tokyo/run3 only. Negative on nagoya runs.
+    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("tokyo", "run3"):
+        effective_blocked_labels.add("psig1hr")
+    # Phase 11af: nobds (--no-beidou) gives +29.7m on nagoya/run2 (largest),
+    # +9.8m on tokyo/run3, +4.2m on tokyo/run1. Negative on nagoya/run1, run3.
+    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("nagoya", "run2"), ("tokyo", "run3"), ("tokyo", "run1")}:
+        effective_blocked_labels.add("nobds")
+    # Phase 11ag: csig05 (--carrier-phase-sigma 0.0005) gives massive gains:
+    # tokyo/run3 +95.8m, nagoya/run2 +95.8m, tokyo/run1 +9.8m. Negative on
+    # nagoya/run1/run3 originally; Phase 11am also enables nagoya/run3 (+2.6m
+    # additive after the other csig05* variants).
+    if policy in {"phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2"), ("tokyo", "run1")}:
+        effective_blocked_labels.add("csig05")
+    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2"), ("tokyo", "run1"), ("nagoya", "run3")}:
+        effective_blocked_labels.add("csig05")
+    # Phase 11ag: noglo (--no-glonass) gives +40.5m on tokyo/run1 only.
+    if policy in {"phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("tokyo", "run1"):
+        effective_blocked_labels.add("noglo")
+    # Phase 11ag: csig1 (--carrier-phase-sigma 0.001) gives +0.6m on
+    # nagoya/run1. Phase 11ah extends to {nagoya/run1, nagoya/run2, tokyo/run3}
+    # (additive after csig05).
+    if policy == "phase11ag" and (city, run) != ("nagoya", "run1"):
+        effective_blocked_labels.add("csig1")
+    if policy in {"phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("nagoya", "run1"), ("nagoya", "run2"), ("tokyo", "run3")}:
+        effective_blocked_labels.add("csig1")
+    # Phase 11ah: rout30 (--rtk-update-outlier-threshold 30) gives +3.6m
+    # on nagoya/run3 only.
+    if policy in {"phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("nagoya", "run3"):
+        effective_blocked_labels.add("rout30")
+    # Phase 11ah: rout20 (--rtk-update-outlier-threshold 20) gives +2.2m
+    # on nagoya/run1 only.
+    if policy in {"phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("nagoya", "run1"):
+        effective_blocked_labels.add("rout20")
+    # Phase 11ai: csig05hr (csig05 + holdrlx combined) gives massive gains:
+    # tokyo/run1 +509.8m, tokyo/run3 +147.1m, nagoya/run3 +128.3m. Block on
+    # nagoya/run2 (-7.7m) and nagoya/run1 (+0.4m, near-zero).
+    if policy in {"phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3"), ("nagoya", "run3")}:
+        effective_blocked_labels.add("csig05hr")
+    # Phase 11ai: csig05ps (csig05 + psig1 combined) gives +22.5m on
+    # tokyo/run3 and +3.4m on nagoya/run1. Phase 11aj also enables on
+    # nagoya/run3 (+11.7m additive).
+    # Phase 11ai/ak: csig05ps (csig05 + psig1) for {tokyo/run3, nagoya/run1}.
+    # Phase 11aj added nagoya/run3 (-0.12pp PF on that run, so removed in 11ak).
+    if policy in {"phase11ai", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1")}:
+        effective_blocked_labels.add("csig05ps")
+    if policy == "phase11aj" and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1"), ("nagoya", "run3")}:
+        effective_blocked_labels.add("csig05ps")
+    # Phase 11aj/ak: csig01 (--carrier-phase-sigma 0.0001). Phase 11ak narrows
+    # to {tokyo/run3, nagoya/run2} only — nagoya/run3 was -0.12pp in PF.
+    if policy == "phase11aj" and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2"), ("nagoya", "run3")}:
+        effective_blocked_labels.add("csig01")
+    if policy in {"phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2")}:
+        effective_blocked_labels.add("csig01")
+    # Phase 11aj: rout100 hurt nagoya/run1 by -1.49pp in PF — block in phase11ak.
+    if policy == "phase11aj" and (city, run) != ("nagoya", "run1"):
+        effective_blocked_labels.add("rout100")
+    if policy in {"phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"}:
+        effective_blocked_labels.add("rout100")
+    # Phase 11aj: csig05nb (csig05 + nobds) +0.8m offline but -0.02pp PF.
+    # Block entirely in phase11ak.
+    if policy == "phase11aj" and (city, run) != ("tokyo", "run1"):
+        effective_blocked_labels.add("csig05nb")
+    if policy in {"phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"}:
+        effective_blocked_labels.add("csig05nb")
+    # Phase 11ak: csig05hvr (csig05 + holdvrlx very loose hold) gives +53.2m
+    # on tokyo/run1 only. Phase 11am also enables tokyo/run3 (+29.4m offline).
+    if policy in {"phase11ak", "phase11al"} and (city, run) != ("tokyo", "run1"):
+        effective_blocked_labels.add("csig05hvr")
+    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3")}:
+        effective_blocked_labels.add("csig05hvr")
+    # Phase 11ak: csig05psh (csig05 + psig1 + holdrlx triple) gives +44m on
+    # tokyo/run3 and +21.5m on nagoya/run3. Phase 11am also enables tokyo/run1 (+4.1m).
+    if policy in {"phase11ak", "phase11al"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run3")}:
+        effective_blocked_labels.add("csig05psh")
+    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run3"), ("tokyo", "run1")}:
+        effective_blocked_labels.add("csig05psh")
+    # Phase 11ak: csig05em (csig05 + em10) gives +2.5m on nagoya/run1.
+    if policy == "phase11ak" and (city, run) != ("nagoya", "run1"):
+        effective_blocked_labels.add("csig05em")
+    if policy == "phase11al":
+        effective_blocked_labels.add("csig05em")
+    # Phase 11am: csig05em allowed only on tokyo/run3 (+20.5m offline). Block elsewhere.
+    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("tokyo", "run3"):
+        effective_blocked_labels.add("csig05em")
+    # Phase 11ak: csig01hr (csig01 + holdrlx) gives +42.8m on nagoya/run2.
+    # Phase 11am widens to {tokyo/run1 +7.2m, tokyo/run3 +23.1m, nagoya/run2 +42.8m}.
+    if policy in {"phase11ak", "phase11al"} and (city, run) != ("nagoya", "run2"):
+        effective_blocked_labels.add("csig01hr")
+    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("nagoya", "run2"), ("tokyo", "run1"), ("tokyo", "run3")}:
+        effective_blocked_labels.add("csig01hr")
+    # Phase 11an: c5p1hvr (csig05+psig1+holdvrlx 4-knob) gives +104.6m on
+    # tokyo/run1 and +28.4m on nagoya/run3 offline.
+    if policy in {"phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run3")}:
+        effective_blocked_labels.add("c5p1hvr")
+    # Phase 11an: c1p1hr (csig01+psig1+holdrlx triple) gives +7.3m on tokyo/run3 offline.
+    if policy in {"phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("tokyo", "run3"):
+        effective_blocked_labels.add("c1p1hr")
+    # Phase 11an: c5hrem (csig05+holdrlx+em10 triple) gives +18.2m on tokyo/run3 offline.
+    if policy in {"phase11an", "phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("tokyo", "run3"):
+        effective_blocked_labels.add("c5hrem")
+    # Phase 11ao: csig005 (--carrier-phase-sigma 0.00005, super-tight) gives
+    # +36.1m on nagoya/run2 (the lowest run). Marginal elsewhere.
+    if policy in {"phase11ao", "phase11ap", "phase11aq"} and (city, run) != ("nagoya", "run2"):
+        effective_blocked_labels.add("csig005")
+    # Phase 11ao: c5nbhr (csig05+nobds+holdrlx triple). Marginal +9.8m on
+    # tokyo/run1 and +6.8m on nagoya/run1. Negative on others.
+    if policy in {"phase11ao", "phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run1")}:
+        effective_blocked_labels.add("c5nbhr")
+    # Phase 11ap: c005hr (csig005+holdrlx) marginal +2.6m on tokyo/run1, +9.5m on nagoya/run1.
+    if policy in {"phase11ap", "phase11aq"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run1")}:
+        effective_blocked_labels.add("c005hr")
+    # Phase 11aq: r05 (--ratio 0.5) marginal +5.0/+3.9/+2.3m on tokyo/run1, tokyo/run3, nagoya/run1.
+    if policy == "phase11aq" and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3"), ("nagoya", "run1")}:
+        effective_blocked_labels.add("r05")
+    # Phase 11aq: c005ga (csig005+glonassar) marginal +1.8/+3.3m on tokyo/run1, tokyo/run3.
+    if policy == "phase11aq" and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3")}:
+        effective_blocked_labels.add("c005ga")
+    if not effective_blocked_labels:
+        return candidates
+    return [
+        candidate for candidate in candidates
+        if candidate[0] not in effective_blocked_labels
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="CT-RBPF-FGO PPC port (Phase 0 scaffolding)")
     parser.add_argument("--data-root", type=Path, default=_DEFAULT_DATA_ROOT)
@@ -2898,6 +3603,7 @@ def main() -> None:
             "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+gate+pu, "
             "pf+hybrid, rbpf+dd+hybrid, rbpf+dd+gate+hybrid, "
             "rbpf+dd+gate+hybrid+gmm, "
+            "rbpf+dd+gate+hybrid+rtkdiag_pf, "
             "rbpf+dd+gate+phase7, rbpf+dd+gate+phase7+gmm, "
             "rbpf+dd+gate+phase4, "
             "rbpf+dd+gate+hybrid+phase4, "
@@ -2937,6 +3643,81 @@ def main() -> None:
                         help="Sigma [m] for the hybrid position_update soft constraint (default 1.0)")
     parser.add_argument("--hybrid-vguide-max-dt-s", type=float, default=0.5,
                         help="Max gap [s] between consecutive hybrid samples for finite-diff velocity (default 0.5)")
+    # Phase 10i: PF rescue using RTK diagnostics from gnss_solve
+    parser.add_argument("--rtkdiag-candidate-pos-dir", type=Path, default=None,
+                        help="Directory of relaxed RTK candidate .pos files for rtkdiag_pf "
+                             "(expects {city}_{run}_full.pos)")
+    parser.add_argument("--rtkdiag-candidate-diag-dir", type=Path, default=None,
+                        help="Directory of relaxed RTK diagnostics CSV files for rtkdiag_pf "
+                             "(expects {city}_{run}_full.csv)")
+    parser.add_argument("--rtkdiag-candidate-pos-dirs", type=str, default="",
+                        help="Comma-separated candidate .pos directories for multi-candidate rtkdiag_pf")
+    parser.add_argument("--rtkdiag-candidate-diag-dirs", type=str, default="",
+                        help="Comma-separated diagnostics CSV directories for multi-candidate rtkdiag_pf")
+    parser.add_argument("--rtkdiag-candidate-labels", type=str, default="",
+                        help="Optional comma-separated labels for multi-candidate rtkdiag_pf")
+    parser.add_argument("--rtkdiag-candidate-block-labels", type=str, default="",
+                        help="Comma-separated candidate labels to block for all runs")
+    parser.add_argument("--rtkdiag-candidate-block-labels-by-run", type=str, default="",
+                        help=(
+                            "Semicolon-separated run-specific candidate label blocks, "
+                            "e.g. 'nagoya/run2=r20g15+r15g15'"
+                        ))
+    parser.add_argument("--rtkdiag-candidate-pos-suffix", type=str, default="_full.pos",
+                        help="Suffix used for RTK diagnostic candidate pos files (default _full.pos)")
+    parser.add_argument("--rtkdiag-candidate-diag-suffix", type=str, default="_full.csv",
+                        help="Suffix used for RTK diagnostic CSV files (default _full.csv)")
+    parser.add_argument("--rtkdiag-candidate-sigma-m", type=float, default=0.02,
+                        help="PF position_update sigma for diagnostics-passing RTK candidate [m] (default 0.02)")
+    parser.add_argument("--rtkdiag-candidate-ratio-min", type=float, default=1.5,
+                        help="Minimum candidate final_ratio for rtkdiag_pf gate (default 1.5)")
+    parser.add_argument("--rtkdiag-candidate-residual-rms-max", type=float, default=1.8,
+                        help="Maximum candidate final_residual_rms for rtkdiag_pf gate (default 1.8)")
+    parser.add_argument("--rtkdiag-candidate-emit-max-diff-m", type=float, default=0.4,
+                        help="Emit PF only if |PF - candidate| <= this [m] after candidate PU (default 0.4)")
+    parser.add_argument("--rtkdiag-candidate-recenter-max-shift-m", type=float, default=10000.0,
+                        help="Recenter PF cloud to candidate before candidate PU when shift <= this [m] (default 10000)")
+    parser.add_argument("--rtkdiag-candidate-select-mode",
+                        choices=("residual", "ratio", "score", "maxabs", "nrows", "hybrid_anchor"),
+                        default="residual",
+                        help="How to choose among multiple gated RTK candidates (default residual). "
+                             "hybrid_anchor picks the candidate closest to the hybrid floor; "
+                             "useful when hybrid is reliable")
+    parser.add_argument("--rtkdiag-candidate-emit-mode",
+                        choices=("pf", "candidate-on-drift", "candidate"),
+                        default="pf",
+                        help=(
+                            "Output policy for diagnostics-passing RTK candidate epochs: "
+                            "pf=emit PF only when close to candidate and otherwise keep hybrid; "
+                            "candidate-on-drift=emit PF when close, otherwise emit candidate; "
+                            "candidate=always emit selected candidate (default pf)"
+                        ))
+    parser.add_argument("--rtkdiag-candidate-run-index-policy",
+                        choices=("none", "phase10o", "phase10p", "phase10r", "phase11h", "phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq"),
+                        default="none",
+                        help=(
+                            "Experimental per-run-index RTKDiag policy. phase10o uses "
+                            "run1=nrows/rms1.4, run2=maxabs/rms5.0, run3=score/rms5.0, "
+                            "all with candidate emit. phase10p uses the same family split "
+                            "but run2/run3 rms5.0 -> rms6.0 for the r30 candidate set "
+                            "phase10r uses run1=nrows/rms1.4, run2=score/ratio1.7/rms6.0, "
+                            "run3=score/rms7.0 for the r15 no-hold candidate set. "
+                            "phase11h follows phase10r but filters gate15 candidates on "
+                            "nagoya/run2. phase11i follows phase11h but also filters "
+                            "r30/r30g on tokyo/run2, nagoya/run1, and nagoya/run2. "
+                            "phase11l follows phase11i but filters r20g10 on "
+                            "nagoya/run1 and nagoya/run2. "
+                            "phase11n follows phase11l but additionally filters "
+                            "r15g10 and r25g10 on all nagoya runs. "
+                            "phase11x extends phase11n with city x run gate values "
+                            "from the offline gate sweep on Phase 11v candidates "
+                            "(tokyo/run1 ratio2.5; tokyo/run2 rms10; tokyo/run3 ratio1.3 rms10; "
+                            "nagoya/run1 rms1.0; nagoya/run2 ratio1.5 rms7; nagoya/run3 ratio1.7 rms10). "
+                            "phase11y extends phase11x by widening rms_max to 20 on the "
+                            "heavy-NLOS runs (tokyo/run3, nagoya/run2, nagoya/run3 with ratio_min "
+                            "dropped to 1.0 on tokyo/run3 and nagoya/run2) "
+                            "(default none)"
+                        ))
     # Phase 4: post-process FGO + LAMBDA partial fix
     parser.add_argument("--fgo-window-size", type=int, default=30,
                         help="FGO window size in epochs (default 30)")
@@ -3093,6 +3874,28 @@ def main() -> None:
     args.pos_dir.mkdir(parents=True, exist_ok=True)
 
     variants = _config_variants(args)
+    rtkdiag_candidate_pos_dirs = (
+        _parse_path_list(args.rtkdiag_candidate_pos_dirs)
+        if str(args.rtkdiag_candidate_pos_dirs).strip()
+        else ([args.rtkdiag_candidate_pos_dir] if args.rtkdiag_candidate_pos_dir else [])
+    )
+    rtkdiag_candidate_diag_dirs = (
+        _parse_path_list(args.rtkdiag_candidate_diag_dirs)
+        if str(args.rtkdiag_candidate_diag_dirs).strip()
+        else ([args.rtkdiag_candidate_diag_dir] if args.rtkdiag_candidate_diag_dir else [])
+    )
+    rtkdiag_candidate_labels = _parse_label_list(args.rtkdiag_candidate_labels)
+    if not rtkdiag_candidate_labels:
+        rtkdiag_candidate_labels = [
+            p.name or f"candidate{i}"
+            for i, p in enumerate(rtkdiag_candidate_pos_dirs)
+        ]
+    rtkdiag_candidate_block_labels = set(
+        _parse_label_list(args.rtkdiag_candidate_block_labels)
+    )
+    rtkdiag_candidate_block_labels_by_run = _parse_run_label_blocks(
+        args.rtkdiag_candidate_block_labels_by_run
+    )
 
     any_dd = any(v.enable_dd_carrier_afv for v in variants)
     any_dd_for_gate = any(
@@ -3112,6 +3915,18 @@ def main() -> None:
     if any_hybrid and args.hybrid_pos_dir is None:
         raise SystemExit(
             "--hybrid-pos-dir is required when any *+hybrid method is selected"
+        )
+    any_rtkdiag_pf = any(v.enable_rtkdiag_pf_rescue for v in variants)
+    if any_rtkdiag_pf and (
+        not rtkdiag_candidate_pos_dirs
+        or not rtkdiag_candidate_diag_dirs
+        or len(rtkdiag_candidate_pos_dirs) != len(rtkdiag_candidate_diag_dirs)
+        or len(rtkdiag_candidate_labels) != len(rtkdiag_candidate_pos_dirs)
+    ):
+        raise SystemExit(
+            "*+rtkdiag_pf requires matching candidate pos/diag dirs and labels "
+            "(use either singular --rtkdiag-candidate-pos-dir/diag-dir or "
+            "comma-separated --rtkdiag-candidate-pos-dirs/diag-dirs)"
         )
 
     print("=" * 72)
@@ -3135,6 +3950,16 @@ def main() -> None:
         print(
             f"  Hybrid PU: dir={args.hybrid_pos_dir}, "
             f"suffix={args.hybrid_pos_suffix}, sigma_m={args.hybrid_sigma_m}"
+        )
+    if any_rtkdiag_pf:
+        print(
+            f"  RTKDiag PF: candidates={rtkdiag_candidate_labels}, "
+            f"sigma={args.rtkdiag_candidate_sigma_m}, "
+            f"ratio>={args.rtkdiag_candidate_ratio_min}, "
+            f"rms<={args.rtkdiag_candidate_residual_rms_max}, "
+            f"select={args.rtkdiag_candidate_select_mode}, "
+            f"emit={args.rtkdiag_candidate_emit_mode}, "
+            f"run_policy={args.rtkdiag_candidate_run_index_policy}"
         )
     print("=" * 72)
 
@@ -3209,6 +4034,9 @@ def main() -> None:
         hybrid_pos_run: dict[float, np.ndarray] | None = None
         hybrid_velocity_run: dict[float, np.ndarray] | None = None
         hybrid_status_run: dict[float, int] | None = None
+        rtkdiag_candidates_run: list[
+            tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]
+        ] = []
         imu_run: dict[str, np.ndarray] | None = None
         if any(v.enable_zupt or v.enable_imu_tc or v.enable_ins_tc for v in variants):
             try:
@@ -3242,11 +4070,62 @@ def main() -> None:
                     f"  [hybrid] velocity guide: {len(hybrid_velocity_run)} epochs "
                     f"(max_dt={args.hybrid_vguide_max_dt_s}s)"
                 )
+        if any_rtkdiag_pf:
+            for label, pos_dir, diag_dir in zip(
+                rtkdiag_candidate_labels,
+                rtkdiag_candidate_pos_dirs,
+                rtkdiag_candidate_diag_dirs,
+                strict=True,
+            ):
+                candidate_pos_path = pos_dir / f"{city}_{run}{args.rtkdiag_candidate_pos_suffix}"
+                candidate_diag_path = diag_dir / f"{city}_{run}{args.rtkdiag_candidate_diag_suffix}"
+                if not candidate_pos_path.is_file() or not candidate_diag_path.is_file():
+                    print(
+                        f"  [rtkdiag:{label}] WARNING: missing {candidate_pos_path} or "
+                        f"{candidate_diag_path}; candidate skipped for this run"
+                    )
+                    continue
+                candidate_pos_run, _candidate_status = _load_hybrid_pos_file(candidate_pos_path)
+                candidate_diag_run = _load_rtk_diag_file(candidate_diag_path)
+                rtkdiag_candidates_run.append((label, candidate_pos_run, candidate_diag_run))
+                print(
+                    f"  [rtkdiag:{label}] {candidate_pos_path.name}: "
+                    f"{len(candidate_pos_run)} candidate rows, "
+                    f"{len(candidate_diag_run)} diagnostic rows"
+                )
+        rtkdiag_candidates_run_policy = _filter_rtkdiag_candidates_by_policy(
+            rtkdiag_candidates_run,
+            city=city,
+            run=run,
+            policy=str(args.rtkdiag_candidate_run_index_policy),
+            blocked_labels=(
+                rtkdiag_candidate_block_labels
+                | rtkdiag_candidate_block_labels_by_run.get((city, run), set())
+            ),
+        )
+        if len(rtkdiag_candidates_run_policy) != len(rtkdiag_candidates_run):
+            kept_labels = {label for label, _, _ in rtkdiag_candidates_run_policy}
+            removed_labels = [
+                label for label, _, _ in rtkdiag_candidates_run
+                if label not in kept_labels
+            ]
+            print(
+                f"  [rtkdiag-policy:{args.rtkdiag_candidate_run_index_policy}] "
+                f"filtered candidates for {city}/{run}: "
+                f"removed={removed_labels}",
+                flush=True,
+            )
 
         wls_positions, wls_ms = run_wls(data)
         print(f"  WLS init done ({wls_ms:.2f} ms/epoch)", flush=True)
 
-        for variant in variants:
+        for configured_variant in variants:
+            variant = _apply_rtkdiag_run_index_policy(
+                configured_variant,
+                run=run,
+                policy=str(args.rtkdiag_candidate_run_index_policy),
+                city=city,
+            )
             print(f"  [{variant.method_label}] running ...", flush=True)
             need_dd_for_variant = variant.enable_dd_carrier_afv or (
                 variant.enable_rbpf_velocity_kf
@@ -3292,13 +4171,22 @@ def main() -> None:
                 if (variant.enable_zupt or variant.enable_imu_tc or variant.enable_ins_tc)
                 else None
             )
-            positions, ms_per_epoch, pr_obs_stats, dd_stats, gate_stats, hybrid_stats, fgo_stats, tdcp_stats, zupt_stats, imu_tc_stats, ins_tc_stats = _run_ctrbpf_on_segment(
+            rtkdiag_candidates_for_variant = (
+                rtkdiag_candidates_run_policy if variant.enable_rtkdiag_pf_rescue else None
+            )
+            rtkdiag_candidate_labels_for_variant = (
+                [label for label, _, _ in rtkdiag_candidates_for_variant]
+                if rtkdiag_candidates_for_variant is not None
+                else rtkdiag_candidate_labels
+            )
+            positions, ms_per_epoch, pr_obs_stats, dd_stats, gate_stats, hybrid_stats, rtkdiag_pf_stats, fgo_stats, tdcp_stats, zupt_stats, imu_tc_stats, ins_tc_stats = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
                 dd_computer=dd_for_variant,
                 dd_pr_computer=dd_pr_for_variant,
                 hybrid_pos=hybrid_for_variant,
                 hybrid_velocity=hybrid_v_for_variant,
                 hybrid_status=hybrid_status_for_variant,
+                rtkdiag_candidates=rtkdiag_candidates_for_variant,
                 imu=imu_for_variant,
             )
             score = score_ppc2024(
@@ -3378,6 +4266,47 @@ def main() -> None:
                 "hybrid_attempted": int(hybrid_stats.epochs_attempted),
                 "hybrid_applied": int(hybrid_stats.epochs_applied),
                 "hybrid_lookup_missing": int(hybrid_stats.epochs_lookup_missing),
+                "rtkdiag_pf": int(variant.enable_rtkdiag_pf_rescue),
+                "rtkdiag_candidate_sigma_m": float(variant.rtkdiag_candidate_sigma_m),
+                "rtkdiag_candidate_ratio_min": float(variant.rtkdiag_candidate_ratio_min),
+                "rtkdiag_candidate_residual_rms_max": float(
+                    variant.rtkdiag_candidate_residual_rms_max
+                ),
+                "rtkdiag_candidate_emit_max_diff_m": float(
+                    variant.rtkdiag_candidate_emit_max_diff_m
+                ),
+                "rtkdiag_candidate_recenter_max_shift_m": float(
+                    variant.rtkdiag_candidate_recenter_max_shift_m
+                ),
+                "rtkdiag_candidate_select_mode": str(variant.rtkdiag_candidate_select_mode),
+                "rtkdiag_candidate_emit_mode": str(variant.rtkdiag_candidate_emit_mode),
+                "rtkdiag_candidate_run_index_policy": str(
+                    args.rtkdiag_candidate_run_index_policy
+                ),
+                "rtkdiag_candidate_block_labels": ",".join(
+                    sorted(rtkdiag_candidate_block_labels)
+                ),
+                "rtkdiag_candidate_block_labels_by_run": str(
+                    args.rtkdiag_candidate_block_labels_by_run
+                ),
+                "rtkdiag_candidate_labels": ",".join(rtkdiag_candidate_labels_for_variant),
+                "rtkdiag_pf_evaluated": int(rtkdiag_pf_stats.epochs_evaluated),
+                "rtkdiag_pf_gate_pass": int(rtkdiag_pf_stats.gate_pass),
+                "rtkdiag_pf_candidate_options_total": int(
+                    rtkdiag_pf_stats.candidate_options_total
+                ),
+                "rtkdiag_pf_candidate_missing": int(rtkdiag_pf_stats.candidate_missing),
+                "rtkdiag_pf_pu_applied": int(rtkdiag_pf_stats.pu_applied),
+                "rtkdiag_pf_recenter_applied": int(rtkdiag_pf_stats.recenter_applied),
+                "rtkdiag_pf_recenter_skipped": int(rtkdiag_pf_stats.recenter_skipped),
+                "rtkdiag_pf_emit_pf_estimate": int(rtkdiag_pf_stats.emit_pf_estimate),
+                "rtkdiag_pf_emit_candidate": int(rtkdiag_pf_stats.emit_candidate),
+                "rtkdiag_pf_emit_skipped_pf_drift": int(
+                    rtkdiag_pf_stats.emit_skipped_pf_drift
+                ),
+                "rtkdiag_pf_selected_counts": ",".join(
+                    f"{k}:{v}" for k, v in sorted(rtkdiag_pf_stats.selected_counts.items())
+                ),
                 "fgo_lambda": int(variant.enable_fgo_lambda),
                 "fgo_windows_attempted": int(fgo_stats.windows_attempted),
                 "fgo_windows_solved": int(fgo_stats.windows_solved),
@@ -3490,6 +4419,24 @@ def main() -> None:
                     f"{hybrid_stats.epochs_attempted} "
                     f"(missing {hybrid_stats.epochs_lookup_missing})"
                 )
+            rtkdiag_pf_msg = ""
+            if variant.enable_rtkdiag_pf_rescue and rtkdiag_pf_stats.epochs_evaluated > 0:
+                selected_counts = ",".join(
+                    f"{k}:{v}" for k, v in sorted(rtkdiag_pf_stats.selected_counts.items())
+                )
+                rtkdiag_pf_msg = (
+                    f", RTKDiag-PF gate={rtkdiag_pf_stats.gate_pass}/"
+                    f"{rtkdiag_pf_stats.epochs_evaluated} "
+                    f"opts={rtkdiag_pf_stats.candidate_options_total} "
+                    f"pu={rtkdiag_pf_stats.pu_applied} "
+                    f"emit_pf={rtkdiag_pf_stats.emit_pf_estimate} "
+                    f"emit_cand={rtkdiag_pf_stats.emit_candidate} "
+                    f"(miss={rtkdiag_pf_stats.candidate_missing}, "
+                    f"drift_skip={rtkdiag_pf_stats.emit_skipped_pf_drift}, "
+                    f"rec={rtkdiag_pf_stats.recenter_applied}/"
+                    f"{rtkdiag_pf_stats.recenter_skipped}, "
+                    f"sel={selected_counts})"
+                )
             zupt_msg = ""
             if variant.enable_zupt and zupt_stats.epochs_evaluated > 0:
                 zupt_msg = (
@@ -3551,7 +4498,7 @@ def main() -> None:
             print(
                 f"    PPC honest: {row['honest_ppc_pct']:5.2f}%  "
                 f"(pass {row['honest_pass_m']:.0f} / total {row['honest_total_m']:.0f}m, "
-                f"{ms_per_epoch:.1f} ms/epoch{pr_msg}{pr_weight_msg}{prefit_msg}{pr_skip_msg}{defer_msg}{dd_msg}{gate_msg}{hybrid_msg}{zupt_msg}{imu_tc_msg}{ins_tc_msg}{tdcp_msg}{fgo_msg})",
+                f"{ms_per_epoch:.1f} ms/epoch{pr_msg}{pr_weight_msg}{prefit_msg}{pr_skip_msg}{defer_msg}{dd_msg}{gate_msg}{hybrid_msg}{rtkdiag_pf_msg}{zupt_msg}{imu_tc_msg}{ins_tc_msg}{tdcp_msg}{fgo_msg})",
                 flush=True,
             )
 

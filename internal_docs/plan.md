@@ -1,10 +1,198 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-04-21 JST
+**最終更新**: 2026-04-30 JST
 **現在の HEAD**: `7952456` (`feature/carrier-phase-imu`, origin 同期)
 **ブランチ**: `feature/carrier-phase-imu`
-**作業ツリー**: clean (未追跡の `.codex_handoff*.md` を除く、gitignore 済)
+**作業ツリー**: dirty (PPC post-process / RTKDiag candidate 実験中)
 **PR #4**: CLOSED (not merged、2026-04-16)。現在の 28+ commits はどの PR にも入っていない
+
+## PPC-Dataset 追記 (2026-04-30)
+
+このファイルの既存本文は UrbanNav/Odaiba 中心で 2026-04-21 時点の内容。2026-04-30 現在の主戦場は PPC-Dataset post-process で、最新の詳細ログは `$HOME/.claude/projects/-home-user-ws-gnss-gpu/memory/project_ppc_postprocess_ceiling.md` を参照。
+
+### PPC current best
+
+- 現在の完走済み full 6-run best は **Phase 11v = 61.6041%** (2026-04-30 確定)。
+- Phase 11v は Phase 11t の 28 候補に nagoya/run3 用 extreme tight (`n3tight2`: ratio=5.0/gate=4) と tokyo/run1 用 extreme tight (`t1tight2`: ratio=5.0/gate=4) を追加した構成 (計 30 候補)。Phase 11t = Phase 11s + tokyo/run1 用 tight (`t1tight`)。Phase 11s = Phase 11r + tokyo/run3 用 tight (`t3tight`)、Phase 11r = Phase 11q + nagoya/run1 用 loose ×3、Phase 11q = Phase 11p + nagoya/run3 用 tight (`n3tight`)、Phase 11p = Phase 11n + nagoya/run2 用 loose ×3。run-specific candidate + auto-skip 機構をそのまま流用 (新 policy 不要)。
+- 重要発見: **run ごとに loose vs tight の最適方向が異なる + 同 run に複数 tight を入れると selector が場面で使い分ける**。
+  - **loose 効果**: nagoya/run2 (+0.55pp)、nagoya/run1 (+0.42pp)
+  - **tight 効果**: nagoya/run3 (+7.20pp +2.15pp 追加 = +9.35pp 累計)、tokyo/run3 (+0.46pp)、tokyo/run1 (+0.82pp +1.26pp 追加 = +2.08pp 累計)
+  - **逆効果**: tokyo/run2 で tight (-0.21pp)、nagoya/run3 で loose (-1.88pp)、nagoya/run1 で tight (-0.08pp)、nagoya/run2 で tight (-0.66pp / Phase 11v smoke)
+  - 各 run で tight と loose の両方向 smoke を試すのが鉄則。さらに有効 run には extreme variant (ratio=5.0/gate=4) を追加すると selector が共存させて伸びる。
+- selective policy は `--rtkdiag-candidate-run-index-policy phase11n` をそのまま流用。Phase 11p〜11v とも新 policy 不要。
+
+### PPC important numbers
+
+| phase / diagnostic | aggregate PPC | notes |
+|---|---:|---|
+| libgnss++ hybrid v5 | 50.7216% | baseline |
+| Phase 11i | 58.9394% | gate15 + selective `r30/r30g` block |
+| Phase 11l | 59.6464% | + `r20g10`, block `r20g10` on `nagoya/run1,nagoya/run2` |
+| Phase 11m | 60.06% | + `r15g10,r25g10`; full complete, but Nagoya worsens |
+| Phase 11n | 60.2124% | Phase 11m candidates + block `r15g10,r25g10` on all Nagoya runs |
+| Phase 11o (Phase 11n + r30g10 Tokyo only) | 60.2161% | r30g10 追加は +0.004pp、ノイズレベル → 不採用 |
+| Phase 11p | 60.2686% | Phase 11n + nagoya/run2 専用 loose 候補 3 種 (n2loose/n2loose2/n2loose3) |
+| Phase 11q (negative — n3 loose) | (smoke -1.88pp on run3) | nagoya/run3 で loose 候補は逆効果 (n3loose2 ratio=1.5 が score selector に false-positive) |
+| Phase 11q | 60.7859% | Phase 11p + nagoya/run3 専用 tight (n3tight: ratio=4.0/gate=5/min-obs=8/arfilter-margin=0.5)、+0.5173pp |
+| Phase 11r | 60.8256% | Phase 11q + nagoya/run1 専用 loose ×3 (n1loose/n1loose2/n1loose3、ratio=1.5-2.0/gate=8-10)、+0.0397pp。tight は -0.08pp で不採用 |
+| Phase 11s | 60.9892% | Phase 11r + tokyo/run3 専用 tight (t3tight: tokyo profile + ratio=4.0/gate=5/min-obs=8)、+0.1636pp |
+| Phase 11t | 61.1713% | Phase 11s + tokyo/run1 専用 tight (t1tight)、+0.1821pp |
+| Phase 11u (negative — t2 tight) | (smoke -0.21pp on tokyo/run2) | tokyo/run2 で tight は逆効果、不採用 |
+| Phase 11v | **61.6041%** | Phase 11t + extreme tight ×2 (n3tight2 ratio=5.0/gate=4 = +2.15pp on run3、t1tight2 ratio=5.0/gate=4/arfilter-margin=0.6 = +1.26pp on run1)、aggregate +0.4328pp |
+| Phase 11v negative — n2tight | (smoke -0.66pp on nagoya/run2) | nagoya/run2 で tight (ratio=4.0/gate=5) は逆効果、不採用 (loose-only が最適) |
+| Phase 11n+r30g10 oracle | raw 63.6327%, gated 61.6616% | candidate pool ceiling 上限 (実 phase 60.21% 時点); 11v が gated oracle に到達、新 oracle 計算が必要 |
+
+Phase 11v run別 (current best):
+- tokyo/run1 **48.9889%** (Phase 11t 47.7437% から +1.2452pp、t1tight2 が 810 / 7125 epoch 選択 + t1tight 512 と共存)
+- tokyo/run2 83.0631% (= Phase 11t)
+- tokyo/run3 72.6707% (= Phase 11t)
+- nagoya/run1 61.0473% (= Phase 11t)
+- nagoya/run2 28.3592% (= Phase 11t、n2tight 不採用)
+- nagoya/run3 **48.4057%** (Phase 11t 46.2609% から +2.1448pp、n3tight2 が 274 / 3546 epoch 選択 + n3tight 469 と共存)
+
+Phase 11t run別:
+- tokyo/run1 **47.7437%** (Phase 11s 46.9150% から +0.8287pp、t1tight が 922 / 6879 epoch 選択)
+- tokyo/run2 83.0631% (= Phase 11s)
+- tokyo/run3 **72.6717%** (Phase 11s と同値、Phase 11r 72.2101% から +0.4616pp、t3tight が 2412 / 13195 epoch 選択)
+- nagoya/run1 **61.0521%** (Phase 11q 60.6347% から +0.4174pp、n1loose×3 が 410 / 4676 epoch 選択)
+- nagoya/run2 **28.3592%** (Phase 11n 27.8099% から +0.5493pp、n2loose×3 が 2667 / 5517 epoch 選択)
+- nagoya/run3 **46.2609%** (Phase 11p 39.0599% から +7.2010pp、n3tight が 600 / 3523 epoch 選択)
+
+Phase 11q run別:
+- tokyo/run1 46.9150% (= Phase 11p)
+- tokyo/run2 83.0631% (= Phase 11p)
+- tokyo/run3 72.2101% (= Phase 11p)
+- nagoya/run1 60.6347% (= Phase 11p)
+- nagoya/run2 28.3592% (= Phase 11p、n2loose 効果維持)
+- nagoya/run3 **46.2609%** (Phase 11p の 39.0599% から **+7.2010pp**、n3tight が 600 / 3523 epoch 選択)
+
+Phase 11p run別:
+- tokyo/run1 46.9150% (= Phase 11n)
+- tokyo/run2 83.0631% (= Phase 11n)
+- tokyo/run3 72.2101% (= Phase 11n)
+- nagoya/run1 60.6347% (= Phase 11n)
+- nagoya/run2 **28.3592%** (Phase 11n の 27.8099% から +0.5493pp、loose 候補 3 種が 2667/5517 epoch 選択)
+- nagoya/run3 39.0599% (= Phase 11n)
+
+Phase 11n run別:
+- tokyo/run1 46.9150% (= Phase 11m)
+- tokyo/run2 83.0631% (= Phase 11m)
+- tokyo/run3 72.2101% (= Phase 11m)
+- nagoya/run1 60.6347% (= Phase 11l)
+- nagoya/run2 27.8099% (= Phase 11l)
+- nagoya/run3 39.0599% (= Phase 11l)
+
+Phase 11m run別:
+- tokyo/run1 46.9150%
+- tokyo/run2 83.0631%
+- tokyo/run3 72.2101%
+- nagoya/run1 60.3377%
+- nagoya/run2 27.1770%
+- nagoya/run3 38.1793%
+
+Phase 11l run別:
+- tokyo/run1 46.7402%
+- tokyo/run2 82.5758%
+- tokyo/run3 70.9280%
+- nagoya/run1 60.6347%
+- nagoya/run2 27.8099%
+- nagoya/run3 39.0599%
+
+### PPC oracle gap by run (Phase 11n + r30g10、2026-04-30)
+
+| run | phase | gated_oracle | raw_oracle | selector gap | gate gap |
+|---|---:|---:|---:|---:|---:|
+| tokyo/run1 | 46.92 | 48.89 | 50.08 | +1.98 | +1.18 |
+| tokyo/run2 | 83.06 | 84.10 | 84.68 | +1.04 | +0.58 |
+| tokyo/run3 | 72.21 | 72.98 | 75.03 | +0.77 | +2.04 |
+| nagoya/run1 | 60.63 | 62.57 | 65.09 | +1.93 | +2.52 |
+| **nagoya/run2** | **27.81** | 29.71 | 35.15 | +1.90 | **+5.44** |
+| nagoya/run3 | 39.06 | 41.78 | 43.14 | +2.72 | +1.37 |
+
+総 gap: selector gap **+1.45pp**、gate gap **+1.97pp**、raw_oracle 上限まで **+3.42pp**。
+
+### 2026-04-30 セッションで試して効かなかった軸
+
+- **r30g10 (Tokyo only) 追加 (Phase 11o)**: +0.004pp ノイズレベル → 不採用。
+- **nagoya/run2 で rms_max 6→8 に gate 緩和**: tokyo/run2 +0.08pp / nagoya/run2 -0.09pp、ノイズレベル。policy の rms 単独緩和では効かず。
+- **nagoya/run2 select_mode sweep**: residual 26.81 / ratio 27.62 / **score 27.81** / maxabs 26.65 / nrows 26.85 — 既に score が best、mode 切替えで改善せず。
+- **nagoya/run3 select_mode sweep**: residual 37.91 / ratio 38.41 / **score 39.06** / maxabs 37.94 / nrows 37.91 — 既に score が best、mode 切替えで改善せず。
+
+### PPC code / result files
+
+- `experiments/exp_ppc_ctrbpf_fgo.py`: RTKDiag multi-candidate labels, global/run別 block labels, and `phase11h/phase11i/phase11l/phase11n` run-index policy. 候補ファイル不在 run は warning + auto-skip (3680-3686 行)。
+- `experiments/exp_ppc_candidate_oracle.py`: truth oracle diagnostic for candidate pool ceiling (`phase11n` policy 対応済み)。
+- `experiments/results/ppc_ctrbpf_fgo_phase11t_t1tight_full_p5k_runs.csv` (**current best 61.1713%**)
+- `experiments/results/ppc_ctrbpf_fgo_phase11s_t3tight_full_p5k_runs.csv` (60.9892%)
+- `experiments/results/ppc_ctrbpf_fgo_phase11r_n1loose_full_p5k_runs.csv` (60.8256%)
+- `experiments/results/ppc_ctrbpf_fgo_phase11q_n3tight_full_p5k_runs.csv` (60.7859%)
+- `experiments/results/ppc_ctrbpf_fgo_phase11p_n2_loose_full_p5k_runs.csv` (60.2686%)
+- `experiments/results/ppc_ctrbpf_fgo_phase11n_tokyo_gate10_family_full_p5k_runs.csv`
+- `experiments/results/ppc_ctrbpf_fgo_phase11o_r30_gate10_tokyo_only_full_p5k_runs.csv` (negative reference)
+- `experiments/results/ppc_candidate_oracle_phase11n_plus_r30g10_runs.csv` (oracle gap breakdown)
+- `experiments/results/ppc_ctrbpf_fgo_phase11l_r20_gate10_tokyo_only_full_p5k_runs.csv`
+- `experiments/results/ppc_ctrbpf_fgo_phase11m_r15r20r25_gate10_full_p5k_runs.csv`
+- `experiments/results/libgnss_diag_phase10/full_ratio3_lock3_trustedseed_gate10_min6/` (r30g10 候補 .pos/.csv、6 run 全)
+- `experiments/results/libgnss_diag_phase10/n2_loose_hold5_ratio20_gate10_min6/` (n2loose、nagoya/run2 のみ; preset low-cost + min-hold 5/hold-ratio 2.0/ratio 2.0/gate 10/min-obs 6)
+- `experiments/results/libgnss_diag_phase10/n2_loose_hold4_ratio15_gate10_min6/` (n2loose2、nagoya/run2 のみ; min-hold 4/hold-ratio 1.8/ratio 1.5/gate 10)
+- `experiments/results/libgnss_diag_phase10/n2_loose_hold5_ratio20_gate8_min6/` (n2loose3、nagoya/run2 のみ; min-hold 5/hold-ratio 2.0/ratio 2.0/gate 8)
+- `experiments/results/libgnss_diag_phase10/n3_loose_*` (nagoya/run3 loose 試作 3 種、いずれも -1.88pp で不採用)
+- `experiments/results/libgnss_diag_phase10/n3_tight_ratio40_gate5_min8/` (n3tight、nagoya/run3 のみ; nagoya プロファイル + ratio=4.0/gate=5/min-obs=8/arfilter-margin=0.5)
+- `experiments/results/libgnss_diag_phase10/n1_loose_*` (nagoya/run1 loose ×3、nagoya プロファイル + ratio=1.5-2.0/min-hold=4-5/gate=8-10)
+- `experiments/results/libgnss_diag_phase10/n1_tight_ratio40_gate5_min8/` (n1tight、nagoya/run1 のみ; tight だが run1 では -0.08pp、不採用)
+- `experiments/results/libgnss_diag_phase10/t3_tight_ratio40_gate5_min8/` (t3tight、tokyo/run3 のみ; tokyo プロファイル + tight knobs)
+- `experiments/results/libgnss_diag_phase10/t1_tight_ratio40_gate5_min8/` (t1tight、tokyo/run1 のみ; tokyo プロファイル + tight knobs、+0.83pp)
+- `experiments/results/libgnss_diag_phase10/t2_tight_ratio40_gate5_min8/` (t2tight、tokyo/run2 のみ; tight だが run2 では -0.21pp、不採用)
+- `/tmp/gen_r30g10.sh`: r30g10 を 6 run 一括生成する bash ループ (city profile + ratio 3 + gate 10 + min-obs 6)。新 gate 候補生成のテンプレート。
+
+### PPC next actions
+
+5 run (tokyo/run1, tokyo/run3, nagoya/run1, nagoya/run2, nagoya/run3) で run-specific 候補追加が効いた (累計 +1.11pp、50.72→61.17)。tokyo/run2 のみ tight が逆効果で残 1 run。次は ROI 順:
+
+1. **nagoya/run3 さらに tight 強化**: 11q で +7.2pp。さらに `--ratio 5.0/6.0`、`--rtk-update-outlier-threshold 3`、`--min-lock-count 5` 等で strict 化。+0.5〜+2pp 期待。
+2. **nagoya/run2 の tight も追加**: 既に loose 3 種で +0.55pp。tight も併用で両方の良いとこ取りができるかは未試行。10 分で確認可。
+3. **tokyo/run1 のさらなる sweep**: t1tight で +0.83pp と大きいが、tokyo/run1 はもともと selector +1.98 / gate +1.18 の伸びしろが大きい。さらに strict (ratio=5.0)、または別軸 (loose) で残伸びしろあり。
+4. **ratio>4.0 / gate<5 の更に extreme tight**: 全 5 効果あった run で sweep。
+5. **複合 selector / 学習ベース selector**: 単純 mode (residual/ratio/score/maxabs/nrows) は頭打ち。`score / log(residual)` の合成 feature や、oracle と現選択の差から逆算する重み学習。
+6. **新候補プールでの oracle 再計算**: Phase 11t の 28 候補で raw/gated oracle を測り、残伸びしろを再評価。
+
+**ROI 順序**: 1 → 2 → 3 → 4 → 6 → 5 が推奨。1〜3 で aggregate +0.5〜+2pp 期待、合計目標 ~62%。
+
+**run-specific 候補生成パターン (引き継ぎ用テンプレート):**
+
+```bash
+DATA=datasets/PPC-Dataset-data
+SOLVE=third_party/gnssplusplus/build/apps/gnss_solve
+RUN=tokyo/run1   # 任意
+
+# tight 候補 (run1/run3/n3 で +0.46〜+7.2pp 効いたパターン)
+# tokyo: --preset low-cost --arfilter --arfilter-margin 0.5 --min-hold-count 8 --hold-ratio-threshold 2.6
+# nagoya: --preset low-cost --min-hold-count 7 --hold-ratio-threshold 2.4
+$SOLVE --rover "$DATA/$RUN/rover.obs" --base "$DATA/$RUN/base.obs" --nav "$DATA/$RUN/base.nav" \
+    --out OUT/${RUN/\//_}_full.pos --diagnostics-csv OUT/${RUN/\//_}_full.csv --no-kml \
+    --preset low-cost --min-ar-sats 4 --min-lock-count 3 --prefer-trusted-seed \
+    --rtk-update-min-obs 8 --skip-epochs 0 --ratio 4.0 --rtk-update-outlier-threshold 5 \
+    --min-hold-count 7-8 --hold-ratio-threshold 2.4-2.6 \
+    [--arfilter --arfilter-margin 0.5  # tokyo only]
+
+# loose 候補 (n2/n1 で +0.42〜+0.55pp 効いたパターン)
+$SOLVE ... --preset low-cost --min-hold-count 4-5 --hold-ratio-threshold 1.8-2.0 \
+    --ratio 1.5-2.0 --min-ar-sats 4 --min-lock-count 3 --prefer-trusted-seed \
+    --rtk-update-outlier-threshold 8-10 --rtk-update-min-obs 6
+```
+
+新候補は `experiments/results/libgnss_diag_phase10/<NAME>/<city>_<run>_full.{pos,csv}` に置き、`exp_ppc_ctrbpf_fgo.py` の `--rtkdiag-candidate-pos-dirs/--rtkdiag-candidate-diag-dirs/--rtkdiag-candidate-labels` に追加するだけ。auto-skip により該当 run のみで活用される。
+
+**run-specific 試行表 (どちらの方向が効いたか、効かなかったか):**
+
+| run | loose | tight | 採用 |
+|---|---|---|---|
+| tokyo/run1 | (未試行) | **+0.82pp (t1tight)** | tight |
+| tokyo/run2 | (未試行) | -0.21pp (t2tight) | なし、両方不採用 |
+| tokyo/run3 | (未試行) | **+0.46pp (t3tight)** | tight |
+| nagoya/run1 | **+0.42pp (n1loose×3)** | -0.08pp (n1tight) | loose |
+| nagoya/run2 | **+0.55pp (n2loose×3)** | (未試行) | loose |
+| nagoya/run3 | -1.88pp (n3loose×3) | **+7.20pp (n3tight)** | tight |
 
 **北極星目標 (2026-04-19 設定)**:
 **A Continuous-Time Rao-Blackwellized Particle Filter with Factor Graph Optimization** (CT-RBPF-FGO)

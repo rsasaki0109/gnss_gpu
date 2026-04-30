@@ -46,6 +46,15 @@ _PROFILES = {
     "nagoya": [
         "--preset", "low-cost", "--min-hold-count", "7", "--hold-ratio-threshold", "2.4",
     ],
+    # Phase 10g full-run sweep: this profile only generalized on nagoya/run2.
+    # Applying it to tokyo/run1 or nagoya/run3 improves short windows but causes
+    # false fixes over full urban-canyon runs.
+    "nagoya2-phase10-lock3": [
+        "--preset", "low-cost",
+        "--min-hold-count", "7", "--hold-ratio-threshold", "2.4",
+        "--ratio", "1.5", "--min-ar-sats", "4", "--min-lock-count", "3",
+        "--prefer-trusted-seed",
+    ],
 }
 
 _FULL_RUNS = (
@@ -56,6 +65,26 @@ _FULL_RUNS = (
     ("nagoya", "run2", "nagoya"),
     ("nagoya", "run3", "nagoya"),
 )
+
+_PHASE10_RESIDUAL_CANDIDATE_KNOBS = [
+    "--ratio", "1.5",
+    "--min-ar-sats", "4",
+    "--min-lock-count", "3",
+    "--prefer-trusted-seed",
+]
+
+
+def _profile_for_run(city: str, run: str, profile_mode: str, default_profile: str) -> str:
+    if profile_mode == "city":
+        return default_profile
+    if profile_mode == "phase10-mix-nagoya2" and city == "nagoya" and run == "run2":
+        return "nagoya2-phase10-lock3"
+    return default_profile
+
+
+def _phase10_residual_candidate_profile(default_profile: str) -> list[str]:
+    """Candidate RTK profile used by the residual-gated dual-profile chooser."""
+    return [*_PROFILES[default_profile], *_PHASE10_RESIDUAL_CANDIDATE_KNOBS]
 
 
 def _load_reference(path: Path) -> list[tuple[float, np.ndarray]]:
@@ -88,6 +117,46 @@ def _parse_pos(path: Path) -> dict[float, tuple[np.ndarray, int]]:
             status = int(parts[8])
             out[tow] = (ecef, status)
     return out
+
+
+def _parse_diag(path: Path) -> dict[float, dict[str, str]]:
+    out: dict[float, dict[str, str]] = {}
+    with path.open() as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            tow = round(float(row["tow"]), 1)
+            out[tow] = row
+    return out
+
+
+def _diag_float(row: dict[str, str], key: str) -> float:
+    try:
+        return float(row[key])
+    except (KeyError, TypeError, ValueError):
+        return float("nan")
+
+
+def _use_phase10_residual_candidate(
+    row: dict[str, str] | None,
+    *,
+    ratio_min: float,
+    residual_rms_max: float,
+) -> bool:
+    """Gate that generalized in Phase 10g full-run diagnostics.
+
+    Base solution is libgnss++ v5. Candidate solution is the relaxed
+    ratio=1.5/min_lock=3/trusted-seed profile. We only promote candidate
+    epochs when they are fixed and the RTK measurement update residual is
+    tight enough.
+    """
+    if row is None:
+        return False
+    return (
+        int(row.get("output_added", "0")) == 1
+        and int(row.get("final_status", "0")) == 4
+        and _diag_float(row, "final_ratio") >= ratio_min
+        and _diag_float(row, "final_residual_rms") <= residual_rms_max
+    )
 
 
 def _run_solver(cmd: list[str]) -> None:
@@ -142,7 +211,54 @@ def main() -> None:
         type=Path,
         default=_SCRIPT_DIR / "results" / "libgnss_spp_pos",
     )
+    parser.add_argument(
+        "--candidate-pos-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Alternate RTK .pos directory used by --chooser-mode. If omitted with a "
+            "chooser enabled, defaults under experiments/results and is generated "
+            "when solvers are not skipped."
+        ),
+    )
+    parser.add_argument(
+        "--candidate-diag-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Diagnostics CSV directory used by --chooser-mode. If omitted with a "
+            "chooser enabled, defaults under experiments/results and is generated "
+            "when solvers are not skipped."
+        ),
+    )
+    parser.add_argument(
+        "--chooser-mode",
+        choices=("none", "phase10-residual"),
+        default="none",
+        help="Per-epoch selection between --pos-dir and --candidate-pos-dir.",
+    )
+    parser.add_argument(
+        "--chooser-ratio-min",
+        type=float,
+        default=1.5,
+        help="Minimum candidate final_ratio for --chooser-mode phase10-residual.",
+    )
+    parser.add_argument(
+        "--chooser-residual-rms-max",
+        type=float,
+        default=1.8,
+        help="Maximum candidate final_residual_rms for --chooser-mode phase10-residual.",
+    )
     parser.add_argument("--results-prefix", type=str, default="ppc_libgnss_hybrid")
+    parser.add_argument(
+        "--profile-mode",
+        choices=("city", "phase10-mix-nagoya2"),
+        default="city",
+        help=(
+            "city: use the baseline tokyo/nagoya profiles. "
+            "phase10-mix-nagoya2: use the Phase10 lock-count profile only for nagoya/run2."
+        ),
+    )
     parser.add_argument(
         "--skip-solvers",
         action="store_true",
@@ -165,15 +281,31 @@ def main() -> None:
     data_root = args.data_root.resolve()
     pos_dir = args.pos_dir.resolve()
     spp_dir = args.spp_dir.resolve()
+    candidate_pos_dir = args.candidate_pos_dir.resolve() if args.candidate_pos_dir else None
+    candidate_diag_dir = args.candidate_diag_dir.resolve() if args.candidate_diag_dir else None
+    if args.chooser_mode != "none":
+        if candidate_pos_dir is None:
+            candidate_pos_dir = (
+                RESULTS_DIR / "libgnss_rtk_pos_phase10_residual_candidate"
+            ).resolve()
+        if candidate_diag_dir is None:
+            candidate_diag_dir = (
+                RESULTS_DIR / "libgnss_diag_phase10_residual_candidate"
+            ).resolve()
     pos_dir.mkdir(parents=True, exist_ok=True)
     spp_dir.mkdir(parents=True, exist_ok=True)
+    if candidate_pos_dir is not None:
+        candidate_pos_dir.mkdir(parents=True, exist_ok=True)
+    if candidate_diag_dir is not None:
+        candidate_diag_dir.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict[str, object]] = []
     agg_pass = agg_total = 0.0
     rtk_only_pass = rtk_only_total = 0.0
 
-    for city, run, profile in _FULL_RUNS:
+    for city, run, default_profile in _FULL_RUNS:
+        profile = _profile_for_run(city, run, args.profile_mode, default_profile)
         run_dir = data_root / city / run
         rtk_pos = pos_dir / f"{city}_{run}_full.pos"
         spp_pos = spp_dir / f"{city}_{run}_full.pos"
@@ -207,16 +339,64 @@ def main() -> None:
         ref = _load_reference(run_dir / "reference.csv")
         rtk = _parse_pos(rtk_pos)
         spp = _parse_pos(spp_pos)
+        candidate_rtk: dict[float, tuple[np.ndarray, int]] = {}
+        candidate_diag: dict[float, dict[str, str]] = {}
+        if args.chooser_mode != "none":
+            assert candidate_pos_dir is not None
+            assert candidate_diag_dir is not None
+            candidate_pos = candidate_pos_dir / f"{city}_{run}_full.pos"
+            candidate_csv = candidate_diag_dir / f"{city}_{run}_full.csv"
+            if not args.skip_solvers or not candidate_pos.exists() or not candidate_csv.exists():
+                print("  running candidate RTK diagnostics (phase10-residual profile)...", flush=True)
+                _run_solver(
+                    [
+                        str(rtk_bin),
+                        "--rover", str(run_dir / "rover.obs"),
+                        "--base", str(run_dir / "base.obs"),
+                        "--nav", str(run_dir / "base.nav"),
+                        "--skip-epochs", "0",
+                        "--out", str(candidate_pos),
+                        "--diagnostics-csv", str(candidate_csv),
+                        "--no-kml",
+                        *_phase10_residual_candidate_profile(default_profile),
+                    ]
+                )
+            if not candidate_pos.exists():
+                raise FileNotFoundError(f"candidate .pos not found: {candidate_pos}")
+            if not candidate_csv.exists():
+                raise FileNotFoundError(f"candidate diagnostics CSV not found: {candidate_csv}")
+            candidate_rtk = _parse_pos(candidate_pos)
+            candidate_diag = _parse_diag(candidate_csv)
+
+        def _chosen_rtk(tow: float) -> tuple[np.ndarray, int, bool] | None:
+            if (
+                args.chooser_mode == "phase10-residual"
+                and _use_phase10_residual_candidate(
+                    candidate_diag.get(tow),
+                    ratio_min=args.chooser_ratio_min,
+                    residual_rms_max=args.chooser_residual_rms_max,
+                )
+            ):
+                candidate = candidate_rtk.get(tow)
+                if candidate is not None:
+                    return candidate[0], candidate[1], True
+            base = rtk.get(tow)
+            if base is None:
+                return None
+            return base[0], base[1], False
 
         fused: list[np.ndarray] = []
         truth: list[np.ndarray] = []
         src_codes: list[int] = []  # 4=FIXED RTK, 3=FLOAT RTK, 1=SPP, 0=missing
+        candidate_pick_count = 0
         for tow, tvec in ref:
-            r = rtk.get(tow)
+            r = _chosen_rtk(tow)
             s = spp.get(tow)
             picked: tuple[np.ndarray, int] | None = None
             if r is not None:
-                ecef_r, st_r = r
+                ecef_r, st_r, is_candidate = r
+                if is_candidate:
+                    candidate_pick_count += 1
                 if args.prefer == "fixed":
                     if st_r == 4:
                         picked = (ecef_r, 4)
@@ -243,7 +423,7 @@ def main() -> None:
         rtk_only_truth: list[np.ndarray] = []
         rtk_only_src: list[int] = []
         for tow, tvec in ref:
-            r = rtk.get(tow)
+            r = _chosen_rtk(tow)
             if r is None:
                 continue
             rtk_only_fused.append(r[0])
@@ -267,7 +447,7 @@ def main() -> None:
         full_est_rtk = np.zeros_like(full_truth)
         full_est_hyb = np.zeros_like(full_truth)
         for i, (tow, _tvec) in enumerate(ref):
-            r = rtk.get(tow)
+            r = _chosen_rtk(tow)
             s = spp.get(tow)
             if r is not None:
                 full_est_rtk[i] = r[0]
@@ -295,6 +475,7 @@ def main() -> None:
         row = {
             "city": city,
             "run": run,
+            "profile_mode": args.profile_mode,
             "profile": profile,
             "n_ref_epochs": n_total_ref,
             "n_hybrid": int(fused_arr.shape[0]),
@@ -302,6 +483,10 @@ def main() -> None:
             "n_fixed": n_fixed,
             "n_float": n_float,
             "n_spp_fill": n_spp,
+            "chooser_mode": args.chooser_mode,
+            "chooser_ratio_min": args.chooser_ratio_min,
+            "chooser_residual_rms_max": args.chooser_residual_rms_max,
+            "n_candidate_pick": candidate_pick_count,
             "rtk_subset_ppc_pct": float(ppc_rtk["ppc_score_pct"]),
             "rtk_subset_pass_m": float(ppc_rtk["ppc_pass_distance_m"]),
             "rtk_subset_total_m": float(ppc_rtk["ppc_total_distance_m"]),
@@ -319,6 +504,7 @@ def main() -> None:
         print(
             f"    cov={row['hybrid_coverage_pct']:5.1f}%  "
             f"FIX={n_fixed} FLOAT={n_float} SPP={n_spp}  "
+            f"CAND={candidate_pick_count}  "
             f"RTK-subset={row['rtk_subset_ppc_pct']:.2f}%  "
             f"HYBRID-subset={row['hybrid_subset_ppc_pct']:.2f}%  "
             f"RTK-honest={row['rtk_honest_ppc_pct']:.2f}%  "
