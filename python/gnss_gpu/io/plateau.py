@@ -6,10 +6,27 @@ building geometry into triangle meshes suitable for GNSS ray tracing.
 PLATEAU distributes LOD1/LOD2 building data in CityGML format using the
 Japanese plane rectangular coordinate system (Gauss-Kruger transverse
 Mercator, EPSG:6669-6687).
+
+Height datum note (EPSG:6697):
+    PLATEAU CityGML EPSG:6697 carries **orthometric heights above Tokyo
+    Bay mean sea level (TP)**, NOT ellipsoidal heights.  This loader
+    currently treats the published height as an ellipsoidal alt and
+    feeds it directly to ``_lla_to_ecef``, which places the mesh ~37 m
+    below the WGS-84 ellipsoidal ground in the Tokyo area.  Callers
+    that need a geometrically accurate mesh (e.g. LoS ray tracing
+    against a rover position from RTKLIB / Septentrio reference.csv,
+    which is ellipsoidal) must compensate -- either by pre-shifting
+    the rover, by monkey-patching ``PlateauLoader._lla_to_ecef`` to
+    add a constant geoid undulation N, or (preferred) by calling a
+    GSI Geoid 2011 lookup before ECEF conversion.  See
+    ``experiments/check_bldg_vs_brid_los_v2.py`` for an example of
+    the constant-N workaround.  This is tracked as a follow-up; the
+    fix should bake a real geoid grid into this loader.
 """
 
 import glob as _glob
 import os
+import warnings
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
@@ -34,10 +51,25 @@ def _infer_kind_from_filename(name: str) -> Optional[str]:
 def _normalise_kinds(
     kinds: Iterable[str], *, include_bridges: Optional[bool] = None
 ) -> tuple[str, ...]:
-    """Resolve ``kinds`` (and the deprecated ``include_bridges`` shim) to a tuple."""
+    """Resolve ``kinds`` (and the deprecated ``include_bridges`` shim) to a tuple.
+
+    The deprecated ``include_bridges`` flag is **strictly additive**:
+    ``True`` adds ``"brid"`` to ``kinds``; ``False`` is a no-op (it does
+    not subtract).  Passing ``include_bridges=False`` together with
+    ``kinds`` containing ``"brid"`` therefore does nothing useful, and a
+    ``UserWarning`` is emitted to help callers catch the misunderstanding.
+    """
     normalised = set(kinds)
     if include_bridges is True:
         normalised.add("brid")
+    elif include_bridges is False and "brid" in normalised:
+        warnings.warn(
+            "include_bridges=False does not remove 'brid' from kinds; "
+            "the deprecated alias is additive-only. Drop 'brid' from "
+            "kinds explicitly to disable bridge loading.",
+            UserWarning,
+            stacklevel=3,
+        )
     unsupported = normalised - SUPPORTED_KINDS
     if unsupported:
         raise ValueError(
