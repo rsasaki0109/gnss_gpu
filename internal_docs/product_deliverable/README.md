@@ -117,6 +117,43 @@ Compared with the previous isotonic75 artifact, the phase-delta guard
 reduces focus false-high windows from 9 to 3, abstain windows from 9 to
 3, and low-confidence routes from 5 to 2.
 
+The tokyo/run2 8.13 pp gap is now treated as an **accepted modeling
+ceiling** with the current feature pool.  See
+`PLATEAU_BRIDGE_INTEGRATION.md` "Why the residual is not closeable"
+for the negative-result trail (Phase 2 PR #38; 2026-04-30):
+
+- **Bridges (PLATEAU LoD2 occluder)**: real input-layer signal
+  (+57 % NLoS on tokyo run2 antenna features) but predictive uplift
+  on the §7.16 nested stack is small (best-feature Δr ≈ +0.04, with
+  a few `_min`/`_max` features going the wrong way).  Won't close
+  the gap.
+- **Hidden-high binary detector**: trained on the existing 5,884-
+  feature input pool with leave-one-route-out holdout.  Overall AUC
+  0.595, with negative transfer on tokyo/run3 (AUC 0.330) and
+  nagoya/run2 (AUC 0.258).  15 hidden-high events across 5 routes
+  is too sparse and route-heterogeneous to learn a transferable
+  classifier.
+- **Per-window uncertainty abstention**: a `|residual|`-regression
+  model over the same feature pool, used to drop the top-k% most
+  uncertain windows.  No abstention rate from 5 % to 30 % beats the
+  baseline route-mean MAE of 1.79 pp; the model identifies false-
+  high windows fine (input layer carries phase-jump warnings) but
+  cannot identify hidden-high windows because the input layer
+  genuinely looks bad while demo5 still locks.
+
+These three negative results converge on a single root cause: the
+hidden-high pattern reflects demo5 succeeding under conditions that
+the simulator and observation summaries jointly describe as bad,
+and there is no warning signal in the runtime feature layer.  The
+3 paths forward are out of scope for the adopted product:
+
+1. **Solver-state lightweight wrapper** -- expose a limited set of
+   demo5 lock indicators as runtime features (medium-size PR).
+2. **Additional PPC data collection** -- more runs to make the
+   hidden-high pattern statistically learnable (operator-side).
+3. **Architectural pivot** -- non-feature-based modelling of the
+   solver-success state directly (multi-week research).
+
 ## 4. Inputs, outputs, and files
 
 ### Inputs required by the product command
@@ -301,11 +338,18 @@ and normal or resolved windows as `use`.
   this segment, but still under-predicts several high-FIX windows.
   The "missing elevated structure" hypothesis (Tokyo Monorail / 首都高
   viaducts in 浜松町〜芝浦) was tested end-to-end via the Phase 1
-  bridge loader and the early-abort check in
-  `PLATEAU_BRIDGE_INTEGRATION.md` ("Phase 2 outcome"); the bldg+brid
-  mesh produces zero new NLoS flips at 9 representative epochs in
-  this cluster, so the residual is *not* explained by occluder
-  geometry at the LoS-check level.
+  bridge loader and the dense Phase 2 LoS / antenna feature checks
+  in `PLATEAU_BRIDGE_INTEGRATION.md`.  After the geoid-datum fix,
+  the bldg+brid mesh does add measurable NLoS coverage on tokyo
+  run2/run3 (+57 % / +88 % NLoS, −3.4 / −3.6 dB median effective
+  gain), but the §7.16 input-feature uplift is small (best-feature
+  Δr ≈ +0.04 vs the bldg-only baseline) and a leave-one-route-out
+  hidden-high classifier on top of the bridge-aware features
+  achieves only AUC 0.595.  The residual reflects demo5 succeeding
+  under conditions the runtime feature layer cannot distinguish
+  from failure, not missing occluder geometry per se.  Treated as
+  an accepted ceiling -- see section 3 for the negative-result
+  trail.
 - **Tokyo run3 w28** (`false_high`): residual inflated prediction on a
   low-actual window after isotonic calibration and the phase-delta
   guard.
