@@ -256,6 +256,11 @@ Relative paths in manifests resolve from the manifest file's directory.
   null-result write-up for the canyon proxy, BVH multipath, and
   simplified antenna gain + NLoS attenuation probes.  These are
   research diagnostics only; none replace the adopted §7.16 model.
+- `internal_docs/product_deliverable/UTD_DIFFRACTION_POC.md` —
+  first UTD follow-up implementation: PLATEAU building-edge extraction,
+  ray/edge candidate scoring, all-run aggregation, and the §7.16
+  retrain null result.  Edge-diffraction candidate features did not
+  improve the adopted model.
 - `experiments/build_paper_style_eval.py` — computes the pooled
   matching-rate sweep and renders the side-by-side Fig.10-style
   RTK-FIXED maps under `plots/{city}_{run}_fix_comparison_map.png`.
@@ -268,6 +273,12 @@ Relative paths in manifests resolve from the manifest file's directory.
   `experiments/augment_window_csv_with_antenna.py` — simplified
   antenna gain + -25 dB NLoS attenuation extraction and §7.16 merge
   scripts for the §7.25 null probe.
+- `experiments/utd_edge_features.py`,
+  `experiments/exp_ppc_utd_edge_diffraction_features.py`,
+  `experiments/aggregate_utd_features.py`, and
+  `experiments/augment_window_csv_with_utd.py` — UTD edge-candidate
+  feature extraction, pooling, and §7.16 merge scripts for the
+  all-six-run null probe.
 - `experiments/_common.py` — shared helpers used across the experiment
   scripts (e.g. `_is_metadata_or_label`).
 - `experiments/build_product_dashboard.py` — script that produces the
