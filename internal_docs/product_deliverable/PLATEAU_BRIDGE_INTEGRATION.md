@@ -257,13 +257,45 @@ Follow-ups (open after v3 dense-sampling):
    GSI Geoid 2011 difference in Tokyo).  A Tokyo regression test
    asserts that an EGM96-corrected mesh ground tri is within 5 m
    of the rover's ellipsoidal ground.
-2. **Phase 2 retrain is now justified for w7 and w23.**  Run the
-   full feature extraction with `kinds=("bldg", "brid")` and
-   `geoid_correction="egm96"`, then re-fit §7.16 + isotonic75 +
-   phaseguard with the `--max-run-mae-pp 4.5` selection guardrail.
-   The expected gain is bounded above by the 4.3 % sat-slot flip
-   rate in w23 plus 3.5 % in w7, applied through the existing
-   FIX classifier.
+2. **Phase 2 retrain is now justified.**  See "Antenna feature
+   pipeline propagation" below for the antenna-feature evidence
+   that bridges produce a measurable signal at the input layer
+   of the §7.16 nested stack.  Once the per-window features for
+   all six runs are merged with the existing window CSV, run
+   `predict.py --retrain` with `--max-run-mae-pp 4.5` as the
+   selection guardrail.
+
+## Antenna feature pipeline propagation (2026-04-30)
+
+`exp_ppc_antenna_attenuation_features.py` grew `--include-bridges`
+and `--geoid-correction` flags that thread directly into the new
+`PlateauLoader(kinds=..., geoid_correction=...)` API.  Running it on
+Tokyo run2 with `--include-bridges --geoid-correction egm96` and
+comparing against the same script with `--geoid-correction egm96`
+alone (so the only delta is the bridge mesh) gives:
+
+| window | epochs | NLoS Δ | high-elev-NLoS Δ | eff_p50 Δ |
+| --- | ---: | ---: | ---: | ---: |
+| w7  (false-high)   |   41 | **+19 (+5.3%)**  | **+16 (+9.0%)**  | **−1.28 dB** |
+| w9  (false-high)   |   41 | 0                | 0                |  0           |
+| w23 (hidden-high)  |   81 | **+21 (+3.5%)**  | **+16 (+5.9%)**  | **−0.59 dB** |
+| w26-27 (hidden)    |   51 | +1               | 0                |  0           |
+| **whole run**      | 1592 | **+3227 (+62%)** | **+2353 (+110%)** | **−3.84 dB** |
+
+(Stride 5; reference rover at the truth state per epoch; elev>0°
+all-sat counts, no per-PRN filter.)
+
+Critical observation: the bridge effect is **not localised to the
+hidden-high windows**.  Across the whole run the bldg+brid mesh
+adds +3,227 NLoS results (+62 % over the bldg-only baseline) and
+shifts the median effective gain by **−3.84 dB**.  The earlier
+v3 dense LoS check (1.122 / 0.667 flips/epoch in w7 / w23) was
+underestimating the antenna pipeline's response because it used
+elev>5° and counted only sats actually observed by the rover in
+each epoch; the antenna feature extractor counts all geometric
+sats and includes low-elevation ones, where bridges are most
+effective occluders.  This is the input-layer signal that will
+feed the §7.16 retrain.
 
 To re-run the dense check:
 
