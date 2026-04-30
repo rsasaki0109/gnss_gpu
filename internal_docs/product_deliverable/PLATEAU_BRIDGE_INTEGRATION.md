@@ -383,11 +383,13 @@ Or the older 9-epoch v2 (geoid-corrected, faster):
 python3 experiments/check_bldg_vs_brid_los_v2.py
 ```
 
-## Why the residual is not closeable (2026-04-30, post-merge follow-up)
+## Why the residual was not closed (2026-04-30, post-merge follow-up)
 
 After PR #38 was merged we ran three additional attacks on the
-tokyo/run2 8.13 pp residual.  All three returned negative results,
-and together they identify the underlying ceiling.
+tokyo/run2 8.13 pp residual.  All three returned negative results
+in the tested feature pool and model classes at this sample size;
+together they point at a likely ceiling under the current
+architecture.
 
 ### Attack 1: linear correction over the input pool
 
@@ -398,6 +400,10 @@ A Lasso (LassoCV) was fit to the 197-window residual
 was 0.436 with 31 non-zero coefficients.  Applied as an additive
 correction:
 
+`route Δ` is the signed change in `|actual - prediction|`: positive
+means the adjusted prediction is closer to actual, negative means
+it moved further away.
+
 | route       | actual | corrected | adjusted | route Δ |
 | ----------- | ---:   | ---:      | ---:     | ---:    |
 | nagoya/run1 | 11.51  | 11.74     | 13.02    | -1.28   |
@@ -405,7 +411,7 @@ correction:
 | nagoya/run3 |  7.87  |  8.03     |  8.31    | -0.28   |
 | tokyo/run1  | 10.92  | 10.42     |  9.67    | -0.75   |
 | tokyo/run2  | 29.02  | 20.89     | 21.34    | **+0.45** |
-| tokyo/run3  | 24.01  | 23.73     | 26.04    | -2.31   |
+| tokyo/run3  | 24.01  | 23.73     | 26.04    | -1.75   |
 
 Tokyo run2 improves by 0.45 pp; the other five routes get worse by
 0.28..3.06 pp.  The "lift" direction the in-sample fit found is
@@ -415,9 +421,11 @@ shaves 5 % of the tokyo/run2 residual.
 ### Attack 2: hidden-high binary classifier (LORO)
 
 Defined hidden-high as `actual ≥ 75 % AND corrected_pred ≤ 50 %`,
-giving 15 positives across 5 routes (3+1+0+2+5+4) out of 197.
-Trained a `GradientBoostingClassifier(n=200, depth=3, lr=0.05)` on
-the same 5,884-feature pool with leave-one-route-out:
+giving 15 positives across the 6 route folds (one fold has zero
+positives), with per-fold counts 3 / 1 / 0 / 2 / 5 / 4 out of 197
+windows total.  Trained a `GradientBoostingClassifier(n_estimators=200,
+max_depth=3, learning_rate=0.05)` on the same 5,884-feature pool
+with leave-one-route-out:
 
 | held-out route | AUC   | n_pos / n_total |
 | ---            | ---:  | ---:            |
@@ -427,12 +435,19 @@ the same 5,884-feature pool with leave-one-route-out:
 | tokyo/run1     | 0.662 | 2 / 39          |
 | tokyo/run2     | 0.615 | 5 / 31          |
 | tokyo/run3     | **0.330** | 4 / 51      |
-| **overall**    | **0.595** | 15 / 197    |
+| **pooled OOF** | **0.595** | 15 / 197    |
 
-Two folds show *negative transfer* (AUC < 0.5), and top-15 flagged
-precision is 13 % (vs 7.6 % positive-rate floor).  The hidden-high
-pattern is route-specific and not learnable across routes from the
-existing feature pool at this sample size.
+(`pooled OOF` AUC is computed on the concatenated out-of-fold
+predictions across all 6 folds, not as a macro/weighted mean of the
+per-fold AUCs.)
+
+Two of the held-out folds (nagoya/run2 with `n_pos=1`, tokyo/run3
+with `n_pos=4`) score below chance (AUC < 0.5), and top-15 flagged
+precision is 13 % (vs 7.6 % positive-rate floor).  At this sample
+size the existing feature pool does not yield a transferable
+hidden-high classifier across routes -- whether this reflects an
+intrinsic ceiling or just sparse-positive variance is not separable
+from one LORO sweep.
 
 ### Attack 3: per-window uncertainty abstention
 
@@ -451,30 +466,36 @@ rate from 5 % to 30 %:
 | 25 %     | 148          | 2.48               |
 | 30 %     | 138          | 2.98               |
 
-Inspecting the tokyo/run2 windows ranked by uncertainty: the model
-correctly puts the false-high windows (w7, w9 -- residuals -48,
--77) at the top, but ranks the hidden-high windows (w23, w25, w26)
-*below* several lower-residual windows.  The input layer carries
-phase-jump warnings that flag false-high cases, but it carries no
-warning that distinguishes the hidden-high cases from genuinely
-bad observation conditions.
+Inspecting the tokyo/run2 windows ranked by predicted
+uncertainty: the model puts the false-high windows (w7, w9 --
+residuals -48, -77) at the top, but does not consistently rank the
+hidden-high cluster (w23, w25, w26) above several lower-residual
+windows -- so dropping the most-uncertain windows removes some
+hidden-high cases together with low-residual ones, and the route
+MAE rises rather than falls.  The input layer carries phase-jump
+warnings that flag false-high cases, but the tested feature pool
+does not separate hidden-high cases from genuinely bad observation
+conditions.
 
 ### Joint conclusion
 
-All three attacks fail the same way: the hidden-high pattern is
-demo5 succeeding under conditions that the runtime feature layer
-(simulator outputs + RINEX summary stats + antenna eff_db, with or
-without bridge-aware NLoS) describes as bad.  There is no warning
-signal at the input layer that separates these cases from the
-many windows that are also "feature-bad" and where demo5 actually
-fails.  The 8.13 pp tokyo/run2 residual is therefore an **accepted
-ceiling** under the current architecture (no `rtk_*` /
-`solver_demo5_*` columns as runtime features).
+All three attacks fail the same way: hidden-high windows are
+those where demo5 reaches/maintains FIX while the runtime feature
+layer (simulator outputs + RINEX summary stats + antenna eff_db,
+with or without bridge-aware NLoS) describes the conditions as
+bad.  None of the tested attacks found a transferable signal at
+the input layer that separates these cases from the many windows
+that are also "feature-bad" and where demo5 does not FIX.  Under
+the current architecture (no `rtk_*` / `solver_demo5_*` columns as
+runtime features) and at this sample size, we treat the 8.13 pp
+tokyo/run2 residual as an **accepted ceiling**, conditional on the
+out-of-scope paths below.
 
 Three out-of-scope paths to lift this ceiling:
 
 1. **Solver-state lightweight wrapper**: expose a curated subset of
-   demo5 lock indicators as runtime features.  Medium-size PR, but
+   demo5 ambiguity-fix-state indicators as runtime features.
+   Medium-size PR, but
    it changes the model's input contract.
 2. **Additional PPC data collection**: more runs in viaduct-heavy
    trajectories so the hidden-high cluster stops being 5/197 and
@@ -484,8 +505,9 @@ Three out-of-scope paths to lift this ceiling:
    FIX rate from per-window stats.  Multi-week research.
 
 The product deliverable at run-MAE 1.79 pp (with tokyo/run2
-abstaining at the route level) is the strongest result the current
-modelling approach can deliver on this dataset.
+flagged `route_action="review_required"`) is the best result we
+have obtained on this dataset under the tested feature pool and
+model classes.
 
 ## Implementation notes
 

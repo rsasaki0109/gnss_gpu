@@ -117,10 +117,11 @@ Compared with the previous isotonic75 artifact, the phase-delta guard
 reduces focus false-high windows from 9 to 3, abstain windows from 9 to
 3, and low-confidence routes from 5 to 2.
 
-The tokyo/run2 8.13 pp gap is now treated as an **accepted modeling
-ceiling** with the current feature pool.  See
-`PLATEAU_BRIDGE_INTEGRATION.md` "Why the residual is not closeable"
-for the negative-result trail (Phase 2 PR #38; 2026-04-30):
+The tokyo/run2 8.13 pp gap is treated as an **accepted modeling
+ceiling under the current feature pool and model classes**, pending
+out-of-scope follow-ups.  See `PLATEAU_BRIDGE_INTEGRATION.md`
+"Why the residual was not closed" for the negative-result trail
+(post-merge follow-up to PR #38, documented in PR #42; 2026-04-30):
 
 - **Bridges (PLATEAU LoD2 occluder)**: real input-layer signal
   (+57 % NLoS on tokyo run2 antenna features) but predictive uplift
@@ -139,16 +140,19 @@ for the negative-result trail (Phase 2 PR #38; 2026-04-30):
   baseline route-mean MAE of 1.79 pp; the model identifies false-
   high windows fine (input layer carries phase-jump warnings) but
   cannot identify hidden-high windows because the input layer
-  genuinely looks bad while demo5 still locks.
+  genuinely looks bad while demo5 still reaches an
+  ambiguity-fixed solution.
 
-These three negative results converge on a single root cause: the
-hidden-high pattern reflects demo5 succeeding under conditions that
-the simulator and observation summaries jointly describe as bad,
-and there is no warning signal in the runtime feature layer.  The
-3 paths forward are out of scope for the adopted product:
+These three negative results point at a common pattern: hidden-high
+windows are those where demo5 reaches/maintains FIX while the
+simulator and observation summaries jointly describe the conditions
+as bad, and no transferable warning signal was found in the runtime
+feature layer at this sample size.  The 3 paths forward are out of
+scope for the adopted product:
 
 1. **Solver-state lightweight wrapper** -- expose a limited set of
-   demo5 lock indicators as runtime features (medium-size PR).
+   demo5 ambiguity-fix-state indicators as runtime features
+   (medium-size PR).
 2. **Additional PPC data collection** -- more runs to make the
    hidden-high pattern statistically learnable (operator-side).
 3. **Architectural pivot** -- non-feature-based modelling of the
@@ -345,11 +349,12 @@ and normal or resolved windows as `use`.
   gain), but the §7.16 input-feature uplift is small (best-feature
   Δr ≈ +0.04 vs the bldg-only baseline) and a leave-one-route-out
   hidden-high classifier on top of the bridge-aware features
-  achieves only AUC 0.595.  The residual reflects demo5 succeeding
-  under conditions the runtime feature layer cannot distinguish
-  from failure, not missing occluder geometry per se.  Treated as
-  an accepted ceiling -- see section 3 for the negative-result
-  trail.
+  achieves only pooled out-of-fold AUC 0.595.  The residual is
+  consistent with demo5 reaching/maintaining FIX under conditions
+  the runtime feature layer cannot distinguish from failure, rather
+  than with missing occluder geometry.  Treated as an accepted
+  ceiling under the current feature pool / model classes -- see
+  section 3 for the negative-result trail.
 - **Tokyo run3 w28** (`false_high`): residual inflated prediction on a
   low-actual window after isotonic calibration and the phase-delta
   guard.
