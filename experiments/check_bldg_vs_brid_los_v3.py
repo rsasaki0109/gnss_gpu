@@ -27,7 +27,6 @@ from pathlib import Path
 
 import numpy as np
 
-import gnss_gpu.io.plateau as plateau_mod
 from gnss_gpu.bvh import BVHAccelerator
 from gnss_gpu.ephemeris import Ephemeris
 from gnss_gpu.io.nav_rinex import read_nav_rinex_multi
@@ -35,7 +34,9 @@ from gnss_gpu.io.plateau import load_plateau
 from gnss_gpu.io.rinex import read_rinex_obs
 
 
-GEOID_N_TOKYO = 36.7
+# Use pyproj+EGM96 if available (~0.5 m off the official GSI Geoid 2011
+# in Japan, sufficient for LoS work). Falls back to a constant if not.
+GEOID_CORRECTION = "egm96"
 
 WGS84_A = 6378137.0
 WGS84_F = 1.0 / 298.257223563
@@ -111,24 +112,13 @@ def build_combined_mesh_dir(out_dir, bldg_files, brid_files):
         os.symlink(f, out_dir / os.path.basename(f))
 
 
-def patch_loader_with_geoid_offset(N_metres):
-    Loader = plateau_mod.PlateauLoader
-    original = Loader._lla_to_ecef
-
-    @staticmethod
-    def _patched(lat, lon, alt):
-        return original(lat, lon, alt + N_metres)
-    Loader._lla_to_ecef = _patched
-
-
 def main():
     run_dir = Path("/media/sasaki/aiueo/ai_coding_ws/datasets/PPC-Dataset-data/tokyo/run2")
     rover_obs = run_dir / "rover.obs"
     base_nav = run_dir / "base.nav"
     reference_csv = run_dir / "reference.csv"
 
-    print(f"[geoid correction] applying +{GEOID_N_TOKYO:.2f} m (TP -> ellipsoidal)")
-    patch_loader_with_geoid_offset(GEOID_N_TOKYO)
+    print(f"[geoid correction] using PlateauLoader(geoid_correction={GEOID_CORRECTION!r})")
 
     target_tows = []
     for name, lo, hi in WINDOWS:
@@ -177,13 +167,15 @@ def main():
 
     print("loading bldg-only mesh...")
     t0 = time.monotonic()
-    m_bldg = load_plateau(bldg_only_dir, zone=9, kinds=("bldg",))
+    m_bldg = load_plateau(bldg_only_dir, zone=9, kinds=("bldg",),
+                          geoid_correction=GEOID_CORRECTION)
     bvh_bldg = BVHAccelerator.from_building_model(m_bldg)
     print(f"  {m_bldg.triangles.shape[0]} tris in {time.monotonic()-t0:.1f}s")
 
     print("loading bldg+brid mesh...")
     t0 = time.monotonic()
-    m_both = load_plateau(bldg_brid_dir, zone=9, kinds=("bldg", "brid"))
+    m_both = load_plateau(bldg_brid_dir, zone=9, kinds=("bldg", "brid"),
+                          geoid_correction=GEOID_CORRECTION)
     bvh_both = BVHAccelerator.from_building_model(m_both)
     print(f"  {m_both.triangles.shape[0]} tris in {time.monotonic()-t0:.1f}s")
 

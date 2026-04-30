@@ -248,17 +248,22 @@ Conclusion for Phase 2 (revised, weaker than original):
 
 Follow-ups (open after v3 dense-sampling):
 
-1. Add a real geoid model (GSI Geoid 2011 grid or pyproj
-   `EPSG:5773` lookup) to `PlateauLoader._lla_to_ecef` so callers
-   don't have to monkey-patch.  Add a Tokyo regression test that
-   asserts the loaded mesh ground tris sit within ±2 m of the
-   rover ellipsoidal height at known street-level epochs.
+1. ~~Add a real geoid model to `PlateauLoader._lla_to_ecef`.~~ Done.
+   `PlateauLoader` and `load_plateau` now accept a `geoid_correction`
+   kwarg accepting `None` / `"egm96"` (pyproj-driven) / a constant
+   float / a callable.  Without it, a one-time UserWarning fires.
+   The v2/v3 scripts use `geoid_correction="egm96"`; results match
+   the previous `+36.7 m` monkey-patch within ~0.5 m (EGM96 vs
+   GSI Geoid 2011 difference in Tokyo).  A Tokyo regression test
+   asserts that an EGM96-corrected mesh ground tri is within 5 m
+   of the rover's ellipsoidal ground.
 2. **Phase 2 retrain is now justified for w7 and w23.**  Run the
    full feature extraction with `kinds=("bldg", "brid")` and
-   re-fit §7.16 + isotonic75 + phaseguard with the
-   `--max-run-mae-pp 4.5` selection guardrail.  The expected gain
-   is bounded above by the 4.3 % sat-slot flip rate in w23 plus
-   3.5 % in w7, applied through the existing FIX classifier.
+   `geoid_correction="egm96"`, then re-fit §7.16 + isotonic75 +
+   phaseguard with the `--max-run-mae-pp 4.5` selection guardrail.
+   The expected gain is bounded above by the 4.3 % sat-slot flip
+   rate in w23 plus 3.5 % in w7, applied through the existing
+   FIX classifier.
 
 To re-run the dense check:
 
