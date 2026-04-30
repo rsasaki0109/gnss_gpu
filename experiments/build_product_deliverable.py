@@ -141,6 +141,20 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build product deliverable CSVs")
     parser.add_argument("--prediction-csv", type=Path, default=DEFAULT_PRED_CSV)
     parser.add_argument("--output-dir", type=Path, default=DELIVERABLE_DIR)
+    parser.add_argument(
+        "--path1-prediction-csv", type=Path, default=None,
+        help=(
+            "Optional. Path to per-window predictions for the D-035 path 1 "
+            "post-demo5 QA model (curated_six_only variant). If provided, "
+            "path1_pred_fix_rate_pct / path1_abs_error_pp columns are added "
+            "to window_level_details.csv and the route-level aggregate "
+            "(path1_*) is added to route_level_fix_rate_prediction.csv. "
+            "Generate with experiments/train_ppc_solver_state_wrapper_loro.py "
+            "--per-window-output-csv. The model uses solver_demo5_*/rtk_lock_* "
+            "features and is only valid as a post-demo5 QA tool, not a "
+            "pre-demo5 estimator."
+        ),
+    )
     g = parser.add_argument_group("focus-case thresholds")
     g.add_argument("--actual-low-pct", type=float, default=DEFAULT_THRESHOLDS["actual_low_pct"],
                    help=f"actual FIX rate <= this counts as 'actual low' (default: {DEFAULT_THRESHOLDS['actual_low_pct']})")
@@ -178,6 +192,20 @@ def main() -> None:
     df = pd.read_csv(args.prediction_csv)
     _require_prediction_columns(df, args.prediction_csv)
 
+    path1_lookup: dict[tuple[str, str, int], float] = {}
+    if args.path1_prediction_csv is not None:
+        path1_df = pd.read_csv(args.path1_prediction_csv)
+        for required in ("city", "run", "window_index", "path1_pred_fix_rate_pct"):
+            if required not in path1_df.columns:
+                raise SystemExit(
+                    f"--path1-prediction-csv {args.path1_prediction_csv} is missing column "
+                    f"{required!r}; expected schema: city, run, window_index, "
+                    f"path1_pred_fix_rate_pct"
+                )
+        for _, row in path1_df.iterrows():
+            key = (str(row["city"]), str(row["run"]), int(row["window_index"]))
+            path1_lookup[key] = float(row["path1_pred_fix_rate_pct"])
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     # window-level details
@@ -185,22 +213,28 @@ def main() -> None:
     for _, row in df.sort_values(["city", "run", "window_index"]).iterrows():
         focus_tag, focus_note = _classify_window(row, thresholds)
         window_action, action_note = _window_action(focus_tag)
-        window_rows.append(
-            {
-                "city": row["city"],
-                "run": row["run"],
-                "window_index": int(row["window_index"]),
-                "sim_matched_epochs": float(row["sim_matched_epochs"]),
-                "actual_fix_rate_pct": float(row["actual_fix_rate_pct"]),
-                "base_pred_fix_rate_pct": float(row["base_pred_fix_rate_pct"]),
-                "adopted_pred_fix_rate_pct": float(row["corrected_pred_fix_rate_pct"]),
-                "abs_error_pp": float(abs(row["corrected_pred_fix_rate_pct"] - row["actual_fix_rate_pct"])),
-                "focus_case_tag": focus_tag,
-                "focus_case_note": focus_note,
-                "window_action": window_action,
-                "window_action_note": action_note,
-            }
-        )
+        out_row: dict[str, object] = {
+            "city": row["city"],
+            "run": row["run"],
+            "window_index": int(row["window_index"]),
+            "sim_matched_epochs": float(row["sim_matched_epochs"]),
+            "actual_fix_rate_pct": float(row["actual_fix_rate_pct"]),
+            "base_pred_fix_rate_pct": float(row["base_pred_fix_rate_pct"]),
+            "adopted_pred_fix_rate_pct": float(row["corrected_pred_fix_rate_pct"]),
+            "abs_error_pp": float(abs(row["corrected_pred_fix_rate_pct"] - row["actual_fix_rate_pct"])),
+            "focus_case_tag": focus_tag,
+            "focus_case_note": focus_note,
+            "window_action": window_action,
+            "window_action_note": action_note,
+        }
+        if path1_lookup:
+            key = (str(row["city"]), str(row["run"]), int(row["window_index"]))
+            p1 = path1_lookup.get(key, float("nan"))
+            out_row["path1_pred_fix_rate_pct"] = float(p1)
+            out_row["path1_abs_error_pp"] = (
+                float(abs(p1 - float(row["actual_fix_rate_pct"]))) if np.isfinite(p1) else float("nan")
+            )
+        window_rows.append(out_row)
     window_df = pd.DataFrame(window_rows)
     window_path = args.output_dir / "window_level_details.csv"
     window_df.to_csv(window_path, index=False)
@@ -234,27 +268,56 @@ def main() -> None:
             if action_weights.sum() > 0.0
             else 0.0
         )
-        route_rows.append(
-            {
-                "city": city,
-                "run": run,
-                "window_count": len(group),
-                "focus_case_window_count": n_focus,
-                "usable_window_count": usable_windows,
-                "review_window_count": review_windows,
-                "abstain_window_count": abstain_windows,
-                "abstain_epoch_fraction_pct": round(abstain_epoch_fraction, 3),
-                "actual_fix_rate_pct": round(actual, 3),
-                "baseline_pred_fix_rate_pct": round(base, 3),
-                "adopted_pred_fix_rate_pct": round(pred, 3),
-                "adopted_abs_error_pp": round(abs(pred - actual), 3),
-                "adopted_signed_error_pp": round(pred - actual, 3),
-                "confidence_tier": tier,
-                "confidence_note": note,
-                "route_action": route_action,
-                "route_action_note": route_action_note,
-            }
-        )
+        route_row: dict[str, object] = {
+            "city": city,
+            "run": run,
+            "window_count": len(group),
+            "focus_case_window_count": n_focus,
+            "usable_window_count": usable_windows,
+            "review_window_count": review_windows,
+            "abstain_window_count": abstain_windows,
+            "abstain_epoch_fraction_pct": round(abstain_epoch_fraction, 3),
+            "actual_fix_rate_pct": round(actual, 3),
+            "baseline_pred_fix_rate_pct": round(base, 3),
+            "adopted_pred_fix_rate_pct": round(pred, 3),
+            "adopted_abs_error_pp": round(abs(pred - actual), 3),
+            "adopted_signed_error_pp": round(pred - actual, 3),
+            "confidence_tier": tier,
+            "confidence_note": note,
+            "route_action": route_action,
+            "route_action_note": route_action_note,
+        }
+        if path1_lookup:
+            p1_vals = np.array(
+                [
+                    path1_lookup.get(
+                        (str(r["city"]), str(r["run"]), int(r["window_index"])),
+                        float("nan"),
+                    )
+                    for _, r in group.iterrows()
+                ],
+                dtype=np.float64,
+            )
+            if np.isfinite(p1_vals).all():
+                p1_pred = float(np.average(p1_vals, weights=weights))
+                p1_abs_err = abs(p1_pred - actual)
+                route_row["path1_pred_fix_rate_pct"] = round(p1_pred, 3)
+                route_row["path1_abs_error_pp"] = round(p1_abs_err, 3)
+                route_row["path1_lift_pp"] = round(
+                    abs(pred - actual) - p1_abs_err, 3
+                )
+                route_row["path1_role_note"] = (
+                    "post-demo5 QA tool; uses solver_demo5_*/rtk_lock_* features, "
+                    "not valid as pre-demo5 estimator"
+                )
+            else:
+                route_row["path1_pred_fix_rate_pct"] = float("nan")
+                route_row["path1_abs_error_pp"] = float("nan")
+                route_row["path1_lift_pp"] = float("nan")
+                route_row["path1_role_note"] = (
+                    "path1 predictions missing for some windows in this route"
+                )
+        route_rows.append(route_row)
     route_df = pd.DataFrame(route_rows)
     route_path = args.output_dir / "route_level_fix_rate_prediction.csv"
     route_df.to_csv(route_path, index=False)

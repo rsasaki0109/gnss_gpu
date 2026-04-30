@@ -1,198 +1,198 @@
-city,run,window_index,sim_matched_epochs,actual_fix_rate_pct,base_pred_fix_rate_pct,adopted_pred_fix_rate_pct,abs_error_pp,focus_case_tag,focus_case_note,window_action,window_action_note
-nagoya,run1,0,300.0,0.0,24.617164529721272,11.875852153022889,11.875852153022889,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,1,300.0,80.0,55.905672307484735,20.0,60.0,hidden_high,actual 80.0% but corrected only 20.0%; under-predicted by 60.0 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-nagoya,run1,2,300.0,100.0,34.8199323122003,20.0,80.0,hidden_high,actual 100.0% but corrected only 20.0%; under-predicted by 80.0 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-nagoya,run1,3,214.0,77.10280373831776,10.39769871785966,15.552921476206876,61.549882262110884,hidden_high,actual 77.1% but corrected only 15.6%; under-predicted by 61.5 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-nagoya,run1,4,280.0,0.0,3.394979130878922,9.857003624450709,9.857003624450709,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,5,300.0,3.333333333333333,18.75825076811805,9.78481346393587,6.451480130602538,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,6,300.0,0.3333333333333333,11.315940710314669,11.518532544314736,11.185199210981402,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,7,300.0,0.0,33.68373091684834,18.883722718774266,18.883722718774266,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,8,300.0,12.333333333333334,10.180194035397934,7.040547161067461,5.292786172265873,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,9,269.0,1.1152416356877324,2.535206058167393,5.821989528795812,4.70674789310808,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,10,300.0,3.333333333333333,14.9670817286306,5.821989528795812,2.488656195462479,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,11,234.0,4.273504273504273,6.168221109206828,6.256213699287866,1.9827094257835922,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,12,268.0,2.238805970149253,1.848534619007745,5.821989528795812,3.583183558646559,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,13,300.0,5.333333333333334,13.070444222285834,6.752821154443963,1.4194878211106294,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,14,300.0,0.0,12.828530407128458,5.821989528795812,5.821989528795812,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,15,233.0,6.437768240343347,2.639166860680261,11.914141337437316,5.476373097093969,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,16,300.0,0.0,5.124085268967049,11.650384261626686,11.650384261626686,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,17,300.0,0.0,10.270657846977189,16.087883799120473,16.087883799120473,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,18,300.0,0.0,13.741322140654654,7.664703705282116,7.664703705282116,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,19,300.0,5.333333333333334,10.505655599377691,16.272053570382432,10.938720237049099,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,20,300.0,5.666666666666666,2.022112509861438,11.601571322446476,5.93490465577981,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,21,300.0,0.0,26.47095689450632,15.286648855493176,15.286648855493176,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,22,300.0,0.0,29.793304818870737,20.0,20.0,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,23,300.0,0.0,23.68091134613474,12.385006870167697,12.385006870167697,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,24,300.0,0.0,16.084539412535324,11.391191605817102,11.391191605817102,,,use,usable for route aggregation and normal diagnostics
-nagoya,run1,25,151.0,0.0,12.162150061545168,5.821989528795812,5.821989528795812,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,0,300.0,81.33333333333333,32.424509080544325,15.042558218853545,66.29077511447979,hidden_high,actual 81.3% but corrected only 15.0%; under-predicted by 66.3 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-nagoya,run2,1,300.0,100.0,68.24697709577502,70.03177947563819,29.96822052436181,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,2,300.0,85.33333333333334,41.70123505346338,66.68150144285764,18.651831890475705,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,3,300.0,64.33333333333333,47.55513866683234,68.5090806136992,4.175747280365869,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,4,266.0,7.518796992481203,9.577914691834604,9.729048339021176,2.210251346539973,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,5,300.0,0.0,6.219912901443451,6.334234742581884,6.334234742581884,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,6,300.0,14.666666666666666,12.965557169215018,6.232601836634158,8.434064830032508,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,7,275.0,9.090909090909092,5.539574425321275,8.193717928898879,0.8971911620102127,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,8,300.0,17.0,3.492184459691361,8.495405484548751,8.504594515451249,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,9,269.0,11.895910780669144,8.446425106127226,10.613646262275608,1.2822645183935357,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,10,265.0,6.415094339622642,8.393849196464998,9.500180440965885,3.0850861013432427,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,11,300.0,7.666666666666666,9.912992640053677,9.357089287148748,1.6904226204820816,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,12,300.0,0.0,15.963166149454832,15.829230451046817,15.829230451046817,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,13,300.0,4.666666666666667,17.431259835236954,20.0,15.333333333333332,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,14,300.0,26.666666666666668,13.719938448493574,20.0,6.666666666666668,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,15,289.0,0.0,4.784334286920829,10.42540468576581,10.42540468576581,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,16,295.0,0.0,5.136676883628116,8.394406929153124,8.394406929153124,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,17,231.0,0.0,18.50413501631225,11.2392057945214,11.2392057945214,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,18,286.0,7.3426573426573425,4.260096322113029,7.742232374381841,0.39957503172449815,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,19,271.0,11.07011070110701,3.530028846041104,6.329491240275914,4.7406194608310965,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,20,287.0,4.529616724738676,6.17809993189219,7.9197983870535555,3.3901816623148795,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,21,300.0,1.0,13.29020622459805,14.669606124634004,13.669606124634004,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,22,300.0,20.666666666666668,12.09392586757103,11.229658349568524,9.437008317098144,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,23,300.0,0.0,16.856147496390243,16.008301164751824,16.008301164751824,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,24,297.0,2.6936026936026933,25.877720538707177,18.458925065135706,15.765322371533012,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,25,300.0,16.333333333333332,9.9566392192834,14.669576581948943,1.6637567513843887,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,26,300.0,0.0,6.095465917955847,5.3216527196652725,5.3216527196652725,,,use,usable for route aggregation and normal diagnostics
-nagoya,run2,27,300.0,0.0,27.25475007167193,8.675820624619774,8.675820624619774,false_lift_resolved,successfully rejected by 18.6 pp against actual 0.0% (base was 27.3%),use,usable for route aggregation and normal diagnostics
-nagoya,run2,28,300.0,0.0,39.90593050256128,20.0,20.0,false_lift_resolved,successfully rejected by 19.9 pp against actual 0.0% (base was 39.9%),use,usable for route aggregation and normal diagnostics
-nagoya,run2,29,300.0,0.0,32.07522093820703,17.00790666327025,17.00790666327025,false_lift_resolved,successfully rejected by 15.1 pp against actual 0.0% (base was 32.1%),use,usable for route aggregation and normal diagnostics
-nagoya,run2,30,300.0,0.0,43.05203989509348,20.0,20.0,false_lift_resolved,successfully rejected by 23.1 pp against actual 0.0% (base was 43.1%),use,usable for route aggregation and normal diagnostics
-nagoya,run2,31,151.0,0.0,18.954990199517987,9.901672100521,9.901672100521,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,0,300.0,0.0,13.768044945570471,15.273808612332504,15.273808612332504,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,1,300.0,0.3333333333333333,10.699475429360362,10.669947715941696,10.336614382608362,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,2,300.0,0.0,13.565452477334167,15.477552424862155,15.477552424862155,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,3,294.0,2.380952380952381,1.6216012407768277,9.440904698881086,7.059952317928705,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,4,299.0,6.020066889632108,0.5166502865681185,8.903222069674628,2.88315518004252,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,5,293.0,7.508532423208192,0.5669628815327026,5.7837812113699,1.7247512118382922,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,6,300.0,2.666666666666667,0.5076010115021252,5.924280535826079,3.257613869159412,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,7,300.0,47.66666666666667,1.0846644855257472,9.467119905562775,38.199546761103896,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,8,300.0,9.666666666666666,1.3823294209253874,9.48363123075683,0.1830354359098365,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,9,300.0,0.6666666666666667,0.9702541823550525,5.198846387370977,4.53217972070431,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,10,289.0,13.494809688581316,0.5418880221883846,5.198846387370977,8.295963301210339,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,11,300.0,0.0,0.3153153337174396,5.198846387370977,5.198846387370977,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,12,296.0,7.094594594594595,0.8578917733259271,5.198846387370977,1.895748207223618,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,13,289.0,20.415224913494807,0.4940499865587693,5.481894427669917,14.93333048582489,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,14,293.0,7.849829351535837,0.6242254744299982,5.637160856837445,2.2126684946983914,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,15,300.0,5.0,0.597631503151971,5.198846387370977,0.1988463873709767,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,16,295.0,1.3559322033898304,0.4917966665963505,9.312986106170325,7.957053902780494,,,use,usable for route aggregation and normal diagnostics
-nagoya,run3,17,101.0,13.861386138613865,0.5358406764310086,6.314311178033963,7.547074960579902,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,0,300.0,76.66666666666667,10.318656008478134,20.0,56.66666666666667,hidden_high,actual 76.7% but corrected only 20.0%; under-predicted by 56.7 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run1,1,300.0,23.33333333333333,9.936484555913564,17.82113602456184,5.512197308771487,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,2,300.0,0.3333333333333333,39.109023772062166,20.0,19.666666666666668,false_lift_resolved,successfully rejected by 19.1 pp against actual 0.3% (base was 39.1%),use,usable for route aggregation and normal diagnostics
-tokyo,run1,3,300.0,5.0,4.0388534799356455,10.334385624109183,5.334385624109183,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,4,300.0,4.0,5.726598627401412,8.32798613296538,4.32798613296538,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,5,300.0,6.666666666666667,5.276657931415074,10.765197957121856,4.098531290455189,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,6,300.0,42.333333333333336,6.322387952545252,8.273409102252756,34.05992423108058,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,7,300.0,76.66666666666667,17.410321525455043,11.127621189460834,65.53904547720583,hidden_high,actual 76.7% but corrected only 11.1%; under-predicted by 65.5 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run1,8,299.0,1.0033444816053512,12.808137160806227,17.019437202882106,16.016092721276756,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,9,231.0,2.1645021645021645,3.0030948427179385,15.249006688845142,13.084504524342979,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,10,291.0,15.120274914089348,7.591121685135979,8.322610953781814,6.797663960307535,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,11,224.0,0.0,20.134581412126565,15.272104206040218,15.272104206040218,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,13,188.0,0.0,17.8241127227395,16.882955795004552,16.882955795004552,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,14,300.0,30.666666666666664,6.135643841862529,9.736643238183822,20.93002342848284,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,15,282.0,17.02127659574468,6.920812954087414,10.180829557452562,6.840447038292119,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,16,300.0,0.0,2.348020966052118,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,17,296.0,0.0,6.7664833083796285,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,18,263.0,2.6615969581749046,7.178719676921591,5.8102766798418966,3.148679721666992,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,19,293.0,10.238907849829353,9.83432310460734,5.8102766798418966,4.428631169987456,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,20,292.0,0.0,7.826892241530917,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,21,300.0,0.0,18.27335679318498,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,22,300.0,36.333333333333336,24.51586568382527,5.8102766798418966,30.523056653491437,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,23,296.0,0.0,20.53197351173637,9.959854250038084,9.959854250038084,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,24,300.0,0.0,22.96024895146559,7.519309862777643,7.519309862777643,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,25,295.0,0.0,12.203216421266712,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,26,297.0,0.0,11.6772051555031,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,27,257.0,0.0,21.60552609397716,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,28,168.0,0.0,9.85970705722989,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,29,240.0,3.75,8.12027213259577,5.8102766798418966,2.0602766798418966,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,30,197.0,5.583756345177665,19.80308895110359,10.930917909166492,5.347161563988827,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,31,300.0,0.0,21.63136087883405,32.994840800289936,32.994840800289936,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,32,300.0,2.333333333333333,6.729409206267295,8.176379276460843,5.8430459431275095,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,33,300.0,2.666666666666667,4.319359165052158,10.159122018817554,7.492455352150887,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,34,300.0,8.0,11.103809827068927,10.919630363550995,2.9196303635509953,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,35,300.0,12.333333333333334,15.46021933353892,7.886110954871908,4.447222378461426,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,36,294.0,6.122448979591836,12.258072657143147,10.220382287958616,4.0979333083667795,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,37,300.0,7.333333333333333,10.561568969818373,9.652759288558732,2.319425955225399,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,38,300.0,4.666666666666667,11.6593237467628,8.436235589146756,3.7695689224800892,,,use,usable for route aggregation and normal diagnostics
-tokyo,run1,39,251.0,1.195219123505976,10.905987896309563,10.915490684941902,9.720271561435926,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,0,300.0,83.66666666666667,20.14606646457132,8.55857213298503,75.10809453368164,hidden_high,actual 83.7% but corrected only 8.6%; under-predicted by 75.1 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run2,1,300.0,1.0,15.663470148691031,15.718507949243609,14.718507949243609,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,2,300.0,44.333333333333336,16.35526398896991,17.84495239401889,26.488380939314446,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,3,300.0,3.6666666666666665,12.421052633606225,18.05397047663928,14.387303809972613,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,4,288.0,2.083333333333333,5.916872823131071,4.908279623202777,2.8249462898694437,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,5,300.0,6.333333333333334,6.273538537355032,5.739926423614163,0.593406909719171,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,6,300.0,1.6666666666666667,16.287305494392317,15.440976061208971,13.774309394542305,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,7,300.0,0.0,63.51669281130082,47.821782743385256,47.821782743385256,false_high,corrected prediction 47.8% against actual 0.0%; deployable features misread,abstain,exclude from automated window-level action; inspect focus-case diagnostics
-tokyo,run2,8,300.0,0.0,23.450179243526613,17.06692184768898,17.06692184768898,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,9,300.0,0.0,73.72755044933733,76.61510933083021,76.61510933083021,false_high,corrected prediction 76.6% against actual 0.0%; deployable features misread,abstain,exclude from automated window-level action; inspect focus-case diagnostics
-tokyo,run2,10,300.0,0.0,10.07049736706373,5.818300308585596,5.818300308585596,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,11,298.0,2.013422818791946,6.870104693430064,4.908279623202777,2.8948568044108307,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,12,300.0,15.666666666666668,10.898798565354133,4.908279623202777,10.758387043463891,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,13,300.0,52.66666666666666,17.7437689565404,7.171468669749983,45.49519799691667,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,14,300.0,87.33333333333333,85.15101219358812,82.3505102454121,4.982823087921233,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,15,173.0,0.0,10.008819627086956,8.177602254040222,8.177602254040222,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,16,186.0,0.0,7.944346701688866,5.071160229160576,5.071160229160576,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,17,300.0,0.3333333333333333,11.473144884255207,7.280523431663978,6.947190098330645,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,18,300.0,0.0,10.233621268807646,16.003906576756542,16.003906576756542,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,19,299.0,12.709030100334449,17.839959830896234,31.344070795120484,18.635040694786035,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,20,300.0,8.333333333333332,6.195705861196916,5.0490027868876695,3.2843305464456627,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,21,267.0,0.0,8.112156493575167,4.908279623202777,4.908279623202777,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,22,300.0,16.0,15.982610428197129,8.363628646101668,7.6363713538983315,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,23,298.0,100.0,16.27491839566826,18.68681604783812,81.31318395216188,hidden_high,actual 100.0% but corrected only 18.7%; under-predicted by 81.3 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run2,24,300.0,100.0,13.480854543578364,18.66901867331404,81.33098132668596,hidden_high,actual 100.0% but corrected only 18.7%; under-predicted by 81.3 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run2,25,300.0,100.0,15.452183260944404,49.96915573952932,50.03084426047068,hidden_high,actual 100.0% but corrected only 50.0%; under-predicted by 50.0 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run2,26,300.0,96.66666666666669,13.96883580142099,54.85428472392479,41.812381942741894,hidden_high,actual 96.7% but corrected only 54.9%; under-predicted by 41.8 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run2,27,300.0,75.33333333333333,23.23470030774939,47.73854553559451,27.594787797738817,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,28,300.0,33.666666666666664,13.642794330283314,6.3885000061023085,27.278166660564356,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,29,300.0,14.333333333333334,13.461950491468755,4.908279623202777,9.425053710130557,,,use,usable for route aggregation and normal diagnostics
-tokyo,run2,30,151.0,0.0,10.19851842055929,5.722819314348833,5.722819314348833,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,0,300.0,83.33333333333334,82.36198764673311,62.8577998286451,20.475533504688244,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,1,300.0,19.33333333333333,49.07156260019311,58.38257725826196,39.04924392492863,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,2,300.0,0.0,21.692299149850104,14.638915162392149,14.638915162392149,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,3,300.0,0.0,10.435082087316763,13.178286886715012,13.178286886715012,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,4,281.0,4.270462633451958,12.10254778835692,12.036095036861225,7.765632403409267,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,5,300.0,1.3333333333333337,9.92067540118602,7.913168352571685,6.5798350192383515,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,6,300.0,8.0,15.361451819395782,14.443490914604892,6.443490914604892,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,7,300.0,87.0,5.766362737778825,3.38252203909544,83.61747796090457,hidden_high,actual 87.0% but corrected only 3.4%; under-predicted by 83.6 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run3,8,300.0,84.66666666666667,16.33089492181276,13.71513426577291,70.95153240089377,hidden_high,actual 84.7% but corrected only 13.7%; under-predicted by 71.0 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run3,9,300.0,0.0,11.00451949687904,10.018075928361604,10.018075928361604,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,10,217.0,6.451612903225806,7.596607440600231,14.292122721614566,7.84050981838876,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,11,300.0,4.333333333333334,12.130963213839866,16.205897478208602,11.872564144875268,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,12,300.0,100.0,40.78735864476769,63.22578919935413,36.77421080064587,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,13,300.0,42.66666666666667,27.45143946244341,49.83857119270555,7.17190452603888,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,14,300.0,1.6666666666666667,12.371775324058978,11.196420234816056,9.52975356814939,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,15,300.0,0.0,16.89692318734354,12.27084760680143,12.27084760680143,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,16,300.0,0.6666666666666667,17.009856849264654,10.200185175051718,9.533518508385052,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,17,300.0,0.0,0.0,13.851094343881917,13.851094343881917,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,18,300.0,49.66666666666666,34.75986344301044,61.51395707268329,11.847290406016633,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,19,300.0,30.333333333333336,18.772654002518017,39.28451886332543,8.951185529992095,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,20,300.0,5.666666666666666,13.52501693484512,8.528389375366837,2.861722708700171,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,21,283.0,2.4734982332155475,11.407105345485652,8.828378001054626,6.354879767839078,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,22,295.0,0.3389830508474576,20.09935760417693,14.843327017201824,14.504343966354366,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,23,295.0,0.0,13.761151253681389,12.82024930997192,12.82024930997192,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,24,300.0,43.333333333333336,21.64332166656399,14.68458522186024,28.648748111473097,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,25,299.0,18.72909698996656,15.470476898188796,14.15627149901612,4.572825490950441,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,26,300.0,2.0,16.46319059393197,15.904604541741453,13.904604541741453,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,27,300.0,8.666666666666668,22.42877070464833,13.170377314624254,4.503710647957586,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,28,300.0,1.3333333333333337,32.30778311538603,61.28894079106001,59.95560745772667,false_high,corrected prediction 61.3% against actual 1.3%; deployable features misread,abstain,exclude from automated window-level action; inspect focus-case diagnostics
-tokyo,run3,29,300.0,37.0,20.231608076598143,15.172201604958111,21.82779839504189,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,30,300.0,0.0,18.5602639645506,12.156770644548676,12.156770644548676,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,31,298.0,0.0,11.69441635313366,7.856026772924729,7.856026772924729,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,32,285.0,11.578947368421051,8.331016060405362,8.664696299140441,2.91425106928061,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,33,300.0,41.333333333333336,22.77619887663264,14.621097446398371,26.712235886934963,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,34,300.0,100.0,40.60894370216105,40.626510430648125,59.373489569351875,hidden_high,actual 100.0% but corrected only 40.6%; under-predicted by 59.4 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run3,35,300.0,100.0,32.25650560130514,40.961129326898,59.038870673102,hidden_high,actual 100.0% but corrected only 41.0%; under-predicted by 59.0 pp,review,prediction likely underestimates a high-FIX window; review before window-level action
-tokyo,run3,36,300.0,71.33333333333334,42.5712405546342,87.61179110979297,16.278457776459632,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,37,300.0,1.6666666666666667,16.418340663866392,20.0,18.333333333333332,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,38,300.0,3.333333333333333,20.06254759724873,14.984547285608038,11.651213952274706,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,39,300.0,4.0,24.73131857874332,8.901350694817536,4.901350694817536,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,40,300.0,10.333333333333334,23.464071906490265,10.164879922568668,0.16845341076466624,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,41,300.0,4.666666666666667,22.637427334606866,14.520574900044789,9.853908233378121,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,42,292.0,9.58904109589041,12.571351054133912,10.178154632457325,0.5891135365669147,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,43,293.0,1.023890784982935,9.560954160136506,8.897428610623884,7.873537825640948,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,44,300.0,5.333333333333334,16.06013072002843,15.142996029867971,9.809662696534637,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,45,300.0,20.666666666666668,20.09628284518496,15.737621765739082,4.929044900927586,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,46,300.0,43.0,19.813468060013427,61.51115318124815,18.511153181248147,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,47,300.0,99.33333333333331,11.523184430155982,60.5424226542835,38.790910679049816,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,48,280.0,44.285714285714285,12.490692351286382,39.16313639902055,5.122577886693733,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,49,300.0,1.3333333333333337,16.598581036749753,14.788923241110288,13.455589907776954,,,use,usable for route aggregation and normal diagnostics
-tokyo,run3,50,300.0,0.0,17.72380762868654,16.373918599294104,16.373918599294104,,,use,usable for route aggregation and normal diagnostics
+city,run,window_index,sim_matched_epochs,actual_fix_rate_pct,base_pred_fix_rate_pct,adopted_pred_fix_rate_pct,abs_error_pp,focus_case_tag,focus_case_note,window_action,window_action_note,path1_pred_fix_rate_pct,path1_abs_error_pp
+nagoya,run1,0,300.0,0.0,24.617164529721272,11.875852153022889,11.875852153022889,,,use,usable for route aggregation and normal diagnostics,0.322675941527795,0.322675941527795
+nagoya,run1,1,300.0,80.0,55.905672307484735,20.0,60.0,hidden_high,actual 80.0% but corrected only 20.0%; under-predicted by 60.0 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,60.87316981539055,19.126830184609453
+nagoya,run1,2,300.0,100.0,34.8199323122003,20.0,80.0,hidden_high,actual 100.0% but corrected only 20.0%; under-predicted by 80.0 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,93.55130760729854,6.44869239270146
+nagoya,run1,3,214.0,77.10280373831776,10.39769871785966,15.552921476206876,61.549882262110884,hidden_high,actual 77.1% but corrected only 15.6%; under-predicted by 61.5 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,54.71764529398358,22.38515844433418
+nagoya,run1,4,280.0,0.0,3.394979130878922,9.857003624450709,9.857003624450709,,,use,usable for route aggregation and normal diagnostics,1.098204372079684,1.098204372079684
+nagoya,run1,5,300.0,3.333333333333333,18.75825076811805,9.78481346393587,6.451480130602538,,,use,usable for route aggregation and normal diagnostics,1.5973109654137747,1.7360223679195583
+nagoya,run1,6,300.0,0.3333333333333333,11.315940710314669,11.518532544314736,11.185199210981402,,,use,usable for route aggregation and normal diagnostics,1.638299942979945,1.3049666096466117
+nagoya,run1,7,300.0,0.0,33.68373091684834,18.883722718774266,18.883722718774266,,,use,usable for route aggregation and normal diagnostics,0.3824169437764589,0.3824169437764589
+nagoya,run1,8,300.0,12.333333333333334,10.180194035397934,7.040547161067461,5.292786172265873,,,use,usable for route aggregation and normal diagnostics,12.156858288553948,0.17647504477938547
+nagoya,run1,9,269.0,1.1152416356877324,2.535206058167393,5.821989528795812,4.70674789310808,,,use,usable for route aggregation and normal diagnostics,1.711160736049714,0.5959191003619817
+nagoya,run1,10,300.0,3.333333333333333,14.9670817286306,5.821989528795812,2.488656195462479,,,use,usable for route aggregation and normal diagnostics,2.179205916525781,1.154127416807552
+nagoya,run1,11,234.0,4.273504273504273,6.168221109206828,6.256213699287866,1.9827094257835922,,,use,usable for route aggregation and normal diagnostics,3.3900102478129712,0.8834940256913022
+nagoya,run1,12,268.0,2.238805970149253,1.848534619007745,5.821989528795812,3.583183558646559,,,use,usable for route aggregation and normal diagnostics,1.7854117629415154,0.4533942072077377
+nagoya,run1,13,300.0,5.333333333333334,13.070444222285834,6.752821154443963,1.4194878211106294,,,use,usable for route aggregation and normal diagnostics,4.812738790549089,0.5205945427842451
+nagoya,run1,14,300.0,0.0,12.828530407128458,5.821989528795812,5.821989528795812,,,use,usable for route aggregation and normal diagnostics,0.3731373675278508,0.3731373675278508
+nagoya,run1,15,233.0,6.437768240343347,2.639166860680261,11.914141337437316,5.476373097093969,,,use,usable for route aggregation and normal diagnostics,5.87856360272227,0.5592046376210771
+nagoya,run1,16,300.0,0.0,5.124085268967049,11.650384261626686,11.650384261626686,,,use,usable for route aggregation and normal diagnostics,0.4492340504378898,0.4492340504378898
+nagoya,run1,17,300.0,0.0,10.270657846977189,16.087883799120473,16.087883799120473,,,use,usable for route aggregation and normal diagnostics,0.7429685819534096,0.7429685819534096
+nagoya,run1,18,300.0,0.0,13.741322140654654,7.664703705282116,7.664703705282116,,,use,usable for route aggregation and normal diagnostics,0.2855871662291903,0.2855871662291903
+nagoya,run1,19,300.0,5.333333333333334,10.505655599377691,16.272053570382432,10.938720237049099,,,use,usable for route aggregation and normal diagnostics,4.64919843914345,0.6841348941898842
+nagoya,run1,20,300.0,5.666666666666666,2.022112509861438,11.601571322446476,5.93490465577981,,,use,usable for route aggregation and normal diagnostics,6.413992004470212,0.747325337803546
+nagoya,run1,21,300.0,0.0,26.47095689450632,15.286648855493176,15.286648855493176,,,use,usable for route aggregation and normal diagnostics,0.2048796566177305,0.2048796566177305
+nagoya,run1,22,300.0,0.0,29.793304818870737,20.0,20.0,,,use,usable for route aggregation and normal diagnostics,1.4104313486935507,1.4104313486935507
+nagoya,run1,23,300.0,0.0,23.68091134613474,12.385006870167697,12.385006870167697,,,use,usable for route aggregation and normal diagnostics,0.2433559283107136,0.2433559283107136
+nagoya,run1,24,300.0,0.0,16.084539412535324,11.391191605817102,11.391191605817102,,,use,usable for route aggregation and normal diagnostics,2.179205916525781,2.179205916525781
+nagoya,run1,25,151.0,0.0,12.162150061545168,5.821989528795812,5.821989528795812,,,use,usable for route aggregation and normal diagnostics,1.2424151152190257,1.2424151152190257
+nagoya,run2,0,300.0,81.33333333333333,32.424509080544325,15.042558218853545,66.29077511447979,hidden_high,actual 81.3% but corrected only 15.0%; under-predicted by 66.3 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,73.35018044693228,7.983152886401044
+nagoya,run2,1,300.0,100.0,68.24697709577502,70.03177947563819,29.96822052436181,,,use,usable for route aggregation and normal diagnostics,88.55956216693296,11.440437833067037
+nagoya,run2,2,300.0,85.33333333333334,41.70123505346338,66.68150144285764,18.651831890475705,,,use,usable for route aggregation and normal diagnostics,47.27605048621244,38.0572828471209
+nagoya,run2,3,300.0,64.33333333333333,47.55513866683234,68.5090806136992,4.175747280365869,,,use,usable for route aggregation and normal diagnostics,42.90461270592626,21.428720627407067
+nagoya,run2,4,266.0,7.518796992481203,9.577914691834604,9.729048339021176,2.210251346539973,,,use,usable for route aggregation and normal diagnostics,7.70647751087725,0.18768051839604727
+nagoya,run2,5,300.0,0.0,6.219912901443451,6.334234742581884,6.334234742581884,,,use,usable for route aggregation and normal diagnostics,0.3801521659135526,0.3801521659135526
+nagoya,run2,6,300.0,14.666666666666666,12.965557169215018,6.232601836634158,8.434064830032508,,,use,usable for route aggregation and normal diagnostics,14.92593280942804,0.2592661427613745
+nagoya,run2,7,275.0,9.090909090909092,5.539574425321275,8.193717928898879,0.8971911620102127,,,use,usable for route aggregation and normal diagnostics,8.515757082808951,0.5751520081001402
+nagoya,run2,8,300.0,17.0,3.492184459691361,8.495405484548751,8.504594515451249,,,use,usable for route aggregation and normal diagnostics,24.440615181306217,7.440615181306217
+nagoya,run2,9,269.0,11.895910780669144,8.446425106127226,10.613646262275608,1.2822645183935357,,,use,usable for route aggregation and normal diagnostics,13.914619384876014,2.0187086042068696
+nagoya,run2,10,265.0,6.415094339622642,8.393849196464998,9.500180440965885,3.0850861013432427,,,use,usable for route aggregation and normal diagnostics,6.186227344366984,0.22886699525565746
+nagoya,run2,11,300.0,7.666666666666666,9.912992640053677,9.357089287148748,1.6904226204820816,,,use,usable for route aggregation and normal diagnostics,8.689051095538808,1.022384428872142
+nagoya,run2,12,300.0,0.0,15.963166149454832,15.829230451046817,15.829230451046817,,,use,usable for route aggregation and normal diagnostics,0.2008076474684275,0.2008076474684275
+nagoya,run2,13,300.0,4.666666666666667,17.431259835236954,20.0,15.333333333333332,,,use,usable for route aggregation and normal diagnostics,9.935316595895817,5.2686499292291495
+nagoya,run2,14,300.0,26.666666666666668,13.719938448493574,20.0,6.666666666666668,,,use,usable for route aggregation and normal diagnostics,32.81281556935515,6.146148902688484
+nagoya,run2,15,289.0,0.0,4.784334286920829,10.42540468576581,10.42540468576581,,,use,usable for route aggregation and normal diagnostics,0.4068496758323764,0.4068496758323764
+nagoya,run2,16,295.0,0.0,5.136676883628116,8.394406929153124,8.394406929153124,,,use,usable for route aggregation and normal diagnostics,0.5502622658239729,0.5502622658239729
+nagoya,run2,17,231.0,0.0,18.50413501631225,11.2392057945214,11.2392057945214,,,use,usable for route aggregation and normal diagnostics,0.2387439739400822,0.2387439739400822
+nagoya,run2,18,286.0,7.3426573426573425,4.260096322113029,7.742232374381841,0.39957503172449815,,,use,usable for route aggregation and normal diagnostics,7.683011662502349,0.3403543198450061
+nagoya,run2,19,271.0,11.07011070110701,3.530028846041104,6.329491240275914,4.7406194608310965,,,use,usable for route aggregation and normal diagnostics,12.77162546242608,1.7015147613190695
+nagoya,run2,20,287.0,4.529616724738676,6.17809993189219,7.9197983870535555,3.3901816623148795,,,use,usable for route aggregation and normal diagnostics,4.056924906336613,0.47269181840206276
+nagoya,run2,21,300.0,1.0,13.29020622459805,14.669606124634004,13.669606124634004,,,use,usable for route aggregation and normal diagnostics,2.1346906497536398,1.1346906497536398
+nagoya,run2,22,300.0,20.666666666666668,12.09392586757103,11.229658349568524,9.437008317098144,,,use,usable for route aggregation and normal diagnostics,27.30420538771469,6.637538721048021
+nagoya,run2,23,300.0,0.0,16.856147496390243,16.008301164751824,16.008301164751824,,,use,usable for route aggregation and normal diagnostics,0.2008076474684275,0.2008076474684275
+nagoya,run2,24,297.0,2.6936026936026933,25.877720538707177,18.458925065135706,15.765322371533012,,,use,usable for route aggregation and normal diagnostics,2.524353882960161,0.16924881064253228
+nagoya,run2,25,300.0,16.333333333333332,9.9566392192834,14.669576581948943,1.6637567513843887,,,use,usable for route aggregation and normal diagnostics,16.575156848203527,0.2418235148701946
+nagoya,run2,26,300.0,0.0,6.095465917955847,5.3216527196652725,5.3216527196652725,,,use,usable for route aggregation and normal diagnostics,0.2008076474684275,0.2008076474684275
+nagoya,run2,27,300.0,0.0,27.25475007167193,8.675820624619774,8.675820624619774,false_lift_resolved,successfully rejected by 18.6 pp against actual 0.0% (base was 27.3%),use,usable for route aggregation and normal diagnostics,0.156894805615355,0.156894805615355
+nagoya,run2,28,300.0,0.0,39.90593050256128,20.0,20.0,false_lift_resolved,successfully rejected by 19.9 pp against actual 0.0% (base was 39.9%),use,usable for route aggregation and normal diagnostics,0.2906684705499379,0.2906684705499379
+nagoya,run2,29,300.0,0.0,32.07522093820703,17.00790666327025,17.00790666327025,false_lift_resolved,successfully rejected by 15.1 pp against actual 0.0% (base was 32.1%),use,usable for route aggregation and normal diagnostics,0.1476709993021969,0.1476709993021969
+nagoya,run2,30,300.0,0.0,43.05203989509348,20.0,20.0,false_lift_resolved,successfully rejected by 23.1 pp against actual 0.0% (base was 43.1%),use,usable for route aggregation and normal diagnostics,0.0832354425530399,0.0832354425530399
+nagoya,run2,31,151.0,0.0,18.954990199517987,9.901672100521,9.901672100521,,,use,usable for route aggregation and normal diagnostics,0.2642296438327371,0.2642296438327371
+nagoya,run3,0,300.0,0.0,13.768044945570471,15.273808612332504,15.273808612332504,,,use,usable for route aggregation and normal diagnostics,0.3684057453263251,0.3684057453263251
+nagoya,run3,1,300.0,0.3333333333333333,10.699475429360362,10.669947715941696,10.336614382608362,,,use,usable for route aggregation and normal diagnostics,2.2449472699822604,1.911613936648927
+nagoya,run3,2,300.0,0.0,13.565452477334167,15.477552424862155,15.477552424862155,,,use,usable for route aggregation and normal diagnostics,0.3068455647361468,0.3068455647361468
+nagoya,run3,3,294.0,2.380952380952381,1.6216012407768277,9.440904698881086,7.059952317928705,,,use,usable for route aggregation and normal diagnostics,1.889217208777047,0.491735172175334
+nagoya,run3,4,299.0,6.020066889632108,0.5166502865681185,8.903222069674628,2.88315518004252,,,use,usable for route aggregation and normal diagnostics,6.474524240197746,0.4544573505656375
+nagoya,run3,5,293.0,7.508532423208192,0.5669628815327026,5.7837812113699,1.7247512118382922,,,use,usable for route aggregation and normal diagnostics,7.29917889657186,0.209353526636332
+nagoya,run3,6,300.0,2.666666666666667,0.5076010115021252,5.924280535826079,3.257613869159412,,,use,usable for route aggregation and normal diagnostics,2.069286899939365,0.5973797667273018
+nagoya,run3,7,300.0,47.66666666666667,1.0846644855257472,9.467119905562775,38.199546761103896,,,use,usable for route aggregation and normal diagnostics,91.72303499187964,44.05636832521297
+nagoya,run3,8,300.0,9.666666666666666,1.3823294209253874,9.48363123075683,0.1830354359098365,,,use,usable for route aggregation and normal diagnostics,7.744918576490495,1.9217480901761714
+nagoya,run3,9,300.0,0.6666666666666667,0.9702541823550525,5.198846387370977,4.53217972070431,,,use,usable for route aggregation and normal diagnostics,0.476127682543173,0.19053898412349374
+nagoya,run3,10,289.0,13.494809688581316,0.5418880221883846,5.198846387370977,8.295963301210339,,,use,usable for route aggregation and normal diagnostics,11.974078763655193,1.5207309249261236
+nagoya,run3,11,300.0,0.0,0.3153153337174396,5.198846387370977,5.198846387370977,,,use,usable for route aggregation and normal diagnostics,1.3551591603676545,1.3551591603676545
+nagoya,run3,12,296.0,7.094594594594595,0.8578917733259271,5.198846387370977,1.895748207223618,,,use,usable for route aggregation and normal diagnostics,6.348697052720669,0.7458975418739255
+nagoya,run3,13,289.0,20.415224913494807,0.4940499865587693,5.481894427669917,14.93333048582489,,,use,usable for route aggregation and normal diagnostics,19.251716768635145,1.1635081448596623
+nagoya,run3,14,293.0,7.849829351535837,0.6242254744299982,5.637160856837445,2.2126684946983914,,,use,usable for route aggregation and normal diagnostics,7.31244351687133,0.5373858346645068
+nagoya,run3,15,300.0,5.0,0.597631503151971,5.198846387370977,0.1988463873709767,,,use,usable for route aggregation and normal diagnostics,4.328654565753946,0.6713454342460539
+nagoya,run3,16,295.0,1.3559322033898304,0.4917966665963505,9.312986106170325,7.957053902780494,,,use,usable for route aggregation and normal diagnostics,4.549858874490121,3.1939266711002903
+nagoya,run3,17,101.0,13.861386138613865,0.5358406764310086,6.314311178033963,7.547074960579902,,,use,usable for route aggregation and normal diagnostics,12.00216057741585,1.8592255611980146
+tokyo,run1,0,300.0,76.66666666666667,10.318656008478134,20.0,56.66666666666667,hidden_high,actual 76.7% but corrected only 20.0%; under-predicted by 56.7 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,60.65362833291675,16.01303833374992
+tokyo,run1,1,300.0,23.33333333333333,9.936484555913564,17.82113602456184,5.512197308771487,,,use,usable for route aggregation and normal diagnostics,18.684816095462697,4.648517237870632
+tokyo,run1,2,300.0,0.3333333333333333,39.109023772062166,20.0,19.666666666666668,false_lift_resolved,successfully rejected by 19.1 pp against actual 0.3% (base was 39.1%),use,usable for route aggregation and normal diagnostics,1.6066741639441642,1.273340830610831
+tokyo,run1,3,300.0,5.0,4.0388534799356455,10.334385624109183,5.334385624109183,,,use,usable for route aggregation and normal diagnostics,4.041809000166455,0.9581909998335449
+tokyo,run1,4,300.0,4.0,5.726598627401412,8.32798613296538,4.32798613296538,,,use,usable for route aggregation and normal diagnostics,0.5717649151016894,3.4282350848983105
+tokyo,run1,5,300.0,6.666666666666667,5.276657931415074,10.765197957121856,4.098531290455189,,,use,usable for route aggregation and normal diagnostics,6.1911630952791725,0.47550357138749444
+tokyo,run1,6,300.0,42.333333333333336,6.322387952545252,8.273409102252756,34.05992423108058,,,use,usable for route aggregation and normal diagnostics,53.53865346300338,11.205320129670042
+tokyo,run1,7,300.0,76.66666666666667,17.410321525455043,11.127621189460834,65.53904547720583,hidden_high,actual 76.7% but corrected only 11.1%; under-predicted by 65.5 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,72.01313636237141,4.653530304295259
+tokyo,run1,8,299.0,1.0033444816053512,12.808137160806227,17.019437202882106,16.016092721276756,,,use,usable for route aggregation and normal diagnostics,0.1021467548327192,0.901197726772632
+tokyo,run1,9,231.0,2.1645021645021645,3.0030948427179385,15.249006688845142,13.084504524342979,,,use,usable for route aggregation and normal diagnostics,0.2456129621571654,1.918889202344999
+tokyo,run1,10,291.0,15.120274914089348,7.591121685135979,8.322610953781814,6.797663960307535,,,use,usable for route aggregation and normal diagnostics,17.824942775989864,2.704667861900516
+tokyo,run1,11,224.0,0.0,20.134581412126565,15.272104206040218,15.272104206040218,,,use,usable for route aggregation and normal diagnostics,0.2456129621571654,0.2456129621571654
+tokyo,run1,13,188.0,0.0,17.8241127227395,16.882955795004552,16.882955795004552,,,use,usable for route aggregation and normal diagnostics,0.417379677283495,0.417379677283495
+tokyo,run1,14,300.0,30.666666666666664,6.135643841862529,9.736643238183822,20.93002342848284,,,use,usable for route aggregation and normal diagnostics,17.987892835365546,12.678773831301118
+tokyo,run1,15,282.0,17.02127659574468,6.920812954087414,10.180829557452562,6.840447038292119,,,use,usable for route aggregation and normal diagnostics,19.81947116963504,2.7981945738903597
+tokyo,run1,16,300.0,0.0,2.348020966052118,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics,1.6913902798333929,1.6913902798333929
+tokyo,run1,17,296.0,0.0,6.7664833083796285,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics,0.0679477391293887,0.0679477391293887
+tokyo,run1,18,263.0,2.6615969581749046,7.178719676921591,5.8102766798418966,3.148679721666992,,,use,usable for route aggregation and normal diagnostics,1.741432129878378,0.9201648282965267
+tokyo,run1,19,293.0,10.238907849829353,9.83432310460734,5.8102766798418966,4.428631169987456,,,use,usable for route aggregation and normal diagnostics,10.48602096975574,0.24711311992638763
+tokyo,run1,20,292.0,0.0,7.826892241530917,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics,0.2106289759558129,0.2106289759558129
+tokyo,run1,21,300.0,0.0,18.27335679318498,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics,0.1537870955207003,0.1537870955207003
+tokyo,run1,22,300.0,36.333333333333336,24.51586568382527,5.8102766798418966,30.523056653491437,,,use,usable for route aggregation and normal diagnostics,20.263505110919205,16.06982822241413
+tokyo,run1,23,296.0,0.0,20.53197351173637,9.959854250038084,9.959854250038084,,,use,usable for route aggregation and normal diagnostics,0.7164778881686894,0.7164778881686894
+tokyo,run1,24,300.0,0.0,22.96024895146559,7.519309862777643,7.519309862777643,,,use,usable for route aggregation and normal diagnostics,0.0821220757398012,0.0821220757398012
+tokyo,run1,25,295.0,0.0,12.203216421266712,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics,0.1389639561749138,0.1389639561749138
+tokyo,run1,26,297.0,0.0,11.6772051555031,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics,0.6479519485762726,0.6479519485762726
+tokyo,run1,27,257.0,0.0,21.60552609397716,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics,0.1689983813432758,0.1689983813432758
+tokyo,run1,28,168.0,0.0,9.85970705722989,5.8102766798418966,5.8102766798418966,,,use,usable for route aggregation and normal diagnostics,0.4080556935751105,0.4080556935751105
+tokyo,run1,29,240.0,3.75,8.12027213259577,5.8102766798418966,2.0602766798418966,,,use,usable for route aggregation and normal diagnostics,1.727138663133227,2.022861336866773
+tokyo,run1,30,197.0,5.583756345177665,19.80308895110359,10.930917909166492,5.347161563988827,,,use,usable for route aggregation and normal diagnostics,6.2022204553286535,0.6184641101509882
+tokyo,run1,31,300.0,0.0,21.63136087883405,32.994840800289936,32.994840800289936,,,use,usable for route aggregation and normal diagnostics,0.6427811321472144,0.6427811321472144
+tokyo,run1,32,300.0,2.333333333333333,6.729409206267295,8.176379276460843,5.8430459431275095,,,use,usable for route aggregation and normal diagnostics,1.4786319130310543,0.8547014203022787
+tokyo,run1,33,300.0,2.666666666666667,4.319359165052158,10.159122018817554,7.492455352150887,,,use,usable for route aggregation and normal diagnostics,0.8323252673707254,1.8343413992959414
+tokyo,run1,34,300.0,8.0,11.103809827068927,10.919630363550995,2.9196303635509953,,,use,usable for route aggregation and normal diagnostics,7.737436942592669,0.26256305740733143
+tokyo,run1,35,300.0,12.333333333333334,15.46021933353892,7.886110954871908,4.447222378461426,,,use,usable for route aggregation and normal diagnostics,13.292272440363634,0.9589391070303002
+tokyo,run1,36,294.0,6.122448979591836,12.258072657143147,10.220382287958616,4.0979333083667795,,,use,usable for route aggregation and normal diagnostics,7.134583033007648,1.0121340534158119
+tokyo,run1,37,300.0,7.333333333333333,10.561568969818373,9.652759288558732,2.319425955225399,,,use,usable for route aggregation and normal diagnostics,7.001848810545392,0.3314845227879406
+tokyo,run1,38,300.0,4.666666666666667,11.6593237467628,8.436235589146756,3.7695689224800892,,,use,usable for route aggregation and normal diagnostics,4.150869768072423,0.5157968985942443
+tokyo,run1,39,251.0,1.195219123505976,10.905987896309563,10.915490684941902,9.720271561435926,,,use,usable for route aggregation and normal diagnostics,0.0,1.195219123505976
+tokyo,run2,0,300.0,83.66666666666667,20.14606646457132,8.55857213298503,75.10809453368164,hidden_high,actual 83.7% but corrected only 8.6%; under-predicted by 75.1 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,71.16887826200426,12.497788404662415
+tokyo,run2,1,300.0,1.0,15.663470148691031,15.718507949243609,14.718507949243609,,,use,usable for route aggregation and normal diagnostics,1.1173219197297952,0.11732191972979522
+tokyo,run2,2,300.0,44.333333333333336,16.35526398896991,17.84495239401889,26.488380939314446,,,use,usable for route aggregation and normal diagnostics,35.809321471236494,8.524011862096842
+tokyo,run2,3,300.0,3.6666666666666665,12.421052633606225,18.05397047663928,14.387303809972613,,,use,usable for route aggregation and normal diagnostics,3.686601865921911,0.019935199255244562
+tokyo,run2,4,288.0,2.083333333333333,5.916872823131071,4.908279623202777,2.8249462898694437,,,use,usable for route aggregation and normal diagnostics,2.220619854641382,0.13728652130804875
+tokyo,run2,5,300.0,6.333333333333334,6.273538537355032,5.739926423614163,0.593406909719171,,,use,usable for route aggregation and normal diagnostics,7.758742183650725,1.4254088503173907
+tokyo,run2,6,300.0,1.6666666666666667,16.287305494392317,15.440976061208971,13.774309394542305,,,use,usable for route aggregation and normal diagnostics,1.048275613627429,0.6183910530392378
+tokyo,run2,7,300.0,0.0,63.51669281130082,47.821782743385256,47.821782743385256,false_high,corrected prediction 47.8% against actual 0.0%; deployable features misread,abstain,exclude from automated window-level action; inspect focus-case diagnostics,0.0695381944495352,0.0695381944495352
+tokyo,run2,8,300.0,0.0,23.450179243526613,17.06692184768898,17.06692184768898,,,use,usable for route aggregation and normal diagnostics,0.4670917166252037,0.4670917166252037
+tokyo,run2,9,300.0,0.0,73.72755044933733,76.61510933083021,76.61510933083021,false_high,corrected prediction 76.6% against actual 0.0%; deployable features misread,abstain,exclude from automated window-level action; inspect focus-case diagnostics,0.0695381944495352,0.0695381944495352
+tokyo,run2,10,300.0,0.0,10.07049736706373,5.818300308585596,5.818300308585596,,,use,usable for route aggregation and normal diagnostics,0.3020945959915232,0.3020945959915232
+tokyo,run2,11,298.0,2.013422818791946,6.870104693430064,4.908279623202777,2.8948568044108307,,,use,usable for route aggregation and normal diagnostics,0.3192145900021519,1.6942082287897942
+tokyo,run2,12,300.0,15.666666666666668,10.898798565354133,4.908279623202777,10.758387043463891,,,use,usable for route aggregation and normal diagnostics,19.351622321055228,3.6849556543885598
+tokyo,run2,13,300.0,52.66666666666666,17.7437689565404,7.171468669749983,45.49519799691667,,,use,usable for route aggregation and normal diagnostics,58.9408923205511,6.274225653884443
+tokyo,run2,14,300.0,87.33333333333333,85.15101219358812,82.3505102454121,4.982823087921233,,,use,usable for route aggregation and normal diagnostics,84.54823543076441,2.7850979025689213
+tokyo,run2,15,173.0,0.0,10.008819627086956,8.177602254040222,8.177602254040222,,,use,usable for route aggregation and normal diagnostics,0.0,0.0
+tokyo,run2,16,186.0,0.0,7.944346701688866,5.071160229160576,5.071160229160576,,,use,usable for route aggregation and normal diagnostics,0.3192145900021519,0.3192145900021519
+tokyo,run2,17,300.0,0.3333333333333333,11.473144884255207,7.280523431663978,6.947190098330645,,,use,usable for route aggregation and normal diagnostics,0.3192145900021519,0.014118743331181405
+tokyo,run2,18,300.0,0.0,10.233621268807646,16.003906576756542,16.003906576756542,,,use,usable for route aggregation and normal diagnostics,4.090986015809736,4.090986015809736
+tokyo,run2,19,299.0,12.709030100334449,17.839959830896234,31.344070795120484,18.635040694786035,,,use,usable for route aggregation and normal diagnostics,10.178454266948368,2.530575833386081
+tokyo,run2,20,300.0,8.333333333333332,6.195705861196916,5.0490027868876695,3.2843305464456627,,,use,usable for route aggregation and normal diagnostics,7.652048956292624,0.6812843770407078
+tokyo,run2,21,267.0,0.0,8.112156493575167,4.908279623202777,4.908279623202777,,,use,usable for route aggregation and normal diagnostics,0.4438808783249358,0.4438808783249358
+tokyo,run2,22,300.0,16.0,15.982610428197129,8.363628646101668,7.6363713538983315,,,use,usable for route aggregation and normal diagnostics,61.15355660149528,45.15355660149528
+tokyo,run2,23,298.0,100.0,16.27491839566826,18.68681604783812,81.31318395216188,hidden_high,actual 100.0% but corrected only 18.7%; under-predicted by 81.3 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,87.3823999334742,12.617600066525796
+tokyo,run2,24,300.0,100.0,13.480854543578364,18.66901867331404,81.33098132668596,hidden_high,actual 100.0% but corrected only 18.7%; under-predicted by 81.3 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,97.46712154299712,2.53287845700288
+tokyo,run2,25,300.0,100.0,15.452183260944404,49.96915573952932,50.03084426047068,hidden_high,actual 100.0% but corrected only 50.0%; under-predicted by 50.0 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,89.84684386330487,10.15315613669513
+tokyo,run2,26,300.0,96.66666666666669,13.96883580142099,54.85428472392479,41.812381942741894,hidden_high,actual 96.7% but corrected only 54.9%; under-predicted by 41.8 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,55.67730563861933,40.989361028047355
+tokyo,run2,27,300.0,75.33333333333333,23.23470030774939,47.73854553559451,27.594787797738817,,,use,usable for route aggregation and normal diagnostics,49.69400343772389,25.639329895609436
+tokyo,run2,28,300.0,33.666666666666664,13.642794330283314,6.3885000061023085,27.278166660564356,,,use,usable for route aggregation and normal diagnostics,47.38520774545753,13.718541078790864
+tokyo,run2,29,300.0,14.333333333333334,13.461950491468755,4.908279623202777,9.425053710130557,,,use,usable for route aggregation and normal diagnostics,14.372514763799732,0.03918143046639777
+tokyo,run2,30,151.0,0.0,10.19851842055929,5.722819314348833,5.722819314348833,,,use,usable for route aggregation and normal diagnostics,1.560285026473329,1.560285026473329
+tokyo,run3,0,300.0,83.33333333333334,82.36198764673311,62.8577998286451,20.475533504688244,,,use,usable for route aggregation and normal diagnostics,81.39765417539638,1.9356791579369599
+tokyo,run3,1,300.0,19.33333333333333,49.07156260019311,58.38257725826196,39.04924392492863,,,use,usable for route aggregation and normal diagnostics,84.03588830229467,64.70255496896134
+tokyo,run3,2,300.0,0.0,21.692299149850104,14.638915162392149,14.638915162392149,,,use,usable for route aggregation and normal diagnostics,0.1604896511065562,0.1604896511065562
+tokyo,run3,3,300.0,0.0,10.435082087316763,13.178286886715012,13.178286886715012,,,use,usable for route aggregation and normal diagnostics,0.1274140715581283,0.1274140715581283
+tokyo,run3,4,281.0,4.270462633451958,12.10254778835692,12.036095036861225,7.765632403409267,,,use,usable for route aggregation and normal diagnostics,5.347393640258259,1.0769310068063014
+tokyo,run3,5,300.0,1.3333333333333337,9.92067540118602,7.913168352571685,6.5798350192383515,,,use,usable for route aggregation and normal diagnostics,1.1842391755547776,0.14909415777855606
+tokyo,run3,6,300.0,8.0,15.361451819395782,14.443490914604892,6.443490914604892,,,use,usable for route aggregation and normal diagnostics,6.512064195350165,1.487935804649835
+tokyo,run3,7,300.0,87.0,5.766362737778825,3.38252203909544,83.61747796090457,hidden_high,actual 87.0% but corrected only 3.4%; under-predicted by 83.6 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,53.7441402585464,33.2558597414536
+tokyo,run3,8,300.0,84.66666666666667,16.33089492181276,13.71513426577291,70.95153240089377,hidden_high,actual 84.7% but corrected only 13.7%; under-predicted by 71.0 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,92.90741239060364,8.240745723936968
+tokyo,run3,9,300.0,0.0,11.00451949687904,10.018075928361604,10.018075928361604,,,use,usable for route aggregation and normal diagnostics,1.8364793767335716,1.8364793767335716
+tokyo,run3,10,217.0,6.451612903225806,7.596607440600231,14.292122721614566,7.84050981838876,,,use,usable for route aggregation and normal diagnostics,7.536965866797304,1.0853529635714976
+tokyo,run3,11,300.0,4.333333333333334,12.130963213839866,16.205897478208602,11.872564144875268,,,use,usable for route aggregation and normal diagnostics,4.783017997100509,0.449684663767175
+tokyo,run3,12,300.0,100.0,40.78735864476769,63.22578919935413,36.77421080064587,,,use,usable for route aggregation and normal diagnostics,53.5828922321125,46.4171077678875
+tokyo,run3,13,300.0,42.66666666666667,27.45143946244341,49.83857119270555,7.17190452603888,,,use,usable for route aggregation and normal diagnostics,77.18934379940305,34.522677132736376
+tokyo,run3,14,300.0,1.6666666666666667,12.371775324058978,11.196420234816056,9.52975356814939,,,use,usable for route aggregation and normal diagnostics,2.505486635188774,0.8388199685221072
+tokyo,run3,15,300.0,0.0,16.89692318734354,12.27084760680143,12.27084760680143,,,use,usable for route aggregation and normal diagnostics,0.0430903059059266,0.0430903059059266
+tokyo,run3,16,300.0,0.6666666666666667,17.009856849264654,10.200185175051718,9.533518508385052,,,use,usable for route aggregation and normal diagnostics,2.0710986944027474,1.4044320277360807
+tokyo,run3,17,300.0,0.0,0.0,13.851094343881917,13.851094343881917,,,use,usable for route aggregation and normal diagnostics,1.132982933901819,1.132982933901819
+tokyo,run3,18,300.0,49.66666666666666,34.75986344301044,61.51395707268329,11.847290406016633,,,use,usable for route aggregation and normal diagnostics,51.05154167108766,1.384875004421005
+tokyo,run3,19,300.0,30.333333333333336,18.772654002518017,39.28451886332543,8.951185529992095,,,use,usable for route aggregation and normal diagnostics,66.72608533652271,36.39275200318938
+tokyo,run3,20,300.0,5.666666666666666,13.52501693484512,8.528389375366837,2.861722708700171,,,use,usable for route aggregation and normal diagnostics,6.653790625559527,0.9871239588928606
+tokyo,run3,21,283.0,2.4734982332155475,11.407105345485652,8.828378001054626,6.354879767839078,,,use,usable for route aggregation and normal diagnostics,1.017052851822278,1.4564453813932696
+tokyo,run3,22,295.0,0.3389830508474576,20.09935760417693,14.843327017201824,14.504343966354366,,,use,usable for route aggregation and normal diagnostics,0.1275423502473056,0.21144070060015202
+tokyo,run3,23,295.0,0.0,13.761151253681389,12.82024930997192,12.82024930997192,,,use,usable for route aggregation and normal diagnostics,1.091093850256525,1.091093850256525
+tokyo,run3,24,300.0,43.333333333333336,21.64332166656399,14.68458522186024,28.648748111473097,,,use,usable for route aggregation and normal diagnostics,59.29249688230242,15.959163548969087
+tokyo,run3,25,299.0,18.72909698996656,15.470476898188796,14.15627149901612,4.572825490950441,,,use,usable for route aggregation and normal diagnostics,15.662637202545769,3.0664597874207917
+tokyo,run3,26,300.0,2.0,16.46319059393197,15.904604541741453,13.904604541741453,,,use,usable for route aggregation and normal diagnostics,1.262223880823084,0.7377761191769161
+tokyo,run3,27,300.0,8.666666666666668,22.42877070464833,13.170377314624254,4.503710647957586,,,use,usable for route aggregation and normal diagnostics,8.547034996723893,0.11963166994277508
+tokyo,run3,28,300.0,1.3333333333333337,32.30778311538603,61.28894079106001,59.95560745772667,false_high,corrected prediction 61.3% against actual 1.3%; deployable features misread,abstain,exclude from automated window-level action; inspect focus-case diagnostics,0.5040601133402771,0.8292732199930566
+tokyo,run3,29,300.0,37.0,20.231608076598143,15.172201604958111,21.82779839504189,,,use,usable for route aggregation and normal diagnostics,47.67840286876584,10.678402868765843
+tokyo,run3,30,300.0,0.0,18.5602639645506,12.156770644548676,12.156770644548676,,,use,usable for route aggregation and normal diagnostics,0.0,0.0
+tokyo,run3,31,298.0,0.0,11.69441635313366,7.856026772924729,7.856026772924729,,,use,usable for route aggregation and normal diagnostics,0.0435896873400289,0.0435896873400289
+tokyo,run3,32,285.0,11.578947368421051,8.331016060405362,8.664696299140441,2.91425106928061,,,use,usable for route aggregation and normal diagnostics,12.961641537697265,1.3826941692762134
+tokyo,run3,33,300.0,41.333333333333336,22.77619887663264,14.621097446398371,26.712235886934963,,,use,usable for route aggregation and normal diagnostics,50.04671963413888,8.713386300805546
+tokyo,run3,34,300.0,100.0,40.60894370216105,40.626510430648125,59.373489569351875,hidden_high,actual 100.0% but corrected only 40.6%; under-predicted by 59.4 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,87.81223849301419,12.187761506985808
+tokyo,run3,35,300.0,100.0,32.25650560130514,40.961129326898,59.038870673102,hidden_high,actual 100.0% but corrected only 41.0%; under-predicted by 59.0 pp,review,prediction likely underestimates a high-FIX window; review before window-level action,98.83430605731422,1.1656939426857775
+tokyo,run3,36,300.0,71.33333333333334,42.5712405546342,87.61179110979297,16.278457776459632,,,use,usable for route aggregation and normal diagnostics,84.37527083072177,13.041937497388432
+tokyo,run3,37,300.0,1.6666666666666667,16.418340663866392,20.0,18.333333333333332,,,use,usable for route aggregation and normal diagnostics,2.505486635188774,0.8388199685221072
+tokyo,run3,38,300.0,3.333333333333333,20.06254759724873,14.984547285608038,11.651213952274706,,,use,usable for route aggregation and normal diagnostics,0.9729742348551366,2.3603590984781966
+tokyo,run3,39,300.0,4.0,24.73131857874332,8.901350694817536,4.901350694817536,,,use,usable for route aggregation and normal diagnostics,0.5131909744581332,3.486809025541867
+tokyo,run3,40,300.0,10.333333333333334,23.464071906490265,10.164879922568668,0.16845341076466624,,,use,usable for route aggregation and normal diagnostics,10.517125533241645,0.18379219990831075
+tokyo,run3,41,300.0,4.666666666666667,22.637427334606866,14.520574900044789,9.853908233378121,,,use,usable for route aggregation and normal diagnostics,3.4406189592569043,1.2260477074097627
+tokyo,run3,42,292.0,9.58904109589041,12.571351054133912,10.178154632457325,0.5891135365669147,,,use,usable for route aggregation and normal diagnostics,8.442163038137421,1.1468780577529891
+tokyo,run3,43,293.0,1.023890784982935,9.560954160136506,8.897428610623884,7.873537825640948,,,use,usable for route aggregation and normal diagnostics,0.5040601133402771,0.519830671642658
+tokyo,run3,44,300.0,5.333333333333334,16.06013072002843,15.142996029867971,9.809662696534637,,,use,usable for route aggregation and normal diagnostics,6.546493077839959,1.2131597445066253
+tokyo,run3,45,300.0,20.666666666666668,20.09628284518496,15.737621765739082,4.929044900927586,,,use,usable for route aggregation and normal diagnostics,15.391186335472062,5.275480331194606
+tokyo,run3,46,300.0,43.0,19.813468060013427,61.51115318124815,18.511153181248147,,,use,usable for route aggregation and normal diagnostics,25.774176759753853,17.225823240246147
+tokyo,run3,47,300.0,99.33333333333331,11.523184430155982,60.5424226542835,38.790910679049816,,,use,usable for route aggregation and normal diagnostics,91.83677943404838,7.496553899284933
+tokyo,run3,48,280.0,44.285714285714285,12.490692351286382,39.16313639902055,5.122577886693733,,,use,usable for route aggregation and normal diagnostics,70.65988803353231,26.374173747818027
+tokyo,run3,49,300.0,1.3333333333333337,16.598581036749753,14.788923241110288,13.455589907776954,,,use,usable for route aggregation and normal diagnostics,1.332786050953058,0.0005472823802756821
+tokyo,run3,50,300.0,0.0,17.72380762868654,16.373918599294104,16.373918599294104,,,use,usable for route aggregation and normal diagnostics,0.0303644764641867,0.0303644764641867
