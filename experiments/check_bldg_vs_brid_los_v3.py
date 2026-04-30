@@ -34,8 +34,11 @@ from gnss_gpu.io.plateau import load_plateau
 from gnss_gpu.io.rinex import read_rinex_obs
 
 
-# Use pyproj+EGM96 if available (~0.5 m off the official GSI Geoid 2011
-# in Japan, sufficient for LoS work). Falls back to a constant if not.
+# Use pyproj+EGM96 (~0.5 m off the official GSI Geoid 2011 in Japan,
+# sufficient for LoS work).  The script will hard-fail if pyproj or
+# its EGM96 grid is missing -- this is intentional, see the loader's
+# module docstring on EPSG:6697.  If you need to run on a host
+# without pyproj, set this to a constant float (e.g. 36.7 for Tokyo).
 GEOID_CORRECTION = "egm96"
 
 WGS84_A = 6378137.0

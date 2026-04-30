@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import textwrap
+import warnings
 
 import numpy as np
 import pytest
@@ -280,6 +281,22 @@ class TestCityGMLParser:
     def test_supported_kinds_constant(self):
         assert SUPPORTED_KINDS == frozenset({"bldg", "brid"})
 
+    def test_building_alias_positional_back_compat(self):
+        """Codex review round 2, P1 #2.  Old callers wrote
+        ``Building(id, lod, polygons)``; that 3-positional signature
+        must continue to construct a building feature with the polygons
+        landing in ``polygons``, not silently shifted into ``kind``."""
+        polys = [np.zeros((4, 3), dtype=np.float64)]
+        b = Building("b1", 2, polys)  # type: ignore[arg-type]
+        assert b.id == "b1"
+        assert b.lod == 2
+        assert b.polygons is polys
+        assert b.kind == "bldg"  # default
+        # CityFeature also supports the same positional contract.
+        c = CityFeature("c1", 3, polys)  # type: ignore[arg-type]
+        assert c.id == "c1" and c.lod == 3 and c.polygons is polys
+        assert c.kind == "bldg"
+
     def test_parse_multi_member_noncanonical_prefixes(self, tmp_path):
         """Parser must handle multiple ``cityObjectMember`` entries and
         non-canonical namespace prefix names (``c:``/``b:``/``g:``
@@ -411,7 +428,9 @@ class TestCoordinateConversion:
         the ellipsoidal-to-ECEF conversion.  At 5 m TP + N=36.7 m the
         ECEF radial offset along the local up vector should equal the
         difference vs the no-correction reference, to within numerics."""
-        loader_off = PlateauLoader(zone=9)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            loader_off = PlateauLoader(zone=9, geoid_correction=None)
         loader_on = PlateauLoader(zone=9, geoid_correction=36.7)
         lat = np.radians(35.6812)
         lon = np.radians(139.7671)
@@ -444,6 +463,25 @@ class TestCoordinateConversion:
         assert seen and abs(seen[0][0] - 35.65) < 1e-9
         assert abs(seen[0][1] - 139.78) < 1e-9
 
+    def test_default_geoid_correction_is_egm96(self):
+        """The default constructor must NOT warn (= no longer the
+        legacy silent no-correction path).  Codex review round 2,
+        P1 #1: the silent path produced the original abort bug, so
+        the default is now the EGM96 lookup."""
+        try:
+            import pyproj  # noqa: F401
+        except ImportError:
+            pytest.skip("pyproj not available")
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                loader = PlateauLoader(zone=9)
+        except RuntimeError as exc:
+            pytest.skip(f"EGM96 grid unavailable: {exc}")
+        # geoid_fn is set => correction is applied.
+        assert loader._geoid_fn is not None
+        assert loader._geoid_label == "egm96"
+
     def test_geoid_correction_egm96_tokyo(self):
         """Regression: with EGM96, a PLATEAU mesh ground-level vertex
         in Tokyo Hamamatsucho (TP ~ 0 m) must end up within ~3 m of
@@ -453,12 +491,20 @@ class TestCoordinateConversion:
             import pyproj  # noqa: F401
         except ImportError:
             pytest.skip("pyproj not available")
-        loader = PlateauLoader(zone=9, geoid_correction="egm96")
+        # pyproj is present but the EGM96 grid (egm96_15.gtx) may not
+        # ship with every install -- _make_egm96_lookup raises
+        # RuntimeError in that case (Codex review round 2, P2 #4).
+        try:
+            loader = PlateauLoader(zone=9, geoid_correction="egm96")
+        except RuntimeError as exc:
+            pytest.skip(f"EGM96 grid unavailable: {exc}")
         lat = np.radians(35.65); lon = np.radians(139.78)
         ecef_ground = loader._lla_to_ecef(lat, lon, 0.0)
         # Reference rover at the same lat/lon but with ellipsoidal
         # alt = 40 m (matches reference.csv at this trajectory).
-        loader_ref = PlateauLoader(zone=9)  # no correction
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            loader_ref = PlateauLoader(zone=9, geoid_correction=None)
         ecef_rover = loader_ref._lla_to_ecef(lat, lon, 40.0)
         delta_radial = np.linalg.norm(ecef_ground) - np.linalg.norm(ecef_rover)
         # |TP_0 - rover_40| should be ~|N - 40| = ~|36.5 - 40| = ~3.5m
