@@ -75,6 +75,63 @@ class BVHAccelerator:
             rx, sat, self._nodes_flat, self._sorted_tris)
         return excess_delays, reflection_points
 
+    def check_los_batch(self, rx_ecef, sat_ecef):
+        """Batched LOS check across N epochs sharing this BVH.
+
+        One CUDA launch handles all N x n_sat rays.  Non-finite (NaN/Inf)
+        entries return False so callers can pad variable-length epochs.
+
+        Args:
+            rx_ecef: [N, 3] receiver ECEF positions in meters.
+            sat_ecef: [N, n_sat, 3] satellite ECEF positions in meters.
+                Use the same n_sat for every epoch (pad with NaN if needed).
+
+        Returns:
+            is_los: [N, n_sat] boolean array.
+        """
+        from gnss_gpu._bvh import raytrace_los_check_bvh_batch
+
+        rx = np.ascontiguousarray(np.asarray(rx_ecef, dtype=np.float64))
+        sat = np.ascontiguousarray(np.asarray(sat_ecef, dtype=np.float64))
+        if rx.ndim != 2 or rx.shape[1] != 3:
+            raise ValueError("rx_ecef must have shape (N, 3)")
+        if sat.ndim != 3 or sat.shape[2] != 3:
+            raise ValueError("sat_ecef must have shape (N, n_sat, 3)")
+        if rx.shape[0] != sat.shape[0]:
+            raise ValueError("rx_ecef and sat_ecef must share the leading N")
+
+        return raytrace_los_check_bvh_batch(
+            rx, sat, self._nodes_flat, self._sorted_tris)
+
+    def compute_multipath_batch(self, rx_ecef, sat_ecef):
+        """Batched multipath reflection across N epochs sharing this BVH.
+
+        One CUDA launch handles all N x n_sat rays.  Non-finite (NaN/Inf)
+        entries yield zero delay and zero reflection point.
+
+        Args:
+            rx_ecef: [N, 3] receiver ECEF positions in meters.
+            sat_ecef: [N, n_sat, 3] satellite ECEF positions in meters.
+
+        Returns:
+            excess_delays: [N, n_sat] excess path delay in meters.
+            reflection_points: [N, n_sat, 3] reflection point coordinates.
+        """
+        from gnss_gpu._bvh import raytrace_multipath_bvh_batch
+
+        rx = np.ascontiguousarray(np.asarray(rx_ecef, dtype=np.float64))
+        sat = np.ascontiguousarray(np.asarray(sat_ecef, dtype=np.float64))
+        if rx.ndim != 2 or rx.shape[1] != 3:
+            raise ValueError("rx_ecef must have shape (N, 3)")
+        if sat.ndim != 3 or sat.shape[2] != 3:
+            raise ValueError("sat_ecef must have shape (N, n_sat, 3)")
+        if rx.shape[0] != sat.shape[0]:
+            raise ValueError("rx_ecef and sat_ecef must share the leading N")
+
+        reflection_points, excess_delays = raytrace_multipath_bvh_batch(
+            rx, sat, self._nodes_flat, self._sorted_tris)
+        return excess_delays, reflection_points
+
     @classmethod
     def from_building_model(cls, building_model):
         """Create BVH accelerator from an existing BuildingModel.
