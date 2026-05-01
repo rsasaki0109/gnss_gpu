@@ -151,7 +151,7 @@ def _run_variant(
     label: str,
     *,
     random_state: int,
-) -> tuple[list[dict[str, object]], dict[str, object]]:
+) -> tuple[list[dict[str, object]], dict[str, object], np.ndarray]:
     LOGGER.info("variant=%s n_features=%d", label, len(feature_names))
     preds = _fit_predict_loro(df, feature_names, random_state=random_state)
     metrics = _aggregate_metrics(df, preds)
@@ -185,7 +185,7 @@ def _run_variant(
         "run_mae_pp": metrics["run_mae_pp"],
         "window_mae_pp": metrics["window_mae_pp"],
         "n_features": len(feature_names),
-    }
+    }, preds
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -193,6 +193,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-csv", type=Path, required=True)
     parser.add_argument("--output-csv", type=Path, required=True)
+    parser.add_argument(
+        "--per-window-output-csv", type=Path, default=None,
+        help=(
+            "Optional. If provided, write per-window LORO predictions for the "
+            "curated_six_only variant (D-035 adopted post-demo5 QA model). "
+            "Columns: city, run, window_index, path1_pred_fix_rate_pct."
+        ),
+    )
     parser.add_argument("--random-state", type=int, default=20260501)
     args = parser.parse_args(argv)
 
@@ -215,15 +223,15 @@ def main(argv: list[str] | None = None) -> int:
             f"unexpected: curated columns leaked into baseline features: {sorted(overlap)}"
         )
 
-    rows_b, summary_b = _run_variant(
+    rows_b, summary_b, _ = _run_variant(
         df_treat, baseline_features, "baseline_no_solver_state",
         random_state=args.random_state,
     )
-    rows_t, summary_t = _run_variant(
+    rows_t, summary_t, _ = _run_variant(
         df_treat, treatment_features, "treatment_with_curated_six",
         random_state=args.random_state,
     )
-    rows_c, summary_c = _run_variant(
+    rows_c, summary_c, preds_c = _run_variant(
         df_treat, list(CURATED_SOLVER_STATE_COLUMNS), "curated_six_only",
         random_state=args.random_state,
     )
@@ -232,6 +240,20 @@ def main(argv: list[str] | None = None) -> int:
     args.output_csv.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(args.output_csv, index=False)
     LOGGER.info("wrote: %s (%d rows)", args.output_csv, len(out))
+
+    if args.per_window_output_csv is not None:
+        per_window = pd.DataFrame({
+            "city": df_treat["city"].astype(str).to_numpy(),
+            "run": df_treat["run"].astype(str).to_numpy(),
+            "window_index": df_treat["window_index"].astype(int).to_numpy(),
+            "path1_pred_fix_rate_pct": preds_c,
+        })
+        args.per_window_output_csv.parent.mkdir(parents=True, exist_ok=True)
+        per_window.to_csv(args.per_window_output_csv, index=False)
+        LOGGER.info(
+            "wrote per-window predictions: %s (%d rows; curated_six_only variant)",
+            args.per_window_output_csv, len(per_window),
+        )
 
     print()
     print("=== summary ===")

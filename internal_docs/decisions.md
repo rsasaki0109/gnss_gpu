@@ -693,11 +693,36 @@
 - 1.66 pp run-MAE は deployed 1.79 pp を上回るが、tautology を踏まえると "別問題への新解" であって "同問題の改善" ではない。両モデルを並立させることで ambiguity を残さない。
 - §7.16 stack の elaborate transition-surrogate scaffolding (6列を target として使う) は、6列が runtime feature でないことを前提にした正当な設計。Contract change で stack の存在意義が消えるわけではない (pre-demo5 use case は依然 stack のみ対応)。
 
+## D-036: Path 1 (post-demo5 QA) を product deliverable bundle に opt-in 列として exposure
+
+状態: 採用 (deployed §7.16 stack の側に並列、`build_product_deliverable.py --path1-prediction-csv` で opt-in)
+
+根拠:
+- D-035 で path 1 を parallel model class として採用したが、product deliverable bundle (`route_level_fix_rate_prediction.csv`, `window_level_details.csv`) への露出形式は未決定だった。
+- 別ファイル (`post_demo5_qa_route.csv` 等) にすると operator が adopted と path1 を相互参照しづらくなる。同ファイルに `path1_*` 列を追加する形なら 1 行で adopted と post-demo5 QA の値を比較できる。
+- Path 1 input (`d034_path1_per_window_predictions.csv`) が無いケース (deployed flow で `wrapper.curate(df)` を回していない場合) との互換性のため、`--path1-prediction-csv` を渡したときだけ列が増える `optional column` schema にする。
+
+実装:
+- `experiments/train_ppc_solver_state_wrapper_loro.py` に `--per-window-output-csv` flag を追加。`curated_six_only` variant の per-window 予測 (197 行) を `experiments/results/d034_path1_per_window_predictions.csv` に書き出す。
+- `experiments/build_product_deliverable.py` に `--path1-prediction-csv` flag を追加。指定時のみ:
+  - `window_level_details.csv` に `path1_pred_fix_rate_pct`, `path1_abs_error_pp` を追加
+  - `route_level_fix_rate_prediction.csv` に `path1_pred_fix_rate_pct`, `path1_abs_error_pp`, `path1_lift_pp` (= `adopted_abs_error_pp - path1_abs_error_pp`、正なら path1 の方が正確), `path1_role_note` (固定文字列で role caveat) を追加
+- 既存 deployed flow (`predict.py`) は `--path1-prediction-csv` を渡さないので、列も増えない (backward compatible)。
+
+確認:
+- 6 routes 中 5 routes で path1 lift が −0.04 〜 −2.34 pp (path1 の方が adopted より少し悪い)。
+- Tokyo/run2 だけ path1 lift **+6.63 pp** (8.13 pp ceiling を 1.50 pp に圧縮)。focus windows w7/w9 (false_high)、w23-w25 (hidden_high) すべて 1-2 pp 以内に解消。
+- 全 6 routes 平均 path1 abs error: 1.66 pp (D-035 報告値と一致)。
+
+理由:
+- 同ファイル列追加は ambiguity を最小化 (operator が `lift_pp` 列を見るだけで "ここでは path1 を信用すべきか" が判定できる)。
+- `path1_role_note` 列で各 row に "post-demo5 QA tool であって pre-demo5 estimator ではない" という caveat を埋め込み、tautology を忘れさせない。
+- `--path1-prediction-csv` を opt-in にすることで、real-time / online 用途の deployed flow は contract 変更なしで運用できる。
+
 ## 現在の未決定事項
 
 - `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか
 - strategy 差分が出る epoch をどの figure で見せるか
 - `blocked score` は完全に不要か、それとも veto 付きなら使えるか
 - readability/extensibility proxy をどこまで信頼するか
-- Path 1 (post-demo5 QA model) を product deliverable bundle に exposure するか (route-level CSV / window-level CSV の追加 column or 別ファイルか)
 - Path 2 (more PPC data) / Path 3 (architectural pivot) の優先度
