@@ -275,6 +275,12 @@ _CANDIDATES_PHASE11V: list[tuple[str, str, set[tuple[str, str]] | None]] = [
     # Phase 11aw: nobdsc005p1 (no-beidou + csig005 + psig1) +2.7m nagoya/run3.
     ("nobdsc005p1", "full_ratio15_lock3_trustedseed_nobdsc005p1",
      {("nagoya", "run3")}),
+    # Phase 11ay: em5 (--elevation-mask-deg 5) +13.8m nagoya/run1, +8.0m tokyo/run2.
+    ("em5", "full_ratio15_lock3_trustedseed_em5",
+     {("nagoya", "run1"), ("tokyo", "run2")}),
+    # Phase 11ay: mlc2oG (--min-lock-count 2 + onlyG) +7.5m tokyo/run1, +1.3m tokyo/run3.
+    ("mlc2oG", "full_ratio15_lock3_trustedseed_mlc2oG",
+     {("tokyo", "run1"), ("tokyo", "run3")}),
 ]
 
 _DIAG_ROOT = Path("experiments/results/libgnss_diag_phase10")
