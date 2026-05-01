@@ -224,6 +224,48 @@ _CANDIDATES_PHASE11V: list[tuple[str, str, set[tuple[str, str]] | None]] = [
     # and tokyo/run3. Big negative -46.3m on nagoya/run1; restrict.
     ("c005ga", "full_ratio15_lock3_trustedseed_csig005_glonassar",
      {("tokyo", "run1"), ("tokyo", "run3")}),
+    # Phase 11ar: onlyG (--no-glonass --no-beidou, only G+E+J). +9.4m on
+    # tokyo/run1 and **+20.2m on nagoya/run2** (the hardest run). Negative
+    # on nagoya/run3 (-32.5m); restrict.
+    ("onlyG", "full_ratio15_lock3_trustedseed_onlyG",
+     {("tokyo", "run1"), ("nagoya", "run2")}),
+    # Phase 11as: onlyG + csig05 (combined super-variant) gives +14.3m on
+    # tokyo/run1 (additive after onlyG). Negative on nagoya/run3 (-72m).
+    ("oGc05", "full_ratio15_lock3_trustedseed_onlyG_csig05",
+     {("tokyo", "run1")}),
+    # Phase 11as: onlyG + csig005 gives +10.4m on nagoya/run2 (additive after
+    # onlyG +20.2m and csig005 +36.1m). Negative elsewhere.
+    ("oGc005", "full_ratio15_lock3_trustedseed_onlyG_csig005",
+     {("nagoya", "run2")}),
+    # Phase 11as: onlyG + psig1 gives +2.1m/+3.0m on nagoya/run1, nagoya/run3.
+    ("oGp1", "full_ratio15_lock3_trustedseed_onlyG_psig1",
+     {("nagoya", "run1"), ("nagoya", "run3")}),
+    # Phase 11at: onlyG + psig1 + holdrlx (3-knob) gives +15.4m on tokyo/run1.
+    # Negative on tokyo/run3 (-13m), nagoya/run2 (-54m), nagoya/run3 (-73m).
+    ("oGp1hr", "full_ratio15_lock3_trustedseed_onlyG_psig1_holdrlx",
+     {("tokyo", "run1")}),
+    # Phase 11at: onlyG + psig1 + csig05 (3-knob) gives +9.2m on nagoya/run3,
+    # +2.0m on nagoya/run1. Negative on tokyo/run1 (-23m).
+    ("oGp1c05", "full_ratio15_lock3_trustedseed_onlyG_psig1_csig05",
+     {("nagoya", "run3"), ("nagoya", "run1")}),
+    # Phase 11at: onlyG + r05 marginal +2.2/+3.7m on tokyo/run3, nagoya/run2.
+    ("oGr05", "full_ratio15_lock3_trustedseed_onlyG_r05",
+     {("tokyo", "run3"), ("nagoya", "run2")}),
+    # Phase 11at: onlyG + csig01 marginal +3.1m on nagoya/run1.
+    ("oGc01", "full_ratio15_lock3_trustedseed_onlyG_csig01",
+     {("nagoya", "run1")}),
+    # Phase 11at: onlyG + em10 marginal +1.5m/+1.1m on tokyo/run3, nagoya/run3.
+    ("oGem10", "full_ratio15_lock3_trustedseed_onlyG_em10",
+     {("tokyo", "run3"), ("nagoya", "run3")}),
+    # Phase 11au: onlyG + csig005 + psig1 quintuple. tokyo/run2 +37m offline (biggest), tokyo/run1 +6.6m, nagoya/run1 +1.2m.
+    ("oGc005p1", "full_ratio15_lock3_trustedseed_oGc005p1",
+     {("tokyo", "run2"), ("tokyo", "run1"), ("nagoya", "run1")}),
+    # Phase 11au: csig005 + psig1 (no onlyG). tokyo/run1 +13.9m, tokyo/run2 +15.1m, nagoya/run1 +1.5m.
+    ("c005p1", "full_ratio15_lock3_trustedseed_c005p1",
+     {("tokyo", "run1"), ("tokyo", "run2"), ("nagoya", "run1")}),
+    # Phase 11au: onlyG + csig01 + psig1. tokyo/run2 +21.4m, tokyo/run3 +3.4m.
+    ("oGc01p1", "full_ratio15_lock3_trustedseed_oGc01p1",
+     {("tokyo", "run2"), ("tokyo", "run3")}),
 ]
 
 _DIAG_ROOT = Path("experiments/results/libgnss_diag_phase10")
