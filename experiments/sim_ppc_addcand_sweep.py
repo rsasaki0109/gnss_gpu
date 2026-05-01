@@ -148,6 +148,12 @@ _VARIANTS_INDIV: list[tuple[str, list[tuple[str, str]]]] = [
     ("mlc2oG", [("mlc2oG", "full_ratio15_lock3_trustedseed_mlc2oG")]),
     ("em5", [("em5", "full_ratio15_lock3_trustedseed_em5")]),
     ("ionest", [("ionest", "full_ratio15_lock3_trustedseed_ionest")]),
+    ("em3", [("em3", "full_ratio15_lock3_trustedseed_em3")]),
+    ("em7", [("em7", "full_ratio15_lock3_trustedseed_em7")]),
+    ("em5oG", [("em5oG", "full_ratio15_lock3_trustedseed_em5oG")]),
+    ("em5c005p1", [("em5c005p1", "full_ratio15_lock3_trustedseed_em5c005p1")]),
+    ("mlc1oG", [("mlc1oG", "full_ratio15_lock3_trustedseed_mlc1oG")]),
+    ("em5mlc2oG", [("em5mlc2oG", "full_ratio15_lock3_trustedseed_em5mlc2oG")]),
 ]
 
 # Combination tests (union of multiple).
