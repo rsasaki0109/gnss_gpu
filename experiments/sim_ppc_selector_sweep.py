@@ -288,6 +288,16 @@ _CANDIDATES_PHASE11V: list[tuple[str, str, set[tuple[str, str]] | None]] = [
     # Phase 11ba: em3 (--elev-mask-deg 3) +5.4m nagoya/run1.
     ("em3", "full_ratio15_lock3_trustedseed_em3",
      {("nagoya", "run1")}),
+    # Phase 11bc: mlc1oGc005p1 (mlc1 + onlyG + csig005 + psig1) positive 5 runs.
+    # n/r3 +11m, t/r1 +4m, t/r2 +4m, n/r1 +1m, t/r3 +4m. n/r2 only loser.
+    ("mlc1oGc005p1", "full_ratio15_lock3_trustedseed_mlc1oGc005p1",
+     {("tokyo", "run1"), ("tokyo", "run2"), ("nagoya", "run1"), ("nagoya", "run3"), ("tokyo", "run3")}),
+    # Phase 11bc: em3mlc1oG (em3 + mlc1 + onlyG) n/r3 +12m, t/r3 +6m, n/r1 +1m.
+    ("em3mlc1oG", "full_ratio15_lock3_trustedseed_em3mlc1oG",
+     {("tokyo", "run3"), ("nagoya", "run3"), ("nagoya", "run1")}),
+    # Phase 11bc: mlc1oGc005 (mlc1 + onlyG + csig005) n/r2 +7m (rare positive on n/r2!), t/r2 +3m, t/r3 +5m.
+    ("mlc1oGc005", "full_ratio15_lock3_trustedseed_mlc1oGc005",
+     {("nagoya", "run2"), ("tokyo", "run2"), ("tokyo", "run3")}),
 ]
 
 _DIAG_ROOT = Path("experiments/results/libgnss_diag_phase10")
