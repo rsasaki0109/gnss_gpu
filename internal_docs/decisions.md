@@ -666,10 +666,38 @@
 - Path 1 を opt-in interface として確保することで、follow-up での research path を ready にしつつ、deployed contract と adopted artefact の両方を変更しない。
 - 既に existing 6 列が training target として材料化されているため、wrapper は新規 column 計算でなく allowlist + sanitiser に責任が限られ、medium-size PR として収まる。
 
+## D-035: Path 1 LORO 評価で ceiling 解消、ただし predictor の役割が "post-demo5 QA" にシフト
+
+状態: 採用 (parallel model class として; deployed §7.16 stack は併存)
+
+根拠:
+- `experiments/train_ppc_solver_state_wrapper_loro.py` で 197 windows / 6 routes の strict LORO を実行。3 variants (default GBR、no hyperparameter tuning):
+  - `baseline_no_solver_state` (5873 features, no rtk_*/solver_*): run-MAE 12.39 pp / window-MAE 25.07 pp
+  - `treatment_with_curated_six` (5879 features, baseline + curated 6): run-MAE **1.43 pp** / window-MAE **5.05 pp**
+  - `curated_six_only` (6 features only): run-MAE **1.66 pp** / window-MAE 4.76 pp
+  - 参考: deployed §7.16 + isotonic75 + phaseguard = run-MAE 1.79 pp / window-MAE 15.85 pp
+- Tokyo/run2 (PR #42 で accepted ceiling とした 8.13 pp 残差): treatment 3.39 pp / `curated_six_only` **1.50 pp** で ceiling lifted。
+- `curated_six_only` ≈ `treatment_with_curated_six` (差 0.23 pp)。残り 5873 features は signal 追加せず、curated 6 が dominant feature。
+- 詳細: `internal_docs/product_deliverable/D034_PATH1_LORO_RESULTS.md`。
+
+注意 (tautology):
+- curated 6 は demo5 自身の ambiguity-fix-state confidence。"demo5 confidence → demo5 success" の予測は半 tautology であり、predictor は **post-demo5 QA tool** に役割が変わる (pre-demo5 estimator としては使えない)。
+- 用途別影響: README §2 の offline-QA / route-ranking はどちらも demo5 を実行済み前提なので両立可能。real-time / online は不可。
+
+決定:
+- D-034 で ship した interface を活用する evaluation script `experiments/train_ppc_solver_state_wrapper_loro.py` + 結果 CSV `experiments/results/d034_loro_results.csv` + analysis doc `D034_PATH1_LORO_RESULTS.md` を follow-up PR (#44 想定) として ship。
+- Path 1 を **parallel model class** として位置づける: deployed §7.16 stack (pre-demo5 estimator) は retire しない。post-demo5 QA は別の deliverable として将来追加可能。
+- README §1 contract 文言は変更しない (default contract は依然 rtk_*/solver_* を runtime から除外)。新しい model class は wrapper を opt-in した派生として記録のみ。
+
+理由:
+- 1.66 pp run-MAE は deployed 1.79 pp を上回るが、tautology を踏まえると "別問題への新解" であって "同問題の改善" ではない。両モデルを並立させることで ambiguity を残さない。
+- §7.16 stack の elaborate transition-surrogate scaffolding (6列を target として使う) は、6列が runtime feature でないことを前提にした正当な設計。Contract change で stack の存在意義が消えるわけではない (pre-demo5 use case は依然 stack のみ対応)。
+
 ## 現在の未決定事項
 
 - `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか
 - strategy 差分が出る epoch をどの figure で見せるか
 - `blocked score` は完全に不要か、それとも veto 付きなら使えるか
 - readability/extensibility proxy をどこまで信頼するか
-- Solver-state wrapper を opt-in する research training script の設計 (target leakage 回避: 6列を runtime feature にした場合、`_transition_targets` から外して別 target に置換する)
+- Path 1 (post-demo5 QA model) を product deliverable bundle に exposure するか (route-level CSV / window-level CSV の追加 column or 別ファイルか)
+- Path 2 (more PPC data) / Path 3 (architectural pivot) の優先度
