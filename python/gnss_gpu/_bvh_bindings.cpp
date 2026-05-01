@@ -149,4 +149,114 @@ PYBIND11_MODULE(_bvh, m) {
   }, "BVH-accelerated multipath reflection",
      py::arg("rx_ecef"), py::arg("sat_ecef"),
      py::arg("nodes_flat"), py::arg("sorted_tris"));
+
+  // Batched LOS check: rx_ecef (N, 3), sat_ecef (N, n_sat, 3) -> (N, n_sat) bool
+  m.def("raytrace_los_check_bvh_batch", [](py::array_t<double, py::array::c_style | py::array::forcecast> rx_ecef,
+                                            py::array_t<double, py::array::c_style | py::array::forcecast> sat_ecef,
+                                            py::array_t<double, py::array::c_style | py::array::forcecast> nodes_flat,
+                                            py::array_t<double, py::array::c_style | py::array::forcecast> sorted_tris) {
+    auto brx = rx_ecef.request();
+    auto bsat = sat_ecef.request();
+    auto bnodes = nodes_flat.request();
+    auto btri = sorted_tris.request();
+
+    if (brx.ndim != 2 || brx.shape[1] != 3)
+      throw std::runtime_error("rx_ecef must have shape (N, 3)");
+    if (bsat.ndim != 3 || bsat.shape[2] != 3)
+      throw std::runtime_error("sat_ecef must have shape (N, n_sat, 3)");
+    if (brx.shape[0] != bsat.shape[0])
+      throw std::runtime_error("rx_ecef and sat_ecef must share the leading N");
+
+    int n_epoch = (int)brx.shape[0];
+    int n_sat = (int)bsat.shape[1];
+    int n_nodes = (int)bnodes.shape[0];
+
+    const double* nptr = static_cast<const double*>(bnodes.ptr);
+    std::vector<gnss_gpu::BVHNode> nodes(n_nodes);
+    for (int i = 0; i < n_nodes; i++) {
+      nodes[i].bbox.min[0] = nptr[i * 10 + 0];
+      nodes[i].bbox.min[1] = nptr[i * 10 + 1];
+      nodes[i].bbox.min[2] = nptr[i * 10 + 2];
+      nodes[i].bbox.max[0] = nptr[i * 10 + 3];
+      nodes[i].bbox.max[1] = nptr[i * 10 + 4];
+      nodes[i].bbox.max[2] = nptr[i * 10 + 5];
+      nodes[i].left = (int)nptr[i * 10 + 6];
+      nodes[i].right = (int)nptr[i * 10 + 7];
+      nodes[i].tri_start = (int)nptr[i * 10 + 8];
+      nodes[i].tri_count = (int)nptr[i * 10 + 9];
+    }
+
+    auto is_los_int = py::array_t<int>({n_epoch, n_sat});
+    int* int_ptr = is_los_int.mutable_data();
+
+    gnss_gpu::raytrace_los_check_bvh_batch(
+        static_cast<double*>(brx.ptr),
+        static_cast<double*>(bsat.ptr),
+        nodes.data(),
+        reinterpret_cast<const gnss_gpu::Triangle*>(btri.ptr),
+        int_ptr,
+        n_epoch, n_sat, n_nodes);
+
+    auto is_los = py::array_t<bool>({n_epoch, n_sat});
+    bool* bool_ptr = is_los.mutable_data();
+    int total = n_epoch * n_sat;
+    for (int i = 0; i < total; i++) bool_ptr[i] = (int_ptr[i] != 0);
+    return is_los;
+  }, "Batched BVH-accelerated LOS check across N epochs",
+     py::arg("rx_ecef"), py::arg("sat_ecef"),
+     py::arg("nodes_flat"), py::arg("sorted_tris"));
+
+  // Batched multipath: rx_ecef (N, 3), sat_ecef (N, n_sat, 3)
+  // -> (refl (N, n_sat, 3), delay (N, n_sat))
+  m.def("raytrace_multipath_bvh_batch", [](py::array_t<double, py::array::c_style | py::array::forcecast> rx_ecef,
+                                            py::array_t<double, py::array::c_style | py::array::forcecast> sat_ecef,
+                                            py::array_t<double, py::array::c_style | py::array::forcecast> nodes_flat,
+                                            py::array_t<double, py::array::c_style | py::array::forcecast> sorted_tris) {
+    auto brx = rx_ecef.request();
+    auto bsat = sat_ecef.request();
+    auto bnodes = nodes_flat.request();
+    auto btri = sorted_tris.request();
+
+    if (brx.ndim != 2 || brx.shape[1] != 3)
+      throw std::runtime_error("rx_ecef must have shape (N, 3)");
+    if (bsat.ndim != 3 || bsat.shape[2] != 3)
+      throw std::runtime_error("sat_ecef must have shape (N, n_sat, 3)");
+    if (brx.shape[0] != bsat.shape[0])
+      throw std::runtime_error("rx_ecef and sat_ecef must share the leading N");
+
+    int n_epoch = (int)brx.shape[0];
+    int n_sat = (int)bsat.shape[1];
+    int n_nodes = (int)bnodes.shape[0];
+
+    const double* nptr = static_cast<const double*>(bnodes.ptr);
+    std::vector<gnss_gpu::BVHNode> nodes(n_nodes);
+    for (int i = 0; i < n_nodes; i++) {
+      nodes[i].bbox.min[0] = nptr[i * 10 + 0];
+      nodes[i].bbox.min[1] = nptr[i * 10 + 1];
+      nodes[i].bbox.min[2] = nptr[i * 10 + 2];
+      nodes[i].bbox.max[0] = nptr[i * 10 + 3];
+      nodes[i].bbox.max[1] = nptr[i * 10 + 4];
+      nodes[i].bbox.max[2] = nptr[i * 10 + 5];
+      nodes[i].left = (int)nptr[i * 10 + 6];
+      nodes[i].right = (int)nptr[i * 10 + 7];
+      nodes[i].tri_start = (int)nptr[i * 10 + 8];
+      nodes[i].tri_count = (int)nptr[i * 10 + 9];
+    }
+
+    auto refl_arr = py::array_t<double>({n_epoch, n_sat, 3});
+    auto delay_arr = py::array_t<double>({n_epoch, n_sat});
+
+    gnss_gpu::raytrace_multipath_bvh_batch(
+        static_cast<double*>(brx.ptr),
+        static_cast<double*>(bsat.ptr),
+        nodes.data(),
+        reinterpret_cast<const gnss_gpu::Triangle*>(btri.ptr),
+        static_cast<double*>(refl_arr.mutable_data()),
+        static_cast<double*>(delay_arr.mutable_data()),
+        n_epoch, n_sat, n_nodes);
+
+    return py::make_tuple(refl_arr, delay_arr);
+  }, "Batched BVH-accelerated multipath reflection across N epochs",
+     py::arg("rx_ecef"), py::arg("sat_ecef"),
+     py::arg("nodes_flat"), py::arg("sorted_tris"));
 }

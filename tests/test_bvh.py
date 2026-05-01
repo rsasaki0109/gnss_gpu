@@ -134,5 +134,100 @@ class TestBVHConsistency:
             )
 
 
+class TestBVHBatch:
+    """Batched check_los_batch / compute_multipath_batch tests."""
+
+    def setup_method(self):
+        self.building = BuildingModel.create_box(
+            center=[100.0, 0.0, 25.0], width=20.0, depth=20.0, height=50.0
+        )
+        self.bvh = BVHAccelerator.from_building_model(self.building)
+
+    def test_check_los_batch_matches_per_epoch(self):
+        rng = np.random.RandomState(7)
+        n_epoch = 16
+        n_sat = 8
+
+        rx = rng.uniform(-50, 50, size=(n_epoch, 3))
+        sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+        for e in range(n_epoch):
+            for s in range(n_sat):
+                # half above (LOS), half behind the box (NLOS)
+                if s % 2 == 0:
+                    sat[e, s] = [0.0, 0.0, 2e7 + s]
+                else:
+                    sat[e, s] = [200.0, float(s), 25.0]
+
+        batch_los = self.bvh.check_los_batch(rx, sat)
+
+        single_los = np.zeros((n_epoch, n_sat), dtype=bool)
+        for e in range(n_epoch):
+            single_los[e] = self.bvh.check_los(rx[e], sat[e])
+
+        np.testing.assert_array_equal(batch_los, single_los)
+
+    def test_check_los_batch_handles_nan_pad(self):
+        rx = np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]], dtype=np.float64)
+        sat = np.array(
+            [
+                [[0.0, 0.0, 2e7], [200.0, 0.0, 25.0]],
+                [[0.0, 0.0, 2e7], [np.nan, np.nan, np.nan]],
+            ],
+            dtype=np.float64,
+        )
+
+        result = self.bvh.check_los_batch(rx, sat)
+        assert result[0, 0]
+        assert not result[0, 1]
+        assert result[1, 0]
+        assert not result[1, 1]
+
+    def test_compute_multipath_batch_matches_per_epoch(self):
+        # Reference is per-epoch compute_multipath called with n_sat=1 to bypass
+        # an unrelated bug in the existing per-epoch multipath kernel that
+        # broadcasts thread-0 results across threads when n_sat > 1.  The
+        # batched kernel does not have this problem (it uses unique tid per
+        # (epoch, sat) pair).
+        rng = np.random.RandomState(11)
+        n_epoch = 6
+        n_sat = 4
+
+        rx = rng.uniform(-50, 50, size=(n_epoch, 3))
+        rx[:, 2] = rng.uniform(0, 30, size=n_epoch)
+        sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+        for e in range(n_epoch):
+            for s in range(n_sat):
+                sat[e, s] = [200.0 + 10.0 * s, 5.0 * (e - 3), 25.0 + s]
+
+        delay_batch, refl_batch = self.bvh.compute_multipath_batch(rx, sat)
+
+        delay_ref = np.zeros((n_epoch, n_sat), dtype=np.float64)
+        refl_ref = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+        for e in range(n_epoch):
+            for s in range(n_sat):
+                d, r = self.bvh.compute_multipath(rx[e], sat[e, s].reshape(1, 3))
+                delay_ref[e, s] = d[0]
+                refl_ref[e, s] = r[0]
+
+        np.testing.assert_allclose(delay_batch, delay_ref, atol=1e-9)
+        np.testing.assert_allclose(refl_batch, refl_ref, atol=1e-9)
+
+    def test_check_los_batch_rejects_bad_shape(self):
+        rx = np.zeros((4, 3), dtype=np.float64)
+        bad_sat = np.zeros((4, 3), dtype=np.float64)
+        with pytest.raises(ValueError):
+            self.bvh.check_los_batch(rx, bad_sat)
+
+        rx_bad = np.zeros((4, 2), dtype=np.float64)
+        sat = np.zeros((4, 2, 3), dtype=np.float64)
+        with pytest.raises(ValueError):
+            self.bvh.check_los_batch(rx_bad, sat)
+
+        rx_short = np.zeros((3, 3), dtype=np.float64)
+        sat = np.zeros((4, 2, 3), dtype=np.float64)
+        with pytest.raises(ValueError):
+            self.bvh.check_los_batch(rx_short, sat)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
