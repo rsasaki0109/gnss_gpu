@@ -333,6 +333,15 @@ _CANDIDATES_PHASE11V: list[tuple[str, str, set[tuple[str, str]] | None]] = [
     # Phase 11bl: rtkout7 marginal +4.2m nagoya/run1.
     ("rtkout7", "full_ratio15_lock3_trustedseed_rtkout7",
      {("nagoya", "run1")}),
+    # Phase 11bm: rtkout1 (--rtk-update-outlier-threshold 1) HUGE on t/r1 (+175.5m, +1.70pp).
+    ("rtkout1", "full_ratio15_lock3_trustedseed_rtkout1",
+     {("tokyo", "run1"), ("tokyo", "run3")}),
+    # Phase 11bm: rtkout5c005 +15.0m nagoya/run2.
+    ("rtkout5c005", "full_ratio15_lock3_trustedseed_rtkout5c005",
+     {("nagoya", "run2")}),
+    # Phase 11bm: rtkout5em3 +13.1m t/r2, +4.2m n/r1.
+    ("rtkout5em3", "full_ratio15_lock3_trustedseed_rtkout5em3",
+     {("tokyo", "run2"), ("nagoya", "run1")}),
 ]
 
 _DIAG_ROOT = Path("experiments/results/libgnss_diag_phase10")
