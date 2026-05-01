@@ -314,6 +314,7 @@ One row per `(city, run)` with columns:
   excluded from automated window-level actions
 - `route_action` — `ok`, `review`, or `review_required`
 - `route_action_note` — reason for the action label
+- `path1_pred_fix_rate_pct`, `path1_abs_error_pp`, `path1_lift_pp`, `path1_role_note` — *only present when `--path1-prediction-csv` was passed to `build_product_deliverable.py`.* These expose the D-035 path 1 post-demo5 QA model's prediction alongside the adopted prediction. `path1_lift_pp` = `adopted_abs_error_pp − path1_abs_error_pp`; positive means path 1 is more accurate for that route. **Caveat**: the path 1 model uses `solver_demo5_*` / `rtk_lock_*` features, so it is only valid as a post-demo5 QA tool, not a pre-demo5 estimator. Generate the per-window predictions with `experiments/train_ppc_solver_state_wrapper_loro.py --per-window-output-csv ...`.
 
 ### 4.2 Confidence tiers
 
@@ -347,6 +348,22 @@ The `window_action` column is the product-facing screen:
 - `review`: prediction likely underestimates a high-FIX window.
 - `abstain`: exclude from automated window-level action and inspect the
   focus-case note.
+
+`path1_pred_fix_rate_pct` and `path1_abs_error_pp` columns are only present when `--path1-prediction-csv` was passed to `build_product_deliverable.py`. See §4.1 for the role caveat.
+
+To regenerate the deliverable bundle with path 1 columns:
+
+```bash
+python3 experiments/train_ppc_solver_state_wrapper_loro.py \
+  --input-csv experiments/results/ppc_window_..._validationhold_current_tight_hold_carry_window_predictions.csv \
+  --output-csv experiments/results/d034_loro_results.csv \
+  --per-window-output-csv experiments/results/d034_path1_per_window_predictions.csv
+
+python3 experiments/build_product_deliverable.py \
+  --path1-prediction-csv experiments/results/d034_path1_per_window_predictions.csv
+```
+
+The default deployed flow (`predict.py`) does not pass `--path1-prediction-csv`, so the bundled CSVs ship without `path1_*` columns unless an operator opts in.
 
 ### 4.4 Inference route/window prediction files
 
