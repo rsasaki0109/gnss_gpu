@@ -503,6 +503,8 @@ Three out-of-scope paths to lift this ceiling:
 3. **Architectural pivot**: model demo5 success directly (e.g. as
    a sequence-level latent variable) rather than predicting the
    FIX rate from per-window stats.  Multi-week research.
+   Design sketch with model-class candidates, POC plan, and
+   kill criteria: `D034_PATH3_SKETCH.md`.
 
 The product deliverable at run-MAE 1.79 pp (with tokyo/run2
 flagged `route_action="review_required"`) is the best result we
