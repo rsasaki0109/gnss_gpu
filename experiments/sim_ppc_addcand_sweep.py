@@ -204,6 +204,14 @@ _VARIANTS_INDIV: list[tuple[str, list[tuple[str, str]]]] = [
     ("rtkout1c005oG", [("rtkout1c005oG", "full_ratio15_lock3_trustedseed_rtkout1c005oG")]),
     ("rtkout10minobs3", [("rtkout10minobs3", "full_ratio15_lock3_trustedseed_rtkout10minobs3")]),
     ("rtkout5oGc005", [("rtkout5oGc005", "full_ratio15_lock3_trustedseed_rtkout5oGc005")]),
+    ("rtkout1c005em3", [("rtkout1c005em3", "full_ratio15_lock3_trustedseed_rtkout1c005em3")]),
+    ("rtkout1oGc005em3", [("rtkout1oGc005em3", "full_ratio15_lock3_trustedseed_rtkout1oGc005em3")]),
+    ("rtkout3c005oG", [("rtkout3c005oG", "full_ratio15_lock3_trustedseed_rtkout3c005oG")]),
+    ("rtkout3c005em3", [("rtkout3c005em3", "full_ratio15_lock3_trustedseed_rtkout3c005em3")]),
+    ("rtkout5c005em3", [("rtkout5c005em3", "full_ratio15_lock3_trustedseed_rtkout5c005em3")]),
+    ("rtkout1minobs4", [("rtkout1minobs4", "full_ratio15_lock3_trustedseed_rtkout1minobs4")]),
+    ("rtkout1minobs6", [("rtkout1minobs6", "full_ratio15_lock3_trustedseed_rtkout1minobs6")]),
+    ("rtkout3oGem3", [("rtkout3oGem3", "full_ratio15_lock3_trustedseed_rtkout3oGem3")]),
 ]
 
 # Combination tests (union of multiple).
