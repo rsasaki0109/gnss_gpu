@@ -298,6 +298,18 @@ _CANDIDATES_PHASE11V: list[tuple[str, str, set[tuple[str, str]] | None]] = [
     # Phase 11bc: mlc1oGc005 (mlc1 + onlyG + csig005) n/r2 +7m (rare positive on n/r2!), t/r2 +3m, t/r3 +5m.
     ("mlc1oGc005", "full_ratio15_lock3_trustedseed_mlc1oGc005",
      {("nagoya", "run2"), ("tokyo", "run2"), ("tokyo", "run3")}),
+    # Phase 11be: mlc1c005p1 (mlc1 + csig005 + psig1, no onlyG) +5m n/r1, +4m n/r3.
+    ("mlc1c005p1", "full_ratio15_lock3_trustedseed_mlc1c005p1",
+     {("nagoya", "run1"), ("nagoya", "run3"), ("nagoya", "run2")}),
+    # Phase 11be: mlc1oGc005em3 (mlc1 + onlyG + csig005 + em3) n/r2 +5m exclusive winner.
+    ("mlc1oGc005em3", "full_ratio15_lock3_trustedseed_mlc1oGc005em3",
+     {("nagoya", "run2"), ("tokyo", "run3"), ("tokyo", "run1")}),
+    # Phase 11be: mlc1oGc005r12 (mlc1 + onlyG + csig005 + ratio 1.2) t/r3 +5m, t/r1 +1m.
+    ("mlc1oGc005r12", "full_ratio15_lock3_trustedseed_mlc1oGc005r12",
+     {("tokyo", "run3"), ("tokyo", "run1")}),
+    # Phase 11be: mlc1nobds (mlc1 + no-beidou) t/r1 +5m.
+    ("mlc1nobds", "full_ratio15_lock3_trustedseed_mlc1nobds",
+     {("tokyo", "run1")}),
 ]
 
 _DIAG_ROOT = Path("experiments/results/libgnss_diag_phase10")
