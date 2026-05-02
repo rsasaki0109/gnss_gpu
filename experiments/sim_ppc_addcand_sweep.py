@@ -212,6 +212,13 @@ _VARIANTS_INDIV: list[tuple[str, list[tuple[str, str]]]] = [
     ("rtkout1minobs4", [("rtkout1minobs4", "full_ratio15_lock3_trustedseed_rtkout1minobs4")]),
     ("rtkout1minobs6", [("rtkout1minobs6", "full_ratio15_lock3_trustedseed_rtkout1minobs6")]),
     ("rtkout3oGem3", [("rtkout3oGem3", "full_ratio15_lock3_trustedseed_rtkout3oGem3")]),
+    ("rtkout1mlc1", [("rtkout1mlc1", "full_ratio15_lock3_trustedseed_rtkout1mlc1")]),
+    ("rtkout3mlc1", [("rtkout3mlc1", "full_ratio15_lock3_trustedseed_rtkout3mlc1")]),
+    ("rtkout5mlc1", [("rtkout5mlc1", "full_ratio15_lock3_trustedseed_rtkout5mlc1")]),
+    ("rtkout3mlc1oG", [("rtkout3mlc1oG", "full_ratio15_lock3_trustedseed_rtkout3mlc1oG")]),
+    ("rtkout3mlc1c005", [("rtkout3mlc1c005", "full_ratio15_lock3_trustedseed_rtkout3mlc1c005")]),
+    ("rtkout1mlc1c005", [("rtkout1mlc1c005", "full_ratio15_lock3_trustedseed_rtkout1mlc1c005")]),
+    ("rtkout5mlc1c005oG", [("rtkout5mlc1c005oG", "full_ratio15_lock3_trustedseed_rtkout5mlc1c005oG")]),
 ]
 
 # Combination tests (union of multiple).
