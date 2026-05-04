@@ -88,6 +88,8 @@ class BridgeResult:
     max_sats: int
     fgo_iters: int
     failed_chunks: int
+    vd_seed_guard_skipped_segments: int
+    vd_seed_guard_skipped_epochs: int
     selected_mse_pr: float
     baseline_mse_pr: float
     raw_wls_mse_pr: float
@@ -97,6 +99,7 @@ class BridgeResult:
     metrics_kaggle: dict | None
     metrics_raw_wls: dict | None
     metrics_fgo: dict | None
+    vd_seed_guard_records: list[dict[str, object]] | None = None
     chunk_selection_records: list[dict[str, object]] | None = None
     parity_audit: dict | None = None
     factor_dt_max_s: float = FACTOR_DT_MAX_S
@@ -169,6 +172,12 @@ class BridgeResult:
         )
 
     def metrics_payload(self) -> dict:
+        vd_guard_records = self.vd_seed_guard_records or []
+        vd_guard_reason_counts: dict[str, int] = {}
+        for record in vd_guard_records:
+            reason = str(record.get("reject_reason", ""))
+            if reason:
+                vd_guard_reason_counts[reason] = vd_guard_reason_counts.get(reason, 0) + 1
         payload = {
             "trip": self.trip,
             "signal_type": self.signal_type,
@@ -179,6 +188,10 @@ class BridgeResult:
             "n_clock": int(max(self.raw_wls.shape[1] - 3, 1)),
             "fgo_iters": int(self.fgo_iters),
             "failed_chunks": int(self.failed_chunks),
+            "vd_seed_guard_skipped_segments": int(self.vd_seed_guard_skipped_segments),
+            "vd_seed_guard_skipped_epochs": int(self.vd_seed_guard_skipped_epochs),
+            "vd_seed_guard_records": vd_guard_records,
+            "vd_seed_guard_reject_reasons": vd_guard_reason_counts,
             "mse_pr": float(self.selected_mse_pr),
             "selected_mse_pr": float(self.selected_mse_pr),
             "baseline_mse_pr": float(self.baseline_mse_pr),
@@ -252,6 +265,21 @@ class BridgeResult:
         ]
         if self.failed_chunks > 0:
             lines.append(f"  failed chunks: {self.failed_chunks} (raw WLS fallback)")
+        if self.vd_seed_guard_skipped_segments > 0 or self.vd_seed_guard_skipped_epochs > 0:
+            reason_counts: dict[str, int] = {}
+            for record in self.vd_seed_guard_records or []:
+                reason = str(record.get("reject_reason", ""))
+                if reason:
+                    reason_counts[reason] = reason_counts.get(reason, 0) + 1
+            reason_text = ""
+            if reason_counts:
+                reason_text = " reasons=" + ",".join(
+                    f"{reason}:{count}" for reason, count in sorted(reason_counts.items())
+                )
+            lines.append(
+                f"  vd guard    : skipped_segments={self.vd_seed_guard_skipped_segments} "
+                f"skipped_epochs={self.vd_seed_guard_skipped_epochs}{reason_text} (raw-backed fgo)"
+            )
         if self.factor_dt_gap_count > 0:
             lines.append(
                 f"  factor gaps : skipped={self.factor_dt_gap_count} "

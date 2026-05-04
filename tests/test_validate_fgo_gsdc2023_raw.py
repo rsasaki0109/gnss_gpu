@@ -1040,6 +1040,153 @@ def test_build_trip_arrays_keeps_l1_l5_as_dual_frequency_slots(tmp_path):
     assert np.isclose(dual.pseudorange[0, 1], single.pseudorange[0, 0] + 25.0)
 
 
+def test_build_trip_arrays_internal_state_snapshot_from_raw_csv(tmp_path):
+    trip = tmp_path / "dataset_2023" / "train" / "course" / "phone"
+    trip.mkdir(parents=True)
+
+    base_xyz = np.array([-3947460.0, 3431490.0, 3637870.0], dtype=np.float64)
+    rows = []
+    for epoch_idx, utc_ms in enumerate((1000, 2000)):
+        rows.extend(
+            [
+                {
+                    "utcTimeMillis": utc_ms,
+                    "Svid": 7,
+                    "ConstellationType": 1,
+                    "SignalType": "GPS_L1_CA",
+                    "RawPseudorangeMeters": 21_000_000.0 + 10.0 * epoch_idx,
+                    "IonosphericDelayMeters": 1.0,
+                    "TroposphericDelayMeters": 2.0,
+                    "SvClockBiasMeters": 3.0 + epoch_idx,
+                    "SvPositionXEcefMeters": 20_000_000.0 + 100.0 * epoch_idx,
+                    "SvPositionYEcefMeters": 10_000_000.0,
+                    "SvPositionZEcefMeters": 21_000_000.0,
+                    "SvElevationDegrees": 30.0 + 15.0 * epoch_idx,
+                    "Cn0DbHz": 35.0,
+                    "WlsPositionXEcefMeters": base_xyz[0] + epoch_idx,
+                    "WlsPositionYEcefMeters": base_xyz[1],
+                    "WlsPositionZEcefMeters": base_xyz[2],
+                    "BiasUncertaintyNanos": 10.0,
+                    "HardwareClockDiscontinuityCount": 2.0,
+                    "ChipsetElapsedRealtimeNanos": 100.0 + 100.0 * epoch_idx,
+                    "FullBiasNanos": -1000 + 2 * epoch_idx,
+                    "BiasNanos": 0.0,
+                    "DriftNanosPerSecond": 1.0 + epoch_idx,
+                    "State": 1 | 8,
+                    "MultipathIndicator": 0,
+                    "PseudorangeRateMetersPerSecond": 1.0,
+                    "PseudorangeRateUncertaintyMetersPerSecond": 0.5,
+                    "AccumulatedDeltaRangeState": 1,
+                    "AccumulatedDeltaRangeMeters": 10.0 + epoch_idx,
+                    "AccumulatedDeltaRangeUncertaintyMeters": 0.2,
+                    "SvVelocityXEcefMetersPerSecond": 1.0,
+                    "SvVelocityYEcefMetersPerSecond": 2.0,
+                    "SvVelocityZEcefMetersPerSecond": 3.0,
+                    "SvClockDriftMetersPerSecond": -0.01,
+                },
+                {
+                    "utcTimeMillis": utc_ms,
+                    "Svid": 7,
+                    "ConstellationType": 1,
+                    "SignalType": "GPS_L5_Q",
+                    "RawPseudorangeMeters": 22_000_000.0 + 20.0 * epoch_idx,
+                    "IonosphericDelayMeters": 2.0,
+                    "TroposphericDelayMeters": 3.0,
+                    "SvClockBiasMeters": 100.0 + epoch_idx,
+                    "SvPositionXEcefMeters": 20_500_000.0 + 100.0 * epoch_idx,
+                    "SvPositionYEcefMeters": 10_500_000.0,
+                    "SvPositionZEcefMeters": 21_500_000.0,
+                    "SvElevationDegrees": 60.0 - 50.0 * epoch_idx,
+                    "Cn0DbHz": 45.0,
+                    "WlsPositionXEcefMeters": base_xyz[0] + epoch_idx,
+                    "WlsPositionYEcefMeters": base_xyz[1],
+                    "WlsPositionZEcefMeters": base_xyz[2],
+                    "BiasUncertaintyNanos": 10.0,
+                    "HardwareClockDiscontinuityCount": 2.0,
+                    "ChipsetElapsedRealtimeNanos": 100.0 + 100.0 * epoch_idx,
+                    "FullBiasNanos": -1000 + 2 * epoch_idx,
+                    "BiasNanos": 0.0,
+                    "DriftNanosPerSecond": 1.0 + epoch_idx,
+                    "State": 1 | 8,
+                    "MultipathIndicator": 0,
+                    "PseudorangeRateMetersPerSecond": 1.0,
+                    "PseudorangeRateUncertaintyMetersPerSecond": 0.25,
+                    "AccumulatedDeltaRangeState": 1,
+                    "AccumulatedDeltaRangeMeters": 20.0 + epoch_idx,
+                    "AccumulatedDeltaRangeUncertaintyMeters": 0.1,
+                    "SvVelocityXEcefMetersPerSecond": 4.0,
+                    "SvVelocityYEcefMetersPerSecond": 5.0,
+                    "SvVelocityZEcefMetersPerSecond": 6.0,
+                    "SvClockDriftMetersPerSecond": -0.02,
+                },
+            ],
+        )
+    _write_zipped_csv(trip / "device_gnss.csv", rows, list(rows[0].keys()))
+
+    batch = _build_trip_arrays(
+        trip,
+        max_epochs=10,
+        start_epoch=0,
+        constellation_type=1,
+        signal_type="GPS_L1_CA",
+        weight_mode="sin2el",
+        dual_frequency=True,
+        use_tdcp=True,
+        tdcp_geometry_correction=False,
+        tdcp_weight_scale=1.0,
+    )
+
+    assert batch.slot_keys == ((1, 7, "GPS_L1_CA"), (1, 7, "GPS_L5_Q"))
+    assert batch.n_sat_slots == 2
+    assert batch.n_clock == raw_bridge.MATLAB_SIGNAL_CLOCK_DIM
+    assert batch.has_truth is False
+    np.testing.assert_allclose(batch.times_ms, [1000.0, 2000.0])
+    np.testing.assert_allclose(
+        batch.kaggle_wls,
+        [base_xyz, base_xyz + np.array([1.0, 0.0, 0.0], dtype=np.float64)],
+    )
+    np.testing.assert_allclose(
+        batch.pseudorange,
+        [[21_000_000.0, 22_000_095.0], [21_000_011.0, 22_000_116.0]],
+    )
+    np.testing.assert_allclose(
+        batch.weights,
+        [[0.25, 0.75], [0.5, np.sin(np.deg2rad(10.0)) ** 2]],
+    )
+    np.testing.assert_allclose(batch.pseudorange_bias_weights, np.ones((2, 2), dtype=np.float64))
+    np.testing.assert_array_equal(batch.sys_kind, [[0, 4], [0, 4]])
+    np.testing.assert_allclose(
+        batch.sat_ecef,
+        [
+            [[20_000_000.0, 10_000_000.0, 21_000_000.0], [20_000_000.0, 10_000_000.0, 21_000_000.0]],
+            [[20_000_100.0, 10_000_000.0, 21_000_000.0], [20_000_100.0, 10_000_000.0, 21_000_000.0]],
+        ],
+    )
+    np.testing.assert_allclose(
+        batch.sat_vel,
+        [
+            [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]],
+            [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]],
+        ],
+    )
+    np.testing.assert_allclose(batch.sat_clock_drift_mps, [[-0.01, -0.01], [-0.01, -0.01]])
+    np.testing.assert_allclose(batch.doppler, [[-1.0, -1.0], [-1.0, -1.0]])
+    np.testing.assert_allclose(batch.doppler_weights, [[4.0, 16.0], [4.0, 16.0]])
+    np.testing.assert_allclose(batch.dt, [1.0, 0.0])
+    np.testing.assert_allclose(batch.elapsed_ns, [100.0, 200.0])
+    np.testing.assert_array_equal(batch.clock_jump, [False, False])
+    np.testing.assert_allclose(batch.clock_bias_m, [0.0, 2.0e-9 * raw_bridge.LIGHT_SPEED_MPS])
+    np.testing.assert_allclose(
+        batch.clock_drift_mps,
+        [-1.0e-9 * raw_bridge.LIGHT_SPEED_MPS, -2.0e-9 * raw_bridge.LIGHT_SPEED_MPS],
+    )
+    assert batch.tdcp_meas is not None
+    assert batch.tdcp_weights is not None
+    np.testing.assert_allclose(batch.tdcp_meas, [[1.0, 1.0]])
+    np.testing.assert_allclose(batch.tdcp_weights, [[12.5, 50.0]])
+    assert batch.tdcp_consistency_mask_count == 0
+
+
 def test_build_trip_arrays_multi_gnss_dual_frequency_uses_matlab_signal_clock_kinds(tmp_path):
     trip = tmp_path / "dataset_2023" / "train" / "course" / "phone"
     trip.mkdir(parents=True)
@@ -2910,6 +3057,95 @@ def test_run_fgo_chunked_masks_imu_prior_across_factor_dt_gap(monkeypatch):
     np.testing.assert_allclose(captured["imu_delta_v"][0], preint.delta_v_body[0])
 
 
+def test_run_fgo_chunked_skips_vd_segment_when_seed_tdcp_residual_is_bad(monkeypatch):
+    true_pos = np.array([1.0e6, 2.0e6, 3.0e6], dtype=np.float64)
+    sat = np.array(
+        [
+            [2.1e7, 0.0, 0.0],
+            [0.0, 2.2e7, 0.0],
+            [0.0, 0.0, 2.3e7],
+            [1.8e7, 1.8e7, 1.8e7],
+        ],
+        dtype=np.float64,
+    )
+    n_epoch, n_sat = 6, 4
+    sat_ecef = np.tile(sat.reshape(1, n_sat, 3), (n_epoch, 1, 1))
+    pseudorange = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pseudorange[t, s] = raw_bridge._geometric_range_with_sagnac(sat[s], true_pos)
+    weights = np.ones((n_epoch, n_sat), dtype=np.float64)
+    raw_wls = np.zeros((n_epoch, 4), dtype=np.float64)
+    raw_wls[:, :3] = true_pos
+    batch = raw_bridge.TripArrays(
+        times_ms=np.arange(n_epoch, dtype=np.float64) * 1000.0,
+        sat_ecef=sat_ecef,
+        pseudorange=pseudorange,
+        weights=weights,
+        kaggle_wls=raw_wls[:, :3],
+        truth=np.full((n_epoch, 3), np.nan, dtype=np.float64),
+        max_sats=n_sat,
+        has_truth=False,
+        sys_kind=np.zeros((n_epoch, n_sat), dtype=np.int32),
+        n_clock=1,
+        dt=np.ones(n_epoch, dtype=np.float64),
+        tdcp_meas=np.full((n_epoch - 1, n_sat), 100.0, dtype=np.float64),
+        tdcp_weights=np.ones((n_epoch - 1, n_sat), dtype=np.float64),
+    )
+
+    def fake_fgo_gnss_lm_vd(*_args, **_kwargs):
+        raise AssertionError("VD solver should be skipped when seed TDCP residual is catastrophic")
+
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm_vd", fake_fgo_gnss_lm_vd)
+
+    (
+        _auto_state,
+        fgo_state,
+        iters,
+        failed_chunks,
+        skipped_segments,
+        skipped_epochs,
+        guard_records,
+        _sources,
+        _counts,
+        _records,
+    ) = raw_bridge.run_fgo_chunked(
+        batch,
+        raw_wls,
+        clock_jump=None,
+        clock_drift_seed_mps=None,
+        clock_use_average_drift=False,
+        tdcp_use_drift=False,
+        stop_mask=None,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.0,
+        stop_position_sigma_m=0.0,
+        apply_imu_prior=False,
+        imu_position_sigma_m=0.0,
+        imu_velocity_sigma_mps=0.0,
+        fgo_iters=1,
+        tol=1e-7,
+        chunk_epochs=0,
+        use_vd=True,
+    )
+
+    assert iters == 0
+    assert failed_chunks == 0
+    assert skipped_segments == 1
+    assert skipped_epochs == n_epoch
+    assert guard_records[0]["reject_reason"] == "tdcp"
+    assert guard_records[0]["tdcp_count"] == (n_epoch - 1) * n_sat
+    np.testing.assert_allclose(fgo_state[:, :3], raw_wls[:, :3], atol=1e-6)
+
+
+def test_vd_seed_factor_guard_phone_policy_is_pixel6pro_only() -> None:
+    assert raw_bridge._vd_seed_factor_guard_enabled_for_phone("pixel6pro")
+    assert raw_bridge._vd_seed_factor_guard_enabled_for_phone("Pixel6Pro")
+    assert not raw_bridge._vd_seed_factor_guard_enabled_for_phone("pixel5")
+    assert not raw_bridge._vd_seed_factor_guard_enabled_for_phone("sm-a205u")
+
+
 def test_solver_stop_mask_filters_fast_epochs():
     origin_xyz = np.asarray(lla_to_ecef(np.deg2rad(35.0), np.deg2rad(139.0), 10.0), dtype=np.float64)
     enu = np.array(
@@ -3186,6 +3422,8 @@ def test_export_bridge_outputs(tmp_path):
         max_sats=7,
         fgo_iters=3,
         failed_chunks=0,
+        vd_seed_guard_skipped_segments=2,
+        vd_seed_guard_skipped_epochs=10,
         selected_mse_pr=12.5,
         baseline_mse_pr=10.0,
         raw_wls_mse_pr=11.0,
@@ -3209,6 +3447,8 @@ def test_export_bridge_outputs(tmp_path):
     assert "GroundTruthLongitudeDegrees" in pos.columns
     assert meta["trip"] == "train/course/phone"
     assert meta["fgo_iters"] == 3
+    assert meta["vd_seed_guard_skipped_segments"] == 2
+    assert meta["vd_seed_guard_skipped_epochs"] == 10
     assert meta["fgo_score_m"] == 1.1
     assert meta["selected_score_m"] == 1.1
     assert meta["baseline_mse_pr"] == 10.0
@@ -3234,6 +3474,8 @@ def test_export_bridge_outputs_without_ground_truth(tmp_path):
         max_sats=7,
         fgo_iters=2,
         failed_chunks=1,
+        vd_seed_guard_skipped_segments=0,
+        vd_seed_guard_skipped_epochs=0,
         selected_mse_pr=5.0,
         baseline_mse_pr=4.0,
         raw_wls_mse_pr=5.0,
@@ -3401,7 +3643,7 @@ def test_build_trip_arrays_multi_gnss_with_tdcp(tmp_path):
     assert batch.tdcp_meas is not None
     assert batch.tdcp_weights is not None
     np.testing.assert_allclose(batch.doppler[0, :4], np.array([0.60, 0.50, 0.40, 0.30]))
-    np.testing.assert_allclose(batch.sat_vel[0, 2], np.array([500.0, -60.0, 90.0]))
+    np.testing.assert_allclose(batch.sat_vel[0, 2], np.array([500.0, -59.99, 89.985]))
     np.testing.assert_allclose(batch.tdcp_meas[0, :3], np.array([0.6, 0.5, 0.4]), atol=1e-9)
     assert batch.tdcp_meas[0, 3] == 0.0
     assert np.all(batch.tdcp_weights[0, :3] > 0.0)
@@ -4024,6 +4266,150 @@ def test_select_gated_chunk_source_rejects_fgo_without_enough_quality_gain():
                 baseline_gap_p95_m=15.378,
                 baseline_gap_max_m=47.870,
                 quality_score=0.930,
+            ),
+        },
+    )
+
+    assert _select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+
+
+def test_select_gated_chunk_source_rejects_fgo_raw_proxy_rescue_after_leaderboard_ab():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=100,
+        auto_source="baseline",
+        candidates={
+            "baseline": ChunkCandidateQuality(
+                mse_pr=171.589931,
+                step_mean_m=13.0,
+                step_p95_m=26.107,
+                accel_mean_m=6.0,
+                accel_p95_m=67.88,
+                bridge_jump_m=0.0,
+                baseline_gap_mean_m=0.0,
+                baseline_gap_p95_m=0.0,
+                baseline_gap_max_m=0.0,
+                quality_score=1.0,
+            ),
+            "raw_wls": ChunkCandidateQuality(
+                mse_pr=88.045268,
+                step_mean_m=12.0,
+                step_p95_m=25.702,
+                accel_mean_m=8.0,
+                accel_p95_m=40.178,
+                bridge_jump_m=0.0,
+                baseline_gap_mean_m=40.0,
+                baseline_gap_p95_m=65.857,
+                baseline_gap_max_m=79.603,
+                quality_score=1.006701,
+            ),
+            "fgo": ChunkCandidateQuality(
+                mse_pr=97.455792,
+                step_mean_m=6.0,
+                step_p95_m=11.722,
+                accel_mean_m=2.0,
+                accel_p95_m=2.385,
+                bridge_jump_m=0.0,
+                baseline_gap_mean_m=35.0,
+                baseline_gap_p95_m=58.992,
+                baseline_gap_max_m=76.461,
+                quality_score=0.763786,
+            ),
+        },
+    )
+
+    assert _select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+
+
+def test_select_gated_chunk_source_rejects_fgo_raw_proxy_rescue_when_raw_quality_is_high():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=100,
+        auto_source="fgo",
+        candidates={
+            "baseline": ChunkCandidateQuality(
+                mse_pr=27.762511,
+                step_mean_m=6.0,
+                step_p95_m=15.49,
+                accel_mean_m=5.0,
+                accel_p95_m=13.884,
+                bridge_jump_m=0.0,
+                baseline_gap_mean_m=0.0,
+                baseline_gap_p95_m=0.0,
+                baseline_gap_max_m=0.0,
+                quality_score=1.0,
+            ),
+            "raw_wls": ChunkCandidateQuality(
+                mse_pr=19.873411,
+                step_mean_m=13.0,
+                step_p95_m=28.952,
+                accel_mean_m=20.0,
+                accel_p95_m=43.63,
+                bridge_jump_m=0.0,
+                baseline_gap_mean_m=12.0,
+                baseline_gap_p95_m=23.05,
+                baseline_gap_max_m=33.753,
+                quality_score=1.256626,
+            ),
+            "fgo": ChunkCandidateQuality(
+                mse_pr=24.489565,
+                step_mean_m=8.0,
+                step_p95_m=15.378,
+                accel_mean_m=6.0,
+                accel_p95_m=11.251,
+                bridge_jump_m=0.0,
+                baseline_gap_mean_m=7.0,
+                baseline_gap_p95_m=12.122,
+                baseline_gap_max_m=15.486,
+                quality_score=0.779428,
+            ),
+        },
+    )
+
+    assert _select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+
+
+def test_select_gated_chunk_source_rejects_fgo_raw_proxy_rescue_with_large_gap_spike():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=100,
+        auto_source="baseline",
+        candidates={
+            "baseline": ChunkCandidateQuality(
+                mse_pr=243.223799,
+                step_mean_m=12.0,
+                step_p95_m=31.477,
+                accel_mean_m=5.0,
+                accel_p95_m=14.0,
+                bridge_jump_m=0.0,
+                baseline_gap_mean_m=0.0,
+                baseline_gap_p95_m=0.0,
+                baseline_gap_max_m=0.0,
+                quality_score=1.0,
+            ),
+            "raw_wls": ChunkCandidateQuality(
+                mse_pr=111.356758,
+                step_mean_m=15.0,
+                step_p95_m=37.299,
+                accel_mean_m=20.0,
+                accel_p95_m=50.0,
+                bridge_jump_m=0.0,
+                baseline_gap_mean_m=55.0,
+                baseline_gap_p95_m=68.356,
+                baseline_gap_max_m=292.349,
+                quality_score=0.999273,
+            ),
+            "fgo": ChunkCandidateQuality(
+                mse_pr=131.893445,
+                step_mean_m=6.0,
+                step_p95_m=11.083,
+                accel_mean_m=2.0,
+                accel_p95_m=4.0,
+                bridge_jump_m=0.0,
+                baseline_gap_mean_m=45.0,
+                baseline_gap_p95_m=52.324,
+                baseline_gap_max_m=276.771,
+                quality_score=0.610123,
             ),
         },
     )
