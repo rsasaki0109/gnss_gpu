@@ -314,6 +314,9 @@ def build_bridge_residual_frame(
     max_epochs: int = 0,
     multi_gnss: bool = False,
     dual_frequency: bool = True,
+    apply_observation_mask: bool = True,
+    include_inactive_observations: bool = False,
+    inactive_key_filter: set[tuple[object, ...]] | None = None,
 ) -> pd.DataFrame:
     start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
 
@@ -321,7 +324,7 @@ def build_bridge_residual_frame(
         *,
         batch_start_epoch: int,
         batch_max_epochs: int,
-        apply_observation_mask: bool = True,
+        apply_observation_mask: bool = apply_observation_mask,
     ):
         return _build_trip_arrays(
             trip_dir,
@@ -468,6 +471,61 @@ def build_bridge_residual_frame(
                 p_frame.loc[finite_common, "bridge_pre_residual"].to_numpy(dtype=np.float64)
                 - p_frame.loc[finite_common, "bridge_common_bias"].to_numpy(dtype=np.float64)
             )
+        if include_inactive_observations:
+            active_keys = set(p_frame[_KEY_COLUMNS].itertuples(index=False, name=None))
+            common_bias_lookup = {
+                (int(row["epoch_index"]), int(row["_bias_group"])): float(row["bridge_common_bias"])
+                for _idx, row in p_frame.iterrows()
+                if np.isfinite(float(row["bridge_common_bias"]))
+            }
+            inactive_records: list[dict[str, object]] = []
+            for epoch_idx in range(batch.weights.shape[0]):
+                rx = np.asarray(batch.kaggle_wls[epoch_idx], dtype=np.float64)
+                all_idx = np.arange(len(slot_keys), dtype=np.int64)
+                ranges = _geometric_range_with_sagnac(batch.sat_ecef[epoch_idx], rx)
+                valid = (
+                    np.isfinite(ranges)
+                    & (ranges > 1.0e6)
+                    & np.isfinite(batch.pseudorange[epoch_idx])
+                    & np.isfinite(batch.sat_ecef[epoch_idx]).all(axis=1)
+                    & np.isfinite(rx).all()
+                )
+                for slot_idx in all_idx[valid]:
+                    constellation, svid, _signal_type = slot_keys[int(slot_idx)]
+                    key = (
+                        "P",
+                        str(slot_freq[int(slot_idx)]),
+                        int(epoch_idx) + 1 + int(start_epoch),
+                        int(round(float(times_ms[int(epoch_idx)]))),
+                        _constellation_to_matlab_sys(int(constellation)),
+                        int(svid),
+                    )
+                    if key in active_keys:
+                        continue
+                    if inactive_key_filter is not None and key not in inactive_key_filter:
+                        continue
+                    group_id = int(pseudorange_bias_groups[int(slot_idx)])
+                    common_bias = common_bias_lookup.get((int(key[2]), group_id))
+                    if common_bias is None:
+                        continue
+                    pre_value = float(batch.pseudorange[epoch_idx, slot_idx] - ranges[int(slot_idx)])
+                    inactive_records.append(
+                        {
+                            "field": key[0],
+                            "freq": key[1],
+                            "epoch_index": key[2],
+                            "utcTimeMillis": key[3],
+                            "sys": key[4],
+                            "svid": key[5],
+                            "bridge_residual": pre_value - common_bias,
+                            "bridge_pre_residual": pre_value,
+                            "bridge_common_bias": common_bias,
+                            "bridge_observation": float(batch.pseudorange[epoch_idx, slot_idx]),
+                            "bridge_model": float(ranges[int(slot_idx)]),
+                        },
+                    )
+            if inactive_records:
+                p_frame = pd.concat([p_frame, pd.DataFrame(inactive_records)], ignore_index=True)
         rows.extend(p_frame.drop(columns=["_clock_bias", "_bias_group"], errors="ignore").to_dict("records"))
 
     if batch.sat_vel is not None and batch.doppler is not None and batch.doppler_weights is not None:
@@ -495,12 +553,12 @@ def build_bridge_residual_frame(
                 geom_rate[finite_clock_drift] -= sat_clock_drift[finite_clock_drift]
         valid = (
             valid_range
-            & (batch.doppler_weights > 0.0)
             & np.isfinite(batch.doppler)
             & np.isfinite(geom_rate)
         )
         for epoch_idx in range(batch.doppler_weights.shape[0]):
-            idx = np.flatnonzero(valid[epoch_idx])
+            active = valid[epoch_idx] & (batch.doppler_weights[epoch_idx] > 0.0)
+            idx = np.flatnonzero(active)
             if idx.size == 0:
                 continue
             # _build_trip_arrays stores Doppler in the native VD solver convention
@@ -539,6 +597,47 @@ def build_bridge_residual_frame(
                         model=float(model_value),
                         epoch_offset=start_epoch,
                     )
+            if include_inactive_observations:
+                inactive_idx = np.flatnonzero(valid[epoch_idx] & ~active)
+                if inactive_idx.size:
+                    inactive_observation = -batch.doppler[epoch_idx, inactive_idx]
+                    inactive_model = geom_rate[epoch_idx, inactive_idx]
+                    inactive_pre = inactive_observation - inactive_model
+                    inactive_residual = inactive_pre - drift
+                    for slot_idx, value, pre_value, obs_value, model_value in zip(
+                        inactive_idx,
+                        inactive_residual,
+                        inactive_pre,
+                        inactive_observation,
+                        inactive_model,
+                    ):
+                        if np.isfinite(value):
+                            constellation, svid, _signal_type = slot_keys[int(slot_idx)]
+                            key = (
+                                "D",
+                                str(slot_freq[int(slot_idx)]),
+                                int(epoch_idx) + 1 + int(start_epoch),
+                                int(round(float(times_ms[int(epoch_idx)]))),
+                                _constellation_to_matlab_sys(int(constellation)),
+                                int(svid),
+                            )
+                            if inactive_key_filter is not None and key not in inactive_key_filter:
+                                continue
+                            _append_bridge_residual_rows(
+                                rows,
+                                field="D",
+                                freq=str(slot_freq[int(slot_idx)]),
+                                times_ms=times_ms,
+                                slot_keys=slot_keys,
+                                epoch_idx=epoch_idx,
+                                slot_idx=int(slot_idx),
+                                residual=float(value),
+                                pre_residual=float(pre_value),
+                                common_bias=drift,
+                                observation=float(obs_value),
+                                model=float(model_value),
+                                epoch_offset=start_epoch,
+                            )
 
     component_frame = _bridge_component_frame(
         trip_dir,
@@ -595,13 +694,25 @@ def compare_residual_values(
     diagnostics_path: Path | None = None,
     max_epochs: int = 0,
     multi_gnss: bool = False,
+    apply_observation_mask: bool = True,
+    include_inactive_observations: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]:
     if diagnostics_path is None:
         diagnostics_path = trip_dir / "phone_data_residual_diagnostics.csv"
     matlab = _matlab_residual_frame(diagnostics_path)
     start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
     matlab = _trim_epoch_window(matlab, start_epoch, bridge_max_epochs)
-    bridge = build_bridge_residual_frame(trip_dir, max_epochs=max_epochs, multi_gnss=multi_gnss)
+    inactive_key_filter = (
+        set(matlab[_KEY_COLUMNS].itertuples(index=False, name=None)) if include_inactive_observations else None
+    )
+    bridge = build_bridge_residual_frame(
+        trip_dir,
+        max_epochs=max_epochs,
+        multi_gnss=multi_gnss,
+        apply_observation_mask=apply_observation_mask,
+        include_inactive_observations=include_inactive_observations,
+        inactive_key_filter=inactive_key_filter,
+    )
     merged = _merge_residual_value_frames(matlab, bridge)
     summary, payload = _summary_frame(merged)
     payload.update(
@@ -610,6 +721,8 @@ def compare_residual_values(
             "diagnostics_path": str(diagnostics_path),
             "max_epochs": int(max_epochs),
             "multi_gnss": bool(multi_gnss),
+            "apply_observation_mask": bool(apply_observation_mask),
+            "include_inactive_observations": bool(include_inactive_observations),
         },
     )
     return merged, summary, payload
@@ -621,6 +734,8 @@ def main() -> None:
     parser.add_argument("--diagnostics", type=Path, default=None)
     _add_max_epochs_arg(parser)
     _add_multi_gnss_arg(parser)
+    parser.add_argument("--observation-mask", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--include-inactive-observations", action=argparse.BooleanOptionalAction, default=False)
     _add_output_dir_arg(parser)
     args = parser.parse_args()
 
@@ -632,6 +747,8 @@ def main() -> None:
         diagnostics_path=args.diagnostics,
         max_epochs=_nonnegative_max_epochs(args),
         multi_gnss=args.multi_gnss,
+        apply_observation_mask=bool(args.observation_mask),
+        include_inactive_observations=bool(args.include_inactive_observations),
     )
     merged.to_csv(out_dir / "residual_value_join.csv", index=False)
     merged[merged["side"] == "matlab_only"].to_csv(out_dir / "matlab_only.csv", index=False)

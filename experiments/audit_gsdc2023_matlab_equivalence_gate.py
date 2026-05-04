@@ -167,6 +167,8 @@ def _residual_gate(
     *,
     max_epochs: int,
     multi_gnss: bool,
+    apply_observation_mask: bool,
+    include_inactive_observations: bool,
     max_abs_delta_threshold_m: float,
     p95_abs_delta_threshold_m: float | None,
     verbose: bool = False,
@@ -177,6 +179,8 @@ def _residual_gate(
         trips,
         max_epochs=max_epochs,
         multi_gnss=multi_gnss,
+        apply_observation_mask=apply_observation_mask,
+        include_inactive_observations=include_inactive_observations,
         max_abs_delta_threshold_m=max_abs_delta_threshold_m,
         p95_abs_delta_threshold_m=p95_abs_delta_threshold_m,
         verbose=verbose,
@@ -202,6 +206,8 @@ def _residual_gate(
         "overall_p95_abs_delta_max": payload.get("overall_p95_abs_delta_max"),
         "max_abs_delta_threshold_m": float(max_abs_delta_threshold_m),
         "p95_abs_delta_threshold_m": p95_abs_delta_threshold_m,
+        "apply_observation_mask": bool(apply_observation_mask),
+        "include_inactive_observations": bool(include_inactive_observations),
         "worst_trip": payload.get("worst_trip"),
         "worst_field": payload.get("worst_field"),
     }
@@ -259,6 +265,8 @@ def run_equivalence_gate(
     count_max_epochs: int,
     factor_multi_gnss: bool,
     residual_multi_gnss: bool,
+    residual_observation_mask: bool,
+    residual_include_inactive_observations: bool,
     count_multi_gnss: bool,
     asset_datasets: Sequence[str],
     quick_assets: bool,
@@ -303,6 +311,8 @@ def run_equivalence_gate(
         trips,
         max_epochs=max_epochs,
         multi_gnss=residual_multi_gnss,
+        apply_observation_mask=residual_observation_mask,
+        include_inactive_observations=residual_include_inactive_observations,
         max_abs_delta_threshold_m=max_abs_delta_threshold_m,
         p95_abs_delta_threshold_m=p95_abs_delta_threshold_m,
         verbose=verbose,
@@ -337,6 +347,8 @@ def run_equivalence_gate(
         "count_max_epochs": int(count_max_epochs),
         "factor_multi_gnss": bool(factor_multi_gnss),
         "residual_multi_gnss": bool(residual_multi_gnss),
+        "residual_observation_mask": bool(residual_observation_mask),
+        "residual_include_inactive_observations": bool(residual_include_inactive_observations),
         "count_multi_gnss": bool(count_multi_gnss),
         "asset_datasets": list(asset_datasets),
         "quick_assets": bool(quick_assets),
@@ -370,6 +382,18 @@ def main() -> None:
         default=False,
         help="residual-value scope; default false because current MATLAB residual exports are GPS-only",
     )
+    parser.add_argument(
+        "--residual-observation-mask",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="keep factor-observation mask while estimating residual common biases",
+    )
+    parser.add_argument(
+        "--residual-include-inactive-observations",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="include pre-mask diagnostics rows using common biases from active factors",
+    )
     parser.add_argument("--asset-datasets", nargs="*", default=["train"])
     parser.add_argument("--quick-assets", action="store_true", help="skip expensive IMU sync parsing in asset gate")
     parser.add_argument("--strict-ref-height", action="store_true", help="require ref_hight.mat/ref_height.mat coverage")
@@ -391,6 +415,8 @@ def main() -> None:
         count_max_epochs=max(int(args.count_max_epochs), 0),
         factor_multi_gnss=bool(args.multi_gnss),
         residual_multi_gnss=bool(args.residual_multi_gnss),
+        residual_observation_mask=bool(args.residual_observation_mask),
+        residual_include_inactive_observations=bool(args.residual_include_inactive_observations),
         count_multi_gnss=bool(args.multi_gnss),
         asset_datasets=tuple(args.asset_datasets),
         quick_assets=bool(args.quick_assets),

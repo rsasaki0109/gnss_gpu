@@ -11,7 +11,16 @@ from experiments.audit_gsdc2023_residual_value_parity import (
 
 
 def test_residual_value_parity_audit_summarizes_trips_and_thresholds(tmp_path: Path) -> None:
-    def fake_compare(trip_dir: Path, *, max_epochs: int, multi_gnss: bool):
+    def fake_compare(
+        trip_dir: Path,
+        *,
+        max_epochs: int,
+        multi_gnss: bool,
+        apply_observation_mask: bool,
+        include_inactive_observations: bool,
+    ):
+        assert apply_observation_mask is False
+        assert include_inactive_observations is True
         trip = trip_dir.name
         delta = 2.5e-5 if trip == "phone-a" else -7.0e-5
         merged = pd.DataFrame(
@@ -60,6 +69,8 @@ def test_residual_value_parity_audit_summarizes_trips_and_thresholds(tmp_path: P
         ["train/course/phone-a", "train/course/phone-b"],
         max_epochs=100,
         multi_gnss=True,
+        apply_observation_mask=False,
+        include_inactive_observations=True,
         max_abs_delta_threshold_m=1.0e-4,
         p95_abs_delta_threshold_m=8.0e-5,
         verbose=True,
@@ -77,7 +88,14 @@ def test_residual_value_parity_audit_summarizes_trips_and_thresholds(tmp_path: P
 
 
 def test_residual_value_parity_audit_fails_when_threshold_exceeded(tmp_path: Path) -> None:
-    def fake_compare(_trip_dir: Path, *, max_epochs: int, multi_gnss: bool):
+    def fake_compare(
+        _trip_dir: Path,
+        *,
+        max_epochs: int,
+        multi_gnss: bool,
+        apply_observation_mask: bool,
+        include_inactive_observations: bool,
+    ):
         merged = pd.DataFrame(
             [
                 {

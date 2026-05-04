@@ -28,7 +28,7 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   --verbose
 ```
 
-結果: `passed=false`, `equivalence_claim=not_proven`
+旧結果: `passed=false`, `equivalence_claim=not_proven`
 
 - assets: pass (`base_correction_ready=156`, `ground_truth_present=156`)
 - factor_mask: pass (`overall_min_symmetric_parity=1.0`, side-only 0)
@@ -55,6 +55,32 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_side_only.py \
 - golden の `phone_data_residual_diagnostics.csv` は 11 ファイルすべて `sys=1` のみ。`audit_gsdc2023_matlab_equivalence_gate.py` の residual default は GPS-only に修正。
 - よって residual 完全等価の残差は「matched 行の数値誤差」ではなく、residual diagnostics の対象 scope と GPS svid=32 の観測マスク/有効性差分。
 
+2026-05-05 追加修正:
+
+- `experiments/audit_gsdc2023_residual_mask_drop.py` を追加し、mask ありで MATLAB-only になった residual 行が mask なしで回復するか分類。
+- 代表 trip の `svid=32` は `total_masked_matlab_only=206` 全件が `recovered_without_observation_mask`。
+- mask reason は `elevation_below_bridge_threshold`。該当 raw 行の elevation は約 `3.1-4.4 deg` で、bridge の `OBS_MASK_MIN_ELEVATION_DEG=10` より低い。
+- ただし単純に residual bridge を mask なしにすると P common bias 推定まで低仰角行を含み、`common_bias_delta ~= 0.292 m` が出る。
+- MATLAB residual diagnostics は「active factor で推定した common bias」と「pre-mask diagnostics row」を同時に出しているため、bridge も active factor の common bias を保持しつつ、MATLAB diagnostics key に存在する inactive 行だけを追加するように修正。
+
+修正後の代表 trip gate:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py \
+  --quick-assets \
+  --max-epochs 200 \
+  --count-max-epochs 0 \
+  --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 \
+  --output-dir experiments/results/matlab_equivalence_gate_probe_20260505 \
+  --verbose
+```
+
+結果: `passed=true`, `equivalence_claim=matlab_equivalent`
+
+- residual default: GPS-only, observation mask on, inactive diagnostics rows included from MATLAB keys only
+- residual side-only: `total_matlab_only=0`, `total_bridge_only=0`
+- residual max delta: `3.56732272732696e-05 m` (`1e-4 m` threshold 内)
+
 12 trip / `--max-epochs 200` probe:
 
 - assets: pass
@@ -68,9 +94,9 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_side_only.py \
 次にやること:
 
 1. MATLAB golden export を補完: missing `phone_data_residual_diagnostics.csv` for `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl`
-2. residual gate の default scope を MATLAB export と同じ GPS-only にするか、export 側が multi-GNSS なら golden を作り直して scope を固定
-3. GPS-only で残る MATLAB-only `svid=32` を、raw bridge の observation mask / finite pre residual / sat product availability のどこで落としているか特定
-4. side-only が実装差なら raw bridge / observation mask / residual diagnostics export を修正
+2. 12 trip gate を新 residual semantics で再実行し、missing golden 以外の residual side-only/value delta が残るか確認
+3. `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl` の missing golden を補完するか、gate の default set から明示的に除外する判断をする
+4. full-window / all exported residual diagnostics へ広げる前に、runtime と output size を見積もる
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 

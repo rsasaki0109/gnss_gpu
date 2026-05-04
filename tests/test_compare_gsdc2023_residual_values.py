@@ -36,3 +36,19 @@ def test_build_bridge_residual_frame_keeps_observation_mask_for_context_batch(mo
         residual_values.build_bridge_residual_frame(Path("trip"), max_epochs=2, multi_gnss=True)
 
     assert len(calls) == 2
+
+
+def test_build_bridge_residual_frame_allows_disabling_observation_mask(monkeypatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_build_trip_arrays(_trip_dir: Path, **kwargs: object) -> object:
+        calls.append(dict(kwargs))
+        raise RuntimeError("mask flag checked")
+
+    monkeypatch.setattr(residual_values, "_settings_epoch_window_for_trip", lambda _trip_dir, _max_epochs: (0, 2))
+    monkeypatch.setattr(residual_values, "_build_trip_arrays", fake_build_trip_arrays)
+
+    with pytest.raises(RuntimeError, match="mask flag checked"):
+        residual_values.build_bridge_residual_frame(Path("trip"), max_epochs=2, apply_observation_mask=False)
+
+    assert calls[0]["apply_observation_mask"] is False

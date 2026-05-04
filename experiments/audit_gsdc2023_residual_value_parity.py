@@ -112,6 +112,8 @@ def residual_value_parity_audit(
     *,
     max_epochs: int,
     multi_gnss: bool,
+    apply_observation_mask: bool = True,
+    include_inactive_observations: bool = False,
     max_abs_delta_threshold_m: float = 1.0e-4,
     p95_abs_delta_threshold_m: float | None = None,
     compare_fn: CompareFn = compare_residual_values,
@@ -129,6 +131,8 @@ def residual_value_parity_audit(
                 trip_dir,
                 max_epochs=max_epochs,
                 multi_gnss=multi_gnss,
+                apply_observation_mask=apply_observation_mask,
+                include_inactive_observations=include_inactive_observations,
             )
         except Exception as exc:  # pragma: no cover - exercised through CLI behavior.
             errors.append({"trip": trip, "error": f"{type(exc).__name__}: {exc}"})
@@ -161,6 +165,8 @@ def residual_value_parity_audit(
         "errors": errors,
         "max_epochs": int(max_epochs),
         "multi_gnss": bool(multi_gnss),
+        "apply_observation_mask": bool(apply_observation_mask),
+        "include_inactive_observations": bool(include_inactive_observations),
         "max_abs_delta_threshold_m": float(max_abs_delta_threshold_m),
         "p95_abs_delta_threshold_m": (
             None if p95_abs_delta_threshold_m is None else float(p95_abs_delta_threshold_m)
@@ -190,6 +196,8 @@ def main() -> None:
     )
     _add_max_epochs_arg(parser, help_text="0 uses each trip's full settings window")
     _add_multi_gnss_arg(parser, default=True)
+    parser.add_argument("--observation-mask", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--include-inactive-observations", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--max-abs-delta-threshold-m", type=float, default=1.0e-4)
     parser.add_argument("--p95-abs-delta-threshold-m", type=float, default=None)
     parser.add_argument("--verbose", action="store_true", help="print trip progress to stderr")
@@ -203,6 +211,8 @@ def main() -> None:
         trips,
         max_epochs=_nonnegative_max_epochs(args),
         multi_gnss=bool(args.multi_gnss),
+        apply_observation_mask=bool(args.observation_mask),
+        include_inactive_observations=bool(args.include_inactive_observations),
         max_abs_delta_threshold_m=float(args.max_abs_delta_threshold_m),
         p95_abs_delta_threshold_m=args.p95_abs_delta_threshold_m,
         verbose=bool(args.verbose),

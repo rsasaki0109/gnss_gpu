@@ -93,6 +93,8 @@ def test_residual_gate_reports_worst_delta(tmp_path: Path) -> None:
         *,
         max_epochs: int,
         multi_gnss: bool,
+        apply_observation_mask: bool,
+        include_inactive_observations: bool,
         max_abs_delta_threshold_m: float,
         p95_abs_delta_threshold_m: float | None,
         verbose: bool,
@@ -100,6 +102,8 @@ def test_residual_gate_reports_worst_delta(tmp_path: Path) -> None:
         assert list(trips) == ["train/course/phone"]
         assert max_epochs == 25
         assert multi_gnss is True
+        assert apply_observation_mask is True
+        assert include_inactive_observations is True
         assert max_abs_delta_threshold_m == 1.0e-4
         assert p95_abs_delta_threshold_m is None
         assert verbose is False
@@ -120,6 +124,8 @@ def test_residual_gate_reports_worst_delta(tmp_path: Path) -> None:
         ["train/course/phone"],
         max_epochs=25,
         multi_gnss=True,
+        apply_observation_mask=True,
+        include_inactive_observations=True,
         max_abs_delta_threshold_m=1.0e-4,
         p95_abs_delta_threshold_m=None,
         residual_audit_fn=fake_residual,
@@ -157,6 +163,8 @@ def test_residual_gate_fails_on_side_only_rows_even_when_deltas_pass(tmp_path: P
         ["train/course/phone"],
         max_epochs=0,
         multi_gnss=True,
+        apply_observation_mask=True,
+        include_inactive_observations=True,
         max_abs_delta_threshold_m=1.0e-4,
         p95_abs_delta_threshold_m=None,
         residual_audit_fn=fake_residual,
