@@ -79,6 +79,111 @@ def _galileo_priority(nav: NavMessage, obs_code: str | None) -> int:
     return 0
 
 
+def _nav_kepler_broadcast_valid(nav: NavMessage | None) -> bool:
+    """True if NavMessage has usable GPS/Galileo/QZSS/BeiDou-style Kepler elements."""
+    if nav is None:
+        return False
+    if nav.system in {"R", "S"}:
+        return False
+    sa = float(nav.sqrt_a)
+    if not math.isfinite(sa) or sa <= 0.0:
+        return False
+    e = float(nav.e)
+    if not math.isfinite(e) or not (0.0 <= e < 1.0):
+        return False
+    return True
+
+
+# GLONASS broadcast orbit integration — constants aligned with RTKLIB ``ephemeris.c`` ref [2].
+GLO_RE = 6378136.0
+GLO_MU = 3.9860044e14
+GLO_J2 = 1.0826257e-3
+GLO_OMGE = 7.292115e-5
+GLO_EPHEMERIS_TSTEP = 60.0
+
+
+def _nav_glonass_broadcast_valid(nav: NavMessage | None) -> bool:
+    if nav is None or nav.system != "R":
+        return False
+    r = math.sqrt(nav.glo_px_m ** 2 + nav.glo_py_m ** 2 + nav.glo_pz_m ** 2)
+    if not math.isfinite(r) or r < 1.5e7 or r > 5.0e7:
+        return False
+    return True
+
+
+def _nav_broadcast_usable(nav: NavMessage | None) -> bool:
+    """Kepler broadcast or GLONASS state-vector broadcast."""
+    return _nav_glonass_broadcast_valid(nav) or _nav_kepler_broadcast_valid(nav)
+
+
+def _deq_glo(x: np.ndarray, acc: np.ndarray) -> np.ndarray:
+    """GLONASS orbit differential equations (PZ-90 / RTKLIB ``deq``)."""
+    xdot = np.zeros(6, dtype=np.float64)
+    r2 = float(np.dot(x[:3], x[:3]))
+    if r2 <= 0.0:
+        return xdot
+    r3 = r2 * math.sqrt(r2)
+    omg2 = GLO_OMGE * GLO_OMGE
+    a = 1.5 * GLO_J2 * GLO_MU * (GLO_RE ** 2) / r2 / r3
+    b = 5.0 * x[2] * x[2] / r2
+    c = -GLO_MU / r3 - a * (1.0 - b)
+    xdot[0] = x[3]
+    xdot[1] = x[4]
+    xdot[2] = x[5]
+    xdot[3] = (c + omg2) * x[0] + 2.0 * GLO_OMGE * x[4] + acc[0]
+    xdot[4] = (c + omg2) * x[1] - 2.0 * GLO_OMGE * x[3] + acc[1]
+    xdot[5] = (c - 2.0 * a) * x[2] + acc[2]
+    return xdot
+
+
+def _glorbit_rk4(t: float, x: np.ndarray, acc: np.ndarray) -> None:
+    """One RK4 GLONASS orbit step in-place (RTKLIB ``glorbit``)."""
+    k1 = _deq_glo(x, acc)
+    w = x + k1 * (t / 2.0)
+    k2 = _deq_glo(w, acc)
+    w = x + k2 * (t / 2.0)
+    k3 = _deq_glo(w, acc)
+    w = x + k3 * t
+    k4 = _deq_glo(w, acc)
+    x += (k1 + 2.0 * k2 + 2.0 * k3 + k4) * (t / 6.0)
+
+
+def _glonass_position_clock(nav: NavMessage, gps_time: float) -> tuple[np.ndarray, float]:
+    """Broadcast GLONASS ECEF position [m] and clock correction [s] at ``gps_time``."""
+    t = float(gps_time) - float(nav.toe)
+    if t > GPS_WEEK_SEC / 2.0:
+        t -= GPS_WEEK_SEC
+    if t < -GPS_WEEK_SEC / 2.0:
+        t += GPS_WEEK_SEC
+
+    clk = -float(nav.glo_tau_n) + float(nav.glo_gamma_n) * t
+
+    x = np.array(
+        [
+            nav.glo_px_m,
+            nav.glo_py_m,
+            nav.glo_pz_m,
+            nav.glo_vx_m_s,
+            nav.glo_vy_m_s,
+            nav.glo_vz_m_s,
+        ],
+        dtype=np.float64,
+    )
+    acc = np.array(
+        [nav.glo_ax_m_s2, nav.glo_ay_m_s2, nav.glo_az_m_s2],
+        dtype=np.float64,
+    )
+
+    tt = -GLO_EPHEMERIS_TSTEP if t < 0.0 else GLO_EPHEMERIS_TSTEP
+    while abs(t) > 1e-9:
+        if abs(t) < GLO_EPHEMERIS_TSTEP:
+            tt = t
+        _glorbit_rk4(tt, x, acc)
+        t -= tt
+
+    return x[:3].copy(), clk
+
+
 def _group_delay(nav: NavMessage, obs_code: str | None) -> float:
     if nav.system != "E":
         return nav.tgd
@@ -213,9 +318,7 @@ class Ephemeris:
         params_bytes = b""
         for prn in prn_list:
             nav = self.select_ephemeris(prn, gps_time)
-            if nav is not None:
-                if nav.system != "G":
-                    raise ValueError("GPU ephemeris path only supports GPS")
+            if nav is not None and nav.system == "G" and _nav_kepler_broadcast_valid(nav):
                 params_bytes += _nav_to_params_bytes(nav)
                 used_prns.append(prn)
 
@@ -314,7 +417,10 @@ class Ephemeris:
         for gps_time in gps_times:
             navs = [self.select_ephemeris(prn, float(gps_time)) for prn in prn_list]
             selected_navs_per_epoch.append(navs)
-            common_mask &= np.array([nav is not None for nav in navs], dtype=bool)
+            common_mask &= np.array(
+                [_nav_broadcast_usable(nav) for nav in navs],
+                dtype=bool,
+            )
 
         used_prns = [prn for prn, keep in zip(prn_list, common_mask) if keep]
         if not used_prns:
@@ -390,6 +496,13 @@ class Ephemeris:
         apply_group_delay: bool = True,
     ) -> tuple[np.ndarray, float]:
         """Compute single satellite position on CPU."""
+        if _nav_glonass_broadcast_valid(nav):
+            return _glonass_position_clock(nav, gps_time)
+        if not _nav_kepler_broadcast_valid(nav):
+            raise ValueError(
+                "invalid or unsupported broadcast ephemeris "
+                f"(system={nav.system!r}, sqrt_a={nav.sqrt_a!r}, e={nav.e!r})"
+            )
         mu, omega_e, rel_f = _constellation_constants(nav.system)
         a = nav.sqrt_a ** 2
         n0 = math.sqrt(mu / (a ** 3))
@@ -470,7 +583,7 @@ class Ephemeris:
         for i, prn in enumerate(prn_list):
             obs_code = None if obs_codes is None else obs_codes[i]
             nav = self.select_ephemeris(prn, gps_time, obs_code)
-            if nav is None:
+            if not _nav_broadcast_usable(nav):
                 continue
             pos, clk = self._compute_single_cpu(nav, gps_time, obs_code)
             positions.append(pos)
