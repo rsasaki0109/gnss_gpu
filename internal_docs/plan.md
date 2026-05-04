@@ -110,12 +110,26 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 - CI for PR #55 / latest commit `b3bc70c` has non-CUDA checks passing, but `build-cuda` is blocked by repeated Ubuntu apt mirror failures. A workflow retry/fallback patch cannot be pushed with the current OAuth token because it lacks `workflow` scope.
 - Local focused tests: `19 passed in 47.01s`
 
+2026-05-05 submit readiness への接続:
+
+- `build_gsdc2023_pre_submit_manifest.py --matlab-equivalence-summary .../summary.json` で `pre_submit_manifest.json` に MATLAB equivalence gate の要約と SHA256 を記録。
+- `submit_gsdc2023_pixel5_candidate_queue.py --require-matlab-equivalence` で P6P0 submit/check-ready 時に以下を必須化:
+  - `passed=true`, `equivalence_claim=matlab_equivalent`
+  - factor mask / raw bridge counts / residual values がすべて pass
+  - residual side-only が `0/0`
+  - residual max delta が threshold 内
+- 実データ確認:
+  - command: `--prepare-ready-report ... --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_probe_20260505/gsdc2023_matlab_equivalence_gate_20260505_154054/summary.json --require-matlab-equivalence --skip-missing`
+  - result: `prepared: 3 candidate(s)`
+  - manifest: `equivalence_claim=matlab_equivalent`, `trip_count=12`, residual side-only `0/0`, max delta `5.91054445631678e-05 m`
+- Local focused tests: `23 passed in 1.55s`
+
 次にやること:
 
-1. latest PR CI の `build-cuda` を再実行し、apt mirror 起因の赤を解消できるか確認
+1. latest PR CI の `build-cuda` 完了を確認
 2. workflow 側の apt retry/fallback を入れるなら、`workflow` scope を持つ token で別途 push する
 3. residual equivalence を full-window / all exported residual diagnostics へ広げる前に、runtime と output size を見積もる
-4. 12-trip `matlab_equivalent` を Kaggle submission candidate の risk gate に接続する
+4. P6P0 submit 前は `--require-matlab-equivalence` 付き ready report を人間レビューする
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 

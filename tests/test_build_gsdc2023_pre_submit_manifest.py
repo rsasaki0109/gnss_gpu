@@ -128,3 +128,67 @@ def test_main_writes_manifest(tmp_path) -> None:
     assert main(["--build-summary", str(build_summary_path), "--risky-trip", RISKY_TRIP]) == 0
     payload = json.loads((tmp_path / "out" / "pre_submit_manifest.json").read_text(encoding="utf-8"))
     assert payload["risky_trips"] == [RISKY_TRIP]
+
+
+def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> None:
+    base = _base_submission()
+    candidate_dir = tmp_path / "out" / CANDIDATE
+    candidate_path = candidate_dir / f"submission_best_basecorr_posoffset_{CANDIDATE}_plus_pixel5_patch_test.csv"
+    base_path = tmp_path / "base.csv"
+    build_summary_path = tmp_path / "out" / "build_summary.json"
+    summary_path = tmp_path / "matlab_equivalence_summary.json"
+    base.to_csv(base_path, index=False)
+    candidate_dir.mkdir(parents=True)
+    base.to_csv(candidate_path, index=False)
+    build_summary_path.write_text(
+        json.dumps(
+            {
+                "input": str(base_path),
+                "pr_proxy_risk_report": {"enabled": True, "candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": CANDIDATE,
+                        "output": str(candidate_path),
+                        "effective_phone_scales": {"pixel6pro": 0.0},
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    summary_path.write_text(
+        json.dumps(
+            {
+                "passed": True,
+                "equivalence_claim": "matlab_equivalent",
+                "trip_count": 12,
+                "max_epochs": 200,
+                "count_max_epochs": 0,
+                "gates": {
+                    "factor_mask": {"passed": True},
+                    "raw_bridge_counts": {"passed": True},
+                    "residual_values": {
+                        "passed": True,
+                        "total_matlab_only": 0,
+                        "total_bridge_only": 0,
+                        "overall_max_abs_delta": 5.9e-5,
+                        "max_abs_delta_threshold_m": 1.0e-4,
+                    },
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    manifest = build_pre_submit_manifest(
+        build_summary_path,
+        risky_trips=(RISKY_TRIP,),
+        matlab_equivalence_summary=summary_path,
+    )
+
+    gate = manifest["matlab_equivalence_gate"]
+    assert gate["passed"] is True
+    assert gate["equivalence_claim"] == "matlab_equivalent"
+    assert gate["trip_count"] == 12
+    assert gate["residual_total_matlab_only"] == 0
+    assert gate["summary_sha256"]

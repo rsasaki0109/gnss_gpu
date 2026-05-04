@@ -239,11 +239,47 @@ def _float_field(row: dict[str, str], key: str, default: float = 0.0) -> float:
         return default
 
 
-def assert_pre_submit_manifest_gate(output_dir: Path, candidates: list[str]) -> dict[str, object]:
+def assert_matlab_equivalence_gate(manifest: dict[str, object], *, require: bool = False) -> dict[str, object] | None:
+    gate = manifest.get("matlab_equivalence_gate")
+    if gate is None:
+        if require:
+            raise SystemExit("pre-submit manifest is missing matlab_equivalence_gate")
+        return None
+    if not isinstance(gate, dict):
+        raise SystemExit("pre-submit manifest matlab_equivalence_gate must be an object")
+    if not bool(gate.get("passed", False)):
+        raise SystemExit("MATLAB equivalence gate failed: passed=false")
+    if gate.get("equivalence_claim") != "matlab_equivalent":
+        raise SystemExit(f"MATLAB equivalence gate failed: equivalence_claim={gate.get('equivalence_claim')}")
+    required_pass_fields = ("factor_mask_passed", "raw_bridge_counts_passed", "residual_values_passed")
+    failed = [field for field in required_pass_fields if not bool(gate.get(field, False))]
+    if failed:
+        raise SystemExit(f"MATLAB equivalence gate failed fields: {', '.join(failed)}")
+    matlab_only = _as_int(gate.get("residual_total_matlab_only"))
+    bridge_only = _as_int(gate.get("residual_total_bridge_only"))
+    if matlab_only != 0 or bridge_only != 0:
+        raise SystemExit(
+            "MATLAB equivalence residual side-only rows are nonzero: "
+            f"matlab_only={matlab_only}, bridge_only={bridge_only}"
+        )
+    max_delta = _as_float(gate.get("residual_overall_max_abs_delta_m"))
+    threshold = _as_float(gate.get("residual_max_abs_delta_threshold_m"))
+    if threshold > 0.0 and max_delta > threshold:
+        raise SystemExit(f"MATLAB equivalence residual max delta failed: {max_delta} > {threshold}")
+    return gate
+
+
+def assert_pre_submit_manifest_gate(
+    output_dir: Path,
+    candidates: list[str],
+    *,
+    require_matlab_equivalence: bool = False,
+) -> dict[str, object]:
     selected = set(candidates)
     manifest = pre_submit_manifest_payload(output_dir)
     if manifest is None:
         raise SystemExit(f"missing pre-submit manifest in {output_dir / PRE_SUBMIT_MANIFEST}")
+    assert_matlab_equivalence_gate(manifest, require=require_matlab_equivalence)
 
     risk_report = manifest.get("risk_report")
     risk_report = risk_report if isinstance(risk_report, dict) else {}
@@ -359,8 +395,10 @@ def build_ready_report(
             },
         )
     manifest_risk: object | None = None
+    matlab_equivalence_gate: object | None = None
     if isinstance(pre_submit_manifest, dict):
         manifest_risk = pre_submit_manifest.get("risk_report")
+        matlab_equivalence_gate = pre_submit_manifest.get("matlab_equivalence_gate")
     return {
         "output_dir": str(output_dir),
         "tag": tag,
@@ -373,6 +411,7 @@ def build_ready_report(
         "pre_submit_manifest": {
             "present": pre_submit_manifest is not None,
             "risk_report": manifest_risk,
+            "matlab_equivalence_gate": matlab_equivalence_gate,
         },
     }
 
@@ -473,6 +512,8 @@ def write_submit_readiness_doc(
     trip_rows = _csv_rows(output_dir / PRE_SUBMIT_TRIP_CHECKS)
     manifest_risk = manifest.get("risk_report")
     manifest_risk = manifest_risk if isinstance(manifest_risk, dict) else {}
+    matlab_equivalence = manifest.get("matlab_equivalence_gate")
+    matlab_equivalence = matlab_equivalence if isinstance(matlab_equivalence, dict) else {}
     report_risk = report.get("risk_report")
     report_risk = report_risk if isinstance(report_risk, dict) else {}
     max_changed = max((_as_int(row.get("input_changed_rows")) for row in trip_rows), default=0)
@@ -552,6 +593,7 @@ def write_submit_readiness_doc(
                 f"- Risky Pixel6Pro trip delta rows: `{len(trip_rows)}`",
                 f"- Max risky Pixel6Pro input changed rows: `{max_changed}`",
                 f"- Max risky Pixel6Pro input delta: `{max_delta:.1f} m`",
+                f"- MATLAB equivalence: `{matlab_equivalence.get('equivalence_claim', 'not recorded')}`",
                 "",
                 "## Candidate SHA256",
                 "",
@@ -685,6 +727,8 @@ def prepare_ready_report(
     previous_output_dir: Path | None = None,
     previous_tag: str = "20260501",
     risky_trips: tuple[str, ...] = DEFAULT_RISKY_TRIPS,
+    matlab_equivalence_summary: Path | None = None,
+    require_matlab_equivalence: bool = False,
     skip_missing: bool = False,
     allow_risk: bool = False,
 ) -> dict[str, Any]:
@@ -695,6 +739,7 @@ def prepare_ready_report(
         previous_output_dir=previous_output_dir,
         previous_tag=previous_tag,
         risky_trips=risky_trips,
+        matlab_equivalence_summary=matlab_equivalence_summary,
     )
     queue = selected_queue(set(groups) if groups else None)
     ready_queue = existing_queue_items(queue, output_dir, tag, skip_missing=skip_missing)
@@ -704,7 +749,11 @@ def prepare_ready_report(
         risk_report = assert_submit_risk_gate(output_dir, allow_risk=allow_risk)
     clean_p6p0 = p6p0_candidates(ready_queue)
     if clean_p6p0 and not allow_risk:
-        pre_submit_manifest = assert_pre_submit_manifest_gate(output_dir, clean_p6p0)
+        pre_submit_manifest = assert_pre_submit_manifest_gate(
+            output_dir,
+            clean_p6p0,
+            require_matlab_equivalence=require_matlab_equivalence,
+        )
     report = build_ready_report(
         output_dir=output_dir,
         tag=tag,
@@ -746,6 +795,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--previous-output-dir", type=Path, help="previous candidate output dir for pre-submit manifest")
     parser.add_argument("--previous-tag", default="20260501")
     parser.add_argument("--risky-trip", action="append", dest="risky_trips")
+    parser.add_argument("--matlab-equivalence-summary", type=Path)
+    parser.add_argument(
+        "--require-matlab-equivalence",
+        action="store_true",
+        help="require a passing MATLAB equivalence summary in the pre-submit manifest for P6P0 candidates",
+    )
     parser.add_argument("--skip-missing", action="store_true", help="skip candidates whose CSVs do not exist")
     parser.add_argument(
         "--allow-risk",
@@ -767,6 +822,8 @@ def main(argv: list[str] | None = None) -> int:
             previous_output_dir=args.previous_output_dir,
             previous_tag=args.previous_tag,
             risky_trips=tuple(args.risky_trips or DEFAULT_RISKY_TRIPS),
+            matlab_equivalence_summary=args.matlab_equivalence_summary,
+            require_matlab_equivalence=args.require_matlab_equivalence,
             skip_missing=args.skip_missing,
             allow_risk=args.allow_risk,
         )
@@ -783,7 +840,11 @@ def main(argv: list[str] | None = None) -> int:
             risk_report = assert_submit_risk_gate(args.output_dir, allow_risk=args.allow_risk)
         clean_p6p0 = p6p0_candidates(ready_queue)
         if clean_p6p0 and not args.allow_risk:
-            pre_submit_manifest = assert_pre_submit_manifest_gate(args.output_dir, clean_p6p0)
+            pre_submit_manifest = assert_pre_submit_manifest_gate(
+                args.output_dir,
+                clean_p6p0,
+                require_matlab_equivalence=args.require_matlab_equivalence,
+            )
         if args.check_ready:
             print(f"ready: {len(ready_queue)} candidate(s)")
     if args.ready_report:

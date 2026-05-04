@@ -9,6 +9,7 @@ import pytest
 
 from experiments.submit_gsdc2023_pixel5_candidate_queue import (
     PENDING_QUEUE,
+    assert_matlab_equivalence_gate,
     assert_pre_submit_manifest_gate,
     assert_ready_report_consistency,
     assert_submit_risk_gate,
@@ -188,6 +189,86 @@ def test_pre_submit_manifest_gate_requires_clean_p6p0_manifest(tmp_path) -> None
     )
     with pytest.raises(SystemExit, match="pre-submit trip check failed"):
         assert_pre_submit_manifest_gate(tmp_path, [candidate])
+
+
+def test_matlab_equivalence_gate_can_be_required_from_pre_submit_manifest(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    output = tmp_path / candidate / "candidate.csv"
+    output.parent.mkdir(parents=True)
+    output.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    manifest = {
+        "risk_report": {"candidate_actionable_risky_chunks": 0},
+        "candidates": [
+            {
+                "candidate": candidate,
+                "output": str(output),
+                "output_sha256": sha256_file(output),
+                "pixel6pro_scale": 0.0,
+                "risk_candidate_actionable_chunks": 0,
+            },
+        ],
+    }
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="missing matlab_equivalence_gate"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_equivalence=True)
+
+    manifest["matlab_equivalence_gate"] = {
+        "passed": True,
+        "equivalence_claim": "matlab_equivalent",
+        "factor_mask_passed": True,
+        "raw_bridge_counts_passed": True,
+        "residual_values_passed": True,
+        "residual_total_matlab_only": 0,
+        "residual_total_bridge_only": 0,
+        "residual_overall_max_abs_delta_m": 5.9e-5,
+        "residual_max_abs_delta_threshold_m": 1.0e-4,
+    }
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert (
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_equivalence=True)[
+            "matlab_equivalence_gate"
+        ]["equivalence_claim"]
+        == "matlab_equivalent"
+    )
+
+
+def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
+    clean = {
+        "matlab_equivalence_gate": {
+            "passed": True,
+            "equivalence_claim": "matlab_equivalent",
+            "factor_mask_passed": True,
+            "raw_bridge_counts_passed": True,
+            "residual_values_passed": True,
+            "residual_total_matlab_only": 0,
+            "residual_total_bridge_only": 0,
+            "residual_overall_max_abs_delta_m": 5.0e-5,
+            "residual_max_abs_delta_threshold_m": 1.0e-4,
+        },
+    }
+    assert assert_matlab_equivalence_gate(clean)["equivalence_claim"] == "matlab_equivalent"
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_total_bridge_only"] = 1
+    with pytest.raises(SystemExit, match="side-only"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_overall_max_abs_delta_m"] = 2.0e-4
+    with pytest.raises(SystemExit, match="max delta failed"):
+        assert_matlab_equivalence_gate(dirty)
 
 
 def test_submit_checks_risk_before_running_kaggle(monkeypatch, tmp_path) -> None:

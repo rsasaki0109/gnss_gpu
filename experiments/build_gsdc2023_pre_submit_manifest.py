@@ -199,6 +199,35 @@ def _candidate_manifest_row(
     }
 
 
+def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
+    summary_path = summary_path.expanduser().resolve()
+    payload = _read_json(summary_path)
+    gates = payload.get("gates")
+    gates = gates if isinstance(gates, dict) else {}
+    residual = gates.get("residual_values")
+    residual = residual if isinstance(residual, dict) else {}
+    return {
+        "summary": str(summary_path),
+        "summary_sha256": sha256_file(summary_path),
+        "passed": bool(payload.get("passed", False)),
+        "equivalence_claim": payload.get("equivalence_claim"),
+        "trip_count": int(payload.get("trip_count", 0) or 0),
+        "max_epochs": int(payload.get("max_epochs", 0) or 0),
+        "count_max_epochs": int(payload.get("count_max_epochs", 0) or 0),
+        "factor_mask_passed": bool(gates.get("factor_mask", {}).get("passed", False))
+        if isinstance(gates.get("factor_mask"), dict)
+        else False,
+        "raw_bridge_counts_passed": bool(gates.get("raw_bridge_counts", {}).get("passed", False))
+        if isinstance(gates.get("raw_bridge_counts"), dict)
+        else False,
+        "residual_values_passed": bool(residual.get("passed", False)),
+        "residual_total_matlab_only": int(residual.get("total_matlab_only", 0) or 0),
+        "residual_total_bridge_only": int(residual.get("total_bridge_only", 0) or 0),
+        "residual_overall_max_abs_delta_m": residual.get("overall_max_abs_delta"),
+        "residual_max_abs_delta_threshold_m": residual.get("max_abs_delta_threshold_m"),
+    }
+
+
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fieldnames = list(rows[0]) if rows else []
     with path.open("w", newline="", encoding="utf-8") as fh:
@@ -214,6 +243,7 @@ def build_pre_submit_manifest(
     previous_output_dir: Path | None = None,
     previous_tag: str = "20260501",
     risky_trips: tuple[str, ...] = DEFAULT_RISKY_TRIPS,
+    matlab_equivalence_summary: Path | None = None,
 ) -> dict[str, Any]:
     build_summary_path = build_summary_path.expanduser().resolve()
     build_summary = _read_json(build_summary_path)
@@ -233,6 +263,9 @@ def build_pre_submit_manifest(
 
     risk_report = build_summary.get("pr_proxy_risk_report")
     risk_report = risk_report if isinstance(risk_report, dict) else {"enabled": False}
+    matlab_equivalence_gate = (
+        _matlab_equivalence_manifest(matlab_equivalence_summary) if matlab_equivalence_summary is not None else None
+    )
     candidate_rows: list[dict[str, Any]] = []
     trip_rows: list[dict[str, Any]] = []
 
@@ -304,6 +337,7 @@ def build_pre_submit_manifest(
             ),
             "candidate_actionable_by_candidate": risk_report.get("candidate_actionable_by_candidate", {}),
         },
+        "matlab_equivalence_gate": matlab_equivalence_gate,
         "candidate_manifest_csv": str(candidate_csv),
         "trip_delta_checks_csv": str(trip_csv),
         "candidates": candidate_rows,
@@ -322,6 +356,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--previous-output-dir", type=Path, default=None)
     parser.add_argument("--previous-tag", default="20260501")
     parser.add_argument("--risky-trip", action="append", dest="risky_trips")
+    parser.add_argument("--matlab-equivalence-summary", type=Path)
     args = parser.parse_args(argv)
 
     build_pre_submit_manifest(
@@ -330,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
         previous_output_dir=args.previous_output_dir,
         previous_tag=args.previous_tag,
         risky_trips=tuple(args.risky_trips or DEFAULT_RISKY_TRIPS),
+        matlab_equivalence_summary=args.matlab_equivalence_summary,
     )
     return 0
 
