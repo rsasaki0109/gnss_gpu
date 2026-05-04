@@ -3,7 +3,7 @@
 **最終更新**: 2026-05-05 JST
 **現在の HEAD**: `codex/residual-mask-main-port`
 **ブランチ**: `codex/residual-mask-main-port`
-**作業ツリー**: GSDC2023 MATLAB equivalence gate 追加中。既存変更を revert しないこと。
+**作業ツリー**: GSDC2023 MATLAB equivalence gate / residual side-only audit 追加中。既存変更を revert しないこと。
 **直近の重点**: Kaggle GSDC2023 raw bridge / MATLAB phone_data 移植の内部状態 parity と提出前 risk gate。
 **旧メモ**: 2026-04-21 以前の UrbanNav / CT-RBPF-FGO 計画は下に残す。現在の最優先は GSDC2023 raw bridge の MATLAB 移植を詰めること。
 
@@ -37,6 +37,24 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - `overall_max_abs_delta=3.56732272732696e-05 m` は threshold `1e-4 m` 内
   - ただし side-only が残る: `total_matlab_only=206`, `total_bridge_only=4898`
 
+side-only probe:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_side_only.py \
+  --max-epochs 200 \
+  --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 \
+  --output-dir experiments/results/matlab_equivalence_gate_probe_20260505 \
+  --verbose
+```
+
+結果: `passed=false`, `total_matlab_only=206`, `total_bridge_only=4898`
+
+- 最大 scope: `bridge_only / D / L1 / sys=8 / count=1353`
+- `sys=8` はこの bridge の MATLAB 表記では Galileo。`P/D`, `L1/L5` の Galileo bridge-only が大半。
+- `--no-multi-gnss` では `bridge_only=0` まで減るが、MATLAB-only GPS `svid=32` が `206` 行残る。
+- golden の `phone_data_residual_diagnostics.csv` は 11 ファイルすべて `sys=1` のみ。`audit_gsdc2023_matlab_equivalence_gate.py` の residual default は GPS-only に修正。
+- よって residual 完全等価の残差は「matched 行の数値誤差」ではなく、residual diagnostics の対象 scope と GPS svid=32 の観測マスク/有効性差分。
+
 12 trip / `--max-epochs 200` probe:
 
 - assets: pass
@@ -50,8 +68,8 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 次にやること:
 
 1. MATLAB golden export を補完: missing `phone_data_residual_diagnostics.csv` for `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl`
-2. residual side-only の内訳を `field/freq/epoch/sys/svid` で分類し、MATLAB export scope mismatch か bridge extra factor かを切る
-3. side-only が scope mismatch なら residual gate に明示的 scope config を導入し、完全等価対象 scope を固定
+2. residual gate の default scope を MATLAB export と同じ GPS-only にするか、export 側が multi-GNSS なら golden を作り直して scope を固定
+3. GPS-only で残る MATLAB-only `svid=32` を、raw bridge の observation mask / finite pre residual / sat product availability のどこで落としているか特定
 4. side-only が実装差なら raw bridge / observation mask / residual diagnostics export を修正
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植

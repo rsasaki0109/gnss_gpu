@@ -367,8 +367,8 @@ def main() -> None:
     parser.add_argument(
         "--residual-multi-gnss",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="residual-value scope; default true because residual exports include multi-GNSS fields",
+        default=False,
+        help="residual-value scope; default false because current MATLAB residual exports are GPS-only",
     )
     parser.add_argument("--asset-datasets", nargs="*", default=["train"])
     parser.add_argument("--quick-assets", action="store_true", help="skip expensive IMU sync parsing in asset gate")
