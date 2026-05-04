@@ -1,11 +1,58 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-05-04 JST
-**現在の HEAD**: `ff77a0a` (`codex/residual-mask-next`)
-**ブランチ**: `codex/residual-mask-next`
-**作業ツリー**: dirty。GSDC2023/MATLAB 移植・audit・候補生成まわりに多数の変更/未追跡ファイルあり。既存変更を revert しないこと。
+**最終更新**: 2026-05-05 JST
+**現在の HEAD**: `codex/residual-mask-main-port`
+**ブランチ**: `codex/residual-mask-main-port`
+**作業ツリー**: GSDC2023 MATLAB equivalence gate 追加中。既存変更を revert しないこと。
 **直近の重点**: Kaggle GSDC2023 raw bridge / MATLAB phone_data 移植の内部状態 parity と提出前 risk gate。
 **旧メモ**: 2026-04-21 以前の UrbanNav / CT-RBPF-FGO 計画は下に残す。現在の最優先は GSDC2023 raw bridge の MATLAB 移植を詰めること。
+
+## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
+
+結論: **完全等価は未達**。従来の focused tests と CI は通っているが、`matched` 行の数値差だけでは不十分だった。`experiments/audit_gsdc2023_matlab_equivalence_gate.py` を追加し、以下を 1 コマンドで fail-fast する gate に束ねた。
+
+- asset readiness: `settings_train.csv` / base correction / ground truth
+- factor mask parity: MATLAB factor mask と bridge factor mask の集合一致
+- residual value parity: matched residual の数値差に加え、MATLAB-only / bridge-only の side-only をゼロ要求
+- raw bridge count parity: MATLAB `phone_data_factor_counts.csv` と bridge count の full-window 完全一致
+
+代表 trip probe:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py \
+  --quick-assets \
+  --max-epochs 200 \
+  --count-max-epochs 0 \
+  --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 \
+  --output-dir experiments/results/matlab_equivalence_gate_probe_20260505 \
+  --verbose
+```
+
+結果: `passed=false`, `equivalence_claim=not_proven`
+
+- assets: pass (`base_correction_ready=156`, `ground_truth_present=156`)
+- factor_mask: pass (`overall_min_symmetric_parity=1.0`, side-only 0)
+- raw_bridge_counts: pass (`count_parity_ratio=1.0`, `matched_abs_delta_total=0`)
+- residual_values: fail
+  - `overall_max_abs_delta=3.56732272732696e-05 m` は threshold `1e-4 m` 内
+  - ただし side-only が残る: `total_matlab_only=206`, `total_bridge_only=4898`
+
+12 trip / `--max-epochs 200` probe:
+
+- assets: pass
+- factor_mask: pass (`completed_trip_count=12`, `overall_min_symmetric_parity=1.0`)
+- raw_bridge_counts: pass (`trip_count=12`, `matched_abs_delta_total=0`, `count_parity_ratio=1.0`)
+- residual_values: fail
+  - `completed_trip_count=11`, `error_count=1`
+  - missing MATLAB golden: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl/phone_data_residual_diagnostics.csv`
+  - 11 completed trips all have matched residual deltas below threshold, but side-only rows remain. This means residual value parity is numerically close only on intersected rows, not complete-equivalence proof.
+
+次にやること:
+
+1. MATLAB golden export を補完: missing `phone_data_residual_diagnostics.csv` for `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl`
+2. residual side-only の内訳を `field/freq/epoch/sys/svid` で分類し、MATLAB export scope mismatch か bridge extra factor かを切る
+3. side-only が scope mismatch なら residual gate に明示的 scope config を導入し、完全等価対象 scope を固定
+4. side-only が実装差なら raw bridge / observation mask / residual diagnostics export を修正
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 
