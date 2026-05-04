@@ -168,9 +168,21 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. PR #55 にこの plan.md 結果追記を commit/push し、CI を確認する
-2. P6P0 ready report の 3 candidate を人間レビューし、submit 実行可否を決める
-3. submit する場合は同じ manifest を使って提出コマンドを実行し、生成物 SHA と Kaggle score を記録する
+1. P6P0 clean submit 結果を評価し、残り 2 candidate を submit するか判断する
+2. P6P0 clean が悪化した場合は pixel6pro 3,754 changed rows の影響を切り分ける
+3. 次の submit は private `4.710` 系の safe baseline を崩さない差分に限定する
+
+2026-05-05 P6P0 clean Kaggle submit:
+
+- Submitted candidate: `pixel5phone_3p375_sjc_r0p84375_p6p0`
+  - file: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/pixel5phone_3p375_sjc_r0p84375_p6p0/submission_best_basecorr_posoffset_pixel5phone_3p375_sjc_r0p84375_p6p0_plus_pixel5_patch_20260505.csv`
+  - sha256: `641b2db9e6e91f29da32c960dc6735decfb229f1b8f2602a17d983023ed880cf`
+  - message: `20260505 pixel5 3.375 sjc r scale 0.84375 p6p0 clean`
+  - Kaggle score: public `3.741`, private `4.725`
+- Comparison:
+  - previous same scale `20260501 pixel5 3.375 sjc r scale 0.84375`: public `3.725`, private `4.711`
+  - P6P0 clean changed `3754` rows vs previous same scale, all in pixel6pro rows; max row movement `0.814 m`, p95 `0.74895 m`
+  - outcome: P6P0 clean worsened private by `+0.014 m`; do not submit `r1p6875_p6p0` / `r2p53125_p6p0` unless new evidence appears
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 
