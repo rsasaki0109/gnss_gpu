@@ -124,12 +124,30 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - manifest: `equivalence_claim=matlab_equivalent`, `trip_count=12`, residual side-only `0/0`, max delta `5.91054445631678e-05 m`
 - Local focused tests: `23 passed in 1.55s`
 
+2026-05-05 full-window residual diagnostics probe:
+
+- 12 exported `phone_data_residual_diagnostics.csv` total: `258537` diagnostics rows / `154.5 MB` CSV.
+- `audit_gsdc2023_residual_value_parity.py` の pass 判定を修正し、max/p95 delta だけでなく residual side-only も fail 条件に含めた。
+- inactive diagnostics 補完を修正:
+  - P: same epoch/group に active P がない場合も `clock_bias + ISB(group)` で common bias を補完
+  - D: same epoch に active Doppler がない場合も clock drift があれば MATLAB diagnostics key の inactive D を出す
+- final full-window residual audit:
+  - command: `audit_gsdc2023_residual_value_parity.py --max-epochs 0 --no-multi-gnss --include-inactive-observations --trip ...12 trips`
+  - output: `experiments/results/matlab_equivalence_fullwindow_probe_20260505/gsdc2023_residual_value_parity_audit_20260505_180322`
+  - runtime: `858.36 s`, peak RSS: `606448 KB`
+  - result: `passed=false`
+  - side-only: `total_matlab_only=0`, `total_bridge_only=0`
+  - value delta: `overall_max_abs_delta=0.00523725524546137 m`, `overall_p95_abs_delta_max=2.7839780766480964e-05 m`
+  - worst row: `train/2020-07-08-22-28-us-ca/pixel4xl`, `P/L5`, epoch `774`, svid `27`
+- Interpretation: full-window は residual key 集合一致までは到達。strict `1e-4 m` value equivalence は、後半の low-elevation GPS L5 satellite product/range 差 `~5.2 mm` が残るため未達。
+- Regression check: `train/2020-07-08-22-28-us-ca/pixel4xl --max-epochs 200` は `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=3.3071655876071304e-05 m` で 200 epoch gate 水準を維持。
+- Local focused tests after fixes: `20 passed in 69.84s`; residual focused tests: `6 passed`; ruff: pass
+
 次にやること:
 
-1. latest PR CI の `build-cuda` 完了を確認
-2. workflow 側の apt retry/fallback を入れるなら、`workflow` scope を持つ token で別途 push する
-3. residual equivalence を full-window / all exported residual diagnostics へ広げる前に、runtime と output size を見積もる
-4. P6P0 submit 前は `--require-matlab-equivalence` 付き ready report を人間レビューする
+1. full-window worst row `2020-07-08 pixel4xl P/L5 epoch 774 svid 27` の satellite product/range 差 `~5.2 mm` を追う
+2. full-window strict value threshold を維持するか、full-window 用に satellite product tolerance を別 gate として切るか判断
+3. P6P0 submit 前は `--require-matlab-equivalence` 付き ready report を人間レビューする
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 

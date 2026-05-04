@@ -446,9 +446,9 @@ def build_bridge_residual_frame(
 
     if p_records:
         p_frame = pd.DataFrame(p_records)
+        isb_by_group = getattr(batch, "pseudorange_isb_by_group", None)
         if p_frame["_clock_bias"].notna().any():
             p_frame["bridge_common_bias"] = np.nan
-            isb_by_group = getattr(batch, "pseudorange_isb_by_group", None)
             if not isb_by_group:
                 isb_by_group = _pseudorange_global_isb_by_group(
                     batch.sat_ecef,
@@ -506,6 +506,11 @@ def build_bridge_residual_frame(
                         continue
                     group_id = int(pseudorange_bias_groups[int(slot_idx)])
                     common_bias = common_bias_lookup.get((int(key[2]), group_id))
+                    if common_bias is None and isb_by_group and batch.clock_bias_m is not None:
+                        clock_bias = batch.clock_bias_m[epoch_idx]
+                        isb = isb_by_group.get(group_id)
+                        if np.isfinite(clock_bias) and isb is not None and np.isfinite(float(isb)):
+                            common_bias = float(clock_bias) + float(isb)
                     if common_bias is None:
                         continue
                     pre_value = float(batch.pseudorange[epoch_idx, slot_idx] - ranges[int(slot_idx)])
@@ -559,8 +564,6 @@ def build_bridge_residual_frame(
         for epoch_idx in range(batch.doppler_weights.shape[0]):
             active = valid[epoch_idx] & (batch.doppler_weights[epoch_idx] > 0.0)
             idx = np.flatnonzero(active)
-            if idx.size == 0:
-                continue
             # _build_trip_arrays stores Doppler in the native VD solver convention
             # (-Android pseudorange-rate). MATLAB residual diagnostics use the
             # gnsslog2obs/resD convention: raw pseudorange-rate - satr.rate.
@@ -572,34 +575,35 @@ def build_bridge_residual_frame(
             elif idx.size >= 4:
                 drift = float(np.median(residual0))
             else:
-                continue
+                drift = np.nan
             residual = residual0 - drift
-            for slot_idx, value, pre_value, obs_value, model_value in zip(
-                idx,
-                residual,
-                residual0,
-                observation,
-                model,
-            ):
-                if np.isfinite(value):
-                    _append_bridge_residual_rows(
-                        rows,
-                        field="D",
-                        freq=str(slot_freq[int(slot_idx)]),
-                        times_ms=times_ms,
-                        slot_keys=slot_keys,
-                        epoch_idx=epoch_idx,
-                        slot_idx=int(slot_idx),
-                        residual=float(value),
-                        pre_residual=float(pre_value),
-                        common_bias=drift,
-                        observation=float(obs_value),
-                        model=float(model_value),
-                        epoch_offset=start_epoch,
-                    )
+            if np.isfinite(drift):
+                for slot_idx, value, pre_value, obs_value, model_value in zip(
+                    idx,
+                    residual,
+                    residual0,
+                    observation,
+                    model,
+                ):
+                    if np.isfinite(value):
+                        _append_bridge_residual_rows(
+                            rows,
+                            field="D",
+                            freq=str(slot_freq[int(slot_idx)]),
+                            times_ms=times_ms,
+                            slot_keys=slot_keys,
+                            epoch_idx=epoch_idx,
+                            slot_idx=int(slot_idx),
+                            residual=float(value),
+                            pre_residual=float(pre_value),
+                            common_bias=drift,
+                            observation=float(obs_value),
+                            model=float(model_value),
+                            epoch_offset=start_epoch,
+                        )
             if include_inactive_observations:
                 inactive_idx = np.flatnonzero(valid[epoch_idx] & ~active)
-                if inactive_idx.size:
+                if inactive_idx.size and np.isfinite(drift):
                     inactive_observation = -batch.doppler[epoch_idx, inactive_idx]
                     inactive_model = geom_rate[epoch_idx, inactive_idx]
                     inactive_pre = inactive_observation - inactive_model

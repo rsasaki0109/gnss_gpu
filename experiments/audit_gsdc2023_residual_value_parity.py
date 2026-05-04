@@ -156,6 +156,8 @@ def residual_value_parity_audit(
         if p95_abs_delta_threshold_m is None
         else bool(np.isfinite(p95_abs) and p95_abs <= float(p95_abs_delta_threshold_m))
     )
+    total_matlab_only = int(trip_summary["matlab_only_count"].sum()) if not trip_summary.empty else 0
+    total_bridge_only = int(trip_summary["bridge_only_count"].sum()) if not trip_summary.empty else 0
     payload = {
         "data_root": str(Path(data_root)),
         "trips": list(trips),
@@ -173,7 +175,9 @@ def residual_value_parity_audit(
         ),
         "overall_max_abs_delta": max_abs,
         "overall_p95_abs_delta_max": p95_abs,
-        "passed": bool(not errors and pass_max and pass_p95),
+        "total_matlab_only": total_matlab_only,
+        "total_bridge_only": total_bridge_only,
+        "passed": bool(not errors and pass_max and pass_p95 and total_matlab_only == 0 and total_bridge_only == 0),
     }
     if not trip_summary.empty:
         worst = trip_summary.loc[trip_summary["max_abs_delta"].idxmax()]

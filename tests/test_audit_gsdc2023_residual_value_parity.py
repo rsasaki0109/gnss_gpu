@@ -53,7 +53,7 @@ def test_residual_value_parity_audit_summarizes_trips_and_thresholds(tmp_path: P
         )
         payload = {
             "total_matched_count": 2,
-            "total_matlab_only": 1,
+            "total_matlab_only": 0,
             "total_bridge_only": 0,
             "median_abs_delta": 1.0e-6,
             "p95_abs_delta": abs(delta),
@@ -81,6 +81,8 @@ def test_residual_value_parity_audit_summarizes_trips_and_thresholds(tmp_path: P
     assert summary["matched_count"].tolist() == [2, 2]
     assert max_rows.loc[max_rows["trip"].eq("train/course/phone-b"), "svid"].iloc[0] == 7
     assert payload["passed"] is True
+    assert payload["total_matlab_only"] == 0
+    assert payload["total_bridge_only"] == 0
     assert payload["completed_trip_count"] == 2
     assert payload["overall_max_abs_delta"] == 7.0e-5
     assert payload["worst_trip"] == "train/course/phone-b"
@@ -123,6 +125,55 @@ def test_residual_value_parity_audit_fails_when_threshold_exceeded(tmp_path: Pat
 
     assert payload["passed"] is False
     assert payload["overall_max_abs_delta"] == 2.0e-4
+
+
+def test_residual_value_parity_audit_fails_on_side_only_rows(tmp_path: Path) -> None:
+    def fake_compare(
+        _trip_dir: Path,
+        *,
+        max_epochs: int,
+        multi_gnss: bool,
+        apply_observation_mask: bool,
+        include_inactive_observations: bool,
+    ):
+        merged = pd.DataFrame(
+            [
+                {
+                    "side": "both",
+                    "field": "P",
+                    "freq": "L1",
+                    "epoch_index": 1,
+                    "utcTimeMillis": 1000,
+                    "sys": 1,
+                    "svid": 2,
+                    "delta": 1.0e-6,
+                },
+            ],
+        )
+        return (
+            merged,
+            pd.DataFrame(),
+            {
+                "total_matched_count": 1,
+                "total_matlab_only": 1,
+                "total_bridge_only": 0,
+                "max_abs_delta": 1.0e-6,
+                "p95_abs_delta": 1.0e-6,
+            },
+        )
+
+    _summary, _max_rows, payload = residual_value_parity_audit(
+        tmp_path,
+        ["train/course/phone"],
+        max_epochs=0,
+        multi_gnss=False,
+        max_abs_delta_threshold_m=1.0e-4,
+        compare_fn=fake_compare,
+    )
+
+    assert payload["passed"] is False
+    assert payload["total_matlab_only"] == 1
+    assert payload["total_bridge_only"] == 0
 
 
 def test_default_residual_parity_trip_set_is_nonempty() -> None:
