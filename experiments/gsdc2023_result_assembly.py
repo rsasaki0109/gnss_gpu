@@ -115,6 +115,9 @@ def build_bridge_result(
     fgo_mse_pr: float,
     chunk_records: Sequence[ChunkSelectionRecord],
     allow_raw_wls_on_mi8_baseline_jump: bool,
+    vd_seed_guard_skipped_segments: int = 0,
+    vd_seed_guard_skipped_epochs: int = 0,
+    vd_seed_guard_records: Sequence[dict[str, object]] | None = None,
     raw_wls_max_gap_m: float | None = None,
 ) -> BridgeResult:
     return BridgeResult(
@@ -132,6 +135,9 @@ def build_bridge_result(
         max_sats=batch.max_sats,
         fgo_iters=fgo_iters,
         failed_chunks=failed_chunks,
+        vd_seed_guard_skipped_segments=vd_seed_guard_skipped_segments,
+        vd_seed_guard_skipped_epochs=vd_seed_guard_skipped_epochs,
+        vd_seed_guard_records=(list(vd_seed_guard_records) if vd_seed_guard_records is not None else None),
         selected_mse_pr=assembled_outputs.selected_mse_pr,
         baseline_mse_pr=baseline_mse_pr,
         raw_wls_mse_pr=raw_wls_mse_pr,

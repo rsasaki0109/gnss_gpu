@@ -131,6 +131,22 @@ def test_build_bridge_result_maps_assembled_outputs_and_metadata() -> None:
         assembled_outputs=outputs,
         fgo_iters=7,
         failed_chunks=1,
+        vd_seed_guard_skipped_segments=2,
+        vd_seed_guard_skipped_epochs=25,
+        vd_seed_guard_records=[
+            {
+                "chunk_start_epoch": 0,
+                "chunk_end_epoch": 25,
+                "segment_start_epoch": 0,
+                "segment_end_epoch": 25,
+                "segment_epochs": 25,
+                "doppler_count": 30,
+                "doppler_rms_mps": 10.0,
+                "tdcp_count": 24,
+                "tdcp_rms_m": 2.0,
+                "reject_reason": "doppler",
+            },
+        ],
         baseline_mse_pr=10.0,
         raw_wls_mse_pr=2.0,
         fgo_mse_pr=5.0,
@@ -144,6 +160,10 @@ def test_build_bridge_result_maps_assembled_outputs_and_metadata() -> None:
     assert result.selected_source_mode == "auto"
     assert result.fgo_iters == 7
     assert result.failed_chunks == 1
+    assert result.vd_seed_guard_skipped_segments == 2
+    assert result.vd_seed_guard_skipped_epochs == 25
+    assert result.vd_seed_guard_records is not None
+    assert result.vd_seed_guard_records[0]["reject_reason"] == "doppler"
     assert result.selected_mse_pr == outputs.selected_mse_pr
     assert result.baseline_mse_pr == 10.0
     assert result.raw_wls_mse_pr == 2.0

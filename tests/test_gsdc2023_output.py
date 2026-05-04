@@ -61,6 +61,8 @@ def _sample_result(*, with_truth: bool = True, with_metrics: bool = True) -> Bri
         max_sats=7,
         fgo_iters=3,
         failed_chunks=0,
+        vd_seed_guard_skipped_segments=2,
+        vd_seed_guard_skipped_epochs=10,
         selected_mse_pr=12.5,
         baseline_mse_pr=10.0,
         raw_wls_mse_pr=11.0,
@@ -70,6 +72,20 @@ def _sample_result(*, with_truth: bool = True, with_metrics: bool = True) -> Bri
         metrics_kaggle=metrics,
         metrics_raw_wls=_metrics(rms_2d=2.0) if with_metrics else None,
         metrics_fgo=metrics,
+        vd_seed_guard_records=[
+            {
+                "chunk_start_epoch": 0,
+                "chunk_end_epoch": 2,
+                "segment_start_epoch": 0,
+                "segment_end_epoch": 2,
+                "segment_epochs": 2,
+                "doppler_count": 24,
+                "doppler_rms_mps": 9.25,
+                "tdcp_count": 20,
+                "tdcp_rms_m": 12.5,
+                "reject_reason": "doppler",
+            },
+        ],
         chunk_selection_records=[{"start": 0, "end": 2, "source": "fgo"}],
         parity_audit={"base_correction_ready": True, "base_correction_status": "ok"},
     )
@@ -87,11 +103,17 @@ def test_bridge_result_positions_payload_and_summary() -> None:
     np.testing.assert_allclose(positions["LatitudeDegrees"].to_numpy(), np.zeros(2), atol=1e-9)
     np.testing.assert_allclose(positions["LongitudeDegrees"].to_numpy(), np.zeros(2), atol=1e-9)
     assert payload["n_clock"] == 1
+    assert payload["vd_seed_guard_skipped_segments"] == 2
+    assert payload["vd_seed_guard_skipped_epochs"] == 10
+    assert payload["vd_seed_guard_records"][0]["reject_reason"] == "doppler"
+    assert payload["vd_seed_guard_reject_reasons"] == {"doppler": 1}
     assert payload["selected_score_m"] == 1.1
     assert payload["raw_wls_metrics"]["rms_2d_m"] == 2.0
     assert payload["chunk_selection_records"] == [{"start": 0, "end": 2, "source": "fgo"}]
     assert payload["parity_audit"]["base_correction_status"] == "ok"
     assert "parity" in summary
+    assert "vd guard" in summary
+    assert "reasons=doppler:1" in summary
     assert "improves raw WLS" in summary
 
 
