@@ -153,12 +153,24 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 - Regression check: `train/2020-07-08-22-28-us-ca/pixel4xl --max-epochs 200` は `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=3.3071655876071304e-05 m` で 200 epoch gate 水準を維持。
 - Additional worst-trip full-window check after timing fix: `train/2020-07-08-22-28-us-ca/pixel4xl --max-epochs 0` は `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=3.505955783089654e-05 m`。
 - Local focused tests after fixes: residual/factor focused suite `20 passed in 69.84s`; observation/residual focused tests `27 passed in 0.59s`; ruff: pass
+- PR #55 latest commit: `f9a12ae Use GNSS log L1 timing for L5 product parity`; CI run `25370055500` は `workflow-lint`, `lint`, `test-python-smoke`, `site-smoke`, `build-cuda` すべて success。
+- Full-window MATLAB equivalence gate summary regenerated:
+  - command: `audit_gsdc2023_matlab_equivalence_gate.py --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets`
+  - output: `experiments/results/matlab_equivalence_gate_probe_20260505/gsdc2023_matlab_equivalence_gate_20260505_192121`
+  - runtime: `2811.46 s`, peak RSS: `722484 KB`
+  - result: `passed=true`, `equivalence_claim=matlab_equivalent`, `max_epochs=0`, `count_max_epochs=0`, `trip_count=12`
+  - gates: assets/factor_mask/residual_values/raw_bridge_counts all pass
+  - residual gate: side-only `0/0`, `overall_max_abs_delta=5.91054445631678e-05 m`, threshold `1e-4 m`
+- P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
+  - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
+  - result: `prepared: 3 candidate(s)`
+  - `pre_submit_manifest.json` gate: `equivalence_claim=matlab_equivalent`, `max_epochs=0`, `count_max_epochs=0`, residual side-only `0/0`, max delta `5.91054445631678e-05 m`, summary SHA `401177f4df7cc634374e454ae5b1202286a0c191118a5590482d888e409fd4a3`
 
 次にやること:
 
-1. PR #55 に GNSS log-only L1 timing fix を commit/push し、CI を確認する
-2. full-window residual audit summary を submit readiness の MATLAB equivalence summary に差し替えるか判断する
-3. P6P0 submit 前は `--require-matlab-equivalence` 付き ready report を人間レビューする
+1. PR #55 にこの plan.md 結果追記を commit/push し、CI を確認する
+2. P6P0 ready report の 3 candidate を人間レビューし、submit 実行可否を決める
+3. submit する場合は同じ manifest を使って提出コマンドを実行し、生成物 SHA と Kaggle score を記録する
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 
