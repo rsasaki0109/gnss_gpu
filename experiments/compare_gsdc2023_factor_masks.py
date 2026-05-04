@@ -82,6 +82,7 @@ def build_bridge_factor_mask(
         pseudorange_doppler_mask_m=pseudorange_doppler_mask_m,
         matlab_residual_diagnostics_mask_path=matlab_residual_diagnostics_mask_path,
         dual_frequency=True,
+        raw_frame_epoch_window=True,
     )
     times_ms = np.asarray(batch.times_ms, dtype=np.float64)
     slot_keys = tuple(batch.slot_keys)

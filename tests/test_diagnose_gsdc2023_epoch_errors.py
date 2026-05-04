@@ -51,7 +51,12 @@ def _result() -> SimpleNamespace:
                 "auto_source": "fgo",
                 "gated_source": "baseline",
                 "candidates": {
-                    "fgo": {"mse_pr": 1.5, "quality_score": 0.7, "baseline_gap_p95_m": 2.0},
+                    "fgo": {
+                        "mse_pr": 1.5,
+                        "quality_score": 0.7,
+                        "baseline_gap_p95_m": 2.0,
+                        "baseline_gap_max_m": 3.0,
+                    },
                 },
             },
             {
@@ -87,6 +92,7 @@ def test_chunk_diagnostics_frame_reports_oracle_and_candidate_fields() -> None:
 
     assert list(chunks["oracle_source"]) == ["fgo", "baseline"]
     assert chunks.loc[0, "fgo_candidate_mse_pr"] == 1.5
+    assert chunks.loc[0, "fgo_candidate_gap_max_m"] == 3.0
     assert chunks.loc[0, "fgo_minus_baseline_score_m"] < 0.0
     assert chunks.loc[1, "fgo_minus_baseline_score_m"] > 0.0
 
