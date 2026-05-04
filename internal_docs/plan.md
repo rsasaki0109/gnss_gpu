@@ -9,7 +9,7 @@
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
-結論: **完全等価は未達**。従来の focused tests と CI は通っているが、`matched` 行の数値差だけでは不十分だった。`experiments/audit_gsdc2023_matlab_equivalence_gate.py` を追加し、以下を 1 コマンドで fail-fast する gate に束ねた。
+結論: **12-trip / 200 epoch の MATLAB equivalence gate は `matlab_equivalent` 到達**。従来の focused tests と CI は通っているが、`matched` 行の数値差だけでは不十分だったため、`experiments/audit_gsdc2023_matlab_equivalence_gate.py` で以下を 1 コマンドの fail-fast gate に束ねた。
 
 - asset readiness: `settings_train.csv` / base correction / ground truth
 - factor mask parity: MATLAB factor mask と bridge factor mask の集合一致
@@ -28,7 +28,7 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   --verbose
 ```
 
-旧結果: `passed=false`, `equivalence_claim=not_proven`
+初期結果: `passed=false`, `equivalence_claim=not_proven`
 
 - assets: pass (`base_correction_ready=156`, `ground_truth_present=156`)
 - factor_mask: pass (`overall_min_symmetric_parity=1.0`, side-only 0)
@@ -83,24 +83,39 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 12 trip / `--max-epochs 200` / count full-window probe:
 
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py \
+  --quick-assets \
+  --max-epochs 200 \
+  --count-max-epochs 0 \
+  --output-dir experiments/results/matlab_equivalence_gate_probe_20260505 \
+  --verbose
+```
+
+結果: `passed=true`, `equivalence_claim=matlab_equivalent`
+
+- output: `experiments/results/matlab_equivalence_gate_probe_20260505/gsdc2023_matlab_equivalence_gate_20260505_154054`
+- missing だった MATLAB golden を `export_phone_data_residual_diagnostics.m` で補完:
+  - `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl/phone_data_residual_diagnostics.csv`
+  - generated rows: `23654`, columns: `44`
 - assets: pass
-- factor_mask: pass (`completed_trip_count=12`, `overall_min_symmetric_parity=1.0`)
+- factor_mask: pass (`completed_trip_count=12`, `overall_min_symmetric_parity=1.0`, side-only 0)
 - raw_bridge_counts: pass (`trip_count=12`, `matched_abs_delta_total=0`, `count_parity_ratio=1.0`)
-- residual_values: fail
-  - `completed_trip_count=11`, `error_count=1`
-  - missing MATLAB golden: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl/phone_data_residual_diagnostics.csv`
-  - `total_matlab_only=0`, `total_bridge_only=0` for the 11 completed trips
+- residual_values: pass
+  - `completed_trip_count=12`, `error_count=0`
+  - `total_matlab_only=0`, `total_bridge_only=0`
   - `overall_max_abs_delta=5.91054445631678e-05 m`, `overall_p95_abs_delta_max=2.796173776410671e-05 m`
-  - 11 completed trips are within the `1e-4 m` threshold with zero side-only rows. Full 12 trip equivalence is still not proven because one MATLAB residual diagnostics golden is missing.
+  - worst field/trip: `D`, `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4`
 - CI for PR #55 / commit `edc39cc` passed after rerunning a transient Ubuntu mirror failure in `build-cuda`.
+- CI for PR #55 / latest commit `b3bc70c` has non-CUDA checks passing, but `build-cuda` is blocked by repeated Ubuntu apt mirror failures. A workflow retry/fallback patch cannot be pushed with the current OAuth token because it lacks `workflow` scope.
 - Local focused tests: `19 passed in 47.01s`
 
 次にやること:
 
-1. MATLAB golden export を補完: missing `phone_data_residual_diagnostics.csv` for `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl`
-2. missing golden を補完したら 12 trip gate を再実行し、12/12 の residual side-only/value delta がゼロ/閾値内になるか確認
-3. golden を補完できない場合は、`train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl` を gate の default set から明示的に除外するか判断する
-4. full-window / all exported residual diagnostics へ広げる前に、runtime と output size を見積もる
+1. latest PR CI の `build-cuda` を再実行し、apt mirror 起因の赤を解消できるか確認
+2. workflow 側の apt retry/fallback を入れるなら、`workflow` scope を持つ token で別途 push する
+3. residual equivalence を full-window / all exported residual diagnostics へ広げる前に、runtime と output size を見積もる
+4. 12-trip `matlab_equivalent` を Kaggle submission candidate の risk gate に接続する
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 
