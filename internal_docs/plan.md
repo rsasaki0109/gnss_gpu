@@ -191,6 +191,14 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - All 3 P6P0 candidates are blocked: previous changed rows are `1444` / `1019` / `1291` on the three risky Pixel6Pro trips, with max movement `0.751m` / `0.814m` / `0.814m`.
   - `--prepare-ready-report ... --require-matlab-equivalence` now fails before ready-report publication with `pre-submit previous trip check failed`.
   - Focused verification: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `23 passed`; ruff pass.
+- Follow-up safe-baseline gate generalization:
+  - pre-submit trip gate now accepts risky Pixel6Pro movement only when either there is no previous safe candidate and input delta is zero, or a previous safe candidate exists and previous delta is zero.
+  - risk report chunks are waived only after pre-submit manifest proves selected candidates preserve the previous safe Pixel6Pro rows.
+  - This keeps old private-safe Pixel6Pro offsets submit-ready while still blocking P6P0 rollback-to-input candidates.
+  - Real-data check:
+    - `sjc_r_scale_sweep` with `--previous-output-dir .../basecorr_posoffset_pixel5_patch_scripted` => `prepared: 3 candidate(s)`; risky Pixel6Pro rows have input changed rows `1444/1019/1291` but previous changed rows `0/0/0`.
+    - P6P0 clean with the nested previous lookup still fails on `previous_changed_rows=1444`.
+  - Focused verification: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `25 passed`; ruff pass.
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 

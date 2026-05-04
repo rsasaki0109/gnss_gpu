@@ -213,6 +213,12 @@ def p6p0_candidates(items: list[QueueItem]) -> list[str]:
     return [item.candidate for item in items if item.candidate.endswith("_p6p0")]
 
 
+def _pre_submit_required_candidates(output_dir: Path, candidates: list[str]) -> list[str]:
+    if pre_submit_manifest_payload(output_dir) is not None:
+        return candidates
+    return [candidate for candidate in candidates if candidate.endswith("_p6p0")]
+
+
 def existing_queue_items(queue: list[QueueItem], output_dir: Path, tag: str, *, skip_missing: bool = False) -> list[QueueItem]:
     existing: list[QueueItem] = []
     for item in queue:
@@ -288,15 +294,6 @@ def assert_pre_submit_manifest_gate(
         raise SystemExit(f"missing pre-submit manifest in {output_dir / PRE_SUBMIT_MANIFEST}")
     assert_matlab_equivalence_gate(manifest, require=require_matlab_equivalence)
 
-    risk_report = manifest.get("risk_report")
-    risk_report = risk_report if isinstance(risk_report, dict) else {}
-    try:
-        actionable_chunks = int(risk_report.get("candidate_actionable_risky_chunks", -1))
-    except (TypeError, ValueError):
-        actionable_chunks = -1
-    if actionable_chunks != 0:
-        raise SystemExit(f"pre-submit manifest risk gate failed: candidate_actionable_risky_chunks={actionable_chunks}")
-
     manifest_candidates = manifest.get("candidates")
     if not isinstance(manifest_candidates, list):
         raise SystemExit("pre-submit manifest is missing candidates")
@@ -311,12 +308,6 @@ def assert_pre_submit_manifest_gate(
 
     for candidate in sorted(selected):
         row = by_candidate[candidate]
-        try:
-            row_actionable = int(row.get("risk_candidate_actionable_chunks", -1))
-        except (TypeError, ValueError):
-            row_actionable = -1
-        if row_actionable != 0:
-            raise SystemExit(f"pre-submit manifest candidate risk failed for {candidate}: {row_actionable}")
         try:
             pixel6pro_scale = float(row.get("pixel6pro_scale"))
         except (TypeError, ValueError):
@@ -337,6 +328,7 @@ def assert_pre_submit_manifest_gate(
     if not trip_csv.is_file():
         raise SystemExit(f"missing pre-submit trip checks in {trip_csv}")
     seen: set[str] = set()
+    previous_safe_by_candidate: dict[str, bool] = {}
     with trip_csv.open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
             candidate = row.get("candidate")
@@ -347,25 +339,41 @@ def assert_pre_submit_manifest_gate(
                 raise SystemExit(f"pre-submit trip check has no rows for {candidate}: {row.get('tripId')}")
             changed_rows = _int_field(row, "input_changed_rows")
             input_max_m = _float_field(row, "input_max_m")
-            if changed_rows != 0 or input_max_m != 0.0:
-                raise SystemExit(
-                    f"pre-submit trip check failed for {candidate} {row.get('tripId')}: "
-                    f"input_changed_rows={changed_rows}, input_max_m={input_max_m}"
-                )
             previous_changed_rows = _int_field(row, "previous_changed_rows")
-            if candidate.endswith("_p6p0") and _bool_field(row, "previous_exists") and previous_changed_rows != 0:
+            previous_exists = _bool_field(row, "previous_exists")
+            previous_safe_by_candidate[candidate] = previous_safe_by_candidate.get(candidate, True) and previous_exists
+            if previous_exists and previous_changed_rows != 0:
+                previous_safe_by_candidate[candidate] = False
                 previous_max_m = _float_field(row, "previous_max_m")
                 raise SystemExit(
                     f"pre-submit previous trip check failed for {candidate} {row.get('tripId')}: "
                     f"previous_changed_rows={previous_changed_rows}, previous_max_m={previous_max_m}"
                 )
+            if not previous_exists and (changed_rows != 0 or input_max_m != 0.0):
+                raise SystemExit(
+                    f"pre-submit trip check failed for {candidate} {row.get('tripId')}: "
+                    f"input_changed_rows={changed_rows}, input_max_m={input_max_m}"
+                )
     missing_trip_checks = sorted(selected - seen)
     if missing_trip_checks:
         raise SystemExit(f"pre-submit trip checks are missing candidates: {', '.join(missing_trip_checks)}")
+    for candidate in sorted(selected):
+        row = by_candidate[candidate]
+        try:
+            row_actionable = int(row.get("risk_candidate_actionable_chunks", -1))
+        except (TypeError, ValueError):
+            row_actionable = -1
+        if row_actionable != 0 and not previous_safe_by_candidate.get(candidate, False):
+            raise SystemExit(f"pre-submit manifest candidate risk failed for {candidate}: {row_actionable}")
     return manifest
 
 
-def assert_submit_risk_gate(output_dir: Path, *, allow_risk: bool = False) -> dict[str, object] | None:
+def assert_submit_risk_gate(
+    output_dir: Path,
+    *,
+    allow_risk: bool = False,
+    previous_safe_manifest: bool = False,
+) -> dict[str, object] | None:
     report = risk_report_payload(output_dir)
     if allow_risk:
         return report
@@ -373,6 +381,8 @@ def assert_submit_risk_gate(output_dir: Path, *, allow_risk: bool = False) -> di
         raise SystemExit(f"missing risk report in {output_dir / 'build_summary.json'}")
     if not bool(report.get("enabled", False)):
         raise SystemExit("PR proxy risk report was not enabled for this candidate build")
+    if previous_safe_manifest:
+        return report
     try:
         risky_chunks = int(report.get("candidate_actionable_risky_chunks", report.get("risky_chunks", 0)))
     except (TypeError, ValueError):
@@ -672,7 +682,24 @@ def assert_ready_report_consistency(report_path: Path) -> dict[str, Any]:
     if expected_count != len(candidates):
         raise SystemExit(f"ready report count mismatch: ready_count={expected_count}, rows={len(candidates)}")
 
-    current_risk = assert_submit_risk_gate(output_dir, allow_risk=allow_risk)
+    pre_submit_candidates = _pre_submit_required_candidates(output_dir, list(by_candidate))
+    manifest: dict[str, object] | None = None
+    manifest_by_candidate: dict[str, dict[str, Any]] = {}
+    if pre_submit_candidates and not allow_risk:
+        manifest = assert_pre_submit_manifest_gate(output_dir, pre_submit_candidates)
+        manifest_rows = manifest.get("candidates")
+        if not isinstance(manifest_rows, list):
+            raise SystemExit("pre-submit manifest is missing candidates")
+        manifest_by_candidate = _candidate_rows_by_name(
+            [row for row in manifest_rows if isinstance(row, dict)],
+            label="pre-submit manifest",
+        )
+
+    current_risk = assert_submit_risk_gate(
+        output_dir,
+        allow_risk=allow_risk,
+        previous_safe_manifest=manifest is not None,
+    )
     ready_risk = report.get("risk_report")
     ready_actionable = _risk_actionable_chunks(ready_risk if isinstance(ready_risk, dict) else None)
     current_actionable = _risk_actionable_chunks(current_risk)
@@ -680,19 +707,6 @@ def assert_ready_report_consistency(report_path: Path) -> dict[str, Any]:
         raise SystemExit(
             "ready report risk mismatch: "
             f"report candidate_actionable_risky_chunks={ready_actionable}, current={current_actionable}"
-        )
-
-    p6p0 = [candidate for candidate in by_candidate if candidate.endswith("_p6p0")]
-    manifest: dict[str, object] | None = None
-    manifest_by_candidate: dict[str, dict[str, Any]] = {}
-    if p6p0 and not allow_risk:
-        manifest = assert_pre_submit_manifest_gate(output_dir, p6p0)
-        manifest_rows = manifest.get("candidates")
-        if not isinstance(manifest_rows, list):
-            raise SystemExit("pre-submit manifest is missing candidates")
-        manifest_by_candidate = _candidate_rows_by_name(
-            [row for row in manifest_rows if isinstance(row, dict)],
-            label="pre-submit manifest",
         )
 
     for candidate, row in sorted(by_candidate.items()):
@@ -759,14 +773,18 @@ def prepare_ready_report(
     ready_queue = existing_queue_items(queue, output_dir, tag, skip_missing=skip_missing)
     risk_report: dict[str, object] | None = None
     pre_submit_manifest: dict[str, object] | None = None
-    if ready_queue:
-        risk_report = assert_submit_risk_gate(output_dir, allow_risk=allow_risk)
-    clean_p6p0 = p6p0_candidates(ready_queue)
-    if clean_p6p0 and not allow_risk:
+    pre_submit_candidates = _pre_submit_required_candidates(output_dir, [item.candidate for item in ready_queue])
+    if pre_submit_candidates and not allow_risk:
         pre_submit_manifest = assert_pre_submit_manifest_gate(
             output_dir,
-            clean_p6p0,
+            pre_submit_candidates,
             require_matlab_equivalence=require_matlab_equivalence,
+        )
+    if ready_queue:
+        risk_report = assert_submit_risk_gate(
+            output_dir,
+            allow_risk=allow_risk,
+            previous_safe_manifest=pre_submit_manifest is not None,
         )
     report = build_ready_report(
         output_dir=output_dir,
@@ -850,14 +868,18 @@ def main(argv: list[str] | None = None) -> int:
     pre_submit_manifest: dict[str, object] | None = None
 
     if args.submit or args.check_ready:
-        if ready_queue:
-            risk_report = assert_submit_risk_gate(args.output_dir, allow_risk=args.allow_risk)
-        clean_p6p0 = p6p0_candidates(ready_queue)
-        if clean_p6p0 and not args.allow_risk:
+        pre_submit_candidates = _pre_submit_required_candidates(args.output_dir, [item.candidate for item in ready_queue])
+        if pre_submit_candidates and not args.allow_risk:
             pre_submit_manifest = assert_pre_submit_manifest_gate(
                 args.output_dir,
-                clean_p6p0,
+                pre_submit_candidates,
                 require_matlab_equivalence=args.require_matlab_equivalence,
+            )
+        if ready_queue:
+            risk_report = assert_submit_risk_gate(
+                args.output_dir,
+                allow_risk=args.allow_risk,
+                previous_safe_manifest=pre_submit_manifest is not None,
             )
         if args.check_ready:
             print(f"ready: {len(ready_queue)} candidate(s)")
