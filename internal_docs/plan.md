@@ -1,10 +1,553 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-04-21 JST
-**現在の HEAD**: `7952456` (`feature/carrier-phase-imu`, origin 同期)
-**ブランチ**: `feature/carrier-phase-imu`
-**作業ツリー**: clean (未追跡の `.codex_handoff*.md` を除く、gitignore 済)
-**PR #4**: CLOSED (not merged、2026-04-16)。現在の 28+ commits はどの PR にも入っていない
+**最終更新**: 2026-05-04 JST
+**現在の HEAD**: `ff77a0a` (`codex/residual-mask-next`)
+**ブランチ**: `codex/residual-mask-next`
+**作業ツリー**: dirty。GSDC2023/MATLAB 移植・audit・候補生成まわりに多数の変更/未追跡ファイルあり。既存変更を revert しないこと。
+**直近の重点**: Kaggle GSDC2023 raw bridge / MATLAB phone_data 移植の内部状態 parity と提出前 risk gate。
+**旧メモ**: 2026-04-21 以前の UrbanNav / CT-RBPF-FGO 計画は下に残す。現在の最優先は GSDC2023 raw bridge の MATLAB 移植を詰めること。
+
+## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
+
+### 現在地
+
+「完全移植完了」とはまだ言わない。実用 pipeline としてはかなり動き、factor mask と residual value は代表 11-12 trip で強い parity が取れた。MATLAB `phone_data` / factor 入力 / residual / mask の全 trip 完全一致と VD/TDCP factor 挙動の説明性が残り。現時点の体感は **85-90%**。
+
+完了済み・確認済み:
+
+- full pytest: `1223 passed, 57 skipped, 1 warning` (2026-05-02)
+- `experiments/gsdc2023_raw_bridge.py`
+  - raw WLS の単発 spike repair を `solve_trip` 内に接続
+  - Pixel6Pro 用 `VD seed factor guard` を追加
+  - guard 発火時は VD solver を呼ばず raw-backed FGO candidate に逃がす
+  - `run_fgo_chunked` が `vd_seed_guard_skipped_segments / epochs` を返す
+- `experiments/gsdc2023_output.py`
+  - `bridge_metrics.json` と summary に `vd_seed_guard_skipped_segments`, `vd_seed_guard_skipped_epochs` を出力
+  - 2026-05-04: guard 発火 segment の `reject_reason`, Doppler/TDCP RMS/count を `vd_seed_guard_records` として `bridge_metrics.json` に出力
+- 実データ slow tests:
+  - Pixel6Pro 2021 cluster split PR outlier を observation mask が抑制
+  - Pixel6Pro raw WLS spike repair で `max step 50km+ -> <100m`
+  - Pixel6Pro 2023 は PR-MSE proxy が良く見えても gated が baseline を維持することを固定
+- `experiments/diagnose_gsdc2023_vd_factor_residuals.py`
+  - VD seed の Doppler / TDCP residual を分解診断
+  - Pixel6Pro 2021 先頭 chunk で TDCP seed residual が破綻することを確認
+- `experiments/audit_gsdc2023_pr_proxy_risk.py`
+  - `bridge_metrics.json` / nested summary から「PR-MSE は改善するが gated が baseline に落とした危険候補」を検出
+  - `--fail-on-risk` で提出前 gate 化済み
+- `experiments/audit_gsdc2023_factor_mask_parity.py`
+  - 複数 trip の MATLAB `phone_data_factor_mask.csv` と bridge factor mask を集約比較する audit を追加
+  - `--verbose` で trip 進捗を stderr に表示
+  - 2026-05-03: GPS-only / 12 trip / `--max-epochs 50` で `passed=true`
+  - window 読み込み最適化を追加。GNSS log 補完は epoch window 外の観測を先に除外し、末尾補間用に raw window へ 8 epoch の余白を付ける
+
+### 重要な leaderboard / Kaggle A/B 結果
+
+基準 private-safe:
+
+- `public=3.687`, `private=4.710`
+
+提出済み実験:
+
+| 候補 | Public | Private | 判定 |
+|---|---:|---:|---|
+| `20260502 seedguard p6p 20211105 obsmask offset3` | 3.728 | 4.710 | private tie だが public 悪化。reject |
+| `20260502 p6p 2023 seedguard rawfgo obsmask offset3p25` | 3.744 | 4.937 | private 大幅悪化。reject |
+
+重要な結論:
+
+- **PR-MSE proxy だけで候補を採用してはいけない。**
+- Pixel6Pro 2023 は raw-backed FGO / raw WLS の PR-MSE が baseline より良く見えるが、Kaggle private が大きく悪化した。
+- gated policy が baseline を維持した判断は正しい。
+- `audit_gsdc2023_pr_proxy_risk.py --fail-on-risk` を提出前 gate として使う。
+
+### 追加・変更された主なファイル
+
+実装:
+
+- `experiments/gsdc2023_raw_bridge.py`
+- `experiments/gsdc2023_output.py`
+- `experiments/gsdc2023_result_assembly.py`
+- `experiments/diagnose_gsdc2023_vd_factor_residuals.py`
+- `experiments/audit_gsdc2023_pr_proxy_risk.py`
+- `experiments/audit_gsdc2023_factor_mask_parity.py`
+- `experiments/audit_gsdc2023_residual_value_parity.py`
+- `experiments/build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py`
+- `experiments/export_gsdc2023_source_chunks_from_summary.py`
+- `experiments/submit_gsdc2023_pixel5_candidate_queue.py`
+
+テスト:
+
+- `tests/test_validate_fgo_gsdc2023_raw.py`
+- `tests/test_gsdc2023_output.py`
+- `tests/test_gsdc2023_result_assembly.py`
+- `tests/test_gsdc2023_chunk_selection.py`
+- `tests/test_gsdc2023_observation_mask_real.py`
+- `tests/test_diagnose_gsdc2023_vd_factor_residuals.py`
+- `tests/test_audit_gsdc2023_pr_proxy_risk.py`
+- `tests/test_audit_gsdc2023_factor_mask_parity.py`
+- `tests/test_audit_gsdc2023_residual_value_parity.py`
+
+### 重要な実データ診断
+
+#### Pixel6Pro 2021 MTV-M
+
+Trip:
+
+`test/2021-11-05-18-28-us-ca-mtv-m/pixel6pro`
+
+観測 mask:
+
+- mask なし PR-MSE: 約 `17,835,614`
+- mask あり PR-MSE: 約 `12.04`
+- multi/dual direct: `multi_mask mse=10.4364`, `multi_dual_mask mse=7.0441`
+
+raw WLS spike repair:
+
+- max step: `56.3km -> 59.6m`
+- PR-MSE: `6.7145 -> 6.7155`
+
+VD guard:
+
+- 200 epoch: `vd guard skipped_segments=1 skipped_epochs=200`
+- FGO iters: `0`
+- selected MSE: `7.1115`
+
+VD residual diagnosis:
+
+- Doppler weighted RMS: 約 `5.20 m/s`
+- TDCP weighted RMS: 約 `1587 m`
+- epoch 146 / 148 に clock component 由来の巨大 TDCP residual
+- `--tdcp-use-drift yes` でも完全には安全化しない
+
+#### Pixel6Pro 2023 raw-backed FGO 棄却
+
+Trips:
+
+- `test/2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro`
+- `test/2023-05-25-17-32-us-ca-pao-j/pixel6pro`
+
+400 epoch probe:
+
+- どちらも `guard_segments=2`, `guard_epochs=400`
+- raw/fgo PR-MSE は baseline より良く見える
+- gated は baseline を選ぶ
+- raw-backed FGO patch を Kaggle 提出すると `private=4.937` へ悪化
+
+対応:
+
+- `tests/test_gsdc2023_observation_mask_real.py::test_real_pixel6pro_2023_gated_rejects_raw_backed_fgo_despite_lower_pr_mse`
+- `tests/test_gsdc2023_chunk_selection.py::test_select_gated_chunk_source_rejects_pixel6pro_2023_raw_proxy_with_low_baseline_pr`
+- `experiments/audit_gsdc2023_pr_proxy_risk.py`
+
+### 2026-05-02 の検証コマンド
+
+通過済み:
+
+```bash
+PYTHONPATH=.:python pytest -q
+# 1223 passed, 57 skipped, 1 warning
+```
+
+局所:
+
+```bash
+PYTHONPATH=.:python pytest -q tests/test_validate_fgo_gsdc2023_raw.py
+# 113 passed
+
+PYTHONPATH=.:python pytest -q tests/test_gsdc2023_observation_mask_real.py
+# 3 passed in 116.43s
+
+PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_pr_proxy_risk.py tests/test_gsdc2023_chunk_selection.py
+# 29 passed
+
+PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_factor_mask_parity.py
+# 3 passed
+```
+
+PR proxy risk gate:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_pr_proxy_risk.py \
+  --input '/tmp/gsdc2023_pixel6pro_guard_probe_400/*/bridge_metrics.json' \
+  --output-dir /tmp/gsdc2023_pr_proxy_risk_fail_gate \
+  --fail-on-risk
+# exit_code=2 expected when risky chunks exist
+```
+
+Factor mask parity audit:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_factor_mask_parity.py \
+  --max-epochs 50 \
+  --no-multi-gnss \
+  --verbose \
+  --output-dir /tmp/gsdc2023_factor_mask_parity_audit_12trip_50epoch_extra8
+# 12 trip completed, passed=true, overall_min_symmetric_parity=1.0,
+# total_matlab_only=0, total_bridge_only=0, elapsed=8:34.08
+```
+
+補足:
+
+- 1 trip smoke: `train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4`, `--max-epochs 50`, parity `1.0`, elapsed `0:33.13`
+- `train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u` は raw window 余白 1 epoch だと epoch 47-50 の GPS L1 が MATLAB-only になる。8 epoch 余白で parity `1.0`。
+- 12 trip audit の出力: `/tmp/gsdc2023_factor_mask_parity_audit_12trip_50epoch_extra8/gsdc2023_factor_mask_parity_audit_20260503_065458`
+
+### 次にやること: MATLAB 移植完了へ向けた優先順位
+
+#### A. factor mask parity audit を完走可能にする
+
+目的:
+
+- MATLAB `phone_data_factor_mask.csv` と Python bridge mask の trip 横断一致率を出す
+- mask / factor availability の移植率を数値化する
+
+状態:
+
+- 2026-05-03 に GPS-only / 12 trip / `--max-epochs 50` は完走、`passed=true`
+- `overall_min_symmetric_parity=1.0`, `total_matlab_only=0`, `total_bridge_only=0`
+- ただし elapsed `8:34.08`。residual mask 用 full context 再構築が支配的で、full epoch 横断や multi-GNSS 化の前にキャッシュ/再利用を検討する
+
+注意:
+
+- 現在の MATLAB export は基本 GPS-only scope。multi-GNSS は MATLAB export scope を揃えるまで parity 失敗扱いにしない。
+- `phone_data_residual_diagnostics.csv` がある trip では diagnostics mask を bridge mask に適用する比較も必要。
+
+#### B. residual value parity audit を横断で回す
+
+目的:
+
+- MATLAB residual diagnostics と Python residual 値の一致を trip 横断で確認
+- `max_abs_delta <= 1e-4m` を目安にする
+
+状態:
+
+- 2026-05-03 に multi-GNSS / 11 trip / `--max-epochs 50` smoke は完走、`passed=true`
+- `overall_max_abs_delta=5.060694127195786e-05`
+- `overall_p95_abs_delta_max=2.7123350099600377e-05`
+- worst: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4`, `field=D`, `freq=L1`, `epoch=44`, `svid=16`
+- worst component: `model_delta ~= 5.1e-05m`, `sat_velocity_delta_norm ~= 2.01e-04m/s`; observation/common-bias 差分はほぼゼロ
+- output: `/tmp/gsdc2023_residual_value_parity_audit_11trip_50epoch/gsdc2023_residual_value_parity_audit_20260503_100107`
+- 2026-05-03 に multi-GNSS / 11 trip / `--max-epochs 200` も完走、`passed=true`
+- `overall_max_abs_delta=5.91054445631678e-05`, `overall_p95_abs_delta_max=2.796173776410671e-05`
+- worst: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4`, `field=D`, `freq=L1`, `epoch=124`, `svid=26`
+- output: `/tmp/gsdc2023_residual_value_parity_audit_11trip_200epoch_context_obs/gsdc2023_residual_value_parity_audit_20260503_102902`
+- 注意: context batch を observation mask なしで作ると GNSS log 由来 epoch grid が欠け、`train/2020-08-04-00-20-us-ca-sb-mtv-101/pixel4xl` の epoch 200 で Doppler residual が約 `1.156m` ずれる。context 側も `apply_observation_mask=True` にする必要がある。
+- 2026-05-04 に multi-GNSS / 11 trip / `--max-epochs 0` full settings window も完走、`passed=true`
+- `overall_max_abs_delta=5.91054445631678e-05`, `overall_p95_abs_delta_max=2.7840284939184543e-05`
+- worst: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4`, `field=D`, `freq=L1`, `epoch=124`, `svid=26`
+- output: `/tmp/gsdc2023_residual_value_parity_audit_11trip_full/gsdc2023_residual_value_parity_audit_20260504_155714`
+
+実行コマンド:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_value_parity.py \
+  --max-epochs 0 \
+  --multi-gnss \
+  --max-abs-delta-threshold-m 1e-4 \
+  --verbose \
+  --output-dir /tmp/gsdc2023_residual_value_parity_audit_11trip_full
+```
+
+結論:
+
+- この対象 11 trip では residual diagnostics value parity は full window まで `1e-4m` 閾値内。
+- 差分の主成分は Doppler model 側の `~6e-05m` 未満で、observation/common-bias は実質一致。
+
+#### C. VD/TDCP の扱いを「guard で逃げる」から「原因別に説明できる」へ
+
+現状:
+
+- Pixel6Pro は TDCP/VD seed residual が危険
+- guard は有効だが、MATLAB と同等の VD factor 挙動とは言い切れない
+- 2026-05-04 に `audit_gsdc2023_vd_factor_residuals.py` を追加し、複数 trip の VD seed residual を集約できるようにした
+- observation mask なし / 4 trip / 200 epoch:
+  - output: `/tmp/gsdc2023_vd_factor_residual_audit_4trip_200/gsdc2023_vd_factor_residual_audit_20260504_161752`
+  - worst: `test/2021-11-05-18-28-us-ca-mtv-m/pixel6pro`
+  - Doppler weighted RMS `2787.0 m/s`, TDCP weighted RMS `1870.7 m`
+  - top Doppler residual は epoch 195 付近で predicted range-rate が数万 m/s へ破綻
+- observation mask あり / 4 trip / 200 epoch:
+  - output: `/tmp/gsdc2023_vd_factor_residual_audit_4trip_200_obsmask/gsdc2023_vd_factor_residual_audit_20260504_161837`
+  - `test/2021-11-05-18-28-us-ca-mtv-m/pixel6pro`: Doppler RMS `5.20 m/s`, TDCP RMS `1587.45 m`
+  - `test/2023-05-25-17-32-us-ca-pao-j/pixel6pro`: Doppler RMS `9.02 m/s`, TDCP RMS `6.03 m`
+  - `test/2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro`: Doppler RMS `4.84 m/s`, TDCP RMS `7.71 m`
+  - `train/2021-12-08-20-28-us-ca-lax-c/pixel5`: Doppler RMS `8.01 m/s`, TDCP RMS `4.93 m`
+- guard chunk 境界 / 4 trip / 400 epoch / chunk 200 / observation mask あり:
+  - output: `/tmp/gsdc2023_vd_factor_guard_segment_audit_4trip_400_effective/gsdc2023_vd_factor_residual_audit_20260504_170802`
+  - threshold 上は 8 segments / 1600 epochs すべて Doppler 理由で reject
+  - 実 guard は Pixel6Pro 限定なので effective reject は 6 segments / 1200 epochs
+  - Pixel6Pro 2023 2 trip は各 2 segments / 400 epochs reject で、既存 probe の `guard skipped 2/400` と整合
+  - Pixel5 train も threshold 上は 2 segments reject だが `phone_guard_enabled=false` なので effective reject しない
+
+解釈:
+
+- Pixel6Pro 2021 は observation mask 後も TDCP が破綻しており、guard の TDCP 閾値 `50m` で説明可能。
+- Pixel6Pro 2023-05-25 は Doppler RMS が guard 閾値 `8m/s` を超える。
+- Pixel5 train も Doppler RMS が `8m/s` 付近に見えるため、guard を Pixel6Pro 限定にしたのは重要。端末非限定 guard にすると Pixel5 の VD を不必要に止める可能性がある。
+- 2026-05-04 に本番 `bridge_metrics.json` へ `vd_seed_guard_records` を追加。各 skipped segment について chunk/segment epoch 範囲、Doppler RMS/count、TDCP RMS/count、`reject_reason` を残す。summary には reason count (`reasons=doppler:N` 等) を表示。
+- 局所検証:
+  - `python3 -m py_compile experiments/gsdc2023_raw_bridge.py experiments/gsdc2023_output.py experiments/gsdc2023_result_assembly.py tests/test_gsdc2023_output.py tests/test_gsdc2023_result_assembly.py tests/test_validate_fgo_gsdc2023_raw.py`
+  - `PYTHONPATH=.:python pytest -q tests/test_gsdc2023_output.py tests/test_gsdc2023_result_assembly.py tests/test_validate_fgo_gsdc2023_raw.py::test_run_fgo_chunked_skips_vd_segment_when_seed_tdcp_residual_is_bad` → `10 passed`
+- 2026-05-04 に `audit_gsdc2023_pr_proxy_risk.py` も `vd_seed_guard_records` を読むように更新:
+  - risky chunk CSV に `vd_guard_overlap_segments`, `vd_guard_reject_reasons`, `vd_guard_max_doppler_rms_mps`, `vd_guard_max_tdcp_rms_m` を追加
+  - output dir に `vd_seed_guard_records.csv` を追加
+  - `summary.json` に `vd_guard_rows`, `vd_guard_by_phone`, `vd_guard_reject_reasons`, `vd_seed_guard_records_csv` を追加
+  - 検証: `python3 -m py_compile experiments/audit_gsdc2023_pr_proxy_risk.py tests/test_audit_gsdc2023_pr_proxy_risk.py && PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_pr_proxy_risk.py` → `3 passed`
+
+次:
+
+- 新しい `bridge_metrics.json` 形式で Pixel6Pro 2021/2023 の 400 epoch probe を再生成し、risk report に guard CSV が実データで添付されることを確認済み:
+  - raw bridge output: `/tmp/gsdc2023_pixel6pro_guard_probe_400_records`
+  - risk report: `/tmp/gsdc2023_pr_proxy_risk_pixel6pro_probe_records`
+  - `audit_gsdc2023_pr_proxy_risk.py --fail-on-risk` は期待どおり `exit_code=2`
+  - `summary.json`: `input_files=3`, `risky_chunks=5`, `risky_rows=15`, `vd_guard_rows=6`, `vd_guard_reject_reasons={"doppler": 6}`
+  - `vd_seed_guard_records.csv` は 3 trip x 2 chunks = 6 rows。最大 Doppler RMS は `2721.586 m/s` (`test/2023-05-25-17-32-us-ca-pao-j/pixel6pro`, epoch 200-400)、最大 TDCP RMS は `4183.744 m` (同 chunk)。
+  - `pr_proxy_risk_chunks.csv` の risky row には `vd_guard_overlap_segments=1`, `vd_guard_reject_reasons=doppler`, `vd_guard_max_doppler_rms_mps`, `vd_guard_max_tdcp_rms_m` が入る。
+
+次:
+
+- full epoch / 提出候補生成の出力にも同じ risk report を接続済み:
+  - `build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py` に `--risk-metrics`, `--risk-report-dir`, `--fail-on-risk` を追加
+  - `build_summary.json` に `pr_proxy_risk_report` を埋め込む
+  - report output は `OUTPUT_DIR/pr_proxy_risk_report/{summary.json,pr_proxy_risk_chunks.csv,vd_seed_guard_records.csv}`
+  - `--fail-on-risk` 指定時、`risky_chunks > 0` なら候補 CSV 生成後に `exit_code=2`
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py` → `7 passed`
+  - CLI smoke でも risk 入力時に `exit_code=2` を確認
+
+次:
+
+- submit queue 側でも `build_summary.json` の `pr_proxy_risk_report.risky_chunks` を読むように更新済み:
+  - `submit_gsdc2023_pixel5_candidate_queue.py --submit` は `build_summary.json` が無い / `pr_proxy_risk_report.enabled=false` / `risky_chunks != 0` の場合に submit 前に `SystemExit`
+  - 明示 override は `--allow-risk`
+  - dry-run listing は従来どおり risk gate を強制しない
+  - 検証: `python3 -m py_compile experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py && PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `7 passed`
+
+次:
+
+- 実候補 output dir に対して submit queue dry-run と `--submit` 前 gate の smoke 済み:
+  - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted`
+  - dry-run: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --group sjc_r_scale_sweep --skip-missing`
+    - 3 candidate command を表示
+  - submit gate smoke: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --group sjc_r_scale_sweep --skip-missing --submit`
+    - `exit_code=1`
+    - `missing risk report in .../build_summary.json`
+    - stdout 0 lines。Kaggle submit 前に停止。
+
+#### D. Kaggle 候補生成は risk gate 必須
+
+提出前に必ず:
+
+```bash
+PYTHONPATH=.:python python3 experiments/build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py \
+  --risk-metrics 'PATH_TO_BRIDGE_METRICS_GLOB' \
+  --fail-on-risk
+```
+
+提出 checklist:
+
+1. `build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py --risk-metrics ... --fail-on-risk` を通す。
+2. `exit_code=2` なら Kaggle 提出しない。
+3. `submit_gsdc2023_pixel5_candidate_queue.py --submit` は `build_summary.json` に `pr_proxy_risk_report.enabled=true` かつ `risky_chunks=0` が無い限り自動停止する。
+4. `--allow-risk` は明示 override。通常提出では使わない。
+
+回帰確認:
+
+```bash
+PYTHONPATH=.:python pytest -q \
+  tests/test_audit_gsdc2023_pr_proxy_risk.py \
+  tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py \
+  tests/test_submit_gsdc2023_pixel5_candidate_queue.py \
+  tests/test_gsdc2023_output.py \
+  tests/test_gsdc2023_result_assembly.py
+# 26 passed
+
+PYTHONPATH=.:python pytest -q tests/test_validate_fgo_gsdc2023_raw.py \
+  -k "vd_seed_factor_guard or run_fgo_chunked or export_bridge_outputs"
+# 6 passed, 107 deselected
+```
+
+実候補再ビルド smoke:
+
+```bash
+PYTHONPATH=.:python python3 experiments/build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py \
+  --candidate pixel5phone_3p375_sjc_r0p84375 \
+  --candidate pixel5phone_3p375_sjc_r1p6875 \
+  --candidate pixel5phone_3p375_sjc_r2p53125 \
+  --risk-metrics '/tmp/gsdc2023_pixel6pro_guard_probe_400_records/*/bridge_metrics.json' \
+  --fail-on-risk
+# exit_code=2 expected
+```
+
+- `experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted/build_summary.json` に `pr_proxy_risk_report` が入った。
+- report: `.../basecorr_posoffset_pixel5_patch_scripted/pr_proxy_risk_report/summary.json`
+- `risky_chunks=5`, `risky_rows=15`, `vd_guard_rows=6`, `vd_guard_reject_reasons={"doppler": 6}`
+- submit smoke:
+
+```bash
+PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \
+  --group sjc_r_scale_sweep --skip-missing --submit
+# exit_code=1, PR proxy risk gate failed: risky_chunks=5
+```
+
+P6P0 clean candidate:
+
+- 既存 scripted candidates は phone-tuned policy により Pixel6Pro 全体へ scale `3.0`、さらに `2023-05-23/25 pixel6pro` へ trip scale `3.25` を入れていた。
+- clean preset として以下を追加:
+  - `pixel5phone_3p375_sjc_r0p84375_p6p0`
+  - `pixel5phone_3p375_sjc_r1p6875_p6p0`
+  - `pixel5phone_3p375_sjc_r2p53125_p6p0`
+- これらは `phone_scale_overrides["pixel6pro"] = 0.0` で、`2023-05-23/25 pixel6pro` の trip scale override も持たない。
+- risk report は global risk と candidate-actionable risk を分けるように更新:
+  - global: `risky_chunks`, `risky_rows`
+  - candidate-aware: `candidate_actionable_risky_chunks`, `candidate_actionable_risky_rows`, `candidate_actionable_by_candidate`
+  - submit gate は `candidate_actionable_risky_chunks` があればそれを優先して見る。
+- 検証:
+
+```bash
+PYTHONPATH=.:python pytest -q \
+  tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py \
+  tests/test_submit_gsdc2023_pixel5_candidate_queue.py
+# 16 passed
+
+PYTHONPATH=.:python python3 experiments/build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py \
+  --candidate pixel5phone_3p375_sjc_r0p84375_p6p0 \
+  --candidate pixel5phone_3p375_sjc_r1p6875_p6p0 \
+  --candidate pixel5phone_3p375_sjc_r2p53125_p6p0 \
+  --output-dir /tmp/gsdc2023_p6p0_clean_candidate_risk_smoke \
+  --risk-metrics '/tmp/gsdc2023_pixel6pro_guard_probe_400_records/*/bridge_metrics.json' \
+  --fail-on-risk
+# exit_code=0
+```
+
+- 実データ smoke 結果:
+  - global: `risky_chunks=5`, `risky_rows=15`, `vd_guard_rows=6`
+  - candidate-aware: `candidate_actionable_risky_chunks=0`, `candidate_actionable_risky_rows=0`
+- 2026-05-05 に正式 output dir へ生成:
+  - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
+  - candidates:
+    - `pixel5phone_3p375_sjc_r0p84375_p6p0`, sha256 `641b2db9e6e91f29da32c960dc6735decfb229f1b8f2602a17d983023ed880cf`
+    - `pixel5phone_3p375_sjc_r1p6875_p6p0`, sha256 `aefcad559acd8bb8a8a43245716a2b08f5e3939eebd839e06ee0e891c3d7aad4`
+    - `pixel5phone_3p375_sjc_r2p53125_p6p0`, sha256 `68e9b42b10a30f153de89f3c722015328568438351f3aae97e65f89a4b35d749`
+  - risk: `risky_chunks=5`, `candidate_actionable_risky_chunks=0`, `vd_guard_rows=6`
+  - build command は `--fail-on-risk` 付きで `exit_code=0`
+- submit queue に `p6p0_clean_sjc_r_scale_sweep` group を追加:
+  - dry-run:
+    ```bash
+    PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \
+      --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505 \
+      --tag 20260505 \
+      --group p6p0_clean_sjc_r_scale_sweep \
+      --skip-missing
+    ```
+    3 件の Kaggle command を表示。
+  - `--submit` path は `subprocess.run` 差し替え smoke で `exit_code=0`, calls=3 を確認。実 Kaggle 送信は未実行。
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `7 passed`
+- pre-submit manifest:
+  - `pre_submit_manifest.json`
+  - `pre_submit_candidate_manifest.csv`
+  - `pre_submit_trip_delta_checks.csv`
+  - 3 candidates はすべて `pixel6pro_scale=0.0`, `risk_candidate_actionable_chunks=0`
+  - risky Pixel6Pro trips の input 比 delta は全候補で `0.0m`, changed rows `0`
+  - 旧 non-P6P0 候補との差分は Pixel6Pro risky trips で全 row changed、max `0.751m` (2021) / `0.814m` (2023)
+- pre-submit manifest を再現可能な script に昇格:
+  - script: `experiments/build_gsdc2023_pre_submit_manifest.py`
+  - test: `tests/test_build_gsdc2023_pre_submit_manifest.py`
+  - 入力: `--build-summary`, 任意で `--previous-output-dir`, `--previous-tag`, `--risky-trip`
+  - 出力: `pre_submit_manifest.json`, `pre_submit_candidate_manifest.csv`, `pre_submit_trip_delta_checks.csv`
+  - 実データ再生成:
+    ```bash
+    PYTHONPATH=.:python python3 experiments/build_gsdc2023_pre_submit_manifest.py \
+      --build-summary experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/build_summary.json \
+      --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted \
+      --previous-tag 20260501
+    ```
+  - 再生成結果: 3 candidates, `candidate_actionable_risky_chunks=0`, 3 risky Pixel6Pro trips は input 比 `changed_rows=0`, `input_max_m=0.0`
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `18 passed`
+- submit queue に pre-submit manifest gate を追加:
+  - `*_p6p0` 候補を `--submit` する場合、`pre_submit_manifest.json` と `pre_submit_trip_delta_checks.csv` が必須。
+  - gate 条件:
+    - manifest risk の `candidate_actionable_risky_chunks == 0`
+    - 対象 candidate の `risk_candidate_actionable_chunks == 0`
+    - `*_p6p0` candidate は `pixel6pro_scale == 0.0`
+    - manifest 記録 SHA256 と実 CSV が一致
+    - risky Pixel6Pro trip check の `input_changed_rows == 0`, `input_max_m == 0.0`
+  - 実データ mocked `--submit`:
+    - command: `--output-dir .../p6p0_clean_candidate_20260505 --tag 20260505 --group p6p0_clean_sjc_r_scale_sweep --submit --skip-missing`
+    - `subprocess.run` 差し替えで `exit_code=0`, calls=3。実 Kaggle 送信は未実行。
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `20 passed`
+- submit queue に `--check-ready` を追加:
+  - Kaggle 実送信なしで、`--submit` と同じ risk / pre-submit manifest gate と candidate CSV 存在確認を走らせる。
+  - 実データ preflight:
+    ```bash
+    PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \
+      --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505 \
+      --tag 20260505 \
+      --group p6p0_clean_sjc_r_scale_sweep \
+      --check-ready \
+      --skip-missing
+    # ready: 3 candidate(s)
+    ```
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `22 passed`
+- submit queue に `--ready-report` を追加:
+  - `--check-ready` / `--submit` と同じ対象 candidate について、candidate 名、priority group、CSV path、SHA256、Kaggle command、risk report、pre-submit manifest risk を JSON に保存する。
+  - JSON と同名 stem の `.csv` も自動生成し、candidate 名、priority group、message、path、SHA256、shell-quoted Kaggle command を候補単位で一覧化する。
+  - 実データ report:
+    - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/submit_ready_report.json`
+    - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/submit_ready_report.csv`
+    - `ready_count=3`
+    - CSV rows: `3`
+    - `risk_report.candidate_actionable_risky_chunks=0`
+    - `pre_submit_manifest.present=true`
+    - candidate SHA256 は build/pre-submit manifest と一致。
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `24 passed`
+- submit queue に `--audit-ready-report` を追加:
+  - ready report JSON、同名 CSV、現在の `build_summary.json` risk、`pre_submit_manifest.json`、実 candidate CSV SHA256 を照合する。
+  - `*_p6p0` candidate では pre-submit manifest gate も再実行し、Pixel6Pro risky trip 差分 0 と SHA 一致を再確認する。
+  - 実データ監査:
+    ```bash
+    PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \
+      --audit-ready-report experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/submit_ready_report.json
+    # audited: 3 candidate(s)
+    ```
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `26 passed`
+- submit queue に `--prepare-ready-report` を追加:
+  - pre-submit manifest 再生成、ready report JSON/CSV 生成、ready report audit を1コマンドで順番に実行する。
+  - 実データ prepare:
+    ```bash
+    PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \
+      --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505 \
+      --tag 20260505 \
+      --group p6p0_clean_sjc_r_scale_sweep \
+      --prepare-ready-report experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/submit_ready_report.json \
+      --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted \
+      --previous-tag 20260501 \
+      --skip-missing
+    # prepared: 3 candidate(s)
+    ```
+  - 再生成結果: `ready_count=3`, ready CSV rows `3`, manifest candidate count `3`, `candidate_actionable_risky_chunks=0`
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `28 passed`
+- P6P0 output dir に `submit_readiness.md` を追加:
+  - path: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/submit_readiness.md`
+  - 内容: regenerate command, audit-only command, artifact 一覧, current gate state, candidate SHA256, submit command source。
+  - 現状値: `ready_count=3`, ready CSV rows `3`, pre-submit manifest candidates `3`, risky Pixel6Pro trip delta rows `9`, max input changed rows `0`, max input delta `0.0m`
+  - 監査: `--audit-ready-report .../submit_ready_report.json` → `audited: 3 candidate(s)`
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `28 passed`
+- `submit_readiness.md` を `--prepare-ready-report` の自動生成物に変更:
+  - `prepare_ready_report()` が pre-submit manifest / ready JSON / ready CSV / audit 後に `submit_readiness.md` も再生成する。
+  - doc の値は `submit_ready_report.json`, `submit_ready_report.csv`, `pre_submit_manifest.json`, `pre_submit_trip_delta_checks.csv` から読み直す。
+  - 実データ `--prepare-ready-report` 再実行で `prepared: 3 candidate(s)`、doc の current gate state は `ready_count=3`, CSV rows `3`, manifest candidates `3`, max risky Pixel6Pro input delta `0.0m`。
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `29 passed`
+
+#### E. plan.md の旧 UrbanNav 部分の整理
+
+このファイルはまだ 4/21 時点の UrbanNav 主戦場メモが大きく残っている。GSDC/MATLAB 移植を主戦場にするなら、次回以降:
+
+- §0-§4 を GSDC2023 raw bridge 現状へ置換
+- UrbanNav / CT-RBPF-FGO は appendix に移動
+- 「再試行禁止」リストを GSDC Kaggle A/B と parity audit 失敗/成功に更新
+
+---
+
+## 旧メモ: UrbanNav / CT-RBPF-FGO 計画 (2026-04-21 時点)
 
 **北極星目標 (2026-04-19 設定)**:
 **A Continuous-Time Rao-Blackwellized Particle Filter with Factor Graph Optimization** (CT-RBPF-FGO)
