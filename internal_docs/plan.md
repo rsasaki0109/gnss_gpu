@@ -199,6 +199,18 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - `sjc_r_scale_sweep` with `--previous-output-dir .../basecorr_posoffset_pixel5_patch_scripted` => `prepared: 3 candidate(s)`; risky Pixel6Pro rows have input changed rows `1444/1019/1291` but previous changed rows `0/0/0`.
     - P6P0 clean with the nested previous lookup still fails on `previous_changed_rows=1444`.
   - Focused verification: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `25 passed`; ruff pass.
+- Local submission screening:
+  - Added `screen_gsdc2023_local_submissions.py` to classify local CSVs by submitted filename, duplicate submitted-local SHA, delta vs reference best, and risky Pixel6Pro delta vs previous safe baseline.
+  - Real-data report: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/local_submission_screen_20260505/local_submission_screen.csv`
+    - screened `132` local submission CSVs
+    - `50` have submitted filenames
+    - `76` are duplicate SHA of locally available submitted files
+    - `36` move risky Pixel6Pro rows vs the previous safe baseline
+  - Generated weighted private-floor probes under `weighted_private_floor_ensemble_20260505`.
+    - `best + 0.50 * (p3p25 - best)`: Kaggle `public=3.686`, `private=4.711`
+    - `best + 0.25 * (p3p25 - best)`: Kaggle `public=3.687`, `private=4.711`
+  - Outcome: weighted p3p25 improves/keeps public but loses the `4.710` private floor; reject further p3p25 blends unless a stronger private-safe reason appears.
+  - Focused verification: `tests/test_screen_gsdc2023_local_submissions.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py` => `27 passed`; ruff pass.
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 
