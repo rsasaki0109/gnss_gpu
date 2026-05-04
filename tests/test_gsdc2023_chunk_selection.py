@@ -127,6 +127,51 @@ def test_select_gated_chunk_source_keeps_bounded_high_baseline_fgo():
     assert select_gated_chunk_source(record, baseline_threshold=500.0) == "fgo"
 
 
+def test_select_gated_chunk_source_allows_high_confidence_low_baseline_fgo():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=20,
+        auto_source="fgo",
+        candidates={
+            "baseline": _quality(9.322, 1.0, step_p95=15.396),
+            "raw_wls": _quality(6.827, 0.851, gap_p95=10.678, gap_max=12.923, step_p95=18.911),
+            "fgo": _quality(8.478, 0.723, gap_p95=9.609, gap_max=10.466, step_p95=15.086),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "fgo"
+
+
+def test_select_gated_chunk_source_rejects_weak_low_baseline_fgo():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=20,
+        auto_source="fgo",
+        candidates={
+            "baseline": _quality(18.460, 1.0, step_p95=16.0),
+            "raw_wls": _quality(14.196, 1.216, gap_p95=16.730, gap_max=17.0, step_p95=18.0),
+            "fgo": _quality(16.275, 0.930, gap_p95=16.726, gap_max=17.0, step_p95=17.0),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+
+
+def test_select_gated_chunk_source_rejects_pixel6pro_2023_raw_proxy_with_low_baseline_pr():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=200,
+        auto_source="raw_wls",
+        candidates={
+            "baseline": _quality(17.641993, 1.0, step_p95=15.456),
+            "fgo": _quality(7.798628, 0.933937, gap_p95=20.0, gap_max=35.090, step_p95=18.436),
+            "raw_wls": _quality(7.798628, 0.933937, gap_p95=20.0, gap_max=35.090, step_p95=18.436),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+
+
 def test_select_gated_chunk_source_rescues_train_backed_high_pr_raw_wls():
     record = ChunkSelectionRecord(
         start_epoch=1400,
