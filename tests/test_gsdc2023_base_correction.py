@@ -149,6 +149,46 @@ def test_matrtklib_sat_product_applies_receiver_clock_to_transmit_time(monkeypat
     np.testing.assert_allclose(sat_pos[0], expected_tow_s * base_correction.LIGHT_SPEED_MPS, atol=1.0e-5)
 
 
+def test_matrtklib_sat_product_uses_received_sv_time_when_available(monkeypatch):
+    selected = SimpleNamespace(
+        toe=900.0,
+        toc_seconds=900.0,
+        iode=7.0,
+        tgd=0.0,
+        af0=1.0e-8,
+        af1=0.0,
+        af2=0.0,
+        clock_m=10.0,
+    )
+
+    def fake_compute_single_cpu(message, tow_s, _code):
+        return np.array([tow_s * base_correction.LIGHT_SPEED_MPS, 0.0, 0.0], dtype=np.float64), message.clock_m / base_correction.LIGHT_SPEED_MPS
+
+    monkeypatch.setattr(
+        base_correction.Ephemeris,
+        "_compute_single_cpu",
+        staticmethod(fake_compute_single_cpu),
+    )
+
+    adjusted = base_correction.gps_matrtklib_sat_product_adjustment(
+        svid=13,
+        arrival_tow_s=1000.0,
+        l1_raw_pseudorange_m=base_correction.LIGHT_SPEED_MPS * 100.0,
+        derived_common_clock_m=10.001,
+        nav_messages_by_svid={13: ((selected,), (selected,))},
+        receiver_clock_bias_m=-30.0,
+        received_sv_tow_s=950.0,
+    )
+
+    assert adjusted is not None
+    sat_pos, sat_vel, sat_clock_bias_m, sat_clock_drift_mps = adjusted
+    expected_tow_s = 950.0 - selected.af0
+    np.testing.assert_allclose(sat_pos[0], expected_tow_s * base_correction.LIGHT_SPEED_MPS, atol=1.0e-5)
+    np.testing.assert_allclose(sat_vel, np.array([base_correction.LIGHT_SPEED_MPS, 0.0, 0.0]), atol=1.0e-5)
+    assert np.isclose(sat_clock_drift_mps, 0.0)
+    assert np.isclose(sat_clock_bias_m, 10.0)
+
+
 def test_base_observation_selector_and_iono_scale_direct():
     obs = {
         "C1C": 21_000_001.0,

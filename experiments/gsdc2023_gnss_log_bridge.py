@@ -139,9 +139,28 @@ def append_gnss_log_only_gps_rows(
     if not dual_frequency or not log_path.is_file():
         return df
 
+    df = df.copy()
+    if "bridge_gnss_log_only" not in df.columns:
+        df["bridge_gnss_log_only"] = False
+
     observations = _load_masked_gps_observations(log_path, phone_name=phone_name, require_p_ok=False)
     if observations.empty:
         return df
+
+    epoch_lookup: dict[int, object] = {
+        int(row.utcTimeMillis): row
+        for row in epoch_meta.itertuples(index=False)
+        if pd.notna(row.utcTimeMillis)
+    }
+    if epoch_lookup:
+        observations = observations[
+            pd.to_numeric(observations["utcTimeMillis"], errors="coerce")
+            .round()
+            .astype("Int64")
+            .isin(set(epoch_lookup))
+        ].copy()
+        if observations.empty:
+            return df
 
     existing: set[tuple[int, int, str]] = set()
     if not df.empty:
@@ -149,11 +168,6 @@ def append_gnss_log_only_gps_rows(
             freq = slot_frequency_label(str(getattr(row, "SignalType")))
             existing.add((int(getattr(row, "utcTimeMillis")), int(getattr(row, "Svid")), freq))
 
-    epoch_lookup: dict[int, object] = {
-        int(row.utcTimeMillis): row
-        for row in epoch_meta.itertuples(index=False)
-        if pd.notna(row.utcTimeMillis)
-    }
     rows: list[dict[str, object]] = []
     for obs_row in observations.itertuples(index=False):
         time_key = int(getattr(obs_row, "utcTimeMillis"))
@@ -215,6 +229,7 @@ def append_gnss_log_only_gps_rows(
                 "ReceivedSvTimeNanos": float(getattr(obs_row, "ReceivedSvTimeNanos")),
                 "ReceivedSvTimeUncertaintyNanos": float(getattr(obs_row, "ReceivedSvTimeUncertaintyNanos")),
                 "TimeOffsetNanos": float(getattr(obs_row, "TimeOffsetNanos")),
+                "bridge_gnss_log_only": True,
             },
         )
         rows.append(new_row)
@@ -263,6 +278,7 @@ def gnss_log_corrected_pseudorange_products(
     *,
     phone_name: str,
     rtklib_tropo_m: np.ndarray | None = None,
+    rtklib_iono_m: np.ndarray | None = None,
     sat_clock_bias_m: np.ndarray | None = None,
     sat_clock_adjustment_m: SatClockAdjustmentFn | None = None,
 ) -> GnssLogPseudorangeProducts | None:
@@ -321,7 +337,12 @@ def gnss_log_corrected_pseudorange_products(
             )
             sat_clock_bias = float(getattr(raw_row, "SvClockBiasMeters")) + float(adjustment_m)
         observable_pr = float(getattr(row, "PseudorangeMeters"))
-        corrected_pr = observable_pr + sat_clock_bias - float(getattr(raw_row, "IonosphericDelayMeters"))
+        iono_m = float(getattr(raw_row, "IonosphericDelayMeters"))
+        if rtklib_iono_m is not None and rtklib_iono_m.shape == weights.shape:
+            candidate_iono_m = float(rtklib_iono_m[epoch_idx, slot_idx])
+            if np.isfinite(candidate_iono_m):
+                iono_m = candidate_iono_m
+        corrected_pr = observable_pr + sat_clock_bias - iono_m
         if rtklib_tropo_m is not None and rtklib_tropo_m.shape == weights.shape:
             tropo_m = float(rtklib_tropo_m[epoch_idx, slot_idx])
             if not np.isfinite(tropo_m):

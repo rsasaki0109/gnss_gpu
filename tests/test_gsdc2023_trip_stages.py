@@ -99,7 +99,10 @@ def test_assemble_trip_arrays_stage_maps_stage_products_to_factory() -> None:
         sys_kind=np.zeros((2, 1), dtype=np.int32),
         n_clock=2,
         sat_vel=np.zeros((2, 1, 3), dtype=np.float64),
+        sat_clock_bias_matrix=np.ones((2, 1), dtype=np.float64) * 0.5,
         sat_clock_drift_mps=np.zeros((2, 1), dtype=np.float64),
+        rtklib_iono_m=np.ones((2, 1), dtype=np.float64) * 0.3,
+        rtklib_tropo_m=np.ones((2, 1), dtype=np.float64) * 0.2,
         doppler=np.zeros((2, 1), dtype=np.float64),
         doppler_weights=np.ones((2, 1), dtype=np.float64),
         pseudorange_bias_weights=np.ones((2, 1), dtype=np.float64),
@@ -139,6 +142,9 @@ def test_assemble_trip_arrays_stage_maps_stage_products_to_factory() -> None:
     np.testing.assert_array_equal(result["tdcp_meas"], tdcp_stage.tdcp_meas)
     np.testing.assert_array_equal(result["stop_epochs"], imu_stage.stop_epochs)
     np.testing.assert_array_equal(result["absolute_height_ref_ecef"], absolute_height_stage.absolute_height_ref_ecef)
+    np.testing.assert_allclose(result["sat_clock_bias_matrix"], [[0.5], [0.5]])
+    np.testing.assert_allclose(result["rtklib_iono_m"], [[0.3], [0.3]])
+    np.testing.assert_allclose(result["rtklib_tropo_m"], [[0.2], [0.2]])
 
 
 def test_assemble_prepared_trip_arrays_stage_uses_stage_products() -> None:
@@ -160,6 +166,7 @@ def test_assemble_prepared_trip_arrays_stage_uses_stage_products() -> None:
         weights=np.ones((2, 1), dtype=np.float64) * 2.0,
         pseudorange_bias_weights=np.ones((2, 1), dtype=np.float64) * 3.0,
         sat_clock_bias_matrix=np.ones((2, 1), dtype=np.float64) * 0.5,
+        rtklib_iono_m=np.ones((2, 1), dtype=np.float64) * 0.3,
         rtklib_tropo_m=np.ones((2, 1), dtype=np.float64) * 0.2,
         kaggle_wls=np.ones((2, 3), dtype=np.float64) * 4.0,
         truth=np.zeros((2, 3), dtype=np.float64),
@@ -253,6 +260,8 @@ def test_assemble_prepared_trip_arrays_stage_uses_stage_products() -> None:
     np.testing.assert_allclose(result["clock_drift_mps"], [0.7, 0.8])
     np.testing.assert_array_equal(result["weights"], observations.weights)
     np.testing.assert_array_equal(result["tdcp_meas"], post_stages.tdcp_stage.tdcp_meas)
+    np.testing.assert_array_equal(result["sat_clock_bias_matrix"], observations.sat_clock_bias_matrix)
+    np.testing.assert_array_equal(result["rtklib_tropo_m"], observations.rtklib_tropo_m)
 
 
 def test_build_clock_residual_stage_keeps_non_blocklisted_clock_and_cleans_drift() -> None:
@@ -623,16 +632,22 @@ def test_build_observation_matrix_input_stage_deduplicates_and_loads_nav_product
         calls.append(("nav", trip_dir))
         return ["nav-message"]
 
+    def iono_loader(trip_dir: Path) -> tuple[tuple[float, ...], tuple[float, ...]]:
+        calls.append(("iono", trip_dir))
+        return (1.0, 2.0, 3.0, 4.0), (5.0, 6.0, 7.0, 8.0)
+
     products = build_observation_matrix_input_stage(
         filtered_frame,
         trip_dir=tmp_path,
         gps_tgd_m_by_svid_for_trip_fn=tgd_loader,
         gps_matrtklib_nav_messages_for_trip_fn=nav_loader,
+        gps_iono_alpha_beta_for_trip_fn=iono_loader,
     )
 
-    assert calls == [("tgd", tmp_path), ("nav", tmp_path)]
+    assert calls == [("tgd", tmp_path), ("nav", tmp_path), ("iono", tmp_path)]
     assert products.gps_tgd_m_by_svid == {3: 0.25}
     assert products.gps_matrtklib_nav_messages == ["nav-message"]
+    assert products.gps_iono_alpha_beta == ((1.0, 2.0, 3.0, 4.0), (5.0, 6.0, 7.0, 8.0))
     assert products.frame["row_id"].tolist() == ["l5", "high_l1", "next"]
     l1_rows = products.frame[products.frame["SignalType"] == "GPS_L1_CA"]
     assert l1_rows[l1_rows["Svid"] == 3]["row_id"].tolist() == ["high_l1"]
@@ -659,6 +674,7 @@ def test_build_filled_observation_matrix_stage_selects_epochs_and_forwards_fill_
         frame=frame,
         gps_tgd_m_by_svid={3: 0.25},
         gps_matrtklib_nav_messages=["nav"],
+        gps_iono_alpha_beta=((1.0, 2.0, 3.0, 4.0), (5.0, 6.0, 7.0, 8.0)),
     )
     gt_times = np.array([1000.0], dtype=np.float64)
     gt_ecef = np.array([[1.0, 2.0, 3.0]], dtype=np.float64)
@@ -704,6 +720,7 @@ def test_build_filled_observation_matrix_stage_selects_epochs_and_forwards_fill_
         assert kwargs["clock_drift_lookup"] is metadata_context.clock_drift_lookup
         assert kwargs["gps_tgd_m_by_svid"] == {3: 0.25}
         assert kwargs["gps_matrtklib_nav_messages"] == ["nav"]
+        assert kwargs["gps_iono_alpha_beta"] == ((1.0, 2.0, 3.0, 4.0), (5.0, 6.0, 7.0, 8.0))
         assert kwargs["matlab_signal_clock_dim"] == 4
         for name in (
             "gps_arrival_tow_s_from_row_fn",
@@ -745,6 +762,7 @@ def test_build_filled_observation_matrix_stage_selects_epochs_and_forwards_fill_
         elevation_azimuth_fn=lambda *_args: None,
         rtklib_tropo_fn=lambda *_args: None,
         matlab_signal_clock_dim=4,
+        gps_iono_alpha_beta=observation_input.gps_iono_alpha_beta,
     )
 
     assert calls == ["select", "fill"]
@@ -774,7 +792,12 @@ def test_build_filled_observation_matrix_stage_raises_before_fill_when_no_epochs
         build_filled_observation_matrix_stage(
             epoch_time_context=epoch_time_context,
             metadata_context=metadata_context,
-            observation_matrix_input=ObservationMatrixInputProducts(frame=frame, gps_tgd_m_by_svid={}, gps_matrtklib_nav_messages=None),
+            observation_matrix_input=ObservationMatrixInputProducts(
+                frame=frame,
+                gps_tgd_m_by_svid={},
+                gps_matrtklib_nav_messages=None,
+                gps_iono_alpha_beta=None,
+            ),
             gt_times=np.array([], dtype=np.float64),
             gt_ecef=np.zeros((0, 3), dtype=np.float64),
             start_epoch=0,
@@ -797,6 +820,7 @@ def test_build_filled_observation_matrix_stage_raises_before_fill_when_no_epochs
             elevation_azimuth_fn=lambda *_args: None,
             rtklib_tropo_fn=lambda *_args: None,
             matlab_signal_clock_dim=1,
+            gps_iono_alpha_beta=None,
         )
 
 
@@ -804,8 +828,12 @@ def test_postprocess_filled_observation_stage_repairs_wls_then_recomputes_tropo(
     times_ms = np.array([1000.0, 2000.0], dtype=np.float64)
     kaggle_wls = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float64)
     sat_ecef = np.arange(12.0, dtype=np.float64).reshape(2, 2, 3)
+    slot_keys = ((1, 3, "GPS_L1_CA"), (1, 4, "GPS_L5_Q"))
+    gps_iono_alpha_beta = ((1.0, 2.0, 3.0, 4.0), (5.0, 6.0, 7.0, 8.0))
+    rtklib_iono_m = np.ones((2, 2), dtype=np.float64) * 0.5
     rtklib_tropo_m = np.ones((2, 2), dtype=np.float64)
     repaired_wls = kaggle_wls + 10.0
+    recomputed_iono = rtklib_iono_m + 3.0
     recomputed_tropo = rtklib_tropo_m + 2.0
     ecef_to_lla_fn = object()
     elevation_azimuth_fn = object()
@@ -818,8 +846,27 @@ def test_postprocess_filled_observation_stage_repairs_wls_then_recomputes_tropo(
         np.testing.assert_allclose(got_kaggle_wls, kaggle_wls)
         return repaired_wls
 
-    def recompute_fn(got_kaggle_wls: np.ndarray, got_sat_ecef: np.ndarray, **kwargs: object) -> np.ndarray:
-        calls.append("recompute")
+    def recompute_iono_fn(
+        got_times_ms: np.ndarray,
+        got_kaggle_wls: np.ndarray,
+        got_sat_ecef: np.ndarray,
+        got_slot_keys: tuple[tuple[int, int, str], ...],
+        got_gps_iono_alpha_beta: tuple[tuple[float, ...], tuple[float, ...]],
+        **kwargs: object,
+    ) -> np.ndarray:
+        calls.append("recompute-iono")
+        np.testing.assert_allclose(got_times_ms, times_ms)
+        np.testing.assert_allclose(got_kaggle_wls, repaired_wls)
+        np.testing.assert_allclose(got_sat_ecef, sat_ecef)
+        assert got_slot_keys == slot_keys
+        assert got_gps_iono_alpha_beta == gps_iono_alpha_beta
+        assert kwargs["ecef_to_lla_fn"] is ecef_to_lla_fn
+        assert kwargs["elevation_azimuth_fn"] is elevation_azimuth_fn
+        assert kwargs["initial_iono_m"] is rtklib_iono_m
+        return recomputed_iono
+
+    def recompute_tropo_fn(got_kaggle_wls: np.ndarray, got_sat_ecef: np.ndarray, **kwargs: object) -> np.ndarray:
+        calls.append("recompute-tropo")
         np.testing.assert_allclose(got_kaggle_wls, repaired_wls)
         np.testing.assert_allclose(got_sat_ecef, sat_ecef)
         assert kwargs["ecef_to_lla_fn"] is ecef_to_lla_fn
@@ -832,16 +879,21 @@ def test_postprocess_filled_observation_stage_repairs_wls_then_recomputes_tropo(
         times_ms=times_ms,
         kaggle_wls=kaggle_wls,
         sat_ecef=sat_ecef,
+        rtklib_iono_m=rtklib_iono_m,
         rtklib_tropo_m=rtklib_tropo_m,
+        slot_keys=slot_keys,
+        gps_iono_alpha_beta=gps_iono_alpha_beta,
         repair_baseline_wls_fn=repair_fn,
-        recompute_rtklib_tropo_matrix_fn=recompute_fn,
+        recompute_rtklib_iono_matrix_fn=recompute_iono_fn,
+        recompute_rtklib_tropo_matrix_fn=recompute_tropo_fn,
         ecef_to_lla_fn=ecef_to_lla_fn,
         elevation_azimuth_fn=elevation_azimuth_fn,
         rtklib_tropo_fn=rtklib_tropo_fn,
     )
 
-    assert calls == ["repair", "recompute"]
+    assert calls == ["repair", "recompute-iono", "recompute-tropo"]
     np.testing.assert_allclose(products.kaggle_wls, repaired_wls)
+    np.testing.assert_allclose(products.rtklib_iono_m, recomputed_iono)
     np.testing.assert_allclose(products.rtklib_tropo_m, recomputed_tropo)
 
 
@@ -870,7 +922,10 @@ def test_build_observation_preparation_stages_wires_front_pipeline(tmp_path: Pat
     obs_times = np.array([1000.0, 2000.0], dtype=np.float64)
     obs_wls = np.array([[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]], dtype=np.float64)
     obs_sat_ecef = np.arange(6.0, dtype=np.float64).reshape(2, 1, 3)
+    obs_slot_keys = ((1, 3, "GPS_L1_CA"),)
+    obs_iono = np.ones((2, 1), dtype=np.float64) * 0.5
     obs_tropo = np.ones((2, 1), dtype=np.float64)
+    gps_iono_alpha_beta = ((1.0, 2.0, 3.0, 4.0), (5.0, 6.0, 7.0, 8.0))
     ecef_to_lla_fn = object()
     elevation_azimuth_fn = object()
     rtklib_tropo_fn = object()
@@ -882,6 +937,8 @@ def test_build_observation_preparation_stages_wires_front_pipeline(tmp_path: Pat
         times_ms: np.ndarray
         kaggle_wls: np.ndarray
         sat_ecef: np.ndarray
+        slot_keys: tuple[tuple[int, int, str], ...]
+        rtklib_iono_m: np.ndarray
         rtklib_tropo_m: np.ndarray
 
     def repair_fn(times_ms: np.ndarray, xyz: np.ndarray) -> np.ndarray:
@@ -939,16 +996,38 @@ def test_build_observation_preparation_stages_wires_front_pipeline(tmp_path: Pat
         assert kwargs["adr_sign"] == -1.0
         assert kwargs["gps_tgd_m_by_svid"] == {3: 0.25}
         assert kwargs["gps_matrtklib_nav_messages"] == ["nav"]
+        assert kwargs["gps_iono_alpha_beta"] == gps_iono_alpha_beta
         assert kwargs["matlab_signal_clock_dim"] == 4
         assert list(kwargs["source_columns"]).count("Cn0DbHz") == 1
         return FakeObservations(
             times_ms=obs_times,
             kaggle_wls=obs_wls,
             sat_ecef=obs_sat_ecef,
+            slot_keys=obs_slot_keys,
+            rtklib_iono_m=obs_iono,
             rtklib_tropo_m=obs_tropo,
         )
 
-    def recompute_fn(got_wls: np.ndarray, got_sat_ecef: np.ndarray, **kwargs: object) -> np.ndarray:
+    def recompute_iono_fn(
+        got_times_ms: np.ndarray,
+        got_wls: np.ndarray,
+        got_sat_ecef: np.ndarray,
+        got_slot_keys: tuple[tuple[int, int, str], ...],
+        got_gps_iono_alpha_beta: tuple[tuple[float, ...], tuple[float, ...]],
+        **kwargs: object,
+    ) -> np.ndarray:
+        calls.append("iono")
+        np.testing.assert_allclose(got_times_ms, obs_times)
+        np.testing.assert_allclose(got_wls, obs_wls + 100.0)
+        np.testing.assert_allclose(got_sat_ecef, obs_sat_ecef)
+        assert got_slot_keys == obs_slot_keys
+        assert got_gps_iono_alpha_beta == gps_iono_alpha_beta
+        assert kwargs["ecef_to_lla_fn"] is ecef_to_lla_fn
+        assert kwargs["elevation_azimuth_fn"] is elevation_azimuth_fn
+        assert kwargs["initial_iono_m"] is obs_iono
+        return obs_iono + 3.0
+
+    def recompute_tropo_fn(got_wls: np.ndarray, got_sat_ecef: np.ndarray, **kwargs: object) -> np.ndarray:
         calls.append("recompute")
         np.testing.assert_allclose(got_wls, obs_wls + 100.0)
         np.testing.assert_allclose(got_sat_ecef, obs_sat_ecef)
@@ -986,6 +1065,7 @@ def test_build_observation_preparation_stages_wires_front_pipeline(tmp_path: Pat
         light_speed_mps=2.0,
         gps_tgd_m_by_svid_for_trip_fn=lambda trip_dir: calls.append("tgd") or {3: 0.25},
         gps_matrtklib_nav_messages_for_trip_fn=lambda trip_dir: calls.append("nav") or ["nav"],
+        gps_iono_alpha_beta_for_trip_fn=lambda trip_dir: calls.append("iono-loader") or gps_iono_alpha_beta,
         gnss_log_matlab_epoch_times_ms_fn=lambda _trip_dir: _raise_unexpected(),
         clean_clock_drift_fn=clean_clock_drift_fn,
         select_epoch_observations_fn=select_fn,
@@ -1001,17 +1081,31 @@ def test_build_observation_preparation_stages_wires_front_pipeline(tmp_path: Pat
         elevation_azimuth_fn=elevation_azimuth_fn,
         rtklib_tropo_fn=rtklib_tropo_fn,
         matlab_signal_clock_dim=4,
-        recompute_rtklib_tropo_matrix_fn=recompute_fn,
+        recompute_rtklib_tropo_matrix_fn=recompute_tropo_fn,
+        recompute_rtklib_iono_matrix_fn=recompute_iono_fn,
     )
 
     assert isinstance(products, ObservationPreparationStageProducts)
-    assert calls == ["repair", "clock-bias", "tgd", "nav", "clean", "select", "fill", "repair", "recompute"]
+    assert calls == [
+        "repair",
+        "clock-bias",
+        "tgd",
+        "nav",
+        "iono-loader",
+        "clean",
+        "select",
+        "fill",
+        "repair",
+        "iono",
+        "recompute",
+    ]
     assert products.raw_observation_frame.observation_mask_count == 0
     assert products.observation_matrix_input.frame["Cn0DbHz"].tolist() == [35.0, 20.0]
     assert products.observation_matrix_stage.epochs is selected_epochs
     np.testing.assert_allclose(products.metadata_context.baseline_velocity_xyz, [[101.0, 110.0, 200.0], [102.0, 120.0, 300.0]])
     np.testing.assert_allclose(products.epoch_time_context.clock_drift_context_mps, [0.1, 0.2])
     np.testing.assert_allclose(products.post_fill_observation.kaggle_wls, obs_wls + 100.0)
+    np.testing.assert_allclose(products.post_fill_observation.rtklib_iono_m, obs_iono + 3.0)
     np.testing.assert_allclose(products.post_fill_observation.rtklib_tropo_m, obs_tropo + 2.0)
 
 
@@ -1034,6 +1128,8 @@ def test_unpack_observation_preparation_stage_materializes_repaired_products() -
     )
     original_wls = np.array([[1.0, 2.0, 3.0]], dtype=np.float64)
     repaired_wls = original_wls + 10.0
+    original_iono = np.array([[0.75]], dtype=np.float64)
+    recomputed_iono = original_iono + 1.0
     original_tropo = np.array([[0.25]], dtype=np.float64)
     recomputed_tropo = original_tropo + 1.0
     slot_keys = ((1, 3, "GPS_L1_CA"),)
@@ -1047,6 +1143,7 @@ def test_unpack_observation_preparation_stage_materializes_repaired_products() -
         weights: np.ndarray
         pseudorange_bias_weights: np.ndarray
         sat_clock_bias_matrix: np.ndarray
+        rtklib_iono_m: np.ndarray
         rtklib_tropo_m: np.ndarray
         kaggle_wls: np.ndarray
         truth: np.ndarray
@@ -1074,6 +1171,7 @@ def test_unpack_observation_preparation_stage_materializes_repaired_products() -
         weights=np.array([[1.0]], dtype=np.float64),
         pseudorange_bias_weights=np.array([[2.0]], dtype=np.float64),
         sat_clock_bias_matrix=np.array([[0.5]], dtype=np.float64),
+        rtklib_iono_m=original_iono,
         rtklib_tropo_m=original_tropo,
         kaggle_wls=original_wls,
         truth=np.array([[3.0, 4.0, 5.0]], dtype=np.float64),
@@ -1100,11 +1198,13 @@ def test_unpack_observation_preparation_stage_materializes_repaired_products() -
             frame=frame,
             gps_tgd_m_by_svid={3: 0.25},
             gps_matrtklib_nav_messages=["nav"],
+            gps_iono_alpha_beta=None,
         ),
         epoch_time_context=epoch_time_context,
         observation_matrix_stage=FilledObservationMatrixProducts(epochs=["epoch"], observations=observations),
         post_fill_observation=FilledObservationPostprocessProducts(
             kaggle_wls=repaired_wls,
+            rtklib_iono_m=recomputed_iono,
             rtklib_tropo_m=recomputed_tropo,
         ),
     )
@@ -1123,6 +1223,7 @@ def test_unpack_observation_preparation_stage_materializes_repaired_products() -
     np.testing.assert_array_equal(products.times_ms, observations.times_ms)
     np.testing.assert_array_equal(products.pseudorange, observations.pseudorange)
     np.testing.assert_array_equal(products.kaggle_wls, repaired_wls)
+    np.testing.assert_array_equal(products.rtklib_iono_m, recomputed_iono)
     np.testing.assert_array_equal(products.rtklib_tropo_m, recomputed_tropo)
     np.testing.assert_array_equal(products.baseline_velocity_times_ms, metadata_context.baseline_velocity_times_ms)
     np.testing.assert_array_equal(products.clock_drift_context_mps, epoch_time_context.clock_drift_context_mps)
@@ -1456,6 +1557,7 @@ def test_apply_gnss_log_pseudorange_stage_overlays_valid_products(tmp_path: Path
         np.testing.assert_allclose(times_ms, [1000.0, 2000.0])
         assert gps_tgd_m_by_svid == {1: 0.5}
         np.testing.assert_allclose(rtklib_tropo_m, [[0.1, 0.2], [0.3, 0.4]])
+        np.testing.assert_allclose(kwargs["rtklib_iono_m"], [[0.5, 0.6], [0.7, 0.8]])
         np.testing.assert_allclose(kwargs["sat_clock_bias_m"], [[1.0, 1.0], [1.0, 1.0]])
         assert kwargs["phone_name"] == "pixel4"
         calls.append((trip_dir, slot_keys, kwargs["phone_name"]))
@@ -1472,6 +1574,7 @@ def test_apply_gnss_log_pseudorange_stage_overlays_valid_products(tmp_path: Path
         slot_keys=["G01", "G02"],
         gps_tgd_m_by_svid={1: 0.5},
         rtklib_tropo_m=np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float64),
+        rtklib_iono_m=np.array([[0.5, 0.6], [0.7, 0.8]], dtype=np.float64),
         sat_clock_bias_m=np.ones((2, 2), dtype=np.float64),
         phone_name="pixel4",
         pseudorange=pseudorange,
@@ -1499,6 +1602,7 @@ def test_apply_gnss_log_pseudorange_stage_keeps_bias_weights_without_products(tm
         slot_keys=["G01"],
         gps_tgd_m_by_svid={},
         rtklib_tropo_m=np.zeros((1, 1), dtype=np.float64),
+        rtklib_iono_m=np.zeros((1, 1), dtype=np.float64),
         sat_clock_bias_m=np.zeros((1, 1), dtype=np.float64),
         phone_name="pixel4",
         pseudorange=pseudorange,
@@ -1931,6 +2035,7 @@ def test_build_configured_post_observation_stages_uses_bundled_config_and_depend
         weights=empty_matrix.copy(),
         pseudorange_bias_weights=empty_matrix.copy(),
         sat_clock_bias_matrix=empty_matrix.copy(),
+        rtklib_iono_m=empty_matrix.copy(),
         rtklib_tropo_m=empty_matrix.copy(),
         kaggle_wls=np.zeros((1, 3), dtype=np.float64),
         truth=np.zeros((1, 3), dtype=np.float64),
@@ -2159,6 +2264,7 @@ def test_build_post_observation_stages_wires_pipeline_and_preserves_signal_weigh
         slot_keys=slot_keys,
         gps_tgd_m_by_svid={},
         rtklib_tropo_m=np.zeros((2, 2), dtype=np.float64),
+        rtklib_iono_m=np.zeros((2, 2), dtype=np.float64),
         sat_clock_bias_m=np.zeros((2, 2), dtype=np.float64),
         phone_name="pixel4",
         pseudorange=pseudorange,

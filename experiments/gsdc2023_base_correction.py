@@ -283,10 +283,13 @@ def gps_matrtklib_sat_product_adjustment(
     derived_common_clock_m: float,
     nav_messages_by_svid: dict[int, tuple[tuple[object, ...], tuple[object, ...]]],
     receiver_clock_bias_m: float = 0.0,
-) -> tuple[np.ndarray, np.ndarray, float, float] | None:
+    received_sv_tow_s: float | None = None,
+) -> tuple[np.ndarray, np.ndarray | None, float, float | None] | None:
+    received_tow = float(received_sv_tow_s) if received_sv_tow_s is not None else np.nan
+    has_received_tow = np.isfinite(received_tow)
     if (
-        not np.isfinite(arrival_tow_s)
-        or not np.isfinite(l1_raw_pseudorange_m)
+        (not np.isfinite(arrival_tow_s) and not has_received_tow)
+        or (not has_received_tow and not np.isfinite(l1_raw_pseudorange_m))
         or not np.isfinite(derived_common_clock_m)
     ):
         return None
@@ -294,13 +297,17 @@ def gps_matrtklib_sat_product_adjustment(
     if nav_pair is None:
         return None
     full_messages, filtered_messages = nav_pair
-    full_message = select_gps_nav_message(full_messages, arrival_tow_s)
-    filtered_message = select_gps_nav_message(filtered_messages, arrival_tow_s)
+    selection_tow_s = float(arrival_tow_s) if np.isfinite(arrival_tow_s) else received_tow
+    full_message = select_gps_nav_message(full_messages, selection_tow_s)
+    filtered_message = select_gps_nav_message(filtered_messages, selection_tow_s)
     if full_message is None or filtered_message is None:
         return None
 
     rx_clock_bias_m = float(receiver_clock_bias_m) if np.isfinite(receiver_clock_bias_m) else 0.0
-    transmit_tow_s = float(arrival_tow_s) - float(l1_raw_pseudorange_m) / LIGHT_SPEED_MPS + rx_clock_bias_m / LIGHT_SPEED_MPS
+    if has_received_tow:
+        transmit_tow_s = received_tow
+    else:
+        transmit_tow_s = float(arrival_tow_s) - float(l1_raw_pseudorange_m) / LIGHT_SPEED_MPS + rx_clock_bias_m / LIGHT_SPEED_MPS
     _, full_clock_s = Ephemeris._compute_single_cpu(full_message, transmit_tow_s, "C1")
     _, filtered_clock_s = Ephemeris._compute_single_cpu(filtered_message, transmit_tow_s, "C1")
     full_common_clock_m = float(full_clock_s) * LIGHT_SPEED_MPS + float(getattr(full_message, "tgd", 0.0)) * LIGHT_SPEED_MPS
@@ -312,8 +319,9 @@ def gps_matrtklib_sat_product_adjustment(
         int(round(float(getattr(full_message, "iode", -1.0)))) == int(round(float(getattr(filtered_message, "iode", -2.0))))
         and abs(float(getattr(full_message, "toe", np.nan)) - float(getattr(filtered_message, "toe", np.nan))) < 1.0e-6
     )
+    clock_matches_filtered = abs(float(derived_common_clock_m) - filtered_common_clock_m) <= GPS_NAV_PRODUCT_ADJUSTMENT_THRESHOLD_M
     if same_selected_message:
-        if abs(float(derived_common_clock_m) - filtered_common_clock_m) <= GPS_NAV_PRODUCT_ADJUSTMENT_THRESHOLD_M:
+        if clock_matches_filtered and not has_received_tow:
             return None
     elif abs(float(derived_common_clock_m) - full_common_clock_m) >= abs(
         float(derived_common_clock_m) - filtered_common_clock_m
@@ -323,9 +331,9 @@ def gps_matrtklib_sat_product_adjustment(
     corrected_tow_s = transmit_tow_s - gps_broadcast_clock_bias_s(filtered_message, transmit_tow_s)
 
     sat_pos, clock_s = Ephemeris._compute_single_cpu(filtered_message, corrected_tow_s, "C1")
+    sat_clock_bias_m = float(clock_s) * LIGHT_SPEED_MPS + float(getattr(filtered_message, "tgd", 0.0)) * LIGHT_SPEED_MPS
     sat_pos_dt, clock_dt_s = Ephemeris._compute_single_cpu(filtered_message, corrected_tow_s + 1.0e-3, "C1")
     sat_vel = (np.asarray(sat_pos_dt, dtype=np.float64) - np.asarray(sat_pos, dtype=np.float64)) / 1.0e-3
-    sat_clock_bias_m = float(clock_s) * LIGHT_SPEED_MPS + float(getattr(filtered_message, "tgd", 0.0)) * LIGHT_SPEED_MPS
     sat_clock_drift_mps = (float(clock_dt_s) - float(clock_s)) * LIGHT_SPEED_MPS / 1.0e-3
     return np.asarray(sat_pos, dtype=np.float64), sat_vel, sat_clock_bias_m, sat_clock_drift_mps
 
