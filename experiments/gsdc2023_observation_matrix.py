@@ -45,6 +45,7 @@ RAW_GNSS_OPTIONAL_COLUMNS = [
     "BiasNanos",
     "DriftNanosPerSecond",
     "ArrivalTimeNanosSinceGpsEpoch",
+    "ReceivedSvTimeNanos",
     "PseudorangeRateMetersPerSecond",
     "PseudorangeRateUncertaintyMetersPerSecond",
     "AccumulatedDeltaRangeState",
@@ -63,9 +64,13 @@ BASELINE_OUTLIER_THRESHOLD_FACTOR = 20.0
 BASELINE_OUTLIER_FLOOR_M = 30.0
 LIGHT_SPEED_MPS = 299792458.0
 GPS_WEEK_SECONDS = 604800.0
+GPS_LEAP_SECONDS = 18.0
 EARTH_ROTATION_RATE_RAD_S = 7.2921151467e-5
 GPS_EPOCH_UNIX_SECONDS = datetime(1980, 1, 6, tzinfo=timezone.utc).timestamp()
+GPS_L1_FREQUENCY_HZ = 1575.42e6
+GPS_L5_FREQUENCY_HZ = 1176.45e6
 GPS_L5_SAT_PRODUCT_CLOCK_MATCH_THRESHOLD_M = 0.005
+RTKLIB_SAT_VELOCITY_FORWARD_DIFF_HALF_STEP_S = 5.0e-4
 OBS_MASK_MIN_CN0_DBHZ = 20.0
 OBS_MASK_MIN_ELEVATION_DEG = 10.0
 OBS_MASK_PSEUDORANGE_MIN_M = 1.0e7
@@ -94,7 +99,10 @@ class TripArrays:
     sys_kind: np.ndarray | None = None
     n_clock: int = 1
     sat_vel: np.ndarray | None = None
+    sat_clock_bias_matrix: np.ndarray | None = None
     sat_clock_drift_mps: np.ndarray | None = None
+    rtklib_iono_m: np.ndarray | None = None
+    rtklib_tropo_m: np.ndarray | None = None
     doppler: np.ndarray | None = None
     doppler_weights: np.ndarray | None = None
     pseudorange_bias_weights: np.ndarray | None = None
@@ -140,6 +148,7 @@ class ObservationMatrixProducts:
     weights: np.ndarray
     pseudorange_bias_weights: np.ndarray
     sat_clock_bias_matrix: np.ndarray
+    rtklib_iono_m: np.ndarray
     rtklib_tropo_m: np.ndarray
     kaggle_wls: np.ndarray
     truth: np.ndarray
@@ -173,14 +182,131 @@ def read_raw_gnss_csv(raw_path: Path, **kwargs) -> pd.DataFrame:
     raise RuntimeError(f"failed to read raw GNSS file: {raw_path}")
 
 
-def load_raw_gnss_frame(raw_path: Path) -> pd.DataFrame:
+def _raw_gnss_usecols(raw_path: Path) -> list[str]:
     header = read_raw_gnss_csv(raw_path, nrows=0)
     available = set(header.columns)
     missing = [col for col in RAW_GNSS_REQUIRED_COLUMNS if col not in available]
     if missing:
         raise RuntimeError(f"device_gnss.csv missing columns: {missing}")
-    usecols = [col for col in RAW_GNSS_COLUMNS if col in available]
-    return read_raw_gnss_csv(raw_path, usecols=usecols)
+    return [col for col in RAW_GNSS_COLUMNS if col in available]
+
+
+def load_raw_gnss_frame(raw_path: Path) -> pd.DataFrame:
+    return read_raw_gnss_csv(raw_path, usecols=_raw_gnss_usecols(raw_path))
+
+
+def _read_raw_gnss_csv_chunks(raw_path: Path, *, usecols: Sequence[str], chunksize: int) -> Iterable[pd.DataFrame]:
+    last_error: Exception | None = None
+    for compression in ("zip", None):
+        try:
+            reader = pd.read_csv(
+                raw_path,
+                compression=compression,
+                usecols=list(usecols),
+                chunksize=chunksize,
+                low_memory=False,
+            )
+            for chunk in reader:
+                yield chunk
+            return
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"failed to read raw GNSS file: {raw_path}")
+
+
+def _filter_raw_gnss_frame_epoch_window(
+    frame: pd.DataFrame,
+    *,
+    start_epoch: int,
+    max_epochs: int,
+    extra_epochs: int = 0,
+) -> pd.DataFrame:
+    if max_epochs <= 0:
+        return frame
+    stop_epoch = start_epoch + max_epochs + max(0, extra_epochs)
+    if stop_epoch <= start_epoch:
+        return frame.iloc[0:0].copy()
+    epoch_times = pd.to_numeric(frame["utcTimeMillis"], errors="coerce").dropna().unique()
+    selected_times = np.sort(epoch_times.astype(np.float64))[start_epoch:stop_epoch]
+    if selected_times.size == 0:
+        return frame.iloc[0:0].copy()
+    return frame.loc[pd.to_numeric(frame["utcTimeMillis"], errors="coerce").isin(selected_times)].copy()
+
+
+def _load_raw_gnss_frame_epoch_window_from_chunks(
+    raw_path: Path,
+    *,
+    start_epoch: int,
+    max_epochs: int,
+    extra_epochs: int,
+    chunksize: int,
+    usecols: Sequence[str],
+) -> pd.DataFrame:
+    stop_epoch = start_epoch + max_epochs + max(0, extra_epochs)
+    if stop_epoch <= start_epoch:
+        return pd.DataFrame(columns=list(usecols))
+
+    chunks: list[pd.DataFrame] = []
+    time_rank: dict[float, int] = {}
+    last_time: float | None = None
+    for chunk in _read_raw_gnss_csv_chunks(raw_path, usecols=usecols, chunksize=chunksize):
+        times = pd.to_numeric(chunk["utcTimeMillis"], errors="coerce")
+        finite_times = times.dropna().to_numpy(dtype=np.float64)
+        if finite_times.size:
+            if np.any(finite_times[1:] < finite_times[:-1]) or (
+                last_time is not None and finite_times[0] < last_time
+            ):
+                raise ValueError("device_gnss.csv utcTimeMillis is not sorted")
+            last_time = float(finite_times[-1])
+        for value in pd.unique(times.dropna()):
+            key = float(value)
+            if key not in time_rank:
+                time_rank[key] = len(time_rank)
+
+        ranks = times.astype(np.float64).map(time_rank)
+        selected = ranks.ge(start_epoch) & ranks.lt(stop_epoch)
+        if selected.any():
+            chunks.append(chunk.loc[selected].copy())
+        if len(time_rank) > stop_epoch:
+            break
+
+    if not chunks:
+        return pd.DataFrame(columns=list(usecols))
+    return pd.concat(chunks, ignore_index=True)
+
+
+def load_raw_gnss_frame_epoch_window(
+    raw_path: Path,
+    *,
+    start_epoch: int,
+    max_epochs: int,
+    extra_epochs: int = 0,
+    chunksize: int = 5_000,
+) -> pd.DataFrame:
+    if start_epoch < 0:
+        raise ValueError("start_epoch must be non-negative")
+    if max_epochs <= 0:
+        return load_raw_gnss_frame(raw_path)
+
+    usecols = _raw_gnss_usecols(raw_path)
+    try:
+        return _load_raw_gnss_frame_epoch_window_from_chunks(
+            raw_path,
+            start_epoch=start_epoch,
+            max_epochs=max_epochs,
+            extra_epochs=extra_epochs,
+            chunksize=chunksize,
+            usecols=usecols,
+        )
+    except Exception:  # noqa: BLE001
+        return _filter_raw_gnss_frame_epoch_window(
+            load_raw_gnss_frame(raw_path),
+            start_epoch=start_epoch,
+            max_epochs=max_epochs,
+            extra_epochs=extra_epochs,
+        )
 
 
 def android_state_tracking_ok(df: pd.DataFrame) -> np.ndarray:
@@ -467,6 +593,38 @@ def select_epoch_observations(
     return epochs
 
 
+def _gps_received_sv_tow_s_from_row(row: Any) -> float:
+    received_ns = float(getattr(row, "ReceivedSvTimeNanos", np.nan))
+    if not np.isfinite(received_ns) or received_ns < 1.0e10:
+        return float("nan")
+    return float((received_ns * 1.0e-9) % GPS_WEEK_SECONDS)
+
+
+def _row_has_usable_bridge_observation(row: Any) -> bool:
+    flags = [
+        getattr(row, "bridge_p_ok", None),
+        getattr(row, "bridge_d_ok", None),
+        getattr(row, "bridge_l_ok", None),
+    ]
+    known_flags = [flag for flag in flags if flag is not None and not pd.isna(flag)]
+    if not known_flags:
+        return True
+    return any(bool(flag) for flag in known_flags)
+
+
+def _row_is_gnss_log_only(row: Any) -> bool:
+    flag = getattr(row, "bridge_gnss_log_only", False)
+    if flag is None or pd.isna(flag):
+        return False
+    return bool(flag)
+
+
+def _row_can_seed_gps_l1_product(row: Any) -> bool:
+    if not _row_is_gnss_log_only(row):
+        return True
+    return _row_has_usable_bridge_observation(row)
+
+
 def build_gps_l1_sat_time_lookup(
     epochs: Sequence[RawEpochObservation],
     *,
@@ -474,13 +632,16 @@ def build_gps_l1_sat_time_lookup(
     gps_sat_clock_bias_adjustment_m_fn: Callable[[int, int, str, Mapping[int, float]], float],
     gps_tgd_m_by_svid: Mapping[int, float],
     is_l5_signal_fn: Callable[[str], bool],
-) -> dict[tuple[int, int], tuple[float, float, float]]:
-    out: dict[tuple[int, int], tuple[float, float, float]] = {}
+) -> dict[tuple[int, int], tuple[float, float, float, float]]:
+    out: dict[tuple[int, int], tuple[float, float, float, float]] = {}
     for epoch_idx, epoch in enumerate(epochs):
         for row in epoch.group.itertuples(index=False):
             if int(row.ConstellationType) != 1 or is_l5_signal_fn(str(row.SignalType)):
                 continue
+            if not _row_can_seed_gps_l1_product(row):
+                continue
             arrival_tow_s = gps_arrival_tow_s_from_row_fn(row)
+            received_sv_tow_s = _gps_received_sv_tow_s_from_row(row)
             raw_pr = float(row.RawPseudorangeMeters)
             common_clock_m = float(row.SvClockBiasMeters) + gps_sat_clock_bias_adjustment_m_fn(
                 int(row.ConstellationType),
@@ -489,7 +650,67 @@ def build_gps_l1_sat_time_lookup(
                 gps_tgd_m_by_svid,
             )
             if np.isfinite(arrival_tow_s) and np.isfinite(raw_pr) and np.isfinite(common_clock_m):
-                out[(epoch_idx, int(row.Svid))] = (arrival_tow_s, raw_pr, common_clock_m)
+                out[(epoch_idx, int(row.Svid))] = (arrival_tow_s, raw_pr, common_clock_m, received_sv_tow_s)
+    return out
+
+
+def build_gps_l1_sat_product_lookup(
+    epochs: Sequence[RawEpochObservation],
+    *,
+    is_l5_signal_fn: Callable[[str], bool],
+) -> dict[tuple[int, int], Any]:
+    out: dict[tuple[int, int], Any] = {}
+    for epoch_idx, epoch in enumerate(epochs):
+        for row in epoch.group.itertuples(index=False):
+            if int(row.ConstellationType) != 1 or is_l5_signal_fn(str(row.SignalType)):
+                continue
+            if not _row_can_seed_gps_l1_product(row):
+                continue
+            out[(epoch_idx, int(row.Svid))] = row
+    return out
+
+
+def build_sat_velocity_forward_difference_lookup(
+    epochs: Sequence[RawEpochObservation],
+    *,
+    half_step_s: float = RTKLIB_SAT_VELOCITY_FORWARD_DIFF_HALF_STEP_S,
+) -> dict[tuple[int, int, int, str], np.ndarray]:
+    samples: dict[tuple[int, int, str], list[tuple[int, float, np.ndarray]]] = {}
+    for epoch_idx, epoch in enumerate(epochs):
+        for row in epoch.group.itertuples(index=False):
+            try:
+                velocity = np.array(
+                    [
+                        float(row.SvVelocityXEcefMetersPerSecond),
+                        float(row.SvVelocityYEcefMetersPerSecond),
+                        float(row.SvVelocityZEcefMetersPerSecond),
+                    ],
+                    dtype=np.float64,
+                )
+            except AttributeError:
+                continue
+            if not np.isfinite(velocity).all():
+                continue
+            key = (int(row.ConstellationType), int(row.Svid), str(row.SignalType))
+            samples.setdefault(key, []).append((epoch_idx, float(epoch.time_ms), velocity))
+
+    out: dict[tuple[int, int, int, str], np.ndarray] = {}
+    for key, group_samples in samples.items():
+        ordered = sorted(group_samples, key=lambda item: (item[1], item[0]))
+        epoch_indices = [item[0] for item in ordered]
+        times_s = np.array([item[1] for item in ordered], dtype=np.float64) * 1.0e-3
+        velocities = np.vstack([item[2] for item in ordered])
+        corrected = velocities.copy()
+        if velocities.shape[0] >= 2 and np.all(np.diff(times_s) > 0.0):
+            # RTKLIB ephpos reports velocity as a 1 ms forward difference,
+            # which is centered half a millisecond after the raw velocity epoch.
+            acceleration = np.zeros_like(velocities)
+            for axis in range(3):
+                acceleration[:, axis] = np.gradient(velocities[:, axis], times_s, edge_order=1)
+            corrected = velocities + float(half_step_s) * acceleration
+        constellation_type, svid, signal_type = key
+        for epoch_idx, velocity in zip(epoch_indices, corrected):
+            out[(int(epoch_idx), int(constellation_type), int(svid), str(signal_type))] = velocity
     return out
 
 
@@ -526,6 +747,118 @@ def _rtklib_tropo_for_satellite(
     if np.isfinite(tropo_m) and tropo_m > 0.0:
         return float(tropo_m)
     return float("nan")
+
+
+def rtklib_klobuchar_iono_delay_m(
+    alpha: Sequence[float],
+    beta: Sequence[float],
+    lat_rad: float,
+    lon_rad: float,
+    az_rad: float,
+    el_rad: float,
+    gps_tow_s: float,
+) -> float:
+    if (
+        not np.isfinite(lat_rad)
+        or not np.isfinite(lon_rad)
+        or not np.isfinite(az_rad)
+        or not np.isfinite(el_rad)
+        or not np.isfinite(gps_tow_s)
+        or el_rad <= 0.0
+    ):
+        return 0.0
+    alpha_arr = np.asarray(alpha, dtype=np.float64).reshape(-1)
+    beta_arr = np.asarray(beta, dtype=np.float64).reshape(-1)
+    if alpha_arr.size < 4 or beta_arr.size < 4 or not np.isfinite(alpha_arr[:4]).all() or not np.isfinite(beta_arr[:4]).all():
+        alpha_arr = np.array([0.1118e-07, -0.7451e-08, -0.5961e-07, 0.1192e-06], dtype=np.float64)
+        beta_arr = np.array([0.1167e06, -0.2294e06, -0.1311e06, 0.1049e07], dtype=np.float64)
+    psi = 0.0137 / (float(el_rad) / np.pi + 0.11) - 0.022
+    phi = float(lat_rad) / np.pi + psi * np.cos(float(az_rad))
+    phi = min(max(phi, -0.416), 0.416)
+    lam = float(lon_rad) / np.pi + psi * np.sin(float(az_rad)) / np.cos(phi * np.pi)
+    phi += 0.064 * np.cos((lam - 1.617) * np.pi)
+    tt = 43200.0 * lam + float(gps_tow_s)
+    tt -= np.floor(tt / 86400.0) * 86400.0
+    slant = 1.0 + 16.0 * (0.53 - float(el_rad) / np.pi) ** 3
+    amp = alpha_arr[0] + phi * (alpha_arr[1] + phi * (alpha_arr[2] + phi * alpha_arr[3]))
+    per = beta_arr[0] + phi * (beta_arr[1] + phi * (beta_arr[2] + phi * beta_arr[3]))
+    amp = max(float(amp), 0.0)
+    per = max(float(per), 72000.0)
+    x = 2.0 * np.pi * (tt - 50400.0) / per
+    if abs(x) < 1.57:
+        delay_s = 5.0e-9 + amp * (1.0 + x * x * (-0.5 + x * x / 24.0))
+    else:
+        delay_s = 5.0e-9
+    return float(LIGHT_SPEED_MPS * slant * delay_s)
+
+
+def signal_type_iono_scale(signal_type: str) -> float:
+    freq_hz = GPS_L5_FREQUENCY_HZ if "L5" in str(signal_type).upper() else GPS_L1_FREQUENCY_HZ
+    return float((GPS_L1_FREQUENCY_HZ / freq_hz) ** 2)
+
+
+def _rtklib_iono_for_satellite(
+    time_ms: float,
+    rx_xyz: np.ndarray,
+    sat_xyz: np.ndarray,
+    signal_type: str,
+    gps_iono_alpha_beta: tuple[Sequence[float], Sequence[float]] | None,
+    *,
+    ecef_to_lla_fn: Callable[[float, float, float], tuple[float, float, float]],
+    elevation_azimuth_fn: Callable[[np.ndarray, np.ndarray], tuple[float, float]],
+) -> float:
+    if gps_iono_alpha_beta is None:
+        return float("nan")
+    if not np.isfinite(rx_xyz).all() or not np.isfinite(sat_xyz).all():
+        return float("nan")
+    alpha, beta = gps_iono_alpha_beta
+    lat_rad, lon_rad, _alt_m = ecef_to_lla_fn(float(rx_xyz[0]), float(rx_xyz[1]), float(rx_xyz[2]))
+    el_rad, az_rad = elevation_azimuth_fn(rx_xyz, sat_xyz)
+    gps_abs_s = float(time_ms) * 1.0e-3 + GPS_LEAP_SECONDS - GPS_EPOCH_UNIX_SECONDS
+    gps_tow_s = gps_abs_s % GPS_WEEK_SECONDS
+    iono_l1 = rtklib_klobuchar_iono_delay_m(alpha, beta, lat_rad, lon_rad, az_rad, el_rad, gps_tow_s)
+    iono_m = signal_type_iono_scale(signal_type) * iono_l1
+    return float(iono_m) if np.isfinite(iono_m) and iono_m >= 0.0 else float("nan")
+
+
+def recompute_rtklib_iono_matrix(
+    times_ms: np.ndarray,
+    receiver_xyz: np.ndarray,
+    sat_ecef: np.ndarray,
+    slot_keys: Sequence[tuple[int, int, str]],
+    gps_iono_alpha_beta: tuple[Sequence[float], Sequence[float]] | None,
+    *,
+    ecef_to_lla_fn: Callable[[float, float, float], tuple[float, float, float]],
+    elevation_azimuth_fn: Callable[[np.ndarray, np.ndarray], tuple[float, float]],
+    initial_iono_m: np.ndarray | None = None,
+) -> np.ndarray:
+    shape = sat_ecef.shape[:2]
+    out = (
+        np.asarray(initial_iono_m, dtype=np.float64).copy()
+        if initial_iono_m is not None and np.asarray(initial_iono_m).shape == shape
+        else np.full(shape, np.nan, dtype=np.float64)
+    )
+    if gps_iono_alpha_beta is None:
+        return out
+    times = np.asarray(times_ms, dtype=np.float64).reshape(-1)
+    rx = np.asarray(receiver_xyz, dtype=np.float64).reshape(-1, 3)
+    for epoch_idx in range(min(shape[0], times.size, rx.shape[0])):
+        for slot_idx, key in enumerate(slot_keys):
+            constellation, _svid, signal_type = key
+            if int(constellation) != 1:
+                continue
+            iono_m = _rtklib_iono_for_satellite(
+                float(times[epoch_idx]),
+                rx[epoch_idx],
+                sat_ecef[epoch_idx, slot_idx],
+                str(signal_type),
+                gps_iono_alpha_beta,
+                ecef_to_lla_fn=ecef_to_lla_fn,
+                elevation_azimuth_fn=elevation_azimuth_fn,
+            )
+            if np.isfinite(iono_m):
+                out[epoch_idx, slot_idx] = iono_m
+    return out
 
 
 def recompute_rtklib_tropo_matrix(
@@ -576,9 +909,10 @@ def fill_observation_matrices(
     clock_drift_lookup: Mapping[int, float] | None,
     gps_tgd_m_by_svid: Mapping[int, float],
     gps_matrtklib_nav_messages: Mapping[int, Sequence[Any]] | None,
+    gps_iono_alpha_beta: tuple[Sequence[float], Sequence[float]] | None = None,
     gps_arrival_tow_s_from_row_fn: Callable[[Any], float],
     gps_sat_clock_bias_adjustment_m_fn: Callable[[int, int, str, Mapping[int, float]], float],
-    gps_matrtklib_sat_product_adjustment_fn: Callable[..., tuple[np.ndarray, np.ndarray, float, float] | None],
+    gps_matrtklib_sat_product_adjustment_fn: Callable[..., tuple[np.ndarray, np.ndarray | None, float, float | None] | None],
     clock_kind_for_observation_fn: Callable[..., int],
     is_l5_signal_fn: Callable[[str], bool],
     slot_sort_key_fn: Callable[[tuple[int, int, str]], Any],
@@ -603,6 +937,7 @@ def fill_observation_matrices(
     weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
     pseudorange_bias_weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
     sat_clock_bias_matrix = np.full((n_epoch, n_sat_slots), np.nan, dtype=np.float64)
+    rtklib_iono_m = np.full((n_epoch, n_sat_slots), np.nan, dtype=np.float64)
     rtklib_tropo_m = np.full((n_epoch, n_sat_slots), np.nan, dtype=np.float64)
     kaggle_wls = np.zeros((n_epoch, 3), dtype=np.float64)
     truth = np.zeros((n_epoch, 3), dtype=np.float64)
@@ -647,8 +982,10 @@ def fill_observation_matrices(
         if gps_matrtklib_nav_messages
         else {}
     )
+    gps_l1_sat_product_lookup = build_gps_l1_sat_product_lookup(epochs, is_l5_signal_fn=is_l5_signal_fn)
+    sat_velocity_forward_lookup = build_sat_velocity_forward_difference_lookup(epochs) if has_sat_vel else {}
     gps_sat_product_adjustment_cache: dict[
-        tuple[int, int, str], tuple[np.ndarray, np.ndarray, float, float] | None
+        tuple[int, int, str], tuple[np.ndarray, np.ndarray | None, float, float | None] | None
     ] = {}
 
     for epoch_idx, epoch in enumerate(epochs):
@@ -676,6 +1013,19 @@ def fill_observation_matrices(
             l_ok = bool(getattr(row, "bridge_l_ok", True))
             p_bias_ok = bool(getattr(row, "bridge_p_bias_ok", p_ok))
             sat_product_adjustment = None
+            raw_product_row = (
+                gps_l1_sat_product_lookup.get((epoch_idx, int(row.Svid)), row)
+                if row_is_gps_l5
+                else row
+            )
+            raw_product_velocity = sat_velocity_forward_lookup.get(
+                (
+                    epoch_idx,
+                    int(raw_product_row.ConstellationType),
+                    int(raw_product_row.Svid),
+                    str(raw_product_row.SignalType),
+                ),
+            )
             derived_common_clock_m = float(row.SvClockBiasMeters) + gps_sat_clock_bias_adjustment_m_fn(
                 int(row.ConstellationType),
                 int(row.Svid),
@@ -688,11 +1038,14 @@ def fill_observation_matrices(
                     sat_product_adjustment = gps_sat_product_adjustment_cache[adjustment_key]
                 else:
                     if row_is_gps_l5:
-                        adjustment_timing = (
-                            gps_arrival_tow_s_from_row_fn(row),
-                            float(row.RawPseudorangeMeters),
-                            derived_common_clock_m,
-                        )
+                        adjustment_timing = gps_l1_sat_time_lookup.get((epoch_idx, int(row.Svid)))
+                        if adjustment_timing is None:
+                            adjustment_timing = (
+                                gps_arrival_tow_s_from_row_fn(row),
+                                float(row.RawPseudorangeMeters),
+                                derived_common_clock_m,
+                                _gps_received_sv_tow_s_from_row(row),
+                            )
                     else:
                         l1_timing = gps_l1_sat_time_lookup.get((epoch_idx, int(row.Svid)))
                         if l1_timing is None:
@@ -700,6 +1053,7 @@ def fill_observation_matrices(
                                 gps_arrival_tow_s_from_row_fn(row),
                                 float(row.RawPseudorangeMeters),
                                 derived_common_clock_m,
+                                _gps_received_sv_tow_s_from_row(row),
                             )
                         else:
                             adjustment_timing = l1_timing
@@ -713,6 +1067,7 @@ def fill_observation_matrices(
                         derived_common_clock_m=float(adjustment_timing[2]),
                         nav_messages_by_svid=gps_matrtklib_nav_messages,
                         receiver_clock_bias_m=receiver_clock_bias_m,
+                        received_sv_tow_s=float(adjustment_timing[3]),
                     )
                     gps_sat_product_adjustment_cache[adjustment_key] = sat_product_adjustment
             if sat_product_adjustment is not None:
@@ -721,25 +1076,26 @@ def fill_observation_matrices(
                     abs(derived_common_clock_m - float(sat_clock_bias_m)) <= GPS_L5_SAT_PRODUCT_CLOCK_MATCH_THRESHOLD_M
                 )
                 if l5_clock_already_matches:
-                    sat_xyz = np.array(
-                        [
-                            float(row.SvPositionXEcefMeters),
-                            float(row.SvPositionYEcefMeters),
-                            float(row.SvPositionZEcefMeters),
-                        ],
-                        dtype=np.float64,
-                    )
                     sat_clock_bias_m = derived_common_clock_m
-                    sat_vel_adjusted = None
-                    sat_clock_drift_adjusted = None
+                    if _row_is_gnss_log_only(raw_product_row):
+                        sat_xyz = sat_xyz_adjusted
+                    else:
+                        sat_xyz = np.array(
+                            [
+                                float(raw_product_row.SvPositionXEcefMeters),
+                                float(raw_product_row.SvPositionYEcefMeters),
+                                float(raw_product_row.SvPositionZEcefMeters),
+                            ],
+                            dtype=np.float64,
+                        )
                 else:
                     sat_xyz = sat_xyz_adjusted
             else:
                 sat_xyz = np.array(
                     [
-                        float(row.SvPositionXEcefMeters),
-                        float(row.SvPositionYEcefMeters),
-                        float(row.SvPositionZEcefMeters),
+                        float(raw_product_row.SvPositionXEcefMeters),
+                        float(raw_product_row.SvPositionYEcefMeters),
+                        float(raw_product_row.SvPositionZEcefMeters),
                     ],
                     dtype=np.float64,
                 )
@@ -749,11 +1105,24 @@ def fill_observation_matrices(
 
             sat_ecef[epoch_idx, sat_idx] = sat_xyz
             sat_clock_bias_matrix[epoch_idx, sat_idx] = sat_clock_bias_m
+            iono_m = float(row.IonosphericDelayMeters)
+            recomputed_iono_m = _rtklib_iono_for_satellite(
+                tow_ms,
+                kaggle_wls[epoch_idx],
+                sat_ecef[epoch_idx, sat_idx],
+                str(row.SignalType),
+                gps_iono_alpha_beta if row_is_gps else None,
+                ecef_to_lla_fn=ecef_to_lla_fn,
+                elevation_azimuth_fn=elevation_azimuth_fn,
+            )
+            if np.isfinite(recomputed_iono_m):
+                iono_m = recomputed_iono_m
+            rtklib_iono_m[epoch_idx, sat_idx] = iono_m
             pseudorange_observable[epoch_idx, sat_idx] = float(row.RawPseudorangeMeters)
             pseudorange[epoch_idx, sat_idx] = (
                 float(row.RawPseudorangeMeters)
                 + sat_clock_bias_m
-                - float(row.IonosphericDelayMeters)
+                - iono_m
                 - float(row.TroposphericDelayMeters)
             )
 
@@ -787,18 +1156,20 @@ def fill_observation_matrices(
             if sat_vel is not None:
                 if sat_vel_adjusted is not None:
                     sat_vel[epoch_idx, sat_idx] = sat_vel_adjusted
+                elif raw_product_velocity is not None:
+                    sat_vel[epoch_idx, sat_idx] = raw_product_velocity
                 else:
                     sat_vel[epoch_idx, sat_idx] = [
-                        float(row.SvVelocityXEcefMetersPerSecond),
-                        float(row.SvVelocityYEcefMetersPerSecond),
-                        float(row.SvVelocityZEcefMetersPerSecond),
+                        float(raw_product_row.SvVelocityXEcefMetersPerSecond),
+                        float(raw_product_row.SvVelocityYEcefMetersPerSecond),
+                        float(raw_product_row.SvVelocityZEcefMetersPerSecond),
                     ]
 
             if sat_clock_drift_mps is not None:
                 sat_clock_drift = (
                     float(sat_clock_drift_adjusted)
                     if sat_clock_drift_adjusted is not None
-                    else float(row.SvClockDriftMetersPerSecond)
+                    else float(raw_product_row.SvClockDriftMetersPerSecond)
                 )
                 if np.isfinite(sat_clock_drift):
                     sat_clock_drift_mps[epoch_idx, sat_idx] = sat_clock_drift
@@ -833,6 +1204,7 @@ def fill_observation_matrices(
         weights=weights,
         pseudorange_bias_weights=pseudorange_bias_weights,
         sat_clock_bias_matrix=sat_clock_bias_matrix,
+        rtklib_iono_m=rtklib_iono_m,
         rtklib_tropo_m=rtklib_tropo_m,
         kaggle_wls=kaggle_wls,
         truth=truth,
@@ -934,12 +1306,18 @@ __all__ = [
     "RAW_GNSS_COLUMNS",
     "RAW_GNSS_OPTIONAL_COLUMNS",
     "RAW_GNSS_REQUIRED_COLUMNS",
+    "RTKLIB_SAT_VELOCITY_FORWARD_DIFF_HALF_STEP_S",
+    "GPS_LEAP_SECONDS",
+    "GPS_L1_FREQUENCY_HZ",
+    "GPS_L5_FREQUENCY_HZ",
     "ObservationMatrixProducts",
     "RawEpochObservation",
     "TripArrays",
     "android_state_tracking_ok",
     "apply_matlab_signal_observation_mask",
+    "build_gps_l1_sat_product_lookup",
     "build_gps_l1_sat_time_lookup",
+    "build_sat_velocity_forward_difference_lookup",
     "build_epoch_metadata_frame",
     "build_slot_keys",
     "clock_jump_from_epoch_counts",
@@ -947,11 +1325,15 @@ __all__ = [
     "interpolate_series",
     "legacy_matlab_signal_observation_mask",
     "load_raw_gnss_frame",
+    "load_raw_gnss_frame_epoch_window",
     "matlab_signal_observation_masks",
     "read_raw_gnss_csv",
     "receiver_clock_bias_from_nanos",
     "receiver_clock_bias_lookup_from_epoch_meta",
+    "recompute_rtklib_iono_matrix",
     "recompute_rtklib_tropo_matrix",
+    "rtklib_klobuchar_iono_delay_m",
+    "signal_type_iono_scale",
     "repair_baseline_wls",
     "select_epoch_observations",
 ]
