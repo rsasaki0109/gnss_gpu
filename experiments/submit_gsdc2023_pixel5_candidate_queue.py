@@ -239,6 +239,13 @@ def _float_field(row: dict[str, str], key: str, default: float = 0.0) -> float:
         return default
 
 
+def _bool_field(row: dict[str, str], key: str, default: bool = False) -> bool:
+    value = row.get(key)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes"}
+
+
 def assert_matlab_equivalence_gate(manifest: dict[str, object], *, require: bool = False) -> dict[str, object] | None:
     gate = manifest.get("matlab_equivalence_gate")
     if gate is None:
@@ -344,6 +351,13 @@ def assert_pre_submit_manifest_gate(
                 raise SystemExit(
                     f"pre-submit trip check failed for {candidate} {row.get('tripId')}: "
                     f"input_changed_rows={changed_rows}, input_max_m={input_max_m}"
+                )
+            previous_changed_rows = _int_field(row, "previous_changed_rows")
+            if candidate.endswith("_p6p0") and _bool_field(row, "previous_exists") and previous_changed_rows != 0:
+                previous_max_m = _float_field(row, "previous_max_m")
+                raise SystemExit(
+                    f"pre-submit previous trip check failed for {candidate} {row.get('tripId')}: "
+                    f"previous_changed_rows={previous_changed_rows}, previous_max_m={previous_max_m}"
                 )
     missing_trip_checks = sorted(selected - seen)
     if missing_trip_checks:

@@ -161,16 +161,17 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - result: `passed=true`, `equivalence_claim=matlab_equivalent`, `max_epochs=0`, `count_max_epochs=0`, `trip_count=12`
   - gates: assets/factor_mask/residual_values/raw_bridge_counts all pass
   - residual gate: side-only `0/0`, `overall_max_abs_delta=5.91054445631678e-05 m`, threshold `1e-4 m`
-- P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
+- Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
   - `pre_submit_manifest.json` gate: `equivalence_claim=matlab_equivalent`, `max_epochs=0`, `count_max_epochs=0`, residual side-only `0/0`, max delta `5.91054445631678e-05 m`, summary SHA `401177f4df7cc634374e454ae5b1202286a0c191118a5590482d888e409fd4a3`
+  - Superseded on 2026-05-05 by the previous-safe-baseline gate below; the initial manifest had missed nested previous candidate files.
 
 次にやること:
 
-1. P6P0 clean submit 結果を評価し、残り 2 candidate を submit するか判断する
-2. P6P0 clean が悪化した場合は pixel6pro 3,754 changed rows の影響を切り分ける
-3. 次の submit は private `4.710` 系の safe baseline を崩さない差分に限定する
+1. private `4.710` 系 safe baseline を崩さない候補だけ submit-ready に進める
+2. P6P0 系は旧 safe baseline との差分 gate を通らない限り submit しない
+3. 次候補は Pixel6Pro risky trip を固定し、Pixel5/Pixel4 系の改善差分だけに限定する
 
 2026-05-05 P6P0 clean Kaggle submit:
 
@@ -183,6 +184,13 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - previous same scale `20260501 pixel5 3.375 sjc r scale 0.84375`: public `3.725`, private `4.711`
   - P6P0 clean changed `3754` rows vs previous same scale, all in pixel6pro rows; max row movement `0.814 m`, p95 `0.74895 m`
   - outcome: P6P0 clean worsened private by `+0.014 m`; do not submit `r1p6875_p6p0` / `r2p53125_p6p0` unless new evidence appears
+- Follow-up pre-submit gate fix:
+  - `build_gsdc2023_pre_submit_manifest.py` now resolves previous candidates by exact direct path first, then by deterministic recursive filename lookup under `--previous-output-dir`; ambiguous matches fail closed.
+  - `submit_gsdc2023_pixel5_candidate_queue.py` now rejects P6P0 candidates when risky Pixel6Pro trips are unchanged vs input but changed vs the previous safe candidate.
+  - Regenerated `pre_submit_trip_delta_checks.csv` now finds the nested previous outputs under `basecorr_posoffset_pixel5_patch_scripted`.
+  - All 3 P6P0 candidates are blocked: previous changed rows are `1444` / `1019` / `1291` on the three risky Pixel6Pro trips, with max movement `0.751m` / `0.814m` / `0.814m`.
+  - `--prepare-ready-report ... --require-matlab-equivalence` now fails before ready-report publication with `pre-submit previous trip check failed`.
+  - Focused verification: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `23 passed`; ruff pass.
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 

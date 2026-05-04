@@ -42,7 +42,7 @@ def test_build_pre_submit_manifest_records_clean_p6p0_risky_trips(tmp_path) -> N
     base_path = tmp_path / "base.csv"
     output_dir = tmp_path / "out"
     candidate_dir = output_dir / CANDIDATE
-    previous_dir = tmp_path / "previous" / PREVIOUS
+    previous_dir = tmp_path / "previous" / "basecorr_posoffset_pixel5_patch_scripted" / PREVIOUS
     candidate_path = candidate_dir / f"submission_best_basecorr_posoffset_{CANDIDATE}_plus_pixel5_patch_test.csv"
     previous_path = previous_dir / f"submission_best_basecorr_posoffset_{PREVIOUS}_plus_pixel5_patch_20260501.csv"
     build_summary_path = output_dir / "build_summary.json"

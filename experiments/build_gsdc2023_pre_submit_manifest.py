@@ -106,13 +106,29 @@ def _candidate_name(candidate_summary: dict[str, Any]) -> str:
     return name
 
 
-def _previous_candidate_path(previous_output_dir: Path, candidate_name: str, previous_tag: str) -> Path:
+def _previous_candidate_name(candidate_name: str) -> str:
+    return candidate_name.removesuffix("_p6p0")
+
+
+def _previous_candidate_filename(candidate_name: str, previous_tag: str) -> str:
     previous_name = candidate_name.removesuffix("_p6p0")
-    return (
-        previous_output_dir
-        / previous_name
-        / f"submission_best_basecorr_posoffset_{previous_name}_plus_pixel5_patch_{previous_tag}.csv"
-    )
+    return f"submission_best_basecorr_posoffset_{previous_name}_plus_pixel5_patch_{previous_tag}.csv"
+
+
+def _previous_candidate_path(previous_output_dir: Path, candidate_name: str, previous_tag: str) -> Path:
+    previous_name = _previous_candidate_name(candidate_name)
+    filename = _previous_candidate_filename(candidate_name, previous_tag)
+    direct_path = previous_output_dir / previous_name / filename
+    if direct_path.is_file():
+        return direct_path
+
+    matches = sorted(previous_output_dir.rglob(filename), key=lambda path: str(path))
+    if not matches:
+        return direct_path
+    if len(matches) > 1:
+        formatted = "\n".join(f"  - {path}" for path in matches)
+        raise SystemExit(f"ambiguous previous candidate CSV for {candidate_name}:\n{formatted}")
+    return matches[0]
 
 
 def _trip_delta_rows(

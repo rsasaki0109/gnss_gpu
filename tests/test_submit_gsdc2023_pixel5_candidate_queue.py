@@ -190,6 +190,19 @@ def test_pre_submit_manifest_gate_requires_clean_p6p0_manifest(tmp_path) -> None
     with pytest.raises(SystemExit, match="pre-submit trip check failed"):
         assert_pre_submit_manifest_gate(tmp_path, [candidate])
 
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m,previous_exists,previous_changed_rows,previous_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0,True,2,0.814",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit, match="previous trip check failed"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate])
+
 
 def test_matlab_equivalence_gate_can_be_required_from_pre_submit_manifest(tmp_path) -> None:
     candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
