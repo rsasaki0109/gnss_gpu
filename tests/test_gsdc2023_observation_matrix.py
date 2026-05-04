@@ -1050,6 +1050,88 @@ def test_fill_observation_matrices_ignores_fully_masked_l1_for_l5_product_reuse(
     assert products.sat_clock_bias_matrix[0, l5_slot] == 150.0
 
 
+def test_fill_observation_matrices_reuses_masked_l1_timing_for_gnss_log_only_l5_product() -> None:
+    l5_row = _required_row(
+        utcTimeMillis=1000,
+        Svid=7,
+        SignalType="GPS_L5_Q",
+        RawPseudorangeMeters=22_000_000.0,
+        SvClockBiasMeters=100.0,
+        SvPositionXEcefMeters=20_000_000.0,
+        SvPositionYEcefMeters=10_000_000.0,
+        SvPositionZEcefMeters=21_000_000.0,
+        ArrivalTimeNanosSinceGpsEpoch=123_000_000_000.0,
+        SvVelocityXEcefMetersPerSecond=4.0,
+        SvVelocityYEcefMetersPerSecond=5.0,
+        SvVelocityZEcefMetersPerSecond=6.0,
+        SvClockDriftMetersPerSecond=-0.03,
+        bridge_gnss_log_only=True,
+    )
+    masked_l1_row = _required_row(
+        utcTimeMillis=1000,
+        Svid=7,
+        SignalType="GPS_L1_CA",
+        RawPseudorangeMeters=21_000_000.0,
+        SvClockBiasMeters=10.0,
+        SvPositionXEcefMeters=19_000_000.0,
+        SvPositionYEcefMeters=9_000_000.0,
+        SvPositionZEcefMeters=20_000_000.0,
+        ArrivalTimeNanosSinceGpsEpoch=123_000_000_000.0,
+        ReceivedSvTimeNanos=120_000_000_000.0,
+        bridge_p_ok=False,
+        bridge_d_ok=False,
+        bridge_l_ok=False,
+        bridge_p_bias_ok=False,
+        bridge_gnss_log_only=True,
+    )
+    epoch = RawEpochObservation(
+        time_ms=1000.0,
+        group=pd.DataFrame([l5_row, masked_l1_row]),
+        baseline_xyz=np.array([1.0, 2.0, 3.0], dtype=np.float64),
+        truth_xyz=np.array([4.0, 5.0, 6.0], dtype=np.float64),
+    )
+    calls: list[dict[str, object]] = []
+    adjusted_xyz = np.array([30_000_000.0, 31_000_000.0, 32_000_000.0], dtype=np.float64)
+
+    def fake_adjustment(**kwargs):
+        calls.append(kwargs)
+        return adjusted_xyz, np.array([1.0, 2.0, 3.0], dtype=np.float64), 150.003, -0.5
+
+    products = fill_observation_matrices(
+        [epoch],
+        source_columns=epoch.group.columns,
+        baseline_lookup={},
+        weight_mode="sin2el",
+        multi_gnss=True,
+        dual_frequency=True,
+        tdcp_enabled=False,
+        adr_sign=1.0,
+        elapsed_ns_lookup=None,
+        hcdc_lookup=None,
+        clock_bias_lookup={1000: -30.0},
+        clock_drift_lookup=None,
+        gps_tgd_m_by_svid={7: 0.5},
+        gps_matrtklib_nav_messages={7: ((object(),), (object(),))},
+        gps_arrival_tow_s_from_row_fn=lambda _row: 123.0,
+        gps_sat_clock_bias_adjustment_m_fn=lambda _const, _svid, signal, _tgd: 5.0 if signal == "GPS_L1_CA" else 50.0,
+        gps_matrtklib_sat_product_adjustment_fn=fake_adjustment,
+        clock_kind_for_observation_fn=lambda const, signal, **_kwargs: 0 if signal == "GPS_L1_CA" else 1,
+        is_l5_signal_fn=lambda signal: "L5" in signal,
+        slot_sort_key_fn=lambda key: key,
+        ecef_to_lla_fn=lambda _x, _y, _z: (0.5, 0.0, 100.0),
+        elevation_azimuth_fn=lambda _rx, _sat: (np.deg2rad(30.0), 0.0),
+        rtklib_tropo_fn=lambda _lat, _alt, _el: 4.0,
+        matlab_signal_clock_dim=7,
+    )
+
+    l5_call = next(call for call in calls if call["l1_raw_pseudorange_m"] == 21_000_000.0)
+    assert l5_call["derived_common_clock_m"] == 15.0
+    assert l5_call["received_sv_tow_s"] == pytest.approx(120.0)
+    l5_slot = products.slot_keys.index((1, 7, "GPS_L5_Q"))
+    np.testing.assert_allclose(products.sat_ecef[0, l5_slot], adjusted_xyz)
+    assert products.sat_clock_bias_matrix[0, l5_slot] == 150.0
+
+
 def test_fill_observation_matrices_reuses_real_masked_l1_for_l5_product() -> None:
     l5_row = _required_row(
         utcTimeMillis=1000,

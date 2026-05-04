@@ -632,13 +632,14 @@ def build_gps_l1_sat_time_lookup(
     gps_sat_clock_bias_adjustment_m_fn: Callable[[int, int, str, Mapping[int, float]], float],
     gps_tgd_m_by_svid: Mapping[int, float],
     is_l5_signal_fn: Callable[[str], bool],
+    include_masked_gnss_log_only: bool = False,
 ) -> dict[tuple[int, int], tuple[float, float, float, float]]:
     out: dict[tuple[int, int], tuple[float, float, float, float]] = {}
     for epoch_idx, epoch in enumerate(epochs):
         for row in epoch.group.itertuples(index=False):
             if int(row.ConstellationType) != 1 or is_l5_signal_fn(str(row.SignalType)):
                 continue
-            if not _row_can_seed_gps_l1_product(row):
+            if not include_masked_gnss_log_only and not _row_can_seed_gps_l1_product(row):
                 continue
             arrival_tow_s = gps_arrival_tow_s_from_row_fn(row)
             received_sv_tow_s = _gps_received_sv_tow_s_from_row(row)
@@ -982,6 +983,18 @@ def fill_observation_matrices(
         if gps_matrtklib_nav_messages
         else {}
     )
+    gps_l1_sat_time_gnss_log_lookup = (
+        build_gps_l1_sat_time_lookup(
+            epochs,
+            gps_arrival_tow_s_from_row_fn=gps_arrival_tow_s_from_row_fn,
+            gps_sat_clock_bias_adjustment_m_fn=gps_sat_clock_bias_adjustment_m_fn,
+            gps_tgd_m_by_svid=gps_tgd_m_by_svid,
+            is_l5_signal_fn=is_l5_signal_fn,
+            include_masked_gnss_log_only=True,
+        )
+        if gps_matrtklib_nav_messages
+        else {}
+    )
     gps_l1_sat_product_lookup = build_gps_l1_sat_product_lookup(epochs, is_l5_signal_fn=is_l5_signal_fn)
     sat_velocity_forward_lookup = build_sat_velocity_forward_difference_lookup(epochs) if has_sat_vel else {}
     gps_sat_product_adjustment_cache: dict[
@@ -1039,6 +1052,11 @@ def fill_observation_matrices(
                 else:
                     if row_is_gps_l5:
                         adjustment_timing = gps_l1_sat_time_lookup.get((epoch_idx, int(row.Svid)))
+                        if adjustment_timing is None and _row_is_gnss_log_only(row):
+                            # MATLAB can use same-epoch GNSS-log L1 timing to
+                            # generate GNSS-log-only L5 satellite products even
+                            # when the L1 observation is inactive as a factor.
+                            adjustment_timing = gps_l1_sat_time_gnss_log_lookup.get((epoch_idx, int(row.Svid)))
                         if adjustment_timing is None:
                             adjustment_timing = (
                                 gps_arrival_tow_s_from_row_fn(row),

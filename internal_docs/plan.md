@@ -131,7 +131,7 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 - inactive diagnostics 補完を修正:
   - P: same epoch/group に active P がない場合も `clock_bias + ISB(group)` で common bias を補完
   - D: same epoch に active Doppler がない場合も clock drift があれば MATLAB diagnostics key の inactive D を出す
-- final full-window residual audit:
+- first full-window residual audit after side-only fixes:
   - command: `audit_gsdc2023_residual_value_parity.py --max-epochs 0 --no-multi-gnss --include-inactive-observations --trip ...12 trips`
   - output: `experiments/results/matlab_equivalence_fullwindow_probe_20260505/gsdc2023_residual_value_parity_audit_20260505_180322`
   - runtime: `858.36 s`, peak RSS: `606448 KB`
@@ -139,14 +139,25 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - side-only: `total_matlab_only=0`, `total_bridge_only=0`
   - value delta: `overall_max_abs_delta=0.00523725524546137 m`, `overall_p95_abs_delta_max=2.7839780766480964e-05 m`
   - worst row: `train/2020-07-08-22-28-us-ca/pixel4xl`, `P/L5`, epoch `774`, svid `27`
-- Interpretation: full-window は residual key 集合一致までは到達。strict `1e-4 m` value equivalence は、後半の low-elevation GPS L5 satellite product/range 差 `~5.2 mm` が残るため未達。
+- Root cause: worst row は GNSS log-only L5 で、MATLAB は同 epoch の GNSS log-only L1 `ReceivedSvTimeNanos` を L5 satellite product timing に使う。bridge は inactive/masked L1 を seed から外して L5 timing を使っており、L1/L5 received time 差 `7.822 us` が satellite position `~2.3 cm` / range `~5.24 mm` になっていた。
+- Fix: `fill_observation_matrices` で、L5 row 自体が GNSS log-only の場合だけ inactive GNSS log-only L1 timing を fallback seed として使う。通常 raw L5 は従来通り fully masked GNSS log-only L1 を無視する。
+- final full-window residual audit after GNSS log-only L1 timing fix:
+  - command: `audit_gsdc2023_residual_value_parity.py --max-epochs 0 --no-multi-gnss --include-inactive-observations --trip ...12 trips`
+  - output: `experiments/results/matlab_equivalence_fullwindow_probe_20260505/gsdc2023_residual_value_parity_audit_20260505_184253`
+  - runtime: `1223.16 s`, peak RSS: `695332 KB`
+  - result: `passed=true`
+  - side-only: `total_matlab_only=0`, `total_bridge_only=0`
+  - value delta: `overall_max_abs_delta=5.91054445631678e-05 m`, `overall_p95_abs_delta_max=2.7839780766480964e-05 m`
+  - worst row: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4`, `D/L1`, epoch `124`, svid `26`
+- Interpretation: 12-trip full-window residual key 集合一致と strict `1e-4 m` value equivalence を達成。
 - Regression check: `train/2020-07-08-22-28-us-ca/pixel4xl --max-epochs 200` は `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=3.3071655876071304e-05 m` で 200 epoch gate 水準を維持。
-- Local focused tests after fixes: `20 passed in 69.84s`; residual focused tests: `6 passed`; ruff: pass
+- Additional worst-trip full-window check after timing fix: `train/2020-07-08-22-28-us-ca/pixel4xl --max-epochs 0` は `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=3.505955783089654e-05 m`。
+- Local focused tests after fixes: residual/factor focused suite `20 passed in 69.84s`; observation/residual focused tests `27 passed in 0.59s`; ruff: pass
 
 次にやること:
 
-1. full-window worst row `2020-07-08 pixel4xl P/L5 epoch 774 svid 27` の satellite product/range 差 `~5.2 mm` を追う
-2. full-window strict value threshold を維持するか、full-window 用に satellite product tolerance を別 gate として切るか判断
+1. PR #55 に GNSS log-only L1 timing fix を commit/push し、CI を確認する
+2. full-window residual audit summary を submit readiness の MATLAB equivalence summary に差し替えるか判断する
 3. P6P0 submit 前は `--require-matlab-equivalence` 付き ready report を人間レビューする
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
