@@ -202,6 +202,8 @@ def test_preprocessing_gap_table_has_expected_stage_coverage():
     assert summary["static_stage_count"] == len(rows)
     assert summary["static_status_counts"]["partial"] >= 1
     assert summary["static_status_counts"]["experimental"] >= 1
+    assert summary["static_strict_completion_percent"] == 66.7
+    assert summary["static_practical_completion_percent"] == 78.3
 
 
 def test_preprocessing_gap_discovers_settings_trips_and_records(tmp_path):
@@ -226,3 +228,16 @@ def test_preprocessing_gap_discovers_settings_trips_and_records(tmp_path):
     assert bool(row["phone_data_present"]) is False
     assert bool(row["settings_csv_present"]) is True
     assert row["base_correction_status"] == "base_metadata_missing"
+
+    quick_records = trip_gap_records(
+        data_root,
+        ["train"],
+        limit=1,
+        include_validation=False,
+        include_imu_sync=False,
+    )
+    quick_row = quick_records.iloc[0].to_dict()
+    assert bool(quick_row["imu_sync_checked"]) is False
+    quick_summary = summary_from_records(quick_records)
+    assert quick_summary["imu_sync_checked"] == 0
+    assert quick_summary["imu_sync_skipped"] == 1

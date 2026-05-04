@@ -122,6 +122,40 @@ def test_corrected_pseudorange_products_injects_sat_clock_adjustment(tmp_path):
     assert products.pseudorange[0, 0] == pytest.approx(raw_pseudorange + 8.0 - 2.0 - 4.0, abs=1.0e-6)
 
 
+def test_corrected_pseudorange_products_prefers_rtklib_iono_matrix(tmp_path):
+    trip = tmp_path / "train" / "course" / "phone"
+    log_path = trip / "supplemental" / "gnss_log.txt"
+    _write_log(log_path)
+    raw_frame = pd.DataFrame(
+        [
+            {
+                "utcTimeMillis": 1000,
+                "ConstellationType": 1,
+                "Svid": 1,
+                "SignalType": "GPS_L1_CA",
+                "SvClockBiasMeters": 5.0,
+                "IonosphericDelayMeters": 2.0,
+                "TroposphericDelayMeters": 3.0,
+            },
+        ],
+    )
+
+    products = gnss_log_corrected_pseudorange_products(
+        trip,
+        raw_frame,
+        np.array([1000.0], dtype=np.float64),
+        ((1, 1, "GPS_L1_CA"),),
+        {},
+        phone_name="phone",
+        rtklib_iono_m=np.array([[0.75]], dtype=np.float64),
+        sat_clock_adjustment_m=lambda *_args: 3.0,
+    )
+
+    raw_pseudorange = load_gnss_log_observations(log_path).query("freq == 'L1'")["PseudorangeMeters"].iloc[0]
+    assert products is not None
+    assert products.pseudorange[0, 0] == pytest.approx(raw_pseudorange + 8.0 - 0.75 - 3.0, abs=1.0e-6)
+
+
 def test_corrected_pseudorange_products_overlays_gps_slots_in_mixed_constellation_batch(tmp_path):
     trip = tmp_path / "train" / "course" / "phone"
     log_path = trip / "supplemental" / "gnss_log.txt"
@@ -230,6 +264,7 @@ def test_append_gnss_log_rows_sets_arrival_time_and_preserves_epoch_fields(tmp_p
     tow_rx_s = load_gnss_log_observations(log_path).query("freq == 'L1'")["tow_rx_s"].iloc[0]
     assert l1_row["ArrivalTimeNanosSinceGpsEpoch"] == pytest.approx(tow_rx_s * 1.0e9)
     assert l1_row["WlsPositionXEcefMeters"] == 12.0
+    assert bool(l1_row["bridge_gnss_log_only"])
 
 
 def test_gnss_log_epoch_times_are_unique_sorted_trip_times(tmp_path):

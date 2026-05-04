@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import csv
 import io
+from pathlib import Path
 import zipfile
 
 import numpy as np
 import pandas as pd
+import pytest
 from scipy.io import savemat
 
 from experiments.compare_gsdc2023_factor_masks import build_bridge_factor_mask, compare_factor_masks
@@ -323,6 +325,57 @@ def test_compare_phone_data_counts_respects_settings_epoch_window(tmp_path):
     l1_l = comparison_df[(comparison_df["freq"] == "L1") & (comparison_df["field"] == "L")].iloc[0]
     assert int(l1_p["bridge_count"]) == 4
     assert int(l1_l["bridge_count"]) == 0
+
+
+def test_real_matlab_export_phone_data_counts_match_bridge_tdcp_snapshot():
+    repo_root = Path(__file__).resolve().parents[1]
+    data_root = repo_root.parent / "ref/gsdc2023/kaggle_smartphone_decimeter_2023/sdc2023"
+    trip = "train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4"
+    trip_dir = data_root / trip
+    required = (
+        trip_dir / "phone_data.mat",
+        trip_dir / "phone_data_factor_counts.csv",
+        trip_dir / "device_gnss.csv",
+    )
+    missing = [path for path in required if not path.is_file()]
+    if missing:
+        pytest.skip(f"MATLAB phone-data count fixture is not available: {missing[0]}")
+
+    comparison, summary_df, payload = build_comparison_frames(
+        data_root,
+        ["train"],
+        trips=[trip],
+        max_epochs=0,
+    )
+
+    assert payload["trip_count"] == 1
+    assert payload["bridge_errors"] == 0
+    assert payload["phone_errors"] == 0
+    assert payload["matched_rows"] == 12
+    assert payload["matched_phone_count_total"] == 83640
+    assert payload["matched_bridge_count_total"] == 83640
+    assert payload["matched_abs_delta_total"] == 0
+    assert payload["count_parity_ratio"] == 1.0
+    assert summary_df.iloc[0]["bridge_total_p_count"] == 16327
+    assert summary_df.iloc[0]["bridge_total_d_count"] == 15513
+    assert summary_df.iloc[0]["bridge_total_l_count"] == 9980
+    assert summary_df.iloc[0]["phone_total_l_count"] == 9980
+    assert comparison["count_delta"].fillna(0).eq(0).all()
+    by_freq_field = comparison.set_index(["freq", "field"])["bridge_count"].to_dict()
+    assert by_freq_field == {
+        ("L1", "P"): 12592,
+        ("L1", "D"): 12019,
+        ("L1", "L"): 7936,
+        ("L1", "resPc"): 12592,
+        ("L1", "resD"): 12019,
+        ("L1", "resL"): 7936,
+        ("L5", "P"): 3735,
+        ("L5", "D"): 3494,
+        ("L5", "L"): 2044,
+        ("L5", "resPc"): 3735,
+        ("L5", "resD"): 3494,
+        ("L5", "resL"): 2044,
+    }
 
 
 def test_compare_factor_masks_matches_exported_bridge_mask(tmp_path):

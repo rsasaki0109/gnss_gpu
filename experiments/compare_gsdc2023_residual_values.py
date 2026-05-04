@@ -35,6 +35,9 @@ from experiments.gsdc2023_audit_cli import (  # noqa: E402
     resolved_output_root as _resolved_output_root,
 )
 from experiments.gsdc2023_observation_matrix import load_raw_gnss_frame as _load_raw_gnss_frame  # noqa: E402
+from experiments.gsdc2023_observation_matrix import (  # noqa: E402
+    RTKLIB_SAT_VELOCITY_FORWARD_DIFF_HALF_STEP_S as _SAT_VEL_HALF_STEP_S,
+)
 from experiments.gsdc2023_residual_audit import (  # noqa: E402
     RESIDUAL_KEY_COLUMNS as _KEY_COLUMNS,
     append_bridge_residual_row as _append_bridge_residual_rows,
@@ -63,6 +66,64 @@ from experiments.gsdc2023_trip_window import (  # noqa: E402
 )
 
 
+def _frame_sat_velocity_forward_difference_lookup(
+    frame: pd.DataFrame,
+    *,
+    half_step_s: float = _SAT_VEL_HALF_STEP_S,
+) -> dict[tuple[int, int, int, str], np.ndarray]:
+    velocity_cols = [
+        "SvVelocityXEcefMetersPerSecond",
+        "SvVelocityYEcefMetersPerSecond",
+        "SvVelocityZEcefMetersPerSecond",
+    ]
+    if not set(velocity_cols).issubset(frame.columns):
+        return {}
+
+    out: dict[tuple[int, int, int, str], np.ndarray] = {}
+    group_cols = ["ConstellationType", "Svid", "SignalType"]
+    for (constellation_type, svid, signal_type), group in frame.groupby(group_cols, sort=False):
+        group = group.sort_values("utcTimeMillis")
+        times_s = pd.to_numeric(group["utcTimeMillis"], errors="coerce").to_numpy(dtype=np.float64) * 1.0e-3
+        velocities = group[velocity_cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float64)
+        valid = np.isfinite(times_s) & np.isfinite(velocities).all(axis=1)
+        times_s = times_s[valid]
+        velocities = velocities[valid]
+        utc_ms = group.loc[valid, "utcTimeMillis"].to_numpy(dtype=np.int64)
+        if velocities.size == 0:
+            continue
+        corrected = velocities.copy()
+        if velocities.shape[0] >= 2 and np.all(np.diff(times_s) > 0.0):
+            acceleration = np.zeros_like(velocities)
+            for axis in range(3):
+                acceleration[:, axis] = np.gradient(velocities[:, axis], times_s, edge_order=1)
+            corrected = velocities + float(half_step_s) * acceleration
+        for time_ms, velocity in zip(utc_ms, corrected):
+            out[(int(time_ms), int(constellation_type), int(svid), str(signal_type))] = velocity
+    return out
+
+
+def _finite_matrix_value(matrix: np.ndarray | None, epoch_idx: int, slot_idx: int) -> float | None:
+    if matrix is None:
+        return None
+    values = np.asarray(matrix, dtype=np.float64)
+    if values.ndim != 2 or not (0 <= epoch_idx < values.shape[0]) or not (0 <= slot_idx < values.shape[1]):
+        return None
+    value = float(values[epoch_idx, slot_idx])
+    return value if np.isfinite(value) else None
+
+
+def _finite_vector_value(matrix: np.ndarray | None, epoch_idx: int, slot_idx: int) -> np.ndarray | None:
+    if matrix is None:
+        return None
+    values = np.asarray(matrix, dtype=np.float64)
+    if values.ndim != 3 or values.shape[2] != 3:
+        return None
+    if not (0 <= epoch_idx < values.shape[0]) or not (0 <= slot_idx < values.shape[1]):
+        return None
+    value = values[epoch_idx, slot_idx]
+    return value if np.isfinite(value).all() else None
+
+
 def _bridge_component_frame(
     trip_dir: Path,
     times_ms: np.ndarray,
@@ -71,6 +132,13 @@ def _bridge_component_frame(
     dual_frequency: bool = True,
     receiver_xyz: np.ndarray | None = None,
     receiver_vel: np.ndarray | None = None,
+    slot_keys: tuple[tuple[int, int, str], ...] | None = None,
+    sat_ecef: np.ndarray | None = None,
+    sat_vel: np.ndarray | None = None,
+    sat_clock_bias_m: np.ndarray | None = None,
+    sat_clock_drift_mps: np.ndarray | None = None,
+    rtklib_iono_m: np.ndarray | None = None,
+    rtklib_tropo_m: np.ndarray | None = None,
     epoch_offset: int = 0,
 ) -> pd.DataFrame:
     raw = _load_raw_gnss_frame(trip_dir / "device_gnss.csv")
@@ -104,6 +172,20 @@ def _bridge_component_frame(
         ["utcTimeMillis", "ConstellationType", "Svid", "SignalType"],
         as_index=False,
     ).tail(1)
+    gps_l1_product_lookup = {
+        (int(getattr(item, "utcTimeMillis")), int(item.Svid)): item
+        for item in frame.itertuples(index=False)
+        if int(item.ConstellationType) == 1 and _freq_label(str(item.SignalType)) == "L1"
+    }
+    sat_velocity_lookup = _frame_sat_velocity_forward_difference_lookup(frame)
+    slot_lookup = (
+        {
+            (int(constellation), int(svid), str(signal_type)): idx
+            for idx, (constellation, svid, signal_type) in enumerate(slot_keys)
+        }
+        if slot_keys is not None
+        else {}
+    )
     epoch_lookup = {
         int(round(float(time_ms))): (idx + 1 + int(epoch_offset), idx)
         for idx, time_ms in enumerate(times_ms)
@@ -116,6 +198,20 @@ def _bridge_component_frame(
         if epoch_item is None:
             continue
         epoch_index, array_idx = epoch_item
+        product_row = (
+            gps_l1_product_lookup.get((utc_ms, int(row.Svid)), row)
+            if int(row.ConstellationType) == 1 and _freq_label(str(row.SignalType)) == "L5"
+            else row
+        )
+        product_velocity = sat_velocity_lookup.get(
+            (
+                utc_ms,
+                int(product_row.ConstellationType),
+                int(product_row.Svid),
+                str(product_row.SignalType),
+            ),
+        )
+        slot_idx = slot_lookup.get((int(row.ConstellationType), int(row.Svid), str(row.SignalType)))
         raw_pr = float(row.RawPseudorangeMeters)
         sv_clock = float(row.SvClockBiasMeters) + _gps_sat_clock_bias_adjustment_m(
             int(row.ConstellationType),
@@ -125,6 +221,19 @@ def _bridge_component_frame(
         )
         iono = float(row.IonosphericDelayMeters)
         trop = float(row.TroposphericDelayMeters)
+        if slot_idx is not None:
+            actual_sv_clock = _finite_matrix_value(sat_clock_bias_m, array_idx, slot_idx)
+            if actual_sv_clock is not None:
+                sv_clock = actual_sv_clock
+            actual_iono = _finite_matrix_value(rtklib_iono_m, array_idx, slot_idx)
+            if actual_iono is not None:
+                iono = actual_iono
+            actual_trop = _finite_matrix_value(rtklib_tropo_m, array_idx, slot_idx)
+            if actual_trop is not None:
+                trop = actual_trop
+            actual_velocity = _finite_vector_value(sat_vel, array_idx, slot_idx)
+            if actual_velocity is not None:
+                product_velocity = actual_velocity
         base = {
             "freq": _freq_label(str(row.SignalType)),
             "epoch_index": int(epoch_index),
@@ -133,14 +242,24 @@ def _bridge_component_frame(
             "svid": int(row.Svid),
             "bridge_raw_pseudorange": raw_pr,
             "bridge_corrected_pseudorange": raw_pr + sv_clock - iono - trop,
-            "bridge_sat_x": float(row.SvPositionXEcefMeters),
-            "bridge_sat_y": float(row.SvPositionYEcefMeters),
-            "bridge_sat_z": float(row.SvPositionZEcefMeters),
+            "bridge_sat_x": float(product_row.SvPositionXEcefMeters),
+            "bridge_sat_y": float(product_row.SvPositionYEcefMeters),
+            "bridge_sat_z": float(product_row.SvPositionZEcefMeters),
             "bridge_sat_clock_bias": sv_clock,
             "bridge_sat_iono": iono,
             "bridge_sat_trop": trop,
-            "bridge_sat_elevation": float(getattr(row, "SvElevationDegrees", np.nan)),
+            "bridge_sat_elevation": float(getattr(product_row, "SvElevationDegrees", np.nan)),
         }
+        if slot_idx is not None:
+            actual_sat_xyz = _finite_vector_value(sat_ecef, array_idx, slot_idx)
+            if actual_sat_xyz is not None:
+                base.update(
+                    {
+                        "bridge_sat_x": float(actual_sat_xyz[0]),
+                        "bridge_sat_y": float(actual_sat_xyz[1]),
+                        "bridge_sat_z": float(actual_sat_xyz[2]),
+                    },
+                )
         if receiver_xyz is not None and 0 <= array_idx < receiver_xyz.shape[0]:
             base.update(
                 {
@@ -157,16 +276,29 @@ def _bridge_component_frame(
                     "bridge_rcv_vz": float(receiver_vel[array_idx, 2]),
                 },
             )
-        if hasattr(row, "SvVelocityXEcefMetersPerSecond"):
+        if hasattr(product_row, "SvVelocityXEcefMetersPerSecond"):
+            if product_velocity is None:
+                product_velocity = np.array(
+                    [
+                        float(product_row.SvVelocityXEcefMetersPerSecond),
+                        float(product_row.SvVelocityYEcefMetersPerSecond),
+                        float(product_row.SvVelocityZEcefMetersPerSecond),
+                    ],
+                    dtype=np.float64,
+                )
             base.update(
                 {
-                    "bridge_sat_vx": float(row.SvVelocityXEcefMetersPerSecond),
-                    "bridge_sat_vy": float(row.SvVelocityYEcefMetersPerSecond),
-                    "bridge_sat_vz": float(row.SvVelocityZEcefMetersPerSecond),
+                    "bridge_sat_vx": float(product_velocity[0]),
+                    "bridge_sat_vy": float(product_velocity[1]),
+                    "bridge_sat_vz": float(product_velocity[2]),
                 },
             )
-        if hasattr(row, "SvClockDriftMetersPerSecond"):
-            base["bridge_sat_clock_drift"] = float(row.SvClockDriftMetersPerSecond)
+        if hasattr(product_row, "SvClockDriftMetersPerSecond"):
+            base["bridge_sat_clock_drift"] = float(product_row.SvClockDriftMetersPerSecond)
+        if slot_idx is not None:
+            actual_drift = _finite_matrix_value(sat_clock_drift_mps, array_idx, slot_idx)
+            if actual_drift is not None:
+                base["bridge_sat_clock_drift"] = actual_drift
         for field in ("P", "D"):
             item = dict(base)
             item["field"] = field
@@ -184,59 +316,63 @@ def build_bridge_residual_frame(
     dual_frequency: bool = True,
 ) -> pd.DataFrame:
     start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
-    batch = _build_trip_arrays(
-        trip_dir,
-        max_epochs=bridge_max_epochs,
-        start_epoch=start_epoch,
-        constellation_type=1,
-        signal_type="GPS_L1_CA",
-        weight_mode="sin2el",
-        multi_gnss=multi_gnss,
-        use_tdcp=False,
-        apply_observation_mask=True,
-        pseudorange_residual_mask_m=0.0,
-        doppler_residual_mask_mps=0.0,
-        pseudorange_doppler_mask_m=0.0,
-        dual_frequency=dual_frequency,
-    )
-    times_ms = np.asarray(batch.times_ms, dtype=np.float64)
-    receiver_velocity = _receiver_velocity_from_reference(times_ms, np.asarray(batch.kaggle_wls, dtype=np.float64))
-    clock_drift_mps = batch.clock_drift_mps
-    if start_epoch > 0 or bridge_max_epochs < FULL_EPOCH_COUNT:
-        full_batch = _build_trip_arrays(
+
+    def build_batch(
+        *,
+        batch_start_epoch: int,
+        batch_max_epochs: int,
+        apply_observation_mask: bool = True,
+    ):
+        return _build_trip_arrays(
             trip_dir,
-        max_epochs=FULL_EPOCH_COUNT,
-            start_epoch=0,
+            max_epochs=batch_max_epochs,
+            start_epoch=batch_start_epoch,
             constellation_type=1,
             signal_type="GPS_L1_CA",
             weight_mode="sin2el",
             multi_gnss=multi_gnss,
             use_tdcp=False,
-            apply_observation_mask=True,
+            apply_observation_mask=apply_observation_mask,
             pseudorange_residual_mask_m=0.0,
             doppler_residual_mask_mps=0.0,
             pseudorange_doppler_mask_m=0.0,
             dual_frequency=dual_frequency,
+            raw_frame_epoch_window=True,
         )
-        full_velocity = _receiver_velocity_from_reference(
-            full_batch.times_ms,
-            np.asarray(full_batch.kaggle_wls, dtype=np.float64),
+
+    batch = build_batch(batch_start_epoch=start_epoch, batch_max_epochs=bridge_max_epochs)
+    times_ms = np.asarray(batch.times_ms, dtype=np.float64)
+    receiver_velocity = _receiver_velocity_from_reference(times_ms, np.asarray(batch.kaggle_wls, dtype=np.float64))
+    clock_drift_mps = batch.clock_drift_mps
+    if start_epoch > 0 or bridge_max_epochs < FULL_EPOCH_COUNT:
+        context_start_epoch = max(int(start_epoch) - 1, 0)
+        leading_context = int(start_epoch) - context_start_epoch
+        trailing_context = 1 if bridge_max_epochs < FULL_EPOCH_COUNT else 0
+        context_max_epochs = int(bridge_max_epochs) + leading_context + trailing_context
+        context_batch = build_batch(
+            batch_start_epoch=context_start_epoch,
+            batch_max_epochs=context_max_epochs,
+            apply_observation_mask=True,
         )
-        full_lookup = {int(round(float(time_ms))): idx for idx, time_ms in enumerate(full_batch.times_ms)}
+        context_velocity = _receiver_velocity_from_reference(
+            context_batch.times_ms,
+            np.asarray(context_batch.kaggle_wls, dtype=np.float64),
+        )
+        context_lookup = {int(round(float(time_ms))): idx for idx, time_ms in enumerate(context_batch.times_ms)}
         for epoch_idx in {0, times_ms.size - 1}:
-            full_idx = full_lookup.get(int(round(float(times_ms[epoch_idx]))))
-            if full_idx is None:
+            context_idx = context_lookup.get(int(round(float(times_ms[epoch_idx]))))
+            if context_idx is None:
                 continue
-            candidate = full_velocity[full_idx]
+            candidate = context_velocity[context_idx]
             if np.isfinite(candidate).all():
                 receiver_velocity[epoch_idx] = candidate
-        if batch.clock_drift_mps is not None and full_batch.clock_drift_mps is not None:
+        if batch.clock_drift_mps is not None and context_batch.clock_drift_mps is not None:
             clock_drift_mps = np.asarray(batch.clock_drift_mps, dtype=np.float64).copy()
             for epoch_idx in {0, times_ms.size - 1}:
-                full_idx = full_lookup.get(int(round(float(times_ms[epoch_idx]))))
-                if full_idx is None:
+                context_idx = context_lookup.get(int(round(float(times_ms[epoch_idx]))))
+                if context_idx is None:
                     continue
-                candidate = float(full_batch.clock_drift_mps[full_idx])
+                candidate = float(context_batch.clock_drift_mps[context_idx])
                 if np.isfinite(candidate):
                     clock_drift_mps[epoch_idx] = candidate
     slot_keys = tuple(batch.slot_keys)
@@ -411,6 +547,29 @@ def build_bridge_residual_frame(
         dual_frequency=dual_frequency,
         receiver_xyz=np.asarray(batch.kaggle_wls, dtype=np.float64),
         receiver_vel=receiver_velocity,
+        slot_keys=slot_keys,
+        sat_ecef=np.asarray(batch.sat_ecef, dtype=np.float64),
+        sat_vel=np.asarray(batch.sat_vel, dtype=np.float64) if batch.sat_vel is not None else None,
+        sat_clock_bias_m=(
+            np.asarray(getattr(batch, "sat_clock_bias_matrix", None), dtype=np.float64)
+            if getattr(batch, "sat_clock_bias_matrix", None) is not None
+            else None
+        ),
+        sat_clock_drift_mps=(
+            np.asarray(getattr(batch, "sat_clock_drift_mps", None), dtype=np.float64)
+            if getattr(batch, "sat_clock_drift_mps", None) is not None
+            else None
+        ),
+        rtklib_iono_m=(
+            np.asarray(getattr(batch, "rtklib_iono_m", None), dtype=np.float64)
+            if getattr(batch, "rtklib_iono_m", None) is not None
+            else None
+        ),
+        rtklib_tropo_m=(
+            np.asarray(getattr(batch, "rtklib_tropo_m", None), dtype=np.float64)
+            if getattr(batch, "rtklib_tropo_m", None) is not None
+            else None
+        ),
         epoch_offset=start_epoch,
     )
     if not rows:
