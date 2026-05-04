@@ -3,7 +3,7 @@
 **最終更新**: 2026-05-05 JST
 **現在の HEAD**: `codex/residual-mask-main-port`
 **ブランチ**: `codex/residual-mask-main-port`
-**作業ツリー**: GSDC2023 MATLAB equivalence gate / residual side-only audit 追加中。既存変更を revert しないこと。
+**作業ツリー**: GSDC2023 MATLAB equivalence gate / residual side-only audit は PR #55 に反映済み。既存変更を revert しないこと。
 **直近の重点**: Kaggle GSDC2023 raw bridge / MATLAB phone_data 移植の内部状態 parity と提出前 risk gate。
 **旧メモ**: 2026-04-21 以前の UrbanNav / CT-RBPF-FGO 計画は下に残す。現在の最優先は GSDC2023 raw bridge の MATLAB 移植を詰めること。
 
@@ -81,7 +81,7 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 - residual side-only: `total_matlab_only=0`, `total_bridge_only=0`
 - residual max delta: `3.56732272732696e-05 m` (`1e-4 m` threshold 内)
 
-12 trip / `--max-epochs 200` probe:
+12 trip / `--max-epochs 200` / count full-window probe:
 
 - assets: pass
 - factor_mask: pass (`completed_trip_count=12`, `overall_min_symmetric_parity=1.0`)
@@ -89,13 +89,17 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 - residual_values: fail
   - `completed_trip_count=11`, `error_count=1`
   - missing MATLAB golden: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl/phone_data_residual_diagnostics.csv`
-  - 11 completed trips all have matched residual deltas below threshold, but side-only rows remain. This means residual value parity is numerically close only on intersected rows, not complete-equivalence proof.
+  - `total_matlab_only=0`, `total_bridge_only=0` for the 11 completed trips
+  - `overall_max_abs_delta=5.91054445631678e-05 m`, `overall_p95_abs_delta_max=2.796173776410671e-05 m`
+  - 11 completed trips are within the `1e-4 m` threshold with zero side-only rows. Full 12 trip equivalence is still not proven because one MATLAB residual diagnostics golden is missing.
+- CI for PR #55 / commit `edc39cc` passed after rerunning a transient Ubuntu mirror failure in `build-cuda`.
+- Local focused tests: `19 passed in 47.01s`
 
 次にやること:
 
 1. MATLAB golden export を補完: missing `phone_data_residual_diagnostics.csv` for `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl`
-2. 12 trip gate を新 residual semantics で再実行し、missing golden 以外の residual side-only/value delta が残るか確認
-3. `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl` の missing golden を補完するか、gate の default set から明示的に除外する判断をする
+2. missing golden を補完したら 12 trip gate を再実行し、12/12 の residual side-only/value delta がゼロ/閾値内になるか確認
+3. golden を補完できない場合は、`train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl` を gate の default set から明示的に除外するか判断する
 4. full-window / all exported residual diagnostics へ広げる前に、runtime と output size を見積もる
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
