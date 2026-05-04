@@ -51,6 +51,19 @@ class TripSpec:
     idx_end: int | None = None
 
 
+STRICT_STATUS_WEIGHTS = {
+    "implemented": 1.0,
+    "experimental": 0.75,
+    "partial": 0.50,
+}
+
+PRACTICAL_STATUS_WEIGHTS = {
+    "implemented": 1.0,
+    "experimental": 0.90,
+    "partial": 0.60,
+}
+
+
 def preprocessing_gap_rows() -> list[PreprocessingGapRow]:
     """Static coverage table for ``ref/gsdc2023/preprocessing.m``."""
 
@@ -184,6 +197,16 @@ def gap_rows_to_dicts(rows: Iterable[PreprocessingGapRow]) -> list[dict[str, str
 
 def rows_to_dataframe(rows: Iterable[PreprocessingGapRow]) -> pd.DataFrame:
     return pd.DataFrame(gap_rows_to_dicts(rows))
+
+
+def completion_percent(rows: Iterable[PreprocessingGapRow], weights: dict[str, float]) -> float | None:
+    rows = list(rows)
+    if not rows:
+        return None
+    total = 0.0
+    for row in rows:
+        total += float(weights.get(row.status, 0.0))
+    return float(round(100.0 * total / len(rows), 1))
 
 
 def _escape_markdown(value: object) -> str:
@@ -359,12 +382,13 @@ def _trip_record(
     include_validation: bool,
     include_bridge_counts: bool,
     bridge_max_epochs: int,
+    include_imu_sync: bool = True,
 ) -> dict[str, object]:
     trip_dir = spec.trip_dir
     audit: dict[str, object] = {}
     audit_error = None
     try:
-        audit = collect_matlab_parity_audit(data_root, spec.trip)
+        audit = collect_matlab_parity_audit(data_root, spec.trip, include_imu_sync=include_imu_sync)
     except Exception as exc:  # noqa: BLE001
         audit_error = str(exc)
 
@@ -420,6 +444,7 @@ def _trip_record(
         "base_position_csv_present": audit.get("base_position_csv_present"),
         "base_offset_csv_present": audit.get("base_offset_csv_present"),
         "ref_height_present": audit.get("ref_height_present"),
+        "imu_sync_checked": audit.get("imu_sync_checked"),
         "gnss_elapsed_present": audit.get("gnss_elapsed_present"),
         "imu_sync_ready": audit.get("imu_sync_ready"),
         "stop_epoch_count": audit.get("stop_epoch_count"),
@@ -465,6 +490,7 @@ def trip_gap_records(
     include_validation: bool = True,
     include_bridge_counts: bool = False,
     bridge_max_epochs: int = 0,
+    include_imu_sync: bool = True,
 ) -> pd.DataFrame:
     specs = discover_trip_specs(data_root, datasets)
     if limit > 0:
@@ -476,6 +502,7 @@ def trip_gap_records(
             include_validation=include_validation,
             include_bridge_counts=include_bridge_counts,
             bridge_max_epochs=bridge_max_epochs,
+            include_imu_sync=include_imu_sync,
         )
         for spec in specs
     ]
@@ -483,7 +510,8 @@ def trip_gap_records(
 
 
 def summary_from_records(records: pd.DataFrame | None = None) -> dict[str, object]:
-    rows = rows_to_dataframe(preprocessing_gap_rows())
+    gap_rows = preprocessing_gap_rows()
+    rows = rows_to_dataframe(gap_rows)
     status_counts = {
         str(key): int(value)
         for key, value in rows["status"].value_counts(dropna=False).to_dict().items()
@@ -491,6 +519,12 @@ def summary_from_records(records: pd.DataFrame | None = None) -> dict[str, objec
     summary: dict[str, object] = {
         "static_stage_count": int(len(rows)),
         "static_status_counts": status_counts,
+        "static_strict_completion_percent": completion_percent(gap_rows, STRICT_STATUS_WEIGHTS),
+        "static_practical_completion_percent": completion_percent(gap_rows, PRACTICAL_STATUS_WEIGHTS),
+        "static_completion_weights": {
+            "strict": STRICT_STATUS_WEIGHTS,
+            "practical": PRACTICAL_STATUS_WEIGHTS,
+        },
     }
     if records is not None:
         summary["trip_count"] = int(len(records))
@@ -503,9 +537,13 @@ def summary_from_records(records: pd.DataFrame | None = None) -> dict[str, objec
             "ref_height_present",
             "gt_mat_present",
             "ground_truth_csv_present",
+            "imu_sync_checked",
+            "imu_sync_ready",
         ):
             if col in records.columns:
                 summary[col] = int(records[col].fillna(False).astype(bool).sum())
+        if "imu_sync_checked" in records.columns:
+            summary["imu_sync_skipped"] = int((~records["imu_sync_checked"].fillna(False).astype(bool)).sum())
         if "base_correction_status" in records.columns:
             summary["base_correction_status_counts"] = {
                 str(key): int(value)
@@ -531,6 +569,11 @@ def main() -> None:
     parser.add_argument("--datasets", nargs="*", default=["train", "test"])
     parser.add_argument("--output-dir", type=Path, default=Path(__file__).resolve().parent / "results")
     parser.add_argument("--scan-trips", action="store_true", help="scan local trips and write trip_gap.csv")
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="during --scan-trips, skip expensive raw GNSS/IMU sync parsing and audit file availability only",
+    )
     parser.add_argument("--limit", type=int, default=0, help="limit trip scan rows; 0 means no limit")
     parser.add_argument("--no-validation", action="store_true", help="skip phone_data/raw baseline validation during trip scan")
     parser.add_argument("--bridge-counts", action="store_true", help="attach raw-bridge observation/mask counts to trip_gap.csv")
@@ -556,6 +599,7 @@ def main() -> None:
             include_validation=not args.no_validation,
             include_bridge_counts=args.bridge_counts,
             bridge_max_epochs=max(args.bridge_max_epochs, 0),
+            include_imu_sync=not args.quick,
         )
         records.to_csv(out_dir / "trip_gap.csv", index=False)
 
@@ -563,6 +607,7 @@ def main() -> None:
     summary["data_root"] = str(data_root)
     summary["datasets"] = list(args.datasets)
     summary["trip_scan_enabled"] = bool(args.scan_trips)
+    summary["quick"] = bool(args.quick)
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
     print(json.dumps(summary, indent=2))
@@ -573,8 +618,11 @@ def main() -> None:
 
 
 __all__ = [
+    "PRACTICAL_STATUS_WEIGHTS",
     "PreprocessingGapRow",
+    "STRICT_STATUS_WEIGHTS",
     "TripSpec",
+    "completion_percent",
     "discover_trip_specs",
     "gap_rows_to_dicts",
     "preprocessing_gap_rows",
