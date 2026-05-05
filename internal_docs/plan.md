@@ -234,6 +234,18 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
       - weighted p3p25 `a0p125/a0p1875/a0p75`: bracketed by submitted `a0p0625` (`3.687/4.710`) and `a0p25/a0p5` (`4.711` private), so no submit unless accepting private risk.
       - weighted p3p0 `a0p0625/a0p125/a0p1875/a0p25/a0p5/a0p75`: source full p3p0 already `3.685/4.714`; likely public-only gamble and not aligned with private-floor goal.
     - Practical result: no remaining high-confidence candidate under the current `private=4.710` floor objective.
+  - 2026-05-06 submitted-weight delta decomposition:
+    - Reports generated at `candidate_delta_submitted_weight_probe_20260506.csv` and `trip_delta_submitted_weight_probe_20260506.csv` under the same local screen directory (ignored artifacts).
+    - `p3p25_full` and `p3p0_full` move the same `12` Pixel5 trips / `26497` rows relative to current best. Movement is nearly uniform per trip (`p3p25_full` trip score `0.039513-0.039609m`; `p3p0_full` trip score `0.118540-0.118827m`), not a single outlier trip.
+    - Score tradeoff is monotone and public/private-split shaped:
+      - `p3p25_a0p0625`: `3.687/4.710`, max row delta `0.002477m`.
+      - `p3p25_a0p25`: `3.687/4.711`, max row delta `0.009906m`.
+      - `p3p25_a0p5`: `3.686/4.711`, max row delta `0.019813m`.
+      - `p3p25_full`: `3.686/4.712`, max row delta `0.039626m`.
+      - `p3p0_full`: `3.685/4.714`, max row delta `0.118878m`.
+    - `top3_mean` only moves `2` Pixel5 trips (`ebf-xx`, `sjc-q`) by about `0.356m`; Kaggle is `3.689/4.710`, so it preserves private but worsens public.
+    - Existing single/combo ablations already found the current best public/private-safe combo (`sjc-q + ebf-xx + ebf-zz`, `3.687/4.710`); `ebf-xx + ebf-zz` and smaller combos also stayed `4.710` private but had worse public.
+    - Practical result: do not submit more p3p25/p3p0 blends under the private-floor objective. If we intentionally spend submissions for discovery, make it an explicit `12`-trip leave-one-out/single-trip p3p25-direction A/B experiment gated by the pre-submit manifest.
   - Non-Pixel raw WLS patch:
     - Unrepaired `samsunga325g_mtv_pe1_raw_wls`: not submitted; changed `1422` rows vs best, max `1865.2006851703695 m`, trip max step `1871.753670863582 m`; reject.
     - Step-repaired raw WLS: submitted Kaggle `public=3.750`, `private=4.710`; changed `1421` rows, max `21.99336504111517 m`; no private gain and public worsens, reject.
