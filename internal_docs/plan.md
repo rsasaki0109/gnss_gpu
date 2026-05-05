@@ -217,6 +217,11 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - Tests now pin both sides: sub-micrometer float noise is not counted as changed, real meter-scale movement is counted.
   - Latest full local screen: `144` candidates, `50` submitted-filename matches, `76` duplicate submitted-local SHA, `35` risky previous-safe movers.
   - Weighted p3p25 screen after the threshold fix: `12` candidates, `risky_previous_changed_count=0`; submitted `a0p25` and `a0p5` remain duplicate/submitted, but Kaggle private stayed `4.711`, so reject further p3p25 blending.
+  - 2026-05-06 JST follow-up submit:
+    - Submitted `submission_private_floor_weighted_best_p3p25_a0p0625_20260505.csv` with message `20260506 private floor weighted best p3p25 alpha0.0625`.
+    - Kaggle score: `public=3.687`, `private=4.710`.
+    - Interpretation: minimal p3p25 blend preserves the private floor but does not improve public vs current best (`3.687/4.710`). Larger p3p25 blends already showed `private=4.711`, so stop this blend family unless a new objective appears.
+    - Local screen regenerated after submit; `a0p0625` is now marked submitted/duplicate, with risky Pixel6Pro previous rows `0` and max movement `0.0m`.
   - Non-Pixel raw WLS patch:
     - Unrepaired `samsunga325g_mtv_pe1_raw_wls`: not submitted; changed `1422` rows vs best, max `1865.2006851703695 m`, trip max step `1871.753670863582 m`; reject.
     - Step-repaired raw WLS: submitted Kaggle `public=3.750`, `private=4.710`; changed `1421` rows, max `21.99336504111517 m`; no private gain and public worsens, reject.
