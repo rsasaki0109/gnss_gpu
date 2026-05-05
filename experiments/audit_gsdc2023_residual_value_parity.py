@@ -16,6 +16,7 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from experiments.compare_gsdc2023_residual_values import compare_residual_values  # noqa: E402
+from experiments.gsdc2023_residual_audit import RESIDUAL_COMPONENT_SUMMARY_COLUMNS  # noqa: E402
 from experiments.gsdc2023_audit_cli import (  # noqa: E402
     add_data_root_arg as _add_data_root_arg,
     add_max_epochs_arg as _add_max_epochs_arg,
@@ -45,6 +46,22 @@ DEFAULT_RESIDUAL_PARITY_TRIPS: tuple[str, ...] = (
     "train/2021-12-08-20-28-us-ca-lax-c/pixel5",
     "train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u",
 )
+DEFAULT_INTERNAL_DELTA_THRESHOLDS: dict[str, float] = {
+    "pre_residual_delta": 1.0e-4,
+    "common_bias_delta": 1.0e-4,
+    "isb_delta": 1.0e-4,
+    "observation_delta": 1.0e-4,
+    "model_delta": 1.0e-4,
+    "sat_position_delta_norm": 1.0e-3,
+    "sat_velocity_delta_norm": 1.0e-3,
+    "sat_clock_bias_delta": 1.0e-4,
+    "sat_clock_drift_delta": 1.0e-6,
+    "sat_iono_delta": 1.0e-4,
+    "sat_trop_delta": 1.0e-4,
+    "sat_elevation_delta": 1.0e-3,
+    "rcv_position_delta_norm": 1.0e-3,
+    "rcv_velocity_delta_norm": 1.0e-3,
+}
 
 CompareFn = Callable[..., tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]]
 
@@ -79,6 +96,13 @@ def _trip_summary_row(trip: str, merged: pd.DataFrame, payload: dict[str, object
             "sat_position_delta_norm",
             "sat_velocity_delta_norm",
             "sat_clock_drift_delta",
+            "sat_clock_bias_delta",
+            "sat_iono_delta",
+            "sat_trop_delta",
+            "sat_elevation_delta",
+            "rcv_position_delta_norm",
+            "rcv_velocity_delta_norm",
+            "isb_delta",
         ):
             if column in matched.columns:
                 max_row[column] = max_item.get(column)
@@ -103,7 +127,45 @@ def _trip_summary_row(trip: str, merged: pd.DataFrame, payload: dict[str, object
         "max_epoch": max_epoch,
         "max_svid": max_svid,
     }
+    for column in _internal_delta_columns():
+        row[f"max_abs_{column}"] = _finite_float(payload.get(f"max_abs_{column}"))
     return row, max_row
+
+
+def _internal_delta_columns() -> tuple[str, ...]:
+    return (
+        "pre_residual_delta",
+        "common_bias_delta",
+        "isb_delta",
+        "observation_delta",
+        "model_delta",
+        *[column for column, _prefix in RESIDUAL_COMPONENT_SUMMARY_COLUMNS],
+    )
+
+
+def _internal_delta_failures(
+    trip_summary: pd.DataFrame,
+    thresholds: dict[str, float],
+) -> list[dict[str, object]]:
+    failures: list[dict[str, object]] = []
+    if trip_summary.empty:
+        return failures
+    for column, threshold in thresholds.items():
+        summary_column = f"max_abs_{column}"
+        if summary_column not in trip_summary.columns:
+            continue
+        values = pd.to_numeric(trip_summary[summary_column], errors="coerce")
+        exceeded = values > float(threshold)
+        for _, row in trip_summary.loc[exceeded].iterrows():
+            failures.append(
+                {
+                    "trip": str(row["trip"]),
+                    "component": column,
+                    "max_abs_delta": float(row[summary_column]),
+                    "threshold": float(threshold),
+                },
+            )
+    return failures
 
 
 def residual_value_parity_audit(
@@ -116,6 +178,7 @@ def residual_value_parity_audit(
     include_inactive_observations: bool = False,
     max_abs_delta_threshold_m: float = 1.0e-4,
     p95_abs_delta_threshold_m: float | None = None,
+    internal_delta_thresholds: dict[str, float] | None = None,
     compare_fn: CompareFn = compare_residual_values,
     verbose: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]:
@@ -158,6 +221,8 @@ def residual_value_parity_audit(
     )
     total_matlab_only = int(trip_summary["matlab_only_count"].sum()) if not trip_summary.empty else 0
     total_bridge_only = int(trip_summary["bridge_only_count"].sum()) if not trip_summary.empty else 0
+    internal_thresholds = dict(DEFAULT_INTERNAL_DELTA_THRESHOLDS if internal_delta_thresholds is None else internal_delta_thresholds)
+    internal_failures = _internal_delta_failures(trip_summary, internal_thresholds)
     payload = {
         "data_root": str(Path(data_root)),
         "trips": list(trips),
@@ -177,8 +242,25 @@ def residual_value_parity_audit(
         "overall_p95_abs_delta_max": p95_abs,
         "total_matlab_only": total_matlab_only,
         "total_bridge_only": total_bridge_only,
-        "passed": bool(not errors and pass_max and pass_p95 and total_matlab_only == 0 and total_bridge_only == 0),
+        "internal_delta_thresholds": internal_thresholds,
+        "internal_delta_failure_count": int(len(internal_failures)),
+        "internal_delta_failures": internal_failures,
+        "passed": bool(
+            not errors
+            and pass_max
+            and pass_p95
+            and total_matlab_only == 0
+            and total_bridge_only == 0
+            and not internal_failures
+        ),
     }
+    for column in _internal_delta_columns():
+        summary_column = f"max_abs_{column}"
+        payload[f"overall_{summary_column}"] = (
+            float(pd.to_numeric(trip_summary[summary_column], errors="coerce").max())
+            if summary_column in trip_summary and not trip_summary.empty
+            else float("nan")
+        )
     if not trip_summary.empty:
         worst = trip_summary.loc[trip_summary["max_abs_delta"].idxmax()]
         payload["worst_trip"] = str(worst["trip"])

@@ -208,6 +208,9 @@ def _residual_gate(
         "p95_abs_delta_threshold_m": p95_abs_delta_threshold_m,
         "apply_observation_mask": bool(apply_observation_mask),
         "include_inactive_observations": bool(include_inactive_observations),
+        "internal_delta_failure_count": int(payload.get("internal_delta_failure_count", 0) or 0),
+        "internal_delta_failures": payload.get("internal_delta_failures", []),
+        "internal_delta_thresholds": payload.get("internal_delta_thresholds", {}),
         "worst_trip": payload.get("worst_trip"),
         "worst_field": payload.get("worst_field"),
     }

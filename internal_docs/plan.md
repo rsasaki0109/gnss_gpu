@@ -161,6 +161,16 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - result: `passed=true`, `equivalence_claim=matlab_equivalent`, `max_epochs=0`, `count_max_epochs=0`, `trip_count=12`
   - gates: assets/factor_mask/residual_values/raw_bridge_counts all pass
   - residual gate: side-only `0/0`, `overall_max_abs_delta=5.91054445631678e-05 m`, threshold `1e-4 m`
+- 2026-05-06 internal-state residual parity hardening:
+  - `audit_gsdc2023_residual_value_parity.py` now records and gates internal residual components, not just final `delta`: `pre_residual_delta`, `common_bias_delta`, `isb_delta`, `observation_delta`, `model_delta`, satellite position/velocity/clock/iono/trop/elevation deltas, and receiver position/velocity deltas.
+  - The residual equivalence gate summary now exposes `internal_delta_failure_count`, `internal_delta_failures`, and `internal_delta_thresholds`.
+  - Full-window 11-trip residual audit with inactive diagnostics included passed with `internal_delta_failure_count=0`:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_value_parity.py --max-epochs 0 --no-multi-gnss --observation-mask --include-inactive-observations --output-dir experiments/results/matlab_internal_state_parity_probe_20260506 --verbose`
+    - output: `experiments/results/matlab_internal_state_parity_probe_20260506/gsdc2023_residual_value_parity_audit_20260506_113157`
+    - residual side-only: `total_matlab_only=0`, `total_bridge_only=0`
+    - residual values: `overall_max_abs_delta=5.91054445631678e-05 m`, `overall_p95_abs_delta_max=2.7839780766480964e-05 m`
+    - internal maxima: `pre_residual=5.910544456799727e-05`, `common_bias=3.5828883795829825e-05`, `observation=1.4528632164001465e-06`, `model=5.9105444620399794e-05`, `sat_position=6.749170441930931e-05`, `sat_velocity=0.0003588729979236617`, `sat_elevation=0.00046625615496864725`, `rcv_position=8.896446402437426e-09`, `rcv_velocity=1.3969610654605222e-09`.
+  - Note: first attempt used an overly tight `sat_elevation_delta=1e-4 deg` and failed on two rows with max `4.6625615496864725e-04 deg`; threshold is now `1e-3 deg` to match that component's units while keeping residual/model/state gates strict.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`

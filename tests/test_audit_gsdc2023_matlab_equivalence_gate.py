@@ -113,6 +113,8 @@ def test_residual_gate_reports_worst_delta(tmp_path: Path) -> None:
             "error_count": 0,
             "overall_max_abs_delta": 9.0e-5,
             "overall_p95_abs_delta_max": 7.0e-5,
+            "internal_delta_failure_count": 0,
+            "internal_delta_failures": [],
             "worst_trip": "train/course/phone",
             "worst_field": "P",
             "passed": True,
@@ -134,6 +136,7 @@ def test_residual_gate_reports_worst_delta(tmp_path: Path) -> None:
     assert result.passed is True
     assert result.summary["overall_max_abs_delta"] == 9.0e-5
     assert result.summary["worst_field"] == "P"
+    assert result.summary["internal_delta_failure_count"] == 0
 
 
 def test_residual_gate_fails_on_side_only_rows_even_when_deltas_pass(tmp_path: Path) -> None:
@@ -172,6 +175,44 @@ def test_residual_gate_fails_on_side_only_rows_even_when_deltas_pass(tmp_path: P
 
     assert result.passed is False
     assert result.summary["total_bridge_only"] == 2
+
+
+def test_residual_gate_reports_internal_delta_failures(tmp_path: Path) -> None:
+    def fake_residual(_data_root: Path, _trips, **_kwargs):
+        payload = {
+            "trip_count": 1,
+            "completed_trip_count": 1,
+            "error_count": 0,
+            "overall_max_abs_delta": 1.0e-6,
+            "overall_p95_abs_delta_max": 1.0e-6,
+            "internal_delta_failure_count": 1,
+            "internal_delta_failures": [
+                {
+                    "trip": "train/course/phone",
+                    "component": "model_delta",
+                    "max_abs_delta": 2.0e-4,
+                    "threshold": 1.0e-4,
+                },
+            ],
+            "passed": False,
+        }
+        return pd.DataFrame(), pd.DataFrame(), payload
+
+    _trip_summary, _max_rows, result = _residual_gate(
+        tmp_path,
+        ["train/course/phone"],
+        max_epochs=0,
+        multi_gnss=True,
+        apply_observation_mask=True,
+        include_inactive_observations=True,
+        max_abs_delta_threshold_m=1.0e-4,
+        p95_abs_delta_threshold_m=None,
+        residual_audit_fn=fake_residual,
+    )
+
+    assert result.passed is False
+    assert result.summary["internal_delta_failure_count"] == 1
+    assert result.summary["internal_delta_failures"][0]["component"] == "model_delta"
 
 
 def test_count_gate_requires_exact_count_parity(tmp_path: Path) -> None:
