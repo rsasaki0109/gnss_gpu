@@ -71,6 +71,14 @@ DEFAULT_VD_FACTOR_RESIDUAL_TRIPS: tuple[str, ...] = (
 DiagnoseFn = Callable[[object], dict[str, object]]
 
 
+def _guard_thresholds() -> dict[str, float | int]:
+    return {
+        "min_count": int(VD_SEED_FACTOR_GUARD_MIN_COUNT),
+        "doppler_weighted_rms_mps": float(VD_SEED_FACTOR_GUARD_DOPPLER_RMS_MPS),
+        "tdcp_weighted_rms_m": float(VD_SEED_FACTOR_GUARD_TDCP_RMS_M),
+    }
+
+
 def _guard_reason(
     *,
     doppler_count: int,
@@ -102,6 +110,73 @@ def _count(summary: dict[str, object], section: str, name: str) -> int:
         return 0
 
 
+def _guard_residual_failure_rows(trip_summary: pd.DataFrame) -> list[dict[str, object]]:
+    failures: list[dict[str, object]] = []
+    for row in trip_summary.itertuples(index=False):
+        reason = _guard_reason(
+            doppler_count=int(row.doppler_count),
+            doppler_rms=float(row.doppler_weighted_rms_mps),
+            tdcp_count=int(row.tdcp_count),
+            tdcp_rms=float(row.tdcp_weighted_rms_m),
+        )
+        if not reason:
+            continue
+        phone = Path(str(row.trip)).name
+        failures.append(
+            {
+                "trip": str(row.trip),
+                "phone": phone,
+                "phone_guard_enabled": bool(_vd_seed_factor_guard_enabled_for_phone(phone)),
+                "reject_reason": reason,
+                "doppler_count": int(row.doppler_count),
+                "doppler_weighted_rms_mps": float(row.doppler_weighted_rms_mps),
+                "tdcp_count": int(row.tdcp_count),
+                "tdcp_weighted_rms_m": float(row.tdcp_weighted_rms_m),
+            },
+        )
+    return failures
+
+
+def _reason_counts(segment_frame: pd.DataFrame, mask: pd.Series) -> dict[str, int]:
+    if segment_frame.empty or not bool(mask.any()):
+        return {}
+    reasons = segment_frame.loc[mask, "reject_reason"].fillna("").astype(str)
+    reasons = reasons[reasons.ne("")]
+    return {str(reason): int(count) for reason, count in reasons.value_counts().sort_index().items()}
+
+
+def guard_segment_summary_payload(segment_frame: pd.DataFrame) -> dict[str, object]:
+    if segment_frame.empty:
+        return {
+            "guard_segment_count": 0,
+            "guard_threshold_rejected_segment_count": 0,
+            "guard_threshold_rejected_epoch_count": 0,
+            "guard_rejected_segment_count": 0,
+            "guard_rejected_epoch_count": 0,
+            "guard_disabled_threshold_rejected_segment_count": 0,
+            "guard_disabled_threshold_rejected_epoch_count": 0,
+            "guard_threshold_reject_reason_counts": {},
+            "guard_effective_reject_reason_counts": {},
+        }
+
+    threshold_mask = segment_frame["would_reject"].astype(bool)
+    effective_mask = segment_frame["effective_reject"].astype(bool)
+    disabled_threshold_mask = threshold_mask & ~effective_mask
+    return {
+        "guard_segment_count": int(len(segment_frame)),
+        "guard_threshold_rejected_segment_count": int(threshold_mask.sum()),
+        "guard_threshold_rejected_epoch_count": int(segment_frame.loc[threshold_mask, "segment_epochs"].sum()),
+        "guard_rejected_segment_count": int(effective_mask.sum()),
+        "guard_rejected_epoch_count": int(segment_frame.loc[effective_mask, "segment_epochs"].sum()),
+        "guard_disabled_threshold_rejected_segment_count": int(disabled_threshold_mask.sum()),
+        "guard_disabled_threshold_rejected_epoch_count": int(
+            segment_frame.loc[disabled_threshold_mask, "segment_epochs"].sum(),
+        ),
+        "guard_threshold_reject_reason_counts": _reason_counts(segment_frame, threshold_mask),
+        "guard_effective_reject_reason_counts": _reason_counts(segment_frame, effective_mask),
+    }
+
+
 def vd_factor_residual_audit(
     data_root: Path,
     trips: Sequence[str],
@@ -114,6 +189,7 @@ def vd_factor_residual_audit(
     observation_mask: bool,
     tdcp_use_drift: str,
     top: int,
+    require_guard_clean: bool = False,
     verbose: bool = False,
     diagnose_fn: DiagnoseFn = run_vd_factor_residual_diagnosis,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
@@ -153,20 +229,37 @@ def vd_factor_residual_audit(
         except Exception as exc:  # noqa: BLE001
             errors.append({"trip": trip, "error": f"{type(exc).__name__}: {exc}"})
             continue
+        phone = Path(trip).name
+        doppler_count = _count(summary, "doppler_seed_residual", "count")
+        doppler_rms = _metric(summary, "doppler_seed_residual", "weighted_rms")
+        tdcp_count = _count(summary, "tdcp_seed_residual", "count")
+        tdcp_rms = _metric(summary, "tdcp_seed_residual", "weighted_rms")
+        reason = _guard_reason(
+            doppler_count=doppler_count,
+            doppler_rms=doppler_rms,
+            tdcp_count=tdcp_count,
+            tdcp_rms=tdcp_rms,
+        )
+        phone_guard_enabled = _vd_seed_factor_guard_enabled_for_phone(phone)
         rows.append(
             {
                 "trip": trip,
+                "phone": phone,
+                "phone_guard_enabled": bool(phone_guard_enabled),
                 "n_epochs": int(summary.get("n_epochs", 0) or 0),
                 "n_sat_slots": int(summary.get("n_sat_slots", 0) or 0),
                 "tdcp_use_drift": bool(summary.get("tdcp_use_drift", False)),
-                "doppler_count": _count(summary, "doppler_seed_residual", "count"),
-                "doppler_weighted_rms_mps": _metric(summary, "doppler_seed_residual", "weighted_rms"),
+                "doppler_count": doppler_count,
+                "doppler_weighted_rms_mps": doppler_rms,
                 "doppler_abs_p95_mps": _metric(summary, "doppler_seed_residual", "abs_p95"),
                 "doppler_abs_max_mps": _metric(summary, "doppler_seed_residual", "abs_max"),
-                "tdcp_count": _count(summary, "tdcp_seed_residual", "count"),
-                "tdcp_weighted_rms_m": _metric(summary, "tdcp_seed_residual", "weighted_rms"),
+                "tdcp_count": tdcp_count,
+                "tdcp_weighted_rms_m": tdcp_rms,
                 "tdcp_abs_p95_m": _metric(summary, "tdcp_seed_residual", "abs_p95"),
                 "tdcp_abs_max_m": _metric(summary, "tdcp_seed_residual", "abs_max"),
+                "guard_threshold_reject_reason": reason,
+                "guard_threshold_would_reject": bool(reason),
+                "guard_effective_reject": bool(reason and phone_guard_enabled),
                 "baseline_pr_mse": _metric(summary, "pseudorange_mse", "baseline"),
                 "raw_wls_pr_mse": _metric(summary, "pseudorange_mse", "raw_wls"),
                 "output_dir": str(trip_output_dir),
@@ -176,6 +269,8 @@ def vd_factor_residual_audit(
     trip_summary = pd.DataFrame(rows)
     if not trip_summary.empty:
         trip_summary = trip_summary.sort_values("trip").reset_index(drop=True)
+    residual_failures = _guard_residual_failure_rows(trip_summary)
+    guard_enabled_failures = [row for row in residual_failures if bool(row["phone_guard_enabled"])]
     payload = {
         "data_root": str(Path(data_root)),
         "trips": list(trips),
@@ -189,13 +284,19 @@ def vd_factor_residual_audit(
         "dual_frequency": bool(dual_frequency),
         "observation_mask": bool(observation_mask),
         "tdcp_use_drift": str(tdcp_use_drift),
+        "require_guard_clean": bool(require_guard_clean),
+        "guard_thresholds": _guard_thresholds(),
         "max_doppler_weighted_rms_mps": (
             float(trip_summary["doppler_weighted_rms_mps"].max()) if not trip_summary.empty else float("nan")
         ),
         "max_tdcp_weighted_rms_m": (
             float(trip_summary["tdcp_weighted_rms_m"].max()) if not trip_summary.empty else float("nan")
         ),
-        "passed": not errors,
+        "residual_threshold_failure_count": int(len(residual_failures)),
+        "guard_enabled_residual_threshold_failure_count": int(len(guard_enabled_failures)),
+        "guard_disabled_residual_threshold_failure_count": int(len(residual_failures) - len(guard_enabled_failures)),
+        "residual_threshold_failures": residual_failures,
+        "passed": bool(not errors and (not require_guard_clean or not guard_enabled_failures)),
     }
     if not trip_summary.empty:
         worst_doppler = trip_summary.loc[trip_summary["doppler_weighted_rms_mps"].idxmax()]
@@ -390,6 +491,11 @@ def main() -> None:
     parser.add_argument("--observation-mask", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--tdcp-use-drift", choices=("auto", "yes", "no"), default="auto")
     parser.add_argument("--chunk-epochs", type=int, default=0, help="emit guard-segment diagnostics using this chunk size")
+    parser.add_argument(
+        "--require-guard-clean",
+        action="store_true",
+        help="fail when a guard-enabled phone exceeds the VD seed residual guard thresholds",
+    )
     parser.add_argument("--top", type=int, default=20)
     parser.add_argument("--verbose", action="store_true")
     _add_output_dir_arg(parser)
@@ -408,6 +514,7 @@ def main() -> None:
         observation_mask=bool(args.observation_mask),
         tdcp_use_drift=str(args.tdcp_use_drift),
         top=int(args.top),
+        require_guard_clean=bool(args.require_guard_clean),
         verbose=bool(args.verbose),
     )
     trip_summary.to_csv(out_dir / "trip_summary.csv", index=False)
@@ -428,23 +535,7 @@ def main() -> None:
             )
         segment_frame = pd.DataFrame(segment_rows)
         segment_frame.to_csv(out_dir / "guard_segment_summary.csv", index=False)
-        payload["guard_segment_count"] = int(len(segment_frame))
-        payload["guard_threshold_rejected_segment_count"] = (
-            int(segment_frame["would_reject"].sum()) if not segment_frame.empty else 0
-        )
-        payload["guard_threshold_rejected_epoch_count"] = (
-            int(segment_frame.loc[segment_frame["would_reject"], "segment_epochs"].sum())
-            if not segment_frame.empty
-            else 0
-        )
-        payload["guard_rejected_segment_count"] = (
-            int(segment_frame["effective_reject"].sum()) if not segment_frame.empty else 0
-        )
-        payload["guard_rejected_epoch_count"] = (
-            int(segment_frame.loc[segment_frame["effective_reject"], "segment_epochs"].sum())
-            if not segment_frame.empty
-            else 0
-        )
+        payload.update(guard_segment_summary_payload(segment_frame))
     _write_summary_json(out_dir, payload)
     _print_summary_and_output_dir(payload, out_dir, label="audit_dir")
     if not payload["passed"]:

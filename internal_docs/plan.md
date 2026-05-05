@@ -571,9 +571,19 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_value_parity.py 
 - Pixel6Pro 2023-05-25 は Doppler RMS が guard 閾値 `8m/s` を超える。
 - Pixel5 train も Doppler RMS が `8m/s` 付近に見えるため、guard を Pixel6Pro 限定にしたのは重要。端末非限定 guard にすると Pixel5 の VD を不必要に止める可能性がある。
 - 2026-05-04 に本番 `bridge_metrics.json` へ `vd_seed_guard_records` を追加。各 skipped segment について chunk/segment epoch 範囲、Doppler RMS/count、TDCP RMS/count、`reject_reason` を残す。summary には reason count (`reasons=doppler:N` 等) を表示。
+- 2026-05-06 に `audit_gsdc2023_vd_factor_residuals.py` の summary を guard 閾値ベースの証跡として強化:
+  - trip summary に `phone`, `phone_guard_enabled`, `guard_threshold_reject_reason`, `guard_threshold_would_reject`, `guard_effective_reject` を追加
+  - summary JSON に guard 閾値、trip-level residual 閾値超過件数、guard-enabled / guard-disabled 別の超過件数、segment の reason count を追加
+  - `--require-guard-clean` を追加し、guard-enabled phone が VD seed residual 閾値を超えた場合に監査を失敗扱いにできるようにした
+  - 4 trip / 200 epoch / observation mask / chunk 200:
+    - output: `experiments/results/vd_factor_guard_probe_20260506/gsdc2023_vd_factor_residual_audit_20260506_140209`
+    - `residual_threshold_failure_count=3`, `guard_enabled_residual_threshold_failure_count=2`, `guard_disabled_residual_threshold_failure_count=1`
+    - segment: `guard_threshold_rejected_segment_count=4`, `guard_rejected_segment_count=3`, `guard_disabled_threshold_rejected_segment_count=1`, effective reason counts `doppler:3`
 - 局所検証:
   - `python3 -m py_compile experiments/gsdc2023_raw_bridge.py experiments/gsdc2023_output.py experiments/gsdc2023_result_assembly.py tests/test_gsdc2023_output.py tests/test_gsdc2023_result_assembly.py tests/test_validate_fgo_gsdc2023_raw.py`
   - `PYTHONPATH=.:python pytest -q tests/test_gsdc2023_output.py tests/test_gsdc2023_result_assembly.py tests/test_validate_fgo_gsdc2023_raw.py::test_run_fgo_chunked_skips_vd_segment_when_seed_tdcp_residual_is_bad` → `10 passed`
+  - `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_vd_factor_residuals.py tests/test_diagnose_gsdc2023_vd_factor_residuals.py` → `7 passed`
+  - `ruff check experiments/audit_gsdc2023_vd_factor_residuals.py tests/test_audit_gsdc2023_vd_factor_residuals.py` → pass
 - 2026-05-04 に `audit_gsdc2023_pr_proxy_risk.py` も `vd_seed_guard_records` を読むように更新:
   - risky chunk CSV に `vd_guard_overlap_segments`, `vd_guard_reject_reasons`, `vd_guard_max_doppler_rms_mps`, `vd_guard_max_tdcp_rms_m` を追加
   - output dir に `vd_seed_guard_records.csv` を追加
