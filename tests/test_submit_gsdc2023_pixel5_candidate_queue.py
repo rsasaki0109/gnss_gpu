@@ -204,6 +204,55 @@ def test_pre_submit_manifest_gate_requires_clean_p6p0_manifest(tmp_path) -> None
         assert_pre_submit_manifest_gate(tmp_path, [candidate])
 
 
+def test_pre_submit_manifest_gate_rejects_any_candidate_that_moves_previous_safe_trip(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375"
+    output = tmp_path / candidate / "candidate.csv"
+    output.parent.mkdir(parents=True)
+    output.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(output),
+                        "output_sha256": sha256_file(output),
+                        "pixel6pro_scale": 3.25,
+                        "risk_candidate_actionable_chunks": 2,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m,previous_exists,previous_changed_rows,previous_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0,True,1,0.25",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="previous trip check failed"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate])
+
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m,previous_exists,previous_changed_rows,previous_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,2,0.75,True,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert assert_pre_submit_manifest_gate(tmp_path, [candidate])["candidates"][0]["candidate"] == candidate
+
+
 def test_matlab_equivalence_gate_can_be_required_from_pre_submit_manifest(tmp_path) -> None:
     candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
     output = tmp_path / candidate / "candidate.csv"
@@ -477,6 +526,58 @@ def test_ready_report_consistency_audits_json_csv_manifest_and_sha(tmp_path) -> 
         writer.writeheader()
         writer.writerows(rows)
     with pytest.raises(SystemExit, match="CSV sha256 mismatch"):
+        assert_ready_report_consistency(report_path)
+
+
+def test_ready_report_consistency_applies_pre_submit_manifest_to_non_p6p0_candidates(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375"
+    path = candidate_submission_path(candidate, tmp_path, "tag")
+    path.parent.mkdir(parents=True)
+    path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "candidate_actionable_risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(path),
+                        "output_sha256": sha256_file(path),
+                        "pixel6pro_scale": 3.25,
+                        "risk_candidate_actionable_chunks": 0,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m,previous_exists,previous_changed_rows,previous_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0,True,1,0.25",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "ready.json"
+    report = build_ready_report(
+        output_dir=tmp_path,
+        tag="tag",
+        groups=["sjc_r_scale_sweep"],
+        queue=selected_queue({"sjc_r_scale_sweep"})[:1],
+        risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
+        pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
+        allow_risk=False,
+    )
+    write_ready_report(report_path, report)
+
+    with pytest.raises(SystemExit, match="previous trip check failed"):
         assert_ready_report_consistency(report_path)
 
 
