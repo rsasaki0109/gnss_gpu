@@ -228,6 +228,28 @@ def test_count_gate_requires_exact_count_parity(tmp_path: Path) -> None:
             "phone_errors": 0,
             "matched_rows": 12,
             "matched_abs_delta_total": 1,
+            "count_delta_failure_count": 1,
+            "worst_count_delta": {
+                "trip": "train/course/phone",
+                "freq": "L1",
+                "field": "P",
+                "phone_count": 9,
+                "bridge_count": 10,
+                "count_delta": 1,
+                "abs_count_delta": 1,
+            },
+            "top_count_delta_failures": [
+                {
+                    "trip": "train/course/phone",
+                    "freq": "L1",
+                    "field": "P",
+                    "phone_count": 9,
+                    "bridge_count": 10,
+                    "count_delta": 1,
+                    "abs_count_delta": 1,
+                },
+            ],
+            "abs_delta_sums": {"P": {"L1": 1, "L5": 0}},
             "count_parity_ratio": 0.999,
         }
         return pd.DataFrame(), pd.DataFrame(), payload
@@ -242,6 +264,9 @@ def test_count_gate_requires_exact_count_parity(tmp_path: Path) -> None:
 
     assert result.passed is False
     assert result.summary["matched_abs_delta_total"] == 1
+    assert result.summary["count_delta_failure_count"] == 1
+    assert result.summary["worst_count_delta"]["field"] == "P"
+    assert result.summary["abs_delta_sums"]["P"]["L1"] == 1
     assert result.summary["count_parity_ratio"] == 0.999
 
 

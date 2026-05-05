@@ -178,6 +178,15 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - result: `passed=true`, `equivalence_claim=matlab_equivalent`, residual side-only `0/0`, `overall_max_abs_delta=5.91054445631678e-05`, `internal_delta_failure_count=0`
   - Regenerated `p6p0_clean_candidate_20260505/pre_submit_manifest.json` using that summary; manifest gate now records `residual_internal_delta_failure_count=0`, thresholds, and summary SHA `62d2d99c5ae5ce4909495f3178c5d932a533822a6692fc59d84fc57aaf84b16e`.
   - Focused verification: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `25 passed`; ruff pass. Direct gate check on regenerated manifest: `assert_matlab_equivalence_gate(..., require=True)` => `matlab_equivalent 0`.
+- 2026-05-06 phone_data / factor-count parity hardening:
+  - `compare_gsdc2023_phone_data_raw_bridge_counts.py` summary now exposes count-diff debugging fields: `missing_phone_count_rows`, `missing_bridge_count_rows`, `count_delta_failure_count`, `worst_count_delta`, `top_count_delta_failures`, and `abs_delta_sums`.
+  - `audit_gsdc2023_matlab_equivalence_gate.py` raw_bridge_counts gate now carries those fields through and requires `count_delta_failure_count=0` in addition to `matched_abs_delta_total=0`.
+  - 12 trip / full settings window / GPS L1+L5 count parity:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_phone_data_raw_bridge_counts.py --max-epochs 0 --trip ...`
+    - output: `experiments/results/phone_data_count_parity_probe_20260506/gsdc2023_phone_data_raw_bridge_count_parity_20260506_143112`
+    - `trip_count=12`, `trips_with_phone_data=12`, `matched_rows=138`, `missing_phone_count_rows=6`, `missing_bridge_count_rows=0`
+    - `matched_abs_delta_total=0`, `count_delta_failure_count=0`, `count_parity_ratio=1.0`, and `abs_delta_sums` is `0` for all field/freq pairs
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_build_gsdc2023_pre_submit_manifest.py` => `23 passed`; `ruff check --ignore=E402 ...` pass.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`

@@ -135,6 +135,11 @@ def test_compare_phone_data_counts_against_raw_bridge(tmp_path):
     assert summary["trips_with_phone_data"] == 1
     assert summary["trips_with_device_gnss"] == 1
     assert summary["matched_rows"] == 12
+    assert summary["missing_phone_count_rows"] == 0
+    assert summary["missing_bridge_count_rows"] == 0
+    assert summary["count_delta_failure_count"] == 0
+    assert summary["worst_count_delta"] is None
+    assert summary["top_count_delta_failures"] == []
     assert comparison_df.shape[0] == 12
     assert summary_df.shape[0] == 1
 
@@ -179,6 +184,9 @@ def test_compare_phone_data_counts_defaults_to_gps_only_scope(tmp_path):
     assert multi_summary["bridge_count_scope"] == "multi_gnss_l1_l5"
     assert multi_summary["matched_bridge_count_total"] > multi_summary["matched_phone_count_total"]
     assert multi_df["count_delta"].fillna(0).gt(0).any()
+    assert multi_summary["count_delta_failure_count"] > 0
+    assert multi_summary["worst_count_delta"]["abs_count_delta"] > 0
+    assert multi_summary["top_count_delta_failures"]
 
 
 def test_compare_phone_data_counts_gracefully_handles_missing_phone_data(tmp_path):
@@ -201,6 +209,8 @@ def test_compare_phone_data_counts_gracefully_handles_missing_phone_data(tmp_pat
     assert summary["trips_with_device_gnss"] == 1
     assert comparison_df["phone_count"].isna().all()
     assert comparison_df["bridge_count"].notna().all()
+    assert summary["missing_phone_count_rows"] == 12
+    assert summary["missing_bridge_count_rows"] == 0
     assert bool(summary_df.iloc[0]["phone_data_present"]) is False
     assert bool(summary_df.iloc[0]["bridge_available"]) is True
 
@@ -289,6 +299,53 @@ def test_compare_phone_data_counts_uses_matlab_count_export(tmp_path):
     assert summary["phone_errors"] == 0
     assert summary_df.iloc[0]["phone_total_p_count"] == 16
     assert matched["count_delta"].eq(0).all()
+
+
+def test_compare_phone_data_counts_reports_count_delta_failures(tmp_path):
+    data_root = tmp_path / "dataset_2023"
+    trip_dir = data_root / "train" / "courseA" / "phoneA"
+    trip_dir.mkdir(parents=True)
+
+    (trip_dir / "phone_data.mat").write_bytes(b"matlab class bundle placeholder")
+    rows = _raw_rows()
+    _write_zipped_csv(trip_dir / "device_gnss.csv", rows, list(rows[0].keys()))
+    pd.DataFrame(
+        [
+            {"freq": freq, "field": field, "count": count}
+            for freq in ("L1", "L5")
+            for field, count in (
+                ("P", 7 if freq == "L1" else 8),
+                ("D", 8),
+                ("L", 4),
+                ("resPc", 8),
+                ("resD", 8),
+                ("resL", 4),
+            )
+        ],
+    ).to_csv(trip_dir / "phone_data_factor_counts.csv", index=False)
+
+    _comparison_df, _summary_df, summary = build_comparison_frames(
+        data_root,
+        ["train"],
+        limit=1,
+        max_epochs=10,
+    )
+
+    assert summary["matched_abs_delta_total"] == 1
+    assert summary["count_delta_failure_count"] == 1
+    assert summary["delta_sums"]["P"]["L1"] == 1
+    assert summary["abs_delta_sums"]["P"]["L1"] == 1
+    assert summary["worst_count_delta"] == {
+        "trip": "train/courseA/phoneA",
+        "freq": "L1",
+        "field": "P",
+        "bridge_source": "pseudorange",
+        "phone_count": 7,
+        "bridge_count": 8,
+        "count_delta": 1,
+        "abs_count_delta": 1,
+    }
+    assert summary["top_count_delta_failures"] == [summary["worst_count_delta"]]
 
 
 def test_compare_phone_data_counts_respects_settings_epoch_window(tmp_path):

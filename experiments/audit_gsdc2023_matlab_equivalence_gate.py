@@ -238,6 +238,7 @@ def _count_gate(
     phone_errors = int(payload.get("phone_errors", 0) or 0)
     trip_count = int(payload.get("trip_count", len(trips)) or 0)
     trips_with_phone_data = int(payload.get("trips_with_phone_data", 0) or 0)
+    count_delta_failure_count = int(payload.get("count_delta_failure_count", 0) or 0)
     count_parity_ratio = payload.get("count_parity_ratio")
     passed = (
         bridge_errors == 0
@@ -245,6 +246,7 @@ def _count_gate(
         and trip_count == len(trips)
         and trips_with_phone_data == trip_count
         and matched_abs_delta_total == 0
+        and count_delta_failure_count == 0
         and count_parity_ratio == 1.0
     )
     summary = {
@@ -253,7 +255,13 @@ def _count_gate(
         "bridge_errors": bridge_errors,
         "phone_errors": phone_errors,
         "matched_rows": int(payload.get("matched_rows", 0) or 0),
+        "missing_phone_count_rows": int(payload.get("missing_phone_count_rows", 0) or 0),
+        "missing_bridge_count_rows": int(payload.get("missing_bridge_count_rows", 0) or 0),
         "matched_abs_delta_total": matched_abs_delta_total,
+        "count_delta_failure_count": count_delta_failure_count,
+        "worst_count_delta": payload.get("worst_count_delta"),
+        "top_count_delta_failures": payload.get("top_count_delta_failures", []),
+        "abs_delta_sums": payload.get("abs_delta_sums", {}),
         "count_parity_ratio": count_parity_ratio,
     }
     return comparison, trip_summary, GateResult("raw_bridge_counts", bool(passed), summary)

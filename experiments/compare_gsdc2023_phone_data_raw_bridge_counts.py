@@ -422,6 +422,10 @@ def build_comparison_frames(
     matched_abs_delta_total = 0
     matched_signed_delta_total = 0
     delta_sums: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    abs_delta_sums: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    count_delta_failure_rows: list[dict[str, object]] = []
+    missing_phone_count_rows = 0
+    missing_bridge_count_rows = 0
 
     for spec in specs:
         trip_dir = spec.trip_dir
@@ -503,6 +507,10 @@ def build_comparison_frames(
 
         for row in comparison_rows[-len(_FIELDS) * len(_FREQS):]:
             total_rows += 1
+            if row["phone_count"] is None:
+                missing_phone_count_rows += 1
+            if row["bridge_count"] is None:
+                missing_bridge_count_rows += 1
             if row["phone_count"] is not None and row["bridge_count"] is not None:
                 matched_rows += 1
                 phone_count = int(row["phone_count"])
@@ -513,6 +521,26 @@ def build_comparison_frames(
                 matched_abs_delta_total += abs(count_delta)
                 matched_signed_delta_total += count_delta
                 delta_sums[str(row["field"])][str(row["freq"])] += count_delta
+                abs_delta_sums[str(row["field"])][str(row["freq"])] += abs(count_delta)
+                if count_delta != 0:
+                    count_delta_failure_rows.append(
+                        {
+                            "trip": str(row["trip"]),
+                            "freq": str(row["freq"]),
+                            "field": str(row["field"]),
+                            "bridge_source": str(row["bridge_source"]),
+                            "phone_count": phone_count,
+                            "bridge_count": bridge_count,
+                            "count_delta": count_delta,
+                            "abs_count_delta": abs(count_delta),
+                        },
+                    )
+
+    count_delta_failure_rows = sorted(
+        count_delta_failure_rows,
+        key=lambda row: (-int(row["abs_count_delta"]), str(row["trip"]), str(row["freq"]), str(row["field"])),
+    )
+    worst_count_delta = count_delta_failure_rows[0] if count_delta_failure_rows else None
 
     summary_payload: dict[str, object] = {
         "data_root": str(data_root),
@@ -540,10 +568,15 @@ def build_comparison_frames(
         "comparison_rows": int(total_rows),
         "matched_rows": int(matched_rows),
         "matched_ratio": float(matched_rows / total_rows) if total_rows else None,
+        "missing_phone_count_rows": int(missing_phone_count_rows),
+        "missing_bridge_count_rows": int(missing_bridge_count_rows),
         "matched_phone_count_total": int(matched_phone_count_total),
         "matched_bridge_count_total": int(matched_bridge_count_total),
         "matched_abs_delta_total": int(matched_abs_delta_total),
         "matched_signed_delta_total": int(matched_signed_delta_total),
+        "count_delta_failure_count": int(len(count_delta_failure_rows)),
+        "worst_count_delta": worst_count_delta,
+        "top_count_delta_failures": count_delta_failure_rows[:20],
         "count_parity_ratio": (
             float(max(0.0, 1.0 - (matched_abs_delta_total / matched_phone_count_total)))
             if matched_phone_count_total > 0
@@ -551,6 +584,10 @@ def build_comparison_frames(
         ),
         "delta_sums": {
             field: {freq: int(delta_sums[field].get(freq, 0)) for freq in _FREQS}
+            for field in _FIELDS
+        },
+        "abs_delta_sums": {
+            field: {freq: int(abs_delta_sums[field].get(freq, 0)) for freq in _FREQS}
             for field in _FIELDS
         },
     }
