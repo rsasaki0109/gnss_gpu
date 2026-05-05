@@ -81,6 +81,37 @@ def test_build_trip_weight_ablation_candidates_rejects_static_selected_trip(tmp_
         )
 
 
+def test_build_trip_weight_ablation_candidates_writes_leave_group_out(tmp_path) -> None:
+    reference_path = tmp_path / "reference.csv"
+    target_path = tmp_path / "target.csv"
+    output_dir = tmp_path / "out"
+    _reference().to_csv(reference_path, index=False)
+    _target().to_csv(target_path, index=False)
+
+    rows = build_trip_weight_ablation_candidates(
+        reference_path=reference_path,
+        target_path=target_path,
+        output_dir=output_dir,
+        tag="test",
+        modes=("leave_group_out",),
+        trips=(TRIP_A, TRIP_B),
+        group_held_trips=(TRIP_A,),
+        group_extra_count=1,
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["mode"] == "leave_group_out"
+    assert rows[0]["held_trip"] == f"{TRIP_A}|{TRIP_B}"
+    assert rows[0]["held_trip_count"] == 2
+    assert rows[0]["active_trip_count"] == 0
+    assert rows[0]["changed_rows"] == 0
+
+    manifest_rows = list(csv.DictReader((output_dir / "trip_weight_ablation_manifest_test.csv").open()))
+    assert len(manifest_rows) == 1
+    assert manifest_rows[0]["held_trip"] == f"{TRIP_A}|{TRIP_B}"
+    assert manifest_rows[0]["held_trip_count"] == "2"
+
+
 def test_build_trip_weight_ablation_candidates_cli(tmp_path, capsys) -> None:
     reference_path = tmp_path / "reference.csv"
     target_path = tmp_path / "target.csv"

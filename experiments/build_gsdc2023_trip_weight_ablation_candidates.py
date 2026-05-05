@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import json
 import re
 from pathlib import Path
@@ -45,6 +46,10 @@ def _slug_trip(trip_id: str) -> str:
 def _format_alpha(alpha: float) -> str:
     text = f"{alpha:.8g}".replace("-", "m").replace(".", "p")
     return text
+
+
+def _format_trip_list(trips: tuple[str, ...] | list[str]) -> str:
+    return "|".join(trips)
 
 
 def _row_deltas(reference: pd.DataFrame, candidate: pd.DataFrame):
@@ -111,6 +116,8 @@ def build_trip_weight_ablation_candidates(
     alpha: float = 1.0,
     modes: tuple[str, ...] = ("single", "leave_one_out"),
     trips: tuple[str, ...] | None = None,
+    group_held_trips: tuple[str, ...] = (),
+    group_extra_count: int = 1,
 ) -> list[dict[str, Any]]:
     reference = _read_submission(reference_path.expanduser().resolve())
     target = _read_submission(target_path.expanduser().resolve())
@@ -118,37 +125,67 @@ def build_trip_weight_ablation_candidates(
 
     changed_trips = _changed_trips(reference, target)
     selected_trips = list(trips) if trips else changed_trips
-    missing = [trip for trip in selected_trips if trip not in set(changed_trips)]
+    missing = [trip for trip in [*selected_trips, *group_held_trips] if trip not in set(changed_trips)]
     if missing:
         raise SystemExit(f"selected trip(s) do not move in target: {', '.join(missing)}")
+    if group_extra_count < 0:
+        raise SystemExit("group_extra_count must be non-negative")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     changed_trip_set = set(changed_trips)
     rows: list[dict[str, Any]] = []
-    for trip_id in selected_trips:
-        mode_trip_sets = {
-            "single": {trip_id},
-            "leave_one_out": changed_trip_set - {trip_id},
-        }
-        for mode in modes:
-            if mode not in mode_trip_sets:
+    group_base = tuple(dict.fromkeys(group_held_trips))
+    group_pool = [trip for trip in selected_trips if trip not in set(group_base)]
+    group_specs = [
+        tuple([*group_base, *extra])
+        for extra in itertools.combinations(group_pool, group_extra_count)
+    ]
+
+    for mode in modes:
+        if mode in {"single", "leave_one_out"}:
+            candidate_specs = [(trip_id,) for trip_id in selected_trips]
+        elif mode == "leave_group_out":
+            candidate_specs = group_specs
+        else:
+            raise SystemExit(f"unknown mode: {mode}")
+
+        for spec in candidate_specs:
+            if not spec:
+                raise SystemExit("leave_group_out requires at least one held trip")
+            if mode == "single":
+                active_trips = {spec[0]}
+                held_trips: tuple[str, ...] = ()
+                active_trip = spec[0]
+                filename_trip_id = spec[0]
+            elif mode == "leave_one_out":
+                active_trips = changed_trip_set - {spec[0]}
+                held_trips = (spec[0],)
+                active_trip = ""
+                filename_trip_id = spec[0]
+            elif mode == "leave_group_out":
+                active_trips = changed_trip_set - set(spec)
+                held_trips = spec
+                active_trip = ""
+                filename_trip_id = _format_trip_list(spec)
+            else:
                 raise SystemExit(f"unknown mode: {mode}")
-            active_trips = mode_trip_sets[mode]
+
             candidate = _blend(reference, target, alpha=alpha, active_trips=active_trips)
             output_path = _write_candidate(
                 candidate=candidate,
                 output_dir=output_dir,
                 tag=tag,
                 mode=mode,
-                trip_id=trip_id,
+                trip_id=filename_trip_id,
                 alpha=alpha,
             )
             summary = _delta_summary(reference, candidate)
             rows.append(
                 {
                     "mode": mode,
-                    "held_trip": trip_id if mode == "leave_one_out" else "",
-                    "active_trip": trip_id if mode == "single" else "",
+                    "held_trip": _format_trip_list(held_trips),
+                    "active_trip": active_trip,
+                    "held_trip_count": len(held_trips),
                     "alpha": alpha,
                     "active_trip_count": len(active_trips),
                     "output": str(output_path),
@@ -162,6 +199,7 @@ def build_trip_weight_ablation_candidates(
         "mode",
         "held_trip",
         "active_trip",
+        "held_trip_count",
         "alpha",
         "active_trip_count",
         "output",
@@ -187,6 +225,8 @@ def build_trip_weight_ablation_candidates(
                 "tag": tag,
                 "alpha": alpha,
                 "modes": list(modes),
+                "group_extra_count": group_extra_count,
+                "group_held_trips": list(group_held_trips),
                 "changed_trip_count": len(changed_trips),
                 "selected_trip_count": len(selected_trips),
                 "candidate_count": len(rows),
@@ -212,8 +252,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--alpha", type=float, default=1.0)
-    parser.add_argument("--mode", action="append", choices=("single", "leave_one_out"))
+    parser.add_argument("--mode", action="append", choices=("single", "leave_one_out", "leave_group_out"))
     parser.add_argument("--trip", action="append", dest="trips")
+    parser.add_argument(
+        "--group-held-trip",
+        action="append",
+        default=[],
+        help="Trip to hold in every leave_group_out candidate; repeat for fixed multi-trip holds.",
+    )
+    parser.add_argument(
+        "--group-extra-count",
+        type=int,
+        default=1,
+        help="Number of selected trips to add to --group-held-trip for each leave_group_out candidate.",
+    )
     args = parser.parse_args(argv)
 
     build_trip_weight_ablation_candidates(
@@ -224,6 +276,8 @@ def main(argv: list[str] | None = None) -> int:
         alpha=args.alpha,
         modes=tuple(args.mode) if args.mode else ("single", "leave_one_out"),
         trips=tuple(args.trips) if args.trips else None,
+        group_held_trips=tuple(args.group_held_trip),
+        group_extra_count=args.group_extra_count,
     )
     return 0
 

@@ -247,14 +247,14 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - Existing single/combo ablations already found the current best public/private-safe combo (`sjc-q + ebf-xx + ebf-zz`, `3.687/4.710`); `ebf-xx + ebf-zz` and smaller combos also stayed `4.710` private but had worse public.
     - Practical result: do not submit more p3p25/p3p0 blends under the private-floor objective. If we intentionally spend submissions for discovery, make it an explicit `12`-trip leave-one-out/single-trip p3p25-direction A/B experiment gated by the pre-submit manifest.
   - 2026-05-06 p3p25 trip-weight ablation candidate build:
-    - Added `experiments/build_gsdc2023_trip_weight_ablation_candidates.py` to derive single-trip and leave-one-out candidates directly from a reference submission and a target submission delta.
+    - Added `experiments/build_gsdc2023_trip_weight_ablation_candidates.py` to derive single-trip, leave-one-out, and fixed-group leave-group-out candidates directly from a reference submission and a target submission delta.
     - Real-data run used current best as reference and `p3p25_full` as target, writing ignored artifacts under `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_trip_weight_ablation_20260506/p3p25_full_direction`.
     - Generated `24` candidates: `12` single-trip and `12` leave-one-out over the moved Pixel5 trips.
     - Manifest: `trip_weight_ablation_manifest_20260506.csv`; local screen: `local_screen_20260506.csv`.
     - Local screen summary: `candidate_count=24`, `submitted_filename_count=0`, `duplicate_submitted_local_sha_count=0`, `risky_previous_changed_count=0`.
     - Local delta shape: leave-one-out candidates all remain near full p3p25 local movement (`score_m=0.019784-0.019794m`, max `0.039626m`); single-trip candidates are mostly below whole-submission p95 impact (`score_m=0.0m`) except `2022-02-24-15-10-us-ca-lax-p/pixel5` (`score_m=0.019753m`).
     - Interpretation: these are discovery candidates for learning the private/public split of the 12-trip p3p25 direction, not high-confidence private-floor submissions.
-    - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_trip_weight_ablation_candidates.py` => `3 passed`; ruff pass.
+    - Focused verification after fixed-group mode: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_trip_weight_ablation_candidates.py` => `4 passed`; ruff pass.
     - Follow-up submit: submitted `submission_trip_weight_single_2022_02_24_15_10_us_ca_lax_p_pixel5_a1_20260506.csv` with message `20260506 p3p25 single trip lax-p pixel5`; Kaggle score `public=3.687`, `private=4.710`.
     - Interpretation: the highest local-delta single-trip probe preserves the private floor but does not improve public. The p3p25 public gain is therefore not isolated to this one trip; any further discovery should test multi-trip/leave-one-out structure, not more single-trip guesses first.
     - Local screen regenerated after submit: `submitted_filename_count=1`, `duplicate_submitted_local_sha_count=1`, `risky_previous_changed_count=0`.
@@ -264,6 +264,9 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - Second leave-one-out submit: submitted `submission_trip_weight_leave_one_out_2022_02_23_22_35_us_ca_lax_m_pixel5_a1_20260506.csv` with message `20260506 p3p25 leave-one-out lax-m pixel5`; Kaggle score `public=3.686`, `private=4.711`.
     - Interpretation: removing `2022-02-23-22-35-us-ca-lax-m/pixel5` recovers `0.001` private vs p3p25 full / `lax-p` leave-one-out while keeping public `3.686`, but it still misses the `4.710` private floor. The private loss is not fully explained by this one trip, but `lax-m` is a partial contributor.
     - Local screen regenerated after the second leave-one-out submit: `submitted_filename_count=3`, `duplicate_submitted_local_sha_count=3`, `risky_previous_changed_count=0`.
+    - Fixed-group probe: generated `11` `leave_group_out` candidates under `p3p25_laxm_pair_hold`, holding `2022-02-23-22-35-us-ca-lax-m/pixel5` plus one additional moved Pixel5 trip. Local screen: `candidate_count=11`, `submitted_filename_count=0`, `duplicate_submitted_local_sha_count=0`, `risky_previous_changed_count=0`.
+    - Submitted the lowest local-score fixed-group candidate, `lax-m + 2023-06-06-22-43-us-ca-sjc-he2/pixel5`, with message `20260506 p3p25 leave-group-out laxm sjc-he2 pixel5`; Kaggle score `public=3.686`, `private=4.712`.
+    - Interpretation: the best local fixed-pair hold-out worsens private vs `lax-m` leave-one-out (`4.711 -> 4.712`), so the private floor is not recovered by simply removing `lax-m` plus the top local secondary trip. Continue this path only as explicit discovery; otherwise return to MATLAB/internal-state parity tests.
   - Non-Pixel raw WLS patch:
     - Unrepaired `samsunga325g_mtv_pe1_raw_wls`: not submitted; changed `1422` rows vs best, max `1865.2006851703695 m`, trip max step `1871.753670863582 m`; reject.
     - Step-repaired raw WLS: submitted Kaggle `public=3.750`, `private=4.710`; changed `1421` rows, max `21.99336504111517 m`; no private gain and public worsens, reject.
