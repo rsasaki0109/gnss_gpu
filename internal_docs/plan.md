@@ -261,6 +261,9 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - Paired leave-one-out submit: submitted `submission_trip_weight_leave_one_out_2022_02_24_15_10_us_ca_lax_p_pixel5_a1_20260506.csv` with message `20260506 p3p25 leave-one-out lax-p pixel5`; Kaggle score `public=3.686`, `private=4.712`.
     - Interpretation: removing `2022-02-24-15-10-us-ca-lax-p/pixel5` keeps the p3p25 public gain but also keeps the private loss. This trip is not the single private-loss culprit; the harmful split is distributed across the remaining p3p25 direction or another held trip.
     - Local screen regenerated after the paired submit: `submitted_filename_count=2`, `duplicate_submitted_local_sha_count=2`, `risky_previous_changed_count=0`.
+    - Second leave-one-out submit: submitted `submission_trip_weight_leave_one_out_2022_02_23_22_35_us_ca_lax_m_pixel5_a1_20260506.csv` with message `20260506 p3p25 leave-one-out lax-m pixel5`; Kaggle score `public=3.686`, `private=4.711`.
+    - Interpretation: removing `2022-02-23-22-35-us-ca-lax-m/pixel5` recovers `0.001` private vs p3p25 full / `lax-p` leave-one-out while keeping public `3.686`, but it still misses the `4.710` private floor. The private loss is not fully explained by this one trip, but `lax-m` is a partial contributor.
+    - Local screen regenerated after the second leave-one-out submit: `submitted_filename_count=3`, `duplicate_submitted_local_sha_count=3`, `risky_previous_changed_count=0`.
   - Non-Pixel raw WLS patch:
     - Unrepaired `samsunga325g_mtv_pe1_raw_wls`: not submitted; changed `1422` rows vs best, max `1865.2006851703695 m`, trip max step `1871.753670863582 m`; reject.
     - Step-repaired raw WLS: submitted Kaggle `public=3.750`, `private=4.710`; changed `1421` rows, max `21.99336504111517 m`; no private gain and public worsens, reject.
