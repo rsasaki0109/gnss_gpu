@@ -258,6 +258,9 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - Follow-up submit: submitted `submission_trip_weight_single_2022_02_24_15_10_us_ca_lax_p_pixel5_a1_20260506.csv` with message `20260506 p3p25 single trip lax-p pixel5`; Kaggle score `public=3.687`, `private=4.710`.
     - Interpretation: the highest local-delta single-trip probe preserves the private floor but does not improve public. The p3p25 public gain is therefore not isolated to this one trip; any further discovery should test multi-trip/leave-one-out structure, not more single-trip guesses first.
     - Local screen regenerated after submit: `submitted_filename_count=1`, `duplicate_submitted_local_sha_count=1`, `risky_previous_changed_count=0`.
+    - Paired leave-one-out submit: submitted `submission_trip_weight_leave_one_out_2022_02_24_15_10_us_ca_lax_p_pixel5_a1_20260506.csv` with message `20260506 p3p25 leave-one-out lax-p pixel5`; Kaggle score `public=3.686`, `private=4.712`.
+    - Interpretation: removing `2022-02-24-15-10-us-ca-lax-p/pixel5` keeps the p3p25 public gain but also keeps the private loss. This trip is not the single private-loss culprit; the harmful split is distributed across the remaining p3p25 direction or another held trip.
+    - Local screen regenerated after the paired submit: `submitted_filename_count=2`, `duplicate_submitted_local_sha_count=2`, `risky_previous_changed_count=0`.
   - Non-Pixel raw WLS patch:
     - Unrepaired `samsunga325g_mtv_pe1_raw_wls`: not submitted; changed `1422` rows vs best, max `1865.2006851703695 m`, trip max step `1871.753670863582 m`; reject.
     - Step-repaired raw WLS: submitted Kaggle `public=3.750`, `private=4.710`; changed `1421` rows, max `21.99336504111517 m`; no private gain and public worsens, reject.
