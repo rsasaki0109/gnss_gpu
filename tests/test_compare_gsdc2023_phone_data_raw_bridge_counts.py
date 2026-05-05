@@ -454,8 +454,38 @@ def test_compare_factor_masks_matches_exported_bridge_mask(tmp_path):
     assert summary["total_matched_count"] == summary["total_matlab_count"]
     assert summary["total_matlab_only"] == 0
     assert summary["total_bridge_only"] == 0
+    assert summary["side_only_failure_count"] == 0
+    assert summary["top_matlab_only"] == []
+    assert summary["top_bridge_only"] == []
     assert merged["side"].eq("both").all()
     assert summary_df["symmetric_parity"].eq(1.0).all()
+
+
+def test_compare_factor_masks_reports_side_only_debug_rows(tmp_path):
+    data_root = tmp_path / "dataset_2023"
+    trip_dir = data_root / "train" / "courseA" / "phoneA"
+    trip_dir.mkdir(parents=True)
+
+    rows = _raw_rows()
+    _write_zipped_csv(trip_dir / "device_gnss.csv", rows, list(rows[0].keys()))
+    bridge_mask = build_bridge_factor_mask(trip_dir, max_epochs=10, multi_gnss=False)
+    matlab_mask = bridge_mask.iloc[:-1].copy()
+    matlab_mask.to_csv(trip_dir / "phone_data_factor_mask.csv", index=False)
+
+    _merged, _summary_df, summary = compare_factor_masks(
+        trip_dir,
+        max_epochs=10,
+        multi_gnss=False,
+    )
+
+    assert summary["total_matlab_only"] == 0
+    assert summary["total_bridge_only"] == 1
+    assert summary["side_only_failure_count"] == 1
+    assert summary["top_matlab_only"] == []
+    assert len(summary["top_bridge_only"]) == 1
+    bridge_only = summary["top_bridge_only"][0]
+    assert bridge_only["side"] == "bridge_only"
+    assert summary["side_only_by_field_freq"][bridge_only["field"]][bridge_only["freq"]]["bridge_only"] == 1
 
 
 def test_compare_factor_masks_respects_settings_epoch_window(tmp_path):

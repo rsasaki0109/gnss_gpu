@@ -68,6 +68,9 @@ def test_factor_gate_passes_through_strict_side_only_failure(tmp_path: Path) -> 
             "overall_min_symmetric_parity": 0.98,
             "total_matlab_only": 0,
             "total_bridge_only": 1,
+            "side_only_failure_count": 1,
+            "side_only_by_field_freq": {"P": {"L1": {"matlab_only": 0, "bridge_only": 1}}},
+            "top_bridge_only": [{"trip": "train/course/phone", "field": "P", "freq": "L1"}],
             "passed": False,
         }
         return pd.DataFrame(), pd.DataFrame(), payload
@@ -83,6 +86,9 @@ def test_factor_gate_passes_through_strict_side_only_failure(tmp_path: Path) -> 
 
     assert result.passed is False
     assert result.summary["total_bridge_only"] == 1
+    assert result.summary["side_only_failure_count"] == 1
+    assert result.summary["side_only_by_field_freq"]["P"]["L1"]["bridge_only"] == 1
+    assert result.summary["top_bridge_only"][0]["field"] == "P"
     assert result.summary["overall_min_symmetric_parity"] == 0.98
 
 

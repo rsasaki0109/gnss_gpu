@@ -38,6 +38,8 @@ from experiments.gsdc2023_audit_cli import (
     resolved_output_root as _resolved_output_root,
 )
 from experiments.gsdc2023_factor_mask import (
+    FACTOR_MASK_FIELDS,
+    FACTOR_MASK_KEY_COLUMNS,
     append_factor_rows as _append_factor_rows,
     factor_mask_side_summary as _factor_mask_side_summary,
     merge_factor_mask_keys as _merge_factor_mask_keys,
@@ -50,6 +52,49 @@ from experiments.gsdc2023_trip_window import (
     settings_epoch_window_for_trip as _settings_epoch_window_for_trip,
     trim_epoch_window as _trim_epoch_window,
 )
+
+
+_SIDE_ONLY_FIELDS = tuple(FACTOR_MASK_KEY_COLUMNS) + ("side",)
+
+
+def _side_only_rows(merged: pd.DataFrame, side: str, *, limit: int = 20) -> list[dict[str, object]]:
+    rows = merged.loc[merged["side"].eq(side), list(_SIDE_ONLY_FIELDS)].copy()
+    if rows.empty:
+        return []
+    rows = rows.sort_values(["field", "freq", "epoch_index", "sys", "svid"]).head(limit)
+    out: list[dict[str, object]] = []
+    for row in rows.itertuples(index=False):
+        out.append(
+            {
+                "field": str(row.field),
+                "freq": str(row.freq),
+                "epoch_index": int(row.epoch_index),
+                "utcTimeMillis": int(row.utcTimeMillis),
+                "next_epoch_index": int(row.next_epoch_index),
+                "nextUtcTimeMillis": int(row.nextUtcTimeMillis),
+                "sys": int(row.sys),
+                "svid": int(row.svid),
+                "side": str(row.side),
+            },
+        )
+    return out
+
+
+def _side_only_by_field_freq(merged: pd.DataFrame) -> dict[str, dict[str, dict[str, int]]]:
+    out: dict[str, dict[str, dict[str, int]]] = {
+        field: {freq: {"matlab_only": 0, "bridge_only": 0} for freq in ("L1", "L5")}
+        for field in FACTOR_MASK_FIELDS
+    }
+    side_only = merged.loc[merged["side"].isin(("matlab_only", "bridge_only"))]
+    if side_only.empty:
+        return out
+    grouped = side_only.groupby(["field", "freq", "side"], sort=True, observed=False).size()
+    for (field, freq, side), count in grouped.items():
+        field_s = str(field)
+        freq_s = str(freq)
+        side_s = str(side)
+        out.setdefault(field_s, {}).setdefault(freq_s, {"matlab_only": 0, "bridge_only": 0})[side_s] = int(count)
+    return out
 
 
 def build_bridge_factor_mask(
@@ -208,6 +253,10 @@ def compare_factor_masks(
         "total_matched_count": side_payload["total_matched_count"],
         "total_matlab_only": side_payload["total_matlab_only"],
         "total_bridge_only": side_payload["total_bridge_only"],
+        "side_only_failure_count": int(side_payload["total_matlab_only"]) + int(side_payload["total_bridge_only"]),
+        "side_only_by_field_freq": _side_only_by_field_freq(merged),
+        "top_matlab_only": _side_only_rows(merged, "matlab_only"),
+        "top_bridge_only": _side_only_rows(merged, "bridge_only"),
         "start_epoch": int(start_epoch),
         "max_epochs": int(bridge_max_epochs),
         "jaccard": side_payload["jaccard"],

@@ -187,6 +187,15 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - `trip_count=12`, `trips_with_phone_data=12`, `matched_rows=138`, `missing_phone_count_rows=6`, `missing_bridge_count_rows=0`
     - `matched_abs_delta_total=0`, `count_delta_failure_count=0`, `count_parity_ratio=1.0`, and `abs_delta_sums` is `0` for all field/freq pairs
   - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_build_gsdc2023_pre_submit_manifest.py` => `23 passed`; `ruff check --ignore=E402 ...` pass.
+- 2026-05-06 factor-mask side-only debug hardening:
+  - `compare_gsdc2023_factor_masks.py` single-trip payload now exposes `side_only_failure_count`, `side_only_by_field_freq`, `top_matlab_only`, and `top_bridge_only`.
+  - `audit_gsdc2023_factor_mask_parity.py` aggregates those fields across trips, and `audit_gsdc2023_matlab_equivalence_gate.py` carries them into the factor_mask gate summary.
+  - 12 trip / full settings window / GPS-only MATLAB parity scope:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_factor_mask_parity.py --max-epochs 0 --no-multi-gnss --output-dir experiments/results/factor_mask_side_only_probe_20260506 --verbose`
+    - output: `experiments/results/factor_mask_side_only_probe_20260506/gsdc2023_factor_mask_parity_audit_20260506_171245`
+    - `passed=true`, `overall_min_symmetric_parity=1.0`, `total_matlab_only=0`, `total_bridge_only=0`, `side_only_failure_count=0`
+    - `side_only_by_field_freq` is `0` for every field/freq pair, and both `top_matlab_only` / `top_bridge_only` are empty.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_factor_mask_parity.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py` => `25 passed`; `ruff check --ignore=E402 ...` pass.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`

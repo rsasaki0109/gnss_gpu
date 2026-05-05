@@ -73,11 +73,53 @@ def _trip_summary_row(trip: str, payload: dict[str, object]) -> dict[str, object
         "total_matched_count": int(payload.get("total_matched_count", 0) or 0),
         "total_matlab_only": int(payload.get("total_matlab_only", 0) or 0),
         "total_bridge_only": int(payload.get("total_bridge_only", 0) or 0),
+        "side_only_failure_count": int(payload.get("side_only_failure_count", 0) or 0),
         "symmetric_parity": _finite_float(payload.get("symmetric_parity")),
         "jaccard": _finite_float(payload.get("jaccard")),
         "start_epoch": int(payload.get("start_epoch", 0) or 0),
         "max_epochs": int(payload.get("max_epochs", 0) or 0),
     }
+
+
+def _with_trip(trip: str, rows: object) -> list[dict[str, object]]:
+    if not isinstance(rows, list):
+        return []
+    out: list[dict[str, object]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item = {"trip": trip}
+        item.update(row)
+        out.append(item)
+    return out
+
+
+def _top_side_only_failures(rows: list[dict[str, object]], *, limit: int = 20) -> list[dict[str, object]]:
+    return sorted(
+        rows,
+        key=lambda row: (
+            str(row.get("side", "")),
+            str(row.get("trip", "")),
+            str(row.get("field", "")),
+            str(row.get("freq", "")),
+            int(row.get("epoch_index", 0) or 0),
+            int(row.get("sys", 0) or 0),
+            int(row.get("svid", 0) or 0),
+        ),
+    )[:limit]
+
+
+def _field_side_only_sums(field_summary: pd.DataFrame) -> dict[str, dict[str, dict[str, int]]]:
+    out: dict[str, dict[str, dict[str, int]]] = {}
+    if field_summary.empty:
+        return out
+    grouped = field_summary.groupby(["field", "freq"], sort=True)[["matlab_only", "bridge_only"]].sum()
+    for (field, freq), row in grouped.iterrows():
+        out.setdefault(str(field), {})[str(freq)] = {
+            "matlab_only": int(row["matlab_only"]),
+            "bridge_only": int(row["bridge_only"]),
+        }
+    return out
 
 
 def factor_mask_parity_audit(
@@ -97,6 +139,8 @@ def factor_mask_parity_audit(
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]:
     rows: list[dict[str, object]] = []
     field_rows: list[pd.DataFrame] = []
+    matlab_only_rows: list[dict[str, object]] = []
+    bridge_only_rows: list[dict[str, object]] = []
     errors: list[dict[str, object]] = []
     for index, trip in enumerate(trips, start=1):
         if verbose:
@@ -117,6 +161,8 @@ def factor_mask_parity_audit(
             errors.append({"trip": trip, "error": f"{type(exc).__name__}: {exc}"})
             continue
         rows.append(_trip_summary_row(trip, payload))
+        matlab_only_rows.extend(_with_trip(trip, payload.get("top_matlab_only")))
+        bridge_only_rows.extend(_with_trip(trip, payload.get("top_bridge_only")))
         field_frame = summary_by_field.copy()
         if not field_frame.empty:
             field_frame.insert(0, "trip", trip)
@@ -157,6 +203,10 @@ def factor_mask_parity_audit(
         "overall_min_symmetric_parity": min_parity,
         "total_matlab_only": total_matlab_only,
         "total_bridge_only": total_bridge_only,
+        "side_only_failure_count": int(total_matlab_only + total_bridge_only),
+        "side_only_by_field_freq": _field_side_only_sums(field_summary),
+        "top_matlab_only": _top_side_only_failures(matlab_only_rows),
+        "top_bridge_only": _top_side_only_failures(bridge_only_rows),
         "passed": passed,
     }
     if not trip_summary.empty:

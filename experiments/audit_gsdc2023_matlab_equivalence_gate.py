@@ -156,6 +156,10 @@ def _factor_gate(
         "overall_min_symmetric_parity": payload.get("overall_min_symmetric_parity"),
         "total_matlab_only": int(payload.get("total_matlab_only", 0) or 0),
         "total_bridge_only": int(payload.get("total_bridge_only", 0) or 0),
+        "side_only_failure_count": int(payload.get("side_only_failure_count", 0) or 0),
+        "side_only_by_field_freq": payload.get("side_only_by_field_freq", {}),
+        "top_matlab_only": payload.get("top_matlab_only", []),
+        "top_bridge_only": payload.get("top_bridge_only", []),
         "threshold": float(min_symmetric_parity),
     }
     return trip_summary, field_summary, GateResult("factor_mask", bool(payload.get("passed", False)), summary)
