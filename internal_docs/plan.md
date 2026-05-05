@@ -222,6 +222,18 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - Kaggle score: `public=3.687`, `private=4.710`.
     - Interpretation: minimal p3p25 blend preserves the private floor but does not improve public vs current best (`3.687/4.710`). Larger p3p25 blends already showed `private=4.711`, so stop this blend family unless a new objective appears.
     - Local screen regenerated after submit; `a0p0625` is now marked submitted/duplicate, with risky Pixel6Pro previous rows `0` and max movement `0.0m`.
+  - 2026-05-06 unverified-candidate audit:
+    - Report generated at `experiments/results/source_selection_lowbaseline_submission_probe_20260430/local_submission_screen_20260505/unverified_candidate_audit_20260506.csv` (ignored artifact).
+    - Safe/unsubmitted/unique screen rows: `36`; unique filenames: `24`.
+    - `14/24` filenames are already present in local Kaggle score logs and are bad:
+      - Pixel5 phone offset `0.5/1.0/1.5/2.0/2.5`: best private among them `4.723`, all worse than `4.710`.
+      - basecorr non-Pixel single/combo patches: private `4.790-4.791`.
+      - source AB patches: private `4.825-4.833`.
+    - Remaining `10/24` not found in score logs:
+      - raw WLS unrepaired: already rejected below due max `1865m` spike.
+      - weighted p3p25 `a0p125/a0p1875/a0p75`: bracketed by submitted `a0p0625` (`3.687/4.710`) and `a0p25/a0p5` (`4.711` private), so no submit unless accepting private risk.
+      - weighted p3p0 `a0p0625/a0p125/a0p1875/a0p25/a0p5/a0p75`: source full p3p0 already `3.685/4.714`; likely public-only gamble and not aligned with private-floor goal.
+    - Practical result: no remaining high-confidence candidate under the current `private=4.710` floor objective.
   - Non-Pixel raw WLS patch:
     - Unrepaired `samsunga325g_mtv_pe1_raw_wls`: not submitted; changed `1422` rows vs best, max `1865.2006851703695 m`, trip max step `1871.753670863582 m`; reject.
     - Step-repaired raw WLS: submitted Kaggle `public=3.750`, `private=4.710`; changed `1421` rows, max `21.99336504111517 m`; no private gain and public worsens, reject.
