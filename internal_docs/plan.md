@@ -164,6 +164,7 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 - 2026-05-06 internal-state residual parity hardening:
   - `audit_gsdc2023_residual_value_parity.py` now records and gates internal residual components, not just final `delta`: `pre_residual_delta`, `common_bias_delta`, `isb_delta`, `observation_delta`, `model_delta`, satellite position/velocity/clock/iono/trop/elevation deltas, and receiver position/velocity deltas.
   - The residual equivalence gate summary now exposes `internal_delta_failure_count`, `internal_delta_failures`, and `internal_delta_thresholds`.
+  - `build_gsdc2023_pre_submit_manifest.py` now records these internal-delta fields into `matlab_equivalence_gate`, and `submit_gsdc2023_pixel5_candidate_queue.py` now rejects summaries missing `residual_internal_delta_failure_count` / thresholds or having nonzero internal failures.
   - Full-window 11-trip residual audit with inactive diagnostics included passed with `internal_delta_failure_count=0`:
     - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_value_parity.py --max-epochs 0 --no-multi-gnss --observation-mask --include-inactive-observations --output-dir experiments/results/matlab_internal_state_parity_probe_20260506 --verbose`
     - output: `experiments/results/matlab_internal_state_parity_probe_20260506/gsdc2023_residual_value_parity_audit_20260506_113157`
@@ -171,6 +172,12 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - residual values: `overall_max_abs_delta=5.91054445631678e-05 m`, `overall_p95_abs_delta_max=2.7839780766480964e-05 m`
     - internal maxima: `pre_residual=5.910544456799727e-05`, `common_bias=3.5828883795829825e-05`, `observation=1.4528632164001465e-06`, `model=5.9105444620399794e-05`, `sat_position=6.749170441930931e-05`, `sat_velocity=0.0003588729979236617`, `sat_elevation=0.00046625615496864725`, `rcv_position=8.896446402437426e-09`, `rcv_velocity=1.3969610654605222e-09`.
   - Note: first attempt used an overly tight `sat_elevation_delta=1e-4 deg` and failed on two rows with max `4.6625615496864725e-04 deg`; threshold is now `1e-3 deg` to match that component's units while keeping residual/model/state gates strict.
+  - Full-window 12-trip MATLAB equivalence gate regenerated with internal fields:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --output-dir experiments/results/matlab_equivalence_gate_probe_20260506 --verbose`
+    - output: `experiments/results/matlab_equivalence_gate_probe_20260506/gsdc2023_matlab_equivalence_gate_20260506_125258`
+    - result: `passed=true`, `equivalence_claim=matlab_equivalent`, residual side-only `0/0`, `overall_max_abs_delta=5.91054445631678e-05`, `internal_delta_failure_count=0`
+  - Regenerated `p6p0_clean_candidate_20260505/pre_submit_manifest.json` using that summary; manifest gate now records `residual_internal_delta_failure_count=0`, thresholds, and summary SHA `62d2d99c5ae5ce4909495f3178c5d932a533822a6692fc59d84fc57aaf84b16e`.
+  - Focused verification: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `25 passed`; ruff pass. Direct gate check on regenerated manifest: `assert_matlab_equivalence_gate(..., require=True)` => `matlab_equivalent 0`.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`

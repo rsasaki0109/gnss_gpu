@@ -295,6 +295,9 @@ def test_matlab_equivalence_gate_can_be_required_from_pre_submit_manifest(tmp_pa
         "residual_total_bridge_only": 0,
         "residual_overall_max_abs_delta_m": 5.9e-5,
         "residual_max_abs_delta_threshold_m": 1.0e-4,
+        "residual_internal_delta_failure_count": 0,
+        "residual_internal_delta_failures": [],
+        "residual_internal_delta_thresholds": {"model_delta": 1.0e-4},
     }
     (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -318,6 +321,9 @@ def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
             "residual_total_bridge_only": 0,
             "residual_overall_max_abs_delta_m": 5.0e-5,
             "residual_max_abs_delta_threshold_m": 1.0e-4,
+            "residual_internal_delta_failure_count": 0,
+            "residual_internal_delta_failures": [],
+            "residual_internal_delta_thresholds": {"model_delta": 1.0e-4},
         },
     }
     assert assert_matlab_equivalence_gate(clean)["equivalence_claim"] == "matlab_equivalent"
@@ -330,6 +336,21 @@ def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
     dirty = json.loads(json.dumps(clean))
     dirty["matlab_equivalence_gate"]["residual_overall_max_abs_delta_m"] = 2.0e-4
     with pytest.raises(SystemExit, match="max delta failed"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    del dirty["matlab_equivalence_gate"]["residual_internal_delta_failure_count"]
+    with pytest.raises(SystemExit, match="missing residual internal delta failure count"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_internal_delta_failure_count"] = 2
+    with pytest.raises(SystemExit, match="internal delta failures"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_internal_delta_thresholds"] = {}
+    with pytest.raises(SystemExit, match="missing residual internal delta thresholds"):
         assert_matlab_equivalence_gate(dirty)
 
 

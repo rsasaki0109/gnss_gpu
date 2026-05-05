@@ -223,6 +223,7 @@ def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
     gates = gates if isinstance(gates, dict) else {}
     residual = gates.get("residual_values")
     residual = residual if isinstance(residual, dict) else {}
+    internal_failure_count = residual.get("internal_delta_failure_count")
     return {
         "summary": str(summary_path),
         "summary_sha256": sha256_file(summary_path),
@@ -242,6 +243,11 @@ def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
         "residual_total_bridge_only": int(residual.get("total_bridge_only", 0) or 0),
         "residual_overall_max_abs_delta_m": residual.get("overall_max_abs_delta"),
         "residual_max_abs_delta_threshold_m": residual.get("max_abs_delta_threshold_m"),
+        "residual_internal_delta_failure_count": (
+            None if internal_failure_count is None else int(internal_failure_count or 0)
+        ),
+        "residual_internal_delta_failures": residual.get("internal_delta_failures", []),
+        "residual_internal_delta_thresholds": residual.get("internal_delta_thresholds"),
     }
 
 

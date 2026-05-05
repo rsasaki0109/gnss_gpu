@@ -178,6 +178,9 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
                         "total_bridge_only": 0,
                         "overall_max_abs_delta": 5.9e-5,
                         "max_abs_delta_threshold_m": 1.0e-4,
+                        "internal_delta_failure_count": 0,
+                        "internal_delta_failures": [],
+                        "internal_delta_thresholds": {"model_delta": 1.0e-4},
                     },
                 },
             },
@@ -196,4 +199,6 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
     assert gate["equivalence_claim"] == "matlab_equivalent"
     assert gate["trip_count"] == 12
     assert gate["residual_total_matlab_only"] == 0
+    assert gate["residual_internal_delta_failure_count"] == 0
+    assert gate["residual_internal_delta_thresholds"]["model_delta"] == 1.0e-4
     assert gate["summary_sha256"]

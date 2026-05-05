@@ -279,6 +279,17 @@ def assert_matlab_equivalence_gate(manifest: dict[str, object], *, require: bool
     threshold = _as_float(gate.get("residual_max_abs_delta_threshold_m"))
     if threshold > 0.0 and max_delta > threshold:
         raise SystemExit(f"MATLAB equivalence residual max delta failed: {max_delta} > {threshold}")
+    if "residual_internal_delta_failure_count" not in gate or gate.get("residual_internal_delta_failure_count") is None:
+        raise SystemExit("MATLAB equivalence gate failed: missing residual internal delta failure count")
+    internal_failure_count = _as_int(gate.get("residual_internal_delta_failure_count"))
+    if internal_failure_count != 0:
+        raise SystemExit(
+            "MATLAB equivalence residual internal delta failures are nonzero: "
+            f"failure_count={internal_failure_count}"
+        )
+    internal_thresholds = gate.get("residual_internal_delta_thresholds")
+    if not isinstance(internal_thresholds, dict) or not internal_thresholds:
+        raise SystemExit("MATLAB equivalence gate failed: missing residual internal delta thresholds")
     return gate
 
 
