@@ -246,6 +246,15 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - `top3_mean` only moves `2` Pixel5 trips (`ebf-xx`, `sjc-q`) by about `0.356m`; Kaggle is `3.689/4.710`, so it preserves private but worsens public.
     - Existing single/combo ablations already found the current best public/private-safe combo (`sjc-q + ebf-xx + ebf-zz`, `3.687/4.710`); `ebf-xx + ebf-zz` and smaller combos also stayed `4.710` private but had worse public.
     - Practical result: do not submit more p3p25/p3p0 blends under the private-floor objective. If we intentionally spend submissions for discovery, make it an explicit `12`-trip leave-one-out/single-trip p3p25-direction A/B experiment gated by the pre-submit manifest.
+  - 2026-05-06 p3p25 trip-weight ablation candidate build:
+    - Added `experiments/build_gsdc2023_trip_weight_ablation_candidates.py` to derive single-trip and leave-one-out candidates directly from a reference submission and a target submission delta.
+    - Real-data run used current best as reference and `p3p25_full` as target, writing ignored artifacts under `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_trip_weight_ablation_20260506/p3p25_full_direction`.
+    - Generated `24` candidates: `12` single-trip and `12` leave-one-out over the moved Pixel5 trips.
+    - Manifest: `trip_weight_ablation_manifest_20260506.csv`; local screen: `local_screen_20260506.csv`.
+    - Local screen summary: `candidate_count=24`, `submitted_filename_count=0`, `duplicate_submitted_local_sha_count=0`, `risky_previous_changed_count=0`.
+    - Local delta shape: leave-one-out candidates all remain near full p3p25 local movement (`score_m=0.019784-0.019794m`, max `0.039626m`); single-trip candidates are mostly below whole-submission p95 impact (`score_m=0.0m`) except `2022-02-24-15-10-us-ca-lax-p/pixel5` (`score_m=0.019753m`).
+    - Interpretation: these are discovery candidates for learning the private/public split of the 12-trip p3p25 direction, not high-confidence private-floor submissions.
+    - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_trip_weight_ablation_candidates.py` => `3 passed`; ruff pass.
   - Non-Pixel raw WLS patch:
     - Unrepaired `samsunga325g_mtv_pe1_raw_wls`: not submitted; changed `1422` rows vs best, max `1865.2006851703695 m`, trip max step `1871.753670863582 m`; reject.
     - Step-repaired raw WLS: submitted Kaggle `public=3.750`, `private=4.710`; changed `1421` rows, max `21.99336504111517 m`; no private gain and public worsens, reject.
