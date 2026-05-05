@@ -4,7 +4,11 @@ import json
 
 import pandas as pd
 
-from experiments.build_gsdc2023_pre_submit_manifest import build_pre_submit_manifest, main
+from experiments.build_gsdc2023_pre_submit_manifest import (
+    DELTA_CHANGED_THRESHOLD_M,
+    build_pre_submit_manifest,
+    main,
+)
 
 
 CANDIDATE = "pixel5phone_3p375_sjc_r0p84375_p6p0"
@@ -35,6 +39,7 @@ def _base_submission() -> pd.DataFrame:
 def test_build_pre_submit_manifest_records_clean_p6p0_risky_trips(tmp_path) -> None:
     base = _base_submission()
     candidate = base.copy()
+    candidate.loc[candidate["tripId"] == RISKY_TRIP, "LatitudeDegrees"] += 1.0e-12
     candidate.loc[candidate["tripId"] == OTHER_TRIP, "LatitudeDegrees"] += 0.00001
     previous = base.copy()
     previous.loc[previous["tripId"].isin([RISKY_TRIP, OTHER_RISKY_TRIP]), "LatitudeDegrees"] += 0.00001
@@ -94,7 +99,7 @@ def test_build_pre_submit_manifest_records_clean_p6p0_risky_trips(tmp_path) -> N
 
     trip_rows = pd.read_csv(output_dir / "pre_submit_trip_delta_checks.csv")
     assert trip_rows["input_changed_rows"].tolist() == [0, 0]
-    assert trip_rows["input_max_m"].tolist() == [0.0, 0.0]
+    assert (trip_rows["input_max_m"] < DELTA_CHANGED_THRESHOLD_M).all()
     assert trip_rows["previous_changed_rows"].tolist() == [2, 2]
     assert (trip_rows["previous_max_m"] > 1.0).all()
 

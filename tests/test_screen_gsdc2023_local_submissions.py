@@ -27,14 +27,18 @@ def test_screen_local_submissions_marks_submitted_duplicates_and_risky_delta(tmp
     root.mkdir()
     base = _submission()
     submitted = base.copy()
+    tiny_float_noise = base.copy()
+    tiny_float_noise.loc[tiny_float_noise["tripId"] == RISKY_TRIP, "LatitudeDegrees"] += 1.0e-12
     risky_changed = base.copy()
     risky_changed.loc[risky_changed["tripId"] == RISKY_TRIP, "LatitudeDegrees"] += 0.00001
     submitted_path = root / "submission_submitted.csv"
     same_bytes_path = root / "submission_same_bytes_new_name.csv"
+    noise_path = root / "submission_tiny_float_noise.csv"
     risky_path = root / "submission_risky.csv"
     base_path = tmp_path / "base.csv"
     submitted.to_csv(submitted_path, index=False)
     submitted.to_csv(same_bytes_path, index=False)
+    tiny_float_noise.to_csv(noise_path, index=False)
     risky_changed.to_csv(risky_path, index=False)
     base.to_csv(base_path, index=False)
     submitted_csv = tmp_path / "kaggle.csv"
@@ -57,6 +61,8 @@ def test_screen_local_submissions_marks_submitted_duplicates_and_risky_delta(tmp
     by_name = {row["filename"]: row for row in rows}
     assert by_name["submission_submitted.csv"]["submitted_filename"] is True
     assert by_name["submission_same_bytes_new_name.csv"]["duplicate_submitted_local_sha"] is True
+    assert by_name["submission_tiny_float_noise.csv"]["risky_previous_changed_rows"] == 0
+    assert by_name["submission_tiny_float_noise.csv"]["reference_changed_rows"] == 0
     assert by_name["submission_risky.csv"]["risky_previous_changed_rows"] == 2
     assert by_name["submission_risky.csv"]["reference_changed_rows"] == 2
     assert output_csv.is_file()
@@ -66,6 +72,7 @@ def test_screen_local_submissions_marks_submitted_duplicates_and_risky_delta(tmp
     assert {row["filename"] for row in csv_rows} == {
         "submission_submitted.csv",
         "submission_same_bytes_new_name.csv",
+        "submission_tiny_float_noise.csv",
         "submission_risky.csv",
     }
 

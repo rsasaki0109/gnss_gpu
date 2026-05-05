@@ -3,7 +3,7 @@
 **最終更新**: 2026-05-05 JST
 **現在の HEAD**: `codex/residual-mask-main-port`
 **ブランチ**: `codex/residual-mask-main-port`
-**作業ツリー**: GSDC2023 MATLAB equivalence gate / residual side-only audit は PR #55 に反映済み。既存変更を revert しないこと。
+**作業ツリー**: GSDC2023 MATLAB equivalence gate / residual side-only audit / submit risk gate / local candidate screening は PR #55 に反映済み。既存変更を revert しないこと。
 **直近の重点**: Kaggle GSDC2023 raw bridge / MATLAB phone_data 移植の内部状態 parity と提出前 risk gate。
 **旧メモ**: 2026-04-21 以前の UrbanNav / CT-RBPF-FGO 計画は下に残す。現在の最優先は GSDC2023 raw bridge の MATLAB 移植を詰めること。
 
@@ -211,6 +211,21 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - `best + 0.25 * (p3p25 - best)`: Kaggle `public=3.687`, `private=4.711`
   - Outcome: weighted p3p25 improves/keeps public but loses the `4.710` private floor; reject further p3p25 blends unless a stronger private-safe reason appears.
   - Focused verification: `tests/test_screen_gsdc2023_local_submissions.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py` => `27 passed`; ruff pass.
+- Follow-up local screening audit:
+  - Changed-row counting now uses shared `DELTA_CHANGED_THRESHOLD_M=1e-6 m` in both `build_gsdc2023_pre_submit_manifest.py` and `screen_gsdc2023_local_submissions.py`.
+  - Reason: CSV/float roundtrip noise created false risky Pixel6Pro row changes for weighted probes (`max ~= 2.25e-9 m`), while true P6P0 movement remains blocked (`1444` rows, max `0.7514168992409354 m`).
+  - Tests now pin both sides: sub-micrometer float noise is not counted as changed, real meter-scale movement is counted.
+  - Latest full local screen: `144` candidates, `50` submitted-filename matches, `76` duplicate submitted-local SHA, `35` risky previous-safe movers.
+  - Weighted p3p25 screen after the threshold fix: `12` candidates, `risky_previous_changed_count=0`; submitted `a0p25` and `a0p5` remain duplicate/submitted, but Kaggle private stayed `4.711`, so reject further p3p25 blending.
+  - Non-Pixel raw WLS patch:
+    - Unrepaired `samsunga325g_mtv_pe1_raw_wls`: not submitted; changed `1422` rows vs best, max `1865.2006851703695 m`, trip max step `1871.753670863582 m`; reject.
+    - Step-repaired raw WLS: submitted Kaggle `public=3.750`, `private=4.710`; changed `1421` rows, max `21.99336504111517 m`; no private gain and public worsens, reject.
+  - Source AB patch candidates are already submitted and bad:
+    - `pixel4_20210914_from_1450`: Kaggle `public=3.725`, `private=4.825`; local delta max `10.122484 m`.
+    - `sma205u_20221006_from_0555`: Kaggle `public=3.725`, `private=4.833`; local delta max `14.623927 m`.
+    - `sma505u_20230509_from_0555`: Kaggle `public=3.725`, `private=4.832`; local delta max `41.003718 m`.
+    - They also include broad Pixel5/base mismatch movement (`~0.535 m` score vs reference best), so do not reuse these AB outputs as safe candidates.
+  - Focused verification after threshold/test update: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_screen_gsdc2023_local_submissions.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `27 passed`; ruff pass.
 
 ## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
 

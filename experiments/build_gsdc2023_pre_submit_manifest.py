@@ -22,6 +22,7 @@ DEFAULT_RISKY_TRIPS = (
     "2023-05-25-17-32-us-ca-pao-j/pixel6pro",
 )
 REQUIRED_COLUMNS = ("tripId", "UnixTimeMillis", "LatitudeDegrees", "LongitudeDegrees")
+DELTA_CHANGED_THRESHOLD_M = 1.0e-6
 
 
 def sha256_file(path: Path) -> str:
@@ -90,7 +91,7 @@ def _delta_summary(reference: pd.DataFrame, candidate: pd.DataFrame) -> dict[str
     score = gsdc_score_m(deltas)
     return {
         "rows": int(len(reference)),
-        "changed_rows": int(np.count_nonzero(deltas > 1.0e-9)),
+        "changed_rows": int(np.count_nonzero(deltas > DELTA_CHANGED_THRESHOLD_M)),
         "score_m": float(score["score_m"]),
         "p50_m": float(score["p50_m"]),
         "p95_m": float(score["p95_m"]),

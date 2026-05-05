@@ -12,7 +12,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from experiments.build_gsdc2023_pre_submit_manifest import DEFAULT_RISKY_TRIPS, sha256_file
+from experiments.build_gsdc2023_pre_submit_manifest import (
+    DEFAULT_RISKY_TRIPS,
+    DELTA_CHANGED_THRESHOLD_M,
+    sha256_file,
+)
 from experiments.smooth_gsdc2023_submission import gsdc_score_m, haversine_m
 
 
@@ -44,7 +48,7 @@ def _delta_summary(reference: pd.DataFrame, candidate: pd.DataFrame) -> dict[str
     )
     score = gsdc_score_m(deltas)
     return {
-        "changed_rows": int(np.count_nonzero(deltas > 1.0e-9)),
+        "changed_rows": int(np.count_nonzero(deltas > DELTA_CHANGED_THRESHOLD_M)),
         "score_m": float(score["score_m"]),
         "p50_m": float(score["p50_m"]),
         "p95_m": float(score["p95_m"]),
