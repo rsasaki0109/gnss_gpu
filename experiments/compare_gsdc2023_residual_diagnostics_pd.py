@@ -43,6 +43,7 @@ from experiments.gsdc2023_trip_window import (  # noqa: E402
 
 PD_VALUE_KEY_COLUMNS = ["field", "diagnostics_column", "freq", "epoch_index", "utcTimeMillis", "sys", "svid"]
 _DIAGNOSTICS_KEY_COLUMNS = ["freq", "epoch_index", "utcTimeMillis", "sys", "svid"]
+PD_WIDE_VALUE_KEY_COLUMNS = ["diagnostics_column", *_DIAGNOSTICS_KEY_COLUMNS]
 PD_DIAGNOSTICS_VALUE_MAP: tuple[tuple[str, str, str, str], ...] = (
     ("P", "p_residual_m", "matlab_residual", "bridge_residual"),
     ("P", "p_pre_respc_m", "matlab_pre_residual", "bridge_pre_residual"),
@@ -82,6 +83,7 @@ PD_WIDE_EXPORT_COLUMNS = (
     *(row[1] for row in PD_DIAGNOSTICS_VALUE_MAP),
     *[row[1] for row in PD_WIDE_COMPONENT_MAP],
 )
+PD_WIDE_VALUE_COLUMNS = tuple(column for column in PD_WIDE_EXPORT_COLUMNS if column not in _DIAGNOSTICS_KEY_COLUMNS)
 
 BridgeFrameFn = Callable[..., pd.DataFrame]
 
@@ -123,6 +125,45 @@ def matlab_residual_diagnostics_pd_values(diagnostics_path: Path) -> pd.DataFram
 
     frame = _matlab_residual_frame(Path(diagnostics_path))
     return _melt_pd_values(frame, side="matlab")
+
+
+def _normalized_wide_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    out = frame.copy()
+    for column in ("epoch_index", "utcTimeMillis", "sys", "svid", "sat_col"):
+        if column in out.columns:
+            out[column] = pd.to_numeric(out[column], errors="coerce")
+    for column in ("epoch_index", "utcTimeMillis", "sys", "svid"):
+        out[column] = out[column].fillna(0).astype(np.int64)
+    out["freq"] = out["freq"].astype(str)
+    for column in PD_WIDE_VALUE_COLUMNS:
+        if column in out.columns:
+            out[column] = pd.to_numeric(out[column], errors="coerce")
+    return out
+
+
+def _key_frame(keys: set[tuple[object, ...]]) -> pd.DataFrame:
+    if not keys:
+        return pd.DataFrame(columns=_DIAGNOSTICS_KEY_COLUMNS)
+    out = pd.DataFrame(list(keys), columns=_DIAGNOSTICS_KEY_COLUMNS)
+    return _normalized_wide_frame(out).loc[:, _DIAGNOSTICS_KEY_COLUMNS].drop_duplicates()
+
+
+def matlab_residual_diagnostics_pd_wide_frame(
+    diagnostics_path: Path,
+    *,
+    key_filter: set[tuple[object, ...]] | None = None,
+) -> pd.DataFrame:
+    """Return MATLAB diagnostics in the bridge writer-shaped P/D wide subset."""
+
+    frame = pd.read_csv(Path(diagnostics_path))
+    missing = sorted(set(PD_WIDE_EXPORT_COLUMNS) - set(frame.columns))
+    if missing:
+        raise ValueError(f"diagnostics CSV missing P/D wide subset columns {missing}: {diagnostics_path}")
+    out = _normalized_wide_frame(frame.loc[:, list(PD_WIDE_EXPORT_COLUMNS)])
+    if key_filter is not None:
+        out = out.merge(_key_frame(key_filter), on=_DIAGNOSTICS_KEY_COLUMNS, how="inner")
+    out = out.drop_duplicates(_DIAGNOSTICS_KEY_COLUMNS)
+    return out.sort_values(["freq", "sat_col", "sys", "svid", "epoch_index"], kind="mergesort").reset_index(drop=True)
 
 
 def bridge_residual_diagnostics_pd_values(
@@ -169,6 +210,34 @@ def bridge_residual_diagnostics_pd_wide_values(
         inactive_key_filter=inactive_key_filter,
     )
     return bridge_residual_diagnostics_pd_wide_export_frame(bridge)
+
+
+def _normalized_wide_value_frame(frame: pd.DataFrame, *, value_column: str) -> pd.DataFrame:
+    out = frame.copy()
+    if out.empty:
+        return pd.DataFrame(columns=PD_WIDE_VALUE_KEY_COLUMNS + [value_column])
+    for column in ("epoch_index", "utcTimeMillis", "sys", "svid"):
+        out[column] = pd.to_numeric(out[column], errors="coerce").fillna(0).astype(np.int64)
+    out["diagnostics_column"] = out["diagnostics_column"].astype(str)
+    out["freq"] = out["freq"].astype(str)
+    out[value_column] = pd.to_numeric(out[value_column], errors="coerce")
+    out = out[np.isfinite(out[value_column].to_numpy(dtype=np.float64))]
+    return out.drop_duplicates(PD_WIDE_VALUE_KEY_COLUMNS).reset_index(drop=True)
+
+
+def _melt_pd_wide_values(frame: pd.DataFrame, *, side: str) -> pd.DataFrame:
+    value_column = f"{side}_value"
+    rows: list[pd.DataFrame] = []
+    for diagnostics_column in PD_WIDE_VALUE_COLUMNS:
+        if diagnostics_column not in frame.columns:
+            continue
+        sub = frame.loc[:, _DIAGNOSTICS_KEY_COLUMNS].copy()
+        sub["diagnostics_column"] = diagnostics_column
+        sub[value_column] = pd.to_numeric(frame[diagnostics_column], errors="coerce")
+        rows.append(sub)
+    if not rows:
+        return pd.DataFrame(columns=PD_WIDE_VALUE_KEY_COLUMNS + [value_column])
+    return _normalized_wide_value_frame(pd.concat(rows, ignore_index=True), value_column=value_column)
 
 
 def bridge_residual_diagnostics_pd_export_frame(values: pd.DataFrame) -> pd.DataFrame:
@@ -241,6 +310,21 @@ def merge_residual_diagnostics_pd_values(matlab: pd.DataFrame, bridge: pd.DataFr
     return merged.sort_values(PD_VALUE_KEY_COLUMNS).reset_index(drop=True)
 
 
+def merge_residual_diagnostics_pd_wide_values(matlab: pd.DataFrame, bridge: pd.DataFrame) -> pd.DataFrame:
+    merged = matlab.merge(bridge, on=PD_WIDE_VALUE_KEY_COLUMNS, how="outer", indicator=True)
+    merged["side"] = merged["_merge"].map(
+        {"left_only": "matlab_only", "right_only": "bridge_only", "both": "both"},
+    )
+    merged = merged.drop(columns=["_merge"])
+    matched = merged["side"].eq("both")
+    merged["delta"] = np.nan
+    merged.loc[matched, "delta"] = (
+        merged.loc[matched, "bridge_value"].to_numpy(dtype=np.float64)
+        - merged.loc[matched, "matlab_value"].to_numpy(dtype=np.float64)
+    )
+    return merged.sort_values(PD_WIDE_VALUE_KEY_COLUMNS).reset_index(drop=True)
+
+
 def residual_diagnostics_pd_summary(
     merged: pd.DataFrame,
     *,
@@ -297,6 +381,66 @@ def residual_diagnostics_pd_summary(
     return summary, payload
 
 
+def residual_diagnostics_pd_wide_summary(
+    merged: pd.DataFrame,
+    *,
+    max_abs_delta_threshold: float = 5.0e-3,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    if not merged.empty:
+        for diagnostics_column, group in merged.groupby("diagnostics_column", sort=True):
+            matched = group[group["side"].eq("both")]
+            abs_delta = pd.to_numeric(matched.get("delta", pd.Series(dtype=float)), errors="coerce").abs()
+            rows.append(
+                {
+                    "diagnostics_column": diagnostics_column,
+                    "matlab_count": int(np.count_nonzero(group["side"].isin(("both", "matlab_only")))),
+                    "bridge_count": int(np.count_nonzero(group["side"].isin(("both", "bridge_only")))),
+                    "matched_count": int(len(matched)),
+                    "matlab_only": int(np.count_nonzero(group["side"].eq("matlab_only"))),
+                    "bridge_only": int(np.count_nonzero(group["side"].eq("bridge_only"))),
+                    "median_abs_delta": float(abs_delta.median()) if not abs_delta.empty else None,
+                    "p95_abs_delta": float(abs_delta.quantile(0.95)) if not abs_delta.empty else None,
+                    "max_abs_delta": float(abs_delta.max()) if not abs_delta.empty else None,
+                },
+            )
+    summary = pd.DataFrame(rows)
+    total_matlab_only = int(np.count_nonzero(merged["side"].eq("matlab_only"))) if "side" in merged else 0
+    total_bridge_only = int(np.count_nonzero(merged["side"].eq("bridge_only"))) if "side" in merged else 0
+    matched_delta = pd.to_numeric(
+        merged.loc[merged["side"].eq("both"), "delta"] if "side" in merged else pd.Series(dtype=float),
+        errors="coerce",
+    ).abs()
+    max_abs_delta = float(matched_delta.max()) if not matched_delta.empty else float("nan")
+    sat_col = merged[merged["diagnostics_column"].eq("sat_col")] if "diagnostics_column" in merged else pd.DataFrame()
+    sat_col_delta = pd.to_numeric(
+        sat_col.loc[sat_col["side"].eq("both"), "delta"] if not sat_col.empty else pd.Series(dtype=float),
+        errors="coerce",
+    ).abs()
+    sat_col_mismatch_count = int(np.count_nonzero(sat_col_delta.to_numpy(dtype=np.float64) > 0.0))
+    payload = {
+        "total_matlab_count": int(np.count_nonzero(merged["side"].isin(("both", "matlab_only")))) if "side" in merged else 0,
+        "total_bridge_count": int(np.count_nonzero(merged["side"].isin(("both", "bridge_only")))) if "side" in merged else 0,
+        "total_matched_count": int(np.count_nonzero(merged["side"].eq("both"))) if "side" in merged else 0,
+        "total_matlab_only": total_matlab_only,
+        "total_bridge_only": total_bridge_only,
+        "median_abs_delta": float(matched_delta.median()) if not matched_delta.empty else None,
+        "p95_abs_delta": float(matched_delta.quantile(0.95)) if not matched_delta.empty else None,
+        "max_abs_delta": max_abs_delta,
+        "max_abs_delta_threshold": float(max_abs_delta_threshold),
+        "sat_col_mismatch_count": sat_col_mismatch_count,
+        "sat_col_max_abs_delta": float(sat_col_delta.max()) if not sat_col_delta.empty else None,
+        "passed": bool(
+            total_matlab_only == 0
+            and total_bridge_only == 0
+            and sat_col_mismatch_count == 0
+            and np.isfinite(max_abs_delta)
+            and max_abs_delta <= float(max_abs_delta_threshold)
+        ),
+    }
+    return summary, payload
+
+
 def compare_residual_diagnostics_pd_values(
     trip_dir: Path,
     *,
@@ -341,6 +485,64 @@ def compare_residual_diagnostics_pd_values(
         },
     )
     return merged, summary, bridge, payload
+
+
+def compare_residual_diagnostics_pd_wide_values(
+    trip_dir: Path,
+    *,
+    diagnostics_path: Path | None = None,
+    max_epochs: int = 0,
+    multi_gnss: bool = False,
+    apply_observation_mask: bool = True,
+    include_inactive_observations: bool = False,
+    max_abs_delta_threshold: float = 5.0e-3,
+    bridge_frame_fn: BridgeFrameFn = build_bridge_residual_frame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, object]]:
+    trip_dir = Path(trip_dir)
+    if diagnostics_path is None:
+        diagnostics_path = trip_dir / "phone_data_residual_diagnostics.csv"
+    start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
+    matlab_residuals = _trim_epoch_window(_matlab_residual_frame(Path(diagnostics_path)), start_epoch, bridge_max_epochs)
+    residual_key_filter = (
+        set(matlab_residuals[RESIDUAL_KEY_COLUMNS].itertuples(index=False, name=None))
+        if include_inactive_observations
+        else None
+    )
+    wide_key_filter = {
+        tuple(row)
+        for row in matlab_residuals[_DIAGNOSTICS_KEY_COLUMNS].itertuples(index=False, name=None)
+    }
+    matlab_wide = matlab_residual_diagnostics_pd_wide_frame(Path(diagnostics_path), key_filter=wide_key_filter)
+    bridge_wide = bridge_residual_diagnostics_pd_wide_values(
+        trip_dir,
+        max_epochs=max_epochs,
+        multi_gnss=multi_gnss,
+        apply_observation_mask=apply_observation_mask,
+        include_inactive_observations=include_inactive_observations,
+        inactive_key_filter=residual_key_filter,
+        bridge_frame_fn=bridge_frame_fn,
+    )
+    merged = merge_residual_diagnostics_pd_wide_values(
+        _melt_pd_wide_values(matlab_wide, side="matlab"),
+        _melt_pd_wide_values(bridge_wide, side="bridge"),
+    )
+    summary, payload = residual_diagnostics_pd_wide_summary(
+        merged,
+        max_abs_delta_threshold=max_abs_delta_threshold,
+    )
+    payload.update(
+        {
+            "trip_dir": str(trip_dir),
+            "diagnostics_path": str(Path(diagnostics_path)),
+            "max_epochs": int(max_epochs),
+            "multi_gnss": bool(multi_gnss),
+            "apply_observation_mask": bool(apply_observation_mask),
+            "include_inactive_observations": bool(include_inactive_observations),
+            "matlab_wide_row_count": int(len(matlab_wide)),
+            "bridge_wide_row_count": int(len(bridge_wide)),
+        },
+    )
+    return merged, summary, bridge_wide, payload
 
 
 def main() -> None:

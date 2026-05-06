@@ -124,6 +124,154 @@ def _finite_vector_value(matrix: np.ndarray | None, epoch_idx: int, slot_idx: in
     return value if np.isfinite(value).all() else None
 
 
+def _sat_col_lookup_for_trip(
+    trip_dir: Path,
+    *,
+    multi_gnss: bool = False,
+    dual_frequency: bool = True,
+) -> dict[tuple[int, int], int]:
+    raw = _load_raw_gnss_frame(trip_dir / "device_gnss.csv")
+    if multi_gnss:
+        frame = raw[_multi_gnss_mask(raw, dual_frequency=dual_frequency)].copy()
+    elif dual_frequency:
+        signal_types = _signal_types_for_constellation(
+            constellation_type=1,
+            signal_type="GPS_L1_CA",
+            dual_frequency=True,
+        )
+        frame = raw[(raw["ConstellationType"] == 1) & (raw["SignalType"].isin(signal_types))].copy()
+    else:
+        frame = raw[(raw["ConstellationType"] == 1) & (raw["SignalType"] == "GPS_L1_CA")].copy()
+    sat_col_keys = sorted(
+        {
+            (_constellation_to_matlab_sys(int(row.ConstellationType)), int(row.Svid))
+            for row in frame[["ConstellationType", "Svid"]].drop_duplicates().itertuples(index=False)
+        },
+    )
+    return {key: index + 1 for index, key in enumerate(sat_col_keys)}
+
+
+def _ecef_elevation_deg(receiver_xyz: np.ndarray, sat_xyz: np.ndarray) -> float:
+    rx = np.asarray(receiver_xyz, dtype=np.float64)
+    sat = np.asarray(sat_xyz, dtype=np.float64)
+    if rx.shape != (3,) or sat.shape != (3,) or not np.isfinite(rx).all() or not np.isfinite(sat).all():
+        return float("nan")
+    x, y, z = rx
+    lon = np.arctan2(y, x)
+    semi_major = 6378137.0
+    eccentricity_sq = 6.69437999014e-3
+    p = np.hypot(x, y)
+    lat = np.arctan2(z, p * (1.0 - eccentricity_sq))
+    for _ in range(5):
+        sin_lat = np.sin(lat)
+        normal = semi_major / np.sqrt(1.0 - eccentricity_sq * sin_lat * sin_lat)
+        lat = np.arctan2(z + eccentricity_sq * normal * sin_lat, p)
+    up = np.array([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)], dtype=np.float64)
+    los = sat - rx
+    norm = np.linalg.norm(los)
+    if not np.isfinite(norm) or norm <= 0.0:
+        return float("nan")
+    return float(np.degrees(np.arcsin(np.clip(float(np.dot(los / norm, up)), -1.0, 1.0))))
+
+
+def _bridge_batch_component_frame(
+    times_ms: np.ndarray,
+    *,
+    receiver_xyz: np.ndarray | None,
+    receiver_vel: np.ndarray | None,
+    slot_keys: tuple[tuple[int, int, str], ...],
+    sat_ecef: np.ndarray | None,
+    sat_vel: np.ndarray | None,
+    sat_clock_bias_m: np.ndarray | None,
+    sat_clock_drift_mps: np.ndarray | None,
+    rtklib_iono_m: np.ndarray | None,
+    rtklib_tropo_m: np.ndarray | None,
+    sat_col_lookup: dict[tuple[int, int], int],
+    epoch_offset: int = 0,
+) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    if sat_ecef is None:
+        return pd.DataFrame(columns=_KEY_COLUMNS)
+    sat_ecef_values = np.asarray(sat_ecef, dtype=np.float64)
+    if sat_ecef_values.ndim != 3:
+        return pd.DataFrame(columns=_KEY_COLUMNS)
+    slot_freq = np.array([_freq_label(key[2]) for key in slot_keys], dtype=object)
+    epoch_count = min(len(times_ms), sat_ecef_values.shape[0])
+    slot_count = min(len(slot_keys), sat_ecef_values.shape[1])
+    for epoch_idx in range(epoch_count):
+        rx = (
+            np.asarray(receiver_xyz[epoch_idx], dtype=np.float64)
+            if receiver_xyz is not None and 0 <= epoch_idx < len(receiver_xyz)
+            else None
+        )
+        rx_vel = (
+            np.asarray(receiver_vel[epoch_idx], dtype=np.float64)
+            if receiver_vel is not None and 0 <= epoch_idx < len(receiver_vel)
+            else None
+        )
+        for slot_idx in range(slot_count):
+            sat_xyz = _finite_vector_value(sat_ecef_values, epoch_idx, slot_idx)
+            if sat_xyz is None:
+                continue
+            constellation, svid, _signal_type = slot_keys[int(slot_idx)]
+            sys = _constellation_to_matlab_sys(int(constellation))
+            base = {
+                "freq": str(slot_freq[int(slot_idx)]),
+                "epoch_index": int(epoch_idx) + 1 + int(epoch_offset),
+                "utcTimeMillis": int(round(float(times_ms[int(epoch_idx)]))),
+                "sys": sys,
+                "svid": int(svid),
+                "bridge_sat_x": float(sat_xyz[0]),
+                "bridge_sat_y": float(sat_xyz[1]),
+                "bridge_sat_z": float(sat_xyz[2]),
+            }
+            sat_col = sat_col_lookup.get((int(sys), int(svid)))
+            if sat_col is not None:
+                base["bridge_sat_col"] = int(sat_col)
+            sat_velocity = _finite_vector_value(sat_vel, epoch_idx, slot_idx)
+            if sat_velocity is not None:
+                base.update(
+                    {
+                        "bridge_sat_vx": float(sat_velocity[0]),
+                        "bridge_sat_vy": float(sat_velocity[1]),
+                        "bridge_sat_vz": float(sat_velocity[2]),
+                    },
+                )
+            for source, target in (
+                (sat_clock_bias_m, "bridge_sat_clock_bias"),
+                (sat_clock_drift_mps, "bridge_sat_clock_drift"),
+                (rtklib_iono_m, "bridge_sat_iono"),
+                (rtklib_tropo_m, "bridge_sat_trop"),
+            ):
+                value = _finite_matrix_value(source, epoch_idx, slot_idx)
+                if value is not None:
+                    base[target] = float(value)
+            if rx is not None and np.isfinite(rx).all():
+                base.update(
+                    {
+                        "bridge_rcv_x": float(rx[0]),
+                        "bridge_rcv_y": float(rx[1]),
+                        "bridge_rcv_z": float(rx[2]),
+                        "bridge_sat_elevation": _ecef_elevation_deg(rx, sat_xyz),
+                    },
+                )
+            if rx_vel is not None and np.isfinite(rx_vel).all():
+                base.update(
+                    {
+                        "bridge_rcv_vx": float(rx_vel[0]),
+                        "bridge_rcv_vy": float(rx_vel[1]),
+                        "bridge_rcv_vz": float(rx_vel[2]),
+                    },
+                )
+            for field in ("P", "D"):
+                item = dict(base)
+                item["field"] = field
+                rows.append(item)
+    if not rows:
+        return pd.DataFrame(columns=_KEY_COLUMNS)
+    return pd.DataFrame(rows).drop_duplicates(_KEY_COLUMNS)
+
+
 def _bridge_component_frame(
     trip_dir: Path,
     times_ms: np.ndarray,
@@ -139,6 +287,7 @@ def _bridge_component_frame(
     sat_clock_drift_mps: np.ndarray | None = None,
     rtklib_iono_m: np.ndarray | None = None,
     rtklib_tropo_m: np.ndarray | None = None,
+    sat_col_lookup: dict[tuple[int, int], int] | None = None,
     epoch_offset: int = 0,
 ) -> pd.DataFrame:
     raw = _load_raw_gnss_frame(trip_dir / "device_gnss.csv")
@@ -186,13 +335,12 @@ def _bridge_component_frame(
         if slot_keys is not None
         else {}
     )
-    sat_col_keys = sorted(
-        {
-            (_constellation_to_matlab_sys(int(row.ConstellationType)), int(row.Svid))
-            for row in frame[["ConstellationType", "Svid"]].drop_duplicates().itertuples(index=False)
-        },
-    )
-    sat_col_lookup = {key: index + 1 for index, key in enumerate(sat_col_keys)}
+    if sat_col_lookup is None:
+        sat_col_lookup = _sat_col_lookup_for_trip(
+            trip_dir,
+            multi_gnss=multi_gnss,
+            dual_frequency=dual_frequency,
+        )
     epoch_lookup = {
         int(round(float(time_ms))): (idx + 1 + int(epoch_offset), idx)
         for idx, time_ms in enumerate(times_ms)
@@ -653,6 +801,11 @@ def build_bridge_residual_frame(
                                 epoch_offset=start_epoch,
                             )
 
+    sat_col_lookup = _sat_col_lookup_for_trip(
+        trip_dir,
+        multi_gnss=multi_gnss,
+        dual_frequency=dual_frequency,
+    )
     component_frame = _bridge_component_frame(
         trip_dir,
         times_ms,
@@ -683,8 +836,46 @@ def build_bridge_residual_frame(
             if getattr(batch, "rtklib_tropo_m", None) is not None
             else None
         ),
+        sat_col_lookup=sat_col_lookup,
         epoch_offset=start_epoch,
     )
+    batch_component_frame = _bridge_batch_component_frame(
+        times_ms,
+        receiver_xyz=np.asarray(batch.kaggle_wls, dtype=np.float64),
+        receiver_vel=receiver_velocity,
+        slot_keys=slot_keys,
+        sat_ecef=np.asarray(batch.sat_ecef, dtype=np.float64),
+        sat_vel=np.asarray(batch.sat_vel, dtype=np.float64) if batch.sat_vel is not None else None,
+        sat_clock_bias_m=(
+            np.asarray(getattr(batch, "sat_clock_bias_matrix", None), dtype=np.float64)
+            if getattr(batch, "sat_clock_bias_matrix", None) is not None
+            else None
+        ),
+        sat_clock_drift_mps=(
+            np.asarray(getattr(batch, "sat_clock_drift_mps", None), dtype=np.float64)
+            if getattr(batch, "sat_clock_drift_mps", None) is not None
+            else None
+        ),
+        rtklib_iono_m=(
+            np.asarray(getattr(batch, "rtklib_iono_m", None), dtype=np.float64)
+            if getattr(batch, "rtklib_iono_m", None) is not None
+            else None
+        ),
+        rtklib_tropo_m=(
+            np.asarray(getattr(batch, "rtklib_tropo_m", None), dtype=np.float64)
+            if getattr(batch, "rtklib_tropo_m", None) is not None
+            else None
+        ),
+        sat_col_lookup=sat_col_lookup,
+        epoch_offset=start_epoch,
+    )
+    component_frames = [frame for frame in (component_frame, batch_component_frame) if not frame.empty]
+    if component_frames:
+        component_frame = pd.concat(component_frames, ignore_index=True).groupby(
+            _KEY_COLUMNS,
+            sort=False,
+            as_index=False,
+        ).first()
     if not rows:
         return pd.DataFrame(
             columns=_KEY_COLUMNS
