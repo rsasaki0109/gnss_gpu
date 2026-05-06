@@ -63,6 +63,12 @@ PRACTICAL_STATUS_WEIGHTS = {
     "partial": 0.60,
 }
 
+MATLAB_PARITY_SIDECARS = (
+    "phone_data_factor_counts.csv",
+    "phone_data_factor_mask.csv",
+    "phone_data_residual_diagnostics.csv",
+)
+
 
 def preprocessing_gap_rows() -> list[PreprocessingGapRow]:
     """Static coverage table for ``ref/gsdc2023/preprocessing.m``."""
@@ -335,6 +341,19 @@ def _present(*paths: Path) -> bool:
     return any(path.is_file() for path in paths)
 
 
+def _matlab_sidecar_presence(trip_dir: Path) -> dict[str, object]:
+    flags = {
+        f"{path.stem}_present": path.is_file()
+        for path in (trip_dir / name for name in MATLAB_PARITY_SIDECARS)
+    }
+    present_count = int(sum(bool(value) for value in flags.values()))
+    return {
+        **flags,
+        "matlab_parity_sidecar_count": present_count,
+        "matlab_parity_sidecar_complete": present_count == len(MATLAB_PARITY_SIDECARS),
+    }
+
+
 def _bridge_counts(
     data_root: Path,
     spec: TripSpec,
@@ -414,6 +433,7 @@ def _trip_record(
     bridge_p_count = bridge_counts.get("bridge_p_count")
     bridge_d_count = bridge_counts.get("bridge_d_count")
     bridge_tdcp_count = bridge_counts.get("bridge_tdcp_count")
+    sidecars = _matlab_sidecar_presence(trip_dir)
 
     record: dict[str, object] = {
         "trip": spec.trip,
@@ -433,6 +453,7 @@ def _trip_record(
         "gt_mat_present": (trip_dir / "gt.mat").is_file(),
         "result_gnss_present": (trip_dir / "result_gnss.mat").is_file(),
         "result_gnss_imu_present": (trip_dir / "result_gnss_imu.mat").is_file(),
+        **sidecars,
         "settings_csv_present": audit.get("settings_csv_present"),
         "setting_row_present": audit.get("setting_row_present"),
         "base_name": audit.get("base_name"),
@@ -539,9 +560,17 @@ def summary_from_records(records: pd.DataFrame | None = None) -> dict[str, objec
             "ground_truth_csv_present",
             "imu_sync_checked",
             "imu_sync_ready",
+            "phone_data_factor_counts_present",
+            "phone_data_factor_mask_present",
+            "phone_data_residual_diagnostics_present",
+            "matlab_parity_sidecar_complete",
         ):
             if col in records.columns:
                 summary[col] = int(records[col].fillna(False).astype(bool).sum())
+        if "matlab_parity_sidecar_count" in records.columns:
+            values = pd.to_numeric(records["matlab_parity_sidecar_count"], errors="coerce")
+            summary["matlab_parity_sidecar_count_sum"] = int(values.fillna(0).sum())
+            summary["matlab_parity_sidecar_count_max"] = int(values.max()) if values.notna().any() else 0
         if "imu_sync_checked" in records.columns:
             summary["imu_sync_skipped"] = int((~records["imu_sync_checked"].fillna(False).astype(bool)).sum())
         if "base_correction_status" in records.columns:
@@ -619,6 +648,7 @@ def main() -> None:
 
 __all__ = [
     "PRACTICAL_STATUS_WEIGHTS",
+    "MATLAB_PARITY_SIDECARS",
     "PreprocessingGapRow",
     "STRICT_STATUS_WEIGHTS",
     "TripSpec",

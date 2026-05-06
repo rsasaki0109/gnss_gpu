@@ -215,6 +215,17 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - expected fail-closed result: `pre-submit previous trip check failed for pixel5phone_3p375_sjc_r0p84375_p6p0 2021-11-05-18-28-us-ca-mtv-m/pixel6pro: previous_changed_rows=1444, previous_max_m=0.7514168992409354`
   - The regenerated manifest still records latest MATLAB gate debug fields: summary SHA `0c38f7233e9b4484344f267c71c2e5d84d2a59c5bffdf3e2ead6b8684738144b`, factor side-only `0`, raw count failures `0`, residual internal failures `0`.
   - `pre_submit_trip_delta_checks.csv` confirms all three P6P0 candidates have `input_changed_rows=0` for risky Pixel6Pro trips but nonzero previous-safe movement: `1444 / 1019 / 1291` rows with max movement `0.751m / 0.814m / 0.814m`.
+- 2026-05-07 preprocessing / phone_data sidecar inventory:
+  - `audit_gsdc2023_preprocessing_gap.py` trip scan now records the MATLAB parity sidecar bundle used by the equivalence gate:
+    - `phone_data_factor_counts.csv`
+    - `phone_data_factor_mask.csv`
+    - `phone_data_residual_diagnostics.csv`
+  - Real-data quick scan command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_preprocessing_gap.py --scan-trips --quick --no-validation --output-dir experiments/results/preprocessing_gap_sidecar_probe_20260507`
+  - output: `experiments/results/preprocessing_gap_sidecar_probe_20260507/gsdc2023_preprocessing_gap_20260507_102211`
+  - result: `trip_count=196`, `raw_device_gnss_present=196`, `raw_gnss_log_present=196`, `device_imu_present=196`, `base_correction_ready=196`
+  - MATLAB export bundle coverage: `phone_data_present=12`, each sidecar present on `12` trips, `matlab_parity_sidecar_complete=12`, sidecar count sum `36`.
+  - Interpretation: current strict MATLAB equivalence proof is anchored to 12 MATLAB-export golden trips; the remaining 184 trips are processed through the Python raw bridge without MATLAB sidecar parity artifacts.
+  - Next: decide whether to keep sidecar exports as golden fixtures for gate/regression, or implement a Python `phone_data.mat`/sidecar writer if artifact compatibility is required beyond raw-bridge behavioral equivalence.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
