@@ -11,7 +11,11 @@ import pytest
 from scipy.io import savemat
 
 from experiments.compare_gsdc2023_factor_masks import build_bridge_factor_mask, compare_factor_masks
-from experiments.compare_gsdc2023_phone_data_raw_bridge_counts import build_comparison_frames
+from experiments.compare_gsdc2023_phone_data_raw_bridge_counts import (
+    bridge_factor_counts_frame,
+    build_comparison_frames,
+    write_bridge_factor_count_exports,
+)
 from experiments.gsdc2023_raw_bridge import _geometric_range_with_sagnac
 
 
@@ -150,6 +154,27 @@ def test_compare_phone_data_counts_against_raw_bridge(tmp_path):
     assert int(l1["bridge_count"]) == 8
     assert int(l5["phone_count"]) == 4
     assert int(l5["bridge_count"]) == 4
+
+    generated = bridge_factor_counts_frame(comparison_df, "train/courseA/phoneA")
+    assert generated.to_dict("records") == [
+        {"freq": "L1", "field": "P", "count": 8},
+        {"freq": "L1", "field": "D", "count": 8},
+        {"freq": "L1", "field": "L", "count": 4},
+        {"freq": "L1", "field": "resPc", "count": 8},
+        {"freq": "L1", "field": "resD", "count": 8},
+        {"freq": "L1", "field": "resL", "count": 4},
+        {"freq": "L5", "field": "P", "count": 8},
+        {"freq": "L5", "field": "D", "count": 8},
+        {"freq": "L5", "field": "L", "count": 4},
+        {"freq": "L5", "field": "resPc", "count": 8},
+        {"freq": "L5", "field": "resD", "count": 8},
+        {"freq": "L5", "field": "resL", "count": 4},
+    ]
+
+    written = write_bridge_factor_count_exports(comparison_df, tmp_path / "exports")
+    assert len(written) == 1
+    exported = pd.read_csv(tmp_path / "exports" / "train" / "courseA" / "phoneA" / "phone_data_factor_counts.csv")
+    pd.testing.assert_frame_equal(exported, generated)
 
 
 def test_compare_phone_data_counts_defaults_to_gps_only_scope(tmp_path):

@@ -226,6 +226,16 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - MATLAB export bundle coverage: `phone_data_present=12`, each sidecar present on `12` trips, `matlab_parity_sidecar_complete=12`, sidecar count sum `36`.
   - Interpretation: current strict MATLAB equivalence proof is anchored to 12 MATLAB-export golden trips; the remaining 184 trips are processed through the Python raw bridge without MATLAB sidecar parity artifacts.
   - Next: decide whether to keep sidecar exports as golden fixtures for gate/regression, or implement a Python `phone_data.mat`/sidecar writer if artifact compatibility is required beyond raw-bridge behavioral equivalence.
+- 2026-05-07 Python factor-count sidecar writer:
+  - `compare_gsdc2023_phone_data_raw_bridge_counts.py --write-bridge-factor-counts` now writes Python-generated MATLAB-style `phone_data_factor_counts.csv` files under `bridge_factor_counts/<split>/<course>/<phone>/`.
+  - The writer uses the same GPS L1/L5 bridge-count rows as the strict count parity gate and writes columns `freq,field,count` in MATLAB export order.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py` => `14 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data probe:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_phone_data_raw_bridge_counts.py --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 --max-epochs 0 --write-bridge-factor-counts --output-dir experiments/results/phone_data_factor_counts_writer_probe_20260507`
+    - output: `experiments/results/phone_data_factor_counts_writer_probe_20260507/gsdc2023_phone_data_raw_bridge_count_parity_20260507_104934`
+    - result: `bridge_factor_count_exports_written=1`, `matched_abs_delta_total=0`, `count_delta_failure_count=0`, `count_parity_ratio=1.0`
+    - generated CSV was byte-for-line equivalent to MATLAB `phone_data_factor_counts.csv` for `train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4` under `diff -u`.
+  - Next: extend the same pattern to `phone_data_factor_mask.csv` writer first, then `phone_data_residual_diagnostics.csv` only after deciding whether inactive diagnostics rows should remain golden-key driven.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`

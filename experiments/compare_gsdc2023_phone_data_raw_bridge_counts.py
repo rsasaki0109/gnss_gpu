@@ -317,6 +317,45 @@ def _comparison_rows(
     return rows
 
 
+def bridge_factor_counts_frame(comparison: pd.DataFrame, trip: str) -> pd.DataFrame:
+    """Build a MATLAB-style ``phone_data_factor_counts.csv`` frame from bridge counts."""
+
+    required = {"trip", "freq", "field", "bridge_count"}
+    missing = required - set(comparison.columns)
+    if missing:
+        raise ValueError(f"count comparison is missing columns: {sorted(missing)}")
+
+    selected = comparison[comparison["trip"].astype(str) == str(trip)].copy()
+    if selected.empty:
+        raise ValueError(f"trip is missing from count comparison: {trip}")
+
+    rows: list[dict[str, object]] = []
+    for freq in _FREQS:
+        for field in _FIELDS:
+            match = selected[(selected["freq"].astype(str) == freq) & (selected["field"].astype(str) == field)]
+            if match.shape[0] != 1:
+                raise ValueError(f"expected one bridge count for {trip} {freq}/{field}, got {match.shape[0]}")
+            count = match.iloc[0]["bridge_count"]
+            if pd.isna(count):
+                raise ValueError(f"bridge count is missing for {trip} {freq}/{field}")
+            rows.append({"freq": freq, "field": field, "count": int(count)})
+    return pd.DataFrame(rows, columns=["freq", "field", "count"])
+
+
+def write_bridge_factor_count_exports(comparison: pd.DataFrame, output_dir: Path) -> list[Path]:
+    """Write Python-generated factor-count sidecars under ``output_dir/<trip>/``."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for trip in sorted(str(value) for value in comparison["trip"].dropna().unique()):
+        frame = bridge_factor_counts_frame(comparison, trip)
+        path = output_dir / trip / "phone_data_factor_counts.csv"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(path, index=False)
+        written.append(path)
+    return written
+
+
 def _trip_summary(
     trip: TripSpec,
     phone_counts: dict[str, dict[str, int]] | None,
@@ -623,6 +662,11 @@ def main() -> None:
         default=None,
         help="optional phone_data_residual_diagnostics.csv used to force bridge P/D/L factor availability",
     )
+    parser.add_argument(
+        "--write-bridge-factor-counts",
+        action="store_true",
+        help="write Python-generated phone_data_factor_counts.csv files under the audit output directory",
+    )
     _add_output_dir_arg(parser)
     args = parser.parse_args()
 
@@ -649,6 +693,10 @@ def main() -> None:
     )
     comparison_df.to_csv(out_dir / "count_comparison.csv", index=False)
     summary_df.to_csv(out_dir / "trip_summary.csv", index=False)
+    if args.write_bridge_factor_counts:
+        written = write_bridge_factor_count_exports(comparison_df, out_dir / "bridge_factor_counts")
+        summary["bridge_factor_count_exports_written"] = int(len(written))
+        summary["bridge_factor_count_export_dir"] = str(out_dir / "bridge_factor_counts")
     _write_summary_json(out_dir, summary)
     _print_summary_and_output_dir(summary, out_dir)
 
