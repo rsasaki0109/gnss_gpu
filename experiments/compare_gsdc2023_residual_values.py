@@ -186,6 +186,13 @@ def _bridge_component_frame(
         if slot_keys is not None
         else {}
     )
+    sat_col_keys = sorted(
+        {
+            (_constellation_to_matlab_sys(int(row.ConstellationType)), int(row.Svid))
+            for row in frame[["ConstellationType", "Svid"]].drop_duplicates().itertuples(index=False)
+        },
+    )
+    sat_col_lookup = {key: index + 1 for index, key in enumerate(sat_col_keys)}
     epoch_lookup = {
         int(round(float(time_ms))): (idx + 1 + int(epoch_offset), idx)
         for idx, time_ms in enumerate(times_ms)
@@ -250,6 +257,9 @@ def _bridge_component_frame(
             "bridge_sat_trop": trop,
             "bridge_sat_elevation": float(getattr(product_row, "SvElevationDegrees", np.nan)),
         }
+        sat_col = sat_col_lookup.get((int(base["sys"]), int(base["svid"])))
+        if sat_col is not None:
+            base["bridge_sat_col"] = int(sat_col)
         if slot_idx is not None:
             actual_sat_xyz = _finite_vector_value(sat_ecef, array_idx, slot_idx)
             if actual_sat_xyz is not None:
