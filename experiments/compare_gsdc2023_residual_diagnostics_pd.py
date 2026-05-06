@@ -76,16 +76,80 @@ PD_WIDE_COMPONENT_MAP: tuple[tuple[str | None, str, str], ...] = (
     (None, "rcv_vx_mps", "bridge_rcv_vx"),
     (None, "rcv_vy_mps", "bridge_rcv_vy"),
     (None, "rcv_vz_mps", "bridge_rcv_vz"),
+    ("P", "obs_clk_m", "bridge_obs_clk"),
+    ("D", "obs_dclk_m", "bridge_obs_dclk"),
+    ("P", "p_isb_m", "bridge_isb"),
+)
+PD_WIDE_BOOLEAN_MAP: tuple[tuple[str, str, str], ...] = (
+    ("P", "p_pre_finite", "bridge_pre_finite"),
+    ("D", "d_pre_finite", "bridge_pre_finite"),
+    ("P", "p_factor_finite", "bridge_factor_finite"),
+    ("D", "d_factor_finite", "bridge_factor_finite"),
 )
 PD_WIDE_EXPORT_COLUMNS = (
-    *_DIAGNOSTICS_KEY_COLUMNS,
     "sat_col",
-    *(row[1] for row in PD_DIAGNOSTICS_VALUE_MAP),
-    *[row[1] for row in PD_WIDE_COMPONENT_MAP],
+    "p_residual_m",
+    "d_residual_mps",
+    "p_pre_respc_m",
+    "d_pre_resd_m",
+    "p_corrected_m",
+    "p_range_m",
+    "d_obs_mps",
+    "d_model_mps",
+    "sat_x_m",
+    "sat_y_m",
+    "sat_z_m",
+    "sat_vx_mps",
+    "sat_vy_mps",
+    "sat_vz_mps",
+    "sat_clock_bias_m",
+    "sat_clock_drift_mps",
+    "sat_iono_m",
+    "sat_trop_m",
+    "sat_range_m",
+    "sat_rate_mps",
+    "sat_elevation_deg",
+    "rcv_x_m",
+    "rcv_y_m",
+    "rcv_z_m",
+    "rcv_vx_mps",
+    "rcv_vy_mps",
+    "rcv_vz_mps",
+    "obs_clk_m",
+    "obs_dclk_m",
+    "p_isb_m",
+    "p_clock_bias_m",
+    "d_clock_bias_mps",
+    "p_pre_finite",
+    "d_pre_finite",
+    "p_factor_finite",
+    "d_factor_finite",
 )
-PD_WIDE_VALUE_COLUMNS = tuple(column for column in PD_WIDE_EXPORT_COLUMNS if column not in _DIAGNOSTICS_KEY_COLUMNS)
+PD_WIDE_FRAME_COLUMNS = (*_DIAGNOSTICS_KEY_COLUMNS, *PD_WIDE_EXPORT_COLUMNS)
+PD_WIDE_VALUE_COLUMNS = PD_WIDE_EXPORT_COLUMNS
 
 BridgeFrameFn = Callable[..., pd.DataFrame]
+
+
+def _bridge_pd_factor_finite_key_filter(
+    trip_dir: Path,
+    *,
+    max_epochs: int,
+    multi_gnss: bool,
+) -> set[tuple[object, ...]]:
+    from experiments.compare_gsdc2023_factor_masks import build_bridge_factor_mask
+
+    frame = build_bridge_factor_mask(
+        Path(trip_dir),
+        max_epochs=max_epochs,
+        multi_gnss=multi_gnss,
+    )
+    if frame.empty:
+        return set()
+    frame = frame[frame["field"].astype(str).isin(("P", "D"))].copy()
+    if frame.empty:
+        return set()
+    return set(frame[RESIDUAL_KEY_COLUMNS].itertuples(index=False, name=None))
 
 
 def _normalized_value_frame(frame: pd.DataFrame, *, value_column: str) -> pd.DataFrame:
@@ -156,10 +220,10 @@ def matlab_residual_diagnostics_pd_wide_frame(
     """Return MATLAB diagnostics in the bridge writer-shaped P/D wide subset."""
 
     frame = pd.read_csv(Path(diagnostics_path))
-    missing = sorted(set(PD_WIDE_EXPORT_COLUMNS) - set(frame.columns))
+    missing = sorted(set(PD_WIDE_FRAME_COLUMNS) - set(frame.columns))
     if missing:
         raise ValueError(f"diagnostics CSV missing P/D wide subset columns {missing}: {diagnostics_path}")
-    out = _normalized_wide_frame(frame.loc[:, list(PD_WIDE_EXPORT_COLUMNS)])
+    out = _normalized_wide_frame(frame.loc[:, list(PD_WIDE_FRAME_COLUMNS)])
     if key_filter is not None:
         out = out.merge(_key_frame(key_filter), on=_DIAGNOSTICS_KEY_COLUMNS, how="inner")
     out = out.drop_duplicates(_DIAGNOSTICS_KEY_COLUMNS)
@@ -197,10 +261,17 @@ def bridge_residual_diagnostics_pd_wide_values(
     apply_observation_mask: bool = True,
     include_inactive_observations: bool = False,
     inactive_key_filter: set[tuple[object, ...]] | None = None,
+    factor_finite_key_filter: set[tuple[object, ...]] | None = None,
     bridge_frame_fn: BridgeFrameFn = build_bridge_residual_frame,
 ) -> pd.DataFrame:
     """Return bridge P/D diagnostics in a wide MATLAB-sidecar column subset."""
 
+    if factor_finite_key_filter is None:
+        factor_finite_key_filter = _bridge_pd_factor_finite_key_filter(
+            Path(trip_dir),
+            max_epochs=max_epochs,
+            multi_gnss=multi_gnss,
+        )
     bridge = bridge_frame_fn(
         Path(trip_dir),
         max_epochs=max_epochs,
@@ -208,6 +279,7 @@ def bridge_residual_diagnostics_pd_wide_values(
         apply_observation_mask=apply_observation_mask,
         include_inactive_observations=include_inactive_observations,
         inactive_key_filter=inactive_key_filter,
+        factor_finite_key_filter=factor_finite_key_filter,
     )
     return bridge_residual_diagnostics_pd_wide_export_frame(bridge)
 
@@ -265,7 +337,7 @@ def bridge_residual_diagnostics_pd_wide_export_frame(bridge_residuals: pd.DataFr
     """Return a writer-shaped P/D diagnostics subset with shared component columns."""
 
     if bridge_residuals.empty:
-        return pd.DataFrame(columns=list(PD_WIDE_EXPORT_COLUMNS))
+        return pd.DataFrame(columns=list(PD_WIDE_FRAME_COLUMNS))
     rows: list[pd.DataFrame] = []
     for field in ("P", "D"):
         sub = bridge_residuals.loc[bridge_residuals["field"].astype(str).eq(field)].copy()
@@ -280,11 +352,14 @@ def bridge_residual_diagnostics_pd_wide_export_frame(bridge_residuals: pd.DataFr
         for component_field, diagnostics_column, bridge_column in PD_WIDE_COMPONENT_MAP:
             if component_field in (None, field) and bridge_column in sub.columns:
                 key[diagnostics_column] = pd.to_numeric(sub[bridge_column], errors="coerce")
+        for boolean_field, diagnostics_column, bridge_column in PD_WIDE_BOOLEAN_MAP:
+            if boolean_field == field and bridge_column in sub.columns:
+                key[diagnostics_column] = pd.to_numeric(sub[bridge_column], errors="coerce")
         rows.append(key)
     if not rows:
-        return pd.DataFrame(columns=list(PD_WIDE_EXPORT_COLUMNS))
+        return pd.DataFrame(columns=list(PD_WIDE_FRAME_COLUMNS))
     out = pd.concat(rows, ignore_index=True)
-    for column in PD_WIDE_EXPORT_COLUMNS:
+    for column in PD_WIDE_FRAME_COLUMNS:
         if column not in out.columns:
             out[column] = np.nan
     for column in ("epoch_index", "utcTimeMillis", "sys", "svid", "sat_col"):
@@ -292,7 +367,7 @@ def bridge_residual_diagnostics_pd_wide_export_frame(bridge_residuals: pd.DataFr
     out["freq"] = out["freq"].astype(str)
     out = out.groupby(_DIAGNOSTICS_KEY_COLUMNS, sort=False, as_index=False).first()
     out = out.sort_values(["freq", "sat_col", "sys", "svid", "epoch_index"], kind="mergesort")
-    return out.loc[:, list(PD_WIDE_EXPORT_COLUMNS)].reset_index(drop=True)
+    return out.loc[:, list(PD_WIDE_FRAME_COLUMNS)].reset_index(drop=True)
 
 
 def merge_residual_diagnostics_pd_values(matlab: pd.DataFrame, bridge: pd.DataFrame) -> pd.DataFrame:
@@ -520,6 +595,11 @@ def compare_residual_diagnostics_pd_wide_values(
         apply_observation_mask=apply_observation_mask,
         include_inactive_observations=include_inactive_observations,
         inactive_key_filter=residual_key_filter,
+        factor_finite_key_filter=_bridge_pd_factor_finite_key_filter(
+            trip_dir,
+            max_epochs=max_epochs,
+            multi_gnss=multi_gnss,
+        ),
         bridge_frame_fn=bridge_frame_fn,
     )
     merged = merge_residual_diagnostics_pd_wide_values(
