@@ -257,6 +257,21 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - writer result: `bridge_factor_mask_export_count=12`, `bridge_factor_mask_export_byte_equivalent_count=12`, `bridge_factor_mask_export_failure_count=0`
   - Interpretation: Python can now regenerate both `phone_data_factor_counts.csv` and `phone_data_factor_mask.csv` byte-equivalent to the 12-trip MATLAB golden bundle. The remaining MATLAB sidecar dependency is `phone_data_residual_diagnostics.csv`.
   - Next: decide whether residual diagnostics should be generated from bridge internal state directly or remain a golden-key fixture for inactive-row injection.
+- 2026-05-07 residual diagnostics sidecar inventory:
+  - Added `audit_gsdc2023_residual_diagnostics_sidecar.py` to classify the 44-column MATLAB `phone_data_residual_diagnostics.csv` schema and scan sidecar coverage/counts across the 12-trip MATLAB export bundle.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_residual_diagnostics_sidecar.py` => `2 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data inventory command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_sidecar.py --output-dir experiments/results/residual_diagnostics_sidecar_inventory_20260507`
+  - output: `experiments/results/residual_diagnostics_sidecar_inventory_20260507/gsdc2023_residual_diagnostics_sidecar_audit_20260507_115109`
+  - result: `trip_count=12`, `diagnostics_present_count=12`, `diagnostics_complete_schema_count=12`, `expected_column_count=44`, `total_rows=258537`
+  - finite availability totals:
+    - `p_pre_finite=258537`, `d_pre_finite=258537`, `l_pre_finite=165479`
+    - `p_factor_finite=221710`, `d_factor_finite=205635`, `l_factor_finite=153487`
+  - Column roles:
+    - keys / export aid: `freq,epoch_index,utcTimeMillis,sys,svid,sat_col`
+    - factor availability used by mask overlay and factor-mask rebuild: `p_factor_finite,d_factor_finite,l_factor_finite`
+    - pre-residual availability used by residual parity and prekey diagnostics: `p_pre_finite,d_pre_finite,l_pre_finite`
+    - P/D residual/internal components are already reproduced in `compare_gsdc2023_residual_values.py` with strict internal-delta gates.
+  - Interpretation: unlike factor counts/masks, residual diagnostics is not just an output artifact; it is still a golden-key input for inactive row injection. Writer work should start with a bridge-vs-MATLAB diagnostics key/value export for P/D, then separately decide how to generate or eliminate `l_pre_finite/l_factor_finite` golden-key dependency.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
