@@ -281,6 +281,15 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - output: `experiments/results/residual_diagnostics_pd_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_20260507_122058`
     - result: `passed=true`, `total_matlab_count=3400`, `total_bridge_count=3400`, `total_matched_count=3400`, `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=4.323213641971302e-05`
   - Interpretation: the bridge can now emit a writer-shaped P/D diagnostics subset with MATLAB sidecar column names. Remaining gaps for a full `phone_data_residual_diagnostics.csv` writer are `sat_col` ordering, shared satellite/receiver component columns in wide form, and L finite columns (`l_pre_finite,l_factor_finite`).
+- 2026-05-07 12-trip residual diagnostics P/D subset audit:
+  - Added `audit_gsdc2023_residual_diagnostics_pd_parity.py` to run the P/D sidecar-column parity check across the 12-trip MATLAB sidecar bundle and optionally write per-trip bridge P/D subset CSVs.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py tests/test_compare_gsdc2023_residual_diagnostics_pd.py` => `4 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data 12-trip full-window probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --max-epochs 0 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-subsets --output-dir experiments/results/residual_diagnostics_pd_12trip_probe_20260507 --verbose`
+    - output: `experiments/results/residual_diagnostics_pd_12trip_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_audit_20260507_124013`
+    - result: `passed=true`, `completed_trip_count=12`, `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - writer-shaped export result: `bridge_subset_export_count=12`, `bridge_subset_export_total_rows=258537`, `bridge_subset_export_total_values=2585370`
+  - Interpretation: all P/D value columns in the MATLAB residual diagnostics sidecar are now covered full-window across the 12-trip bundle with no key side-only rows. Full sidecar writer work can build on this by adding `sat_col`/wide component columns and then resolving the L finite-column dependency.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
