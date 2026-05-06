@@ -289,7 +289,12 @@ def test_matlab_equivalence_gate_can_be_required_from_pre_submit_manifest(tmp_pa
         "passed": True,
         "equivalence_claim": "matlab_equivalent",
         "factor_mask_passed": True,
+        "factor_total_matlab_only": 0,
+        "factor_total_bridge_only": 0,
+        "factor_side_only_failure_count": 0,
         "raw_bridge_counts_passed": True,
+        "raw_bridge_matched_abs_delta_total": 0,
+        "raw_bridge_count_delta_failure_count": 0,
         "residual_values_passed": True,
         "residual_total_matlab_only": 0,
         "residual_total_bridge_only": 0,
@@ -315,7 +320,12 @@ def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
             "passed": True,
             "equivalence_claim": "matlab_equivalent",
             "factor_mask_passed": True,
+            "factor_total_matlab_only": 0,
+            "factor_total_bridge_only": 0,
+            "factor_side_only_failure_count": 0,
             "raw_bridge_counts_passed": True,
+            "raw_bridge_matched_abs_delta_total": 0,
+            "raw_bridge_count_delta_failure_count": 0,
             "residual_values_passed": True,
             "residual_total_matlab_only": 0,
             "residual_total_bridge_only": 0,
@@ -327,6 +337,26 @@ def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
         },
     }
     assert assert_matlab_equivalence_gate(clean)["equivalence_claim"] == "matlab_equivalent"
+
+    dirty = json.loads(json.dumps(clean))
+    del dirty["matlab_equivalence_gate"]["factor_side_only_failure_count"]
+    with pytest.raises(SystemExit, match="missing factor side-only failure count"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["factor_side_only_failure_count"] = 1
+    with pytest.raises(SystemExit, match="factor mask side-only"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    del dirty["matlab_equivalence_gate"]["raw_bridge_count_delta_failure_count"]
+    with pytest.raises(SystemExit, match="missing raw bridge count delta failure count"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["raw_bridge_count_delta_failure_count"] = 1
+    with pytest.raises(SystemExit, match="raw bridge count parity failed"):
+        assert_matlab_equivalence_gate(dirty)
 
     dirty = json.loads(json.dumps(clean))
     dirty["matlab_equivalence_gate"]["residual_total_bridge_only"] = 1

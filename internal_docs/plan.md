@@ -203,6 +203,13 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - factor_mask gate now carries: `side_only_failure_count=0`, `total_matlab_only=0`, `total_bridge_only=0`, all `side_only_by_field_freq` entries `0`, `top_matlab_only=[]`, `top_bridge_only=[]`
   - raw_bridge_counts gate now carries: `count_delta_failure_count=0`, `matched_abs_delta_total=0`, `missing_phone_count_rows=6`, `missing_bridge_count_rows=0`, `abs_delta_sums` all `0`, `top_count_delta_failures=[]`
   - residual_values gate remains strict: `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.91054445631678e-05`, `overall_p95_abs_delta_max=2.7839780766480964e-05`, `internal_delta_failure_count=0`
+- 2026-05-07 pre-submit manifest regenerated with the latest gate debug fields:
+  - `build_gsdc2023_pre_submit_manifest.py` now records factor side-only debug fields and raw bridge count-delta debug fields into `matlab_equivalence_gate`.
+  - `submit_gsdc2023_pixel5_candidate_queue.py` now rejects manifests missing those fields or having nonzero `factor_side_only_failure_count` / `raw_bridge_count_delta_failure_count` / `raw_bridge_matched_abs_delta_total`.
+  - Regenerated `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/pre_submit_manifest.json` using `20260507_085015/summary.json`.
+  - New manifest gate summary SHA: `0c38f7233e9b4484344f267c71c2e5d84d2a59c5bffdf3e2ead6b8684738144b`.
+  - Direct gate check: `assert_matlab_equivalence_gate(..., require=True)` => `matlab_equivalent 0 0 0` for factor side-only, raw count failures, residual internal failures.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `25 passed`; `ruff check experiments/build_gsdc2023_pre_submit_manifest.py experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`

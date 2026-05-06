@@ -170,8 +170,24 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
                 "max_epochs": 200,
                 "count_max_epochs": 0,
                 "gates": {
-                    "factor_mask": {"passed": True},
-                    "raw_bridge_counts": {"passed": True},
+                    "factor_mask": {
+                        "passed": True,
+                        "total_matlab_only": 0,
+                        "total_bridge_only": 0,
+                        "side_only_failure_count": 0,
+                        "side_only_by_field_freq": {"P": {"L1": {"matlab_only": 0, "bridge_only": 0}}},
+                        "top_matlab_only": [],
+                        "top_bridge_only": [],
+                    },
+                    "raw_bridge_counts": {
+                        "passed": True,
+                        "matched_abs_delta_total": 0,
+                        "count_delta_failure_count": 0,
+                        "missing_phone_count_rows": 6,
+                        "missing_bridge_count_rows": 0,
+                        "abs_delta_sums": {"P": {"L1": 0, "L5": 0}},
+                        "top_count_delta_failures": [],
+                    },
                     "residual_values": {
                         "passed": True,
                         "total_matlab_only": 0,
@@ -198,6 +214,14 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
     assert gate["passed"] is True
     assert gate["equivalence_claim"] == "matlab_equivalent"
     assert gate["trip_count"] == 12
+    assert gate["factor_side_only_failure_count"] == 0
+    assert gate["factor_total_matlab_only"] == 0
+    assert gate["factor_total_bridge_only"] == 0
+    assert gate["factor_side_only_by_field_freq"]["P"]["L1"]["matlab_only"] == 0
+    assert gate["raw_bridge_count_delta_failure_count"] == 0
+    assert gate["raw_bridge_matched_abs_delta_total"] == 0
+    assert gate["raw_bridge_missing_phone_count_rows"] == 6
+    assert gate["raw_bridge_abs_delta_sums"]["P"]["L5"] == 0
     assert gate["residual_total_matlab_only"] == 0
     assert gate["residual_internal_delta_failure_count"] == 0
     assert gate["residual_internal_delta_thresholds"]["model_delta"] == 1.0e-4
