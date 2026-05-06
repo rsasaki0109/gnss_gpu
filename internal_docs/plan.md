@@ -196,6 +196,13 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - `passed=true`, `overall_min_symmetric_parity=1.0`, `total_matlab_only=0`, `total_bridge_only=0`, `side_only_failure_count=0`
     - `side_only_by_field_freq` is `0` for every field/freq pair, and both `top_matlab_only` / `top_bridge_only` are empty.
   - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_factor_mask_parity.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py` => `25 passed`; `ruff check --ignore=E402 ...` pass.
+- 2026-05-07 full-window MATLAB equivalence gate regenerated after count/factor debug fields:
+  - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --output-dir experiments/results/matlab_equivalence_gate_probe_20260507 --verbose`
+  - output: `experiments/results/matlab_equivalence_gate_probe_20260507/gsdc2023_matlab_equivalence_gate_20260507_085015`
+  - result: `passed=true`, `equivalence_claim=matlab_equivalent`
+  - factor_mask gate now carries: `side_only_failure_count=0`, `total_matlab_only=0`, `total_bridge_only=0`, all `side_only_by_field_freq` entries `0`, `top_matlab_only=[]`, `top_bridge_only=[]`
+  - raw_bridge_counts gate now carries: `count_delta_failure_count=0`, `matched_abs_delta_total=0`, `missing_phone_count_rows=6`, `missing_bridge_count_rows=0`, `abs_delta_sums` all `0`, `top_count_delta_failures=[]`
+  - residual_values gate remains strict: `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.91054445631678e-05`, `overall_p95_abs_delta_max=2.7839780766480964e-05`, `internal_delta_failure_count=0`
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
