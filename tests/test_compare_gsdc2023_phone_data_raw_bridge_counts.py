@@ -10,7 +10,11 @@ import pandas as pd
 import pytest
 from scipy.io import savemat
 
-from experiments.compare_gsdc2023_factor_masks import build_bridge_factor_mask, compare_factor_masks
+from experiments.compare_gsdc2023_factor_masks import (
+    bridge_factor_mask_export_frame,
+    build_bridge_factor_mask,
+    compare_factor_masks,
+)
 from experiments.compare_gsdc2023_phone_data_raw_bridge_counts import (
     bridge_factor_counts_frame,
     build_comparison_frames,
@@ -468,6 +472,9 @@ def test_compare_factor_masks_matches_exported_bridge_mask(tmp_path):
     rows = _raw_rows()
     _write_zipped_csv(trip_dir / "device_gnss.csv", rows, list(rows[0].keys()))
     bridge_mask = build_bridge_factor_mask(trip_dir, max_epochs=10, multi_gnss=False)
+    assert "sat_col" in bridge_mask.columns
+    assert bridge_mask.loc[bridge_mask["svid"].eq(1), "sat_col"].eq(1).all()
+    assert bridge_mask.loc[bridge_mask["svid"].eq(2), "sat_col"].eq(2).all()
     bridge_mask.to_csv(trip_dir / "phone_data_factor_mask.csv", index=False)
 
     merged, summary_df, summary = compare_factor_masks(
@@ -484,6 +491,26 @@ def test_compare_factor_masks_matches_exported_bridge_mask(tmp_path):
     assert summary["top_bridge_only"] == []
     assert merged["side"].eq("both").all()
     assert summary_df["symmetric_parity"].eq(1.0).all()
+
+    export = bridge_factor_mask_export_frame(trip_dir, max_epochs=10, multi_gnss=False)
+    assert export.columns.tolist() == [
+        "field",
+        "freq",
+        "epoch_index",
+        "utcTimeMillis",
+        "next_epoch_index",
+        "nextUtcTimeMillis",
+        "sys",
+        "svid",
+        "sat_col",
+    ]
+    assert "signal_type" not in export.columns
+    assert tuple(export.loc[0, ["freq", "field"]]) == ("L1", "P")
+    assert export.iloc[0]["sat_col"] <= export.iloc[-1]["sat_col"]
+    pd.testing.assert_frame_equal(
+        export.sort_values(export.columns.tolist()).reset_index(drop=True),
+        bridge_mask[export.columns.tolist()].sort_values(export.columns.tolist()).reset_index(drop=True),
+    )
 
 
 def test_compare_factor_masks_reports_side_only_debug_rows(tmp_path):
