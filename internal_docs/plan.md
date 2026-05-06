@@ -247,6 +247,16 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - result: `bridge_factor_mask_export_rows=83640`, `total_matlab_only=0`, `total_bridge_only=0`, `symmetric_parity=1.0`
     - generated CSV was byte-for-line equivalent to MATLAB `phone_data_factor_mask.csv` for `train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4` under `diff -u`.
   - Next: run the writer on the 12-trip MATLAB export bundle and record whether every generated factor mask is byte-equivalent before moving to residual diagnostics.
+- 2026-05-07 12-trip factor-mask writer equivalence:
+  - `audit_gsdc2023_factor_mask_parity.py --write-bridge-factor-masks` now writes Python-generated `phone_data_factor_mask.csv` files for the audit trip set and byte-compares them with the MATLAB exports.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_factor_mask_parity.py tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py::test_compare_factor_masks_matches_exported_bridge_mask` => `5 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data 12-trip full-window probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_factor_mask_parity.py --max-epochs 0 --no-multi-gnss --write-bridge-factor-masks --output-dir experiments/results/factor_mask_writer_12trip_probe_20260507 --verbose`
+    - output: `experiments/results/factor_mask_writer_12trip_probe_20260507/gsdc2023_factor_mask_parity_audit_20260507_112122`
+    - result: `passed=true`, `completed_trip_count=12`, `overall_min_symmetric_parity=1.0`, `total_matlab_only=0`, `total_bridge_only=0`
+    - writer result: `bridge_factor_mask_export_count=12`, `bridge_factor_mask_export_byte_equivalent_count=12`, `bridge_factor_mask_export_failure_count=0`
+  - Interpretation: Python can now regenerate both `phone_data_factor_counts.csv` and `phone_data_factor_mask.csv` byte-equivalent to the 12-trip MATLAB golden bundle. The remaining MATLAB sidecar dependency is `phone_data_residual_diagnostics.csv`.
+  - Next: decide whether residual diagnostics should be generated from bridge internal state directly or remain a golden-key fixture for inactive-row injection.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
