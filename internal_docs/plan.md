@@ -442,11 +442,26 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - result: `prepared: 3 candidate(s)`
   - `pre_submit_manifest.json` gate: `equivalence_claim=matlab_equivalent`, `max_epochs=0`, `count_max_epochs=0`, residual side-only `0/0`, max delta `5.91054445631678e-05 m`, summary SHA `401177f4df7cc634374e454ae5b1202286a0c191118a5590482d888e409fd4a3`
   - Superseded on 2026-05-05 by the previous-safe-baseline gate below; the initial manifest had missed nested previous candidate files.
+- P6P0 previous-safe reconstruction:
+  - Built `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_prevsafe_candidate_20260508` from the three P6P0 configs, but patched the three risky Pixel6Pro trips from the prior safe `sjc_r_scale_sweep` candidate:
+    - `2021-11-05-18-28-us-ca-mtv-m/pixel6pro`
+    - `2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro`
+    - `2023-05-25-17-32-us-ca-pao-j/pixel6pro`
+  - Risk build with `--fail-on-risk` passed: global risk remains `risky_chunks=5`, but `candidate_actionable_risky_chunks=0`; `vd_guard_rows=6`.
+  - `--prepare-ready-report ... --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json --require-matlab-equivalence --skip-missing` => `prepared: 3 candidate(s)`.
+  - `--audit-ready-report .../submit_ready_report.json` => `audited: 3 candidate(s)`; `--check-ready --ready-report .../submit_ready_report.json` => `ready: 3 candidate(s)`.
+  - `pre_submit_trip_delta_checks.csv` now has `previous_changed_rows=0` and `previous_max_m=0.0` for all 9 risky Pixel6Pro trip/candidate rows; input delta is expectedly nonzero (`1444` / `1019` / `1291` rows, max `0.751m` / `0.814m` / `0.814m`) because the prior safe Pixel6Pro offsets are preserved instead of rolling back to raw input.
+  - Output SHA256s are byte-identical to the existing non-P6P0 ready candidates:
+    - `pixel5phone_3p375_sjc_r0p84375_p6p0`: `b454a4cfc5d65afac2210ba84d4c9cc1a89a4e1ff934ddf0aee15ed84419af67`
+    - `pixel5phone_3p375_sjc_r1p6875_p6p0`: `797ff01db70677bea93bc09dbb1333b5792d96ba4ae2ca9b76df403a8b27ded1`
+    - `pixel5phone_3p375_sjc_r2p53125_p6p0`: `934ef3410aa55b6888336d70e737679a46c553279328c6ace0090d5ab59f77ab`
+  - Interpretation: the previous-safe gate failure was fully explained by rolling Pixel6Pro risky trips back to input. Preserving prior safe Pixel6Pro rows makes the P6P0 queue gate-clean, but produces duplicate files of the already-ready non-P6P0 queue, so these are not new Kaggle submissions.
 
 次にやること:
 
-1. P6P0 clean queue は previous-safe gate でまだ止まるため、`previous_changed_rows=1444` の内訳を trip/candidate 単位で潰す
-2. cached summary validation を pre-submit manifest / ready report の機械可読 field としても載せるか判断する
+1. submit queue / ready report に「既存 ready/submitted CSV と同一 SHA の重複候補」を fail-closed または明示 warning として記録する。
+2. cached summary validation を pre-submit manifest / ready report の機械可読 field としても載せるか判断する。
+3. MATLAB 移植の残タスクとして、`phone_data.mat` / sidecar artifact compatibility を Python writer でどこまで生成対象にするか決める。
 
 2026-05-05 P6P0 clean Kaggle submit:
 
