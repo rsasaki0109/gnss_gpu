@@ -498,12 +498,24 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - output: `experiments/results/phone_data_artifact_compatibility_regression_probe_20260508/gsdc2023_phone_data_artifact_compatibility_20260508_164407`
     - result: `passed=true`, `factor_count_regression_checked=true`, `factor_mask_regression_checked=true`, both mismatch counts `0`, `failed_artifact_count=0`.
   - Focused verification: `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_phone_data_sidecar_writer_regression.py experiments/audit_gsdc2023_phone_data_artifact_compatibility.py tests/test_audit_gsdc2023_phone_data_sidecar_writer_regression.py tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_phone_data_sidecar_writer_regression.py tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => `8 passed`.
+- Submit-readiness duplicate SHA guard documentation:
+  - `write_submit_readiness_doc()` now emits a `Duplicate SHA Guard` section whenever a ready report records `duplicate_sha_roots`.
+  - The section includes:
+    - recorded-report audit command with `--fail-on-duplicate-sha`
+    - queue re-check command with the same `--duplicate-sha-root ... --fail-on-duplicate-sha`
+    - explicit expected behavior stating whether the command should fail because duplicate SHA matches are present.
+  - Real-data P6P0 previous-safe readiness doc regenerated:
+    - command: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_prevsafe_candidate_20260508 --tag 20260508 --group p6p0_clean_sjc_r_scale_sweep --prepare-ready-report experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_prevsafe_candidate_20260508/submit_ready_report.json --build-summary experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_prevsafe_candidate_20260508/build_summary.json --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --previous-tag 20260501 --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json --require-matlab-equivalence --duplicate-sha-root experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --skip-missing`
+    - result: `prepared: 3 candidate(s)`
+    - regenerated doc includes `Duplicate SHA Guard`, `--fail-on-duplicate-sha`, and `Expected behavior: fails when duplicate SHA matches are present`.
+    - direct audit check: `--audit-ready-report .../submit_ready_report.json --fail-on-duplicate-sha` exits nonzero with all three duplicate P6P0 candidates listed.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `24 passed`.
 
 次にやること:
 
 1. P6P0 ではなく score 改善に戻る場合、既存 local screen の `duplicate_submitted_local_sha` / risky previous-safe columns を使って未提出かつ private-safe な候補だけを再抽出する。
-2. submit-ready artifacts を出す標準コマンドに `--duplicate-sha-root` / `--fail-on-duplicate-sha` を常用するか、PR description に運用ルールとして明記する。
-3. MATLAB migration の締めとして、`phone_data` artifact compatibility audit を PR description に書くか、submit-ready doc から参照できる形にする。
+2. MATLAB migration の締めとして、`phone_data` artifact compatibility audit を PR description に書くか、submit-ready doc から参照できる形にする。
+3. submit-ready doc に `phone_data` artifact compatibility audit コマンドを追加するか判断する。
 
 2026-05-05 P6P0 clean Kaggle submit:
 

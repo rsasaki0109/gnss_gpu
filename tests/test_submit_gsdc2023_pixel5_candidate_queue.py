@@ -776,6 +776,7 @@ def test_ready_report_consistency_applies_pre_submit_manifest_to_non_p6p0_candid
         risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
         pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
         allow_risk=False,
+        duplicate_sha_roots=[tmp_path],
     )
     write_ready_report(report_path, report)
 
@@ -828,6 +829,7 @@ def test_audit_ready_report_cli(capsys, tmp_path) -> None:
         risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
         pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
         allow_risk=False,
+        duplicate_sha_roots=[tmp_path],
     )
     write_ready_report(report_path, report)
 
@@ -998,6 +1000,7 @@ def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
         risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
         pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
         allow_risk=False,
+        duplicate_sha_roots=[tmp_path],
     )
     write_ready_report(report_path, report)
 
@@ -1019,6 +1022,9 @@ def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
     assert "--require-matlab-equivalence" in doc
     assert "--cached-summary" in doc
     assert "--default-writer-regression-manifest" in doc
+    assert "## Duplicate SHA Guard" in doc
+    assert "--fail-on-duplicate-sha" in doc
+    assert f"--duplicate-sha-root {tmp_path}" in doc
     assert "MATLAB equivalence: `matlab_equivalent`" in doc
     assert "Ready candidates: `1`" in doc
     assert candidate in doc

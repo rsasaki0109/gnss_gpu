@@ -768,6 +768,106 @@ def _format_cached_equivalence_command(summary_path: object | None, matlab_equiv
     return "\n".join(lines)
 
 
+def _report_duplicate_sha_roots(report: dict[str, object], fallback_roots: list[Path] | None) -> list[Path]:
+    roots = report.get("duplicate_sha_roots")
+    if isinstance(roots, list) and roots:
+        out: list[Path] = []
+        for root in roots:
+            if isinstance(root, str):
+                out.append(Path(root))
+        if out:
+            return out
+    return list(fallback_roots or [])
+
+
+def _format_duplicate_sha_check_ready_command(
+    *,
+    output_dir: Path,
+    tag: str,
+    groups: list[str] | None,
+    duplicate_sha_roots: list[Path],
+    require_matlab_equivalence: bool,
+    skip_missing: bool,
+) -> str:
+    args = ["--output-dir", str(output_dir), "--tag", tag]
+    for group in groups or []:
+        args.extend(["--group", group])
+    args.append("--check-ready")
+    if require_matlab_equivalence:
+        args.append("--require-matlab-equivalence")
+    for root in duplicate_sha_roots:
+        args.extend(["--duplicate-sha-root", str(root)])
+    args.append("--fail-on-duplicate-sha")
+    if skip_missing:
+        args.append("--skip-missing")
+    entries: list[str] = []
+    i = 0
+    while i < len(args):
+        if args[i] in {"--check-ready", "--require-matlab-equivalence", "--fail-on-duplicate-sha", "--skip-missing"}:
+            entries.append(f"  {args[i]}")
+            i += 1
+            continue
+        entries.append(f"  {args[i]} {shlex.quote(args[i + 1])}")
+        i += 2
+    lines = ["PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \\"]
+    for index, entry in enumerate(entries):
+        lines.append(f"{entry} \\" if index < len(entries) - 1 else entry)
+    return "\n".join(lines)
+
+
+def _duplicate_sha_guard_lines(
+    *,
+    ready_report_path: Path,
+    output_dir: Path,
+    tag: str,
+    groups: list[str] | None,
+    duplicate_sha_roots: list[Path],
+    duplicate_sha_match_count: int,
+    require_matlab_equivalence: bool,
+    skip_missing: bool,
+) -> list[str]:
+    if not duplicate_sha_roots:
+        return []
+    audit_command = (
+        "PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \\\n"
+        f"  --audit-ready-report {ready_report_path} \\\n"
+        "  --fail-on-duplicate-sha"
+    )
+    check_ready_command = _format_duplicate_sha_check_ready_command(
+        output_dir=output_dir,
+        tag=tag,
+        groups=groups,
+        duplicate_sha_roots=duplicate_sha_roots,
+        require_matlab_equivalence=require_matlab_equivalence,
+        skip_missing=skip_missing,
+    )
+    expected = (
+        "fails when duplicate SHA matches are present"
+        if duplicate_sha_match_count > 0
+        else "passes only when no duplicate SHA matches are present"
+    )
+    return [
+        "## Duplicate SHA Guard",
+        "",
+        "Use this before any Kaggle submit. It is fail-closed against same-SHA CSVs already present under the configured duplicate roots.",
+        "",
+        "Audit the recorded report:",
+        "",
+        "```bash",
+        audit_command,
+        "```",
+        "",
+        "Re-check the queue with duplicate scanning enabled:",
+        "",
+        "```bash",
+        check_ready_command,
+        "```",
+        "",
+        f"Expected behavior: `{expected}`.",
+        "",
+    ]
+
+
 def write_submit_readiness_doc(
     *,
     output_dir: Path,
@@ -794,6 +894,7 @@ def write_submit_readiness_doc(
     max_delta = max((_as_float(row.get("input_max_m")) for row in trip_rows), default=0.0)
     duplicate_sha_candidate_count = _as_int(report.get("duplicate_sha_candidate_count"))
     duplicate_sha_match_count = _as_int(report.get("duplicate_sha_match_count"))
+    duplicate_guard_roots = _report_duplicate_sha_roots(report, duplicate_sha_roots)
     cached_validation_label = "not recorded"
     if matlab_equivalence:
         if bool(matlab_equivalence.get("cached_summary_validation_checked", False)):
@@ -834,6 +935,16 @@ def write_submit_readiness_doc(
         if cached_equivalence_command is not None
         else []
     )
+    duplicate_guard_lines = _duplicate_sha_guard_lines(
+        ready_report_path=ready_report_path,
+        output_dir=output_dir,
+        tag=tag,
+        groups=groups,
+        duplicate_sha_roots=duplicate_guard_roots,
+        duplicate_sha_match_count=duplicate_sha_match_count,
+        require_matlab_equivalence=bool(matlab_equivalence),
+        skip_missing=skip_missing,
+    )
     audit_command = (
         "PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \\\n"
         f"  --audit-ready-report {ready_report_path}"
@@ -871,6 +982,7 @@ def write_submit_readiness_doc(
                 "```",
                 "",
                 *cached_equivalence_lines,
+                *duplicate_guard_lines,
                 "## Audit Only",
                 "",
                 "```bash",
