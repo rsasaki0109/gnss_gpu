@@ -62,11 +62,18 @@ from experiments.gsdc2023_signal_model import (  # noqa: E402
     slot_frequency_label as _freq_label,
     slot_pseudorange_common_bias_groups as _slot_pseudorange_common_bias_groups,
 )
+from experiments.gsdc2023_tdcp import (  # noqa: E402
+    DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M as _TDCP_CONSISTENCY_THRESHOLD_M,
+    tdcp_loffset_m as _tdcp_loffset_m,
+    valid_adr_state as _valid_adr_state,
+)
 from experiments.gsdc2023_trip_window import (  # noqa: E402
     FULL_EPOCH_COUNT,
     settings_epoch_window_for_trip as _settings_epoch_window_for_trip,
     trim_epoch_window as _trim_epoch_window,
 )
+
+_NONFIELD_KEY_COLUMNS = ("freq", "epoch_index", "utcTimeMillis", "sys", "svid")
 
 
 def _frame_sat_velocity_forward_difference_lookup(
@@ -469,6 +476,161 @@ def _bridge_component_frame(
     return pd.DataFrame(rows).drop_duplicates(_KEY_COLUMNS)
 
 
+def _bridge_l_pre_finite_keys_from_raw(
+    trip_dir: Path,
+    *,
+    times_ms: np.ndarray,
+    slot_keys: tuple[tuple[int, int, str], ...],
+    start_epoch: int,
+) -> set[tuple[object, ...]]:
+    raw_path = Path(trip_dir) / "device_gnss.csv"
+    if not raw_path.is_file():
+        return set()
+    raw = _load_raw_gnss_frame(raw_path)
+    required = {
+        "utcTimeMillis",
+        "ConstellationType",
+        "Svid",
+        "SignalType",
+        "Cn0DbHz",
+        "AccumulatedDeltaRangeMeters",
+        "AccumulatedDeltaRangeState",
+    }
+    if required - set(raw.columns):
+        return set()
+    frame = raw.copy()
+    if frame.empty:
+        return set()
+    time_to_epoch = {
+        int(round(float(time_ms))): int(epoch_idx) + 1 + int(start_epoch)
+        for epoch_idx, time_ms in enumerate(times_ms)
+    }
+    keys: set[tuple[object, ...]] = set()
+
+    def add_row_key(row: object, freq: str) -> None:
+        adr = float(pd.to_numeric(getattr(row, "AccumulatedDeltaRangeMeters"), errors="coerce"))
+        state_value = pd.to_numeric(getattr(row, "AccumulatedDeltaRangeState"), errors="coerce")
+        state = int(state_value) if np.isfinite(float(state_value)) else 0
+        if not np.isfinite(adr) or adr == 0.0 or not _valid_adr_state(state):
+            return
+        utc_ms = int(round(float(row.utcTimeMillis)))
+        epoch_index = time_to_epoch.get(utc_ms)
+        if epoch_index is None:
+            return
+        keys.add(
+            (
+                freq,
+                epoch_index,
+                utc_ms,
+                _constellation_to_matlab_sys(int(row.ConstellationType)),
+                int(row.Svid),
+            ),
+        )
+
+    signaled = frame.loc[frame["SignalType"].notna()].copy()
+    signaled_freqs_by_group: dict[tuple[int, int, int], set[str]] = {}
+    if not signaled.empty:
+        for row in signaled.itertuples(index=False):
+            group_key = (
+                int(round(float(row.utcTimeMillis))),
+                int(row.ConstellationType),
+                int(row.Svid),
+            )
+            signaled_freqs_by_group.setdefault(group_key, set()).add(_freq_label(str(row.SignalType)))
+        signaled = (
+            signaled.sort_values(["utcTimeMillis", "ConstellationType", "Svid", "SignalType", "Cn0DbHz"])
+            .groupby(["utcTimeMillis", "ConstellationType", "Svid", "SignalType"], as_index=False)
+            .tail(1)
+        )
+        for row in signaled.itertuples(index=False):
+            add_row_key(row, _freq_label(str(row.SignalType)))
+
+    unsignaled = frame.loc[frame["SignalType"].isna()].copy()
+    if not unsignaled.empty:
+        for group_key, group in unsignaled.groupby(["utcTimeMillis", "ConstellationType", "Svid"], sort=False):
+            group = group.copy()
+            if "ReceivedSvTimeNanos" in group.columns and len(group) >= 2:
+                group["_received_sv_time_nanos"] = pd.to_numeric(group["ReceivedSvTimeNanos"], errors="coerce")
+                ordered = group.sort_values(["_received_sv_time_nanos", "Cn0DbHz"], na_position="last")
+                for freq, row in zip(("L1", "L5"), ordered.itertuples(index=False), strict=False):
+                    add_row_key(row, freq)
+            else:
+                ordered = group.sort_values(["Cn0DbHz"])
+                row = next(ordered.tail(1).itertuples(index=False))
+                normalized_group_key = (int(round(float(group_key[0]))), int(group_key[1]), int(group_key[2]))
+                signaled_freqs = signaled_freqs_by_group.get(normalized_group_key, set())
+                missing_freqs = tuple(sorted({"L1", "L5"} - signaled_freqs))
+                if len(missing_freqs) == 1:
+                    add_row_key(row, missing_freqs[0])
+                elif not signaled_freqs:
+                    add_row_key(row, "*")
+    return keys
+
+
+def _bridge_l_factor_finite_keys_from_batch(
+    batch: object,
+    *,
+    start_epoch: int,
+    tdcp_loffset_m: float = 0.0,
+    consistency_threshold_m: float = _TDCP_CONSISTENCY_THRESHOLD_M,
+) -> set[tuple[object, ...]]:
+    adr = getattr(batch, "adr", None)
+    adr_state = getattr(batch, "adr_state", None)
+    if adr is None or adr_state is None:
+        return set()
+    times_ms = np.asarray(batch.times_ms, dtype=np.float64)
+    slot_keys = tuple(batch.slot_keys)
+    adr = np.asarray(adr, dtype=np.float64)
+    adr_state = np.asarray(adr_state)
+    valid_phase = np.isfinite(adr) & np.vectorize(lambda state: _valid_adr_state(int(state)))(adr_state)
+    doppler = getattr(batch, "doppler", None)
+    doppler_weights = getattr(batch, "doppler_weights", None)
+    if doppler is not None and doppler_weights is not None and valid_phase.shape[0] > 1:
+        doppler = np.asarray(doppler, dtype=np.float64)
+        doppler_weights = np.asarray(doppler_weights, dtype=np.float64)
+        raw_dt = np.diff(times_ms) * 1.0e-3
+        positive_dt = raw_dt
+        positive_dt = positive_dt[np.isfinite(positive_dt) & (positive_dt > 0.0)]
+        matlab_dt_s = float(np.round(np.median(positive_dt), 2)) if positive_dt.size else 0.0
+        rejected_pair = np.zeros((valid_phase.shape[0] - 1, valid_phase.shape[1]), dtype=bool)
+        if matlab_dt_s > 0.0:
+            for epoch_idx in range(valid_phase.shape[0] - 1):
+                dt_s = float(raw_dt[epoch_idx]) if epoch_idx < raw_dt.size else 0.0
+                if not np.isfinite(dt_s) or dt_s <= 0.0:
+                    continue
+                for slot_idx in range(valid_phase.shape[1]):
+                    if not valid_phase[epoch_idx, slot_idx] or not valid_phase[epoch_idx + 1, slot_idx]:
+                        continue
+                    d0 = float(doppler[epoch_idx, slot_idx])
+                    d1 = float(doppler[epoch_idx + 1, slot_idx])
+                    if not np.isfinite(d0) or not np.isfinite(d1):
+                        continue
+                    if float(doppler_weights[epoch_idx, slot_idx]) <= 0.0 or float(doppler_weights[epoch_idx + 1, slot_idx]) <= 0.0:
+                        continue
+                    meas = float(adr[epoch_idx + 1, slot_idx] - adr[epoch_idx, slot_idx] + float(tdcp_loffset_m))
+                    doppler_tdcp = -0.5 * (d0 + d1) * matlab_dt_s
+                    if abs(meas - doppler_tdcp) > float(consistency_threshold_m):
+                        rejected_pair[epoch_idx, slot_idx] = True
+        if np.any(rejected_pair):
+            valid_phase[:-1, :] &= ~rejected_pair
+            valid_phase[1:, :] &= ~rejected_pair
+    keys: set[tuple[object, ...]] = set()
+    for epoch_idx, time_ms in enumerate(times_ms):
+        for slot_idx, slot_key in enumerate(slot_keys):
+            if not valid_phase[epoch_idx, slot_idx]:
+                continue
+            keys.add(
+                (
+                    _freq_label(str(slot_key[2])),
+                    int(epoch_idx) + 1 + int(start_epoch),
+                    int(round(float(time_ms))),
+                    _constellation_to_matlab_sys(int(slot_key[0])),
+                    int(slot_key[1]),
+                ),
+            )
+    return keys
+
+
 def build_bridge_residual_frame(
     trip_dir: Path,
     *,
@@ -505,7 +667,23 @@ def build_bridge_residual_frame(
             raw_frame_epoch_window=True,
         )
 
+    def build_l_factor_batch(*, batch_start_epoch: int, batch_max_epochs: int):
+        return _build_trip_arrays(
+            trip_dir,
+            max_epochs=batch_max_epochs,
+            start_epoch=batch_start_epoch,
+            constellation_type=1,
+            signal_type="GPS_L1_CA",
+            weight_mode="sin2el",
+            multi_gnss=multi_gnss,
+            use_tdcp=True,
+            apply_observation_mask=apply_observation_mask,
+            dual_frequency=dual_frequency,
+            raw_frame_epoch_window=True,
+        )
+
     batch = build_batch(batch_start_epoch=start_epoch, batch_max_epochs=bridge_max_epochs)
+    l_factor_batch = build_l_factor_batch(batch_start_epoch=start_epoch, batch_max_epochs=bridge_max_epochs)
     times_ms = np.asarray(batch.times_ms, dtype=np.float64)
     receiver_velocity = _receiver_velocity_from_reference(times_ms, np.asarray(batch.kaggle_wls, dtype=np.float64))
     clock_drift_mps = batch.clock_drift_mps
@@ -939,6 +1117,26 @@ def build_bridge_residual_frame(
     out["bridge_factor_finite"] = [
         1 if key in factor_finite_keys else 0
         for key in out[_KEY_COLUMNS].itertuples(index=False, name=None)
+    ]
+    l_pre_finite_keys = _bridge_l_pre_finite_keys_from_raw(
+        trip_dir,
+        times_ms=times_ms,
+        slot_keys=slot_keys,
+        start_epoch=start_epoch,
+    )
+    l_factor_finite_keys = _bridge_l_factor_finite_keys_from_batch(
+        l_factor_batch,
+        start_epoch=start_epoch,
+        tdcp_loffset_m=_tdcp_loffset_m(Path(trip_dir).name),
+    )
+    l_pre_values = []
+    for key in out[list(_NONFIELD_KEY_COLUMNS)].itertuples(index=False, name=None):
+        wildcard_key = ("*", *key[1:])
+        l_pre_values.append(1 if key in l_pre_finite_keys or wildcard_key in l_pre_finite_keys else 0)
+    out["bridge_l_pre_finite"] = l_pre_values
+    out["bridge_l_factor_finite"] = [
+        1 if key in l_factor_finite_keys else 0
+        for key in out[list(_NONFIELD_KEY_COLUMNS)].itertuples(index=False, name=None)
     ]
     d_rows = out["field"].astype(str).eq("D")
     out.loc[d_rows, "bridge_obs_dclk"] = pd.to_numeric(out.loc[d_rows, "bridge_common_bias"], errors="coerce")

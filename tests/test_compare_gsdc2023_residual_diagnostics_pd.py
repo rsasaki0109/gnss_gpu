@@ -130,6 +130,8 @@ def test_bridge_residual_diagnostics_pd_wide_export_adds_sat_col_and_components(
                 "bridge_isb": 10.0,
                 "bridge_pre_finite": 1,
                 "bridge_factor_finite": 1,
+                "bridge_l_pre_finite": 1,
+                "bridge_l_factor_finite": 0,
                 "bridge_sat_x": 1.0,
                 "bridge_sat_y": 2.0,
                 "bridge_sat_z": 3.0,
@@ -156,6 +158,8 @@ def test_bridge_residual_diagnostics_pd_wide_export_adds_sat_col_and_components(
                 "bridge_obs_dclk": 10.0,
                 "bridge_pre_finite": 1,
                 "bridge_factor_finite": 0,
+                "bridge_l_pre_finite": 1,
+                "bridge_l_factor_finite": 0,
                 "bridge_sat_x": 1.0,
                 "bridge_sat_y": 2.0,
                 "bridge_sat_z": 3.0,
@@ -187,3 +191,5 @@ def test_bridge_residual_diagnostics_pd_wide_export_adds_sat_col_and_components(
     assert row["d_pre_finite"] == 1
     assert row["p_factor_finite"] == 1
     assert row["d_factor_finite"] == 0
+    assert row["l_pre_finite"] == 1
+    assert row["l_factor_finite"] == 0

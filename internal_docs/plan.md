@@ -326,6 +326,19 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - new wide column aggregate: `obs_clk_m` max delta `2.75671478533468e-07`, `obs_dclk_m` max delta `3.5828883795829825e-05`, `p_isb_m` max delta `9.253617008653237e-06`, and `p_pre_finite,d_pre_finite,p_factor_finite,d_factor_finite` all max delta `0.0`.
     - writer-shaped export result: `bridge_wide_subset_export_count=12`, `bridge_wide_subset_export_total_rows=258537`, each export has `42` columns.
   - Interpretation: the writer path now covers P/D values, `sat_col`, shared component columns, clock/ISB columns, and P/D finite booleans over the full 12-trip bundle. Remaining full-writer gap is the L finite-column dependency (`l_pre_finite`, `l_factor_finite`) before assembling the complete `phone_data_residual_diagnostics.csv` writer.
+- 2026-05-08 residual diagnostics L finite subset:
+  - Added bridge-generated wide columns `l_pre_finite` and `l_factor_finite`.
+  - `l_pre_finite` is reproduced from raw ADR rows, including old GPS logs where `SignalType` is missing: two same-epoch/svid unsignaled rows are assigned by `ReceivedSvTimeNanos` order (`L1`, then `L5`), while singleton unsignaled rows only fill the missing frequency when a signaled row already exists.
+  - `l_factor_finite` is reproduced from TDCP ADR state after MATLAB-style consistency rejection. The consistency check uses raw positive epoch time deltas for rejection, then masks both endpoints of rejected TDCP pairs.
+  - Real-data 12-trip full-window wide probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-wide-subsets --verbose --output-dir experiments/results/residual_diagnostics_pd_lfinite_12trip_probe3_20260508`
+    - output: `experiments/results/residual_diagnostics_pd_lfinite_12trip_probe3_20260508/gsdc2023_residual_diagnostics_pd_parity_audit_20260508_061756`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, `completed_trip_count=12`, `wide_completed_trip_count=12`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components/finite: `wide_total_matlab_count=10082943`, `wide_total_bridge_count=10082943`, `wide_total_matched_count=10082943`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - new L finite aggregate: `l_pre_finite` and `l_factor_finite` both have max delta `0.0` on every trip.
+    - writer-shaped export result: `bridge_wide_subset_export_count=12`, `bridge_wide_subset_export_total_rows=258537`, each export has the full `44` sidecar-shaped columns.
+  - Interpretation: the bridge can now regenerate the residual diagnostics P/D writer-shaped subset with all 44 MATLAB sidecar columns covered over the 12-trip bundle. Remaining work is packaging this path as a complete `phone_data_residual_diagnostics.csv` writer and making the equivalence gate consume it without the MATLAB residual diagnostics sidecar as a golden-key input.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
@@ -334,9 +347,9 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. `l_pre_finite` / `l_factor_finite` の L finite 依存を bridge 内部状態から再現し、MATLAB residual diagnostics sidecar の golden-key 入力を外す
-2. P/D wide subset と L finite を統合して complete `phone_data_residual_diagnostics.csv` writer を組み立てる
-3. 12-trip full-window で sidecar 不使用の residual diagnostics writer gate を通し、既存 submit-ready gate に接続する
+1. 44-column wide subset path を complete `phone_data_residual_diagnostics.csv` writer として梱包する
+2. 12-trip full-window で sidecar 不使用の residual diagnostics writer gate を通す
+3. 既存 submit-ready / MATLAB equivalence gate に residual diagnostics writer を接続する
 
 2026-05-05 P6P0 clean Kaggle submit:
 

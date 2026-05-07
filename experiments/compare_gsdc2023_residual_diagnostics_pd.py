@@ -85,6 +85,10 @@ PD_WIDE_BOOLEAN_MAP: tuple[tuple[str, str, str], ...] = (
     ("D", "d_pre_finite", "bridge_pre_finite"),
     ("P", "p_factor_finite", "bridge_factor_finite"),
     ("D", "d_factor_finite", "bridge_factor_finite"),
+    ("P", "l_pre_finite", "bridge_l_pre_finite"),
+    ("D", "l_pre_finite", "bridge_l_pre_finite"),
+    ("P", "l_factor_finite", "bridge_l_factor_finite"),
+    ("D", "l_factor_finite", "bridge_l_factor_finite"),
 )
 PD_WIDE_EXPORT_COLUMNS = (
     "sat_col",
@@ -124,6 +128,8 @@ PD_WIDE_EXPORT_COLUMNS = (
     "d_pre_finite",
     "p_factor_finite",
     "d_factor_finite",
+    "l_pre_finite",
+    "l_factor_finite",
 )
 PD_WIDE_FRAME_COLUMNS = (*_DIAGNOSTICS_KEY_COLUMNS, *PD_WIDE_EXPORT_COLUMNS)
 PD_WIDE_VALUE_COLUMNS = PD_WIDE_EXPORT_COLUMNS
