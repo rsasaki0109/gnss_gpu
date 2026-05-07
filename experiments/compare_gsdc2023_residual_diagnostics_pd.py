@@ -290,6 +290,31 @@ def bridge_residual_diagnostics_pd_wide_values(
     return bridge_residual_diagnostics_pd_wide_export_frame(bridge)
 
 
+def bridge_residual_diagnostics_export_frame(
+    trip_dir: Path,
+    *,
+    max_epochs: int = 0,
+    multi_gnss: bool = False,
+    apply_observation_mask: bool = True,
+    include_inactive_observations: bool = False,
+    inactive_key_filter: set[tuple[object, ...]] | None = None,
+    factor_finite_key_filter: set[tuple[object, ...]] | None = None,
+    bridge_frame_fn: BridgeFrameFn = build_bridge_residual_frame,
+) -> pd.DataFrame:
+    """Return a Python-generated ``phone_data_residual_diagnostics.csv`` frame."""
+
+    return bridge_residual_diagnostics_pd_wide_values(
+        trip_dir,
+        max_epochs=max_epochs,
+        multi_gnss=multi_gnss,
+        apply_observation_mask=apply_observation_mask,
+        include_inactive_observations=include_inactive_observations,
+        inactive_key_filter=inactive_key_filter,
+        factor_finite_key_filter=factor_finite_key_filter,
+        bridge_frame_fn=bridge_frame_fn,
+    )
+
+
 def _normalized_wide_value_frame(frame: pd.DataFrame, *, value_column: str) -> pd.DataFrame:
     out = frame.copy()
     if out.empty:
@@ -642,6 +667,7 @@ def main() -> None:
     parser.add_argument("--max-abs-delta-threshold", type=float, default=1.0e-4)
     parser.add_argument("--write-bridge-pd-values", action="store_true")
     parser.add_argument("--write-bridge-pd-wide", action="store_true")
+    parser.add_argument("--write-bridge-residual-diagnostics", action="store_true")
     _add_output_dir_arg(parser)
     args = parser.parse_args()
 
@@ -688,6 +714,36 @@ def main() -> None:
             include_inactive_observations=bool(args.include_inactive_observations),
             inactive_key_filter=inactive_key_filter,
         ).to_csv(out_dir / "bridge_residual_diagnostics_pd_wide_subset.csv", index=False)
+    if args.write_bridge_residual_diagnostics:
+        diagnostics_path = Path(args.diagnostics) if args.diagnostics is not None else trip_dir / "phone_data_residual_diagnostics.csv"
+        start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
+        matlab_residuals = _trim_epoch_window(
+            _matlab_residual_frame(diagnostics_path),
+            start_epoch,
+            bridge_max_epochs,
+        )
+        inactive_key_filter = (
+            set(matlab_residuals[RESIDUAL_KEY_COLUMNS].itertuples(index=False, name=None))
+            if bool(args.include_inactive_observations)
+            else None
+        )
+        export = bridge_residual_diagnostics_export_frame(
+            trip_dir,
+            max_epochs=max_epochs,
+            multi_gnss=bool(args.multi_gnss),
+            apply_observation_mask=bool(args.observation_mask),
+            include_inactive_observations=bool(args.include_inactive_observations),
+            inactive_key_filter=inactive_key_filter,
+        )
+        export_path = out_dir / "bridge_residual_diagnostics" / "phone_data_residual_diagnostics.csv"
+        export_path.parent.mkdir(parents=True, exist_ok=True)
+        export.to_csv(export_path, index=False)
+        payload["bridge_residual_diagnostics_export_path"] = str(export_path)
+        payload["bridge_residual_diagnostics_export_rows"] = int(len(export))
+        payload["bridge_residual_diagnostics_export_columns"] = int(len(export.columns))
+        payload["bridge_residual_diagnostics_export_byte_equivalent"] = bool(
+            diagnostics_path.is_file() and export_path.read_bytes() == diagnostics_path.read_bytes(),
+        )
     _write_summary_json(out_dir, payload)
     _print_summary_and_output_dir(payload, out_dir)
 

@@ -186,6 +186,18 @@ def test_residual_diagnostics_pd_parity_audit_fails_on_side_only_rows(tmp_path: 
 
 
 def test_residual_diagnostics_pd_parity_audit_summarizes_wide_components(tmp_path: Path) -> None:
+    expected_export = "freq,epoch_index,utcTimeMillis,sys,svid,sat_rate_mps\nL1,1,1000,1,3,20.001\n"
+    (tmp_path / "train/course/phone-a").mkdir(parents=True)
+    (tmp_path / "train/course/phone-a/phone_data_residual_diagnostics.csv").write_text(
+        expected_export,
+        encoding="utf-8",
+    )
+    (tmp_path / "train/course/phone-b").mkdir(parents=True)
+    (tmp_path / "train/course/phone-b/phone_data_residual_diagnostics.csv").write_text(
+        "freq,epoch_index,utcTimeMillis,sys,svid,sat_rate_mps\nL1,1,1000,1,3,20.002\n",
+        encoding="utf-8",
+    )
+
     def fake_compare(
         _trip_dir: Path,
         *,
@@ -270,7 +282,18 @@ def test_residual_diagnostics_pd_parity_audit_summarizes_wide_components(tmp_pat
                 },
             ],
         )
-        bridge_wide = pd.DataFrame([{"freq": "L1", "epoch_index": 1, "sat_rate_mps": 20.0 + delta}])
+        bridge_wide = pd.DataFrame(
+            [
+                {
+                    "freq": "L1",
+                    "epoch_index": 1,
+                    "utcTimeMillis": 1000,
+                    "sys": 1,
+                    "svid": 3,
+                    "sat_rate_mps": 20.0 + delta,
+                },
+            ],
+        )
         payload = {
             "total_matlab_count": 1,
             "total_bridge_count": 1,
@@ -288,6 +311,7 @@ def test_residual_diagnostics_pd_parity_audit_summarizes_wide_components(tmp_pat
         return merged, summary, bridge_wide, payload
 
     wide_export_dir = tmp_path / "wide_exports"
+    residual_export_dir = tmp_path / "residual_exports"
     (
         _trip_summary,
         _column_summary,
@@ -307,6 +331,7 @@ def test_residual_diagnostics_pd_parity_audit_summarizes_wide_components(tmp_pat
         compare_fn=fake_compare,
         wide_compare_fn=fake_wide_compare,
         bridge_wide_subset_export_dir=wide_export_dir,
+        bridge_residual_diagnostics_export_dir=residual_export_dir,
     )
 
     assert payload["passed"] is True
@@ -320,3 +345,107 @@ def test_residual_diagnostics_pd_parity_audit_summarizes_wide_components(tmp_pat
     assert wide_side_only.empty
     assert len(wide_export_summary) == 2
     assert (wide_export_dir / "train/course/phone-a/phone_data_residual_diagnostics_pd_wide_subset.csv").is_file()
+    assert (residual_export_dir / "train/course/phone-a/phone_data_residual_diagnostics.csv").is_file()
+    assert payload["bridge_residual_diagnostics_export_count"] == 2
+    assert payload["bridge_residual_diagnostics_export_byte_equivalent_count"] == 2
+    assert payload["bridge_residual_diagnostics_export_byte_difference_count"] == 0
+
+
+def test_residual_diagnostics_export_byte_difference_is_informational(tmp_path: Path) -> None:
+    (tmp_path / "train/course/phone").mkdir(parents=True)
+    (tmp_path / "train/course/phone/phone_data_residual_diagnostics.csv").write_text(
+        "freq,epoch_index,utcTimeMillis,sys,svid,sat_rate_mps\nL1,1,1000,1,3,99.0\n",
+        encoding="utf-8",
+    )
+
+    def fake_compare(_trip_dir: Path, **_kwargs):
+        return (
+            pd.DataFrame(
+                [
+                    {
+                        "field": "P",
+                        "diagnostics_column": "p_residual_m",
+                        "freq": "L1",
+                        "epoch_index": 1,
+                        "utcTimeMillis": 1000,
+                        "sys": 1,
+                        "svid": 3,
+                        "matlab_value": 1.0,
+                        "bridge_value": 1.0,
+                        "side": "both",
+                        "delta": 0.0,
+                    },
+                ],
+            ),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            {
+                "total_matlab_count": 1,
+                "total_bridge_count": 1,
+                "total_matched_count": 1,
+                "total_matlab_only": 0,
+                "total_bridge_only": 0,
+                "max_abs_delta": 0.0,
+                "passed": True,
+            },
+        )
+
+    def fake_wide_compare(_trip_dir: Path, **_kwargs):
+        bridge_wide = pd.DataFrame(
+            [
+                {
+                    "freq": "L1",
+                    "epoch_index": 1,
+                    "utcTimeMillis": 1000,
+                    "sys": 1,
+                    "svid": 3,
+                    "sat_rate_mps": 20.0,
+                },
+            ],
+        )
+        return (
+            pd.DataFrame(
+                [
+                    {
+                        "diagnostics_column": "sat_rate_mps",
+                        "freq": "L1",
+                        "epoch_index": 1,
+                        "utcTimeMillis": 1000,
+                        "sys": 1,
+                        "svid": 3,
+                        "matlab_value": 20.0,
+                        "bridge_value": 20.0,
+                        "side": "both",
+                        "delta": 0.0,
+                    },
+                ],
+            ),
+            pd.DataFrame(),
+            bridge_wide,
+            {
+                "total_matlab_count": 1,
+                "total_bridge_count": 1,
+                "total_matched_count": 1,
+                "total_matlab_only": 0,
+                "total_bridge_only": 0,
+                "max_abs_delta": 0.0,
+                "sat_col_mismatch_count": 0,
+                "matlab_wide_row_count": 1,
+                "bridge_wide_row_count": 1,
+                "passed": True,
+            },
+        )
+
+    *_frames, payload = residual_diagnostics_pd_parity_audit(
+        tmp_path,
+        ["train/course/phone"],
+        max_epochs=0,
+        multi_gnss=False,
+        compare_fn=fake_compare,
+        wide_compare_fn=fake_wide_compare,
+        bridge_residual_diagnostics_export_dir=tmp_path / "exports",
+    )
+
+    assert payload["wide_passed"] is True
+    assert payload["bridge_residual_diagnostics_export_byte_difference_count"] == 1
+    assert payload["passed"] is True

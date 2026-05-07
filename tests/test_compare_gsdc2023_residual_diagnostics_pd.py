@@ -5,6 +5,8 @@ from pathlib import Path
 import pandas as pd
 
 from experiments.compare_gsdc2023_residual_diagnostics_pd import (
+    PD_WIDE_FRAME_COLUMNS,
+    bridge_residual_diagnostics_export_frame,
     bridge_residual_diagnostics_pd_export_frame,
     bridge_residual_diagnostics_pd_wide_export_frame,
     compare_residual_diagnostics_pd_values,
@@ -193,3 +195,60 @@ def test_bridge_residual_diagnostics_pd_wide_export_adds_sat_col_and_components(
     assert row["d_factor_finite"] == 0
     assert row["l_pre_finite"] == 1
     assert row["l_factor_finite"] == 0
+
+
+def test_bridge_residual_diagnostics_export_frame_returns_sidecar_columns(tmp_path: Path) -> None:
+    trip_dir = tmp_path / "train" / "course" / "phone"
+    trip_dir.mkdir(parents=True)
+
+    def fake_bridge_frame(*_args, **_kwargs) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "field": "P",
+                    "freq": "L1",
+                    "epoch_index": 1,
+                    "utcTimeMillis": 1000,
+                    "sys": 1,
+                    "svid": 3,
+                    "bridge_sat_col": 2,
+                    "bridge_residual": 1.0,
+                    "bridge_pre_residual": 2.0,
+                    "bridge_common_bias": 3.0,
+                    "bridge_observation": 4.0,
+                    "bridge_model": 5.0,
+                    "bridge_pre_finite": 1,
+                    "bridge_factor_finite": 1,
+                    "bridge_l_pre_finite": 1,
+                    "bridge_l_factor_finite": 0,
+                },
+                {
+                    "field": "D",
+                    "freq": "L1",
+                    "epoch_index": 1,
+                    "utcTimeMillis": 1000,
+                    "sys": 1,
+                    "svid": 3,
+                    "bridge_sat_col": 2,
+                    "bridge_residual": 6.0,
+                    "bridge_pre_residual": 7.0,
+                    "bridge_common_bias": 8.0,
+                    "bridge_observation": 9.0,
+                    "bridge_model": 10.0,
+                    "bridge_pre_finite": 1,
+                    "bridge_factor_finite": 0,
+                    "bridge_l_pre_finite": 1,
+                    "bridge_l_factor_finite": 0,
+                },
+            ],
+        )
+
+    export = bridge_residual_diagnostics_export_frame(
+        trip_dir,
+        bridge_frame_fn=fake_bridge_frame,
+        factor_finite_key_filter=set(),
+    )
+
+    assert tuple(export.columns) == PD_WIDE_FRAME_COLUMNS
+    assert export.loc[0, "p_residual_m"] == 1.0
+    assert export.loc[0, "d_residual_mps"] == 6.0

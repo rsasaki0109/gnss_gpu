@@ -138,6 +138,28 @@ def _write_bridge_wide_subset_export(
     }
 
 
+def _write_bridge_residual_diagnostics_export(
+    data_root: Path,
+    trip: str,
+    bridge_wide: pd.DataFrame,
+    export_dir: Path,
+) -> dict[str, object]:
+    output_path = export_dir / trip / "phone_data_residual_diagnostics.csv"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    bridge_wide.to_csv(output_path, index=False)
+    matlab_path = data_root / trip / "phone_data_residual_diagnostics.csv"
+    byte_equivalent = bool(matlab_path.is_file() and output_path.read_bytes() == matlab_path.read_bytes())
+    return {
+        "trip": trip,
+        "path": str(output_path),
+        "matlab_path": str(matlab_path),
+        "row_count": int(len(bridge_wide)),
+        "column_count": int(len(bridge_wide.columns)),
+        "matlab_path_present": bool(matlab_path.is_file()),
+        "byte_equivalent": byte_equivalent,
+    }
+
+
 def residual_diagnostics_pd_parity_audit(
     data_root: Path,
     trips: Sequence[str],
@@ -153,6 +175,7 @@ def residual_diagnostics_pd_parity_audit(
     wide_compare_fn: WideCompareFn = compare_residual_diagnostics_pd_wide_values,
     bridge_subset_export_dir: Path | None = None,
     bridge_wide_subset_export_dir: Path | None = None,
+    bridge_residual_diagnostics_export_dir: Path | None = None,
     verbose: bool = False,
 ) -> tuple[
     pd.DataFrame,
@@ -174,7 +197,13 @@ def residual_diagnostics_pd_parity_audit(
     wide_column_frames: list[pd.DataFrame] = []
     wide_side_only_rows: list[dict[str, object]] = []
     wide_export_rows: list[dict[str, object]] = []
+    residual_diagnostics_export_rows: list[dict[str, object]] = []
     errors: list[dict[str, object]] = []
+    run_wide = bool(
+        run_wide_audit
+        or bridge_wide_subset_export_dir is not None
+        or bridge_residual_diagnostics_export_dir is not None
+    )
     for index, trip in enumerate(trips, start=1):
         if verbose:
             print(f"[{index}/{len(trips)}] {trip}", file=sys.stderr, flush=True)
@@ -205,7 +234,7 @@ def residual_diagnostics_pd_parity_audit(
                 export_rows.append(_write_bridge_subset_export(trip, bridge_values, bridge_subset_export_dir))
             except Exception as exc:  # pragma: no cover - exercised by CLI usage.
                 errors.append({"trip": trip, "error": f"bridge subset export {type(exc).__name__}: {exc}"})
-        if run_wide_audit:
+        if run_wide:
             try:
                 wide_merged, wide_column_summary, bridge_wide, wide_payload = wide_compare_fn(
                     trip_dir,
@@ -231,6 +260,20 @@ def residual_diagnostics_pd_parity_audit(
                     wide_export_rows.append(_write_bridge_wide_subset_export(trip, bridge_wide, bridge_wide_subset_export_dir))
                 except Exception as exc:  # pragma: no cover - exercised by CLI usage.
                     errors.append({"trip": trip, "error": f"bridge wide subset export {type(exc).__name__}: {exc}"})
+            if bridge_residual_diagnostics_export_dir is not None:
+                try:
+                    residual_diagnostics_export_rows.append(
+                        _write_bridge_residual_diagnostics_export(
+                            data_root,
+                            trip,
+                            bridge_wide,
+                            bridge_residual_diagnostics_export_dir,
+                        ),
+                    )
+                except Exception as exc:  # pragma: no cover - exercised by CLI usage.
+                    errors.append(
+                        {"trip": trip, "error": f"bridge residual diagnostics export {type(exc).__name__}: {exc}"},
+                    )
 
     trip_summary = pd.DataFrame(trip_rows)
     if not trip_summary.empty:
@@ -244,6 +287,7 @@ def residual_diagnostics_pd_parity_audit(
     wide_column_summary = pd.concat(wide_column_frames, ignore_index=True) if wide_column_frames else pd.DataFrame()
     wide_side_only_frame = pd.DataFrame(wide_side_only_rows)
     wide_export_summary = pd.DataFrame(wide_export_rows)
+    residual_diagnostics_export_summary = pd.DataFrame(residual_diagnostics_export_rows)
 
     total_matlab_only = int(trip_summary["total_matlab_only"].sum()) if not trip_summary.empty else 0
     total_bridge_only = int(trip_summary["total_bridge_only"].sum()) if not trip_summary.empty else 0
@@ -269,8 +313,15 @@ def residual_diagnostics_pd_parity_audit(
     wide_sat_col_mismatch_count = (
         int(wide_trip_summary["sat_col_mismatch_count"].sum()) if not wide_trip_summary.empty else 0
     )
+    residual_diagnostics_export_byte_difference_count = int(
+        sum(
+            1
+            for row in residual_diagnostics_export_rows
+            if bool(row.get("matlab_path_present", False)) and not bool(row.get("byte_equivalent", False))
+        ),
+    )
     wide_passed = bool(
-        (not run_wide_audit)
+        (not run_wide)
         or (
             not errors
             and not wide_trip_summary.empty
@@ -306,7 +357,7 @@ def residual_diagnostics_pd_parity_audit(
         "bridge_subset_export_total_rows": int(export_summary["row_count"].sum()) if not export_summary.empty else 0,
         "bridge_subset_export_total_values": int(export_summary["value_count"].sum()) if not export_summary.empty else 0,
         "pd_value_passed": pd_value_passed,
-        "run_wide_audit": bool(run_wide_audit),
+        "run_wide_audit": bool(run_wide),
         "wide_completed_trip_count": int(len(wide_trip_summary)),
         "wide_total_matlab_count": int(wide_trip_summary["total_matlab_count"].sum()) if not wide_trip_summary.empty else 0,
         "wide_total_bridge_count": int(wide_trip_summary["total_bridge_count"].sum()) if not wide_trip_summary.empty else 0,
@@ -319,6 +370,23 @@ def residual_diagnostics_pd_parity_audit(
         "bridge_wide_subset_export_total_rows": (
             int(wide_export_summary["row_count"].sum()) if not wide_export_summary.empty else 0
         ),
+        "bridge_residual_diagnostics_export_enabled": bridge_residual_diagnostics_export_dir is not None,
+        "bridge_residual_diagnostics_export_dir": (
+            str(bridge_residual_diagnostics_export_dir)
+            if bridge_residual_diagnostics_export_dir is not None
+            else None
+        ),
+        "bridge_residual_diagnostics_export_count": int(len(residual_diagnostics_export_summary)),
+        "bridge_residual_diagnostics_export_total_rows": (
+            int(residual_diagnostics_export_summary["row_count"].sum())
+            if not residual_diagnostics_export_summary.empty
+            else 0
+        ),
+        "bridge_residual_diagnostics_export_byte_equivalent_count": int(
+            sum(1 for row in residual_diagnostics_export_rows if bool(row.get("byte_equivalent", False))),
+        ),
+        "bridge_residual_diagnostics_export_byte_difference_count": residual_diagnostics_export_byte_difference_count,
+        "bridge_residual_diagnostics_exports": residual_diagnostics_export_rows[:20],
         "wide_passed": wide_passed,
         "passed": bool(pd_value_passed and wide_passed),
     }
@@ -368,6 +436,11 @@ def main() -> None:
     parser.add_argument("--wide-max-abs-delta-threshold", type=float, default=5.0e-3)
     parser.add_argument("--write-bridge-pd-subsets", action="store_true")
     parser.add_argument("--write-bridge-pd-wide-subsets", action="store_true")
+    parser.add_argument(
+        "--write-bridge-residual-diagnostics",
+        action="store_true",
+        help="write Python-generated phone_data_residual_diagnostics.csv files and byte-compare them to MATLAB exports",
+    )
     parser.add_argument("--verbose", action="store_true")
     _add_output_dir_arg(parser)
     args = parser.parse_args()
@@ -377,6 +450,9 @@ def main() -> None:
     export_dir = out_dir / "bridge_residual_diagnostics_pd_subset" if args.write_bridge_pd_subsets else None
     wide_export_dir = (
         out_dir / "bridge_residual_diagnostics_pd_wide_subset" if args.write_bridge_pd_wide_subsets else None
+    )
+    residual_diagnostics_export_dir = (
+        out_dir / "bridge_residual_diagnostics" if args.write_bridge_residual_diagnostics else None
     )
     (
         trip_summary,
@@ -400,6 +476,7 @@ def main() -> None:
         wide_max_abs_delta_threshold=float(args.wide_max_abs_delta_threshold),
         bridge_subset_export_dir=export_dir,
         bridge_wide_subset_export_dir=wide_export_dir,
+        bridge_residual_diagnostics_export_dir=residual_diagnostics_export_dir,
         verbose=bool(args.verbose),
     )
     trip_summary.to_csv(out_dir / "trip_summary.csv", index=False)
@@ -410,6 +487,11 @@ def main() -> None:
     wide_column_summary.to_csv(out_dir / "wide_summary_by_column.csv", index=False)
     wide_side_only.to_csv(out_dir / "wide_side_only.csv", index=False)
     wide_export_summary.to_csv(out_dir / "bridge_wide_subset_exports.csv", index=False)
+    if payload.get("bridge_residual_diagnostics_exports"):
+        pd.DataFrame(payload["bridge_residual_diagnostics_exports"]).to_csv(
+            out_dir / "bridge_residual_diagnostics_exports.csv",
+            index=False,
+        )
     _write_summary_json(out_dir, payload)
     _print_summary_and_output_dir(payload, out_dir, label="audit_dir")
 
