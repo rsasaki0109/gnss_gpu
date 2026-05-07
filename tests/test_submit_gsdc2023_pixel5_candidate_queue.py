@@ -568,7 +568,99 @@ def test_build_and_write_ready_report(tmp_path) -> None:
     assert payload["candidates"][0]["sha256"] == sha256_file(path)
     assert csv_rows[0]["candidate"] == queue[0].candidate
     assert csv_rows[0]["sha256"] == sha256_file(path)
+    assert csv_rows[0]["duplicate_sha_match_count"] == "0"
     assert csv_rows[0]["command"].startswith("kaggle competitions submit")
+
+
+def test_ready_report_records_duplicate_sha_matches(tmp_path) -> None:
+    queue = selected_queue({"p6p0_clean_sjc_r_scale_sweep"})[:1]
+    path = candidate_submission_path(queue[0].candidate, tmp_path / "out", "tag")
+    duplicate_path = tmp_path / "previous" / "nested" / "submission_previous.csv"
+    rows = "tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n"
+    path.parent.mkdir(parents=True)
+    duplicate_path.parent.mkdir(parents=True)
+    path.write_text(rows, encoding="utf-8")
+    duplicate_path.write_text(rows, encoding="utf-8")
+    report_path = tmp_path / "ready.json"
+
+    report = build_ready_report(
+        output_dir=tmp_path / "out",
+        tag="tag",
+        groups=["p6p0_clean_sjc_r_scale_sweep"],
+        queue=queue,
+        risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
+        pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
+        allow_risk=False,
+        duplicate_sha_roots=[tmp_path / "previous"],
+    )
+    write_ready_report(report_path, report)
+
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    csv_rows = list(csv.DictReader((tmp_path / "ready.csv").open(encoding="utf-8")))
+    assert payload["duplicate_sha_candidate_count"] == 1
+    assert payload["duplicate_sha_match_count"] == 1
+    assert payload["candidates"][0]["duplicate_sha_matches"] == [str(duplicate_path.resolve())]
+    assert csv_rows[0]["duplicate_sha_match_count"] == "1"
+    assert csv_rows[0]["duplicate_sha_matches"] == str(duplicate_path.resolve())
+
+
+def test_audit_ready_report_can_fail_on_duplicate_sha(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    output_dir = tmp_path / "out"
+    path = candidate_submission_path(candidate, output_dir, "tag")
+    duplicate_path = tmp_path / "previous" / "submission_previous.csv"
+    rows = "tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n"
+    path.parent.mkdir(parents=True)
+    duplicate_path.parent.mkdir(parents=True)
+    path.write_text(rows, encoding="utf-8")
+    duplicate_path.write_text(rows, encoding="utf-8")
+    (output_dir / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "candidate_actionable_risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    (output_dir / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(path),
+                        "output_sha256": sha256_file(path),
+                        "pixel6pro_scale": 0.0,
+                        "risk_candidate_actionable_chunks": 0,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (output_dir / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "ready.json"
+    report = build_ready_report(
+        output_dir=output_dir,
+        tag="tag",
+        groups=["p6p0_clean_sjc_r_scale_sweep"],
+        queue=selected_queue({"p6p0_clean_sjc_r_scale_sweep"})[:1],
+        risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
+        pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
+        allow_risk=False,
+        duplicate_sha_roots=[tmp_path / "previous"],
+    )
+    write_ready_report(report_path, report)
+
+    assert assert_ready_report_consistency(report_path)["duplicate_sha_match_count"] == 1
+    with pytest.raises(SystemExit, match="duplicate SHA candidates found"):
+        main(["--audit-ready-report", str(report_path), "--fail-on-duplicate-sha"])
 
 
 def test_ready_report_consistency_audits_json_csv_manifest_and_sha(tmp_path) -> None:

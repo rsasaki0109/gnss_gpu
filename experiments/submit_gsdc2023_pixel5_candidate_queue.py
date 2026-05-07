@@ -9,6 +9,7 @@ import hashlib
 import json
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ COMPETITION = "smartphone-decimeter-2023"
 DEFAULT_TAG = "20260501"
 PRE_SUBMIT_MANIFEST = "pre_submit_manifest.json"
 PRE_SUBMIT_TRIP_CHECKS = "pre_submit_trip_delta_checks.csv"
+SUBMISSION_GLOB = "submission*.csv"
 
 
 @dataclass(frozen=True)
@@ -196,6 +198,71 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _submission_csv_paths(root: Path) -> list[Path]:
+    return sorted(
+        path.resolve()
+        for path in root.expanduser().resolve().rglob(SUBMISSION_GLOB)
+        if path.is_file()
+        and "trip_summary" not in path.name
+        and not path.name.startswith("submissions_by_")
+    )
+
+
+def _duplicate_sha_index(roots: list[Path], *, exclude_paths: set[Path]) -> dict[str, list[str]]:
+    by_sha: dict[str, list[str]] = {}
+    for root in roots:
+        root = root.expanduser().resolve()
+        if not root.is_dir():
+            raise SystemExit(f"duplicate SHA root is missing or not a directory: {root}")
+        for path in _submission_csv_paths(root):
+            if path in exclude_paths:
+                continue
+            by_sha.setdefault(sha256_file(path), []).append(str(path))
+    for matches in by_sha.values():
+        matches.sort()
+    return by_sha
+
+
+def _attach_duplicate_sha_matches(candidates: list[dict[str, object]], roots: list[Path]) -> dict[str, int]:
+    if not roots:
+        for row in candidates:
+            row["duplicate_sha_matches"] = []
+            row["duplicate_sha_match_count"] = 0
+        return {"candidate_count": 0, "match_count": 0}
+
+    exclude_paths = {
+        Path(path).expanduser().resolve()
+        for row in candidates
+        if isinstance((path := row.get("path")), str)
+    }
+    duplicate_index = _duplicate_sha_index(roots, exclude_paths=exclude_paths)
+    duplicate_candidate_count = 0
+    duplicate_match_count = 0
+    for row in candidates:
+        sha = row.get("sha256")
+        matches = duplicate_index.get(sha, []) if isinstance(sha, str) else []
+        row["duplicate_sha_matches"] = matches
+        row["duplicate_sha_match_count"] = len(matches)
+        if matches:
+            duplicate_candidate_count += 1
+            duplicate_match_count += len(matches)
+    return {"candidate_count": duplicate_candidate_count, "match_count": duplicate_match_count}
+
+
+def _assert_no_duplicate_sha_matches(report: dict[str, object]) -> None:
+    candidates = report.get("candidates")
+    rows = candidates if isinstance(candidates, list) else []
+    failures: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        count = _as_int(row.get("duplicate_sha_match_count"))
+        if count > 0:
+            failures.append(f"{row.get('candidate', '<unknown>')}={count}")
+    if failures:
+        raise SystemExit(f"duplicate SHA candidates found: {', '.join(failures)}")
 
 
 def pre_submit_manifest_payload(output_dir: Path) -> dict[str, object] | None:
@@ -511,6 +578,7 @@ def build_ready_report(
     risk_report: dict[str, object] | None,
     pre_submit_manifest: dict[str, object] | None,
     allow_risk: bool,
+    duplicate_sha_roots: list[Path] | None = None,
 ) -> dict[str, object]:
     candidates: list[dict[str, object]] = []
     for item in queue:
@@ -525,6 +593,8 @@ def build_ready_report(
                 "command": kaggle_submit_command(path, item.message),
             },
         )
+    duplicate_roots = [root.expanduser().resolve() for root in duplicate_sha_roots or []]
+    duplicate_summary = _attach_duplicate_sha_matches(candidates, duplicate_roots)
     manifest_risk: object | None = None
     matlab_equivalence_gate: object | None = None
     if isinstance(pre_submit_manifest, dict):
@@ -538,6 +608,9 @@ def build_ready_report(
         "ready_count": len(candidates),
         "candidate_count": len(candidates),
         "candidates": candidates,
+        "duplicate_sha_roots": [str(root) for root in duplicate_roots],
+        "duplicate_sha_candidate_count": duplicate_summary["candidate_count"],
+        "duplicate_sha_match_count": duplicate_summary["match_count"],
         "risk_report": risk_report,
         "pre_submit_manifest": {
             "present": pre_submit_manifest is not None,
@@ -553,7 +626,16 @@ def write_ready_report(path: Path, report: dict[str, object]) -> None:
     csv_path = path.with_suffix(".csv")
     candidates = report.get("candidates", [])
     rows = candidates if isinstance(candidates, list) else []
-    fieldnames = ["candidate", "priority_group", "message", "path", "sha256", "command"]
+    fieldnames = [
+        "candidate",
+        "priority_group",
+        "message",
+        "path",
+        "sha256",
+        "duplicate_sha_match_count",
+        "duplicate_sha_matches",
+        "command",
+    ]
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
@@ -568,6 +650,10 @@ def write_ready_report(path: Path, report: dict[str, object]) -> None:
                     "message": row.get("message", ""),
                     "path": row.get("path", ""),
                     "sha256": row.get("sha256", ""),
+                    "duplicate_sha_match_count": row.get("duplicate_sha_match_count", 0),
+                    "duplicate_sha_matches": ";".join(row.get("duplicate_sha_matches", []))
+                    if isinstance(row.get("duplicate_sha_matches"), list)
+                    else "",
                     "command": shlex.join(command) if isinstance(command, list) else str(command),
                 },
             )
@@ -618,6 +704,8 @@ def _format_prepare_command(
     previous_output_dir: Path | None,
     previous_tag: str,
     skip_missing: bool,
+    duplicate_sha_roots: list[Path] | None,
+    fail_on_duplicate_sha: bool,
 ) -> str:
     args = ["--output-dir", str(output_dir), "--tag", tag]
     for group in groups or []:
@@ -634,12 +722,16 @@ def _format_prepare_command(
         args.extend(["--matlab-equivalence-summary", matlab_summary_cli_path])
     if require_matlab_equivalence:
         args.append("--require-matlab-equivalence")
+    for root in duplicate_sha_roots or []:
+        args.extend(["--duplicate-sha-root", str(root)])
+    if fail_on_duplicate_sha:
+        args.append("--fail-on-duplicate-sha")
     if skip_missing:
         args.append("--skip-missing")
     entries: list[str] = []
     i = 0
     while i < len(args):
-        if args[i] in {"--require-matlab-equivalence", "--skip-missing"}:
+        if args[i] in {"--require-matlab-equivalence", "--fail-on-duplicate-sha", "--skip-missing"}:
             entries.append(f"  {args[i]}")
             i += 1
             continue
@@ -677,6 +769,8 @@ def write_submit_readiness_doc(
     previous_output_dir: Path | None,
     previous_tag: str,
     skip_missing: bool,
+    duplicate_sha_roots: list[Path] | None = None,
+    fail_on_duplicate_sha: bool = False,
 ) -> Path:
     report = _read_json_object(ready_report_path)
     manifest = _read_json_object(output_dir / PRE_SUBMIT_MANIFEST)
@@ -690,6 +784,8 @@ def write_submit_readiness_doc(
     report_risk = report_risk if isinstance(report_risk, dict) else {}
     max_changed = max((_as_int(row.get("input_changed_rows")) for row in trip_rows), default=0)
     max_delta = max((_as_float(row.get("input_max_m")) for row in trip_rows), default=0.0)
+    duplicate_sha_candidate_count = _as_int(report.get("duplicate_sha_candidate_count"))
+    duplicate_sha_match_count = _as_int(report.get("duplicate_sha_match_count"))
     prepare_command = _format_prepare_command(
         output_dir=output_dir,
         tag=tag,
@@ -701,6 +797,8 @@ def write_submit_readiness_doc(
         previous_output_dir=previous_output_dir,
         previous_tag=previous_tag,
         skip_missing=skip_missing,
+        duplicate_sha_roots=duplicate_sha_roots,
+        fail_on_duplicate_sha=fail_on_duplicate_sha,
     )
     cached_equivalence_command = _format_cached_equivalence_command(matlab_equivalence.get("summary"), matlab_equivalence)
     cached_equivalence_lines = (
@@ -786,6 +884,8 @@ def write_submit_readiness_doc(
                 f"- Max risky Pixel6Pro input changed rows: `{max_changed}`",
                 f"- Max risky Pixel6Pro input delta: `{max_delta:.1f} m`",
                 f"- MATLAB equivalence: `{matlab_equivalence.get('equivalence_claim', 'not recorded')}`",
+                f"- Duplicate SHA candidates: `{duplicate_sha_candidate_count}`",
+                f"- Duplicate SHA matches: `{duplicate_sha_match_count}`",
                 "",
                 "## Candidate SHA256",
                 "",
@@ -824,6 +924,18 @@ def _candidate_rows_by_name(rows: list[dict[str, Any]], *, label: str) -> dict[s
             raise SystemExit(f"{label} has duplicate candidate: {candidate}")
         by_name[candidate] = row
     return by_name
+
+
+def _duplicate_roots_from_report(report: dict[str, Any]) -> list[Path]:
+    roots = report.get("duplicate_sha_roots", [])
+    if not isinstance(roots, list):
+        raise SystemExit("ready report duplicate_sha_roots must be a list")
+    duplicate_roots: list[Path] = []
+    for root in roots:
+        if not isinstance(root, str):
+            raise SystemExit("ready report duplicate_sha_roots contains a non-string entry")
+        duplicate_roots.append(Path(root))
+    return duplicate_roots
 
 
 def _risk_actionable_chunks(report: dict[str, object] | None) -> int | None:
@@ -896,6 +1008,29 @@ def assert_ready_report_consistency(report_path: Path) -> dict[str, Any]:
             if manifest_sha != sha_raw:
                 raise SystemExit(f"ready report/pre-submit sha256 mismatch for {candidate}: {sha_raw} != {manifest_sha}")
 
+    duplicate_roots = _duplicate_roots_from_report(report)
+    if duplicate_roots:
+        duplicate_rows = [dict(row) for row in candidates]
+        duplicate_summary = _attach_duplicate_sha_matches(duplicate_rows, duplicate_roots)
+        if duplicate_summary["candidate_count"] != _as_int(report.get("duplicate_sha_candidate_count")):
+            raise SystemExit(
+                "ready report duplicate SHA candidate count mismatch: "
+                f"report={report.get('duplicate_sha_candidate_count')}, current={duplicate_summary['candidate_count']}"
+            )
+        if duplicate_summary["match_count"] != _as_int(report.get("duplicate_sha_match_count")):
+            raise SystemExit(
+                "ready report duplicate SHA match count mismatch: "
+                f"report={report.get('duplicate_sha_match_count')}, current={duplicate_summary['match_count']}"
+            )
+        duplicate_by_candidate = _candidate_rows_by_name(duplicate_rows, label="current duplicate SHA scan")
+        for candidate, row in by_candidate.items():
+            recorded_matches = row.get("duplicate_sha_matches", [])
+            recorded_matches = recorded_matches if isinstance(recorded_matches, list) else []
+            current_matches = duplicate_by_candidate[candidate].get("duplicate_sha_matches", [])
+            current_matches = current_matches if isinstance(current_matches, list) else []
+            if sorted(str(value) for value in recorded_matches) != sorted(str(value) for value in current_matches):
+                raise SystemExit(f"ready report duplicate SHA matches changed for {candidate}")
+
     csv_path = report_path.with_suffix(".csv")
     if not csv_path.is_file():
         raise SystemExit(f"ready report CSV is missing: {csv_path}")
@@ -910,6 +1045,13 @@ def assert_ready_report_consistency(report_path: Path) -> dict[str, Any]:
         csv_sha = csv_by_candidate[candidate].get("sha256")
         if csv_sha != row.get("sha256"):
             raise SystemExit(f"ready report CSV sha256 mismatch for {candidate}: {csv_sha} != {row.get('sha256')}")
+        csv_duplicate_count = _as_int(csv_by_candidate[candidate].get("duplicate_sha_match_count"))
+        row_duplicate_count = _as_int(row.get("duplicate_sha_match_count"))
+        if csv_duplicate_count != row_duplicate_count:
+            raise SystemExit(
+                f"ready report CSV duplicate SHA count mismatch for {candidate}: "
+                f"{csv_duplicate_count} != {row_duplicate_count}"
+            )
     return report
 
 
@@ -927,6 +1069,8 @@ def prepare_ready_report(
     require_matlab_equivalence: bool = False,
     skip_missing: bool = False,
     allow_risk: bool = False,
+    duplicate_sha_roots: list[Path] | None = None,
+    fail_on_duplicate_sha: bool = False,
 ) -> dict[str, Any]:
     build_summary = build_summary_path or output_dir / "build_summary.json"
     build_pre_submit_manifest(
@@ -962,9 +1106,12 @@ def prepare_ready_report(
         risk_report=risk_report,
         pre_submit_manifest=pre_submit_manifest,
         allow_risk=allow_risk,
+        duplicate_sha_roots=duplicate_sha_roots,
     )
     write_ready_report(ready_report_path, report)
     audited = assert_ready_report_consistency(ready_report_path)
+    if fail_on_duplicate_sha:
+        _assert_no_duplicate_sha_matches(audited)
     write_submit_readiness_doc(
         output_dir=output_dir,
         ready_report_path=ready_report_path,
@@ -973,6 +1120,8 @@ def prepare_ready_report(
         previous_output_dir=previous_output_dir,
         previous_tag=previous_tag,
         skip_missing=skip_missing,
+        duplicate_sha_roots=duplicate_sha_roots,
+        fail_on_duplicate_sha=fail_on_duplicate_sha,
     )
     return audited
 
@@ -1003,6 +1152,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--skip-missing", action="store_true", help="skip candidates whose CSVs do not exist")
     parser.add_argument(
+        "--duplicate-sha-root",
+        action="append",
+        type=Path,
+        dest="duplicate_sha_roots",
+        help="scan an existing submission tree and record same-SHA candidate CSV matches in ready reports",
+    )
+    parser.add_argument(
+        "--fail-on-duplicate-sha",
+        action="store_true",
+        help="fail check-ready/submit/prepare-ready-report when --duplicate-sha-root finds same-SHA CSVs",
+    )
+    parser.add_argument(
         "--allow-risk",
         action="store_true",
         help="allow Kaggle submit even when the build risk report is missing or has risky chunks",
@@ -1010,6 +1171,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.audit_ready_report:
         report = assert_ready_report_consistency(args.audit_ready_report)
+        if args.fail_on_duplicate_sha:
+            _assert_no_duplicate_sha_matches(report)
         print(f"audited: {int(report.get('ready_count', 0))} candidate(s)")
         return 0
     if args.prepare_ready_report:
@@ -1026,6 +1189,8 @@ def main(argv: list[str] | None = None) -> int:
             require_matlab_equivalence=args.require_matlab_equivalence,
             skip_missing=args.skip_missing,
             allow_risk=args.allow_risk,
+            duplicate_sha_roots=args.duplicate_sha_roots,
+            fail_on_duplicate_sha=args.fail_on_duplicate_sha,
         )
         print(f"prepared: {int(report.get('ready_count', 0))} candidate(s)")
         return 0
@@ -1049,6 +1214,26 @@ def main(argv: list[str] | None = None) -> int:
                 allow_risk=args.allow_risk,
                 previous_safe_manifest=pre_submit_manifest is not None,
             )
+        if args.duplicate_sha_roots:
+            duplicate_report = build_ready_report(
+                output_dir=args.output_dir,
+                tag=args.tag,
+                groups=args.group,
+                queue=ready_queue,
+                risk_report=risk_report,
+                pre_submit_manifest=pre_submit_manifest,
+                allow_risk=args.allow_risk,
+                duplicate_sha_roots=args.duplicate_sha_roots,
+            )
+            if _as_int(duplicate_report.get("duplicate_sha_match_count")) > 0:
+                print(
+                    "warning: duplicate SHA matches found: "
+                    f"{duplicate_report.get('duplicate_sha_candidate_count')} candidate(s), "
+                    f"{duplicate_report.get('duplicate_sha_match_count')} match(es)",
+                    file=sys.stderr,
+                )
+            if args.fail_on_duplicate_sha:
+                _assert_no_duplicate_sha_matches(duplicate_report)
         if args.check_ready:
             print(f"ready: {len(ready_queue)} candidate(s)")
     if args.ready_report:
@@ -1060,6 +1245,7 @@ def main(argv: list[str] | None = None) -> int:
             risk_report=risk_report,
             pre_submit_manifest=pre_submit_manifest,
             allow_risk=args.allow_risk,
+            duplicate_sha_roots=args.duplicate_sha_roots,
         )
         write_ready_report(args.ready_report, report)
 

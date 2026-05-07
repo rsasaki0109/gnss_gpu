@@ -456,12 +456,18 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - `pixel5phone_3p375_sjc_r1p6875_p6p0`: `797ff01db70677bea93bc09dbb1333b5792d96ba4ae2ca9b76df403a8b27ded1`
     - `pixel5phone_3p375_sjc_r2p53125_p6p0`: `934ef3410aa55b6888336d70e737679a46c553279328c6ace0090d5ab59f77ab`
   - Interpretation: the previous-safe gate failure was fully explained by rolling Pixel6Pro risky trips back to input. Preserving prior safe Pixel6Pro rows makes the P6P0 queue gate-clean, but produces duplicate files of the already-ready non-P6P0 queue, so these are not new Kaggle submissions.
+- Submit-ready duplicate SHA guard:
+  - `submit_gsdc2023_pixel5_candidate_queue.py` now accepts `--duplicate-sha-root PATH` to scan existing local `submission*.csv` trees and record same-SHA matches in `submit_ready_report.json`, `submit_ready_report.csv`, and `submit_readiness.md`.
+  - `--fail-on-duplicate-sha` upgrades recorded duplicate SHA matches to a fail-closed gate for `--audit-ready-report`, `--check-ready`, `--submit`, and `--prepare-ready-report`.
+  - Real-data P6P0 previous-safe report with `--duplicate-sha-root experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted` records `duplicate_sha_candidate_count=3`, `duplicate_sha_match_count=3`; each P6P0 previous-safe candidate points to the corresponding non-P6P0 ready candidate path.
+  - `--audit-ready-report .../submit_ready_report.json --fail-on-duplicate-sha` exits nonzero with all three duplicate candidates listed.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py` => `27 passed`.
 
 次にやること:
 
-1. submit queue / ready report に「既存 ready/submitted CSV と同一 SHA の重複候補」を fail-closed または明示 warning として記録する。
-2. cached summary validation を pre-submit manifest / ready report の機械可読 field としても載せるか判断する。
-3. MATLAB 移植の残タスクとして、`phone_data.mat` / sidecar artifact compatibility を Python writer でどこまで生成対象にするか決める。
+1. cached summary validation を pre-submit manifest / ready report の機械可読 field としても載せるか判断する。
+2. MATLAB 移植の残タスクとして、`phone_data.mat` / sidecar artifact compatibility を Python writer でどこまで生成対象にするか決める。
+3. P6P0 ではなく score 改善に戻る場合、既存 local screen の `duplicate_submitted_local_sha` / risky previous-safe columns を使って未提出かつ private-safe な候補だけを再抽出する。
 
 2026-05-05 P6P0 clean Kaggle submit:
 
