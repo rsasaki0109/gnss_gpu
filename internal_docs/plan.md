@@ -236,6 +236,17 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - result: `bridge_factor_count_exports_written=1`, `matched_abs_delta_total=0`, `count_delta_failure_count=0`, `count_parity_ratio=1.0`
     - generated CSV was byte-for-line equivalent to MATLAB `phone_data_factor_counts.csv` for `train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4` under `diff -u`.
   - Next: extend the same pattern to `phone_data_factor_mask.csv` writer first, then `phone_data_residual_diagnostics.csv` only after deciding whether inactive diagnostics rows should remain golden-key driven.
+- 2026-05-07 Python factor-mask sidecar writer:
+  - `compare_gsdc2023_factor_masks.py --write-bridge-factor-mask` now writes a Python-generated MATLAB-style `phone_data_factor_mask.csv` under `bridge_factor_mask/`.
+  - The writer adds MATLAB `sat_col` from the bridge slot satellite order and emits columns `field,freq,epoch_index,utcTimeMillis,next_epoch_index,nextUtcTimeMillis,sys,svid,sat_col`.
+  - Export order now matches MATLAB: frequency order `L1` then `L5`, field order `P,resPc,D,resD,L,resL`, then `sat_col` and epoch.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py::test_compare_factor_masks_matches_exported_bridge_mask tests/test_gsdc2023_factor_mask.py::test_real_matlab_export_factor_counts_match_factor_mask_rows` => `13 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data probe:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_factor_masks.py --data-root ../ref/gsdc2023/kaggle_smartphone_decimeter_2023/sdc2023 --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 --max-epochs 0 --write-bridge-factor-mask --output-dir experiments/results/phone_data_factor_mask_writer_probe_20260507`
+    - output: `experiments/results/phone_data_factor_mask_writer_probe_20260507/gsdc2023_factor_mask_parity_20260507_110908`
+    - result: `bridge_factor_mask_export_rows=83640`, `total_matlab_only=0`, `total_bridge_only=0`, `symmetric_parity=1.0`
+    - generated CSV was byte-for-line equivalent to MATLAB `phone_data_factor_mask.csv` for `train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4` under `diff -u`.
+  - Next: run the writer on the 12-trip MATLAB export bundle and record whether every generated factor mask is byte-equivalent before moving to residual diagnostics.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`

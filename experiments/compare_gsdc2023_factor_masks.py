@@ -46,6 +46,7 @@ from experiments.gsdc2023_factor_mask import (
     normalize_factor_mask_frame as _normalize_mask_frame,
 )
 from experiments.gsdc2023_signal_model import (
+    constellation_to_matlab_sys as _constellation_to_matlab_sys,
     factor_frequency_label as _freq_label,
 )
 from experiments.gsdc2023_trip_window import (
@@ -55,6 +56,11 @@ from experiments.gsdc2023_trip_window import (
 
 
 _SIDE_ONLY_FIELDS = tuple(FACTOR_MASK_KEY_COLUMNS) + ("side",)
+FACTOR_MASK_EXPORT_COLUMNS = tuple(FACTOR_MASK_KEY_COLUMNS) + ("sat_col",)
+_FACTOR_MASK_EXPORT_FIELD_ORDER = {
+    field: index for index, field in enumerate(("P", "resPc", "D", "resD", "L", "resL"))
+}
+_FACTOR_MASK_EXPORT_FREQ_ORDER = {"L1": 0, "L5": 1}
 
 
 def _side_only_rows(merged: pd.DataFrame, side: str, *, limit: int = 20) -> list[dict[str, object]]:
@@ -97,6 +103,15 @@ def _side_only_by_field_freq(merged: pd.DataFrame) -> dict[str, dict[str, dict[s
     return out
 
 
+def _sat_col_by_key(slot_keys: tuple[tuple[int, int, str], ...]) -> dict[tuple[int, int], int]:
+    sat_col: dict[tuple[int, int], int] = {}
+    for constellation, svid, _signal_type in slot_keys:
+        key = (_constellation_to_matlab_sys(int(constellation)), int(svid))
+        if key not in sat_col:
+            sat_col[key] = len(sat_col) + 1
+    return sat_col
+
+
 def build_bridge_factor_mask(
     trip_dir: Path,
     *,
@@ -132,6 +147,7 @@ def build_bridge_factor_mask(
     times_ms = np.asarray(batch.times_ms, dtype=np.float64)
     slot_keys = tuple(batch.slot_keys)
     slot_freq = np.array([_freq_label(key[2]) for key in slot_keys], dtype=object)
+    sat_col = _sat_col_by_key(slot_keys)
     rows: list[dict[str, object]] = []
 
     for freq in ("L1", "L5"):
@@ -181,7 +197,59 @@ def build_bridge_factor_mask(
                 epoch_offset=start_epoch,
             )
 
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    if not frame.empty:
+        frame["sat_col"] = [
+            int(sat_col[(int(row.sys), int(row.svid))])
+            for row in frame[["sys", "svid"]].itertuples(index=False)
+        ]
+    return frame
+
+
+def bridge_factor_mask_export_frame(
+    trip_dir: Path,
+    *,
+    max_epochs: int = 0,
+    multi_gnss: bool = False,
+    pseudorange_residual_mask_m: float = OBS_MASK_RESIDUAL_THRESHOLD_M,
+    pseudorange_residual_mask_l5_m: float = OBS_MASK_RESIDUAL_THRESHOLD_L5_M,
+    doppler_residual_mask_mps: float = OBS_MASK_DOPPLER_RESIDUAL_THRESHOLD_MPS,
+    tdcp_consistency_threshold_m: float = DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M,
+    pseudorange_doppler_mask_m: float = OBS_MASK_PSEUDORANGE_DOPPLER_THRESHOLD_M,
+    matlab_residual_diagnostics_mask_path: Path | None = None,
+) -> pd.DataFrame:
+    bridge_mask = build_bridge_factor_mask(
+        trip_dir,
+        max_epochs=max_epochs,
+        multi_gnss=multi_gnss,
+        pseudorange_residual_mask_m=pseudorange_residual_mask_m,
+        pseudorange_residual_mask_l5_m=pseudorange_residual_mask_l5_m,
+        doppler_residual_mask_mps=doppler_residual_mask_mps,
+        tdcp_consistency_threshold_m=tdcp_consistency_threshold_m,
+        pseudorange_doppler_mask_m=pseudorange_doppler_mask_m,
+        matlab_residual_diagnostics_mask_path=matlab_residual_diagnostics_mask_path,
+    )
+    if bridge_mask.empty:
+        return pd.DataFrame(columns=list(FACTOR_MASK_EXPORT_COLUMNS))
+    missing = [col for col in FACTOR_MASK_EXPORT_COLUMNS if col not in bridge_mask.columns]
+    if missing:
+        raise ValueError(f"bridge factor mask is missing export columns: {missing}")
+    out = bridge_mask.loc[:, list(FACTOR_MASK_EXPORT_COLUMNS)].copy()
+    out["_freq_order"] = out["freq"].map(_FACTOR_MASK_EXPORT_FREQ_ORDER).fillna(99).astype(int)
+    out["_field_order"] = out["field"].map(_FACTOR_MASK_EXPORT_FIELD_ORDER).fillna(99).astype(int)
+    out = out.sort_values(
+        [
+            "_freq_order",
+            "_field_order",
+            "sat_col",
+            "sys",
+            "svid",
+            "epoch_index",
+            "next_epoch_index",
+        ],
+        kind="mergesort",
+    )
+    return out.loc[:, list(FACTOR_MASK_EXPORT_COLUMNS)].reset_index(drop=True)
 
 
 def compare_factor_masks(
@@ -281,6 +349,11 @@ def main() -> None:
         default=None,
         help="optional phone_data_residual_diagnostics.csv used to force bridge P/D/L factor availability",
     )
+    parser.add_argument(
+        "--write-bridge-factor-mask",
+        action="store_true",
+        help="write a Python-generated phone_data_factor_mask.csv under the audit output directory",
+    )
     _add_multi_gnss_arg(
         parser,
         help_text="match raw bridge multi-GNSS mode; default is GPS-only MATLAB parity",
@@ -310,6 +383,23 @@ def main() -> None:
     merged[merged["side"] == "matlab_only"].to_csv(out_dir / "matlab_only.csv", index=False)
     merged[merged["side"] == "bridge_only"].to_csv(out_dir / "bridge_only.csv", index=False)
     summary.to_csv(out_dir / "summary_by_field.csv", index=False)
+    if args.write_bridge_factor_mask:
+        bridge_export = bridge_factor_mask_export_frame(
+            trip_dir,
+            max_epochs=_nonnegative_max_epochs(args),
+            multi_gnss=args.multi_gnss,
+            pseudorange_residual_mask_m=args.pseudorange_residual_mask_m,
+            pseudorange_residual_mask_l5_m=args.pseudorange_residual_mask_l5_m,
+            doppler_residual_mask_mps=args.doppler_residual_mask_mps,
+            tdcp_consistency_threshold_m=args.tdcp_consistency_threshold_m,
+            pseudorange_doppler_mask_m=args.pseudorange_doppler_mask_m,
+            matlab_residual_diagnostics_mask_path=args.matlab_residual_diagnostics_mask,
+        )
+        bridge_export_path = out_dir / "bridge_factor_mask" / "phone_data_factor_mask.csv"
+        bridge_export_path.parent.mkdir(parents=True, exist_ok=True)
+        bridge_export.to_csv(bridge_export_path, index=False)
+        payload["bridge_factor_mask_export_path"] = str(bridge_export_path)
+        payload["bridge_factor_mask_export_rows"] = int(len(bridge_export))
     _write_summary_json(out_dir, payload)
     _print_summary_and_output_dir(payload, out_dir)
 
