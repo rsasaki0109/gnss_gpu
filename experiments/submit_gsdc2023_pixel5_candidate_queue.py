@@ -594,12 +594,27 @@ def _as_float(value: object, default: float = 0.0) -> float:
         return default
 
 
+def _cli_path(value: object) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        path = Path(value)
+        if path.is_absolute():
+            return str(path.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        pass
+    return value
+
+
 def _format_prepare_command(
     *,
     output_dir: Path,
     tag: str,
     groups: list[str] | None,
     ready_report_path: Path,
+    build_summary_path: object | None,
+    matlab_equivalence_summary: object | None,
+    require_matlab_equivalence: bool,
     previous_output_dir: Path | None,
     previous_tag: str,
     skip_missing: bool,
@@ -608,22 +623,48 @@ def _format_prepare_command(
     for group in groups or []:
         args.extend(["--group", group])
     args.extend(["--prepare-ready-report", str(ready_report_path)])
+    build_summary_cli_path = _cli_path(build_summary_path)
+    if build_summary_cli_path is not None:
+        args.extend(["--build-summary", build_summary_cli_path])
     if previous_output_dir is not None:
         args.extend(["--previous-output-dir", str(previous_output_dir)])
         args.extend(["--previous-tag", previous_tag])
+    matlab_summary_cli_path = _cli_path(matlab_equivalence_summary)
+    if matlab_summary_cli_path is not None:
+        args.extend(["--matlab-equivalence-summary", matlab_summary_cli_path])
+    if require_matlab_equivalence:
+        args.append("--require-matlab-equivalence")
     if skip_missing:
         args.append("--skip-missing")
-    lines = ["PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \\"]
+    entries: list[str] = []
     i = 0
     while i < len(args):
-        if args[i] == "--skip-missing":
-            lines.append("  --skip-missing")
+        if args[i] in {"--require-matlab-equivalence", "--skip-missing"}:
+            entries.append(f"  {args[i]}")
             i += 1
             continue
-        lines.append(f"  {args[i]} {shlex.quote(args[i + 1])} \\")
+        entries.append(f"  {args[i]} {shlex.quote(args[i + 1])}")
         i += 2
-    if lines[-1].endswith(" \\"):
-        lines[-1] = lines[-1][:-2]
+    lines = ["PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \\"]
+    for index, entry in enumerate(entries):
+        lines.append(f"{entry} \\" if index < len(entries) - 1 else entry)
+    return "\n".join(lines)
+
+
+def _format_cached_equivalence_command(summary_path: object | None, matlab_equivalence: dict[str, object]) -> str | None:
+    summary_cli_path = _cli_path(summary_path)
+    if summary_cli_path is None:
+        return None
+    max_epochs = _as_int(matlab_equivalence.get("max_epochs"))
+    count_max_epochs = _as_int(matlab_equivalence.get("count_max_epochs"))
+    lines = [
+        "PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py \\",
+        f"  --cached-summary {shlex.quote(summary_cli_path)} \\",
+        f"  --max-epochs {max_epochs} --count-max-epochs {count_max_epochs} \\",
+        "  --no-multi-gnss --no-residual-multi-gnss \\",
+        "  --residual-observation-mask --residual-include-inactive-observations \\",
+        "  --quick-assets --default-writer-regression-manifest",
+    ]
     return "\n".join(lines)
 
 
@@ -654,9 +695,27 @@ def write_submit_readiness_doc(
         tag=tag,
         groups=groups,
         ready_report_path=ready_report_path,
+        build_summary_path=manifest.get("build_summary"),
+        matlab_equivalence_summary=matlab_equivalence.get("summary"),
+        require_matlab_equivalence=bool(matlab_equivalence),
         previous_output_dir=previous_output_dir,
         previous_tag=previous_tag,
         skip_missing=skip_missing,
+    )
+    cached_equivalence_command = _format_cached_equivalence_command(matlab_equivalence.get("summary"), matlab_equivalence)
+    cached_equivalence_lines = (
+        [
+            "## Validate Cached MATLAB Equivalence",
+            "",
+            "Use this when the submit artifacts only need to re-check the existing full-window proof instead of rerunning the expensive gate.",
+            "",
+            "```bash",
+            cached_equivalence_command,
+            "```",
+            "",
+        ]
+        if cached_equivalence_command is not None
+        else []
     )
     audit_command = (
         "PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \\\n"
@@ -664,6 +723,7 @@ def write_submit_readiness_doc(
     )
     candidates = report.get("candidates", [])
     candidate_rows = candidates if isinstance(candidates, list) else []
+    group_label = ", ".join(groups or []) or "selected queue"
     table_rows = [
         "| Candidate | SHA256 |",
         "| --- | --- |",
@@ -677,9 +737,9 @@ def write_submit_readiness_doc(
     path.write_text(
         "\n".join(
             [
-                "# P6P0 Submit Readiness",
+                "# Submit Readiness",
                 "",
-                "This directory contains the ready-to-audit artifacts for the P6P0 clean SJC-R scale sweep. Kaggle submission has not been run.",
+                f"This directory contains the ready-to-audit artifacts for `{group_label}`. Kaggle submission has not been run.",
                 "",
                 "## Regenerate",
                 "",
@@ -693,6 +753,7 @@ def write_submit_readiness_doc(
                 f"prepared: {_as_int(report.get('ready_count'))} candidate(s)",
                 "```",
                 "",
+                *cached_equivalence_lines,
                 "## Audit Only",
                 "",
                 "```bash",

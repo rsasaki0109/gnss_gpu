@@ -865,7 +865,16 @@ def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
     (tmp_path / "pre_submit_manifest.json").write_text(
         json.dumps(
             {
+                "build_summary": str(tmp_path / "build_summary.json"),
                 "candidate_count": 1,
+                "matlab_equivalence_gate": {
+                    "count_max_epochs": 0,
+                    "equivalence_claim": "matlab_equivalent",
+                    "max_epochs": 0,
+                    "passed": True,
+                    "summary": str(tmp_path / "matlab_summary.json"),
+                    "summary_sha256": "abc123",
+                },
                 "risk_report": {"candidate_actionable_risky_chunks": 0},
             },
         ),
@@ -905,7 +914,13 @@ def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
 
     doc = doc_path.read_text(encoding="utf-8")
     assert "--prepare-ready-report" in doc
+    assert f"--build-summary {tmp_path / 'build_summary.json'}" in doc
     assert "--previous-tag old" in doc
+    assert f"--matlab-equivalence-summary {tmp_path / 'matlab_summary.json'}" in doc
+    assert "--require-matlab-equivalence" in doc
+    assert "--cached-summary" in doc
+    assert "--default-writer-regression-manifest" in doc
+    assert "MATLAB equivalence: `matlab_equivalent`" in doc
     assert "Ready candidates: `1`" in doc
     assert candidate in doc
 
