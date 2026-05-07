@@ -539,10 +539,21 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - Worst trip: `2022-04-04-16-31-us-ca-lax-x/pixel5`, `p95=19.04625557930374m`, `max=245.83184201676735m`, `rows_gt_5m=547`, so this is the first local-spike target.
   - Worst phones by p95: `sm-a325f` p95 `2.574789098663229m`, `xiaomimi8` p95 `0.430924179205534m`, `mi8` p95 `0.43090675242799864m`, then Samsung A32/A205U/S908B around `0.391m`; `pixel5` has p95 only `0.316864093093176m` but owns the max spike through LAX-X.
   - Interpretation: the closest local candidate is not missing a single row-order or byte-format detail. Most rows show phone-family-scale systematic offsets, while a small set of trip-local spikes dominates max/tail. The next full-final-submission reproduction step should first isolate the LAX-X/pixel5 source/patch mismatch, then check whether MATLAB applies a phone-family offset/postprocess that the Python candidate does not.
+- LAX-X/pixel5 source-rule decomposition:
+  - Added `experiments/analyze_gsdc2023_target_trip_source_delta.py` to compare one target trip against bridge source columns (`baseline`, `raw_wls`, `fgo`, `selected`) and write row/chunk/source-match summaries.
+  - Real-data command compared MATLAB/reference `submission_20260501_0526.csv` against the closest local candidate using `pixel5_lax_x_old_gated_fgo_early_raw_late_bridge_positions_submission_rows.csv`.
+  - Output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_source_delta_20260508/summary.json` (ignored artifact).
+  - Candidate delta on LAX-X: `2170` rows, `799` rows changed above `0.01m`, `738` above `1m`, `547` above `5m`, p95 `19.04625557930374m`, max `245.83184201676735m`.
+  - Closest bridge source to MATLAB reference by row: `baseline=1417`, `fgo=504`, `raw_wls=234`, `selected=15`; existing selected-source counts are `baseline=1858`, `raw_wls=252`, `fgo_early_chunk_override=30`, `raw_wls_late_chunk_override=30`.
+  - Worst chunks show the mismatch:
+    - epochs `0-200`: MATLAB reference is mostly nearest to `fgo` (`164/200`), but selected source is mostly `baseline` (`139/200`).
+    - epochs `400-600`: MATLAB reference is mostly nearest to `raw_wls` (`194/200`), but selected source is mostly `baseline` (`181/200`); this contains the `245.831842m` max row where MATLAB reference is essentially raw WLS.
+    - epochs `1800-2170`: MATLAB reference is mostly nearest to `fgo` (`339/370`), while selected source is mostly baseline/raw-late (`baseline=149`, `raw_wls=191`, including `30` raw_wls late override rows).
+  - Interpretation: the MATLAB reference final submission is much closer to a different LAX-X source schedule than the current old-gated early/raw-late patch. Reproducing Kaggle-score-level MATLAB behavior now needs a LAX-X schedule override, not another global score screen.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、`2022-04-04-16-31-us-ca-lax-x/pixel5` の closest-candidate差分を chunk/source-rule単位に分解し、MATLAB reference 側が採用した postprocess/patch/source を特定する。その次に phone-family-scale の定数的オフセット差を調べる。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、`2022-04-04-16-31-us-ca-lax-x/pixel5` の MATLAB-nearest source schedule を候補CSVとして再構成し、reference差分が p95/max とも縮むか確認する。その次に phone-family-scale の定数的オフセット差を調べる。
 2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
