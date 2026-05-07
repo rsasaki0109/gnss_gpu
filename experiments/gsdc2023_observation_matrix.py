@@ -6,13 +6,16 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
 from experiments.gsdc2023_imu import ecef_to_enu_relative as _ecef_to_enu_relative
 from experiments.gsdc2023_tdcp import ADR_STATE_CYCLE_SLIP, ADR_STATE_RESET, ADR_STATE_VALID
+
+if TYPE_CHECKING:
+    from experiments.gsdc2023_imu import IMUPreintegration
 
 
 RAW_GNSS_REQUIRED_COLUMNS = [
@@ -110,6 +113,9 @@ class TripArrays:
     dt: np.ndarray | None = None
     tdcp_meas: np.ndarray | None = None
     tdcp_weights: np.ndarray | None = None
+    adr: np.ndarray | None = None
+    adr_state: np.ndarray | None = None
+    adr_uncertainty: np.ndarray | None = None
     n_sat_slots: int = 0
     slot_keys: tuple[tuple[int, int, str], ...] = ()
     elapsed_ns: np.ndarray | None = None
