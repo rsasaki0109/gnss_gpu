@@ -398,6 +398,13 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - `--prepare-ready-report ... --require-matlab-equivalence` still fails closed as intended for P6P0 clean:
     - failure: `pre-submit previous trip check failed for pixel5phone_3p375_sjc_r0p84375_p6p0 2021-11-05-18-28-us-ca-mtv-m/pixel6pro: previous_changed_rows=1444, previous_max_m=0.7514168992409354`
     - Interpretation: MATLAB/writer equivalence now passes and is recorded in the manifest; submit-ready publication is correctly blocked by the separate previous-safe Pixel6Pro risk gate.
+- `sjc_r_scale_sweep` ready report regenerated with `--require-matlab-equivalence` using the same writer-gate summary:
+  - command: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --tag 20260501 --group sjc_r_scale_sweep --prepare-ready-report .../submit_ready_report.json --build-summary .../build_summary.json --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --previous-tag 20260501 --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_110637/summary.json --require-matlab-equivalence --skip-missing`
+  - result: `prepared: 3 candidate(s)`; `--audit-ready-report .../submit_ready_report.json` => `audited: 3 candidate(s)`; `--check-ready --require-matlab-equivalence` => `ready: 3 candidate(s)`
+  - ready candidates: `pixel5phone_3p375_sjc_r0p84375`, `pixel5phone_3p375_sjc_r1p6875`, `pixel5phone_3p375_sjc_r2p53125`
+  - manifest gate: summary SHA `7db96cba563dd2fe8719eed4a1a6082b5e8a76137c77b6608c92981c068b3e7a`, `equivalence_claim=matlab_equivalent`, writer passed `true`, writer exports `12`, writer rows `258537`, writer columns `44/44`, column mismatch `0`
+  - previous-safe trip checks: `9` rows; max input changed rows `1444`, max input delta `0.8140372066789227m`, max previous changed rows `0`, max previous delta `0.0m`
+  - Interpretation: the non-P6P0 previous-safe `sjc_r_scale_sweep` candidates remain submit-ready under the stricter MATLAB/writer gate because they preserve the previous safe Pixel6Pro rows exactly.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
@@ -407,8 +414,7 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 次にやること:
 
 1. 生成済み writer artifacts を regression 出力として固定し、MATLAB residual diagnostics sidecar 依存を golden fixture のみに縮小する
-2. `sjc_r_scale_sweep` 側の previous-safe candidate で writer gate 付き submit-ready report を再監査する
-3. full-window gate が重いので、writer gate の再利用/skip オプションか cached summary 入力を検討する
+2. full-window gate が重いので、writer gate の再利用/skip オプションか cached summary 入力を検討する
 
 2026-05-05 P6P0 clean Kaggle submit:
 
