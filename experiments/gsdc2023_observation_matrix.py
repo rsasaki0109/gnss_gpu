@@ -99,6 +99,7 @@ class TripArrays:
     truth: np.ndarray
     max_sats: int
     has_truth: bool
+    pseudorange_observable: np.ndarray | None = None
     sys_kind: np.ndarray | None = None
     n_clock: int = 1
     sat_vel: np.ndarray | None = None

@@ -91,6 +91,7 @@ def test_assemble_trip_arrays_stage_maps_stage_products_to_factory() -> None:
         times_ms=np.array([1000.0, 2000.0], dtype=np.float64),
         sat_ecef=np.ones((2, 1, 3), dtype=np.float64),
         pseudorange=np.ones((2, 1), dtype=np.float64),
+        pseudorange_observable=np.ones((2, 1), dtype=np.float64) * 1.5,
         weights=np.ones((2, 1), dtype=np.float64),
         kaggle_wls=np.ones((2, 3), dtype=np.float64),
         truth=np.zeros((2, 3), dtype=np.float64),
@@ -105,6 +106,9 @@ def test_assemble_trip_arrays_stage_maps_stage_products_to_factory() -> None:
         rtklib_tropo_m=np.ones((2, 1), dtype=np.float64) * 0.2,
         doppler=np.zeros((2, 1), dtype=np.float64),
         doppler_weights=np.ones((2, 1), dtype=np.float64),
+        adr=None,
+        adr_state=None,
+        adr_uncertainty=None,
         pseudorange_bias_weights=np.ones((2, 1), dtype=np.float64),
         pseudorange_residual_stage=pseudorange_residual_stage,
         time_delta=time_delta,
@@ -145,6 +149,7 @@ def test_assemble_trip_arrays_stage_maps_stage_products_to_factory() -> None:
     np.testing.assert_allclose(result["sat_clock_bias_matrix"], [[0.5], [0.5]])
     np.testing.assert_allclose(result["rtklib_iono_m"], [[0.3], [0.3]])
     np.testing.assert_allclose(result["rtklib_tropo_m"], [[0.2], [0.2]])
+    np.testing.assert_allclose(result["pseudorange_observable"], [[1.5], [1.5]])
 
 
 def test_assemble_prepared_trip_arrays_stage_uses_stage_products() -> None:
@@ -259,6 +264,7 @@ def test_assemble_prepared_trip_arrays_stage_uses_stage_products() -> None:
     np.testing.assert_allclose(result["clock_bias_m"], [7.0, 8.0])
     np.testing.assert_allclose(result["clock_drift_mps"], [0.7, 0.8])
     np.testing.assert_array_equal(result["weights"], observations.weights)
+    np.testing.assert_array_equal(result["pseudorange_observable"], observations.pseudorange_observable)
     np.testing.assert_array_equal(result["tdcp_meas"], post_stages.tdcp_stage.tdcp_meas)
     np.testing.assert_array_equal(result["sat_clock_bias_matrix"], observations.sat_clock_bias_matrix)
     np.testing.assert_array_equal(result["rtklib_tropo_m"], observations.rtklib_tropo_m)

@@ -631,6 +631,39 @@ def _bridge_l_factor_finite_keys_from_batch(
     return keys
 
 
+def _bridge_pd_pre_finite_keys_from_gnss_log(
+    trip_dir: Path,
+    *,
+    start_epoch: int,
+    max_epochs: int,
+    multi_gnss: bool,
+) -> set[tuple[object, ...]]:
+    from experiments.gsdc2023_gnss_log_reader import gnss_log_signal_mask_frame
+
+    gnss_log_path = Path(trip_dir) / "supplemental" / "gnss_log.txt"
+    if not gnss_log_path.is_file():
+        return set()
+    frame = gnss_log_signal_mask_frame(
+        gnss_log_path,
+        phone=Path(trip_dir).name,
+        gps_only=not bool(multi_gnss),
+    )
+    if frame.empty:
+        return set()
+    frame = frame[frame["field"].astype(str).isin(("P", "D"))].copy()
+    if max_epochs > 0:
+        start = int(start_epoch) + 1
+        stop = int(start_epoch) + int(max_epochs)
+        frame = frame[
+            pd.to_numeric(frame["epoch_index"], errors="coerce").between(start, stop, inclusive="both")
+        ].copy()
+    for column in ("epoch_index", "utcTimeMillis", "sys", "svid"):
+        frame[column] = pd.to_numeric(frame[column], errors="coerce").fillna(0).astype(np.int64)
+    frame["field"] = frame["field"].astype(str)
+    frame["freq"] = frame["freq"].astype(str)
+    return set(frame[_KEY_COLUMNS].itertuples(index=False, name=None))
+
+
 def build_bridge_residual_frame(
     trip_dir: Path,
     *,
@@ -684,7 +717,21 @@ def build_bridge_residual_frame(
 
     batch = build_batch(batch_start_epoch=start_epoch, batch_max_epochs=bridge_max_epochs)
     l_factor_batch = build_l_factor_batch(batch_start_epoch=start_epoch, batch_max_epochs=bridge_max_epochs)
+    if include_inactive_observations and inactive_key_filter is None:
+        inactive_key_filter = _bridge_pd_pre_finite_keys_from_gnss_log(
+            trip_dir,
+            start_epoch=start_epoch,
+            max_epochs=bridge_max_epochs,
+            multi_gnss=multi_gnss,
+        )
     times_ms = np.asarray(batch.times_ms, dtype=np.float64)
+    pseudorange_observable = getattr(batch, "pseudorange_observable", None)
+    if pseudorange_observable is not None:
+        observable_pseudorange_mask = np.isfinite(np.asarray(pseudorange_observable, dtype=np.float64)) & (
+            np.asarray(pseudorange_observable, dtype=np.float64) != 0.0
+        )
+    else:
+        observable_pseudorange_mask = np.isfinite(batch.pseudorange)
     receiver_velocity = _receiver_velocity_from_reference(times_ms, np.asarray(batch.kaggle_wls, dtype=np.float64))
     clock_drift_mps = batch.clock_drift_mps
     if start_epoch > 0 or bridge_max_epochs < FULL_EPOCH_COUNT:
@@ -848,6 +895,7 @@ def build_bridge_residual_frame(
                     np.isfinite(ranges)
                     & (ranges > 1.0e6)
                     & np.isfinite(batch.pseudorange[epoch_idx])
+                    & observable_pseudorange_mask[epoch_idx]
                     & np.isfinite(batch.sat_ecef[epoch_idx]).all(axis=1)
                     & np.isfinite(rx).all()
                 )
@@ -983,7 +1031,7 @@ def build_bridge_residual_frame(
                             epoch_offset=start_epoch,
                         )
             if include_inactive_observations:
-                inactive_idx = np.flatnonzero(valid[epoch_idx] & ~active)
+                inactive_idx = np.flatnonzero(valid[epoch_idx] & observable_pseudorange_mask[epoch_idx] & ~active)
                 if inactive_idx.size and np.isfinite(drift):
                     inactive_observation = -batch.doppler[epoch_idx, inactive_idx]
                     inactive_model = geom_rate[epoch_idx, inactive_idx]
@@ -1159,16 +1207,12 @@ def compare_residual_values(
     matlab = _matlab_residual_frame(diagnostics_path)
     start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
     matlab = _trim_epoch_window(matlab, start_epoch, bridge_max_epochs)
-    inactive_key_filter = (
-        set(matlab[_KEY_COLUMNS].itertuples(index=False, name=None)) if include_inactive_observations else None
-    )
     bridge = build_bridge_residual_frame(
         trip_dir,
         max_epochs=max_epochs,
         multi_gnss=multi_gnss,
         apply_observation_mask=apply_observation_mask,
         include_inactive_observations=include_inactive_observations,
-        inactive_key_filter=inactive_key_filter,
     )
     merged = _merge_residual_value_frames(matlab, bridge)
     summary, payload = _summary_frame(merged)
@@ -1180,6 +1224,7 @@ def compare_residual_values(
             "multi_gnss": bool(multi_gnss),
             "apply_observation_mask": bool(apply_observation_mask),
             "include_inactive_observations": bool(include_inactive_observations),
+            "inactive_key_source": "gnss_log_signal_mask" if include_inactive_observations else None,
         },
     )
     return merged, summary, payload

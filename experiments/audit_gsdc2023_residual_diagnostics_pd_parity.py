@@ -344,6 +344,7 @@ def residual_diagnostics_pd_parity_audit(
         "multi_gnss": bool(multi_gnss),
         "apply_observation_mask": bool(apply_observation_mask),
         "include_inactive_observations": bool(include_inactive_observations),
+        "inactive_key_source": "gnss_log_signal_mask" if include_inactive_observations else None,
         "max_abs_delta_threshold": float(max_abs_delta_threshold),
         "wide_max_abs_delta_threshold": float(wide_max_abs_delta_threshold),
         "overall_max_abs_delta": overall_max_abs_delta,

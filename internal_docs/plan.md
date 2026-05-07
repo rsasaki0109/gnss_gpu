@@ -352,6 +352,22 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - writer result: `bridge_residual_diagnostics_export_count=12`, `bridge_residual_diagnostics_export_total_rows=258537`, every generated export has `column_count=44`
     - `bridge_residual_diagnostics_export_byte_difference_count=12` is informational only: continuous numeric columns are parity-threshold equivalent, but CSV text/float formatting is not MATLAB byte-identical.
   - Interpretation: the complete residual diagnostics sidecar writer is packaged and validated on the 12-trip MATLAB bundle. It still derives inactive diagnostics keys from the MATLAB residual diagnostics sidecar when `--include-inactive-observations` is enabled, so the next gate-hardening step is to generate those inactive keys from Python state and then wire the writer into the MATLAB equivalence / submit-ready gate.
+- 2026-05-08 sidecar-free inactive diagnostics keys:
+  - `build_bridge_residual_frame(... include_inactive_observations=True)` now derives inactive P/D keys from Python-generated `gnss_log_signal_mask_frame` output instead of using MATLAB `phone_data_residual_diagnostics.csv` as the inactive-key filter.
+  - `TripArrays` now carries `pseudorange_observable`, so inactive row generation can distinguish real raw/gnss_log observations from interpolated matrix values.
+  - Full-window single-trip smoke:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_residual_diagnostics_pd.py --trip train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u --max-epochs 0 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-residual-diagnostics --output-dir experiments/results/residual_diagnostics_sidecarfree_inactive_full_smoke2_20260508`
+    - output: `experiments/results/residual_diagnostics_sidecarfree_inactive_full_smoke2_20260508/gsdc2023_residual_diagnostics_pd_parity_20260508_092213`
+    - result: `passed=true`, `total_matlab_only=0`, `total_bridge_only=0`, export rows `9036`, columns `44`
+  - Real-data 12-trip full-window writer probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-residual-diagnostics --verbose --output-dir experiments/results/residual_diagnostics_sidecarfree_inactive_12trip_probe_20260508`
+    - output: `experiments/results/residual_diagnostics_sidecarfree_inactive_12trip_probe_20260508/gsdc2023_residual_diagnostics_pd_parity_audit_20260508_092544`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, `completed_trip_count=12`, `error_count=0`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components/finite: `wide_total_matlab_count=10082943`, `wide_total_bridge_count=10082943`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - writer result: `bridge_residual_diagnostics_export_count=12`, `bridge_residual_diagnostics_export_total_rows=258537`, every generated export has `column_count=44`
+  - Fix detail: a full-window smoke initially produced one extra sm-a205u row at epoch `184` / svid `9` because gnss-log pseudorange completion made an interpolated matrix value look observable even though raw `SignalType` and `RawPseudorangeMeters` were absent. The generated `gnss_log_signal_mask_frame` key source excludes that row and matches MATLAB pre-finite availability without reading the residual diagnostics sidecar.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_residual_diagnostics_pd.py tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py tests/test_gsdc2023_trip_stages.py tests/test_compare_gsdc2023_residual_values.py tests/test_gsdc2023_residual_audit.py` => `62 passed`; `ruff check --ignore=E402 ...` pass.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
@@ -360,8 +376,8 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. inactive diagnostics keys を MATLAB residual diagnostics sidecar から読まずに Python state から生成する
-2. `phone_data_residual_diagnostics.csv` writer を MATLAB equivalence / submit-ready gate に接続する
+1. `phone_data_residual_diagnostics.csv` writer を MATLAB equivalence gate に接続し、gate summary に writer row/column/side-only fields を載せる
+2. `build_gsdc2023_pre_submit_manifest.py` / submit-ready gate に residual diagnostics writer summary を必須化する
 3. 生成済み writer artifacts を regression 出力として使い、MATLAB sidecar 依存を golden fixture のみに縮小する
 
 2026-05-05 P6P0 clean Kaggle submit:
