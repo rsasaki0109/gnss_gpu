@@ -216,6 +216,10 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
                         "bridge_residual_diagnostics_export_column_mismatch_count": 0,
                         "bridge_residual_diagnostics_export_byte_equivalent_count": 0,
                         "bridge_residual_diagnostics_export_byte_difference_count": 12,
+                        "writer_regression_manifest": "data/writer_manifest.json",
+                        "writer_regression_checked": True,
+                        "writer_regression_passed": True,
+                        "writer_regression_mismatch_count": 0,
                         "inactive_key_source": "gnss_log_signal_mask",
                     },
                 },
@@ -254,5 +258,9 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
     assert gate["residual_diagnostics_writer_export_column_count_max"] == 44
     assert gate["residual_diagnostics_writer_export_column_mismatch_count"] == 0
     assert gate["residual_diagnostics_writer_export_byte_difference_count"] == 12
+    assert gate["residual_diagnostics_writer_regression_manifest"] == "data/writer_manifest.json"
+    assert gate["residual_diagnostics_writer_regression_checked"] is True
+    assert gate["residual_diagnostics_writer_regression_passed"] is True
+    assert gate["residual_diagnostics_writer_regression_mismatch_count"] == 0
     assert gate["residual_diagnostics_writer_inactive_key_source"] == "gnss_log_signal_mask"
     assert gate["summary_sha256"]

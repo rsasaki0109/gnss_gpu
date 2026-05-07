@@ -378,6 +378,14 @@ def assert_matlab_equivalence_gate(manifest: dict[str, object], *, require: bool
             f"expected={writer_expected_columns}, min={writer_column_min}, "
             f"max={writer_column_max}, mismatches={writer_column_mismatches}",
         )
+    if bool(gate.get("residual_diagnostics_writer_regression_checked", False)):
+        regression_passed = bool(gate.get("residual_diagnostics_writer_regression_passed", False))
+        regression_mismatches = _as_int(gate.get("residual_diagnostics_writer_regression_mismatch_count"))
+        if not regression_passed or regression_mismatches != 0:
+            raise SystemExit(
+                "MATLAB equivalence residual diagnostics writer regression failed: "
+                f"passed={regression_passed}, mismatches={regression_mismatches}",
+            )
     return gate
 
 

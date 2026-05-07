@@ -405,6 +405,15 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - manifest gate: summary SHA `7db96cba563dd2fe8719eed4a1a6082b5e8a76137c77b6608c92981c068b3e7a`, `equivalence_claim=matlab_equivalent`, writer passed `true`, writer exports `12`, writer rows `258537`, writer columns `44/44`, column mismatch `0`
   - previous-safe trip checks: `9` rows; max input changed rows `1444`, max input delta `0.8140372066789227m`, max previous changed rows `0`, max previous delta `0.0m`
   - Interpretation: the non-P6P0 previous-safe `sjc_r_scale_sweep` candidates remain submit-ready under the stricter MATLAB/writer gate because they preserve the previous safe Pixel6Pro rows exactly.
+- Residual diagnostics writer regression fixture:
+  - Added `experiments/audit_gsdc2023_residual_diagnostics_writer_regression.py` to build/check a compact manifest over generated `phone_data_residual_diagnostics.csv` outputs: per-trip relative path, row count, column count, schema, and SHA256.
+  - Tracked fixture: `data/gsdc2023_residual_diagnostics_writer_regression_manifest.json`; size is about `17KB`, so the `162MB` generated CSV bundle remains outside Git.
+  - Fixture source: the full-window writer output at `experiments/results/matlab_equivalence_gate_writer_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_110637/residual_diagnostics_writer/bridge_residual_diagnostics`.
+  - Real-data fixture check: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_writer_regression.py --export-dir .../bridge_residual_diagnostics --check` => `matched: 12 file(s), 258537 row(s)`.
+  - `audit_gsdc2023_matlab_equivalence_gate.py` now accepts `--writer-regression-manifest` or `--default-writer-regression-manifest`; when enabled, the residual diagnostics writer gate records `writer_regression_checked/passed/mismatch_count` and fails closed on manifest drift.
+  - `build_gsdc2023_pre_submit_manifest.py` carries those regression fields into `matlab_equivalence_gate`; `submit_gsdc2023_pixel5_candidate_queue.py --require-matlab-equivalence` fails closed if a checked writer regression manifest reports mismatches.
+  - Focused verification: `python3 -m ruff check --ignore=E402 ...` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_residual_diagnostics_writer_regression.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `38 passed`.
+  - Interpretation: generated residual diagnostics writer artifacts are now locked as lightweight golden regression metadata. The MATLAB residual diagnostics sidecar remains a comparison fixture for value parity, while artifact-shape regression no longer depends on reading MATLAB sidecar CSVs.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
@@ -413,8 +422,8 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. 生成済み writer artifacts を regression 出力として固定し、MATLAB residual diagnostics sidecar 依存を golden fixture のみに縮小する
-2. full-window gate が重いので、writer gate の再利用/skip オプションか cached summary 入力を検討する
+1. full-window gate が重いので、writer gate の再利用/skip オプションか cached summary 入力を検討する
+2. 次回 full-window equivalence gate を `--default-writer-regression-manifest` 付きで再実行し、新 summary SHA を submit-ready manifest に流す
 
 2026-05-05 P6P0 clean Kaggle submit:
 

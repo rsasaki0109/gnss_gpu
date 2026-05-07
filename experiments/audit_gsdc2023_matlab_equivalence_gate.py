@@ -30,6 +30,11 @@ from experiments.audit_gsdc2023_residual_diagnostics_pd_parity import (  # noqa:
     EXPECTED_RESIDUAL_DIAGNOSTICS_COLUMN_COUNT,
     residual_diagnostics_pd_parity_audit,
 )
+from experiments.audit_gsdc2023_residual_diagnostics_writer_regression import (  # noqa: E402
+    DEFAULT_EXPECTED_MANIFEST as DEFAULT_WRITER_REGRESSION_MANIFEST,
+    build_writer_regression_manifest,
+    writer_regression_mismatches,
+)
 from experiments.compare_gsdc2023_phone_data_raw_bridge_counts import (  # noqa: E402
     build_comparison_frames,
 )
@@ -53,6 +58,7 @@ FactorAuditFn = Callable[..., tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]]
 ResidualAuditFn = Callable[..., tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]]
 ResidualDiagnosticsAuditFn = Callable[..., tuple[Any, ...]]
 CountAuditFn = Callable[..., tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]]
+WriterRegressionCheckFn = Callable[[Path, Path], list[str]]
 
 
 @dataclass(frozen=True)
@@ -276,6 +282,12 @@ def _count_gate(
     return comparison, trip_summary, GateResult("raw_bridge_counts", bool(passed), summary)
 
 
+def _writer_regression_check(export_dir: Path, expected_manifest: Path) -> list[str]:
+    actual = build_writer_regression_manifest(export_dir)
+    expected = json.loads(expected_manifest.read_text(encoding="utf-8"))
+    return writer_regression_mismatches(actual, expected)
+
+
 def _residual_diagnostics_writer_gate(
     data_root: Path,
     trips: Sequence[str],
@@ -287,8 +299,10 @@ def _residual_diagnostics_writer_gate(
     include_inactive_observations: bool,
     max_abs_delta_threshold_m: float,
     wide_max_abs_delta_threshold_m: float,
+    writer_regression_manifest: Path | None = None,
     verbose: bool = False,
     diagnostics_audit_fn: ResidualDiagnosticsAuditFn = residual_diagnostics_pd_parity_audit,
+    writer_regression_check_fn: WriterRegressionCheckFn = _writer_regression_check,
 ) -> tuple[
     pd.DataFrame,
     pd.DataFrame,
@@ -331,6 +345,9 @@ def _residual_diagnostics_writer_gate(
     export_column_mismatch_count = int(
         payload.get("bridge_residual_diagnostics_export_column_mismatch_count", 0) or 0,
     )
+    writer_regression_mismatch_rows: list[str] = []
+    if writer_regression_manifest is not None:
+        writer_regression_mismatch_rows = writer_regression_check_fn(export_dir, writer_regression_manifest)
     total_matlab_only = int(payload.get("total_matlab_only", 0) or 0)
     total_bridge_only = int(payload.get("total_bridge_only", 0) or 0)
     wide_total_matlab_only = int(payload.get("wide_total_matlab_only", 0) or 0)
@@ -384,6 +401,11 @@ def _residual_diagnostics_writer_gate(
         "bridge_residual_diagnostics_export_byte_difference_count": int(
             payload.get("bridge_residual_diagnostics_export_byte_difference_count", 0) or 0,
         ),
+        "writer_regression_manifest": str(writer_regression_manifest) if writer_regression_manifest else None,
+        "writer_regression_checked": writer_regression_manifest is not None,
+        "writer_regression_passed": writer_regression_manifest is None or not writer_regression_mismatch_rows,
+        "writer_regression_mismatch_count": int(len(writer_regression_mismatch_rows)),
+        "writer_regression_mismatches": writer_regression_mismatch_rows[:20],
         "inactive_key_source": payload.get("inactive_key_source"),
     }
     passed = bool(
@@ -399,6 +421,7 @@ def _residual_diagnostics_writer_gate(
         and wide_total_matlab_only == 0
         and wide_total_bridge_only == 0
         and wide_sat_col_mismatch_count == 0
+        and summary["writer_regression_passed"]
     )
     return (
         trip_summary,
@@ -431,6 +454,7 @@ def run_equivalence_gate(
     min_symmetric_parity: float,
     max_abs_delta_threshold_m: float,
     p95_abs_delta_threshold_m: float | None,
+    writer_regression_manifest: Path | None = None,
     verbose: bool = False,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -500,6 +524,7 @@ def run_equivalence_gate(
         include_inactive_observations=residual_include_inactive_observations,
         max_abs_delta_threshold_m=max_abs_delta_threshold_m,
         wide_max_abs_delta_threshold_m=5.0e-3,
+        writer_regression_manifest=writer_regression_manifest,
         verbose=verbose,
     )
     diagnostics_trip_summary.to_csv(output_dir / "residual_diagnostics_writer_trip_summary.csv", index=False)
@@ -591,6 +616,20 @@ def main() -> None:
     parser.add_argument("--min-symmetric-parity", type=float, default=1.0)
     parser.add_argument("--max-abs-delta-threshold-m", type=float, default=1.0e-4)
     parser.add_argument("--p95-abs-delta-threshold-m", type=float, default=None)
+    parser.add_argument(
+        "--writer-regression-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "optional compact golden manifest for Python-generated "
+            "phone_data_residual_diagnostics.csv writer outputs"
+        ),
+    )
+    parser.add_argument(
+        "--default-writer-regression-manifest",
+        action="store_true",
+        help=f"use the default writer regression manifest at {DEFAULT_WRITER_REGRESSION_MANIFEST}",
+    )
     parser.add_argument("--verbose", action="store_true", help="print gate and trip progress to stderr")
     _add_output_dir_arg(parser)
     args = parser.parse_args()
@@ -598,6 +637,11 @@ def main() -> None:
     trips = tuple(args.trips) if args.trips else DEFAULT_EQUIVALENCE_TRIPS
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = _resolved_output_root(args) / f"gsdc2023_matlab_equivalence_gate_{stamp}"
+    writer_regression_manifest = (
+        DEFAULT_WRITER_REGRESSION_MANIFEST
+        if args.default_writer_regression_manifest
+        else args.writer_regression_manifest
+    )
     payload = run_equivalence_gate(
         Path(args.data_root).resolve(),
         output_dir,
@@ -615,6 +659,7 @@ def main() -> None:
         min_symmetric_parity=float(args.min_symmetric_parity),
         max_abs_delta_threshold_m=float(args.max_abs_delta_threshold_m),
         p95_abs_delta_threshold_m=args.p95_abs_delta_threshold_m,
+        writer_regression_manifest=writer_regression_manifest,
         verbose=bool(args.verbose),
     )
     print(json.dumps(_json_safe(payload), indent=2, sort_keys=True))
