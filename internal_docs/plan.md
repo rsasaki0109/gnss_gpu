@@ -293,13 +293,22 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 - 2026-05-07 residual diagnostics wide P/D component subset:
   - Added bridge-generated `sat_col` to residual component rows. The mapping now uses trip-wide raw `(sys,svid)` ordering so limited epoch windows keep MATLAB-style satellite column gaps.
   - Added `bridge_residual_diagnostics_pd_wide_export_frame` / `bridge_residual_diagnostics_pd_wide_values` and CLI `--write-bridge-pd-wide` to emit a wider writer-shaped subset: P/D value columns plus `sat_col`, satellite position/velocity/clock/iono/trop/elevation/range/rate, and receiver position/velocity columns.
-  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_residual_diagnostics_pd.py tests/test_compare_gsdc2023_residual_values.py` => `5 passed`; `ruff check --ignore=E402 ...` pass.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_residual_diagnostics_pd.py tests/test_compare_gsdc2023_residual_values.py tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py` => `9 passed`; `ruff check --ignore=E402 ...` pass.
   - Real-data 50-epoch probe:
     - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_residual_diagnostics_pd.py --trip train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u --max-epochs 50 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-wide --output-dir experiments/results/residual_diagnostics_pd_wide_probe_20260507`
     - output: `experiments/results/residual_diagnostics_pd_wide_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_20260507_132745`
     - result: P/D parity still `passed=true`, `total_matched_count=3400`, `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=4.323213641971302e-05`
     - wide subset result: `bridge_residual_diagnostics_pd_wide_subset.csv` has `340` rows and includes `35` columns through `rcv_vz_mps`; MATLAB sidecar `sat_col` mismatch count is `0/340`.
-  - Interpretation: the writer path now has P/D values plus the shared component columns in wide sidecar shape. Remaining full-writer gaps are `obs_clk_m`, `obs_dclk_m`, `p_isb_m`, boolean finite columns, and the L finite-column dependency.
+  - Added 12-trip audit support for the wide P/D component subset via `--write-bridge-pd-wide-subsets`. The audit now writes per-trip `phone_data_residual_diagnostics_pd_wide_subset.csv` files plus `wide_trip_summary.csv`, `wide_summary_by_column.csv`, `wide_side_only.csv`, and `bridge_wide_subset_exports.csv`.
+  - Added a batch-component fallback for inactive residual rows whose raw-derived component frame cannot be joined. Raw-derived component values still take precedence; the fallback fills only missing `sat_col`/satellite/receiver component columns from the bridge batch arrays.
+  - Real-data 12-trip full-window wide probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-wide-subsets --verbose --output-dir experiments/results/residual_diagnostics_pd_wide_12trip_probe_20260507`
+    - output: `experiments/results/residual_diagnostics_pd_wide_12trip_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_audit_20260507_142721`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, `completed_trip_count=12`, `wide_completed_trip_count=12`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components: `wide_total_matlab_count=7756110`, `wide_total_bridge_count=7756110`, `wide_total_matched_count=7756110`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - writer-shaped export result: `bridge_wide_subset_export_count=12`, `bridge_wide_subset_export_total_rows=258537`, each export has `35` columns.
+  - Interpretation: the writer path now has P/D values plus `sat_col` and shared component columns in wide sidecar shape over the full 12-trip bundle. Remaining full-writer gaps are `obs_clk_m`, `obs_dclk_m`, `p_isb_m`, boolean finite columns, and the L finite-column dependency.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
