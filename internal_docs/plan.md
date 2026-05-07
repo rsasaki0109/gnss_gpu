@@ -468,10 +468,23 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - `submit_gsdc2023_pixel5_candidate_queue.py --require-matlab-equivalence` now fails closed if a checked cached summary validation reports mismatches.
   - Real-data P6P0 previous-safe report records `cached_summary_validation_checked=true`, `cached_summary_validation_passed=true`, and `cached_summary_validation_mismatch_count=0`; `submit_readiness.md` shows `Cached MATLAB equivalence validation: passed`.
   - Focused verification: `python3 -m ruff check --ignore=E402 experiments/build_gsdc2023_pre_submit_manifest.py experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `27 passed`.
+- `phone_data.mat` / sidecar artifact compatibility decision:
+  - Added `experiments/audit_gsdc2023_phone_data_artifact_compatibility.py` to convert the current MATLAB equivalence proof into an artifact-level compatibility report.
+  - The audit records four artifacts:
+    - `phone_data_factor_counts.csv`: Python writer exists; count parity is covered by `raw_bridge_counts`; optional writer-export summaries can be required with `--require-csv-writer-exports`.
+    - `phone_data_factor_mask.csv`: Python writer exists; side-only zero parity is covered by `factor_mask`; optional writer-export summaries can be required.
+    - `phone_data_residual_diagnostics.csv`: Python writer is covered by the `residual_diagnostics_writer` gate and the default writer regression manifest; expected columns are `44/44`, mismatch count `0`.
+    - `phone_data.mat`: Python writer intentionally not implemented; `required_for_submit_ready=false`; decision is to defer MAT struct generation unless a downstream MATLAB consumer needs exact `.mat` container compatibility.
+  - Real-data audit:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_phone_data_artifact_compatibility.py --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json --factor-count-summary experiments/results/phone_data_factor_counts_writer_probe_20260507/gsdc2023_phone_data_raw_bridge_count_parity_20260507_104934/summary.json --factor-mask-summary experiments/results/phone_data_factor_mask_writer_probe_20260507/gsdc2023_factor_mask_parity_20260507_110908/summary.json --require-csv-writer-exports --output-dir experiments/results/phone_data_artifact_compatibility_probe_20260508`
+    - output: `experiments/results/phone_data_artifact_compatibility_probe_20260508/gsdc2023_phone_data_artifact_compatibility_20260508_162904`
+    - result: `passed=true`, `failed_artifact_count=0`, cached summary validation passed, `phone_data_mat_decision=defer`.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_phone_data_artifact_compatibility.py tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => `4 passed`.
+  - Interpretation: the migration target is now behavior/state/CSV artifact equivalence, not byte-for-byte `.mat` container reconstruction. `phone_data.mat` should stay out of submit-ready gates until a concrete MATLAB downstream consumer is identified.
 
 次にやること:
 
-1. MATLAB 移植の残タスクとして、`phone_data.mat` / sidecar artifact compatibility を Python writer でどこまで生成対象にするか決める。
+1. Factor-count / factor-mask writer-export checksを residual diagnostics と同じように軽量 regression manifest 化するか決める。現状は単発 writer summary を artifact compatibility audit に渡している。
 2. P6P0 ではなく score 改善に戻る場合、既存 local screen の `duplicate_submitted_local_sha` / risky previous-safe columns を使って未提出かつ private-safe な候補だけを再抽出する。
 3. submit-ready artifacts を出す標準コマンドに `--duplicate-sha-root` / `--fail-on-duplicate-sha` を常用するか、PR description に運用ルールとして明記する。
 
