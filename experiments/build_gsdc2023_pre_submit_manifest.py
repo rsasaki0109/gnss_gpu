@@ -221,6 +221,10 @@ def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
     payload = _read_json(summary_path)
     gates = payload.get("gates")
     gates = gates if isinstance(gates, dict) else {}
+    factor = gates.get("factor_mask")
+    factor = factor if isinstance(factor, dict) else {}
+    counts = gates.get("raw_bridge_counts")
+    counts = counts if isinstance(counts, dict) else {}
     residual = gates.get("residual_values")
     residual = residual if isinstance(residual, dict) else {}
     internal_failure_count = residual.get("internal_delta_failure_count")
@@ -232,12 +236,20 @@ def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
         "trip_count": int(payload.get("trip_count", 0) or 0),
         "max_epochs": int(payload.get("max_epochs", 0) or 0),
         "count_max_epochs": int(payload.get("count_max_epochs", 0) or 0),
-        "factor_mask_passed": bool(gates.get("factor_mask", {}).get("passed", False))
-        if isinstance(gates.get("factor_mask"), dict)
-        else False,
-        "raw_bridge_counts_passed": bool(gates.get("raw_bridge_counts", {}).get("passed", False))
-        if isinstance(gates.get("raw_bridge_counts"), dict)
-        else False,
+        "factor_mask_passed": bool(factor.get("passed", False)),
+        "factor_total_matlab_only": int(factor.get("total_matlab_only", 0) or 0),
+        "factor_total_bridge_only": int(factor.get("total_bridge_only", 0) or 0),
+        "factor_side_only_failure_count": int(factor.get("side_only_failure_count", 0) or 0),
+        "factor_side_only_by_field_freq": factor.get("side_only_by_field_freq", {}),
+        "factor_top_matlab_only": factor.get("top_matlab_only", []),
+        "factor_top_bridge_only": factor.get("top_bridge_only", []),
+        "raw_bridge_counts_passed": bool(counts.get("passed", False)),
+        "raw_bridge_matched_abs_delta_total": int(counts.get("matched_abs_delta_total", 0) or 0),
+        "raw_bridge_count_delta_failure_count": int(counts.get("count_delta_failure_count", 0) or 0),
+        "raw_bridge_missing_phone_count_rows": int(counts.get("missing_phone_count_rows", 0) or 0),
+        "raw_bridge_missing_bridge_count_rows": int(counts.get("missing_bridge_count_rows", 0) or 0),
+        "raw_bridge_abs_delta_sums": counts.get("abs_delta_sums", {}),
+        "raw_bridge_top_count_delta_failures": counts.get("top_count_delta_failures", []),
         "residual_values_passed": bool(residual.get("passed", False)),
         "residual_total_matlab_only": int(residual.get("total_matlab_only", 0) or 0),
         "residual_total_bridge_only": int(residual.get("total_bridge_only", 0) or 0),

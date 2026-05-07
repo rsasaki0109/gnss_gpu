@@ -268,6 +268,25 @@ def assert_matlab_equivalence_gate(manifest: dict[str, object], *, require: bool
     failed = [field for field in required_pass_fields if not bool(gate.get(field, False))]
     if failed:
         raise SystemExit(f"MATLAB equivalence gate failed fields: {', '.join(failed)}")
+    if "factor_side_only_failure_count" not in gate:
+        raise SystemExit("MATLAB equivalence gate failed: missing factor side-only failure count")
+    factor_side_only = _as_int(gate.get("factor_side_only_failure_count"))
+    factor_matlab_only = _as_int(gate.get("factor_total_matlab_only"))
+    factor_bridge_only = _as_int(gate.get("factor_total_bridge_only"))
+    if factor_side_only != 0 or factor_matlab_only != 0 or factor_bridge_only != 0:
+        raise SystemExit(
+            "MATLAB equivalence factor mask side-only rows are nonzero: "
+            f"failure_count={factor_side_only}, matlab_only={factor_matlab_only}, bridge_only={factor_bridge_only}"
+        )
+    if "raw_bridge_count_delta_failure_count" not in gate:
+        raise SystemExit("MATLAB equivalence gate failed: missing raw bridge count delta failure count")
+    raw_count_failures = _as_int(gate.get("raw_bridge_count_delta_failure_count"))
+    raw_count_abs_delta = _as_int(gate.get("raw_bridge_matched_abs_delta_total"))
+    if raw_count_failures != 0 or raw_count_abs_delta != 0:
+        raise SystemExit(
+            "MATLAB equivalence raw bridge count parity failed: "
+            f"failure_count={raw_count_failures}, matched_abs_delta_total={raw_count_abs_delta}"
+        )
     matlab_only = _as_int(gate.get("residual_total_matlab_only"))
     bridge_only = _as_int(gate.get("residual_total_bridge_only"))
     if matlab_only != 0 or bridge_only != 0:
