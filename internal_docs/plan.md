@@ -381,6 +381,23 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - output: `experiments/results/residual_diagnostics_writer_gate_fields_50epoch_20260508/gsdc2023_residual_diagnostics_pd_parity_audit_20260508_104652`
     - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, side-only `0/0`, wide side-only `0/0`, writer rows `340`, expected/min/max columns `44/44/44`, column mismatch `0`, inactive key source `gnss_log_signal_mask`.
   - Interpretation: residual diagnostics writer is now part of the strict MATLAB equivalence proof and the submit-ready manifest gate. Remaining MATLAB sidecar dependency is now comparison/golden fixture usage, not inactive-key generation or submit readiness.
+- 2026-05-08 full-window equivalence gate regenerated with writer gate:
+  - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --output-dir experiments/results/matlab_equivalence_gate_writer_probe_20260508 --verbose`
+  - output: `experiments/results/matlab_equivalence_gate_writer_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_110637`
+  - result: `passed=true`, `equivalence_claim=matlab_equivalent`
+  - residual diagnostics writer gate:
+    - `passed=true`, `pd_value_passed=true`, `wide_passed=true`
+    - `inactive_key_source=gnss_log_signal_mask`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, side-only `0/0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components/finite: `wide_total_matlab_count=10082943`, `wide_total_bridge_count=10082943`, side-only `0/0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - writer export: `bridge_residual_diagnostics_export_count=12`, total rows `258537`, expected/min/max columns `44/44/44`, column mismatch `0`, byte difference `12` informational only
+  - `pre_submit_manifest.json` regenerated with this summary:
+    - manifest path: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/pre_submit_manifest.json`
+    - summary SHA: `7db96cba563dd2fe8719eed4a1a6082b5e8a76137c77b6608c92981c068b3e7a`
+    - direct `assert_matlab_equivalence_gate(..., require=True)` check: `matlab_equivalent`, writer export count `12`, writer rows `258537`, writer columns `44/44`, writer side-only `0/0/0/0`
+  - `--prepare-ready-report ... --require-matlab-equivalence` still fails closed as intended for P6P0 clean:
+    - failure: `pre-submit previous trip check failed for pixel5phone_3p375_sjc_r0p84375_p6p0 2021-11-05-18-28-us-ca-mtv-m/pixel6pro: previous_changed_rows=1444, previous_max_m=0.7514168992409354`
+    - Interpretation: MATLAB/writer equivalence now passes and is recorded in the manifest; submit-ready publication is correctly blocked by the separate previous-safe Pixel6Pro risk gate.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
@@ -389,9 +406,9 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. full-window `audit_gsdc2023_matlab_equivalence_gate.py` を再生成し、`residual_diagnostics_writer` gate 入りの summary を新しい submit-ready manifest に流す
-2. 生成済み writer artifacts を regression 出力として固定し、MATLAB residual diagnostics sidecar 依存を golden fixture のみに縮小する
-3. writer gate 付き submit-ready report を再監査し、P6P0 candidate の `--require-matlab-equivalence` 手順を更新する
+1. 生成済み writer artifacts を regression 出力として固定し、MATLAB residual diagnostics sidecar 依存を golden fixture のみに縮小する
+2. `sjc_r_scale_sweep` 側の previous-safe candidate で writer gate 付き submit-ready report を再監査する
+3. full-window gate が重いので、writer gate の再利用/skip オプションか cached summary 入力を検討する
 
 2026-05-05 P6P0 clean Kaggle submit:
 

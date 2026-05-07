@@ -437,7 +437,7 @@ def run_equivalence_gate(
     gates: list[GateResult] = []
 
     if verbose:
-        print("[1/4] asset gate", file=sys.stderr, flush=True)
+        print("[1/5] asset gate", file=sys.stderr, flush=True)
     asset_frame, asset_result = _asset_gate(
         data_root,
         asset_datasets,
@@ -448,7 +448,7 @@ def run_equivalence_gate(
     gates.append(asset_result)
 
     if verbose:
-        print("[2/4] factor-mask gate", file=sys.stderr, flush=True)
+        print("[2/5] factor-mask gate", file=sys.stderr, flush=True)
     factor_trip_summary, factor_field_summary, factor_result = _factor_gate(
         data_root,
         trips,
@@ -462,7 +462,7 @@ def run_equivalence_gate(
     gates.append(factor_result)
 
     if verbose:
-        print("[3/4] residual-value gate", file=sys.stderr, flush=True)
+        print("[3/5] residual-value gate", file=sys.stderr, flush=True)
     residual_trip_summary, residual_max_rows, residual_result = _residual_gate(
         data_root,
         trips,
