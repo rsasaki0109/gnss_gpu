@@ -309,6 +309,23 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - wide values/components: `wide_total_matlab_count=7756110`, `wide_total_bridge_count=7756110`, `wide_total_matched_count=7756110`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
     - writer-shaped export result: `bridge_wide_subset_export_count=12`, `bridge_wide_subset_export_total_rows=258537`, each export has `35` columns.
   - Interpretation: the writer path now has P/D values plus `sat_col` and shared component columns in wide sidecar shape over the full 12-trip bundle. Remaining full-writer gaps are `obs_clk_m`, `obs_dclk_m`, `p_isb_m`, boolean finite columns, and the L finite-column dependency.
+- 2026-05-07 residual diagnostics P/D wide clock/finite subset:
+  - Added bridge-generated wide columns `obs_clk_m`, `obs_dclk_m`, `p_isb_m`, `p_pre_finite`, `d_pre_finite`, `p_factor_finite`, and `d_factor_finite`.
+  - `p_factor_finite` / `d_factor_finite` now come from the same bridge factor-mask key builder used by mask overlay, so the wide subset compares exact MATLAB diagnostics keys instead of approximating finite flags from residual thresholds alone.
+  - Real-data 50-epoch probe:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_residual_diagnostics_pd.py --trip train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u --max-epochs 50 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-wide --output-dir experiments/results/residual_diagnostics_pd_clock_finite_probe_20260507`
+    - output: `experiments/results/residual_diagnostics_pd_clock_finite_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_20260507_161804`
+    - result: `passed=true`, `total_matlab_count=3400`, `total_bridge_count=3400`, `total_matched_count=3400`, `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=4.323213641971302e-05`
+    - new wide column check: `obs_clk_m` max delta `6.705524668859653e-08`, `obs_dclk_m` max delta `3.24080950804273e-05`, `p_isb_m` max delta `0.0`, and all four P/D finite columns max delta `0.0`.
+  - Real-data 12-trip full-window wide probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-wide-subsets --verbose --output-dir experiments/results/residual_diagnostics_pd_clock_finite_12trip_probe_20260507`
+    - output: `experiments/results/residual_diagnostics_pd_clock_finite_12trip_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_audit_20260507_162137`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, `completed_trip_count=12`, `wide_completed_trip_count=12`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components/finite: `wide_total_matlab_count=9565869`, `wide_total_bridge_count=9565869`, `wide_total_matched_count=9565869`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - new wide column aggregate: `obs_clk_m` max delta `2.75671478533468e-07`, `obs_dclk_m` max delta `3.5828883795829825e-05`, `p_isb_m` max delta `9.253617008653237e-06`, and `p_pre_finite,d_pre_finite,p_factor_finite,d_factor_finite` all max delta `0.0`.
+    - writer-shaped export result: `bridge_wide_subset_export_count=12`, `bridge_wide_subset_export_total_rows=258537`, each export has `42` columns.
+  - Interpretation: the writer path now covers P/D values, `sat_col`, shared component columns, clock/ISB columns, and P/D finite booleans over the full 12-trip bundle. Remaining full-writer gap is the L finite-column dependency (`l_pre_finite`, `l_factor_finite`) before assembling the complete `phone_data_residual_diagnostics.csv` writer.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
@@ -317,9 +334,9 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. private `4.710` 系 safe baseline を崩さない候補だけ submit-ready に進める
-2. P6P0 系は旧 safe baseline との差分 gate を通らない限り submit しない
-3. 次候補は Pixel6Pro risky trip を固定し、Pixel5/Pixel4 系の改善差分だけに限定する
+1. `l_pre_finite` / `l_factor_finite` の L finite 依存を bridge 内部状態から再現し、MATLAB residual diagnostics sidecar の golden-key 入力を外す
+2. P/D wide subset と L finite を統合して complete `phone_data_residual_diagnostics.csv` writer を組み立てる
+3. 12-trip full-window で sidecar 不使用の residual diagnostics writer gate を通し、既存 submit-ready gate に接続する
 
 2026-05-05 P6P0 clean Kaggle submit:
 

@@ -36,6 +36,9 @@ from experiments.gsdc2023_audit_cli import (  # noqa: E402
 )
 from experiments.gsdc2023_observation_matrix import load_raw_gnss_frame as _load_raw_gnss_frame  # noqa: E402
 from experiments.gsdc2023_observation_matrix import (  # noqa: E402
+    OBS_MASK_DOPPLER_RESIDUAL_THRESHOLD_MPS as _DOPPLER_RESIDUAL_MASK_MPS,
+    OBS_MASK_RESIDUAL_THRESHOLD_L5_M as _PSEUDORANGE_RESIDUAL_MASK_L5_M,
+    OBS_MASK_RESIDUAL_THRESHOLD_M as _PSEUDORANGE_RESIDUAL_MASK_M,
     RTKLIB_SAT_VELOCITY_FORWARD_DIFF_HALF_STEP_S as _SAT_VEL_HALF_STEP_S,
 )
 from experiments.gsdc2023_residual_audit import (  # noqa: E402
@@ -475,6 +478,7 @@ def build_bridge_residual_frame(
     apply_observation_mask: bool = True,
     include_inactive_observations: bool = False,
     inactive_key_filter: set[tuple[object, ...]] | None = None,
+    factor_finite_key_filter: set[tuple[object, ...]] | None = None,
 ) -> pd.DataFrame:
     start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
 
@@ -541,6 +545,7 @@ def build_bridge_residual_frame(
     pseudorange_bias_groups = _slot_pseudorange_common_bias_groups(slot_keys)
     rows: list[dict[str, object]] = []
     p_records: list[dict[str, object]] = []
+    factor_finite_keys: set[tuple[object, ...]] = set()
 
     for epoch_idx in range(batch.weights.shape[0]):
         idx = np.flatnonzero(batch.weights[epoch_idx] > 0.0)
@@ -599,11 +604,22 @@ def build_bridge_residual_frame(
                         "bridge_model": float(range_value),
                         "_clock_bias": clock_bias,
                         "_bias_group": int(pseudorange_bias_groups[int(slot_idx)]),
+                        "_factor_finite": int(
+                            abs(float(value))
+                            <= (
+                                _PSEUDORANGE_RESIDUAL_MASK_L5_M
+                                if str(slot_freq[int(slot_idx)]) == "L5"
+                                else _PSEUDORANGE_RESIDUAL_MASK_M
+                            ),
+                        ),
                     },
                 )
 
     if p_records:
         p_frame = pd.DataFrame(p_records)
+        factor_finite_keys.update(
+            p_frame.loc[p_frame["_factor_finite"].astype(bool), _KEY_COLUMNS].itertuples(index=False, name=None),
+        )
         isb_by_group = getattr(batch, "pseudorange_isb_by_group", None)
         if p_frame["_clock_bias"].notna().any():
             p_frame["bridge_common_bias"] = np.nan
@@ -629,6 +645,15 @@ def build_bridge_residual_frame(
                 p_frame.loc[finite_common, "bridge_pre_residual"].to_numpy(dtype=np.float64)
                 - p_frame.loc[finite_common, "bridge_common_bias"].to_numpy(dtype=np.float64)
             )
+        p_frame["bridge_obs_clk"] = pd.to_numeric(p_frame["_clock_bias"], errors="coerce")
+        p_frame["bridge_isb"] = np.nan
+        finite_obs_clk = np.isfinite(p_frame["bridge_obs_clk"].to_numpy(dtype=np.float64))
+        finite_common = np.isfinite(p_frame["bridge_common_bias"].to_numpy(dtype=np.float64))
+        finite_isb = finite_obs_clk & finite_common
+        p_frame.loc[finite_isb, "bridge_isb"] = (
+            p_frame.loc[finite_isb, "bridge_common_bias"].to_numpy(dtype=np.float64)
+            - p_frame.loc[finite_isb, "bridge_obs_clk"].to_numpy(dtype=np.float64)
+        )
         if include_inactive_observations:
             active_keys = set(p_frame[_KEY_COLUMNS].itertuples(index=False, name=None))
             common_bias_lookup = {
@@ -671,6 +696,13 @@ def build_bridge_residual_frame(
                             common_bias = float(clock_bias) + float(isb)
                     if common_bias is None:
                         continue
+                    clock_bias = (
+                        float(batch.clock_bias_m[epoch_idx])
+                        if batch.clock_bias_m is not None
+                        and epoch_idx < len(batch.clock_bias_m)
+                        and np.isfinite(batch.clock_bias_m[epoch_idx])
+                        else np.nan
+                    )
                     pre_value = float(batch.pseudorange[epoch_idx, slot_idx] - ranges[int(slot_idx)])
                     inactive_records.append(
                         {
@@ -685,11 +717,13 @@ def build_bridge_residual_frame(
                             "bridge_common_bias": common_bias,
                             "bridge_observation": float(batch.pseudorange[epoch_idx, slot_idx]),
                             "bridge_model": float(ranges[int(slot_idx)]),
+                            "bridge_obs_clk": clock_bias,
+                            "bridge_isb": common_bias - clock_bias if np.isfinite(clock_bias) else np.nan,
                         },
                     )
             if inactive_records:
                 p_frame = pd.concat([p_frame, pd.DataFrame(inactive_records)], ignore_index=True)
-        rows.extend(p_frame.drop(columns=["_clock_bias", "_bias_group"], errors="ignore").to_dict("records"))
+        rows.extend(p_frame.drop(columns=["_clock_bias", "_bias_group", "_factor_finite"], errors="ignore").to_dict("records"))
 
     if batch.sat_vel is not None and batch.doppler is not None and batch.doppler_weights is not None:
         rx_xyz = np.asarray(batch.kaggle_wls, dtype=np.float64)
@@ -744,6 +778,17 @@ def build_bridge_residual_frame(
                     model,
                 ):
                     if np.isfinite(value):
+                        constellation, svid, _signal_type = slot_keys[int(slot_idx)]
+                        key = (
+                            "D",
+                            str(slot_freq[int(slot_idx)]),
+                            int(epoch_idx) + 1 + int(start_epoch),
+                            int(round(float(times_ms[int(epoch_idx)]))),
+                            _constellation_to_matlab_sys(int(constellation)),
+                            int(svid),
+                        )
+                        if abs(float(value)) <= _DOPPLER_RESIDUAL_MASK_MPS:
+                            factor_finite_keys.add(key)
                         _append_bridge_residual_rows(
                             rows,
                             field="D",
@@ -888,6 +933,15 @@ def build_bridge_residual_frame(
             ],
         )
     out = pd.DataFrame(rows).drop_duplicates(_KEY_COLUMNS)
+    if factor_finite_key_filter is not None:
+        factor_finite_keys = set(factor_finite_key_filter)
+    out["bridge_pre_finite"] = 1
+    out["bridge_factor_finite"] = [
+        1 if key in factor_finite_keys else 0
+        for key in out[_KEY_COLUMNS].itertuples(index=False, name=None)
+    ]
+    d_rows = out["field"].astype(str).eq("D")
+    out.loc[d_rows, "bridge_obs_dclk"] = pd.to_numeric(out.loc[d_rows, "bridge_common_bias"], errors="coerce")
     if component_frame.empty:
         return out
     return out.merge(component_frame, on=_KEY_COLUMNS, how="left")
