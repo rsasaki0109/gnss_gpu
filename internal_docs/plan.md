@@ -531,10 +531,18 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - Result: `candidate_count=182`, `compared_count=182`, `byte_identical_count=0`, `submitted_score_log_count=49`.
   - Closest existing local candidate: `pixel5_old_gated_fgo_early_raw_late_extra_candidate/submission_20260421_0555_pixel4xl_and_sm_a505u_current1450_20260423.csv`, `score_m=0.3733503726322797`, `p95_m=0.4306222271895031`, `max_m=245.83184201676735`, `changed_rows=67014`, not found in score logs.
   - Interpretation: no existing Python-generated local submission reproduces the MATLAB/reference final CSV. Kaggle-score-level MATLAB equivalence requires a separate full-final-submission reproduction track; it is not implied by the current raw bridge/internal-state equivalence gate.
+- MATLAB final-submission delta decomposition:
+  - Extended `experiments/analyze_gsdc2023_source_ab.py` so submission A/B outputs now include `comparison_summary.csv`, `phone_delta_summary.csv`, phone tags in `row_deltas.csv` / `trip_delta_summary.csv`, top phones, and worst rows in `summary.json`.
+  - Real-data command compared MATLAB/reference `../ref/gsdc2023/results/test_parallel/20260501_0526/submission_20260501_0526.csv` against the closest local candidate `pixel5_old_gated_fgo_early_raw_late_extra_candidate/submission_20260421_0555_pixel4xl_and_sm_a505u_current1450_20260423.csv`.
+  - Output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_delta_decomposition_20260508/summary.json` (ignored artifact).
+  - Overall vs closest candidate: `71936` rows, `68042` changed above `1e-9m`, `66991` changed above `0.01m`, `rows_gt_1m=1095`, `rows_gt_5m=573`, mean `0.42546851607109604m`, p50 `0.3160785180750563m`, p95 `0.4306222271895031m`, max `245.83184201676735m`.
+  - Worst trip: `2022-04-04-16-31-us-ca-lax-x/pixel5`, `p95=19.04625557930374m`, `max=245.83184201676735m`, `rows_gt_5m=547`, so this is the first local-spike target.
+  - Worst phones by p95: `sm-a325f` p95 `2.574789098663229m`, `xiaomimi8` p95 `0.430924179205534m`, `mi8` p95 `0.43090675242799864m`, then Samsung A32/A205U/S908B around `0.391m`; `pixel5` has p95 only `0.316864093093176m` but owns the max spike through LAX-X.
+  - Interpretation: the closest local candidate is not missing a single row-order or byte-format detail. Most rows show phone-family-scale systematic offsets, while a small set of trip-local spikes dominates max/tail. The next full-final-submission reproduction step should first isolate the LAX-X/pixel5 source/patch mismatch, then check whether MATLAB applies a phone-family offset/postprocess that the Python candidate does not.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、`submission_20260501_0526.csv` の full-final-submission reproduction track を始める。最初は closest candidate の差分を trip/phone 別に分解して、どの postprocess/patch/source が MATLAB reference と違うか特定する。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、`2022-04-04-16-31-us-ca-lax-x/pixel5` の closest-candidate差分を chunk/source-rule単位に分解し、MATLAB reference 側が採用した postprocess/patch/source を特定する。その次に phone-family-scale の定数的オフセット差を調べる。
 2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
