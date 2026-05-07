@@ -7,6 +7,9 @@ from experiments.audit_gsdc2023_matlab_equivalence_gate import DEFAULT_EQUIVALEN
 from experiments.audit_gsdc2023_phone_data_artifact_compatibility import (
     phone_data_artifact_compatibility_report,
 )
+from experiments.audit_gsdc2023_phone_data_sidecar_writer_regression import (
+    build_artifact_writer_regression_manifest,
+)
 from experiments.gsdc2023_raw_bridge import DEFAULT_ROOT
 
 
@@ -129,6 +132,46 @@ def test_phone_data_artifact_report_accepts_writer_export_summaries(tmp_path: Pa
     )
 
     assert report["passed"] is True
+    rows = {row["artifact"]: row for row in report["artifacts"]}
+    assert rows["phone_data_factor_counts.csv"]["writer_export_checked"] is True
+    assert rows["phone_data_factor_mask.csv"]["writer_export_checked"] is True
+
+
+def test_phone_data_artifact_report_accepts_sidecar_regression_manifests(tmp_path: Path) -> None:
+    summary_path = _write_json(tmp_path / "summary.json", _summary_payload())
+    count_export = tmp_path / "count_exports"
+    count_path = count_export / "train/course/phone/phone_data_factor_counts.csv"
+    count_path.parent.mkdir(parents=True)
+    count_path.write_text("freq,field,count\nL1,P,10\n", encoding="utf-8")
+    count_manifest = _write_json(
+        tmp_path / "count_manifest.json",
+        build_artifact_writer_regression_manifest(count_export, "factor_counts"),
+    )
+    mask_export = tmp_path / "mask_exports"
+    mask_export.mkdir()
+    mask_path = mask_export / "phone_data_factor_mask.csv"
+    mask_path.write_text(
+        "field,freq,epoch_index,utcTimeMillis,next_epoch_index,nextUtcTimeMillis,sys,svid,sat_col\n"
+        "P,L1,1,1000,0,0,1,3,1\n",
+        encoding="utf-8",
+    )
+    mask_manifest = _write_json(
+        tmp_path / "mask_manifest.json",
+        build_artifact_writer_regression_manifest(mask_export, "factor_mask"),
+    )
+
+    report = phone_data_artifact_compatibility_report(
+        summary_path,
+        factor_count_export_dir=count_export,
+        factor_count_regression_manifest=count_manifest,
+        factor_mask_export_dir=mask_export,
+        factor_mask_regression_manifest=mask_manifest,
+        require_csv_writer_exports=True,
+    )
+
+    assert report["passed"] is True
+    assert report["factor_count_regression_checked"] is True
+    assert report["factor_mask_regression_checked"] is True
     rows = {row["artifact"]: row for row in report["artifacts"]}
     assert rows["phone_data_factor_counts.csv"]["writer_export_checked"] is True
     assert rows["phone_data_factor_mask.csv"]["writer_export_checked"] is True

@@ -481,12 +481,29 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - result: `passed=true`, `failed_artifact_count=0`, cached summary validation passed, `phone_data_mat_decision=defer`.
   - Focused verification: `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_phone_data_artifact_compatibility.py tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => `4 passed`.
   - Interpretation: the migration target is now behavior/state/CSV artifact equivalence, not byte-for-byte `.mat` container reconstruction. `phone_data.mat` should stay out of submit-ready gates until a concrete MATLAB downstream consumer is identified.
+- Factor-count / factor-mask writer regression manifests:
+  - Added `experiments/audit_gsdc2023_phone_data_sidecar_writer_regression.py`, a compact manifest checker for generated `phone_data_factor_counts.csv` and `phone_data_factor_mask.csv` sidecars. It records writer filename, expected columns, file count, row count, relative path, schema, and SHA256.
+  - Added tracked fixtures:
+    - `data/gsdc2023_factor_count_writer_regression_manifest.json`
+    - `data/gsdc2023_factor_mask_writer_regression_manifest.json`
+  - Fixture sources:
+    - factor counts: `experiments/results/phone_data_factor_counts_writer_probe_20260507/gsdc2023_phone_data_raw_bridge_count_parity_20260507_104934/bridge_factor_counts`
+    - factor mask: `experiments/results/phone_data_factor_mask_writer_probe_20260507/gsdc2023_factor_mask_parity_20260507_110908/bridge_factor_mask`
+  - Real-data checks:
+    - `audit_gsdc2023_phone_data_sidecar_writer_regression.py --artifact factor_counts ... --check` => `matched: 1 file(s), 12 row(s)`.
+    - `audit_gsdc2023_phone_data_sidecar_writer_regression.py --artifact factor_mask ... --check` => `matched: 1 file(s), 83640 row(s)`.
+  - `audit_gsdc2023_phone_data_artifact_compatibility.py` now accepts `--factor-count-export-dir` and `--factor-mask-export-dir`; with `--require-csv-writer-exports`, those sidecars can be validated via the tracked regression manifests instead of ad-hoc writer summaries.
+  - Real-data artifact compatibility with regression manifests:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_phone_data_artifact_compatibility.py --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json --factor-count-export-dir experiments/results/phone_data_factor_counts_writer_probe_20260507/gsdc2023_phone_data_raw_bridge_count_parity_20260507_104934/bridge_factor_counts --factor-mask-export-dir experiments/results/phone_data_factor_mask_writer_probe_20260507/gsdc2023_factor_mask_parity_20260507_110908/bridge_factor_mask --require-csv-writer-exports --output-dir experiments/results/phone_data_artifact_compatibility_regression_probe_20260508`
+    - output: `experiments/results/phone_data_artifact_compatibility_regression_probe_20260508/gsdc2023_phone_data_artifact_compatibility_20260508_164407`
+    - result: `passed=true`, `factor_count_regression_checked=true`, `factor_mask_regression_checked=true`, both mismatch counts `0`, `failed_artifact_count=0`.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_phone_data_sidecar_writer_regression.py experiments/audit_gsdc2023_phone_data_artifact_compatibility.py tests/test_audit_gsdc2023_phone_data_sidecar_writer_regression.py tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_phone_data_sidecar_writer_regression.py tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => `8 passed`.
 
 次にやること:
 
-1. Factor-count / factor-mask writer-export checksを residual diagnostics と同じように軽量 regression manifest 化するか決める。現状は単発 writer summary を artifact compatibility audit に渡している。
-2. P6P0 ではなく score 改善に戻る場合、既存 local screen の `duplicate_submitted_local_sha` / risky previous-safe columns を使って未提出かつ private-safe な候補だけを再抽出する。
-3. submit-ready artifacts を出す標準コマンドに `--duplicate-sha-root` / `--fail-on-duplicate-sha` を常用するか、PR description に運用ルールとして明記する。
+1. P6P0 ではなく score 改善に戻る場合、既存 local screen の `duplicate_submitted_local_sha` / risky previous-safe columns を使って未提出かつ private-safe な候補だけを再抽出する。
+2. submit-ready artifacts を出す標準コマンドに `--duplicate-sha-root` / `--fail-on-duplicate-sha` を常用するか、PR description に運用ルールとして明記する。
+3. MATLAB migration の締めとして、`phone_data` artifact compatibility audit を PR description に書くか、submit-ready doc から参照できる形にする。
 
 2026-05-05 P6P0 clean Kaggle submit:
 

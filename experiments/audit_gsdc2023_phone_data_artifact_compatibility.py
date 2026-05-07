@@ -19,6 +19,11 @@ from experiments.audit_gsdc2023_matlab_equivalence_gate import (  # noqa: E402
     DEFAULT_WRITER_REGRESSION_MANIFEST,
     cached_summary_mismatches,
 )
+from experiments.audit_gsdc2023_phone_data_sidecar_writer_regression import (  # noqa: E402
+    DEFAULT_FACTOR_COUNT_MANIFEST,
+    DEFAULT_FACTOR_MASK_MANIFEST,
+    check_artifact_writer_regression,
+)
 from experiments.gsdc2023_audit_cli import (  # noqa: E402
     add_output_dir_arg as _add_output_dir_arg,
     resolved_output_root as _resolved_output_root,
@@ -105,6 +110,8 @@ def _factor_counts_row(
     factor_count_summary: dict[str, Any] | None,
     *,
     require_writer_exports: bool,
+    regression_checked: bool = False,
+    regression_mismatches: list[str] | None = None,
 ) -> dict[str, Any]:
     gate = _gate(equivalence_summary, "raw_bridge_counts")
     gate_passed = (
@@ -112,10 +119,11 @@ def _factor_counts_row(
         and _int(gate, "count_delta_failure_count") == 0
         and _int(gate, "missing_bridge_count_rows") == 0
     )
-    writer_checked = factor_count_summary is not None and _int(
+    writer_checked = regression_checked or factor_count_summary is not None and _int(
         factor_count_summary,
         "bridge_factor_count_exports_written",
     ) > 0
+    regression_mismatches = regression_mismatches or []
     writer_passed = True
     if factor_count_summary is not None:
         writer_passed = (
@@ -124,6 +132,8 @@ def _factor_counts_row(
             and _int(factor_count_summary, "missing_bridge_count_rows") == 0
             and _int(factor_count_summary, "bridge_factor_count_exports_written") > 0
         )
+    if regression_checked:
+        writer_passed = writer_passed and not regression_mismatches
     passed = gate_passed and writer_passed and (writer_checked or not require_writer_exports)
     status = "matlab_equivalent"
     if require_writer_exports and not writer_checked:
@@ -140,7 +150,8 @@ def _factor_counts_row(
         passed=passed,
         decision="keep_csv_sidecar_writer",
         evidence="raw_bridge_counts gate"
-        + (" + factor count writer summary" if factor_count_summary is not None else ""),
+        + (" + factor count writer summary" if factor_count_summary is not None else "")
+        + (" + factor count writer regression manifest" if regression_checked else ""),
         notes=(
             "GPS L1/L5 factor counts match MATLAB counts; "
             "missing MATLAB rows are allowed only when bridge rows are not missing."
@@ -150,7 +161,7 @@ def _factor_counts_row(
             if factor_count_summary is not None
             else None
         ),
-        mismatch_count=_int(gate, "count_delta_failure_count") if gate else None,
+        mismatch_count=(_int(gate, "count_delta_failure_count") if gate else 0) + len(regression_mismatches),
     )
 
 
@@ -159,6 +170,8 @@ def _factor_mask_row(
     factor_mask_summary: dict[str, Any] | None,
     *,
     require_writer_exports: bool,
+    regression_checked: bool = False,
+    regression_mismatches: list[str] | None = None,
 ) -> dict[str, Any]:
     gate = _gate(equivalence_summary, "factor_mask")
     gate_passed = (
@@ -167,14 +180,15 @@ def _factor_mask_row(
         and _int(gate, "total_matlab_only") == 0
         and _int(gate, "total_bridge_only") == 0
     )
-    writer_checked = False
+    writer_checked = regression_checked
     writer_export_count: int | None = None
     writer_failure_count = 0
+    regression_mismatches = regression_mismatches or []
     if factor_mask_summary is not None:
         writer_export_count = _int(factor_mask_summary, "bridge_factor_mask_export_count")
         if writer_export_count == 0 and factor_mask_summary.get("bridge_factor_mask_export_path"):
             writer_export_count = 1
-        writer_checked = bool(writer_export_count)
+        writer_checked = writer_checked or bool(writer_export_count)
         writer_failure_count = _int(factor_mask_summary, "bridge_factor_mask_export_failure_count")
     writer_passed = factor_mask_summary is None or (
         writer_checked
@@ -183,6 +197,8 @@ def _factor_mask_row(
         and _int(factor_mask_summary, "total_matlab_only") == 0
         and _int(factor_mask_summary, "total_bridge_only") == 0
     )
+    if regression_checked:
+        writer_passed = writer_passed and not regression_mismatches
     passed = gate_passed and writer_passed and (writer_checked or not require_writer_exports)
     status = "matlab_equivalent"
     if require_writer_exports and not writer_checked:
@@ -199,10 +215,11 @@ def _factor_mask_row(
         passed=passed,
         decision="keep_csv_sidecar_writer",
         evidence="factor_mask gate"
-        + (" + factor mask writer summary" if factor_mask_summary is not None else ""),
+        + (" + factor mask writer summary" if factor_mask_summary is not None else "")
+        + (" + factor mask writer regression manifest" if regression_checked else ""),
         notes="Bridge factor mask key set is side-only zero against MATLAB.",
         export_count=writer_export_count,
-        mismatch_count=_int(gate, "side_only_failure_count") if gate else None,
+        mismatch_count=(_int(gate, "side_only_failure_count") if gate else 0) + len(regression_mismatches),
     )
 
 
@@ -267,6 +284,10 @@ def phone_data_artifact_compatibility_report(
     *,
     factor_count_summary: Path | None = None,
     factor_mask_summary: Path | None = None,
+    factor_count_export_dir: Path | None = None,
+    factor_count_regression_manifest: Path | None = None,
+    factor_mask_export_dir: Path | None = None,
+    factor_mask_regression_manifest: Path | None = None,
     require_csv_writer_exports: bool = False,
     require_phone_data_mat: bool = False,
     skip_cached_scope_validation: bool = False,
@@ -295,16 +316,35 @@ def phone_data_artifact_compatibility_report(
             writer_regression_manifest=DEFAULT_WRITER_REGRESSION_MANIFEST,
         )
 
+    factor_count_regression_mismatches: list[str] | None = None
+    if factor_count_export_dir is not None:
+        factor_count_regression_mismatches = check_artifact_writer_regression(
+            factor_count_export_dir,
+            factor_count_regression_manifest or DEFAULT_FACTOR_COUNT_MANIFEST,
+            "factor_counts",
+        )
+    factor_mask_regression_mismatches: list[str] | None = None
+    if factor_mask_export_dir is not None:
+        factor_mask_regression_mismatches = check_artifact_writer_regression(
+            factor_mask_export_dir,
+            factor_mask_regression_manifest or DEFAULT_FACTOR_MASK_MANIFEST,
+            "factor_mask",
+        )
+
     rows = [
         _factor_counts_row(
             equivalence_payload,
             factor_count_payload,
             require_writer_exports=require_csv_writer_exports,
+            regression_checked=factor_count_regression_mismatches is not None,
+            regression_mismatches=factor_count_regression_mismatches,
         ),
         _factor_mask_row(
             equivalence_payload,
             factor_mask_payload,
             require_writer_exports=require_csv_writer_exports,
+            regression_checked=factor_mask_regression_mismatches is not None,
+            regression_mismatches=factor_mask_regression_mismatches,
         ),
         _residual_diagnostics_row(equivalence_payload),
         _phone_data_mat_row(require_phone_data_mat=require_phone_data_mat),
@@ -320,6 +360,34 @@ def phone_data_artifact_compatibility_report(
         "matlab_equivalence_summary": str(Path(matlab_equivalence_summary)),
         "factor_count_summary": str(factor_count_summary) if factor_count_summary is not None else None,
         "factor_mask_summary": str(factor_mask_summary) if factor_mask_summary is not None else None,
+        "factor_count_export_dir": str(factor_count_export_dir) if factor_count_export_dir is not None else None,
+        "factor_count_regression_manifest": (
+            str(factor_count_regression_manifest or DEFAULT_FACTOR_COUNT_MANIFEST)
+            if factor_count_export_dir is not None
+            else None
+        ),
+        "factor_count_regression_checked": factor_count_regression_mismatches is not None,
+        "factor_count_regression_passed": (
+            factor_count_regression_mismatches is None or not factor_count_regression_mismatches
+        ),
+        "factor_count_regression_mismatch_count": (
+            len(factor_count_regression_mismatches) if factor_count_regression_mismatches is not None else 0
+        ),
+        "factor_count_regression_mismatches": (factor_count_regression_mismatches or [])[:20],
+        "factor_mask_export_dir": str(factor_mask_export_dir) if factor_mask_export_dir is not None else None,
+        "factor_mask_regression_manifest": (
+            str(factor_mask_regression_manifest or DEFAULT_FACTOR_MASK_MANIFEST)
+            if factor_mask_export_dir is not None
+            else None
+        ),
+        "factor_mask_regression_checked": factor_mask_regression_mismatches is not None,
+        "factor_mask_regression_passed": (
+            factor_mask_regression_mismatches is None or not factor_mask_regression_mismatches
+        ),
+        "factor_mask_regression_mismatch_count": (
+            len(factor_mask_regression_mismatches) if factor_mask_regression_mismatches is not None else 0
+        ),
+        "factor_mask_regression_mismatches": (factor_mask_regression_mismatches or [])[:20],
         "equivalence_claim": equivalence_payload.get("equivalence_claim"),
         "matlab_equivalence_passed": bool(equivalence_payload.get("passed", False)),
         "cached_summary_validation_checked": not skip_cached_scope_validation,
@@ -365,6 +433,10 @@ def main() -> None:
     parser.add_argument("--matlab-equivalence-summary", type=Path, required=True)
     parser.add_argument("--factor-count-summary", type=Path)
     parser.add_argument("--factor-mask-summary", type=Path)
+    parser.add_argument("--factor-count-export-dir", type=Path)
+    parser.add_argument("--factor-count-regression-manifest", type=Path)
+    parser.add_argument("--factor-mask-export-dir", type=Path)
+    parser.add_argument("--factor-mask-regression-manifest", type=Path)
     parser.add_argument(
         "--require-csv-writer-exports",
         action="store_true",
@@ -388,6 +460,10 @@ def main() -> None:
         args.matlab_equivalence_summary,
         factor_count_summary=args.factor_count_summary,
         factor_mask_summary=args.factor_mask_summary,
+        factor_count_export_dir=args.factor_count_export_dir,
+        factor_count_regression_manifest=args.factor_count_regression_manifest,
+        factor_mask_export_dir=args.factor_mask_export_dir,
+        factor_mask_regression_manifest=args.factor_mask_regression_manifest,
         require_csv_writer_exports=bool(args.require_csv_writer_exports),
         require_phone_data_mat=bool(args.require_phone_data_mat),
         skip_cached_scope_validation=bool(args.skip_cached_scope_validation),
