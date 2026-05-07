@@ -421,6 +421,16 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - Real-data cached check: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --cached-summary experiments/results/matlab_equivalence_gate_writer_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_110637/summary.json --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --output-dir experiments/results/matlab_equivalence_gate_cached_probe_20260508` => prints the cached payload and `equivalence_dir=.../gsdc2023_matlab_equivalence_gate_20260508_110637`.
   - Focused verification: `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_matlab_equivalence_gate.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_matlab_equivalence_gate.py` => `13 passed`.
   - Interpretation: submit-ready workflows can keep using `--matlab-equivalence-summary` directly, and humans/scripts can now validate a cached full-window equivalence proof without paying the full rerun cost. A new full-window run is still required once when introducing new gates such as the default writer regression manifest.
+- Full-window MATLAB equivalence gate rerun with default writer regression manifest:
+  - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --default-writer-regression-manifest --output-dir experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508 --verbose`
+  - output: `experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952`
+  - summary SHA256: `8b91da173d3724be528a37652d0c5450dec2b5dc474ed25a6f824136c89a0b88`
+  - result: `passed=true`, `equivalence_claim=matlab_equivalent`; factor side-only `0/0`; residual side-only `0/0`; residual max delta `5.91054445631678e-05 m`; writer exports `12`, rows `258537`, columns `44/44`; writer regression `checked=true`, `passed=true`, mismatch count `0`; raw bridge count failures `0`.
+  - submit-ready refresh for non-P6P0 `sjc_r_scale_sweep`:
+    - command: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --tag 20260501 --group sjc_r_scale_sweep --prepare-ready-report experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted/submit_ready_report.json --build-summary experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted/build_summary.json --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --previous-tag 20260501 --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json --require-matlab-equivalence --skip-missing`
+    - result: `prepared: 3 candidate(s)`; `--audit-ready-report .../submit_ready_report.json` => `audited: 3 candidate(s)`; `--check-ready --output-dir ... --tag 20260501 --group sjc_r_scale_sweep --require-matlab-equivalence --skip-missing` => `ready: 3 candidate(s)`.
+    - refreshed `pre_submit_manifest.json` records `summary_sha256=8b91da173d3724be528a37652d0c5450dec2b5dc474ed25a6f824136c89a0b88`, `residual_diagnostics_writer_regression_checked=true`, `residual_diagnostics_writer_regression_passed=true`, and `residual_diagnostics_writer_regression_mismatch_count=0`.
+  - Interpretation: the stricter writer-regression full-window proof is now the active submit-ready equivalence summary for the non-P6P0 ready queue. The generated writer CSV bundle is about `162MB` and remains outside Git.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
@@ -429,8 +439,8 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. 次回 full-window equivalence gate を `--default-writer-regression-manifest` 付きで再実行し、新 summary SHA を submit-ready manifest に流す
-2. cached summary validation を submit-ready/report docs に明示し、手順の標準コマンドを短くする
+1. cached summary validation を submit-ready/report docs に明示し、手順の標準コマンドを短くする
+2. P6P0 clean queue は previous-safe gate でまだ止まるため、`previous_changed_rows=1444` の内訳を trip/candidate 単位で潰す
 
 2026-05-05 P6P0 clean Kaggle submit:
 
