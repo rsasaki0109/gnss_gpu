@@ -6,6 +6,7 @@ import pandas as pd
 
 from experiments.compare_gsdc2023_residual_diagnostics_pd import (
     bridge_residual_diagnostics_pd_export_frame,
+    bridge_residual_diagnostics_pd_wide_export_frame,
     compare_residual_diagnostics_pd_values,
     matlab_residual_diagnostics_pd_values,
 )
@@ -107,3 +108,68 @@ def test_compare_residual_diagnostics_pd_values_summarizes_bridge_deltas(tmp_pat
     wide = bridge_residual_diagnostics_pd_export_frame(bridge)
     assert wide.loc[0, "p_residual_m"] == 10.25
     assert wide.loc[0, "d_model_mps"] == 20.0
+
+
+def test_bridge_residual_diagnostics_pd_wide_export_adds_sat_col_and_components() -> None:
+    bridge_residuals = pd.DataFrame(
+        [
+            {
+                "field": "P",
+                "freq": "L1",
+                "epoch_index": 1,
+                "utcTimeMillis": 1000,
+                "sys": 1,
+                "svid": 3,
+                "bridge_sat_col": 2,
+                "bridge_residual": 1.25,
+                "bridge_pre_residual": 11.25,
+                "bridge_common_bias": 10.0,
+                "bridge_observation": 210.0,
+                "bridge_model": 200.0,
+                "bridge_sat_x": 1.0,
+                "bridge_sat_y": 2.0,
+                "bridge_sat_z": 3.0,
+                "bridge_sat_vx": 0.1,
+                "bridge_sat_vy": 0.2,
+                "bridge_sat_vz": 0.3,
+                "bridge_rcv_x": 4.0,
+                "bridge_rcv_y": 5.0,
+                "bridge_rcv_z": 6.0,
+            },
+            {
+                "field": "D",
+                "freq": "L1",
+                "epoch_index": 1,
+                "utcTimeMillis": 1000,
+                "sys": 1,
+                "svid": 3,
+                "bridge_sat_col": 2,
+                "bridge_residual": -2.0,
+                "bridge_pre_residual": 8.0,
+                "bridge_common_bias": 10.0,
+                "bridge_observation": 28.0,
+                "bridge_model": 20.0,
+                "bridge_sat_x": 1.0,
+                "bridge_sat_y": 2.0,
+                "bridge_sat_z": 3.0,
+                "bridge_sat_vx": 0.1,
+                "bridge_sat_vy": 0.2,
+                "bridge_sat_vz": 0.3,
+                "bridge_rcv_x": 4.0,
+                "bridge_rcv_y": 5.0,
+                "bridge_rcv_z": 6.0,
+            },
+        ],
+    )
+
+    wide = bridge_residual_diagnostics_pd_wide_export_frame(bridge_residuals)
+
+    assert len(wide) == 1
+    row = wide.iloc[0]
+    assert row["sat_col"] == 2
+    assert row["p_residual_m"] == 1.25
+    assert row["d_residual_mps"] == -2.0
+    assert row["sat_range_m"] == 200.0
+    assert row["sat_rate_mps"] == 20.0
+    assert row["sat_x_m"] == 1.0
+    assert row["rcv_z_m"] == 6.0

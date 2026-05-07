@@ -55,6 +55,33 @@ PD_DIAGNOSTICS_VALUE_MAP: tuple[tuple[str, str, str, str], ...] = (
     ("D", "d_obs_mps", "matlab_observation", "bridge_observation"),
     ("D", "d_model_mps", "matlab_model", "bridge_model"),
 )
+PD_WIDE_COMPONENT_MAP: tuple[tuple[str | None, str, str], ...] = (
+    (None, "sat_x_m", "bridge_sat_x"),
+    (None, "sat_y_m", "bridge_sat_y"),
+    (None, "sat_z_m", "bridge_sat_z"),
+    (None, "sat_vx_mps", "bridge_sat_vx"),
+    (None, "sat_vy_mps", "bridge_sat_vy"),
+    (None, "sat_vz_mps", "bridge_sat_vz"),
+    (None, "sat_clock_bias_m", "bridge_sat_clock_bias"),
+    (None, "sat_clock_drift_mps", "bridge_sat_clock_drift"),
+    (None, "sat_iono_m", "bridge_sat_iono"),
+    (None, "sat_trop_m", "bridge_sat_trop"),
+    ("P", "sat_range_m", "bridge_model"),
+    ("D", "sat_rate_mps", "bridge_model"),
+    (None, "sat_elevation_deg", "bridge_sat_elevation"),
+    (None, "rcv_x_m", "bridge_rcv_x"),
+    (None, "rcv_y_m", "bridge_rcv_y"),
+    (None, "rcv_z_m", "bridge_rcv_z"),
+    (None, "rcv_vx_mps", "bridge_rcv_vx"),
+    (None, "rcv_vy_mps", "bridge_rcv_vy"),
+    (None, "rcv_vz_mps", "bridge_rcv_vz"),
+)
+PD_WIDE_EXPORT_COLUMNS = (
+    *_DIAGNOSTICS_KEY_COLUMNS,
+    "sat_col",
+    *(row[1] for row in PD_DIAGNOSTICS_VALUE_MAP),
+    *[row[1] for row in PD_WIDE_COMPONENT_MAP],
+)
 
 BridgeFrameFn = Callable[..., pd.DataFrame]
 
@@ -121,6 +148,29 @@ def bridge_residual_diagnostics_pd_values(
     return _melt_pd_values(bridge, side="bridge")
 
 
+def bridge_residual_diagnostics_pd_wide_values(
+    trip_dir: Path,
+    *,
+    max_epochs: int = 0,
+    multi_gnss: bool = False,
+    apply_observation_mask: bool = True,
+    include_inactive_observations: bool = False,
+    inactive_key_filter: set[tuple[object, ...]] | None = None,
+    bridge_frame_fn: BridgeFrameFn = build_bridge_residual_frame,
+) -> pd.DataFrame:
+    """Return bridge P/D diagnostics in a wide MATLAB-sidecar column subset."""
+
+    bridge = bridge_frame_fn(
+        Path(trip_dir),
+        max_epochs=max_epochs,
+        multi_gnss=multi_gnss,
+        apply_observation_mask=apply_observation_mask,
+        include_inactive_observations=include_inactive_observations,
+        inactive_key_filter=inactive_key_filter,
+    )
+    return bridge_residual_diagnostics_pd_wide_export_frame(bridge)
+
+
 def bridge_residual_diagnostics_pd_export_frame(values: pd.DataFrame) -> pd.DataFrame:
     """Pivot long bridge P/D values to a MATLAB-column subset export."""
 
@@ -140,6 +190,40 @@ def bridge_residual_diagnostics_pd_export_frame(values: pd.DataFrame) -> pd.Data
         if diagnostics_column not in wide.columns:
             wide[diagnostics_column] = np.nan
     return wide[_DIAGNOSTICS_KEY_COLUMNS + [row[1] for row in PD_DIAGNOSTICS_VALUE_MAP]]
+
+
+def bridge_residual_diagnostics_pd_wide_export_frame(bridge_residuals: pd.DataFrame) -> pd.DataFrame:
+    """Return a writer-shaped P/D diagnostics subset with shared component columns."""
+
+    if bridge_residuals.empty:
+        return pd.DataFrame(columns=list(PD_WIDE_EXPORT_COLUMNS))
+    rows: list[pd.DataFrame] = []
+    for field in ("P", "D"):
+        sub = bridge_residuals.loc[bridge_residuals["field"].astype(str).eq(field)].copy()
+        if sub.empty:
+            continue
+        key = sub.loc[:, _DIAGNOSTICS_KEY_COLUMNS].copy()
+        if "bridge_sat_col" in sub.columns:
+            key["sat_col"] = pd.to_numeric(sub["bridge_sat_col"], errors="coerce")
+        for map_field, diagnostics_column, _matlab_column, bridge_column in PD_DIAGNOSTICS_VALUE_MAP:
+            if map_field == field and bridge_column in sub.columns:
+                key[diagnostics_column] = pd.to_numeric(sub[bridge_column], errors="coerce")
+        for component_field, diagnostics_column, bridge_column in PD_WIDE_COMPONENT_MAP:
+            if component_field in (None, field) and bridge_column in sub.columns:
+                key[diagnostics_column] = pd.to_numeric(sub[bridge_column], errors="coerce")
+        rows.append(key)
+    if not rows:
+        return pd.DataFrame(columns=list(PD_WIDE_EXPORT_COLUMNS))
+    out = pd.concat(rows, ignore_index=True)
+    for column in PD_WIDE_EXPORT_COLUMNS:
+        if column not in out.columns:
+            out[column] = np.nan
+    for column in ("epoch_index", "utcTimeMillis", "sys", "svid", "sat_col"):
+        out[column] = pd.to_numeric(out[column], errors="coerce")
+    out["freq"] = out["freq"].astype(str)
+    out = out.groupby(_DIAGNOSTICS_KEY_COLUMNS, sort=False, as_index=False).first()
+    out = out.sort_values(["freq", "sat_col", "sys", "svid", "epoch_index"], kind="mergesort")
+    return out.loc[:, list(PD_WIDE_EXPORT_COLUMNS)].reset_index(drop=True)
 
 
 def merge_residual_diagnostics_pd_values(matlab: pd.DataFrame, bridge: pd.DataFrame) -> pd.DataFrame:
@@ -269,15 +353,17 @@ def main() -> None:
     parser.add_argument("--include-inactive-observations", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--max-abs-delta-threshold", type=float, default=1.0e-4)
     parser.add_argument("--write-bridge-pd-values", action="store_true")
+    parser.add_argument("--write-bridge-pd-wide", action="store_true")
     _add_output_dir_arg(parser)
     args = parser.parse_args()
 
     trip_dir = _resolve_trip_dir(args)
     out_dir = _timestamped_output_dir(_resolved_output_root(args), "gsdc2023_residual_diagnostics_pd_parity")
+    max_epochs = _nonnegative_max_epochs(args)
     merged, summary, bridge, payload = compare_residual_diagnostics_pd_values(
         trip_dir,
         diagnostics_path=args.diagnostics,
-        max_epochs=_nonnegative_max_epochs(args),
+        max_epochs=max_epochs,
         multi_gnss=bool(args.multi_gnss),
         apply_observation_mask=bool(args.observation_mask),
         include_inactive_observations=bool(args.include_inactive_observations),
@@ -293,6 +379,27 @@ def main() -> None:
             out_dir / "bridge_residual_diagnostics_pd_subset.csv",
             index=False,
         )
+    if args.write_bridge_pd_wide:
+        diagnostics_path = Path(args.diagnostics) if args.diagnostics is not None else trip_dir / "phone_data_residual_diagnostics.csv"
+        start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
+        matlab_residuals = _trim_epoch_window(
+            _matlab_residual_frame(diagnostics_path),
+            start_epoch,
+            bridge_max_epochs,
+        )
+        inactive_key_filter = (
+            set(matlab_residuals[RESIDUAL_KEY_COLUMNS].itertuples(index=False, name=None))
+            if bool(args.include_inactive_observations)
+            else None
+        )
+        bridge_residual_diagnostics_pd_wide_values(
+            trip_dir,
+            max_epochs=max_epochs,
+            multi_gnss=bool(args.multi_gnss),
+            apply_observation_mask=bool(args.observation_mask),
+            include_inactive_observations=bool(args.include_inactive_observations),
+            inactive_key_filter=inactive_key_filter,
+        ).to_csv(out_dir / "bridge_residual_diagnostics_pd_wide_subset.csv", index=False)
     _write_summary_json(out_dir, payload)
     _print_summary_and_output_dir(payload, out_dir)
 
