@@ -29,6 +29,17 @@ DEFAULT_TAG = "20260501"
 PRE_SUBMIT_MANIFEST = "pre_submit_manifest.json"
 PRE_SUBMIT_TRIP_CHECKS = "pre_submit_trip_delta_checks.csv"
 SUBMISSION_GLOB = "submission*.csv"
+DEFAULT_PHONE_DATA_FACTOR_COUNT_EXPORT_DIR = Path(
+    "experiments/results/phone_data_factor_counts_writer_probe_20260507/"
+    "gsdc2023_phone_data_raw_bridge_count_parity_20260507_104934/bridge_factor_counts"
+)
+DEFAULT_PHONE_DATA_FACTOR_MASK_EXPORT_DIR = Path(
+    "experiments/results/phone_data_factor_mask_writer_probe_20260507/"
+    "gsdc2023_factor_mask_parity_20260507_110908/bridge_factor_mask"
+)
+DEFAULT_PHONE_DATA_ARTIFACT_COMPATIBILITY_OUTPUT_DIR = Path(
+    "experiments/results/phone_data_artifact_compatibility_regression_probe_20260508"
+)
 
 
 @dataclass(frozen=True)
@@ -768,6 +779,21 @@ def _format_cached_equivalence_command(summary_path: object | None, matlab_equiv
     return "\n".join(lines)
 
 
+def _format_phone_data_artifact_compatibility_command(summary_path: object | None) -> str | None:
+    summary_cli_path = _cli_path(summary_path)
+    if summary_cli_path is None:
+        return None
+    lines = [
+        "PYTHONPATH=.:python python3 experiments/audit_gsdc2023_phone_data_artifact_compatibility.py \\",
+        f"  --matlab-equivalence-summary {shlex.quote(summary_cli_path)} \\",
+        f"  --factor-count-export-dir {DEFAULT_PHONE_DATA_FACTOR_COUNT_EXPORT_DIR} \\",
+        f"  --factor-mask-export-dir {DEFAULT_PHONE_DATA_FACTOR_MASK_EXPORT_DIR} \\",
+        "  --require-csv-writer-exports \\",
+        f"  --output-dir {DEFAULT_PHONE_DATA_ARTIFACT_COMPATIBILITY_OUTPUT_DIR}",
+    ]
+    return "\n".join(lines)
+
+
 def _report_duplicate_sha_roots(report: dict[str, object], fallback_roots: list[Path] | None) -> list[Path]:
     roots = report.get("duplicate_sha_roots")
     if isinstance(roots, list) and roots:
@@ -935,6 +961,21 @@ def write_submit_readiness_doc(
         if cached_equivalence_command is not None
         else []
     )
+    phone_data_artifact_command = _format_phone_data_artifact_compatibility_command(matlab_equivalence.get("summary"))
+    phone_data_artifact_lines = (
+        [
+            "## Validate Phone Data Artifact Compatibility",
+            "",
+            "Use this to confirm that submit readiness is covered by Python bridge state and CSV sidecar compatibility, while `phone_data.mat` remains intentionally deferred.",
+            "",
+            "```bash",
+            phone_data_artifact_command,
+            "```",
+            "",
+        ]
+        if phone_data_artifact_command is not None
+        else []
+    )
     duplicate_guard_lines = _duplicate_sha_guard_lines(
         ready_report_path=ready_report_path,
         output_dir=output_dir,
@@ -982,6 +1023,7 @@ def write_submit_readiness_doc(
                 "```",
                 "",
                 *cached_equivalence_lines,
+                *phone_data_artifact_lines,
                 *duplicate_guard_lines,
                 "## Audit Only",
                 "",

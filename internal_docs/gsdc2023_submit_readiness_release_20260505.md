@@ -50,7 +50,9 @@ diagnostic comparison helpers: 11 passed
 ## Submit State
 
 - Kaggle submit was not run.
-- P6P0 ready artifacts were prepared and audited.
+- P6P0 previous-safe artifacts were prepared and audited, but duplicate-SHA guard identifies them as byte-identical to already-ready non-P6P0 candidates.
+- Full-window MATLAB writer equivalence is cached and re-auditable from the submit-readiness doc.
+- `phone_data` artifact compatibility is re-auditable from the submit-readiness doc; CSV sidecars are covered and `phone_data.mat` is intentionally deferred.
 - `git status --short` was clean after the commit split.
 
 ## P6P0 Ready Artifacts
@@ -71,6 +73,12 @@ ready_count=3
 ready_csv_rows=3
 pre_submit_manifest_candidates=3
 candidate_actionable_risky_chunks=0
-max_risky_pixel6pro_input_changed_rows=0
-max_risky_pixel6pro_input_delta_m=0.0
+max_risky_pixel6pro_input_changed_rows=1444
+max_risky_pixel6pro_input_delta_m=0.8
+matlab_equivalence=matlab_equivalent
+cached_matlab_equivalence_validation=passed
+duplicate_sha_candidates=3
+duplicate_sha_matches=3
+phone_data_artifact_compatibility=passed
+phone_data_mat_decision=defer
 ```

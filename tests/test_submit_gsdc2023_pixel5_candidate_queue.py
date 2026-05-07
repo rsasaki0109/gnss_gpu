@@ -1022,6 +1022,11 @@ def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
     assert "--require-matlab-equivalence" in doc
     assert "--cached-summary" in doc
     assert "--default-writer-regression-manifest" in doc
+    assert "## Validate Phone Data Artifact Compatibility" in doc
+    assert "audit_gsdc2023_phone_data_artifact_compatibility.py" in doc
+    assert "--factor-count-export-dir" in doc
+    assert "--factor-mask-export-dir" in doc
+    assert "--require-csv-writer-exports" in doc
     assert "## Duplicate SHA Guard" in doc
     assert "--fail-on-duplicate-sha" in doc
     assert f"--duplicate-sha-root {tmp_path}" in doc

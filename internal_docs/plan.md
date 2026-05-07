@@ -510,12 +510,16 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - regenerated doc includes `Duplicate SHA Guard`, `--fail-on-duplicate-sha`, and `Expected behavior: fails when duplicate SHA matches are present`.
     - direct audit check: `--audit-ready-report .../submit_ready_report.json --fail-on-duplicate-sha` exits nonzero with all three duplicate P6P0 candidates listed.
   - Focused verification: `python3 -m ruff check --ignore=E402 experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `24 passed`.
+- Submit-readiness phone_data artifact compatibility documentation:
+  - `write_submit_readiness_doc()` now emits a `Validate Phone Data Artifact Compatibility` section whenever a MATLAB equivalence summary is recorded.
+  - The section runs `audit_gsdc2023_phone_data_artifact_compatibility.py` with the full-window writer-regression summary plus factor-count/factor-mask sidecar export dirs, validates the tracked sidecar regression manifests, and keeps `phone_data.mat` explicitly deferred.
+  - Real-data command against `experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json` passed with `artifact_count=4`, `failed_artifact_count=0`, CSV writer regressions passed, and `phone_data_mat_decision=defer`.
+  - Regenerated `p6p0_prevsafe_candidate_20260508/submit_readiness.md` includes the new artifact compatibility section.
 
 次にやること:
 
-1. MATLAB migration の締めとして、`phone_data` artifact compatibility audit と full-window writer equivalence summary を PR description に書くか、submit-ready doc から参照できる形にする。
-2. submit-ready doc に `phone_data` artifact compatibility audit コマンドを追加するか判断する。
-3. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
+1. PR description に full-window writer equivalence summary、`phone_data` artifact compatibility audit、safe unsubmitted shortlist の結論を反映する。
+2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 
 2026-05-05 P6P0 clean Kaggle submit:
 
