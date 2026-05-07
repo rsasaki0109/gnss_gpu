@@ -1,6 +1,6 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-05-05 JST
+**最終更新**: 2026-05-08 JST
 **現在の HEAD**: `codex/residual-mask-main-port`
 **ブランチ**: `codex/residual-mask-main-port`
 **作業ツリー**: GSDC2023 MATLAB equivalence gate / residual side-only audit / submit risk gate / local candidate screening は PR #55 に反映済み。既存変更を revert しないこと。
@@ -339,6 +339,19 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - new L finite aggregate: `l_pre_finite` and `l_factor_finite` both have max delta `0.0` on every trip.
     - writer-shaped export result: `bridge_wide_subset_export_count=12`, `bridge_wide_subset_export_total_rows=258537`, each export has the full `44` sidecar-shaped columns.
   - Interpretation: the bridge can now regenerate the residual diagnostics P/D writer-shaped subset with all 44 MATLAB sidecar columns covered over the 12-trip bundle. Remaining work is packaging this path as a complete `phone_data_residual_diagnostics.csv` writer and making the equivalence gate consume it without the MATLAB residual diagnostics sidecar as a golden-key input.
+- 2026-05-08 residual diagnostics writer packaging:
+  - `compare_gsdc2023_residual_diagnostics_pd.py --write-bridge-residual-diagnostics` now writes a Python-generated `bridge_residual_diagnostics/phone_data_residual_diagnostics.csv` with the full 44-column MATLAB sidecar schema.
+  - `audit_gsdc2023_residual_diagnostics_pd_parity.py --write-bridge-residual-diagnostics` now writes per-trip Python-generated `phone_data_residual_diagnostics.csv` files, summarizes them in `bridge_residual_diagnostics_exports.csv`, and byte-compares them with MATLAB exports as an informational field.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_residual_diagnostics_pd.py tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py` => `8 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data 12-trip full-window writer probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-residual-diagnostics --verbose --output-dir experiments/results/residual_diagnostics_writer_12trip_probe_20260508`
+    - output: `experiments/results/residual_diagnostics_writer_12trip_probe_20260508/gsdc2023_residual_diagnostics_pd_parity_audit_20260508_075221`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, `completed_trip_count=12`, `wide_completed_trip_count=12`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components/finite: `wide_total_matlab_count=10082943`, `wide_total_bridge_count=10082943`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - writer result: `bridge_residual_diagnostics_export_count=12`, `bridge_residual_diagnostics_export_total_rows=258537`, every generated export has `column_count=44`
+    - `bridge_residual_diagnostics_export_byte_difference_count=12` is informational only: continuous numeric columns are parity-threshold equivalent, but CSV text/float formatting is not MATLAB byte-identical.
+  - Interpretation: the complete residual diagnostics sidecar writer is packaged and validated on the 12-trip MATLAB bundle. It still derives inactive diagnostics keys from the MATLAB residual diagnostics sidecar when `--include-inactive-observations` is enabled, so the next gate-hardening step is to generate those inactive keys from Python state and then wire the writer into the MATLAB equivalence / submit-ready gate.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
@@ -347,9 +360,9 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. 44-column wide subset path を complete `phone_data_residual_diagnostics.csv` writer として梱包する
-2. 12-trip full-window で sidecar 不使用の residual diagnostics writer gate を通す
-3. 既存 submit-ready / MATLAB equivalence gate に residual diagnostics writer を接続する
+1. inactive diagnostics keys を MATLAB residual diagnostics sidecar から読まずに Python state から生成する
+2. `phone_data_residual_diagnostics.csv` writer を MATLAB equivalence / submit-ready gate に接続する
+3. 生成済み writer artifacts を regression 出力として使い、MATLAB sidecar 依存を golden fixture のみに縮小する
 
 2026-05-05 P6P0 clean Kaggle submit:
 
