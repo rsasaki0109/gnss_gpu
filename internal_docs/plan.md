@@ -272,6 +272,15 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - pre-residual availability used by residual parity and prekey diagnostics: `p_pre_finite,d_pre_finite,l_pre_finite`
     - P/D residual/internal components are already reproduced in `compare_gsdc2023_residual_values.py` with strict internal-delta gates.
   - Interpretation: unlike factor counts/masks, residual diagnostics is not just an output artifact; it is still a golden-key input for inactive row injection. Writer work should start with a bridge-vs-MATLAB diagnostics key/value export for P/D, then separately decide how to generate or eliminate `l_pre_finite/l_factor_finite` golden-key dependency.
+- 2026-05-07 residual diagnostics P/D subset export parity:
+  - Added `compare_gsdc2023_residual_diagnostics_pd.py` to map bridge residual values back to MATLAB sidecar column names for the P/D subset: `p_residual_m,p_pre_respc_m,p_clock_bias_m,p_corrected_m,p_range_m,d_residual_mps,d_pre_resd_m,d_clock_bias_mps,d_obs_mps,d_model_mps`.
+  - The tool writes a long join (`residual_diagnostics_pd_join.csv`) plus optional bridge exports: `bridge_residual_diagnostics_pd_values.csv` and wide MATLAB-column subset `bridge_residual_diagnostics_pd_subset.csv`.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_residual_diagnostics_pd.py` => `2 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data 50-epoch probe:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_residual_diagnostics_pd.py --trip train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u --max-epochs 50 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-values --output-dir experiments/results/residual_diagnostics_pd_probe_20260507`
+    - output: `experiments/results/residual_diagnostics_pd_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_20260507_122058`
+    - result: `passed=true`, `total_matlab_count=3400`, `total_bridge_count=3400`, `total_matched_count=3400`, `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=4.323213641971302e-05`
+  - Interpretation: the bridge can now emit a writer-shaped P/D diagnostics subset with MATLAB sidecar column names. Remaining gaps for a full `phone_data_residual_diagnostics.csv` writer are `sat_col` ordering, shared satellite/receiver component columns in wide form, and L finite columns (`l_pre_finite,l_factor_finite`).
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
