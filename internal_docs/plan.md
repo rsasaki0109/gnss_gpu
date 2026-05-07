@@ -368,6 +368,19 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - writer result: `bridge_residual_diagnostics_export_count=12`, `bridge_residual_diagnostics_export_total_rows=258537`, every generated export has `column_count=44`
   - Fix detail: a full-window smoke initially produced one extra sm-a205u row at epoch `184` / svid `9` because gnss-log pseudorange completion made an interpolated matrix value look observable even though raw `SignalType` and `RawPseudorangeMeters` were absent. The generated `gnss_log_signal_mask_frame` key source excludes that row and matches MATLAB pre-finite availability without reading the residual diagnostics sidecar.
   - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_residual_diagnostics_pd.py tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py tests/test_gsdc2023_trip_stages.py tests/test_compare_gsdc2023_residual_values.py tests/test_gsdc2023_residual_audit.py` => `62 passed`; `ruff check --ignore=E402 ...` pass.
+- 2026-05-08 residual diagnostics writer gate wiring:
+  - `audit_gsdc2023_residual_diagnostics_pd_parity.py` summary now records writer column fields: `bridge_residual_diagnostics_export_expected_columns`, `*_column_count_min`, `*_column_count_max`, and `*_column_mismatch_count`.
+  - `audit_gsdc2023_matlab_equivalence_gate.py` now runs a fifth gate, `residual_diagnostics_writer`, which writes Python-generated `phone_data_residual_diagnostics.csv` artifacts, requires P/D and wide side-only `0/0`, requires `sat_col` mismatch `0`, requires non-empty exports, and requires every writer export to have the expected `44` columns. Byte differences from MATLAB CSV formatting remain informational.
+  - `build_gsdc2023_pre_submit_manifest.py --matlab-equivalence-summary .../summary.json` now flattens the writer gate into `matlab_equivalence_gate` fields such as `residual_diagnostics_writer_export_count`, `residual_diagnostics_writer_export_total_rows`, `residual_diagnostics_writer_export_column_count_min/max`, and writer side-only counts.
+  - `submit_gsdc2023_pixel5_candidate_queue.py --require-matlab-equivalence` now rejects manifests missing the residual diagnostics writer fields, any writer side-only rows, empty writer exports, or non-44-column writer output.
+  - Focused verification:
+    - `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py experiments/audit_gsdc2023_matlab_equivalence_gate.py experiments/build_gsdc2023_pre_submit_manifest.py experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass.
+    - `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `38 passed`.
+  - Real-data 50-epoch writer field smoke:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --trip train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u --max-epochs 50 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-residual-diagnostics --output-dir experiments/results/residual_diagnostics_writer_gate_fields_50epoch_20260508`
+    - output: `experiments/results/residual_diagnostics_writer_gate_fields_50epoch_20260508/gsdc2023_residual_diagnostics_pd_parity_audit_20260508_104652`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, side-only `0/0`, wide side-only `0/0`, writer rows `340`, expected/min/max columns `44/44/44`, column mismatch `0`, inactive key source `gnss_log_signal_mask`.
+  - Interpretation: residual diagnostics writer is now part of the strict MATLAB equivalence proof and the submit-ready manifest gate. Remaining MATLAB sidecar dependency is now comparison/golden fixture usage, not inactive-key generation or submit readiness.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
@@ -376,9 +389,9 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. `phone_data_residual_diagnostics.csv` writer を MATLAB equivalence gate に接続し、gate summary に writer row/column/side-only fields を載せる
-2. `build_gsdc2023_pre_submit_manifest.py` / submit-ready gate に residual diagnostics writer summary を必須化する
-3. 生成済み writer artifacts を regression 出力として使い、MATLAB sidecar 依存を golden fixture のみに縮小する
+1. full-window `audit_gsdc2023_matlab_equivalence_gate.py` を再生成し、`residual_diagnostics_writer` gate 入りの summary を新しい submit-ready manifest に流す
+2. 生成済み writer artifacts を regression 出力として固定し、MATLAB residual diagnostics sidecar 依存を golden fixture のみに縮小する
+3. writer gate 付き submit-ready report を再監査し、P6P0 candidate の `--require-matlab-equivalence` 手順を更新する
 
 2026-05-05 P6P0 clean Kaggle submit:
 

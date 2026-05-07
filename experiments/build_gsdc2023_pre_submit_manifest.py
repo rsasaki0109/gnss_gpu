@@ -227,6 +227,8 @@ def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
     counts = counts if isinstance(counts, dict) else {}
     residual = gates.get("residual_values")
     residual = residual if isinstance(residual, dict) else {}
+    residual_diagnostics = gates.get("residual_diagnostics_writer")
+    residual_diagnostics = residual_diagnostics if isinstance(residual_diagnostics, dict) else {}
     internal_failure_count = residual.get("internal_delta_failure_count")
     return {
         "summary": str(summary_path),
@@ -260,6 +262,54 @@ def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
         ),
         "residual_internal_delta_failures": residual.get("internal_delta_failures", []),
         "residual_internal_delta_thresholds": residual.get("internal_delta_thresholds"),
+        "residual_diagnostics_writer_passed": bool(residual_diagnostics.get("passed", False)),
+        "residual_diagnostics_writer_pd_value_passed": bool(
+            residual_diagnostics.get("pd_value_passed", False),
+        ),
+        "residual_diagnostics_writer_wide_passed": bool(residual_diagnostics.get("wide_passed", False)),
+        "residual_diagnostics_writer_total_matlab_only": int(
+            residual_diagnostics.get("total_matlab_only", 0) or 0,
+        ),
+        "residual_diagnostics_writer_total_bridge_only": int(
+            residual_diagnostics.get("total_bridge_only", 0) or 0,
+        ),
+        "residual_diagnostics_writer_wide_total_matlab_only": int(
+            residual_diagnostics.get("wide_total_matlab_only", 0) or 0,
+        ),
+        "residual_diagnostics_writer_wide_total_bridge_only": int(
+            residual_diagnostics.get("wide_total_bridge_only", 0) or 0,
+        ),
+        "residual_diagnostics_writer_wide_sat_col_mismatch_count": int(
+            residual_diagnostics.get("wide_sat_col_mismatch_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_enabled": bool(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_enabled", False),
+        ),
+        "residual_diagnostics_writer_export_count": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_total_rows": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_total_rows", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_expected_columns": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_expected_columns", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_column_count_min": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_column_count_min", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_column_count_max": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_column_count_max", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_column_mismatch_count": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_column_mismatch_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_byte_equivalent_count": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_byte_equivalent_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_byte_difference_count": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_byte_difference_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_inactive_key_source": residual_diagnostics.get("inactive_key_source"),
     }
 
 
