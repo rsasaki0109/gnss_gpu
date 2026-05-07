@@ -95,6 +95,112 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(_json_safe(payload), indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def cached_summary_mismatches(
+    payload: dict[str, Any],
+    *,
+    data_root: Path,
+    trips: Sequence[str],
+    max_epochs: int,
+    count_max_epochs: int,
+    factor_multi_gnss: bool,
+    residual_multi_gnss: bool,
+    residual_observation_mask: bool,
+    residual_include_inactive_observations: bool,
+    count_multi_gnss: bool,
+    asset_datasets: Sequence[str],
+    quick_assets: bool,
+    strict_ref_height: bool,
+    writer_regression_manifest: Path | None = None,
+) -> list[str]:
+    mismatches: list[str] = []
+    if not bool(payload.get("passed", False)):
+        mismatches.append("cached summary is not passed")
+    if payload.get("equivalence_claim") != "matlab_equivalent":
+        mismatches.append(f"equivalence_claim={payload.get('equivalence_claim')!r}")
+
+    expected: dict[str, Any] = {
+        "data_root": str(Path(data_root).resolve()),
+        "trips": list(trips),
+        "trip_count": int(len(trips)),
+        "max_epochs": int(max_epochs),
+        "count_max_epochs": int(count_max_epochs),
+        "factor_multi_gnss": bool(factor_multi_gnss),
+        "residual_multi_gnss": bool(residual_multi_gnss),
+        "residual_observation_mask": bool(residual_observation_mask),
+        "residual_include_inactive_observations": bool(residual_include_inactive_observations),
+        "count_multi_gnss": bool(count_multi_gnss),
+        "asset_datasets": list(asset_datasets),
+        "quick_assets": bool(quick_assets),
+        "strict_ref_height": bool(strict_ref_height),
+    }
+    for key, expected_value in expected.items():
+        if payload.get(key) != expected_value:
+            mismatches.append(f"{key}: actual={payload.get(key)!r} expected={expected_value!r}")
+
+    gates = payload.get("gates")
+    gates = gates if isinstance(gates, dict) else {}
+    for gate_name in ("assets", "factor_mask", "residual_values", "residual_diagnostics_writer", "raw_bridge_counts"):
+        gate = gates.get(gate_name)
+        if not isinstance(gate, dict):
+            mismatches.append(f"missing gate {gate_name}")
+        elif not bool(gate.get("passed", False)):
+            mismatches.append(f"gate {gate_name} is not passed")
+
+    writer_gate = gates.get("residual_diagnostics_writer")
+    writer_gate = writer_gate if isinstance(writer_gate, dict) else {}
+    if writer_regression_manifest is not None:
+        if not bool(writer_gate.get("writer_regression_checked", False)):
+            mismatches.append("writer regression was not checked")
+        if not bool(writer_gate.get("writer_regression_passed", False)):
+            mismatches.append("writer regression did not pass")
+        if int(writer_gate.get("writer_regression_mismatch_count", 0) or 0) != 0:
+            mismatches.append(
+                f"writer regression mismatch_count={writer_gate.get('writer_regression_mismatch_count')!r}",
+            )
+    return mismatches
+
+
+def load_cached_equivalence_summary(
+    summary_path: Path,
+    *,
+    data_root: Path,
+    trips: Sequence[str],
+    max_epochs: int,
+    count_max_epochs: int,
+    factor_multi_gnss: bool,
+    residual_multi_gnss: bool,
+    residual_observation_mask: bool,
+    residual_include_inactive_observations: bool,
+    count_multi_gnss: bool,
+    asset_datasets: Sequence[str],
+    quick_assets: bool,
+    strict_ref_height: bool,
+    writer_regression_manifest: Path | None = None,
+) -> dict[str, Any]:
+    payload = json.loads(Path(summary_path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise SystemExit(f"cached summary must contain a JSON object: {summary_path}")
+    mismatches = cached_summary_mismatches(
+        payload,
+        data_root=data_root,
+        trips=trips,
+        max_epochs=max_epochs,
+        count_max_epochs=count_max_epochs,
+        factor_multi_gnss=factor_multi_gnss,
+        residual_multi_gnss=residual_multi_gnss,
+        residual_observation_mask=residual_observation_mask,
+        residual_include_inactive_observations=residual_include_inactive_observations,
+        count_multi_gnss=count_multi_gnss,
+        asset_datasets=asset_datasets,
+        quick_assets=quick_assets,
+        strict_ref_height=strict_ref_height,
+        writer_regression_manifest=writer_regression_manifest,
+    )
+    if mismatches:
+        raise SystemExit("cached MATLAB equivalence summary mismatch:\n" + "\n".join(mismatches[:20]))
+    return payload
+
+
 def _asset_gate(
     data_root: Path,
     datasets: Sequence[str],
@@ -630,6 +736,11 @@ def main() -> None:
         action="store_true",
         help=f"use the default writer regression manifest at {DEFAULT_WRITER_REGRESSION_MANIFEST}",
     )
+    parser.add_argument(
+        "--cached-summary",
+        type=Path,
+        help="validate and reuse an existing summary.json instead of rerunning the expensive full gate",
+    )
     parser.add_argument("--verbose", action="store_true", help="print gate and trip progress to stderr")
     _add_output_dir_arg(parser)
     args = parser.parse_args()
@@ -642,6 +753,26 @@ def main() -> None:
         if args.default_writer_regression_manifest
         else args.writer_regression_manifest
     )
+    if args.cached_summary is not None:
+        payload = load_cached_equivalence_summary(
+            args.cached_summary,
+            data_root=Path(args.data_root).resolve(),
+            trips=trips,
+            max_epochs=_nonnegative_max_epochs(args),
+            count_max_epochs=max(int(args.count_max_epochs), 0),
+            factor_multi_gnss=bool(args.multi_gnss),
+            residual_multi_gnss=bool(args.residual_multi_gnss),
+            residual_observation_mask=bool(args.residual_observation_mask),
+            residual_include_inactive_observations=bool(args.residual_include_inactive_observations),
+            count_multi_gnss=bool(args.multi_gnss),
+            asset_datasets=tuple(args.asset_datasets),
+            quick_assets=bool(args.quick_assets),
+            strict_ref_height=bool(args.strict_ref_height),
+            writer_regression_manifest=writer_regression_manifest,
+        )
+        print(json.dumps(_json_safe(payload), indent=2, sort_keys=True))
+        print(f"equivalence_dir={Path(args.cached_summary).resolve().parent}")
+        return
     payload = run_equivalence_gate(
         Path(args.data_root).resolve(),
         output_dir,

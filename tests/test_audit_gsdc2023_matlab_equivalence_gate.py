@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from experiments.audit_gsdc2023_matlab_equivalence_gate import (
     DEFAULT_EQUIVALENCE_TRIPS,
@@ -11,6 +13,8 @@ from experiments.audit_gsdc2023_matlab_equivalence_gate import (
     _factor_gate,
     _residual_diagnostics_writer_gate,
     _residual_gate,
+    cached_summary_mismatches,
+    load_cached_equivalence_summary,
 )
 
 
@@ -532,3 +536,123 @@ def test_count_gate_requires_exact_count_parity(tmp_path: Path) -> None:
 def test_default_equivalence_trip_set_covers_factor_and_residual_exports() -> None:
     assert "train/2020-07-08-22-28-us-ca/pixel4xl" in DEFAULT_EQUIVALENCE_TRIPS
     assert "train/2021-12-08-20-28-us-ca-lax-c/pixel5" in DEFAULT_EQUIVALENCE_TRIPS
+
+
+def _cached_summary_payload(data_root: Path) -> dict[str, object]:
+    return {
+        "passed": True,
+        "equivalence_claim": "matlab_equivalent",
+        "data_root": str(data_root.resolve()),
+        "trips": ["train/course/phone"],
+        "trip_count": 1,
+        "max_epochs": 0,
+        "count_max_epochs": 0,
+        "factor_multi_gnss": False,
+        "residual_multi_gnss": False,
+        "residual_observation_mask": True,
+        "residual_include_inactive_observations": True,
+        "count_multi_gnss": False,
+        "asset_datasets": ["train"],
+        "quick_assets": True,
+        "strict_ref_height": False,
+        "gates": {
+            "assets": {"passed": True},
+            "factor_mask": {"passed": True},
+            "residual_values": {"passed": True},
+            "residual_diagnostics_writer": {
+                "passed": True,
+                "writer_regression_checked": True,
+                "writer_regression_passed": True,
+                "writer_regression_mismatch_count": 0,
+            },
+            "raw_bridge_counts": {"passed": True},
+        },
+    }
+
+
+def test_cached_summary_mismatches_validates_requested_gate_scope(tmp_path: Path) -> None:
+    payload = _cached_summary_payload(tmp_path)
+
+    assert (
+        cached_summary_mismatches(
+            payload,
+            data_root=tmp_path,
+            trips=["train/course/phone"],
+            max_epochs=0,
+            count_max_epochs=0,
+            factor_multi_gnss=False,
+            residual_multi_gnss=False,
+            residual_observation_mask=True,
+            residual_include_inactive_observations=True,
+            count_multi_gnss=False,
+            asset_datasets=["train"],
+            quick_assets=True,
+            strict_ref_height=False,
+            writer_regression_manifest=tmp_path / "writer_manifest.json",
+        )
+        == []
+    )
+
+    dirty = json.loads(json.dumps(payload))
+    dirty["max_epochs"] = 50
+    dirty["gates"]["residual_diagnostics_writer"]["writer_regression_mismatch_count"] = 1
+    mismatches = cached_summary_mismatches(
+        dirty,
+        data_root=tmp_path,
+        trips=["train/course/phone"],
+        max_epochs=0,
+        count_max_epochs=0,
+        factor_multi_gnss=False,
+        residual_multi_gnss=False,
+        residual_observation_mask=True,
+        residual_include_inactive_observations=True,
+        count_multi_gnss=False,
+        asset_datasets=["train"],
+        quick_assets=True,
+        strict_ref_height=False,
+        writer_regression_manifest=tmp_path / "writer_manifest.json",
+    )
+
+    assert any("max_epochs" in item for item in mismatches)
+    assert any("writer regression mismatch_count" in item for item in mismatches)
+
+
+def test_load_cached_equivalence_summary_fails_closed_on_scope_mismatch(tmp_path: Path) -> None:
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(_cached_summary_payload(tmp_path)), encoding="utf-8")
+
+    payload = load_cached_equivalence_summary(
+        summary_path,
+        data_root=tmp_path,
+        trips=["train/course/phone"],
+        max_epochs=0,
+        count_max_epochs=0,
+        factor_multi_gnss=False,
+        residual_multi_gnss=False,
+        residual_observation_mask=True,
+        residual_include_inactive_observations=True,
+        count_multi_gnss=False,
+        asset_datasets=["train"],
+        quick_assets=True,
+        strict_ref_height=False,
+        writer_regression_manifest=tmp_path / "writer_manifest.json",
+    )
+    assert payload["equivalence_claim"] == "matlab_equivalent"
+
+    with pytest.raises(SystemExit, match="cached MATLAB equivalence summary mismatch"):
+        load_cached_equivalence_summary(
+            summary_path,
+            data_root=tmp_path,
+            trips=["train/course/other-phone"],
+            max_epochs=0,
+            count_max_epochs=0,
+            factor_multi_gnss=False,
+            residual_multi_gnss=False,
+            residual_observation_mask=True,
+            residual_include_inactive_observations=True,
+            count_multi_gnss=False,
+            asset_datasets=["train"],
+            quick_assets=True,
+            strict_ref_height=False,
+            writer_regression_manifest=tmp_path / "writer_manifest.json",
+        )

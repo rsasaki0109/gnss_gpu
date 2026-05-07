@@ -414,6 +414,13 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - `build_gsdc2023_pre_submit_manifest.py` carries those regression fields into `matlab_equivalence_gate`; `submit_gsdc2023_pixel5_candidate_queue.py --require-matlab-equivalence` fails closed if a checked writer regression manifest reports mismatches.
   - Focused verification: `python3 -m ruff check --ignore=E402 ...` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_residual_diagnostics_writer_regression.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `38 passed`.
   - Interpretation: generated residual diagnostics writer artifacts are now locked as lightweight golden regression metadata. The MATLAB residual diagnostics sidecar remains a comparison fixture for value parity, while artifact-shape regression no longer depends on reading MATLAB sidecar CSVs.
+- Cached MATLAB equivalence summary reuse:
+  - `audit_gsdc2023_matlab_equivalence_gate.py --cached-summary .../summary.json` now validates an existing summary instead of rerunning the expensive full-window gates.
+  - The cached summary check fails closed unless `passed=true`, `equivalence_claim=matlab_equivalent`, all five gate summaries are passed, and the requested CLI scope matches the cached summary: trips, max epochs, count max epochs, multi-GNSS flags, residual observation/inactive flags, asset datasets, quick-assets, strict ref-height, and data root.
+  - If `--writer-regression-manifest` or `--default-writer-regression-manifest` is also supplied, the cached summary must already record a passing writer regression check with zero mismatches.
+  - Real-data cached check: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --cached-summary experiments/results/matlab_equivalence_gate_writer_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_110637/summary.json --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --output-dir experiments/results/matlab_equivalence_gate_cached_probe_20260508` => prints the cached payload and `equivalence_dir=.../gsdc2023_matlab_equivalence_gate_20260508_110637`.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_matlab_equivalence_gate.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_matlab_equivalence_gate.py` => `13 passed`.
+  - Interpretation: submit-ready workflows can keep using `--matlab-equivalence-summary` directly, and humans/scripts can now validate a cached full-window equivalence proof without paying the full rerun cost. A new full-window run is still required once when introducing new gates such as the default writer regression manifest.
 - Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
   - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
   - result: `prepared: 3 candidate(s)`
@@ -422,8 +429,8 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. full-window gate が重いので、writer gate の再利用/skip オプションか cached summary 入力を検討する
-2. 次回 full-window equivalence gate を `--default-writer-regression-manifest` 付きで再実行し、新 summary SHA を submit-ready manifest に流す
+1. 次回 full-window equivalence gate を `--default-writer-regression-manifest` 付きで再実行し、新 summary SHA を submit-ready manifest に流す
+2. cached summary validation を submit-ready/report docs に明示し、手順の標準コマンドを短くする
 
 2026-05-05 P6P0 clean Kaggle submit:
 
