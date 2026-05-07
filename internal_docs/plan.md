@@ -515,11 +515,13 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - The section runs `audit_gsdc2023_phone_data_artifact_compatibility.py` with the full-window writer-regression summary plus factor-count/factor-mask sidecar export dirs, validates the tracked sidecar regression manifests, and keeps `phone_data.mat` explicitly deferred.
   - Real-data command against `experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json` passed with `artifact_count=4`, `failed_artifact_count=0`, CSV writer regressions passed, and `phone_data_mat_decision=defer`.
   - Regenerated `p6p0_prevsafe_candidate_20260508/submit_readiness.md` includes the new artifact compatibility section.
+- PR #55 description refresh:
+  - PR body now records the full-window writer-regression MATLAB equivalence summary, `phone_data` artifact compatibility result, duplicate-SHA P6P0 previous-safe conclusion, and safe unsubmitted shortlist conclusion.
 
 次にやること:
 
-1. PR description に full-window writer equivalence summary、`phone_data` artifact compatibility audit、safe unsubmitted shortlist の結論を反映する。
-2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
+1. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
+2. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
 2026-05-05 P6P0 clean Kaggle submit:
 
