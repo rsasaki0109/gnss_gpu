@@ -15,7 +15,10 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from experiments.compare_gsdc2023_factor_masks import compare_factor_masks  # noqa: E402
+from experiments.compare_gsdc2023_factor_masks import (  # noqa: E402
+    bridge_factor_mask_export_frame,
+    compare_factor_masks,
+)
 from experiments.gsdc2023_audit_cli import (  # noqa: E402
     add_data_root_arg as _add_data_root_arg,
     add_max_epochs_arg as _add_max_epochs_arg,
@@ -55,6 +58,7 @@ DEFAULT_FACTOR_MASK_PARITY_TRIPS: tuple[str, ...] = (
 )
 
 CompareFn = Callable[..., tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]]
+ExportFn = Callable[..., pd.DataFrame]
 
 
 def _finite_float(value: object) -> float:
@@ -122,6 +126,27 @@ def _field_side_only_sums(field_summary: pd.DataFrame) -> dict[str, dict[str, di
     return out
 
 
+def _write_bridge_factor_mask_export(
+    data_root: Path,
+    trip: str,
+    frame: pd.DataFrame,
+    export_dir: Path,
+) -> dict[str, object]:
+    output_path = export_dir / trip / "phone_data_factor_mask.csv"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_csv(output_path, index=False)
+    matlab_path = data_root / trip / "phone_data_factor_mask.csv"
+    byte_equivalent = bool(matlab_path.is_file() and output_path.read_bytes() == matlab_path.read_bytes())
+    return {
+        "trip": trip,
+        "path": str(output_path),
+        "matlab_path": str(matlab_path),
+        "row_count": int(len(frame)),
+        "matlab_path_present": bool(matlab_path.is_file()),
+        "byte_equivalent": byte_equivalent,
+    }
+
+
 def factor_mask_parity_audit(
     data_root: Path,
     trips: Sequence[str],
@@ -135,17 +160,21 @@ def factor_mask_parity_audit(
     tdcp_consistency_threshold_m: float = DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M,
     pseudorange_doppler_mask_m: float = OBS_MASK_PSEUDORANGE_DOPPLER_THRESHOLD_M,
     compare_fn: CompareFn = compare_factor_masks,
+    bridge_factor_mask_export_dir: Path | None = None,
+    export_fn: ExportFn = bridge_factor_mask_export_frame,
     verbose: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]:
+    data_root = Path(data_root)
     rows: list[dict[str, object]] = []
     field_rows: list[pd.DataFrame] = []
     matlab_only_rows: list[dict[str, object]] = []
     bridge_only_rows: list[dict[str, object]] = []
+    export_rows: list[dict[str, object]] = []
     errors: list[dict[str, object]] = []
     for index, trip in enumerate(trips, start=1):
         if verbose:
             print(f"[{index}/{len(trips)}] {trip}", file=sys.stderr, flush=True)
-        trip_dir = Path(data_root) / trip
+        trip_dir = data_root / trip
         try:
             _merged, summary_by_field, payload = compare_fn(
                 trip_dir,
@@ -167,6 +196,23 @@ def factor_mask_parity_audit(
         if not field_frame.empty:
             field_frame.insert(0, "trip", trip)
             field_rows.append(field_frame)
+        if bridge_factor_mask_export_dir is not None:
+            try:
+                export_frame = export_fn(
+                    trip_dir,
+                    max_epochs=max_epochs,
+                    multi_gnss=multi_gnss,
+                    pseudorange_residual_mask_m=pseudorange_residual_mask_m,
+                    pseudorange_residual_mask_l5_m=pseudorange_residual_mask_l5_m,
+                    doppler_residual_mask_mps=doppler_residual_mask_mps,
+                    tdcp_consistency_threshold_m=tdcp_consistency_threshold_m,
+                    pseudorange_doppler_mask_m=pseudorange_doppler_mask_m,
+                )
+                export_rows.append(
+                    _write_bridge_factor_mask_export(data_root, trip, export_frame, bridge_factor_mask_export_dir),
+                )
+            except Exception as exc:  # pragma: no cover - exercised through CLI behavior.
+                errors.append({"trip": trip, "error": f"factor mask export {type(exc).__name__}: {exc}"})
 
     trip_summary = pd.DataFrame(rows)
     field_summary = pd.concat(field_rows, ignore_index=True) if field_rows else pd.DataFrame()
@@ -182,6 +228,9 @@ def factor_mask_parity_audit(
     )
     total_matlab_only = int(trip_summary["total_matlab_only"].sum()) if not trip_summary.empty else 0
     total_bridge_only = int(trip_summary["total_bridge_only"].sum()) if not trip_summary.empty else 0
+    export_failure_count = int(
+        sum(1 for row in export_rows if not bool(row.get("byte_equivalent", False))),
+    )
     passed = bool(
         not errors
         and not trip_summary.empty
@@ -189,6 +238,7 @@ def factor_mask_parity_audit(
         and min_parity >= float(min_symmetric_parity)
         and total_matlab_only == 0
         and total_bridge_only == 0
+        and export_failure_count == 0
     )
     payload = {
         "data_root": str(Path(data_root)),
@@ -207,6 +257,14 @@ def factor_mask_parity_audit(
         "side_only_by_field_freq": _field_side_only_sums(field_summary),
         "top_matlab_only": _top_side_only_failures(matlab_only_rows),
         "top_bridge_only": _top_side_only_failures(bridge_only_rows),
+        "bridge_factor_mask_export_enabled": bridge_factor_mask_export_dir is not None,
+        "bridge_factor_mask_export_dir": (
+            str(bridge_factor_mask_export_dir) if bridge_factor_mask_export_dir is not None else None
+        ),
+        "bridge_factor_mask_export_count": int(len(export_rows)),
+        "bridge_factor_mask_export_byte_equivalent_count": int(len(export_rows) - export_failure_count),
+        "bridge_factor_mask_export_failure_count": export_failure_count,
+        "bridge_factor_mask_exports": export_rows[:20],
         "passed": passed,
     }
     if not trip_summary.empty:
@@ -233,6 +291,11 @@ def main() -> None:
     parser.add_argument("--doppler-residual-mask-mps", type=float, default=OBS_MASK_DOPPLER_RESIDUAL_THRESHOLD_MPS)
     parser.add_argument("--tdcp-consistency-threshold-m", type=float, default=DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M)
     parser.add_argument("--pseudorange-doppler-mask-m", type=float, default=OBS_MASK_PSEUDORANGE_DOPPLER_THRESHOLD_M)
+    parser.add_argument(
+        "--write-bridge-factor-masks",
+        action="store_true",
+        help="write Python-generated phone_data_factor_mask.csv files and byte-compare them to MATLAB exports",
+    )
     parser.add_argument("--verbose", action="store_true", help="print trip progress to stderr")
     _add_output_dir_arg(parser)
     args = parser.parse_args()
@@ -250,10 +313,16 @@ def main() -> None:
         doppler_residual_mask_mps=float(args.doppler_residual_mask_mps),
         tdcp_consistency_threshold_m=float(args.tdcp_consistency_threshold_m),
         pseudorange_doppler_mask_m=float(args.pseudorange_doppler_mask_m),
+        bridge_factor_mask_export_dir=(out_dir / "bridge_factor_masks" if args.write_bridge_factor_masks else None),
         verbose=bool(args.verbose),
     )
     trip_summary.to_csv(out_dir / "trip_summary.csv", index=False)
     field_summary.to_csv(out_dir / "summary_by_trip_field.csv", index=False)
+    if payload.get("bridge_factor_mask_exports"):
+        pd.DataFrame(payload["bridge_factor_mask_exports"]).to_csv(
+            out_dir / "bridge_factor_mask_exports.csv",
+            index=False,
+        )
     _write_summary_json(out_dir, payload)
     _print_summary_and_output_dir(payload, out_dir, label="audit_dir")
     if not payload["passed"]:

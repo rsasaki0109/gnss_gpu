@@ -11,6 +11,12 @@ from experiments.audit_gsdc2023_factor_mask_parity import (
 
 
 def test_factor_mask_parity_audit_summarizes_trips_and_field_rows(tmp_path: Path) -> None:
+    expected_csv = "field,freq,epoch_index,utcTimeMillis,next_epoch_index,nextUtcTimeMillis,sys,svid,sat_col\n"
+    for trip in ("train/course/phone-a", "train/course/phone-b"):
+        expected_path = tmp_path / trip / "phone_data_factor_mask.csv"
+        expected_path.parent.mkdir(parents=True, exist_ok=True)
+        expected_path.write_text(expected_csv, encoding="utf-8")
+
     def fake_compare(
         trip_dir: Path,
         *,
@@ -56,12 +62,31 @@ def test_factor_mask_parity_audit_summarizes_trips_and_field_rows(tmp_path: Path
         }
         return pd.DataFrame(), summary, payload | {"trip_name": trip}
 
+    def fake_export(_trip_dir: Path, **_kwargs):
+        return pd.DataFrame(
+            [
+                {
+                    "field": "P",
+                    "freq": "L1",
+                    "epoch_index": 1,
+                    "utcTimeMillis": 1000,
+                    "next_epoch_index": 0,
+                    "nextUtcTimeMillis": 0,
+                    "sys": 1,
+                    "svid": 3,
+                    "sat_col": 1,
+                },
+            ],
+        ).iloc[:0]
+
     trip_summary, field_summary, payload = factor_mask_parity_audit(
         tmp_path,
         ["train/course/phone-a", "train/course/phone-b"],
         max_epochs=100,
         multi_gnss=False,
         compare_fn=fake_compare,
+        bridge_factor_mask_export_dir=tmp_path / "exports",
+        export_fn=fake_export,
     )
 
     assert trip_summary["trip"].tolist() == ["train/course/phone-a", "train/course/phone-b"]
@@ -73,6 +98,11 @@ def test_factor_mask_parity_audit_summarizes_trips_and_field_rows(tmp_path: Path
     assert payload["side_only_failure_count"] == 0
     assert payload["top_matlab_only"] == []
     assert payload["top_bridge_only"] == []
+    assert payload["bridge_factor_mask_export_enabled"] is True
+    assert payload["bridge_factor_mask_export_count"] == 2
+    assert payload["bridge_factor_mask_export_byte_equivalent_count"] == 2
+    assert payload["bridge_factor_mask_export_failure_count"] == 0
+    assert (tmp_path / "exports" / "train/course/phone-a/phone_data_factor_mask.csv").is_file()
 
 
 def test_factor_mask_parity_audit_fails_on_side_only_rows(tmp_path: Path) -> None:
