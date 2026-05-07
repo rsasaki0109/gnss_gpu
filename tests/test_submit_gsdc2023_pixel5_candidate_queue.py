@@ -328,6 +328,13 @@ def test_matlab_equivalence_gate_can_be_required_from_pre_submit_manifest(tmp_pa
         == "matlab_equivalent"
     )
 
+    manifest["matlab_equivalence_gate"]["cached_summary_validation_checked"] = True
+    manifest["matlab_equivalence_gate"]["cached_summary_validation_passed"] = False
+    manifest["matlab_equivalence_gate"]["cached_summary_validation_mismatch_count"] = 1
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(SystemExit, match="cached summary validation failed"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_equivalence=True)
+
 
 def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
     clean = {

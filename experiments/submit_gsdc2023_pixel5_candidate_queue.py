@@ -453,6 +453,14 @@ def assert_matlab_equivalence_gate(manifest: dict[str, object], *, require: bool
                 "MATLAB equivalence residual diagnostics writer regression failed: "
                 f"passed={regression_passed}, mismatches={regression_mismatches}",
             )
+    if bool(gate.get("cached_summary_validation_checked", False)):
+        cached_passed = bool(gate.get("cached_summary_validation_passed", False))
+        cached_mismatches = _as_int(gate.get("cached_summary_validation_mismatch_count"))
+        if not cached_passed or cached_mismatches != 0:
+            raise SystemExit(
+                "MATLAB equivalence cached summary validation failed: "
+                f"passed={cached_passed}, mismatches={cached_mismatches}",
+            )
     return gate
 
 
@@ -786,6 +794,17 @@ def write_submit_readiness_doc(
     max_delta = max((_as_float(row.get("input_max_m")) for row in trip_rows), default=0.0)
     duplicate_sha_candidate_count = _as_int(report.get("duplicate_sha_candidate_count"))
     duplicate_sha_match_count = _as_int(report.get("duplicate_sha_match_count"))
+    cached_validation_label = "not recorded"
+    if matlab_equivalence:
+        if bool(matlab_equivalence.get("cached_summary_validation_checked", False)):
+            cached_validation_label = (
+                "passed"
+                if bool(matlab_equivalence.get("cached_summary_validation_passed", False))
+                and _as_int(matlab_equivalence.get("cached_summary_validation_mismatch_count")) == 0
+                else "failed"
+            )
+        elif matlab_equivalence.get("cached_summary_validation_unchecked_reason"):
+            cached_validation_label = "unchecked"
     prepare_command = _format_prepare_command(
         output_dir=output_dir,
         tag=tag,
@@ -884,6 +903,7 @@ def write_submit_readiness_doc(
                 f"- Max risky Pixel6Pro input changed rows: `{max_changed}`",
                 f"- Max risky Pixel6Pro input delta: `{max_delta:.1f} m`",
                 f"- MATLAB equivalence: `{matlab_equivalence.get('equivalence_claim', 'not recorded')}`",
+                f"- Cached MATLAB equivalence validation: `{cached_validation_label}`",
                 f"- Duplicate SHA candidates: `{duplicate_sha_candidate_count}`",
                 f"- Duplicate SHA matches: `{duplicate_sha_match_count}`",
                 "",

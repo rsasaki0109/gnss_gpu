@@ -13,6 +13,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from experiments.audit_gsdc2023_matlab_equivalence_gate import (
+    DEFAULT_EQUIVALENCE_TRIPS,
+    DEFAULT_WRITER_REGRESSION_MANIFEST,
+    cached_summary_mismatches,
+)
+from experiments.gsdc2023_raw_bridge import DEFAULT_ROOT as DEFAULT_GSDC2023_DATA_ROOT
 from experiments.smooth_gsdc2023_submission import gsdc_score_m, haversine_m
 
 
@@ -230,6 +236,7 @@ def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
     residual_diagnostics = gates.get("residual_diagnostics_writer")
     residual_diagnostics = residual_diagnostics if isinstance(residual_diagnostics, dict) else {}
     internal_failure_count = residual.get("internal_delta_failure_count")
+    cached_validation = _cached_summary_validation(payload)
     return {
         "summary": str(summary_path),
         "summary_sha256": sha256_file(summary_path),
@@ -320,6 +327,59 @@ def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
             residual_diagnostics.get("writer_regression_mismatch_count", 0) or 0,
         ),
         "residual_diagnostics_writer_inactive_key_source": residual_diagnostics.get("inactive_key_source"),
+        **cached_validation,
+    }
+
+
+def _cached_summary_validation(payload: dict[str, Any]) -> dict[str, Any]:
+    required_scope_fields = (
+        "data_root",
+        "trips",
+        "max_epochs",
+        "count_max_epochs",
+        "factor_multi_gnss",
+        "residual_multi_gnss",
+        "residual_observation_mask",
+        "residual_include_inactive_observations",
+        "count_multi_gnss",
+        "asset_datasets",
+        "quick_assets",
+        "strict_ref_height",
+    )
+    missing = [field for field in required_scope_fields if field not in payload]
+    if missing:
+        return {
+            "cached_summary_validation_checked": False,
+            "cached_summary_validation_passed": None,
+            "cached_summary_validation_mismatch_count": None,
+            "cached_summary_validation_mismatches": [],
+            "cached_summary_validation_unchecked_reason": "missing scope fields: " + ", ".join(missing),
+            "cached_summary_validation_writer_regression_manifest": None,
+        }
+
+    mismatches = cached_summary_mismatches(
+        payload,
+        data_root=Path(DEFAULT_GSDC2023_DATA_ROOT).resolve(),
+        trips=DEFAULT_EQUIVALENCE_TRIPS,
+        max_epochs=int(payload.get("max_epochs", 0) or 0),
+        count_max_epochs=int(payload.get("count_max_epochs", 0) or 0),
+        factor_multi_gnss=False,
+        residual_multi_gnss=False,
+        residual_observation_mask=True,
+        residual_include_inactive_observations=True,
+        count_multi_gnss=False,
+        asset_datasets=("train",),
+        quick_assets=True,
+        strict_ref_height=False,
+        writer_regression_manifest=DEFAULT_WRITER_REGRESSION_MANIFEST,
+    )
+    return {
+        "cached_summary_validation_checked": True,
+        "cached_summary_validation_passed": not mismatches,
+        "cached_summary_validation_mismatch_count": len(mismatches),
+        "cached_summary_validation_mismatches": mismatches[:20],
+        "cached_summary_validation_unchecked_reason": None,
+        "cached_summary_validation_writer_regression_manifest": str(DEFAULT_WRITER_REGRESSION_MANIFEST),
     }
 
 

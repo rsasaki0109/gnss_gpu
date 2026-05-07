@@ -4,11 +4,13 @@ import json
 
 import pandas as pd
 
+from experiments.audit_gsdc2023_matlab_equivalence_gate import DEFAULT_EQUIVALENCE_TRIPS
 from experiments.build_gsdc2023_pre_submit_manifest import (
     DELTA_CHANGED_THRESHOLD_M,
     build_pre_submit_manifest,
     main,
 )
+from experiments.gsdc2023_raw_bridge import DEFAULT_ROOT as DEFAULT_GSDC2023_DATA_ROOT
 
 
 CANDIDATE = "pixel5phone_3p375_sjc_r0p84375_p6p0"
@@ -166,10 +168,23 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
             {
                 "passed": True,
                 "equivalence_claim": "matlab_equivalent",
-                "trip_count": 12,
+                "data_root": str(DEFAULT_GSDC2023_DATA_ROOT),
+                "trips": list(DEFAULT_EQUIVALENCE_TRIPS),
+                "trip_count": len(DEFAULT_EQUIVALENCE_TRIPS),
                 "max_epochs": 200,
                 "count_max_epochs": 0,
+                "factor_multi_gnss": False,
+                "residual_multi_gnss": False,
+                "residual_observation_mask": True,
+                "residual_include_inactive_observations": True,
+                "count_multi_gnss": False,
+                "asset_datasets": ["train"],
+                "quick_assets": True,
+                "strict_ref_height": False,
                 "gates": {
+                    "assets": {
+                        "passed": True,
+                    },
                     "factor_mask": {
                         "passed": True,
                         "total_matlab_only": 0,
@@ -237,7 +252,7 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
     gate = manifest["matlab_equivalence_gate"]
     assert gate["passed"] is True
     assert gate["equivalence_claim"] == "matlab_equivalent"
-    assert gate["trip_count"] == 12
+    assert gate["trip_count"] == len(DEFAULT_EQUIVALENCE_TRIPS)
     assert gate["factor_side_only_failure_count"] == 0
     assert gate["factor_total_matlab_only"] == 0
     assert gate["factor_total_bridge_only"] == 0
@@ -263,4 +278,8 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
     assert gate["residual_diagnostics_writer_regression_passed"] is True
     assert gate["residual_diagnostics_writer_regression_mismatch_count"] == 0
     assert gate["residual_diagnostics_writer_inactive_key_source"] == "gnss_log_signal_mask"
+    assert gate["cached_summary_validation_checked"] is True
+    assert gate["cached_summary_validation_passed"] is True
+    assert gate["cached_summary_validation_mismatch_count"] == 0
+    assert gate["cached_summary_validation_mismatches"] == []
     assert gate["summary_sha256"]

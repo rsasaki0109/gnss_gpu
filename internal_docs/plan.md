@@ -462,12 +462,18 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - Real-data P6P0 previous-safe report with `--duplicate-sha-root experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted` records `duplicate_sha_candidate_count=3`, `duplicate_sha_match_count=3`; each P6P0 previous-safe candidate points to the corresponding non-P6P0 ready candidate path.
   - `--audit-ready-report .../submit_ready_report.json --fail-on-duplicate-sha` exits nonzero with all three duplicate candidates listed.
   - Focused verification: `python3 -m ruff check --ignore=E402 experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py` => `27 passed`.
+- Cached summary validation is now machine-readable:
+  - `build_gsdc2023_pre_submit_manifest.py` validates recorded `--matlab-equivalence-summary` payloads against the same cached-summary scope used in `submit_readiness.md`: default 12-trip equivalence set, default GSDC2023 data root, GPS-only factor/count/residual scope, residual observation mask and inactive observations enabled, quick assets, and the default residual diagnostics writer regression manifest.
+  - The result is recorded under `matlab_equivalence_gate.cached_summary_validation_checked`, `cached_summary_validation_passed`, `cached_summary_validation_mismatch_count`, `cached_summary_validation_mismatches`, and `cached_summary_validation_writer_regression_manifest`.
+  - `submit_gsdc2023_pixel5_candidate_queue.py --require-matlab-equivalence` now fails closed if a checked cached summary validation reports mismatches.
+  - Real-data P6P0 previous-safe report records `cached_summary_validation_checked=true`, `cached_summary_validation_passed=true`, and `cached_summary_validation_mismatch_count=0`; `submit_readiness.md` shows `Cached MATLAB equivalence validation: passed`.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/build_gsdc2023_pre_submit_manifest.py experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `27 passed`.
 
 次にやること:
 
-1. cached summary validation を pre-submit manifest / ready report の機械可読 field としても載せるか判断する。
-2. MATLAB 移植の残タスクとして、`phone_data.mat` / sidecar artifact compatibility を Python writer でどこまで生成対象にするか決める。
-3. P6P0 ではなく score 改善に戻る場合、既存 local screen の `duplicate_submitted_local_sha` / risky previous-safe columns を使って未提出かつ private-safe な候補だけを再抽出する。
+1. MATLAB 移植の残タスクとして、`phone_data.mat` / sidecar artifact compatibility を Python writer でどこまで生成対象にするか決める。
+2. P6P0 ではなく score 改善に戻る場合、既存 local screen の `duplicate_submitted_local_sha` / risky previous-safe columns を使って未提出かつ private-safe な候補だけを再抽出する。
+3. submit-ready artifacts を出す標準コマンドに `--duplicate-sha-root` / `--fail-on-duplicate-sha` を常用するか、PR description に運用ルールとして明記する。
 
 2026-05-05 P6P0 clean Kaggle submit:
 
