@@ -1,6 +1,6 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-05-08 JST
+**最終更新**: 2026-05-09 JST
 **現在の HEAD**: `codex/residual-mask-main-port`
 **ブランチ**: `codex/residual-mask-main-port`
 **作業ツリー**: GSDC2023 MATLAB equivalence gate / residual side-only audit / submit risk gate / local candidate screening は PR #55 に反映済み。既存変更を revert しないこと。
@@ -557,10 +557,18 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - LAX-X trip delta improved from p95 `19.04625557930374m`, max `245.83184201676735m`, `rows_gt_5m=547` to p95 `3.246214736620738m`, max `24.20678253261115m`, `rows_gt_5m=60`.
   - Full-submission delta improved from mean `0.42546851607109604m`, p95 `0.4306222271895031m`, max `245.83184201676735m`, `rows_gt_1m=1095`, `rows_gt_5m=573` to mean `0.3231501712937187m`, p95 `0.430533521603983m`, max `24.20678253261115m`, `rows_gt_1m=669`, `rows_gt_5m=86`.
   - Interpretation: LAX-X source schedule explains the max/tail spike, but not the remaining full-submission p95. The next mismatch is now the phone-family/systematic layer led by `sm-a325f` p95 `2.574789098663229m` and `mi8` p95 `2.432442593842371m`.
+- ENU median-offset decomposition after LAX-X audit reconstruction:
+  - Added `experiments/analyze_gsdc2023_submission_enu_offset.py` to decompose MATLAB/reference-vs-candidate final submission deltas into candidate-minus-reference east/north offsets and residual deltas after subtracting the group median ENU offset.
+  - Real-data command compared MATLAB/reference `submission_20260501_0526.csv` against `matlab_submission_laxx_source_delta_20260509/submission_with_target_trip_best_reference_source.csv` for `sm-a325f`, `mi8`, `xiaomimi8`, and `pixel5`.
+  - Output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_enu_offset_20260509/summary.json` (ignored artifact).
+  - `sm-a325f` / `2022-07-12-18-37-us-ca-mtv-b`: original p95 `2.574789098663229m`, max `19.603959623859655m`, median ENU offset `east=-0.02035642932374815m`, `north=-0.1966791696573562m`; after subtracting median offset, p95 remains `2.5607683563447274m`, max `19.443666042589943m`, `rows_gt_5m` only drops `25 -> 24`.
+  - `mi8` / `2021-11-30-20-59-us-ca-mtv-m`: original p95 `2.432442593842371m`, max `5.024299497771718m`, median ENU offset `east=-0.15183095645141975m`, `north=0.14429164552484508m`; after subtracting median offset, p95 remains `2.265394869061211m`, max `4.852529m`, `rows_gt_1m` remains `178`.
+  - Other broad phone-family deltas around `0.316m`/`0.430m` are not explained by a single phone-level median offset either; phone-level residual p95 is often larger after median subtraction because the deltas are not a constant ENU vector.
+  - Interpretation: the remaining Kaggle-score-level mismatch is not a simple phone-family constant offset. It is dominated by trip/epoch-local source schedule or postprocess differences, with `sm-a325f` and `2021-11-30 mi8` now the next concrete targets.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、`sm-a325f` と `mi8` の phone-family/systematic offset を分解する。まず `2022-07-12-18-37-us-ca-mtv-b/sm-a325f` と `2021-11-30-20-59-us-ca-mtv-m/mi8` について、差分が定数ENUオフセットか source schedule 差かを切り分ける。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、`2022-07-12-18-37-us-ca-mtv-b/sm-a325f` と `2021-11-30-20-59-us-ca-mtv-m/mi8` の行単位ソース/後処理差を、LAX-X と同じ `bridge_rows` 近傍ソース照合で分解する。定数ENU補正では説明できない。
 2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
