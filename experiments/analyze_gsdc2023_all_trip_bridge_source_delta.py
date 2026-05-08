@@ -151,7 +151,7 @@ def analyze_all_trip_bridge_source_delta(
     *,
     reference_submission: Path,
     bridge_root: Path,
-) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, object]]:
     reference = _read_submission(reference_submission)
     row_frames: list[pd.DataFrame] = []
     trip_records: list[dict[str, object]] = []
@@ -184,6 +184,7 @@ def analyze_all_trip_bridge_source_delta(
         if not compared.empty
         else pd.DataFrame()
     )
+    source_runs = summarize_source_runs(row_summary)
     payload = {
         "reference_submission": str(reference_submission),
         "bridge_root": str(bridge_root),
@@ -207,8 +208,51 @@ def analyze_all_trip_bridge_source_delta(
             if not phone_summary.empty
             else []
         ),
+        "source_run_count": int(len(source_runs)),
+        "top_source_runs_by_distance": (
+            source_runs.sort_values(["p95_m", "max_m"], ascending=[False, False])
+            .head(20)
+            .to_dict(orient="records")
+            if not source_runs.empty
+            else []
+        ),
     }
-    return row_summary, trip_summary, payload
+    return row_summary, trip_summary, source_runs, payload
+
+
+def summarize_source_runs(row_summary: pd.DataFrame) -> pd.DataFrame:
+    if row_summary.empty:
+        return pd.DataFrame()
+    required = {"tripId", "UnixTimeMillis", "epoch_index", "best_source", "best_source_distance_m"}
+    missing = required.difference(row_summary.columns)
+    if missing:
+        raise ValueError(f"row summary is missing columns: {sorted(missing)}")
+
+    records: list[dict[str, object]] = []
+    for trip_id, trip_rows in row_summary.sort_values(["tripId", "epoch_index"]).groupby("tripId", sort=True):
+        run_start = 0
+        best_sources = trip_rows["best_source"].astype(str).to_numpy()
+        epoch_indices = trip_rows["epoch_index"].to_numpy(dtype=np.int64)
+        times = trip_rows["UnixTimeMillis"].to_numpy(dtype=np.int64)
+        distances = trip_rows["best_source_distance_m"].to_numpy(dtype=np.float64)
+        for index in range(1, len(trip_rows) + 1):
+            if index < len(trip_rows) and best_sources[index] == best_sources[run_start]:
+                continue
+            run_distance = distances[run_start:index]
+            records.append(
+                {
+                    "tripId": str(trip_id),
+                    "best_source": str(best_sources[run_start]),
+                    "start_epoch": int(epoch_indices[run_start]),
+                    "end_epoch": int(epoch_indices[index - 1] + 1),
+                    "rows": int(index - run_start),
+                    "first_time_ms": int(times[run_start]),
+                    "last_time_ms": int(times[index - 1]),
+                    **_score_record(run_distance),
+                },
+            )
+            run_start = index
+    return pd.DataFrame(records)
 
 
 def reconstruct_candidate_submission(
@@ -260,6 +304,7 @@ def write_outputs(
     output_dir: Path,
     rows: pd.DataFrame,
     trips: pd.DataFrame,
+    source_runs: pd.DataFrame,
     summary: dict[str, object],
     reconstructed_submission: pd.DataFrame | None = None,
     reconstructed_summary: dict[str, object] | None = None,
@@ -267,8 +312,10 @@ def write_outputs(
     output_dir.mkdir(parents=True, exist_ok=True)
     rows_path = output_dir / "all_trip_bridge_source_delta_rows.csv"
     trips_path = output_dir / "all_trip_bridge_source_delta_trips.csv"
+    source_runs_path = output_dir / "all_trip_bridge_source_runs.csv"
     rows.to_csv(rows_path, index=False)
     trips.to_csv(trips_path, index=False)
+    source_runs.to_csv(source_runs_path, index=False)
     reconstructed_path = output_dir / "submission_with_all_trip_best_reference_bridge_source.csv"
     if reconstructed_submission is not None:
         reconstructed_submission.to_csv(reconstructed_path, index=False)
@@ -278,7 +325,16 @@ def write_outputs(
             "reconstructed_submission": reconstructed_summary or {},
         }
     with (output_dir / "summary.json").open("w", encoding="utf-8") as f:
-        json.dump({**summary, "rows_csv": str(rows_path), "trip_summary_csv": str(trips_path)}, f, indent=2)
+        json.dump(
+            {
+                **summary,
+                "rows_csv": str(rows_path),
+                "trip_summary_csv": str(trips_path),
+                "source_runs_csv": str(source_runs_path),
+            },
+            f,
+            indent=2,
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -290,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--write-reconstructed-submission", action="store_true")
     args = parser.parse_args(argv)
 
-    rows, trips, summary = analyze_all_trip_bridge_source_delta(
+    rows, trips, source_runs, summary = analyze_all_trip_bridge_source_delta(
         reference_submission=args.reference_submission,
         bridge_root=args.bridge_root,
     )
@@ -307,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output_dir,
         rows,
         trips,
+        source_runs,
         summary,
         reconstructed_submission=reconstructed_submission,
         reconstructed_summary=reconstructed_summary,
