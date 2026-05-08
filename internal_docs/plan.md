@@ -139,6 +139,11 @@ final submission 再現:
         - Local screen for all 6 stacks has `risky_previous_changed_rows=0`.
         - Submitted `submission_mtv700_plus_p3p25a00625_20260509.csv`: Kaggle `3.686/4.710`.
         - Interpretation: adding the already-safe tiny global p3p25 component to the MTV 700-row public-positive candidate still does not move the 3-decimal score beyond `3.686/4.710`. The remaining path to improve is likely not another tiny p3p25-family stack, but a genuinely different row/source rule with independent leaderboard effect.
+      - p3p0 partial source follow-up: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p0_a075_group_window_candidates_20260509/summary.json`
+        - Built p3p0 `alpha=0.75` group/window candidates for MTV, MTV700, EBF, SJC, non-LAX/non-MTV, and LAX groups. Local screen covers `36` candidates and the checked small-window candidates have `risky_previous_changed_rows=0`.
+        - Submitted `submission_p3p0a075_mtv700_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
+        - Submitted `submission_p3p0a075_non_lax_non_mtv_f25_39_20260509.csv`: Kaggle `3.687/4.710`.
+        - Interpretation: strengthening the same MTV700 row set from p3p25-size movement to p3p0 `alpha=0.75` still ties `3.686/4.710`, while the non-MTV small window does not recover the public improvement. The current evidence says the p3 family public-positive effect is concentrated in MTV rows but already saturated at the 3-decimal leaderboard resolution.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
