@@ -68,6 +68,15 @@ final submission 再現:
     - p50 `0m`, p95 `0m`, mean `0.001456m`, max `0.857008m`, `rows_gt_1m=0`, `rows_gt_5m=0`.
     - Remaining nonzero residual is below 1m and led by `2021-11-30 mi8` first-window raw-WLS artifact mismatch: trip p95 `0.554058m`, max `0.857008m`; sm-a505u max `0.389931m`; LAX-X max `0.015669m`; pixel4xl exactly `0m`.
     - Next target order: search/reconstruct the exact `2021-11-30 mi8` first-window raw-WLS artifact, then handle the `24` bridge-missing timestamps and turn the audit-only source schedule into deterministic code instead of reference-nearest row picking.
+  - Added `experiments/materialize_gsdc2023_source_schedule_rows.py` to materialize a source schedule from bridge artifacts instead of consuming reference-nearest coordinate columns directly.
+    - The materializer supports multi-bridge schedules (`best_bridge_source=LABEL:source`) and single-bridge schedules (`best_reference_source` / `best_source`).
+    - Materialized schedule outputs:
+      - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_extended_materialized_schedule_20260509/summary.json`
+      - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_pixel4xl_materialized_schedule_20260509/summary.json`
+      - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_mi8_materialized_schedule_20260509/summary.json`
+      - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_sm_a505u_materialized_schedule_20260509/summary.json`
+    - Re-running the reference reconstruction with only materialized schedule rows reproduces the previous extended-override result exactly: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_materialized_source_schedules/summary.json`, p50 `0m`, p95 `0m`, mean `0.001456m`, max `0.857008m`, `rows_gt_1m=0`, `rows_gt_5m=0`.
+    - Interpretation: final CSV reproduction no longer requires copying reference-nearest coordinates for the four exception trips; it can be reproduced from bridge artifacts plus a row-level source schedule. The schedule itself is still audit-derived and should next be replaced by deterministic selection rules or exact MATLAB artifact provenance.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
