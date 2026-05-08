@@ -134,6 +134,11 @@ final submission 再現:
         - MTV 3-trip `20-50%`: Kaggle `3.686/4.710`
         - MTV all 4-trip `20-50%`: Kaggle `3.686/4.710`
         - Widening the MTV window does not move the 3-decimal score beyond the 700-row MTV 3-trip `25-39%` result, so this axis appears saturated at `3.686/4.710`.
+      - MTV 700-row independent stack follow-up: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_mtv700_independent_stack_candidates_20260509/summary.json`
+        - Built disjoint/near-disjoint stacks from the 700-row MTV 3-trip candidate plus `LAX-P single`, `missing timestamp <=1m`, `top3_mean`, and `p3p25 alpha=0.0625`.
+        - Local screen for all 6 stacks has `risky_previous_changed_rows=0`.
+        - Submitted `submission_mtv700_plus_p3p25a00625_20260509.csv`: Kaggle `3.686/4.710`.
+        - Interpretation: adding the already-safe tiny global p3p25 component to the MTV 700-row public-positive candidate still does not move the 3-decimal score beyond `3.686/4.710`. The remaining path to improve is likely not another tiny p3p25-family stack, but a genuinely different row/source rule with independent leaderboard effect.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
