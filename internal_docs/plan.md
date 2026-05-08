@@ -517,11 +517,19 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - Regenerated `p6p0_prevsafe_candidate_20260508/submit_readiness.md` includes the new artifact compatibility section.
 - PR #55 description refresh:
   - PR body now records the full-window writer-regression MATLAB equivalence summary, `phone_data` artifact compatibility result, duplicate-SHA P6P0 previous-safe conclusion, and safe unsubmitted shortlist conclusion.
+- MATLAB reference Kaggle score check:
+  - Submitted MATLAB/reference output `../ref/gsdc2023/results/test_parallel/20260501_0526/submission_20260501_0526.csv` with message `20260508 matlab reference 20260501_0526 score equivalence check`.
+  - The same CSV is byte-identical to `../ref/gsdc2023/results/test_parallel/20260423_1450/submission_20260423_1450.csv` (`sha256=2ff02b916c642956285e0421f7a8dab171f9a88ca30dc42317ea404e9685029c`).
+  - Kaggle result: public `4.056`, private `5.141`.
+  - Current Python/private-safe best remains `submission_best_pixel5_sjcr0_combo_sjcq_ebfxx_ebfzz_20260501.csv`: public `3.687`, private `4.710`.
+  - CSV delta between the MATLAB reference submission and the current Python best: `71936` matched rows, `71932` rows changed above `1e-9m`, mean `1.320844m`, p95 `2.876252m`, max `640.020249m`.
+  - Conclusion: Kaggle score is **not** MATLAB-reference equivalent at the final submission level. The MATLAB equivalence proof covers raw bridge/internal state/CSV sidecar artifacts used by submit-readiness gates, not byte-identical reproduction of the full MATLAB final submission or equal leaderboard score.
 
 次にやること:
 
-1. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
-2. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、full MATLAB submission の再現を別タスクとして定義し、まず `submission_20260501_0526.csv` と同じ final CSV を Python で出せるかを監査する。
+2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
+3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
 2026-05-05 P6P0 clean Kaggle submit:
 
