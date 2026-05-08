@@ -311,6 +311,119 @@ def test_residual_diagnostics_writer_gate_requires_exports_and_wide_parity(tmp_p
     assert result.summary["bridge_residual_diagnostics_export_column_mismatch_count"] == 0
     assert result.summary["wide_total_bridge_only"] == 0
     assert result.summary["inactive_key_source"] == "gnss_log_signal_mask"
+    assert result.summary["writer_regression_checked"] is False
+
+
+def test_residual_diagnostics_writer_gate_checks_regression_manifest(tmp_path: Path) -> None:
+    def fake_diagnostics(_data_root: Path, trips, **kwargs):
+        export_dir = kwargs["bridge_residual_diagnostics_export_dir"]
+        payload = {
+            "trip_count": len(trips),
+            "completed_trip_count": len(trips),
+            "error_count": 0,
+            "pd_value_passed": True,
+            "wide_passed": True,
+            "total_matlab_only": 0,
+            "total_bridge_only": 0,
+            "wide_total_matlab_only": 0,
+            "wide_total_bridge_only": 0,
+            "wide_sat_col_mismatch_count": 0,
+            "bridge_residual_diagnostics_export_enabled": True,
+            "bridge_residual_diagnostics_export_dir": str(export_dir),
+            "bridge_residual_diagnostics_export_count": len(trips),
+            "bridge_residual_diagnostics_export_total_rows": 4,
+            "bridge_residual_diagnostics_export_column_mismatch_count": 0,
+            "passed": True,
+        }
+        return (
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            payload,
+        )
+
+    def fake_regression_check(export_dir: Path, expected_manifest: Path) -> list[str]:
+        assert export_dir.name == "bridge_residual_diagnostics"
+        assert expected_manifest.name == "expected.json"
+        return []
+
+    *_frames, result = _residual_diagnostics_writer_gate(
+        tmp_path,
+        ["train/course/phone"],
+        tmp_path / "writer_gate",
+        max_epochs=0,
+        multi_gnss=False,
+        apply_observation_mask=True,
+        include_inactive_observations=True,
+        max_abs_delta_threshold_m=1.0e-4,
+        wide_max_abs_delta_threshold_m=5.0e-3,
+        writer_regression_manifest=tmp_path / "expected.json",
+        diagnostics_audit_fn=fake_diagnostics,
+        writer_regression_check_fn=fake_regression_check,
+    )
+
+    assert result.passed is True
+    assert result.summary["writer_regression_checked"] is True
+    assert result.summary["writer_regression_passed"] is True
+    assert result.summary["writer_regression_mismatch_count"] == 0
+
+
+def test_residual_diagnostics_writer_gate_fails_on_regression_mismatch(tmp_path: Path) -> None:
+    def fake_diagnostics(_data_root: Path, trips, **_kwargs):
+        payload = {
+            "trip_count": len(trips),
+            "completed_trip_count": len(trips),
+            "error_count": 0,
+            "pd_value_passed": True,
+            "wide_passed": True,
+            "total_matlab_only": 0,
+            "total_bridge_only": 0,
+            "wide_total_matlab_only": 0,
+            "wide_total_bridge_only": 0,
+            "wide_sat_col_mismatch_count": 0,
+            "bridge_residual_diagnostics_export_enabled": True,
+            "bridge_residual_diagnostics_export_count": len(trips),
+            "bridge_residual_diagnostics_export_total_rows": 4,
+            "bridge_residual_diagnostics_export_column_mismatch_count": 0,
+            "passed": True,
+        }
+        return (
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            payload,
+        )
+
+    *_frames, result = _residual_diagnostics_writer_gate(
+        tmp_path,
+        ["train/course/phone"],
+        tmp_path / "writer_gate",
+        max_epochs=0,
+        multi_gnss=False,
+        apply_observation_mask=True,
+        include_inactive_observations=True,
+        max_abs_delta_threshold_m=1.0e-4,
+        wide_max_abs_delta_threshold_m=5.0e-3,
+        writer_regression_manifest=tmp_path / "expected.json",
+        diagnostics_audit_fn=fake_diagnostics,
+        writer_regression_check_fn=lambda _export_dir, _expected_manifest: ["sha256 changed"],
+    )
+
+    assert result.passed is False
+    assert result.summary["writer_regression_checked"] is True
+    assert result.summary["writer_regression_passed"] is False
+    assert result.summary["writer_regression_mismatch_count"] == 1
+    assert result.summary["writer_regression_mismatches"] == ["sha256 changed"]
 
 
 def test_residual_diagnostics_writer_gate_fails_on_column_mismatch(tmp_path: Path) -> None:

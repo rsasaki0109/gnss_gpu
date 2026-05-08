@@ -428,6 +428,13 @@ def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
     with pytest.raises(SystemExit, match="residual diagnostics writer column parity failed"):
         assert_matlab_equivalence_gate(dirty)
 
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_regression_checked"] = True
+    dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_regression_passed"] = False
+    dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_regression_mismatch_count"] = 1
+    with pytest.raises(SystemExit, match="residual diagnostics writer regression failed"):
+        assert_matlab_equivalence_gate(dirty)
+
 
 def test_submit_checks_risk_before_running_kaggle(monkeypatch, tmp_path) -> None:
     for item in selected_queue({"sjc_r_scale_sweep"}):

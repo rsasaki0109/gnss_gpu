@@ -309,6 +309,16 @@ def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
         "residual_diagnostics_writer_export_byte_difference_count": int(
             residual_diagnostics.get("bridge_residual_diagnostics_export_byte_difference_count", 0) or 0,
         ),
+        "residual_diagnostics_writer_regression_manifest": residual_diagnostics.get("writer_regression_manifest"),
+        "residual_diagnostics_writer_regression_checked": bool(
+            residual_diagnostics.get("writer_regression_checked", False),
+        ),
+        "residual_diagnostics_writer_regression_passed": bool(
+            residual_diagnostics.get("writer_regression_passed", False),
+        ),
+        "residual_diagnostics_writer_regression_mismatch_count": int(
+            residual_diagnostics.get("writer_regression_mismatch_count", 0) or 0,
+        ),
         "residual_diagnostics_writer_inactive_key_source": residual_diagnostics.get("inactive_key_source"),
     }
 
