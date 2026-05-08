@@ -155,6 +155,12 @@ final submission 再現:
         - Submitted `submission_mtv700_sm_a505u_ref2selected_le0p25m_20260509.csv` (`77` rows): Kaggle `3.686/4.711`.
         - Window split: `e300-350 <=0.75m` (`47` rows) scored `3.686/4.710`; `e200-300 <=0.75m` (`80` rows) scored `3.686/4.711`.
         - Interpretation: the private-sensitive `sm-a505u` rows are concentrated in the earlier `ref2:selected` window, not just in large local deltas or the `ref:baseline` rows. The safe later window preserves the score but adds no 3-decimal gain, so `sm-a505u` ref2-selected is not a current best-improving stack component.
+      - mi8 ref2/source-window narrowing: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/mi8_ref2_source_window_candidates_20260509/summary.json`
+        - Built MTV700 stacks by splitting the `mi8` materialized schedule by source (`ref2:selected`, `ref2:raw_wls`, `ref:baseline`, `ref:selected`), epoch window, and delta threshold.
+        - Submitted `submission_mtv700_mi8_ref2_selected_le1p0m_20260509.csv` (`456` rows): Kaggle `3.687/4.710`.
+        - Submitted `submission_mtv700_mi8_ref2selected_e400_1200_le0p75m_20260509.csv` (`209` rows): Kaggle `3.687/4.710`.
+        - Submitted `submission_mtv700_mi8_ref2_raw_wls_le1p0m_20260509.csv` (`11` rows): Kaggle `3.686/4.710`.
+        - Interpretation: `mi8` public degradation is driven by the `ref2:selected` rows across the main trajectory, not by the tiny safe subset of early `ref2:raw_wls` rows. The raw-WLS subset is safe but too small to improve the 3-decimal score.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
