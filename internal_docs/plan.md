@@ -616,10 +616,17 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - The audit explains the previously contradictory windows: early/late mostly require `ref:fgo`/`local:fgo`, while epochs `400-600` require `local:raw_wls` (`194/200` rows, p95 `0.17752368197664328m`), not the `ref` bridge raw WLS.
   - Audit-only full-submission reconstruction output: `matlab_submission_laxx_multi_bridge_source_delta_20260509/submission_with_target_trip_multi_bridge_best_source.csv`. Compared with MATLAB/reference, full-submission max improves to `1.9513839635168002m`, p95 `0.4304469531691849m`, score_m `0.3732582829602139m`. The remaining full-submission mismatch is now the broad phone/systematic offset layer, not LAX-X spikes.
   - Interpretation: the LAX-X gap is largely an artifact provenance/schedule problem, not an unknown smoother formula. To reproduce MATLAB final submission, Python must reproduce which bridge artifact/source generation produced `ref:fgo` for early/late and `local:raw_wls` for the mid-window, then remove the remaining sub-2m FGO boundary residual.
+- All-trip reference bridge source audit:
+  - Added `experiments/analyze_gsdc2023_all_trip_bridge_source_delta.py` to scan every MATLAB/reference final-submission trip against its `../ref/gsdc2023/dataset_2023/test/<course>/<phone>/bridge_positions.csv` source columns.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_source_delta_20260509/summary.json` (ignored artifact).
+  - Coverage: `40` trips, `71936` reference rows, `71912` matched bridge rows, `24` missing bridge rows. Status counts: `compared=28`, `partial_match=12`. Partial-match trips all have zero residual on matched rows; the missing rows are timestamp coverage gaps.
+  - Overall matched-row best-source residual is p50 `0m`, p95 `0m`, mean `0.029432532787553506m`, max `245.60912280842763m`, with `rows_gt_1m=445`, `rows_gt_5m=27`.
+  - Only four fully matched trips show nonzero p95 against the reference bridge: `2021-11-30 mi8` p95 `2.2958334048136635m`, LAX-X/pixel5 p95 `1.0848493978416838m`, `2023-05-09 sm-a505u` p95 `1.0147935942947024m`, and `2020-12-11 pixel4xl` p95 `0.7497261277872788m`. Most other matched trips are exactly represented by `ref:baseline`.
+  - Interpretation: the remaining `0.39-0.43m` full-submission layer is not a mysterious MATLAB offset. The MATLAB/reference final CSV is mostly already represented by the reference `bridge_positions.csv`; the closest Python candidate differs because it used older/different artifacts and phone/trip offsets. Reproduction should now switch from score tuning to deterministic artifact/source selection against the reference bridge tree, then handle the four nonzero-p95 trips plus 24 missing timestamp rows.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、LAX-X は multi-bridge artifact schedule を再現する。次は `ref:fgo` と `local:fgo` がどの run options / chunk boundary / raw bridge revisionから分岐したかを `bridge_run.log`, `summary.json`, `parameters.m`, `run_raw_bridge_batch.py` options で比較し、Python submit generator に audit-only ではない deterministic source rule として落とせる形にする。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、reference `bridge_positions.csv` tree を deterministic artifact/source schedule として再現する。次は all-trip audit の 4 nonzero-p95 trips (`2021-11-30 mi8`, LAX-X/pixel5, `2023-05-09 sm-a505u`, `2020-12-11 pixel4xl`) と 24 missing timestamp rowsを個別に詰め、残り trip は `ref:baseline` で final CSV を再構成できることを確認する。
 2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
