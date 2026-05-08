@@ -8,6 +8,7 @@ import pandas as pd
 from experiments.analyze_gsdc2023_target_trip_source_delta import (
     analyze_target_trip_source_delta,
     main,
+    reconstruct_candidate_submission,
     source_coordinate_columns,
 )
 
@@ -90,6 +91,28 @@ def test_analyze_target_trip_source_delta_summarizes_best_sources(tmp_path) -> N
     assert chunks.loc[1, "best_reference_source_raw_wls_rows"] == 2
     assert chunks.loc[0, "selected_source_baseline_rows"] == 2
     assert chunks.loc[1, "selected_source_raw_wls_rows"] == 2
+    assert rows["best_reference_source_latitude_degrees"].tolist() == [0.0, 0.0, 0.001, 0.001]
+
+
+def test_reconstruct_candidate_submission_replaces_target_trip_with_best_source(tmp_path) -> None:
+    reference = tmp_path / "reference.csv"
+    candidate = tmp_path / "candidate.csv"
+    bridge = tmp_path / "bridge.csv"
+    _write_submission(reference, [0.0, 0.0, 0.001, 0.001])
+    _write_submission(candidate, [0.001, 0.001, 0.0, 0.0])
+    _write_bridge(bridge)
+    rows, _, _ = analyze_target_trip_source_delta(
+        reference_submission=reference,
+        candidate_submission=candidate,
+        bridge_rows=bridge,
+        target_trip=TRIP,
+        chunk_epochs=2,
+    )
+
+    reconstructed, summary = reconstruct_candidate_submission(candidate, rows, target_trip=TRIP)
+
+    assert reconstructed["LatitudeDegrees"].tolist() == [0.0, 0.0, 0.001, 0.001]
+    assert summary["rows_replaced"] == 4
 
 
 def test_analyze_target_trip_source_delta_cli(tmp_path, capsys) -> None:
@@ -114,6 +137,7 @@ def test_analyze_target_trip_source_delta_cli(tmp_path, capsys) -> None:
                 TRIP,
                 "--chunk-epochs",
                 "2",
+                "--write-reconstructed-submission",
                 "--output-dir",
                 str(output),
             ],
@@ -123,6 +147,9 @@ def test_analyze_target_trip_source_delta_cli(tmp_path, capsys) -> None:
 
     assert "analyzed: 4 row(s)" in capsys.readouterr().out
     assert (output / "summary.json").is_file()
-    assert json.loads((output / "summary.json").read_text(encoding="utf-8"))["rows"] == 4
+    summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
+    assert summary["rows"] == 4
+    assert summary["reconstructed_submission"]["rows_replaced"] == 4
+    assert (output / "submission_with_target_trip_best_reference_source.csv").is_file()
     rows = list(csv.DictReader((output / "target_trip_source_delta_rows.csv").open(encoding="utf-8")))
     assert rows[0]["best_reference_source"] == "baseline"

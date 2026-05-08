@@ -550,10 +550,17 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
     - epochs `400-600`: MATLAB reference is mostly nearest to `raw_wls` (`194/200`), but selected source is mostly `baseline` (`181/200`); this contains the `245.831842m` max row where MATLAB reference is essentially raw WLS.
     - epochs `1800-2170`: MATLAB reference is mostly nearest to `fgo` (`339/370`), while selected source is mostly baseline/raw-late (`baseline=149`, `raw_wls=191`, including `30` raw_wls late override rows).
   - Interpretation: the MATLAB reference final submission is much closer to a different LAX-X source schedule than the current old-gated early/raw-late patch. Reproducing Kaggle-score-level MATLAB behavior now needs a LAX-X schedule override, not another global score screen.
+- LAX-X/pixel5 MATLAB-nearest source reconstruction:
+  - Extended `experiments/analyze_gsdc2023_target_trip_source_delta.py` with `--write-reconstructed-submission`, which writes a full candidate CSV where the target trip is replaced by the bridge row source nearest to the MATLAB/reference row.
+  - This is an audit/reproduction probe because it uses the MATLAB reference to choose per-row nearest source; it is not a Kaggle-submit candidate.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_source_delta_20260509/submission_with_target_trip_best_reference_source.csv` and comparison output `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_best_source_delta_20260509/summary.json` (ignored artifacts).
+  - LAX-X trip delta improved from p95 `19.04625557930374m`, max `245.83184201676735m`, `rows_gt_5m=547` to p95 `3.246214736620738m`, max `24.20678253261115m`, `rows_gt_5m=60`.
+  - Full-submission delta improved from mean `0.42546851607109604m`, p95 `0.4306222271895031m`, max `245.83184201676735m`, `rows_gt_1m=1095`, `rows_gt_5m=573` to mean `0.3231501712937187m`, p95 `0.430533521603983m`, max `24.20678253261115m`, `rows_gt_1m=669`, `rows_gt_5m=86`.
+  - Interpretation: LAX-X source schedule explains the max/tail spike, but not the remaining full-submission p95. The next mismatch is now the phone-family/systematic layer led by `sm-a325f` p95 `2.574789098663229m` and `mi8` p95 `2.432442593842371m`.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、`2022-04-04-16-31-us-ca-lax-x/pixel5` の MATLAB-nearest source schedule を候補CSVとして再構成し、reference差分が p95/max とも縮むか確認する。その次に phone-family-scale の定数的オフセット差を調べる。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、`sm-a325f` と `mi8` の phone-family/systematic offset を分解する。まず `2022-07-12-18-37-us-ca-mtv-b/sm-a325f` と `2021-11-30-20-59-us-ca-mtv-m/mi8` について、差分が定数ENUオフセットか source schedule 差かを切り分ける。
 2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 

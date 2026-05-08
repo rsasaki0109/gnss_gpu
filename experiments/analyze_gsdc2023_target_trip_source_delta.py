@@ -137,6 +137,12 @@ def analyze_target_trip_source_delta(
     source_names = list(source_columns)
     rows["best_reference_source"] = [source_names[index] for index in best_indices]
     rows["best_reference_source_distance_m"] = np.nanmin(distance_matrix, axis=1)
+    rows["best_reference_source_latitude_degrees"] = np.nan
+    rows["best_reference_source_longitude_degrees"] = np.nan
+    for source, (lat_column, lon_column) in source_columns.items():
+        mask = rows["best_reference_source"] == source
+        rows.loc[mask, "best_reference_source_latitude_degrees"] = rows.loc[mask, lat_column]
+        rows.loc[mask, "best_reference_source_longitude_degrees"] = rows.loc[mask, lon_column]
     if "SelectedSource" not in rows.columns:
         rows["SelectedSource"] = ""
 
@@ -209,6 +215,8 @@ def analyze_target_trip_source_delta(
         "SelectedSource",
         "best_reference_source",
         "best_reference_source_distance_m",
+        "best_reference_source_latitude_degrees",
+        "best_reference_source_longitude_degrees",
         "LatitudeDegrees_reference",
         "LongitudeDegrees_reference",
         "LatitudeDegrees_candidate",
@@ -218,15 +226,76 @@ def analyze_target_trip_source_delta(
     return rows[output_columns], chunk_summary, summary
 
 
-def write_outputs(output_dir: Path, row_summary: pd.DataFrame, chunk_summary: pd.DataFrame, summary: dict[str, object]) -> None:
+def reconstruct_candidate_submission(
+    candidate_submission: Path,
+    row_summary: pd.DataFrame,
+    *,
+    target_trip: str,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    frame = pd.read_csv(candidate_submission)
+    required = set(KEY_COLUMNS + ["LatitudeDegrees", "LongitudeDegrees"])
+    missing = required.difference(frame.columns)
+    if missing:
+        raise ValueError(f"{candidate_submission} is missing columns: {sorted(missing)}")
+    patch_columns = {
+        "UnixTimeMillis",
+        "best_reference_source_latitude_degrees",
+        "best_reference_source_longitude_degrees",
+    }
+    missing_patch = patch_columns.difference(row_summary.columns)
+    if missing_patch:
+        raise ValueError(f"row summary is missing columns: {sorted(missing_patch)}")
+
+    mask = frame["tripId"] == target_trip
+    if not mask.any():
+        raise ValueError(f"{candidate_submission} contains no rows for {target_trip!r}")
+    target = frame.loc[mask, ["UnixTimeMillis"]].copy()
+    patch = row_summary[
+        [
+            "UnixTimeMillis",
+            "best_reference_source_latitude_degrees",
+            "best_reference_source_longitude_degrees",
+        ]
+    ].copy()
+    if patch["UnixTimeMillis"].duplicated().any():
+        raise ValueError("row summary contains duplicate UnixTimeMillis values")
+    joined = target.merge(patch, on="UnixTimeMillis", how="left", validate="one_to_one")
+    if joined[["best_reference_source_latitude_degrees", "best_reference_source_longitude_degrees"]].isna().any(axis=None):
+        raise ValueError("row summary does not cover every target trip timestamp")
+
+    out = frame.copy()
+    out.loc[mask, "LatitudeDegrees"] = joined["best_reference_source_latitude_degrees"].to_numpy()
+    out.loc[mask, "LongitudeDegrees"] = joined["best_reference_source_longitude_degrees"].to_numpy()
+    return out, {
+        "candidate_submission": str(candidate_submission),
+        "target_trip": target_trip,
+        "rows_replaced": int(mask.sum()),
+        "source": "best_reference_source",
+    }
+
+
+def write_outputs(
+    output_dir: Path,
+    row_summary: pd.DataFrame,
+    chunk_summary: pd.DataFrame,
+    summary: dict[str, object],
+    reconstructed_submission: pd.DataFrame | None = None,
+    reconstructed_summary: dict[str, object] | None = None,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     row_summary.to_csv(output_dir / "target_trip_source_delta_rows.csv", index=False)
     chunk_summary.to_csv(output_dir / "target_trip_source_delta_chunks.csv", index=False)
+    reconstructed_path = output_dir / "submission_with_target_trip_best_reference_source.csv"
+    if reconstructed_submission is not None:
+        reconstructed_submission.to_csv(reconstructed_path, index=False)
     payload = {
         **summary,
         "row_summary_csv": str(output_dir / "target_trip_source_delta_rows.csv"),
         "chunk_summary_csv": str(output_dir / "target_trip_source_delta_chunks.csv"),
     }
+    if reconstructed_submission is not None:
+        payload["reconstructed_submission_csv"] = str(reconstructed_path)
+        payload["reconstructed_submission"] = reconstructed_summary or {}
     with (output_dir / "summary.json").open("w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
 
@@ -238,6 +307,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bridge-rows", type=Path, required=True)
     parser.add_argument("--target-trip", required=True)
     parser.add_argument("--chunk-epochs", type=int, default=200)
+    parser.add_argument(
+        "--write-reconstructed-submission",
+        action="store_true",
+        help="write a full candidate submission with the target trip replaced by best-reference-source bridge rows",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
 
@@ -248,7 +322,22 @@ def main(argv: list[str] | None = None) -> int:
         target_trip=args.target_trip,
         chunk_epochs=args.chunk_epochs,
     )
-    write_outputs(args.output_dir, row_summary, chunk_summary, summary)
+    reconstructed_submission = None
+    reconstructed_summary = None
+    if args.write_reconstructed_submission:
+        reconstructed_submission, reconstructed_summary = reconstruct_candidate_submission(
+            args.candidate_submission,
+            row_summary,
+            target_trip=args.target_trip,
+        )
+    write_outputs(
+        args.output_dir,
+        row_summary,
+        chunk_summary,
+        summary,
+        reconstructed_submission=reconstructed_submission,
+        reconstructed_summary=reconstructed_summary,
+    )
     print(f"analyzed: {summary['rows']} row(s)")
     return 0
 
