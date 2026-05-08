@@ -17,6 +17,7 @@ if str(_REPO) not in sys.path:
 
 from experiments.audit_gsdc2023_factor_mask_parity import DEFAULT_FACTOR_MASK_PARITY_TRIPS  # noqa: E402
 from experiments.compare_gsdc2023_residual_diagnostics_pd import (  # noqa: E402
+    PD_WIDE_FRAME_COLUMNS,
     bridge_residual_diagnostics_pd_export_frame,
     compare_residual_diagnostics_pd_wide_values,
     compare_residual_diagnostics_pd_values,
@@ -39,6 +40,7 @@ from experiments.gsdc2023_raw_bridge import DEFAULT_ROOT  # noqa: E402
 
 CompareFn = Callable[..., tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, object]]]
 WideCompareFn = Callable[..., tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, object]]]
+EXPECTED_RESIDUAL_DIAGNOSTICS_COLUMN_COUNT = len(PD_WIDE_FRAME_COLUMNS)
 
 
 def _finite_float(value: object) -> float:
@@ -288,6 +290,24 @@ def residual_diagnostics_pd_parity_audit(
     wide_side_only_frame = pd.DataFrame(wide_side_only_rows)
     wide_export_summary = pd.DataFrame(wide_export_rows)
     residual_diagnostics_export_summary = pd.DataFrame(residual_diagnostics_export_rows)
+    residual_diagnostics_export_column_counts = (
+        pd.to_numeric(residual_diagnostics_export_summary["column_count"], errors="coerce")
+        if "column_count" in residual_diagnostics_export_summary
+        else pd.Series(dtype="float64")
+    )
+    residual_diagnostics_export_column_mismatch_count = int(
+        (residual_diagnostics_export_column_counts != EXPECTED_RESIDUAL_DIAGNOSTICS_COLUMN_COUNT).sum(),
+    )
+    residual_diagnostics_export_column_count_min = (
+        int(residual_diagnostics_export_column_counts.min())
+        if not residual_diagnostics_export_column_counts.empty
+        else 0
+    )
+    residual_diagnostics_export_column_count_max = (
+        int(residual_diagnostics_export_column_counts.max())
+        if not residual_diagnostics_export_column_counts.empty
+        else 0
+    )
 
     total_matlab_only = int(trip_summary["total_matlab_only"].sum()) if not trip_summary.empty else 0
     total_bridge_only = int(trip_summary["total_bridge_only"].sum()) if not trip_summary.empty else 0
@@ -382,6 +402,12 @@ def residual_diagnostics_pd_parity_audit(
             int(residual_diagnostics_export_summary["row_count"].sum())
             if not residual_diagnostics_export_summary.empty
             else 0
+        ),
+        "bridge_residual_diagnostics_export_expected_columns": int(EXPECTED_RESIDUAL_DIAGNOSTICS_COLUMN_COUNT),
+        "bridge_residual_diagnostics_export_column_count_min": residual_diagnostics_export_column_count_min,
+        "bridge_residual_diagnostics_export_column_count_max": residual_diagnostics_export_column_count_max,
+        "bridge_residual_diagnostics_export_column_mismatch_count": (
+            residual_diagnostics_export_column_mismatch_count
         ),
         "bridge_residual_diagnostics_export_byte_equivalent_count": int(
             sum(1 for row in residual_diagnostics_export_rows if bool(row.get("byte_equivalent", False))),

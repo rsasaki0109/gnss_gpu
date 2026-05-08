@@ -9,6 +9,7 @@ from experiments.audit_gsdc2023_matlab_equivalence_gate import (
     _asset_gate,
     _count_gate,
     _factor_gate,
+    _residual_diagnostics_writer_gate,
     _residual_gate,
 )
 
@@ -219,6 +220,145 @@ def test_residual_gate_reports_internal_delta_failures(tmp_path: Path) -> None:
     assert result.passed is False
     assert result.summary["internal_delta_failure_count"] == 1
     assert result.summary["internal_delta_failures"][0]["component"] == "model_delta"
+
+
+def test_residual_diagnostics_writer_gate_requires_exports_and_wide_parity(tmp_path: Path) -> None:
+    def fake_diagnostics(
+        _data_root: Path,
+        trips,
+        *,
+        max_epochs: int,
+        multi_gnss: bool,
+        apply_observation_mask: bool,
+        include_inactive_observations: bool,
+        max_abs_delta_threshold: float,
+        run_wide_audit: bool,
+        wide_max_abs_delta_threshold: float,
+        bridge_residual_diagnostics_export_dir: Path,
+        verbose: bool,
+    ):
+        assert list(trips) == ["train/course/phone"]
+        assert max_epochs == 0
+        assert multi_gnss is False
+        assert apply_observation_mask is True
+        assert include_inactive_observations is True
+        assert max_abs_delta_threshold == 1.0e-4
+        assert run_wide_audit is True
+        assert wide_max_abs_delta_threshold == 5.0e-3
+        assert bridge_residual_diagnostics_export_dir.name == "bridge_residual_diagnostics"
+        assert verbose is False
+        payload = {
+            "trip_count": 1,
+            "completed_trip_count": 1,
+            "error_count": 0,
+            "pd_value_passed": True,
+            "wide_passed": True,
+            "overall_max_abs_delta": 5.0e-5,
+            "wide_overall_max_abs_delta": 3.0e-3,
+            "total_matlab_count": 10,
+            "total_bridge_count": 10,
+            "total_matched_count": 10,
+            "total_matlab_only": 0,
+            "total_bridge_only": 0,
+            "wide_total_matlab_count": 44,
+            "wide_total_bridge_count": 44,
+            "wide_total_matched_count": 44,
+            "wide_total_matlab_only": 0,
+            "wide_total_bridge_only": 0,
+            "wide_sat_col_mismatch_count": 0,
+            "bridge_residual_diagnostics_export_enabled": True,
+            "bridge_residual_diagnostics_export_dir": str(bridge_residual_diagnostics_export_dir),
+            "bridge_residual_diagnostics_export_count": 1,
+            "bridge_residual_diagnostics_export_total_rows": 4,
+            "bridge_residual_diagnostics_export_expected_columns": 44,
+            "bridge_residual_diagnostics_export_column_count_min": 44,
+            "bridge_residual_diagnostics_export_column_count_max": 44,
+            "bridge_residual_diagnostics_export_column_mismatch_count": 0,
+            "bridge_residual_diagnostics_export_byte_equivalent_count": 0,
+            "bridge_residual_diagnostics_export_byte_difference_count": 1,
+            "inactive_key_source": "gnss_log_signal_mask",
+            "passed": True,
+        }
+        return (
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            payload,
+        )
+
+    *_frames, result = _residual_diagnostics_writer_gate(
+        tmp_path,
+        ["train/course/phone"],
+        tmp_path / "writer_gate",
+        max_epochs=0,
+        multi_gnss=False,
+        apply_observation_mask=True,
+        include_inactive_observations=True,
+        max_abs_delta_threshold_m=1.0e-4,
+        wide_max_abs_delta_threshold_m=5.0e-3,
+        diagnostics_audit_fn=fake_diagnostics,
+    )
+
+    assert result.passed is True
+    assert result.summary["bridge_residual_diagnostics_export_count"] == 1
+    assert result.summary["bridge_residual_diagnostics_export_total_rows"] == 4
+    assert result.summary["bridge_residual_diagnostics_export_column_count_min"] == 44
+    assert result.summary["bridge_residual_diagnostics_export_column_mismatch_count"] == 0
+    assert result.summary["wide_total_bridge_only"] == 0
+    assert result.summary["inactive_key_source"] == "gnss_log_signal_mask"
+
+
+def test_residual_diagnostics_writer_gate_fails_on_column_mismatch(tmp_path: Path) -> None:
+    def fake_diagnostics(_data_root: Path, trips, **_kwargs):
+        payload = {
+            "trip_count": len(trips),
+            "completed_trip_count": len(trips),
+            "error_count": 0,
+            "pd_value_passed": True,
+            "wide_passed": True,
+            "total_matlab_only": 0,
+            "total_bridge_only": 0,
+            "wide_total_matlab_only": 0,
+            "wide_total_bridge_only": 0,
+            "wide_sat_col_mismatch_count": 0,
+            "bridge_residual_diagnostics_export_enabled": True,
+            "bridge_residual_diagnostics_export_count": len(trips),
+            "bridge_residual_diagnostics_export_total_rows": 4,
+            "bridge_residual_diagnostics_export_column_mismatch_count": 1,
+            "passed": True,
+        }
+        return (
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            payload,
+        )
+
+    *_frames, result = _residual_diagnostics_writer_gate(
+        tmp_path,
+        ["train/course/phone"],
+        tmp_path / "writer_gate",
+        max_epochs=0,
+        multi_gnss=False,
+        apply_observation_mask=True,
+        include_inactive_observations=True,
+        max_abs_delta_threshold_m=1.0e-4,
+        wide_max_abs_delta_threshold_m=5.0e-3,
+        diagnostics_audit_fn=fake_diagnostics,
+    )
+
+    assert result.passed is False
+    assert result.summary["bridge_residual_diagnostics_export_column_mismatch_count"] == 1
 
 
 def test_count_gate_requires_exact_count_parity(tmp_path: Path) -> None:

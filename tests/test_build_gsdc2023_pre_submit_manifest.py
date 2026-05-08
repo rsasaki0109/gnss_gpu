@@ -198,6 +198,26 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
                         "internal_delta_failures": [],
                         "internal_delta_thresholds": {"model_delta": 1.0e-4},
                     },
+                    "residual_diagnostics_writer": {
+                        "passed": True,
+                        "pd_value_passed": True,
+                        "wide_passed": True,
+                        "total_matlab_only": 0,
+                        "total_bridge_only": 0,
+                        "wide_total_matlab_only": 0,
+                        "wide_total_bridge_only": 0,
+                        "wide_sat_col_mismatch_count": 0,
+                        "bridge_residual_diagnostics_export_enabled": True,
+                        "bridge_residual_diagnostics_export_count": 12,
+                        "bridge_residual_diagnostics_export_total_rows": 258537,
+                        "bridge_residual_diagnostics_export_expected_columns": 44,
+                        "bridge_residual_diagnostics_export_column_count_min": 44,
+                        "bridge_residual_diagnostics_export_column_count_max": 44,
+                        "bridge_residual_diagnostics_export_column_mismatch_count": 0,
+                        "bridge_residual_diagnostics_export_byte_equivalent_count": 0,
+                        "bridge_residual_diagnostics_export_byte_difference_count": 12,
+                        "inactive_key_source": "gnss_log_signal_mask",
+                    },
                 },
             },
         ),
@@ -225,4 +245,14 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
     assert gate["residual_total_matlab_only"] == 0
     assert gate["residual_internal_delta_failure_count"] == 0
     assert gate["residual_internal_delta_thresholds"]["model_delta"] == 1.0e-4
+    assert gate["residual_diagnostics_writer_passed"] is True
+    assert gate["residual_diagnostics_writer_total_bridge_only"] == 0
+    assert gate["residual_diagnostics_writer_wide_total_matlab_only"] == 0
+    assert gate["residual_diagnostics_writer_export_count"] == 12
+    assert gate["residual_diagnostics_writer_export_total_rows"] == 258537
+    assert gate["residual_diagnostics_writer_export_column_count_min"] == 44
+    assert gate["residual_diagnostics_writer_export_column_count_max"] == 44
+    assert gate["residual_diagnostics_writer_export_column_mismatch_count"] == 0
+    assert gate["residual_diagnostics_writer_export_byte_difference_count"] == 12
+    assert gate["residual_diagnostics_writer_inactive_key_source"] == "gnss_log_signal_mask"
     assert gate["summary_sha256"]

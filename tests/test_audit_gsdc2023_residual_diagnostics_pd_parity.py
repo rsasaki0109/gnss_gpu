@@ -347,6 +347,10 @@ def test_residual_diagnostics_pd_parity_audit_summarizes_wide_components(tmp_pat
     assert (wide_export_dir / "train/course/phone-a/phone_data_residual_diagnostics_pd_wide_subset.csv").is_file()
     assert (residual_export_dir / "train/course/phone-a/phone_data_residual_diagnostics.csv").is_file()
     assert payload["bridge_residual_diagnostics_export_count"] == 2
+    assert payload["bridge_residual_diagnostics_export_expected_columns"] == 44
+    assert payload["bridge_residual_diagnostics_export_column_count_min"] == 6
+    assert payload["bridge_residual_diagnostics_export_column_count_max"] == 6
+    assert payload["bridge_residual_diagnostics_export_column_mismatch_count"] == 2
     assert payload["bridge_residual_diagnostics_export_byte_equivalent_count"] == 2
     assert payload["bridge_residual_diagnostics_export_byte_difference_count"] == 0
 
@@ -447,5 +451,7 @@ def test_residual_diagnostics_export_byte_difference_is_informational(tmp_path: 
     )
 
     assert payload["wide_passed"] is True
+    assert payload["bridge_residual_diagnostics_export_expected_columns"] == 44
+    assert payload["bridge_residual_diagnostics_export_column_mismatch_count"] == 1
     assert payload["bridge_residual_diagnostics_export_byte_difference_count"] == 1
     assert payload["passed"] is True

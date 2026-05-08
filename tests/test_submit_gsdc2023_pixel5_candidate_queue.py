@@ -303,6 +303,21 @@ def test_matlab_equivalence_gate_can_be_required_from_pre_submit_manifest(tmp_pa
         "residual_internal_delta_failure_count": 0,
         "residual_internal_delta_failures": [],
         "residual_internal_delta_thresholds": {"model_delta": 1.0e-4},
+        "residual_diagnostics_writer_passed": True,
+        "residual_diagnostics_writer_pd_value_passed": True,
+        "residual_diagnostics_writer_wide_passed": True,
+        "residual_diagnostics_writer_total_matlab_only": 0,
+        "residual_diagnostics_writer_total_bridge_only": 0,
+        "residual_diagnostics_writer_wide_total_matlab_only": 0,
+        "residual_diagnostics_writer_wide_total_bridge_only": 0,
+        "residual_diagnostics_writer_wide_sat_col_mismatch_count": 0,
+        "residual_diagnostics_writer_export_enabled": True,
+        "residual_diagnostics_writer_export_count": 12,
+        "residual_diagnostics_writer_export_total_rows": 258537,
+        "residual_diagnostics_writer_export_expected_columns": 44,
+        "residual_diagnostics_writer_export_column_count_min": 44,
+        "residual_diagnostics_writer_export_column_count_max": 44,
+        "residual_diagnostics_writer_export_column_mismatch_count": 0,
     }
     (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -334,6 +349,21 @@ def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
             "residual_internal_delta_failure_count": 0,
             "residual_internal_delta_failures": [],
             "residual_internal_delta_thresholds": {"model_delta": 1.0e-4},
+            "residual_diagnostics_writer_passed": True,
+            "residual_diagnostics_writer_pd_value_passed": True,
+            "residual_diagnostics_writer_wide_passed": True,
+            "residual_diagnostics_writer_total_matlab_only": 0,
+            "residual_diagnostics_writer_total_bridge_only": 0,
+            "residual_diagnostics_writer_wide_total_matlab_only": 0,
+            "residual_diagnostics_writer_wide_total_bridge_only": 0,
+            "residual_diagnostics_writer_wide_sat_col_mismatch_count": 0,
+            "residual_diagnostics_writer_export_enabled": True,
+            "residual_diagnostics_writer_export_count": 12,
+            "residual_diagnostics_writer_export_total_rows": 258537,
+            "residual_diagnostics_writer_export_expected_columns": 44,
+            "residual_diagnostics_writer_export_column_count_min": 44,
+            "residual_diagnostics_writer_export_column_count_max": 44,
+            "residual_diagnostics_writer_export_column_mismatch_count": 0,
         },
     }
     assert assert_matlab_equivalence_gate(clean)["equivalence_claim"] == "matlab_equivalent"
@@ -381,6 +411,21 @@ def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
     dirty = json.loads(json.dumps(clean))
     dirty["matlab_equivalence_gate"]["residual_internal_delta_thresholds"] = {}
     with pytest.raises(SystemExit, match="missing residual internal delta thresholds"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    del dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_export_count"]
+    with pytest.raises(SystemExit, match="missing residual diagnostics writer fields"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_wide_total_bridge_only"] = 1
+    with pytest.raises(SystemExit, match="residual diagnostics writer side-only"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_export_column_count_max"] = 45
+    with pytest.raises(SystemExit, match="residual diagnostics writer column parity failed"):
         assert_matlab_equivalence_gate(dirty)
 
 

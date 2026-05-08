@@ -26,6 +26,10 @@ from experiments.audit_gsdc2023_residual_value_parity import (  # noqa: E402
     DEFAULT_RESIDUAL_PARITY_TRIPS,
     residual_value_parity_audit,
 )
+from experiments.audit_gsdc2023_residual_diagnostics_pd_parity import (  # noqa: E402
+    EXPECTED_RESIDUAL_DIAGNOSTICS_COLUMN_COUNT,
+    residual_diagnostics_pd_parity_audit,
+)
 from experiments.compare_gsdc2023_phone_data_raw_bridge_counts import (  # noqa: E402
     build_comparison_frames,
 )
@@ -47,6 +51,7 @@ DEFAULT_EQUIVALENCE_TRIPS: tuple[str, ...] = tuple(
 AssetAuditFn = Callable[..., pd.DataFrame]
 FactorAuditFn = Callable[..., tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]]
 ResidualAuditFn = Callable[..., tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]]
+ResidualDiagnosticsAuditFn = Callable[..., tuple[Any, ...]]
 CountAuditFn = Callable[..., tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]]
 
 
@@ -271,6 +276,143 @@ def _count_gate(
     return comparison, trip_summary, GateResult("raw_bridge_counts", bool(passed), summary)
 
 
+def _residual_diagnostics_writer_gate(
+    data_root: Path,
+    trips: Sequence[str],
+    output_dir: Path,
+    *,
+    max_epochs: int,
+    multi_gnss: bool,
+    apply_observation_mask: bool,
+    include_inactive_observations: bool,
+    max_abs_delta_threshold_m: float,
+    wide_max_abs_delta_threshold_m: float,
+    verbose: bool = False,
+    diagnostics_audit_fn: ResidualDiagnosticsAuditFn = residual_diagnostics_pd_parity_audit,
+) -> tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    GateResult,
+]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    export_dir = output_dir / "bridge_residual_diagnostics"
+    result = diagnostics_audit_fn(
+        data_root,
+        trips,
+        max_epochs=max_epochs,
+        multi_gnss=multi_gnss,
+        apply_observation_mask=apply_observation_mask,
+        include_inactive_observations=include_inactive_observations,
+        max_abs_delta_threshold=max_abs_delta_threshold_m,
+        run_wide_audit=True,
+        wide_max_abs_delta_threshold=wide_max_abs_delta_threshold_m,
+        bridge_residual_diagnostics_export_dir=export_dir,
+        verbose=verbose,
+    )
+    (
+        trip_summary,
+        column_summary,
+        side_only,
+        export_summary,
+        wide_trip_summary,
+        wide_column_summary,
+        wide_side_only,
+        wide_export_summary,
+        payload,
+    ) = result
+    export_count = int(payload.get("bridge_residual_diagnostics_export_count", 0) or 0)
+    export_total_rows = int(payload.get("bridge_residual_diagnostics_export_total_rows", 0) or 0)
+    export_column_mismatch_count = int(
+        payload.get("bridge_residual_diagnostics_export_column_mismatch_count", 0) or 0,
+    )
+    total_matlab_only = int(payload.get("total_matlab_only", 0) or 0)
+    total_bridge_only = int(payload.get("total_bridge_only", 0) or 0)
+    wide_total_matlab_only = int(payload.get("wide_total_matlab_only", 0) or 0)
+    wide_total_bridge_only = int(payload.get("wide_total_bridge_only", 0) or 0)
+    wide_sat_col_mismatch_count = int(payload.get("wide_sat_col_mismatch_count", 0) or 0)
+    summary = {
+        "trip_count": int(payload.get("trip_count", len(trips)) or 0),
+        "completed_trip_count": int(payload.get("completed_trip_count", len(trip_summary)) or 0),
+        "error_count": int(payload.get("error_count", 0) or 0),
+        "errors": payload.get("errors", []),
+        "pd_value_passed": bool(payload.get("pd_value_passed", False)),
+        "wide_passed": bool(payload.get("wide_passed", False)),
+        "overall_max_abs_delta": payload.get("overall_max_abs_delta"),
+        "wide_overall_max_abs_delta": payload.get("wide_overall_max_abs_delta"),
+        "max_abs_delta_threshold_m": float(max_abs_delta_threshold_m),
+        "wide_max_abs_delta_threshold_m": float(wide_max_abs_delta_threshold_m),
+        "total_matlab_count": int(payload.get("total_matlab_count", 0) or 0),
+        "total_bridge_count": int(payload.get("total_bridge_count", 0) or 0),
+        "total_matched_count": int(payload.get("total_matched_count", 0) or 0),
+        "total_matlab_only": total_matlab_only,
+        "total_bridge_only": total_bridge_only,
+        "wide_total_matlab_count": int(payload.get("wide_total_matlab_count", 0) or 0),
+        "wide_total_bridge_count": int(payload.get("wide_total_bridge_count", 0) or 0),
+        "wide_total_matched_count": int(payload.get("wide_total_matched_count", 0) or 0),
+        "wide_total_matlab_only": wide_total_matlab_only,
+        "wide_total_bridge_only": wide_total_bridge_only,
+        "wide_sat_col_mismatch_count": wide_sat_col_mismatch_count,
+        "bridge_residual_diagnostics_export_enabled": bool(
+            payload.get("bridge_residual_diagnostics_export_enabled", False),
+        ),
+        "bridge_residual_diagnostics_export_dir": payload.get("bridge_residual_diagnostics_export_dir"),
+        "bridge_residual_diagnostics_export_count": export_count,
+        "bridge_residual_diagnostics_export_total_rows": export_total_rows,
+        "bridge_residual_diagnostics_export_expected_columns": int(
+            payload.get(
+                "bridge_residual_diagnostics_export_expected_columns",
+                EXPECTED_RESIDUAL_DIAGNOSTICS_COLUMN_COUNT,
+            )
+            or 0,
+        ),
+        "bridge_residual_diagnostics_export_column_count_min": int(
+            payload.get("bridge_residual_diagnostics_export_column_count_min", 0) or 0,
+        ),
+        "bridge_residual_diagnostics_export_column_count_max": int(
+            payload.get("bridge_residual_diagnostics_export_column_count_max", 0) or 0,
+        ),
+        "bridge_residual_diagnostics_export_column_mismatch_count": export_column_mismatch_count,
+        "bridge_residual_diagnostics_export_byte_equivalent_count": int(
+            payload.get("bridge_residual_diagnostics_export_byte_equivalent_count", 0) or 0,
+        ),
+        "bridge_residual_diagnostics_export_byte_difference_count": int(
+            payload.get("bridge_residual_diagnostics_export_byte_difference_count", 0) or 0,
+        ),
+        "inactive_key_source": payload.get("inactive_key_source"),
+    }
+    passed = bool(
+        payload.get("passed", False)
+        and summary["pd_value_passed"]
+        and summary["wide_passed"]
+        and summary["bridge_residual_diagnostics_export_enabled"]
+        and export_count == len(trips)
+        and export_total_rows > 0
+        and export_column_mismatch_count == 0
+        and total_matlab_only == 0
+        and total_bridge_only == 0
+        and wide_total_matlab_only == 0
+        and wide_total_bridge_only == 0
+        and wide_sat_col_mismatch_count == 0
+    )
+    return (
+        trip_summary,
+        column_summary,
+        side_only,
+        export_summary,
+        wide_trip_summary,
+        wide_column_summary,
+        wide_side_only,
+        wide_export_summary,
+        GateResult("residual_diagnostics_writer", passed, summary),
+    )
+
+
 def run_equivalence_gate(
     data_root: Path,
     output_dir: Path,
@@ -337,7 +479,41 @@ def run_equivalence_gate(
     gates.append(residual_result)
 
     if verbose:
-        print("[4/4] raw-bridge count gate", file=sys.stderr, flush=True)
+        print("[4/5] residual-diagnostics writer gate", file=sys.stderr, flush=True)
+    (
+        diagnostics_trip_summary,
+        diagnostics_column_summary,
+        diagnostics_side_only,
+        diagnostics_export_summary,
+        diagnostics_wide_trip_summary,
+        diagnostics_wide_column_summary,
+        diagnostics_wide_side_only,
+        diagnostics_wide_export_summary,
+        diagnostics_result,
+    ) = _residual_diagnostics_writer_gate(
+        data_root,
+        trips,
+        output_dir / "residual_diagnostics_writer",
+        max_epochs=max_epochs,
+        multi_gnss=residual_multi_gnss,
+        apply_observation_mask=residual_observation_mask,
+        include_inactive_observations=residual_include_inactive_observations,
+        max_abs_delta_threshold_m=max_abs_delta_threshold_m,
+        wide_max_abs_delta_threshold_m=5.0e-3,
+        verbose=verbose,
+    )
+    diagnostics_trip_summary.to_csv(output_dir / "residual_diagnostics_writer_trip_summary.csv", index=False)
+    diagnostics_column_summary.to_csv(output_dir / "residual_diagnostics_writer_column_summary.csv", index=False)
+    diagnostics_side_only.to_csv(output_dir / "residual_diagnostics_writer_side_only.csv", index=False)
+    diagnostics_export_summary.to_csv(output_dir / "residual_diagnostics_writer_subset_exports.csv", index=False)
+    diagnostics_wide_trip_summary.to_csv(output_dir / "residual_diagnostics_writer_wide_trip_summary.csv", index=False)
+    diagnostics_wide_column_summary.to_csv(output_dir / "residual_diagnostics_writer_wide_column_summary.csv", index=False)
+    diagnostics_wide_side_only.to_csv(output_dir / "residual_diagnostics_writer_wide_side_only.csv", index=False)
+    diagnostics_wide_export_summary.to_csv(output_dir / "residual_diagnostics_writer_wide_subset_exports.csv", index=False)
+    gates.append(diagnostics_result)
+
+    if verbose:
+        print("[5/5] raw-bridge count gate", file=sys.stderr, flush=True)
     count_comparison, count_trip_summary, count_result = _count_gate(
         data_root,
         trips,

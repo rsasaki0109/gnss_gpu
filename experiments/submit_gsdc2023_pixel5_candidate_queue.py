@@ -309,6 +309,75 @@ def assert_matlab_equivalence_gate(manifest: dict[str, object], *, require: bool
     internal_thresholds = gate.get("residual_internal_delta_thresholds")
     if not isinstance(internal_thresholds, dict) or not internal_thresholds:
         raise SystemExit("MATLAB equivalence gate failed: missing residual internal delta thresholds")
+    required_writer_fields = (
+        "residual_diagnostics_writer_passed",
+        "residual_diagnostics_writer_pd_value_passed",
+        "residual_diagnostics_writer_wide_passed",
+        "residual_diagnostics_writer_total_matlab_only",
+        "residual_diagnostics_writer_total_bridge_only",
+        "residual_diagnostics_writer_wide_total_matlab_only",
+        "residual_diagnostics_writer_wide_total_bridge_only",
+        "residual_diagnostics_writer_wide_sat_col_mismatch_count",
+        "residual_diagnostics_writer_export_enabled",
+        "residual_diagnostics_writer_export_count",
+        "residual_diagnostics_writer_export_total_rows",
+        "residual_diagnostics_writer_export_expected_columns",
+        "residual_diagnostics_writer_export_column_count_min",
+        "residual_diagnostics_writer_export_column_count_max",
+        "residual_diagnostics_writer_export_column_mismatch_count",
+    )
+    missing_writer_fields = [field for field in required_writer_fields if field not in gate]
+    if missing_writer_fields:
+        raise SystemExit(
+            "MATLAB equivalence gate failed: missing residual diagnostics writer fields: "
+            + ", ".join(missing_writer_fields),
+        )
+    writer_pass_fields = (
+        "residual_diagnostics_writer_passed",
+        "residual_diagnostics_writer_pd_value_passed",
+        "residual_diagnostics_writer_wide_passed",
+        "residual_diagnostics_writer_export_enabled",
+    )
+    failed_writer_pass_fields = [field for field in writer_pass_fields if not bool(gate.get(field, False))]
+    if failed_writer_pass_fields:
+        raise SystemExit(
+            "MATLAB equivalence residual diagnostics writer failed fields: "
+            + ", ".join(failed_writer_pass_fields),
+        )
+    writer_side_counts = {
+        "matlab_only": _as_int(gate.get("residual_diagnostics_writer_total_matlab_only")),
+        "bridge_only": _as_int(gate.get("residual_diagnostics_writer_total_bridge_only")),
+        "wide_matlab_only": _as_int(gate.get("residual_diagnostics_writer_wide_total_matlab_only")),
+        "wide_bridge_only": _as_int(gate.get("residual_diagnostics_writer_wide_total_bridge_only")),
+        "wide_sat_col_mismatch": _as_int(gate.get("residual_diagnostics_writer_wide_sat_col_mismatch_count")),
+    }
+    if any(value != 0 for value in writer_side_counts.values()):
+        raise SystemExit(
+            "MATLAB equivalence residual diagnostics writer side-only rows are nonzero: "
+            + ", ".join(f"{key}={value}" for key, value in writer_side_counts.items()),
+        )
+    writer_export_count = _as_int(gate.get("residual_diagnostics_writer_export_count"))
+    writer_export_total_rows = _as_int(gate.get("residual_diagnostics_writer_export_total_rows"))
+    writer_expected_columns = _as_int(gate.get("residual_diagnostics_writer_export_expected_columns"))
+    writer_column_min = _as_int(gate.get("residual_diagnostics_writer_export_column_count_min"))
+    writer_column_max = _as_int(gate.get("residual_diagnostics_writer_export_column_count_max"))
+    writer_column_mismatches = _as_int(gate.get("residual_diagnostics_writer_export_column_mismatch_count"))
+    if writer_export_count <= 0 or writer_export_total_rows <= 0:
+        raise SystemExit(
+            "MATLAB equivalence residual diagnostics writer export is empty: "
+            f"count={writer_export_count}, rows={writer_export_total_rows}",
+        )
+    if (
+        writer_expected_columns <= 0
+        or writer_column_min != writer_expected_columns
+        or writer_column_max != writer_expected_columns
+        or writer_column_mismatches != 0
+    ):
+        raise SystemExit(
+            "MATLAB equivalence residual diagnostics writer column parity failed: "
+            f"expected={writer_expected_columns}, min={writer_column_min}, "
+            f"max={writer_column_max}, mismatches={writer_column_mismatches}",
+        )
     return gate
 
 
