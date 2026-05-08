@@ -86,9 +86,13 @@ def test_analyze_target_trip_source_delta_summarizes_best_sources(tmp_path) -> N
     )
 
     assert rows["best_reference_source"].tolist() == ["baseline", "baseline", "raw_wls", "raw_wls"]
+    assert rows["best_candidate_source"].tolist() == ["raw_wls", "raw_wls", "baseline", "baseline"]
     assert summary["best_reference_source_counts"] == {"baseline": 2, "raw_wls": 2}
+    assert summary["best_candidate_source_counts"] == {"baseline": 2, "raw_wls": 2}
     assert chunks.loc[0, "best_reference_source_baseline_rows"] == 2
     assert chunks.loc[1, "best_reference_source_raw_wls_rows"] == 2
+    assert chunks.loc[0, "best_candidate_source_raw_wls_rows"] == 2
+    assert chunks.loc[1, "best_candidate_source_baseline_rows"] == 2
     assert chunks.loc[0, "selected_source_baseline_rows"] == 2
     assert chunks.loc[1, "selected_source_raw_wls_rows"] == 2
     assert rows["best_reference_source_latitude_degrees"].tolist() == [0.0, 0.0, 0.001, 0.001]

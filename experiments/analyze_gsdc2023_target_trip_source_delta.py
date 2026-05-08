@@ -132,11 +132,16 @@ def analyze_target_trip_source_delta(
         )
 
     distance_columns = [f"reference_to_{source}_m" for source in source_columns]
+    candidate_distance_columns = [f"candidate_to_{source}_m" for source in source_columns]
     distance_matrix = rows[distance_columns].to_numpy(dtype=np.float64)
     best_indices = np.nanargmin(distance_matrix, axis=1)
     source_names = list(source_columns)
     rows["best_reference_source"] = [source_names[index] for index in best_indices]
     rows["best_reference_source_distance_m"] = np.nanmin(distance_matrix, axis=1)
+    candidate_distance_matrix = rows[candidate_distance_columns].to_numpy(dtype=np.float64)
+    best_candidate_indices = np.nanargmin(candidate_distance_matrix, axis=1)
+    rows["best_candidate_source"] = [source_names[index] for index in best_candidate_indices]
+    rows["best_candidate_source_distance_m"] = np.nanmin(candidate_distance_matrix, axis=1)
     rows["best_reference_source_latitude_degrees"] = np.nan
     rows["best_reference_source_longitude_degrees"] = np.nan
     for source, (lat_column, lon_column) in source_columns.items():
@@ -151,6 +156,7 @@ def analyze_target_trip_source_delta(
         chunk = rows.iloc[start : start + chunk_epochs]
         candidate_delta = chunk["candidate_delta_m"].to_numpy()
         best_delta = chunk["best_reference_source_distance_m"].to_numpy()
+        best_candidate_delta = chunk["best_candidate_source_distance_m"].to_numpy()
         record: dict[str, object] = {
             "tripId": target_trip,
             "start_epoch": int(start),
@@ -161,8 +167,10 @@ def analyze_target_trip_source_delta(
             "rows_gt_5m": int(np.count_nonzero(candidate_delta > 5.0)),
             **_score_columns(candidate_delta, "_candidate_delta"),
             **_score_columns(best_delta, "_best_reference_source_distance"),
+            **_score_columns(best_candidate_delta, "_best_candidate_source_distance"),
         }
         record.update(_count_columns("best_reference_source", chunk["best_reference_source"]))
+        record.update(_count_columns("best_candidate_source", chunk["best_candidate_source"]))
         record.update(_count_columns("selected_source", chunk["SelectedSource"].astype(str)))
         chunk_rows.append(record)
     chunk_summary = pd.DataFrame(chunk_rows)
@@ -181,7 +189,9 @@ def analyze_target_trip_source_delta(
             **_score_columns(rows["candidate_delta_m"].to_numpy(), ""),
         },
         "best_reference_source_distance": _score_columns(rows["best_reference_source_distance_m"].to_numpy(), ""),
+        "best_candidate_source_distance": _score_columns(rows["best_candidate_source_distance_m"].to_numpy(), ""),
         "best_reference_source_counts": rows["best_reference_source"].value_counts().sort_index().to_dict(),
+        "best_candidate_source_counts": rows["best_candidate_source"].value_counts().sort_index().to_dict(),
         "selected_source_counts": rows["SelectedSource"].astype(str).value_counts().sort_index().to_dict(),
         "top_chunks_by_candidate_p95_delta": (
             chunk_summary.sort_values(
@@ -202,6 +212,8 @@ def analyze_target_trip_source_delta(
                     "SelectedSource",
                     "best_reference_source",
                     "best_reference_source_distance_m",
+                    "best_candidate_source",
+                    "best_candidate_source_distance_m",
                 ]
             ]
             .to_dict(orient="records")
@@ -215,6 +227,8 @@ def analyze_target_trip_source_delta(
         "SelectedSource",
         "best_reference_source",
         "best_reference_source_distance_m",
+        "best_candidate_source",
+        "best_candidate_source_distance_m",
         "best_reference_source_latitude_degrees",
         "best_reference_source_longitude_degrees",
         "LatitudeDegrees_reference",
@@ -223,6 +237,7 @@ def analyze_target_trip_source_delta(
         "LongitudeDegrees_candidate",
     ]
     output_columns.extend(distance_columns)
+    output_columns.extend(candidate_distance_columns)
     return rows[output_columns], chunk_summary, summary
 
 
