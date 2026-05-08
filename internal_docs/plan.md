@@ -166,6 +166,12 @@ final submission 再現:
         - Submitted `submission_mtv700_pixel4xl_ref_baseline_le1p0m_20260509.csv` (`733` rows): Kaggle `3.687/4.710`.
         - Submitted `submission_mtv700_pixel4xl_local_patch_selected_le1p0m_20260509.csv` (`37` rows): Kaggle `3.686/4.710`.
         - Interpretation: the `pixel4xl` public regression is caused by the broad early/mid `ref:baseline` transfer. The late `local_patch:selected` subset is safe but does not improve beyond the current `3.686/4.710` floor.
+      - LAX-X source/window narrowing: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/laxx_ref2_source_window_candidates_20260509/summary.json`
+        - Built MTV700 stacks from the LAX-X materialized schedule by source (`ref2:selected`, `ref:baseline`, `ref2:raw_wls`), epoch window, and sub-meter delta threshold against the private-safe base.
+        - Submitted `submission_mtv700_laxx_ref2selected_e800_1400_le0p75m_20260509.csv` (`331` rows): Kaggle `3.686/4.710`.
+        - Submitted `submission_mtv700_laxx_ref2_selected_le0p5m_20260509.csv` (`384` rows): Kaggle `3.686/4.710`.
+        - Submitted `submission_mtv700_laxx_all_le0p5m_20260509.csv` (`421` rows): Kaggle `3.686/4.710`.
+        - Interpretation: LAX-X sub-meter materialized rows are leaderboard-safe when stacked on MTV700, including the small `ref:baseline` `<=0.5m` subset, but they are also saturated at the current `3.686/4.710` floor. The next useful probe should move off the already-safe sub-meter LAX-X rows, either to a different phone/trip family or to an orthogonal postprocess with an independent leaderboard effect.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
