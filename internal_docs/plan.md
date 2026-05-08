@@ -44,6 +44,13 @@ final submission 再現:
   - `2020-12-11-19-30-us-ca-mtv-e/pixel4xl`: epoch `1000-1189`, p95 `0.749726m`, max `1.523208m`
 - bridge timestamp missing は12 partial-match trips / 24 rows。matched部分はすべて residual `0m`。欠損 rows は candidate fallback だと最大約 `0.391m` 程度で、p95には効いていない。
 - 次の実装方針は、submit/reproduction 用 source selector を「ref bridge tree baseline default + 上記4 tripのrow-level source schedule + LAX-X multi-bridge例外 + missing timestamp補間/保持」に寄せること。
+- `reconstruct_gsdc2023_matlab_reference_submission.py` を追加し、MATLAB/reference final CSV 再現ビルダーを独立化した。
+  - ref bridge only output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_only/summary.json`
+    - p50 `0m`, p95 `0m`, mean `0.029535m`, max `245.609123m`
+  - ref bridge + LAX-X multi-bridge override output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_laxx_multi_bridge/summary.json`
+    - p50 `0m`, p95 `0m`, mean `0.016383m`, max `5.061363m`, `rows_gt_1m=380`, `rows_gt_5m=1`
+    - LAX-X is reduced to p95 `0.871450m`, max `1.951384m`; current max is now `2021-11-30-20-59-us-ca-mtv-m/mi8` first-window residual.
+  - Next target order: `2021-11-30 mi8` source/artifact search, then `2023-05-09 sm-a505u`, then `2020-12-11 pixel4xl`, then missing `24` timestamps.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
