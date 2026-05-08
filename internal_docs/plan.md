@@ -575,10 +575,20 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - `mi8` source audit output: `matlab_submission_mi8_mtv_m_source_delta_20260509/summary.json` (ignored artifact). Overall MATLAB/reference nearest source counts are `baseline=1172`, `raw_wls=216`, `fgo=7`; nearest-source distance p95 is `0.5731125672918876m`, max `0.8570075723271451m`.
   - The `mi8` bad tail is entirely the first chunk: epochs `0-200` have candidate p95 `4.48965561567638m`, max `5.024299497771718m`; MATLAB/reference nearest source is `raw_wls=199`, `fgo=1`, while selected source is `baseline=200`. For candidate delta `>1m`, MATLAB/reference nearest source is `raw_wls=177`, `fgo=1`.
   - Interpretation for `mi8`: this is a clear first-200-epoch source schedule mismatch. An audit-only replacement of epochs `0-200` with nearest raw/FGO bridge rows should reduce that trip's p95 from `2.432442593842371m` toward the nearest-source p95 `~0.573m`.
+- Audit-only partial target patch reconstruction:
+  - Added `experiments/apply_gsdc2023_target_trip_source_patches.py` to apply row-summary source coordinates over explicit epoch ranges, writing a full patched submission and optional MATLAB/reference delta summary.
+  - Real-data audit patched the LAX-X nearest-source reconstruction with:
+    - `2022-07-12-18-37-us-ca-mtv-b/sm-a325f` epochs `0-200` from current `best_reference_source` rows (effectively current baseline in that window).
+    - `2021-11-30-20-59-us-ca-mtv-m/mi8` epochs `0-200` from current `best_reference_source` rows (raw WLS for `199` rows and FGO for `1` row).
+  - Output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_target_patch_audit_20260509/submission_with_target_source_patches.csv` and comparison output `matlab_submission_target_patch_delta_20260509/summary.json` (ignored artifacts).
+  - Full-submission delta vs MATLAB/reference improved from the LAX-X-only reconstruction mean `0.3231501712937187m`, p95 `0.430533521603983m`, max `24.20678253261115m`, `rows_gt_1m=669`, `rows_gt_5m=86` to mean `0.31067259238144235m`, p95 `0.430459786592024m`, max `24.20678253261115m`, `rows_gt_1m=312`, `rows_gt_5m=60`.
+  - `sm-a325f` after patch: p95 `0.3912312370669254m`, max `0.39124732894952036m`, `rows_gt_1m=0`, `rows_gt_5m=0` (from p95 `2.574789098663229m`, max `19.603959623859655m`, `rows_gt_1m=179`, `rows_gt_5m=25`).
+  - `2021-11-30 mi8` after patch: p95 `0.5731125672918876m`, max `0.8570075723271451m`, `rows_gt_1m=0`, `rows_gt_5m=0` (from p95 `2.432442593842371m`, max `5.024299497771718m`, `rows_gt_1m=178`, `rows_gt_5m=1`).
+  - Remaining `>1m` and `>5m` rows now come entirely from LAX-X/pixel5 (`rows_gt_1m=312`, `rows_gt_5m=60`). Phone-level top p95 after patch is back to the broad offset layer: `xiaomimi8` p95 `0.430924m`, `mi8` p95 `0.430902m`, Samsung A32 family around `0.391m`, pixel5 p95 `0.316858m` but max `24.206783m` from LAX-X.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、audit-only で `sm-a325f` epochs `0-200` を current baseline に、`2021-11-30 mi8` epochs `0-200` を nearest raw/FGO source に置換した full-submission CSV を作り、MATLAB/reference delta がどこまで下がるか確認する。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、LAX-X/pixel5 の残り `rows_gt_1m=312`, `rows_gt_5m=60` を chunk/row単位でさらに分解する。特に epochs `0-200`, `1800-2170` の nearest source residual がまだ大きく、ここが full-submission max/tail の支配要因。
 2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
