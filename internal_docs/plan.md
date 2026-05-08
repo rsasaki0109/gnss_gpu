@@ -130,6 +130,10 @@ final submission 再現:
         - `leave-one-out LAX-P`: `3.686/4.710`; `leave-one-out 2023-04-27 MTV-PE1`: `3.686/4.710`; individual removed trips do not break the score.
         - `non-LAX only`: `3.686/4.710`; `non-LAX non-SJC`: `3.686/4.710`; `MTV only`: `3.686/4.710`.
         - MTV 3-trip minimal candidate (`2021-08-17 MTV-G`, `2023-04-27 MTV-PE1`, `2023-05-23 MTV-DE1`) changes `700` rows and still scores `3.686/4.710`. Best MTV 2-trip probe (`2022-03-22 MTV-PE1` + `2023-05-23 MTV-DE1`, `572` rows) falls back to `3.687/4.710`. Current smallest confirmed public-improving/private-safe candidate is the MTV 3-trip `25-39%` window.
+      - MTV width follow-up: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_mtv_window_width_candidates_20260509/summary.json`
+        - MTV 3-trip `20-50%`: Kaggle `3.686/4.710`
+        - MTV all 4-trip `20-50%`: Kaggle `3.686/4.710`
+        - Widening the MTV window does not move the 3-decimal score beyond the 700-row MTV 3-trip `25-39%` result, so this axis appears saturated at `3.686/4.710`.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
