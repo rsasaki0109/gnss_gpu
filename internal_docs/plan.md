@@ -524,10 +524,17 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - Current Python/private-safe best remains `submission_best_pixel5_sjcr0_combo_sjcq_ebfxx_ebfzz_20260501.csv`: public `3.687`, private `4.710`.
   - CSV delta between the MATLAB reference submission and the current Python best: `71936` matched rows, `71932` rows changed above `1e-9m`, mean `1.320844m`, p95 `2.876252m`, max `640.020249m`.
   - Conclusion: Kaggle score is **not** MATLAB-reference equivalent at the final submission level. The MATLAB equivalence proof covers raw bridge/internal state/CSV sidecar artifacts used by submit-readiness gates, not byte-identical reproduction of the full MATLAB final submission or equal leaderboard score.
+- MATLAB final-submission equivalence audit:
+  - Added `experiments/audit_gsdc2023_matlab_submission_score_equivalence.py` to compare a MATLAB/reference final submission CSV against local Python-generated submission candidates by SHA, row keys, haversine deltas, and optional Kaggle score logs.
+  - Real-data audit command used `../ref/gsdc2023/results/test_parallel/20260501_0526/submission_20260501_0526.csv` as the MATLAB reference and scanned `experiments/results/source_selection_lowbaseline_submission_probe_20260430`.
+  - Output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_score_equivalence_20260508/matlab_submission_score_equivalence.summary.json` (ignored artifact).
+  - Result: `candidate_count=182`, `compared_count=182`, `byte_identical_count=0`, `submitted_score_log_count=49`.
+  - Closest existing local candidate: `pixel5_old_gated_fgo_early_raw_late_extra_candidate/submission_20260421_0555_pixel4xl_and_sm_a505u_current1450_20260423.csv`, `score_m=0.3733503726322797`, `p95_m=0.4306222271895031`, `max_m=245.83184201676735`, `changed_rows=67014`, not found in score logs.
+  - Interpretation: no existing Python-generated local submission reproduces the MATLAB/reference final CSV. Kaggle-score-level MATLAB equivalence requires a separate full-final-submission reproduction track; it is not implied by the current raw bridge/internal-state equivalence gate.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、full MATLAB submission の再現を別タスクとして定義し、まず `submission_20260501_0526.csv` と同じ final CSV を Python で出せるかを監査する。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、`submission_20260501_0526.csv` の full-final-submission reproduction track を始める。最初は closest candidate の差分を trip/phone 別に分解して、どの postprocess/patch/source が MATLAB reference と違うか特定する。
 2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
