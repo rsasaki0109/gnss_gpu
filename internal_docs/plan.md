@@ -50,7 +50,14 @@ final submission 再現:
   - ref bridge + LAX-X multi-bridge override output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_laxx_multi_bridge/summary.json`
     - p50 `0m`, p95 `0m`, mean `0.016383m`, max `5.061363m`, `rows_gt_1m=380`, `rows_gt_5m=1`
     - LAX-X is reduced to p95 `0.871450m`, max `1.951384m`; current max is now `2021-11-30-20-59-us-ca-mtv-m/mi8` first-window residual.
-  - Next target order: `2021-11-30 mi8` source/artifact search, then `2023-05-09 sm-a505u`, then `2020-12-11 pixel4xl`, then missing `24` timestamps.
+  - ref bridge + LAX-X + `2021-11-30 mi8` override output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_laxx_mi8_overrides/summary.json`
+    - p50 `0m`, p95 `1.414646e-09m`, mean `0.018744m`, max `2.492327m`, `rows_gt_1m=216`, `rows_gt_5m=0`
+    - `mi8` override uses `best_reference_source_*` coordinate columns from `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_mi8_mtv_m_source_delta_20260509/target_trip_source_delta_rows.csv`; nearest-source trip residual is p95 `0.573113m`, max `0.857008m`.
+  - `2023-05-09 sm-a505u` current-selector source delta: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_sm_a505u_current_selector_source_delta_20260509/summary.json`
+    - nearest-source distance p50 `0m`, p95 `2.024937e-08m`, max `0.432700m`; counts `baseline=2166`, `fgo=200`, `selected=18`
+  - ref bridge + LAX-X + `mi8` + `sm-a505u` override output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_laxx_mi8_sm_a505u_overrides/summary.json`
+    - p50 `0m`, p95 `1.414646e-09m`, mean `0.015764m`, max `1.951384m`, `rows_gt_1m=91`, `rows_gt_5m=0`
+    - Current residual targets: `2020-12-11-19-30-us-ca-mtv-e/pixel4xl` p95 `0.749726m`, max `1.523208m`; then remaining LAX-X/pixel5 rows p95 `0.871450m`, max `1.951384m`; then missing `24` timestamps.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 

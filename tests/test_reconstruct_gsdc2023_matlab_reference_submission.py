@@ -72,6 +72,31 @@ def test_apply_row_summary_coordinates_replaces_keyed_rows() -> None:
     assert summary["rows_by_trip"] == {"trip/a": 1}
 
 
+def test_apply_row_summary_coordinates_accepts_reference_source_columns() -> None:
+    submission = pd.DataFrame(
+        {
+            "tripId": ["trip/a"],
+            "UnixTimeMillis": [1],
+            "LatitudeDegrees": [10.0],
+            "LongitudeDegrees": [40.0],
+        },
+    )
+    rows = pd.DataFrame(
+        {
+            "tripId": ["trip/a"],
+            "UnixTimeMillis": [1],
+            "best_reference_source_latitude_degrees": [11.0],
+            "best_reference_source_longitude_degrees": [41.0],
+        },
+    )
+
+    reconstructed, summary = apply_row_summary_coordinates(submission, rows, source_label="target_trip")
+
+    assert reconstructed["LatitudeDegrees"].tolist() == [11.0]
+    assert reconstructed["LongitudeDegrees"].tolist() == [41.0]
+    assert summary["rows_replaced"] == 1
+
+
 def test_reconstruct_matlab_reference_submission_applies_bridge_and_overrides(tmp_path) -> None:
     reference = tmp_path / "reference.csv"
     candidate = tmp_path / "candidate.csv"

@@ -17,7 +17,22 @@ from experiments.analyze_gsdc2023_source_ab import compare_submissions, comparis
 
 KEY_COLUMNS = ["tripId", "UnixTimeMillis"]
 SOURCE_COORDINATE_COLUMNS = ["best_source_latitude_degrees", "best_source_longitude_degrees"]
+REFERENCE_SOURCE_COORDINATE_COLUMNS = [
+    "best_reference_source_latitude_degrees",
+    "best_reference_source_longitude_degrees",
+]
 SUBMISSION_COORDINATE_COLUMNS = ["LatitudeDegrees", "LongitudeDegrees"]
+
+
+def _coordinate_columns(row_summary: pd.DataFrame) -> list[str]:
+    if set(SOURCE_COORDINATE_COLUMNS).issubset(row_summary.columns):
+        return SOURCE_COORDINATE_COLUMNS
+    if set(REFERENCE_SOURCE_COORDINATE_COLUMNS).issubset(row_summary.columns):
+        return REFERENCE_SOURCE_COORDINATE_COLUMNS
+    raise ValueError(
+        "row summary is missing coordinate columns: expected "
+        f"{SOURCE_COORDINATE_COLUMNS} or {REFERENCE_SOURCE_COORDINATE_COLUMNS}",
+    )
 
 
 def apply_row_summary_coordinates(
@@ -26,14 +41,21 @@ def apply_row_summary_coordinates(
     *,
     source_label: str,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
-    required = set(KEY_COLUMNS + SOURCE_COORDINATE_COLUMNS)
+    coordinate_columns = _coordinate_columns(row_summary)
+    required = set(KEY_COLUMNS + coordinate_columns)
     missing = required.difference(row_summary.columns)
     if missing:
         raise ValueError(f"row summary is missing columns: {sorted(missing)}")
     if row_summary[KEY_COLUMNS].duplicated().any():
         raise ValueError("row summary contains duplicate tripId/UnixTimeMillis values")
 
-    patch = row_summary[KEY_COLUMNS + SOURCE_COORDINATE_COLUMNS].copy()
+    patch = row_summary[KEY_COLUMNS + coordinate_columns].copy()
+    patch = patch.rename(
+        columns={
+            coordinate_columns[0]: SOURCE_COORDINATE_COLUMNS[0],
+            coordinate_columns[1]: SOURCE_COORDINATE_COLUMNS[1],
+        },
+    )
     keyed_submission = submission[KEY_COLUMNS].copy()
     joined = keyed_submission.merge(patch, on=KEY_COLUMNS, how="left", validate="one_to_one")
     replace_mask = joined[SOURCE_COORDINATE_COLUMNS].notna().all(axis=1)
