@@ -100,6 +100,11 @@ final submission 再現:
     - Delta vs current private-safe best: `changed_rows_gt_0p01m=24`, `rows_gt_1m=18`, `rows_gt_5m=16`, max `21.085948m`。大きく動く行が多いため、full patch は direct transfer として棄却。
     - Threshold candidates: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/private_safe_best_missing_timestamp_threshold_patches_20260509/summary.json`
     - `<=1m` candidate は 6 rows / 2 trips のみ変更、max `0.752546m`, risky trip changed rows `0`。Kaggle submission `submission_private_safe_best_ref2_missing_timestamp_patch_le_1p0m_20260509.csv` は `public=3.687`, `private=4.710` で private-safe best と3桁 score 同等。改善は確認できないが悪化もなし。
+  - Submitted candidate delta audit: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/submitted_candidate_delta_audit_20260509/summary.json`
+    - Kaggle submissions `50` 件中、local CSV と join できた completed submissions は `49` 件。`submission_20260501_0526.csv` だけは MATLAB reference 側の外部 path なので local candidate root には未登録。
+    - public `3.685-3.686` まで下がる global/weighted candidates は private が `4.711-4.726` に悪化。現状の stable floor は `3.687/4.710`。
+    - `p3p0 alpha=0.0625` boundary check: local max delta `0.007430m`, risky trip changed rows `0` だが Kaggle は `3.687/4.711`。12 Pixel5 trips へのほぼ一様な millimeter-level shift でも private が悪化する。
+    - `p3p25 alpha=0.125` boundary check: local max delta `0.004953m`, risky trip changed rows `0` だが Kaggle は `3.687/4.711`。`p3p25 alpha=0.0625` は `3.687/4.710` なので、global blend の safe boundary はかなり狭く、3桁 public 改善には届いていない。
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
