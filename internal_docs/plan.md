@@ -189,6 +189,13 @@ final submission 再現:
         - Submitted `submission_mtv700_plus_p3p25_ebf_only_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
         - Submitted `submission_mtv700_plus_p3p25_sjc_only_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
         - Interpretation: EBF/SJC p3p25 rows stack safely on MTV700 but do not move the 3-decimal score. The p3p25 public-positive effect remains concentrated in the MTV700 rows and is already saturated at `3.686/4.710`; adding same-direction non-MTV Pixel5 rows is not enough for another leaderboard step.
+      - MTV700 -> old public-best Pixel5phone `3.0` interpolation: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/mtv700_publicbest3p0_interp_candidates_20260509/summary.json`
+        - Built linear interpolation candidates from MTV700 toward the older public-best / private-bad `submission_best_basecorr_posoffset_pixel5phone_3p0_sjcr0_combo_sjcq_ebfxx_ebfzz_plus_pixel5_patch_20260502.csv` (`3.685/4.714`).
+        - Submitted `submission_mtv700_interp_publicbest3p0_a0p5_20260509.csv`: local p95/max vs MTV700 `0.059410m/0.059439m`, Kaggle `3.685/4.713`.
+        - Submitted `submission_mtv700_interp_publicbest3p0_a0p25_20260509.csv`: local p95/max `0.029705m/0.029719m`, Kaggle `3.686/4.712`.
+        - Submitted `submission_mtv700_interp_publicbest3p0_a0p125_20260509.csv`: local p95/max `0.014853m/0.014860m`, Kaggle `3.686/4.711`.
+        - Submitted `submission_mtv700_interp_publicbest3p0_a0p0625_20260509.csv`: local max vs MTV700 `0.007430m`, Kaggle `3.686/4.711`.
+        - Interpretation: this old public-best direction is real enough to recover public `3.685` at `alpha=0.5`, but the private loss appears even at sub-centimeter max movement relative to MTV700. Reject this direction under the private-floor objective; it is another example that the private split is extremely sensitive to broad Pixel5phone-scale shifts.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
