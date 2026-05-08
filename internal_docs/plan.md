@@ -105,6 +105,13 @@ final submission 再現:
     - public `3.685-3.686` まで下がる global/weighted candidates は private が `4.711-4.726` に悪化。現状の stable floor は `3.687/4.710`。
     - `p3p0 alpha=0.0625` boundary check: local max delta `0.007430m`, risky trip changed rows `0` だが Kaggle は `3.687/4.711`。12 Pixel5 trips へのほぼ一様な millimeter-level shift でも private が悪化する。
     - `p3p25 alpha=0.125` boundary check: local max delta `0.004953m`, risky trip changed rows `0` だが Kaggle は `3.687/4.711`。`p3p25 alpha=0.0625` は `3.687/4.710` なので、global blend の safe boundary はかなり狭く、3桁 public 改善には届いていない。
+    - Safe-delta stack candidates: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/safe_delta_stack_candidates_20260509/summary.json`
+      - `p3p25 alpha=0.0625` + `LAX-P single` + `missing timestamp <=1m` stack は local max `0.752546m`, `rows_gt_1m=0`。Kaggle は `3.687/4.710`。safe 差分同士は private を壊さないが、3桁 public 改善にも届かない。
+    - Trip-weight hold boundary:
+      - `LAX-M + LAX-P` hold: Kaggle `3.686/4.711`
+      - `LAX-M + LAX-I` hold: Kaggle `3.686/4.711`
+      - `LAX-M + LAX-P + LAX-I` hold: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_trip_weight_ablation_20260509/p3p25_lax_m_p_i_hold/trip_weight_ablation_summary_20260509.json`, local changed rows `15597`, max `0.039626m`, Kaggle `3.686/4.711`
+      - Interpretation: p3p25 full-direction family can keep public at `3.686`, but LAX holds alone do not recover private to `4.710`. Next useful search is non-LAX private-negative trip isolation or a lower-alpha/partial-row version of the public-positive trips.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
