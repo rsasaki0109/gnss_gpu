@@ -97,3 +97,59 @@ def test_reproduce_matlab_reference_final_cli_writes_summary(tmp_path, capsys) -
     assert "reproduced MATLAB reference final: rows=4" in capsys.readouterr().out
     payload = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert payload["missing_bridge_timestamp_summary"]["rows"] == 1
+
+
+def test_reproduce_matlab_reference_final_cli_require_exact_passes(tmp_path) -> None:
+    reference = tmp_path / "reference.csv"
+    candidate = tmp_path / "candidate.csv"
+    bridge_root = tmp_path / "bridge"
+    output_dir = tmp_path / "out"
+    _write_submission(reference, trip_b_lat=3.0)
+    _write_submission(candidate, trip_b_lat=0.0)
+    _write_bridge_tree(bridge_root)
+
+    assert (
+        main(
+            [
+                "--reference-submission",
+                str(reference),
+                "--candidate-submission",
+                str(candidate),
+                "--bridge-root",
+                str(bridge_root),
+                "--output-dir",
+                str(output_dir),
+                "--require-exact",
+            ],
+        )
+        == 0
+    )
+
+
+def test_reproduce_matlab_reference_final_cli_require_exact_fails(tmp_path, capsys) -> None:
+    reference = tmp_path / "reference.csv"
+    candidate = tmp_path / "candidate.csv"
+    bridge_root = tmp_path / "bridge"
+    output_dir = tmp_path / "out"
+    _write_submission(reference, trip_b_lat=4.0)
+    _write_submission(candidate, trip_b_lat=0.0)
+    _write_bridge_tree(bridge_root)
+
+    assert (
+        main(
+            [
+                "--reference-submission",
+                str(reference),
+                "--candidate-submission",
+                str(candidate),
+                "--bridge-root",
+                str(bridge_root),
+                "--output-dir",
+                str(output_dir),
+                "--require-exact",
+            ],
+        )
+        == 2
+    )
+
+    assert "reconstructed submission is not numerically exact" in capsys.readouterr().err
