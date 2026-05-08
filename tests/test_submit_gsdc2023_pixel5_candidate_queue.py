@@ -10,6 +10,7 @@ import pytest
 from experiments.submit_gsdc2023_pixel5_candidate_queue import (
     PENDING_QUEUE,
     assert_matlab_equivalence_gate,
+    assert_matlab_final_reproduction_gate,
     assert_pre_submit_manifest_gate,
     assert_ready_report_consistency,
     assert_submit_risk_gate,
@@ -26,6 +27,42 @@ from experiments.submit_gsdc2023_pixel5_candidate_queue import (
     write_ready_report,
     write_submit_readiness_doc,
 )
+
+
+def _clean_matlab_final_reproduction_gate(tmp_path: Path) -> dict[str, object]:
+    summary_path = tmp_path / "matlab_final_reproduction_summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "reconstruction_summary": {
+                    "delta_vs_reference": {
+                        "rows": 71936,
+                        "changed_rows_gt_1e_9m": 0,
+                        "changed_rows_gt_0p01m": 0,
+                        "max_delta_m": 0.0,
+                    },
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "summary": str(summary_path),
+        "summary_sha256": sha256_file(summary_path),
+        "passed": True,
+        "max_delta_threshold_m": 1.0e-6,
+        "reference_submission": str(tmp_path / "reference.csv"),
+        "candidate_submission": str(tmp_path / "candidate.csv"),
+        "bridge_root": str(tmp_path / "bridge"),
+        "rows": 71936,
+        "changed_rows_gt_1e_9m": 0,
+        "changed_rows_gt_0p01m": 0,
+        "p95_delta_m": 0.0,
+        "max_delta_m": 0.0,
+        "missing_bridge_timestamp_rows": 24,
+        "missing_bridge_timestamp_trips": 12,
+        "reconstructed_submission_csv": str(tmp_path / "reconstructed.csv"),
+    }
 
 
 def test_pending_queue_prioritizes_sjc_r_then_mtv_sjc_then_lax_ebf() -> None:
@@ -336,6 +373,75 @@ def test_matlab_equivalence_gate_can_be_required_from_pre_submit_manifest(tmp_pa
         assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_equivalence=True)
 
 
+def test_matlab_final_reproduction_gate_can_be_required_from_pre_submit_manifest(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    output = tmp_path / candidate / "candidate.csv"
+    output.parent.mkdir(parents=True)
+    output.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    manifest = {
+        "risk_report": {"candidate_actionable_risky_chunks": 0},
+        "candidates": [
+            {
+                "candidate": candidate,
+                "output": str(output),
+                "output_sha256": sha256_file(output),
+                "pixel6pro_scale": 0.0,
+                "risk_candidate_actionable_chunks": 0,
+            },
+        ],
+    }
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="missing matlab_final_reproduction_gate"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_final_reproduction=True)
+
+    manifest["matlab_final_reproduction_gate"] = _clean_matlab_final_reproduction_gate(tmp_path)
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert (
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_final_reproduction=True)[
+            "matlab_final_reproduction_gate"
+        ]["max_delta_m"]
+        == 0.0
+    )
+
+    manifest["matlab_final_reproduction_gate"]["max_delta_m"] = 2.0e-6
+    manifest["matlab_final_reproduction_gate"]["passed"] = False
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(SystemExit, match="passed=false"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_final_reproduction=True)
+
+
+def test_matlab_final_reproduction_gate_rejects_delta_failures(tmp_path) -> None:
+    clean = {"matlab_final_reproduction_gate": _clean_matlab_final_reproduction_gate(tmp_path)}
+    assert assert_matlab_final_reproduction_gate(clean)["rows"] == 71936
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_final_reproduction_gate"]["changed_rows_gt_1e_9m"] = 1
+    with pytest.raises(SystemExit, match="changed rows are nonzero"):
+        assert_matlab_final_reproduction_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_final_reproduction_gate"]["max_delta_m"] = 2.0e-6
+    with pytest.raises(SystemExit, match="max delta failed"):
+        assert_matlab_final_reproduction_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_final_reproduction_gate"]["summary_sha256"] = "bad"
+    with pytest.raises(SystemExit, match="summary sha256 mismatch"):
+        assert_matlab_final_reproduction_gate(dirty)
+
+
 def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
     clean = {
         "matlab_equivalence_gate": {
@@ -553,6 +659,7 @@ def test_build_and_write_ready_report(tmp_path) -> None:
     path.parent.mkdir(parents=True)
     path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
     report_path = tmp_path / "ready_report.json"
+    matlab_final_gate = _clean_matlab_final_reproduction_gate(tmp_path)
 
     report = build_ready_report(
         output_dir=tmp_path,
@@ -560,7 +667,10 @@ def test_build_and_write_ready_report(tmp_path) -> None:
         groups=["p6p0_clean_sjc_r_scale_sweep"],
         queue=queue,
         risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
-        pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
+        pre_submit_manifest={
+            "risk_report": {"candidate_actionable_risky_chunks": 0},
+            "matlab_final_reproduction_gate": matlab_final_gate,
+        },
         allow_risk=False,
     )
     write_ready_report(report_path, report)
@@ -571,6 +681,7 @@ def test_build_and_write_ready_report(tmp_path) -> None:
     assert payload["groups"] == ["p6p0_clean_sjc_r_scale_sweep"]
     assert payload["risk_report"]["candidate_actionable_risky_chunks"] == 0
     assert payload["pre_submit_manifest"]["present"] is True
+    assert payload["pre_submit_manifest"]["matlab_final_reproduction_gate"]["max_delta_m"] == 0.0
     assert payload["candidates"][0]["candidate"] == queue[0].candidate
     assert payload["candidates"][0]["sha256"] == sha256_file(path)
     assert csv_rows[0]["candidate"] == queue[0].candidate
@@ -976,6 +1087,7 @@ def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
                     "summary": str(tmp_path / "matlab_summary.json"),
                     "summary_sha256": "abc123",
                 },
+                "matlab_final_reproduction_gate": _clean_matlab_final_reproduction_gate(tmp_path),
                 "risk_report": {"candidate_actionable_risky_chunks": 0},
             },
         ),
@@ -1019,7 +1131,9 @@ def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
     assert f"--build-summary {tmp_path / 'build_summary.json'}" in doc
     assert "--previous-tag old" in doc
     assert f"--matlab-equivalence-summary {tmp_path / 'matlab_summary.json'}" in doc
+    assert f"--matlab-final-reproduction-summary {tmp_path / 'matlab_final_reproduction_summary.json'}" in doc
     assert "--require-matlab-equivalence" in doc
+    assert "--require-matlab-final-reproduction" in doc
     assert "--cached-summary" in doc
     assert "--default-writer-regression-manifest" in doc
     assert "## Validate Phone Data Artifact Compatibility" in doc
@@ -1031,6 +1145,10 @@ def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
     assert "--fail-on-duplicate-sha" in doc
     assert f"--duplicate-sha-root {tmp_path}" in doc
     assert "MATLAB equivalence: `matlab_equivalent`" in doc
+    assert "## Validate MATLAB Final Reproduction" in doc
+    assert "reproduce_gsdc2023_matlab_reference_final.py" in doc
+    assert "--require-exact" in doc
+    assert "MATLAB final reproduction max delta: `0 m`" in doc
     assert "Ready candidates: `1`" in doc
     assert candidate in doc
 

@@ -475,17 +475,70 @@ def assert_matlab_equivalence_gate(manifest: dict[str, object], *, require: bool
     return gate
 
 
+def assert_matlab_final_reproduction_gate(
+    manifest: dict[str, object],
+    *,
+    require: bool = False,
+) -> dict[str, object] | None:
+    gate = manifest.get("matlab_final_reproduction_gate")
+    if gate is None:
+        if require:
+            raise SystemExit("pre-submit manifest is missing matlab_final_reproduction_gate")
+        return None
+    if not isinstance(gate, dict):
+        raise SystemExit("pre-submit manifest matlab_final_reproduction_gate must be an object")
+    if not bool(gate.get("passed", False)):
+        raise SystemExit("MATLAB final reproduction gate failed: passed=false")
+    rows = _as_int(gate.get("rows"), -1)
+    if rows <= 0:
+        raise SystemExit(f"MATLAB final reproduction gate failed: rows={rows}")
+    max_delta = _as_float(gate.get("max_delta_m"), float("inf"))
+    threshold = _as_float(gate.get("max_delta_threshold_m"), 0.0)
+    if threshold <= 0.0:
+        raise SystemExit(f"MATLAB final reproduction gate failed: invalid max_delta_threshold_m={threshold}")
+    if max_delta > threshold:
+        raise SystemExit(f"MATLAB final reproduction max delta failed: {max_delta} > {threshold}")
+    changed_rows_gt_1e_9m = _as_int(gate.get("changed_rows_gt_1e_9m"), -1)
+    changed_rows_gt_0p01m = _as_int(gate.get("changed_rows_gt_0p01m"), -1)
+    if changed_rows_gt_1e_9m != 0 or changed_rows_gt_0p01m != 0:
+        raise SystemExit(
+            "MATLAB final reproduction changed rows are nonzero: "
+            f"gt_1e_9m={changed_rows_gt_1e_9m}, gt_0p01m={changed_rows_gt_0p01m}",
+        )
+    summary_path_raw = gate.get("summary")
+    summary_sha256 = gate.get("summary_sha256")
+    if isinstance(summary_path_raw, str) and summary_path_raw and isinstance(summary_sha256, str) and summary_sha256:
+        summary_path = Path(summary_path_raw).expanduser()
+        if not summary_path.is_file():
+            raise SystemExit(f"MATLAB final reproduction summary is missing: {summary_path}")
+        actual_sha256 = sha256_file(summary_path)
+        if actual_sha256 != summary_sha256:
+            raise SystemExit(
+                "MATLAB final reproduction summary sha256 mismatch: "
+                f"{actual_sha256} != {summary_sha256}",
+            )
+    else:
+        raise SystemExit("MATLAB final reproduction gate failed: missing summary or summary_sha256")
+    for key in ("reference_submission", "candidate_submission", "bridge_root", "reconstructed_submission_csv"):
+        value = gate.get(key)
+        if not isinstance(value, str) or not value:
+            raise SystemExit(f"MATLAB final reproduction gate failed: missing {key}")
+    return gate
+
+
 def assert_pre_submit_manifest_gate(
     output_dir: Path,
     candidates: list[str],
     *,
     require_matlab_equivalence: bool = False,
+    require_matlab_final_reproduction: bool = False,
 ) -> dict[str, object]:
     selected = set(candidates)
     manifest = pre_submit_manifest_payload(output_dir)
     if manifest is None:
         raise SystemExit(f"missing pre-submit manifest in {output_dir / PRE_SUBMIT_MANIFEST}")
     assert_matlab_equivalence_gate(manifest, require=require_matlab_equivalence)
+    assert_matlab_final_reproduction_gate(manifest, require=require_matlab_final_reproduction)
 
     manifest_candidates = manifest.get("candidates")
     if not isinstance(manifest_candidates, list):
@@ -616,9 +669,11 @@ def build_ready_report(
     duplicate_summary = _attach_duplicate_sha_matches(candidates, duplicate_roots)
     manifest_risk: object | None = None
     matlab_equivalence_gate: object | None = None
+    matlab_final_reproduction_gate: object | None = None
     if isinstance(pre_submit_manifest, dict):
         manifest_risk = pre_submit_manifest.get("risk_report")
         matlab_equivalence_gate = pre_submit_manifest.get("matlab_equivalence_gate")
+        matlab_final_reproduction_gate = pre_submit_manifest.get("matlab_final_reproduction_gate")
     return {
         "output_dir": str(output_dir),
         "tag": tag,
@@ -635,6 +690,7 @@ def build_ready_report(
             "present": pre_submit_manifest is not None,
             "risk_report": manifest_risk,
             "matlab_equivalence_gate": matlab_equivalence_gate,
+            "matlab_final_reproduction_gate": matlab_final_reproduction_gate,
         },
     }
 
@@ -719,7 +775,9 @@ def _format_prepare_command(
     ready_report_path: Path,
     build_summary_path: object | None,
     matlab_equivalence_summary: object | None,
+    matlab_final_reproduction_summary: object | None,
     require_matlab_equivalence: bool,
+    require_matlab_final_reproduction: bool,
     previous_output_dir: Path | None,
     previous_tag: str,
     skip_missing: bool,
@@ -739,8 +797,13 @@ def _format_prepare_command(
     matlab_summary_cli_path = _cli_path(matlab_equivalence_summary)
     if matlab_summary_cli_path is not None:
         args.extend(["--matlab-equivalence-summary", matlab_summary_cli_path])
+    matlab_final_summary_cli_path = _cli_path(matlab_final_reproduction_summary)
+    if matlab_final_summary_cli_path is not None:
+        args.extend(["--matlab-final-reproduction-summary", matlab_final_summary_cli_path])
     if require_matlab_equivalence:
         args.append("--require-matlab-equivalence")
+    if require_matlab_final_reproduction:
+        args.append("--require-matlab-final-reproduction")
     for root in duplicate_sha_roots or []:
         args.extend(["--duplicate-sha-root", str(root)])
     if fail_on_duplicate_sha:
@@ -750,7 +813,12 @@ def _format_prepare_command(
     entries: list[str] = []
     i = 0
     while i < len(args):
-        if args[i] in {"--require-matlab-equivalence", "--fail-on-duplicate-sha", "--skip-missing"}:
+        if args[i] in {
+            "--require-matlab-equivalence",
+            "--require-matlab-final-reproduction",
+            "--fail-on-duplicate-sha",
+            "--skip-missing",
+        }:
             entries.append(f"  {args[i]}")
             i += 1
             continue
@@ -794,6 +862,32 @@ def _format_phone_data_artifact_compatibility_command(summary_path: object | Non
     return "\n".join(lines)
 
 
+def _format_matlab_final_reproduction_command(matlab_final_reproduction: dict[str, object]) -> str | None:
+    summary_cli_path = _cli_path(matlab_final_reproduction.get("summary"))
+    reference_submission = _cli_path(matlab_final_reproduction.get("reference_submission"))
+    candidate_submission = _cli_path(matlab_final_reproduction.get("candidate_submission"))
+    bridge_root = _cli_path(matlab_final_reproduction.get("bridge_root"))
+    if (
+        summary_cli_path is None
+        or reference_submission is None
+        or candidate_submission is None
+        or bridge_root is None
+    ):
+        return None
+    output_dir = str(Path(summary_cli_path).parent)
+    max_delta = _as_float(matlab_final_reproduction.get("max_delta_threshold_m"), 1.0e-6)
+    lines = [
+        "PYTHONPATH=.:python python3 experiments/reproduce_gsdc2023_matlab_reference_final.py \\",
+        f"  --reference-submission {shlex.quote(reference_submission)} \\",
+        f"  --candidate-submission {shlex.quote(candidate_submission)} \\",
+        f"  --bridge-root {shlex.quote(bridge_root)} \\",
+        f"  --output-dir {shlex.quote(output_dir)} \\",
+        f"  --max-delta-m {max_delta:g} \\",
+        "  --require-exact",
+    ]
+    return "\n".join(lines)
+
+
 def _report_duplicate_sha_roots(report: dict[str, object], fallback_roots: list[Path] | None) -> list[Path]:
     roots = report.get("duplicate_sha_roots")
     if isinstance(roots, list) and roots:
@@ -813,6 +907,7 @@ def _format_duplicate_sha_check_ready_command(
     groups: list[str] | None,
     duplicate_sha_roots: list[Path],
     require_matlab_equivalence: bool,
+    require_matlab_final_reproduction: bool,
     skip_missing: bool,
 ) -> str:
     args = ["--output-dir", str(output_dir), "--tag", tag]
@@ -821,6 +916,8 @@ def _format_duplicate_sha_check_ready_command(
     args.append("--check-ready")
     if require_matlab_equivalence:
         args.append("--require-matlab-equivalence")
+    if require_matlab_final_reproduction:
+        args.append("--require-matlab-final-reproduction")
     for root in duplicate_sha_roots:
         args.extend(["--duplicate-sha-root", str(root)])
     args.append("--fail-on-duplicate-sha")
@@ -829,7 +926,13 @@ def _format_duplicate_sha_check_ready_command(
     entries: list[str] = []
     i = 0
     while i < len(args):
-        if args[i] in {"--check-ready", "--require-matlab-equivalence", "--fail-on-duplicate-sha", "--skip-missing"}:
+        if args[i] in {
+            "--check-ready",
+            "--require-matlab-equivalence",
+            "--require-matlab-final-reproduction",
+            "--fail-on-duplicate-sha",
+            "--skip-missing",
+        }:
             entries.append(f"  {args[i]}")
             i += 1
             continue
@@ -850,6 +953,7 @@ def _duplicate_sha_guard_lines(
     duplicate_sha_roots: list[Path],
     duplicate_sha_match_count: int,
     require_matlab_equivalence: bool,
+    require_matlab_final_reproduction: bool,
     skip_missing: bool,
 ) -> list[str]:
     if not duplicate_sha_roots:
@@ -865,6 +969,7 @@ def _duplicate_sha_guard_lines(
         groups=groups,
         duplicate_sha_roots=duplicate_sha_roots,
         require_matlab_equivalence=require_matlab_equivalence,
+        require_matlab_final_reproduction=require_matlab_final_reproduction,
         skip_missing=skip_missing,
     )
     expected = (
@@ -914,6 +1019,8 @@ def write_submit_readiness_doc(
     manifest_risk = manifest_risk if isinstance(manifest_risk, dict) else {}
     matlab_equivalence = manifest.get("matlab_equivalence_gate")
     matlab_equivalence = matlab_equivalence if isinstance(matlab_equivalence, dict) else {}
+    matlab_final_reproduction = manifest.get("matlab_final_reproduction_gate")
+    matlab_final_reproduction = matlab_final_reproduction if isinstance(matlab_final_reproduction, dict) else {}
     report_risk = report.get("risk_report")
     report_risk = report_risk if isinstance(report_risk, dict) else {}
     max_changed = max((_as_int(row.get("input_changed_rows")) for row in trip_rows), default=0)
@@ -939,7 +1046,9 @@ def write_submit_readiness_doc(
         ready_report_path=ready_report_path,
         build_summary_path=manifest.get("build_summary"),
         matlab_equivalence_summary=matlab_equivalence.get("summary"),
+        matlab_final_reproduction_summary=matlab_final_reproduction.get("summary"),
         require_matlab_equivalence=bool(matlab_equivalence),
+        require_matlab_final_reproduction=bool(matlab_final_reproduction),
         previous_output_dir=previous_output_dir,
         previous_tag=previous_tag,
         skip_missing=skip_missing,
@@ -976,6 +1085,21 @@ def write_submit_readiness_doc(
         if phone_data_artifact_command is not None
         else []
     )
+    matlab_final_command = _format_matlab_final_reproduction_command(matlab_final_reproduction)
+    matlab_final_lines = (
+        [
+            "## Validate MATLAB Final Reproduction",
+            "",
+            "Use this to rerun the end-to-end reconstruction and fail if the final CSV differs from the MATLAB reference beyond the exact threshold.",
+            "",
+            "```bash",
+            matlab_final_command,
+            "```",
+            "",
+        ]
+        if matlab_final_command is not None
+        else []
+    )
     duplicate_guard_lines = _duplicate_sha_guard_lines(
         ready_report_path=ready_report_path,
         output_dir=output_dir,
@@ -984,6 +1108,7 @@ def write_submit_readiness_doc(
         duplicate_sha_roots=duplicate_guard_roots,
         duplicate_sha_match_count=duplicate_sha_match_count,
         require_matlab_equivalence=bool(matlab_equivalence),
+        require_matlab_final_reproduction=bool(matlab_final_reproduction),
         skip_missing=skip_missing,
     )
     audit_command = (
@@ -1024,6 +1149,7 @@ def write_submit_readiness_doc(
                 "",
                 *cached_equivalence_lines,
                 *phone_data_artifact_lines,
+                *matlab_final_lines,
                 *duplicate_guard_lines,
                 "## Audit Only",
                 "",
@@ -1057,6 +1183,7 @@ def write_submit_readiness_doc(
                 f"- Max risky Pixel6Pro input changed rows: `{max_changed}`",
                 f"- Max risky Pixel6Pro input delta: `{max_delta:.1f} m`",
                 f"- MATLAB equivalence: `{matlab_equivalence.get('equivalence_claim', 'not recorded')}`",
+                f"- MATLAB final reproduction max delta: `{_as_float(matlab_final_reproduction.get('max_delta_m')):.6g} m`",
                 f"- Cached MATLAB equivalence validation: `{cached_validation_label}`",
                 f"- Duplicate SHA candidates: `{duplicate_sha_candidate_count}`",
                 f"- Duplicate SHA matches: `{duplicate_sha_match_count}`",
@@ -1240,7 +1367,9 @@ def prepare_ready_report(
     previous_tag: str = "20260501",
     risky_trips: tuple[str, ...] = DEFAULT_RISKY_TRIPS,
     matlab_equivalence_summary: Path | None = None,
+    matlab_final_reproduction_summary: Path | None = None,
     require_matlab_equivalence: bool = False,
+    require_matlab_final_reproduction: bool = False,
     skip_missing: bool = False,
     allow_risk: bool = False,
     duplicate_sha_roots: list[Path] | None = None,
@@ -1254,6 +1383,7 @@ def prepare_ready_report(
         previous_tag=previous_tag,
         risky_trips=risky_trips,
         matlab_equivalence_summary=matlab_equivalence_summary,
+        matlab_final_reproduction_summary=matlab_final_reproduction_summary,
     )
     queue = selected_queue(set(groups) if groups else None)
     ready_queue = existing_queue_items(queue, output_dir, tag, skip_missing=skip_missing)
@@ -1265,6 +1395,7 @@ def prepare_ready_report(
             output_dir,
             pre_submit_candidates,
             require_matlab_equivalence=require_matlab_equivalence,
+            require_matlab_final_reproduction=require_matlab_final_reproduction,
         )
     if ready_queue:
         risk_report = assert_submit_risk_gate(
@@ -1319,10 +1450,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--previous-tag", default="20260501")
     parser.add_argument("--risky-trip", action="append", dest="risky_trips")
     parser.add_argument("--matlab-equivalence-summary", type=Path)
+    parser.add_argument("--matlab-final-reproduction-summary", type=Path)
     parser.add_argument(
         "--require-matlab-equivalence",
         action="store_true",
         help="require a passing MATLAB equivalence summary in the pre-submit manifest for P6P0 candidates",
+    )
+    parser.add_argument(
+        "--require-matlab-final-reproduction",
+        action="store_true",
+        help="require a passing MATLAB final reproduction summary in the pre-submit manifest for P6P0 candidates",
     )
     parser.add_argument("--skip-missing", action="store_true", help="skip candidates whose CSVs do not exist")
     parser.add_argument(
@@ -1360,7 +1497,9 @@ def main(argv: list[str] | None = None) -> int:
             previous_tag=args.previous_tag,
             risky_trips=tuple(args.risky_trips or DEFAULT_RISKY_TRIPS),
             matlab_equivalence_summary=args.matlab_equivalence_summary,
+            matlab_final_reproduction_summary=args.matlab_final_reproduction_summary,
             require_matlab_equivalence=args.require_matlab_equivalence,
+            require_matlab_final_reproduction=args.require_matlab_final_reproduction,
             skip_missing=args.skip_missing,
             allow_risk=args.allow_risk,
             duplicate_sha_roots=args.duplicate_sha_roots,
@@ -1381,6 +1520,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.output_dir,
                 pre_submit_candidates,
                 require_matlab_equivalence=args.require_matlab_equivalence,
+                require_matlab_final_reproduction=args.require_matlab_final_reproduction,
             )
         if ready_queue:
             risk_report = assert_submit_risk_gate(

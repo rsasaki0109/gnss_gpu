@@ -283,3 +283,78 @@ def test_build_pre_submit_manifest_records_matlab_equivalence_gate(tmp_path) -> 
     assert gate["cached_summary_validation_mismatch_count"] == 0
     assert gate["cached_summary_validation_mismatches"] == []
     assert gate["summary_sha256"]
+
+
+def test_build_pre_submit_manifest_records_matlab_final_reproduction_gate(tmp_path) -> None:
+    base = _base_submission()
+    candidate_dir = tmp_path / "out" / CANDIDATE
+    candidate_path = candidate_dir / f"submission_best_basecorr_posoffset_{CANDIDATE}_plus_pixel5_patch_test.csv"
+    base_path = tmp_path / "base.csv"
+    build_summary_path = tmp_path / "out" / "build_summary.json"
+    summary_path = tmp_path / "matlab_final_reproduction_summary.json"
+    base.to_csv(base_path, index=False)
+    candidate_dir.mkdir(parents=True)
+    base.to_csv(candidate_path, index=False)
+    build_summary_path.write_text(
+        json.dumps(
+            {
+                "input": str(base_path),
+                "pr_proxy_risk_report": {"enabled": True, "candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": CANDIDATE,
+                        "output": str(candidate_path),
+                        "effective_phone_scales": {"pixel6pro": 0.0},
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    summary_path.write_text(
+        json.dumps(
+            {
+                "reference_submission": "ref.csv",
+                "candidate_submission": "candidate.csv",
+                "bridge_root": "bridge",
+                "missing_bridge_timestamp_summary": {
+                    "rows": 24,
+                    "trips": 12,
+                    "materialized_source_counts": {"bridge": 24},
+                },
+                "reconstruction_summary": {
+                    "delta_vs_reference": {
+                        "rows": 71936,
+                        "changed_rows_gt_1e_9m": 0,
+                        "changed_rows_gt_0p01m": 0,
+                        "mean_delta_m": 0.0,
+                        "p50_delta_m": 0.0,
+                        "p95_delta_m": 0.0,
+                        "max_delta_m": 0.0,
+                    },
+                },
+                "missing_bridge_timestamp_rows_csv": "missing.csv",
+                "reconstructed_submission_csv": "reconstructed.csv",
+                "reconstruction_summary_json": "reconstruction_summary.json",
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    manifest = build_pre_submit_manifest(
+        build_summary_path,
+        risky_trips=(RISKY_TRIP,),
+        matlab_final_reproduction_summary=summary_path,
+    )
+
+    gate = manifest["matlab_final_reproduction_gate"]
+    assert gate["passed"] is True
+    assert gate["max_delta_threshold_m"] == 1e-6
+    assert gate["rows"] == 71936
+    assert gate["changed_rows_gt_1e_9m"] == 0
+    assert gate["changed_rows_gt_0p01m"] == 0
+    assert gate["max_delta_m"] == 0.0
+    assert gate["missing_bridge_timestamp_rows"] == 24
+    assert gate["missing_bridge_timestamp_trips"] == 12
+    assert gate["missing_bridge_timestamp_materialized_source_counts"] == {"bridge": 24}
+    assert gate["summary_sha256"]

@@ -815,12 +815,20 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - Overall matched-row best-source residual is p50 `0m`, p95 `0m`, mean `0.029432532787553506m`, max `245.60912280842763m`, with `rows_gt_1m=445`, `rows_gt_5m=27`.
   - Only four fully matched trips show nonzero p95 against the reference bridge: `2021-11-30 mi8` p95 `2.2958334048136635m`, LAX-X/pixel5 p95 `1.0848493978416838m`, `2023-05-09 sm-a505u` p95 `1.0147935942947024m`, and `2020-12-11 pixel4xl` p95 `0.7497261277872788m`. Most other matched trips are exactly represented by `ref:baseline`.
   - Interpretation: the remaining `0.39-0.43m` full-submission layer is not a mysterious MATLAB offset. The MATLAB/reference final CSV is mostly already represented by the reference `bridge_positions.csv`; the closest Python candidate differs because it used older/different artifacts and phone/trip offsets. Reproduction should now switch from score tuning to deterministic artifact/source selection against the reference bridge tree, then handle the four nonzero-p95 trips plus 24 missing timestamp rows.
+- MATLAB final reproduction gate:
+  - Added `experiments/reproduce_gsdc2023_matlab_reference_final.py --require-exact --max-delta-m` so full final-submission reconstruction fails closed if the reconstructed CSV differs from the MATLAB/reference final CSV.
+  - Real-data exact reproduction command passed: `rows=71936`, `p95=0m`, `max=0m`, `missing_rows=24`.
+  - `build_gsdc2023_pre_submit_manifest.py` now records a `matlab_final_reproduction_gate` from that summary, including `summary_sha256`, reference/candidate/bridge paths, missing timestamp row counts, `changed_rows_gt_1e_9m`, `changed_rows_gt_0p01m`, `max_delta_m`, and the `1e-6m` threshold.
+  - `submit_gsdc2023_pixel5_candidate_queue.py` now supports `--matlab-final-reproduction-summary` and `--require-matlab-final-reproduction`; `check-ready`, `submit`, `prepare-ready-report`, ready-report JSON, and `submit_readiness.md` all carry the gate.
+  - Readiness docs now emit a `Validate MATLAB Final Reproduction` command that reruns `reproduce_gsdc2023_matlab_reference_final.py --require-exact` from the recorded summary paths.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py tests/test_reproduce_gsdc2023_matlab_reference_final.py` => `34 passed`; ruff pass.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、reference `bridge_positions.csv` tree を deterministic artifact/source schedule として再現する。次は all-trip audit の 4 nonzero-p95 trips (`2021-11-30 mi8`, LAX-X/pixel5, `2023-05-09 sm-a505u`, `2020-12-11 pixel4xl`) と 24 missing timestamp rowsを個別に詰め、残り trip は `ref:baseline` で final CSV を再構成できることを確認する。
-2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
-3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
+1. PR #55 の最新 ready artifact を再生成するなら、既存 `--matlab-equivalence-summary` に加えて `--matlab-final-reproduction-summary experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_final_reproduction_require_exact_20260509/summary.json --require-matlab-final-reproduction` を付ける。
+2. 「Kaggle score まで MATLAB と同等」をさらに詰めるなら、deterministic artifact/source schedule を final reconstruction command の内側へ固定し、reference `bridge_positions.csv` と 24 missing timestamp rowsを再現する最短パスを維持する。
+3. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
+4. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
 2026-05-05 P6P0 clean Kaggle submit:
 

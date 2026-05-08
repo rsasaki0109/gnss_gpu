@@ -19,6 +19,7 @@ from experiments.audit_gsdc2023_matlab_equivalence_gate import (
     cached_summary_mismatches,
 )
 from experiments.gsdc2023_raw_bridge import DEFAULT_ROOT as DEFAULT_GSDC2023_DATA_ROOT
+from experiments.reproduce_gsdc2023_matlab_reference_final import DEFAULT_MAX_DELTA_M
 from experiments.smooth_gsdc2023_submission import gsdc_score_m, haversine_m
 
 
@@ -331,6 +332,68 @@ def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
     }
 
 
+def _int_or_default(value: object, default: int) -> int:
+    try:
+        return int(float(value if value is not None else default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _float_or_default(value: object, default: float) -> float:
+    try:
+        return float(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _matlab_final_reproduction_manifest(
+    summary_path: Path,
+    *,
+    max_delta_m: float = DEFAULT_MAX_DELTA_M,
+) -> dict[str, Any]:
+    summary_path = summary_path.expanduser().resolve()
+    payload = _read_json(summary_path)
+    missing_summary = payload.get("missing_bridge_timestamp_summary")
+    missing_summary = missing_summary if isinstance(missing_summary, dict) else {}
+    reconstruction_summary = payload.get("reconstruction_summary")
+    reconstruction_summary = reconstruction_summary if isinstance(reconstruction_summary, dict) else {}
+    delta = reconstruction_summary.get("delta_vs_reference")
+    delta = delta if isinstance(delta, dict) else {}
+
+    rows = _int_or_default(delta.get("rows"), -1)
+    changed_rows_gt_1e_9m = _int_or_default(delta.get("changed_rows_gt_1e_9m"), -1)
+    changed_rows_gt_0p01m = _int_or_default(delta.get("changed_rows_gt_0p01m"), -1)
+    max_delta = _float_or_default(delta.get("max_delta_m"), float("inf"))
+    passed = (
+        rows > 0
+        and changed_rows_gt_1e_9m == 0
+        and changed_rows_gt_0p01m == 0
+        and max_delta <= max_delta_m
+    )
+    return {
+        "summary": str(summary_path),
+        "summary_sha256": sha256_file(summary_path),
+        "passed": passed,
+        "max_delta_threshold_m": max_delta_m,
+        "reference_submission": payload.get("reference_submission"),
+        "candidate_submission": payload.get("candidate_submission"),
+        "bridge_root": payload.get("bridge_root"),
+        "missing_bridge_timestamp_rows": _int_or_default(missing_summary.get("rows"), 0),
+        "missing_bridge_timestamp_trips": _int_or_default(missing_summary.get("trips"), 0),
+        "missing_bridge_timestamp_materialized_source_counts": missing_summary.get("materialized_source_counts", {}),
+        "rows": rows,
+        "changed_rows_gt_1e_9m": changed_rows_gt_1e_9m,
+        "changed_rows_gt_0p01m": changed_rows_gt_0p01m,
+        "mean_delta_m": _float_or_default(delta.get("mean_delta_m"), float("inf")),
+        "p50_delta_m": _float_or_default(delta.get("p50_delta_m"), float("inf")),
+        "p95_delta_m": _float_or_default(delta.get("p95_delta_m"), float("inf")),
+        "max_delta_m": max_delta,
+        "missing_bridge_timestamp_rows_csv": payload.get("missing_bridge_timestamp_rows_csv"),
+        "reconstructed_submission_csv": payload.get("reconstructed_submission_csv"),
+        "reconstruction_summary_json": payload.get("reconstruction_summary_json"),
+    }
+
+
 def _cached_summary_validation(payload: dict[str, Any]) -> dict[str, Any]:
     required_scope_fields = (
         "data_root",
@@ -399,6 +462,7 @@ def build_pre_submit_manifest(
     previous_tag: str = "20260501",
     risky_trips: tuple[str, ...] = DEFAULT_RISKY_TRIPS,
     matlab_equivalence_summary: Path | None = None,
+    matlab_final_reproduction_summary: Path | None = None,
 ) -> dict[str, Any]:
     build_summary_path = build_summary_path.expanduser().resolve()
     build_summary = _read_json(build_summary_path)
@@ -420,6 +484,11 @@ def build_pre_submit_manifest(
     risk_report = risk_report if isinstance(risk_report, dict) else {"enabled": False}
     matlab_equivalence_gate = (
         _matlab_equivalence_manifest(matlab_equivalence_summary) if matlab_equivalence_summary is not None else None
+    )
+    matlab_final_reproduction_gate = (
+        _matlab_final_reproduction_manifest(matlab_final_reproduction_summary)
+        if matlab_final_reproduction_summary is not None
+        else None
     )
     candidate_rows: list[dict[str, Any]] = []
     trip_rows: list[dict[str, Any]] = []
@@ -493,6 +562,7 @@ def build_pre_submit_manifest(
             "candidate_actionable_by_candidate": risk_report.get("candidate_actionable_by_candidate", {}),
         },
         "matlab_equivalence_gate": matlab_equivalence_gate,
+        "matlab_final_reproduction_gate": matlab_final_reproduction_gate,
         "candidate_manifest_csv": str(candidate_csv),
         "trip_delta_checks_csv": str(trip_csv),
         "candidates": candidate_rows,
@@ -512,6 +582,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--previous-tag", default="20260501")
     parser.add_argument("--risky-trip", action="append", dest="risky_trips")
     parser.add_argument("--matlab-equivalence-summary", type=Path)
+    parser.add_argument("--matlab-final-reproduction-summary", type=Path)
     args = parser.parse_args(argv)
 
     build_pre_submit_manifest(
@@ -521,6 +592,7 @@ def main(argv: list[str] | None = None) -> int:
         previous_tag=args.previous_tag,
         risky_trips=tuple(args.risky_trips or DEFAULT_RISKY_TRIPS),
         matlab_equivalence_summary=args.matlab_equivalence_summary,
+        matlab_final_reproduction_summary=args.matlab_final_reproduction_summary,
     )
     return 0
 
