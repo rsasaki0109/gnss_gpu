@@ -9,7 +9,7 @@
 
 ## 2026-05-09 最新サマリ: MATLAB final submission 再現の残差分解
 
-結論: **MATLAB/reference final CSV は score では同等ではないが、座標列そのものはほぼ `../ref/gsdc2023/dataset_2023/test/<course>/<phone>/bridge_positions.csv` から再構成可能**。現時点の Kaggle score 等価は未達で、MATLAB/reference submission `submission_20260501_0526.csv` は `4.056/5.141`。Python private-safe best は引き続き `3.687/4.710`。
+結論: **MATLAB/reference final CSV は Python の one-command wrapper から数値的に完全再構成でき、Kaggle score も original MATLAB/reference と同じ `4.056/5.141` まで確認済み**。ただし score は Python private-safe best `3.687/4.710` より悪いので、MATLAB final の完全再現は provenance/parity 達成であり、そのまま submit 改善ではない。
 
 内部状態 parity:
 
@@ -95,6 +95,11 @@ final submission 再現:
     - The wrapper materializes the `24` missing bridge timestamps, reconstructs from the alternate bridge root, and writes a nested reconstruction summary.
     - Real-data one-command output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_final_reproduction_one_command_20260509/summary.json`, `71936` rows, `changed_rows_gt_1e_9m=0`, `changed_rows_gt_0p01m=0`, mean/p50/p95/max all `0m`; latitude max absolute diff `0`, longitude max absolute diff `1.421085e-14deg`.
     - Kaggle score check for the one-command generated `submission_reconstructed_matlab_reference.csv`: `public=4.056`, `private=5.141`, matching the original MATLAB/reference final submission score exactly.
+  - Private-safe best への missing timestamp transfer も確認した。
+    - Full 24-row nearest-selected patch: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/private_safe_best_missing_timestamp_patch_20260509/summary.json`
+    - Delta vs current private-safe best: `changed_rows_gt_0p01m=24`, `rows_gt_1m=18`, `rows_gt_5m=16`, max `21.085948m`。大きく動く行が多いため、full patch は direct transfer として棄却。
+    - Threshold candidates: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/private_safe_best_missing_timestamp_threshold_patches_20260509/summary.json`
+    - `<=1m` candidate は 6 rows / 2 trips のみ変更、max `0.752546m`, risky trip changed rows `0`。Kaggle submission `submission_private_safe_best_ref2_missing_timestamp_patch_le_1p0m_20260509.csv` は `public=3.687`, `private=4.710` で private-safe best と3桁 score 同等。改善は確認できないが悪化もなし。
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
