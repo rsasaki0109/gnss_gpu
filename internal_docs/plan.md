@@ -58,6 +58,16 @@ final submission 再現:
   - ref bridge + LAX-X + `mi8` + `sm-a505u` override output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_laxx_mi8_sm_a505u_overrides/summary.json`
     - p50 `0m`, p95 `1.414646e-09m`, mean `0.015764m`, max `1.951384m`, `rows_gt_1m=91`, `rows_gt_5m=0`
     - Current residual targets: `2020-12-11-19-30-us-ca-mtv-e/pixel4xl` p95 `0.749726m`, max `1.523208m`; then remaining LAX-X/pixel5 rows p95 `0.871450m`, max `1.951384m`; then missing `24` timestamps.
+  - `2020-12-11 pixel4xl` multi-bridge source delta: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_pixel4xl_multi_bridge_source_delta_20260509/summary.json`
+    - ref bridge + local patch bridge (`experiments/results/reproduce_best_submission_20260424/regenerate_patch_trips/pixel4xl/bridge_positions.csv`) exactly explains the trip: p50/p95/max `0m`; counts `ref:baseline=990`, `local_patch:selected=195`, `local_patch:raw_wls=5`.
+  - LAX-X extended multi-bridge source delta: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_extended_multi_bridge_source_delta_20260509/summary.json`
+    - adding `experiments/results/focused_test_pixel5_lax_x_20260424_gated_no_tdcp/bridge_positions.csv` reduces LAX-X from p95 `0.871450m`, max `1.951384m`, `rows_gt_1m=65` to p95 `7.819426e-08m`, max `0.015669m`, `rows_gt_1m=0`; counts `focused_gated:fgo=570`, `focused_gated:selected=857`, `local:raw_wls=179`, `ref:baseline=564`.
+  - sm-a505u extended multi-bridge source delta: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_sm_a505u_extended_multi_bridge_source_delta_20260509/summary.json`
+    - adding the old `no_offset_full` bridge reduces sm-a505u max from `0.432700m` to `0.389931m`; p95 remains `2.024937e-08m`.
+  - Final audit-only reconstruction with extended LAX-X / mi8 / sm-a505u / pixel4xl overrides: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_extended_laxx_mi8_sm_a505u_pixel4xl_multi_bridge_overrides/summary.json`
+    - p50 `0m`, p95 `0m`, mean `0.001456m`, max `0.857008m`, `rows_gt_1m=0`, `rows_gt_5m=0`.
+    - Remaining nonzero residual is below 1m and led by `2021-11-30 mi8` first-window raw-WLS artifact mismatch: trip p95 `0.554058m`, max `0.857008m`; sm-a505u max `0.389931m`; LAX-X max `0.015669m`; pixel4xl exactly `0m`.
+    - Next target order: search/reconstruct the exact `2021-11-30 mi8` first-window raw-WLS artifact, then handle the `24` bridge-missing timestamps and turn the audit-only source schedule into deterministic code instead of reference-nearest row picking.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
