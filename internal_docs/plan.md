@@ -177,6 +177,12 @@ final submission 再現:
         - The union changes `516` rows relative to MTV700, has no component row conflicts, and keeps local max delta below `1m`.
         - Submitted `submission_mtv700_safe_source_transfer_union_laxx_mi8_pixel4xl_sma505u_20260509.csv`: Kaggle `3.686/4.710`.
         - Interpretation: the safe source-transfer components stack without private/public degradation, but their combined effect is still saturated at the current 3-decimal floor. Further submits should not spend budget on smaller subsets of the same safe transfer rows unless they introduce a new independent movement direction.
+      - MTV700 temporal curvature postprocess: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/mtv700_temporal_curvature_postprocess_20260509/summary.json`
+        - Built 3-point centered curvature-damping candidates applied only to the 700 MTV700 p3-shifted rows. This is an orthogonal temporal postprocess direction, not a source-transfer or p3 target blend.
+        - Local deltas vs MTV700 stayed bounded: `alpha=0.5` changes `692` rows, p95 `0.454117m`, max `0.720833m`, `rows_gt_1m=0`; `alpha=0.2` changes `644` rows, p95 `0.181947m`, max `0.288333m`, `rows_gt_1m=0`.
+        - Submitted `submission_mtv700_temporal_curvature_p3rows_a0p5_20260509.csv`: Kaggle `3.687/4.711`.
+        - Submitted `submission_mtv700_temporal_curvature_p3rows_a0p2_20260509.csv`: Kaggle `3.687/4.710`.
+        - Interpretation: centered temporal smoothing of the p3-shifted MTV rows removes the public improvement even when bounded below `0.3m` max. Reject this curvature-damping direction; the MTV700 gain appears sensitive to preserving the original rowwise p3 displacement rather than smoothing it temporally.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
