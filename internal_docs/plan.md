@@ -599,10 +599,17 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - In the problematic windows, FGO is the closest shape source but still not exact: epochs `0-200` FGO p95 `14.793344933627136m` while baseline/selected/raw are `35-40m`; epochs `1800-2170` FGO p95 `6.356740906280458m` while baseline/selected/raw are `29-37m`. The previously exact raw-WLS window remains identifiable: epochs `400-600` raw WLS p95 `0.1777494524624754m`.
   - Step/curvature comparison supports this: early/late FGO has near-zero median step/curvature deltas relative to MATLAB (`0-200`: step `-0.148m`, curvature `-0.011m`; `1800-2170`: step `-0.021m`, curvature `0.001m`) while baseline/raw/selected have much larger shape deltas.
   - Interpretation: LAX-X is not a global lag issue. MATLAB final output follows an FGO-like trajectory shape in early/late windows, but the exact points are offset from exported FGO/source columns. Next concrete target is to find the missing postprocess/artifact that transforms the FGO-like path into the MATLAB reference, especially epochs `0-200` and `1800-2170`.
+- LAX-X tangent/normal residual component audit:
+  - Added `experiments/analyze_gsdc2023_path_residual_components.py` to decompose `MATLAB reference - source` residuals into each source path's tangent and normal components, then test whether removing per-chunk median tangent/normal components explains the mismatch.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_path_residual_components_20260509/summary.json` (ignored artifact).
+  - FGO-like early window is not a constant lateral/heading offset: epochs `0-200` FGO p95 stays `14.793344933627136m -> 14.751078m` after removing both component medians; median tangent/normal are only `-0.139365m` / `0.142838m`, while p95 absolute tangent/normal are `10.369646m` / `8.732462m`.
+  - FGO-like late windows behave the same: epochs `1800-2000` FGO p95 stays `8.336503m -> 8.349585m` after component-median removal; epochs `2000-2170` stays `4.203943m -> 4.283417m`.
+  - The known raw-WLS exact window validates the decomposition: epochs `400-600` raw WLS p95 is `0.1777494524624754m`, with zero median tangent/normal.
+  - Interpretation: remaining LAX-X mismatch is not a simple lateral bias, heading-aligned offset, or global lag. It is more likely a local nonlinear postprocess / smoother boundary condition / missing intermediate artifact that changes the FGO-like path shape within the early and late windows.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、LAX-X epochs `0-200` / `1800-2170` で exported FGO から MATLAB reference へ移る missing postprocess/artifact を探す。次は FGO-like source と MATLAB reference の ENU residual を tangent/normal 成分に分解し、一定 lateral bias・heading correction・smoother boundary condition のどれかを判定する。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、LAX-X epochs `0-200` / `1800-2170` の missing postprocess/artifact を MATLAB 側の final-submission pipeline から探す。次は MATLAB の LAX-X FGO/postprocess 中間出力（pre/post smoothing、boundary handling、chunk stitching）を特定して Python bridge source columns と同じ row key で比較する。
 2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
