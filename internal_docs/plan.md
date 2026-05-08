@@ -585,10 +585,17 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - `sm-a325f` after patch: p95 `0.3912312370669254m`, max `0.39124732894952036m`, `rows_gt_1m=0`, `rows_gt_5m=0` (from p95 `2.574789098663229m`, max `19.603959623859655m`, `rows_gt_1m=179`, `rows_gt_5m=25`).
   - `2021-11-30 mi8` after patch: p95 `0.5731125672918876m`, max `0.8570075723271451m`, `rows_gt_1m=0`, `rows_gt_5m=0` (from p95 `2.432442593842371m`, max `5.024299497771718m`, `rows_gt_1m=178`, `rows_gt_5m=1`).
   - Remaining `>1m` and `>5m` rows now come entirely from LAX-X/pixel5 (`rows_gt_1m=312`, `rows_gt_5m=60`). Phone-level top p95 after patch is back to the broad offset layer: `xiaomimi8` p95 `0.430924m`, `mi8` p95 `0.430902m`, Samsung A32 family around `0.391m`, pixel5 p95 `0.316858m` but max `24.206783m` from LAX-X.
+- LAX-X source-blend residual audit:
+  - Added `experiments/analyze_gsdc2023_source_blend_residual.py` to measure distance from MATLAB/reference rows to bridge source points, source-pair line segments, and source convex hulls.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_source_blend_residual_20260509/summary.json` (ignored artifact).
+  - For LAX-X after nearest-source reconstruction, point-source residuals are p95 `3.24234231692054m`, max `24.146540864046084m`, `rows_gt_1m=312`, `rows_gt_5m=60`.
+  - Best source-pair segment residuals improve to p95 `1.7216599113362976m`, max `22.87792129971042m`, `rows_gt_1m=192`, `rows_gt_5m=27`; convex hull improves only slightly further to p95 `1.6561923737282056m`, max `22.87792129971042m`, `rows_gt_1m=178`, `rows_gt_5m=27`.
+  - Worst chunks after convex-hull blending remain epochs `0-200` (p95 `6.684154805859866m`, max `22.87792129971042m`, `rows_gt_5m=18`) and `1800-2000` (p95 `4.555553454214027m`, max `8.58725096388998m`, `rows_gt_5m=9`), with `2000-2170` still `rows_gt_1m=38` but `rows_gt_5m=0`.
+  - Interpretation: LAX-X remaining tail is not just missing a static source schedule or simple baseline/raw/FGO blend. The MATLAB reference appears to include trajectory-level smoothing/postprocess behavior, or a source artifact absent from the exported bridge columns, concentrated in early and late LAX-X windows.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、LAX-X/pixel5 の残り `rows_gt_1m=312`, `rows_gt_5m=60` を chunk/row単位でさらに分解する。特に epochs `0-200`, `1800-2170` の nearest source residual がまだ大きく、ここが full-submission max/tail の支配要因。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、LAX-X epochs `0-200` / `1800-2170` の MATLAB参照軌跡が、時間平滑化・補間・別artifactのどれに近いかを切り分ける。次は参照軌跡の step/curvature と source trajectory の step/curvature を比較する。
 2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
