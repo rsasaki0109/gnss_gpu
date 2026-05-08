@@ -97,6 +97,9 @@ class CTRBPFConfig:
     rtkdiag_candidate_recenter_max_shift_m: float = 10000.0
     rtkdiag_candidate_select_mode: str = "residual"
     rtkdiag_candidate_emit_mode: str = "pf"
+    rtkdiag_candidate_local_ungate_windows: tuple[tuple[int, int, tuple[str, ...]], ...] = ()
+    rtkdiag_candidate_local_ungate_tow_windows: tuple[tuple[float, float, tuple[str, ...]], ...] = ()
+    rtkdiag_candidate_label_factors: tuple[tuple[str, float], ...] = ()
     sigma_pos: float = 2.0
     sigma_cb: float = 50.0
     spread_pos_init: float = 50.0
@@ -291,6 +294,19 @@ class CTRBPFConfig:
     ins_tc_align_gyro_max_dps: float = 1.5
     ins_tc_align_min_samples: int = 50
     ins_tc_yaw_init_min_speed_mps: float = 1.0
+    # GNSS-quality based gate on the ins_tc emit decision. When enabled, the
+    # rolling fix rate over the previous ``ins_tc_quality_gate_window_epochs``
+    # epochs is computed; when fix rate >= ``ins_tc_quality_gate_max_fix_rate``
+    # the ins_tc PF-emit is suppressed (defer to GNSS / hybrid). Designed to
+    # reduce ins_tc regression on high-baseline runs (tokyo/run2 -7.06pp,
+    # nagoya/run1 -2.59pp) where GNSS Fix solutions are already accurate.
+    ins_tc_quality_gate_enabled: bool = False
+    ins_tc_quality_gate_window_epochs: int = 30
+    ins_tc_quality_gate_max_fix_rate: float = 0.5
+    # When true (and ins_tc_quality_gate_enabled), the rolling-fix-rate gate
+    # also suppresses ins_tc PF position_update (PU), not just emit. Default
+    # off so the existing emit-only gate behaviour is preserved.
+    ins_tc_quality_gate_pu_skip: bool = False
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -1295,8 +1311,217 @@ def _rtkdiag_candidate_sort_key(
         return (_diag_float(row, "final_residual_abs_max"), residual)
     if mode == "nrows":
         return (-update_rows, residual)
+    if mode == "rms_per_row":
+        return (residual / max(update_rows, 1.0), residual)
+    if mode == "score_per_row":
+        return ((residual / max(ratio, 1.0e-6)) / max(update_rows, 1.0), residual)
+    if mode == "score_per_row2":
+        return ((residual / max(ratio, 1.0e-6)) / max(update_rows, 1.0) ** 2, residual)
+    if mode == "score_per_row3":
+        return ((residual / max(ratio, 1.0e-6)) / max(update_rows, 1.0) ** 3, residual)
+    if mode == "rms_minus_alpha_rows":
+        return (residual - 0.1 * update_rows, residual)
+    if mode == "log_combined":
+        import math as _m
+        return (_m.log(residual + 1.0e-3) - 0.5 * _m.log(max(update_rows, 1.0)), residual)
+    if mode == "composite_3axis_n2":
+        # 3-axis sim BEST for n/r2: residual / (ratio^0.5 * rows^1.5 * abs_max^0.5)
+        # sim 39.92% vs score 39.12 (+0.74pp); also n/r3 sim 59.04% vs 58.85 (+0.19pp).
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.5
+                       * max(update_rows, 1.0) ** 1.5
+                       * max(abs_max, 1.0e-3) ** 0.5),
+            residual,
+        )
+    if mode == "composite_3axis_t2":
+        # 3-axis sim BEST for t/r2: residual / (ratio^0.5 * rows^2.0)
+        # sim 84.78% vs score_per_row 84.53 (+0.25pp).
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.5
+                       * max(update_rows, 1.0) ** 2.0),
+            residual,
+        )
+    if mode == "composite_3axis_n1":
+        # 3-axis sim BEST for n/r1: residual / (rows^0.5 * abs_max^0.5)
+        # sim 64.25% vs rms_per_row 63.89 (+0.37pp). Note: a=0 (no ratio dependence).
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(update_rows, 1.0) ** 0.5
+                       * max(abs_max, 1.0e-3) ** 0.5),
+            residual,
+        )
+    if mode == "composite_n2_v2":
+        # Fine sim BEST for n/r2: residual / (ratio^0.4 * rows^1.0 * abs_max^0.7)
+        # sim 40.14% vs composite_3axis_n2 39.92 (+0.22pp).
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.4
+                       * max(update_rows, 1.0) ** 1.0
+                       * max(abs_max, 1.0e-3) ** 0.7),
+            residual,
+        )
+    if mode == "composite_n3_v2":
+        # Fine sim BEST for n/r3: residual / (ratio^0.2 * rows^0.5 * abs_max^0.5)
+        # sim 59.10% vs composite_3axis_n2 59.04 (+0.05pp).
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.2
+                       * max(update_rows, 1.0) ** 0.5
+                       * max(abs_max, 1.0e-3) ** 0.5),
+            residual,
+        )
+    if mode == "composite_n1_v2":
+        # Fine sim BEST for n/r1: residual / (rows^0.5 * abs_max^0.3)
+        # sim 64.31% vs composite_3axis_n1 64.25 (+0.06pp).
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(update_rows, 1.0) ** 0.5
+                       * max(abs_max, 1.0e-3) ** 0.3),
+            residual,
+        )
+    if mode == "composite_t2_v2":
+        # Fine sim BEST for t/r2: residual / (ratio^0.2 * rows^2.0 * abs_max^0.5)
+        # sim 84.86% vs composite_3axis_t2 84.78 (+0.08pp).
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.2
+                       * max(update_rows, 1.0) ** 2.0
+                       * max(abs_max, 1.0e-3) ** 0.5),
+            residual,
+        )
+    if mode == "composite_t3_v2":
+        # Phase 11dm t/r3 re-sweep after 11dl pool:
+        # residual / (ratio^1.3 * rows^1.5 * abs_max^-0.5).
+        # Negative abs exponent intentionally penalizes tiny abs_max candidates
+        # that became traps in the expanded 11dl pool.
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 1.3
+                       * max(update_rows, 1.0) ** 1.5
+                       * max(abs_max, 1.0e-3) ** -0.5),
+            residual,
+        )
+    if mode == "composite_t3_v4":
+        # Phase 11eb t/r3 re-sweep after 11ea blocks:
+        # residual / (ratio^1.5 * rows^1.5 * abs_max^-0.7).
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 1.5
+                       * max(update_rows, 1.0) ** 1.5
+                       * max(abs_max, 1.0e-3) ** -0.7),
+            residual,
+        )
+    if mode == "composite_t2_v3":
+        # Phase 11ed t/r2 re-sweep after 11ec pool:
+        # residual / (ratio^0.1 * rows^1.0 * abs_max^0.5), sim 85.099%.
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.1
+                       * max(update_rows, 1.0) ** 1.0
+                       * max(abs_max, 1.0e-3) ** 0.5),
+            residual,
+        )
+    if mode == "composite_n1_v3":
+        # Ultra-fine sim BEST for n/r1: residual / (rows^0.7 * abs_max^0.3)
+        # sim 64.33% vs composite_n1_v2 64.31 (+0.02pp). a=0 (no ratio).
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(update_rows, 1.0) ** 0.7
+                       * max(abs_max, 1.0e-3) ** 0.3),
+            residual,
+        )
+    if mode == "composite_n2_v3":
+        # Ultra-fine sim BEST for n/r2: residual / (ratio^0.3 * rows^0.7 * abs_max^0.8)
+        # sim 40.21% vs composite_n2_v2 40.14 (+0.07pp).
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.3
+                       * max(update_rows, 1.0) ** 0.7
+                       * max(abs_max, 1.0e-3) ** 0.8),
+            residual,
+        )
+    if mode == "composite_n2_v4":
+        # Phase 11dm n/r2 re-sweep after 11dl pool:
+        # residual / (ratio^0.2 * rows^0.3 * abs_max^0.8), sim 40.73%.
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.2
+                       * max(update_rows, 1.0) ** 0.3
+                       * max(abs_max, 1.0e-3) ** 0.8),
+            residual,
+        )
+    if mode in {"temporal_n2_v1", "temporal_n2_v2", "temporal_n2_v3"}:
+        # Stateless fallback for diagnostics; the PF loop adds the temporal
+        # previous-position penalty on top of this same base key.
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.2
+                       * max(update_rows, 1.0) ** 0.3
+                       * max(abs_max, 1.0e-3) ** 0.8),
+            residual,
+        )
+    if mode in {"temporal_hybdelta_t3_v1", "temporal_hybdelta_t3_v2", "temporal_hybdelta_t3_v3"}:
+        return _rtkdiag_candidate_sort_key(row, mode="composite_t3_v2")
+    if mode == "temporal_hybdelta_t3_v4":
+        return _rtkdiag_candidate_sort_key(row, mode="composite_t3_v4")
+    if mode == "temporal_hybdelta_n2_v1":
+        return _rtkdiag_candidate_sort_key(row, mode="composite_n2_v4")
+    if mode == "temporal_hybdelta_n3_v1":
+        return _rtkdiag_candidate_sort_key(row, mode="composite_n3_v3")
+    if mode == "temporal_hybdelta_n3_v2":
+        return _rtkdiag_candidate_sort_key(row, mode="composite_n3_v4")
+    if mode == "composite_n3_v3":
+        # Ultra-fine sim BEST for n/r3: residual / (ratio^0.2 * rows^0.7 * abs_max^0.5)
+        # sim 59.15% vs composite_n3_v2 59.10 (+0.05pp).
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.2
+                       * max(update_rows, 1.0) ** 0.7
+                       * max(abs_max, 1.0e-3) ** 0.5),
+            residual,
+        )
+    if mode == "composite_n3_v4":
+        # Phase 11ec n/r3 re-sweep after 11eb pool:
+        # residual / (ratio^0.2 * rows^1.0 * abs_max^0.7), sim 62.02%.
+        abs_max = _diag_float(row, "final_residual_abs_max")
+        return (
+            residual / (max(ratio, 1.0e-6) ** 0.2
+                       * max(update_rows, 1.0) ** 1.0
+                       * max(abs_max, 1.0e-3) ** 0.7),
+            residual,
+        )
     # Conservative default: prefer the tightest measurement update residual.
     return (residual, -ratio)
+
+
+def _rtkdiag_local_ungate_labels(
+    windows: tuple[tuple[int, int, tuple[str, ...]], ...],
+    epoch_idx: int,
+) -> tuple[str, ...] | None:
+    for start_idx, end_idx, labels in windows:
+        if int(start_idx) <= int(epoch_idx) <= int(end_idx):
+            return tuple(labels)
+    return None
+
+
+def _rtkdiag_local_ungate_labels_for_tow(
+    windows: tuple[tuple[float, float, tuple[str, ...]], ...],
+    tow: float,
+) -> tuple[str, ...] | None:
+    for start_tow, end_tow, labels in windows:
+        if float(start_tow) <= float(tow) <= float(end_tow):
+            return tuple(labels)
+    return None
+
+
+def _rtkdiag_fixed_output_ok(row: dict[str, str] | None) -> bool:
+    if row is None:
+        return False
+    try:
+        return int(row.get("output_added", "0")) == 1 and int(row.get("final_status", "0")) == 4
+    except ValueError:
+        return False
 
 
 def _load_full_reference(path: Path) -> list[tuple[float, np.ndarray]]:
@@ -1543,6 +1768,16 @@ def _run_ctrbpf_on_segment(
         spread_cb=config.spread_cb_init,
         velocity_init_sigma=config.velocity_init_sigma if config.enable_rbpf_velocity_kf else 0.0,
     )
+    rtkdiag_temporal_prev: np.ndarray | None = None
+    rtkdiag_temporal_prev_hybrid: np.ndarray | None = None
+
+    # Rolling window of hybrid statuses, used by the ins_tc quality gate.
+    # Each entry is the int hybrid_status for that epoch (or 0 when unknown).
+    from collections import deque as _deque
+    ins_tc_quality_window: _deque[int] = _deque(
+        maxlen=max(1, int(config.ins_tc_quality_gate_window_epochs))
+    )
+    ins_tc_quality_gate_skip_count = 0
 
     t0 = time.perf_counter()
     for i in range(n_epochs):
@@ -2028,44 +2263,322 @@ def _run_ctrbpf_on_segment(
         rtkdiag_pf_ref: np.ndarray | None = None
         if use_rtkdiag_pf:
             rtkdiag_pf_stats.epochs_evaluated += 1
-            best_candidate: tuple[str, np.ndarray, dict[str, str]] | None = None
-            best_key: tuple[float, float] | None = None
+            select_mode = str(config.rtkdiag_candidate_select_mode)
+            is_fusion = select_mode in {"wavg3", "wavg5"}
+            is_consensus = select_mode in {"consensus3", "consensus5"}
+            temporal_prevdist_alpha = {
+                "temporal_n2_v1": 0.001,
+                "temporal_n2_v2": 0.0006,
+                "temporal_n2_v3": 0.00062,
+                "temporal_n2_v4": 0.00062,
+                "temporal_n2_v5": 0.00062,
+                "temporal_n2_v6": 0.00062,
+                "temporal_n2_v7": 0.00062,
+                "temporal_n2_v8": 0.00062,
+                "temporal_n2_v9": 0.00062,
+                "temporal_n2_v10": 0.00062,
+            }.get(select_mode)
+            is_temporal_prevdist = temporal_prevdist_alpha is not None
+            temporal_hybdelta_base = {
+                "temporal_hybdelta_t3_v1": "composite_t3_v2",
+                "temporal_hybdelta_t3_v2": "composite_t3_v2",
+                "temporal_hybdelta_t3_v3": "composite_t3_v2",
+                "temporal_hybdelta_t3_v4": "composite_t3_v4",
+                "temporal_hybdelta_t3_v5": "composite_t3_v4",
+                "temporal_hybdelta_t3_v6": "composite_t3_v4",
+                "temporal_hybdelta_t3_v7": "composite_t3_v4",
+                "temporal_hybdelta_t3_v8": "composite_t3_v4",
+                "temporal_hybdelta_n2_v1": "composite_n2_v4",
+                "temporal_hybdelta_n3_v1": "composite_n3_v3",
+                "temporal_hybdelta_n3_v2": "composite_n3_v4",
+                "temporal_hybdelta_n3_v3": "composite_n3_v4",
+                "temporal_hybdelta_n3_v4": "composite_n3_v4",
+                "temporal_hybdelta_n3_v5": "composite_n3_v4",
+                "temporal_hybdelta_n3_v6": "composite_n3_v4",
+            }.get(select_mode)
+            temporal_hybdelta_alpha = {
+                "temporal_hybdelta_t3_v1": 0.0003,
+                "temporal_hybdelta_t3_v2": 0.0002,
+                "temporal_hybdelta_t3_v3": 0.00022,
+                "temporal_hybdelta_t3_v4": 0.0002,
+                "temporal_hybdelta_t3_v5": 0.0002,
+                "temporal_hybdelta_t3_v6": 0.0002,
+                "temporal_hybdelta_t3_v7": 0.0002,
+                "temporal_hybdelta_t3_v8": 0.0002,
+                "temporal_hybdelta_n2_v1": 0.0003,
+                "temporal_hybdelta_n3_v1": 0.0003,
+                "temporal_hybdelta_n3_v2": 0.0006,
+                "temporal_hybdelta_n3_v3": 0.0006,
+                "temporal_hybdelta_n3_v4": 0.0006,
+                "temporal_hybdelta_n3_v5": 0.0006,
+                "temporal_hybdelta_n3_v6": 0.0006,
+            }.get(select_mode)
+            label_penalty_factors = {
+                "temporal_hybdelta_t3_v5": {
+                    "rtkout5minobs3": 1.06,
+                    "mlc1r10": 1.03,
+                },
+                "temporal_hybdelta_t3_v6": {
+                    "rtkout5minobs3": 1.06,
+                    "mlc1r10": 1.03,
+                    "c1p1hr": 1.10,
+                },
+                "temporal_hybdelta_t3_v7": {
+                    "rtkout5minobs3": 1.06,
+                    "mlc1r10": 1.03,
+                    "c1p1hr": 1.10,
+                    "r20ga": 3.00,
+                    "psig1": 1.50,
+                    "r15ga": 1.20,
+                },
+                "temporal_hybdelta_t3_v8": {
+                    "rtkout5minobs3": 1.06,
+                    "mlc1r10": 1.03,
+                    "c1p1hr": 1.10,
+                    "r20ga": 3.00,
+                    "psig1": 1.50,
+                    "r15ga": 1.20,
+                    "r25g10": 1.50,
+                    "r20g10": 1.50,
+                    "r15g10": 1.10,
+                },
+                "temporal_n2_v4": {
+                    "mlc1oGc0001": 1.06,
+                    "mlc1r10oG": 1.10,
+                    "rtkout3": 1.06,
+                },
+                "temporal_n2_v5": {
+                    "mlc1oGc0001": 1.06,
+                    "mlc1r10oG": 1.10,
+                    "rtkout3": 1.06,
+                    "csig005_em10": 1.06,
+                    "mlc1oG": 1.06,
+                },
+                "temporal_n2_v6": {
+                    "mlc1oGc0001": 1.06,
+                    "mlc1r10oG": 1.10,
+                    "rtkout3": 1.06,
+                    "csig005_em10": 1.06,
+                    "mlc1oG": 1.06,
+                    "oGc005": 1.10,
+                    "psig3": 1.20,
+                },
+                "temporal_n2_v7": {
+                    "mlc1oGc0001": 1.06,
+                    "mlc1r10oG": 1.10,
+                    "rtkout3": 1.06,
+                    "csig005_em10": 1.06,
+                    "mlc1oG": 1.06,
+                    "oGc005": 1.10,
+                    "psig3": 1.20,
+                    "r15": 1.06,
+                    "r15g": 1.01,
+                },
+                "temporal_n2_v8": {
+                    "mlc1oGc0001": 1.06,
+                    "mlc1r10oG": 1.10,
+                    "rtkout3": 1.06,
+                    "csig005_em10": 1.06,
+                    "mlc1oG": 1.06,
+                    "oGc005": 1.10,
+                    "psig3": 1.20,
+                    "r15": 1.06,
+                    "r15g": 1.01,
+                    "csig05_psig1": 1.01,
+                    "rtkout5oG": 1.03,
+                },
+                "temporal_n2_v9": {
+                    "mlc1oGc0001": 1.06,
+                    "mlc1r10oG": 1.10,
+                    "rtkout3": 1.06,
+                    "csig005_em10": 1.06,
+                    "mlc1oG": 1.06,
+                    "oGc005": 1.10,
+                    "psig3": 1.20,
+                    "r15": 1.06,
+                    "r15g": 1.0403,
+                    "csig05_psig1": 1.01,
+                    "rtkout5oG": 1.03,
+                    "csig05": 1.01,
+                    "r25g": 1.01,
+                },
+                "temporal_n2_v10": {
+                    "mlc1oGc0001": 1.0706,
+                    "mlc1r10oG": 1.10,
+                    "rtkout3": 1.06,
+                    "csig005_em10": 1.06,
+                    "mlc1oG": 1.06,
+                    "oGc005": 1.10,
+                    "psig3": 1.20,
+                    "r15": 1.06,
+                    "r15g": 1.0403,
+                    "csig05_psig1": 1.01,
+                    "rtkout5oG": 1.03,
+                    "csig05": 1.01,
+                    "r25g": 1.01,
+                    "n2loose3": 1.06,
+                    "r25": 1.01,
+                },
+                "temporal_hybdelta_n3_v3": {
+                    "rtkout5c005em3": 1.06,
+                    "mlc2nobds": 1.50,
+                    "xd_n3_loose_hold4_ratio15_gate10_min6": 1.03,
+                },
+                "temporal_hybdelta_n3_v4": {
+                    "rtkout5c005em3": 1.06,
+                    "mlc2nobds": 1.50,
+                    "xd_n3_loose_hold4_ratio15_gate10_min6": 1.03,
+                    "mlc1c005p1": 1.50,
+                    "n3tight": 1.10,
+                },
+                "temporal_hybdelta_n3_v5": {
+                    "rtkout5c005em3": 1.06,
+                    "mlc2nobds": 1.50,
+                    "xd_n3_loose_hold4_ratio15_gate10_min6": 1.03,
+                    "mlc1c005p1": 1.50,
+                    "n3tight": 1.10,
+                    "mlc1oGc005p1": 1.03,
+                    "csig05psh": 1.10,
+                },
+                "temporal_hybdelta_n3_v6": {
+                    "rtkout5c005em3": 1.06,
+                    "mlc2nobds": 1.50,
+                    "xd_n3_loose_hold4_ratio15_gate10_min6": 1.03,
+                    "mlc1c005p1": 1.50,
+                    "n3tight": 1.10,
+                    "mlc1oGc005p1": 1.03,
+                    "csig05psh": 1.10,
+                    "n3tight2": 1.01,
+                },
+            }.get(select_mode, {})
+            if config.rtkdiag_candidate_label_factors:
+                label_penalty_factors = dict(label_penalty_factors)
+                label_penalty_factors.update(
+                    {
+                        str(label): float(factor)
+                        for label, factor in config.rtkdiag_candidate_label_factors
+                    }
+                )
+            is_temporal_hybdelta = temporal_hybdelta_base is not None
+            collected: list[tuple[str, np.ndarray, dict[str, str], tuple[float, float]]] = []
             gated_options = 0
+            local_ungate_labels = _rtkdiag_local_ungate_labels(
+                tuple(config.rtkdiag_candidate_local_ungate_windows),
+                int(i),
+            )
+            if local_ungate_labels is None:
+                local_ungate_labels = _rtkdiag_local_ungate_labels_for_tow(
+                    tuple(config.rtkdiag_candidate_local_ungate_tow_windows),
+                    float(t_key),
+                )
             for label, candidate_pos, candidate_diag in rtkdiag_candidates or []:
                 diag_row = candidate_diag.get(t_key)
-                if not _rtkdiag_candidate_gate(
+                gate_ok = _rtkdiag_candidate_gate(
                     diag_row,
                     ratio_min=float(config.rtkdiag_candidate_ratio_min),
                     residual_rms_max=float(config.rtkdiag_candidate_residual_rms_max),
-                ):
+                )
+                local_ungate_ok = (
+                    local_ungate_labels is not None
+                    and _rtkdiag_fixed_output_ok(diag_row)
+                    and (not local_ungate_labels or label in local_ungate_labels)
+                )
+                if not gate_ok and not local_ungate_ok:
                     continue
                 gated_options += 1
                 cand = candidate_pos.get(t_key)
                 if cand is None or not np.all(np.isfinite(cand)) or np.all(cand == 0.0):
                     continue
-                select_mode = str(config.rtkdiag_candidate_select_mode)
-                if select_mode == "hybrid_anchor" and hp is not None and np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
+                if is_fusion or is_consensus:
+                    candidate_key = _rtkdiag_candidate_sort_key(diag_row, mode="score")
+                elif is_temporal_prevdist:
+                    candidate_key = _rtkdiag_candidate_sort_key(diag_row, mode="composite_n2_v4")
+                elif temporal_hybdelta_base is not None:
+                    candidate_key = _rtkdiag_candidate_sort_key(diag_row, mode=temporal_hybdelta_base)
+                elif select_mode == "hybrid_anchor" and hp is not None and np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
                     cand_arr = np.asarray(cand, dtype=np.float64)
                     dist_to_hyb = float(np.linalg.norm(cand_arr - np.asarray(hp, dtype=np.float64)))
                     candidate_key = (dist_to_hyb, _diag_float(diag_row, "final_residual_rms"))
+                elif select_mode == "hybrid_anchor":
+                    candidate_key = _rtkdiag_candidate_sort_key(diag_row, mode="residual")
                 else:
-                    if select_mode == "hybrid_anchor":
-                        # Hybrid floor missing — fall back to residual.
-                        candidate_key = _rtkdiag_candidate_sort_key(diag_row, mode="residual")
-                    else:
-                        candidate_key = _rtkdiag_candidate_sort_key(diag_row, mode=select_mode)
-                if best_key is None or candidate_key < best_key:
-                    best_key = candidate_key
-                    best_candidate = (label, np.asarray(cand, dtype=np.float64), diag_row)
+                    candidate_key = _rtkdiag_candidate_sort_key(diag_row, mode=select_mode)
+                if label_penalty_factors:
+                    factor = float(label_penalty_factors.get(label, 1.0))
+                    if factor != 1.0:
+                        candidate_key = (float(candidate_key[0]) * factor, float(candidate_key[1]))
+                collected.append((label, np.asarray(cand, dtype=np.float64), diag_row, candidate_key))
 
             if gated_options > 0:
                 rtkdiag_pf_stats.gate_pass += 1
                 rtkdiag_pf_stats.candidate_options_total += int(gated_options)
-                if best_candidate is None:
+                hp_valid_for_temporal = hp is not None and np.all(np.isfinite(hp)) and not np.all(np.asarray(hp, dtype=np.float64) == 0.0)
+                if not collected:
                     rtkdiag_pf_stats.candidate_missing += 1
+                    if (is_temporal_prevdist or is_temporal_hybdelta) and hp_valid_for_temporal:
+                        rtkdiag_temporal_prev = np.asarray(hp, dtype=np.float64)
+                        rtkdiag_temporal_prev_hybrid = np.asarray(hp, dtype=np.float64)
                 else:
-                    label, selected_pos, _selected_diag = best_candidate
+                    if is_fusion:
+                        n_fuse = 3 if select_mode == "wavg3" else 5
+                        sorted_top = sorted(collected, key=lambda c: c[3])[:n_fuse]
+                        eps = 0.01
+                        raw_w = np.array([1.0 / (max(c[3][0], 0.0) + eps) for c in sorted_top], dtype=np.float64)
+                        if raw_w.sum() < 1e-9 or not np.all(np.isfinite(raw_w)):
+                            raw_w = np.ones(len(sorted_top), dtype=np.float64)
+                        raw_w /= raw_w.sum()
+                        fused_pos = np.sum(np.stack([w * c[1] for w, c in zip(raw_w, sorted_top)], axis=0), axis=0)
+                        label = sorted_top[0][0] + "+wavg"
+                        selected_pos = fused_pos
+                        _selected_diag = sorted_top[0][2]
+                    elif is_consensus:
+                        n_cons = 3 if select_mode == "consensus3" else 5
+                        sorted_top = sorted(collected, key=lambda c: c[3])[:n_cons]
+                        cand_positions = np.stack([c[1] for c in sorted_top], axis=0)
+                        median_pos = np.median(cand_positions, axis=0)
+                        # Pick candidate nearest to median (robust selector)
+                        dists = np.linalg.norm(cand_positions - median_pos, axis=1)
+                        best_idx = int(np.argmin(dists))
+                        label = sorted_top[best_idx][0] + "+cons"
+                        selected_pos = sorted_top[best_idx][1]
+                        _selected_diag = sorted_top[best_idx][2]
+                    elif is_temporal_prevdist and rtkdiag_temporal_prev is not None:
+                        alpha = float(temporal_prevdist_alpha)
+                        best_cand = min(
+                            collected,
+                            key=lambda c, _prev=rtkdiag_temporal_prev: (
+                                c[3][0] + alpha * float(np.linalg.norm(c[1] - _prev)),
+                                c[3][1],
+                            ),
+                        )
+                        label, selected_pos, _selected_diag, _ = best_cand
+                    elif (
+                        is_temporal_hybdelta
+                        and rtkdiag_temporal_prev is not None
+                        and rtkdiag_temporal_prev_hybrid is not None
+                        and hp_valid_for_temporal
+                    ):
+                        alpha = float(temporal_hybdelta_alpha)
+                        predicted_pos = (
+                            rtkdiag_temporal_prev
+                            + (np.asarray(hp, dtype=np.float64) - rtkdiag_temporal_prev_hybrid)
+                        )
+                        best_cand = min(
+                            collected,
+                            key=lambda c, _pred=predicted_pos: (
+                                c[3][0] + alpha * float(np.linalg.norm(c[1] - _pred)),
+                                c[3][1],
+                            ),
+                        )
+                        label, selected_pos, _selected_diag, _ = best_cand
+                    else:
+                        best_cand = min(collected, key=lambda c: c[3])
+                        label, selected_pos, _selected_diag, _ = best_cand
                     rtkdiag_pf_ref = selected_pos
+                    if is_temporal_prevdist or is_temporal_hybdelta:
+                        rtkdiag_temporal_prev = np.asarray(selected_pos, dtype=np.float64)
+                        if hp_valid_for_temporal:
+                            rtkdiag_temporal_prev_hybrid = np.asarray(hp, dtype=np.float64)
                     rtkdiag_pf_stats.selected_counts[label] = (
                         rtkdiag_pf_stats.selected_counts.get(label, 0) + 1
                     )
@@ -2085,6 +2598,9 @@ def _run_ctrbpf_on_segment(
                     )
                     rtkdiag_pf_stats.pu_applied += 1
                     rtkdiag_pf_emit_here = True
+            elif (is_temporal_prevdist or is_temporal_hybdelta) and hp is not None and np.all(np.isfinite(hp)) and not np.all(np.asarray(hp, dtype=np.float64) == 0.0):
+                rtkdiag_temporal_prev = np.asarray(hp, dtype=np.float64)
+                rtkdiag_temporal_prev_hybrid = np.asarray(hp, dtype=np.float64)
 
         # Phase 9b: tight-coupled IMU. After hybrid PU but BEFORE estimate /
         # emission, integrate IMU since the anchor and apply a per-particle
@@ -2309,6 +2825,18 @@ def _run_ctrbpf_on_segment(
                         )
                         if hp_valid and float(np.linalg.norm(p_ins_ecef - hp)) > float(config.ins_tc_max_disagreement_m):
                             ins_tc_stats.pu_skipped_disagreement += 1
+                        elif (
+                            bool(config.ins_tc_quality_gate_enabled)
+                            and bool(config.ins_tc_quality_gate_pu_skip)
+                            and len(ins_tc_quality_window) > 0
+                            and (
+                                sum(1 for s in ins_tc_quality_window if int(s) == 4)
+                                / max(1, len(ins_tc_quality_window))
+                            )
+                            >= float(config.ins_tc_quality_gate_max_fix_rate)
+                        ):
+                            ins_tc_stats.pu_skipped_disagreement += 1  # accounted under disagreement bucket
+                            ins_tc_quality_gate_skip_count += 1
                         else:
                             sigma_ins = max(
                                 float(config.ins_tc_pf_pu_floor_sigma_m),
@@ -2329,6 +2857,33 @@ def _run_ctrbpf_on_segment(
                     and int(st_now) in ins_tc_emit_set
                 ):
                     ins_tc_emit_pf_here = True
+
+        # GNSS quality gate: when enabled and recent fix rate is high,
+        # suppress ins_tc PF-emit (defer to GNSS / hybrid). This keeps the
+        # gain on low-baseline runs (canyon) while reducing the regression
+        # on high-baseline runs (open sky). The window holds the previous
+        # K epochs' hybrid statuses (4=Fix, 3=Float, 1=uncertain, 0=unknown).
+        if use_ins_tc and bool(config.ins_tc_quality_gate_enabled):
+            if (
+                ins_tc_emit_pf_here
+                and len(ins_tc_quality_window) > 0
+            ):
+                fix_count = sum(1 for s in ins_tc_quality_window if int(s) == 4)
+                fix_rate = fix_count / max(1, len(ins_tc_quality_window))
+                if fix_rate >= float(config.ins_tc_quality_gate_max_fix_rate):
+                    ins_tc_emit_pf_here = False
+                    ins_tc_quality_gate_skip_count += 1
+        # Append CURRENT epoch's hybrid status to the rolling window so the
+        # NEXT epoch's gate sees this one.
+        if use_ins_tc:
+            _st_for_window = (
+                hybrid_status.get(round(float(times[i]), 1))
+                if hybrid_status is not None
+                else None
+            )
+            ins_tc_quality_window.append(
+                int(_st_for_window) if _st_for_window is not None else 0
+            )
 
         est = np.asarray(pf.estimate(), dtype=np.float64)
         if ins_tc_emit_pf_here:
@@ -2436,13 +2991,23 @@ def _run_ctrbpf_on_segment(
         # based on the hybrid Status gate (C2). When the gate is empty or
         # no hybrid status was loaded, every epoch is eligible.
         protect_indices: set[int] = set()
-        if hybrid_status is not None and config.fgo_apply_hybrid_statuses:
-            allowed = set(int(s) for s in config.fgo_apply_hybrid_statuses)
+        if hybrid_status is not None:
+            allowed: set[int] | None = (
+                set(int(s) for s in config.fgo_apply_hybrid_statuses)
+                if config.fgo_apply_hybrid_statuses
+                else None
+            )
             for i in range(n_epochs):
                 st = hybrid_status.get(round(float(times[i]), 1))
-                # Protect epoch (keep hybrid passthrough) when it has a
-                # status NOT in the allowed-rewrite set.
-                if st is not None and st not in allowed:
+                if st is None:
+                    continue
+                if allowed is not None and st not in allowed:
+                    # Protect epoch (keep hybrid passthrough) when it has a
+                    # status NOT in the allowed-rewrite set.
+                    protect_indices.add(i)
+                elif allowed is None and int(st) == 4:
+                    # Default guard: when no apply list is configured, never
+                    # let FGO overwrite Status=4 cm-class hybrid epochs.
                     protect_indices.add(i)
 
         # D2: build per-epoch prior sigma array. Status values NOT in the
@@ -2536,6 +3101,13 @@ def _apply_fgo_lambda(
     )
 
     out = positions.copy()
+    # Bug #2 fix: keep an immutable copy of the original (hybrid passthrough)
+    # positions. Each window must use the original for both the soft prior
+    # anchor and the ``min_correction_m`` comparison; otherwise overlapping
+    # windows leak state via ``out`` and the result becomes stride/order
+    # dependent (small sub-threshold moves can accumulate, and the prior
+    # anchor drifts between windows).
+    original = positions.copy()
     start = 0
     while start + win_size <= n:
         end = start + win_size - 1
@@ -2546,7 +3118,8 @@ def _apply_fgo_lambda(
             continue
 
         stats.windows_attempted += 1
-        slice_pos = np.asarray(out[start : end + 1], dtype=np.float64).copy()
+        slice_init = np.asarray(out[start : end + 1], dtype=np.float64).copy()
+        slice_orig = np.asarray(original[start : end + 1], dtype=np.float64).copy()
         window_dd_pr = (
             dd_pr_cache[start : end + 1] if dd_pr_cache is not None else None
         )
@@ -2556,11 +3129,11 @@ def _apply_fgo_lambda(
             else None
         )
         problem = LocalFgoProblem(
-            initial_positions_ecef=slice_pos,
+            initial_positions_ecef=slice_init,
             window=LocalFgoWindow(0, win_size - 1),
             dd_carrier=window_dd,
             dd_pseudorange=window_dd_pr,
-            prior_positions_ecef=slice_pos,
+            prior_positions_ecef=slice_orig,
             prior_sigmas_m=slice_prior_sigmas,
         )
         try:
@@ -2576,24 +3149,26 @@ def _apply_fgo_lambda(
         if n_fixed >= int(config.fgo_min_fixed_to_apply):
             new_positions = np.asarray(result.positions_ecef, dtype=np.float64)
             if (
-                new_positions.shape == slice_pos.shape
+                new_positions.shape == slice_init.shape
                 and np.all(np.isfinite(new_positions))
             ):
-                # C2 per-epoch gate: only overwrite indices that are NOT
-                # protected (i.e., not Status=4 / cm-class hybrid).
-                # D2b: also skip rewrites where the FGO output disagrees
-                # with the hybrid passthrough by less than fgo_min_correction_m;
-                # those small rewrites tend to nudge cm-class hybrid passes
-                # across the 0.5 m PPC threshold without recovering far-fail
-                # epochs.
+                # Bug #1 fix: per-epoch fix mask. Restrict the rewrite to
+                # epochs that actually had a DD carrier ambiguity integer-
+                # fixed via LAMBDA (window-relative indices in
+                # ``summary["fixed_epochs"]``). Float-only or weakly-
+                # constrained epochs in the same window kept the hybrid
+                # passthrough.
+                fixed_rel_epochs = set(int(e) for e in summary.get("fixed_epochs", []) or [])
                 min_corr = float(config.fgo_min_correction_m)
                 replaced = 0
                 for rel_i in range(win_size):
                     abs_i = start + rel_i
                     if protect_indices is not None and abs_i in protect_indices:
                         continue
+                    if fixed_rel_epochs and rel_i not in fixed_rel_epochs:
+                        continue
                     if min_corr > 0.0:
-                        delta = float(np.linalg.norm(new_positions[rel_i] - slice_pos[rel_i]))
+                        delta = float(np.linalg.norm(new_positions[rel_i] - slice_orig[rel_i]))
                         if delta < min_corr:
                             continue
                     out[abs_i] = new_positions[rel_i]
@@ -2630,6 +3205,25 @@ def _parse_path_list(raw: str) -> list[Path]:
 
 def _parse_label_list(raw: str) -> list[str]:
     return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def _parse_label_factor_list(raw: str) -> tuple[tuple[str, float], ...]:
+    factors: list[tuple[str, float]] = []
+    for spec in raw.split(","):
+        spec = spec.strip()
+        if not spec:
+            continue
+        if "=" not in spec:
+            raise ValueError(
+                f"invalid label factor spec {spec!r}; expected label=factor"
+            )
+        label, factor_raw = (part.strip() for part in spec.split("=", 1))
+        if not label:
+            raise ValueError(
+                f"invalid label factor spec {spec!r}; expected label=factor"
+            )
+        factors.append((label, float(factor_raw)))
+    return tuple(factors)
 
 
 def _parse_run_label_blocks(raw: str) -> dict[tuple[str, str], set[str]]:
@@ -2698,6 +3292,9 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         rtkdiag_candidate_recenter_max_shift_m=args.rtkdiag_candidate_recenter_max_shift_m,
         rtkdiag_candidate_select_mode=args.rtkdiag_candidate_select_mode,
         rtkdiag_candidate_emit_mode=args.rtkdiag_candidate_emit_mode,
+        rtkdiag_candidate_label_factors=_parse_label_factor_list(
+            args.rtkdiag_candidate_label_factors
+        ),
         sigma_pos=args.sigma_pos,
         sigma_cb=args.sigma_cb,
         spread_pos_init=args.spread_pos_init,
@@ -2782,6 +3379,10 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         ins_tc_align_gyro_max_dps=args.ins_tc_align_gyro_max_dps,
         ins_tc_align_min_samples=args.ins_tc_align_min_samples,
         ins_tc_yaw_init_min_speed_mps=args.ins_tc_yaw_init_min_speed_mps,
+        ins_tc_quality_gate_enabled=bool(args.ins_tc_quality_gate_enabled),
+        ins_tc_quality_gate_window_epochs=int(args.ins_tc_quality_gate_window_epochs),
+        ins_tc_quality_gate_max_fix_rate=float(args.ins_tc_quality_gate_max_fix_rate),
+        ins_tc_quality_gate_pu_skip=bool(args.ins_tc_quality_gate_pu_skip),
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -2912,6 +3513,49 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_hybrid_velocity_guide=True,
             enable_rtkdiag_pf_rescue=True,
             method_label="RBPF-velKF+DD+gate+hybrid+rtkdiag_pf",
+        ))
+    # Phase 11cq: rtkdiag_pf + post-process FGO (with bug #3 fixed in motion-delta).
+    if "rbpf+dd+gate+hybrid+rtkdiag_pf+phase4" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            enable_rtkdiag_pf_rescue=True,
+            enable_fgo_lambda=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+rtkdiag_pf+phase4",
+        ))
+    # Phase 11ex: rtkdiag_pf + imu_tc combo (TURING gici-open architectural ref:
+    # rtk_imu_tc estimator). rtkdiag_pf still drives candidate selection; imu_tc
+    # adds per-particle IMU pre-integration and Status=1/3 PF emission. Goal:
+    # IMU helps prune bad candidates by pulling particles toward IMU-predicted
+    # trajectory, so wrong candidate PU has less effect on final estimate.
+    if "rbpf+dd+gate+hybrid+rtkdiag_pf+imu_tc" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            enable_rtkdiag_pf_rescue=True,
+            enable_imu_tc=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+rtkdiag_pf+imu_tc",
+        ))
+    # Phase 11ex variant: rtkdiag_pf + ins_tc combo (15-state INS+GNSS EKF).
+    if "rbpf+dd+gate+hybrid+rtkdiag_pf+ins_tc" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            enable_rtkdiag_pf_rescue=True,
+            enable_ins_tc=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+rtkdiag_pf+ins_tc",
         ))
     # Phase 7: full stack (vguide + hybrid PU + DD AFV + RBPF gate) emitting
     # the PF's own estimate. Goal: show DD-AFV cm-correction beat the hybrid
@@ -3083,7 +3727,7 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
 _RTKDIAG_POLICIES = {
     "phase10o", "phase10p", "phase10r",
     "phase11h", "phase11i", "phase11l", "phase11n",
-    "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv",
+    "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di", "phase11dk", "phase11dl", "phase11dm", "phase11dn", "phase11do", "phase11dp", "phase11dq", "phase11dr", "phase11ds", "phase11dt", "phase11du", "phase11dv", "phase11dw", "phase11dx", "phase11dy", "phase11dz", "phase11ea", "phase11eb", "phase11ec", "phase11ed", "phase11ee", "phase11ef", "phase11eg", "phase11eh", "phase11ei", "phase11ej", "phase11ek", "phase11el", "phase11em", "phase11en", "phase11eo", "phase11ep",
 }
 
 
@@ -3099,7 +3743,333 @@ def _apply_rtkdiag_run_index_policy(
         or not bool(variant.enable_rtkdiag_pf_rescue)
     ):
         return variant
-    if policy in {"phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"}:
+    if policy == "phase11ep":
+        if city == "tokyo" and run == "run1":
+            variant = replace(
+                variant,
+                rtkdiag_candidate_local_ungate_tow_windows=(
+                    (188028.6, 188054.0, ()),
+                    (188131.8, 188137.4, ()),
+                    (188151.6, 188164.4, ()),
+                    (188259.0, 188268.2, ()),
+                    (188403.0, 188417.4, ()),
+                    (188432.2, 188443.2, ()),
+                    (188554.6, 188560.6, ()),
+                    (189207.2, 189216.6, ()),
+                ),
+            )
+        elif city == "tokyo" and run == "run2":
+            variant = replace(
+                variant,
+                rtkdiag_candidate_local_ungate_tow_windows=((178248.4, 178255.4, ()),),
+            )
+        elif city == "nagoya" and run == "run1":
+            variant = replace(
+                variant,
+                rtkdiag_candidate_local_ungate_tow_windows=(
+                    (551063.2, 551076.2, ()),
+                    (551106.6, 551113.8, ()),
+                    (551315.0, 551349.8, ()),
+                ),
+            )
+        elif city == "nagoya" and run == "run2":
+            variant = replace(
+                variant,
+                rtkdiag_candidate_label_factors=(
+                    (
+                        "xd_fixedicb_raw_n2_icbsweep_5734_5773_l1p8_l2p0",
+                        0.8,
+                    ),
+                ),
+            )
+        policy = "phase11eo"
+    if policy == "phase11eo":
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_t3_v8",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_n2_v10",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11en"
+    if policy == "phase11en":
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_t3_v7",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_n2_v9",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_n3_v6",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=30.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11em"
+    if policy == "phase11em":
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_n2_v8",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11el"
+    if policy == "phase11el":
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_n2_v7",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11ek"
+    if policy == "phase11ek":
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_n2_v6",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_n3_v5",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=30.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11ej"
+    if policy == "phase11ej":
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_t3_v6",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_n2_v5",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_n3_v4",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=30.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11ei"
+    if policy == "phase11ei":
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_t3_v5",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11eh"
+    if policy == "phase11eh":
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_n2_v4",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_n3_v3",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=30.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11eg"
+    if policy == "phase11eg":
+        policy = "phase11ef"
+    if policy == "phase11ef":
+        policy = "phase11ee"
+    if policy == "phase11ee":
+        policy = "phase11ed"
+    if policy == "phase11ed":
+        if city == "tokyo" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="composite_t2_v3",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=10.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11ec"
+    if policy == "phase11ec":
+        if city == "nagoya" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_n3_v2",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=30.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11eb"
+    if policy == "phase11eb":
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_t3_v4",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11ea"
+    if policy == "phase11ea":
+        policy = "phase11dz"
+    if policy == "phase11dz":
+        policy = "phase11dy"
+    if policy == "phase11dy":
+        policy = "phase11dx"
+    if policy == "phase11dx":
+        policy = "phase11dw"
+    if policy == "phase11dw":
+        policy = "phase11dv"
+    if policy == "phase11dv":
+        policy = "phase11du"
+    if policy == "phase11du":
+        policy = "phase11dt"
+    if policy == "phase11dt":
+        policy = "phase11ds"
+    if policy == "phase11ds":
+        policy = "phase11dr"
+    if policy == "phase11dr":
+        policy = "phase11dq"
+    if policy == "phase11dq":
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_t3_v3",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_n2_v3",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11dp"
+    if policy == "phase11dp":
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_t3_v2",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_n2_v2",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11do"
+    if policy == "phase11do":
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_t3_v1",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_n2_v1",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_hybdelta_n3_v1",
+                rtkdiag_candidate_ratio_min=1.7,
+                rtkdiag_candidate_residual_rms_max=30.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11dn"
+    if policy == "phase11dn":
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="temporal_n2_v1",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11dm"
+    if policy == "phase11dm":
+        if city == "tokyo" and run == "run3":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="composite_t3_v2",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        if city == "nagoya" and run == "run2":
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="composite_n2_v4",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_emit_mode="candidate",
+            )
+        policy = "phase11di"
+    if policy in {"phase11dk", "phase11dl"}:
+        # Phase 11dk/dl keep Phase 11di selector/gate settings and only change
+        # the per-run candidate allow-list in _filter_rtkdiag_candidates_by_policy.
+        policy = "phase11di"
+    if policy in {"phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
         # Phase 11aa: extends Phase 11z by switching tokyo/run1 selector
         # to hybrid_anchor (consensus selector showed +0.20pp on this run /
         # +0.05pp aggregate). Other runs unchanged from Phase 11z.
@@ -3116,6 +4086,16 @@ def _apply_rtkdiag_run_index_policy(
         # (--min-hold-count 3 --hold-ratio-threshold 1.5). Offline shows
         # +146m on tokyo/run3 alone (additive).
         if city == "tokyo" and run == "run1":
+            # Phase 11bw: switch t/r1 to residual mode (selector sweep predicted +164m
+            # vs score in small candidate pool; check if PF realises the gain).
+            if policy in {"phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="residual",
+                    rtkdiag_candidate_ratio_min=2.5,
+                    rtkdiag_candidate_residual_rms_max=1.4,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
             # Phase 11bu: switch t/r1 to score mode (confirmed +3.34pp / +344m on t/r1 alone)
             # — hybrid_anchor was underusing high-precision combos.
             if policy in {"phase11bu", "phase11bv"}:
@@ -3134,6 +4114,44 @@ def _apply_rtkdiag_run_index_policy(
                 rtkdiag_candidate_emit_mode="candidate",
             )
         if city == "tokyo" and run == "run2":
+            # Phase 11dc/dd: composite_t2_v2 = residual / (ratio^0.2 * rows^2.0 * abs_max^0.5).
+            # Fine sim BEST = 84.86% vs db 84.78 (+0.08pp). dd: ultra-fine confirmed same optimum.
+            if policy in {"phase11dc", "phase11dd", "phase11dh", "phase11di"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_t2_v2",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=10.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11db: composite_3axis_t2 = residual / (ratio^0.5 * rows^2.0).
+            # 3-axis sim BEST = 84.78% vs score_per_row 84.53 (+0.25pp).
+            if policy == "phase11db":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_3axis_t2",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=10.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cu/cv: switch t/r2 score → score_per_row.
+            if policy in {"phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score_per_row",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=10.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cc: try t/r2 score → residual (mirror t/r1 pattern).
+            if policy == "phase11cc":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="residual",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=10.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
             return replace(
                 variant,
                 rtkdiag_candidate_select_mode="score",
@@ -3142,6 +4160,33 @@ def _apply_rtkdiag_run_index_policy(
                 rtkdiag_candidate_emit_mode="candidate",
             )
         if city == "tokyo" and run == "run3":
+            # Phase 11cu/cv: switch t/r3 score → score_per_row (sweep +0.12pp / +19.6m).
+            if policy in {"phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score_per_row",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cb: tighten ratio_min 1.0 → 1.7 for t/r3 score (rms_max kept 50).
+            if policy == "phase11cb":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11ca: tighten rms_max 50 → 5 for t/r3 score (regressed -1.40pp).
+            if policy == "phase11ca":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=5.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
             return replace(
                 variant,
                 rtkdiag_candidate_select_mode="score",
@@ -3150,6 +4195,64 @@ def _apply_rtkdiag_run_index_policy(
                 rtkdiag_candidate_emit_mode="candidate",
             )
         if city == "nagoya" and run == "run1":
+            # Phase 11dd: composite_n1_v3 = residual / (rows^0.7 * abs_max^0.3).
+            # Ultra-fine sim BEST = 64.33% vs dc 64.31 (+0.02pp).
+            if policy in {"phase11dd", "phase11dh", "phase11di"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_n1_v3",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=1.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11dc: composite_n1_v2 = residual / (rows^0.5 * abs_max^0.3).
+            # Fine sim BEST = 64.31% vs db 64.25 (+0.06pp).
+            if policy == "phase11dc":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_n1_v2",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=1.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11db: composite_3axis_n1 = residual / (rows^0.5 * abs_max^0.5) (no ratio).
+            # 3-axis sim BEST = 64.25% vs rms_per_row 63.89 (+0.37pp).
+            if policy == "phase11db":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_3axis_n1",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=1.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cu/cv: switch n/r1 nrows → rms_per_row (sweep +0.14pp / +6.2m).
+            if policy in {"phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="rms_per_row",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=1.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11bz: try n/r1 nrows → ratio (max ratio = highest ambiguity confidence).
+            if policy == "phase11bz":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="ratio",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=1.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11by: try n/r1 nrows → residual (mirror t/r1 success).
+            # Tight rms_max=1.0 → residual mode should pick the truly-best rms candidate.
+            if policy == "phase11by":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="residual",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=1.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
             # Phase 11bv: try switching n/r1 from nrows to score (mirror t/r1 success).
             if policy == "phase11bv":
                 return replace(
@@ -3167,6 +4270,122 @@ def _apply_rtkdiag_run_index_policy(
                 rtkdiag_candidate_emit_mode="candidate",
             )
         if city == "nagoya" and run == "run2":
+            # Phase 11dh: dd composite_n2_v3 + emit_mode="pf" + recenter=2.0m.
+            # Test: if candidate > 2m from PF, skip recenter, drift_skip → emit hybrid.
+            # Goal: filter outlier candidates by hybrid agreement.
+            if policy == "phase11dh":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_n2_v3",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="pf",
+                    rtkdiag_candidate_recenter_max_shift_m=2.0,
+                )
+            # Phase 11dd: composite_n2_v3 = residual / (ratio^0.3 * rows^0.7 * abs_max^0.8).
+            # Ultra-fine sim BEST = 40.21% vs dc 40.14 (+0.07pp).
+            if policy in {"phase11dd", "phase11di"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_n2_v3",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11dc: composite_n2_v2 = residual / (ratio^0.4 * rows^1.0 * abs_max^0.7).
+            # Fine sim BEST = 40.14% vs db 39.92 (+0.22pp).
+            if policy == "phase11dc":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_n2_v2",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11da/db: composite_3axis_n2 = residual / (ratio^0.5 * rows^1.5 * abs_max^0.5).
+            # 3-axis sim BEST = 39.92% vs cy 39.18% (+0.74pp).
+            if policy in {"phase11da", "phase11db"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_3axis_n2",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cv/cz: switch n/r2 score → score_per_row2 (alpha sweep b=2、sim 39.43% vs 39.18%、+0.25pp).
+            if policy in {"phase11cv", "phase11cz"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score_per_row2",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cu/cy: switch n/r2 score → score_per_row (filter fix 後 PF +0.06pp 確認).
+            if policy in {"phase11cu", "phase11cy"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score_per_row",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cp: try ratio mode on n/r2 (untested).
+            if policy == "phase11cp":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="ratio",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11co: try consensus5 (median-anchored) on n/r2.
+            if policy == "phase11co":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="consensus5",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cn: try wavg3 fusion mode on n/r2 (top 3 candidates weighted avg).
+            if policy == "phase11cn":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="wavg3",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cj: relax sigma_m 0.02 → 1.0 on n/r2 (PF takes candidate weakly).
+            if policy == "phase11cj":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                    rtkdiag_candidate_sigma_m=1.0,
+                )
+            # Phase 11ci: relax emit_max_diff_m 0.4 → 2.0 on n/r2 (no effect).
+            if policy == "phase11ci":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                    rtkdiag_candidate_emit_max_diff_m=2.0,
+                )
+            # Phase 11bx: try n/r2 score → residual (regressed -4.49pp).
+            if policy == "phase11bx":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="residual",
+                    rtkdiag_candidate_ratio_min=1.0,
+                    rtkdiag_candidate_residual_rms_max=50.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
             return replace(
                 variant,
                 rtkdiag_candidate_select_mode="score",
@@ -3175,6 +4394,71 @@ def _apply_rtkdiag_run_index_policy(
                 rtkdiag_candidate_emit_mode="candidate",
             )
         if city == "nagoya" and run == "run3":
+            # Phase 11cv: switch n/r3 score → score_per_row3 (alpha sweep +1.06pp at b=3).
+            if policy == "phase11cv":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score_per_row3",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=30.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11dd: n/r3 composite_n3_v3 = residual / (ratio^0.2 * rows^0.7 * abs_max^0.5).
+            # Ultra-fine sim BEST = 59.15% vs dc 59.10 (+0.05pp).
+            if policy in {"phase11dd", "phase11dh", "phase11di"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_n3_v3",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=30.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11dc: n/r3 composite_n3_v2 = residual / (ratio^0.2 * rows^0.5 * abs_max^0.5).
+            # Fine sim BEST = 59.10% vs db 59.04 (+0.05pp).
+            if policy == "phase11dc":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_n3_v2",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=30.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11da/db: n/r3 composite_3axis_n2 (3-axis sim 59.04% vs cy 58.85%、+0.19pp).
+            if policy in {"phase11da", "phase11db"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="composite_3axis_n2",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=30.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cx/cy: n/r3 score → score_per_row3 (alpha sweep +1.06pp at b=3、PF +0.25pp 確認).
+            if policy in {"phase11cx", "phase11cy", "phase11cz"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score_per_row3",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=30.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cu/cw: switch n/r3 score → score_per_row (sweep +0.81pp / +27m).
+            if policy in {"phase11cu", "phase11cw"}:
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="score_per_row",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=30.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
+            # Phase 11cd: try n/r3 score → residual (last selector permutation).
+            if policy == "phase11cd":
+                return replace(
+                    variant,
+                    rtkdiag_candidate_select_mode="residual",
+                    rtkdiag_candidate_ratio_min=1.7,
+                    rtkdiag_candidate_residual_rms_max=30.0,
+                    rtkdiag_candidate_emit_mode="candidate",
+                )
             return replace(
                 variant,
                 rtkdiag_candidate_select_mode="score",
@@ -3388,59 +4672,478 @@ def _filter_rtkdiag_candidates_by_policy(
     policy: str,
     blocked_labels: set[str] | None = None,
 ) -> list[tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]]:
+    if policy == "phase11eo":
+        # Phase 11eo changes only t/r3 and n/r2 selector label penalties.
+        # Candidate pool and block rules are exactly Phase 11en.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11en",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11en":
+        # Phase 11en changes only t/r3, n/r2, and n/r3 selector label
+        # penalties. Candidate pool and block rules are exactly Phase 11em.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11em",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11em":
+        # Phase 11em changes only n/r2 selector label penalties.
+        # Candidate pool and block rules are exactly Phase 11el.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11el",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11el":
+        # Phase 11el changes only n/r2 selector label penalties.
+        # Candidate pool and block rules are exactly Phase 11ek.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11ek",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11ek":
+        # Phase 11ek changes only n/r2 and n/r3 selector label penalties.
+        # Candidate pool and block rules are exactly Phase 11ej.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11ej",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11ej":
+        # Phase 11ej changes only t/r3, n/r2, and n/r3 selector label
+        # penalties. Candidate pool and block rules are exactly Phase 11ei.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11ei",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11ei":
+        # Phase 11ei changes only t/r3 selector label penalties. Candidate
+        # pool and block rules are exactly Phase 11eh.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11eh",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11eh":
+        # Phase 11eh changes only n/r2 and n/r3 selector label penalties.
+        # Candidate pool and block rules are exactly Phase 11eg.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11eg",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11eg":
+        # Phase 11eg: Phase 11ef plus n/r3-only micro-add of
+        # csig01_psig1, em5oG, and mlc2nobds. Combo replay on nagoya/run3
+        # gave +2.494m.
+        extra_blocked = set(blocked_labels or set())
+        if (city, run) != ("nagoya", "run3"):
+            extra_blocked.update({"csig01_psig1", "em5oG", "mlc2nobds"})
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11ef",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11ef":
+        # Phase 11ef: Phase 11ee plus t/r3-only micro-add of
+        # rtkout5minobs3. Single-add replay on tokyo/run3 gave +1.817m.
+        extra_blocked = set(blocked_labels or set())
+        if (city, run) != ("tokyo", "run3"):
+            extra_blocked.add("rtkout5minobs3")
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11ee",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11ee":
+        # Phase 11ee: Phase 11ed base plus n/r2-only micro-add of
+        # csig005_em10 and onlyG_r05. Both labels are blocked elsewhere to
+        # avoid widening the pool on runs that were not replay-positive.
+        extra_blocked = set(blocked_labels or set())
+        if (city, run) != ("nagoya", "run2"):
+            extra_blocked.update({"csig005_em10", "onlyG_r05"})
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11ed",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11ed":
+        # Phase 11ed changes only tokyo/run2 selector parameters; candidate
+        # blocks are exactly the Phase 11ec pool.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11ec",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11ec":
+        # Phase 11ec changes only nagoya/run3 selector parameters; candidate
+        # blocks are exactly the Phase 11eb pool.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11eb",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11eb":
+        # Phase 11eb changes only tokyo/run3 selector parameters; candidate
+        # blocks are exactly the Phase 11ea pool.
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11ea",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11ea":
+        # Phase 11ea: tenth selected-loss block pass on top of 11dz.
+        blocked_by_run: dict[tuple[str, str], set[str]] = {
+            ("nagoya", "run2"): {"r25g20"},
+        }
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(blocked_by_run.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dz",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11dz":
+        # Phase 11dz: ninth selected-loss block pass on top of 11dy.
+        blocked_by_run: dict[tuple[str, str], set[str]] = {
+            ("nagoya", "run2"): {"csig005_holdvrlx", "r20"},
+        }
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(blocked_by_run.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dy",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11dy":
+        # Phase 11dy: eighth selected-loss block pass on top of 11dx.
+        blocked_by_run: dict[tuple[str, str], set[str]] = {
+            ("nagoya", "run2"): {"r20ga"},
+            ("nagoya", "run3"): {"r30"},
+        }
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(blocked_by_run.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dx",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11dx":
+        # Phase 11dx: seventh selected-loss block pass on top of 11dw.
+        blocked_by_run: dict[tuple[str, str], set[str]] = {
+            ("nagoya", "run1"): {"c005p1"},
+            ("nagoya", "run2"): {"em5mlc2oG"},
+            ("nagoya", "run3"): {"mlc1c005r10", "r20", "r20g40", "r30g"},
+        }
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(blocked_by_run.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dw",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11dw":
+        # Phase 11dw: sixth selected-loss block pass on top of 11dv.
+        blocked_by_run: dict[tuple[str, str], set[str]] = {
+            ("tokyo", "run1"): {"r20g10", "r20g15"},
+            ("nagoya", "run2"): {"onlyG"},
+            ("nagoya", "run3"): {"r15g", "r15g20", "r25g20"},
+        }
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(blocked_by_run.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dv",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11dv":
+        # Phase 11dv: fifth selected-loss block pass on top of 11du.
+        blocked_by_run: dict[tuple[str, str], set[str]] = {
+            ("nagoya", "run2"): {"r20g40", "ratio12oG", "nobds"},
+        }
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(blocked_by_run.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11du",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11du":
+        # Phase 11du: fourth selected-loss block pass on top of 11dt.
+        blocked_by_run: dict[tuple[str, str], set[str]] = {
+            ("nagoya", "run2"): {"r15g20", "r20g", "csig1"},
+        }
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(blocked_by_run.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dt",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11dt":
+        # Phase 11dt: third selected-loss block pass on top of 11ds.
+        blocked_by_run: dict[tuple[str, str], set[str]] = {
+            ("tokyo", "run3"): {"oGr05", "psig2"},
+            ("nagoya", "run2"): {"mlc1c005"},
+        }
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(blocked_by_run.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11ds",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11ds":
+        # Phase 11ds: second selected-loss block pass on top of 11dr.
+        blocked_by_run: dict[tuple[str, str], set[str]] = {
+            ("tokyo", "run1"): {"csig05hvr", "r25g15"},
+            ("tokyo", "run2"): {"r15nh"},
+            ("tokyo", "run3"): {"mlc1oGc005p1", "c005ga", "r05", "oGc01p1"},
+            ("nagoya", "run1"): {"rtkout10", "csig05_em10"},
+            ("nagoya", "run2"): {"n2loose"},
+            ("nagoya", "run3"): {"r15nh", "r20g", "csig05", "mlc1"},
+        }
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(blocked_by_run.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dr",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11dr":
+        # Phase 11dr: keep Phase 11dq temporal selectors, but block labels
+        # that single-run replay showed were locally replaceable by better
+        # candidates.
+        blocked_by_run: dict[tuple[str, str], set[str]] = {
+            ("tokyo", "run1"): {"oGp1hr", "csig05psh"},
+            ("nagoya", "run1"): {"c005hr", "mlc1c005p1", "oGc01"},
+            ("nagoya", "run2"): {"rtkout5", "rtkout5c005", "oGr05", "n2loose2"},
+            ("tokyo", "run3"): {"csig01", "mlc1oG", "csig05ps"},
+            ("nagoya", "run3"): {"r15g15", "em3mlc1oG", "psig1", "csig05hr", "oGp1"},
+        }
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(blocked_by_run.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dq",
+            blocked_labels=extra_blocked,
+        )
+    if policy in {"phase11do", "phase11dp", "phase11dq"}:
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dn",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11dn":
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dm",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11dm":
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dl",
+            blocked_labels=blocked_labels,
+        )
+    if policy == "phase11dl":
+        # 11dk + final run-local positives from discovered diag dirs and
+        # post-11dk all-known replay.  Offline combo: +10.410m / +0.022471pp.
+        allowed: dict[tuple[str, str], set[str]] = {
+            ("nagoya", "run1"): {"xd_r25_nohold", "csig05_em10"},
+            ("nagoya", "run2"): {"csig05_psig1", "em5mlc2oG"},
+            ("nagoya", "run3"): {"xd_n3_loose_hold4_ratio15_gate10_min6"},
+            ("tokyo", "run1"): {"xd_ratio4", "xd_r2_nohold", "xd_r25_nohold", "r10c005p1"},
+            ("tokyo", "run2"): {"xd_ratio3_gate10_min6", "em5c005p1"},
+            ("tokyo", "run3"): {"csig01_holdvrlx"},
+        }
+        surgical_labels = set().union(*allowed.values())
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(surgical_labels - allowed.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11dk",
+            blocked_labels=extra_blocked,
+        )
+    if policy == "phase11dk":
+        # 11di true-base + run-local positive extras discovered by
+        # sim_ppc_phase_csv_addcand.py --allowed-pairs (delta_pass_m > 1m).
+        allowed: dict[tuple[str, str], set[str]] = {
+            ("nagoya", "run1"): {"ratio12", "csig05_psig1_holdvrlx"},
+            ("nagoya", "run2"): {"mlc1oGc0001", "mlc1r10oG", "rtkout5oG", "psig3", "csig005_holdvrlx", "ratio12oG"},
+            ("nagoya", "run3"): {"mlc1c005r10em3", "mlc1", "csig05_holdrlx_em10", "r10", "r08"},
+            ("tokyo", "run1"): {"oGc005p1hr", "c005p1hr", "oGc005p2", "mlc1r10c005p1", "em3oG", "oGc005hr", "csig005_holdvrlx"},
+            ("tokyo", "run2"): {"oGc005p05", "mlc1oGp1"},
+            ("tokyo", "run3"): {"csig05_r10", "csig01_holdrlx"},
+        }
+        surgical_labels = set().union(*allowed.values())
+        extra_blocked = set(blocked_labels or set())
+        extra_blocked.update(surgical_labels - allowed.get((city, run), set()))
+        return _filter_rtkdiag_candidates_by_policy(
+            candidates,
+            city=city,
+            run=run,
+            policy="phase11di",
+            blocked_labels=extra_blocked,
+        )
     effective_blocked_labels = set(blocked_labels or set())
-    if policy in {"phase11h", "phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and city == "nagoya" and run == "run2":
+    # Phase 11ce: experimentally block mlc1oG on n/r2 (currently dominant
+    # selection ~1729 epochs, ~42% of selected). Test if this drives selection
+    # toward better candidates.
+    if policy == "phase11ce" and city == "nagoya" and run == "run2":
+        effective_blocked_labels.add("mlc1oG")
+    # Phase 11cf: 5 new candidates restricted to n/r2 only (regressed -0.86pp on n/r2).
+    if policy == "phase11cf" and (city, run) != ("nagoya", "run2"):
+        effective_blocked_labels.update({"c005em10", "mlc1c005r10oG", "GE", "psig01", "nopostflt"})
+    # Phase 11cg: 5 different candidates targeting n/r2 (regressed -0.30pp).
+    if policy == "phase11cg" and (city, run) != ("nagoya", "run2"):
+        effective_blocked_labels.update({"c005hvrlx", "mlc1oGc0001", "GEonly", "noarfilt", "c005minar3"})
+    # Phase 11ch: open phase11cf candidates GLOBALLY (block only on n/r2 where they regressed).
+    if policy == "phase11ch" and (city, run) == ("nagoya", "run2"):
+        effective_blocked_labels.update({"c005em10", "mlc1c005r10oG", "GE", "psig01", "nopostflt"})
+    # Phase 11ck: modeauto + modestatic (regressed -7.70pp on n/r2).
+    if policy == "phase11ck" and (city, run) != ("nagoya", "run2"):
+        effective_blocked_labels.update({"modeauto", "modestatic"})
+    # Phase 11cl: psig005 + oGc005hr + r12oG candidates restricted to n/r2.
+    if policy == "phase11cl" and (city, run) != ("nagoya", "run2"):
+        effective_blocked_labels.update({"psig005", "oGc005hr", "r12oG"})
+    # Phase 11dg: surgical addition of 3 NEW candidates with strict per-run allowance
+    # based on per-epoch oracle pick frequency (sim_ppc_oracle_label_freq.py):
+    # - xr25_glonassar: allowed only on tokyo/run1 (8.6%) and tokyo/run2 (10.1%)
+    # - xmlc1psig005: allowed only on tokyo/run2 (12.2%)
+    # - xcsig005_em10: allowed only on nagoya/run2 (9.0%)
+    if policy == "phase11dg":
+        if (city, run) not in {("tokyo", "run1"), ("tokyo", "run2")}:
+            effective_blocked_labels.add("xr25_glonassar")
+        if (city, run) != ("tokyo", "run2"):
+            effective_blocked_labels.add("xmlc1psig005")
+        if (city, run) != ("nagoya", "run2"):
+            effective_blocked_labels.add("xcsig005_em10")
+    # Phase 11di: narrower surgical version after replaying additions against
+    # the real Phase 11dd per-run pools. 11dg let several oracle-frequent
+    # labels into runs where the 11dd composite selector actually regressed.
+    if policy == "phase11di":
+        if (city, run) != ("tokyo", "run1"):
+            effective_blocked_labels.update({"xr25_glonassar", "xcsig005_em10"})
+        if (city, run) != ("nagoya", "run1"):
+            effective_blocked_labels.add("xr17_glonassar")
+        if (city, run) != ("tokyo", "run3"):
+            effective_blocked_labels.add("xpsig05")
+        effective_blocked_labels.update({"xmlc1psig005", "xnobds_holdrlx"})
+    if policy in {"phase11h", "phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and city == "nagoya" and run == "run2":
+        # Phase 11cm: skip this 11h-era block on n/r2 to test if old reasoning still holds.
+        # Phase 11cu/cv/cw: re-apply block (the cm-cp experiment showed regression).
         effective_blocked_labels.update({"r15g15", "r20g15", "r25g15", "r30g15"})
-    if policy in {"phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (
+    if policy in {"phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (
         (city, run) in {("tokyo", "run2"), ("nagoya", "run1"), ("nagoya", "run2")}
     ):
         effective_blocked_labels.update({"r30", "r30g"})
-    if policy in {"phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (
+    if policy in {"phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (
         (city, run) in {("nagoya", "run1"), ("nagoya", "run2")}
     ):
         effective_blocked_labels.add("r20g10")
-    if policy in {"phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and city == "nagoya":
+    if policy in {"phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and city == "nagoya":
         effective_blocked_labels.update({"r15g10", "r25g10"})
     # Phase 11ab: r15ga (--glonass-ar autocal ratio 1.5) only helps tokyo/run3
     # and nagoya/run1 in offline simulation; block on the other 4 runs to
     # avoid the -30/-19/-5/-2 m/run regressions seen in the sim.
-    if policy in {"phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1")}:
+    if policy in {"phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1")}:
         effective_blocked_labels.add("r15ga")
     # Phase 11ac: r20ga only helps tokyo/run3 (+12.6m) and nagoya/run2
     # (+47.7m) on top of 11ab base. Block elsewhere.
-    if policy in {"phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2")}:
+    if policy in {"phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2")}:
         effective_blocked_labels.add("r20ga")
     # Phase 11ac: em10 (elev mask 10°) only helps tokyo/run3 (+21m). Block
     # elsewhere. Phase 11af also allows em10 on nagoya/run1 (+2.0m offline).
     if policy in {"phase11ac", "phase11ad", "phase11ae"} and (city, run) != ("tokyo", "run3"):
         effective_blocked_labels.add("em10")
-    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1")}:
+    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1")}:
         effective_blocked_labels.add("em10")
     # Phase 11ad: psig1 (--pseudorange-sigma 1.0) gives +125m only on
     # tokyo/run3. Phase 11af also allows psig1 on nagoya/run3 (+4.1m offline).
     if policy in {"phase11ad", "phase11ae"} and (city, run) != ("tokyo", "run3"):
         effective_blocked_labels.add("psig1")
-    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run3")}:
+    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run3")}:
         effective_blocked_labels.add("psig1")
     # Phase 11ad: holdrlx (relaxed hold ambiguity) gives +72m only on
     # tokyo/run3.
-    if policy in {"phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run3"):
+    if policy in {"phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run3"):
         effective_blocked_labels.add("holdrlx")
     # Phase 11ae: r12ga (--ratio 1.2 + --glonass-ar autocal) gives +103m
     # additive on tokyo/run3 only. Phase 11af keeps it (no harm).
-    if policy in {"phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run3"):
+    if policy in {"phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run3"):
         effective_blocked_labels.add("r12ga")
     # Phase 11ae: psig2 (--pseudorange-sigma 2.0) gives +44.5m additive on
     # tokyo/run3 only. Phase 11af/ag keeps it (no harm).
-    if policy in {"phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run3"):
+    if policy in {"phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run3"):
         effective_blocked_labels.add("psig2")
     # Phase 11af: psig1hr (psig1 + holdrlx combined config) gives +90.8m
     # additive on tokyo/run3 only. Negative on nagoya runs.
-    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run3"):
+    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run3"):
         effective_blocked_labels.add("psig1hr")
     # Phase 11af: nobds (--no-beidou) gives +29.7m on nagoya/run2 (largest),
     # +9.8m on tokyo/run3, +4.2m on tokyo/run1. Negative on nagoya/run1, run3.
-    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("nagoya", "run2"), ("tokyo", "run3"), ("tokyo", "run1")}:
+    if policy in {"phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("nagoya", "run2"), ("tokyo", "run3"), ("tokyo", "run1")}:
         effective_blocked_labels.add("nobds")
     # Phase 11ag: csig05 (--carrier-phase-sigma 0.0005) gives massive gains:
     # tokyo/run3 +95.8m, nagoya/run2 +95.8m, tokyo/run1 +9.8m. Negative on
@@ -3448,37 +5151,37 @@ def _filter_rtkdiag_candidates_by_policy(
     # additive after the other csig05* variants).
     if policy in {"phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2"), ("tokyo", "run1")}:
         effective_blocked_labels.add("csig05")
-    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2"), ("tokyo", "run1"), ("nagoya", "run3")}:
+    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2"), ("tokyo", "run1"), ("nagoya", "run3")}:
         effective_blocked_labels.add("csig05")
     # Phase 11ag: noglo (--no-glonass) gives +40.5m on tokyo/run1 only.
-    if policy in {"phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run1"):
+    if policy in {"phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("noglo")
     # Phase 11ag: csig1 (--carrier-phase-sigma 0.001) gives +0.6m on
     # nagoya/run1. Phase 11ah extends to {nagoya/run1, nagoya/run2, tokyo/run3}
     # (additive after csig05).
     if policy == "phase11ag" and (city, run) != ("nagoya", "run1"):
         effective_blocked_labels.add("csig1")
-    if policy in {"phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("nagoya", "run1"), ("nagoya", "run2"), ("tokyo", "run3")}:
+    if policy in {"phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("nagoya", "run1"), ("nagoya", "run2"), ("tokyo", "run3")}:
         effective_blocked_labels.add("csig1")
     # Phase 11ah: rout30 (--rtk-update-outlier-threshold 30) gives +3.6m
     # on nagoya/run3 only.
-    if policy in {"phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run3"):
+    if policy in {"phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run3"):
         effective_blocked_labels.add("rout30")
     # Phase 11ah: rout20 (--rtk-update-outlier-threshold 20) gives +2.2m
     # on nagoya/run1 only.
-    if policy in {"phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run1"):
+    if policy in {"phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run1"):
         effective_blocked_labels.add("rout20")
     # Phase 11ai: csig05hr (csig05 + holdrlx combined) gives massive gains:
     # tokyo/run1 +509.8m, tokyo/run3 +147.1m, nagoya/run3 +128.3m. Block on
     # nagoya/run2 (-7.7m) and nagoya/run1 (+0.4m, near-zero).
-    if policy in {"phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3"), ("nagoya", "run3")}:
+    if policy in {"phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3"), ("nagoya", "run3")}:
         effective_blocked_labels.add("csig05hr")
     # Phase 11ai: csig05ps (csig05 + psig1 combined) gives +22.5m on
     # tokyo/run3 and +3.4m on nagoya/run1. Phase 11aj also enables on
     # nagoya/run3 (+11.7m additive).
     # Phase 11ai/ak: csig05ps (csig05 + psig1) for {tokyo/run3, nagoya/run1}.
     # Phase 11aj added nagoya/run3 (-0.12pp PF on that run, so removed in 11ak).
-    if policy in {"phase11ai", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1")}:
+    if policy in {"phase11ai", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1")}:
         effective_blocked_labels.add("csig05ps")
     if policy == "phase11aj" and (city, run) not in {("tokyo", "run3"), ("nagoya", "run1"), ("nagoya", "run3")}:
         effective_blocked_labels.add("csig05ps")
@@ -3486,30 +5189,30 @@ def _filter_rtkdiag_candidates_by_policy(
     # to {tokyo/run3, nagoya/run2} only — nagoya/run3 was -0.12pp in PF.
     if policy == "phase11aj" and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2"), ("nagoya", "run3")}:
         effective_blocked_labels.add("csig01")
-    if policy in {"phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2")}:
+    if policy in {"phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2")}:
         effective_blocked_labels.add("csig01")
     # Phase 11aj: rout100 hurt nagoya/run1 by -1.49pp in PF — block in phase11ak.
     if policy == "phase11aj" and (city, run) != ("nagoya", "run1"):
         effective_blocked_labels.add("rout100")
-    if policy in {"phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"}:
+    if policy in {"phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
         effective_blocked_labels.add("rout100")
     # Phase 11aj: csig05nb (csig05 + nobds) +0.8m offline but -0.02pp PF.
     # Block entirely in phase11ak.
     if policy == "phase11aj" and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("csig05nb")
-    if policy in {"phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"}:
+    if policy in {"phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
         effective_blocked_labels.add("csig05nb")
     # Phase 11ak: csig05hvr (csig05 + holdvrlx very loose hold) gives +53.2m
     # on tokyo/run1 only. Phase 11am also enables tokyo/run3 (+29.4m offline).
     if policy in {"phase11ak", "phase11al"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("csig05hvr")
-    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3")}:
+    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3")}:
         effective_blocked_labels.add("csig05hvr")
     # Phase 11ak: csig05psh (csig05 + psig1 + holdrlx triple) gives +44m on
     # tokyo/run3 and +21.5m on nagoya/run3. Phase 11am also enables tokyo/run1 (+4.1m).
     if policy in {"phase11ak", "phase11al"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run3")}:
         effective_blocked_labels.add("csig05psh")
-    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run3"), ("tokyo", "run1")}:
+    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run3"), ("tokyo", "run1")}:
         effective_blocked_labels.add("csig05psh")
     # Phase 11ak: csig05em (csig05 + em10) gives +2.5m on nagoya/run1.
     if policy == "phase11ak" and (city, run) != ("nagoya", "run1"):
@@ -3517,224 +5220,224 @@ def _filter_rtkdiag_candidates_by_policy(
     if policy == "phase11al":
         effective_blocked_labels.add("csig05em")
     # Phase 11am: csig05em allowed only on tokyo/run3 (+20.5m offline). Block elsewhere.
-    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run3"):
+    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run3"):
         effective_blocked_labels.add("csig05em")
     # Phase 11ak: csig01hr (csig01 + holdrlx) gives +42.8m on nagoya/run2.
     # Phase 11am widens to {tokyo/run1 +7.2m, tokyo/run3 +23.1m, nagoya/run2 +42.8m}.
     if policy in {"phase11ak", "phase11al"} and (city, run) != ("nagoya", "run2"):
         effective_blocked_labels.add("csig01hr")
-    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("nagoya", "run2"), ("tokyo", "run1"), ("tokyo", "run3")}:
+    if policy in {"phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("nagoya", "run2"), ("tokyo", "run1"), ("tokyo", "run3")}:
         effective_blocked_labels.add("csig01hr")
     # Phase 11an: c5p1hvr (csig05+psig1+holdvrlx 4-knob) gives +104.6m on
     # tokyo/run1 and +28.4m on nagoya/run3 offline.
-    if policy in {"phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run3")}:
+    if policy in {"phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run3")}:
         effective_blocked_labels.add("c5p1hvr")
     # Phase 11an: c1p1hr (csig01+psig1+holdrlx triple) gives +7.3m on tokyo/run3 offline.
-    if policy in {"phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run3"):
+    if policy in {"phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run3"):
         effective_blocked_labels.add("c1p1hr")
     # Phase 11an: c5hrem (csig05+holdrlx+em10 triple) gives +18.2m on tokyo/run3 offline.
-    if policy in {"phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run3"):
+    if policy in {"phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run3"):
         effective_blocked_labels.add("c5hrem")
     # Phase 11ao: csig005 (--carrier-phase-sigma 0.00005, super-tight) gives
     # +36.1m on nagoya/run2 (the lowest run). Marginal elsewhere.
-    if policy in {"phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run2"):
+    if policy in {"phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run2"):
         effective_blocked_labels.add("csig005")
     # Phase 11ao: c5nbhr (csig05+nobds+holdrlx triple). Marginal +9.8m on
     # tokyo/run1 and +6.8m on nagoya/run1. Negative on others.
-    if policy in {"phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run1")}:
+    if policy in {"phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run1")}:
         effective_blocked_labels.add("c5nbhr")
     # Phase 11ap: c005hr (csig005+holdrlx) marginal +2.6m on tokyo/run1, +9.5m on nagoya/run1.
-    if policy in {"phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run1")}:
+    if policy in {"phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run1")}:
         effective_blocked_labels.add("c005hr")
     # Phase 11aq: r05 (--ratio 0.5) marginal +5.0/+3.9/+2.3m on tokyo/run1, tokyo/run3, nagoya/run1.
-    if policy in {"phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3"), ("nagoya", "run1")}:
+    if policy in {"phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3"), ("nagoya", "run1")}:
         effective_blocked_labels.add("r05")
     # Phase 11aq: c005ga (csig005+glonassar) marginal +1.8/+3.3m on tokyo/run1, tokyo/run3.
-    if policy in {"phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3")}:
+    if policy in {"phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3")}:
         effective_blocked_labels.add("c005ga")
     # Phase 11ar: onlyG (--no-glonass --no-beidou, only G+E+J). +9.4m tokyo/run1
     # and **+20.2m on nagoya/run2** (the lowest-scoring run). Negative on nagoya/run3.
-    if policy in {"phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run2")}:
+    if policy in {"phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run1"), ("nagoya", "run2")}:
         effective_blocked_labels.add("onlyG")
     # Phase 11as: oGc05 (onlyG + csig05) +14.3m on tokyo/run1.
-    if policy in {"phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run1"):
+    if policy in {"phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("oGc05")
     # Phase 11as: oGc005 (onlyG + csig005) +10.4m on nagoya/run2.
-    if policy in {"phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run2"):
+    if policy in {"phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run2"):
         effective_blocked_labels.add("oGc005")
     # Phase 11as: oGp1 (onlyG + psig1) +2.1/+3.0m on nagoya/run1, nagoya/run3.
-    if policy in {"phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("nagoya", "run1"), ("nagoya", "run3")}:
+    if policy in {"phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("nagoya", "run1"), ("nagoya", "run3")}:
         effective_blocked_labels.add("oGp1")
     # Phase 11at: oGp1hr (onlyG + psig1 + holdrlx) +15.4m on tokyo/run1.
-    if policy in {"phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run1"):
+    if policy in {"phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("oGp1hr")
     # Phase 11at: oGp1c05 (onlyG + psig1 + csig05) +9.2m nagoya/run3, +2.0m nagoya/run1.
-    if policy in {"phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("nagoya", "run3"), ("nagoya", "run1")}:
+    if policy in {"phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("nagoya", "run3"), ("nagoya", "run1")}:
         effective_blocked_labels.add("oGp1c05")
     # Phase 11at: oGr05 (onlyG + ratio 0.5) marginal +2.2/+3.7m on tokyo/run3, nagoya/run2.
-    if policy in {"phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2")}:
+    if policy in {"phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2")}:
         effective_blocked_labels.add("oGr05")
     # Phase 11at: oGc01 (onlyG + csig01) marginal +3.1m on nagoya/run1.
-    if policy in {"phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run1"):
+    if policy in {"phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run1"):
         effective_blocked_labels.add("oGc01")
     # Phase 11at: oGem10 (onlyG + em10) marginal +1.5m/+1.1m on tokyo/run3, nagoya/run3.
-    if policy in {"phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run3")}:
+    if policy in {"phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run3")}:
         effective_blocked_labels.add("oGem10")
     # Phase 11au: oGc005p1 (onlyG + csig005 + psig1) +37m tokyo/run2, +6.6m tokyo/run1, +1.2m nagoya/run1.
-    if policy in {"phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run2"), ("tokyo", "run1"), ("nagoya", "run1")}:
+    if policy in {"phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run2"), ("tokyo", "run1"), ("nagoya", "run1")}:
         effective_blocked_labels.add("oGc005p1")
     # Phase 11au: c005p1 (csig005 + psig1, no onlyG) +13.9m tokyo/run1, +15.1m tokyo/run2, +1.5m nagoya/run1.
-    if policy in {"phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run2"), ("nagoya", "run1")}:
+    if policy in {"phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run2"), ("nagoya", "run1")}:
         effective_blocked_labels.add("c005p1")
     # Phase 11au: oGc01p1 (onlyG + csig01 + psig1) +21.4m tokyo/run2, +3.4m tokyo/run3.
-    if policy in {"phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run2"), ("tokyo", "run3")}:
+    if policy in {"phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run2"), ("tokyo", "run3")}:
         effective_blocked_labels.add("oGc01p1")
     # Phase 11aw: oGc00005p1 (onlyG + csig 0.00005 + psig 1) +16.7m tokyo/run1.
-    if policy in {"phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run1"):
+    if policy in {"phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("oGc00005p1")
     # Phase 11aw: oGc0001p1 (onlyG + csig 0.0001 + psig 1) +16.3m tokyo/run2, +5.4m tokyo/run1.
-    if policy in {"phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run2"), ("tokyo", "run1")}:
+    if policy in {"phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run2"), ("tokyo", "run1")}:
         effective_blocked_labels.add("oGc0001p1")
     # Phase 11aw: nobdsc005p1 (no-beidou + csig005 + psig1) +2.7m nagoya/run3.
-    if policy in {"phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run3"):
+    if policy in {"phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run3"):
         effective_blocked_labels.add("nobdsc005p1")
     # Phase 11ay: em5 (--elevation-mask-deg 5) +13.8m nagoya/run1, +8.0m tokyo/run2.
-    if policy in {"phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("nagoya", "run1"), ("tokyo", "run2")}:
+    if policy in {"phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("nagoya", "run1"), ("tokyo", "run2")}:
         effective_blocked_labels.add("em5")
     # Phase 11ay: mlc2oG (--min-lock-count 2 + onlyG) +7.5m tokyo/run1, +1.3m tokyo/run3.
-    if policy in {"phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3")}:
+    if policy in {"phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run1"), ("tokyo", "run3")}:
         effective_blocked_labels.add("mlc2oG")
     # Phase 11ba: mlc1oG (--min-lock-count 1 + onlyG) +11.3m t/r2, +9.3m t/r3, +3.6m n/r2.
-    if policy in {"phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run2"), ("tokyo", "run3"), ("nagoya", "run2")}:
+    if policy in {"phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run2"), ("tokyo", "run3"), ("nagoya", "run2")}:
         effective_blocked_labels.add("mlc1oG")
     # Phase 11ba: em3 (--elev-mask-deg 3) +5.4m nagoya/run1.
-    if policy in {"phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run1"):
+    if policy in {"phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run1"):
         effective_blocked_labels.add("em3")
     # Phase 11bc: mlc1oGc005p1 (mlc1+onlyG+csig005+psig1) positive 5 runs, n/r2 only loser.
-    if policy in {"phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {
+    if policy in {"phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {
         ("tokyo", "run1"), ("tokyo", "run2"), ("nagoya", "run1"), ("nagoya", "run3"), ("tokyo", "run3"),
     }:
         effective_blocked_labels.add("mlc1oGc005p1")
     # Phase 11bc: em3mlc1oG (em3+mlc1+onlyG) n/r3 +12m, t/r3 +6m, n/r1 +1m.
-    if policy in {"phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {
+    if policy in {"phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {
         ("tokyo", "run3"), ("nagoya", "run3"), ("nagoya", "run1"),
     }:
         effective_blocked_labels.add("em3mlc1oG")
     # Phase 11bc: mlc1oGc005 (mlc1+onlyG+csig005) n/r2 +7m, t/r2 +3m, t/r3 +5m.
-    if policy in {"phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {
+    if policy in {"phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {
         ("nagoya", "run2"), ("tokyo", "run2"), ("tokyo", "run3"),
     }:
         effective_blocked_labels.add("mlc1oGc005")
     # Phase 11be: mlc1c005p1 (mlc1+csig005+psig1, no onlyG) +5m n/r1, +4m n/r3, +2m n/r2.
     # Phase 11bf: drop n/r2 (lost -3.36m PF, displaced existing winners).
     _mlc1c005p1_runs = {("nagoya", "run1"), ("nagoya", "run3"), ("nagoya", "run2")}
-    if policy in {"phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"}:
+    if policy in {"phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
         _mlc1c005p1_runs = {("nagoya", "run1"), ("nagoya", "run3")}
-    if policy in {"phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in _mlc1c005p1_runs:
+    if policy in {"phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in _mlc1c005p1_runs:
         effective_blocked_labels.add("mlc1c005p1")
     # Phase 11be: mlc1oGc005em3 (mlc1+onlyG+csig005+em3) n/r2 +5m, t/r3 +4m, t/r1 +1m.
     # Phase 11bf: drop n/r2 (suspected over-trust contributor to -3.36m loss).
     _mlc1oGc005em3_runs = {("nagoya", "run2"), ("tokyo", "run3"), ("tokyo", "run1")}
-    if policy in {"phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"}:
+    if policy in {"phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
         _mlc1oGc005em3_runs = {("tokyo", "run3"), ("tokyo", "run1")}
-    if policy in {"phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in _mlc1oGc005em3_runs:
+    if policy in {"phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in _mlc1oGc005em3_runs:
         effective_blocked_labels.add("mlc1oGc005em3")
     # Phase 11be: mlc1oGc005r12 (mlc1+onlyG+csig005+ratio 1.2) t/r3 +5m, t/r1 +1m.
-    if policy in {"phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {
+    if policy in {"phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {
         ("tokyo", "run3"), ("tokyo", "run1"),
     }:
         effective_blocked_labels.add("mlc1oGc005r12")
     # Phase 11be: mlc1nobds (mlc1+no-beidou) t/r1 +5m.
-    if policy in {"phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run1"):
+    if policy in {"phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("mlc1nobds")
     # Phase 11bh: mlc1c005r10 (mlc1+csig005+ratio 1.0) +14m n/r3, +3m t/r1, +1.5m t/r2.
-    if policy in {"phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {
+    if policy in {"phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {
         ("nagoya", "run3"), ("tokyo", "run1"), ("tokyo", "run2"),
     }:
         effective_blocked_labels.add("mlc1c005r10")
     # Phase 11bh: mlc1r10 (mlc1+ratio 1.0) +8m n/r1, +6.5m t/r3.
-    if policy in {"phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {
+    if policy in {"phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {
         ("nagoya", "run1"), ("tokyo", "run3"),
     }:
         effective_blocked_labels.add("mlc1r10")
     # Phase 11bh: mlc1c005 (mlc1+csig005) +4.2m n/r2 (rare positive).
-    if policy in {"phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run2"):
+    if policy in {"phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run2"):
         effective_blocked_labels.add("mlc1c005")
     # Phase 11bk: rtkout5 (--rtk-update-outlier-threshold 5) HUGE on tokyo/run1 (+74m, +0.72pp).
     # Also tokyo/run2 +6.94m, nagoya/run2 +2.91m. Other runs negative.
-    if policy in {"phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {
+    if policy in {"phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {
         ("tokyo", "run1"), ("tokyo", "run2"), ("nagoya", "run2"),
     }:
         effective_blocked_labels.add("rtkout5")
     # Phase 11bk: rtkout10 (--rtk-update-outlier-threshold 10) +3.95m nagoya/run1.
-    if policy in {"phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run1"):
+    if policy in {"phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run1"):
         effective_blocked_labels.add("rtkout10")
     # Phase 11bl: rtkout3 (--rtk-update-outlier-threshold 3) HUGE on tokyo/run1 (+167m, +1.62pp).
     # Marginal positive on nagoya/run2 (+1.5m). Other runs negative.
-    if policy in {"phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {
+    if policy in {"phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {
         ("tokyo", "run1"), ("nagoya", "run2"),
     }:
         effective_blocked_labels.add("rtkout3")
     # Phase 11bl: rtkout7 marginal positive on nagoya/run1 (+4.2m).
-    if policy in {"phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run1"):
+    if policy in {"phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run1"):
         effective_blocked_labels.add("rtkout7")
     # Phase 11bm: rtkout1 (--rtk-update-outlier-threshold 1) HUGE on tokyo/run1 (+175.5m, +1.70pp)
     # and tokyo/run3 (+14.4m). Other runs negative.
-    if policy in {"phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {
+    if policy in {"phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {
         ("tokyo", "run1"), ("tokyo", "run3"),
     }:
         effective_blocked_labels.add("rtkout1")
     # Phase 11bm: rtkout5c005 (rtkout5 + carrier-phase-sigma 0.0005) +15.0m nagoya/run2.
-    if policy in {"phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run2"):
+    if policy in {"phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run2"):
         effective_blocked_labels.add("rtkout5c005")
     # Phase 11bm: rtkout5em3 (rtkout5 + elevation-mask-deg 3) +13.1m t/r2, +4.2m n/r1.
-    if policy in {"phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {
+    if policy in {"phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {
         ("tokyo", "run2"), ("nagoya", "run1"),
     }:
         effective_blocked_labels.add("rtkout5em3")
     # Phase 11bn: rtkout2/rtkout4/rtkout3c005 are not winners — block from all runs.
     # Were leaked into pool by phase 11bm dirs/labels but no per-run target; caused
     # -113m on t/r3 and -67m on n/r2 displacement in 11bm.
-    if policy in {"phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"}:
+    if policy in {"phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
         effective_blocked_labels.add("rtkout2")
         effective_blocked_labels.add("rtkout4")
         effective_blocked_labels.add("rtkout3c005")
     # Phase 11bo: rtkout3oG (rtkout3 + no-glonass + no-beidou) +61.5m on tokyo/run1.
     # Other runs negative.
-    if policy in {"phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run1"):
+    if policy in {"phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("rtkout3oG")
     # Phase 11bo: rtkout3em3 / rtkout3minobs3 are non-winners on every run; block globally.
-    if policy in {"phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"}:
+    if policy in {"phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
         effective_blocked_labels.add("rtkout3em3")
         effective_blocked_labels.add("rtkout3minobs3")
     # Phase 11bp: rtkout1c005oG (rtkout1 + carrier-phase-sigma 0.0005 + no-glonass/beidou)
     # +125.1m on tokyo/run1 (best variant in phase 11bp sweep). Other runs negative.
-    if policy in {"phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run1"):
+    if policy in {"phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("rtkout1c005oG")
     # Phase 11bp: rtkout5oGc005 (rtkout5 + no-glonass/beidou + csig005) +35.3m on tokyo/run3
     # (rare positive on this run). Other runs negative.
-    if policy in {"phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run3"):
+    if policy in {"phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run3"):
         effective_blocked_labels.add("rtkout5oGc005")
     # Phase 11bp: rtkout1c005 +2.8m on n/r2 (marginal); also strong on t/r1 (+111m) but rtkout1c005oG
     # is even better there, so target n/r2 only.
-    if policy in {"phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run2"):
+    if policy in {"phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run2"):
         effective_blocked_labels.add("rtkout1c005")
     # Phase 11bp: non-winner combos (rtkout1oG, rtkout1em3, rtkout1minobs3, rtkout10minobs3) — block globally.
-    if policy in {"phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"}:
+    if policy in {"phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
         effective_blocked_labels.add("rtkout1oG")
         effective_blocked_labels.add("rtkout1em3")
         effective_blocked_labels.add("rtkout1minobs3")
         effective_blocked_labels.add("rtkout10minobs3")
     # Phase 11bq: rtkout3c005oG (rtkout3 + csig005 + no-glonass/beidou) +404m on tokyo/run1 (HUGE).
     # Other runs marginally negative. Best single variant of session.
-    if policy in {"phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run1"):
+    if policy in {"phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("rtkout3c005oG")
     # Phase 11bq: rtkout5c005em3 (rtkout5 + csig005 + em3) +18m on n/r3 (first n/r3 winner) and
     # +4.5m on n/r2.
-    if policy in {"phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("nagoya", "run3"), ("nagoya", "run2")}:
+    if policy in {"phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("nagoya", "run3"), ("nagoya", "run2")}:
         effective_blocked_labels.add("rtkout5c005em3")
     # Phase 11bq: non-winner combos — block globally.
-    if policy in {"phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"}:
+    if policy in {"phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
         effective_blocked_labels.add("rtkout1c005em3")
         effective_blocked_labels.add("rtkout1oGc005em3")
         effective_blocked_labels.add("rtkout3c005em3")
@@ -3742,23 +5445,23 @@ def _filter_rtkdiag_candidates_by_policy(
         effective_blocked_labels.add("rtkout1minobs6")
     # Phase 11br: rtkout3oGem3 (rtkout3 + no-glonass/beidou + em3) +73.5m on tokyo/run1 (offline,
     # vs phase11bp base — additive on top of phase11bq's rtkout3c005oG depends on epoch overlap).
-    if policy in {"phase11br", "phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run1"):
+    if policy in {"phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("rtkout3oGem3")
     # Block rtkout3oGem3 globally for phase11bq (kept as phase11br-only target).
     if policy == "phase11bq":
         effective_blocked_labels.add("rtkout3oGem3")
     # Phase 11bt: rtkout3mlc1c005 (rtkout3 + mlc1 + csig005) +278.1m on tokyo/run1 (offline winner).
-    if policy in {"phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("tokyo", "run1"):
+    if policy in {"phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("tokyo", "run1"):
         effective_blocked_labels.add("rtkout3mlc1c005")
     # Phase 11bt: rtkout5mlc1c005oG (rtkout5 + mlc1 + csig005 + no-glonass/beidou)
     # +26.6m on t/r3 and +11.5m on n/r2 — winner on TWO runs.
-    if policy in {"phase11bt", "phase11bu", "phase11bv"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2")}:
+    if policy in {"phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) not in {("tokyo", "run3"), ("nagoya", "run2")}:
         effective_blocked_labels.add("rtkout5mlc1c005oG")
     # Phase 11bt: rtkout3mlc1 +17.1m on n/r3 (third n/r3 winner of session).
-    if policy in {"phase11bt", "phase11bu", "phase11bv"} and (city, run) != ("nagoya", "run3"):
+    if policy in {"phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"} and (city, run) != ("nagoya", "run3"):
         effective_blocked_labels.add("rtkout3mlc1")
     # Phase 11bt: non-winner combos — block globally.
-    if policy in {"phase11bt", "phase11bu", "phase11bv"}:
+    if policy in {"phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di"}:
         effective_blocked_labels.add("rtkout1mlc1")
         effective_blocked_labels.add("rtkout5mlc1")
         effective_blocked_labels.add("rtkout3mlc1oG")
@@ -3841,7 +5544,9 @@ def main() -> None:
             "rbpf+dd+gate+hybrid+zupt, rbpf+dd+gate+hybrid+zupt+tdcp, "
             "rbpf+dd+gate+hybrid+imu_tc, rbpf+dd+gate+hybrid+zupt+imu_tc, "
             "rbpf+dd+gate+hybrid+ins_tc, rbpf+dd+gate+hybrid+gmm+ins_tc, "
-            "rbpf+dd+gate+hybrid+zupt+ins_tc}"
+            "rbpf+dd+gate+hybrid+zupt+ins_tc, "
+            "rbpf+dd+gate+hybrid+rtkdiag_pf+imu_tc, "
+            "rbpf+dd+gate+hybrid+rtkdiag_pf+ins_tc}"
         ),
     )
     parser.add_argument("--dd-sigma-cycles", type=float, default=0.05,
@@ -3908,7 +5613,15 @@ def main() -> None:
     parser.add_argument("--rtkdiag-candidate-recenter-max-shift-m", type=float, default=10000.0,
                         help="Recenter PF cloud to candidate before candidate PU when shift <= this [m] (default 10000)")
     parser.add_argument("--rtkdiag-candidate-select-mode",
-                        choices=("residual", "ratio", "score", "maxabs", "nrows", "hybrid_anchor"),
+                        choices=("residual", "ratio", "score", "maxabs", "nrows", "hybrid_anchor", "wavg3", "wavg5", "consensus3", "consensus5",
+                                 "rms_per_row", "score_per_row", "score_per_row2", "score_per_row3", "rms_minus_alpha_rows", "log_combined",
+                                 "composite_3axis_n2", "composite_3axis_t2", "composite_3axis_n1",
+                                 "composite_n2_v2", "composite_n3_v2", "composite_n1_v2", "composite_t2_v2",
+                                 "composite_t3_v2", "composite_t3_v4", "composite_t2_v3",
+                                 "composite_n1_v3", "composite_n2_v3", "composite_n2_v4", "composite_n3_v3", "composite_n3_v4",
+                                 "temporal_n2_v1", "temporal_n2_v2", "temporal_n2_v3", "temporal_n2_v4", "temporal_n2_v5", "temporal_n2_v6", "temporal_n2_v7", "temporal_n2_v8", "temporal_n2_v9", "temporal_n2_v10",
+                                 "temporal_hybdelta_t3_v1", "temporal_hybdelta_t3_v2", "temporal_hybdelta_t3_v3", "temporal_hybdelta_t3_v4", "temporal_hybdelta_t3_v5", "temporal_hybdelta_t3_v6", "temporal_hybdelta_t3_v7", "temporal_hybdelta_t3_v8",
+                                 "temporal_hybdelta_n2_v1", "temporal_hybdelta_n3_v1", "temporal_hybdelta_n3_v2", "temporal_hybdelta_n3_v3", "temporal_hybdelta_n3_v4", "temporal_hybdelta_n3_v5", "temporal_hybdelta_n3_v6"),
                         default="residual",
                         help="How to choose among multiple gated RTK candidates (default residual). "
                              "hybrid_anchor picks the candidate closest to the hybrid floor; "
@@ -3922,8 +5635,18 @@ def main() -> None:
                             "candidate-on-drift=emit PF when close, otherwise emit candidate; "
                             "candidate=always emit selected candidate (default pf)"
                         ))
+    parser.add_argument(
+        "--rtkdiag-candidate-label-factors",
+        type=str,
+        default="",
+        help=(
+            "Comma-separated label=factor sort-key multipliers applied after "
+            "the built-in selector label penalties. Values below 1 prefer a "
+            "candidate label; values above 1 penalize it."
+        ),
+    )
     parser.add_argument("--rtkdiag-candidate-run-index-policy",
-                        choices=("none", "phase10o", "phase10p", "phase10r", "phase11h", "phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv"),
+                        choices=("none", "phase10o", "phase10p", "phase10r", "phase11h", "phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di", "phase11dk", "phase11dl", "phase11dm", "phase11dn", "phase11do", "phase11dp", "phase11dq", "phase11dr", "phase11ds", "phase11dt", "phase11du", "phase11dv", "phase11dw", "phase11dx", "phase11dy", "phase11dz", "phase11ea", "phase11eb", "phase11ec", "phase11ed", "phase11ee", "phase11ef", "phase11eg", "phase11eh", "phase11ei", "phase11ej", "phase11ek", "phase11el", "phase11em", "phase11en", "phase11eo", "phase11ep"),
                         default="none",
                         help=(
                             "Experimental per-run-index RTKDiag policy. phase10o uses "
@@ -4078,6 +5801,19 @@ def main() -> None:
                         help="Consecutive static IMU samples required for INS alignment (default 50)")
     parser.add_argument("--ins-tc-yaw-init-min-speed-mps", type=float, default=1.0,
                         help="Planar ENU speed required before yaw is initialized from hybrid velocity (default 1.0)")
+    parser.add_argument("--ins-tc-quality-gate-enabled", action="store_true",
+                        help="Enable rolling fix-rate gate on ins_tc PF emit. Suppresses ins_tc emission "
+                             "in epochs where the previous K hybrid statuses had a fix rate >= threshold "
+                             "(default off)")
+    parser.add_argument("--ins-tc-quality-gate-window-epochs", type=int, default=30,
+                        help="Window length for the ins_tc quality-gate fix-rate average (default 30)")
+    parser.add_argument("--ins-tc-quality-gate-max-fix-rate", type=float, default=0.5,
+                        help="Maximum recent fix rate at which ins_tc PF emit is allowed; above this it "
+                             "is suppressed (default 0.5)")
+    parser.add_argument("--ins-tc-quality-gate-pu-skip", action="store_true",
+                        help="When set (and quality gate enabled), also skip ins_tc PF position_update "
+                             "in high-fix-rate epochs, not just PF emit. Reduces PF state contamination "
+                             "in good-GNSS runs (default off)")
     parser.add_argument("--max-epochs", type=int, default=None,
                         help="Cap epochs per run (smoke / debug). None = full run.")
     parser.add_argument("--start-epoch", type=int, default=0)
