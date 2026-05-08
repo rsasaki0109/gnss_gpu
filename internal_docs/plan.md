@@ -77,6 +77,12 @@ final submission 再現:
       - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_sm_a505u_materialized_schedule_20260509/summary.json`
     - Re-running the reference reconstruction with only materialized schedule rows reproduces the previous extended-override result exactly: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_materialized_source_schedules/summary.json`, p50 `0m`, p95 `0m`, mean `0.001456m`, max `0.857008m`, `rows_gt_1m=0`, `rows_gt_5m=0`.
     - Interpretation: final CSV reproduction no longer requires copying reference-nearest coordinates for the four exception trips; it can be reproduced from bridge artifacts plus a row-level source schedule. The schedule itself is still audit-derived and should next be replaced by deterministic selection rules or exact MATLAB artifact provenance.
+  - Added `experiments/apply_gsdc2023_bridge_position_offsets.py` to apply the phone-position offset to every source coordinate pair in a `bridge_positions.csv`, including source-specific altitude columns when present.
+    - Real-data scripted artifact: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_target_bridge_rows_20260509/mi8_mtv_m_gated_chunk200_posoffset_scripted/summary.json`
+    - Re-running the `2021-11-30 mi8` multi-bridge source audit with this scripted offset gives p50 `2.121969e-09m`, p95 `0.193305m`, mean `0.028254m`, max `0.427953m`, `rows_gt_1m=0`.
+    - Materialized schedule: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_mi8_posoffset_scripted_materialized_schedule_20260509/summary.json`
+    - Final materialized reconstruction with the scripted mi8 pos-offset schedule: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_materialized_source_schedules_mi8_posoffset_scripted/summary.json`, p50 `0m`, p95 `0m`, mean `0.000722m`, max `0.427953m`, `rows_gt_1m=0`, `rows_gt_5m=0`.
+    - Interpretation: the remaining MATLAB/reference reconstruction gap is now below `0.43m` and is still isolated to sub-meter first-window mi8 residuals plus already bounded sm-a505u/LAX-X tails; the next highest-value step is exact provenance for the mi8 first-window offset/source rule or a deterministic rule that replaces the audit-derived row schedule.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
