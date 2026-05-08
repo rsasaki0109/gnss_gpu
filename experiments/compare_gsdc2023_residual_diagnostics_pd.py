@@ -564,18 +564,12 @@ def compare_residual_diagnostics_pd_values(
     start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
     matlab_residuals = _trim_epoch_window(_matlab_residual_frame(Path(diagnostics_path)), start_epoch, bridge_max_epochs)
     matlab = _melt_pd_values(matlab_residuals, side="matlab")
-    inactive_key_filter = (
-        set(matlab_residuals[RESIDUAL_KEY_COLUMNS].itertuples(index=False, name=None))
-        if include_inactive_observations
-        else None
-    )
     bridge = bridge_residual_diagnostics_pd_values(
         trip_dir,
         max_epochs=max_epochs,
         multi_gnss=multi_gnss,
         apply_observation_mask=apply_observation_mask,
         include_inactive_observations=include_inactive_observations,
-        inactive_key_filter=inactive_key_filter,
         bridge_frame_fn=bridge_frame_fn,
     )
     merged = merge_residual_diagnostics_pd_values(matlab, bridge)
@@ -588,6 +582,7 @@ def compare_residual_diagnostics_pd_values(
             "multi_gnss": bool(multi_gnss),
             "apply_observation_mask": bool(apply_observation_mask),
             "include_inactive_observations": bool(include_inactive_observations),
+            "inactive_key_source": "gnss_log_signal_mask" if include_inactive_observations else None,
         },
     )
     return merged, summary, bridge, payload
@@ -609,11 +604,6 @@ def compare_residual_diagnostics_pd_wide_values(
         diagnostics_path = trip_dir / "phone_data_residual_diagnostics.csv"
     start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
     matlab_residuals = _trim_epoch_window(_matlab_residual_frame(Path(diagnostics_path)), start_epoch, bridge_max_epochs)
-    residual_key_filter = (
-        set(matlab_residuals[RESIDUAL_KEY_COLUMNS].itertuples(index=False, name=None))
-        if include_inactive_observations
-        else None
-    )
     wide_key_filter = {
         tuple(row)
         for row in matlab_residuals[_DIAGNOSTICS_KEY_COLUMNS].itertuples(index=False, name=None)
@@ -625,7 +615,6 @@ def compare_residual_diagnostics_pd_wide_values(
         multi_gnss=multi_gnss,
         apply_observation_mask=apply_observation_mask,
         include_inactive_observations=include_inactive_observations,
-        inactive_key_filter=residual_key_filter,
         factor_finite_key_filter=_bridge_pd_factor_finite_key_filter(
             trip_dir,
             max_epochs=max_epochs,
@@ -649,6 +638,7 @@ def compare_residual_diagnostics_pd_wide_values(
             "multi_gnss": bool(multi_gnss),
             "apply_observation_mask": bool(apply_observation_mask),
             "include_inactive_observations": bool(include_inactive_observations),
+            "inactive_key_source": "gnss_log_signal_mask" if include_inactive_observations else None,
             "matlab_wide_row_count": int(len(matlab_wide)),
             "bridge_wide_row_count": int(len(bridge_wide)),
         },
@@ -694,46 +684,21 @@ def main() -> None:
             index=False,
         )
     if args.write_bridge_pd_wide:
-        diagnostics_path = Path(args.diagnostics) if args.diagnostics is not None else trip_dir / "phone_data_residual_diagnostics.csv"
-        start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
-        matlab_residuals = _trim_epoch_window(
-            _matlab_residual_frame(diagnostics_path),
-            start_epoch,
-            bridge_max_epochs,
-        )
-        inactive_key_filter = (
-            set(matlab_residuals[RESIDUAL_KEY_COLUMNS].itertuples(index=False, name=None))
-            if bool(args.include_inactive_observations)
-            else None
-        )
         bridge_residual_diagnostics_pd_wide_values(
             trip_dir,
             max_epochs=max_epochs,
             multi_gnss=bool(args.multi_gnss),
             apply_observation_mask=bool(args.observation_mask),
             include_inactive_observations=bool(args.include_inactive_observations),
-            inactive_key_filter=inactive_key_filter,
         ).to_csv(out_dir / "bridge_residual_diagnostics_pd_wide_subset.csv", index=False)
     if args.write_bridge_residual_diagnostics:
         diagnostics_path = Path(args.diagnostics) if args.diagnostics is not None else trip_dir / "phone_data_residual_diagnostics.csv"
-        start_epoch, bridge_max_epochs = _settings_epoch_window_for_trip(trip_dir, max_epochs)
-        matlab_residuals = _trim_epoch_window(
-            _matlab_residual_frame(diagnostics_path),
-            start_epoch,
-            bridge_max_epochs,
-        )
-        inactive_key_filter = (
-            set(matlab_residuals[RESIDUAL_KEY_COLUMNS].itertuples(index=False, name=None))
-            if bool(args.include_inactive_observations)
-            else None
-        )
         export = bridge_residual_diagnostics_export_frame(
             trip_dir,
             max_epochs=max_epochs,
             multi_gnss=bool(args.multi_gnss),
             apply_observation_mask=bool(args.observation_mask),
             include_inactive_observations=bool(args.include_inactive_observations),
-            inactive_key_filter=inactive_key_filter,
         )
         export_path = out_dir / "bridge_residual_diagnostics" / "phone_data_residual_diagnostics.csv"
         export_path.parent.mkdir(parents=True, exist_ok=True)

@@ -112,6 +112,54 @@ def test_compare_residual_diagnostics_pd_values_summarizes_bridge_deltas(tmp_pat
     assert wide.loc[0, "d_model_mps"] == 20.0
 
 
+def test_compare_residual_diagnostics_pd_values_does_not_use_sidecar_as_inactive_filter(tmp_path: Path) -> None:
+    trip_dir = tmp_path / "train" / "course" / "phone"
+    trip_dir.mkdir(parents=True)
+    pd.DataFrame([_diagnostics_row()]).to_csv(trip_dir / "phone_data_residual_diagnostics.csv", index=False)
+
+    def fake_bridge_frame(*_args, **kwargs) -> pd.DataFrame:
+        assert kwargs["include_inactive_observations"] is True
+        assert kwargs.get("inactive_key_filter") is None
+        return pd.DataFrame(
+            [
+                {
+                    "field": "P",
+                    "freq": "L1",
+                    "epoch_index": 1,
+                    "utcTimeMillis": 1000,
+                    "sys": 1,
+                    "svid": 3,
+                    "bridge_residual": 10.0,
+                    "bridge_pre_residual": 110.0,
+                    "bridge_common_bias": 100.0,
+                    "bridge_observation": 210.0,
+                    "bridge_model": 100.0,
+                },
+                {
+                    "field": "D",
+                    "freq": "L1",
+                    "epoch_index": 1,
+                    "utcTimeMillis": 1000,
+                    "sys": 1,
+                    "svid": 3,
+                    "bridge_residual": -2.0,
+                    "bridge_pre_residual": 8.0,
+                    "bridge_common_bias": 10.0,
+                    "bridge_observation": 28.0,
+                    "bridge_model": 20.0,
+                },
+            ],
+        )
+
+    _merged, _summary, _bridge, payload = compare_residual_diagnostics_pd_values(
+        trip_dir,
+        include_inactive_observations=True,
+        bridge_frame_fn=fake_bridge_frame,
+    )
+
+    assert payload["passed"] is True
+
+
 def test_bridge_residual_diagnostics_pd_wide_export_adds_sat_col_and_components() -> None:
     bridge_residuals = pd.DataFrame(
         [
