@@ -111,7 +111,10 @@ final submission 再現:
       - `LAX-M + LAX-P` hold: Kaggle `3.686/4.711`
       - `LAX-M + LAX-I` hold: Kaggle `3.686/4.711`
       - `LAX-M + LAX-P + LAX-I` hold: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_trip_weight_ablation_20260509/p3p25_lax_m_p_i_hold/trip_weight_ablation_summary_20260509.json`, local changed rows `15597`, max `0.039626m`, Kaggle `3.686/4.711`
-      - Interpretation: p3p25 full-direction family can keep public at `3.686`, but LAX holds alone do not recover private to `4.710`. Next useful search is non-LAX private-negative trip isolation or a lower-alpha/partial-row version of the public-positive trips.
+      - `LAX-M + SJC-BE2` hold: Kaggle `3.686/4.711`
+      - `LAX-M + LAX-P + SJC-BE2` hold: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_trip_weight_ablation_20260509/p3p25_laxm_two_extra_hold/trip_weight_ablation_summary_20260509.json`, Kaggle `3.686/4.711`
+      - `LAX-M hold alpha=0.5`: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_trip_weight_ablation_20260509/p3p25_laxm_hold_alpha_sweep_a0p5/trip_weight_ablation_summary_20260509.json`, local p95 `0.019784m`, max `0.019813m`, Kaggle `3.686/4.711`
+      - Interpretation: p3p25 full-direction family can keep public at `3.686`, but LAX holds, SJC-BE2 hold, and lower-alpha LAX-M hold still do not recover private to `4.710`. The next useful search is not more LAX holds; it is either a different non-LAX private-negative trip set or a partial-row/source-rule change that does not apply the broad p3p25 shift to all 12 Pixel5 trips.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
