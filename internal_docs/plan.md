@@ -29,6 +29,11 @@ final submission 再現:
   - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_reconstruct_20260509/submission_with_all_trip_best_reference_bridge_source.csv`
   - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_reconstruct_delta_20260509/summary.json`
 - 全体再構成結果: `71912` rows replaced, `24` rows unmatched。MATLAB/reference との差分は p50 `0m`, p95 `0m`, mean `0.029535m`, max `245.609123m`, `rows_gt_1m=445`, `rows_gt_5m=27`。
+- `all_trip_bridge_source_runs.csv` writer を追加し、row-level best source を contiguous run schedule に畳めるようにした。
+  - output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_reconstruct_runs_20260509/summary.json`
+  - source run count: `666`
+  - source totals: `baseline=273 runs / 69854 rows`, `fgo=79 / 805`, `raw_wls=79 / 415`, `selected=235 / 838`
+  - Interpretation: 多くは baseline だが、4つの非ゼロtrip周辺は source が細かく切り替わる。chunk単位の単純な固定ルールでは足りず、例外window内の row-level schedule または同等の再現ロジックが必要。
 
 残っているもの:
 
@@ -38,7 +43,7 @@ final submission 再現:
   - `2023-05-09-23-10-us-ca-sjc-r/sm-a505u`: epoch `188-399`, p95 `1.014794m`, max `2.492327m`
   - `2020-12-11-19-30-us-ca-mtv-e/pixel4xl`: epoch `1000-1189`, p95 `0.749726m`, max `1.523208m`
 - bridge timestamp missing は12 partial-match trips / 24 rows。matched部分はすべて residual `0m`。欠損 rows は candidate fallback だと最大約 `0.391m` 程度で、p95には効いていない。
-- 次の実装方針は、submit/reproduction 用 source selector を「ref bridge tree baseline default + 上記4 tripの例外 + LAX-X multi-bridge例外 + missing timestamp補間/保持」に寄せること。
+- 次の実装方針は、submit/reproduction 用 source selector を「ref bridge tree baseline default + 上記4 tripのrow-level source schedule + LAX-X multi-bridge例外 + missing timestamp補間/保持」に寄せること。
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
