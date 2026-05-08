@@ -606,10 +606,20 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
   - FGO-like late windows behave the same: epochs `1800-2000` FGO p95 stays `8.336503m -> 8.349585m` after component-median removal; epochs `2000-2170` stays `4.203943m -> 4.283417m`.
   - The known raw-WLS exact window validates the decomposition: epochs `400-600` raw WLS p95 is `0.1777494524624754m`, with zero median tangent/normal.
   - Interpretation: remaining LAX-X mismatch is not a simple lateral bias, heading-aligned offset, or global lag. It is more likely a local nonlinear postprocess / smoother boundary condition / missing intermediate artifact that changes the FGO-like path shape within the early and late windows.
+- LAX-X multi-bridge source artifact audit:
+  - Added `experiments/analyze_gsdc2023_multi_bridge_source_delta.py` to compare MATLAB/reference rows against source columns from multiple `bridge_positions.csv` artifacts on the same `UnixTimeMillis` row key, and optionally write an audit-only reconstructed submission using the nearest artifact/source row.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_multi_bridge_source_delta_20260509/summary.json` (ignored artifact), using:
+    - `ref=../ref/gsdc2023/dataset_2023/test/2022-04-04-16-31-us-ca-lax-x/pixel5/bridge_positions.csv`
+    - `local=experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_lax_x_old_gated_fgo_early_raw_late_bridge_positions_submission_rows.csv`
+    - `current=experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_lax_x_current_selector_bridge_positions_submission_rows.csv`
+  - Best artifact/source LAX-X residual is now p95 `0.8714503186030915m`, max `1.9513839635168002m`, `rows_gt_1m=65`, `rows_gt_5m=0`. Counts: `ref:baseline=1401`, `ref:fgo=334`, `ref:raw_wls=3`, `local:fgo=225`, `local:raw_wls=200`, `local:selected=7`.
+  - The audit explains the previously contradictory windows: early/late mostly require `ref:fgo`/`local:fgo`, while epochs `400-600` require `local:raw_wls` (`194/200` rows, p95 `0.17752368197664328m`), not the `ref` bridge raw WLS.
+  - Audit-only full-submission reconstruction output: `matlab_submission_laxx_multi_bridge_source_delta_20260509/submission_with_target_trip_multi_bridge_best_source.csv`. Compared with MATLAB/reference, full-submission max improves to `1.9513839635168002m`, p95 `0.4304469531691849m`, score_m `0.3732582829602139m`. The remaining full-submission mismatch is now the broad phone/systematic offset layer, not LAX-X spikes.
+  - Interpretation: the LAX-X gap is largely an artifact provenance/schedule problem, not an unknown smoother formula. To reproduce MATLAB final submission, Python must reproduce which bridge artifact/source generation produced `ref:fgo` for early/late and `local:raw_wls` for the mid-window, then remove the remaining sub-2m FGO boundary residual.
 
 次にやること:
 
-1. 「Kaggle score まで MATLAB と同等」を目標にするなら、LAX-X epochs `0-200` / `1800-2170` の missing postprocess/artifact を MATLAB 側の final-submission pipeline から探す。次は MATLAB の LAX-X FGO/postprocess 中間出力（pre/post smoothing、boundary handling、chunk stitching）を特定して Python bridge source columns と同じ row key で比較する。
+1. 「Kaggle score まで MATLAB と同等」を目標にするなら、LAX-X は multi-bridge artifact schedule を再現する。次は `ref:fgo` と `local:fgo` がどの run options / chunk boundary / raw bridge revisionから分岐したかを `bridge_run.log`, `summary.json`, `parameters.m`, `run_raw_bridge_batch.py` options で比較し、Python submit generator に audit-only ではない deterministic source rule として落とせる形にする。
 2. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 3. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
 
