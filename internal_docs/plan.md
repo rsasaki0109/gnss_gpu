@@ -513,9 +513,9 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
 
 次にやること:
 
-1. P6P0 ではなく score 改善に戻る場合、既存 local screen の `duplicate_submitted_local_sha` / risky previous-safe columns を使って未提出かつ private-safe な候補だけを再抽出する。
-2. MATLAB migration の締めとして、`phone_data` artifact compatibility audit を PR description に書くか、submit-ready doc から参照できる形にする。
-3. submit-ready doc に `phone_data` artifact compatibility audit コマンドを追加するか判断する。
+1. MATLAB migration の締めとして、`phone_data` artifact compatibility audit と full-window writer equivalence summary を PR description に書くか、submit-ready doc から参照できる形にする。
+2. submit-ready doc に `phone_data` artifact compatibility audit コマンドを追加するか判断する。
+3. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
 
 2026-05-05 P6P0 clean Kaggle submit:
 
@@ -578,6 +578,12 @@ PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.p
       - weighted p3p25 `a0p125/a0p1875/a0p75`: bracketed by submitted `a0p0625` (`3.687/4.710`) and `a0p25/a0p5` (`4.711` private), so no submit unless accepting private risk.
       - weighted p3p0 `a0p0625/a0p125/a0p1875/a0p25/a0p5/a0p75`: source full p3p0 already `3.685/4.714`; likely public-only gamble and not aligned with private-floor goal.
     - Practical result: no remaining high-confidence candidate under the current `private=4.710` floor objective.
+  - 2026-05-08 safe unsubmitted shortlist:
+    - Added `experiments/filter_gsdc2023_safe_submission_candidates.py` to combine one or more local screen CSVs, remove submitted filenames, remove duplicate submitted-local SHA candidates, require zero risky previous-safe row changes, merge the score-audit CSV, deduplicate by submission SHA, and classify candidates into `reject_known_score`, `reject_spike_risk`, `hold_bracketed_blend`, `hold_public_only_blend`, `discovery_only`, or `review_manually`.
+    - Regenerated full local screen with the latest local Kaggle submission log `kaggle_submissions_20260506.csv`: `182` candidates, `50` submitted-filename matches, `79` duplicate submitted-local SHA matches, `35` risky previous-safe movers.
+    - Regenerated weighted/trip focused screens under `experiments/results/source_selection_lowbaseline_submission_probe_20260430/safe_unsubmitted_shortlist_20260508/screens` and wrote the combined ignored shortlist to `safe_unsubmitted_shortlist.csv`.
+    - Combined shortlist summary: `59` safe/unsubmitted/SHA-unique candidates after filtering; `35` are `discovery_only` trip-weight candidates, `3` are `hold_bracketed_blend`, `6` are `hold_public_only_blend`, `14` are `reject_known_score`, and `1` is `reject_spike_risk`.
+    - Interpretation: the latest extraction confirms there is still no high-confidence private-floor submission candidate. The remaining unsubmitted candidates are either already bracketed by submitted worse/equal scores, public-only blend gambles, known bad score-log entries, raw WLS risk, or explicit discovery probes.
   - 2026-05-06 submitted-weight delta decomposition:
     - Reports generated at `candidate_delta_submitted_weight_probe_20260506.csv` and `trip_delta_submitted_weight_probe_20260506.csv` under the same local screen directory (ignored artifacts).
     - `p3p25_full` and `p3p0_full` move the same `12` Pixel5 trips / `26497` rows relative to current best. Movement is nearly uniform per trip (`p3p25_full` trip score `0.039513-0.039609m`; `p3p0_full` trip score `0.118540-0.118827m`), not a single outlier trip.
