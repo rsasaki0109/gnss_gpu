@@ -7,6 +7,39 @@
 **直近の重点**: Kaggle GSDC2023 raw bridge / MATLAB phone_data 移植の内部状態 parity と提出前 risk gate。
 **旧メモ**: 2026-04-21 以前の UrbanNav / CT-RBPF-FGO 計画は下に残す。現在の最優先は GSDC2023 raw bridge の MATLAB 移植を詰めること。
 
+## 2026-05-09 最新サマリ: MATLAB final submission 再現の残差分解
+
+結論: **MATLAB/reference final CSV は score では同等ではないが、座標列そのものはほぼ `../ref/gsdc2023/dataset_2023/test/<course>/<phone>/bridge_positions.csv` から再構成可能**。現時点の Kaggle score 等価は未達で、MATLAB/reference submission `submission_20260501_0526.csv` は `4.056/5.141`。Python private-safe best は引き続き `3.687/4.710`。
+
+内部状態 parity:
+
+- full-window MATLAB equivalence gate は `passed=true`, `equivalence_claim=matlab_equivalent`。
+- 代表 artifact: `experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json`
+- summary SHA256: `8b91da173d3724be528a37652d0c5450dec2b5dc474ed25a6f824136c89a0b88`
+- residual diagnostics writer regression mismatches `0`、`phone_data_factor_counts.csv` / `phone_data_factor_mask.csv` / `phone_data_residual_diagnostics.csv` の CSV sidecar path は submit-ready flow に入っている。`phone_data.mat` は submit-ready には不要なので deferred。
+
+final submission 再現:
+
+- closest Python candidate と MATLAB/reference final CSV は `71932/71936` matched rows が違い、最悪 trip は `2022-04-04-16-31-us-ca-lax-x/pixel5`。
+- LAX-X multi-bridge audit で、ref bridge / local old-gated bridge / current bridge の複数 artifact source から最寄りを選ぶと LAX-X は p95 `0.871450m`, max `1.951384m`, `rows_gt_5m=0` まで縮む。
+- all-trip reference bridge scan で、MATLAB/reference final CSV は `71912/71936` rows が ref bridge tree に timestamp match。matched rows の最寄りsource距離は p50 `0m`, p95 `0m`, mean `0.029433m`。
+- `experiments/analyze_gsdc2023_all_trip_bridge_source_delta.py --write-reconstructed-submission` を追加し、closest Python candidate を土台に ref bridge best source で matched rows を差し替える audit-only CSV を生成可能にした。
+- 生成物:
+  - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_reconstruct_20260509/summary.json`
+  - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_reconstruct_20260509/submission_with_all_trip_best_reference_bridge_source.csv`
+  - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_reconstruct_delta_20260509/summary.json`
+- 全体再構成結果: `71912` rows replaced, `24` rows unmatched。MATLAB/reference との差分は p50 `0m`, p95 `0m`, mean `0.029535m`, max `245.609123m`, `rows_gt_1m=445`, `rows_gt_5m=27`。
+
+残っているもの:
+
+- 非ゼロp95の fully matched trip は4つだけ:
+  - `2021-11-30-20-59-us-ca-mtv-m/mi8`: epoch `0-200`, p95 `2.295833m`, max `5.061363m`
+  - `2022-04-04-16-31-us-ca-lax-x/pixel5`: epoch `0-200`, `400-600`, `1800-2170`, p95 `1.084849m`, max `245.609123m`
+  - `2023-05-09-23-10-us-ca-sjc-r/sm-a505u`: epoch `188-399`, p95 `1.014794m`, max `2.492327m`
+  - `2020-12-11-19-30-us-ca-mtv-e/pixel4xl`: epoch `1000-1189`, p95 `0.749726m`, max `1.523208m`
+- bridge timestamp missing は12 partial-match trips / 24 rows。matched部分はすべて residual `0m`。欠損 rows は candidate fallback だと最大約 `0.391m` 程度で、p95には効いていない。
+- 次の実装方針は、submit/reproduction 用 source selector を「ref bridge tree baseline default + 上記4 tripの例外 + LAX-X multi-bridge例外 + missing timestamp補間/保持」に寄せること。
+
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
 結論: **12-trip / 200 epoch の MATLAB equivalence gate は `matlab_equivalent` 到達**。従来の focused tests と CI は通っているが、`matched` 行の数値差だけでは不十分だったため、`experiments/audit_gsdc2023_matlab_equivalence_gate.py` で以下を 1 コマンドの fail-fast gate に束ねた。

@@ -110,6 +110,13 @@ def _analyze_trip(reference: pd.DataFrame, bridge_path: Path) -> tuple[pd.DataFr
     best_distance = distance_matrix[np.arange(len(merged)), best_index]
     merged["best_source"] = [source_names[index] for index in best_index]
     merged["best_source_distance_m"] = best_distance
+    merged["best_source_latitude_degrees"] = np.nan
+    merged["best_source_longitude_degrees"] = np.nan
+    for index, source in enumerate(source_names):
+        lat_column, lon_column = sources[source]
+        mask = best_index == index
+        merged.loc[mask, "best_source_latitude_degrees"] = merged.loc[mask, lat_column]
+        merged.loc[mask, "best_source_longitude_degrees"] = merged.loc[mask, lon_column]
     counts = Counter(merged["best_source"].astype(str))
     status = "compared" if len(merged) == len(reference) else "partial_match"
     summary: dict[str, object] = {
@@ -133,6 +140,8 @@ def _analyze_trip(reference: pd.DataFrame, bridge_path: Path) -> tuple[pd.DataFr
         "LongitudeDegrees_reference",
         "best_source",
         "best_source_distance_m",
+        "best_source_latitude_degrees",
+        "best_source_longitude_degrees",
     ]
     output_columns.extend(distance_columns)
     return merged[output_columns], summary
@@ -202,12 +211,72 @@ def analyze_all_trip_bridge_source_delta(
     return row_summary, trip_summary, payload
 
 
-def write_outputs(output_dir: Path, rows: pd.DataFrame, trips: pd.DataFrame, summary: dict[str, object]) -> None:
+def reconstruct_candidate_submission(
+    candidate_submission: Path,
+    row_summary: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    frame = _read_submission(candidate_submission)
+    patch_columns = {
+        "tripId",
+        "UnixTimeMillis",
+        "best_source_latitude_degrees",
+        "best_source_longitude_degrees",
+    }
+    missing_patch = patch_columns.difference(row_summary.columns)
+    if missing_patch:
+        raise ValueError(f"row summary is missing columns: {sorted(missing_patch)}")
+
+    patch = row_summary[
+        [
+            "tripId",
+            "UnixTimeMillis",
+            "best_source_latitude_degrees",
+            "best_source_longitude_degrees",
+        ]
+    ].copy()
+    if patch[["tripId", "UnixTimeMillis"]].duplicated().any():
+        raise ValueError("row summary contains duplicate tripId/UnixTimeMillis values")
+
+    joined = frame[["tripId", "UnixTimeMillis"]].merge(
+        patch,
+        on=["tripId", "UnixTimeMillis"],
+        how="left",
+        validate="one_to_one",
+    )
+    replace_mask = joined[["best_source_latitude_degrees", "best_source_longitude_degrees"]].notna().all(axis=1)
+    out = frame.copy()
+    out.loc[replace_mask, "LatitudeDegrees"] = joined.loc[replace_mask, "best_source_latitude_degrees"].to_numpy()
+    out.loc[replace_mask, "LongitudeDegrees"] = joined.loc[replace_mask, "best_source_longitude_degrees"].to_numpy()
+    return out, {
+        "candidate_submission": str(candidate_submission),
+        "rows": int(len(frame)),
+        "rows_replaced": int(replace_mask.sum()),
+        "rows_unmatched": int(len(frame) - replace_mask.sum()),
+        "source": "all_trip_best_reference_bridge_source",
+    }
+
+
+def write_outputs(
+    output_dir: Path,
+    rows: pd.DataFrame,
+    trips: pd.DataFrame,
+    summary: dict[str, object],
+    reconstructed_submission: pd.DataFrame | None = None,
+    reconstructed_summary: dict[str, object] | None = None,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     rows_path = output_dir / "all_trip_bridge_source_delta_rows.csv"
     trips_path = output_dir / "all_trip_bridge_source_delta_trips.csv"
     rows.to_csv(rows_path, index=False)
     trips.to_csv(trips_path, index=False)
+    reconstructed_path = output_dir / "submission_with_all_trip_best_reference_bridge_source.csv"
+    if reconstructed_submission is not None:
+        reconstructed_submission.to_csv(reconstructed_path, index=False)
+        summary = {
+            **summary,
+            "reconstructed_submission_csv": str(reconstructed_path),
+            "reconstructed_submission": reconstructed_summary or {},
+        }
     with (output_dir / "summary.json").open("w", encoding="utf-8") as f:
         json.dump({**summary, "rows_csv": str(rows_path), "trip_summary_csv": str(trips_path)}, f, indent=2)
 
@@ -217,13 +286,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reference-submission", type=Path, required=True)
     parser.add_argument("--bridge-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--candidate-submission", type=Path)
+    parser.add_argument("--write-reconstructed-submission", action="store_true")
     args = parser.parse_args(argv)
 
     rows, trips, summary = analyze_all_trip_bridge_source_delta(
         reference_submission=args.reference_submission,
         bridge_root=args.bridge_root,
     )
-    write_outputs(args.output_dir, rows, trips, summary)
+    reconstructed_submission = None
+    reconstructed_summary = None
+    if args.write_reconstructed_submission:
+        if args.candidate_submission is None:
+            raise ValueError("--candidate-submission is required with --write-reconstructed-submission")
+        reconstructed_submission, reconstructed_summary = reconstruct_candidate_submission(
+            args.candidate_submission,
+            rows,
+        )
+    write_outputs(
+        args.output_dir,
+        rows,
+        trips,
+        summary,
+        reconstructed_submission=reconstructed_submission,
+        reconstructed_summary=reconstructed_summary,
+    )
     print(f"analyzed: {summary['trip_count']} trip(s), {summary['matched_rows']} matched row(s)")
     return 0
 
