@@ -119,6 +119,12 @@ final submission 再現:
       - `first_half` across all 12 moved Pixel5 trips: local changed rows `13246`, p95 `0.039559m`, Kaggle `3.686/4.710`. This is the first confirmed public improvement that preserves the current private floor.
       - `second_half`: Kaggle `3.686/4.711`; `first_q`: Kaggle `3.686/4.711`.
       - `second_q`: local changed rows `6627`, p95 `0.039486m`, Kaggle `3.686/4.710`. This matches the `first_half` Kaggle score with half as many rows changed, so current minimal best candidate is `submission_p3p25_partial_second_q_20260509.csv`.
+      - Stacking `second_q` with safe `LAX-P single + missing timestamp <=1m`: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_second_q_stack_candidates_20260509/summary.json`, Kaggle `3.686/4.710`. No additional 3-decimal improvement.
+      - Fraction-window refinement: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_fraction_window_candidates_20260509/summary.json`
+        - `30-50%`: Kaggle `3.687/4.710`, too narrow/late to preserve public improvement.
+        - `25-45%`: `3.686/4.710`; `25-40%`: `3.686/4.710`; `23-40%`: `3.686/4.710`.
+        - `25-38%` changes `3445` rows and local p95 stays `0`, so it is below the GSDC score p95 threshold and was not submitted.
+        - `25-39%` changes `3708` rows, local p95 `0.039440m`, Kaggle `3.686/4.710`. Current minimal confirmed best is `submission_p3p25_window_f25_39_20260509.csv`.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
