@@ -645,9 +645,84 @@
 - `odaiba_best_accuracy` は変更しない。
 - 次に進むなら Phase 2 の per-particle velocity/RBPF 側で mode survival を制約する。
 
+## D-034: Solver-state lightweight wrapper を opt-in research module として追加
+
+状態: 採用 (interface only)
+
+根拠:
+- PR #42 (`docs: tokyo/run2 8.13pp residual is an accepted modeling ceiling`) が tokyo/run2 8.13 pp 残差の3つ取り組み (linear correction / hidden-high classifier / abstention) を null result としてクローズし、ceiling lift の3つの out-of-scope path を列挙した。
+- `PLATEAU_BRIDGE_INTEGRATION.md` "Why the residual is not closeable": 1番目の path "Solver-state lightweight wrapper" は medium-size PR であり model input contract を変更するもの。
+- 現状の product 契約 (`product_deliverable/README.md` §1) は `rtk_*` / `solver_demo5_*` を runtime feature から除外、6 列はすべて training target としてのみ使用。
+- `experiments/_common._is_metadata_or_label` が `rtk_*` / `solver_*` を gate して runtime feature 入りを防いでいる。
+
+決定:
+- `experiments/solver_state_wrapper.py` を追加: 6列 (`solver_demo5_ratio_{mean,p90,p95,mean_past_delta}`, `rtk_lock_p90_p50{,_past_delta}`) の curated allowlist + `SolverStateWrapper.validate` / `curate` / `runtime_feature_columns`。
+- `experiments/augment_window_csv_with_solver_state_wrapper.py` を追加: window CSV → curated subset を sanitise した CSV を出す CLI (research input prep).
+- `tests/test_solver_state_wrapper.py` で allowlist / non-finite handling / default gatekeeper 不変性 を検証。
+- 既存の `train_ppc_solver_transition_surrogate_stack.py` / `product_inference_model.py` は wrapper を import せず、deployed run-MAE 1.79 pp は維持。
+- ceiling lift を実証する training script + LORO 評価は follow-up PR に分離 (target leakage 注意点を wrapper module docstring に記載済み)。
+
+理由:
+- Path 1 を opt-in interface として確保することで、follow-up での research path を ready にしつつ、deployed contract と adopted artefact の両方を変更しない。
+- 既に existing 6 列が training target として材料化されているため、wrapper は新規 column 計算でなく allowlist + sanitiser に責任が限られ、medium-size PR として収まる。
+
+## D-035: Path 1 LORO 評価で ceiling 解消、ただし predictor の役割が "post-demo5 QA" にシフト
+
+状態: 採用 (parallel model class として; deployed §7.16 stack は併存)
+
+根拠:
+- `experiments/train_ppc_solver_state_wrapper_loro.py` で 197 windows / 6 routes の strict LORO を実行。3 variants (default GBR、no hyperparameter tuning):
+  - `baseline_no_solver_state` (5873 features, no rtk_*/solver_*): run-MAE 12.39 pp / window-MAE 25.07 pp
+  - `treatment_with_curated_six` (5879 features, baseline + curated 6): run-MAE **1.43 pp** / window-MAE **5.05 pp**
+  - `curated_six_only` (6 features only): run-MAE **1.66 pp** / window-MAE 4.76 pp
+  - 参考: deployed §7.16 + isotonic75 + phaseguard = run-MAE 1.79 pp / window-MAE 15.85 pp
+- Tokyo/run2 (PR #42 で accepted ceiling とした 8.13 pp 残差): treatment 3.39 pp / `curated_six_only` **1.50 pp** で ceiling lifted。
+- `curated_six_only` ≈ `treatment_with_curated_six` (差 0.23 pp)。残り 5873 features は signal 追加せず、curated 6 が dominant feature。
+- 詳細: `internal_docs/product_deliverable/D034_PATH1_LORO_RESULTS.md`。
+
+注意 (tautology):
+- curated 6 は demo5 自身の ambiguity-fix-state confidence。"demo5 confidence → demo5 success" の予測は半 tautology であり、predictor は **post-demo5 QA tool** に役割が変わる (pre-demo5 estimator としては使えない)。
+- 用途別影響: README §2 の offline-QA / route-ranking はどちらも demo5 を実行済み前提なので両立可能。real-time / online は不可。
+
+決定:
+- D-034 で ship した interface を活用する evaluation script `experiments/train_ppc_solver_state_wrapper_loro.py` + 結果 CSV `experiments/results/d034_loro_results.csv` + analysis doc `D034_PATH1_LORO_RESULTS.md` を follow-up PR (#44 想定) として ship。
+- Path 1 を **parallel model class** として位置づける: deployed §7.16 stack (pre-demo5 estimator) は retire しない。post-demo5 QA は別の deliverable として将来追加可能。
+- README §1 contract 文言は変更しない (default contract は依然 rtk_*/solver_* を runtime から除外)。新しい model class は wrapper を opt-in した派生として記録のみ。
+
+理由:
+- 1.66 pp run-MAE は deployed 1.79 pp を上回るが、tautology を踏まえると "別問題への新解" であって "同問題の改善" ではない。両モデルを並立させることで ambiguity を残さない。
+- §7.16 stack の elaborate transition-surrogate scaffolding (6列を target として使う) は、6列が runtime feature でないことを前提にした正当な設計。Contract change で stack の存在意義が消えるわけではない (pre-demo5 use case は依然 stack のみ対応)。
+
+## D-036: Path 1 (post-demo5 QA) を product deliverable bundle に opt-in 列として exposure
+
+状態: 採用 (deployed §7.16 stack の側に並列、`build_product_deliverable.py --path1-prediction-csv` で opt-in)
+
+根拠:
+- D-035 で path 1 を parallel model class として採用したが、product deliverable bundle (`route_level_fix_rate_prediction.csv`, `window_level_details.csv`) への露出形式は未決定だった。
+- 別ファイル (`post_demo5_qa_route.csv` 等) にすると operator が adopted と path1 を相互参照しづらくなる。同ファイルに `path1_*` 列を追加する形なら 1 行で adopted と post-demo5 QA の値を比較できる。
+- Path 1 input (`d034_path1_per_window_predictions.csv`) が無いケース (deployed flow で `wrapper.curate(df)` を回していない場合) との互換性のため、`--path1-prediction-csv` を渡したときだけ列が増える `optional column` schema にする。
+
+実装:
+- `experiments/train_ppc_solver_state_wrapper_loro.py` に `--per-window-output-csv` flag を追加。`curated_six_only` variant の per-window 予測 (197 行) を `experiments/results/d034_path1_per_window_predictions.csv` に書き出す。
+- `experiments/build_product_deliverable.py` に `--path1-prediction-csv` flag を追加。指定時のみ:
+  - `window_level_details.csv` に `path1_pred_fix_rate_pct`, `path1_abs_error_pp` を追加
+  - `route_level_fix_rate_prediction.csv` に `path1_pred_fix_rate_pct`, `path1_abs_error_pp`, `path1_lift_pp` (= `adopted_abs_error_pp - path1_abs_error_pp`、正なら path1 の方が正確), `path1_role_note` (固定文字列で role caveat) を追加
+- 既存 deployed flow (`predict.py`) は `--path1-prediction-csv` を渡さないので、列も増えない (backward compatible)。
+
+確認:
+- 6 routes 中 5 routes で path1 lift が −0.04 〜 −2.34 pp (path1 の方が adopted より少し悪い)。
+- Tokyo/run2 だけ path1 lift **+6.63 pp** (8.13 pp ceiling を 1.50 pp に圧縮)。focus windows w7/w9 (false_high)、w23-w25 (hidden_high) すべて 1-2 pp 以内に解消。
+- 全 6 routes 平均 path1 abs error: 1.66 pp (D-035 報告値と一致)。
+
+理由:
+- 同ファイル列追加は ambiguity を最小化 (operator が `lift_pp` 列を見るだけで "ここでは path1 を信用すべきか" が判定できる)。
+- `path1_role_note` 列で各 row に "post-demo5 QA tool であって pre-demo5 estimator ではない" という caveat を埋め込み、tautology を忘れさせない。
+- `--path1-prediction-csv` を opt-in にすることで、real-time / online 用途の deployed flow は contract 変更なしで運用できる。
+
 ## 現在の未決定事項
 
 - `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか
 - strategy 差分が出る epoch をどの figure で見せるか
 - `blocked score` は完全に不要か、それとも veto 付きなら使えるか
 - readability/extensibility proxy をどこまで信頼するか
+- Path 2 (more PPC data) / Path 3 (architectural pivot) の優先度

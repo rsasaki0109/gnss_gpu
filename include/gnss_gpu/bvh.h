@@ -36,4 +36,20 @@ void raytrace_multipath_bvh(const double* rx_ecef, const double* sat_ecef,
                              double* reflection_points, double* excess_delays,
                              int n_sat, int n_nodes);
 
+// Batched LOS check across N epochs sharing one BVH.
+// rx_ecef: N x 3 receiver positions, sat_ecef: N x n_sat x 3 satellite positions.
+// is_los: N x n_sat int output (1 = LOS clear, 0 = blocked).
+// Single CUDA launch over n_epoch * n_sat threads; BVH is uploaded once.
+void raytrace_los_check_bvh_batch(const double* rx_ecef, const double* sat_ecef,
+                                   const BVHNode* bvh, const Triangle* sorted_tris,
+                                   int* is_los, int n_epoch, int n_sat, int n_nodes);
+
+// Batched multipath reflection across N epochs sharing one BVH.
+// rx_ecef: N x 3, sat_ecef: N x n_sat x 3.
+// reflection_points: N x n_sat x 3, excess_delays: N x n_sat.
+void raytrace_multipath_bvh_batch(const double* rx_ecef, const double* sat_ecef,
+                                   const BVHNode* bvh, const Triangle* sorted_tris,
+                                   double* reflection_points, double* excess_delays,
+                                   int n_epoch, int n_sat, int n_nodes);
+
 }  // namespace gnss_gpu

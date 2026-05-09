@@ -514,6 +514,287 @@ void raytrace_multipath_bvh(const double* rx_ecef, const double* sat_ecef,
   CUDA_CHECK(cudaFree(d_delay));
 }
 
+__global__ void los_check_bvh_batch_kernel(const double* rx_ecef,
+                                            const double* sat_ecef,
+                                            const BVHNode* bvh,
+                                            const Triangle* tris,
+                                            int* is_los,
+                                            int n_epoch, int n_sat, int n_nodes) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int total = n_epoch * n_sat;
+  if (tid >= total) return;
+
+  int eid = tid / n_sat;
+  int sid = tid % n_sat;
+
+  double ox = rx_ecef[eid * 3 + 0];
+  double oy = rx_ecef[eid * 3 + 1];
+  double oz = rx_ecef[eid * 3 + 2];
+  int sat_offset = (eid * n_sat + sid) * 3;
+  double sx = sat_ecef[sat_offset + 0];
+  double sy = sat_ecef[sat_offset + 1];
+  double sz = sat_ecef[sat_offset + 2];
+
+  if (!isfinite(sx) || !isfinite(sy) || !isfinite(sz) ||
+      !isfinite(ox) || !isfinite(oy) || !isfinite(oz)) {
+    is_los[tid] = 0;
+    return;
+  }
+
+  double dir[3] = {sx - ox, sy - oy, sz - oz};
+  double dist = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+  if (dist < 1e-15) { is_los[tid] = 1; return; }
+  dir[0] /= dist; dir[1] /= dist; dir[2] /= dist;
+
+  double dir_inv[3];
+  for (int d = 0; d < 3; d++) {
+    dir_inv[d] = (fabs(dir[d]) > 1e-20) ? (1.0 / dir[d]) : ((dir[d] >= 0) ? 1e20 : -1e20);
+  }
+
+  double origin[3] = {ox, oy, oz};
+
+  int stack[BVH_MAX_DEPTH];
+  int sp = 0;
+  stack[sp++] = 0;
+
+  bool blocked = false;
+  while (sp > 0 && !blocked) {
+    int node_idx = stack[--sp];
+    const BVHNode& node = bvh[node_idx];
+
+    if (!ray_aabb_intersect(origin, dir_inv, 0.0, dist, node.bbox))
+      continue;
+
+    if (node.left == -1) {
+      for (int i = 0; i < node.tri_count; i++) {
+        double t;
+        const Triangle& tri = tris[node.tri_start + i];
+        if (mt_intersect(origin, dir, tri.v0, tri.v1, tri.v2, t)) {
+          if (t < dist) { blocked = true; break; }
+        }
+      }
+    } else {
+      if (sp < BVH_MAX_DEPTH - 1) {
+        stack[sp++] = node.left;
+        stack[sp++] = node.right;
+      }
+    }
+  }
+
+  is_los[tid] = blocked ? 0 : 1;
+}
+
+__global__ void multipath_bvh_batch_kernel(const double* rx_ecef,
+                                            const double* sat_ecef,
+                                            const BVHNode* bvh,
+                                            const Triangle* tris,
+                                            double* reflection_points,
+                                            double* excess_delays,
+                                            int n_epoch, int n_sat, int n_nodes) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int total = n_epoch * n_sat;
+  if (tid >= total) return;
+
+  int eid = tid / n_sat;
+  int sid = tid % n_sat;
+
+  double rx[3] = {rx_ecef[eid * 3 + 0],
+                   rx_ecef[eid * 3 + 1],
+                   rx_ecef[eid * 3 + 2]};
+  int sat_offset = (eid * n_sat + sid) * 3;
+  double sat[3] = {sat_ecef[sat_offset + 0],
+                    sat_ecef[sat_offset + 1],
+                    sat_ecef[sat_offset + 2]};
+
+  if (!isfinite(rx[0]) || !isfinite(rx[1]) || !isfinite(rx[2]) ||
+      !isfinite(sat[0]) || !isfinite(sat[1]) || !isfinite(sat[2])) {
+    excess_delays[tid] = 0.0;
+    reflection_points[tid * 3 + 0] = 0.0;
+    reflection_points[tid * 3 + 1] = 0.0;
+    reflection_points[tid * 3 + 2] = 0.0;
+    return;
+  }
+
+  double d_rx_sat = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
+                          (rx[1] - sat[1]) * (rx[1] - sat[1]) +
+                          (rx[2] - sat[2]) * (rx[2] - sat[2]));
+
+  double best_delay = 0.0;
+  double best_refl[3] = {0.0, 0.0, 0.0};
+  bool found = false;
+
+  int stack[64];
+  int sp = 0;
+  stack[sp++] = 0;
+
+  while (sp > 0) {
+    int node_idx = stack[--sp];
+    const BVHNode& node = bvh[node_idx];
+
+    if (node.left == -1) {
+      for (int i = 0; i < node.tri_count; i++) {
+        const Triangle& tri = tris[node.tri_start + i];
+
+        double e1[3] = {tri.v1[0] - tri.v0[0], tri.v1[1] - tri.v0[1], tri.v1[2] - tri.v0[2]};
+        double e2[3] = {tri.v2[0] - tri.v0[0], tri.v2[1] - tri.v0[1], tri.v2[2] - tri.v0[2]};
+        double n[3] = {e1[1] * e2[2] - e1[2] * e2[1],
+                        e1[2] * e2[0] - e1[0] * e2[2],
+                        e1[0] * e2[1] - e1[1] * e2[0]};
+        double nn = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+        if (nn < 1e-15) continue;
+        n[0] /= nn; n[1] /= nn; n[2] /= nn;
+
+        double dv[3] = {rx[0] - tri.v0[0], rx[1] - tri.v0[1], rx[2] - tri.v0[2]};
+        double d = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
+        double mirror[3] = {rx[0] - 2.0 * d * n[0],
+                             rx[1] - 2.0 * d * n[1],
+                             rx[2] - 2.0 * d * n[2]};
+
+        double dir[3] = {sat[0] - mirror[0], sat[1] - mirror[1], sat[2] - mirror[2]};
+        double dir_len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+        if (dir_len < 1e-15) continue;
+        dir[0] /= dir_len; dir[1] /= dir_len; dir[2] /= dir_len;
+
+        double t;
+        if (!mt_intersect(mirror, dir, tri.v0, tri.v1, tri.v2, t)) continue;
+
+        double refl[3] = {mirror[0] + t * dir[0],
+                           mirror[1] + t * dir[1],
+                           mirror[2] + t * dir[2]};
+
+        double d_rx_refl = sqrt((rx[0] - refl[0]) * (rx[0] - refl[0]) +
+                                 (rx[1] - refl[1]) * (rx[1] - refl[1]) +
+                                 (rx[2] - refl[2]) * (rx[2] - refl[2]));
+        double d_refl_sat = sqrt((refl[0] - sat[0]) * (refl[0] - sat[0]) +
+                                  (refl[1] - sat[1]) * (refl[1] - sat[1]) +
+                                  (refl[2] - sat[2]) * (refl[2] - sat[2]));
+        double excess = (d_rx_refl + d_refl_sat) - d_rx_sat;
+
+        if (excess > 0.0 && (!found || excess < best_delay)) {
+          best_delay = excess;
+          best_refl[0] = refl[0]; best_refl[1] = refl[1]; best_refl[2] = refl[2];
+          found = true;
+        }
+      }
+    } else {
+      if (sp < 62) {
+        stack[sp++] = node.left;
+        stack[sp++] = node.right;
+      }
+    }
+  }
+
+  excess_delays[tid] = best_delay;
+  reflection_points[tid * 3 + 0] = best_refl[0];
+  reflection_points[tid * 3 + 1] = best_refl[1];
+  reflection_points[tid * 3 + 2] = best_refl[2];
+}
+
+void raytrace_los_check_bvh_batch(const double* rx_ecef, const double* sat_ecef,
+                                   const BVHNode* bvh, const Triangle* sorted_tris,
+                                   int* is_los, int n_epoch, int n_sat, int n_nodes) {
+  size_t sz_rx = (size_t)n_epoch * 3 * sizeof(double);
+  size_t sz_sat = (size_t)n_epoch * n_sat * 3 * sizeof(double);
+  size_t sz_bvh = (size_t)n_nodes * sizeof(BVHNode);
+  size_t sz_los = (size_t)n_epoch * n_sat * sizeof(int);
+
+  int total_tris = 0;
+  for (int i = 0; i < n_nodes; i++) {
+    if (bvh[i].left == -1) {
+      int end = bvh[i].tri_start + bvh[i].tri_count;
+      if (end > total_tris) total_tris = end;
+    }
+  }
+  size_t sz_tri = (size_t)total_tris * sizeof(Triangle);
+
+  double *d_rx, *d_sat;
+  BVHNode* d_bvh;
+  Triangle* d_tri;
+  int* d_los;
+
+  CUDA_CHECK(cudaMalloc(&d_rx, sz_rx));
+  CUDA_CHECK(cudaMalloc(&d_sat, sz_sat));
+  CUDA_CHECK(cudaMalloc(&d_bvh, sz_bvh));
+  CUDA_CHECK(cudaMalloc(&d_tri, sz_tri));
+  CUDA_CHECK(cudaMalloc(&d_los, sz_los));
+
+  CUDA_CHECK(cudaMemcpy(d_rx, rx_ecef, sz_rx, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_sat, sat_ecef, sz_sat, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_bvh, bvh, sz_bvh, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_tri, sorted_tris, sz_tri, cudaMemcpyHostToDevice));
+
+  int total = n_epoch * n_sat;
+  int block = 256;
+  int grid = (total + block - 1) / block;
+  los_check_bvh_batch_kernel<<<grid, block>>>(d_rx, d_sat, d_bvh, d_tri, d_los,
+                                                n_epoch, n_sat, n_nodes);
+  CUDA_CHECK_LAST();
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  CUDA_CHECK(cudaMemcpy(is_los, d_los, sz_los, cudaMemcpyDeviceToHost));
+
+  CUDA_CHECK(cudaFree(d_rx));
+  CUDA_CHECK(cudaFree(d_sat));
+  CUDA_CHECK(cudaFree(d_bvh));
+  CUDA_CHECK(cudaFree(d_tri));
+  CUDA_CHECK(cudaFree(d_los));
+}
+
+void raytrace_multipath_bvh_batch(const double* rx_ecef, const double* sat_ecef,
+                                   const BVHNode* bvh, const Triangle* sorted_tris,
+                                   double* reflection_points, double* excess_delays,
+                                   int n_epoch, int n_sat, int n_nodes) {
+  size_t sz_rx = (size_t)n_epoch * 3 * sizeof(double);
+  size_t sz_sat = (size_t)n_epoch * n_sat * 3 * sizeof(double);
+  size_t sz_bvh = (size_t)n_nodes * sizeof(BVHNode);
+  size_t sz_refl = (size_t)n_epoch * n_sat * 3 * sizeof(double);
+  size_t sz_delay = (size_t)n_epoch * n_sat * sizeof(double);
+
+  int total_tris = 0;
+  for (int i = 0; i < n_nodes; i++) {
+    if (bvh[i].left == -1) {
+      int end = bvh[i].tri_start + bvh[i].tri_count;
+      if (end > total_tris) total_tris = end;
+    }
+  }
+  size_t sz_tri = (size_t)total_tris * sizeof(Triangle);
+
+  double *d_rx, *d_sat, *d_refl, *d_delay;
+  BVHNode* d_bvh;
+  Triangle* d_tri;
+
+  CUDA_CHECK(cudaMalloc(&d_rx, sz_rx));
+  CUDA_CHECK(cudaMalloc(&d_sat, sz_sat));
+  CUDA_CHECK(cudaMalloc(&d_bvh, sz_bvh));
+  CUDA_CHECK(cudaMalloc(&d_tri, sz_tri));
+  CUDA_CHECK(cudaMalloc(&d_refl, sz_refl));
+  CUDA_CHECK(cudaMalloc(&d_delay, sz_delay));
+
+  CUDA_CHECK(cudaMemcpy(d_rx, rx_ecef, sz_rx, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_sat, sat_ecef, sz_sat, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_bvh, bvh, sz_bvh, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_tri, sorted_tris, sz_tri, cudaMemcpyHostToDevice));
+
+  int total = n_epoch * n_sat;
+  int block = 256;
+  int grid = (total + block - 1) / block;
+  multipath_bvh_batch_kernel<<<grid, block>>>(d_rx, d_sat, d_bvh, d_tri,
+                                                d_refl, d_delay,
+                                                n_epoch, n_sat, n_nodes);
+  CUDA_CHECK_LAST();
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  CUDA_CHECK(cudaMemcpy(reflection_points, d_refl, sz_refl, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(excess_delays, d_delay, sz_delay, cudaMemcpyDeviceToHost));
+
+  CUDA_CHECK(cudaFree(d_rx));
+  CUDA_CHECK(cudaFree(d_sat));
+  CUDA_CHECK(cudaFree(d_bvh));
+  CUDA_CHECK(cudaFree(d_tri));
+  CUDA_CHECK(cudaFree(d_refl));
+  CUDA_CHECK(cudaFree(d_delay));
+}
+
 void raytrace_los_check_bvh(const double* rx_ecef, const double* sat_ecef,
                              const BVHNode* bvh, const Triangle* sorted_tris,
                              int* is_los, int n_sat, int n_nodes) {

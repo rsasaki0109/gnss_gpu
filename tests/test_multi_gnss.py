@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+from gnss_gpu.range_model import geometric_ranges_sagnac
 from gnss_gpu.multi_gnss import (
     MultiGNSSSolver,
     SYSTEM_GPS,
@@ -35,7 +36,7 @@ def _make_gps_scenario():
         [-11527000.0, -19421000.0,  13682000.0],
     ])
 
-    ranges = np.sqrt(np.sum((sat_ecef - true_pos) ** 2, axis=1))
+    ranges = geometric_ranges_sagnac(true_pos, sat_ecef)
     pseudoranges = ranges + true_cb
     system_ids = np.zeros(len(sat_ecef), dtype=np.int32)  # all GPS
 
@@ -81,7 +82,7 @@ def _make_multi_gnss_scenario(isb_galileo=0.0, isb_glonass=0.0):
                           dtype=np.int32)
 
     # Compute pseudoranges with per-system clock biases
-    ranges = np.sqrt(np.sum((sat_ecef - true_pos) ** 2, axis=1))
+    ranges = geometric_ranges_sagnac(true_pos, sat_ecef)
     pseudoranges = ranges.copy()
     pseudoranges[:4] += true_cb_gps                          # GPS clock
     pseudoranges[4:8] += true_cb_gps + isb_galileo           # Galileo clock

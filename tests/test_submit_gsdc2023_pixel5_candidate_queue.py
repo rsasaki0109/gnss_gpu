@@ -1,0 +1,1249 @@
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+import subprocess
+
+import pytest
+
+from experiments.submit_gsdc2023_pixel5_candidate_queue import (
+    PENDING_QUEUE,
+    assert_matlab_equivalence_gate,
+    assert_matlab_final_reproduction_gate,
+    assert_pre_submit_manifest_gate,
+    assert_ready_report_consistency,
+    assert_submit_risk_gate,
+    build_ready_report,
+    candidate_submission_path,
+    existing_queue_items,
+    kaggle_submit_command,
+    main,
+    prepare_ready_report,
+    pre_submit_manifest_payload,
+    risk_report_payload,
+    selected_queue,
+    sha256_file,
+    write_ready_report,
+    write_submit_readiness_doc,
+)
+
+
+def _clean_matlab_final_reproduction_gate(tmp_path: Path) -> dict[str, object]:
+    summary_path = tmp_path / "matlab_final_reproduction_summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "reconstruction_summary": {
+                    "delta_vs_reference": {
+                        "rows": 71936,
+                        "changed_rows_gt_1e_9m": 0,
+                        "changed_rows_gt_0p01m": 0,
+                        "max_delta_m": 0.0,
+                    },
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "summary": str(summary_path),
+        "summary_sha256": sha256_file(summary_path),
+        "passed": True,
+        "max_delta_threshold_m": 1.0e-6,
+        "reference_submission": str(tmp_path / "reference.csv"),
+        "candidate_submission": str(tmp_path / "candidate.csv"),
+        "bridge_root": str(tmp_path / "bridge"),
+        "rows": 71936,
+        "changed_rows_gt_1e_9m": 0,
+        "changed_rows_gt_0p01m": 0,
+        "p95_delta_m": 0.0,
+        "max_delta_m": 0.0,
+        "missing_bridge_timestamp_rows": 24,
+        "missing_bridge_timestamp_trips": 12,
+        "reconstructed_submission_csv": str(tmp_path / "reconstructed.csv"),
+    }
+
+
+def test_pending_queue_prioritizes_sjc_r_then_mtv_sjc_then_lax_ebf() -> None:
+    groups = [item.priority_group for item in PENDING_QUEUE]
+
+    assert groups[:3] == ["sjc_r_scale_sweep"] * 3
+    assert groups[3:6] == ["p6p0_clean_sjc_r_scale_sweep"] * 3
+    assert groups[6:12] == ["mtv_sjc_trip_ablation"] * 6
+    assert groups[12:] == ["lax_ebf_trip_ablation"] * 8
+
+
+def test_candidate_submission_path_uses_scripted_output_layout() -> None:
+    output_dir = Path("out")
+    path = candidate_submission_path("pixel5phone_3p375_sjc_r0p84375", output_dir, "tag")
+
+    assert path == (
+        output_dir
+        / "pixel5phone_3p375_sjc_r0p84375"
+        / "submission_best_basecorr_posoffset_pixel5phone_3p375_sjc_r0p84375_plus_pixel5_patch_tag.csv"
+    )
+
+
+def test_selected_queue_filters_by_group() -> None:
+    selected = selected_queue({"mtv_sjc_trip_ablation"})
+
+    assert len(selected) == 6
+    assert {item.priority_group for item in selected} == {"mtv_sjc_trip_ablation"}
+
+    p6p0 = selected_queue({"p6p0_clean_sjc_r_scale_sweep"})
+    assert [item.candidate for item in p6p0] == [
+        "pixel5phone_3p375_sjc_r0p84375_p6p0",
+        "pixel5phone_3p375_sjc_r1p6875_p6p0",
+        "pixel5phone_3p375_sjc_r2p53125_p6p0",
+    ]
+
+
+def test_existing_queue_items_can_skip_missing(tmp_path) -> None:
+    queue = selected_queue({"p6p0_clean_sjc_r_scale_sweep"})
+    path = candidate_submission_path(queue[0].candidate, tmp_path, "tag")
+    path.parent.mkdir(parents=True)
+    path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+
+    assert existing_queue_items(queue, tmp_path, "tag", skip_missing=True) == [queue[0]]
+    with pytest.raises(SystemExit, match="missing candidate CSV"):
+        existing_queue_items(queue, tmp_path, "tag", skip_missing=False)
+
+
+def test_kaggle_submit_command() -> None:
+    command = kaggle_submit_command(Path("candidate.csv"), "message")
+
+    assert command == [
+        "kaggle",
+        "competitions",
+        "submit",
+        "-c",
+        "smartphone-decimeter-2023",
+        "-f",
+        "candidate.csv",
+        "-m",
+        "message",
+    ]
+
+
+def test_dry_run_shell_quotes_submission_message() -> None:
+    completed = subprocess.run(
+        [
+            "python3",
+            "experiments/submit_gsdc2023_pixel5_candidate_queue.py",
+            "--group",
+            "mtv_sjc_trip_ablation",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    first_line = completed.stdout.splitlines()[0]
+    assert "-m '20260501 pixel5 sjcr0 ablate mtv de1 20230523'" in first_line
+
+
+def test_submit_risk_gate_requires_enabled_clean_report(tmp_path) -> None:
+    with pytest.raises(SystemExit, match="missing risk report"):
+        assert_submit_risk_gate(tmp_path)
+
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": False}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit, match="not enabled"):
+        assert_submit_risk_gate(tmp_path)
+
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "risky_chunks": 2}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit, match="risky_chunks=2"):
+        assert_submit_risk_gate(tmp_path)
+
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    assert assert_submit_risk_gate(tmp_path) == {"enabled": True, "risky_chunks": 0}
+    assert risk_report_payload(tmp_path) == {"enabled": True, "risky_chunks": 0}
+
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "risky_chunks": 3, "candidate_actionable_risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    assert assert_submit_risk_gate(tmp_path)["candidate_actionable_risky_chunks"] == 0
+
+
+def test_pre_submit_manifest_gate_requires_clean_p6p0_manifest(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    output = tmp_path / candidate / "candidate.csv"
+    output.parent.mkdir(parents=True)
+    output.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="missing pre-submit manifest"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate])
+
+    (tmp_path / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(output),
+                        "output_sha256": sha256_file(output),
+                        "pixel6pro_scale": 0.0,
+                        "risk_candidate_actionable_chunks": 0,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert pre_submit_manifest_payload(tmp_path)["risk_report"]["candidate_actionable_risky_chunks"] == 0
+    assert assert_pre_submit_manifest_gate(tmp_path, [candidate])["candidates"][0]["candidate"] == candidate
+
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,1,0.5",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit, match="pre-submit trip check failed"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate])
+
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m,previous_exists,previous_changed_rows,previous_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0,True,2,0.814",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit, match="previous trip check failed"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate])
+
+
+def test_pre_submit_manifest_gate_rejects_any_candidate_that_moves_previous_safe_trip(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375"
+    output = tmp_path / candidate / "candidate.csv"
+    output.parent.mkdir(parents=True)
+    output.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(output),
+                        "output_sha256": sha256_file(output),
+                        "pixel6pro_scale": 3.25,
+                        "risk_candidate_actionable_chunks": 2,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m,previous_exists,previous_changed_rows,previous_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0,True,1,0.25",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="previous trip check failed"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate])
+
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m,previous_exists,previous_changed_rows,previous_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,2,0.75,True,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert assert_pre_submit_manifest_gate(tmp_path, [candidate])["candidates"][0]["candidate"] == candidate
+
+
+def test_matlab_equivalence_gate_can_be_required_from_pre_submit_manifest(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    output = tmp_path / candidate / "candidate.csv"
+    output.parent.mkdir(parents=True)
+    output.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    manifest = {
+        "risk_report": {"candidate_actionable_risky_chunks": 0},
+        "candidates": [
+            {
+                "candidate": candidate,
+                "output": str(output),
+                "output_sha256": sha256_file(output),
+                "pixel6pro_scale": 0.0,
+                "risk_candidate_actionable_chunks": 0,
+            },
+        ],
+    }
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="missing matlab_equivalence_gate"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_equivalence=True)
+
+    manifest["matlab_equivalence_gate"] = {
+        "passed": True,
+        "equivalence_claim": "matlab_equivalent",
+        "factor_mask_passed": True,
+        "factor_total_matlab_only": 0,
+        "factor_total_bridge_only": 0,
+        "factor_side_only_failure_count": 0,
+        "raw_bridge_counts_passed": True,
+        "raw_bridge_matched_abs_delta_total": 0,
+        "raw_bridge_count_delta_failure_count": 0,
+        "residual_values_passed": True,
+        "residual_total_matlab_only": 0,
+        "residual_total_bridge_only": 0,
+        "residual_overall_max_abs_delta_m": 5.9e-5,
+        "residual_max_abs_delta_threshold_m": 1.0e-4,
+        "residual_internal_delta_failure_count": 0,
+        "residual_internal_delta_failures": [],
+        "residual_internal_delta_thresholds": {"model_delta": 1.0e-4},
+        "residual_diagnostics_writer_passed": True,
+        "residual_diagnostics_writer_pd_value_passed": True,
+        "residual_diagnostics_writer_wide_passed": True,
+        "residual_diagnostics_writer_total_matlab_only": 0,
+        "residual_diagnostics_writer_total_bridge_only": 0,
+        "residual_diagnostics_writer_wide_total_matlab_only": 0,
+        "residual_diagnostics_writer_wide_total_bridge_only": 0,
+        "residual_diagnostics_writer_wide_sat_col_mismatch_count": 0,
+        "residual_diagnostics_writer_export_enabled": True,
+        "residual_diagnostics_writer_export_count": 12,
+        "residual_diagnostics_writer_export_total_rows": 258537,
+        "residual_diagnostics_writer_export_expected_columns": 44,
+        "residual_diagnostics_writer_export_column_count_min": 44,
+        "residual_diagnostics_writer_export_column_count_max": 44,
+        "residual_diagnostics_writer_export_column_mismatch_count": 0,
+    }
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert (
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_equivalence=True)[
+            "matlab_equivalence_gate"
+        ]["equivalence_claim"]
+        == "matlab_equivalent"
+    )
+
+    manifest["matlab_equivalence_gate"]["cached_summary_validation_checked"] = True
+    manifest["matlab_equivalence_gate"]["cached_summary_validation_passed"] = False
+    manifest["matlab_equivalence_gate"]["cached_summary_validation_mismatch_count"] = 1
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(SystemExit, match="cached summary validation failed"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_equivalence=True)
+
+
+def test_matlab_final_reproduction_gate_can_be_required_from_pre_submit_manifest(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    output = tmp_path / candidate / "candidate.csv"
+    output.parent.mkdir(parents=True)
+    output.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    manifest = {
+        "risk_report": {"candidate_actionable_risky_chunks": 0},
+        "candidates": [
+            {
+                "candidate": candidate,
+                "output": str(output),
+                "output_sha256": sha256_file(output),
+                "pixel6pro_scale": 0.0,
+                "risk_candidate_actionable_chunks": 0,
+            },
+        ],
+    }
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="missing matlab_final_reproduction_gate"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_final_reproduction=True)
+
+    manifest["matlab_final_reproduction_gate"] = _clean_matlab_final_reproduction_gate(tmp_path)
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert (
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_final_reproduction=True)[
+            "matlab_final_reproduction_gate"
+        ]["max_delta_m"]
+        == 0.0
+    )
+
+    manifest["matlab_final_reproduction_gate"]["max_delta_m"] = 2.0e-6
+    manifest["matlab_final_reproduction_gate"]["passed"] = False
+    (tmp_path / "pre_submit_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(SystemExit, match="passed=false"):
+        assert_pre_submit_manifest_gate(tmp_path, [candidate], require_matlab_final_reproduction=True)
+
+
+def test_matlab_final_reproduction_gate_rejects_delta_failures(tmp_path) -> None:
+    clean = {"matlab_final_reproduction_gate": _clean_matlab_final_reproduction_gate(tmp_path)}
+    assert assert_matlab_final_reproduction_gate(clean)["rows"] == 71936
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_final_reproduction_gate"]["changed_rows_gt_1e_9m"] = 1
+    with pytest.raises(SystemExit, match="changed rows are nonzero"):
+        assert_matlab_final_reproduction_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_final_reproduction_gate"]["max_delta_m"] = 2.0e-6
+    with pytest.raises(SystemExit, match="max delta failed"):
+        assert_matlab_final_reproduction_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_final_reproduction_gate"]["summary_sha256"] = "bad"
+    with pytest.raises(SystemExit, match="summary sha256 mismatch"):
+        assert_matlab_final_reproduction_gate(dirty)
+
+
+def test_matlab_equivalence_gate_rejects_side_only_or_delta_failures() -> None:
+    clean = {
+        "matlab_equivalence_gate": {
+            "passed": True,
+            "equivalence_claim": "matlab_equivalent",
+            "factor_mask_passed": True,
+            "factor_total_matlab_only": 0,
+            "factor_total_bridge_only": 0,
+            "factor_side_only_failure_count": 0,
+            "raw_bridge_counts_passed": True,
+            "raw_bridge_matched_abs_delta_total": 0,
+            "raw_bridge_count_delta_failure_count": 0,
+            "residual_values_passed": True,
+            "residual_total_matlab_only": 0,
+            "residual_total_bridge_only": 0,
+            "residual_overall_max_abs_delta_m": 5.0e-5,
+            "residual_max_abs_delta_threshold_m": 1.0e-4,
+            "residual_internal_delta_failure_count": 0,
+            "residual_internal_delta_failures": [],
+            "residual_internal_delta_thresholds": {"model_delta": 1.0e-4},
+            "residual_diagnostics_writer_passed": True,
+            "residual_diagnostics_writer_pd_value_passed": True,
+            "residual_diagnostics_writer_wide_passed": True,
+            "residual_diagnostics_writer_total_matlab_only": 0,
+            "residual_diagnostics_writer_total_bridge_only": 0,
+            "residual_diagnostics_writer_wide_total_matlab_only": 0,
+            "residual_diagnostics_writer_wide_total_bridge_only": 0,
+            "residual_diagnostics_writer_wide_sat_col_mismatch_count": 0,
+            "residual_diagnostics_writer_export_enabled": True,
+            "residual_diagnostics_writer_export_count": 12,
+            "residual_diagnostics_writer_export_total_rows": 258537,
+            "residual_diagnostics_writer_export_expected_columns": 44,
+            "residual_diagnostics_writer_export_column_count_min": 44,
+            "residual_diagnostics_writer_export_column_count_max": 44,
+            "residual_diagnostics_writer_export_column_mismatch_count": 0,
+        },
+    }
+    assert assert_matlab_equivalence_gate(clean)["equivalence_claim"] == "matlab_equivalent"
+
+    dirty = json.loads(json.dumps(clean))
+    del dirty["matlab_equivalence_gate"]["factor_side_only_failure_count"]
+    with pytest.raises(SystemExit, match="missing factor side-only failure count"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["factor_side_only_failure_count"] = 1
+    with pytest.raises(SystemExit, match="factor mask side-only"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    del dirty["matlab_equivalence_gate"]["raw_bridge_count_delta_failure_count"]
+    with pytest.raises(SystemExit, match="missing raw bridge count delta failure count"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["raw_bridge_count_delta_failure_count"] = 1
+    with pytest.raises(SystemExit, match="raw bridge count parity failed"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_total_bridge_only"] = 1
+    with pytest.raises(SystemExit, match="side-only"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_overall_max_abs_delta_m"] = 2.0e-4
+    with pytest.raises(SystemExit, match="max delta failed"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    del dirty["matlab_equivalence_gate"]["residual_internal_delta_failure_count"]
+    with pytest.raises(SystemExit, match="missing residual internal delta failure count"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_internal_delta_failure_count"] = 2
+    with pytest.raises(SystemExit, match="internal delta failures"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_internal_delta_thresholds"] = {}
+    with pytest.raises(SystemExit, match="missing residual internal delta thresholds"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    del dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_export_count"]
+    with pytest.raises(SystemExit, match="missing residual diagnostics writer fields"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_wide_total_bridge_only"] = 1
+    with pytest.raises(SystemExit, match="residual diagnostics writer side-only"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_export_column_count_max"] = 45
+    with pytest.raises(SystemExit, match="residual diagnostics writer column parity failed"):
+        assert_matlab_equivalence_gate(dirty)
+
+    dirty = json.loads(json.dumps(clean))
+    dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_regression_checked"] = True
+    dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_regression_passed"] = False
+    dirty["matlab_equivalence_gate"]["residual_diagnostics_writer_regression_mismatch_count"] = 1
+    with pytest.raises(SystemExit, match="residual diagnostics writer regression failed"):
+        assert_matlab_equivalence_gate(dirty)
+
+
+def test_submit_checks_risk_before_running_kaggle(monkeypatch, tmp_path) -> None:
+    for item in selected_queue({"sjc_r_scale_sweep"}):
+        path = candidate_submission_path(item.candidate, tmp_path, "tag")
+        path.parent.mkdir(parents=True)
+        path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "risky_chunks": 1}}),
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_run(command, check):
+        calls.append(command)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(SystemExit, match="risky_chunks=1"):
+        main(["--output-dir", str(tmp_path), "--tag", "tag", "--group", "sjc_r_scale_sweep", "--submit"])
+
+    assert calls == []
+
+    assert (
+        main(
+            [
+                "--output-dir",
+                str(tmp_path),
+                "--tag",
+                "tag",
+                "--group",
+                "sjc_r_scale_sweep",
+                "--submit",
+                "--allow-risk",
+                "--skip-missing",
+            ],
+        )
+        == 0
+    )
+    assert len(calls) == 3
+
+
+def test_check_ready_runs_gates_without_running_kaggle(monkeypatch, capsys, tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    path = candidate_submission_path(candidate, tmp_path, "tag")
+    path.parent.mkdir(parents=True)
+    path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "risky_chunks": 3, "candidate_actionable_risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(path),
+                        "output_sha256": sha256_file(path),
+                        "pixel6pro_scale": 0.0,
+                        "risk_candidate_actionable_chunks": 0,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_run(command, check):
+        calls.append(command)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert (
+        main(
+            [
+                "--output-dir",
+                str(tmp_path),
+                "--tag",
+                "tag",
+                "--group",
+                "p6p0_clean_sjc_r_scale_sweep",
+                "--check-ready",
+                "--skip-missing",
+            ],
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert "ready: 1 candidate(s)" in captured.out
+    assert "kaggle competitions submit" in captured.out
+    assert calls == []
+
+
+def test_build_and_write_ready_report(tmp_path) -> None:
+    queue = selected_queue({"p6p0_clean_sjc_r_scale_sweep"})[:1]
+    path = candidate_submission_path(queue[0].candidate, tmp_path, "tag")
+    path.parent.mkdir(parents=True)
+    path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    report_path = tmp_path / "ready_report.json"
+    matlab_final_gate = _clean_matlab_final_reproduction_gate(tmp_path)
+
+    report = build_ready_report(
+        output_dir=tmp_path,
+        tag="tag",
+        groups=["p6p0_clean_sjc_r_scale_sweep"],
+        queue=queue,
+        risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
+        pre_submit_manifest={
+            "risk_report": {"candidate_actionable_risky_chunks": 0},
+            "matlab_final_reproduction_gate": matlab_final_gate,
+        },
+        allow_risk=False,
+    )
+    write_ready_report(report_path, report)
+
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    csv_rows = list(csv.DictReader((tmp_path / "ready_report.csv").open(encoding="utf-8")))
+    assert payload["ready_count"] == 1
+    assert payload["groups"] == ["p6p0_clean_sjc_r_scale_sweep"]
+    assert payload["risk_report"]["candidate_actionable_risky_chunks"] == 0
+    assert payload["pre_submit_manifest"]["present"] is True
+    assert payload["pre_submit_manifest"]["matlab_final_reproduction_gate"]["max_delta_m"] == 0.0
+    assert payload["candidates"][0]["candidate"] == queue[0].candidate
+    assert payload["candidates"][0]["sha256"] == sha256_file(path)
+    assert csv_rows[0]["candidate"] == queue[0].candidate
+    assert csv_rows[0]["sha256"] == sha256_file(path)
+    assert csv_rows[0]["duplicate_sha_match_count"] == "0"
+    assert csv_rows[0]["command"].startswith("kaggle competitions submit")
+
+
+def test_ready_report_records_duplicate_sha_matches(tmp_path) -> None:
+    queue = selected_queue({"p6p0_clean_sjc_r_scale_sweep"})[:1]
+    path = candidate_submission_path(queue[0].candidate, tmp_path / "out", "tag")
+    duplicate_path = tmp_path / "previous" / "nested" / "submission_previous.csv"
+    rows = "tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n"
+    path.parent.mkdir(parents=True)
+    duplicate_path.parent.mkdir(parents=True)
+    path.write_text(rows, encoding="utf-8")
+    duplicate_path.write_text(rows, encoding="utf-8")
+    report_path = tmp_path / "ready.json"
+
+    report = build_ready_report(
+        output_dir=tmp_path / "out",
+        tag="tag",
+        groups=["p6p0_clean_sjc_r_scale_sweep"],
+        queue=queue,
+        risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
+        pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
+        allow_risk=False,
+        duplicate_sha_roots=[tmp_path / "previous"],
+    )
+    write_ready_report(report_path, report)
+
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    csv_rows = list(csv.DictReader((tmp_path / "ready.csv").open(encoding="utf-8")))
+    assert payload["duplicate_sha_candidate_count"] == 1
+    assert payload["duplicate_sha_match_count"] == 1
+    assert payload["candidates"][0]["duplicate_sha_matches"] == [str(duplicate_path.resolve())]
+    assert csv_rows[0]["duplicate_sha_match_count"] == "1"
+    assert csv_rows[0]["duplicate_sha_matches"] == str(duplicate_path.resolve())
+
+
+def test_audit_ready_report_can_fail_on_duplicate_sha(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    output_dir = tmp_path / "out"
+    path = candidate_submission_path(candidate, output_dir, "tag")
+    duplicate_path = tmp_path / "previous" / "submission_previous.csv"
+    rows = "tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n"
+    path.parent.mkdir(parents=True)
+    duplicate_path.parent.mkdir(parents=True)
+    path.write_text(rows, encoding="utf-8")
+    duplicate_path.write_text(rows, encoding="utf-8")
+    (output_dir / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "candidate_actionable_risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    (output_dir / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(path),
+                        "output_sha256": sha256_file(path),
+                        "pixel6pro_scale": 0.0,
+                        "risk_candidate_actionable_chunks": 0,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (output_dir / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "ready.json"
+    report = build_ready_report(
+        output_dir=output_dir,
+        tag="tag",
+        groups=["p6p0_clean_sjc_r_scale_sweep"],
+        queue=selected_queue({"p6p0_clean_sjc_r_scale_sweep"})[:1],
+        risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
+        pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
+        allow_risk=False,
+        duplicate_sha_roots=[tmp_path / "previous"],
+    )
+    write_ready_report(report_path, report)
+
+    assert assert_ready_report_consistency(report_path)["duplicate_sha_match_count"] == 1
+    with pytest.raises(SystemExit, match="duplicate SHA candidates found"):
+        main(["--audit-ready-report", str(report_path), "--fail-on-duplicate-sha"])
+
+
+def test_ready_report_consistency_audits_json_csv_manifest_and_sha(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    path = candidate_submission_path(candidate, tmp_path, "tag")
+    path.parent.mkdir(parents=True)
+    path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "candidate_actionable_risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(path),
+                        "output_sha256": sha256_file(path),
+                        "pixel6pro_scale": 0.0,
+                        "risk_candidate_actionable_chunks": 0,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "ready.json"
+    report = build_ready_report(
+        output_dir=tmp_path,
+        tag="tag",
+        groups=["p6p0_clean_sjc_r_scale_sweep"],
+        queue=selected_queue({"p6p0_clean_sjc_r_scale_sweep"})[:1],
+        risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
+        pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
+        allow_risk=False,
+    )
+    write_ready_report(report_path, report)
+
+    assert assert_ready_report_consistency(report_path)["ready_count"] == 1
+
+    csv_path = tmp_path / "ready.csv"
+    rows = list(csv.DictReader(csv_path.open(encoding="utf-8")))
+    rows[0]["sha256"] = "bad"
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    with pytest.raises(SystemExit, match="CSV sha256 mismatch"):
+        assert_ready_report_consistency(report_path)
+
+
+def test_ready_report_consistency_applies_pre_submit_manifest_to_non_p6p0_candidates(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375"
+    path = candidate_submission_path(candidate, tmp_path, "tag")
+    path.parent.mkdir(parents=True)
+    path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "candidate_actionable_risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(path),
+                        "output_sha256": sha256_file(path),
+                        "pixel6pro_scale": 3.25,
+                        "risk_candidate_actionable_chunks": 0,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m,previous_exists,previous_changed_rows,previous_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0,True,1,0.25",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "ready.json"
+    report = build_ready_report(
+        output_dir=tmp_path,
+        tag="tag",
+        groups=["sjc_r_scale_sweep"],
+        queue=selected_queue({"sjc_r_scale_sweep"})[:1],
+        risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
+        pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
+        allow_risk=False,
+        duplicate_sha_roots=[tmp_path],
+    )
+    write_ready_report(report_path, report)
+
+    with pytest.raises(SystemExit, match="previous trip check failed"):
+        assert_ready_report_consistency(report_path)
+
+
+def test_audit_ready_report_cli(capsys, tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    path = candidate_submission_path(candidate, tmp_path, "tag")
+    path.parent.mkdir(parents=True)
+    path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "candidate_actionable_risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(path),
+                        "output_sha256": sha256_file(path),
+                        "pixel6pro_scale": 0.0,
+                        "risk_candidate_actionable_chunks": 0,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "ready.json"
+    report = build_ready_report(
+        output_dir=tmp_path,
+        tag="tag",
+        groups=["p6p0_clean_sjc_r_scale_sweep"],
+        queue=selected_queue({"p6p0_clean_sjc_r_scale_sweep"})[:1],
+        risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
+        pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
+        allow_risk=False,
+        duplicate_sha_roots=[tmp_path],
+    )
+    write_ready_report(report_path, report)
+
+    assert main(["--audit-ready-report", str(report_path)]) == 0
+    assert "audited: 1 candidate(s)" in capsys.readouterr().out
+
+
+def test_prepare_ready_report_builds_manifest_report_and_audits(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    risky_trip = "2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro"
+    output_dir = tmp_path / "out"
+    candidate_path = candidate_submission_path(candidate, output_dir, "tag")
+    base_path = tmp_path / "base.csv"
+    build_summary_path = output_dir / "build_summary.json"
+    ready_report_path = output_dir / "ready.json"
+    rows = "\n".join(
+        [
+            "tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees",
+            f"{risky_trip},1000,37.0,-122.0",
+            f"{risky_trip},2000,37.00001,-121.99999",
+        ],
+    ) + "\n"
+    base_path.write_text(rows, encoding="utf-8")
+    candidate_path.parent.mkdir(parents=True)
+    candidate_path.write_text(rows, encoding="utf-8")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    build_summary_path.write_text(
+        json.dumps(
+            {
+                "input": str(base_path),
+                "pr_proxy_risk_report": {
+                    "enabled": True,
+                    "risky_chunks": 3,
+                    "candidate_actionable_risky_chunks": 0,
+                },
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(candidate_path),
+                        "output_sha256": sha256_file(candidate_path),
+                        "effective_phone_scales": {"pixel6pro": 0.0},
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    report = prepare_ready_report(
+        output_dir=output_dir,
+        tag="tag",
+        groups=["p6p0_clean_sjc_r_scale_sweep"],
+        ready_report_path=ready_report_path,
+        build_summary_path=build_summary_path,
+        risky_trips=(risky_trip,),
+        skip_missing=True,
+    )
+
+    assert report["ready_count"] == 1
+    assert (output_dir / "pre_submit_manifest.json").is_file()
+    assert (output_dir / "pre_submit_trip_delta_checks.csv").is_file()
+    assert (output_dir / "ready.json").is_file()
+    assert (output_dir / "ready.csv").is_file()
+    readiness = (output_dir / "submit_readiness.md").read_text(encoding="utf-8")
+    assert "prepared: 1 candidate(s)" in readiness
+    assert "Max risky Pixel6Pro input changed rows: `0`" in readiness
+
+
+def test_prepare_ready_report_cli(capsys, tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    risky_trip = "2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro"
+    output_dir = tmp_path / "out"
+    candidate_path = candidate_submission_path(candidate, output_dir, "tag")
+    base_path = tmp_path / "base.csv"
+    build_summary_path = output_dir / "build_summary.json"
+    rows = "\n".join(
+        [
+            "tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees",
+            f"{risky_trip},1000,37.0,-122.0",
+            f"{risky_trip},2000,37.00001,-121.99999",
+        ],
+    ) + "\n"
+    base_path.write_text(rows, encoding="utf-8")
+    candidate_path.parent.mkdir(parents=True)
+    candidate_path.write_text(rows, encoding="utf-8")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    build_summary_path.write_text(
+        json.dumps(
+            {
+                "input": str(base_path),
+                "pr_proxy_risk_report": {"enabled": True, "candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(candidate_path),
+                        "output_sha256": sha256_file(candidate_path),
+                        "effective_phone_scales": {"pixel6pro": 0.0},
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "--output-dir",
+                str(output_dir),
+                "--tag",
+                "tag",
+                "--group",
+                "p6p0_clean_sjc_r_scale_sweep",
+                "--prepare-ready-report",
+                str(output_dir / "ready.json"),
+                "--build-summary",
+                str(build_summary_path),
+                "--risky-trip",
+                risky_trip,
+                "--skip-missing",
+            ],
+        )
+        == 0
+    )
+    assert "prepared: 1 candidate(s)" in capsys.readouterr().out
+    assert (output_dir / "submit_readiness.md").is_file()
+
+
+def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    path = candidate_submission_path(candidate, tmp_path, "tag")
+    path.parent.mkdir(parents=True)
+    path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "build_summary": str(tmp_path / "build_summary.json"),
+                "candidate_count": 1,
+                "matlab_equivalence_gate": {
+                    "count_max_epochs": 0,
+                    "equivalence_claim": "matlab_equivalent",
+                    "max_epochs": 0,
+                    "passed": True,
+                    "summary": str(tmp_path / "matlab_summary.json"),
+                    "summary_sha256": "abc123",
+                },
+                "matlab_final_reproduction_gate": _clean_matlab_final_reproduction_gate(tmp_path),
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+            },
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "ready.json"
+    report = build_ready_report(
+        output_dir=tmp_path,
+        tag="tag",
+        groups=["p6p0_clean_sjc_r_scale_sweep"],
+        queue=selected_queue({"p6p0_clean_sjc_r_scale_sweep"})[:1],
+        risk_report={"enabled": True, "candidate_actionable_risky_chunks": 0},
+        pre_submit_manifest={"risk_report": {"candidate_actionable_risky_chunks": 0}},
+        allow_risk=False,
+        duplicate_sha_roots=[tmp_path],
+    )
+    write_ready_report(report_path, report)
+
+    doc_path = write_submit_readiness_doc(
+        output_dir=tmp_path,
+        ready_report_path=report_path,
+        tag="tag",
+        groups=["p6p0_clean_sjc_r_scale_sweep"],
+        previous_output_dir=tmp_path / "previous",
+        previous_tag="old",
+        skip_missing=True,
+    )
+
+    doc = doc_path.read_text(encoding="utf-8")
+    assert "--prepare-ready-report" in doc
+    assert f"--build-summary {tmp_path / 'build_summary.json'}" in doc
+    assert "--previous-tag old" in doc
+    assert f"--matlab-equivalence-summary {tmp_path / 'matlab_summary.json'}" in doc
+    assert f"--matlab-final-reproduction-summary {tmp_path / 'matlab_final_reproduction_summary.json'}" in doc
+    assert "--require-matlab-equivalence" in doc
+    assert "--require-matlab-final-reproduction" in doc
+    assert "--cached-summary" in doc
+    assert "--default-writer-regression-manifest" in doc
+    assert "## Validate Phone Data Artifact Compatibility" in doc
+    assert "audit_gsdc2023_phone_data_artifact_compatibility.py" in doc
+    assert "--factor-count-export-dir" in doc
+    assert "--factor-mask-export-dir" in doc
+    assert "--require-csv-writer-exports" in doc
+    assert "## Duplicate SHA Guard" in doc
+    assert "--fail-on-duplicate-sha" in doc
+    assert f"--duplicate-sha-root {tmp_path}" in doc
+    assert "MATLAB equivalence: `matlab_equivalent`" in doc
+    assert "## Validate MATLAB Final Reproduction" in doc
+    assert "reproduce_gsdc2023_matlab_reference_final.py" in doc
+    assert "--require-exact" in doc
+    assert "MATLAB final reproduction max delta: `0 m`" in doc
+    assert "Ready candidates: `1`" in doc
+    assert candidate in doc
+
+
+def test_check_ready_can_write_ready_report(monkeypatch, capsys, tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    path = candidate_submission_path(candidate, tmp_path, "tag")
+    path.parent.mkdir(parents=True)
+    path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "candidate_actionable_risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_manifest.json").write_text(
+        json.dumps(
+            {
+                "risk_report": {"candidate_actionable_risky_chunks": 0},
+                "candidates": [
+                    {
+                        "candidate": candidate,
+                        "output": str(path),
+                        "output_sha256": sha256_file(path),
+                        "pixel6pro_scale": 0.0,
+                        "risk_candidate_actionable_chunks": 0,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "pre_submit_trip_delta_checks.csv").write_text(
+        "\n".join(
+            [
+                "candidate,tripId,rows,input_changed_rows,input_max_m",
+                f"{candidate},2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro,2,0,0.0",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "reports" / "ready.json"
+    monkeypatch.setattr(subprocess, "run", lambda command, check: None)
+
+    assert (
+        main(
+            [
+                "--output-dir",
+                str(tmp_path),
+                "--tag",
+                "tag",
+                "--group",
+                "p6p0_clean_sjc_r_scale_sweep",
+                "--check-ready",
+                "--skip-missing",
+                "--ready-report",
+                str(report_path),
+            ],
+        )
+        == 0
+    )
+    capsys.readouterr()
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    csv_rows = list(csv.DictReader((tmp_path / "reports" / "ready.csv").open(encoding="utf-8")))
+    assert payload["ready_count"] == 1
+    assert payload["candidates"][0]["command"][:3] == ["kaggle", "competitions", "submit"]
+    assert csv_rows[0]["candidate"] == candidate
+
+
+def test_submit_p6p0_checks_pre_submit_manifest_before_running_kaggle(monkeypatch, tmp_path) -> None:
+    candidate = "pixel5phone_3p375_sjc_r0p84375_p6p0"
+    path = candidate_submission_path(candidate, tmp_path, "tag")
+    path.parent.mkdir(parents=True)
+    path.write_text("tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n", encoding="utf-8")
+    (tmp_path / "build_summary.json").write_text(
+        json.dumps({"pr_proxy_risk_report": {"enabled": True, "risky_chunks": 3, "candidate_actionable_risky_chunks": 0}}),
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_run(command, check):
+        calls.append(command)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(SystemExit, match="missing pre-submit manifest"):
+        main(
+            [
+                "--output-dir",
+                str(tmp_path),
+                "--tag",
+                "tag",
+                "--group",
+                "p6p0_clean_sjc_r_scale_sweep",
+                "--submit",
+                "--skip-missing",
+            ],
+        )
+    assert calls == []

@@ -1,0 +1,2 @@
+model,windows,actual_fix_rate_pct,pred_fix_rate_pct,aggregate_error_pp,window_mae_pp,window_weighted_mae_pp,window_rmse_pp,epoch_weighted_rmse_pp,run_mae_pp,run_max_abs_pp,r2_window,corr_window,under_20pp_count,over_20pp_count,residual_model,alpha,residual_clip_pp,selection_max_run_mae_pp,selection_max_abs_aggregate_error_pp
+base,197,17.899032007348264,16.240535208462898,-1.6584967988853672,17.800650818973324,18.046394941974526,26.527112626306064,26.860834643903324,4.435719198894998,9.43566591422122,0.1510883524806308,0.40135730810657727,30,23,base,0.0,0.0,4.5,2.0

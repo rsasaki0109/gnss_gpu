@@ -186,6 +186,28 @@ __device__ void solve_NxN_device(double* A_aug, double* delta, int n) {
   }
 }
 
+static __device__ inline void sagnac_los_device(
+    const double* sat_ecef, int s, double x, double y, double z,
+    double* dx, double* dy, double* dz, double* r) {
+  double sx = sat_ecef[s * 3 + 0];
+  double sy = sat_ecef[s * 3 + 1];
+  double sz = sat_ecef[s * 3 + 2];
+
+  double dx0 = x - sx;
+  double dy0 = y - sy;
+  double dz0 = z - sz;
+  double range_approx = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+  double theta = 7.2921151467e-5 * (range_approx / 299792458.0);
+  double sx_rot = sx * cos(theta) + sy * sin(theta);
+  double sy_rot = -sx * sin(theta) + sy * cos(theta);
+
+  *dx = x - sx_rot;
+  *dy = y - sy_rot;
+  *dz = z - sz;
+  *r = sqrt((*dx) * (*dx) + (*dy) * (*dy) + (*dz) * (*dz));
+  if (*r < 1e-12) *r = 1e-12;
+}
+
 __global__ void wls_multi_gnss_batch_kernel(
     const double* sat_ecef, const double* pseudoranges,
     const double* weights, const int* system_ids,
@@ -218,10 +240,8 @@ __global__ void wls_multi_gnss_batch_kernel(
   double cb[MAX_SYSTEMS] = {};
   int cb_count[MAX_SYSTEMS] = {};
   for (int s = 0; s < n_sat; s++) {
-    double dx = x - my_sat[s * 3 + 0];
-    double dy_v = y - my_sat[s * 3 + 1];
-    double dz = z - my_sat[s * 3 + 2];
-    double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+    double dx, dy_v, dz, r;
+    sagnac_los_device(my_sat, s, x, y, z, &dx, &dy_v, &dz, &r);
     int sys = my_sys[s];
     if (sys >= 0 && sys < n_systems) {
       cb[sys] += my_pr[s] - r;
@@ -238,10 +258,8 @@ __global__ void wls_multi_gnss_batch_kernel(
     double HTWdy[MAX_STATE] = {};
 
     for (int s = 0; s < n_sat; s++) {
-      double dx = x - my_sat[s * 3 + 0];
-      double dy_v = y - my_sat[s * 3 + 1];
-      double dz = z - my_sat[s * 3 + 2];
-      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      double dx, dy_v, dz, r;
+      sagnac_los_device(my_sat, s, x, y, z, &dx, &dy_v, &dz, &r);
       int sys = my_sys[s];
       double pr_pred = r + ((sys >= 0 && sys < n_systems) ? cb[sys] : cb[0]);
       double residual = my_pr[s] - (pr_pred);

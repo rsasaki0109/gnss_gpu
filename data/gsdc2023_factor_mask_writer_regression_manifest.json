@@ -1,0 +1,38 @@
+{
+  "expected_column_count": 9,
+  "expected_columns": [
+    "field",
+    "freq",
+    "epoch_index",
+    "utcTimeMillis",
+    "next_epoch_index",
+    "nextUtcTimeMillis",
+    "sys",
+    "svid",
+    "sat_col"
+  ],
+  "file_count": 1,
+  "files": [
+    {
+      "column_count": 9,
+      "columns": [
+        "field",
+        "freq",
+        "epoch_index",
+        "utcTimeMillis",
+        "next_epoch_index",
+        "nextUtcTimeMillis",
+        "sys",
+        "svid",
+        "sat_col"
+      ],
+      "relative_path": "phone_data_factor_mask.csv",
+      "row_count": 83640,
+      "sha256": "3572fbebe4ed4bce6176f9d97bbd5b87aa1747e9087ada4c1182565c29943772",
+      "trip": "."
+    }
+  ],
+  "manifest_version": 1,
+  "total_rows": 83640,
+  "writer_filename": "phone_data_factor_mask.csv"
+}

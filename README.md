@@ -92,23 +92,26 @@ TST and Whampoa sequences have 20-30 satellites but SPP itself fails (>300m RMS)
 
 These are Kaggle leaderboard submission scores on open-sky smartphone data. They are included as a supplemental smartphone benchmark only, not as the main UrbanNav claim.
 
+After the GSDC2023 MATLAB migration work, two separate facts are tracked:
+
+- The MATLAB/reference final CSV can be numerically reproduced by the Python wrapper with `p95=0m`, `max=0m` over `71936` rows. That reproduced CSV matches the MATLAB/reference Kaggle score: **4.056 public / 5.141 private**.
+- The best private-floor Python submission family is intentionally different from that MATLAB/reference CSV and scores **3.686 public / 4.710 private**. This is the better leaderboard result, but it is not a MATLAB-reference byte-for-byte final output.
+
+Use `experiments/reproduce_gsdc2023_matlab_reference_final.py --require-exact` when the goal is MATLAB final-output provenance/parity. Use the submit-readiness tooling when the goal is gated Kaggle submission review.
+
 | Submission | Public | Private | Method |
 | --- | ---: | ---: | --- |
-| v1 | 4.207 m | **5.144 m** | pseudorange only |
-| v3 | 4.128 m | — | + smoother |
-| v2 | 10.150 m | — | + TDCP + Hatch |
-| v11 | 4.223 m | 5.255 m | reset-safe segmented smoother |
-| v12 | 4.133 m | 5.242 m | reset-safe smoother-only |
-| v13 | 4.117 m | 5.268 m | reset-safe smoother-only + Gaussian backward |
-| v15 | 4.116 m | 5.268 m | reset-safe smoother-only + Gaussian backward + alpha 0.45 |
-| **v22** | **4.112 m** | 5.200 m | shared TDCP soft-only, no TDCP predict, ultra-conservative gates |
+| MATLAB/reference reproduced final | 4.056 m | 5.141 m | exact final-CSV reproduction from bridge artifacts |
+| Current Python private-floor best family | **3.686 m** | **4.710 m** | gated source/patch candidate family, not MATLAB-reference identical |
+| historical v1 | 4.207 m | 5.144 m | pseudorange only |
+| historical v22 | 4.112 m | 5.200 m | shared TDCP soft-only, no TDCP predict, ultra-conservative gates |
 
 | Train method | Mean P50 | Median P50 | Mean RMS |
 | --- | ---: | ---: | ---: |
 | WLS (Android baseline) | **2.62 m** | **2.42 m** | **5.14 m** |
 | PF-100K | 2.83 m | 2.62 m | 5.36 m |
 
-The best leaderboard submission is now `v22` at **4.112 m public / 5.200 m private**, while the best private score still remains `v1` at **5.144 m**. The reset-safe smoother fixed the hidden catastrophic failure (`v11`: `4.223 / 5.255`), the reset-safe smoother-only variant (`v12`: `4.133 / 5.242`) recovered almost all of the public gap, switching the segmented backward pass closer to the old generic smoother (`v13`) pushed the public score to `4.117 m`, and a small blend adjustment (`v15`, `alpha=0.45`) improved it again to `4.116 m`. `v22` then showed the important TDCP distinction: `TDCP predict + Hatch` was the bad coupling, but a shared-TDCP path used only as a tightly gated soft displacement cue can still help on open-sky smartphone data. This section is here to document the smartphone submission result, not to replace the UrbanNav headline.
+The current best private-floor Python candidate family is **3.686 m public / 4.710 m private**. The MATLAB/reference final CSV is now reproducible exactly from Python, but it scores **4.056 m public / 5.141 m private**, so MATLAB final-output parity and leaderboard optimization are separate tracks. This section is here to document the smartphone submission result, not to replace the UrbanNav headline.
 
 **BVH systems result (PPC-Dataset PLATEAU subset, separate dataset)**
 
@@ -166,7 +169,7 @@ Controlled simulation with parametric canyon (parallel buildings, ray-traced NLO
 - Forward-backward particle smoother uses future observations to refine past estimates.
 - IMU stop-detection with dynamic sigma_pos achieves 100% IMU utilization.
 - Per-epoch clock bias correction enables cross-receiver robustness (trimble and ublox).
-- On Kaggle GSDC 2023 smartphone data, the best PF leaderboard submission is `v3` at 4.128 m public, and it is documented only as a supplemental benchmark.
+- On Kaggle GSDC 2023 smartphone data, the current best private-floor Python submission family is 3.686 m public / 4.710 m private, and it is documented only as a supplemental benchmark.
 - Particle count scaling reveals a phase transition at N≈1,000 with continued tail improvement to 1M.
 - BVH makes real-PLATEAU PF3D runtime practical without changing accuracy.
 - Urban canyon simulation confirms PF advantage increases with NLOS severity (87% gain at 91% NLOS).

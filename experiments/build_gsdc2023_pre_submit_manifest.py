@@ -1,0 +1,601 @@
+#!/usr/bin/env python3
+"""Build a reproducible pre-submit manifest for GSDC2023 candidate CSVs."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import json
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from experiments.audit_gsdc2023_matlab_equivalence_gate import (
+    DEFAULT_EQUIVALENCE_TRIPS,
+    DEFAULT_WRITER_REGRESSION_MANIFEST,
+    cached_summary_mismatches,
+)
+from experiments.gsdc2023_raw_bridge import DEFAULT_ROOT as DEFAULT_GSDC2023_DATA_ROOT
+from experiments.reproduce_gsdc2023_matlab_reference_final import DEFAULT_MAX_DELTA_M
+from experiments.smooth_gsdc2023_submission import gsdc_score_m, haversine_m
+
+
+DEFAULT_RISKY_TRIPS = (
+    "2021-11-05-18-28-us-ca-mtv-m/pixel6pro",
+    "2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro",
+    "2023-05-25-17-32-us-ca-pao-j/pixel6pro",
+)
+REQUIRED_COLUMNS = ("tripId", "UnixTimeMillis", "LatitudeDegrees", "LongitudeDegrees")
+DELTA_CHANGED_THRESHOLD_M = 1.0e-6
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    with path.open(encoding="utf-8") as fh:
+        payload = json.load(fh)
+    if not isinstance(payload, dict):
+        raise SystemExit(f"expected JSON object: {path}")
+    return payload
+
+
+def _resolve_path(raw_path: str | Path, base_dir: Path) -> Path:
+    path = Path(raw_path).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    cwd_path = path.resolve()
+    if cwd_path.exists():
+        return cwd_path
+    return (base_dir / path).resolve()
+
+
+def _read_submission(path: Path) -> pd.DataFrame:
+    frame = pd.read_csv(path)
+    missing = [column for column in REQUIRED_COLUMNS if column not in frame.columns]
+    if missing:
+        raise SystemExit(f"{path} is missing columns: {', '.join(missing)}")
+    return frame
+
+
+def _assert_same_keys(reference: pd.DataFrame, candidate: pd.DataFrame, *, label: str) -> None:
+    if len(reference) != len(candidate):
+        raise SystemExit(f"{label}: row count mismatch {len(reference)} != {len(candidate)}")
+    for column in ("tripId", "UnixTimeMillis"):
+        if not reference[column].equals(candidate[column]):
+            raise SystemExit(f"{label}: {column} mismatch")
+
+
+def _empty_delta_summary() -> dict[str, float | int | None]:
+    return {
+        "rows": 0,
+        "changed_rows": 0,
+        "score_m": None,
+        "p50_m": None,
+        "p95_m": None,
+        "mean_m": None,
+        "max_m": None,
+    }
+
+
+def _delta_summary(reference: pd.DataFrame, candidate: pd.DataFrame) -> dict[str, float | int | None]:
+    if reference.empty:
+        return _empty_delta_summary()
+    deltas = haversine_m(
+        reference["LatitudeDegrees"].to_numpy(),
+        reference["LongitudeDegrees"].to_numpy(),
+        candidate["LatitudeDegrees"].to_numpy(),
+        candidate["LongitudeDegrees"].to_numpy(),
+    )
+    score = gsdc_score_m(deltas)
+    return {
+        "rows": int(len(reference)),
+        "changed_rows": int(np.count_nonzero(deltas > DELTA_CHANGED_THRESHOLD_M)),
+        "score_m": float(score["score_m"]),
+        "p50_m": float(score["p50_m"]),
+        "p95_m": float(score["p95_m"]),
+        "mean_m": float(score["mean_m"]),
+        "max_m": float(score["max_m"]),
+    }
+
+
+def _candidate_name(candidate_summary: dict[str, Any]) -> str:
+    name = candidate_summary.get("candidate")
+    if not isinstance(name, str) or not name:
+        raise SystemExit("candidate summary is missing candidate name")
+    return name
+
+
+def _previous_candidate_name(candidate_name: str) -> str:
+    return candidate_name.removesuffix("_p6p0")
+
+
+def _previous_candidate_filename(candidate_name: str, previous_tag: str) -> str:
+    previous_name = candidate_name.removesuffix("_p6p0")
+    return f"submission_best_basecorr_posoffset_{previous_name}_plus_pixel5_patch_{previous_tag}.csv"
+
+
+def _previous_candidate_path(previous_output_dir: Path, candidate_name: str, previous_tag: str) -> Path:
+    previous_name = _previous_candidate_name(candidate_name)
+    filename = _previous_candidate_filename(candidate_name, previous_tag)
+    direct_path = previous_output_dir / previous_name / filename
+    if direct_path.is_file():
+        return direct_path
+
+    matches = sorted(previous_output_dir.rglob(filename), key=lambda path: str(path))
+    if not matches:
+        return direct_path
+    if len(matches) > 1:
+        formatted = "\n".join(f"  - {path}" for path in matches)
+        raise SystemExit(f"ambiguous previous candidate CSV for {candidate_name}:\n{formatted}")
+    return matches[0]
+
+
+def _trip_delta_rows(
+    *,
+    candidate_name: str,
+    reference: pd.DataFrame,
+    candidate: pd.DataFrame,
+    risky_trips: tuple[str, ...],
+    previous: pd.DataFrame | None,
+    previous_path: Path | None,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for trip in risky_trips:
+        mask = reference["tripId"] == trip
+        ref_trip = reference[mask].reset_index(drop=True)
+        cand_trip = candidate[mask].reset_index(drop=True)
+        input_delta = _delta_summary(ref_trip, cand_trip)
+
+        previous_delta = _empty_delta_summary()
+        previous_exists = False
+        if previous is not None:
+            previous_exists = True
+            prev_trip = previous[mask].reset_index(drop=True)
+            previous_delta = _delta_summary(prev_trip, cand_trip)
+
+        rows.append(
+            {
+                "candidate": candidate_name,
+                "tripId": trip,
+                "rows": int(input_delta["rows"] or 0),
+                "input_changed_rows": int(input_delta["changed_rows"] or 0),
+                "input_score_m": input_delta["score_m"],
+                "input_p50_m": input_delta["p50_m"],
+                "input_p95_m": input_delta["p95_m"],
+                "input_mean_m": input_delta["mean_m"],
+                "input_max_m": input_delta["max_m"],
+                "previous_output": str(previous_path) if previous_path is not None else None,
+                "previous_exists": previous_exists,
+                "previous_changed_rows": int(previous_delta["changed_rows"] or 0),
+                "previous_score_m": previous_delta["score_m"],
+                "previous_p50_m": previous_delta["p50_m"],
+                "previous_p95_m": previous_delta["p95_m"],
+                "previous_mean_m": previous_delta["mean_m"],
+                "previous_max_m": previous_delta["max_m"],
+            },
+        )
+    return rows
+
+
+def _candidate_manifest_row(
+    candidate_summary: dict[str, Any],
+    *,
+    candidate_name: str,
+    candidate_path: Path,
+    candidate: pd.DataFrame,
+    reference: pd.DataFrame,
+    risk_report: dict[str, Any],
+) -> dict[str, Any]:
+    scales = candidate_summary.get("effective_phone_scales")
+    scales = scales if isinstance(scales, dict) else {}
+    delta = _delta_summary(reference, candidate)
+    return {
+        "candidate": candidate_name,
+        "output": str(candidate_path),
+        "output_sha256": sha256_file(candidate_path),
+        "summary_output_sha256": candidate_summary.get("output_sha256"),
+        "rows": int(len(candidate)),
+        "pixel6pro_scale": scales.get("pixel6pro"),
+        "risk_enabled": bool(risk_report.get("enabled", False)),
+        "risk_risky_chunks": int(risk_report.get("risky_chunks", 0) or 0),
+        "risk_risky_rows": int(risk_report.get("risky_rows", 0) or 0),
+        "risk_vd_guard_rows": int(risk_report.get("vd_guard_rows", 0) or 0),
+        "risk_candidate_actionable_chunks": int(
+            risk_report.get("candidate_actionable_risky_chunks", risk_report.get("risky_chunks", 0)) or 0,
+        ),
+        "risk_candidate_actionable_rows": int(
+            risk_report.get("candidate_actionable_risky_rows", risk_report.get("risky_rows", 0)) or 0,
+        ),
+        "delta_vs_input_score_m": delta["score_m"],
+        "delta_vs_input_p50_m": delta["p50_m"],
+        "delta_vs_input_p95_m": delta["p95_m"],
+        "delta_vs_input_max_m": delta["max_m"],
+        "delta_vs_input_changed_rows": delta["changed_rows"],
+    }
+
+
+def _matlab_equivalence_manifest(summary_path: Path) -> dict[str, Any]:
+    summary_path = summary_path.expanduser().resolve()
+    payload = _read_json(summary_path)
+    gates = payload.get("gates")
+    gates = gates if isinstance(gates, dict) else {}
+    factor = gates.get("factor_mask")
+    factor = factor if isinstance(factor, dict) else {}
+    counts = gates.get("raw_bridge_counts")
+    counts = counts if isinstance(counts, dict) else {}
+    residual = gates.get("residual_values")
+    residual = residual if isinstance(residual, dict) else {}
+    residual_diagnostics = gates.get("residual_diagnostics_writer")
+    residual_diagnostics = residual_diagnostics if isinstance(residual_diagnostics, dict) else {}
+    internal_failure_count = residual.get("internal_delta_failure_count")
+    cached_validation = _cached_summary_validation(payload)
+    return {
+        "summary": str(summary_path),
+        "summary_sha256": sha256_file(summary_path),
+        "passed": bool(payload.get("passed", False)),
+        "equivalence_claim": payload.get("equivalence_claim"),
+        "trip_count": int(payload.get("trip_count", 0) or 0),
+        "max_epochs": int(payload.get("max_epochs", 0) or 0),
+        "count_max_epochs": int(payload.get("count_max_epochs", 0) or 0),
+        "factor_mask_passed": bool(factor.get("passed", False)),
+        "factor_total_matlab_only": int(factor.get("total_matlab_only", 0) or 0),
+        "factor_total_bridge_only": int(factor.get("total_bridge_only", 0) or 0),
+        "factor_side_only_failure_count": int(factor.get("side_only_failure_count", 0) or 0),
+        "factor_side_only_by_field_freq": factor.get("side_only_by_field_freq", {}),
+        "factor_top_matlab_only": factor.get("top_matlab_only", []),
+        "factor_top_bridge_only": factor.get("top_bridge_only", []),
+        "raw_bridge_counts_passed": bool(counts.get("passed", False)),
+        "raw_bridge_matched_abs_delta_total": int(counts.get("matched_abs_delta_total", 0) or 0),
+        "raw_bridge_count_delta_failure_count": int(counts.get("count_delta_failure_count", 0) or 0),
+        "raw_bridge_missing_phone_count_rows": int(counts.get("missing_phone_count_rows", 0) or 0),
+        "raw_bridge_missing_bridge_count_rows": int(counts.get("missing_bridge_count_rows", 0) or 0),
+        "raw_bridge_abs_delta_sums": counts.get("abs_delta_sums", {}),
+        "raw_bridge_top_count_delta_failures": counts.get("top_count_delta_failures", []),
+        "residual_values_passed": bool(residual.get("passed", False)),
+        "residual_total_matlab_only": int(residual.get("total_matlab_only", 0) or 0),
+        "residual_total_bridge_only": int(residual.get("total_bridge_only", 0) or 0),
+        "residual_overall_max_abs_delta_m": residual.get("overall_max_abs_delta"),
+        "residual_max_abs_delta_threshold_m": residual.get("max_abs_delta_threshold_m"),
+        "residual_internal_delta_failure_count": (
+            None if internal_failure_count is None else int(internal_failure_count or 0)
+        ),
+        "residual_internal_delta_failures": residual.get("internal_delta_failures", []),
+        "residual_internal_delta_thresholds": residual.get("internal_delta_thresholds"),
+        "residual_diagnostics_writer_passed": bool(residual_diagnostics.get("passed", False)),
+        "residual_diagnostics_writer_pd_value_passed": bool(
+            residual_diagnostics.get("pd_value_passed", False),
+        ),
+        "residual_diagnostics_writer_wide_passed": bool(residual_diagnostics.get("wide_passed", False)),
+        "residual_diagnostics_writer_total_matlab_only": int(
+            residual_diagnostics.get("total_matlab_only", 0) or 0,
+        ),
+        "residual_diagnostics_writer_total_bridge_only": int(
+            residual_diagnostics.get("total_bridge_only", 0) or 0,
+        ),
+        "residual_diagnostics_writer_wide_total_matlab_only": int(
+            residual_diagnostics.get("wide_total_matlab_only", 0) or 0,
+        ),
+        "residual_diagnostics_writer_wide_total_bridge_only": int(
+            residual_diagnostics.get("wide_total_bridge_only", 0) or 0,
+        ),
+        "residual_diagnostics_writer_wide_sat_col_mismatch_count": int(
+            residual_diagnostics.get("wide_sat_col_mismatch_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_enabled": bool(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_enabled", False),
+        ),
+        "residual_diagnostics_writer_export_count": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_total_rows": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_total_rows", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_expected_columns": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_expected_columns", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_column_count_min": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_column_count_min", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_column_count_max": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_column_count_max", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_column_mismatch_count": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_column_mismatch_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_byte_equivalent_count": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_byte_equivalent_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_export_byte_difference_count": int(
+            residual_diagnostics.get("bridge_residual_diagnostics_export_byte_difference_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_regression_manifest": residual_diagnostics.get("writer_regression_manifest"),
+        "residual_diagnostics_writer_regression_checked": bool(
+            residual_diagnostics.get("writer_regression_checked", False),
+        ),
+        "residual_diagnostics_writer_regression_passed": bool(
+            residual_diagnostics.get("writer_regression_passed", False),
+        ),
+        "residual_diagnostics_writer_regression_mismatch_count": int(
+            residual_diagnostics.get("writer_regression_mismatch_count", 0) or 0,
+        ),
+        "residual_diagnostics_writer_inactive_key_source": residual_diagnostics.get("inactive_key_source"),
+        **cached_validation,
+    }
+
+
+def _int_or_default(value: object, default: int) -> int:
+    try:
+        return int(float(value if value is not None else default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _float_or_default(value: object, default: float) -> float:
+    try:
+        return float(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _matlab_final_reproduction_manifest(
+    summary_path: Path,
+    *,
+    max_delta_m: float = DEFAULT_MAX_DELTA_M,
+) -> dict[str, Any]:
+    summary_path = summary_path.expanduser().resolve()
+    payload = _read_json(summary_path)
+    missing_summary = payload.get("missing_bridge_timestamp_summary")
+    missing_summary = missing_summary if isinstance(missing_summary, dict) else {}
+    reconstruction_summary = payload.get("reconstruction_summary")
+    reconstruction_summary = reconstruction_summary if isinstance(reconstruction_summary, dict) else {}
+    delta = reconstruction_summary.get("delta_vs_reference")
+    delta = delta if isinstance(delta, dict) else {}
+
+    rows = _int_or_default(delta.get("rows"), -1)
+    changed_rows_gt_1e_9m = _int_or_default(delta.get("changed_rows_gt_1e_9m"), -1)
+    changed_rows_gt_0p01m = _int_or_default(delta.get("changed_rows_gt_0p01m"), -1)
+    max_delta = _float_or_default(delta.get("max_delta_m"), float("inf"))
+    passed = (
+        rows > 0
+        and changed_rows_gt_1e_9m == 0
+        and changed_rows_gt_0p01m == 0
+        and max_delta <= max_delta_m
+    )
+    return {
+        "summary": str(summary_path),
+        "summary_sha256": sha256_file(summary_path),
+        "passed": passed,
+        "max_delta_threshold_m": max_delta_m,
+        "reference_submission": payload.get("reference_submission"),
+        "candidate_submission": payload.get("candidate_submission"),
+        "bridge_root": payload.get("bridge_root"),
+        "missing_bridge_timestamp_rows": _int_or_default(missing_summary.get("rows"), 0),
+        "missing_bridge_timestamp_trips": _int_or_default(missing_summary.get("trips"), 0),
+        "missing_bridge_timestamp_materialized_source_counts": missing_summary.get("materialized_source_counts", {}),
+        "rows": rows,
+        "changed_rows_gt_1e_9m": changed_rows_gt_1e_9m,
+        "changed_rows_gt_0p01m": changed_rows_gt_0p01m,
+        "mean_delta_m": _float_or_default(delta.get("mean_delta_m"), float("inf")),
+        "p50_delta_m": _float_or_default(delta.get("p50_delta_m"), float("inf")),
+        "p95_delta_m": _float_or_default(delta.get("p95_delta_m"), float("inf")),
+        "max_delta_m": max_delta,
+        "missing_bridge_timestamp_rows_csv": payload.get("missing_bridge_timestamp_rows_csv"),
+        "reconstructed_submission_csv": payload.get("reconstructed_submission_csv"),
+        "reconstruction_summary_json": payload.get("reconstruction_summary_json"),
+    }
+
+
+def _cached_summary_validation(payload: dict[str, Any]) -> dict[str, Any]:
+    required_scope_fields = (
+        "data_root",
+        "trips",
+        "max_epochs",
+        "count_max_epochs",
+        "factor_multi_gnss",
+        "residual_multi_gnss",
+        "residual_observation_mask",
+        "residual_include_inactive_observations",
+        "count_multi_gnss",
+        "asset_datasets",
+        "quick_assets",
+        "strict_ref_height",
+    )
+    missing = [field for field in required_scope_fields if field not in payload]
+    if missing:
+        return {
+            "cached_summary_validation_checked": False,
+            "cached_summary_validation_passed": None,
+            "cached_summary_validation_mismatch_count": None,
+            "cached_summary_validation_mismatches": [],
+            "cached_summary_validation_unchecked_reason": "missing scope fields: " + ", ".join(missing),
+            "cached_summary_validation_writer_regression_manifest": None,
+        }
+
+    mismatches = cached_summary_mismatches(
+        payload,
+        data_root=Path(DEFAULT_GSDC2023_DATA_ROOT).resolve(),
+        trips=DEFAULT_EQUIVALENCE_TRIPS,
+        max_epochs=int(payload.get("max_epochs", 0) or 0),
+        count_max_epochs=int(payload.get("count_max_epochs", 0) or 0),
+        factor_multi_gnss=False,
+        residual_multi_gnss=False,
+        residual_observation_mask=True,
+        residual_include_inactive_observations=True,
+        count_multi_gnss=False,
+        asset_datasets=("train",),
+        quick_assets=True,
+        strict_ref_height=False,
+        writer_regression_manifest=DEFAULT_WRITER_REGRESSION_MANIFEST,
+    )
+    return {
+        "cached_summary_validation_checked": True,
+        "cached_summary_validation_passed": not mismatches,
+        "cached_summary_validation_mismatch_count": len(mismatches),
+        "cached_summary_validation_mismatches": mismatches[:20],
+        "cached_summary_validation_unchecked_reason": None,
+        "cached_summary_validation_writer_regression_manifest": str(DEFAULT_WRITER_REGRESSION_MANIFEST),
+    }
+
+
+def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    fieldnames = list(rows[0]) if rows else []
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def build_pre_submit_manifest(
+    build_summary_path: Path,
+    *,
+    output_dir: Path | None = None,
+    previous_output_dir: Path | None = None,
+    previous_tag: str = "20260501",
+    risky_trips: tuple[str, ...] = DEFAULT_RISKY_TRIPS,
+    matlab_equivalence_summary: Path | None = None,
+    matlab_final_reproduction_summary: Path | None = None,
+) -> dict[str, Any]:
+    build_summary_path = build_summary_path.expanduser().resolve()
+    build_summary = _read_json(build_summary_path)
+    base_dir = build_summary_path.parent
+    output_dir = (output_dir or base_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    input_path_raw = build_summary.get("input")
+    if not isinstance(input_path_raw, str):
+        raise SystemExit(f"{build_summary_path} is missing input")
+    input_path = _resolve_path(input_path_raw, base_dir)
+    reference = _read_submission(input_path)
+
+    candidates = build_summary.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        raise SystemExit(f"{build_summary_path} has no candidates")
+
+    risk_report = build_summary.get("pr_proxy_risk_report")
+    risk_report = risk_report if isinstance(risk_report, dict) else {"enabled": False}
+    matlab_equivalence_gate = (
+        _matlab_equivalence_manifest(matlab_equivalence_summary) if matlab_equivalence_summary is not None else None
+    )
+    matlab_final_reproduction_gate = (
+        _matlab_final_reproduction_manifest(matlab_final_reproduction_summary)
+        if matlab_final_reproduction_summary is not None
+        else None
+    )
+    candidate_rows: list[dict[str, Any]] = []
+    trip_rows: list[dict[str, Any]] = []
+
+    for candidate_summary_raw in candidates:
+        if not isinstance(candidate_summary_raw, dict):
+            raise SystemExit("candidate summary must be an object")
+        candidate_name = _candidate_name(candidate_summary_raw)
+        output_raw = candidate_summary_raw.get("output")
+        if not isinstance(output_raw, str):
+            raise SystemExit(f"{candidate_name} is missing output path")
+        candidate_path = _resolve_path(output_raw, base_dir)
+        candidate = _read_submission(candidate_path)
+        _assert_same_keys(reference, candidate, label=candidate_name)
+
+        previous_path: Path | None = None
+        previous_frame: pd.DataFrame | None = None
+        if previous_output_dir is not None:
+            previous_path = _previous_candidate_path(previous_output_dir.expanduser().resolve(), candidate_name, previous_tag)
+            if previous_path.is_file():
+                previous_frame = _read_submission(previous_path)
+                _assert_same_keys(reference, previous_frame, label=f"previous {candidate_name}")
+
+        candidate_rows.append(
+            _candidate_manifest_row(
+                candidate_summary_raw,
+                candidate_name=candidate_name,
+                candidate_path=candidate_path,
+                candidate=candidate,
+                reference=reference,
+                risk_report=risk_report,
+            ),
+        )
+        trip_rows.extend(
+            _trip_delta_rows(
+                candidate_name=candidate_name,
+                reference=reference,
+                candidate=candidate,
+                risky_trips=risky_trips,
+                previous=previous_frame,
+                previous_path=previous_path,
+            ),
+        )
+
+    candidate_csv = output_dir / "pre_submit_candidate_manifest.csv"
+    trip_csv = output_dir / "pre_submit_trip_delta_checks.csv"
+    manifest_path = output_dir / "pre_submit_manifest.json"
+    _write_csv(candidate_csv, candidate_rows)
+    _write_csv(trip_csv, trip_rows)
+
+    manifest = {
+        "build_summary": str(build_summary_path),
+        "input": str(input_path),
+        "input_sha256": sha256_file(input_path),
+        "output_dir": str(output_dir),
+        "previous_output_dir": str(previous_output_dir.expanduser().resolve()) if previous_output_dir else None,
+        "previous_tag": previous_tag if previous_output_dir else None,
+        "risky_trips": list(risky_trips),
+        "candidate_count": len(candidate_rows),
+        "risk_report": {
+            "enabled": bool(risk_report.get("enabled", False)),
+            "risky_chunks": int(risk_report.get("risky_chunks", 0) or 0),
+            "risky_rows": int(risk_report.get("risky_rows", 0) or 0),
+            "vd_guard_rows": int(risk_report.get("vd_guard_rows", 0) or 0),
+            "candidate_actionable_risky_chunks": int(
+                risk_report.get("candidate_actionable_risky_chunks", risk_report.get("risky_chunks", 0)) or 0,
+            ),
+            "candidate_actionable_risky_rows": int(
+                risk_report.get("candidate_actionable_risky_rows", risk_report.get("risky_rows", 0)) or 0,
+            ),
+            "candidate_actionable_by_candidate": risk_report.get("candidate_actionable_by_candidate", {}),
+        },
+        "matlab_equivalence_gate": matlab_equivalence_gate,
+        "matlab_final_reproduction_gate": matlab_final_reproduction_gate,
+        "candidate_manifest_csv": str(candidate_csv),
+        "trip_delta_checks_csv": str(trip_csv),
+        "candidates": candidate_rows,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"saved: {manifest_path}")
+    print(f"saved: {candidate_csv}")
+    print(f"saved: {trip_csv}")
+    return manifest
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--build-summary", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument("--previous-output-dir", type=Path, default=None)
+    parser.add_argument("--previous-tag", default="20260501")
+    parser.add_argument("--risky-trip", action="append", dest="risky_trips")
+    parser.add_argument("--matlab-equivalence-summary", type=Path)
+    parser.add_argument("--matlab-final-reproduction-summary", type=Path)
+    args = parser.parse_args(argv)
+
+    build_pre_submit_manifest(
+        args.build_summary,
+        output_dir=args.output_dir,
+        previous_output_dir=args.previous_output_dir,
+        previous_tag=args.previous_tag,
+        risky_trips=tuple(args.risky_trips or DEFAULT_RISKY_TRIPS),
+        matlab_equivalence_summary=args.matlab_equivalence_summary,
+        matlab_final_reproduction_summary=args.matlab_final_reproduction_summary,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
