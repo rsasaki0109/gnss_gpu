@@ -183,6 +183,12 @@ final submission 再現:
         - Submitted `submission_mtv700_temporal_curvature_p3rows_a0p5_20260509.csv`: Kaggle `3.687/4.711`.
         - Submitted `submission_mtv700_temporal_curvature_p3rows_a0p2_20260509.csv`: Kaggle `3.687/4.710`.
         - Interpretation: centered temporal smoothing of the p3-shifted MTV rows removes the public improvement even when bounded below `0.3m` max. Reject this curvature-damping direction; the MTV700 gain appears sensitive to preserving the original rowwise p3 displacement rather than smoothing it temporally.
+      - MTV700 + non-MTV p3p25 stack: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/mtv700_non_mtv_p3p25_stack_candidates_20260509/summary.json`
+        - Built MTV700 plus disjoint p3p25 `f25-39` rows from EBF/SJC Pixel5 trips: EBF-only (`418` added rows), SJC-only (`432` added rows), and combined non-LAX/non-MTV (`850` added rows). All local deltas are below `0.04m` and have `rows_gt_1m=0`.
+        - Submitted `submission_mtv700_plus_p3p25_non_lax_non_mtv_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
+        - Submitted `submission_mtv700_plus_p3p25_ebf_only_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
+        - Submitted `submission_mtv700_plus_p3p25_sjc_only_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
+        - Interpretation: EBF/SJC p3p25 rows stack safely on MTV700 but do not move the 3-decimal score. The p3p25 public-positive effect remains concentrated in the MTV700 rows and is already saturated at `3.686/4.710`; adding same-direction non-MTV Pixel5 rows is not enough for another leaderboard step.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
