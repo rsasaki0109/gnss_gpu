@@ -172,6 +172,11 @@ final submission 再現:
         - Submitted `submission_mtv700_laxx_ref2_selected_le0p5m_20260509.csv` (`384` rows): Kaggle `3.686/4.710`.
         - Submitted `submission_mtv700_laxx_all_le0p5m_20260509.csv` (`421` rows): Kaggle `3.686/4.710`.
         - Interpretation: LAX-X sub-meter materialized rows are leaderboard-safe when stacked on MTV700, including the small `ref:baseline` `<=0.5m` subset, but they are also saturated at the current `3.686/4.710` floor. The next useful probe should move off the already-safe sub-meter LAX-X rows, either to a different phone/trip family or to an orthogonal postprocess with an independent leaderboard effect.
+      - Safe source-transfer union follow-up: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/safe_source_transfer_union_candidates_20260509/summary.json`
+        - Stacked the individually safe source-transfer components on MTV700: LAX-X all sources `<=0.5m` (`421` rows), `mi8` `ref2:raw_wls <=1m` (`11` rows), `pixel4xl` late `local_patch:selected <=1m` (`37` rows), and `sm-a505u` `e300-350 <=0.75m` (`47` rows).
+        - The union changes `516` rows relative to MTV700, has no component row conflicts, and keeps local max delta below `1m`.
+        - Submitted `submission_mtv700_safe_source_transfer_union_laxx_mi8_pixel4xl_sma505u_20260509.csv`: Kaggle `3.686/4.710`.
+        - Interpretation: the safe source-transfer components stack without private/public degradation, but their combined effect is still saturated at the current 3-decimal floor. Further submits should not spend budget on smaller subsets of the same safe transfer rows unless they introduce a new independent movement direction.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
