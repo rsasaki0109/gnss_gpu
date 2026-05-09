@@ -42,6 +42,11 @@ def read_submission(path: Path) -> pd.DataFrame:
     return frame
 
 
+def phone_from_trip_id(trip_id: object) -> str:
+    parts = str(trip_id).split("/")
+    return parts[-1] if parts else ""
+
+
 def compare_submissions(base: pd.DataFrame, candidate: pd.DataFrame, name: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     if len(base) != len(candidate):
         raise ValueError(f"{name}: row count mismatch {len(base)} != {len(candidate)}")
@@ -57,6 +62,7 @@ def compare_submissions(base: pd.DataFrame, candidate: pd.DataFrame, name: str) 
     )
     row_delta = base[KEY_COLUMNS].copy()
     row_delta["comparison"] = name
+    row_delta["phone"] = row_delta["tripId"].map(phone_from_trip_id)
     row_delta["delta_m"] = dist_m
     row_delta["base_lat"] = base["LatitudeDegrees"].to_numpy()
     row_delta["base_lon"] = base["LongitudeDegrees"].to_numpy()
@@ -72,6 +78,7 @@ def compare_submissions(base: pd.DataFrame, candidate: pd.DataFrame, name: str) 
             {
                 "comparison": name,
                 "tripId": trip_id,
+                "phone": phone_from_trip_id(trip_id),
                 "rows": int(len(group)),
                 "changed_rows_gt_0p01m": int(np.count_nonzero(changed)),
                 "rows_gt_1m": int(np.count_nonzero(group["delta_m"].to_numpy() > 1.0)),
@@ -85,6 +92,53 @@ def compare_submissions(base: pd.DataFrame, candidate: pd.DataFrame, name: str) 
             }
         )
     return row_delta, pd.DataFrame(trip_rows)
+
+
+def _delta_score_record(delta_m: np.ndarray) -> dict[str, float]:
+    score = gsdc_score_m(delta_m)
+    return {
+        "mean_delta_m": score["mean_m"],
+        "p50_delta_m": score["p50_m"],
+        "p95_delta_m": score["p95_m"],
+        "max_delta_m": score["max_m"],
+    }
+
+
+def comparison_summary(row_delta: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for comparison, group in row_delta.groupby("comparison", sort=False):
+        deltas = group["delta_m"].to_numpy()
+        rows.append(
+            {
+                "comparison": comparison,
+                "rows": int(len(group)),
+                "changed_rows_gt_1e_9m": int(np.count_nonzero(deltas > 1e-9)),
+                "changed_rows_gt_0p01m": int(np.count_nonzero(deltas > 0.01)),
+                "rows_gt_1m": int(np.count_nonzero(deltas > 1.0)),
+                "rows_gt_5m": int(np.count_nonzero(deltas > 5.0)),
+                **_delta_score_record(deltas),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def phone_delta_summary(row_delta: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for (comparison, phone), group in row_delta.groupby(["comparison", "phone"], sort=False):
+        deltas = group["delta_m"].to_numpy()
+        rows.append(
+            {
+                "comparison": comparison,
+                "phone": phone,
+                "rows": int(len(group)),
+                "changed_rows_gt_1e_9m": int(np.count_nonzero(deltas > 1e-9)),
+                "changed_rows_gt_0p01m": int(np.count_nonzero(deltas > 0.01)),
+                "rows_gt_1m": int(np.count_nonzero(deltas > 1.0)),
+                "rows_gt_5m": int(np.count_nonzero(deltas > 5.0)),
+                **_delta_score_record(deltas),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def chunk_delta_summary(row_delta: pd.DataFrame, target_trips: set[str], chunk_epochs: int) -> pd.DataFrame:
@@ -185,28 +239,46 @@ def metrics_chunk_summary(named_metrics: list[tuple[str, Path]]) -> pd.DataFrame
 def write_outputs(
     output_dir: Path,
     row_delta: pd.DataFrame,
+    summary: pd.DataFrame,
     trip_summary: pd.DataFrame,
+    phone_summary: pd.DataFrame,
     chunk_summary: pd.DataFrame,
     metrics_summary: pd.DataFrame,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     row_delta.to_csv(output_dir / "row_deltas.csv", index=False)
+    summary.to_csv(output_dir / "comparison_summary.csv", index=False)
     trip_summary.to_csv(output_dir / "trip_delta_summary.csv", index=False)
+    phone_summary.to_csv(output_dir / "phone_delta_summary.csv", index=False)
     chunk_summary.to_csv(output_dir / "target_chunk_delta_summary.csv", index=False)
     metrics_summary.to_csv(output_dir / "chunk_metrics_summary.csv", index=False)
 
+    top_comparisons = summary.sort_values(["p95_delta_m", "max_delta_m"], ascending=[False, False])
+    top_phones = (
+        phone_summary.sort_values(["comparison", "p95_delta_m", "max_delta_m"], ascending=[True, False, False])
+        .groupby("comparison", sort=False)
+        .head(10)
+    )
     top_trips = (
         trip_summary.sort_values(["comparison", "p95_delta_m", "max_delta_m"], ascending=[True, False, False])
         .groupby("comparison", sort=False)
         .head(10)
     )
+    worst_rows = (
+        row_delta.sort_values(["comparison", "delta_m"], ascending=[True, False]).groupby("comparison", sort=False).head(10)
+    )
     summary = {
         "comparisons": sorted(trip_summary["comparison"].unique().tolist()) if not trip_summary.empty else [],
         "row_deltas_csv": str(output_dir / "row_deltas.csv"),
+        "comparison_summary_csv": str(output_dir / "comparison_summary.csv"),
         "trip_delta_summary_csv": str(output_dir / "trip_delta_summary.csv"),
+        "phone_delta_summary_csv": str(output_dir / "phone_delta_summary.csv"),
         "target_chunk_delta_summary_csv": str(output_dir / "target_chunk_delta_summary.csv"),
         "chunk_metrics_summary_csv": str(output_dir / "chunk_metrics_summary.csv"),
+        "comparison_summary": top_comparisons.to_dict(orient="records"),
+        "top_phones_by_p95_delta": top_phones.to_dict(orient="records"),
         "top_trips_by_p95_delta": top_trips.to_dict(orient="records"),
+        "worst_rows_by_delta": worst_rows.to_dict(orient="records"),
     }
     with (output_dir / "summary.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
@@ -239,10 +311,12 @@ def main() -> None:
 
     all_rows = pd.concat(row_frames, ignore_index=True)
     all_trips = pd.concat(trip_frames, ignore_index=True)
+    summary = comparison_summary(all_rows)
+    phone_summary = phone_delta_summary(all_rows)
     target_trips = set(args.target_trip)
     chunks = chunk_delta_summary(all_rows, target_trips, args.chunk_epochs)
     metrics_summary = metrics_chunk_summary(metrics)
-    write_outputs(args.output_dir, all_rows, all_trips, chunks, metrics_summary)
+    write_outputs(args.output_dir, all_rows, summary, all_trips, phone_summary, chunks, metrics_summary)
 
 
 if __name__ == "__main__":

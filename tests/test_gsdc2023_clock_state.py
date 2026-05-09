@@ -75,3 +75,21 @@ def test_factor_break_mask_combines_clock_jump_and_invalid_dt() -> None:
     mask = factor_break_mask(clock_jump, dt, 5)
 
     np.testing.assert_array_equal(mask, np.array([False, False, True, True, False]))
+
+
+def test_clock_internal_state_snapshot_for_matlab_parity() -> None:
+    times_ms = np.arange(5, dtype=np.float64) * 1000.0
+    clock_bias_m = np.array([0.0, 10.0, 20.0, 580.0, 590.0], dtype=np.float64)
+    raw_clock_drift_mps = np.array([1.0, 2.0, 80.0, 3.0, 4.0], dtype=np.float64)
+
+    cleaned_drift = clean_clock_drift(times_ms, clock_bias_m, raw_clock_drift_mps, "pixel5")
+    bias_jump = detect_clock_jumps_from_clock_bias(clock_bias_m, "pixel5")
+    diagnostics_jump = np.array([False, False, True, False, False], dtype=bool)
+    combined_jump = combine_clock_jump_masks(bias_jump, diagnostics_jump)
+    breaks = factor_break_mask(combined_jump, np.array([0.5, 0.0, 1.0, np.nan]), 5)
+
+    np.testing.assert_allclose(cleaned_drift, np.array([1.0, 1.75, 2.5, 3.25, 4.0]), atol=1e-12)
+    np.testing.assert_array_equal(bias_jump, np.array([False, False, False, True, False]))
+    np.testing.assert_array_equal(combined_jump, np.array([False, False, True, True, False]))
+    np.testing.assert_array_equal(breaks, np.array([False, False, True, True, True]))
+    assert segment_ranges(0, 5, combined_jump) == [(0, 2), (2, 3), (3, 5)]

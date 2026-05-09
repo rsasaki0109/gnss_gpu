@@ -202,12 +202,22 @@ def test_preprocessing_gap_table_has_expected_stage_coverage():
     assert summary["static_stage_count"] == len(rows)
     assert summary["static_status_counts"]["partial"] >= 1
     assert summary["static_status_counts"]["experimental"] >= 1
+    assert summary["static_strict_completion_percent"] == 66.7
+    assert summary["static_practical_completion_percent"] == 78.3
 
 
 def test_preprocessing_gap_discovers_settings_trips_and_records(tmp_path):
     data_root = tmp_path / "dataset_2023"
     trip_dir = data_root / "train" / "courseA" / "phoneX"
     trip_dir.mkdir(parents=True)
+    (trip_dir / "phone_data_factor_counts.csv").write_text(
+        "freq,field,count\nL1,P,1\n",
+        encoding="utf-8",
+    )
+    (trip_dir / "phone_data_factor_mask.csv").write_text(
+        "epoch_idx,field,freq,sys,svid\n0,P,L1,1,1\n",
+        encoding="utf-8",
+    )
     (data_root / "settings_train.csv").write_text(
         "Course,Phone,Base1,RINEX\ncourseA,phoneX,SLAC,V3\n",
         encoding="utf-8",
@@ -224,5 +234,29 @@ def test_preprocessing_gap_discovers_settings_trips_and_records(tmp_path):
     assert row["trip"] == "train/courseA/phoneX"
     assert bool(row["trip_dir_present"]) is True
     assert bool(row["phone_data_present"]) is False
+    assert bool(row["phone_data_factor_counts_present"]) is True
+    assert bool(row["phone_data_factor_mask_present"]) is True
+    assert bool(row["phone_data_residual_diagnostics_present"]) is False
+    assert row["matlab_parity_sidecar_count"] == 2
+    assert bool(row["matlab_parity_sidecar_complete"]) is False
     assert bool(row["settings_csv_present"]) is True
     assert row["base_correction_status"] == "base_metadata_missing"
+
+    quick_records = trip_gap_records(
+        data_root,
+        ["train"],
+        limit=1,
+        include_validation=False,
+        include_imu_sync=False,
+    )
+    quick_row = quick_records.iloc[0].to_dict()
+    assert bool(quick_row["imu_sync_checked"]) is False
+    quick_summary = summary_from_records(quick_records)
+    assert quick_summary["imu_sync_checked"] == 0
+    assert quick_summary["imu_sync_skipped"] == 1
+    assert quick_summary["phone_data_factor_counts_present"] == 1
+    assert quick_summary["phone_data_factor_mask_present"] == 1
+    assert quick_summary["phone_data_residual_diagnostics_present"] == 0
+    assert quick_summary["matlab_parity_sidecar_complete"] == 0
+    assert quick_summary["matlab_parity_sidecar_count_sum"] == 2
+    assert quick_summary["matlab_parity_sidecar_count_max"] == 2

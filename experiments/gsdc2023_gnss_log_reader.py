@@ -9,6 +9,7 @@ keys, and count finite P/D/L availability.
 from __future__ import annotations
 
 import csv
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Iterable
 
@@ -79,6 +80,41 @@ RAW_COLUMNS = [
 ]
 
 _OBS_FIELDS = ("P", "D", "L")
+_INTEGER_COLUMNS = {
+    "utcTimeMillis",
+    "TimeNanos",
+    "LeapSecond",
+    "FullBiasNanos",
+    "HardwareClockDiscontinuityCount",
+    "Svid",
+    "State",
+    "ReceivedSvTimeNanos",
+    "ReceivedSvTimeUncertaintyNanos",
+    "AccumulatedDeltaRangeState",
+    "ConstellationType",
+    "ChipsetElapsedRealtimeNanos",
+}
+
+
+def _parse_nullable_int(value: object) -> object:
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "<na>"}:
+        return pd.NA
+    try:
+        number = Decimal(text)
+    except InvalidOperation:
+        return pd.NA
+    if not number.is_finite():
+        return pd.NA
+    integral = number.to_integral_value()
+    if number != integral:
+        return pd.NA
+    return int(integral)
+
+
+def _parse_nullable_int_series(series: pd.Series) -> pd.Series:
+    values = [_parse_nullable_int(value) for value in series]
+    return pd.Series(pd.array(values, dtype="Int64"), index=series.index)
 
 
 def _read_raw_rows(log_path: Path) -> pd.DataFrame:
@@ -96,7 +132,10 @@ def _read_raw_rows(log_path: Path) -> pd.DataFrame:
     for column in RAW_COLUMNS:
         if column == "CodeType":
             continue
-        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        if column in _INTEGER_COLUMNS:
+            frame[column] = _parse_nullable_int_series(frame[column])
+        else:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
     return frame
 
 

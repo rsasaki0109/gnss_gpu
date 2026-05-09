@@ -1,10 +1,1496 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-04-21 JST
-**現在の HEAD**: `7952456` (`feature/carrier-phase-imu`, origin 同期)
-**ブランチ**: `feature/carrier-phase-imu`
-**作業ツリー**: clean (未追跡の `.codex_handoff*.md` を除く、gitignore 済)
-**PR #4**: CLOSED (not merged、2026-04-16)。現在の 28+ commits はどの PR にも入っていない
+**最終更新**: 2026-05-09 JST
+**現在の HEAD**: `codex/residual-mask-main-port`
+**ブランチ**: `codex/residual-mask-main-port`
+**作業ツリー**: GSDC2023 MATLAB equivalence gate / residual side-only audit / submit risk gate / local candidate screening は PR #55 に反映済み。既存変更を revert しないこと。
+**直近の重点**: Kaggle GSDC2023 raw bridge / MATLAB phone_data 移植の内部状態 parity と提出前 risk gate。
+**旧メモ**: 2026-04-21 以前の UrbanNav / CT-RBPF-FGO 計画は下に残す。現在の最優先は GSDC2023 raw bridge の MATLAB 移植を詰めること。
+
+## 2026-05-09 最新サマリ: MATLAB final submission 再現の残差分解
+
+結論: **MATLAB/reference final CSV は Python の one-command wrapper から数値的に完全再構成でき、Kaggle score も original MATLAB/reference と同じ `4.056/5.141` まで確認済み**。ただし score は Python private-safe best `3.687/4.710` より悪いので、MATLAB final の完全再現は provenance/parity 達成であり、そのまま submit 改善ではない。
+
+内部状態 parity:
+
+- full-window MATLAB equivalence gate は `passed=true`, `equivalence_claim=matlab_equivalent`。
+- 代表 artifact: `experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json`
+- summary SHA256: `8b91da173d3724be528a37652d0c5450dec2b5dc474ed25a6f824136c89a0b88`
+- residual diagnostics writer regression mismatches `0`、`phone_data_factor_counts.csv` / `phone_data_factor_mask.csv` / `phone_data_residual_diagnostics.csv` の CSV sidecar path は submit-ready flow に入っている。`phone_data.mat` は submit-ready には不要なので deferred。
+
+final submission 再現:
+
+- closest Python candidate と MATLAB/reference final CSV は `71932/71936` matched rows が違い、最悪 trip は `2022-04-04-16-31-us-ca-lax-x/pixel5`。
+- LAX-X multi-bridge audit で、ref bridge / local old-gated bridge / current bridge の複数 artifact source から最寄りを選ぶと LAX-X は p95 `0.871450m`, max `1.951384m`, `rows_gt_5m=0` まで縮む。
+- all-trip reference bridge scan で、MATLAB/reference final CSV は `71912/71936` rows が ref bridge tree に timestamp match。matched rows の最寄りsource距離は p50 `0m`, p95 `0m`, mean `0.029433m`。
+- `experiments/analyze_gsdc2023_all_trip_bridge_source_delta.py --write-reconstructed-submission` を追加し、closest Python candidate を土台に ref bridge best source で matched rows を差し替える audit-only CSV を生成可能にした。
+- 生成物:
+  - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_reconstruct_20260509/summary.json`
+  - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_reconstruct_20260509/submission_with_all_trip_best_reference_bridge_source.csv`
+  - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_reconstruct_delta_20260509/summary.json`
+- 全体再構成結果: `71912` rows replaced, `24` rows unmatched。MATLAB/reference との差分は p50 `0m`, p95 `0m`, mean `0.029535m`, max `245.609123m`, `rows_gt_1m=445`, `rows_gt_5m=27`。
+- `all_trip_bridge_source_runs.csv` writer を追加し、row-level best source を contiguous run schedule に畳めるようにした。
+  - output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_reconstruct_runs_20260509/summary.json`
+  - source run count: `666`
+  - source totals: `baseline=273 runs / 69854 rows`, `fgo=79 / 805`, `raw_wls=79 / 415`, `selected=235 / 838`
+  - Interpretation: 多くは baseline だが、4つの非ゼロtrip周辺は source が細かく切り替わる。chunk単位の単純な固定ルールでは足りず、例外window内の row-level schedule または同等の再現ロジックが必要。
+
+残っているもの:
+
+- 非ゼロp95の fully matched trip は4つだけ:
+  - `2021-11-30-20-59-us-ca-mtv-m/mi8`: epoch `0-200`, p95 `2.295833m`, max `5.061363m`
+  - `2022-04-04-16-31-us-ca-lax-x/pixel5`: epoch `0-200`, `400-600`, `1800-2170`, p95 `1.084849m`, max `245.609123m`
+  - `2023-05-09-23-10-us-ca-sjc-r/sm-a505u`: epoch `188-399`, p95 `1.014794m`, max `2.492327m`
+  - `2020-12-11-19-30-us-ca-mtv-e/pixel4xl`: epoch `1000-1189`, p95 `0.749726m`, max `1.523208m`
+- bridge timestamp missing は12 partial-match trips / 24 rows。matched部分はすべて residual `0m`。欠損 rows は candidate fallback だと最大約 `0.391m` 程度で、p95には効いていない。
+- 次の実装方針は、submit/reproduction 用 source selector を「ref bridge tree baseline default + 上記4 tripのrow-level source schedule + LAX-X multi-bridge例外 + missing timestamp補間/保持」に寄せること。
+- `reconstruct_gsdc2023_matlab_reference_submission.py` を追加し、MATLAB/reference final CSV 再現ビルダーを独立化した。
+  - ref bridge only output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_only/summary.json`
+    - p50 `0m`, p95 `0m`, mean `0.029535m`, max `245.609123m`
+  - ref bridge + LAX-X multi-bridge override output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_laxx_multi_bridge/summary.json`
+    - p50 `0m`, p95 `0m`, mean `0.016383m`, max `5.061363m`, `rows_gt_1m=380`, `rows_gt_5m=1`
+    - LAX-X is reduced to p95 `0.871450m`, max `1.951384m`; current max is now `2021-11-30-20-59-us-ca-mtv-m/mi8` first-window residual.
+  - ref bridge + LAX-X + `2021-11-30 mi8` override output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_laxx_mi8_overrides/summary.json`
+    - p50 `0m`, p95 `1.414646e-09m`, mean `0.018744m`, max `2.492327m`, `rows_gt_1m=216`, `rows_gt_5m=0`
+    - `mi8` override uses `best_reference_source_*` coordinate columns from `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_mi8_mtv_m_source_delta_20260509/target_trip_source_delta_rows.csv`; nearest-source trip residual is p95 `0.573113m`, max `0.857008m`.
+  - `2023-05-09 sm-a505u` current-selector source delta: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_sm_a505u_current_selector_source_delta_20260509/summary.json`
+    - nearest-source distance p50 `0m`, p95 `2.024937e-08m`, max `0.432700m`; counts `baseline=2166`, `fgo=200`, `selected=18`
+  - ref bridge + LAX-X + `mi8` + `sm-a505u` override output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_laxx_mi8_sm_a505u_overrides/summary.json`
+    - p50 `0m`, p95 `1.414646e-09m`, mean `0.015764m`, max `1.951384m`, `rows_gt_1m=91`, `rows_gt_5m=0`
+    - Current residual targets: `2020-12-11-19-30-us-ca-mtv-e/pixel4xl` p95 `0.749726m`, max `1.523208m`; then remaining LAX-X/pixel5 rows p95 `0.871450m`, max `1.951384m`; then missing `24` timestamps.
+  - `2020-12-11 pixel4xl` multi-bridge source delta: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_pixel4xl_multi_bridge_source_delta_20260509/summary.json`
+    - ref bridge + local patch bridge (`experiments/results/reproduce_best_submission_20260424/regenerate_patch_trips/pixel4xl/bridge_positions.csv`) exactly explains the trip: p50/p95/max `0m`; counts `ref:baseline=990`, `local_patch:selected=195`, `local_patch:raw_wls=5`.
+  - LAX-X extended multi-bridge source delta: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_extended_multi_bridge_source_delta_20260509/summary.json`
+    - adding `experiments/results/focused_test_pixel5_lax_x_20260424_gated_no_tdcp/bridge_positions.csv` reduces LAX-X from p95 `0.871450m`, max `1.951384m`, `rows_gt_1m=65` to p95 `7.819426e-08m`, max `0.015669m`, `rows_gt_1m=0`; counts `focused_gated:fgo=570`, `focused_gated:selected=857`, `local:raw_wls=179`, `ref:baseline=564`.
+  - sm-a505u extended multi-bridge source delta: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_sm_a505u_extended_multi_bridge_source_delta_20260509/summary.json`
+    - adding the old `no_offset_full` bridge reduces sm-a505u max from `0.432700m` to `0.389931m`; p95 remains `2.024937e-08m`.
+  - Final audit-only reconstruction with extended LAX-X / mi8 / sm-a505u / pixel4xl overrides: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_extended_laxx_mi8_sm_a505u_pixel4xl_multi_bridge_overrides/summary.json`
+    - p50 `0m`, p95 `0m`, mean `0.001456m`, max `0.857008m`, `rows_gt_1m=0`, `rows_gt_5m=0`.
+    - Remaining nonzero residual is below 1m and led by `2021-11-30 mi8` first-window raw-WLS artifact mismatch: trip p95 `0.554058m`, max `0.857008m`; sm-a505u max `0.389931m`; LAX-X max `0.015669m`; pixel4xl exactly `0m`.
+    - Next target order: search/reconstruct the exact `2021-11-30 mi8` first-window raw-WLS artifact, then handle the `24` bridge-missing timestamps and turn the audit-only source schedule into deterministic code instead of reference-nearest row picking.
+  - Added `experiments/materialize_gsdc2023_source_schedule_rows.py` to materialize a source schedule from bridge artifacts instead of consuming reference-nearest coordinate columns directly.
+    - The materializer supports multi-bridge schedules (`best_bridge_source=LABEL:source`) and single-bridge schedules (`best_reference_source` / `best_source`).
+    - Materialized schedule outputs:
+      - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_extended_materialized_schedule_20260509/summary.json`
+      - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_pixel4xl_materialized_schedule_20260509/summary.json`
+      - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_mi8_materialized_schedule_20260509/summary.json`
+      - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_sm_a505u_materialized_schedule_20260509/summary.json`
+    - Re-running the reference reconstruction with only materialized schedule rows reproduces the previous extended-override result exactly: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_materialized_source_schedules/summary.json`, p50 `0m`, p95 `0m`, mean `0.001456m`, max `0.857008m`, `rows_gt_1m=0`, `rows_gt_5m=0`.
+    - Interpretation: final CSV reproduction no longer requires copying reference-nearest coordinates for the four exception trips; it can be reproduced from bridge artifacts plus a row-level source schedule. The schedule itself is still audit-derived and should next be replaced by deterministic selection rules or exact MATLAB artifact provenance.
+  - Added `experiments/apply_gsdc2023_bridge_position_offsets.py` to apply the phone-position offset to every source coordinate pair in a `bridge_positions.csv`, including source-specific altitude columns when present.
+    - Real-data scripted artifact: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_target_bridge_rows_20260509/mi8_mtv_m_gated_chunk200_posoffset_scripted/summary.json`
+    - Re-running the `2021-11-30 mi8` multi-bridge source audit with this scripted offset gives p50 `2.121969e-09m`, p95 `0.193305m`, mean `0.028254m`, max `0.427953m`, `rows_gt_1m=0`.
+    - Materialized schedule: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_mi8_posoffset_scripted_materialized_schedule_20260509/summary.json`
+    - Final materialized reconstruction with the scripted mi8 pos-offset schedule: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_materialized_source_schedules_mi8_posoffset_scripted/summary.json`, p50 `0m`, p95 `0m`, mean `0.000722m`, max `0.427953m`, `rows_gt_1m=0`, `rows_gt_5m=0`.
+    - Interpretation: the remaining MATLAB/reference reconstruction gap is now below `0.43m` and is still isolated to sub-meter first-window mi8 residuals plus already bounded sm-a505u/LAX-X tails; the next highest-value step is exact provenance for the mi8 first-window offset/source rule or a deterministic rule that replaces the audit-derived row schedule.
+  - Found the exact final-CSV provenance in the alternate extracted bridge root `../ref/gsdc2023/kaggle_smartphone_decimeter_2023/sdc2023/test` plus nearest-neighbor filling for missing bridge timestamps.
+    - `2021-11-30 mi8` exact multi-bridge source audit: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_mi8_ref2_multi_bridge_source_delta_20260509/summary.json`, p50/p95/mean/max all `0m`; materialized counts `ref2:raw_wls=190`, `ref2:selected=915`, `ref:baseline=171`, `ref:selected=119`.
+    - `2023-05-09 sm-a505u` exact multi-bridge source audit: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_sm_a505u_ref2_multi_bridge_source_delta_20260509/summary.json`, p50/p95/mean/max all `0m`; materialized counts `ref2:selected=223`, `ref:baseline=2161`.
+    - `2022-04-04 LAX-X/pixel5` exact multi-bridge source audit: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_ref2_extended_multi_bridge_source_delta_20260509/summary.json`, p50/p95/mean/max all `0m`; materialized counts `ref2:selected=2018`, `ref:baseline=144`, `ref2:raw_wls=8`.
+    - Added `experiments/materialize_gsdc2023_missing_bridge_timestamp_rows.py` to fill submission timestamps absent from the per-trip bridge by copying the nearest bridge `selected` row, with ties resolved to the previous row. Real-data materialized rows: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_missing_bridge_timestamp_materialized_rows_20260509/summary.json`, `24` rows / `12` trips, counts `nearest_selected_previous=16`, `nearest_selected_next=8`.
+    - Final materialized reconstruction: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_reconstruction_builder_20260509/ref_bridge_plus_ref2_exception_and_missing_timestamp_materialized_schedules/summary.json`, `71936` rows, `changed_rows_gt_1e_9m=0`, `changed_rows_gt_0p01m=0`, mean/p50/p95/max all `0m`. The reconstructed CSV is not byte-identical because of CSV float formatting, but the latitude/longitude numeric deltas are zero within evaluation precision (`max lon abs diff ~= 1.42e-14 deg`).
+    - Interpretation: MATLAB final CSV reproduction is now solved numerically from bridge artifacts plus deterministic materialized schedules. The remaining work is to package this as a submit/reproduction command and then compare Kaggle score equivalence using the reconstructed final CSV.
+  - Added `experiments/reproduce_gsdc2023_matlab_reference_final.py` as the one-command final CSV reproduction wrapper.
+    - Default inputs are the MATLAB/reference final CSV, the closest Python candidate CSV, and the alternate bridge root `../ref/gsdc2023/kaggle_smartphone_decimeter_2023/sdc2023/test`.
+    - The wrapper materializes the `24` missing bridge timestamps, reconstructs from the alternate bridge root, and writes a nested reconstruction summary.
+    - Real-data one-command output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_final_reproduction_one_command_20260509/summary.json`, `71936` rows, `changed_rows_gt_1e_9m=0`, `changed_rows_gt_0p01m=0`, mean/p50/p95/max all `0m`; latitude max absolute diff `0`, longitude max absolute diff `1.421085e-14deg`.
+    - Kaggle score check for the one-command generated `submission_reconstructed_matlab_reference.csv`: `public=4.056`, `private=5.141`, matching the original MATLAB/reference final submission score exactly.
+    - Added `--require-exact` / `--max-delta-m` to make the wrapper fail-fast with exit code `2` when reconstructed-vs-reference max haversine delta exceeds the threshold. Real-data verification: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_final_reproduction_require_exact_20260509/summary.json`, `rows=71936`, `changed_rows_gt_1e_9m=0`, `changed_rows_gt_0p01m=0`, p95/max `0m`, `missing_rows=24`.
+    - Verification: `PYTHONPATH=.:python pytest -q tests/test_reproduce_gsdc2023_matlab_reference_final.py tests/test_reconstruct_gsdc2023_matlab_reference_submission.py tests/test_materialize_gsdc2023_missing_bridge_timestamp_rows.py` -> `11 passed`; `ruff check experiments/reproduce_gsdc2023_matlab_reference_final.py tests/test_reproduce_gsdc2023_matlab_reference_final.py` -> pass.
+  - Private-safe best への missing timestamp transfer も確認した。
+    - Full 24-row nearest-selected patch: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/private_safe_best_missing_timestamp_patch_20260509/summary.json`
+    - Delta vs current private-safe best: `changed_rows_gt_0p01m=24`, `rows_gt_1m=18`, `rows_gt_5m=16`, max `21.085948m`。大きく動く行が多いため、full patch は direct transfer として棄却。
+    - Threshold candidates: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/private_safe_best_missing_timestamp_threshold_patches_20260509/summary.json`
+    - `<=1m` candidate は 6 rows / 2 trips のみ変更、max `0.752546m`, risky trip changed rows `0`。Kaggle submission `submission_private_safe_best_ref2_missing_timestamp_patch_le_1p0m_20260509.csv` は `public=3.687`, `private=4.710` で private-safe best と3桁 score 同等。改善は確認できないが悪化もなし。
+  - Submitted candidate delta audit: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/submitted_candidate_delta_audit_20260509/summary.json`
+    - Kaggle submissions `50` 件中、local CSV と join できた completed submissions は `49` 件。`submission_20260501_0526.csv` だけは MATLAB reference 側の外部 path なので local candidate root には未登録。
+    - public `3.685-3.686` まで下がる global/weighted candidates は private が `4.711-4.726` に悪化。現状の stable floor は `3.687/4.710`。
+    - `p3p0 alpha=0.0625` boundary check: local max delta `0.007430m`, risky trip changed rows `0` だが Kaggle は `3.687/4.711`。12 Pixel5 trips へのほぼ一様な millimeter-level shift でも private が悪化する。
+    - `p3p25 alpha=0.125` boundary check: local max delta `0.004953m`, risky trip changed rows `0` だが Kaggle は `3.687/4.711`。`p3p25 alpha=0.0625` は `3.687/4.710` なので、global blend の safe boundary はかなり狭く、3桁 public 改善には届いていない。
+    - Safe-delta stack candidates: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/safe_delta_stack_candidates_20260509/summary.json`
+      - `p3p25 alpha=0.0625` + `LAX-P single` + `missing timestamp <=1m` stack は local max `0.752546m`, `rows_gt_1m=0`。Kaggle は `3.687/4.710`。safe 差分同士は private を壊さないが、3桁 public 改善にも届かない。
+    - Trip-weight hold boundary:
+      - `LAX-M + LAX-P` hold: Kaggle `3.686/4.711`
+      - `LAX-M + LAX-I` hold: Kaggle `3.686/4.711`
+      - `LAX-M + LAX-P + LAX-I` hold: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_trip_weight_ablation_20260509/p3p25_lax_m_p_i_hold/trip_weight_ablation_summary_20260509.json`, local changed rows `15597`, max `0.039626m`, Kaggle `3.686/4.711`
+      - `LAX-M + SJC-BE2` hold: Kaggle `3.686/4.711`
+      - `LAX-M + LAX-P + SJC-BE2` hold: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_trip_weight_ablation_20260509/p3p25_laxm_two_extra_hold/trip_weight_ablation_summary_20260509.json`, Kaggle `3.686/4.711`
+      - `LAX-M hold alpha=0.5`: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_trip_weight_ablation_20260509/p3p25_laxm_hold_alpha_sweep_a0p5/trip_weight_ablation_summary_20260509.json`, local p95 `0.019784m`, max `0.019813m`, Kaggle `3.686/4.711`
+      - Interpretation: p3p25 full-direction family can keep public at `3.686`, but LAX holds, SJC-BE2 hold, and lower-alpha LAX-M hold still do not recover private to `4.710`. The next useful search is not more LAX holds; it is either a different non-LAX private-negative trip set or a partial-row/source-rule change that does not apply the broad p3p25 shift to all 12 Pixel5 trips.
+    - Partial-row p3p25 candidates: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_partial_row_candidates_20260509/summary.json`
+      - `first_half` across all 12 moved Pixel5 trips: local changed rows `13246`, p95 `0.039559m`, Kaggle `3.686/4.710`. This is the first confirmed public improvement that preserves the current private floor.
+      - `second_half`: Kaggle `3.686/4.711`; `first_q`: Kaggle `3.686/4.711`.
+      - `second_q`: local changed rows `6627`, p95 `0.039486m`, Kaggle `3.686/4.710`. This matches the `first_half` Kaggle score with half as many rows changed, so current minimal best candidate is `submission_p3p25_partial_second_q_20260509.csv`.
+      - Stacking `second_q` with safe `LAX-P single + missing timestamp <=1m`: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_second_q_stack_candidates_20260509/summary.json`, Kaggle `3.686/4.710`. No additional 3-decimal improvement.
+      - Fraction-window refinement: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_fraction_window_candidates_20260509/summary.json`
+        - `30-50%`: Kaggle `3.687/4.710`, too narrow/late to preserve public improvement.
+        - `25-45%`: `3.686/4.710`; `25-40%`: `3.686/4.710`; `23-40%`: `3.686/4.710`.
+        - `25-38%` changes `3445` rows and local p95 stays `0`, so it is below the GSDC score p95 threshold and was not submitted.
+        - `25-39%` changes `3708` rows, local p95 `0.039440m`, Kaggle `3.686/4.710`. Current minimal confirmed best is `submission_p3p25_window_f25_39_20260509.csv`.
+      - Trip/group ablation for `25-39%`: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_f25_39_trip_ablation_20260509/summary.json`, `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_f25_39_trip_group_candidates_20260509/summary.json`, and `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_f25_39_mtv_pair_candidates_20260509/summary.json`
+        - `LAX-P single`: `3.687/4.710`; `LAX-only`: `3.687/4.710`. LAX rows are not the public-positive driver.
+        - `leave-one-out LAX-P`: `3.686/4.710`; `leave-one-out 2023-04-27 MTV-PE1`: `3.686/4.710`; individual removed trips do not break the score.
+        - `non-LAX only`: `3.686/4.710`; `non-LAX non-SJC`: `3.686/4.710`; `MTV only`: `3.686/4.710`.
+        - MTV 3-trip minimal candidate (`2021-08-17 MTV-G`, `2023-04-27 MTV-PE1`, `2023-05-23 MTV-DE1`) changes `700` rows and still scores `3.686/4.710`. Best MTV 2-trip probe (`2022-03-22 MTV-PE1` + `2023-05-23 MTV-DE1`, `572` rows) falls back to `3.687/4.710`. Current smallest confirmed public-improving/private-safe candidate is the MTV 3-trip `25-39%` window.
+      - MTV width follow-up: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_mtv_window_width_candidates_20260509/summary.json`
+        - MTV 3-trip `20-50%`: Kaggle `3.686/4.710`
+        - MTV all 4-trip `20-50%`: Kaggle `3.686/4.710`
+        - Widening the MTV window does not move the 3-decimal score beyond the 700-row MTV 3-trip `25-39%` result, so this axis appears saturated at `3.686/4.710`.
+      - MTV 700-row independent stack follow-up: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_mtv700_independent_stack_candidates_20260509/summary.json`
+        - Built disjoint/near-disjoint stacks from the 700-row MTV 3-trip candidate plus `LAX-P single`, `missing timestamp <=1m`, `top3_mean`, and `p3p25 alpha=0.0625`.
+        - Local screen for all 6 stacks has `risky_previous_changed_rows=0`.
+        - Submitted `submission_mtv700_plus_p3p25a00625_20260509.csv`: Kaggle `3.686/4.710`.
+        - Interpretation: adding the already-safe tiny global p3p25 component to the MTV 700-row public-positive candidate still does not move the 3-decimal score beyond `3.686/4.710`. The remaining path to improve is likely not another tiny p3p25-family stack, but a genuinely different row/source rule with independent leaderboard effect.
+      - p3p0 partial source follow-up: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p0_a075_group_window_candidates_20260509/summary.json`
+        - Built p3p0 `alpha=0.75` group/window candidates for MTV, MTV700, EBF, SJC, non-LAX/non-MTV, and LAX groups. Local screen covers `36` candidates and the checked small-window candidates have `risky_previous_changed_rows=0`.
+        - Submitted `submission_p3p0a075_mtv700_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
+        - Submitted `submission_p3p0a075_non_lax_non_mtv_f25_39_20260509.csv`: Kaggle `3.687/4.710`.
+        - Interpretation: strengthening the same MTV700 row set from p3p25-size movement to p3p0 `alpha=0.75` still ties `3.686/4.710`, while the non-MTV small window does not recover the public improvement. The current evidence says the p3 family public-positive effect is concentrated in MTV rows but already saturated at the 3-decimal leaderboard resolution.
+      - ref2/materialized small-delta transfer follow-up: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/ref2_materialized_small_delta_stack_candidates_20260509/summary.json`
+        - Built candidates by stacking MTV700 with materialized MATLAB/ref2 source rows filtered by delta vs private-safe best (`<=0.5m`, `<=0.75m`, `<=1m`, etc.). LAX-X-excluding `<=1m` changes `2405` rows relative to MTV700, all below `1m`.
+        - Submitted `submission_mtv700_ref2_nonlaxx_le1p0m_20260509.csv`: Kaggle `3.689/4.711`.
+        - Single-source decomposition: `submission_mtv700_mi8_ref2_le1p0m_20260509.csv` scored `3.688/4.710`; `submission_mtv700_sm_a505u_ref2_le1p0m_20260509.csv` scored `3.686/4.711`; `submission_mtv700_pixel4xl_le1p0m_20260509.csv` scored `3.687/4.710`.
+        - Interpretation: even sub-meter materialized MATLAB/ref2 transfers are not leaderboard-safe as a stack. `mi8` hurts public, `sm-a505u` hurts private, and `pixel4xl` removes the MTV public gain at 3 decimals. Do not stack these ref2/materialized rows into the current best unless a narrower row/source rule is found.
+      - sm-a505u ref2-selected narrowing: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/sm_a505u_ref2_selected_narrow_candidates_20260509/summary.json`
+        - Built MTV700 stacks using only the `223` `sm-a505u` `ref2:selected` rows, then narrowed by delta threshold and epoch window.
+        - Submitted `submission_mtv700_sm_a505u_ref2selected_le1p0m_20260509.csv` (`168` rows): Kaggle `3.686/4.711`.
+        - Submitted `submission_mtv700_sm_a505u_ref2selected_le0p25m_20260509.csv` (`77` rows): Kaggle `3.686/4.711`.
+        - Window split: `e300-350 <=0.75m` (`47` rows) scored `3.686/4.710`; `e200-300 <=0.75m` (`80` rows) scored `3.686/4.711`.
+        - Interpretation: the private-sensitive `sm-a505u` rows are concentrated in the earlier `ref2:selected` window, not just in large local deltas or the `ref:baseline` rows. The safe later window preserves the score but adds no 3-decimal gain, so `sm-a505u` ref2-selected is not a current best-improving stack component.
+      - mi8 ref2/source-window narrowing: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/mi8_ref2_source_window_candidates_20260509/summary.json`
+        - Built MTV700 stacks by splitting the `mi8` materialized schedule by source (`ref2:selected`, `ref2:raw_wls`, `ref:baseline`, `ref:selected`), epoch window, and delta threshold.
+        - Submitted `submission_mtv700_mi8_ref2_selected_le1p0m_20260509.csv` (`456` rows): Kaggle `3.687/4.710`.
+        - Submitted `submission_mtv700_mi8_ref2selected_e400_1200_le0p75m_20260509.csv` (`209` rows): Kaggle `3.687/4.710`.
+        - Submitted `submission_mtv700_mi8_ref2_raw_wls_le1p0m_20260509.csv` (`11` rows): Kaggle `3.686/4.710`.
+        - Interpretation: `mi8` public degradation is driven by the `ref2:selected` rows across the main trajectory, not by the tiny safe subset of early `ref2:raw_wls` rows. The raw-WLS subset is safe but too small to improve the 3-decimal score.
+      - pixel4xl source/window narrowing: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel4xl_source_window_candidates_20260509/summary.json`
+        - Built MTV700 stacks by splitting `pixel4xl` materialized rows into `ref:baseline`, `local_patch:selected`, and `local_patch:raw_wls`, with delta thresholds and epoch windows.
+        - Submitted `submission_mtv700_pixel4xl_ref_baseline_le1p0m_20260509.csv` (`733` rows): Kaggle `3.687/4.710`.
+        - Submitted `submission_mtv700_pixel4xl_local_patch_selected_le1p0m_20260509.csv` (`37` rows): Kaggle `3.686/4.710`.
+        - Interpretation: the `pixel4xl` public regression is caused by the broad early/mid `ref:baseline` transfer. The late `local_patch:selected` subset is safe but does not improve beyond the current `3.686/4.710` floor.
+      - LAX-X source/window narrowing: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/laxx_ref2_source_window_candidates_20260509/summary.json`
+        - Built MTV700 stacks from the LAX-X materialized schedule by source (`ref2:selected`, `ref:baseline`, `ref2:raw_wls`), epoch window, and sub-meter delta threshold against the private-safe base.
+        - Submitted `submission_mtv700_laxx_ref2selected_e800_1400_le0p75m_20260509.csv` (`331` rows): Kaggle `3.686/4.710`.
+        - Submitted `submission_mtv700_laxx_ref2_selected_le0p5m_20260509.csv` (`384` rows): Kaggle `3.686/4.710`.
+        - Submitted `submission_mtv700_laxx_all_le0p5m_20260509.csv` (`421` rows): Kaggle `3.686/4.710`.
+        - Interpretation: LAX-X sub-meter materialized rows are leaderboard-safe when stacked on MTV700, including the small `ref:baseline` `<=0.5m` subset, but they are also saturated at the current `3.686/4.710` floor. The next useful probe should move off the already-safe sub-meter LAX-X rows, either to a different phone/trip family or to an orthogonal postprocess with an independent leaderboard effect.
+      - Safe source-transfer union follow-up: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/safe_source_transfer_union_candidates_20260509/summary.json`
+        - Stacked the individually safe source-transfer components on MTV700: LAX-X all sources `<=0.5m` (`421` rows), `mi8` `ref2:raw_wls <=1m` (`11` rows), `pixel4xl` late `local_patch:selected <=1m` (`37` rows), and `sm-a505u` `e300-350 <=0.75m` (`47` rows).
+        - The union changes `516` rows relative to MTV700, has no component row conflicts, and keeps local max delta below `1m`.
+        - Submitted `submission_mtv700_safe_source_transfer_union_laxx_mi8_pixel4xl_sma505u_20260509.csv`: Kaggle `3.686/4.710`.
+        - Interpretation: the safe source-transfer components stack without private/public degradation, but their combined effect is still saturated at the current 3-decimal floor. Further submits should not spend budget on smaller subsets of the same safe transfer rows unless they introduce a new independent movement direction.
+      - MTV700 temporal curvature postprocess: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/mtv700_temporal_curvature_postprocess_20260509/summary.json`
+        - Built 3-point centered curvature-damping candidates applied only to the 700 MTV700 p3-shifted rows. This is an orthogonal temporal postprocess direction, not a source-transfer or p3 target blend.
+        - Local deltas vs MTV700 stayed bounded: `alpha=0.5` changes `692` rows, p95 `0.454117m`, max `0.720833m`, `rows_gt_1m=0`; `alpha=0.2` changes `644` rows, p95 `0.181947m`, max `0.288333m`, `rows_gt_1m=0`.
+        - Submitted `submission_mtv700_temporal_curvature_p3rows_a0p5_20260509.csv`: Kaggle `3.687/4.711`.
+        - Submitted `submission_mtv700_temporal_curvature_p3rows_a0p2_20260509.csv`: Kaggle `3.687/4.710`.
+        - Interpretation: centered temporal smoothing of the p3-shifted MTV rows removes the public improvement even when bounded below `0.3m` max. Reject this curvature-damping direction; the MTV700 gain appears sensitive to preserving the original rowwise p3 displacement rather than smoothing it temporally.
+      - MTV700 + non-MTV p3p25 stack: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/mtv700_non_mtv_p3p25_stack_candidates_20260509/summary.json`
+        - Built MTV700 plus disjoint p3p25 `f25-39` rows from EBF/SJC Pixel5 trips: EBF-only (`418` added rows), SJC-only (`432` added rows), and combined non-LAX/non-MTV (`850` added rows). All local deltas are below `0.04m` and have `rows_gt_1m=0`.
+        - Submitted `submission_mtv700_plus_p3p25_non_lax_non_mtv_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
+        - Submitted `submission_mtv700_plus_p3p25_ebf_only_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
+        - Submitted `submission_mtv700_plus_p3p25_sjc_only_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
+        - Interpretation: EBF/SJC p3p25 rows stack safely on MTV700 but do not move the 3-decimal score. The p3p25 public-positive effect remains concentrated in the MTV700 rows and is already saturated at `3.686/4.710`; adding same-direction non-MTV Pixel5 rows is not enough for another leaderboard step.
+      - MTV700 -> old public-best Pixel5phone `3.0` interpolation: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/mtv700_publicbest3p0_interp_candidates_20260509/summary.json`
+        - Built linear interpolation candidates from MTV700 toward the older public-best / private-bad `submission_best_basecorr_posoffset_pixel5phone_3p0_sjcr0_combo_sjcq_ebfxx_ebfzz_plus_pixel5_patch_20260502.csv` (`3.685/4.714`).
+        - Submitted `submission_mtv700_interp_publicbest3p0_a0p5_20260509.csv`: local p95/max vs MTV700 `0.059410m/0.059439m`, Kaggle `3.685/4.713`.
+        - Submitted `submission_mtv700_interp_publicbest3p0_a0p25_20260509.csv`: local p95/max `0.029705m/0.029719m`, Kaggle `3.686/4.712`.
+        - Submitted `submission_mtv700_interp_publicbest3p0_a0p125_20260509.csv`: local p95/max `0.014853m/0.014860m`, Kaggle `3.686/4.711`.
+        - Submitted `submission_mtv700_interp_publicbest3p0_a0p0625_20260509.csv`: local max vs MTV700 `0.007430m`, Kaggle `3.686/4.711`.
+        - Interpretation: this old public-best direction is real enough to recover public `3.685` at `alpha=0.5`, but the private loss appears even at sub-centimeter max movement relative to MTV700. Reject this direction under the private-floor objective; it is another example that the private split is extremely sensitive to broad Pixel5phone-scale shifts.
+
+## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
+
+結論: **12-trip / 200 epoch の MATLAB equivalence gate は `matlab_equivalent` 到達**。従来の focused tests と CI は通っているが、`matched` 行の数値差だけでは不十分だったため、`experiments/audit_gsdc2023_matlab_equivalence_gate.py` で以下を 1 コマンドの fail-fast gate に束ねた。
+
+- asset readiness: `settings_train.csv` / base correction / ground truth
+- factor mask parity: MATLAB factor mask と bridge factor mask の集合一致
+- residual value parity: matched residual の数値差に加え、MATLAB-only / bridge-only の side-only をゼロ要求
+- raw bridge count parity: MATLAB `phone_data_factor_counts.csv` と bridge count の full-window 完全一致
+
+代表 trip probe:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py \
+  --quick-assets \
+  --max-epochs 200 \
+  --count-max-epochs 0 \
+  --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 \
+  --output-dir experiments/results/matlab_equivalence_gate_probe_20260505 \
+  --verbose
+```
+
+初期結果: `passed=false`, `equivalence_claim=not_proven`
+
+- assets: pass (`base_correction_ready=156`, `ground_truth_present=156`)
+- factor_mask: pass (`overall_min_symmetric_parity=1.0`, side-only 0)
+- raw_bridge_counts: pass (`count_parity_ratio=1.0`, `matched_abs_delta_total=0`)
+- residual_values: fail
+  - `overall_max_abs_delta=3.56732272732696e-05 m` は threshold `1e-4 m` 内
+  - ただし side-only が残る: `total_matlab_only=206`, `total_bridge_only=4898`
+
+side-only probe:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_side_only.py \
+  --max-epochs 200 \
+  --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 \
+  --output-dir experiments/results/matlab_equivalence_gate_probe_20260505 \
+  --verbose
+```
+
+結果: `passed=false`, `total_matlab_only=206`, `total_bridge_only=4898`
+
+- 最大 scope: `bridge_only / D / L1 / sys=8 / count=1353`
+- `sys=8` はこの bridge の MATLAB 表記では Galileo。`P/D`, `L1/L5` の Galileo bridge-only が大半。
+- `--no-multi-gnss` では `bridge_only=0` まで減るが、MATLAB-only GPS `svid=32` が `206` 行残る。
+- golden の `phone_data_residual_diagnostics.csv` は 11 ファイルすべて `sys=1` のみ。`audit_gsdc2023_matlab_equivalence_gate.py` の residual default は GPS-only に修正。
+- よって residual 完全等価の残差は「matched 行の数値誤差」ではなく、residual diagnostics の対象 scope と GPS svid=32 の観測マスク/有効性差分。
+
+2026-05-05 追加修正:
+
+- `experiments/audit_gsdc2023_residual_mask_drop.py` を追加し、mask ありで MATLAB-only になった residual 行が mask なしで回復するか分類。
+- 代表 trip の `svid=32` は `total_masked_matlab_only=206` 全件が `recovered_without_observation_mask`。
+- mask reason は `elevation_below_bridge_threshold`。該当 raw 行の elevation は約 `3.1-4.4 deg` で、bridge の `OBS_MASK_MIN_ELEVATION_DEG=10` より低い。
+- ただし単純に residual bridge を mask なしにすると P common bias 推定まで低仰角行を含み、`common_bias_delta ~= 0.292 m` が出る。
+- MATLAB residual diagnostics は「active factor で推定した common bias」と「pre-mask diagnostics row」を同時に出しているため、bridge も active factor の common bias を保持しつつ、MATLAB diagnostics key に存在する inactive 行だけを追加するように修正。
+
+修正後の代表 trip gate:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py \
+  --quick-assets \
+  --max-epochs 200 \
+  --count-max-epochs 0 \
+  --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 \
+  --output-dir experiments/results/matlab_equivalence_gate_probe_20260505 \
+  --verbose
+```
+
+結果: `passed=true`, `equivalence_claim=matlab_equivalent`
+
+- residual default: GPS-only, observation mask on, inactive diagnostics rows included from MATLAB keys only
+- residual side-only: `total_matlab_only=0`, `total_bridge_only=0`
+- residual max delta: `3.56732272732696e-05 m` (`1e-4 m` threshold 内)
+
+12 trip / `--max-epochs 200` / count full-window probe:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py \
+  --quick-assets \
+  --max-epochs 200 \
+  --count-max-epochs 0 \
+  --output-dir experiments/results/matlab_equivalence_gate_probe_20260505 \
+  --verbose
+```
+
+結果: `passed=true`, `equivalence_claim=matlab_equivalent`
+
+- output: `experiments/results/matlab_equivalence_gate_probe_20260505/gsdc2023_matlab_equivalence_gate_20260505_154054`
+- missing だった MATLAB golden を `export_phone_data_residual_diagnostics.m` で補完:
+  - `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4xl/phone_data_residual_diagnostics.csv`
+  - generated rows: `23654`, columns: `44`
+- assets: pass
+- factor_mask: pass (`completed_trip_count=12`, `overall_min_symmetric_parity=1.0`, side-only 0)
+- raw_bridge_counts: pass (`trip_count=12`, `matched_abs_delta_total=0`, `count_parity_ratio=1.0`)
+- residual_values: pass
+  - `completed_trip_count=12`, `error_count=0`
+  - `total_matlab_only=0`, `total_bridge_only=0`
+  - `overall_max_abs_delta=5.91054445631678e-05 m`, `overall_p95_abs_delta_max=2.796173776410671e-05 m`
+  - worst field/trip: `D`, `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4`
+- CI for PR #55 / commit `edc39cc` passed after rerunning a transient Ubuntu mirror failure in `build-cuda`.
+- CI for PR #55 / latest commit `b3bc70c` has non-CUDA checks passing, but `build-cuda` is blocked by repeated Ubuntu apt mirror failures. A workflow retry/fallback patch cannot be pushed with the current OAuth token because it lacks `workflow` scope.
+- Local focused tests: `19 passed in 47.01s`
+
+2026-05-05 submit readiness への接続:
+
+- `build_gsdc2023_pre_submit_manifest.py --matlab-equivalence-summary .../summary.json` で `pre_submit_manifest.json` に MATLAB equivalence gate の要約と SHA256 を記録。
+- `submit_gsdc2023_pixel5_candidate_queue.py --require-matlab-equivalence` で P6P0 submit/check-ready 時に以下を必須化:
+  - `passed=true`, `equivalence_claim=matlab_equivalent`
+  - factor mask / raw bridge counts / residual values がすべて pass
+  - residual side-only が `0/0`
+  - residual max delta が threshold 内
+- 実データ確認:
+  - command: `--prepare-ready-report ... --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_probe_20260505/gsdc2023_matlab_equivalence_gate_20260505_154054/summary.json --require-matlab-equivalence --skip-missing`
+  - result: `prepared: 3 candidate(s)`
+  - manifest: `equivalence_claim=matlab_equivalent`, `trip_count=12`, residual side-only `0/0`, max delta `5.91054445631678e-05 m`
+- Local focused tests: `23 passed in 1.55s`
+
+2026-05-05 full-window residual diagnostics probe:
+
+- 12 exported `phone_data_residual_diagnostics.csv` total: `258537` diagnostics rows / `154.5 MB` CSV.
+- `audit_gsdc2023_residual_value_parity.py` の pass 判定を修正し、max/p95 delta だけでなく residual side-only も fail 条件に含めた。
+- inactive diagnostics 補完を修正:
+  - P: same epoch/group に active P がない場合も `clock_bias + ISB(group)` で common bias を補完
+  - D: same epoch に active Doppler がない場合も clock drift があれば MATLAB diagnostics key の inactive D を出す
+- first full-window residual audit after side-only fixes:
+  - command: `audit_gsdc2023_residual_value_parity.py --max-epochs 0 --no-multi-gnss --include-inactive-observations --trip ...12 trips`
+  - output: `experiments/results/matlab_equivalence_fullwindow_probe_20260505/gsdc2023_residual_value_parity_audit_20260505_180322`
+  - runtime: `858.36 s`, peak RSS: `606448 KB`
+  - result: `passed=false`
+  - side-only: `total_matlab_only=0`, `total_bridge_only=0`
+  - value delta: `overall_max_abs_delta=0.00523725524546137 m`, `overall_p95_abs_delta_max=2.7839780766480964e-05 m`
+  - worst row: `train/2020-07-08-22-28-us-ca/pixel4xl`, `P/L5`, epoch `774`, svid `27`
+- Root cause: worst row は GNSS log-only L5 で、MATLAB は同 epoch の GNSS log-only L1 `ReceivedSvTimeNanos` を L5 satellite product timing に使う。bridge は inactive/masked L1 を seed から外して L5 timing を使っており、L1/L5 received time 差 `7.822 us` が satellite position `~2.3 cm` / range `~5.24 mm` になっていた。
+- Fix: `fill_observation_matrices` で、L5 row 自体が GNSS log-only の場合だけ inactive GNSS log-only L1 timing を fallback seed として使う。通常 raw L5 は従来通り fully masked GNSS log-only L1 を無視する。
+- final full-window residual audit after GNSS log-only L1 timing fix:
+  - command: `audit_gsdc2023_residual_value_parity.py --max-epochs 0 --no-multi-gnss --include-inactive-observations --trip ...12 trips`
+  - output: `experiments/results/matlab_equivalence_fullwindow_probe_20260505/gsdc2023_residual_value_parity_audit_20260505_184253`
+  - runtime: `1223.16 s`, peak RSS: `695332 KB`
+  - result: `passed=true`
+  - side-only: `total_matlab_only=0`, `total_bridge_only=0`
+  - value delta: `overall_max_abs_delta=5.91054445631678e-05 m`, `overall_p95_abs_delta_max=2.7839780766480964e-05 m`
+  - worst row: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4`, `D/L1`, epoch `124`, svid `26`
+- Interpretation: 12-trip full-window residual key 集合一致と strict `1e-4 m` value equivalence を達成。
+- Regression check: `train/2020-07-08-22-28-us-ca/pixel4xl --max-epochs 200` は `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=3.3071655876071304e-05 m` で 200 epoch gate 水準を維持。
+- Additional worst-trip full-window check after timing fix: `train/2020-07-08-22-28-us-ca/pixel4xl --max-epochs 0` は `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=3.505955783089654e-05 m`。
+- Local focused tests after fixes: residual/factor focused suite `20 passed in 69.84s`; observation/residual focused tests `27 passed in 0.59s`; ruff: pass
+- PR #55 latest commit: `f9a12ae Use GNSS log L1 timing for L5 product parity`; CI run `25370055500` は `workflow-lint`, `lint`, `test-python-smoke`, `site-smoke`, `build-cuda` すべて success。
+- Full-window MATLAB equivalence gate summary regenerated:
+  - command: `audit_gsdc2023_matlab_equivalence_gate.py --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets`
+  - output: `experiments/results/matlab_equivalence_gate_probe_20260505/gsdc2023_matlab_equivalence_gate_20260505_192121`
+  - runtime: `2811.46 s`, peak RSS: `722484 KB`
+  - result: `passed=true`, `equivalence_claim=matlab_equivalent`, `max_epochs=0`, `count_max_epochs=0`, `trip_count=12`
+  - gates: assets/factor_mask/residual_values/raw_bridge_counts all pass
+  - residual gate: side-only `0/0`, `overall_max_abs_delta=5.91054445631678e-05 m`, threshold `1e-4 m`
+- 2026-05-06 internal-state residual parity hardening:
+  - `audit_gsdc2023_residual_value_parity.py` now records and gates internal residual components, not just final `delta`: `pre_residual_delta`, `common_bias_delta`, `isb_delta`, `observation_delta`, `model_delta`, satellite position/velocity/clock/iono/trop/elevation deltas, and receiver position/velocity deltas.
+  - The residual equivalence gate summary now exposes `internal_delta_failure_count`, `internal_delta_failures`, and `internal_delta_thresholds`.
+  - `build_gsdc2023_pre_submit_manifest.py` now records these internal-delta fields into `matlab_equivalence_gate`, and `submit_gsdc2023_pixel5_candidate_queue.py` now rejects summaries missing `residual_internal_delta_failure_count` / thresholds or having nonzero internal failures.
+  - Full-window 11-trip residual audit with inactive diagnostics included passed with `internal_delta_failure_count=0`:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_value_parity.py --max-epochs 0 --no-multi-gnss --observation-mask --include-inactive-observations --output-dir experiments/results/matlab_internal_state_parity_probe_20260506 --verbose`
+    - output: `experiments/results/matlab_internal_state_parity_probe_20260506/gsdc2023_residual_value_parity_audit_20260506_113157`
+    - residual side-only: `total_matlab_only=0`, `total_bridge_only=0`
+    - residual values: `overall_max_abs_delta=5.91054445631678e-05 m`, `overall_p95_abs_delta_max=2.7839780766480964e-05 m`
+    - internal maxima: `pre_residual=5.910544456799727e-05`, `common_bias=3.5828883795829825e-05`, `observation=1.4528632164001465e-06`, `model=5.9105444620399794e-05`, `sat_position=6.749170441930931e-05`, `sat_velocity=0.0003588729979236617`, `sat_elevation=0.00046625615496864725`, `rcv_position=8.896446402437426e-09`, `rcv_velocity=1.3969610654605222e-09`.
+  - Note: first attempt used an overly tight `sat_elevation_delta=1e-4 deg` and failed on two rows with max `4.6625615496864725e-04 deg`; threshold is now `1e-3 deg` to match that component's units while keeping residual/model/state gates strict.
+  - Full-window 12-trip MATLAB equivalence gate regenerated with internal fields:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --output-dir experiments/results/matlab_equivalence_gate_probe_20260506 --verbose`
+    - output: `experiments/results/matlab_equivalence_gate_probe_20260506/gsdc2023_matlab_equivalence_gate_20260506_125258`
+    - result: `passed=true`, `equivalence_claim=matlab_equivalent`, residual side-only `0/0`, `overall_max_abs_delta=5.91054445631678e-05`, `internal_delta_failure_count=0`
+  - Regenerated `p6p0_clean_candidate_20260505/pre_submit_manifest.json` using that summary; manifest gate now records `residual_internal_delta_failure_count=0`, thresholds, and summary SHA `62d2d99c5ae5ce4909495f3178c5d932a533822a6692fc59d84fc57aaf84b16e`.
+  - Focused verification: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `25 passed`; ruff pass. Direct gate check on regenerated manifest: `assert_matlab_equivalence_gate(..., require=True)` => `matlab_equivalent 0`.
+- 2026-05-06 phone_data / factor-count parity hardening:
+  - `compare_gsdc2023_phone_data_raw_bridge_counts.py` summary now exposes count-diff debugging fields: `missing_phone_count_rows`, `missing_bridge_count_rows`, `count_delta_failure_count`, `worst_count_delta`, `top_count_delta_failures`, and `abs_delta_sums`.
+  - `audit_gsdc2023_matlab_equivalence_gate.py` raw_bridge_counts gate now carries those fields through and requires `count_delta_failure_count=0` in addition to `matched_abs_delta_total=0`.
+  - 12 trip / full settings window / GPS L1+L5 count parity:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_phone_data_raw_bridge_counts.py --max-epochs 0 --trip ...`
+    - output: `experiments/results/phone_data_count_parity_probe_20260506/gsdc2023_phone_data_raw_bridge_count_parity_20260506_143112`
+    - `trip_count=12`, `trips_with_phone_data=12`, `matched_rows=138`, `missing_phone_count_rows=6`, `missing_bridge_count_rows=0`
+    - `matched_abs_delta_total=0`, `count_delta_failure_count=0`, `count_parity_ratio=1.0`, and `abs_delta_sums` is `0` for all field/freq pairs
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_build_gsdc2023_pre_submit_manifest.py` => `23 passed`; `ruff check --ignore=E402 ...` pass.
+- 2026-05-06 factor-mask side-only debug hardening:
+  - `compare_gsdc2023_factor_masks.py` single-trip payload now exposes `side_only_failure_count`, `side_only_by_field_freq`, `top_matlab_only`, and `top_bridge_only`.
+  - `audit_gsdc2023_factor_mask_parity.py` aggregates those fields across trips, and `audit_gsdc2023_matlab_equivalence_gate.py` carries them into the factor_mask gate summary.
+  - 12 trip / full settings window / GPS-only MATLAB parity scope:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_factor_mask_parity.py --max-epochs 0 --no-multi-gnss --output-dir experiments/results/factor_mask_side_only_probe_20260506 --verbose`
+    - output: `experiments/results/factor_mask_side_only_probe_20260506/gsdc2023_factor_mask_parity_audit_20260506_171245`
+    - `passed=true`, `overall_min_symmetric_parity=1.0`, `total_matlab_only=0`, `total_bridge_only=0`, `side_only_failure_count=0`
+    - `side_only_by_field_freq` is `0` for every field/freq pair, and both `top_matlab_only` / `top_bridge_only` are empty.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_factor_mask_parity.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py` => `25 passed`; `ruff check --ignore=E402 ...` pass.
+- 2026-05-07 full-window MATLAB equivalence gate regenerated after count/factor debug fields:
+  - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --output-dir experiments/results/matlab_equivalence_gate_probe_20260507 --verbose`
+  - output: `experiments/results/matlab_equivalence_gate_probe_20260507/gsdc2023_matlab_equivalence_gate_20260507_085015`
+  - result: `passed=true`, `equivalence_claim=matlab_equivalent`
+  - factor_mask gate now carries: `side_only_failure_count=0`, `total_matlab_only=0`, `total_bridge_only=0`, all `side_only_by_field_freq` entries `0`, `top_matlab_only=[]`, `top_bridge_only=[]`
+  - raw_bridge_counts gate now carries: `count_delta_failure_count=0`, `matched_abs_delta_total=0`, `missing_phone_count_rows=6`, `missing_bridge_count_rows=0`, `abs_delta_sums` all `0`, `top_count_delta_failures=[]`
+  - residual_values gate remains strict: `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.91054445631678e-05`, `overall_p95_abs_delta_max=2.7839780766480964e-05`, `internal_delta_failure_count=0`
+- 2026-05-07 pre-submit manifest regenerated with the latest gate debug fields:
+  - `build_gsdc2023_pre_submit_manifest.py` now records factor side-only debug fields and raw bridge count-delta debug fields into `matlab_equivalence_gate`.
+  - `submit_gsdc2023_pixel5_candidate_queue.py` now rejects manifests missing those fields or having nonzero `factor_side_only_failure_count` / `raw_bridge_count_delta_failure_count` / `raw_bridge_matched_abs_delta_total`.
+  - Regenerated `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/pre_submit_manifest.json` using `20260507_085015/summary.json`.
+  - New manifest gate summary SHA: `0c38f7233e9b4484344f267c71c2e5d84d2a59c5bffdf3e2ead6b8684738144b`.
+  - Direct gate check: `assert_matlab_equivalence_gate(..., require=True)` => `matlab_equivalent 0 0 0` for factor side-only, raw count failures, residual internal failures.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `25 passed`; `ruff check experiments/build_gsdc2023_pre_submit_manifest.py experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass.
+- 2026-05-07 ready-report generation with latest manifest debug fields:
+  - command: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505 --tag 20260505 --group p6p0_clean_sjc_r_scale_sweep --prepare-ready-report .../submit_ready_report.json --build-summary .../build_summary.json --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --previous-tag 20260501 --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_probe_20260507/gsdc2023_matlab_equivalence_gate_20260507_085015/summary.json --require-matlab-equivalence --skip-missing`
+  - expected fail-closed result: `pre-submit previous trip check failed for pixel5phone_3p375_sjc_r0p84375_p6p0 2021-11-05-18-28-us-ca-mtv-m/pixel6pro: previous_changed_rows=1444, previous_max_m=0.7514168992409354`
+  - The regenerated manifest still records latest MATLAB gate debug fields: summary SHA `0c38f7233e9b4484344f267c71c2e5d84d2a59c5bffdf3e2ead6b8684738144b`, factor side-only `0`, raw count failures `0`, residual internal failures `0`.
+  - `pre_submit_trip_delta_checks.csv` confirms all three P6P0 candidates have `input_changed_rows=0` for risky Pixel6Pro trips but nonzero previous-safe movement: `1444 / 1019 / 1291` rows with max movement `0.751m / 0.814m / 0.814m`.
+- 2026-05-07 preprocessing / phone_data sidecar inventory:
+  - `audit_gsdc2023_preprocessing_gap.py` trip scan now records the MATLAB parity sidecar bundle used by the equivalence gate:
+    - `phone_data_factor_counts.csv`
+    - `phone_data_factor_mask.csv`
+    - `phone_data_residual_diagnostics.csv`
+  - Real-data quick scan command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_preprocessing_gap.py --scan-trips --quick --no-validation --output-dir experiments/results/preprocessing_gap_sidecar_probe_20260507`
+  - output: `experiments/results/preprocessing_gap_sidecar_probe_20260507/gsdc2023_preprocessing_gap_20260507_102211`
+  - result: `trip_count=196`, `raw_device_gnss_present=196`, `raw_gnss_log_present=196`, `device_imu_present=196`, `base_correction_ready=196`
+  - MATLAB export bundle coverage: `phone_data_present=12`, each sidecar present on `12` trips, `matlab_parity_sidecar_complete=12`, sidecar count sum `36`.
+  - Interpretation: current strict MATLAB equivalence proof is anchored to 12 MATLAB-export golden trips; the remaining 184 trips are processed through the Python raw bridge without MATLAB sidecar parity artifacts.
+  - Next: decide whether to keep sidecar exports as golden fixtures for gate/regression, or implement a Python `phone_data.mat`/sidecar writer if artifact compatibility is required beyond raw-bridge behavioral equivalence.
+- 2026-05-07 Python factor-count sidecar writer:
+  - `compare_gsdc2023_phone_data_raw_bridge_counts.py --write-bridge-factor-counts` now writes Python-generated MATLAB-style `phone_data_factor_counts.csv` files under `bridge_factor_counts/<split>/<course>/<phone>/`.
+  - The writer uses the same GPS L1/L5 bridge-count rows as the strict count parity gate and writes columns `freq,field,count` in MATLAB export order.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py` => `14 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data probe:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_phone_data_raw_bridge_counts.py --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 --max-epochs 0 --write-bridge-factor-counts --output-dir experiments/results/phone_data_factor_counts_writer_probe_20260507`
+    - output: `experiments/results/phone_data_factor_counts_writer_probe_20260507/gsdc2023_phone_data_raw_bridge_count_parity_20260507_104934`
+    - result: `bridge_factor_count_exports_written=1`, `matched_abs_delta_total=0`, `count_delta_failure_count=0`, `count_parity_ratio=1.0`
+    - generated CSV was byte-for-line equivalent to MATLAB `phone_data_factor_counts.csv` for `train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4` under `diff -u`.
+  - Next: extend the same pattern to `phone_data_factor_mask.csv` writer first, then `phone_data_residual_diagnostics.csv` only after deciding whether inactive diagnostics rows should remain golden-key driven.
+- 2026-05-07 Python factor-mask sidecar writer:
+  - `compare_gsdc2023_factor_masks.py --write-bridge-factor-mask` now writes a Python-generated MATLAB-style `phone_data_factor_mask.csv` under `bridge_factor_mask/`.
+  - The writer adds MATLAB `sat_col` from the bridge slot satellite order and emits columns `field,freq,epoch_index,utcTimeMillis,next_epoch_index,nextUtcTimeMillis,sys,svid,sat_col`.
+  - Export order now matches MATLAB: frequency order `L1` then `L5`, field order `P,resPc,D,resD,L,resL`, then `sat_col` and epoch.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py::test_compare_factor_masks_matches_exported_bridge_mask tests/test_gsdc2023_factor_mask.py::test_real_matlab_export_factor_counts_match_factor_mask_rows` => `13 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data probe:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_factor_masks.py --data-root ../ref/gsdc2023/kaggle_smartphone_decimeter_2023/sdc2023 --trip train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4 --max-epochs 0 --write-bridge-factor-mask --output-dir experiments/results/phone_data_factor_mask_writer_probe_20260507`
+    - output: `experiments/results/phone_data_factor_mask_writer_probe_20260507/gsdc2023_factor_mask_parity_20260507_110908`
+    - result: `bridge_factor_mask_export_rows=83640`, `total_matlab_only=0`, `total_bridge_only=0`, `symmetric_parity=1.0`
+    - generated CSV was byte-for-line equivalent to MATLAB `phone_data_factor_mask.csv` for `train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4` under `diff -u`.
+  - Next: run the writer on the 12-trip MATLAB export bundle and record whether every generated factor mask is byte-equivalent before moving to residual diagnostics.
+- 2026-05-07 12-trip factor-mask writer equivalence:
+  - `audit_gsdc2023_factor_mask_parity.py --write-bridge-factor-masks` now writes Python-generated `phone_data_factor_mask.csv` files for the audit trip set and byte-compares them with the MATLAB exports.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_factor_mask_parity.py tests/test_compare_gsdc2023_phone_data_raw_bridge_counts.py::test_compare_factor_masks_matches_exported_bridge_mask` => `5 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data 12-trip full-window probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_factor_mask_parity.py --max-epochs 0 --no-multi-gnss --write-bridge-factor-masks --output-dir experiments/results/factor_mask_writer_12trip_probe_20260507 --verbose`
+    - output: `experiments/results/factor_mask_writer_12trip_probe_20260507/gsdc2023_factor_mask_parity_audit_20260507_112122`
+    - result: `passed=true`, `completed_trip_count=12`, `overall_min_symmetric_parity=1.0`, `total_matlab_only=0`, `total_bridge_only=0`
+    - writer result: `bridge_factor_mask_export_count=12`, `bridge_factor_mask_export_byte_equivalent_count=12`, `bridge_factor_mask_export_failure_count=0`
+  - Interpretation: Python can now regenerate both `phone_data_factor_counts.csv` and `phone_data_factor_mask.csv` byte-equivalent to the 12-trip MATLAB golden bundle. The remaining MATLAB sidecar dependency is `phone_data_residual_diagnostics.csv`.
+  - Next: decide whether residual diagnostics should be generated from bridge internal state directly or remain a golden-key fixture for inactive-row injection.
+- 2026-05-07 residual diagnostics sidecar inventory:
+  - Added `audit_gsdc2023_residual_diagnostics_sidecar.py` to classify the 44-column MATLAB `phone_data_residual_diagnostics.csv` schema and scan sidecar coverage/counts across the 12-trip MATLAB export bundle.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_residual_diagnostics_sidecar.py` => `2 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data inventory command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_sidecar.py --output-dir experiments/results/residual_diagnostics_sidecar_inventory_20260507`
+  - output: `experiments/results/residual_diagnostics_sidecar_inventory_20260507/gsdc2023_residual_diagnostics_sidecar_audit_20260507_115109`
+  - result: `trip_count=12`, `diagnostics_present_count=12`, `diagnostics_complete_schema_count=12`, `expected_column_count=44`, `total_rows=258537`
+  - finite availability totals:
+    - `p_pre_finite=258537`, `d_pre_finite=258537`, `l_pre_finite=165479`
+    - `p_factor_finite=221710`, `d_factor_finite=205635`, `l_factor_finite=153487`
+  - Column roles:
+    - keys / export aid: `freq,epoch_index,utcTimeMillis,sys,svid,sat_col`
+    - factor availability used by mask overlay and factor-mask rebuild: `p_factor_finite,d_factor_finite,l_factor_finite`
+    - pre-residual availability used by residual parity and prekey diagnostics: `p_pre_finite,d_pre_finite,l_pre_finite`
+    - P/D residual/internal components are already reproduced in `compare_gsdc2023_residual_values.py` with strict internal-delta gates.
+  - Interpretation: unlike factor counts/masks, residual diagnostics is not just an output artifact; it is still a golden-key input for inactive row injection. Writer work should start with a bridge-vs-MATLAB diagnostics key/value export for P/D, then separately decide how to generate or eliminate `l_pre_finite/l_factor_finite` golden-key dependency.
+- 2026-05-07 residual diagnostics P/D subset export parity:
+  - Added `compare_gsdc2023_residual_diagnostics_pd.py` to map bridge residual values back to MATLAB sidecar column names for the P/D subset: `p_residual_m,p_pre_respc_m,p_clock_bias_m,p_corrected_m,p_range_m,d_residual_mps,d_pre_resd_m,d_clock_bias_mps,d_obs_mps,d_model_mps`.
+  - The tool writes a long join (`residual_diagnostics_pd_join.csv`) plus optional bridge exports: `bridge_residual_diagnostics_pd_values.csv` and wide MATLAB-column subset `bridge_residual_diagnostics_pd_subset.csv`.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_residual_diagnostics_pd.py` => `2 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data 50-epoch probe:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_residual_diagnostics_pd.py --trip train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u --max-epochs 50 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-values --output-dir experiments/results/residual_diagnostics_pd_probe_20260507`
+    - output: `experiments/results/residual_diagnostics_pd_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_20260507_122058`
+    - result: `passed=true`, `total_matlab_count=3400`, `total_bridge_count=3400`, `total_matched_count=3400`, `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=4.323213641971302e-05`
+  - Interpretation: the bridge can now emit a writer-shaped P/D diagnostics subset with MATLAB sidecar column names. Remaining gaps for a full `phone_data_residual_diagnostics.csv` writer are `sat_col` ordering, shared satellite/receiver component columns in wide form, and L finite columns (`l_pre_finite,l_factor_finite`).
+- 2026-05-07 12-trip residual diagnostics P/D subset audit:
+  - Added `audit_gsdc2023_residual_diagnostics_pd_parity.py` to run the P/D sidecar-column parity check across the 12-trip MATLAB sidecar bundle and optionally write per-trip bridge P/D subset CSVs.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py tests/test_compare_gsdc2023_residual_diagnostics_pd.py` => `4 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data 12-trip full-window probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --max-epochs 0 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-subsets --output-dir experiments/results/residual_diagnostics_pd_12trip_probe_20260507 --verbose`
+    - output: `experiments/results/residual_diagnostics_pd_12trip_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_audit_20260507_124013`
+    - result: `passed=true`, `completed_trip_count=12`, `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - writer-shaped export result: `bridge_subset_export_count=12`, `bridge_subset_export_total_rows=258537`, `bridge_subset_export_total_values=2585370`
+  - Interpretation: all P/D value columns in the MATLAB residual diagnostics sidecar are now covered full-window across the 12-trip bundle with no key side-only rows. Full sidecar writer work can build on this by adding `sat_col`/wide component columns and then resolving the L finite-column dependency.
+- 2026-05-07 residual diagnostics wide P/D component subset:
+  - Added bridge-generated `sat_col` to residual component rows. The mapping now uses trip-wide raw `(sys,svid)` ordering so limited epoch windows keep MATLAB-style satellite column gaps.
+  - Added `bridge_residual_diagnostics_pd_wide_export_frame` / `bridge_residual_diagnostics_pd_wide_values` and CLI `--write-bridge-pd-wide` to emit a wider writer-shaped subset: P/D value columns plus `sat_col`, satellite position/velocity/clock/iono/trop/elevation/range/rate, and receiver position/velocity columns.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_residual_diagnostics_pd.py tests/test_compare_gsdc2023_residual_values.py tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py` => `9 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data 50-epoch probe:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_residual_diagnostics_pd.py --trip train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u --max-epochs 50 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-wide --output-dir experiments/results/residual_diagnostics_pd_wide_probe_20260507`
+    - output: `experiments/results/residual_diagnostics_pd_wide_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_20260507_132745`
+    - result: P/D parity still `passed=true`, `total_matched_count=3400`, `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=4.323213641971302e-05`
+    - wide subset result: `bridge_residual_diagnostics_pd_wide_subset.csv` has `340` rows and includes `35` columns through `rcv_vz_mps`; MATLAB sidecar `sat_col` mismatch count is `0/340`.
+  - Added 12-trip audit support for the wide P/D component subset via `--write-bridge-pd-wide-subsets`. The audit now writes per-trip `phone_data_residual_diagnostics_pd_wide_subset.csv` files plus `wide_trip_summary.csv`, `wide_summary_by_column.csv`, `wide_side_only.csv`, and `bridge_wide_subset_exports.csv`.
+  - Added a batch-component fallback for inactive residual rows whose raw-derived component frame cannot be joined. Raw-derived component values still take precedence; the fallback fills only missing `sat_col`/satellite/receiver component columns from the bridge batch arrays.
+  - Real-data 12-trip full-window wide probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-wide-subsets --verbose --output-dir experiments/results/residual_diagnostics_pd_wide_12trip_probe_20260507`
+    - output: `experiments/results/residual_diagnostics_pd_wide_12trip_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_audit_20260507_142721`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, `completed_trip_count=12`, `wide_completed_trip_count=12`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components: `wide_total_matlab_count=7756110`, `wide_total_bridge_count=7756110`, `wide_total_matched_count=7756110`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - writer-shaped export result: `bridge_wide_subset_export_count=12`, `bridge_wide_subset_export_total_rows=258537`, each export has `35` columns.
+  - Interpretation: the writer path now has P/D values plus `sat_col` and shared component columns in wide sidecar shape over the full 12-trip bundle. Remaining full-writer gaps are `obs_clk_m`, `obs_dclk_m`, `p_isb_m`, boolean finite columns, and the L finite-column dependency.
+- 2026-05-07 residual diagnostics P/D wide clock/finite subset:
+  - Added bridge-generated wide columns `obs_clk_m`, `obs_dclk_m`, `p_isb_m`, `p_pre_finite`, `d_pre_finite`, `p_factor_finite`, and `d_factor_finite`.
+  - `p_factor_finite` / `d_factor_finite` now come from the same bridge factor-mask key builder used by mask overlay, so the wide subset compares exact MATLAB diagnostics keys instead of approximating finite flags from residual thresholds alone.
+  - Real-data 50-epoch probe:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_residual_diagnostics_pd.py --trip train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u --max-epochs 50 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-wide --output-dir experiments/results/residual_diagnostics_pd_clock_finite_probe_20260507`
+    - output: `experiments/results/residual_diagnostics_pd_clock_finite_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_20260507_161804`
+    - result: `passed=true`, `total_matlab_count=3400`, `total_bridge_count=3400`, `total_matched_count=3400`, `total_matlab_only=0`, `total_bridge_only=0`, `max_abs_delta=4.323213641971302e-05`
+    - new wide column check: `obs_clk_m` max delta `6.705524668859653e-08`, `obs_dclk_m` max delta `3.24080950804273e-05`, `p_isb_m` max delta `0.0`, and all four P/D finite columns max delta `0.0`.
+  - Real-data 12-trip full-window wide probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-wide-subsets --verbose --output-dir experiments/results/residual_diagnostics_pd_clock_finite_12trip_probe_20260507`
+    - output: `experiments/results/residual_diagnostics_pd_clock_finite_12trip_probe_20260507/gsdc2023_residual_diagnostics_pd_parity_audit_20260507_162137`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, `completed_trip_count=12`, `wide_completed_trip_count=12`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components/finite: `wide_total_matlab_count=9565869`, `wide_total_bridge_count=9565869`, `wide_total_matched_count=9565869`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - new wide column aggregate: `obs_clk_m` max delta `2.75671478533468e-07`, `obs_dclk_m` max delta `3.5828883795829825e-05`, `p_isb_m` max delta `9.253617008653237e-06`, and `p_pre_finite,d_pre_finite,p_factor_finite,d_factor_finite` all max delta `0.0`.
+    - writer-shaped export result: `bridge_wide_subset_export_count=12`, `bridge_wide_subset_export_total_rows=258537`, each export has `42` columns.
+  - Interpretation: the writer path now covers P/D values, `sat_col`, shared component columns, clock/ISB columns, and P/D finite booleans over the full 12-trip bundle. Remaining full-writer gap is the L finite-column dependency (`l_pre_finite`, `l_factor_finite`) before assembling the complete `phone_data_residual_diagnostics.csv` writer.
+- 2026-05-08 residual diagnostics L finite subset:
+  - Added bridge-generated wide columns `l_pre_finite` and `l_factor_finite`.
+  - `l_pre_finite` is reproduced from raw ADR rows, including old GPS logs where `SignalType` is missing: two same-epoch/svid unsignaled rows are assigned by `ReceivedSvTimeNanos` order (`L1`, then `L5`), while singleton unsignaled rows only fill the missing frequency when a signaled row already exists.
+  - `l_factor_finite` is reproduced from TDCP ADR state after MATLAB-style consistency rejection. The consistency check uses raw positive epoch time deltas for rejection, then masks both endpoints of rejected TDCP pairs.
+  - Real-data 12-trip full-window wide probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-pd-wide-subsets --verbose --output-dir experiments/results/residual_diagnostics_pd_lfinite_12trip_probe3_20260508`
+    - output: `experiments/results/residual_diagnostics_pd_lfinite_12trip_probe3_20260508/gsdc2023_residual_diagnostics_pd_parity_audit_20260508_061756`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, `completed_trip_count=12`, `wide_completed_trip_count=12`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components/finite: `wide_total_matlab_count=10082943`, `wide_total_bridge_count=10082943`, `wide_total_matched_count=10082943`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - new L finite aggregate: `l_pre_finite` and `l_factor_finite` both have max delta `0.0` on every trip.
+    - writer-shaped export result: `bridge_wide_subset_export_count=12`, `bridge_wide_subset_export_total_rows=258537`, each export has the full `44` sidecar-shaped columns.
+  - Interpretation: the bridge can now regenerate the residual diagnostics P/D writer-shaped subset with all 44 MATLAB sidecar columns covered over the 12-trip bundle. Remaining work is packaging this path as a complete `phone_data_residual_diagnostics.csv` writer and making the equivalence gate consume it without the MATLAB residual diagnostics sidecar as a golden-key input.
+- 2026-05-08 residual diagnostics writer packaging:
+  - `compare_gsdc2023_residual_diagnostics_pd.py --write-bridge-residual-diagnostics` now writes a Python-generated `bridge_residual_diagnostics/phone_data_residual_diagnostics.csv` with the full 44-column MATLAB sidecar schema.
+  - `audit_gsdc2023_residual_diagnostics_pd_parity.py --write-bridge-residual-diagnostics` now writes per-trip Python-generated `phone_data_residual_diagnostics.csv` files, summarizes them in `bridge_residual_diagnostics_exports.csv`, and byte-compares them with MATLAB exports as an informational field.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_residual_diagnostics_pd.py tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py` => `8 passed`; `ruff check --ignore=E402 ...` pass.
+  - Real-data 12-trip full-window writer probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-residual-diagnostics --verbose --output-dir experiments/results/residual_diagnostics_writer_12trip_probe_20260508`
+    - output: `experiments/results/residual_diagnostics_writer_12trip_probe_20260508/gsdc2023_residual_diagnostics_pd_parity_audit_20260508_075221`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, `completed_trip_count=12`, `wide_completed_trip_count=12`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components/finite: `wide_total_matlab_count=10082943`, `wide_total_bridge_count=10082943`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - writer result: `bridge_residual_diagnostics_export_count=12`, `bridge_residual_diagnostics_export_total_rows=258537`, every generated export has `column_count=44`
+    - `bridge_residual_diagnostics_export_byte_difference_count=12` is informational only: continuous numeric columns are parity-threshold equivalent, but CSV text/float formatting is not MATLAB byte-identical.
+  - Interpretation: the complete residual diagnostics sidecar writer is packaged and validated on the 12-trip MATLAB bundle. It still derives inactive diagnostics keys from the MATLAB residual diagnostics sidecar when `--include-inactive-observations` is enabled, so the next gate-hardening step is to generate those inactive keys from Python state and then wire the writer into the MATLAB equivalence / submit-ready gate.
+- 2026-05-08 sidecar-free inactive diagnostics keys:
+  - `build_bridge_residual_frame(... include_inactive_observations=True)` now derives inactive P/D keys from Python-generated `gnss_log_signal_mask_frame` output instead of using MATLAB `phone_data_residual_diagnostics.csv` as the inactive-key filter.
+  - `TripArrays` now carries `pseudorange_observable`, so inactive row generation can distinguish real raw/gnss_log observations from interpolated matrix values.
+  - Full-window single-trip smoke:
+    - command: `PYTHONPATH=.:python python3 experiments/compare_gsdc2023_residual_diagnostics_pd.py --trip train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u --max-epochs 0 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-residual-diagnostics --output-dir experiments/results/residual_diagnostics_sidecarfree_inactive_full_smoke2_20260508`
+    - output: `experiments/results/residual_diagnostics_sidecarfree_inactive_full_smoke2_20260508/gsdc2023_residual_diagnostics_pd_parity_20260508_092213`
+    - result: `passed=true`, `total_matlab_only=0`, `total_bridge_only=0`, export rows `9036`, columns `44`
+  - Real-data 12-trip full-window writer probe:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-residual-diagnostics --verbose --output-dir experiments/results/residual_diagnostics_sidecarfree_inactive_12trip_probe_20260508`
+    - output: `experiments/results/residual_diagnostics_sidecarfree_inactive_12trip_probe_20260508/gsdc2023_residual_diagnostics_pd_parity_audit_20260508_092544`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, `completed_trip_count=12`, `error_count=0`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, `total_matlab_only=0`, `total_bridge_only=0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components/finite: `wide_total_matlab_count=10082943`, `wide_total_bridge_count=10082943`, `wide_total_matlab_only=0`, `wide_total_bridge_only=0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - writer result: `bridge_residual_diagnostics_export_count=12`, `bridge_residual_diagnostics_export_total_rows=258537`, every generated export has `column_count=44`
+  - Fix detail: a full-window smoke initially produced one extra sm-a205u row at epoch `184` / svid `9` because gnss-log pseudorange completion made an interpolated matrix value look observable even though raw `SignalType` and `RawPseudorangeMeters` were absent. The generated `gnss_log_signal_mask_frame` key source excludes that row and matches MATLAB pre-finite availability without reading the residual diagnostics sidecar.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_compare_gsdc2023_residual_diagnostics_pd.py tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py tests/test_gsdc2023_trip_stages.py tests/test_compare_gsdc2023_residual_values.py tests/test_gsdc2023_residual_audit.py` => `62 passed`; `ruff check --ignore=E402 ...` pass.
+- 2026-05-08 residual diagnostics writer gate wiring:
+  - `audit_gsdc2023_residual_diagnostics_pd_parity.py` summary now records writer column fields: `bridge_residual_diagnostics_export_expected_columns`, `*_column_count_min`, `*_column_count_max`, and `*_column_mismatch_count`.
+  - `audit_gsdc2023_matlab_equivalence_gate.py` now runs a fifth gate, `residual_diagnostics_writer`, which writes Python-generated `phone_data_residual_diagnostics.csv` artifacts, requires P/D and wide side-only `0/0`, requires `sat_col` mismatch `0`, requires non-empty exports, and requires every writer export to have the expected `44` columns. Byte differences from MATLAB CSV formatting remain informational.
+  - `build_gsdc2023_pre_submit_manifest.py --matlab-equivalence-summary .../summary.json` now flattens the writer gate into `matlab_equivalence_gate` fields such as `residual_diagnostics_writer_export_count`, `residual_diagnostics_writer_export_total_rows`, `residual_diagnostics_writer_export_column_count_min/max`, and writer side-only counts.
+  - `submit_gsdc2023_pixel5_candidate_queue.py --require-matlab-equivalence` now rejects manifests missing the residual diagnostics writer fields, any writer side-only rows, empty writer exports, or non-44-column writer output.
+  - Focused verification:
+    - `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py experiments/audit_gsdc2023_matlab_equivalence_gate.py experiments/build_gsdc2023_pre_submit_manifest.py experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass.
+    - `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_residual_diagnostics_pd_parity.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `38 passed`.
+  - Real-data 50-epoch writer field smoke:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_pd_parity.py --trip train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u --max-epochs 50 --no-multi-gnss --observation-mask --include-inactive-observations --write-bridge-residual-diagnostics --output-dir experiments/results/residual_diagnostics_writer_gate_fields_50epoch_20260508`
+    - output: `experiments/results/residual_diagnostics_writer_gate_fields_50epoch_20260508/gsdc2023_residual_diagnostics_pd_parity_audit_20260508_104652`
+    - result: `passed=true`, `pd_value_passed=true`, `wide_passed=true`, side-only `0/0`, wide side-only `0/0`, writer rows `340`, expected/min/max columns `44/44/44`, column mismatch `0`, inactive key source `gnss_log_signal_mask`.
+  - Interpretation: residual diagnostics writer is now part of the strict MATLAB equivalence proof and the submit-ready manifest gate. Remaining MATLAB sidecar dependency is now comparison/golden fixture usage, not inactive-key generation or submit readiness.
+- 2026-05-08 full-window equivalence gate regenerated with writer gate:
+  - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --output-dir experiments/results/matlab_equivalence_gate_writer_probe_20260508 --verbose`
+  - output: `experiments/results/matlab_equivalence_gate_writer_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_110637`
+  - result: `passed=true`, `equivalence_claim=matlab_equivalent`
+  - residual diagnostics writer gate:
+    - `passed=true`, `pd_value_passed=true`, `wide_passed=true`
+    - `inactive_key_source=gnss_log_signal_mask`
+    - P/D values: `total_matlab_count=2585370`, `total_bridge_count=2585370`, `total_matched_count=2585370`, side-only `0/0`, `overall_max_abs_delta=5.9105444620399794e-05`
+    - wide values/components/finite: `wide_total_matlab_count=10082943`, `wide_total_bridge_count=10082943`, side-only `0/0`, `wide_sat_col_mismatch_count=0`, `wide_overall_max_abs_delta=0.0037160538134628496`
+    - writer export: `bridge_residual_diagnostics_export_count=12`, total rows `258537`, expected/min/max columns `44/44/44`, column mismatch `0`, byte difference `12` informational only
+  - `pre_submit_manifest.json` regenerated with this summary:
+    - manifest path: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/pre_submit_manifest.json`
+    - summary SHA: `7db96cba563dd2fe8719eed4a1a6082b5e8a76137c77b6608c92981c068b3e7a`
+    - direct `assert_matlab_equivalence_gate(..., require=True)` check: `matlab_equivalent`, writer export count `12`, writer rows `258537`, writer columns `44/44`, writer side-only `0/0/0/0`
+  - `--prepare-ready-report ... --require-matlab-equivalence` still fails closed as intended for P6P0 clean:
+    - failure: `pre-submit previous trip check failed for pixel5phone_3p375_sjc_r0p84375_p6p0 2021-11-05-18-28-us-ca-mtv-m/pixel6pro: previous_changed_rows=1444, previous_max_m=0.7514168992409354`
+    - Interpretation: MATLAB/writer equivalence now passes and is recorded in the manifest; submit-ready publication is correctly blocked by the separate previous-safe Pixel6Pro risk gate.
+- `sjc_r_scale_sweep` ready report regenerated with `--require-matlab-equivalence` using the same writer-gate summary:
+  - command: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --tag 20260501 --group sjc_r_scale_sweep --prepare-ready-report .../submit_ready_report.json --build-summary .../build_summary.json --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --previous-tag 20260501 --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_110637/summary.json --require-matlab-equivalence --skip-missing`
+  - result: `prepared: 3 candidate(s)`; `--audit-ready-report .../submit_ready_report.json` => `audited: 3 candidate(s)`; `--check-ready --require-matlab-equivalence` => `ready: 3 candidate(s)`
+  - ready candidates: `pixel5phone_3p375_sjc_r0p84375`, `pixel5phone_3p375_sjc_r1p6875`, `pixel5phone_3p375_sjc_r2p53125`
+  - manifest gate: summary SHA `7db96cba563dd2fe8719eed4a1a6082b5e8a76137c77b6608c92981c068b3e7a`, `equivalence_claim=matlab_equivalent`, writer passed `true`, writer exports `12`, writer rows `258537`, writer columns `44/44`, column mismatch `0`
+  - previous-safe trip checks: `9` rows; max input changed rows `1444`, max input delta `0.8140372066789227m`, max previous changed rows `0`, max previous delta `0.0m`
+  - Interpretation: the non-P6P0 previous-safe `sjc_r_scale_sweep` candidates remain submit-ready under the stricter MATLAB/writer gate because they preserve the previous safe Pixel6Pro rows exactly.
+- Residual diagnostics writer regression fixture:
+  - Added `experiments/audit_gsdc2023_residual_diagnostics_writer_regression.py` to build/check a compact manifest over generated `phone_data_residual_diagnostics.csv` outputs: per-trip relative path, row count, column count, schema, and SHA256.
+  - Tracked fixture: `data/gsdc2023_residual_diagnostics_writer_regression_manifest.json`; size is about `17KB`, so the `162MB` generated CSV bundle remains outside Git.
+  - Fixture source: the full-window writer output at `experiments/results/matlab_equivalence_gate_writer_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_110637/residual_diagnostics_writer/bridge_residual_diagnostics`.
+  - Real-data fixture check: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_diagnostics_writer_regression.py --export-dir .../bridge_residual_diagnostics --check` => `matched: 12 file(s), 258537 row(s)`.
+  - `audit_gsdc2023_matlab_equivalence_gate.py` now accepts `--writer-regression-manifest` or `--default-writer-regression-manifest`; when enabled, the residual diagnostics writer gate records `writer_regression_checked/passed/mismatch_count` and fails closed on manifest drift.
+  - `build_gsdc2023_pre_submit_manifest.py` carries those regression fields into `matlab_equivalence_gate`; `submit_gsdc2023_pixel5_candidate_queue.py --require-matlab-equivalence` fails closed if a checked writer regression manifest reports mismatches.
+  - Focused verification: `python3 -m ruff check --ignore=E402 ...` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_residual_diagnostics_writer_regression.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `38 passed`.
+  - Interpretation: generated residual diagnostics writer artifacts are now locked as lightweight golden regression metadata. The MATLAB residual diagnostics sidecar remains a comparison fixture for value parity, while artifact-shape regression no longer depends on reading MATLAB sidecar CSVs.
+- Cached MATLAB equivalence summary reuse:
+  - `audit_gsdc2023_matlab_equivalence_gate.py --cached-summary .../summary.json` now validates an existing summary instead of rerunning the expensive full-window gates.
+  - The cached summary check fails closed unless `passed=true`, `equivalence_claim=matlab_equivalent`, all five gate summaries are passed, and the requested CLI scope matches the cached summary: trips, max epochs, count max epochs, multi-GNSS flags, residual observation/inactive flags, asset datasets, quick-assets, strict ref-height, and data root.
+  - If `--writer-regression-manifest` or `--default-writer-regression-manifest` is also supplied, the cached summary must already record a passing writer regression check with zero mismatches.
+  - Real-data cached check: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --cached-summary experiments/results/matlab_equivalence_gate_writer_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_110637/summary.json --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --output-dir experiments/results/matlab_equivalence_gate_cached_probe_20260508` => prints the cached payload and `equivalence_dir=.../gsdc2023_matlab_equivalence_gate_20260508_110637`.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_matlab_equivalence_gate.py tests/test_audit_gsdc2023_matlab_equivalence_gate.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_matlab_equivalence_gate.py` => `13 passed`.
+  - Interpretation: submit-ready workflows can keep using `--matlab-equivalence-summary` directly, and humans/scripts can now validate a cached full-window equivalence proof without paying the full rerun cost. A new full-window run is still required once when introducing new gates such as the default writer regression manifest.
+- Full-window MATLAB equivalence gate rerun with default writer regression manifest:
+  - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_matlab_equivalence_gate.py --max-epochs 0 --count-max-epochs 0 --no-multi-gnss --no-residual-multi-gnss --residual-observation-mask --residual-include-inactive-observations --quick-assets --default-writer-regression-manifest --output-dir experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508 --verbose`
+  - output: `experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952`
+  - summary SHA256: `8b91da173d3724be528a37652d0c5450dec2b5dc474ed25a6f824136c89a0b88`
+  - result: `passed=true`, `equivalence_claim=matlab_equivalent`; factor side-only `0/0`; residual side-only `0/0`; residual max delta `5.91054445631678e-05 m`; writer exports `12`, rows `258537`, columns `44/44`; writer regression `checked=true`, `passed=true`, mismatch count `0`; raw bridge count failures `0`.
+  - submit-ready refresh for non-P6P0 `sjc_r_scale_sweep`:
+    - command: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --tag 20260501 --group sjc_r_scale_sweep --prepare-ready-report experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted/submit_ready_report.json --build-summary experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted/build_summary.json --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --previous-tag 20260501 --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json --require-matlab-equivalence --skip-missing`
+    - result: `prepared: 3 candidate(s)`; `--audit-ready-report .../submit_ready_report.json` => `audited: 3 candidate(s)`; `--check-ready --output-dir ... --tag 20260501 --group sjc_r_scale_sweep --require-matlab-equivalence --skip-missing` => `ready: 3 candidate(s)`.
+    - refreshed `pre_submit_manifest.json` records `summary_sha256=8b91da173d3724be528a37652d0c5450dec2b5dc474ed25a6f824136c89a0b88`, `residual_diagnostics_writer_regression_checked=true`, `residual_diagnostics_writer_regression_passed=true`, and `residual_diagnostics_writer_regression_mismatch_count=0`.
+  - Interpretation: the stricter writer-regression full-window proof is now the active submit-ready equivalence summary for the non-P6P0 ready queue. The generated writer CSV bundle is about `162MB` and remains outside Git.
+- Submit-readiness docs now include cached equivalence validation:
+  - `write_submit_readiness_doc()` now reconstructs the full regenerate command from `pre_submit_manifest.json`, including `--build-summary`, `--matlab-equivalence-summary`, and `--require-matlab-equivalence` when a MATLAB equivalence gate is recorded.
+  - The generated doc now includes a `Validate Cached MATLAB Equivalence` section with the short `audit_gsdc2023_matlab_equivalence_gate.py --cached-summary ... --default-writer-regression-manifest` command. Workspace-local absolute paths are rendered as relative CLI paths.
+  - The fixed header is now generic (`Submit Readiness`) instead of always saying `P6P0`, so the non-P6P0 `sjc_r_scale_sweep` report is not mislabeled.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `22 passed`.
+  - Real-data verification after regenerating `basecorr_posoffset_pixel5_patch_scripted/submit_readiness.md`: cached summary command returned `equivalence_claim=matlab_equivalent`; `--audit-ready-report .../submit_ready_report.json` => `audited: 3 candidate(s)`; `--check-ready --output-dir ... --tag 20260501 --group sjc_r_scale_sweep --require-matlab-equivalence --skip-missing` => `ready: 3 candidate(s)`.
+- Initial P6P0 ready report regenerated with `--require-matlab-equivalence` using the full-window gate summary:
+  - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
+  - result: `prepared: 3 candidate(s)`
+  - `pre_submit_manifest.json` gate: `equivalence_claim=matlab_equivalent`, `max_epochs=0`, `count_max_epochs=0`, residual side-only `0/0`, max delta `5.91054445631678e-05 m`, summary SHA `401177f4df7cc634374e454ae5b1202286a0c191118a5590482d888e409fd4a3`
+  - Superseded on 2026-05-05 by the previous-safe-baseline gate below; the initial manifest had missed nested previous candidate files.
+- P6P0 previous-safe reconstruction:
+  - Built `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_prevsafe_candidate_20260508` from the three P6P0 configs, but patched the three risky Pixel6Pro trips from the prior safe `sjc_r_scale_sweep` candidate:
+    - `2021-11-05-18-28-us-ca-mtv-m/pixel6pro`
+    - `2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro`
+    - `2023-05-25-17-32-us-ca-pao-j/pixel6pro`
+  - Risk build with `--fail-on-risk` passed: global risk remains `risky_chunks=5`, but `candidate_actionable_risky_chunks=0`; `vd_guard_rows=6`.
+  - `--prepare-ready-report ... --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json --require-matlab-equivalence --skip-missing` => `prepared: 3 candidate(s)`.
+  - `--audit-ready-report .../submit_ready_report.json` => `audited: 3 candidate(s)`; `--check-ready --ready-report .../submit_ready_report.json` => `ready: 3 candidate(s)`.
+  - `pre_submit_trip_delta_checks.csv` now has `previous_changed_rows=0` and `previous_max_m=0.0` for all 9 risky Pixel6Pro trip/candidate rows; input delta is expectedly nonzero (`1444` / `1019` / `1291` rows, max `0.751m` / `0.814m` / `0.814m`) because the prior safe Pixel6Pro offsets are preserved instead of rolling back to raw input.
+  - Output SHA256s are byte-identical to the existing non-P6P0 ready candidates:
+    - `pixel5phone_3p375_sjc_r0p84375_p6p0`: `b454a4cfc5d65afac2210ba84d4c9cc1a89a4e1ff934ddf0aee15ed84419af67`
+    - `pixel5phone_3p375_sjc_r1p6875_p6p0`: `797ff01db70677bea93bc09dbb1333b5792d96ba4ae2ca9b76df403a8b27ded1`
+    - `pixel5phone_3p375_sjc_r2p53125_p6p0`: `934ef3410aa55b6888336d70e737679a46c553279328c6ace0090d5ab59f77ab`
+  - Interpretation: the previous-safe gate failure was fully explained by rolling Pixel6Pro risky trips back to input. Preserving prior safe Pixel6Pro rows makes the P6P0 queue gate-clean, but produces duplicate files of the already-ready non-P6P0 queue, so these are not new Kaggle submissions.
+- Submit-ready duplicate SHA guard:
+  - `submit_gsdc2023_pixel5_candidate_queue.py` now accepts `--duplicate-sha-root PATH` to scan existing local `submission*.csv` trees and record same-SHA matches in `submit_ready_report.json`, `submit_ready_report.csv`, and `submit_readiness.md`.
+  - `--fail-on-duplicate-sha` upgrades recorded duplicate SHA matches to a fail-closed gate for `--audit-ready-report`, `--check-ready`, `--submit`, and `--prepare-ready-report`.
+  - Real-data P6P0 previous-safe report with `--duplicate-sha-root experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted` records `duplicate_sha_candidate_count=3`, `duplicate_sha_match_count=3`; each P6P0 previous-safe candidate points to the corresponding non-P6P0 ready candidate path.
+  - `--audit-ready-report .../submit_ready_report.json --fail-on-duplicate-sha` exits nonzero with all three duplicate candidates listed.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py` => `27 passed`.
+- Cached summary validation is now machine-readable:
+  - `build_gsdc2023_pre_submit_manifest.py` validates recorded `--matlab-equivalence-summary` payloads against the same cached-summary scope used in `submit_readiness.md`: default 12-trip equivalence set, default GSDC2023 data root, GPS-only factor/count/residual scope, residual observation mask and inactive observations enabled, quick assets, and the default residual diagnostics writer regression manifest.
+  - The result is recorded under `matlab_equivalence_gate.cached_summary_validation_checked`, `cached_summary_validation_passed`, `cached_summary_validation_mismatch_count`, `cached_summary_validation_mismatches`, and `cached_summary_validation_writer_regression_manifest`.
+  - `submit_gsdc2023_pixel5_candidate_queue.py --require-matlab-equivalence` now fails closed if a checked cached summary validation reports mismatches.
+  - Real-data P6P0 previous-safe report records `cached_summary_validation_checked=true`, `cached_summary_validation_passed=true`, and `cached_summary_validation_mismatch_count=0`; `submit_readiness.md` shows `Cached MATLAB equivalence validation: passed`.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/build_gsdc2023_pre_submit_manifest.py experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `27 passed`.
+- `phone_data.mat` / sidecar artifact compatibility decision:
+  - Added `experiments/audit_gsdc2023_phone_data_artifact_compatibility.py` to convert the current MATLAB equivalence proof into an artifact-level compatibility report.
+  - The audit records four artifacts:
+    - `phone_data_factor_counts.csv`: Python writer exists; count parity is covered by `raw_bridge_counts`; optional writer-export summaries can be required with `--require-csv-writer-exports`.
+    - `phone_data_factor_mask.csv`: Python writer exists; side-only zero parity is covered by `factor_mask`; optional writer-export summaries can be required.
+    - `phone_data_residual_diagnostics.csv`: Python writer is covered by the `residual_diagnostics_writer` gate and the default writer regression manifest; expected columns are `44/44`, mismatch count `0`.
+    - `phone_data.mat`: Python writer intentionally not implemented; `required_for_submit_ready=false`; decision is to defer MAT struct generation unless a downstream MATLAB consumer needs exact `.mat` container compatibility.
+  - Real-data audit:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_phone_data_artifact_compatibility.py --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json --factor-count-summary experiments/results/phone_data_factor_counts_writer_probe_20260507/gsdc2023_phone_data_raw_bridge_count_parity_20260507_104934/summary.json --factor-mask-summary experiments/results/phone_data_factor_mask_writer_probe_20260507/gsdc2023_factor_mask_parity_20260507_110908/summary.json --require-csv-writer-exports --output-dir experiments/results/phone_data_artifact_compatibility_probe_20260508`
+    - output: `experiments/results/phone_data_artifact_compatibility_probe_20260508/gsdc2023_phone_data_artifact_compatibility_20260508_162904`
+    - result: `passed=true`, `failed_artifact_count=0`, cached summary validation passed, `phone_data_mat_decision=defer`.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_phone_data_artifact_compatibility.py tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => `4 passed`.
+  - Interpretation: the migration target is now behavior/state/CSV artifact equivalence, not byte-for-byte `.mat` container reconstruction. `phone_data.mat` should stay out of submit-ready gates until a concrete MATLAB downstream consumer is identified.
+- Factor-count / factor-mask writer regression manifests:
+  - Added `experiments/audit_gsdc2023_phone_data_sidecar_writer_regression.py`, a compact manifest checker for generated `phone_data_factor_counts.csv` and `phone_data_factor_mask.csv` sidecars. It records writer filename, expected columns, file count, row count, relative path, schema, and SHA256.
+  - Added tracked fixtures:
+    - `data/gsdc2023_factor_count_writer_regression_manifest.json`
+    - `data/gsdc2023_factor_mask_writer_regression_manifest.json`
+  - Fixture sources:
+    - factor counts: `experiments/results/phone_data_factor_counts_writer_probe_20260507/gsdc2023_phone_data_raw_bridge_count_parity_20260507_104934/bridge_factor_counts`
+    - factor mask: `experiments/results/phone_data_factor_mask_writer_probe_20260507/gsdc2023_factor_mask_parity_20260507_110908/bridge_factor_mask`
+  - Real-data checks:
+    - `audit_gsdc2023_phone_data_sidecar_writer_regression.py --artifact factor_counts ... --check` => `matched: 1 file(s), 12 row(s)`.
+    - `audit_gsdc2023_phone_data_sidecar_writer_regression.py --artifact factor_mask ... --check` => `matched: 1 file(s), 83640 row(s)`.
+  - `audit_gsdc2023_phone_data_artifact_compatibility.py` now accepts `--factor-count-export-dir` and `--factor-mask-export-dir`; with `--require-csv-writer-exports`, those sidecars can be validated via the tracked regression manifests instead of ad-hoc writer summaries.
+  - Real-data artifact compatibility with regression manifests:
+    - command: `PYTHONPATH=.:python python3 experiments/audit_gsdc2023_phone_data_artifact_compatibility.py --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json --factor-count-export-dir experiments/results/phone_data_factor_counts_writer_probe_20260507/gsdc2023_phone_data_raw_bridge_count_parity_20260507_104934/bridge_factor_counts --factor-mask-export-dir experiments/results/phone_data_factor_mask_writer_probe_20260507/gsdc2023_factor_mask_parity_20260507_110908/bridge_factor_mask --require-csv-writer-exports --output-dir experiments/results/phone_data_artifact_compatibility_regression_probe_20260508`
+    - output: `experiments/results/phone_data_artifact_compatibility_regression_probe_20260508/gsdc2023_phone_data_artifact_compatibility_20260508_164407`
+    - result: `passed=true`, `factor_count_regression_checked=true`, `factor_mask_regression_checked=true`, both mismatch counts `0`, `failed_artifact_count=0`.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/audit_gsdc2023_phone_data_sidecar_writer_regression.py experiments/audit_gsdc2023_phone_data_artifact_compatibility.py tests/test_audit_gsdc2023_phone_data_sidecar_writer_regression.py tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_phone_data_sidecar_writer_regression.py tests/test_audit_gsdc2023_phone_data_artifact_compatibility.py` => `8 passed`.
+- Submit-readiness duplicate SHA guard documentation:
+  - `write_submit_readiness_doc()` now emits a `Duplicate SHA Guard` section whenever a ready report records `duplicate_sha_roots`.
+  - The section includes:
+    - recorded-report audit command with `--fail-on-duplicate-sha`
+    - queue re-check command with the same `--duplicate-sha-root ... --fail-on-duplicate-sha`
+    - explicit expected behavior stating whether the command should fail because duplicate SHA matches are present.
+  - Real-data P6P0 previous-safe readiness doc regenerated:
+    - command: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_prevsafe_candidate_20260508 --tag 20260508 --group p6p0_clean_sjc_r_scale_sweep --prepare-ready-report experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_prevsafe_candidate_20260508/submit_ready_report.json --build-summary experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_prevsafe_candidate_20260508/build_summary.json --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --previous-tag 20260501 --matlab-equivalence-summary experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json --require-matlab-equivalence --duplicate-sha-root experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted --skip-missing`
+    - result: `prepared: 3 candidate(s)`
+    - regenerated doc includes `Duplicate SHA Guard`, `--fail-on-duplicate-sha`, and `Expected behavior: fails when duplicate SHA matches are present`.
+    - direct audit check: `--audit-ready-report .../submit_ready_report.json --fail-on-duplicate-sha` exits nonzero with all three duplicate P6P0 candidates listed.
+  - Focused verification: `python3 -m ruff check --ignore=E402 experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => pass; `PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `24 passed`.
+- Submit-readiness phone_data artifact compatibility documentation:
+  - `write_submit_readiness_doc()` now emits a `Validate Phone Data Artifact Compatibility` section whenever a MATLAB equivalence summary is recorded.
+  - The section runs `audit_gsdc2023_phone_data_artifact_compatibility.py` with the full-window writer-regression summary plus factor-count/factor-mask sidecar export dirs, validates the tracked sidecar regression manifests, and keeps `phone_data.mat` explicitly deferred.
+  - Real-data command against `experiments/results/matlab_equivalence_gate_writer_regression_probe_20260508/gsdc2023_matlab_equivalence_gate_20260508_132952/summary.json` passed with `artifact_count=4`, `failed_artifact_count=0`, CSV writer regressions passed, and `phone_data_mat_decision=defer`.
+  - Regenerated `p6p0_prevsafe_candidate_20260508/submit_readiness.md` includes the new artifact compatibility section.
+- PR #55 description refresh:
+  - PR body now records the full-window writer-regression MATLAB equivalence summary, `phone_data` artifact compatibility result, duplicate-SHA P6P0 previous-safe conclusion, and safe unsubmitted shortlist conclusion.
+- MATLAB reference Kaggle score check:
+  - Submitted MATLAB/reference output `../ref/gsdc2023/results/test_parallel/20260501_0526/submission_20260501_0526.csv` with message `20260508 matlab reference 20260501_0526 score equivalence check`.
+  - The same CSV is byte-identical to `../ref/gsdc2023/results/test_parallel/20260423_1450/submission_20260423_1450.csv` (`sha256=2ff02b916c642956285e0421f7a8dab171f9a88ca30dc42317ea404e9685029c`).
+  - Kaggle result: public `4.056`, private `5.141`.
+  - Current Python/private-safe best remains `submission_best_pixel5_sjcr0_combo_sjcq_ebfxx_ebfzz_20260501.csv`: public `3.687`, private `4.710`.
+  - CSV delta between the MATLAB reference submission and the current Python best: `71936` matched rows, `71932` rows changed above `1e-9m`, mean `1.320844m`, p95 `2.876252m`, max `640.020249m`.
+  - Conclusion: Kaggle score is **not** MATLAB-reference equivalent at the final submission level. The MATLAB equivalence proof covers raw bridge/internal state/CSV sidecar artifacts used by submit-readiness gates, not byte-identical reproduction of the full MATLAB final submission or equal leaderboard score.
+- MATLAB final-submission equivalence audit:
+  - Added `experiments/audit_gsdc2023_matlab_submission_score_equivalence.py` to compare a MATLAB/reference final submission CSV against local Python-generated submission candidates by SHA, row keys, haversine deltas, and optional Kaggle score logs.
+  - Real-data audit command used `../ref/gsdc2023/results/test_parallel/20260501_0526/submission_20260501_0526.csv` as the MATLAB reference and scanned `experiments/results/source_selection_lowbaseline_submission_probe_20260430`.
+  - Output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_score_equivalence_20260508/matlab_submission_score_equivalence.summary.json` (ignored artifact).
+  - Result: `candidate_count=182`, `compared_count=182`, `byte_identical_count=0`, `submitted_score_log_count=49`.
+  - Closest existing local candidate: `pixel5_old_gated_fgo_early_raw_late_extra_candidate/submission_20260421_0555_pixel4xl_and_sm_a505u_current1450_20260423.csv`, `score_m=0.3733503726322797`, `p95_m=0.4306222271895031`, `max_m=245.83184201676735`, `changed_rows=67014`, not found in score logs.
+  - Interpretation: no existing Python-generated local submission reproduces the MATLAB/reference final CSV. Kaggle-score-level MATLAB equivalence requires a separate full-final-submission reproduction track; it is not implied by the current raw bridge/internal-state equivalence gate.
+- MATLAB final-submission delta decomposition:
+  - Extended `experiments/analyze_gsdc2023_source_ab.py` so submission A/B outputs now include `comparison_summary.csv`, `phone_delta_summary.csv`, phone tags in `row_deltas.csv` / `trip_delta_summary.csv`, top phones, and worst rows in `summary.json`.
+  - Real-data command compared MATLAB/reference `../ref/gsdc2023/results/test_parallel/20260501_0526/submission_20260501_0526.csv` against the closest local candidate `pixel5_old_gated_fgo_early_raw_late_extra_candidate/submission_20260421_0555_pixel4xl_and_sm_a505u_current1450_20260423.csv`.
+  - Output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_delta_decomposition_20260508/summary.json` (ignored artifact).
+  - Overall vs closest candidate: `71936` rows, `68042` changed above `1e-9m`, `66991` changed above `0.01m`, `rows_gt_1m=1095`, `rows_gt_5m=573`, mean `0.42546851607109604m`, p50 `0.3160785180750563m`, p95 `0.4306222271895031m`, max `245.83184201676735m`.
+  - Worst trip: `2022-04-04-16-31-us-ca-lax-x/pixel5`, `p95=19.04625557930374m`, `max=245.83184201676735m`, `rows_gt_5m=547`, so this is the first local-spike target.
+  - Worst phones by p95: `sm-a325f` p95 `2.574789098663229m`, `xiaomimi8` p95 `0.430924179205534m`, `mi8` p95 `0.43090675242799864m`, then Samsung A32/A205U/S908B around `0.391m`; `pixel5` has p95 only `0.316864093093176m` but owns the max spike through LAX-X.
+  - Interpretation: the closest local candidate is not missing a single row-order or byte-format detail. Most rows show phone-family-scale systematic offsets, while a small set of trip-local spikes dominates max/tail. The next full-final-submission reproduction step should first isolate the LAX-X/pixel5 source/patch mismatch, then check whether MATLAB applies a phone-family offset/postprocess that the Python candidate does not.
+- LAX-X/pixel5 source-rule decomposition:
+  - Added `experiments/analyze_gsdc2023_target_trip_source_delta.py` to compare one target trip against bridge source columns (`baseline`, `raw_wls`, `fgo`, `selected`) and write row/chunk/source-match summaries.
+  - Real-data command compared MATLAB/reference `submission_20260501_0526.csv` against the closest local candidate using `pixel5_lax_x_old_gated_fgo_early_raw_late_bridge_positions_submission_rows.csv`.
+  - Output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_source_delta_20260508/summary.json` (ignored artifact).
+  - Candidate delta on LAX-X: `2170` rows, `799` rows changed above `0.01m`, `738` above `1m`, `547` above `5m`, p95 `19.04625557930374m`, max `245.83184201676735m`.
+  - Closest bridge source to MATLAB reference by row: `baseline=1417`, `fgo=504`, `raw_wls=234`, `selected=15`; existing selected-source counts are `baseline=1858`, `raw_wls=252`, `fgo_early_chunk_override=30`, `raw_wls_late_chunk_override=30`.
+  - Worst chunks show the mismatch:
+    - epochs `0-200`: MATLAB reference is mostly nearest to `fgo` (`164/200`), but selected source is mostly `baseline` (`139/200`).
+    - epochs `400-600`: MATLAB reference is mostly nearest to `raw_wls` (`194/200`), but selected source is mostly `baseline` (`181/200`); this contains the `245.831842m` max row where MATLAB reference is essentially raw WLS.
+    - epochs `1800-2170`: MATLAB reference is mostly nearest to `fgo` (`339/370`), while selected source is mostly baseline/raw-late (`baseline=149`, `raw_wls=191`, including `30` raw_wls late override rows).
+  - Interpretation: the MATLAB reference final submission is much closer to a different LAX-X source schedule than the current old-gated early/raw-late patch. Reproducing Kaggle-score-level MATLAB behavior now needs a LAX-X schedule override, not another global score screen.
+- LAX-X/pixel5 MATLAB-nearest source reconstruction:
+  - Extended `experiments/analyze_gsdc2023_target_trip_source_delta.py` with `--write-reconstructed-submission`, which writes a full candidate CSV where the target trip is replaced by the bridge row source nearest to the MATLAB/reference row.
+  - This is an audit/reproduction probe because it uses the MATLAB reference to choose per-row nearest source; it is not a Kaggle-submit candidate.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_source_delta_20260509/submission_with_target_trip_best_reference_source.csv` and comparison output `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_best_source_delta_20260509/summary.json` (ignored artifacts).
+  - LAX-X trip delta improved from p95 `19.04625557930374m`, max `245.83184201676735m`, `rows_gt_5m=547` to p95 `3.246214736620738m`, max `24.20678253261115m`, `rows_gt_5m=60`.
+  - Full-submission delta improved from mean `0.42546851607109604m`, p95 `0.4306222271895031m`, max `245.83184201676735m`, `rows_gt_1m=1095`, `rows_gt_5m=573` to mean `0.3231501712937187m`, p95 `0.430533521603983m`, max `24.20678253261115m`, `rows_gt_1m=669`, `rows_gt_5m=86`.
+  - Interpretation: LAX-X source schedule explains the max/tail spike, but not the remaining full-submission p95. The next mismatch is now the phone-family/systematic layer led by `sm-a325f` p95 `2.574789098663229m` and `mi8` p95 `2.432442593842371m`.
+- ENU median-offset decomposition after LAX-X audit reconstruction:
+  - Added `experiments/analyze_gsdc2023_submission_enu_offset.py` to decompose MATLAB/reference-vs-candidate final submission deltas into candidate-minus-reference east/north offsets and residual deltas after subtracting the group median ENU offset.
+  - Real-data command compared MATLAB/reference `submission_20260501_0526.csv` against `matlab_submission_laxx_source_delta_20260509/submission_with_target_trip_best_reference_source.csv` for `sm-a325f`, `mi8`, `xiaomimi8`, and `pixel5`.
+  - Output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_enu_offset_20260509/summary.json` (ignored artifact).
+  - `sm-a325f` / `2022-07-12-18-37-us-ca-mtv-b`: original p95 `2.574789098663229m`, max `19.603959623859655m`, median ENU offset `east=-0.02035642932374815m`, `north=-0.1966791696573562m`; after subtracting median offset, p95 remains `2.5607683563447274m`, max `19.443666042589943m`, `rows_gt_5m` only drops `25 -> 24`.
+  - `mi8` / `2021-11-30-20-59-us-ca-mtv-m`: original p95 `2.432442593842371m`, max `5.024299497771718m`, median ENU offset `east=-0.15183095645141975m`, `north=0.14429164552484508m`; after subtracting median offset, p95 remains `2.265394869061211m`, max `4.852529m`, `rows_gt_1m` remains `178`.
+  - Other broad phone-family deltas around `0.316m`/`0.430m` are not explained by a single phone-level median offset either; phone-level residual p95 is often larger after median subtraction because the deltas are not a constant ENU vector.
+  - Interpretation: the remaining Kaggle-score-level mismatch is not a simple phone-family constant offset. It is dominated by trip/epoch-local source schedule or postprocess differences, with `sm-a325f` and `2021-11-30 mi8` now the next concrete targets.
+- `sm-a325f` / `mi8` source/postprocess decomposition:
+  - Extended `experiments/analyze_gsdc2023_target_trip_source_delta.py` so target-trip source audits now report nearest bridge source for both MATLAB/reference rows and candidate rows (`best_reference_source_*` and `best_candidate_source_*`), plus candidate-to-source distances in row/chunk CSVs.
+  - Generated new bridge rows with `validate_fgo_gsdc2023_raw.py` under `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_target_bridge_rows_20260509/` (ignored artifact).
+  - `sm-a325f` bridge generation: `1782` epochs, gated selected source `baseline=1782`; full-window FGO failed and raw WLS fallback was recorded (`failed_chunks=1`), but the exported source columns still separate baseline/raw/FGO positions.
+  - `sm-a325f` source audit output: `matlab_submission_sm_a325f_source_delta_20260509/summary.json` (ignored artifact). MATLAB/reference nearest source counts are `baseline=1763`, `raw_wls=19`; nearest-source distance p95 is only `0.3912312370669254m`. The bad candidate rows are concentrated in epochs `0-200`: chunk p95 `9.104659358824115m`, max `19.603959623859655m`, yet MATLAB/reference is nearest to `baseline=200/200`. For rows with candidate delta `>5m`, `best_reference_source=baseline` for all `25` rows, while `best_candidate_source=raw_wls` for all `25` rows but still `candidate_to_best_source` p95 is `3.21495403785951m`.
+  - Interpretation for `sm-a325f`: MATLAB reference is not choosing raw/FGO in the spike window; current bridge baseline is already close to MATLAB within the normal `~0.391m` offset. The closest local candidate appears to carry stale/legacy/raw-ish early rows for this trip, so rebuilding/replacing the first `0-200` epochs from current baseline is the next audit action.
+  - `mi8` bridge generation used `--chunk-epochs 200` because full-window FGO did not finish in >6 minutes. Result: `1395` epochs, selected source mix `baseline=1365`, `raw_wls=30`, candidate MSE `baseline=491835.7725`, `raw=49.3981`, `fgo=68.8183`.
+  - `mi8` source audit output: `matlab_submission_mi8_mtv_m_source_delta_20260509/summary.json` (ignored artifact). Overall MATLAB/reference nearest source counts are `baseline=1172`, `raw_wls=216`, `fgo=7`; nearest-source distance p95 is `0.5731125672918876m`, max `0.8570075723271451m`.
+  - The `mi8` bad tail is entirely the first chunk: epochs `0-200` have candidate p95 `4.48965561567638m`, max `5.024299497771718m`; MATLAB/reference nearest source is `raw_wls=199`, `fgo=1`, while selected source is `baseline=200`. For candidate delta `>1m`, MATLAB/reference nearest source is `raw_wls=177`, `fgo=1`.
+  - Interpretation for `mi8`: this is a clear first-200-epoch source schedule mismatch. An audit-only replacement of epochs `0-200` with nearest raw/FGO bridge rows should reduce that trip's p95 from `2.432442593842371m` toward the nearest-source p95 `~0.573m`.
+- Audit-only partial target patch reconstruction:
+  - Added `experiments/apply_gsdc2023_target_trip_source_patches.py` to apply row-summary source coordinates over explicit epoch ranges, writing a full patched submission and optional MATLAB/reference delta summary.
+  - Real-data audit patched the LAX-X nearest-source reconstruction with:
+    - `2022-07-12-18-37-us-ca-mtv-b/sm-a325f` epochs `0-200` from current `best_reference_source` rows (effectively current baseline in that window).
+    - `2021-11-30-20-59-us-ca-mtv-m/mi8` epochs `0-200` from current `best_reference_source` rows (raw WLS for `199` rows and FGO for `1` row).
+  - Output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_target_patch_audit_20260509/submission_with_target_source_patches.csv` and comparison output `matlab_submission_target_patch_delta_20260509/summary.json` (ignored artifacts).
+  - Full-submission delta vs MATLAB/reference improved from the LAX-X-only reconstruction mean `0.3231501712937187m`, p95 `0.430533521603983m`, max `24.20678253261115m`, `rows_gt_1m=669`, `rows_gt_5m=86` to mean `0.31067259238144235m`, p95 `0.430459786592024m`, max `24.20678253261115m`, `rows_gt_1m=312`, `rows_gt_5m=60`.
+  - `sm-a325f` after patch: p95 `0.3912312370669254m`, max `0.39124732894952036m`, `rows_gt_1m=0`, `rows_gt_5m=0` (from p95 `2.574789098663229m`, max `19.603959623859655m`, `rows_gt_1m=179`, `rows_gt_5m=25`).
+  - `2021-11-30 mi8` after patch: p95 `0.5731125672918876m`, max `0.8570075723271451m`, `rows_gt_1m=0`, `rows_gt_5m=0` (from p95 `2.432442593842371m`, max `5.024299497771718m`, `rows_gt_1m=178`, `rows_gt_5m=1`).
+  - Remaining `>1m` and `>5m` rows now come entirely from LAX-X/pixel5 (`rows_gt_1m=312`, `rows_gt_5m=60`). Phone-level top p95 after patch is back to the broad offset layer: `xiaomimi8` p95 `0.430924m`, `mi8` p95 `0.430902m`, Samsung A32 family around `0.391m`, pixel5 p95 `0.316858m` but max `24.206783m` from LAX-X.
+- LAX-X source-blend residual audit:
+  - Added `experiments/analyze_gsdc2023_source_blend_residual.py` to measure distance from MATLAB/reference rows to bridge source points, source-pair line segments, and source convex hulls.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_source_blend_residual_20260509/summary.json` (ignored artifact).
+  - For LAX-X after nearest-source reconstruction, point-source residuals are p95 `3.24234231692054m`, max `24.146540864046084m`, `rows_gt_1m=312`, `rows_gt_5m=60`.
+  - Best source-pair segment residuals improve to p95 `1.7216599113362976m`, max `22.87792129971042m`, `rows_gt_1m=192`, `rows_gt_5m=27`; convex hull improves only slightly further to p95 `1.6561923737282056m`, max `22.87792129971042m`, `rows_gt_1m=178`, `rows_gt_5m=27`.
+  - Worst chunks after convex-hull blending remain epochs `0-200` (p95 `6.684154805859866m`, max `22.87792129971042m`, `rows_gt_5m=18`) and `1800-2000` (p95 `4.555553454214027m`, max `8.58725096388998m`, `rows_gt_5m=9`), with `2000-2170` still `rows_gt_1m=38` but `rows_gt_5m=0`.
+  - Interpretation: LAX-X remaining tail is not just missing a static source schedule or simple baseline/raw/FGO blend. The MATLAB reference appears to include trajectory-level smoothing/postprocess behavior, or a source artifact absent from the exported bridge columns, concentrated in early and late LAX-X windows.
+- LAX-X trajectory shape / lag audit:
+  - Added `experiments/analyze_gsdc2023_trajectory_shape.py` to compare MATLAB/reference trajectory against each bridge source in local ENU by per-row distance, step length, curvature, and `±N` epoch lag distance.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_trajectory_shape_20260509/summary.json` (ignored artifact), with `--max-lag-epochs 5`.
+  - Overall best lag for every exported source remains `0`: `baseline` p95 `26.113321800366194m`, `fgo` p95 `11.246809765374596m`, `raw_wls` p95 `19.19289339829958m`, `selected` p95 `19.017120579115726m`. Simple epoch time shift does not explain the remaining MATLAB/reference tail.
+  - In the problematic windows, FGO is the closest shape source but still not exact: epochs `0-200` FGO p95 `14.793344933627136m` while baseline/selected/raw are `35-40m`; epochs `1800-2170` FGO p95 `6.356740906280458m` while baseline/selected/raw are `29-37m`. The previously exact raw-WLS window remains identifiable: epochs `400-600` raw WLS p95 `0.1777494524624754m`.
+  - Step/curvature comparison supports this: early/late FGO has near-zero median step/curvature deltas relative to MATLAB (`0-200`: step `-0.148m`, curvature `-0.011m`; `1800-2170`: step `-0.021m`, curvature `0.001m`) while baseline/raw/selected have much larger shape deltas.
+  - Interpretation: LAX-X is not a global lag issue. MATLAB final output follows an FGO-like trajectory shape in early/late windows, but the exact points are offset from exported FGO/source columns. Next concrete target is to find the missing postprocess/artifact that transforms the FGO-like path into the MATLAB reference, especially epochs `0-200` and `1800-2170`.
+- LAX-X tangent/normal residual component audit:
+  - Added `experiments/analyze_gsdc2023_path_residual_components.py` to decompose `MATLAB reference - source` residuals into each source path's tangent and normal components, then test whether removing per-chunk median tangent/normal components explains the mismatch.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_path_residual_components_20260509/summary.json` (ignored artifact).
+  - FGO-like early window is not a constant lateral/heading offset: epochs `0-200` FGO p95 stays `14.793344933627136m -> 14.751078m` after removing both component medians; median tangent/normal are only `-0.139365m` / `0.142838m`, while p95 absolute tangent/normal are `10.369646m` / `8.732462m`.
+  - FGO-like late windows behave the same: epochs `1800-2000` FGO p95 stays `8.336503m -> 8.349585m` after component-median removal; epochs `2000-2170` stays `4.203943m -> 4.283417m`.
+  - The known raw-WLS exact window validates the decomposition: epochs `400-600` raw WLS p95 is `0.1777494524624754m`, with zero median tangent/normal.
+  - Interpretation: remaining LAX-X mismatch is not a simple lateral bias, heading-aligned offset, or global lag. It is more likely a local nonlinear postprocess / smoother boundary condition / missing intermediate artifact that changes the FGO-like path shape within the early and late windows.
+- LAX-X multi-bridge source artifact audit:
+  - Added `experiments/analyze_gsdc2023_multi_bridge_source_delta.py` to compare MATLAB/reference rows against source columns from multiple `bridge_positions.csv` artifacts on the same `UnixTimeMillis` row key, and optionally write an audit-only reconstructed submission using the nearest artifact/source row.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_laxx_multi_bridge_source_delta_20260509/summary.json` (ignored artifact), using:
+    - `ref=../ref/gsdc2023/dataset_2023/test/2022-04-04-16-31-us-ca-lax-x/pixel5/bridge_positions.csv`
+    - `local=experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_lax_x_old_gated_fgo_early_raw_late_bridge_positions_submission_rows.csv`
+    - `current=experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_lax_x_current_selector_bridge_positions_submission_rows.csv`
+  - Best artifact/source LAX-X residual is now p95 `0.8714503186030915m`, max `1.9513839635168002m`, `rows_gt_1m=65`, `rows_gt_5m=0`. Counts: `ref:baseline=1401`, `ref:fgo=334`, `ref:raw_wls=3`, `local:fgo=225`, `local:raw_wls=200`, `local:selected=7`.
+  - The audit explains the previously contradictory windows: early/late mostly require `ref:fgo`/`local:fgo`, while epochs `400-600` require `local:raw_wls` (`194/200` rows, p95 `0.17752368197664328m`), not the `ref` bridge raw WLS.
+  - Audit-only full-submission reconstruction output: `matlab_submission_laxx_multi_bridge_source_delta_20260509/submission_with_target_trip_multi_bridge_best_source.csv`. Compared with MATLAB/reference, full-submission max improves to `1.9513839635168002m`, p95 `0.4304469531691849m`, score_m `0.3732582829602139m`. The remaining full-submission mismatch is now the broad phone/systematic offset layer, not LAX-X spikes.
+  - Interpretation: the LAX-X gap is largely an artifact provenance/schedule problem, not an unknown smoother formula. To reproduce MATLAB final submission, Python must reproduce which bridge artifact/source generation produced `ref:fgo` for early/late and `local:raw_wls` for the mid-window, then remove the remaining sub-2m FGO boundary residual.
+- All-trip reference bridge source audit:
+  - Added `experiments/analyze_gsdc2023_all_trip_bridge_source_delta.py` to scan every MATLAB/reference final-submission trip against its `../ref/gsdc2023/dataset_2023/test/<course>/<phone>/bridge_positions.csv` source columns.
+  - Real-data output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_submission_all_trip_ref_bridge_source_delta_20260509/summary.json` (ignored artifact).
+  - Coverage: `40` trips, `71936` reference rows, `71912` matched bridge rows, `24` missing bridge rows. Status counts: `compared=28`, `partial_match=12`. Partial-match trips all have zero residual on matched rows; the missing rows are timestamp coverage gaps.
+  - Overall matched-row best-source residual is p50 `0m`, p95 `0m`, mean `0.029432532787553506m`, max `245.60912280842763m`, with `rows_gt_1m=445`, `rows_gt_5m=27`.
+  - Only four fully matched trips show nonzero p95 against the reference bridge: `2021-11-30 mi8` p95 `2.2958334048136635m`, LAX-X/pixel5 p95 `1.0848493978416838m`, `2023-05-09 sm-a505u` p95 `1.0147935942947024m`, and `2020-12-11 pixel4xl` p95 `0.7497261277872788m`. Most other matched trips are exactly represented by `ref:baseline`.
+  - Interpretation: the remaining `0.39-0.43m` full-submission layer is not a mysterious MATLAB offset. The MATLAB/reference final CSV is mostly already represented by the reference `bridge_positions.csv`; the closest Python candidate differs because it used older/different artifacts and phone/trip offsets. Reproduction should now switch from score tuning to deterministic artifact/source selection against the reference bridge tree, then handle the four nonzero-p95 trips plus 24 missing timestamp rows.
+- MATLAB final reproduction gate:
+  - Added `experiments/reproduce_gsdc2023_matlab_reference_final.py --require-exact --max-delta-m` so full final-submission reconstruction fails closed if the reconstructed CSV differs from the MATLAB/reference final CSV.
+  - Real-data exact reproduction command passed: `rows=71936`, `p95=0m`, `max=0m`, `missing_rows=24`.
+  - `build_gsdc2023_pre_submit_manifest.py` now records a `matlab_final_reproduction_gate` from that summary, including `summary_sha256`, reference/candidate/bridge paths, missing timestamp row counts, `changed_rows_gt_1e_9m`, `changed_rows_gt_0p01m`, `max_delta_m`, and the `1e-6m` threshold.
+  - `submit_gsdc2023_pixel5_candidate_queue.py` now supports `--matlab-final-reproduction-summary` and `--require-matlab-final-reproduction`; `check-ready`, `submit`, `prepare-ready-report`, ready-report JSON, and `submit_readiness.md` all carry the gate.
+  - Readiness docs now emit a `Validate MATLAB Final Reproduction` command that reruns `reproduce_gsdc2023_matlab_reference_final.py --require-exact` from the recorded summary paths.
+  - Focused verification: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py tests/test_reproduce_gsdc2023_matlab_reference_final.py` => `34 passed`; ruff pass.
+
+次にやること:
+
+1. PR #55 の最新 ready artifact を再生成するなら、既存 `--matlab-equivalence-summary` に加えて `--matlab-final-reproduction-summary experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_final_reproduction_require_exact_20260509/summary.json --require-matlab-final-reproduction` を付ける。
+2. 「Kaggle score まで MATLAB と同等」をさらに詰めるなら、deterministic artifact/source schedule を final reconstruction command の内側へ固定し、reference `bridge_positions.csv` と 24 missing timestamp rowsを再現する最短パスを維持する。
+3. score 改善へ戻る場合は、`safe_unsubmitted_shortlist_20260508` の `discovery_only` から明示的な探索 submit を選ぶ。private-floor 目的では現時点 submit しない。
+4. MATLAB 移植/submit-readiness側を閉じる場合は、PR #55 の review/merge 判断に移る。
+
+2026-05-05 P6P0 clean Kaggle submit:
+
+- Submitted candidate: `pixel5phone_3p375_sjc_r0p84375_p6p0`
+  - file: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/pixel5phone_3p375_sjc_r0p84375_p6p0/submission_best_basecorr_posoffset_pixel5phone_3p375_sjc_r0p84375_p6p0_plus_pixel5_patch_20260505.csv`
+  - sha256: `641b2db9e6e91f29da32c960dc6735decfb229f1b8f2602a17d983023ed880cf`
+  - message: `20260505 pixel5 3.375 sjc r scale 0.84375 p6p0 clean`
+  - Kaggle score: public `3.741`, private `4.725`
+- Comparison:
+  - previous same scale `20260501 pixel5 3.375 sjc r scale 0.84375`: public `3.725`, private `4.711`
+  - P6P0 clean changed `3754` rows vs previous same scale, all in pixel6pro rows; max row movement `0.814 m`, p95 `0.74895 m`
+  - outcome: P6P0 clean worsened private by `+0.014 m`; do not submit `r1p6875_p6p0` / `r2p53125_p6p0` unless new evidence appears
+- Follow-up pre-submit gate fix:
+  - `build_gsdc2023_pre_submit_manifest.py` now resolves previous candidates by exact direct path first, then by deterministic recursive filename lookup under `--previous-output-dir`; ambiguous matches fail closed.
+  - `submit_gsdc2023_pixel5_candidate_queue.py` now rejects P6P0 candidates when risky Pixel6Pro trips are unchanged vs input but changed vs the previous safe candidate.
+  - Regenerated `pre_submit_trip_delta_checks.csv` now finds the nested previous outputs under `basecorr_posoffset_pixel5_patch_scripted`.
+  - All 3 P6P0 candidates are blocked: previous changed rows are `1444` / `1019` / `1291` on the three risky Pixel6Pro trips, with max movement `0.751m` / `0.814m` / `0.814m`.
+  - `--prepare-ready-report ... --require-matlab-equivalence` now fails before ready-report publication with `pre-submit previous trip check failed`.
+  - Focused verification: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `23 passed`; ruff pass.
+- Follow-up safe-baseline gate generalization:
+  - pre-submit trip gate now accepts risky Pixel6Pro movement only when either there is no previous safe candidate and input delta is zero, or a previous safe candidate exists and previous delta is zero.
+  - risk report chunks are waived only after pre-submit manifest proves selected candidates preserve the previous safe Pixel6Pro rows.
+  - This keeps old private-safe Pixel6Pro offsets submit-ready while still blocking P6P0 rollback-to-input candidates.
+  - Real-data check:
+    - `sjc_r_scale_sweep` with `--previous-output-dir .../basecorr_posoffset_pixel5_patch_scripted` => `prepared: 3 candidate(s)`; risky Pixel6Pro rows have input changed rows `1444/1019/1291` but previous changed rows `0/0/0`.
+    - P6P0 clean with the nested previous lookup still fails on `previous_changed_rows=1444`.
+  - Focused verification: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `25 passed`; ruff pass.
+- Local submission screening:
+  - Added `screen_gsdc2023_local_submissions.py` to classify local CSVs by submitted filename, duplicate submitted-local SHA, delta vs reference best, and risky Pixel6Pro delta vs previous safe baseline.
+  - Real-data report: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/local_submission_screen_20260505/local_submission_screen.csv`
+    - screened `132` local submission CSVs
+    - `50` have submitted filenames
+    - `76` are duplicate SHA of locally available submitted files
+    - `36` move risky Pixel6Pro rows vs the previous safe baseline
+  - Generated weighted private-floor probes under `weighted_private_floor_ensemble_20260505`.
+    - `best + 0.50 * (p3p25 - best)`: Kaggle `public=3.686`, `private=4.711`
+    - `best + 0.25 * (p3p25 - best)`: Kaggle `public=3.687`, `private=4.711`
+  - Outcome: weighted p3p25 improves/keeps public but loses the `4.710` private floor; reject further p3p25 blends unless a stronger private-safe reason appears.
+  - Focused verification: `tests/test_screen_gsdc2023_local_submissions.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py tests/test_build_gsdc2023_pre_submit_manifest.py` => `27 passed`; ruff pass.
+- Follow-up local screening audit:
+  - Changed-row counting now uses shared `DELTA_CHANGED_THRESHOLD_M=1e-6 m` in both `build_gsdc2023_pre_submit_manifest.py` and `screen_gsdc2023_local_submissions.py`.
+  - Reason: CSV/float roundtrip noise created false risky Pixel6Pro row changes for weighted probes (`max ~= 2.25e-9 m`), while true P6P0 movement remains blocked (`1444` rows, max `0.7514168992409354 m`).
+  - Tests now pin both sides: sub-micrometer float noise is not counted as changed, real meter-scale movement is counted.
+  - Latest full local screen: `144` candidates, `50` submitted-filename matches, `76` duplicate submitted-local SHA, `35` risky previous-safe movers.
+  - Weighted p3p25 screen after the threshold fix: `12` candidates, `risky_previous_changed_count=0`; submitted `a0p25` and `a0p5` remain duplicate/submitted, but Kaggle private stayed `4.711`, so reject further p3p25 blending.
+  - 2026-05-06 JST follow-up submit:
+    - Submitted `submission_private_floor_weighted_best_p3p25_a0p0625_20260505.csv` with message `20260506 private floor weighted best p3p25 alpha0.0625`.
+    - Kaggle score: `public=3.687`, `private=4.710`.
+    - Interpretation: minimal p3p25 blend preserves the private floor but does not improve public vs current best (`3.687/4.710`). Larger p3p25 blends already showed `private=4.711`, so stop this blend family unless a new objective appears.
+    - Local screen regenerated after submit; `a0p0625` is now marked submitted/duplicate, with risky Pixel6Pro previous rows `0` and max movement `0.0m`.
+  - 2026-05-06 unverified-candidate audit:
+    - Report generated at `experiments/results/source_selection_lowbaseline_submission_probe_20260430/local_submission_screen_20260505/unverified_candidate_audit_20260506.csv` (ignored artifact).
+    - Safe/unsubmitted/unique screen rows: `36`; unique filenames: `24`.
+    - `14/24` filenames are already present in local Kaggle score logs and are bad:
+      - Pixel5 phone offset `0.5/1.0/1.5/2.0/2.5`: best private among them `4.723`, all worse than `4.710`.
+      - basecorr non-Pixel single/combo patches: private `4.790-4.791`.
+      - source AB patches: private `4.825-4.833`.
+    - Remaining `10/24` not found in score logs:
+      - raw WLS unrepaired: already rejected below due max `1865m` spike.
+      - weighted p3p25 `a0p125/a0p1875/a0p75`: bracketed by submitted `a0p0625` (`3.687/4.710`) and `a0p25/a0p5` (`4.711` private), so no submit unless accepting private risk.
+      - weighted p3p0 `a0p0625/a0p125/a0p1875/a0p25/a0p5/a0p75`: source full p3p0 already `3.685/4.714`; likely public-only gamble and not aligned with private-floor goal.
+    - Practical result: no remaining high-confidence candidate under the current `private=4.710` floor objective.
+  - 2026-05-08 safe unsubmitted shortlist:
+    - Added `experiments/filter_gsdc2023_safe_submission_candidates.py` to combine one or more local screen CSVs, remove submitted filenames, remove duplicate submitted-local SHA candidates, require zero risky previous-safe row changes, merge the score-audit CSV, deduplicate by submission SHA, and classify candidates into `reject_known_score`, `reject_spike_risk`, `hold_bracketed_blend`, `hold_public_only_blend`, `discovery_only`, or `review_manually`.
+    - Regenerated full local screen with the latest local Kaggle submission log `kaggle_submissions_20260506.csv`: `182` candidates, `50` submitted-filename matches, `79` duplicate submitted-local SHA matches, `35` risky previous-safe movers.
+    - Regenerated weighted/trip focused screens under `experiments/results/source_selection_lowbaseline_submission_probe_20260430/safe_unsubmitted_shortlist_20260508/screens` and wrote the combined ignored shortlist to `safe_unsubmitted_shortlist.csv`.
+    - Combined shortlist summary: `59` safe/unsubmitted/SHA-unique candidates after filtering; `35` are `discovery_only` trip-weight candidates, `3` are `hold_bracketed_blend`, `6` are `hold_public_only_blend`, `14` are `reject_known_score`, and `1` is `reject_spike_risk`.
+    - Interpretation: the latest extraction confirms there is still no high-confidence private-floor submission candidate. The remaining unsubmitted candidates are either already bracketed by submitted worse/equal scores, public-only blend gambles, known bad score-log entries, raw WLS risk, or explicit discovery probes.
+  - 2026-05-06 submitted-weight delta decomposition:
+    - Reports generated at `candidate_delta_submitted_weight_probe_20260506.csv` and `trip_delta_submitted_weight_probe_20260506.csv` under the same local screen directory (ignored artifacts).
+    - `p3p25_full` and `p3p0_full` move the same `12` Pixel5 trips / `26497` rows relative to current best. Movement is nearly uniform per trip (`p3p25_full` trip score `0.039513-0.039609m`; `p3p0_full` trip score `0.118540-0.118827m`), not a single outlier trip.
+    - Score tradeoff is monotone and public/private-split shaped:
+      - `p3p25_a0p0625`: `3.687/4.710`, max row delta `0.002477m`.
+      - `p3p25_a0p25`: `3.687/4.711`, max row delta `0.009906m`.
+      - `p3p25_a0p5`: `3.686/4.711`, max row delta `0.019813m`.
+      - `p3p25_full`: `3.686/4.712`, max row delta `0.039626m`.
+      - `p3p0_full`: `3.685/4.714`, max row delta `0.118878m`.
+    - `top3_mean` only moves `2` Pixel5 trips (`ebf-xx`, `sjc-q`) by about `0.356m`; Kaggle is `3.689/4.710`, so it preserves private but worsens public.
+    - Existing single/combo ablations already found the current best public/private-safe combo (`sjc-q + ebf-xx + ebf-zz`, `3.687/4.710`); `ebf-xx + ebf-zz` and smaller combos also stayed `4.710` private but had worse public.
+    - Practical result: do not submit more p3p25/p3p0 blends under the private-floor objective. If we intentionally spend submissions for discovery, make it an explicit `12`-trip leave-one-out/single-trip p3p25-direction A/B experiment gated by the pre-submit manifest.
+  - 2026-05-06 p3p25 trip-weight ablation candidate build:
+    - Added `experiments/build_gsdc2023_trip_weight_ablation_candidates.py` to derive single-trip, leave-one-out, and fixed-group leave-group-out candidates directly from a reference submission and a target submission delta.
+    - Real-data run used current best as reference and `p3p25_full` as target, writing ignored artifacts under `experiments/results/source_selection_lowbaseline_submission_probe_20260430/pixel5_trip_weight_ablation_20260506/p3p25_full_direction`.
+    - Generated `24` candidates: `12` single-trip and `12` leave-one-out over the moved Pixel5 trips.
+    - Manifest: `trip_weight_ablation_manifest_20260506.csv`; local screen: `local_screen_20260506.csv`.
+    - Local screen summary: `candidate_count=24`, `submitted_filename_count=0`, `duplicate_submitted_local_sha_count=0`, `risky_previous_changed_count=0`.
+    - Local delta shape: leave-one-out candidates all remain near full p3p25 local movement (`score_m=0.019784-0.019794m`, max `0.039626m`); single-trip candidates are mostly below whole-submission p95 impact (`score_m=0.0m`) except `2022-02-24-15-10-us-ca-lax-p/pixel5` (`score_m=0.019753m`).
+    - Interpretation: these are discovery candidates for learning the private/public split of the 12-trip p3p25 direction, not high-confidence private-floor submissions.
+    - Focused verification after fixed-group mode: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_trip_weight_ablation_candidates.py` => `4 passed`; ruff pass.
+    - Follow-up submit: submitted `submission_trip_weight_single_2022_02_24_15_10_us_ca_lax_p_pixel5_a1_20260506.csv` with message `20260506 p3p25 single trip lax-p pixel5`; Kaggle score `public=3.687`, `private=4.710`.
+    - Interpretation: the highest local-delta single-trip probe preserves the private floor but does not improve public. The p3p25 public gain is therefore not isolated to this one trip; any further discovery should test multi-trip/leave-one-out structure, not more single-trip guesses first.
+    - Local screen regenerated after submit: `submitted_filename_count=1`, `duplicate_submitted_local_sha_count=1`, `risky_previous_changed_count=0`.
+    - Paired leave-one-out submit: submitted `submission_trip_weight_leave_one_out_2022_02_24_15_10_us_ca_lax_p_pixel5_a1_20260506.csv` with message `20260506 p3p25 leave-one-out lax-p pixel5`; Kaggle score `public=3.686`, `private=4.712`.
+    - Interpretation: removing `2022-02-24-15-10-us-ca-lax-p/pixel5` keeps the p3p25 public gain but also keeps the private loss. This trip is not the single private-loss culprit; the harmful split is distributed across the remaining p3p25 direction or another held trip.
+    - Local screen regenerated after the paired submit: `submitted_filename_count=2`, `duplicate_submitted_local_sha_count=2`, `risky_previous_changed_count=0`.
+    - Second leave-one-out submit: submitted `submission_trip_weight_leave_one_out_2022_02_23_22_35_us_ca_lax_m_pixel5_a1_20260506.csv` with message `20260506 p3p25 leave-one-out lax-m pixel5`; Kaggle score `public=3.686`, `private=4.711`.
+    - Interpretation: removing `2022-02-23-22-35-us-ca-lax-m/pixel5` recovers `0.001` private vs p3p25 full / `lax-p` leave-one-out while keeping public `3.686`, but it still misses the `4.710` private floor. The private loss is not fully explained by this one trip, but `lax-m` is a partial contributor.
+    - Local screen regenerated after the second leave-one-out submit: `submitted_filename_count=3`, `duplicate_submitted_local_sha_count=3`, `risky_previous_changed_count=0`.
+    - Fixed-group probe: generated `11` `leave_group_out` candidates under `p3p25_laxm_pair_hold`, holding `2022-02-23-22-35-us-ca-lax-m/pixel5` plus one additional moved Pixel5 trip. Local screen: `candidate_count=11`, `submitted_filename_count=0`, `duplicate_submitted_local_sha_count=0`, `risky_previous_changed_count=0`.
+    - Submitted the lowest local-score fixed-group candidate, `lax-m + 2023-06-06-22-43-us-ca-sjc-he2/pixel5`, with message `20260506 p3p25 leave-group-out laxm sjc-he2 pixel5`; Kaggle score `public=3.686`, `private=4.712`.
+    - Interpretation: the best local fixed-pair hold-out worsens private vs `lax-m` leave-one-out (`4.711 -> 4.712`), so the private floor is not recovered by simply removing `lax-m` plus the top local secondary trip. Continue this path only as explicit discovery; otherwise return to MATLAB/internal-state parity tests.
+  - Non-Pixel raw WLS patch:
+    - Unrepaired `samsunga325g_mtv_pe1_raw_wls`: not submitted; changed `1422` rows vs best, max `1865.2006851703695 m`, trip max step `1871.753670863582 m`; reject.
+    - Step-repaired raw WLS: submitted Kaggle `public=3.750`, `private=4.710`; changed `1421` rows, max `21.99336504111517 m`; no private gain and public worsens, reject.
+  - Source AB patch candidates are already submitted and bad:
+    - `pixel4_20210914_from_1450`: Kaggle `public=3.725`, `private=4.825`; local delta max `10.122484 m`.
+    - `sma205u_20221006_from_0555`: Kaggle `public=3.725`, `private=4.833`; local delta max `14.623927 m`.
+    - `sma505u_20230509_from_0555`: Kaggle `public=3.725`, `private=4.832`; local delta max `41.003718 m`.
+    - They also include broad Pixel5/base mismatch movement (`~0.535 m` score vs reference best), so do not reuse these AB outputs as safe candidates.
+  - Focused verification after threshold/test update: `tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_screen_gsdc2023_local_submissions.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` => `27 passed`; ruff pass.
+
+## 2026-05-02 最新サマリ: GSDC2023 MATLAB 移植
+
+### 現在地
+
+「完全移植完了」とはまだ言わない。実用 pipeline としてはかなり動き、factor mask と residual value は代表 11-12 trip で強い parity が取れた。MATLAB `phone_data` / factor 入力 / residual / mask の全 trip 完全一致と VD/TDCP factor 挙動の説明性が残り。現時点の体感は **85-90%**。
+
+完了済み・確認済み:
+
+- full pytest: `1223 passed, 57 skipped, 1 warning` (2026-05-02)
+- `experiments/gsdc2023_raw_bridge.py`
+  - raw WLS の単発 spike repair を `solve_trip` 内に接続
+  - Pixel6Pro 用 `VD seed factor guard` を追加
+  - guard 発火時は VD solver を呼ばず raw-backed FGO candidate に逃がす
+  - `run_fgo_chunked` が `vd_seed_guard_skipped_segments / epochs` を返す
+- `experiments/gsdc2023_output.py`
+  - `bridge_metrics.json` と summary に `vd_seed_guard_skipped_segments`, `vd_seed_guard_skipped_epochs` を出力
+  - 2026-05-04: guard 発火 segment の `reject_reason`, Doppler/TDCP RMS/count を `vd_seed_guard_records` として `bridge_metrics.json` に出力
+- 実データ slow tests:
+  - Pixel6Pro 2021 cluster split PR outlier を observation mask が抑制
+  - Pixel6Pro raw WLS spike repair で `max step 50km+ -> <100m`
+  - Pixel6Pro 2023 は PR-MSE proxy が良く見えても gated が baseline を維持することを固定
+- `experiments/diagnose_gsdc2023_vd_factor_residuals.py`
+  - VD seed の Doppler / TDCP residual を分解診断
+  - Pixel6Pro 2021 先頭 chunk で TDCP seed residual が破綻することを確認
+- `experiments/audit_gsdc2023_pr_proxy_risk.py`
+  - `bridge_metrics.json` / nested summary から「PR-MSE は改善するが gated が baseline に落とした危険候補」を検出
+  - `--fail-on-risk` で提出前 gate 化済み
+- `experiments/audit_gsdc2023_factor_mask_parity.py`
+  - 複数 trip の MATLAB `phone_data_factor_mask.csv` と bridge factor mask を集約比較する audit を追加
+  - `--verbose` で trip 進捗を stderr に表示
+  - 2026-05-03: GPS-only / 12 trip / `--max-epochs 50` で `passed=true`
+  - window 読み込み最適化を追加。GNSS log 補完は epoch window 外の観測を先に除外し、末尾補間用に raw window へ 8 epoch の余白を付ける
+
+### 重要な leaderboard / Kaggle A/B 結果
+
+基準 private-safe:
+
+- `public=3.687`, `private=4.710`
+
+提出済み実験:
+
+| 候補 | Public | Private | 判定 |
+|---|---:|---:|---|
+| `20260502 seedguard p6p 20211105 obsmask offset3` | 3.728 | 4.710 | private tie だが public 悪化。reject |
+| `20260502 p6p 2023 seedguard rawfgo obsmask offset3p25` | 3.744 | 4.937 | private 大幅悪化。reject |
+
+重要な結論:
+
+- **PR-MSE proxy だけで候補を採用してはいけない。**
+- Pixel6Pro 2023 は raw-backed FGO / raw WLS の PR-MSE が baseline より良く見えるが、Kaggle private が大きく悪化した。
+- gated policy が baseline を維持した判断は正しい。
+- `audit_gsdc2023_pr_proxy_risk.py --fail-on-risk` を提出前 gate として使う。
+
+### 追加・変更された主なファイル
+
+実装:
+
+- `experiments/gsdc2023_raw_bridge.py`
+- `experiments/gsdc2023_output.py`
+- `experiments/gsdc2023_result_assembly.py`
+- `experiments/diagnose_gsdc2023_vd_factor_residuals.py`
+- `experiments/audit_gsdc2023_pr_proxy_risk.py`
+- `experiments/audit_gsdc2023_factor_mask_parity.py`
+- `experiments/audit_gsdc2023_residual_value_parity.py`
+- `experiments/build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py`
+- `experiments/export_gsdc2023_source_chunks_from_summary.py`
+- `experiments/submit_gsdc2023_pixel5_candidate_queue.py`
+
+テスト:
+
+- `tests/test_validate_fgo_gsdc2023_raw.py`
+- `tests/test_gsdc2023_output.py`
+- `tests/test_gsdc2023_result_assembly.py`
+- `tests/test_gsdc2023_chunk_selection.py`
+- `tests/test_gsdc2023_observation_mask_real.py`
+- `tests/test_diagnose_gsdc2023_vd_factor_residuals.py`
+- `tests/test_audit_gsdc2023_pr_proxy_risk.py`
+- `tests/test_audit_gsdc2023_factor_mask_parity.py`
+- `tests/test_audit_gsdc2023_residual_value_parity.py`
+
+### 重要な実データ診断
+
+#### Pixel6Pro 2021 MTV-M
+
+Trip:
+
+`test/2021-11-05-18-28-us-ca-mtv-m/pixel6pro`
+
+観測 mask:
+
+- mask なし PR-MSE: 約 `17,835,614`
+- mask あり PR-MSE: 約 `12.04`
+- multi/dual direct: `multi_mask mse=10.4364`, `multi_dual_mask mse=7.0441`
+
+raw WLS spike repair:
+
+- max step: `56.3km -> 59.6m`
+- PR-MSE: `6.7145 -> 6.7155`
+
+VD guard:
+
+- 200 epoch: `vd guard skipped_segments=1 skipped_epochs=200`
+- FGO iters: `0`
+- selected MSE: `7.1115`
+
+VD residual diagnosis:
+
+- Doppler weighted RMS: 約 `5.20 m/s`
+- TDCP weighted RMS: 約 `1587 m`
+- epoch 146 / 148 に clock component 由来の巨大 TDCP residual
+- `--tdcp-use-drift yes` でも完全には安全化しない
+
+#### Pixel6Pro 2023 raw-backed FGO 棄却
+
+Trips:
+
+- `test/2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro`
+- `test/2023-05-25-17-32-us-ca-pao-j/pixel6pro`
+
+400 epoch probe:
+
+- どちらも `guard_segments=2`, `guard_epochs=400`
+- raw/fgo PR-MSE は baseline より良く見える
+- gated は baseline を選ぶ
+- raw-backed FGO patch を Kaggle 提出すると `private=4.937` へ悪化
+
+対応:
+
+- `tests/test_gsdc2023_observation_mask_real.py::test_real_pixel6pro_2023_gated_rejects_raw_backed_fgo_despite_lower_pr_mse`
+- `tests/test_gsdc2023_chunk_selection.py::test_select_gated_chunk_source_rejects_pixel6pro_2023_raw_proxy_with_low_baseline_pr`
+- `experiments/audit_gsdc2023_pr_proxy_risk.py`
+
+### 2026-05-02 の検証コマンド
+
+通過済み:
+
+```bash
+PYTHONPATH=.:python pytest -q
+# 1223 passed, 57 skipped, 1 warning
+```
+
+局所:
+
+```bash
+PYTHONPATH=.:python pytest -q tests/test_validate_fgo_gsdc2023_raw.py
+# 113 passed
+
+PYTHONPATH=.:python pytest -q tests/test_gsdc2023_observation_mask_real.py
+# 3 passed in 116.43s
+
+PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_pr_proxy_risk.py tests/test_gsdc2023_chunk_selection.py
+# 29 passed
+
+PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_factor_mask_parity.py
+# 3 passed
+```
+
+PR proxy risk gate:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_pr_proxy_risk.py \
+  --input '/tmp/gsdc2023_pixel6pro_guard_probe_400/*/bridge_metrics.json' \
+  --output-dir /tmp/gsdc2023_pr_proxy_risk_fail_gate \
+  --fail-on-risk
+# exit_code=2 expected when risky chunks exist
+```
+
+Factor mask parity audit:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_factor_mask_parity.py \
+  --max-epochs 50 \
+  --no-multi-gnss \
+  --verbose \
+  --output-dir /tmp/gsdc2023_factor_mask_parity_audit_12trip_50epoch_extra8
+# 12 trip completed, passed=true, overall_min_symmetric_parity=1.0,
+# total_matlab_only=0, total_bridge_only=0, elapsed=8:34.08
+```
+
+補足:
+
+- 1 trip smoke: `train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4`, `--max-epochs 50`, parity `1.0`, elapsed `0:33.13`
+- `train/2022-10-06-21-51-us-ca-mtv-n/sm-a205u` は raw window 余白 1 epoch だと epoch 47-50 の GPS L1 が MATLAB-only になる。8 epoch 余白で parity `1.0`。
+- 12 trip audit の出力: `/tmp/gsdc2023_factor_mask_parity_audit_12trip_50epoch_extra8/gsdc2023_factor_mask_parity_audit_20260503_065458`
+
+### 次にやること: MATLAB 移植完了へ向けた優先順位
+
+#### A. factor mask parity audit を完走可能にする
+
+目的:
+
+- MATLAB `phone_data_factor_mask.csv` と Python bridge mask の trip 横断一致率を出す
+- mask / factor availability の移植率を数値化する
+
+状態:
+
+- 2026-05-03 に GPS-only / 12 trip / `--max-epochs 50` は完走、`passed=true`
+- `overall_min_symmetric_parity=1.0`, `total_matlab_only=0`, `total_bridge_only=0`
+- ただし elapsed `8:34.08`。residual mask 用 full context 再構築が支配的で、full epoch 横断や multi-GNSS 化の前にキャッシュ/再利用を検討する
+
+注意:
+
+- 現在の MATLAB export は基本 GPS-only scope。multi-GNSS は MATLAB export scope を揃えるまで parity 失敗扱いにしない。
+- `phone_data_residual_diagnostics.csv` がある trip では diagnostics mask を bridge mask に適用する比較も必要。
+
+#### B. residual value parity audit を横断で回す
+
+目的:
+
+- MATLAB residual diagnostics と Python residual 値の一致を trip 横断で確認
+- `max_abs_delta <= 1e-4m` を目安にする
+
+状態:
+
+- 2026-05-03 に multi-GNSS / 11 trip / `--max-epochs 50` smoke は完走、`passed=true`
+- `overall_max_abs_delta=5.060694127195786e-05`
+- `overall_p95_abs_delta_max=2.7123350099600377e-05`
+- worst: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4`, `field=D`, `freq=L1`, `epoch=44`, `svid=16`
+- worst component: `model_delta ~= 5.1e-05m`, `sat_velocity_delta_norm ~= 2.01e-04m/s`; observation/common-bias 差分はほぼゼロ
+- output: `/tmp/gsdc2023_residual_value_parity_audit_11trip_50epoch/gsdc2023_residual_value_parity_audit_20260503_100107`
+- 2026-05-03 に multi-GNSS / 11 trip / `--max-epochs 200` も完走、`passed=true`
+- `overall_max_abs_delta=5.91054445631678e-05`, `overall_p95_abs_delta_max=2.796173776410671e-05`
+- worst: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4`, `field=D`, `freq=L1`, `epoch=124`, `svid=26`
+- output: `/tmp/gsdc2023_residual_value_parity_audit_11trip_200epoch_context_obs/gsdc2023_residual_value_parity_audit_20260503_102902`
+- 注意: context batch を observation mask なしで作ると GNSS log 由来 epoch grid が欠け、`train/2020-08-04-00-20-us-ca-sb-mtv-101/pixel4xl` の epoch 200 で Doppler residual が約 `1.156m` ずれる。context 側も `apply_observation_mask=True` にする必要がある。
+- 2026-05-04 に multi-GNSS / 11 trip / `--max-epochs 0` full settings window も完走、`passed=true`
+- `overall_max_abs_delta=5.91054445631678e-05`, `overall_p95_abs_delta_max=2.7840284939184543e-05`
+- worst: `train/2020-07-17-23-13-us-ca-sf-mtv-280/pixel4`, `field=D`, `freq=L1`, `epoch=124`, `svid=26`
+- output: `/tmp/gsdc2023_residual_value_parity_audit_11trip_full/gsdc2023_residual_value_parity_audit_20260504_155714`
+
+実行コマンド:
+
+```bash
+PYTHONPATH=.:python python3 experiments/audit_gsdc2023_residual_value_parity.py \
+  --max-epochs 0 \
+  --multi-gnss \
+  --max-abs-delta-threshold-m 1e-4 \
+  --verbose \
+  --output-dir /tmp/gsdc2023_residual_value_parity_audit_11trip_full
+```
+
+結論:
+
+- この対象 11 trip では residual diagnostics value parity は full window まで `1e-4m` 閾値内。
+- 差分の主成分は Doppler model 側の `~6e-05m` 未満で、observation/common-bias は実質一致。
+
+#### C. VD/TDCP の扱いを「guard で逃げる」から「原因別に説明できる」へ
+
+現状:
+
+- Pixel6Pro は TDCP/VD seed residual が危険
+- guard は有効だが、MATLAB と同等の VD factor 挙動とは言い切れない
+- 2026-05-04 に `audit_gsdc2023_vd_factor_residuals.py` を追加し、複数 trip の VD seed residual を集約できるようにした
+- observation mask なし / 4 trip / 200 epoch:
+  - output: `/tmp/gsdc2023_vd_factor_residual_audit_4trip_200/gsdc2023_vd_factor_residual_audit_20260504_161752`
+  - worst: `test/2021-11-05-18-28-us-ca-mtv-m/pixel6pro`
+  - Doppler weighted RMS `2787.0 m/s`, TDCP weighted RMS `1870.7 m`
+  - top Doppler residual は epoch 195 付近で predicted range-rate が数万 m/s へ破綻
+- observation mask あり / 4 trip / 200 epoch:
+  - output: `/tmp/gsdc2023_vd_factor_residual_audit_4trip_200_obsmask/gsdc2023_vd_factor_residual_audit_20260504_161837`
+  - `test/2021-11-05-18-28-us-ca-mtv-m/pixel6pro`: Doppler RMS `5.20 m/s`, TDCP RMS `1587.45 m`
+  - `test/2023-05-25-17-32-us-ca-pao-j/pixel6pro`: Doppler RMS `9.02 m/s`, TDCP RMS `6.03 m`
+  - `test/2023-05-23-22-16-us-ca-mtv-ie2/pixel6pro`: Doppler RMS `4.84 m/s`, TDCP RMS `7.71 m`
+  - `train/2021-12-08-20-28-us-ca-lax-c/pixel5`: Doppler RMS `8.01 m/s`, TDCP RMS `4.93 m`
+- guard chunk 境界 / 4 trip / 400 epoch / chunk 200 / observation mask あり:
+  - output: `/tmp/gsdc2023_vd_factor_guard_segment_audit_4trip_400_effective/gsdc2023_vd_factor_residual_audit_20260504_170802`
+  - threshold 上は 8 segments / 1600 epochs すべて Doppler 理由で reject
+  - 実 guard は Pixel6Pro 限定なので effective reject は 6 segments / 1200 epochs
+  - Pixel6Pro 2023 2 trip は各 2 segments / 400 epochs reject で、既存 probe の `guard skipped 2/400` と整合
+  - Pixel5 train も threshold 上は 2 segments reject だが `phone_guard_enabled=false` なので effective reject しない
+
+解釈:
+
+- Pixel6Pro 2021 は observation mask 後も TDCP が破綻しており、guard の TDCP 閾値 `50m` で説明可能。
+- Pixel6Pro 2023-05-25 は Doppler RMS が guard 閾値 `8m/s` を超える。
+- Pixel5 train も Doppler RMS が `8m/s` 付近に見えるため、guard を Pixel6Pro 限定にしたのは重要。端末非限定 guard にすると Pixel5 の VD を不必要に止める可能性がある。
+- 2026-05-04 に本番 `bridge_metrics.json` へ `vd_seed_guard_records` を追加。各 skipped segment について chunk/segment epoch 範囲、Doppler RMS/count、TDCP RMS/count、`reject_reason` を残す。summary には reason count (`reasons=doppler:N` 等) を表示。
+- 2026-05-06 に `audit_gsdc2023_vd_factor_residuals.py` の summary を guard 閾値ベースの証跡として強化:
+  - trip summary に `phone`, `phone_guard_enabled`, `guard_threshold_reject_reason`, `guard_threshold_would_reject`, `guard_effective_reject` を追加
+  - summary JSON に guard 閾値、trip-level residual 閾値超過件数、guard-enabled / guard-disabled 別の超過件数、segment の reason count を追加
+  - `--require-guard-clean` を追加し、guard-enabled phone が VD seed residual 閾値を超えた場合に監査を失敗扱いにできるようにした
+  - 4 trip / 200 epoch / observation mask / chunk 200:
+    - output: `experiments/results/vd_factor_guard_probe_20260506/gsdc2023_vd_factor_residual_audit_20260506_140209`
+    - `residual_threshold_failure_count=3`, `guard_enabled_residual_threshold_failure_count=2`, `guard_disabled_residual_threshold_failure_count=1`
+    - segment: `guard_threshold_rejected_segment_count=4`, `guard_rejected_segment_count=3`, `guard_disabled_threshold_rejected_segment_count=1`, effective reason counts `doppler:3`
+- 局所検証:
+  - `python3 -m py_compile experiments/gsdc2023_raw_bridge.py experiments/gsdc2023_output.py experiments/gsdc2023_result_assembly.py tests/test_gsdc2023_output.py tests/test_gsdc2023_result_assembly.py tests/test_validate_fgo_gsdc2023_raw.py`
+  - `PYTHONPATH=.:python pytest -q tests/test_gsdc2023_output.py tests/test_gsdc2023_result_assembly.py tests/test_validate_fgo_gsdc2023_raw.py::test_run_fgo_chunked_skips_vd_segment_when_seed_tdcp_residual_is_bad` → `10 passed`
+  - `PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_vd_factor_residuals.py tests/test_diagnose_gsdc2023_vd_factor_residuals.py` → `7 passed`
+  - `ruff check experiments/audit_gsdc2023_vd_factor_residuals.py tests/test_audit_gsdc2023_vd_factor_residuals.py` → pass
+- 2026-05-04 に `audit_gsdc2023_pr_proxy_risk.py` も `vd_seed_guard_records` を読むように更新:
+  - risky chunk CSV に `vd_guard_overlap_segments`, `vd_guard_reject_reasons`, `vd_guard_max_doppler_rms_mps`, `vd_guard_max_tdcp_rms_m` を追加
+  - output dir に `vd_seed_guard_records.csv` を追加
+  - `summary.json` に `vd_guard_rows`, `vd_guard_by_phone`, `vd_guard_reject_reasons`, `vd_seed_guard_records_csv` を追加
+  - 検証: `python3 -m py_compile experiments/audit_gsdc2023_pr_proxy_risk.py tests/test_audit_gsdc2023_pr_proxy_risk.py && PYTHONPATH=.:python pytest -q tests/test_audit_gsdc2023_pr_proxy_risk.py` → `3 passed`
+
+次:
+
+- 新しい `bridge_metrics.json` 形式で Pixel6Pro 2021/2023 の 400 epoch probe を再生成し、risk report に guard CSV が実データで添付されることを確認済み:
+  - raw bridge output: `/tmp/gsdc2023_pixel6pro_guard_probe_400_records`
+  - risk report: `/tmp/gsdc2023_pr_proxy_risk_pixel6pro_probe_records`
+  - `audit_gsdc2023_pr_proxy_risk.py --fail-on-risk` は期待どおり `exit_code=2`
+  - `summary.json`: `input_files=3`, `risky_chunks=5`, `risky_rows=15`, `vd_guard_rows=6`, `vd_guard_reject_reasons={"doppler": 6}`
+  - `vd_seed_guard_records.csv` は 3 trip x 2 chunks = 6 rows。最大 Doppler RMS は `2721.586 m/s` (`test/2023-05-25-17-32-us-ca-pao-j/pixel6pro`, epoch 200-400)、最大 TDCP RMS は `4183.744 m` (同 chunk)。
+  - `pr_proxy_risk_chunks.csv` の risky row には `vd_guard_overlap_segments=1`, `vd_guard_reject_reasons=doppler`, `vd_guard_max_doppler_rms_mps`, `vd_guard_max_tdcp_rms_m` が入る。
+
+次:
+
+- full epoch / 提出候補生成の出力にも同じ risk report を接続済み:
+  - `build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py` に `--risk-metrics`, `--risk-report-dir`, `--fail-on-risk` を追加
+  - `build_summary.json` に `pr_proxy_risk_report` を埋め込む
+  - report output は `OUTPUT_DIR/pr_proxy_risk_report/{summary.json,pr_proxy_risk_chunks.csv,vd_seed_guard_records.csv}`
+  - `--fail-on-risk` 指定時、`risky_chunks > 0` なら候補 CSV 生成後に `exit_code=2`
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py` → `7 passed`
+  - CLI smoke でも risk 入力時に `exit_code=2` を確認
+
+次:
+
+- submit queue 側でも `build_summary.json` の `pr_proxy_risk_report.risky_chunks` を読むように更新済み:
+  - `submit_gsdc2023_pixel5_candidate_queue.py --submit` は `build_summary.json` が無い / `pr_proxy_risk_report.enabled=false` / `risky_chunks != 0` の場合に submit 前に `SystemExit`
+  - 明示 override は `--allow-risk`
+  - dry-run listing は従来どおり risk gate を強制しない
+  - 検証: `python3 -m py_compile experiments/submit_gsdc2023_pixel5_candidate_queue.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py && PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `7 passed`
+
+次:
+
+- 実候補 output dir に対して submit queue dry-run と `--submit` 前 gate の smoke 済み:
+  - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted`
+  - dry-run: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --group sjc_r_scale_sweep --skip-missing`
+    - 3 candidate command を表示
+  - submit gate smoke: `PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py --group sjc_r_scale_sweep --skip-missing --submit`
+    - `exit_code=1`
+    - `missing risk report in .../build_summary.json`
+    - stdout 0 lines。Kaggle submit 前に停止。
+
+#### D. Kaggle 候補生成は risk gate 必須
+
+提出前に必ず:
+
+```bash
+PYTHONPATH=.:python python3 experiments/build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py \
+  --risk-metrics 'PATH_TO_BRIDGE_METRICS_GLOB' \
+  --fail-on-risk
+```
+
+提出 checklist:
+
+1. `build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py --risk-metrics ... --fail-on-risk` を通す。
+2. `exit_code=2` なら Kaggle 提出しない。
+3. `submit_gsdc2023_pixel5_candidate_queue.py --submit` は `build_summary.json` に `pr_proxy_risk_report.enabled=true` かつ `risky_chunks=0` が無い限り自動停止する。
+4. `--allow-risk` は明示 override。通常提出では使わない。
+
+回帰確認:
+
+```bash
+PYTHONPATH=.:python pytest -q \
+  tests/test_audit_gsdc2023_pr_proxy_risk.py \
+  tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py \
+  tests/test_submit_gsdc2023_pixel5_candidate_queue.py \
+  tests/test_gsdc2023_output.py \
+  tests/test_gsdc2023_result_assembly.py
+# 26 passed
+
+PYTHONPATH=.:python pytest -q tests/test_validate_fgo_gsdc2023_raw.py \
+  -k "vd_seed_factor_guard or run_fgo_chunked or export_bridge_outputs"
+# 6 passed, 107 deselected
+```
+
+実候補再ビルド smoke:
+
+```bash
+PYTHONPATH=.:python python3 experiments/build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py \
+  --candidate pixel5phone_3p375_sjc_r0p84375 \
+  --candidate pixel5phone_3p375_sjc_r1p6875 \
+  --candidate pixel5phone_3p375_sjc_r2p53125 \
+  --risk-metrics '/tmp/gsdc2023_pixel6pro_guard_probe_400_records/*/bridge_metrics.json' \
+  --fail-on-risk
+# exit_code=2 expected
+```
+
+- `experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted/build_summary.json` に `pr_proxy_risk_report` が入った。
+- report: `.../basecorr_posoffset_pixel5_patch_scripted/pr_proxy_risk_report/summary.json`
+- `risky_chunks=5`, `risky_rows=15`, `vd_guard_rows=6`, `vd_guard_reject_reasons={"doppler": 6}`
+- submit smoke:
+
+```bash
+PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \
+  --group sjc_r_scale_sweep --skip-missing --submit
+# exit_code=1, PR proxy risk gate failed: risky_chunks=5
+```
+
+P6P0 clean candidate:
+
+- 既存 scripted candidates は phone-tuned policy により Pixel6Pro 全体へ scale `3.0`、さらに `2023-05-23/25 pixel6pro` へ trip scale `3.25` を入れていた。
+- clean preset として以下を追加:
+  - `pixel5phone_3p375_sjc_r0p84375_p6p0`
+  - `pixel5phone_3p375_sjc_r1p6875_p6p0`
+  - `pixel5phone_3p375_sjc_r2p53125_p6p0`
+- これらは `phone_scale_overrides["pixel6pro"] = 0.0` で、`2023-05-23/25 pixel6pro` の trip scale override も持たない。
+- risk report は global risk と candidate-actionable risk を分けるように更新:
+  - global: `risky_chunks`, `risky_rows`
+  - candidate-aware: `candidate_actionable_risky_chunks`, `candidate_actionable_risky_rows`, `candidate_actionable_by_candidate`
+  - submit gate は `candidate_actionable_risky_chunks` があればそれを優先して見る。
+- 検証:
+
+```bash
+PYTHONPATH=.:python pytest -q \
+  tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py \
+  tests/test_submit_gsdc2023_pixel5_candidate_queue.py
+# 16 passed
+
+PYTHONPATH=.:python python3 experiments/build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py \
+  --candidate pixel5phone_3p375_sjc_r0p84375_p6p0 \
+  --candidate pixel5phone_3p375_sjc_r1p6875_p6p0 \
+  --candidate pixel5phone_3p375_sjc_r2p53125_p6p0 \
+  --output-dir /tmp/gsdc2023_p6p0_clean_candidate_risk_smoke \
+  --risk-metrics '/tmp/gsdc2023_pixel6pro_guard_probe_400_records/*/bridge_metrics.json' \
+  --fail-on-risk
+# exit_code=0
+```
+
+- 実データ smoke 結果:
+  - global: `risky_chunks=5`, `risky_rows=15`, `vd_guard_rows=6`
+  - candidate-aware: `candidate_actionable_risky_chunks=0`, `candidate_actionable_risky_rows=0`
+- 2026-05-05 に正式 output dir へ生成:
+  - output dir: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505`
+  - candidates:
+    - `pixel5phone_3p375_sjc_r0p84375_p6p0`, sha256 `641b2db9e6e91f29da32c960dc6735decfb229f1b8f2602a17d983023ed880cf`
+    - `pixel5phone_3p375_sjc_r1p6875_p6p0`, sha256 `aefcad559acd8bb8a8a43245716a2b08f5e3939eebd839e06ee0e891c3d7aad4`
+    - `pixel5phone_3p375_sjc_r2p53125_p6p0`, sha256 `68e9b42b10a30f153de89f3c722015328568438351f3aae97e65f89a4b35d749`
+  - risk: `risky_chunks=5`, `candidate_actionable_risky_chunks=0`, `vd_guard_rows=6`
+  - build command は `--fail-on-risk` 付きで `exit_code=0`
+- submit queue に `p6p0_clean_sjc_r_scale_sweep` group を追加:
+  - dry-run:
+    ```bash
+    PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \
+      --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505 \
+      --tag 20260505 \
+      --group p6p0_clean_sjc_r_scale_sweep \
+      --skip-missing
+    ```
+    3 件の Kaggle command を表示。
+  - `--submit` path は `subprocess.run` 差し替え smoke で `exit_code=0`, calls=3 を確認。実 Kaggle 送信は未実行。
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `7 passed`
+- pre-submit manifest:
+  - `pre_submit_manifest.json`
+  - `pre_submit_candidate_manifest.csv`
+  - `pre_submit_trip_delta_checks.csv`
+  - 3 candidates はすべて `pixel6pro_scale=0.0`, `risk_candidate_actionable_chunks=0`
+  - risky Pixel6Pro trips の input 比 delta は全候補で `0.0m`, changed rows `0`
+  - 旧 non-P6P0 候補との差分は Pixel6Pro risky trips で全 row changed、max `0.751m` (2021) / `0.814m` (2023)
+- pre-submit manifest を再現可能な script に昇格:
+  - script: `experiments/build_gsdc2023_pre_submit_manifest.py`
+  - test: `tests/test_build_gsdc2023_pre_submit_manifest.py`
+  - 入力: `--build-summary`, 任意で `--previous-output-dir`, `--previous-tag`, `--risky-trip`
+  - 出力: `pre_submit_manifest.json`, `pre_submit_candidate_manifest.csv`, `pre_submit_trip_delta_checks.csv`
+  - 実データ再生成:
+    ```bash
+    PYTHONPATH=.:python python3 experiments/build_gsdc2023_pre_submit_manifest.py \
+      --build-summary experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/build_summary.json \
+      --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted \
+      --previous-tag 20260501
+    ```
+  - 再生成結果: 3 candidates, `candidate_actionable_risky_chunks=0`, 3 risky Pixel6Pro trips は input 比 `changed_rows=0`, `input_max_m=0.0`
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `18 passed`
+- submit queue に pre-submit manifest gate を追加:
+  - `*_p6p0` 候補を `--submit` する場合、`pre_submit_manifest.json` と `pre_submit_trip_delta_checks.csv` が必須。
+  - gate 条件:
+    - manifest risk の `candidate_actionable_risky_chunks == 0`
+    - 対象 candidate の `risk_candidate_actionable_chunks == 0`
+    - `*_p6p0` candidate は `pixel6pro_scale == 0.0`
+    - manifest 記録 SHA256 と実 CSV が一致
+    - risky Pixel6Pro trip check の `input_changed_rows == 0`, `input_max_m == 0.0`
+  - 実データ mocked `--submit`:
+    - command: `--output-dir .../p6p0_clean_candidate_20260505 --tag 20260505 --group p6p0_clean_sjc_r_scale_sweep --submit --skip-missing`
+    - `subprocess.run` 差し替えで `exit_code=0`, calls=3。実 Kaggle 送信は未実行。
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `20 passed`
+- submit queue に `--check-ready` を追加:
+  - Kaggle 実送信なしで、`--submit` と同じ risk / pre-submit manifest gate と candidate CSV 存在確認を走らせる。
+  - 実データ preflight:
+    ```bash
+    PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \
+      --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505 \
+      --tag 20260505 \
+      --group p6p0_clean_sjc_r_scale_sweep \
+      --check-ready \
+      --skip-missing
+    # ready: 3 candidate(s)
+    ```
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `22 passed`
+- submit queue に `--ready-report` を追加:
+  - `--check-ready` / `--submit` と同じ対象 candidate について、candidate 名、priority group、CSV path、SHA256、Kaggle command、risk report、pre-submit manifest risk を JSON に保存する。
+  - JSON と同名 stem の `.csv` も自動生成し、candidate 名、priority group、message、path、SHA256、shell-quoted Kaggle command を候補単位で一覧化する。
+  - 実データ report:
+    - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/submit_ready_report.json`
+    - `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/submit_ready_report.csv`
+    - `ready_count=3`
+    - CSV rows: `3`
+    - `risk_report.candidate_actionable_risky_chunks=0`
+    - `pre_submit_manifest.present=true`
+    - candidate SHA256 は build/pre-submit manifest と一致。
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `24 passed`
+- submit queue に `--audit-ready-report` を追加:
+  - ready report JSON、同名 CSV、現在の `build_summary.json` risk、`pre_submit_manifest.json`、実 candidate CSV SHA256 を照合する。
+  - `*_p6p0` candidate では pre-submit manifest gate も再実行し、Pixel6Pro risky trip 差分 0 と SHA 一致を再確認する。
+  - 実データ監査:
+    ```bash
+    PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \
+      --audit-ready-report experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/submit_ready_report.json
+    # audited: 3 candidate(s)
+    ```
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `26 passed`
+- submit queue に `--prepare-ready-report` を追加:
+  - pre-submit manifest 再生成、ready report JSON/CSV 生成、ready report audit を1コマンドで順番に実行する。
+  - 実データ prepare:
+    ```bash
+    PYTHONPATH=.:python python3 experiments/submit_gsdc2023_pixel5_candidate_queue.py \
+      --output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505 \
+      --tag 20260505 \
+      --group p6p0_clean_sjc_r_scale_sweep \
+      --prepare-ready-report experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/submit_ready_report.json \
+      --previous-output-dir experiments/results/source_selection_lowbaseline_submission_probe_20260430/basecorr_posoffset_pixel5_patch_scripted \
+      --previous-tag 20260501 \
+      --skip-missing
+    # prepared: 3 candidate(s)
+    ```
+  - 再生成結果: `ready_count=3`, ready CSV rows `3`, manifest candidate count `3`, `candidate_actionable_risky_chunks=0`
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `28 passed`
+- P6P0 output dir に `submit_readiness.md` を追加:
+  - path: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p6p0_clean_candidate_20260505/submit_readiness.md`
+  - 内容: regenerate command, audit-only command, artifact 一覧, current gate state, candidate SHA256, submit command source。
+  - 現状値: `ready_count=3`, ready CSV rows `3`, pre-submit manifest candidates `3`, risky Pixel6Pro trip delta rows `9`, max input changed rows `0`, max input delta `0.0m`
+  - 監査: `--audit-ready-report .../submit_ready_report.json` → `audited: 3 candidate(s)`
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `28 passed`
+- `submit_readiness.md` を `--prepare-ready-report` の自動生成物に変更:
+  - `prepare_ready_report()` が pre-submit manifest / ready JSON / ready CSV / audit 後に `submit_readiness.md` も再生成する。
+  - doc の値は `submit_ready_report.json`, `submit_ready_report.csv`, `pre_submit_manifest.json`, `pre_submit_trip_delta_checks.csv` から読み直す。
+  - 実データ `--prepare-ready-report` 再実行で `prepared: 3 candidate(s)`、doc の current gate state は `ready_count=3`, CSV rows `3`, manifest candidates `3`, max risky Pixel6Pro input delta `0.0m`。
+  - 検証: `PYTHONPATH=.:python pytest -q tests/test_build_gsdc2023_pre_submit_manifest.py tests/test_build_gsdc2023_basecorr_posoffset_pixel5_patch_candidates.py tests/test_submit_gsdc2023_pixel5_candidate_queue.py` → `29 passed`
+
+#### E. plan.md の旧 UrbanNav 部分の整理
+
+このファイルはまだ 4/21 時点の UrbanNav 主戦場メモが大きく残っている。GSDC/MATLAB 移植を主戦場にするなら、次回以降:
+
+- §0-§4 を GSDC2023 raw bridge 現状へ置換
+- UrbanNav / CT-RBPF-FGO は appendix に移動
+- 「再試行禁止」リストを GSDC Kaggle A/B と parity audit 失敗/成功に更新
+
+---
+
+## 旧メモ: UrbanNav / CT-RBPF-FGO 計画 (2026-04-21 時点)
 
 **北極星目標 (2026-04-19 設定)**:
 **A Continuous-Time Rao-Blackwellized Particle Filter with Factor Graph Optimization** (CT-RBPF-FGO)

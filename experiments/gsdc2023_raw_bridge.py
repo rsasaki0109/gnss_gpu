@@ -9,6 +9,7 @@ import pandas as pd
 from experiments.evaluate import ecef_to_lla, lla_to_ecef
 from gnss_gpu import wls_position
 from gnss_gpu.fgo import fgo_gnss_lm, fgo_gnss_lm_vd
+from gnss_gpu.io.nav_rinex import read_gps_klobuchar_from_nav_header
 from gnss_gpu.multi_gnss import (
     SYSTEM_BEIDOU,
     MultiGNSSSolver,
@@ -329,10 +330,12 @@ from experiments.gsdc2023_observation_matrix import (
     fill_observation_matrices as _fill_observation_matrices,
     legacy_matlab_signal_observation_mask as _legacy_matlab_signal_observation_mask,
     load_raw_gnss_frame as _load_raw_gnss_frame,
+    load_raw_gnss_frame_epoch_window as _load_raw_gnss_frame_epoch_window,
     matlab_signal_observation_masks as _matlab_signal_observation_masks,
     read_raw_gnss_csv as _read_raw_gnss_csv,
     receiver_clock_bias_from_nanos as _receiver_clock_bias_from_nanos,
     receiver_clock_bias_lookup_from_epoch_meta as _receiver_clock_bias_lookup_from_epoch_meta,
+    recompute_rtklib_iono_matrix as _recompute_rtklib_iono_matrix,
     recompute_rtklib_tropo_matrix as _recompute_rtklib_tropo_matrix,
     repair_baseline_wls as _repair_baseline_wls,
     select_epoch_observations as _select_epoch_observations,
@@ -388,6 +391,9 @@ def resolve_gsdc2023_data_root() -> Path:
 
 
 DEFAULT_ROOT = resolve_gsdc2023_data_root()
+VD_SEED_FACTOR_GUARD_MIN_COUNT = 20
+VD_SEED_FACTOR_GUARD_DOPPLER_RMS_MPS = 8.0
+VD_SEED_FACTOR_GUARD_TDCP_RMS_M = 50.0
 
 GPS_L1_FREQUENCY_HZ = 1575.42e6
 GPS_L5_FREQUENCY_HZ = 1176.45e6
@@ -562,6 +568,17 @@ def load_device_imu_measurements(trip_dir: Path) -> tuple[IMUMeasurements | None
     return _load_device_imu_measurements_impl(trip_dir, read_csv_fn=_read_raw_gnss_csv)
 
 
+def _gps_iono_alpha_beta_for_trip(trip_dir: Path) -> tuple[tuple[float, ...], tuple[float, ...]] | None:
+    nav_path = _trip_nav_path(trip_dir)
+    if nav_path is None:
+        return None
+    alpha, beta = read_gps_klobuchar_from_nav_header(nav_path)
+    if alpha is None or beta is None:
+        alpha = [0.1118e-07, -0.7451e-08, -0.5961e-07, 0.1192e-06]
+        beta = [0.1167e06, -0.2294e06, -0.1311e06, 0.1049e07]
+    return tuple(float(value) for value in alpha), tuple(float(value) for value in beta)
+
+
 def _gnss_log_corrected_pseudorange_matrix(
     trip_dir: Path,
     raw_frame: pd.DataFrame,
@@ -569,6 +586,7 @@ def _gnss_log_corrected_pseudorange_matrix(
     slot_keys: tuple[tuple[int, int, str], ...],
     gps_tgd_m_by_svid: dict[int, float],
     rtklib_tropo_m: np.ndarray | None = None,
+    rtklib_iono_m: np.ndarray | None = None,
     sat_clock_bias_m: np.ndarray | None = None,
     *,
     phone_name: str,
@@ -581,6 +599,7 @@ def _gnss_log_corrected_pseudorange_matrix(
         gps_tgd_m_by_svid,
         phone_name=phone_name,
         rtklib_tropo_m=rtklib_tropo_m,
+        rtklib_iono_m=rtklib_iono_m,
         sat_clock_bias_m=sat_clock_bias_m,
         sat_clock_adjustment_m=_gps_sat_clock_bias_adjustment_m,
     )
@@ -618,6 +637,7 @@ def build_trip_arrays(
     absolute_height_dist_m: float = HEIGHT_ABSOLUTE_DIST_M,
     imu_frame: str = "body",
     factor_dt_max_s: float = FACTOR_DT_MAX_S,
+    raw_frame_epoch_window: bool = False,
 ) -> TripArrays:
     raw_path = trip_dir / "device_gnss.csv"
     if not raw_path.is_file():
@@ -629,7 +649,15 @@ def build_trip_arrays(
     tdcp_enabled = _tdcp_enabled_for_phone(phone_name, use_tdcp)
     tdcp_loffset_m = _tdcp_loffset_m(phone_name) if tdcp_enabled else 0.0
     adr_sign = -1.0 if phone_name_l in TDCP_LOFFSET_PHONES else 1.0
-    raw_df = _load_raw_gnss_frame(raw_path)
+    if raw_frame_epoch_window:
+        raw_df = _load_raw_gnss_frame_epoch_window(
+            raw_path,
+            start_epoch=start_epoch,
+            max_epochs=max_epochs,
+            extra_epochs=8,
+        )
+    else:
+        raw_df = _load_raw_gnss_frame(raw_path)
     epoch_meta = _build_epoch_metadata_frame(raw_df)
     observation_preparation = _build_observation_preparation_stages(
         raw_df,
@@ -659,6 +687,7 @@ def build_trip_arrays(
         light_speed_mps=LIGHT_SPEED_MPS,
         gps_tgd_m_by_svid_for_trip_fn=_gps_tgd_m_by_svid_for_trip,
         gps_matrtklib_nav_messages_for_trip_fn=_gps_matrtklib_nav_messages_for_trip,
+        gps_iono_alpha_beta_for_trip_fn=_gps_iono_alpha_beta_for_trip,
         gnss_log_matlab_epoch_times_ms_fn=_gnss_log_matlab_epoch_times_ms,
         clean_clock_drift_fn=_clean_clock_drift,
         select_epoch_observations_fn=_select_epoch_observations,
@@ -675,6 +704,7 @@ def build_trip_arrays(
         rtklib_tropo_fn=_rtklib_tropo_saastamoinen,
         matlab_signal_clock_dim=MATLAB_SIGNAL_CLOCK_DIM,
         recompute_rtklib_tropo_matrix_fn=_recompute_rtklib_tropo_matrix,
+        recompute_rtklib_iono_matrix_fn=_recompute_rtklib_iono_matrix,
     )
     observation_products = _unpack_observation_preparation_stage(observation_preparation)
 
@@ -901,6 +931,180 @@ def _seed_vd_state(
     return seed
 
 
+def _vd_seed_weighted_rms(residual: np.ndarray, weights: np.ndarray) -> tuple[float, int]:
+    valid = np.isfinite(residual) & np.isfinite(weights) & (weights > 0.0)
+    if not valid.any():
+        return float("nan"), 0
+    r = residual[valid]
+    w = weights[valid]
+    weight_sum = float(np.sum(w))
+    if weight_sum <= 0.0:
+        return float("nan"), 0
+    return float(np.sqrt(np.sum(w * r * r) / weight_sum)), int(r.size)
+
+
+def _vd_seed_doppler_rms(
+    sat_ecef: np.ndarray,
+    state: np.ndarray,
+    sat_vel: np.ndarray | None,
+    doppler: np.ndarray | None,
+    doppler_weights: np.ndarray | None,
+    sat_clock_drift_mps: np.ndarray | None,
+    n_clock: int,
+) -> tuple[float, int]:
+    if sat_vel is None or doppler is None or doppler_weights is None:
+        return float("nan"), 0
+    geom_rate = _geometric_range_rate_with_sagnac(sat_ecef, state[:, None, :3], sat_vel, state[:, None, 3:6])
+    if sat_clock_drift_mps is not None and sat_clock_drift_mps.shape == geom_rate.shape:
+        finite = np.isfinite(sat_clock_drift_mps)
+        geom_rate[finite] -= sat_clock_drift_mps[finite]
+    drift = state[:, 6 + n_clock]
+    residual = doppler - (drift[:, None] - geom_rate)
+    weights = np.where(np.isfinite(drift)[:, None], doppler_weights, 0.0)
+    return _vd_seed_weighted_rms(residual, weights)
+
+
+def _tdcp_unit_vectors_vd(sat_ecef: np.ndarray, receiver_ecef: np.ndarray) -> np.ndarray:
+    sat = np.asarray(sat_ecef, dtype=np.float64)
+    rx = np.asarray(receiver_ecef, dtype=np.float64)
+    dx0 = rx[..., 0] - sat[..., 0]
+    dy0 = rx[..., 1] - sat[..., 1]
+    dz0 = rx[..., 2] - sat[..., 2]
+    r0 = np.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0)
+    theta = EARTH_ROTATION_RATE_RAD_S * (r0 / LIGHT_SPEED_MPS)
+    sx_rot = sat[..., 0] * np.cos(theta) + sat[..., 1] * np.sin(theta)
+    sy_rot = -sat[..., 0] * np.sin(theta) + sat[..., 1] * np.cos(theta)
+    delta = np.stack((rx[..., 0] - sx_rot, rx[..., 1] - sy_rot, rx[..., 2] - sat[..., 2]), axis=-1)
+    ranges = np.linalg.norm(delta, axis=-1)
+    unit = np.full_like(delta, np.nan, dtype=np.float64)
+    valid = np.isfinite(ranges) & (ranges > 1.0e-6) & np.isfinite(delta).all(axis=-1)
+    unit[valid] = delta[valid] / ranges[valid, None]
+    return unit
+
+
+def _vd_seed_tdcp_rms(
+    sat_ecef: np.ndarray,
+    state: np.ndarray,
+    tdcp_meas: np.ndarray | None,
+    tdcp_weights: np.ndarray | None,
+    sys_kind: np.ndarray | None,
+    dt: np.ndarray,
+    *,
+    n_clock: int,
+    tdcp_use_drift: bool,
+) -> tuple[float, int]:
+    if tdcp_meas is None or tdcp_weights is None or state.shape[0] <= 1:
+        return float("nan"), 0
+    x0 = state[:-1, :3]
+    x1 = state[1:, :3]
+    los = _tdcp_unit_vectors_vd(sat_ecef[1:], x1[:, None, :])
+    predicted = np.sum(los * (x1 - x0)[:, None, :], axis=2)
+    if tdcp_use_drift:
+        dt_arr = np.asarray(dt, dtype=np.float64).reshape(-1)[: predicted.shape[0]]
+        drift = state[:, 6 + n_clock]
+        predicted += 0.5 * dt_arr[:, None] * (drift[:-1, None] + drift[1:, None])
+        valid_time = np.isfinite(dt_arr) & (dt_arr > 0.0)
+    else:
+        sk_arr = sys_kind[1:] if sys_kind is not None else np.zeros_like(tdcp_meas, dtype=np.int32)
+        for epoch_idx in range(predicted.shape[0]):
+            design = _fill_clock_design(np.asarray(sk_arr[epoch_idx], dtype=np.int32), n_clock)
+            clock_delta = state[epoch_idx + 1, 6 : 6 + n_clock] - state[epoch_idx, 6 : 6 + n_clock]
+            predicted[epoch_idx] += design @ clock_delta
+        valid_time = np.ones(predicted.shape[0], dtype=bool)
+    residual = tdcp_meas - predicted
+    weights = np.where(valid_time[:, None], tdcp_weights, 0.0)
+    return _vd_seed_weighted_rms(residual, weights)
+
+
+def _finite_float_or_none(value: float) -> float | None:
+    return float(value) if np.isfinite(value) else None
+
+
+def _vd_seed_factor_guard_segment_summary(
+    sat_ecef: np.ndarray,
+    state: np.ndarray,
+    *,
+    sat_vel: np.ndarray | None,
+    doppler: np.ndarray | None,
+    doppler_weights: np.ndarray | None,
+    sat_clock_drift_mps: np.ndarray | None,
+    tdcp_meas: np.ndarray | None,
+    tdcp_weights: np.ndarray | None,
+    sys_kind: np.ndarray | None,
+    dt: np.ndarray,
+    n_clock: int,
+    tdcp_use_drift: bool,
+) -> dict[str, object]:
+    doppler_rms, doppler_count = _vd_seed_doppler_rms(
+        sat_ecef,
+        state,
+        sat_vel,
+        doppler,
+        doppler_weights,
+        sat_clock_drift_mps,
+        n_clock,
+    )
+    tdcp_rms, tdcp_count = _vd_seed_tdcp_rms(
+        sat_ecef,
+        state,
+        tdcp_meas,
+        tdcp_weights,
+        sys_kind,
+        dt,
+        n_clock=n_clock,
+        tdcp_use_drift=tdcp_use_drift,
+    )
+    reject_reason = ""
+    if doppler_count >= VD_SEED_FACTOR_GUARD_MIN_COUNT and doppler_rms > VD_SEED_FACTOR_GUARD_DOPPLER_RMS_MPS:
+        reject_reason = "doppler"
+    elif tdcp_count >= VD_SEED_FACTOR_GUARD_MIN_COUNT and tdcp_rms > VD_SEED_FACTOR_GUARD_TDCP_RMS_M:
+        reject_reason = "tdcp"
+    return {
+        "doppler_rms_mps": _finite_float_or_none(doppler_rms),
+        "doppler_count": int(doppler_count),
+        "tdcp_rms_m": _finite_float_or_none(tdcp_rms),
+        "tdcp_count": int(tdcp_count),
+        "reject_reason": reject_reason,
+        "would_reject": bool(reject_reason),
+    }
+
+
+def _vd_seed_factor_guard_rejects_segment(
+    sat_ecef: np.ndarray,
+    state: np.ndarray,
+    *,
+    sat_vel: np.ndarray | None,
+    doppler: np.ndarray | None,
+    doppler_weights: np.ndarray | None,
+    sat_clock_drift_mps: np.ndarray | None,
+    tdcp_meas: np.ndarray | None,
+    tdcp_weights: np.ndarray | None,
+    sys_kind: np.ndarray | None,
+    dt: np.ndarray,
+    n_clock: int,
+    tdcp_use_drift: bool,
+) -> bool:
+    summary = _vd_seed_factor_guard_segment_summary(
+        sat_ecef,
+        state,
+        sat_vel=sat_vel,
+        doppler=doppler,
+        doppler_weights=doppler_weights,
+        sat_clock_drift_mps=sat_clock_drift_mps,
+        tdcp_meas=tdcp_meas,
+        tdcp_weights=tdcp_weights,
+        sys_kind=sys_kind,
+        dt=dt,
+        n_clock=n_clock,
+        tdcp_use_drift=tdcp_use_drift,
+    )
+    return bool(summary["would_reject"])
+
+
+def _vd_seed_factor_guard_enabled_for_phone(phone: str) -> bool:
+    return phone.lower() == "pixel6pro"
+
+
 def run_fgo_chunked(
     batch: TripArrays,
     raw_wls: np.ndarray,
@@ -928,13 +1132,28 @@ def run_fgo_chunked(
     imu_accel_bias_state: bool = False,
     imu_accel_bias_prior_sigma_mps2: float = IMU_ACCEL_BIAS_PRIOR_SIGMA_MPS2,
     imu_accel_bias_between_sigma_mps2: float = IMU_ACCEL_BIAS_BETWEEN_SIGMA_MPS2,
-) -> tuple[np.ndarray, np.ndarray, int, int, np.ndarray, dict[str, int], list[ChunkSelectionRecord]]:
+    vd_seed_factor_guard: bool = True,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    int,
+    int,
+    int,
+    int,
+    list[dict[str, object]],
+    np.ndarray,
+    dict[str, int],
+    list[ChunkSelectionRecord],
+]:
     n_epoch = batch.sat_ecef.shape[0]
     chunk_size = n_epoch if chunk_epochs <= 0 or n_epoch <= chunk_epochs else chunk_epochs
     stitched = raw_wls.copy()
     fgo_stitched = raw_wls.copy()
     total_iters = 0
     failed_chunks = 0
+    vd_seed_guard_skipped_segments = 0
+    vd_seed_guard_skipped_epochs = 0
+    vd_seed_guard_records: list[dict[str, object]] = []
     selected_sources = np.empty(n_epoch, dtype=object)
     selected_source_counts = {"baseline": 0, "raw_wls": 0, "fgo": 0}
     prev_tail_xyz: np.ndarray | None = None
@@ -995,6 +1214,48 @@ def run_fgo_chunked(
                 if batch.tdcp_meas is not None and seg_end - seg_start > 1:
                     tdcp_meas = batch.tdcp_meas[seg_start : seg_end - 1]
                     tdcp_weights = batch.tdcp_weights[seg_start : seg_end - 1] if batch.tdcp_weights is not None else None
+                guard_summary = None
+                if vd_seed_factor_guard:
+                    guard_summary = _vd_seed_factor_guard_segment_summary(
+                        batch.sat_ecef[seg_start:seg_end],
+                        seg_state,
+                        sat_vel=(batch.sat_vel[seg_start:seg_end] if batch.sat_vel is not None else None),
+                        doppler=(batch.doppler[seg_start:seg_end] if batch.doppler is not None else None),
+                        doppler_weights=(
+                            batch.doppler_weights[seg_start:seg_end] if batch.doppler_weights is not None else None
+                        ),
+                        sat_clock_drift_mps=(
+                            batch.sat_clock_drift_mps[seg_start:seg_end]
+                            if batch.sat_clock_drift_mps is not None
+                            else None
+                        ),
+                        tdcp_meas=tdcp_meas,
+                        tdcp_weights=tdcp_weights,
+                        sys_kind=(batch.sys_kind[seg_start:seg_end] if batch.sys_kind is not None else None),
+                        dt=seg_dt,
+                        n_clock=batch.n_clock,
+                        tdcp_use_drift=tdcp_use_drift,
+                    )
+                if guard_summary is not None and bool(guard_summary["would_reject"]):
+                    fgo_xyz[local_start:local_end] = raw_state[local_start:local_end, :3]
+                    vd_seed_guard_skipped_segments += 1
+                    vd_seed_guard_skipped_epochs += local_end - local_start
+                    vd_seed_guard_records.append(
+                        {
+                            "chunk_start_epoch": int(start),
+                            "chunk_end_epoch": int(end),
+                            "segment_start_epoch": int(seg_start),
+                            "segment_end_epoch": int(seg_end),
+                            "segment_epochs": int(local_end - local_start),
+                            "doppler_count": int(guard_summary["doppler_count"]),
+                            "doppler_rms_mps": guard_summary["doppler_rms_mps"],
+                            "tdcp_count": int(guard_summary["tdcp_count"]),
+                            "tdcp_rms_m": guard_summary["tdcp_rms_m"],
+                            "reject_reason": str(guard_summary["reject_reason"]),
+                        },
+                    )
+                    chunk_success = True
+                    continue
                 seg_stop_mask = stop_mask[seg_start:seg_end] if stop_mask is not None else None
                 imu_delta_p = None
                 imu_delta_v = None
@@ -1222,6 +1483,9 @@ def run_fgo_chunked(
         fgo_stitched,
         total_iters,
         failed_chunks,
+        vd_seed_guard_skipped_segments,
+        vd_seed_guard_skipped_epochs,
+        vd_seed_guard_records,
         selected_sources,
         selected_source_counts,
         chunk_records,
@@ -1249,9 +1513,22 @@ def solve_trip(trip: str, batch: TripArrays, config: BridgeConfig) -> BridgeResu
         n_clock=batch.n_clock,
         fallback_xyz=batch.kaggle_wls,
     )
+    raw_wls[:, :3] = _repair_baseline_wls(batch.times_ms, raw_wls[:, :3])
     fgo_run_options = _fgo_run_options_from_config(config)
     fgo_run_kwargs = fgo_run_options.run_kwargs()
-    auto_state, fgo_state, iters, failed_chunks, auto_sources, auto_source_counts, chunk_records = run_fgo_chunked(
+    fgo_run_kwargs["vd_seed_factor_guard"] = _vd_seed_factor_guard_enabled_for_phone(phone_name)
+    (
+        auto_state,
+        fgo_state,
+        iters,
+        failed_chunks,
+        vd_seed_guard_skipped_segments,
+        vd_seed_guard_skipped_epochs,
+        vd_seed_guard_records,
+        auto_sources,
+        auto_source_counts,
+        chunk_records,
+    ) = run_fgo_chunked(
         batch,
         raw_wls,
         **solver_context_kwargs,
@@ -1265,6 +1542,9 @@ def solve_trip(trip: str, batch: TripArrays, config: BridgeConfig) -> BridgeResu
             tdcp_off_fgo_state,
             _tdcp_off_iters,
             _tdcp_off_failed_chunks,
+            _tdcp_off_vd_seed_guard_skipped_segments,
+            _tdcp_off_vd_seed_guard_skipped_epochs,
+            _tdcp_off_vd_seed_guard_records,
             _tdcp_off_auto_sources,
             _tdcp_off_auto_source_counts,
             tdcp_off_chunk_records,
@@ -1380,6 +1660,9 @@ def solve_trip(trip: str, batch: TripArrays, config: BridgeConfig) -> BridgeResu
         assembled_outputs=assembled_outputs,
         fgo_iters=int(iters),
         failed_chunks=int(failed_chunks),
+        vd_seed_guard_skipped_segments=int(vd_seed_guard_skipped_segments),
+        vd_seed_guard_skipped_epochs=int(vd_seed_guard_skipped_epochs),
+        vd_seed_guard_records=vd_seed_guard_records,
         baseline_mse_pr=baseline_mse_pr,
         raw_wls_mse_pr=raw_wls_mse_pr,
         fgo_mse_pr=fgo_mse_pr,

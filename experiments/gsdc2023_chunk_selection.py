@@ -15,6 +15,17 @@ import numpy as np
 GATED_BASELINE_THRESHOLD_DEFAULT = 500.0
 GATED_FGO_BASELINE_MSE_PR_MIN = 20.0
 GATED_FGO_BASELINE_GAP_P95_FLOOR_M = 12.0
+GATED_LOW_BASELINE_FGO_MSE_PR_MAX = 9.3
+GATED_LOW_BASELINE_FGO_QUALITY_MAX = 0.914226
+GATED_LOW_BASELINE_FGO_GAP_P95_MAX_M = 18.0
+# Train 200-epoch chunk diagnostics found a small FGO rescue pocket where the
+# raw-WLS PR proxy beats FGO, but direct Kaggle A/B on SJC-Q worsened public
+# score and kept private unchanged.  Keep the thresholds documented for audit
+# replay, but leave this exception disabled in the default gated policy.
+GATED_FGO_RAW_WLS_RESCUE_ENABLED = False
+GATED_FGO_RAW_WLS_RESCUE_MSE_PR_MIN = 31.721240912308435
+GATED_FGO_RAW_WLS_RESCUE_QUALITY_MAX = 1.0638132412840764
+GATED_FGO_RAW_WLS_RESCUE_GAP_MAX_M = 100.0
 # Broad train diagnostics found no FGO-winning chunks above this PR-MSE.
 FGO_CANDIDATE_MSE_PR_MAX = 400.0
 GATED_CANDIDATE_QUALITY_MARGIN = 0.08
@@ -245,11 +256,41 @@ def fgo_candidate_passes_baseline_gap_guard(
     )
 
 
+def fgo_candidate_passes_low_baseline_confidence_guard(quality: ChunkCandidateQuality) -> bool:
+    return (
+        np.isfinite(quality.mse_pr)
+        and quality.mse_pr <= GATED_LOW_BASELINE_FGO_MSE_PR_MAX
+        and np.isfinite(quality.quality_score)
+        and quality.quality_score <= GATED_LOW_BASELINE_FGO_QUALITY_MAX
+        and np.isfinite(quality.baseline_gap_p95_m)
+        and quality.baseline_gap_p95_m <= GATED_LOW_BASELINE_FGO_GAP_P95_MAX_M
+    )
+
+
 def fgo_candidate_passes_raw_wls_mse_guard(
     quality: ChunkCandidateQuality,
     raw_wls: ChunkCandidateQuality | None,
 ) -> bool:
     return raw_wls is None or quality.mse_pr <= raw_wls.mse_pr
+
+
+def fgo_candidate_passes_raw_wls_proxy_rescue(
+    quality: ChunkCandidateQuality,
+    raw_wls: ChunkCandidateQuality | None,
+) -> bool:
+    if not GATED_FGO_RAW_WLS_RESCUE_ENABLED:
+        return False
+    return (
+        raw_wls is not None
+        and np.isfinite(raw_wls.mse_pr)
+        and raw_wls.mse_pr >= GATED_FGO_RAW_WLS_RESCUE_MSE_PR_MIN
+        and np.isfinite(raw_wls.quality_score)
+        and raw_wls.quality_score <= GATED_FGO_RAW_WLS_RESCUE_QUALITY_MAX
+        and np.isfinite(quality.baseline_gap_max_m)
+        and quality.baseline_gap_max_m <= GATED_FGO_RAW_WLS_RESCUE_GAP_MAX_M
+        and np.isfinite(raw_wls.baseline_gap_max_m)
+        and raw_wls.baseline_gap_max_m <= GATED_FGO_RAW_WLS_RESCUE_GAP_MAX_M
+    )
 
 
 def raw_wls_candidate_passes_mi8_baseline_jump_guard(
@@ -359,11 +400,24 @@ def select_gated_chunk_source(
             ):
                 continue
         if is_fgo_candidate_source(name):
+            raw_wls = record.candidates.get("raw_wls")
+            low_baseline_fgo = (
+                baseline.mse_pr < GATED_FGO_BASELINE_MSE_PR_MIN
+                and raw_wls is not None
+                and fgo_candidate_passes_low_baseline_confidence_guard(quality)
+            )
+            raw_proxy_rescue = fgo_candidate_passes_raw_wls_proxy_rescue(quality, raw_wls)
             if not fgo_candidate_passes_mse_guard(quality):
                 continue
-            if not fgo_candidate_passes_baseline_gap_guard(quality, baseline):
+            if not low_baseline_fgo and not raw_proxy_rescue and not fgo_candidate_passes_baseline_gap_guard(
+                quality,
+                baseline,
+            ):
                 continue
-            if not fgo_candidate_passes_raw_wls_mse_guard(quality, record.candidates.get("raw_wls")):
+            if not low_baseline_fgo and not (
+                fgo_candidate_passes_raw_wls_mse_guard(quality, raw_wls)
+                or raw_proxy_rescue
+            ):
                 continue
         if name == "fgo":
             tdcp_off_fgo = record.candidates.get("fgo_no_tdcp")

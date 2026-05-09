@@ -29,6 +29,7 @@ GnssLogPseudorangeMatrixFn = Callable[..., tuple[np.ndarray, np.ndarray, np.ndar
 GnssLogEpochTimesFn = Callable[[Path], Any]
 GpsMatrtklibNavMessagesForTripFn = Callable[[Path], Any]
 GpsTgdBySvidForTripFn = Callable[[Path], dict[int, float]]
+GpsIonoAlphaBetaForTripFn = Callable[[Path], Any]
 FillObservationMatricesFn = Callable[..., Any]
 LoadAbsoluteHeightFn = Callable[..., tuple[np.ndarray | None, int]]
 LoadImuMeasurementsFn = Callable[[Path], tuple[Any, Any, Any]]
@@ -43,6 +44,7 @@ PseudorangeGlobalIsbFn = Callable[..., Any]
 ProjectStopFn = Callable[[np.ndarray, Any, np.ndarray], np.ndarray]
 ReceiverClockBiasLookupFn = Callable[[Any], dict[int, float]]
 RecomputeRtklibTropoMatrixFn = Callable[..., np.ndarray]
+RecomputeRtklibIonoMatrixFn = Callable[..., np.ndarray]
 RemapPseudorangeIsbFn = Callable[[Sequence[Any], Any, Sequence[Any]], Any]
 RepairBaselineWlsFn = Callable[[np.ndarray, np.ndarray], np.ndarray]
 SelectEpochObservationsFn = Callable[..., Sequence[Any]]
@@ -81,6 +83,7 @@ class ObservationMatrixInputProducts:
     frame: Any
     gps_tgd_m_by_svid: dict[int, float]
     gps_matrtklib_nav_messages: Any
+    gps_iono_alpha_beta: Any
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,7 @@ class FilledObservationMatrixProducts:
 @dataclass(frozen=True)
 class FilledObservationPostprocessProducts:
     kaggle_wls: np.ndarray
+    rtklib_iono_m: np.ndarray
     rtklib_tropo_m: np.ndarray
 
 
@@ -124,6 +128,7 @@ class PreparedObservationProducts:
     weights: np.ndarray
     pseudorange_bias_weights: np.ndarray
     sat_clock_bias_matrix: np.ndarray
+    rtklib_iono_m: np.ndarray
     rtklib_tropo_m: np.ndarray
     kaggle_wls: np.ndarray
     truth: np.ndarray
@@ -363,6 +368,7 @@ def assemble_trip_arrays_stage(
     times_ms: np.ndarray,
     sat_ecef: np.ndarray,
     pseudorange: np.ndarray,
+    pseudorange_observable: np.ndarray,
     weights: np.ndarray,
     kaggle_wls: np.ndarray,
     truth: np.ndarray,
@@ -371,9 +377,15 @@ def assemble_trip_arrays_stage(
     sys_kind: np.ndarray | None,
     n_clock: int,
     sat_vel: np.ndarray | None,
+    sat_clock_bias_matrix: np.ndarray | None,
     sat_clock_drift_mps: np.ndarray | None,
+    rtklib_iono_m: np.ndarray | None,
+    rtklib_tropo_m: np.ndarray | None,
     doppler: np.ndarray | None,
     doppler_weights: np.ndarray | None,
+    adr: np.ndarray | None,
+    adr_state: np.ndarray | None,
+    adr_uncertainty: np.ndarray | None,
     pseudorange_bias_weights: np.ndarray,
     pseudorange_residual_stage: PseudorangeResidualStageProducts,
     time_delta: GraphTimeDeltaProducts,
@@ -396,6 +408,7 @@ def assemble_trip_arrays_stage(
         times_ms=times_ms,
         sat_ecef=sat_ecef,
         pseudorange=pseudorange,
+        pseudorange_observable=pseudorange_observable,
         weights=weights,
         kaggle_wls=kaggle_wls,
         truth=truth,
@@ -404,7 +417,10 @@ def assemble_trip_arrays_stage(
         sys_kind=sys_kind,
         n_clock=n_clock,
         sat_vel=sat_vel,
+        sat_clock_bias_matrix=sat_clock_bias_matrix,
         sat_clock_drift_mps=sat_clock_drift_mps,
+        rtklib_iono_m=rtklib_iono_m,
+        rtklib_tropo_m=rtklib_tropo_m,
         doppler=doppler,
         doppler_weights=doppler_weights,
         pseudorange_bias_weights=pseudorange_bias_weights,
@@ -412,6 +428,9 @@ def assemble_trip_arrays_stage(
         dt=time_delta.dt,
         tdcp_meas=tdcp_stage.tdcp_meas,
         tdcp_weights=tdcp_stage.tdcp_weights,
+        adr=adr,
+        adr_state=adr_state,
+        adr_uncertainty=adr_uncertainty,
         n_sat_slots=n_sat_slots,
         slot_keys=tuple(slot_keys),
         elapsed_ns=elapsed_ns,
@@ -474,6 +493,7 @@ def assemble_prepared_trip_arrays_stage(
         times_ms=observation_products.times_ms,
         sat_ecef=observation_products.sat_ecef,
         pseudorange=observation_products.pseudorange,
+        pseudorange_observable=observation_products.pseudorange_observable,
         weights=observation_products.weights,
         kaggle_wls=observation_products.kaggle_wls,
         truth=observation_products.truth,
@@ -482,9 +502,15 @@ def assemble_prepared_trip_arrays_stage(
         sys_kind=observation_products.sys_kind,
         n_clock=observation_products.n_clock,
         sat_vel=observation_products.sat_vel,
+        sat_clock_bias_matrix=observation_products.sat_clock_bias_matrix,
         sat_clock_drift_mps=observation_products.sat_clock_drift_mps,
+        rtklib_iono_m=observation_products.rtklib_iono_m,
+        rtklib_tropo_m=observation_products.rtklib_tropo_m,
         doppler=observation_products.doppler,
         doppler_weights=observation_products.doppler_weights,
+        adr=observation_products.adr,
+        adr_state=observation_products.adr_state,
+        adr_uncertainty=observation_products.adr_uncertainty,
         pseudorange_bias_weights=observation_products.pseudorange_bias_weights,
         pseudorange_residual_stage=mask_base_stage.pseudorange_residual_stage,
         time_delta=post_observation_stages.time_delta,
@@ -622,6 +648,7 @@ def build_observation_matrix_input_stage(
     trip_dir: Path,
     gps_tgd_m_by_svid_for_trip_fn: GpsTgdBySvidForTripFn,
     gps_matrtklib_nav_messages_for_trip_fn: GpsMatrtklibNavMessagesForTripFn,
+    gps_iono_alpha_beta_for_trip_fn: GpsIonoAlphaBetaForTripFn,
 ) -> ObservationMatrixInputProducts:
     frame = filtered_frame.sort_values(["utcTimeMillis", "ConstellationType", "Svid", "Cn0DbHz"]).groupby(
         ["utcTimeMillis", "ConstellationType", "Svid", "SignalType"],
@@ -631,6 +658,7 @@ def build_observation_matrix_input_stage(
         frame=frame,
         gps_tgd_m_by_svid=gps_tgd_m_by_svid_for_trip_fn(trip_dir),
         gps_matrtklib_nav_messages=gps_matrtklib_nav_messages_for_trip_fn(trip_dir),
+        gps_iono_alpha_beta=gps_iono_alpha_beta_for_trip_fn(trip_dir),
     )
 
 
@@ -661,6 +689,7 @@ def build_filled_observation_matrix_stage(
     elevation_azimuth_fn: Callable[..., Any],
     rtklib_tropo_fn: Callable[..., Any],
     matlab_signal_clock_dim: int,
+    gps_iono_alpha_beta: Any,
 ) -> FilledObservationMatrixProducts:
     epochs = select_epoch_observations_fn(
         epoch_time_context.epoch_time_keys,
@@ -700,6 +729,7 @@ def build_filled_observation_matrix_stage(
         elevation_azimuth_fn=elevation_azimuth_fn,
         rtklib_tropo_fn=rtklib_tropo_fn,
         matlab_signal_clock_dim=matlab_signal_clock_dim,
+        gps_iono_alpha_beta=gps_iono_alpha_beta,
     )
     return FilledObservationMatrixProducts(
         epochs=epochs,
@@ -712,14 +742,28 @@ def postprocess_filled_observation_stage(
     times_ms: np.ndarray,
     kaggle_wls: np.ndarray,
     sat_ecef: np.ndarray,
+    rtklib_iono_m: np.ndarray,
     rtklib_tropo_m: np.ndarray,
+    slot_keys: Sequence[Any],
+    gps_iono_alpha_beta: Any,
     repair_baseline_wls_fn: RepairBaselineWlsFn,
+    recompute_rtklib_iono_matrix_fn: RecomputeRtklibIonoMatrixFn,
     recompute_rtklib_tropo_matrix_fn: RecomputeRtklibTropoMatrixFn,
     ecef_to_lla_fn: Callable[..., Any],
     elevation_azimuth_fn: Callable[..., Any],
     rtklib_tropo_fn: Callable[..., Any],
 ) -> FilledObservationPostprocessProducts:
     repaired_wls = repair_baseline_wls_fn(times_ms, kaggle_wls)
+    recomputed_iono_m = recompute_rtklib_iono_matrix_fn(
+        times_ms,
+        repaired_wls,
+        sat_ecef,
+        slot_keys,
+        gps_iono_alpha_beta,
+        ecef_to_lla_fn=ecef_to_lla_fn,
+        elevation_azimuth_fn=elevation_azimuth_fn,
+        initial_iono_m=rtklib_iono_m,
+    )
     recomputed_tropo_m = recompute_rtklib_tropo_matrix_fn(
         repaired_wls,
         sat_ecef,
@@ -730,6 +774,7 @@ def postprocess_filled_observation_stage(
     )
     return FilledObservationPostprocessProducts(
         kaggle_wls=repaired_wls,
+        rtklib_iono_m=recomputed_iono_m,
         rtklib_tropo_m=recomputed_tropo_m,
     )
 
@@ -763,6 +808,7 @@ def build_observation_preparation_stages(
     light_speed_mps: float,
     gps_tgd_m_by_svid_for_trip_fn: GpsTgdBySvidForTripFn,
     gps_matrtklib_nav_messages_for_trip_fn: GpsMatrtklibNavMessagesForTripFn,
+    gps_iono_alpha_beta_for_trip_fn: GpsIonoAlphaBetaForTripFn,
     gnss_log_matlab_epoch_times_ms_fn: GnssLogEpochTimesFn,
     clean_clock_drift_fn: CleanClockDriftFn,
     select_epoch_observations_fn: SelectEpochObservationsFn,
@@ -779,6 +825,7 @@ def build_observation_preparation_stages(
     rtklib_tropo_fn: Callable[..., Any],
     matlab_signal_clock_dim: int,
     recompute_rtklib_tropo_matrix_fn: RecomputeRtklibTropoMatrixFn,
+    recompute_rtklib_iono_matrix_fn: RecomputeRtklibIonoMatrixFn,
 ) -> ObservationPreparationStageProducts:
     raw_observation_frame = build_raw_observation_frame(
         raw_frame,
@@ -808,6 +855,7 @@ def build_observation_preparation_stages(
         trip_dir=trip_dir,
         gps_tgd_m_by_svid_for_trip_fn=gps_tgd_m_by_svid_for_trip_fn,
         gps_matrtklib_nav_messages_for_trip_fn=gps_matrtklib_nav_messages_for_trip_fn,
+        gps_iono_alpha_beta_for_trip_fn=gps_iono_alpha_beta_for_trip_fn,
     )
     epoch_time_context = build_epoch_time_context(
         observation_matrix_input.frame,
@@ -848,14 +896,19 @@ def build_observation_preparation_stages(
         elevation_azimuth_fn=elevation_azimuth_fn,
         rtklib_tropo_fn=rtklib_tropo_fn,
         matlab_signal_clock_dim=matlab_signal_clock_dim,
+        gps_iono_alpha_beta=observation_matrix_input.gps_iono_alpha_beta,
     )
     observations = observation_matrix_stage.observations
     post_fill_observation = postprocess_filled_observation_stage(
         times_ms=observations.times_ms,
         kaggle_wls=observations.kaggle_wls,
         sat_ecef=observations.sat_ecef,
+        rtklib_iono_m=observations.rtklib_iono_m,
         rtklib_tropo_m=observations.rtklib_tropo_m,
+        slot_keys=observations.slot_keys,
+        gps_iono_alpha_beta=observation_matrix_input.gps_iono_alpha_beta,
         repair_baseline_wls_fn=repair_baseline_wls_fn,
+        recompute_rtklib_iono_matrix_fn=recompute_rtklib_iono_matrix_fn,
         recompute_rtklib_tropo_matrix_fn=recompute_rtklib_tropo_matrix_fn,
         ecef_to_lla_fn=ecef_to_lla_fn,
         elevation_azimuth_fn=elevation_azimuth_fn,
@@ -897,6 +950,7 @@ def unpack_observation_preparation_stage(
         weights=observations.weights,
         pseudorange_bias_weights=observations.pseudorange_bias_weights,
         sat_clock_bias_matrix=observations.sat_clock_bias_matrix,
+        rtklib_iono_m=post_fill_observation.rtklib_iono_m,
         rtklib_tropo_m=post_fill_observation.rtklib_tropo_m,
         kaggle_wls=post_fill_observation.kaggle_wls,
         truth=observations.truth,
@@ -1137,6 +1191,7 @@ def apply_gnss_log_pseudorange_stage(
     slot_keys: Sequence[Any],
     gps_tgd_m_by_svid: dict[int, float],
     rtklib_tropo_m: np.ndarray,
+    rtklib_iono_m: np.ndarray,
     sat_clock_bias_m: np.ndarray,
     phone_name: str,
     pseudorange: np.ndarray,
@@ -1151,6 +1206,7 @@ def apply_gnss_log_pseudorange_stage(
         tuple(slot_keys),
         gps_tgd_m_by_svid,
         rtklib_tropo_m,
+        rtklib_iono_m=rtklib_iono_m,
         sat_clock_bias_m=sat_clock_bias_m,
         phone_name=phone_name,
     )
@@ -1467,6 +1523,7 @@ def build_post_observation_stages(
     slot_keys: Sequence[Any],
     gps_tgd_m_by_svid: dict[int, float],
     rtklib_tropo_m: np.ndarray,
+    rtklib_iono_m: np.ndarray,
     sat_clock_bias_m: np.ndarray,
     phone_name: str,
     pseudorange: np.ndarray,
@@ -1555,6 +1612,7 @@ def build_post_observation_stages(
         slot_keys=slot_keys,
         gps_tgd_m_by_svid=gps_tgd_m_by_svid,
         rtklib_tropo_m=rtklib_tropo_m,
+        rtklib_iono_m=rtklib_iono_m,
         sat_clock_bias_m=sat_clock_bias_m,
         phone_name=phone_name,
         pseudorange=pseudorange,
@@ -1723,6 +1781,7 @@ def build_configured_post_observation_stages(
         slot_keys=observation_products.slot_keys,
         gps_tgd_m_by_svid=observation_products.gps_tgd_m_by_svid,
         rtklib_tropo_m=observation_products.rtklib_tropo_m,
+        rtklib_iono_m=observation_products.rtklib_iono_m,
         sat_clock_bias_m=observation_products.sat_clock_bias_matrix,
         phone_name=config.phone_name,
         pseudorange=observation_products.pseudorange,
@@ -1953,6 +2012,7 @@ __all__ = [
     "FullObservationContextProducts",
     "EpochMetadataContext",
     "EpochTimeContext",
+    "GpsIonoAlphaBetaForTripFn",
     "GpsMatrtklibNavMessagesForTripFn",
     "GnssLogPseudorangeMatrixFn",
     "GnssLogEpochTimesFn",
@@ -1982,6 +2042,7 @@ __all__ = [
     "ProjectStopFn",
     "RawObservationFrameProducts",
     "ReceiverClockBiasLookupFn",
+    "RecomputeRtklibIonoMatrixFn",
     "RecomputeRtklibTropoMatrixFn",
     "RemapPseudorangeIsbFn",
     "RepairBaselineWlsFn",

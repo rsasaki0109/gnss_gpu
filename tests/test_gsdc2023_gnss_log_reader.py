@@ -269,6 +269,15 @@ def test_gnss_log_pseudorange_preserves_large_nanosecond_integer_precision(tmp_p
     received_sv_time_nanos = 347_670_368_542_152
     log_path.write_text(
         _raw_line(
+            utc_ms=315_964_800_000,
+            time_nanos=0,
+            full_bias_nanos="",
+            bias_nanos="",
+            svid=10,
+            carrier_hz=1_575_420_000.0,
+            received_sv_time_nanos="",
+        )
+        + _raw_line(
             utc_ms=1_593_045_252_440,
             time_nanos=time_nanos,
             full_bias_nanos=full_bias_nanos,
@@ -763,12 +772,20 @@ def test_residual_value_bridge_respects_settings_epoch_window(tmp_path, monkeypa
 
     def fake_build_trip_arrays(path, **kwargs):
         assert path == trip_dir
-        build_calls.append((kwargs["start_epoch"], kwargs["max_epochs"]))
+        build_calls.append(
+            (
+                kwargs["start_epoch"],
+                kwargs["max_epochs"],
+                kwargs["apply_observation_mask"],
+            )
+        )
         if kwargs["start_epoch"] == 1:
             assert kwargs["max_epochs"] == 1
+            assert kwargs["apply_observation_mask"] is True
         else:
             assert kwargs["start_epoch"] == 0
-            assert kwargs["max_epochs"] == 1_000_000_000
+            assert kwargs["max_epochs"] == 3
+            assert kwargs["apply_observation_mask"] is True
         return batch
 
     def fake_component_frame(path, times_ms, **kwargs):
@@ -786,7 +803,7 @@ def test_residual_value_bridge_respects_settings_epoch_window(tmp_path, monkeypa
     assert set(frame["field"]) == {"D"}
     assert set(frame["epoch_index"]) == {2}
     np.testing.assert_allclose(frame.sort_values("svid")["bridge_residual"], residual[0])
-    assert build_calls == [(1, 1), (0, 1_000_000_000)]
+    assert build_calls == [(1, 1, True), (0, 3, True)]
 
 
 def test_residual_value_bridge_doppler_uses_matlab_resd_convention(tmp_path, monkeypatch):

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from experiments.compare_gsdc2023_residual_values import compare_residual_values
 from experiments.gsdc2023_residual_audit import (
     append_bridge_residual_row,
     matlab_residual_frame,
@@ -103,6 +104,8 @@ def test_merge_residual_value_frames_adds_deltas_and_summary() -> None:
                 "matlab_sat_x": 1.0,
                 "matlab_sat_y": 2.0,
                 "matlab_sat_z": 3.0,
+                "matlab_obs_clk": 90.0,
+                "matlab_isb": 10.0,
             },
             {
                 "field": "D",
@@ -127,6 +130,8 @@ def test_merge_residual_value_frames_adds_deltas_and_summary() -> None:
     assert matched["delta"] == 2.0
     assert matched["pre_residual_delta"] == 2.0
     assert matched["common_bias_delta"] == 0.0
+    assert matched["bridge_isb"] == 10.0
+    assert matched["isb_delta"] == 0.0
     assert matched["observation_delta"] == 2.0
     assert matched["model_delta"] == -100.0
     assert matched["sat_position_delta_norm"] == 1.0
@@ -136,6 +141,7 @@ def test_merge_residual_value_frames_adds_deltas_and_summary() -> None:
     assert payload["total_matlab_only"] == 1
     assert payload["total_bridge_only"] == 0
     assert payload["median_abs_delta"] == 2.0
+    assert payload["median_abs_isb_delta"] == 0.0
     assert payload["median_abs_model_delta"] == 100.0
     assert payload["median_abs_sat_position_delta_norm"] == 1.0
     by_field = summary.set_index(["field", "freq"])
@@ -150,3 +156,117 @@ def test_matlab_residual_frame_requires_columns(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="diagnostics CSV missing required columns"):
         matlab_residual_frame(diagnostics_path)
+
+
+def test_real_matlab_export_residual_values_sm_a205u_snapshot() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    trip_dir = (
+        repo_root.parent
+        / "ref/gsdc2023/kaggle_smartphone_decimeter_2023/sdc2023/train/"
+        / "2022-10-06-21-51-us-ca-mtv-n/sm-a205u"
+    )
+    diagnostics_path = trip_dir / "phone_data_residual_diagnostics.csv"
+    if not diagnostics_path.is_file():
+        pytest.skip(f"MATLAB residual diagnostics fixture is not available: {diagnostics_path}")
+    if not (trip_dir / "device_gnss.csv").is_file():
+        pytest.skip(f"raw bridge fixture is not available: {trip_dir}")
+
+    merged, summary, payload = compare_residual_values(
+        trip_dir,
+        max_epochs=50,
+        multi_gnss=False,
+    )
+
+    assert payload["total_matlab_count"] == 680
+    assert payload["total_bridge_count"] == 580
+    assert payload["total_matched_count"] == 580
+    assert payload["total_matlab_only"] == 100
+    assert payload["total_bridge_only"] == 0
+    assert payload["median_abs_delta"] == pytest.approx(4.470348319296491e-08)
+    assert payload["p95_abs_delta"] == pytest.approx(2.3697519201973366e-05)
+    assert payload["max_abs_delta"] == pytest.approx(4.323213641971302e-05)
+    assert payload["median_abs_sat_position_delta_norm"] == pytest.approx(1.0908206617897573e-07)
+    assert payload["median_abs_sat_clock_bias_delta"] == pytest.approx(4.3291947804391384e-10)
+    assert payload["median_abs_sat_clock_drift_delta"] == pytest.approx(7.209944447028604e-17)
+    assert payload["median_abs_sat_trop_delta"] == pytest.approx(2.842170943040401e-14)
+    assert payload["median_abs_common_bias_delta"] == pytest.approx(4.083205844551685e-07)
+    assert payload["p95_abs_common_bias_delta"] == pytest.approx(1.7323779010780518e-05)
+    assert payload["median_abs_isb_delta"] == pytest.approx(1.862647813766216e-08)
+    assert payload["p95_abs_isb_delta"] == pytest.approx(4.0978193283081055e-08)
+    assert payload["median_abs_pre_residual_delta"] == pytest.approx(8.940696405446147e-08)
+    assert payload["median_abs_observation_delta"] == pytest.approx(4.831690603168681e-13)
+    assert payload["max_abs_observation_delta"] == pytest.approx(1.0058283805847168e-07)
+    assert payload["median_abs_model_delta"] == pytest.approx(7.82310962677002e-08)
+    assert payload["max_abs_common_bias_delta"] == pytest.approx(3.240809505200559e-05)
+    assert payload["max_abs_isb_delta"] == pytest.approx(6.705524668859653e-08)
+    assert int(np.count_nonzero(merged["side"] == "both")) == 580
+    assert int(np.count_nonzero(merged["side"] == "matlab_only")) == 100
+    assert int(np.count_nonzero(merged["side"] == "bridge_only")) == 0
+    diagnostics = pd.read_csv(diagnostics_path)
+    matlab_only = merged.loc[
+        merged["side"] == "matlab_only",
+        ["field", "freq", "epoch_index", "utcTimeMillis", "sys", "svid"],
+    ].merge(
+        diagnostics[
+            [
+                "freq",
+                "epoch_index",
+                "utcTimeMillis",
+                "sys",
+                "svid",
+                "p_factor_finite",
+                "d_factor_finite",
+            ]
+        ],
+        on=["freq", "epoch_index", "utcTimeMillis", "sys", "svid"],
+        how="left",
+    )
+    p_only = matlab_only["field"] == "P"
+    d_only = matlab_only["field"] == "D"
+    assert int(matlab_only.loc[p_only, "p_factor_finite"].sum()) == 0
+    assert int(matlab_only.loc[d_only, "d_factor_finite"].sum()) == 0
+
+    by_field = summary.set_index(["field", "freq"])
+    assert by_field.loc[("P", "L1"), "matched_count"] == 290
+    assert by_field.loc[("D", "L1"), "matched_count"] == 290
+    assert by_field.loc[("P", "L1"), "matlab_only"] == 50
+    assert by_field.loc[("D", "L1"), "matlab_only"] == 50
+    assert by_field.loc[("P", "L1"), "median_abs_delta"] == pytest.approx(1.4901161193847656e-08)
+    assert by_field.loc[("D", "L1"), "median_abs_delta"] == pytest.approx(8.283568e-06, abs=1e-12)
+    assert by_field.loc[("D", "L1"), "median_abs_common_bias_delta"] == pytest.approx(8.729387e-06, abs=1e-12)
+    assert by_field.loc[("D", "L1"), "max_abs_common_bias_delta"] == pytest.approx(3.240809505200559e-05)
+    assert by_field.loc[("P", "L1"), "median_abs_common_bias_delta"] == pytest.approx(1.862647813766216e-08)
+    assert by_field.loc[("P", "L1"), "max_abs_common_bias_delta"] == pytest.approx(6.705524668859653e-08)
+    assert by_field.loc[("P", "L1"), "median_abs_isb_delta"] == pytest.approx(1.862647813766216e-08)
+    assert by_field.loc[("P", "L1"), "max_abs_isb_delta"] == pytest.approx(6.705524668859653e-08)
+    assert pd.isna(by_field.loc[("D", "L1"), "median_abs_isb_delta"])
+
+
+def test_real_matlab_export_residual_values_pixel4_l5_isb_snapshot() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    trip_dir = (
+        repo_root.parent
+        / "ref/gsdc2023/kaggle_smartphone_decimeter_2023/sdc2023/train/"
+        / "2020-07-17-23-13-us-ca-sf-mtv-280/pixel4"
+    )
+    diagnostics_path = trip_dir / "phone_data_residual_diagnostics.csv"
+    if not diagnostics_path.is_file():
+        pytest.skip(f"MATLAB residual diagnostics fixture is not available: {diagnostics_path}")
+    if not (trip_dir / "device_gnss.csv").is_file():
+        pytest.skip(f"raw bridge fixture is not available: {trip_dir}")
+
+    _merged, summary, payload = compare_residual_values(
+        trip_dir,
+        max_epochs=50,
+        multi_gnss=False,
+    )
+
+    assert payload["total_matched_count"] == 1182
+    assert payload["max_abs_delta"] == pytest.approx(5.060694127195786e-05)
+    assert payload["max_abs_isb_delta"] == pytest.approx(5.301088094711304e-06)
+    by_field = summary.set_index(["field", "freq"])
+    assert by_field.loc[("P", "L5"), "matched_count"] == 136
+    assert by_field.loc[("P", "L5"), "median_abs_isb_delta"] == pytest.approx(5.301088094711304e-06)
+    assert by_field.loc[("P", "L5"), "max_abs_model_delta"] == pytest.approx(9.890645742416382e-06)
+    assert by_field.loc[("P", "L1"), "median_abs_isb_delta"] == pytest.approx(2.6077276782388026e-08)
+    assert pd.isna(by_field.loc[("D", "L5"), "median_abs_isb_delta"])
