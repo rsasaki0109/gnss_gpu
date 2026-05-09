@@ -149,6 +149,12 @@ final submission 再現:
         - Submitted `submission_mtv700_ref2_nonlaxx_le1p0m_20260509.csv`: Kaggle `3.689/4.711`.
         - Single-source decomposition: `submission_mtv700_mi8_ref2_le1p0m_20260509.csv` scored `3.688/4.710`; `submission_mtv700_sm_a505u_ref2_le1p0m_20260509.csv` scored `3.686/4.711`; `submission_mtv700_pixel4xl_le1p0m_20260509.csv` scored `3.687/4.710`.
         - Interpretation: even sub-meter materialized MATLAB/ref2 transfers are not leaderboard-safe as a stack. `mi8` hurts public, `sm-a505u` hurts private, and `pixel4xl` removes the MTV public gain at 3 decimals. Do not stack these ref2/materialized rows into the current best unless a narrower row/source rule is found.
+      - sm-a505u ref2-selected narrowing: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/sm_a505u_ref2_selected_narrow_candidates_20260509/summary.json`
+        - Built MTV700 stacks using only the `223` `sm-a505u` `ref2:selected` rows, then narrowed by delta threshold and epoch window.
+        - Submitted `submission_mtv700_sm_a505u_ref2selected_le1p0m_20260509.csv` (`168` rows): Kaggle `3.686/4.711`.
+        - Submitted `submission_mtv700_sm_a505u_ref2selected_le0p25m_20260509.csv` (`77` rows): Kaggle `3.686/4.711`.
+        - Window split: `e300-350 <=0.75m` (`47` rows) scored `3.686/4.710`; `e200-300 <=0.75m` (`80` rows) scored `3.686/4.711`.
+        - Interpretation: the private-sensitive `sm-a505u` rows are concentrated in the earlier `ref2:selected` window, not just in large local deltas or the `ref:baseline` rows. The safe later window preserves the score but adds no 3-decimal gain, so `sm-a505u` ref2-selected is not a current best-improving stack component.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
