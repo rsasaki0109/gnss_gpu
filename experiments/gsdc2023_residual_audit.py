@@ -197,6 +197,14 @@ def add_residual_value_deltas(merged: pd.DataFrame) -> pd.DataFrame:
     _add_scalar_delta(out, matched, "common_bias_delta", "bridge_common_bias", "matlab_common_bias")
     _add_scalar_delta(out, matched, "observation_delta", "bridge_observation", "matlab_observation")
     _add_scalar_delta(out, matched, "model_delta", "bridge_model", "matlab_model")
+    if {"bridge_common_bias", "matlab_obs_clk", "matlab_isb"}.issubset(out.columns):
+        out["bridge_isb"] = np.nan
+        p_matched = matched & (out["field"] == "P")
+        out.loc[p_matched, "bridge_isb"] = (
+            out.loc[p_matched, "bridge_common_bias"].to_numpy(dtype=np.float64)
+            - out.loc[p_matched, "matlab_obs_clk"].to_numpy(dtype=np.float64)
+        )
+        _add_scalar_delta(out, p_matched, "isb_delta", "bridge_isb", "matlab_isb")
 
     for delta_col, bridge_col, matlab_col in (
         ("sat_clock_bias_delta", "bridge_sat_clock_bias", "matlab_sat_clock_bias"),
@@ -280,6 +288,7 @@ def residual_value_summary_frame(merged: pd.DataFrame) -> tuple[pd.DataFrame, di
         }
         row.update(delta_abs_stats(group_matched, "pre_residual_delta", "pre_residual_delta"))
         row.update(delta_abs_stats(group_matched, "common_bias_delta", "common_bias_delta"))
+        row.update(delta_abs_stats(group_matched, "isb_delta", "isb_delta"))
         row.update(delta_abs_stats(group_matched, "observation_delta", "observation_delta"))
         row.update(delta_abs_stats(group_matched, "model_delta", "model_delta"))
         for column, prefix in RESIDUAL_COMPONENT_SUMMARY_COLUMNS:
@@ -310,6 +319,7 @@ def residual_value_summary_frame(merged: pd.DataFrame) -> tuple[pd.DataFrame, di
     }
     payload.update(delta_abs_stats(matched, "pre_residual_delta", "pre_residual_delta"))
     payload.update(delta_abs_stats(matched, "common_bias_delta", "common_bias_delta"))
+    payload.update(delta_abs_stats(matched, "isb_delta", "isb_delta"))
     payload.update(delta_abs_stats(matched, "observation_delta", "observation_delta"))
     payload.update(delta_abs_stats(matched, "model_delta", "model_delta"))
     for column, prefix in RESIDUAL_COMPONENT_SUMMARY_COLUMNS:

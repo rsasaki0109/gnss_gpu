@@ -172,6 +172,7 @@ def chunk_diagnostics_frame(result, epoch_frame: pd.DataFrame) -> pd.DataFrame:
                     row[f"{source}_candidate_mse_pr"] = quality.get("mse_pr")
                     row[f"{source}_candidate_quality_score"] = quality.get("quality_score")
                     row[f"{source}_candidate_gap_p95_m"] = quality.get("baseline_gap_p95_m")
+                    row[f"{source}_candidate_gap_max_m"] = quality.get("baseline_gap_max_m")
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -248,6 +249,8 @@ def _build_config(args: argparse.Namespace) -> BridgeConfig:
         doppler_residual_mask_mps=args.doppler_residual_mask_mps,
         pseudorange_doppler_mask_m=args.pseudorange_doppler_mask_m,
         dual_frequency=args.dual_frequency,
+        apply_base_correction=args.base_correction,
+        apply_position_offset=args.position_offset,
     )
 
 
@@ -313,6 +316,18 @@ def main() -> None:
     parser.add_argument("--doppler-residual-mask-mps", type=float, default=OBS_MASK_DOPPLER_RESIDUAL_THRESHOLD_MPS)
     parser.add_argument("--pseudorange-doppler-mask-m", type=float, default=OBS_MASK_PSEUDORANGE_DOPPLER_THRESHOLD_M)
     parser.add_argument("--dual-frequency", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument(
+        "--base-correction",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="subtract smoothed base-station pseudorange residuals when metadata/RINEX/nav inputs are ready",
+    )
+    parser.add_argument(
+        "--position-offset",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="apply MATLAB-style phone position offset before computing source diagnostics",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
 

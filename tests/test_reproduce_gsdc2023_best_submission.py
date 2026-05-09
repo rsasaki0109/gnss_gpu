@@ -4,6 +4,8 @@ import pytest
 from experiments.reproduce_gsdc2023_best_submission import apply_row_coordinate_overrides
 from experiments.reproduce_gsdc2023_best_submission import apply_patch_source_preset
 from experiments.reproduce_gsdc2023_best_submission import CURRENT_1450_SUBMISSION
+from experiments.reproduce_gsdc2023_best_submission import main
+from experiments.reproduce_gsdc2023_best_submission import merge_patch_trips
 from experiments.reproduce_gsdc2023_best_submission import promote_final_row
 from experiments.reproduce_gsdc2023_best_submission import replace_trip_coordinates
 
@@ -145,3 +147,65 @@ def test_bridge_exception_patch_source_uses_base_as_key_submission() -> None:
     assert any("pixel4xl=" in value for value in trip_positions)
     assert any("sm-a505u=" in value for value in trip_positions)
     assert "sm-a505u=" in row_positions[0]
+
+
+def test_merge_patch_trips_appends_unique_extra_trips() -> None:
+    trips = merge_patch_trips(("trip/a", "trip/b"), ["trip/c", "trip/a", "", "trip/d"])
+
+    assert trips == ("trip/a", "trip/b", "trip/c", "trip/d")
+
+
+def test_main_can_patch_only_extra_trip_without_final_smoothing(tmp_path) -> None:
+    base = pd.DataFrame(
+        {
+            "tripId": ["trip/a", "trip/b"],
+            "UnixTimeMillis": [1, 2],
+            "LatitudeDegrees": [10.0, 20.0],
+            "LongitudeDegrees": [30.0, 40.0],
+        }
+    )
+    base_path = tmp_path / "base.csv"
+    patch_positions = tmp_path / "trip_a_positions.csv"
+    output = tmp_path / "output.csv"
+    source_output = tmp_path / "source.csv"
+    summary = tmp_path / "summary.json"
+    base.to_csv(base_path, index=False)
+    pd.DataFrame(
+        {
+            "UnixTimeMillis": [1],
+            "LatitudeDegrees": [11.0],
+            "LongitudeDegrees": [31.0],
+        }
+    ).to_csv(patch_positions, index=False)
+
+    status = main(
+        [
+            "--base-submission",
+            str(base_path),
+            "--patch-submission",
+            str(base_path),
+            "--no-default-patch-trips",
+            "--extra-patch-trip",
+            "trip/a",
+            "--patch-trip-positions",
+            f"trip/a={patch_positions}",
+            "--skip-final-build",
+            "--output-dir",
+            str(tmp_path),
+            "--source-output",
+            str(source_output),
+            "--output",
+            str(output),
+            "--summary",
+            str(summary),
+            "--expected-source",
+            str(tmp_path / "missing-source.csv"),
+            "--expected",
+            str(tmp_path / "missing-output.csv"),
+        ]
+    )
+
+    out = pd.read_csv(output)
+    assert status == 0
+    assert out["LatitudeDegrees"].tolist() == [11.0, 20.0]
+    assert out["LongitudeDegrees"].tolist() == [31.0, 40.0]

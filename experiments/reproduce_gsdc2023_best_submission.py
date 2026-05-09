@@ -94,6 +94,18 @@ def _trip_path_arg(trip: str, path: Path) -> str:
     return f"{trip}={path}"
 
 
+def merge_patch_trips(base_trips: tuple[str, ...], extra_trips: list[str]) -> tuple[str, ...]:
+    trips = list(base_trips)
+    seen = set(trips)
+    for trip in extra_trips:
+        trip = str(trip).strip()
+        if not trip or trip in seen:
+            continue
+        trips.append(trip)
+        seen.add(trip)
+    return tuple(trips)
+
+
 def reduced_patch_trip_position_args() -> list[str]:
     return [
         _trip_path_arg("2020-12-11-19-30-us-ca-mtv-e/pixel4xl", PIXEL4XL_BRIDGE_POSITIONS),
@@ -441,11 +453,28 @@ def main(argv: list[str] | None = None) -> int:
         help="override one patch trip with a bridge_positions.csv/submission-style CSV",
     )
     parser.add_argument(
+        "--extra-patch-trip",
+        action="append",
+        default=[],
+        metavar="TRIP",
+        help="append one additional tripId to replace from --patch-submission or --patch-trip-positions",
+    )
+    parser.add_argument(
+        "--no-default-patch-trips",
+        action="store_true",
+        help="only patch trips supplied with --extra-patch-trip",
+    )
+    parser.add_argument(
         "--patch-row-positions",
         action="append",
         default=[],
         metavar="TRIP=CSV",
         help="override selected rows after trip replacement with a partial CSV keyed by UnixTimeMillis",
+    )
+    parser.add_argument(
+        "--skip-final-build",
+        action="store_true",
+        help="write the patched source submission as the final output without running the reset-safe smoother",
     )
     args = parser.parse_args(argv)
 
@@ -467,6 +496,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     patch_trip_overrides = parse_trip_position_overrides(patch_trip_values)
     patch_row_overrides = parse_trip_position_overrides(patch_row_values)
+    base_patch_trips = () if args.no_default_patch_trips else SOURCE_PATCH_TRIPS
+    patch_trips = merge_patch_trips(base_patch_trips, args.extra_patch_trip)
     input_artifacts = {
         "base_submission": input_artifact_summary(
             args.base_submission,
@@ -488,7 +519,7 @@ def main(argv: list[str] | None = None) -> int:
     source_frame, source_build = replace_trip_coordinates(
         base_frame,
         patch_frame,
-        SOURCE_PATCH_TRIPS,
+        patch_trips,
         trip_position_overrides=patch_trip_overrides,
     )
     if patch_row_overrides:
@@ -498,7 +529,14 @@ def main(argv: list[str] | None = None) -> int:
     source_build["row_position_overrides"] = row_override_summary
     source_frame.to_csv(source_output, index=False)
 
-    final, build_summary = build_final(source_frame, output_dir)
+    if args.skip_final_build:
+        final = source_frame.copy()
+        build_summary = {
+            "skipped": True,
+            "reason": "--skip-final-build",
+        }
+    else:
+        final, build_summary = build_final(source_frame, output_dir)
     final.to_csv(output, index=False)
 
     source_verification = verify_optional(source_output, args.expected_source)
@@ -516,6 +554,7 @@ def main(argv: list[str] | None = None) -> int:
         "source_build": source_build,
         "source_verification": source_verification,
         "build": build_summary,
+        "skip_final_build": bool(args.skip_final_build),
         "verification": verification,
     }
     summary_path.parent.mkdir(parents=True, exist_ok=True)

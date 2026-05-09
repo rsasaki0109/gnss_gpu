@@ -1,0 +1,26 @@
+{
+  "expected_column_count": 3,
+  "expected_columns": [
+    "freq",
+    "field",
+    "count"
+  ],
+  "file_count": 1,
+  "files": [
+    {
+      "column_count": 3,
+      "columns": [
+        "freq",
+        "field",
+        "count"
+      ],
+      "relative_path": "train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4/phone_data_factor_counts.csv",
+      "row_count": 12,
+      "sha256": "8fd4705bd75a4ba9cfbe69e825ffd58e4430f92b0b3393b44c0d8bf8284afb3f",
+      "trip": "train/2020-06-25-00-34-us-ca-mtv-sb-101/pixel4"
+    }
+  ],
+  "manifest_version": 1,
+  "total_rows": 12,
+  "writer_filename": "phone_data_factor_counts.csv"
+}
