@@ -125,6 +125,11 @@ final submission 再現:
         - `25-45%`: `3.686/4.710`; `25-40%`: `3.686/4.710`; `23-40%`: `3.686/4.710`.
         - `25-38%` changes `3445` rows and local p95 stays `0`, so it is below the GSDC score p95 threshold and was not submitted.
         - `25-39%` changes `3708` rows, local p95 `0.039440m`, Kaggle `3.686/4.710`. Current minimal confirmed best is `submission_p3p25_window_f25_39_20260509.csv`.
+      - Trip/group ablation for `25-39%`: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_f25_39_trip_ablation_20260509/summary.json`, `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_f25_39_trip_group_candidates_20260509/summary.json`, and `experiments/results/source_selection_lowbaseline_submission_probe_20260430/p3p25_f25_39_mtv_pair_candidates_20260509/summary.json`
+        - `LAX-P single`: `3.687/4.710`; `LAX-only`: `3.687/4.710`. LAX rows are not the public-positive driver.
+        - `leave-one-out LAX-P`: `3.686/4.710`; `leave-one-out 2023-04-27 MTV-PE1`: `3.686/4.710`; individual removed trips do not break the score.
+        - `non-LAX only`: `3.686/4.710`; `non-LAX non-SJC`: `3.686/4.710`; `MTV only`: `3.686/4.710`.
+        - MTV 3-trip minimal candidate (`2021-08-17 MTV-G`, `2023-04-27 MTV-PE1`, `2023-05-23 MTV-DE1`) changes `700` rows and still scores `3.686/4.710`. Best MTV 2-trip probe (`2022-03-22 MTV-PE1` + `2023-05-23 MTV-DE1`, `572` rows) falls back to `3.687/4.710`. Current smallest confirmed public-improving/private-safe candidate is the MTV 3-trip `25-39%` window.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
