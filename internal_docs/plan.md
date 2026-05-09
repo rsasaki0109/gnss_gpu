@@ -94,6 +94,7 @@ final submission 再現:
     - Default inputs are the MATLAB/reference final CSV, the closest Python candidate CSV, and the alternate bridge root `../ref/gsdc2023/kaggle_smartphone_decimeter_2023/sdc2023/test`.
     - The wrapper materializes the `24` missing bridge timestamps, reconstructs from the alternate bridge root, and writes a nested reconstruction summary.
     - Real-data one-command output: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/matlab_reference_final_reproduction_one_command_20260509/summary.json`, `71936` rows, `changed_rows_gt_1e_9m=0`, `changed_rows_gt_0p01m=0`, mean/p50/p95/max all `0m`; latitude max absolute diff `0`, longitude max absolute diff `1.421085e-14deg`.
+    - Kaggle score check for the one-command generated `submission_reconstructed_matlab_reference.csv`: `public=4.056`, `private=5.141`, matching the original MATLAB/reference final submission score exactly.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
