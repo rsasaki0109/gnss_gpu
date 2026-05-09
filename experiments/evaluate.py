@@ -28,6 +28,8 @@ from typing import Dict, Optional, Sequence
 
 import numpy as np
 
+from gnss_gpu.range_model import geometric_ranges_sagnac, rotate_satellites_sagnac
+
 
 # ---------------------------------------------------------------------------
 # WGS84 constants
@@ -649,20 +651,32 @@ def wls_solve_py(
     state : ndarray, shape (4,)   [x, y, z, clock_bias]
     n_iter : int
     """
+    sat_ecef = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+    pseudoranges = np.asarray(pseudoranges, dtype=np.float64).ravel()
+    weights = np.asarray(weights, dtype=np.float64).ravel()
     n_sat = len(pseudoranges)
-    state = np.zeros(4)
+    state = np.zeros(4, dtype=np.float64)
+
+    if n_sat >= 4:
+        centroid = np.mean(sat_ecef, axis=0)
+        centroid_norm = float(np.linalg.norm(centroid))
+        if centroid_norm > 1e-6:
+            state[:3] = centroid * (_WGS84_A / centroid_norm)
+            ranges = geometric_ranges_sagnac(state[:3], sat_ecef)
+            state[3] = float(np.mean(pseudoranges - ranges))
 
     for iteration in range(max_iter):
         H = np.zeros((n_sat, 4))
         pred_pr = np.zeros(n_sat)
+        sat_rot = rotate_satellites_sagnac(state[:3], sat_ecef)
 
         for j in range(n_sat):
-            dx = sat_ecef[j] - state[:3]
+            dx = state[:3] - sat_rot[j]
             r = np.linalg.norm(dx)
             if r < 1.0:
                 r = 1.0
             pred_pr[j] = r + state[3]
-            H[j, :3] = -dx / r
+            H[j, :3] = dx / r
             H[j, 3] = 1.0
 
         residual = pseudoranges - pred_pr

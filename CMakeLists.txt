@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(gnss_gpu LANGUAGES CXX CUDA)
+project(gnss_gpu LANGUAGES C CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
@@ -12,6 +12,7 @@ find_package(pybind11 QUIET)
 add_library(gnss_gpu_core
   src/utils/coordinates.cu
   src/positioning/wls.cu
+  src/positioning/fgo.cu
   src/positioning/multi_gnss.cu
 )
 target_include_directories(gnss_gpu_core PUBLIC include)
@@ -237,6 +238,48 @@ if(pybind11_FOUND)
   # Signal simulator bindings
   pybind11_add_module(_gnss_gpu_signal_sim python/gnss_gpu/_signal_sim_bindings.cpp)
   target_link_libraries(_gnss_gpu_signal_sim PRIVATE gnss_gpu_signal_sim)
+
+  # --- RTKLIB SPP wrapper (pure C, no CUDA) ---
+  # Requires RTKLIB demo5 sources at ../ref/RTKLIB-demo5/src/
+  set(RTKLIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ref/RTKLIB-demo5/src)
+  if(EXISTS ${RTKLIB_DIR}/rtklib.h)
+    set(RTKLIB_SRCS
+      ${RTKLIB_DIR}/rtkcmn.c
+      ${RTKLIB_DIR}/rinex.c
+      ${RTKLIB_DIR}/pntpos.c
+      ${RTKLIB_DIR}/ephemeris.c
+      ${RTKLIB_DIR}/ionex.c
+      ${RTKLIB_DIR}/tides.c
+      ${RTKLIB_DIR}/sofa.c
+      ${RTKLIB_DIR}/trace.c
+      ${RTKLIB_DIR}/options.c
+      ${RTKLIB_DIR}/solution.c
+      ${RTKLIB_DIR}/lambda.c
+      ${RTKLIB_DIR}/geoid.c
+      ${RTKLIB_DIR}/sbas.c
+      ${RTKLIB_DIR}/preceph.c
+      ${RTKLIB_DIR}/rtkpos.c
+      ${RTKLIB_DIR}/postpos.c
+      ${RTKLIB_DIR}/ppp.c
+      ${RTKLIB_DIR}/ppp_ar.c
+      ${RTKLIB_DIR}/rtcm.c
+      ${RTKLIB_DIR}/rtcm2.c
+      ${RTKLIB_DIR}/rtcm3.c
+      ${RTKLIB_DIR}/rtcm3e.c
+    )
+    add_library(rtklib_c STATIC ${RTKLIB_SRCS} src/rtklib_spp/rtklib_spp.c)
+    target_include_directories(rtklib_c PUBLIC ${RTKLIB_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_definitions(rtklib_c PRIVATE TRACE ENAGLO ENAQZS ENAGAL ENACMP ENAIRN NFREQ=4 NEXOBS=3)
+    target_compile_options(rtklib_c PRIVATE -std=c99 -Wno-unused-but-set-variable)
+    set_target_properties(rtklib_c PROPERTIES LINKER_LANGUAGE C)
+
+    pybind11_add_module(_gnss_gpu_rtklib_spp python/gnss_gpu/_rtklib_spp_bindings.cpp)
+    target_link_libraries(_gnss_gpu_rtklib_spp PRIVATE rtklib_c m)
+    target_include_directories(_gnss_gpu_rtklib_spp PRIVATE ${RTKLIB_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    install(TARGETS _gnss_gpu_rtklib_spp DESTINATION gnss_gpu)
+  else()
+    message(STATUS "RTKLIB demo5 sources not found at ${RTKLIB_DIR} -- skipping rtklib_spp binding")
+  endif()
 
   # Install all pybind11 modules into the gnss_gpu package
   install(TARGETS

@@ -5,6 +5,8 @@ from pathlib import Path
 
 import numpy as np
 
+from gnss_gpu.range_model import geometric_ranges_sagnac
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT / "experiments") not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT / "experiments"))
@@ -44,7 +46,7 @@ def _quality_scenario():
         [SYSTEM_GPS] * len(gps_sats) + [SYSTEM_GALILEO] * len(gal_sats),
         dtype=np.int32,
     )
-    ranges = np.linalg.norm(sat_ecef - true_pos.reshape(1, 3), axis=1)
+    ranges = geometric_ranges_sagnac(true_pos, sat_ecef)
     pseudoranges = ranges.copy()
     pseudoranges[: len(gps_sats)] += gps_cb
     pseudoranges[len(gps_sats) :] += gps_cb + gal_bias

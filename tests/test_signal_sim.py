@@ -5,6 +5,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+pytest.importorskip(
+    "gnss_gpu._gnss_gpu_signal_sim",
+    reason="CUDA signal simulator bindings not available",
+)
+pytest.importorskip(
+    "gnss_gpu._gnss_gpu_acq",
+    reason="CUDA acquisition bindings not available",
+)
 signal_sim = pytest.importorskip(
     "gnss_gpu.signal_sim",
     reason="CUDA signal simulator bindings not available",

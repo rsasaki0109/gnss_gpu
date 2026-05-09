@@ -90,6 +90,36 @@ def _datetime_to_gps_week(dt: datetime) -> int:
     return int(total_seconds // 604800)
 
 
+def read_gps_klobuchar_from_nav_header(filepath: str | Path) -> tuple[list[float] | None, list[float] | None]:
+    """Read GPS Klobuchar alpha/beta from RINEX navigation headers.
+
+    Supports mixed RINEX 3 ``GPSA`` / ``GPSB`` records and RINEX 2
+    ``ION ALPHA`` / ``ION BETA`` records.
+
+    Returns ``(None, None)`` if those lines are missing; callers should fall back to defaults.
+    """
+    filepath = Path(filepath)
+    alpha: list[float] | None = None
+    beta: list[float] | None = None
+    with open(filepath) as f:
+        for raw in f:
+            if "END OF HEADER" in raw:
+                break
+            label = raw[60:].strip() if len(raw) > 60 else ""
+            parts = raw.split()
+            if len(parts) < 5:
+                continue
+            if parts[0] == "GPSA" and "IONOSPHERIC" in label:
+                alpha = [_parse_nav_float(parts[i]) for i in range(1, 5)]
+            elif parts[0] == "GPSB" and "IONOSPHERIC" in label:
+                beta = [_parse_nav_float(parts[i]) for i in range(1, 5)]
+            elif label == "ION ALPHA" or parts[-2:] == ["ION", "ALPHA"]:
+                alpha = [_parse_nav_float(parts[i]) for i in range(0, 4)]
+            elif label == "ION BETA" or parts[-2:] == ["ION", "BETA"]:
+                beta = [_parse_nav_float(parts[i]) for i in range(0, 4)]
+    return alpha, beta
+
+
 def read_nav_rinex(
     filepath: str | Path,
     systems: tuple[str, ...] = ("G",),
