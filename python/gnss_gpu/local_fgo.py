@@ -1036,9 +1036,15 @@ def solve_local_fgo_with_lambda(
     for pair_key, _integer in fixed_segments:
         system = pair_key[0]
         fixed_by_system[system] = fixed_by_system.get(system, 0) + 1
+    fixed_epochs_set = sorted({int(epoch_pair[0]) for epoch_pair in fixed_epoch_pairs.keys()})
     summary["n_fixed"] = int(len(fixed_segments))
     summary["n_fixed_observations"] = int(len(fixed_epoch_pairs))
     summary["fixed_by_system"] = fixed_by_system
+    # Per-epoch fix mask: epoch indices (relative to the LocalFgoWindow start)
+    # that had at least one DD carrier ambiguity fixed via LAMBDA. Used by
+    # callers to limit FGO rewrite to actually-fixed epochs (avoid the
+    # partial-fix broad-apply bug where float-only epochs are also moved).
+    summary["fixed_epochs"] = fixed_epochs_set
     return current_result, summary
 
 

@@ -154,6 +154,14 @@ def test_local_fgo_lambda_adds_fixed_carrier_factors():
     assert info["n_fixed"] > 0
     assert info["n_fixed_observations"] > 0
     assert result.factor_counts["dd_carrier_fixed"] > 0
+    # Bug #1 regression guard: per-epoch fix mask must be exposed and
+    # consist of valid window-relative indices.
+    fixed_epochs = info["fixed_epochs"]
+    assert isinstance(fixed_epochs, list)
+    assert len(fixed_epochs) > 0
+    win = result.window
+    for rel in fixed_epochs:
+        assert win.start <= int(rel) <= win.end
 
 
 def test_window_helpers_and_injection():
