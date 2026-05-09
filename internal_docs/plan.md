@@ -144,6 +144,11 @@ final submission 再現:
         - Submitted `submission_p3p0a075_mtv700_f25_39_20260509.csv`: Kaggle `3.686/4.710`.
         - Submitted `submission_p3p0a075_non_lax_non_mtv_f25_39_20260509.csv`: Kaggle `3.687/4.710`.
         - Interpretation: strengthening the same MTV700 row set from p3p25-size movement to p3p0 `alpha=0.75` still ties `3.686/4.710`, while the non-MTV small window does not recover the public improvement. The current evidence says the p3 family public-positive effect is concentrated in MTV rows but already saturated at the 3-decimal leaderboard resolution.
+      - ref2/materialized small-delta transfer follow-up: `experiments/results/source_selection_lowbaseline_submission_probe_20260430/ref2_materialized_small_delta_stack_candidates_20260509/summary.json`
+        - Built candidates by stacking MTV700 with materialized MATLAB/ref2 source rows filtered by delta vs private-safe best (`<=0.5m`, `<=0.75m`, `<=1m`, etc.). LAX-X-excluding `<=1m` changes `2405` rows relative to MTV700, all below `1m`.
+        - Submitted `submission_mtv700_ref2_nonlaxx_le1p0m_20260509.csv`: Kaggle `3.689/4.711`.
+        - Single-source decomposition: `submission_mtv700_mi8_ref2_le1p0m_20260509.csv` scored `3.688/4.710`; `submission_mtv700_sm_a505u_ref2_le1p0m_20260509.csv` scored `3.686/4.711`; `submission_mtv700_pixel4xl_le1p0m_20260509.csv` scored `3.687/4.710`.
+        - Interpretation: even sub-meter materialized MATLAB/ref2 transfers are not leaderboard-safe as a stack. `mi8` hurts public, `sm-a505u` hurts private, and `pixel4xl` removes the MTV public gain at 3 decimals. Do not stack these ref2/materialized rows into the current best unless a narrower row/source rule is found.
 
 ## 2026-05-05 最新サマリ: MATLAB 完全等価 gate
 
