@@ -1,15 +1,24 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-05-09 JST
-**現在の HEAD**: `codex/residual-mask-main-port`
-**ブランチ**: `codex/residual-mask-main-port`
-**作業ツリー**: GSDC2023 MATLAB equivalence gate / residual side-only audit / submit risk gate / local candidate screening は PR #55 に反映済み。既存変更を revert しないこと。
+**最終更新**: 2026-05-10 JST
+**現在の HEAD**: `origin/main` after PR #55 merge (`bd63c08`)
+**ブランチ**: post-merge docs cleanup branch
+**作業ツリー**: PR #55 は merge 済み。GSDC2023 MATLAB equivalence gate / final reproduction gate / submit risk gate / local candidate screening は `main` に反映済み。既存変更を revert しないこと。
 **直近の重点**: Kaggle GSDC2023 raw bridge / MATLAB phone_data 移植の内部状態 parity と提出前 risk gate。
 **旧メモ**: 2026-04-21 以前の UrbanNav / CT-RBPF-FGO 計画は下に残す。現在の最優先は GSDC2023 raw bridge の MATLAB 移植を詰めること。
 
+## 2026-05-10 post-merge status
+
+- PR #55 merged: <https://github.com/rsasaki0109/gnss_gpu/pull/55>
+- Merge commit: `bd63c08d5da3ed909b909f56d3c0383e5ee22cc6`
+- Current concise status doc: `internal_docs/gsdc2023_post_pr55_status_20260510.md`
+- README now separates:
+  - MATLAB/reference final CSV exact reproduction: `71936` rows, p95/max `0m`, Kaggle `4.056/5.141`
+  - Python private-floor best family: `3.686/4.710`, not MATLAB-reference identical
+
 ## 2026-05-09 最新サマリ: MATLAB final submission 再現の残差分解
 
-結論: **MATLAB/reference final CSV は Python の one-command wrapper から数値的に完全再構成でき、Kaggle score も original MATLAB/reference と同じ `4.056/5.141` まで確認済み**。ただし score は Python private-safe best `3.687/4.710` より悪いので、MATLAB final の完全再現は provenance/parity 達成であり、そのまま submit 改善ではない。
+結論: **MATLAB/reference final CSV は Python の one-command wrapper から数値的に完全再構成でき、Kaggle score も original MATLAB/reference と同じ `4.056/5.141` まで確認済み**。ただし score は現在の Python private-floor best family `3.686/4.710` より悪いので、MATLAB final の完全再現は provenance/parity 達成であり、そのまま submit 改善ではない。
 
 内部状態 parity:
 
