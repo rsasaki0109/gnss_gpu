@@ -44,9 +44,14 @@ from exp_ppc_ctrbpf_fgo import (  # noqa: E402
     _load_hybrid_pos_file,
     _load_rtk_diag_file,
     _rtkdiag_candidate_gate,
+    _parse_label_list,
 )
 from gnss_gpu.ppc_score import score_ppc2024  # noqa: E402
 
+from sim_ppc_phase_csv_addcand import (  # noqa: E402
+    _candidate_dir_map,
+    _discover_candidate_dir_map,
+)
 from sim_ppc_selector_sweep import (  # noqa: E402
     _CANDIDATES_PHASE11V,
     _DIAG_ROOT,
@@ -108,6 +113,22 @@ def _load_candidates_for_run(city, run):
     return out
 
 
+def _load_candidates_for_labels(city: str, run: str, labels: list[str], label_to_dir: dict[str, str]):
+    out = []
+    for label in labels:
+        dir_name = label_to_dir.get(label)
+        if dir_name is None:
+            continue
+        pos_path = _PROJECT_ROOT / _DIAG_ROOT / dir_name / f"{city}_{run}_full.pos"
+        diag_path = _PROJECT_ROOT / _DIAG_ROOT / dir_name / f"{city}_{run}_full.csv"
+        if not pos_path.is_file() or not diag_path.is_file():
+            continue
+        pos, _ = _load_hybrid_pos_file(pos_path)
+        diag = _load_rtk_diag_file(diag_path)
+        out.append((label, pos, diag))
+    return out
+
+
 def _build_features(row: dict[str, str]) -> np.ndarray:
     return np.asarray([_diag_float(row, k) for k in _FEATURE_KEYS], dtype=np.float64)
 
@@ -138,7 +159,14 @@ def _augment_features(positions: list[np.ndarray], base_feats: list[np.ndarray],
     return out
 
 
-def _build_dataset(data_root: Path, hybrid_pos_dir: Path, policy: str):
+def _build_dataset(
+    data_root: Path,
+    hybrid_pos_dir: Path,
+    policy: str,
+    *,
+    phase_rows: dict[tuple[str, str], list[str]] | None = None,
+    label_to_dir: dict[str, str] | None = None,
+):
     """Yield (city, run, ref, hybrid_pos_dict, gate_pass_records).
 
     Each gate_pass_record is a list of (tow, [(label, pos_arr, feat_arr, truth_dist), ...]).
@@ -154,8 +182,13 @@ def _build_dataset(data_root: Path, hybrid_pos_dir: Path, policy: str):
         )
         ratio_min = float(variant.rtkdiag_candidate_ratio_min)
         rms_max = float(variant.rtkdiag_candidate_residual_rms_max)
+        if phase_rows is not None:
+            labels = phase_rows.get((city, run), [])
+            loaded = _load_candidates_for_labels(city, run, labels, label_to_dir or {})
+        else:
+            loaded = _load_candidates_for_run(city, run)
         kept = _filter_rtkdiag_candidates_by_policy(
-            _load_candidates_for_run(city, run),
+            loaded,
             city=city, run=run, policy=policy,
         )
         gate_records: list[tuple[float, list[tuple[str, np.ndarray, np.ndarray, float]]]] = []
@@ -312,11 +345,36 @@ def _baseline_score_phase(data, holdout_idx: int, policy: str) -> tuple[float, f
     return float(score.score_pct), float(score.pass_distance_m), float(score.total_distance_m)
 
 
+def _oracle_score(data, holdout_idx: int) -> tuple[float, float, float]:
+    city, run, ref, hybrid_pos, recs = data[holdout_idx]
+    truth_arr = np.asarray([t for _, t in ref], dtype=np.float64)
+    est = np.zeros((len(ref), 3), dtype=np.float64)
+    for i, (tow, _) in enumerate(ref):
+        t_key = round(float(tow), 1)
+        hp = hybrid_pos.get(t_key)
+        if hp is not None and np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
+            est[i] = np.asarray(hp, dtype=np.float64)
+    rec_lookup = {tow: options for tow, options in recs}
+    for i, (tow, _) in enumerate(ref):
+        t_key = round(float(tow), 1)
+        opts = rec_lookup.get(t_key)
+        if opts is None:
+            continue
+        best_i = min(range(len(opts)), key=lambda j: opts[j][3])
+        est[i] = opts[best_i][1]
+    score = score_ppc2024(est, truth_arr)
+    return float(score.score_pct), float(score.pass_distance_m), float(score.total_distance_m)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=Path, default=_DEFAULT_DATA_ROOT)
     parser.add_argument("--hybrid-pos-dir", type=Path, default=RESULTS_DIR / "libgnss_rtk_pos_v5")
     parser.add_argument("--policy", type=str, default="phase11z")
+    parser.add_argument("--phase-runs-csv", type=Path, default=None,
+                        help="Use rtkdiag_candidate_labels from this runs CSV as the authoritative pool.")
+    parser.add_argument("--discover-diag-dirs", action="store_true",
+                        help="Include unmapped libgnss_diag_phase10 dirs in the label map.")
     parser.add_argument("--max-iter", type=int, default=400)
     parser.add_argument("--lr", type=float, default=0.05)
     parser.add_argument("--model-kind", choices=("hgb", "lgb_rank"), default="hgb")
@@ -325,8 +383,25 @@ def main() -> None:
     parser.add_argument("--out-csv", type=Path, default=RESULTS_DIR / "ppc_learned_selector_phase11z.csv")
     args = parser.parse_args()
 
+    phase_rows = None
+    label_to_dir = None
+    if args.phase_runs_csv is not None:
+        label_to_dir = _candidate_dir_map()
+        if args.discover_diag_dirs:
+            label_to_dir = _discover_candidate_dir_map(label_to_dir)
+        with args.phase_runs_csv.open(newline="") as fh:
+            phase_rows = {
+                (str(row["city"]), str(row["run"])): _parse_label_list(str(row["rtkdiag_candidate_labels"]))
+                for row in csv.DictReader(fh)
+            }
     print(f"Loading data...", flush=True)
-    data = _build_dataset(args.data_root, args.hybrid_pos_dir, str(args.policy))
+    data = _build_dataset(
+        args.data_root,
+        args.hybrid_pos_dir,
+        str(args.policy),
+        phase_rows=phase_rows,
+        label_to_dir=label_to_dir,
+    )
     n_records = sum(len(recs) for _, _, _, _, recs in data)
     n_options = sum(len(opts) for _, _, _, _, recs in data for _, opts in recs)
     print(f"Loaded {len(data)} runs, {n_records} gate-pass epochs, {n_options} (epoch, candidate) pairs", flush=True)
@@ -341,6 +416,7 @@ def main() -> None:
                                     model_kind=str(args.model_kind), scope=str(args.scope))
         learned_ppc, learned_pm, total_m = _select_with_model(data, i, model)
         base_ppc, base_pm, _tm = _baseline_score_phase(data, i, str(args.policy))
+        oracle_ppc, oracle_pm, _otm = _oracle_score(data, i)
         delta_pp = learned_ppc - base_ppc
         delta_m = learned_pm - base_pm
         learned_pass_sum += learned_pm
@@ -349,11 +425,15 @@ def main() -> None:
         rows.append({
             "city": city, "run": run,
             "phase_baseline_ppc": base_ppc, "phase_baseline_pass_m": base_pm,
+            "oracle_ppc": oracle_ppc, "oracle_pass_m": oracle_pm,
             "learned_ppc": learned_ppc, "learned_pass_m": learned_pm,
             "delta_pp": delta_pp, "delta_m": delta_m,
+            "oracle_gap_pp": oracle_ppc - base_ppc,
+            "oracle_gap_m": oracle_pm - base_pm,
             "total_m": total_m,
         })
         print(f"  baseline (sort_key): ppc={base_ppc:.4f}% pass={base_pm:.1f}", flush=True)
+        print(f"  oracle:              ppc={oracle_ppc:.4f}% pass={oracle_pm:.1f}", flush=True)
         print(f"  learned (HGB): ppc={learned_ppc:.4f}% pass={learned_pm:.1f}", flush=True)
         print(f"  delta: {delta_pp:+.4f}pp ({delta_m:+.1f}m)", flush=True)
 
