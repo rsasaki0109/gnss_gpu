@@ -1,9 +1,161 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-05-10 JST (PPC ceiling Phase 19d) / 2026-05-10 (PR #55 main merge)
-**現在の HEAD**: feature/ppc-realtime-turing-target (PPC Phase 19d) merged with `origin/main` after PR #55 (`bd63c08`)
-**ブランチ**: `feature/ppc-realtime-turing-target` (this branch carries the PPC post-process ceiling 73.76% effort; PR #55 GSDC raw bridge / MATLAB equivalence gate is now reflected via merge)
-**最近の進捗ハイライト**: PPC PF aggregate **73.7587%** (Phase 17 から +1.10pp) — GTSAM FGO 3-config diversity (v2_gap + v14_snr38 + v17_el25) で全 6 run positive。 PR #55 経由で GSDC raw bridge / MATLAB final reproduction / submit risk gate も統合済み。
+**最終更新**: 2026-05-11 JST (Phase 19d landed on main via PR #58)
+**現在の HEAD**: `main` after PR #58 merge (`4632a83`) + PR #55 merge (`bd63c08`)
+**最近の進捗ハイライト**:
+- **PR #58 MERGED 2026-05-10**: Phase 11-19 PPC ceiling 73.76% PF (+1.10pp over Phase 17、 +2.28pp / +1058m over Phase 11ep baseline) を main に統合。 86 commits、 全 5 CI checks green。
+- **PR #55 MERGED 2026-05-10 (upstream)**: GSDC2023 raw bridge / MATLAB final reproduction / submit risk gate / 18 新規 FGO/LAMBDA module を main 投入。
+- **TURING gap 13.5pp → 11.84pp** に縮小 (target 85.6%、 現状 73.76%)。
+
+---
+
+## §0. TURING 残戦略 (2026-05-11 update — what's needed to win)
+
+### 現状サマリ
+
+- PPC2024 honest aggregate 6-run PF: **73.7587%** (Phase 19d、 NEW canonical best)
+- 累積進捗: Phase 11ep PF 71.48% → Phase 19d 73.76% = +2.28pp / +1058m
+- TURING target 85.6% への gap: **11.84pp** / ~5.5km equivalent
+- Selector oracle (best per-epoch over 60+ candidates): ~75-78% → 現候補 pool の理論上限が **80% 弱**
+
+つまり、 **既存 candidate diversity の追加では +pp が出ない**。 新候補種 (新 observation model / 新 architecture) が必須。
+
+### 既に exhausted な path (記録 — 再試行禁止)
+
+| 試行 | Δpp aggregate | 結論 |
+|---|---:|---|
+| Per-run gnss_solve config sweep (40+ variants) | ceiling at +0.10pp marginal | 飽和 |
+| Demo5 trusted_o3 + continuous_nojump (Phase 17) | +0.531pp | landed |
+| GTSAM FGO single-config (Phase 19a) | +0.84pp | landed |
+| GTSAM FGO multi-config 3-FGO (Phase 19d) | +0.84→+1.10pp cum | landed、 ceiling |
+| L1/L2 widelane cascade (Phase 11fj) | +0.012pp | negligible |
+| L5 N5 filter state + L1/L5 widelane (Phase 18) | neutral on dataset | landed、 triple-freq dataset 待ち |
+| IFLC (Iono-Free LC) | -3.83pp | 短基線 + urban で IF noise 3x amp |
+| DD-PR LS anchor | -0.23pp | 失敗 |
+| FGO+LAMBDA (Python local) | applied=0 | 適用 epoch なし |
+| imu_tc / ins_tc on Phase 11ep base | 0 〜 -1.15pp | base 由来 transfer 失敗 |
+| Per-run candidate blocking on Phase 19d | -0.06pp regression | PPC selector は既に per-epoch optimal |
+| Tunnel smoothing / vehicle speed FGO args | no-op | PPC で tunnel detection 失敗、 wheel odom 不在 |
+| FGO env vars (BLEND_EXPONENT 等) | (未試行、 期待 +0.0-0.02pp marginal) | 後回し |
+
+### 残 architectural breakthrough path (ROI 順)
+
+#### 1. Multi-frequency LAMBDA cascade in libgnss++ (~2 週、 期待 +3-5pp、 ROI 最高)
+
+**現状**: `third_party/gnssplusplus` で L1/L2 widelane のみ implement (`compute_wide_lane_float`)、 Phase 18 で L1/L5 widelane も加わったが neutral。 NL stage (L1 narrow-lane ≈0.19m) が未 cascade。
+
+**必要**:
+- UWL stage: Galileo E1-E5a Melbourne-Wübbena (λ_UWL ≈ 3.4m、 一発で fix 高確率)
+- WL stage: L1-L2 / L1-L5 (既存)
+- NL stage: UWL+WL の 整数解 conditioning 下で L1 narrow-lane LAMBDA
+- 既存 `compute_wide_lane_l5_float` を `compute_uwl_e1e5a_float` に拡張 + NL cascade pipeline
+
+**dataset 適合**: PPC has GPS L1/L2 + Galileo E1/E5a + GLO L1/L2 → triple-freq cascade 可能 (Galileo 限定)。 GPS 系は L1/L2 のみで dual-freq。
+
+**期待 PF +pp**: +3-5pp aggregate (offline で +5-7pp、 realization 50-70%)、 Phase 19d 73.76% → **77-79%**
+
+**実装場所**: `third_party/gnssplusplus/src/algorithms/rtk.cpp` の `compute_wide_lane_l5_float` 直後に `compute_uwl_galileo_float` + 既存 widelane の NL conditioning 強化
+
+**リスク**: Galileo E5a 観測が PPC dataset で sparse な場合 effective epoch 少、 +pp 縮小
+
+#### 2. 3D map-aided NLOS rejection (~1-2 週、 期待 +2-4pp、 既存 infrastructure 活用度高)
+
+**現状**: PR #55 で BVH ray tracing module 投入済 (`python/gnss_gpu/bvh.py`, `src/raytrace/`, `_bvh.so`)、 PPC pipeline 未統合。 PPC urban canyon (特に tokyo/run1) の主要 error 源 = NLOS misfix。
+
+**必要**:
+- City model 取得 (PPC 撮影地: Tokyo Odaiba、 Nagoya 街区) — 国土地理院 3D 都市モデル / OpenStreetMap building footprints + Manhattan-world height extrusion で代用可
+- Per-particle NLOS gate: 各 particle の hypothesized position から sat LOS → BVH ray cast → block 判定 → likelihood weight = 0 or down-weighted
+- 既存 `exp_ppc_ctrbpf_fgo.py` の per-particle PR likelihood に hook 追加
+
+**dataset 適合**: tokyo/run1 (62% PF base → +5-10pp expected from NLOS gate)、 n/r1 街区 (+3-5pp)。 開放地 (t/r2, t/r3, n/r3) は marginal。
+
+**期待 PF +pp**: +2-4pp aggregate (t/r1 で +5pp dominant、 他 +0.5-2pp)、 Phase 19d → **75-77%**
+
+**実装場所**: `experiments/exp_ppc_ctrbpf_fgo.py` per-particle update loop に BVH NLOS gate、 `experiments/build_ppc_city_model.py` 新規作成
+
+**リスク**: City model accuracy 不足で false-positive NLOS rejection → fix 減
+
+#### 3. Reservoir Stein PF / FFBSi (~1 週、 期待 +1-2pp、 既存 code 統合のみ)
+
+**現状**: PR #58 (現 PR) の中で `python/gnss_gpu/particle_ffbsi.py`、 `reservoir_stein.py` 等 code が main 入り、 但し PPC pipeline 未統合 (本来別 task として作業されていた)。
+
+**必要**:
+- 現 `exp_ppc_ctrbpf_fgo.py` の `_particle_resample` を `reservoir_stein` 関数に差し替え (CLI flag `--resample-mode reservoir-stein`)
+- Particle degeneracy 改善で effective N 大、 多 modal density 表現
+- FFBSi backward pass で smoothed posterior、 PPC offline scoring に有効
+
+**期待 PF +pp**: +1-2pp aggregate (degeneracy heavy な epoch で gain)、 Phase 19d → **74.5-75.5%**
+
+**実装場所**: `experiments/exp_ppc_ctrbpf_fgo.py` の resample wiring、 `python/gnss_gpu/particle_filter_device.py` の Stein update hook
+
+**リスク**: PPC は既に N=2000 で degeneracy 軽い、 gain 小さい可能性
+
+#### 4. GTSAM TC FGO with proper IMU pre-integration (~1 週、 期待 +1-2pp)
+
+**現状**: 現使用の `gtsam_gnss_ws/ambiguity_resolution` binary は IMU input 取るが、 PreintegratedImuMeasurements (Forster et al. 2017) が proper TC として活性化されていない (motion factor with IMU velocity prior のみ)。 ins_tc 経由は Phase 11fi で -1.15pp、 但しこれは PPC selector の方式問題で TC 自体は valid。
+
+**必要**:
+- `gtsam_gnss_ws/.../ambiguity_resolution.cpp` の IMU factor を proper `PreintegratedImuMeasurements` に書き換え
+- ImuFactor + ImuBias factor graph、 bias state estimation
+- 高頻度 IMU (100Hz) → 1Hz GNSS epoch間で proper preintegration
+
+**期待 PF +pp**: +1-2pp on tokyo/run1 (IMU rich)、 全 aggregate +0.5-1pp、 Phase 19d → **74.3-74.8%**
+
+**実装場所**: `gtsam_gnss_ws/gtsam_gnss/examples_cpp/ambiguity_resolution.cpp` (~3000 LOC)
+
+**リスク**: IMU bias estimation 困難、 short window で over-fitting
+
+#### 5. RTKLIB demo5 full port (~1-2 週、 期待 +0.5-1pp)
+
+**現状**: Phase 14-17 で develop の `--prefer-trusted-seed` / `--diagnostics-csv` / `--rtk-update-outlier-threshold` を手動 port、 +0.531pp gain landed。 但し develop branch には更に AR reliability 1642 LOC, max-pos-jump, adaptive sigma 等の demo5 logic が unported。 Full port で +0.5-1pp 追加期待。
+
+**必要**:
+- `third_party/gnssplusplus/develop` branch (rsasaki0109/gnssplusplus-library) の demo5 changes を `feature/demo5-parity-rebase` に rebase
+- 共通祖先なし問題 (Phase 13 で確認) のため、 cherry-pick 方式
+- Per-run blocking 必要 (n/r2 dev は drag)
+
+**期待 PF +pp**: +0.3-0.5pp aggregate
+
+**リスク**: develop 側に更なる divergence、 full rebase 不可能
+
+### 推奨 work order (Pareto)
+
+1. **#3 Reservoir Stein PF**: 既存 code を wire up するだけ。 期待 +1-2pp、 1 週以下。 まず ROI 確認。
+2. **#1 Multi-freq LAMBDA cascade**: 一番大きな +pp potential。 2 週投資の justification 強い。
+3. **#2 BVH NLOS**: city model 取得が gating factor。 取得できれば urgent ROI。
+4. (#4, #5) 後回し
+
+### TURING まで到達 estimate
+
+```
+Phase 19d:          73.76%
++ #3 Reservoir Stein: ~75.0% (+1.3pp)
++ #1 Multi-freq cascade: ~78.0% (+3pp)
++ #2 BVH NLOS:       ~80.5% (+2.5pp、 #1 と部分 overlap)
++ #4 TC FGO IMU:     ~81.5% (+1pp)
++ #5 demo5 full:     ~82.0% (+0.5pp)
+
+→ TURING (85.6%) には依然 +3.6pp 不足
+```
+
+実は **上記 5 path 全部出しても TURING には届かない**可能性。 残り +3-4pp は:
+- Multi-base (network RTK)
+- Ionospheric SBAS / CLAS PPP (PR #55 で main に IERS / RINEX4 madoca infra 入った)
+- Map-aided LOS/NLOS の超高精度 city model
+
+### CLAS / madoca path (PR #55 経由で新規 available)
+
+PR #55 で `feature/clas-code-outlier-sigma-10`、 `feat/ppp-iers-solid-tide`、 `feat/rinex4-madoca` 等の branch が submodule に追加 (但し my branch とは別 history)。 madoca を使えば PPC でも **PPP-AR** (precise point positioning ambiguity resolution) が可能、 multi-base 必要なし、 期待 +2-3pp。
+
+但し my submodule branch (`feature/demo5-parity-rebase`) と CLAS branch は共通祖先なし、 統合は別 rebase 作業必要。
+
+### 関連 reference
+
+- Phase 19d FGO ceiling 詳細: §A 内の "Phase 19b–d: GTSAM FGO multi-config diversity"
+- FGO converter scripts: `/tmp/convert_ppc_to_fgo.py`、 `/tmp/fgo_to_ppc_pos.py`
+- FGO candidate dirs: `experiments/results/libgnss_diag_phase10/{fgo_v2_gap, fgo_v14_snr38, fgo_v17_el25}`
+- Phase 19d PF reproduce script: `/tmp/run_phase19d_3fgo.sh`
+- Memory store: `~/.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_ppc_postprocess_ceiling.md`
 
 ---
 
