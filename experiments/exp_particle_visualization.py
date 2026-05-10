@@ -48,6 +48,43 @@ def particles_ecef_to_lonlat(particles: np.ndarray) -> np.ndarray:
     return result
 
 
+def ecef_to_local_enu(positions_ecef: np.ndarray, origin_ecef: np.ndarray) -> np.ndarray:
+    """Convert ECEF positions to a local ENU frame anchored at origin_ecef."""
+    positions = np.asarray(positions_ecef, dtype=np.float64).reshape(-1, 3)
+    origin = np.asarray(origin_ecef, dtype=np.float64).reshape(3)
+    lat_deg, lon_deg, _ = ecef_to_lla(origin[0], origin[1], origin[2])
+    lat = math.radians(lat_deg)
+    lon = math.radians(lon_deg)
+    sin_lat = math.sin(lat)
+    cos_lat = math.cos(lat)
+    sin_lon = math.sin(lon)
+    cos_lon = math.cos(lon)
+    rot = np.array(
+        [
+            [-sin_lon, cos_lon, 0.0],
+            [-sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat],
+            [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat],
+        ],
+        dtype=np.float64,
+    )
+    return (rot @ (positions - origin).T).T
+
+
+def _axis_limits(points_xy: np.ndarray, margin_frac: float = 0.08, min_span_m: float = 20.0):
+    points = np.asarray(points_xy, dtype=np.float64).reshape(-1, 2)
+    finite = np.all(np.isfinite(points), axis=1)
+    if not np.any(finite):
+        return (-10.0, 10.0), (-10.0, 10.0)
+    pts = points[finite]
+    xmin, ymin = np.min(pts, axis=0)
+    xmax, ymax = np.max(pts, axis=0)
+    span = max(float(xmax - xmin), float(ymax - ymin), float(min_span_m))
+    cx = 0.5 * float(xmin + xmax)
+    cy = 0.5 * float(ymin + ymax)
+    half = 0.5 * span * (1.0 + 2.0 * margin_frac)
+    return (cx - half, cx + half), (cy - half, cy + half)
+
+
 def _run_ekf(data: dict, wls_init: np.ndarray) -> np.ndarray:
     """Run EKF to get reference positions for guide velocity."""
     from exp_urbannav_baseline import run_ekf
@@ -179,6 +216,9 @@ def run_pf_with_particle_dumps(
 
             particle_frames.append({
                 "epoch": i,
+                "particles_ecef": particles[:, :3].copy(),
+                "estimate_ecef": estimate[:3].copy(),
+                "gt_ecef": gt.copy(),
                 "particles_lonlat": p_lonlat,
                 "estimate_lonlat": np.array([est_lon, est_lat]),
                 "gt_lonlat": np.array([gt_lon, gt_lat]),
@@ -204,6 +244,140 @@ def run_pf_with_particle_dumps(
     print(f"    PF run: {n_epochs} epochs, {n_particles} particles, {elapsed:.1f}s")
     print(f"    Dumped {len(particle_frames)} frames")
     return {"frames": particle_frames, "estimates": estimates}
+
+
+def create_enu_animation(
+    frames: list[dict],
+    output_path: Path,
+    title: str = "GPU Particle Filter GNSS",
+    fps: int = 10,
+    trail_length: int = 50,
+    zoom_radius_m: float = 80.0,
+    baseline_label: str = "Baseline",
+) -> None:
+    """Create a lightweight local-ENU mp4 animation without map tiles."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FFMpegWriter
+
+    if not frames:
+        raise ValueError("frames must not be empty")
+    if "gt_ecef" not in frames[0]:
+        raise ValueError("frames must include ECEF fields for ENU rendering")
+
+    origin = np.asarray(frames[0]["gt_ecef"], dtype=np.float64).reshape(3)
+    for frame in frames:
+        frame["particles_enu"] = ecef_to_local_enu(frame["particles_ecef"], origin)
+        frame["estimate_enu"] = ecef_to_local_enu(frame["estimate_ecef"], origin)[0]
+        frame["gt_enu"] = ecef_to_local_enu(frame["gt_ecef"], origin)[0]
+        if "spp_ecef" in frame:
+            frame["spp_enu"] = ecef_to_local_enu(frame["spp_ecef"], origin)[0]
+
+    all_gt = np.vstack([frame["gt_enu"][:2] for frame in frames])
+    all_est = np.vstack([frame["estimate_enu"][:2] for frame in frames])
+    full_xlim, full_ylim = _axis_limits(np.vstack([all_gt, all_est]), min_span_m=100.0)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    writer = FFMpegWriter(fps=fps, bitrate=5000)
+
+    fig, (ax_full, ax_zoom) = plt.subplots(1, 2, figsize=(14, 6), dpi=90)
+    fig.suptitle(title, fontsize=15, fontweight="bold")
+
+    gt_trail: list[np.ndarray] = []
+    est_trail: list[np.ndarray] = []
+    baseline_trail: list[np.ndarray] = []
+
+    print(f"    Rendering {len(frames)} ENU frames...")
+    with writer.saving(fig, str(output_path), dpi=90):
+        for frame_idx, frame in enumerate(frames):
+            gt = frame["gt_enu"]
+            est = frame["estimate_enu"]
+            particles = frame["particles_enu"]
+
+            gt_trail.append(gt[:2].copy())
+            est_trail.append(est[:2].copy())
+            if "spp_enu" in frame:
+                baseline_trail.append(frame["spp_enu"][:2].copy())
+            trail_start = max(0, len(gt_trail) - trail_length)
+            gt_tail = np.vstack(gt_trail[trail_start:])
+            est_tail = np.vstack(est_trail[trail_start:])
+            baseline_tail = np.vstack(baseline_trail[trail_start:]) if baseline_trail else None
+
+            for ax, zoomed in ((ax_full, False), (ax_zoom, True)):
+                ax.clear()
+                ax.set_aspect("equal", adjustable="box")
+                ax.grid(True, alpha=0.25)
+                ax.set_xlabel("East [m]")
+                ax.set_ylabel("North [m]")
+                if zoomed:
+                    ax.set_title("Zoom around current truth")
+                    ax.set_xlim(gt[0] - zoom_radius_m, gt[0] + zoom_radius_m)
+                    ax.set_ylim(gt[1] - zoom_radius_m, gt[1] + zoom_radius_m)
+                    point_size = 11
+                    trail_width = 2.6
+                    trail_gt = gt_tail
+                    trail_est = est_tail
+                    trail_baseline = baseline_tail
+                else:
+                    ax.set_title("Full dumped trajectory")
+                    ax.set_xlim(*full_xlim)
+                    ax.set_ylim(*full_ylim)
+                    ax.plot(all_gt[:, 0], all_gt[:, 1], "-", color="#93c5fd", linewidth=1.0, alpha=0.45)
+                    point_size = 4
+                    trail_width = 2.0
+                    trail_gt = np.vstack(gt_trail)
+                    trail_est = np.vstack(est_trail)
+                    trail_baseline = np.vstack(baseline_trail) if baseline_trail else None
+
+                ax.scatter(
+                    particles[:, 0],
+                    particles[:, 1],
+                    s=point_size,
+                    c="#f97316",
+                    alpha=0.25,
+                    edgecolors="none",
+                    label="Particles" if frame_idx == 0 else None,
+                )
+                ax.plot(trail_gt[:, 0], trail_gt[:, 1], "-", color="#2563eb", linewidth=trail_width, label="Ground truth")
+                ax.plot(trail_est[:, 0], trail_est[:, 1], "-", color="#dc2626", linewidth=trail_width, label="PF estimate")
+                if trail_baseline is not None and len(trail_baseline):
+                    ax.plot(
+                        trail_baseline[:, 0],
+                        trail_baseline[:, 1],
+                        "--",
+                        color="#16a34a",
+                        linewidth=trail_width,
+                        label=baseline_label,
+                    )
+                    ax.plot(trail_baseline[-1, 0], trail_baseline[-1, 1], "D", color="#16a34a", markersize=8)
+                ax.plot(est[0], est[1], "o", color="#dc2626", markersize=9, markeredgecolor="white")
+                ax.plot(gt[0], gt[1], "s", color="#2563eb", markersize=8, markeredgecolor="white")
+
+            err_2d = float(frame.get("error_2d", 0.0))
+            pf_rms = float(frame.get("pf_rms", 0.0))
+            text = (
+                f"Epoch {frame['epoch']} / {frames[-1]['epoch']}\n"
+                f"PF err: {err_2d:6.1f} m\n"
+                f"PF RMS: {pf_rms:6.1f} m\n"
+                f"{len(particles)} particles"
+            )
+            ax_zoom.text(
+                0.02,
+                0.98,
+                text,
+                transform=ax_zoom.transAxes,
+                fontsize=8,
+                va="top",
+                fontfamily="monospace",
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.92),
+            )
+            ax_zoom.legend(loc="lower right", fontsize=8)
+            fig.tight_layout(rect=(0, 0, 1, 0.94))
+            writer.grab_frame()
+
+    plt.close(fig)
+    print(f"    Saved {output_path} ({output_path.stat().st_size / 1024:.0f} KB)")
 
 
 def create_animation(
@@ -518,6 +692,9 @@ def _run_pf_gnssplusplus(
                 est_lat, est_lon, _ = ecef_to_lla(est[0], est[1], est[2])
                 particle_frames.append({
                     "epoch": frame_count,
+                    "particles_ecef": particles[:, :3].copy(),
+                    "estimate_ecef": est[:3].copy(),
+                    "gt_ecef": gt[gt_idx].copy(),
                     "particles_lonlat": p_lonlat,
                     "estimate_lonlat": np.array([est_lon, est_lat]),
                     "gt_lonlat": np.array([gt_lon, gt_lat]),
@@ -586,6 +763,8 @@ def _run_pf_gnssplusplus(
                 key = round(tow_arr[i], 1)
                 if key in rtklib_lonlat_lookup:
                     particle_frames[fi]["spp_lonlat"] = rtklib_lonlat_lookup[key]
+                if key in rtklib_lookup:
+                    particle_frames[fi]["spp_ecef"] = rtklib_lookup[key]
 
     # Fill defaults
     for f in particle_frames:
@@ -604,7 +783,7 @@ def _run_pf_gnssplusplus(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Particle cloud visualization on OSM")
+    parser = argparse.ArgumentParser(description="Particle cloud trajectory visualization")
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--run", type=str, default="Odaiba")
     parser.add_argument("--systems", type=str, default="G,E,J")
@@ -612,7 +791,15 @@ def main() -> None:
     parser.add_argument("--n-particles", type=int, default=10000)
     parser.add_argument("--dump-every", type=int, default=10)
     parser.add_argument("--max-dump-particles", type=int, default=3000)
+    parser.add_argument("--max-epochs", type=int, default=None,
+                        help="Cap real-data epochs before rendering a quick video")
+    parser.add_argument("--start-epoch", type=int, default=0,
+                        help="Skip this many usable real-data epochs")
     parser.add_argument("--fps", type=int, default=10)
+    parser.add_argument("--renderer", choices=("enu", "map"), default="enu",
+                        help="Use local ENU renderer or OpenStreetMap renderer")
+    parser.add_argument("--trail-length", type=int, default=50)
+    parser.add_argument("--zoom-radius-m", type=float, default=80.0)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--use-gnssplusplus", action="store_true",
                         help="Use gnssplusplus corrected pseudoranges")
@@ -625,7 +812,13 @@ def main() -> None:
 
     systems = tuple(s.strip().upper() for s in args.systems.split(","))
     run_dir = args.data_root / args.run
-    data = load_or_generate_data(run_dir, systems=systems, urban_rover=args.urban_rover)
+    data = load_or_generate_data(
+        run_dir,
+        max_real_epochs=args.max_epochs,
+        start_epoch=args.start_epoch,
+        systems=systems,
+        urban_rover=args.urban_rover,
+    )
 
     # WLS init
     n_epochs = data["n_epochs"]
@@ -726,6 +919,9 @@ def main() -> None:
                 rtk_ll = rtklib_lonlat_lookup.get(best_key)
                 if rtk_ll is not None:
                     f["spp_lonlat"] = rtk_ll
+                rtk_ecef = rtklib_lookup.get(best_key)
+                if rtk_ecef is not None:
+                    f["spp_ecef"] = rtk_ecef
             else:
                 f["rtklib_error_2d"] = 0
                 f["rtklib_rms"] = 0
@@ -733,11 +929,23 @@ def main() -> None:
 
     output = args.output or (RESULTS_DIR / "paper_assets" / f"particle_viz_{args.run.lower()}_{args.n_particles}.mp4")
     mode = "PF + gnssplusplus corrections" if args.use_gnssplusplus else "PF"
-    create_animation(
-        result["frames"], output,
-        title=f"GPU Particle Filter GNSS — {args.run} ({mode}, {args.n_particles:,} particles)",
-        fps=args.fps,
-    )
+    title = f"GPU Particle Filter GNSS - {args.run} ({mode}, {args.n_particles:,} particles)"
+    if args.renderer == "map":
+        create_animation(
+            result["frames"], output,
+            title=title,
+            fps=args.fps,
+            trail_length=args.trail_length,
+            zoom_radius_m=args.zoom_radius_m,
+        )
+    else:
+        create_enu_animation(
+            result["frames"], output,
+            title=title,
+            fps=args.fps,
+            trail_length=args.trail_length,
+            zoom_radius_m=args.zoom_radius_m,
+        )
 
 
 if __name__ == "__main__":

@@ -9,6 +9,12 @@ import numpy as np
 import pytest
 
 from gnss_gpu.io.ppc import PPCDatasetLoader
+from gnss_gpu.io.ppc import (
+    _CARRIER_CODE_PREFERENCES,
+    _DOPPLER_CODE_PREFERENCES,
+    _pick_obs_value,
+    _valid_nav_obs_mask,
+)
 
 
 def _write(directory: Path, filename: str, content: str) -> Path:
@@ -82,3 +88,61 @@ GPS TOW (s),Latitude (deg),Longitude (deg),Ellipsoid Height (m)
 
     assert ecef.shape == (1, 3)
     assert 6.3e6 < np.linalg.norm(ecef[0]) < 6.5e6
+
+
+def test_pick_ppc_l1_carrier_prefers_system_default():
+    value, code = _pick_obs_value(
+        "E",
+        {"L1X": 1234.0, "L1C": 5678.0},
+        None,
+        _CARRIER_CODE_PREFERENCES,
+        "L1",
+        min_abs=1e3,
+    )
+
+    assert value == pytest.approx(5678.0)
+    assert code == "L1C"
+
+
+def test_pick_ppc_l1_carrier_falls_back_to_available_signal():
+    value, code = _pick_obs_value(
+        "J",
+        {"L5Q": 9999.0, "L1Z": 2222.0},
+        None,
+        _CARRIER_CODE_PREFERENCES,
+        "L1",
+        min_abs=1e3,
+    )
+
+    assert value == pytest.approx(2222.0)
+    assert code == "L1Z"
+
+
+def test_pick_ppc_doppler_returns_nan_when_missing():
+    value, code = _pick_obs_value(
+        "G",
+        {"L1C": 1234.0},
+        None,
+        _DOPPLER_CODE_PREFERENCES,
+        "D1",
+    )
+
+    assert np.isnan(value)
+    assert code == ""
+
+
+def test_valid_nav_obs_mask_rejects_unphysical_satellite_rows():
+    sat_ecef = np.array(
+        [
+            [15_600_000.0, 20_100_000.0, 21_700_000.0],
+            [1.0, 2.0, 3.0],
+            [15_600_000.0, 20_100_000.0, 21_700_000.0],
+        ],
+        dtype=np.float64,
+    )
+    pseudoranges = np.array([24_000_000.0, 24_000_000.0, 1.0e21], dtype=np.float64)
+    weights = np.array([45.0, 45.0, 45.0], dtype=np.float64)
+
+    mask = _valid_nav_obs_mask(sat_ecef, pseudoranges, weights)
+
+    assert mask.tolist() == [True, False, False]

@@ -1,0 +1,58 @@
+# Relaxed RTKProcessor Internal Gates
+
+Apply to third_party/gnssplusplus/src/algorithms/rtk.cpp on top of the
+`apps/gnss_solve.cpp` outer-guard patch (see
+`libgnssplusplus_relaxed_guards.patch`).
+
+## Changes
+
+### 1. `processRTKEpoch` trusted-jump cap (line ~1216)
+
+```diff
+                 const double trusted_jump =
+                     (solution.position_ecef - saved_last_trusted_position).norm();
+-                const double max_trusted_jump = std::max(8.0, 12.0 * dt);
++                const double max_trusted_jump = std::max(50.0, 60.0 * dt);
+                 if (trusted_jump > max_trusted_jump) {
+```
+
+### 2. `updateFilter` measurement thresholds (line ~1624)
+
+```diff
+ bool RTKProcessor::updateFilter(const std::map<SatelliteId, SatelliteData>& sat_data) {
+     if (sat_data.size() < 4) return false;
+
+     auto measurement_system = rtk_measurement::assembleMeasurementSystem(
+         buildMeasurementBlocks(sat_data), filter_state_.state.size());
+     const auto update_result = rtk_update::applyMeasurementUpdate(filter_state_.state,
+                                                                   filter_state_.covariance,
+                                                                   measurement_system,
+-                                                                  30.0,
+-                                                                  6);
++                                                                  60.0,
++                                                                  4);
+     return update_result.ok;
+ }
+```
+
+## Effect on PPC2024 honest aggregate
+
+| Stage | Aggregate |
+|---|---:|
+| Session start (signoff) | 33.65% |
+| Patch 1 (outer guards) | 46.14% |
+| **+ Patch 2 (inner gates)** | **47.84%** |
+| TURING target | 85.60% |
+
++1.70 pp over outer guards alone. nagoya/run1 gains the most (+9.70 pp),
+tokyo/run1 +4.36 pp. Some segments regress slightly.
+
+## Follow-ups
+
+- Expose the three thresholds as CLI flags (`--max-trusted-jump-m`,
+  `--filter-outlier-threshold`, `--filter-min-observations`).
+- Lower `rtk_config_.min_lock_count` default from its current value.
+- Add IMU predict stage in `processRTKEpoch` before the KF update so the
+  filter survives extended signal blackouts.
+- Evaluate raising the `kReacquireFixedCount` (currently 5) so that hold
+  ambiguity does not drop as quickly.

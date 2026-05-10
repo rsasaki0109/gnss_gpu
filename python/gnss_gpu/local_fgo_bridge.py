@@ -81,11 +81,11 @@ def _aligned_motion_deltas(
         return None
     deltas: list[np.ndarray] = []
     for a, b in zip(aligned_indices[:-1], aligned_indices[1:]):
-        if b <= a or a < 0 or b - 1 > len(stored_motion_deltas):
+        if b <= a or a < 0 or b > len(stored_motion_deltas):
             deltas.append(np.full(3, np.nan, dtype=np.float64))
             continue
         span = np.asarray(stored_motion_deltas[a:b], dtype=np.float64)
-        if span.ndim != 2 or span.shape[1] != 3 or not np.isfinite(span).all():
+        if span.ndim != 2 or span.shape[1] != 3 or span.shape[0] != (b - a) or not np.isfinite(span).all():
             deltas.append(np.full(3, np.nan, dtype=np.float64))
             continue
         deltas.append(np.sum(span, axis=0))
