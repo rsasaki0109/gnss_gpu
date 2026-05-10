@@ -328,8 +328,8 @@ class INSEKF:
         except np.linalg.LinAlgError:
             K = self.P @ H.T @ np.linalg.pinv(S)
         dx = K @ residual
-        I = np.eye(15, dtype=np.float64)
-        IKH = I - K @ H
+        eye15 = np.eye(15, dtype=np.float64)
+        IKH = eye15 - K @ H
         self.P = IKH @ self.P @ IKH.T + K @ Rm @ K.T
         self._symmetrize_covariance()
 
