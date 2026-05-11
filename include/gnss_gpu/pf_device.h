@@ -184,6 +184,9 @@ void pf_device_position_update(PFDeviceState* state,
 // Shift all particles' clock bias by a constant offset
 void pf_device_shift_clock_bias(PFDeviceState* state, double shift);
 
+// Shift all particle positions by a constant ECEF delta, preserving weights.
+void pf_device_shift_position(PFDeviceState* state, double dx, double dy, double dz);
+
 // ESS - compute on device, return scalar to host
 double pf_device_ess(const PFDeviceState* state);
 
@@ -207,8 +210,16 @@ void pf_device_get_particles(const PFDeviceState* state, double* output);
 // Synchronizes the stream.
 void pf_device_get_particle_states(const PFDeviceState* state, double* output);
 
+// Upload full particle states from host:
+// [x, y, z, cb, mu_vx, mu_vy, mu_vz, Sigma_v(3x3 row-major)].
+// Resets log-weights to uniform after upload.
+void pf_device_set_particle_states(PFDeviceState* state, const double* input);
+
 // Copy log-weights to host (for FFBSi / diagnostics). Synchronizes the stream.
 void pf_device_get_log_weights(const PFDeviceState* state, double* output);
+
+// Upload log-weights from host. Synchronizes the stream.
+void pf_device_set_log_weights(PFDeviceState* state, const double* input);
 
 // Copy last systematic-resampling ancestor indices to host (out[j] = source idx).
 // Only valid after pf_device_resample_systematic; synchronizes the stream.

@@ -64,6 +64,7 @@ class ParticleFilterDevice:
             pf_device_doppler_kf_update,
             pf_device_position_update,
             pf_device_shift_clock_bias,
+            pf_device_shift_position,
             pf_device_ess,
             pf_device_position_spread,
             pf_device_resample_systematic,
@@ -71,7 +72,9 @@ class ParticleFilterDevice:
             pf_device_estimate,
             pf_device_get_particles,
             pf_device_get_particle_states,
+            pf_device_set_particle_states,
             pf_device_get_log_weights,
+            pf_device_set_log_weights,
             pf_device_get_resample_ancestors,
             pf_device_sync,
         )
@@ -88,6 +91,7 @@ class ParticleFilterDevice:
         self._pf_device_doppler_kf_update = pf_device_doppler_kf_update
         self._pf_device_position_update = pf_device_position_update
         self._pf_device_shift_clock_bias = pf_device_shift_clock_bias
+        self._pf_device_shift_position = pf_device_shift_position
         self._pf_device_ess = pf_device_ess
         self._pf_device_position_spread = pf_device_position_spread
         self._pf_device_resample_systematic = pf_device_resample_systematic
@@ -95,7 +99,9 @@ class ParticleFilterDevice:
         self._pf_device_estimate = pf_device_estimate
         self._pf_device_get_particles = pf_device_get_particles
         self._pf_device_get_particle_states = pf_device_get_particle_states
+        self._pf_device_set_particle_states = pf_device_set_particle_states
         self._pf_device_get_log_weights = pf_device_get_log_weights
+        self._pf_device_set_log_weights = pf_device_set_log_weights
         self._pf_device_get_resample_ancestors = pf_device_get_resample_ancestors
         self._pf_device_sync = pf_device_sync
 
@@ -616,7 +622,30 @@ class ParticleFilterDevice:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
         self._pf_device_shift_clock_bias(self._state, float(shift))
 
-    def correct_clock_bias(self, sat_ecef, pseudoranges):
+    def recenter_position(self, ref_ecef, max_shift_m=10000.0):
+        """Shift the particle cloud center to ``ref_ecef`` when within a cap."""
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        ref = np.asarray(ref_ecef, dtype=np.float64).ravel()
+        if ref.size != 3:
+            raise ValueError("ref_ecef must have shape (3,)")
+        if not np.all(np.isfinite(ref)):
+            return float("inf"), False
+        est = np.asarray(self.estimate(), dtype=np.float64)
+        delta = ref[:3] - est[:3]
+        shift_norm = float(np.linalg.norm(delta))
+        cap = float(max_shift_m)
+        if cap > 0.0 and shift_norm > cap:
+            return shift_norm, False
+        self._pf_device_shift_position(
+            self._state,
+            float(delta[0]),
+            float(delta[1]),
+            float(delta[2]),
+        )
+        return shift_norm, True
+
+    def correct_clock_bias(self, sat_ecef, pseudoranges, quantile=0.5):
         """Re-center particles' clock bias using pseudorange residuals.
 
         Computes the expected cb from the current position estimate and
@@ -641,7 +670,8 @@ class ParticleFilterDevice:
 
         ranges = np.linalg.norm(sat - pos, axis=1)
         residuals = pr - ranges
-        expected_cb = float(np.median(residuals))
+        q = float(np.clip(quantile, 0.0, 1.0))
+        expected_cb = float(np.quantile(residuals, q))
 
         shift = expected_cb - current_cb
         self._pf_device_shift_clock_bias(self._state, shift)
@@ -712,6 +742,21 @@ class ParticleFilterDevice:
 
         return self._pf_device_get_particle_states(self._state)
 
+    def set_particle_states(self, states):
+        """Replace full per-particle RBPF states and reset weights.
+
+        Parameters
+        ----------
+        states : array_like, shape (n_particles, 16)
+            Rows are ``[x, y, z, clock_bias, mu_vx, mu_vy, mu_vz, Sigma_v...]``.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        arr = np.asarray(states, dtype=np.float64)
+        if arr.shape != (self.n_particles, 16):
+            raise ValueError(f"states shape {arr.shape} != ({self.n_particles}, 16)")
+        self._pf_device_set_particle_states(self._state, np.ascontiguousarray(arr))
+
     def get_log_weights(self):
         """Copy per-particle log-weights from GPU (synchronizes stream).
 
@@ -724,6 +769,54 @@ class ParticleFilterDevice:
         out = np.empty(self.n_particles, dtype=np.float64)
         self._pf_device_get_log_weights(self._state, out)
         return out
+
+    def set_log_weights(self, log_weights):
+        """Replace per-particle log-weights on the device."""
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        lw = np.asarray(log_weights, dtype=np.float64).reshape(-1)
+        if lw.size != self.n_particles:
+            raise ValueError(f"log_weights size {lw.size} != {self.n_particles}")
+        self._pf_device_set_log_weights(self._state, np.ascontiguousarray(lw))
+
+    def position_mixture_update(self, refs_ecef, sigma_pos=1.0, mixture_weights=None):
+        """Apply a CPU-side Gaussian-mixture position likelihood to particles."""
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        refs = np.asarray(refs_ecef, dtype=np.float64).reshape(-1, 3)
+        if refs.shape[0] == 0:
+            return
+        refs = refs[np.all(np.isfinite(refs), axis=1)]
+        if refs.shape[0] == 0:
+            return
+        sigma = max(float(sigma_pos), 1.0e-6)
+        if mixture_weights is None:
+            mix = np.full(refs.shape[0], 1.0 / refs.shape[0], dtype=np.float64)
+        else:
+            mix = np.asarray(mixture_weights, dtype=np.float64).reshape(-1)
+            if mix.size != refs.shape[0]:
+                raise ValueError("mixture_weights length must match refs_ecef")
+            mix = np.where(np.isfinite(mix) & (mix > 0.0), mix, 0.0)
+            total = float(np.sum(mix))
+            if total <= 0.0:
+                mix = np.full(refs.shape[0], 1.0 / refs.shape[0], dtype=np.float64)
+            else:
+                mix = mix / total
+
+        particles = np.asarray(self.get_particles(), dtype=np.float64)
+        log_weights = np.asarray(self.get_log_weights(), dtype=np.float64)
+        diff = particles[:, np.newaxis, :3] - refs[np.newaxis, :, :]
+        log_components = (
+            np.log(mix[np.newaxis, :])
+            - 0.5 * np.sum(diff * diff, axis=2) / (sigma * sigma)
+        )
+        max_log = np.max(log_components, axis=1)
+        finite = np.isfinite(max_log)
+        increment = np.full(log_weights.shape, -np.inf, dtype=np.float64)
+        increment[finite] = max_log[finite] + np.log(
+            np.sum(np.exp(log_components[finite] - max_log[finite, np.newaxis]), axis=1)
+        )
+        self.set_log_weights(log_weights + increment)
 
     def get_resample_ancestors(self):
         """Ancestor indices from the **last** systematic resample: ``out[j]=i`` means slot ``j``

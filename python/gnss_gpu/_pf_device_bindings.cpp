@@ -292,6 +292,12 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
     }, "Shift all particles' clock bias by a constant offset",
        py::arg("state"), py::arg("shift"));
 
+    m.def("pf_device_shift_position", [](gnss_gpu::PFDeviceState* state,
+                                         double dx, double dy, double dz) {
+        gnss_gpu::pf_device_shift_position(state, dx, dy, dz);
+    }, "Shift all particle positions by a constant ECEF delta, preserving weights",
+       py::arg("state"), py::arg("dx"), py::arg("dy"), py::arg("dz"));
+
     m.def("pf_device_ess", [](const gnss_gpu::PFDeviceState* state) {
         return gnss_gpu::pf_device_ess(state);
     }, "Compute ESS on device, return scalar to host",
@@ -341,6 +347,17 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
     }, "Copy full particle states [x,y,z,cb,mu_vx,mu_vy,mu_vz,Sigma_v(3x3)] to host",
        py::arg("state"));
 
+    m.def("pf_device_set_particle_states", [](gnss_gpu::PFDeviceState* state,
+                                              py::array_t<double, py::array::c_style | py::array::forcecast> input) {
+        int N = state->n_particles;
+        auto r = input.request();
+        if (r.ndim != 2 || r.shape[0] != N || r.shape[1] != 16) {
+            throw std::runtime_error("pf_device_set_particle_states: input shape must be (n_particles, 16)");
+        }
+        gnss_gpu::pf_device_set_particle_states(state, static_cast<const double*>(r.ptr));
+    }, "Upload full particle states [x,y,z,cb,mu_vx,mu_vy,mu_vz,Sigma_v(3x3)] and reset weights",
+       py::arg("state"), py::arg("input"));
+
     m.def("pf_device_get_log_weights", [](const gnss_gpu::PFDeviceState* state,
                                          py::array_t<double> out) {
         int N = state->n_particles;
@@ -351,6 +368,17 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
         gnss_gpu::pf_device_get_log_weights(state, static_cast<double*>(r.ptr));
     }, "Copy log-weights to host (D2H, synchronizes stream)",
        py::arg("state"), py::arg("out"));
+
+    m.def("pf_device_set_log_weights", [](gnss_gpu::PFDeviceState* state,
+                                          py::array_t<double, py::array::c_style | py::array::forcecast> input) {
+        int N = state->n_particles;
+        auto r = input.request();
+        if (r.size != N) {
+            throw std::runtime_error("pf_device_set_log_weights: input size must match n_particles");
+        }
+        gnss_gpu::pf_device_set_log_weights(state, static_cast<const double*>(r.ptr));
+    }, "Upload log-weights from host (H2D, sync)",
+       py::arg("state"), py::arg("input"));
 
     m.def("pf_device_get_resample_ancestors", [](const gnss_gpu::PFDeviceState* state,
                                                   py::array_t<int> out) {
