@@ -909,6 +909,17 @@ __global__ void pfd_shift_clock_bias_kernel(
     pcb[tid] += shift;
 }
 
+__global__ void pfd_shift_position_kernel(
+    double* px, double* py, double* pz,
+    double dx, double dy, double dz,
+    int N) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+    px[tid] += dx;
+    py[tid] += dy;
+    pz[tid] += dz;
+}
+
 // --- ESS reduction kernel (same logic as weight.cu) ---
 __global__ void pfd_ess_kernel(const double* log_weights,
                                double* partial_sum_w,
@@ -1094,6 +1105,29 @@ __global__ void pfd_get_particle_states_kernel(
     output[out_off + 6] = vz[tid];
     for (int k = 0; k < 9; k++) {
         output[out_off + 7 + k] = vcov[cov_off + k];
+    }
+}
+
+__global__ void pfd_set_particle_states_kernel(
+    double* px, double* py, double* pz,
+    double* vx, double* vy, double* vz,
+    double* vcov,
+    double* pcb,
+    const double* input,
+    int N) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+    int in_off = tid * 16;
+    int cov_off = tid * 9;
+    px[tid] = input[in_off + 0];
+    py[tid] = input[in_off + 1];
+    pz[tid] = input[in_off + 2];
+    pcb[tid] = input[in_off + 3];
+    vx[tid] = input[in_off + 4];
+    vy[tid] = input[in_off + 5];
+    vz[tid] = input[in_off + 6];
+    for (int k = 0; k < 9; k++) {
+        vcov[cov_off + k] = input[in_off + 7 + k];
     }
 }
 
@@ -1671,6 +1705,16 @@ void pf_device_shift_clock_bias(PFDeviceState* state, double shift) {
     CUDA_CHECK_LAST();
 }
 
+void pf_device_shift_position(PFDeviceState* state, double dx, double dy, double dz) {
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    pfd_shift_position_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        dx, dy, dz, N);
+    CUDA_CHECK_LAST();
+}
+
 // ============================================================
 // ESS
 // ============================================================
@@ -1967,11 +2011,41 @@ void pf_device_get_particle_states(const PFDeviceState* state, double* output) {
     CUDA_CHECK(cudaFree(d_out));
 }
 
+void pf_device_set_particle_states(PFDeviceState* state, const double* input) {
+    int N = state->n_particles;
+    size_t sz_in = (size_t)N * 16 * sizeof(double);
+    double* d_in;
+    CUDA_CHECK(cudaMalloc(&d_in, sz_in));
+    CUDA_CHECK(cudaMemcpyAsync(d_in, input, sz_in, cudaMemcpyHostToDevice, state->stream));
+
+    int grid = state->grid_size;
+    pfd_set_particle_states_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
+        d_in, N);
+    CUDA_CHECK_LAST();
+    pfd_reset_weights_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(state->d_log_weights, N);
+    CUDA_CHECK_LAST();
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+    CUDA_CHECK(cudaFree(d_in));
+}
+
 void pf_device_get_log_weights(const PFDeviceState* state, double* output) {
     int N = state->n_particles;
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
     CUDA_CHECK(cudaMemcpy(output, state->d_log_weights,
                           (size_t)N * sizeof(double), cudaMemcpyDeviceToHost));
+}
+
+void pf_device_set_log_weights(PFDeviceState* state, const double* input) {
+    int N = state->n_particles;
+    CUDA_CHECK(cudaMemcpyAsync(
+        state->d_log_weights,
+        input,
+        (size_t)N * sizeof(double),
+        cudaMemcpyHostToDevice,
+        state->stream));
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
 }
 
 void pf_device_get_resample_ancestors(const PFDeviceState* state, int* output) {

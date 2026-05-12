@@ -160,6 +160,7 @@ class LambdaFixConfig:
     slip_threshold_cycles: float = 1.5
     variance_floor_cycles: float = 0.04
     max_group_size: int = 8
+    max_epoch_gap: int = 1
 
 
 @dataclass
@@ -1045,7 +1046,114 @@ def solve_local_fgo_with_lambda(
     # callers to limit FGO rewrite to actually-fixed epochs (avoid the
     # partial-fix broad-apply bug where float-only epochs are also moved).
     summary["fixed_epochs"] = fixed_epochs_set
+    summary["postfit"] = _postfit_observation_diagnostics(
+        current_problem.dd_carrier,
+        current_problem.dd_pseudorange,
+        current_result.positions_ecef,
+        current_result.window,
+    )
     return current_result, summary
+
+
+def _postfit_observation_diagnostics(
+    dd_carrier: Sequence[DDCarrierEpoch | None] | None,
+    dd_pseudorange: Sequence[DDPseudorangeEpoch | None] | None,
+    positions_ecef: np.ndarray,
+    window: LocalFgoWindow,
+) -> dict[str, float | int]:
+    positions = _as_positions(positions_ecef)
+    out: dict[str, float | int] = {
+        "carrier_fixed_count": 0,
+        "carrier_fixed_abs_cycles_median": 0.0,
+        "carrier_fixed_abs_cycles_p90": 0.0,
+        "carrier_float_count": 0,
+        "carrier_float_afv_abs_cycles_median": 0.0,
+        "carrier_float_afv_abs_cycles_p90": 0.0,
+        "dd_pr_count": 0,
+        "dd_pr_abs_m_median": 0.0,
+        "dd_pr_abs_m_p90": 0.0,
+    }
+    fixed_residuals: list[float] = []
+    float_afv: list[float] = []
+    dd_pr_residuals: list[float] = []
+
+    for epoch_index in range(window.start, window.end + 1):
+        rel_index = epoch_index - window.start
+        if rel_index < 0 or rel_index >= len(positions):
+            continue
+        x = positions[rel_index]
+        if dd_carrier is not None and epoch_index < len(dd_carrier):
+            obs = dd_carrier[epoch_index]
+            if obs is not None:
+                dd = np.asarray(obs.dd_carrier_cycles, dtype=np.float64).ravel()
+                sat_k = np.asarray(obs.sat_ecef_k, dtype=np.float64).reshape(-1, 3)
+                sat_ref = np.asarray(obs.sat_ecef_ref, dtype=np.float64).reshape(-1, 3)
+                base_k = np.asarray(obs.base_range_k, dtype=np.float64).ravel()
+                base_ref = np.asarray(obs.base_range_ref, dtype=np.float64).ravel()
+                wavelengths = np.asarray(obs.wavelengths_m, dtype=np.float64).ravel()
+                fixed = _fixed_ambiguities(obs.fixed_ambiguities, len(dd))
+                for row in range(len(dd)):
+                    if not _valid_dd_row(
+                        dd[row],
+                        sat_k[row],
+                        sat_ref[row],
+                        base_k[row],
+                        base_ref[row],
+                        wavelengths[row],
+                    ):
+                        continue
+                    expected_m = _dd_expected_m(
+                        x,
+                        sat_k[row],
+                        sat_ref[row],
+                        float(base_k[row]),
+                        float(base_ref[row]),
+                    )
+                    if not np.isfinite(expected_m):
+                        continue
+                    residual_cycles = float(dd[row]) - expected_m / float(wavelengths[row])
+                    if np.isfinite(fixed[row]):
+                        fixed_residuals.append(abs(residual_cycles - round(float(fixed[row]))))
+                    else:
+                        float_afv.append(abs(_wrap_cycles(residual_cycles)))
+
+        if dd_pseudorange is not None and epoch_index < len(dd_pseudorange):
+            obs_pr = dd_pseudorange[epoch_index]
+            if obs_pr is not None:
+                dd_pr = np.asarray(obs_pr.dd_pseudorange_m, dtype=np.float64).ravel()
+                sat_k = np.asarray(obs_pr.sat_ecef_k, dtype=np.float64).reshape(-1, 3)
+                sat_ref = np.asarray(obs_pr.sat_ecef_ref, dtype=np.float64).reshape(-1, 3)
+                base_k = np.asarray(obs_pr.base_range_k, dtype=np.float64).ravel()
+                base_ref = np.asarray(obs_pr.base_range_ref, dtype=np.float64).ravel()
+                for row in range(len(dd_pr)):
+                    if not _valid_dd_row(dd_pr[row], sat_k[row], sat_ref[row], base_k[row], base_ref[row], 1.0):
+                        continue
+                    expected_m = _dd_expected_m(
+                        x,
+                        sat_k[row],
+                        sat_ref[row],
+                        float(base_k[row]),
+                        float(base_ref[row]),
+                    )
+                    if np.isfinite(expected_m):
+                        dd_pr_residuals.append(abs(expected_m - float(dd_pr[row])))
+
+    if fixed_residuals:
+        vals = np.asarray(fixed_residuals, dtype=np.float64)
+        out["carrier_fixed_count"] = int(vals.size)
+        out["carrier_fixed_abs_cycles_median"] = float(np.median(vals))
+        out["carrier_fixed_abs_cycles_p90"] = float(np.percentile(vals, 90.0))
+    if float_afv:
+        vals = np.asarray(float_afv, dtype=np.float64)
+        out["carrier_float_count"] = int(vals.size)
+        out["carrier_float_afv_abs_cycles_median"] = float(np.median(vals))
+        out["carrier_float_afv_abs_cycles_p90"] = float(np.percentile(vals, 90.0))
+    if dd_pr_residuals:
+        vals = np.asarray(dd_pr_residuals, dtype=np.float64)
+        out["dd_pr_count"] = int(vals.size)
+        out["dd_pr_abs_m_median"] = float(np.median(vals))
+        out["dd_pr_abs_m_p90"] = float(np.percentile(vals, 90.0))
+    return out
 
 
 def _estimate_lambda_fixes(
@@ -1120,7 +1228,10 @@ def _estimate_lambda_fixes(
         for row in rows_sorted:
             epoch, value, _weight = row
             split = False
-            if prev_epoch is not None and epoch != prev_epoch + 1:
+            if (
+                prev_epoch is not None
+                and epoch - prev_epoch > max(1, int(config.max_epoch_gap))
+            ):
                 split = True
             if (
                 prev_value is not None
@@ -1142,6 +1253,33 @@ def _estimate_lambda_fixes(
 
     info["n_segments"] = int(len(segments))
     info["n_candidates"] = int(len(segments))
+    if segments:
+        segment_lengths = np.asarray(
+            [int(segment["n_epochs"]) for segment in segments],
+            dtype=np.float64,
+        )
+        segment_variances = np.asarray(
+            [float(segment["variance"]) for segment in segments],
+            dtype=np.float64,
+        )
+        segment_abs_frac = np.asarray(
+            [
+                abs(float(segment["mean"]) - round(float(segment["mean"])))
+                for segment in segments
+            ],
+            dtype=np.float64,
+        )
+        info["segment_n_epochs_median"] = float(np.median(segment_lengths))
+        info["segment_n_epochs_max"] = int(np.max(segment_lengths))
+        info["segment_variance_median"] = float(np.median(segment_variances))
+        info["segment_abs_frac_median"] = float(np.median(segment_abs_frac))
+        info["segment_abs_frac_p90"] = float(np.percentile(segment_abs_frac, 90.0))
+    else:
+        info["segment_n_epochs_median"] = 0.0
+        info["segment_n_epochs_max"] = 0
+        info["segment_variance_median"] = 0.0
+        info["segment_abs_frac_median"] = 0.0
+        info["segment_abs_frac_p90"] = 0.0
     fixes: dict[tuple[int, tuple[str, str, str, str]], int] = {}
     fixed_segments: set[int] = set()
     ratios: list[float] = []
@@ -1204,6 +1342,12 @@ def _estimate_lambda_fixes(
         info["best_ratio"] = float("inf")
     elif finite_ratios:
         info["best_ratio"] = float(max(finite_ratios))
+    if finite_ratios:
+        info["ratio_median"] = float(np.median(finite_ratios))
+        info["ratio_p90"] = float(np.percentile(finite_ratios, 90.0))
+    else:
+        info["ratio_median"] = 0.0
+        info["ratio_p90"] = 0.0
     info["n_fixed"] = int(len(fixed_segments))
     info["n_fixed_observations"] = int(len(fixes))
     info["fixed_by_system"] = fixed_by_system

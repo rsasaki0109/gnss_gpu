@@ -79,12 +79,23 @@ class CTRBPFConfig:
     pr_weight_ref_cn0: float = 45.0
     pr_weight_min: float = 0.25
     pr_weight_max: float = 1.5
+    pr_systems: tuple[str, ...] = ("G", "E", "J")
     pr_prefit_gate_m: float = 0.0
     pr_prefit_gate_min_sats: int = 6
     pr_prefit_gate_keep_best: int = 0
     pr_prefit_ref: str = "pf"
+    pr_prefit_per_system: bool = False
     pr_skip_statuses: tuple[int, ...] = ()
     defer_epoch_resample: bool = False
+    enable_reservoir_stein: bool = False
+    reservoir_stein_size: int = 2048
+    reservoir_stein_elite_fraction: float = 0.25
+    reservoir_stein_steps: int = 1
+    reservoir_stein_step_size: float = 0.05
+    reservoir_stein_repulsion_scale: float = 1.0
+    reservoir_stein_guide_sigma_m: float = 2.0
+    reservoir_stein_guide_sigma_cb_m: float = 50.0
+    reservoir_stein_seed: int = 20260512
     # Phase 10i: RTK-diagnostic candidate as a PF pseudo-observation.
     # The v5 libgnss++ hybrid remains the passthrough floor. A relaxed RTK
     # candidate is injected into the PF only when its diagnostics pass the
@@ -95,6 +106,10 @@ class CTRBPFConfig:
     rtkdiag_candidate_residual_rms_max: float = 1.8
     rtkdiag_candidate_emit_max_diff_m: float = 0.4
     rtkdiag_candidate_recenter_max_shift_m: float = 10000.0
+    rtkdiag_candidate_soft_top_k: int = 1
+    rtkdiag_candidate_soft_weight_eps: float = 0.01
+    rtkdiag_candidate_proposal_cloud: bool = False
+    rtkdiag_candidate_proposal_spread_m: float = 0.25
     rtkdiag_candidate_select_mode: str = "residual"
     rtkdiag_candidate_emit_mode: str = "pf"
     rtkdiag_candidate_local_ungate_windows: tuple[tuple[int, int, tuple[str, ...]], ...] = ()
@@ -117,6 +132,22 @@ class CTRBPFConfig:
     dd_min_pairs_update: int = 3
     dd_systems: tuple[str, ...] = ("G", "E", "J", "C")
     dd_base_interp: bool = False
+    dd_min_elevation_deg: float = -90.0
+    dd_min_snr: float = 0.0
+    dd_keep_best: int = 0
+    dd_pr_pair_residual_max_m: float = 0.0
+    dd_pr_epoch_median_residual_max_m: float = 0.0
+    dd_pr_gate_min_pairs: int = 3
+    enable_dd_pr_ls_anchor: bool = False
+    dd_pr_ls_anchor_min_pairs: int = 3
+    dd_pr_ls_anchor_dd_sigma_m: float = 2.0
+    dd_pr_ls_anchor_solve_prior_sigma_m: float = 100.0
+    dd_pr_ls_anchor_prior_sigma_m: float = 3.0
+    dd_pr_ls_anchor_max_shift_m: float = 100.0
+    dd_pr_ls_anchor_max_postfit_rms_m: float = 5.0
+    dd_pr_ls_anchor_statuses: tuple[int, ...] = (1, 3)
+    dd_pr_ls_anchor_set_initial: bool = True
+    dd_pr_ls_anchor_mode: str = "prior"
     # Phase 2: region-aware gate for the RBPF velocity-KF (Doppler) update.
     # ``None`` disables a gate. DD-pair gate uses 0 if no DD computer is
     # available, so it implicitly skips the KF update unless DD is wired.
@@ -130,6 +161,7 @@ class CTRBPFConfig:
     # Doppler-KF/DD-AFV updates so fractional DD residuals become meaningful.
     enable_hybrid_pu: bool = False
     hybrid_sigma_m: float = 1.0
+    hybrid_recenter_max_shift_m: float = 0.0
     # Phase 7: derive a per-epoch velocity guide from hybrid pos finite
     # differences and feed it to ``pf.predict(velocity=...)`` so the cloud
     # can independently track the trajectory. Without this, the cloud is
@@ -141,6 +173,10 @@ class CTRBPFConfig:
     # so the run can show whether DD-AFV / Doppler-KF correction beats
     # plain hybrid.
     hybrid_emit_pf_estimate: bool = False
+    # Optional status gate for ``hybrid_emit_pf_estimate``. Empty means emit
+    # PF at every hybrid epoch. For PPC, Status=4 anchors are often cm-class,
+    # so GPU/PF diagnostics should usually emit PF only on weak statuses.
+    hybrid_emit_pf_statuses: tuple[int, ...] = ()
     # Phase 4: post-process FGO + LAMBDA partial fix. After the PF loop
     # completes, slide a window over the trajectory and call
     # ``solve_local_fgo_with_lambda`` per window using cached DD-carrier
@@ -153,9 +189,11 @@ class CTRBPFConfig:
     fgo_window_stride: int = 15
     fgo_lambda_ratio: float = 3.0
     fgo_lambda_min_epochs: int = 10
+    fgo_lambda_max_epoch_gap: int = 6
     fgo_min_fixed_to_apply: int = 3
     fgo_prior_sigma_m: float = 0.5
     fgo_dd_sigma_cycles: float = 0.20
+    fgo_dd_pr_sigma_m: float = 5.0
     # C2: per-epoch gate. If non-empty, FGO output is only written back to
     # ``positions[i]`` when the hybrid Status at ``times[i]`` is one of these
     # values; epochs with other Status values keep the hybrid passthrough.
@@ -173,12 +211,21 @@ class CTRBPFConfig:
     # endpoint-only priors at ``fgo_prior_sigma_m``).
     fgo_anchor_sigma_m: float = 0.05
     fgo_loose_sigma_m: float = 5.0
+    # Continuous-time trajectory prior for the FGO window. This fits a cubic
+    # smoothing spline to the PF/anchor trajectory and feeds its inter-epoch
+    # displacement as the FGO motion factor. It is a post-loop CT layer, not
+    # yet an in-loop spline state.
+    enable_ct_spline_motion_prior: bool = False
+    ct_spline_smoothing_m: float = 0.5
+    ct_motion_sigma_m: float = 0.25
+    ct_motion_min_epochs: int = 6
     # D2b "minimum-correction gate": skip rewrites where FGO output is
     # within ``fgo_min_correction_m`` of the hybrid passthrough. Empirical
     # evidence (tokyo/run2 first 2000 ep) showed Phase 4 nudges many
     # cm-class hybrid passes (~5cm) across the 0.5m PPC threshold; small
     # rewrites cost more pass than they recover. Set to 0.0 to disable.
     fgo_min_correction_m: float = 0.5
+    fgo_apply_fixed_epochs_only: bool = True
     # Phase 8: TDCP-anchored hybrid smoother. After the PF loop, run a
     # per-coordinate forward+backward Kalman smoother over the trajectory,
     # using the rover-side TDCP velocity as the motion model and the hybrid
@@ -363,13 +410,20 @@ def _build_dd_measurements(
     weights: np.ndarray,
     rover_pos: np.ndarray,
     allowed_systems: tuple[str, ...],
+    min_elevation_deg: float = -90.0,
+    min_snr: float = 0.0,
+    keep_best: int = 0,
 ) -> list[_PPCMeasurement]:
     """Build measurement objects from per-epoch arrays for compute_dd()."""
     out: list[_PPCMeasurement] = []
     sids = np.asarray(system_ids, dtype=np.int32)
+    min_elev_rad = math.radians(float(min_elevation_deg))
     for k in range(int(sat_ecef.shape[0])):
         sys_char = _SYS_ID_TO_CHAR.get(int(sids[k]))
         if sys_char is None or sys_char not in allowed_systems:
+            continue
+        snr = float(weights[k]) if k < len(weights) else 1.0
+        if np.isfinite(float(min_snr)) and snr < float(min_snr):
             continue
         sat_id_str = sat_id_strs[k] if k < len(sat_id_strs) else ""
         prn_str = sat_id_str[1:].lstrip("0") if sat_id_str else ""
@@ -383,15 +437,26 @@ def _build_dd_measurements(
         if sat_pos.size != 3 or not np.all(np.isfinite(sat_pos)):
             continue
         elev = _elevation_rad(rover_pos, sat_pos)
+        if np.isfinite(min_elev_rad) and elev < min_elev_rad:
+            continue
         out.append(
             _PPCMeasurement(
                 system_id=int(sids[k]),
                 prn=prn,
                 satellite_ecef=sat_pos,
                 elevation=float(elev),
-                snr=float(weights[k]) if k < len(weights) else 1.0,
+                snr=snr,
             )
         )
+    if int(keep_best) > 0 and len(out) > int(keep_best):
+        out = sorted(
+            out,
+            key=lambda m: (
+                float(m.elevation),
+                float(m.snr),
+            ),
+            reverse=True,
+        )[: int(keep_best)]
     return out
 
 
@@ -414,6 +479,15 @@ class _PRObsStats:
 
 
 @dataclass
+class _ReservoirSteinStats:
+    epochs_attempted: int = 0
+    epochs_applied: int = 0
+    reservoir_size_sum: int = 0
+    ess_before_sum: float = 0.0
+    bandwidth_sum: float = 0.0
+
+
+@dataclass
 class _RBPFGateStats:
     epochs_attempted: int = 0
     epochs_applied: int = 0
@@ -427,6 +501,9 @@ class _HybridStats:
     epochs_attempted: int = 0
     epochs_applied: int = 0
     epochs_lookup_missing: int = 0
+    recenter_applied: int = 0
+    recenter_skipped: int = 0
+    recenter_shift_sum_m: float = 0.0
 
 
 @dataclass
@@ -452,6 +529,41 @@ class _FGOStats:
     n_fixed_total: int = 0
     n_fixed_observations_total: int = 0
     epochs_replaced: int = 0
+    lambda_tracks_total: int = 0
+    lambda_segments_total: int = 0
+    lambda_candidates_total: int = 0
+    lambda_ratio_rejected_total: int = 0
+    lambda_best_ratio: float = 0.0
+    lambda_ratio_median_sum: float = 0.0
+    lambda_ratio_p90_sum: float = 0.0
+    lambda_segment_n_epochs_median_sum: float = 0.0
+    lambda_segment_n_epochs_max: int = 0
+    lambda_segment_variance_median_sum: float = 0.0
+    lambda_segment_abs_frac_median_sum: float = 0.0
+    lambda_segment_abs_frac_p90_sum: float = 0.0
+    postfit_fixed_count_total: int = 0
+    postfit_fixed_abs_cycles_median_sum: float = 0.0
+    postfit_fixed_abs_cycles_p90_sum: float = 0.0
+    postfit_float_count_total: int = 0
+    postfit_float_afv_abs_cycles_median_sum: float = 0.0
+    postfit_float_afv_abs_cycles_p90_sum: float = 0.0
+    postfit_dd_pr_count_total: int = 0
+    postfit_dd_pr_abs_m_median_sum: float = 0.0
+    postfit_dd_pr_abs_m_p90_sum: float = 0.0
+    lambda_diag_windows: int = 0
+    dd_pr_ls_anchor_attempted: int = 0
+    dd_pr_ls_anchor_accepted: int = 0
+    dd_pr_ls_anchor_status_skipped: int = 0
+    dd_pr_ls_anchor_rejected_postfit: int = 0
+    dd_pr_ls_anchor_rejected_solve: int = 0
+    dd_pr_ls_anchor_shift_sum_m: float = 0.0
+    dd_pr_ls_anchor_postfit_sum_m: float = 0.0
+    dd_pr_ls_anchor_gt_count: int = 0
+    dd_pr_ls_anchor_gt_error_sum_m: float = 0.0
+    dd_pr_ls_anchor_seed_error_sum_m: float = 0.0
+    dd_pr_ls_anchor_improved: int = 0
+    dd_pr_ls_anchor_pass_05m: int = 0
+    dd_pr_ls_anchor_pass_5m: int = 0
 
 
 @dataclass
@@ -1540,6 +1652,64 @@ def _load_full_reference(path: Path) -> list[tuple[float, np.ndarray]]:
     return rows
 
 
+def _reference_position_map(rows: list[tuple[float, np.ndarray]]) -> dict[float, np.ndarray]:
+    """Return reference ECEF positions keyed by rounded TOW for diagnostics."""
+    return {round(float(tow), 1): np.asarray(ecef, dtype=np.float64) for tow, ecef in rows}
+
+
+def _filter_data_by_systems(data: dict, systems: tuple[str, ...]) -> dict:
+    """Return a shallow data copy with per-satellite arrays masked by system."""
+    allowed = {str(s).strip() for s in systems if str(s).strip()}
+    if not allowed:
+        return data
+    allowed_ids = {sid for sid, ch in _SYS_ID_TO_CHAR.items() if ch in allowed}
+    out = dict(data)
+    n_epochs = int(data["n_epochs"])
+    sat_counts: list[int] = []
+
+    def mask_for_epoch(i: int) -> np.ndarray:
+        sids = np.asarray(data["system_ids"][i], dtype=np.int32)
+        return np.array([int(sid) in allowed_ids for sid in sids], dtype=bool)
+
+    masked_keys = {
+        "sat_ecef",
+        "pseudoranges",
+        "weights",
+        "system_ids",
+        "carrier_phase",
+        "doppler_hz",
+        "sat_velocity",
+        "clock_drift",
+    }
+    for key in masked_keys:
+        if key not in data:
+            continue
+        vals = []
+        for i in range(n_epochs):
+            arr = np.asarray(data[key][i])
+            vals.append(arr[mask_for_epoch(i)])
+        out[key] = vals
+
+    for key in ("used_prns", "carrier_codes", "doppler_codes"):
+        if key not in data:
+            continue
+        vals = []
+        for i in range(n_epochs):
+            mask = mask_for_epoch(i)
+            seq = list(data[key][i])
+            vals.append([v for v, keep in zip(seq, mask) if bool(keep)])
+        out[key] = vals
+
+    for i in range(n_epochs):
+        sat_counts.append(int(np.count_nonzero(mask_for_epoch(i))))
+    out["satellite_counts"] = np.asarray(sat_counts, dtype=np.int32)
+    out["n_satellites"] = int(np.median(out["satellite_counts"])) if sat_counts else 0
+    out["constellations"] = tuple(
+        sorted({sat_id[0] for sats in out.get("used_prns", []) for sat_id in sats if sat_id})
+    )
+    return out
+
+
 def _scale_weights_per_system(weights: np.ndarray, system_ids: np.ndarray) -> np.ndarray:
     out = np.asarray(weights, dtype=np.float64).copy()
     sids = np.asarray(system_ids, dtype=np.int32)
@@ -1580,6 +1750,8 @@ def _pr_prefit_gate_mask(
     clock_quantile: float,
     min_sats: int,
     keep_best: int,
+    system_ids: np.ndarray | None = None,
+    per_system: bool = False,
 ) -> np.ndarray:
     """Gate pseudoranges by robust prefit residual around a reference position."""
     n_sat = int(len(pseudoranges))
@@ -1597,8 +1769,22 @@ def _pr_prefit_gate_mask(
         return mask
 
     q = float(np.clip(float(clock_quantile), 0.0, 1.0))
-    cb = float(np.quantile(residuals[finite], q))
-    abs_prefit = np.abs(residuals - cb)
+    abs_prefit = np.full(n_sat, np.inf, dtype=np.float64)
+    if per_system and system_ids is not None:
+        sids = np.asarray(system_ids, dtype=np.int32).ravel()
+        if sids.size == n_sat:
+            for sid in np.unique(sids[finite]):
+                group = finite & (sids == int(sid))
+                if int(group.sum()) == 0:
+                    continue
+                cb = float(np.quantile(residuals[group], q))
+                abs_prefit[group] = np.abs(residuals[group] - cb)
+        else:
+            cb = float(np.quantile(residuals[finite], q))
+            abs_prefit[finite] = np.abs(residuals[finite] - cb)
+    else:
+        cb = float(np.quantile(residuals[finite], q))
+        abs_prefit[finite] = np.abs(residuals[finite] - cb)
     mask = finite & (abs_prefit <= float(gate_m))
 
     min_keep = max(4, min(int(min_sats), n_sat))
@@ -1627,6 +1813,171 @@ def _build_pf(config: CTRBPFConfig):
     return pf
 
 
+def _resample_deferred(config: CTRBPFConfig) -> bool:
+    return bool(config.defer_epoch_resample) or bool(config.enable_reservoir_stein)
+
+
+def _reservoir_stein_resample_if_needed(
+    pf,
+    config: CTRBPFConfig,
+    stats: _ReservoirSteinStats,
+    epoch_index: int,
+) -> bool:
+    ess = float(pf.get_ess())
+    if ess >= float(pf.ess_threshold) * int(pf.n_particles):
+        return False
+
+    stats.epochs_attempted += 1
+    states = np.asarray(pf.get_particle_states(), dtype=np.float64)
+    log_weights = np.asarray(pf.get_log_weights(), dtype=np.float64)
+    guide = np.asarray(pf.estimate(), dtype=np.float64)
+
+    sigma_pos = max(float(config.reservoir_stein_guide_sigma_m), 1.0e-6)
+    sigma_cb = max(float(config.reservoir_stein_guide_sigma_cb_m), 1.0e-6)
+    grad = np.empty((states.shape[0], 4), dtype=np.float64)
+    grad[:, :3] = (guide[:3] - states[:, :3]) / (sigma_pos * sigma_pos)
+    grad[:, 3] = (guide[3] - states[:, 3]) / (sigma_cb * sigma_cb)
+
+    from gnss_gpu.reservoir_stein import ReservoirSteinConfig, reservoir_stein_update
+
+    reservoir_size = int(config.reservoir_stein_size)
+    if reservoir_size <= 0:
+        reservoir_size = int(pf.n_particles)
+    reservoir_size = max(1, min(reservoir_size, int(pf.n_particles)))
+    result = reservoir_stein_update(
+        states[:, :4],
+        log_weights,
+        grad,
+        ReservoirSteinConfig(
+            reservoir_size=reservoir_size,
+            elite_fraction=float(config.reservoir_stein_elite_fraction),
+            stein_steps=int(config.reservoir_stein_steps),
+            stein_step_size=float(config.reservoir_stein_step_size),
+            repulsion_scale=float(config.reservoir_stein_repulsion_scale),
+            seed=int(config.reservoir_stein_seed) + int(epoch_index),
+        ),
+    )
+
+    reservoir_states = states[np.asarray(result.source_indices, dtype=np.int64)].copy()
+    reservoir_states[:, :4] = np.asarray(result.particles, dtype=np.float64)
+    if reservoir_states.shape[0] == int(pf.n_particles):
+        new_states = reservoir_states
+    else:
+        rng = np.random.default_rng(int(config.reservoir_stein_seed) + 1_000_003 + int(epoch_index))
+        probs = np.asarray(result.weights, dtype=np.float64)
+        probs = probs / max(float(np.sum(probs)), np.finfo(np.float64).tiny)
+        idx = rng.choice(reservoir_states.shape[0], size=int(pf.n_particles), replace=True, p=probs)
+        new_states = reservoir_states[idx]
+    pf.set_particle_states(new_states)
+
+    stats.epochs_applied += 1
+    stats.reservoir_size_sum += int(reservoir_states.shape[0])
+    stats.ess_before_sum += float(result.ess_before)
+    if result.bandwidths:
+        stats.bandwidth_sum += float(result.bandwidths[-1])
+    return True
+
+
+def _apply_rtkdiag_candidate_proposal_cloud(
+    pf,
+    refs_ecef: np.ndarray,
+    mixture_weights: np.ndarray | None,
+    spread_m: float,
+    seed: int,
+) -> None:
+    refs = np.asarray(refs_ecef, dtype=np.float64).reshape(-1, 3)
+    refs = refs[np.all(np.isfinite(refs), axis=1)]
+    if refs.shape[0] == 0:
+        return
+    if mixture_weights is None:
+        weights = np.full(refs.shape[0], 1.0 / refs.shape[0], dtype=np.float64)
+    else:
+        weights = np.asarray(mixture_weights, dtype=np.float64).reshape(-1)
+        if weights.size != refs.shape[0]:
+            weights = np.ones(refs.shape[0], dtype=np.float64)
+        weights = np.where(np.isfinite(weights) & (weights > 0.0), weights, 0.0)
+        total = float(np.sum(weights))
+        if total <= 0.0:
+            weights = np.full(refs.shape[0], 1.0 / refs.shape[0], dtype=np.float64)
+        else:
+            weights = weights / total
+
+    states = np.asarray(pf.get_particle_states(), dtype=np.float64)
+    log_weights = np.asarray(pf.get_log_weights(), dtype=np.float64)
+    state_weights = np.exp(log_weights - float(np.max(log_weights)))
+    state_total = float(np.sum(state_weights))
+    if state_total <= 0.0 or not np.all(np.isfinite(state_weights)):
+        state_weights = None
+    else:
+        state_weights = state_weights / state_total
+
+    rng = np.random.default_rng(int(seed))
+    src_idx = rng.choice(states.shape[0], size=int(pf.n_particles), replace=True, p=state_weights)
+    ref_idx = rng.choice(refs.shape[0], size=int(pf.n_particles), replace=True, p=weights)
+    new_states = states[src_idx].copy()
+    sigma = max(float(spread_m), 1.0e-6)
+    new_states[:, :3] = refs[ref_idx] + rng.normal(0.0, sigma, size=(int(pf.n_particles), 3))
+    pf.set_particle_states(new_states)
+
+
+def _ct_spline_motion_prior(
+    positions: np.ndarray,
+    times: np.ndarray,
+    config: CTRBPFConfig,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """Fit a cubic CT trajectory and return inter-epoch motion factors."""
+    pos = np.asarray(positions, dtype=np.float64)
+    t = np.asarray(times, dtype=np.float64).reshape(-1)
+    if pos.ndim != 2 or pos.shape[1] < 3 or t.size != pos.shape[0]:
+        return None, None
+    valid = (
+        np.isfinite(t)
+        & np.isfinite(pos[:, :3]).all(axis=1)
+        & (np.linalg.norm(pos[:, :3], axis=1) > 1.0)
+    )
+    if int(np.count_nonzero(valid)) < max(4, int(config.ct_motion_min_epochs)):
+        return None, None
+
+    t0 = float(t[valid][0])
+    tt = t - t0
+    tv = tt[valid]
+    pv = pos[valid, :3]
+    unique_t, unique_idx = np.unique(tv, return_index=True)
+    if unique_t.size < max(4, int(config.ct_motion_min_epochs)):
+        return None, None
+    pv = pv[unique_idx]
+
+    smooth_sigma = max(float(config.ct_spline_smoothing_m), 0.0)
+    smooth_s = (smooth_sigma * smooth_sigma) * float(unique_t.size)
+    try:
+        from scipy.interpolate import UnivariateSpline  # type: ignore
+
+        ct_pos = np.empty((pos.shape[0], 3), dtype=np.float64)
+        for axis in range(3):
+            spline = UnivariateSpline(unique_t, pv[:, axis], k=3, s=smooth_s)
+            ct_pos[:, axis] = np.asarray(spline(tt), dtype=np.float64)
+    except Exception:
+        # Fallback: centered moving average on the observed trajectory. This is
+        # not a cubic spline, but still supplies a smooth CT-like motion prior.
+        ct_pos = pos[:, :3].copy()
+        radius = max(1, int(round(max(float(config.ct_spline_smoothing_m), 0.5) * 2.0)))
+        for i in range(pos.shape[0]):
+            lo = max(0, i - radius)
+            hi = min(pos.shape[0], i + radius + 1)
+            mask = valid[lo:hi]
+            if np.any(mask):
+                ct_pos[i] = np.mean(pos[lo:hi, :3][mask], axis=0)
+
+    if not np.isfinite(ct_pos).all():
+        return None, None
+    deltas = np.diff(ct_pos, axis=0)
+    edge_valid = valid[:-1] & valid[1:] & np.isfinite(deltas).all(axis=1)
+    deltas = np.where(edge_valid[:, np.newaxis], deltas, np.nan)
+    sigmas = np.full(deltas.shape[0], float(config.ct_motion_sigma_m), dtype=np.float64)
+    sigmas[~edge_valid] = np.nan
+    return deltas, sigmas
+
+
 def _run_ctrbpf_on_segment(
     data: dict,
     wls_positions: np.ndarray,
@@ -1636,6 +1987,7 @@ def _run_ctrbpf_on_segment(
     hybrid_pos: dict[float, np.ndarray] | None = None,
     hybrid_velocity: dict[float, np.ndarray] | None = None,
     hybrid_status: dict[float, int] | None = None,
+    reference_pos: dict[float, np.ndarray] | None = None,
     rtkdiag_candidates: list[
         tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]
     ] | None = None,
@@ -1644,6 +1996,7 @@ def _run_ctrbpf_on_segment(
     np.ndarray,
     float,
     _PRObsStats,
+    _ReservoirSteinStats,
     _DDStats,
     _RBPFGateStats,
     _HybridStats,
@@ -1668,6 +2021,7 @@ def _run_ctrbpf_on_segment(
     used_prns = data.get("used_prns") or [[] for _ in range(n_epochs)]
     times = np.asarray(data["times"], dtype=np.float64)
     pr_obs_stats = _PRObsStats()
+    reservoir_stein_stats = _ReservoirSteinStats()
     dd_stats = _DDStats()
     gate_stats = _RBPFGateStats()
     hybrid_stats = _HybridStats()
@@ -1695,11 +2049,14 @@ def _run_ctrbpf_on_segment(
     )
     fgo_dd_cache: list = [None] * n_epochs  # holds DDCarrierEpoch | None
     fgo_dd_pr_cache: list = [None] * n_epochs  # holds DDPseudorangeEpoch | None
+    fgo_dd_pr_ls_anchor_pos = np.full((n_epochs, 3), np.nan, dtype=np.float64)
+    fgo_dd_pr_ls_anchor_sigma = np.full(n_epochs, np.nan, dtype=np.float64)
     fgo_stats = _FGOStats()
     tdcp_stats = _TDCPSmootherStats()
     zupt_stats = _ZUPTStats()
     imu_tc_stats = _IMUTCStats()
     ins_tc_stats = _INSTCStats()
+    defer_resample = _resample_deferred(config)
 
     # Phase 9b: tight-coupled IMU state (in-loop pre-integration since the
     # last Status=4 hybrid anchor). Initialized lazily on the first epoch
@@ -2003,8 +2360,19 @@ def _run_ctrbpf_on_segment(
         sat_i = np.asarray(sat_ecef[i], dtype=np.float64)
         pr_i = np.asarray(pseudoranges[i], dtype=np.float64)
         w_i = np.asarray(weights[i], dtype=np.float64)
+        sids_i_full = None if system_ids is None else np.asarray(system_ids[i], dtype=np.int32)
+        if config.pr_systems and sids_i_full is not None:
+            allowed_pr_ids = {
+                sid for sid, ch in _SYS_ID_TO_CHAR.items() if ch in set(config.pr_systems)
+            }
+            pr_sys_mask = np.array([int(sid) in allowed_pr_ids for sid in sids_i_full], dtype=bool)
+            if int(pr_sys_mask.sum()) >= 4:
+                sat_i = sat_i[pr_sys_mask]
+                pr_i = pr_i[pr_sys_mask]
+                w_i = w_i[pr_sys_mask]
+                sids_i_full = sids_i_full[pr_sys_mask]
         if system_ids is not None:
-            w_i = _scale_weights_per_system(w_i, system_ids[i])
+            w_i = _scale_weights_per_system(w_i, sids_i_full)
         w_i = _pr_likelihood_weights(w_i, config)
 
         finite = (
@@ -2020,7 +2388,7 @@ def _run_ctrbpf_on_segment(
         sat_i = sat_i[finite]
         pr_i = pr_i[finite]
         w_i = w_i[finite]
-        sids_i = None if system_ids is None else np.asarray(system_ids[i])[finite]
+        sids_i = None if sids_i_full is None else np.asarray(sids_i_full)[finite]
         st_obs = hybrid_status.get(t_key) if hybrid_status is not None else None
         skip_pr_here = (
             st_obs is not None
@@ -2046,6 +2414,8 @@ def _run_ctrbpf_on_segment(
                 clock_quantile=clock_quantile,
                 min_sats=int(config.pr_prefit_gate_min_sats),
                 keep_best=int(config.pr_prefit_gate_keep_best),
+                system_ids=sids_i,
+                per_system=bool(config.pr_prefit_per_system),
             )
             if int(gate_mask.sum()) >= 4 and int(gate_mask.sum()) < int(gate_mask.size):
                 pr_obs_stats.prefit_epochs += 1
@@ -2074,7 +2444,7 @@ def _run_ctrbpf_on_segment(
                 w_los=float(config.pr_gmm_w_los),
                 mu_nlos=float(config.pr_gmm_mu_nlos_m),
                 sigma_nlos=float(config.pr_gmm_sigma_nlos_m),
-                resample=not bool(config.defer_epoch_resample),
+                resample=not defer_resample,
             )
             pr_obs_stats.epochs_gmm += 1
         else:
@@ -2082,7 +2452,7 @@ def _run_ctrbpf_on_segment(
                 sat_i,
                 pr_i,
                 weights=w_i,
-                resample=not bool(config.defer_epoch_resample),
+                resample=not defer_resample,
             )
             pr_obs_stats.epochs_gaussian += 1
 
@@ -2091,6 +2461,11 @@ def _run_ctrbpf_on_segment(
         dd_result = None
         if need_dd_compute and dd_computer is not None:
             rover_pos_now = np.asarray(pf.estimate(), dtype=np.float64)[:3]
+            dd_select_pos = (
+                np.asarray(hp_prefetched, dtype=np.float64)[:3]
+                if hp_prefetched_valid
+                else rover_pos_now
+            )
             sat_full = np.asarray(sat_ecef[i], dtype=np.float64)
             sids_full = (
                 np.asarray(system_ids[i], dtype=np.int32)
@@ -2104,14 +2479,17 @@ def _run_ctrbpf_on_segment(
                 sids_full,
                 sat_id_strs,
                 w_full_meas,
-                rover_pos_now,
+                dd_select_pos,
                 config.dd_systems,
+                min_elevation_deg=float(config.dd_min_elevation_deg),
+                min_snr=float(config.dd_min_snr),
+                keep_best=int(config.dd_keep_best),
             )
             if len(measurements) >= 2:
                 dd_result = dd_computer.compute_dd(
                     float(times[i]),
                     measurements,
-                    rover_position_approx=rover_pos_now,
+                    rover_position_approx=dd_select_pos,
                     min_common_sats=config.dd_min_pairs,
                 )
                 # Phase 4 cache: save the DD carrier observation for the
@@ -2133,7 +2511,7 @@ def _run_ctrbpf_on_segment(
                             dd_pr_result = dd_pr_computer.compute_dd(
                                 float(times[i]),
                                 measurements,
-                                rover_position_approx=rover_pos_now,
+                                rover_position_approx=dd_select_pos,
                                 min_common_sats=config.dd_min_pairs,
                                 rover_weights=[float(m.snr) for m in measurements],
                             )
@@ -2141,8 +2519,110 @@ def _run_ctrbpf_on_segment(
                             dd_pr_result = None
                         if (
                             dd_pr_result is not None
+                            and (
+                                float(config.dd_pr_pair_residual_max_m) > 0.0
+                                or float(config.dd_pr_epoch_median_residual_max_m) > 0.0
+                            )
+                        ):
+                            from gnss_gpu.dd_quality import gate_dd_pseudorange
+
+                            dd_pr_result, _dd_pr_gate_stats = gate_dd_pseudorange(
+                                dd_pr_result,
+                                dd_select_pos,
+                                pair_residual_max_m=(
+                                    float(config.dd_pr_pair_residual_max_m)
+                                    if float(config.dd_pr_pair_residual_max_m) > 0.0
+                                    else None
+                                ),
+                                epoch_median_residual_max_m=(
+                                    float(config.dd_pr_epoch_median_residual_max_m)
+                                    if float(config.dd_pr_epoch_median_residual_max_m) > 0.0
+                                    else None
+                                ),
+                                min_pairs=max(1, int(config.dd_pr_gate_min_pairs)),
+                            )
+                        if (
+                            dd_pr_result is not None
                             and int(getattr(dd_pr_result, "n_dd", 0)) > 0
                         ):
+                            if bool(config.enable_dd_pr_ls_anchor):
+                                status_ok = True
+                                if config.dd_pr_ls_anchor_statuses and st_obs is not None:
+                                    status_ok = int(st_obs) in {
+                                        int(s) for s in config.dd_pr_ls_anchor_statuses
+                                    }
+                                if not status_ok:
+                                    fgo_stats.dd_pr_ls_anchor_status_skipped += 1
+                                else:
+                                    fgo_stats.dd_pr_ls_anchor_attempted += 1
+                                    try:
+                                        from gnss_gpu.gsdc_dgnss import (
+                                            DDWLSConfig,
+                                            dd_pseudorange_position_update,
+                                        )
+
+                                        anchor_pos, anchor_diag = dd_pseudorange_position_update(
+                                            dd_select_pos,
+                                            dd_pr_result,
+                                            DDWLSConfig(
+                                                min_dd_pairs=int(
+                                                    config.dd_pr_ls_anchor_min_pairs
+                                                ),
+                                                dd_sigma_m=float(
+                                                    config.dd_pr_ls_anchor_dd_sigma_m
+                                                ),
+                                                prior_sigma_m=float(
+                                                    config.dd_pr_ls_anchor_solve_prior_sigma_m
+                                                ),
+                                                max_shift_m=float(
+                                                    config.dd_pr_ls_anchor_max_shift_m
+                                                ),
+                                                max_iter=8,
+                                            ),
+                                        )
+                                    except Exception:
+                                        anchor_pos = None
+                                        anchor_diag = {"accepted": False}
+                                    accepted = bool(anchor_diag.get("accepted", False))
+                                    postfit_rms = float(anchor_diag.get("final_rms_m", float("inf")))
+                                    if accepted and (
+                                        not np.isfinite(postfit_rms)
+                                        or postfit_rms
+                                        > float(config.dd_pr_ls_anchor_max_postfit_rms_m)
+                                    ):
+                                        accepted = False
+                                        fgo_stats.dd_pr_ls_anchor_rejected_postfit += 1
+                                    if accepted and anchor_pos is not None and np.all(
+                                        np.isfinite(anchor_pos)
+                                    ):
+                                        anchor_ecef = np.asarray(anchor_pos, dtype=np.float64)[:3]
+                                        fgo_dd_pr_ls_anchor_pos[i, :] = anchor_ecef
+                                        fgo_dd_pr_ls_anchor_sigma[i] = float(
+                                            config.dd_pr_ls_anchor_prior_sigma_m
+                                        )
+                                        fgo_stats.dd_pr_ls_anchor_accepted += 1
+                                        fgo_stats.dd_pr_ls_anchor_shift_sum_m += float(
+                                            anchor_diag.get("shift_m", 0.0)
+                                        )
+                                        fgo_stats.dd_pr_ls_anchor_postfit_sum_m += postfit_rms
+                                        if reference_pos is not None:
+                                            ref_ecef = reference_pos.get(round(float(times[i]), 1))
+                                            if ref_ecef is not None and np.all(np.isfinite(ref_ecef)):
+                                                seed_ecef = np.asarray(dd_select_pos, dtype=np.float64)[:3]
+                                                anchor_err = float(np.linalg.norm(anchor_ecef - ref_ecef[:3]))
+                                                seed_err = float(np.linalg.norm(seed_ecef - ref_ecef[:3]))
+                                                if np.isfinite(anchor_err) and np.isfinite(seed_err):
+                                                    fgo_stats.dd_pr_ls_anchor_gt_count += 1
+                                                    fgo_stats.dd_pr_ls_anchor_gt_error_sum_m += anchor_err
+                                                    fgo_stats.dd_pr_ls_anchor_seed_error_sum_m += seed_err
+                                                    if anchor_err < seed_err:
+                                                        fgo_stats.dd_pr_ls_anchor_improved += 1
+                                                    if anchor_err <= 0.5:
+                                                        fgo_stats.dd_pr_ls_anchor_pass_05m += 1
+                                                    if anchor_err <= 5.0:
+                                                        fgo_stats.dd_pr_ls_anchor_pass_5m += 1
+                                    elif not bool(anchor_diag.get("accepted", False)):
+                                        fgo_stats.dd_pr_ls_anchor_rejected_solve += 1
                             from gnss_gpu.local_fgo import DDPseudorangeEpoch
 
                             fgo_dd_pr_cache[i] = DDPseudorangeEpoch.from_result(dd_pr_result)
@@ -2188,7 +2668,7 @@ def _run_ctrbpf_on_segment(
                         weights=w_full[dop_finite],
                         wavelength=_GPS_L1_WAVELENGTH_M,
                         sigma_mps=config.sigma_doppler_mps,
-                        resample=not bool(config.defer_epoch_resample),
+                        resample=not defer_resample,
                     )
                     if gate_active:
                         gate_stats.epochs_applied += 1
@@ -2202,7 +2682,7 @@ def _run_ctrbpf_on_segment(
                 pf.update_dd_carrier_afv(
                     dd_result,
                     sigma_cycles=float(config.dd_sigma_cycles),
-                    resample=not bool(config.defer_epoch_resample),
+                    resample=not defer_resample,
                 )
                 dd_stats.epochs_applied += 1
                 dd_stats.pairs_total += int(dd_result.n_dd)
@@ -2256,6 +2736,16 @@ def _run_ctrbpf_on_segment(
                         and int(st_now_pu) in {int(s) for s in config.imu_tc_emit_pf_hybrid_statuses}
                     ):
                         hybrid_sigma_now = float(config.imu_tc_hybrid_loose_sigma_m)
+                if float(config.hybrid_recenter_max_shift_m) > 0.0:
+                    shift_norm, recentered = pf.recenter_position(
+                        hp,
+                        max_shift_m=float(config.hybrid_recenter_max_shift_m),
+                    )
+                    if recentered:
+                        hybrid_stats.recenter_applied += 1
+                        hybrid_stats.recenter_shift_sum_m += float(shift_norm)
+                    else:
+                        hybrid_stats.recenter_skipped += 1
                 pf.position_update(hp, sigma_pos=hybrid_sigma_now)
                 hybrid_stats.epochs_applied += 1
 
@@ -2531,6 +3021,7 @@ def _run_ctrbpf_on_segment(
                         label = sorted_top[0][0] + "+wavg"
                         selected_pos = fused_pos
                         _selected_diag = sorted_top[0][2]
+                        _selected_key = sorted_top[0][3]
                     elif is_consensus:
                         n_cons = 3 if select_mode == "consensus3" else 5
                         sorted_top = sorted(collected, key=lambda c: c[3])[:n_cons]
@@ -2542,6 +3033,7 @@ def _run_ctrbpf_on_segment(
                         label = sorted_top[best_idx][0] + "+cons"
                         selected_pos = sorted_top[best_idx][1]
                         _selected_diag = sorted_top[best_idx][2]
+                        _selected_key = sorted_top[best_idx][3]
                     elif is_temporal_prevdist and rtkdiag_temporal_prev is not None:
                         alpha = float(temporal_prevdist_alpha)
                         best_cand = min(
@@ -2551,7 +3043,7 @@ def _run_ctrbpf_on_segment(
                                 c[3][1],
                             ),
                         )
-                        label, selected_pos, _selected_diag, _ = best_cand
+                        label, selected_pos, _selected_diag, _selected_key = best_cand
                     elif (
                         is_temporal_hybdelta
                         and rtkdiag_temporal_prev is not None
@@ -2570,10 +3062,10 @@ def _run_ctrbpf_on_segment(
                                 c[3][1],
                             ),
                         )
-                        label, selected_pos, _selected_diag, _ = best_cand
+                        label, selected_pos, _selected_diag, _selected_key = best_cand
                     else:
                         best_cand = min(collected, key=lambda c: c[3])
-                        label, selected_pos, _selected_diag, _ = best_cand
+                        label, selected_pos, _selected_diag, _selected_key = best_cand
                     rtkdiag_pf_ref = selected_pos
                     if is_temporal_prevdist or is_temporal_hybdelta:
                         rtkdiag_temporal_prev = np.asarray(selected_pos, dtype=np.float64)
@@ -2582,20 +3074,75 @@ def _run_ctrbpf_on_segment(
                     rtkdiag_pf_stats.selected_counts[label] = (
                         rtkdiag_pf_stats.selected_counts.get(label, 0) + 1
                     )
-                    recenter_max = float(config.rtkdiag_candidate_recenter_max_shift_m)
-                    if recenter_max > 0.0:
-                        shift_norm, recentered = pf.recenter_position(
-                            rtkdiag_pf_ref,
-                            max_shift_m=recenter_max,
+                    soft_top_k = max(int(config.rtkdiag_candidate_soft_top_k), 1)
+                    pf_update_refs = np.asarray(rtkdiag_pf_ref, dtype=np.float64).reshape(1, 3)
+                    pf_update_weights = None
+                    if soft_top_k > 1 and len(collected) > 1:
+                        refs_list = [np.asarray(rtkdiag_pf_ref, dtype=np.float64)]
+                        keys_list = [_selected_key]
+                        for _cand_label, cand_pos, _cand_diag, cand_key in sorted(collected, key=lambda c: c[3]):
+                            if len(refs_list) >= soft_top_k:
+                                break
+                            cand_arr = np.asarray(cand_pos, dtype=np.float64)
+                            if not np.all(np.isfinite(cand_arr)):
+                                continue
+                            if any(float(np.linalg.norm(cand_arr - ref)) < 1.0e-6 for ref in refs_list):
+                                continue
+                            refs_list.append(cand_arr)
+                            keys_list.append(cand_key)
+                        if len(refs_list) > 1:
+                            eps = max(float(config.rtkdiag_candidate_soft_weight_eps), 1.0e-9)
+                            raw_w = np.asarray(
+                                [
+                                    1.0 / (max(float(key[0]), 0.0) + eps)
+                                    if np.isfinite(float(key[0]))
+                                    else 0.0
+                                    for key in keys_list
+                                ],
+                                dtype=np.float64,
+                            )
+                            if float(np.sum(raw_w)) <= 0.0 or not np.all(np.isfinite(raw_w)):
+                                raw_w = np.ones(len(refs_list), dtype=np.float64)
+                            raw_w /= float(np.sum(raw_w))
+                            pf_update_refs = np.stack(refs_list, axis=0)
+                            pf_update_weights = raw_w
+                    if config.rtkdiag_candidate_proposal_cloud:
+                        _apply_rtkdiag_candidate_proposal_cloud(
+                            pf,
+                            pf_update_refs,
+                            pf_update_weights,
+                            spread_m=float(config.rtkdiag_candidate_proposal_spread_m),
+                            seed=int(config.reservoir_stein_seed) + 2_000_003 + int(i),
                         )
-                        if recentered:
-                            rtkdiag_pf_stats.recenter_applied += 1
+                    else:
+                        recenter_max = float(config.rtkdiag_candidate_recenter_max_shift_m)
+                        if recenter_max > 0.0:
+                            recenter_ref = rtkdiag_pf_ref
+                            if pf_update_weights is not None and pf_update_refs.shape[0] > 1:
+                                recenter_ref = np.sum(
+                                    pf_update_refs * pf_update_weights[:, np.newaxis],
+                                    axis=0,
+                                )
+                            shift_norm, recentered = pf.recenter_position(
+                                recenter_ref,
+                                max_shift_m=recenter_max,
+                            )
+                            if recentered:
+                                rtkdiag_pf_stats.recenter_applied += 1
+                            else:
+                                rtkdiag_pf_stats.recenter_skipped += 1
+                        sigma_candidate = max(float(config.rtkdiag_candidate_sigma_m), 0.01)
+                        if pf_update_weights is not None and pf_update_refs.shape[0] > 1:
+                            pf.position_mixture_update(
+                                pf_update_refs,
+                                sigma_pos=sigma_candidate,
+                                mixture_weights=pf_update_weights,
+                            )
                         else:
-                            rtkdiag_pf_stats.recenter_skipped += 1
-                    pf.position_update(
-                        rtkdiag_pf_ref,
-                        sigma_pos=max(float(config.rtkdiag_candidate_sigma_m), 0.01),
-                    )
+                            pf.position_update(
+                                rtkdiag_pf_ref,
+                                sigma_pos=sigma_candidate,
+                            )
                     rtkdiag_pf_stats.pu_applied += 1
                     rtkdiag_pf_emit_here = True
             elif (is_temporal_prevdist or is_temporal_hybdelta) and hp is not None and np.all(np.isfinite(hp)) and not np.all(np.asarray(hp, dtype=np.float64) == 0.0):
@@ -2846,7 +3393,7 @@ def _run_ctrbpf_on_segment(
                                 ),
                             )
                             pf.position_update(p_ins_ecef, sigma_pos=sigma_ins)
-                            if not bool(config.defer_epoch_resample):
+                            if not defer_resample:
                                 pf.resample_if_needed()
                             ins_tc_stats.pu_applied += 1
                             ins_valid_for_emit = True
@@ -2884,6 +3431,14 @@ def _run_ctrbpf_on_segment(
             ins_tc_quality_window.append(
                 int(_st_for_window) if _st_for_window is not None else 0
             )
+
+        resampled_before_emit = False
+        if config.enable_reservoir_stein:
+            resampled_before_emit = _reservoir_stein_resample_if_needed(
+                pf, config, reservoir_stein_stats, i
+            )
+            if resampled_before_emit:
+                pr_obs_stats.deferred_resample_epochs += 1
 
         est = np.asarray(pf.estimate(), dtype=np.float64)
         if ins_tc_emit_pf_here:
@@ -2948,13 +3503,31 @@ def _run_ctrbpf_on_segment(
         ):
             # Phase 6 passthrough: trust hybrid as the floor.
             positions[i] = np.asarray(hp, dtype=np.float64)
+        elif (
+            use_hybrid
+            and config.hybrid_emit_pf_estimate
+            and config.hybrid_emit_pf_statuses
+            and hp is not None
+            and np.all(np.isfinite(hp))
+            and not np.all(hp == 0.0)
+            and hybrid_status is not None
+        ):
+            st_emit = hybrid_status.get(round(float(times[i]), 1))
+            if st_emit is not None and int(st_emit) not in {
+                int(s) for s in config.hybrid_emit_pf_statuses
+            }:
+                positions[i] = np.asarray(hp, dtype=np.float64)
+            else:
+                positions[i] = est[:3]
         else:
             # Phase 7 / non-hybrid: emit the PF's own weighted-mean estimate
             # so any DD-AFV / Doppler-KF correction shows up in the score.
             positions[i] = est[:3]
 
-        if config.defer_epoch_resample and pf.resample_if_needed():
-            pr_obs_stats.deferred_resample_epochs += 1
+        if defer_resample and not config.enable_reservoir_stein:
+            did_resample = pf.resample_if_needed()
+            if did_resample:
+                pr_obs_stats.deferred_resample_epochs += 1
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
@@ -3026,6 +3599,13 @@ def _run_ctrbpf_on_segment(
                 if st is not None and st not in allowed:
                     prior_sigmas_arr[i] = float(config.fgo_anchor_sigma_m)
 
+        ct_motion_deltas = None
+        ct_motion_sigmas = None
+        if config.enable_ct_spline_motion_prior:
+            ct_motion_deltas, ct_motion_sigmas = _ct_spline_motion_prior(
+                positions, times, config
+            )
+
         positions = _apply_fgo_lambda(
             positions=positions,
             dd_cache=fgo_dd_cache,
@@ -3034,6 +3614,10 @@ def _run_ctrbpf_on_segment(
             stats=fgo_stats,
             protect_indices=protect_indices,
             prior_sigmas=prior_sigmas_arr,
+            anchor_positions=fgo_dd_pr_ls_anchor_pos,
+            anchor_sigmas=fgo_dd_pr_ls_anchor_sigma,
+            motion_deltas=ct_motion_deltas,
+            motion_sigmas=ct_motion_sigmas,
         )
 
     if ins_ekf is not None:
@@ -3047,6 +3631,7 @@ def _run_ctrbpf_on_segment(
         positions,
         ms_per_epoch,
         pr_obs_stats,
+        reservoir_stein_stats,
         dd_stats,
         gate_stats,
         hybrid_stats,
@@ -3068,6 +3653,10 @@ def _apply_fgo_lambda(
     stats: _FGOStats,
     protect_indices: set[int] | None = None,
     prior_sigmas: np.ndarray | None = None,
+    anchor_positions: np.ndarray | None = None,
+    anchor_sigmas: np.ndarray | None = None,
+    motion_deltas: np.ndarray | None = None,
+    motion_sigmas: np.ndarray | None = None,
 ) -> np.ndarray:
     """Slide a window over the trajectory and run solve_local_fgo_with_lambda.
 
@@ -3094,10 +3683,12 @@ def _apply_fgo_lambda(
     base_cfg = LocalFgoConfig(
         prior_sigma_m=float(config.fgo_prior_sigma_m),
         dd_sigma_cycles=float(config.fgo_dd_sigma_cycles),
+        dd_pr_sigma_m=float(config.fgo_dd_pr_sigma_m),
     )
     lam_cfg = LambdaFixConfig(
         ratio_threshold=float(config.fgo_lambda_ratio),
         min_epochs=int(config.fgo_lambda_min_epochs),
+        max_epoch_gap=int(config.fgo_lambda_max_epoch_gap),
     )
 
     out = positions.copy()
@@ -3128,12 +3719,54 @@ def _apply_fgo_lambda(
             if prior_sigmas is not None
             else None
         )
+        slice_prior_positions = slice_orig.copy()
+        if anchor_positions is not None and anchor_sigmas is not None:
+            anchor_mode = str(config.dd_pr_ls_anchor_mode).strip().lower()
+            slice_anchor_pos = np.asarray(
+                anchor_positions[start : end + 1], dtype=np.float64
+            ).reshape(win_size, 3)
+            slice_anchor_sigmas = np.asarray(
+                anchor_sigmas[start : end + 1], dtype=np.float64
+            ).reshape(win_size)
+            anchor_mask = (
+                np.all(np.isfinite(slice_anchor_pos), axis=1)
+                & np.isfinite(slice_anchor_sigmas)
+                & (slice_anchor_sigmas > 0.0)
+            )
+            if np.any(anchor_mask):
+                if (
+                    anchor_mode in {"prior", "initial"}
+                    and bool(config.dd_pr_ls_anchor_set_initial)
+                ):
+                    slice_init[anchor_mask] = slice_anchor_pos[anchor_mask]
+                if anchor_mode == "prior":
+                    slice_prior_positions[anchor_mask] = slice_anchor_pos[anchor_mask]
+                    if slice_prior_sigmas is None:
+                        slice_prior_sigmas = np.full(
+                            win_size, float(config.fgo_prior_sigma_m), dtype=np.float64
+                        )
+                    slice_prior_sigmas[anchor_mask] = np.minimum(
+                        slice_prior_sigmas[anchor_mask],
+                        slice_anchor_sigmas[anchor_mask],
+                    )
+        slice_motion_deltas = (
+            np.asarray(motion_deltas[start:end], dtype=np.float64).copy()
+            if motion_deltas is not None
+            else None
+        )
+        slice_motion_sigmas = (
+            np.asarray(motion_sigmas[start:end], dtype=np.float64).copy()
+            if motion_sigmas is not None
+            else None
+        )
         problem = LocalFgoProblem(
             initial_positions_ecef=slice_init,
             window=LocalFgoWindow(0, win_size - 1),
+            motion_deltas_ecef=slice_motion_deltas,
+            motion_sigmas_m=slice_motion_sigmas,
             dd_carrier=window_dd,
             dd_pseudorange=window_dd_pr,
-            prior_positions_ecef=slice_orig,
+            prior_positions_ecef=slice_prior_positions,
             prior_sigmas_m=slice_prior_sigmas,
         )
         try:
@@ -3146,6 +3779,59 @@ def _apply_fgo_lambda(
         n_fixed_obs = int(summary.get("n_fixed_observations", 0))
         stats.n_fixed_total += n_fixed
         stats.n_fixed_observations_total += n_fixed_obs
+        for iteration_info in summary.get("iterations", []) or []:
+            stats.lambda_diag_windows += 1
+            stats.lambda_tracks_total += int(iteration_info.get("n_tracks", 0))
+            stats.lambda_segments_total += int(iteration_info.get("n_segments", 0))
+            stats.lambda_candidates_total += int(iteration_info.get("n_candidates", 0))
+            stats.lambda_ratio_rejected_total += int(
+                iteration_info.get("n_ratio_rejected", 0)
+            )
+            best_ratio = float(iteration_info.get("best_ratio", 0.0))
+            if np.isfinite(best_ratio):
+                stats.lambda_best_ratio = max(float(stats.lambda_best_ratio), best_ratio)
+            elif best_ratio == float("inf"):
+                stats.lambda_best_ratio = float("inf")
+            stats.lambda_ratio_median_sum += float(iteration_info.get("ratio_median", 0.0))
+            stats.lambda_ratio_p90_sum += float(iteration_info.get("ratio_p90", 0.0))
+            stats.lambda_segment_n_epochs_median_sum += float(
+                iteration_info.get("segment_n_epochs_median", 0.0)
+            )
+            stats.lambda_segment_n_epochs_max = max(
+                int(stats.lambda_segment_n_epochs_max),
+                int(iteration_info.get("segment_n_epochs_max", 0)),
+            )
+            stats.lambda_segment_variance_median_sum += float(
+                iteration_info.get("segment_variance_median", 0.0)
+            )
+            stats.lambda_segment_abs_frac_median_sum += float(
+                iteration_info.get("segment_abs_frac_median", 0.0)
+            )
+            stats.lambda_segment_abs_frac_p90_sum += float(
+                iteration_info.get("segment_abs_frac_p90", 0.0)
+            )
+        postfit = summary.get("postfit", {}) or {}
+        stats.postfit_fixed_count_total += int(postfit.get("carrier_fixed_count", 0))
+        stats.postfit_fixed_abs_cycles_median_sum += float(
+            postfit.get("carrier_fixed_abs_cycles_median", 0.0)
+        )
+        stats.postfit_fixed_abs_cycles_p90_sum += float(
+            postfit.get("carrier_fixed_abs_cycles_p90", 0.0)
+        )
+        stats.postfit_float_count_total += int(postfit.get("carrier_float_count", 0))
+        stats.postfit_float_afv_abs_cycles_median_sum += float(
+            postfit.get("carrier_float_afv_abs_cycles_median", 0.0)
+        )
+        stats.postfit_float_afv_abs_cycles_p90_sum += float(
+            postfit.get("carrier_float_afv_abs_cycles_p90", 0.0)
+        )
+        stats.postfit_dd_pr_count_total += int(postfit.get("dd_pr_count", 0))
+        stats.postfit_dd_pr_abs_m_median_sum += float(
+            postfit.get("dd_pr_abs_m_median", 0.0)
+        )
+        stats.postfit_dd_pr_abs_m_p90_sum += float(
+            postfit.get("dd_pr_abs_m_p90", 0.0)
+        )
         if n_fixed >= int(config.fgo_min_fixed_to_apply):
             new_positions = np.asarray(result.positions_ecef, dtype=np.float64)
             if (
@@ -3165,7 +3851,11 @@ def _apply_fgo_lambda(
                     abs_i = start + rel_i
                     if protect_indices is not None and abs_i in protect_indices:
                         continue
-                    if fixed_rel_epochs and rel_i not in fixed_rel_epochs:
+                    if (
+                        bool(config.fgo_apply_fixed_epochs_only)
+                        and fixed_rel_epochs
+                        and rel_i not in fixed_rel_epochs
+                    ):
                         continue
                     if min_corr > 0.0:
                         delta = float(np.linalg.norm(new_positions[rel_i] - slice_orig[rel_i]))
@@ -3277,19 +3967,34 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         pr_weight_ref_cn0=args.pr_weight_ref_cn0,
         pr_weight_min=args.pr_weight_min,
         pr_weight_max=args.pr_weight_max,
+        pr_systems=tuple(s.strip() for s in args.pr_systems.split(",") if s.strip()),
         pr_prefit_gate_m=args.pr_prefit_gate_m,
         pr_prefit_gate_min_sats=args.pr_prefit_gate_min_sats,
         pr_prefit_gate_keep_best=args.pr_prefit_gate_keep_best,
         pr_prefit_ref=args.pr_prefit_ref,
+        pr_prefit_per_system=bool(args.pr_prefit_per_system),
         pr_skip_statuses=tuple(
             int(s.strip()) for s in args.pr_skip_statuses.split(",") if s.strip()
         ),
         defer_epoch_resample=bool(args.defer_epoch_resample),
+        enable_reservoir_stein=bool(args.enable_reservoir_stein),
+        reservoir_stein_size=args.reservoir_stein_size,
+        reservoir_stein_elite_fraction=args.reservoir_stein_elite_fraction,
+        reservoir_stein_steps=args.reservoir_stein_steps,
+        reservoir_stein_step_size=args.reservoir_stein_step_size,
+        reservoir_stein_repulsion_scale=args.reservoir_stein_repulsion_scale,
+        reservoir_stein_guide_sigma_m=args.reservoir_stein_guide_sigma_m,
+        reservoir_stein_guide_sigma_cb_m=args.reservoir_stein_guide_sigma_cb_m,
+        reservoir_stein_seed=args.reservoir_stein_seed,
         rtkdiag_candidate_sigma_m=args.rtkdiag_candidate_sigma_m,
         rtkdiag_candidate_ratio_min=args.rtkdiag_candidate_ratio_min,
         rtkdiag_candidate_residual_rms_max=args.rtkdiag_candidate_residual_rms_max,
         rtkdiag_candidate_emit_max_diff_m=args.rtkdiag_candidate_emit_max_diff_m,
         rtkdiag_candidate_recenter_max_shift_m=args.rtkdiag_candidate_recenter_max_shift_m,
+        rtkdiag_candidate_soft_top_k=args.rtkdiag_candidate_soft_top_k,
+        rtkdiag_candidate_soft_weight_eps=args.rtkdiag_candidate_soft_weight_eps,
+        rtkdiag_candidate_proposal_cloud=bool(args.rtkdiag_candidate_proposal_cloud),
+        rtkdiag_candidate_proposal_spread_m=args.rtkdiag_candidate_proposal_spread_m,
         rtkdiag_candidate_select_mode=args.rtkdiag_candidate_select_mode,
         rtkdiag_candidate_emit_mode=args.rtkdiag_candidate_emit_mode,
         rtkdiag_candidate_label_factors=_parse_label_factor_list(
@@ -3309,20 +4014,49 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         dd_min_pairs_update=args.dd_min_pairs_update,
         dd_systems=dd_systems,
         dd_base_interp=bool(args.dd_base_interp),
+        dd_min_elevation_deg=args.dd_min_elevation_deg,
+        dd_min_snr=args.dd_min_snr,
+        dd_keep_best=args.dd_keep_best,
+        dd_pr_pair_residual_max_m=args.dd_pr_pair_residual_max_m,
+        dd_pr_epoch_median_residual_max_m=args.dd_pr_epoch_median_residual_max_m,
+        dd_pr_gate_min_pairs=args.dd_pr_gate_min_pairs,
+        enable_dd_pr_ls_anchor=bool(args.enable_dd_pr_ls_anchor),
+        dd_pr_ls_anchor_min_pairs=args.dd_pr_ls_anchor_min_pairs,
+        dd_pr_ls_anchor_dd_sigma_m=args.dd_pr_ls_anchor_dd_sigma_m,
+        dd_pr_ls_anchor_solve_prior_sigma_m=args.dd_pr_ls_anchor_solve_prior_sigma_m,
+        dd_pr_ls_anchor_prior_sigma_m=args.dd_pr_ls_anchor_prior_sigma_m,
+        dd_pr_ls_anchor_max_shift_m=args.dd_pr_ls_anchor_max_shift_m,
+        dd_pr_ls_anchor_max_postfit_rms_m=args.dd_pr_ls_anchor_max_postfit_rms_m,
+        dd_pr_ls_anchor_statuses=tuple(
+            int(s.strip()) for s in args.dd_pr_ls_anchor_statuses.split(",") if s.strip()
+        ),
+        dd_pr_ls_anchor_set_initial=not bool(args.dd_pr_ls_anchor_no_initial),
+        dd_pr_ls_anchor_mode=str(args.dd_pr_ls_anchor_mode),
         hybrid_sigma_m=args.hybrid_sigma_m,
+        hybrid_recenter_max_shift_m=args.hybrid_recenter_max_shift_m,
+        hybrid_emit_pf_statuses=tuple(
+            int(s.strip()) for s in args.hybrid_emit_pf_statuses.split(",") if s.strip()
+        ),
         fgo_window_size=args.fgo_window_size,
         fgo_window_stride=args.fgo_window_stride,
         fgo_lambda_ratio=args.fgo_lambda_ratio,
         fgo_lambda_min_epochs=args.fgo_lambda_min_epochs,
+        fgo_lambda_max_epoch_gap=args.fgo_lambda_max_epoch_gap,
         fgo_min_fixed_to_apply=args.fgo_min_fixed_to_apply,
         fgo_prior_sigma_m=args.fgo_prior_sigma_m,
         fgo_dd_sigma_cycles=args.fgo_dd_sigma_cycles,
+        fgo_dd_pr_sigma_m=args.fgo_dd_pr_sigma_m,
         fgo_apply_hybrid_statuses=tuple(
             int(s.strip()) for s in args.fgo_apply_hybrid_statuses.split(",") if s.strip()
         ),
         fgo_anchor_sigma_m=args.fgo_anchor_sigma_m,
         fgo_loose_sigma_m=args.fgo_loose_sigma_m,
+        enable_ct_spline_motion_prior=bool(args.enable_ct_spline_motion_prior),
+        ct_spline_smoothing_m=args.ct_spline_smoothing_m,
+        ct_motion_sigma_m=args.ct_motion_sigma_m,
+        ct_motion_min_epochs=args.ct_motion_min_epochs,
         fgo_min_correction_m=args.fgo_min_correction_m,
+        fgo_apply_fixed_epochs_only=not bool(args.fgo_apply_window_all),
         tdcp_sigma_mps=args.tdcp_sigma_mps,
         tdcp_postfit_max_m=args.tdcp_postfit_max_m,
         tdcp_min_sats=args.tdcp_min_sats,
@@ -3718,6 +4452,96 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_dd_carrier_afv=True,
             enable_fgo_lambda=True,
             method_label="RBPF-velKF+DD+gate+phase4",
+        ))
+    # Embedded target: one RTK/hybrid anchor stream, CT/RBPF updates, fixed-lag
+    # FGO/LAMBDA, and conservative single-stream emission. No RTKDiag
+    # candidate selector.
+    if "embedded" in args.methods or "embedded_ctpf_fgo" in args.methods:
+        variant_kwargs = {**base, **aaa_gate, "fgo_lambda_min_epochs": 3}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            enable_fgo_lambda=True,
+            method_label="EMBEDDED-RTK-CTPF-FGO",
+        ))
+    if "embedded_pfemit" in args.methods:
+        variant_kwargs = {**base, **aaa_gate, "fgo_lambda_min_epochs": 3}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            hybrid_emit_pf_estimate=True,
+            enable_fgo_lambda=True,
+            method_label="EMBEDDED-CTPF-FGO-PFEMIT",
+        ))
+    if "gpu_ctpf_fgo" in args.methods:
+        variant_kwargs = {
+            **base,
+            **aaa_gate,
+            "enable_ct_spline_motion_prior": True,
+            "fgo_lambda_min_epochs": 3,
+            # PPC base/rover common-sat coverage is often below the old
+            # AAA-style 15-DD-pair gate, which disabled Doppler KF for whole
+            # runs. Keep the gate active for diagnostics, but do not require
+            # DD pairs before applying Doppler.
+            "rbpf_kf_gate_min_dd_pairs": (
+                args.rbpf_velocity_kf_gate_min_dd_pairs
+                if args.rbpf_velocity_kf_gate_min_dd_pairs is not None
+                else 0
+            ),
+            "hybrid_recenter_max_shift_m": (
+                10000.0
+                if float(base.get("hybrid_recenter_max_shift_m", 0.0)) <= 0.0
+                else float(base["hybrid_recenter_max_shift_m"])
+            ),
+        }
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            enable_fgo_lambda=True,
+            method_label="GPU-CTPF-FGO",
+        ))
+    if "gpu_ctpf_fgo_pfemit" in args.methods:
+        variant_kwargs = {
+            **base,
+            **aaa_gate,
+            "enable_ct_spline_motion_prior": True,
+            "fgo_lambda_min_epochs": 3,
+            "hybrid_emit_pf_statuses": (
+                tuple(
+                    int(s.strip()) for s in args.hybrid_emit_pf_statuses.split(",") if s.strip()
+                )
+                if args.hybrid_emit_pf_statuses.strip()
+                else (1, 3)
+            ),
+            "rbpf_kf_gate_min_dd_pairs": (
+                args.rbpf_velocity_kf_gate_min_dd_pairs
+                if args.rbpf_velocity_kf_gate_min_dd_pairs is not None
+                else 0
+            ),
+            "hybrid_recenter_max_shift_m": (
+                10000.0
+                if float(base.get("hybrid_recenter_max_shift_m", 0.0)) <= 0.0
+                else float(base["hybrid_recenter_max_shift_m"])
+            ),
+        }
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            hybrid_emit_pf_estimate=True,
+            enable_fgo_lambda=True,
+            method_label="GPU-CTPF-FGO-PFEMIT",
         ))
     if not variants:
         raise ValueError(f"no valid methods: {args.methods}")
@@ -5505,6 +6329,8 @@ def main() -> None:
                         help="Minimum transformed PR likelihood weight when clipping is active (default 0.25)")
     parser.add_argument("--pr-weight-max", type=float, default=1.5,
                         help="Maximum transformed PR likelihood weight when clipping is active (default 1.5)")
+    parser.add_argument("--pr-systems", type=str, default="G,E,J",
+                        help="Constellations used for undifferenced PR/WLS/PF updates; data load and DD can still include --systems/--dd-systems (default G,E,J)")
     parser.add_argument("--pr-prefit-gate-m", type=float, default=0.0,
                         help="Drop satellites whose robust clock-centered PR prefit residual exceeds this [m]; <=0 disables")
     parser.add_argument("--pr-prefit-gate-min-sats", type=int, default=6,
@@ -5513,10 +6339,30 @@ def main() -> None:
                         help="If >0, keep at most this many smallest-prefit satellites after gating")
     parser.add_argument("--pr-prefit-ref", choices=("pf", "hybrid"), default="pf",
                         help="Reference position for PR prefit residuals (default pf; hybrid uses libgnss++ position when available)")
+    parser.add_argument("--pr-prefit-per-system", action="store_true",
+                        help="Estimate PR prefit clock/ISB separately per constellation before residual gating")
     parser.add_argument("--pr-skip-statuses", type=str, default="",
                         help="Comma-separated hybrid Status values where undifferenced PR update is skipped")
     parser.add_argument("--defer-epoch-resample", action="store_true",
                         help="Accumulate PR/DD/Doppler/PU likelihoods within an epoch and resample only after emission")
+    parser.add_argument("--enable-reservoir-stein", action="store_true",
+                        help="Use epoch-end weighted reservoir + Stein rejuvenation instead of standard PF resampling")
+    parser.add_argument("--reservoir-stein-size", type=int, default=2048,
+                        help="Reservoir size for --enable-reservoir-stein; <=0 uses all particles")
+    parser.add_argument("--reservoir-stein-elite-fraction", type=float, default=0.25,
+                        help="Fraction of reservoir slots reserved for top-weight particles")
+    parser.add_argument("--reservoir-stein-steps", type=int, default=1,
+                        help="Number of Stein transport steps per reservoir resample")
+    parser.add_argument("--reservoir-stein-step-size", type=float, default=0.05,
+                        help="Stein transport step size")
+    parser.add_argument("--reservoir-stein-repulsion-scale", type=float, default=1.0,
+                        help="Scale for the SVGD repulsion term")
+    parser.add_argument("--reservoir-stein-guide-sigma-m", type=float, default=2.0,
+                        help="Position sigma for the weighted-mean guide gradient [m]")
+    parser.add_argument("--reservoir-stein-guide-sigma-cb-m", type=float, default=50.0,
+                        help="Clock-bias sigma for the weighted-mean guide gradient [m]")
+    parser.add_argument("--reservoir-stein-seed", type=int, default=20260512,
+                        help="Base RNG seed for reservoir selection and expansion")
     parser.add_argument("--sigma-pos", type=float, default=2.0)
     parser.add_argument("--sigma-cb", type=float, default=50.0)
     parser.add_argument("--spread-pos-init", type=float, default=50.0)
@@ -5546,7 +6392,9 @@ def main() -> None:
             "rbpf+dd+gate+hybrid+ins_tc, rbpf+dd+gate+hybrid+gmm+ins_tc, "
             "rbpf+dd+gate+hybrid+zupt+ins_tc, "
             "rbpf+dd+gate+hybrid+rtkdiag_pf+imu_tc, "
-            "rbpf+dd+gate+hybrid+rtkdiag_pf+ins_tc}"
+            "rbpf+dd+gate+hybrid+rtkdiag_pf+ins_tc, "
+            "embedded, embedded_ctpf_fgo, embedded_pfemit, "
+            "gpu_ctpf_fgo, gpu_ctpf_fgo_pfemit}"
         ),
     )
     parser.add_argument("--dd-sigma-cycles", type=float, default=0.05,
@@ -5559,6 +6407,41 @@ def main() -> None:
                         help="Constellations used for DD (GLONASS skipped, default G,E,J,C)")
     parser.add_argument("--dd-base-interp", action="store_true",
                         help="Interpolate base RINEX between epochs when rover TOW falls between two")
+    parser.add_argument("--dd-min-elevation-deg", type=float, default=-90.0,
+                        help="Drop DD satellites below this elevation angle in degrees (default off)")
+    parser.add_argument("--dd-min-snr", type=float, default=0.0,
+                        help="Drop DD satellites with SNR/CN0 below this value (default off)")
+    parser.add_argument("--dd-keep-best", type=int, default=0,
+                        help="Keep only the best N DD satellites by elevation then SNR per epoch; <=0 disables")
+    parser.add_argument("--dd-pr-pair-residual-max-m", type=float, default=0.0,
+                        help="Gate FGO DD-pseudorange pairs by residual at DD selection position; <=0 disables")
+    parser.add_argument("--dd-pr-epoch-median-residual-max-m", type=float, default=0.0,
+                        help="Drop an FGO DD-pseudorange epoch if kept-pair median residual exceeds this; <=0 disables")
+    parser.add_argument("--dd-pr-gate-min-pairs", type=int, default=3,
+                        help="Minimum DD-pseudorange pairs after residual gating (default 3)")
+    parser.add_argument("--enable-dd-pr-ls-anchor", action="store_true",
+                        help="Solve a gated DD-pseudorange LS anchor and use it as FGO initial/prior on selected statuses")
+    parser.add_argument("--dd-pr-ls-anchor-min-pairs", type=int, default=3,
+                        help="Minimum DD-pseudorange pairs for LS anchor (default 3)")
+    parser.add_argument("--dd-pr-ls-anchor-dd-sigma-m", type=float, default=2.0,
+                        help="DD-pseudorange sigma for LS anchor solve [m] (default 2)")
+    parser.add_argument("--dd-pr-ls-anchor-solve-prior-sigma-m", type=float, default=100.0,
+                        help="Seed prior sigma inside DD-PR LS anchor solve [m] (default 100)")
+    parser.add_argument("--dd-pr-ls-anchor-prior-sigma-m", type=float, default=3.0,
+                        help="FGO prior sigma assigned to accepted DD-PR LS anchors [m] (default 3)")
+    parser.add_argument("--dd-pr-ls-anchor-max-shift-m", type=float, default=100.0,
+                        help="Reject DD-PR LS anchors that move farther than this from the seed [m] (default 100)")
+    parser.add_argument("--dd-pr-ls-anchor-max-postfit-rms-m", type=float, default=5.0,
+                        help="Reject DD-PR LS anchors with final DD-PR RMS above this [m] (default 5)")
+    parser.add_argument("--dd-pr-ls-anchor-statuses", type=str, default="1,3",
+                        help="Hybrid statuses where DD-PR LS anchors may be used; empty means all (default 1,3)")
+    parser.add_argument("--dd-pr-ls-anchor-no-initial", action="store_true",
+                        help="Use accepted DD-PR LS anchors as FGO priors only, not initial positions")
+    parser.add_argument("--dd-pr-ls-anchor-mode",
+                        choices=("prior", "initial", "diagnostic"),
+                        default="prior",
+                        help=("How accepted DD-PR LS anchors enter FGO: prior=initial plus "
+                              "position prior, initial=initial value only, diagnostic=stats only"))
     # Phase 2: region-aware gate on RBPF velocity-KF (Doppler) update.
     # Mirrors the AAA gate knobs from internal_docs/plan.md §10.1.
     parser.add_argument("--rbpf-velocity-kf-gate-min-dd-pairs", type=int, default=None,
@@ -5576,6 +6459,10 @@ def main() -> None:
                         help="Suffix used to find pos files (default _full.pos)")
     parser.add_argument("--hybrid-sigma-m", type=float, default=1.0,
                         help="Sigma [m] for the hybrid position_update soft constraint (default 1.0)")
+    parser.add_argument("--hybrid-recenter-max-shift-m", type=float, default=0.0,
+                        help="Recenter PF cloud to the single hybrid anchor before hybrid PU when shift <= this [m]; 0 disables")
+    parser.add_argument("--hybrid-emit-pf-statuses", type=str, default="",
+                        help="Comma-separated hybrid Status values where PF may be emitted when hybrid_emit_pf_estimate is enabled; empty means all")
     parser.add_argument("--hybrid-vguide-max-dt-s", type=float, default=0.5,
                         help="Max gap [s] between consecutive hybrid samples for finite-diff velocity (default 0.5)")
     # Phase 10i: PF rescue using RTK diagnostics from gnss_solve
@@ -5612,6 +6499,14 @@ def main() -> None:
                         help="Emit PF only if |PF - candidate| <= this [m] after candidate PU (default 0.4)")
     parser.add_argument("--rtkdiag-candidate-recenter-max-shift-m", type=float, default=10000.0,
                         help="Recenter PF cloud to candidate before candidate PU when shift <= this [m] (default 10000)")
+    parser.add_argument("--rtkdiag-candidate-soft-top-k", type=int, default=1,
+                        help="Use top-K gated RTK candidates as a Gaussian-mixture PF update; 1 keeps single-candidate PU")
+    parser.add_argument("--rtkdiag-candidate-soft-weight-eps", type=float, default=0.01,
+                        help="Epsilon for inverse-sort-key weights in --rtkdiag-candidate-soft-top-k mixture")
+    parser.add_argument("--rtkdiag-candidate-proposal-cloud", action="store_true",
+                        help="Replace particles with a candidate-centered proposal cloud instead of applying candidate log-likelihood weights")
+    parser.add_argument("--rtkdiag-candidate-proposal-spread-m", type=float, default=0.25,
+                        help="Position spread [m] for --rtkdiag-candidate-proposal-cloud")
     parser.add_argument("--rtkdiag-candidate-select-mode",
                         choices=("residual", "ratio", "score", "maxabs", "nrows", "hybrid_anchor", "wavg3", "wavg5", "consensus3", "consensus5",
                                  "rms_per_row", "score_per_row", "score_per_row2", "score_per_row3", "rms_minus_alpha_rows", "log_combined",
@@ -5635,6 +6530,10 @@ def main() -> None:
                             "candidate-on-drift=emit PF when close, otherwise emit candidate; "
                             "candidate=always emit selected candidate (default pf)"
                         ))
+    parser.add_argument("--rtkdiag-candidate-force-emit-mode",
+                        choices=("pf", "candidate-on-drift", "candidate"),
+                        default="",
+                        help="Override any run-index policy's emit-mode rewrite; useful for PF-emission experiments")
     parser.add_argument(
         "--rtkdiag-candidate-label-factors",
         type=str,
@@ -5680,12 +6579,16 @@ def main() -> None:
                         help="LAMBDA ratio test threshold (default 3.0)")
     parser.add_argument("--fgo-lambda-min-epochs", type=int, default=10,
                         help="Min epochs with DD obs in window to run LAMBDA (default 10)")
+    parser.add_argument("--fgo-lambda-max-epoch-gap", type=int, default=6,
+                        help="Max epoch-index gap still considered one ambiguity track (default 6 for PPC 5Hz rover / 1Hz DD)")
     parser.add_argument("--fgo-min-fixed-to-apply", type=int, default=3,
                         help="Min ratio-passed integer fixes per window to apply FGO output (default 3)")
     parser.add_argument("--fgo-prior-sigma-m", type=float, default=0.5,
                         help="FGO prior sigma [m] for initial positions (default 0.5)")
     parser.add_argument("--fgo-dd-sigma-cycles", type=float, default=0.20,
                         help="FGO DD carrier float sigma [cycles] (default 0.20)")
+    parser.add_argument("--fgo-dd-pr-sigma-m", type=float, default=5.0,
+                        help="FGO DD pseudorange sigma [m] for absolute-position factors (default 5.0)")
     parser.add_argument("--fgo-apply-hybrid-statuses", type=str, default="1,3",
                         help="Comma-separated hybrid Status values where Phase 4 may overwrite "
                              "the hybrid passthrough; default '1,3' protects Status=4 cm-class "
@@ -5697,10 +6600,20 @@ def main() -> None:
     parser.add_argument("--fgo-loose-sigma-m", type=float, default=5.0,
                         help="Per-epoch FGO prior sigma [m] applied to rewritten Status epochs "
                              "(D2: loose, lets DD drive the solve, default 5.0).")
+    parser.add_argument("--enable-ct-spline-motion-prior", action="store_true",
+                        help="Fit a cubic continuous-time spline and use its motion as the FGO between-factor prior")
+    parser.add_argument("--ct-spline-smoothing-m", type=float, default=0.5,
+                        help="Approximate position smoothing scale [m] for --enable-ct-spline-motion-prior")
+    parser.add_argument("--ct-motion-sigma-m", type=float, default=0.25,
+                        help="FGO between-factor sigma [m] for CT spline motion prior")
+    parser.add_argument("--ct-motion-min-epochs", type=int, default=6,
+                        help="Minimum valid epochs required to fit the CT spline motion prior")
     parser.add_argument("--fgo-min-correction-m", type=float, default=0.5,
                         help="Minimum |FGO - hybrid| disagreement [m] required to overwrite the "
                              "hybrid passthrough at a given epoch (D2b: filters out small noisy "
                              "rewrites that cost cm-class passes; default 0.5, set 0 to disable).")
+    parser.add_argument("--fgo-apply-window-all", action="store_true",
+                        help="Apply every unprotected epoch in a fixed FGO window instead of only epochs with an accepted integer fix")
     # Phase 8: TDCP-anchored hybrid smoother
     parser.add_argument("--tdcp-sigma-mps", type=float, default=0.05,
                         help="TDCP velocity sigma [m/s] used as the smoother process noise (default 0.05)")
@@ -5901,10 +6814,14 @@ def main() -> None:
     print(f"  Particles: {args.n_particles}, Systems: {args.systems_tuple}")
     if any_dd or any_dd_for_gate:
         print(
-            f"  DD: sigma_cycles={args.dd_sigma_cycles}, "
-            f"min_pairs={args.dd_min_pairs}/{args.dd_min_pairs_update}, "
-            f"systems={args.dd_systems}, base_interp={bool(args.dd_base_interp)}"
-        )
+        f"  DD: sigma_cycles={args.dd_sigma_cycles}, "
+        f"min_pairs={args.dd_min_pairs}/{args.dd_min_pairs_update}, "
+        f"systems={args.dd_systems}, base_interp={bool(args.dd_base_interp)}, "
+        f"min_el={args.dd_min_elevation_deg}, min_snr={args.dd_min_snr}, "
+        f"keep_best={args.dd_keep_best}, "
+        f"dd_pr_gate={args.dd_pr_pair_residual_max_m}/"
+        f"{args.dd_pr_epoch_median_residual_max_m}m"
+    )
     if any_gate:
         print(
             f"  RBPF gate: min_dd_pairs={args.rbpf_velocity_kf_gate_min_dd_pairs}, "
@@ -5950,6 +6867,7 @@ def main() -> None:
             ),
         )
         full_ref = _load_full_reference(run_dir / "reference.csv")
+        reference_pos_run = _reference_position_map(full_ref)
         n_emit = _emission_count(full_ref, np.asarray(data["times"], dtype=np.float64))
         print(
             f"  data: {data['n_epochs']} usable / {len(full_ref)} ref epochs "
@@ -6082,7 +7000,14 @@ def main() -> None:
                 flush=True,
             )
 
-        wls_positions, wls_ms = run_wls(data)
+        pr_systems_run = tuple(s.strip() for s in args.pr_systems.split(",") if s.strip())
+        wls_data = _filter_data_by_systems(data, pr_systems_run)
+        if wls_data is not data:
+            print(
+                f"  PR/WLS systems: {pr_systems_run} "
+                f"(median sats={wls_data['n_satellites']}; loaded={data['constellations']})"
+            )
+        wls_positions, wls_ms = run_wls(wls_data)
         print(f"  WLS init done ({wls_ms:.2f} ms/epoch)", flush=True)
 
         for configured_variant in variants:
@@ -6092,6 +7017,11 @@ def main() -> None:
                 policy=str(args.rtkdiag_candidate_run_index_policy),
                 city=city,
             )
+            if str(args.rtkdiag_candidate_force_emit_mode).strip():
+                variant = replace(
+                    variant,
+                    rtkdiag_candidate_emit_mode=str(args.rtkdiag_candidate_force_emit_mode),
+                )
             print(f"  [{variant.method_label}] running ...", flush=True)
             need_dd_for_variant = variant.enable_dd_carrier_afv or (
                 variant.enable_rbpf_velocity_kf
@@ -6145,13 +7075,14 @@ def main() -> None:
                 if rtkdiag_candidates_for_variant is not None
                 else rtkdiag_candidate_labels
             )
-            positions, ms_per_epoch, pr_obs_stats, dd_stats, gate_stats, hybrid_stats, rtkdiag_pf_stats, fgo_stats, tdcp_stats, zupt_stats, imu_tc_stats, ins_tc_stats = _run_ctrbpf_on_segment(
+            positions, ms_per_epoch, pr_obs_stats, reservoir_stein_stats, dd_stats, gate_stats, hybrid_stats, rtkdiag_pf_stats, fgo_stats, tdcp_stats, zupt_stats, imu_tc_stats, ins_tc_stats = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
                 dd_computer=dd_for_variant,
                 dd_pr_computer=dd_pr_for_variant,
                 hybrid_pos=hybrid_for_variant,
                 hybrid_velocity=hybrid_v_for_variant,
                 hybrid_status=hybrid_status_for_variant,
+                reference_pos=reference_pos_run,
                 rtkdiag_candidates=rtkdiag_candidates_for_variant,
                 imu=imu_for_variant,
             )
@@ -6184,14 +7115,31 @@ def main() -> None:
                 "position_update": int(variant.enable_position_update),
                 "defer_epoch_resample": int(variant.defer_epoch_resample),
                 "deferred_resample_epochs": int(pr_obs_stats.deferred_resample_epochs),
+                "reservoir_stein": int(variant.enable_reservoir_stein),
+                "reservoir_stein_epochs": int(reservoir_stein_stats.epochs_applied),
+                "reservoir_stein_size": int(variant.reservoir_stein_size),
+                "reservoir_stein_avg_selected": (
+                    float(reservoir_stein_stats.reservoir_size_sum)
+                    / max(int(reservoir_stein_stats.epochs_applied), 1)
+                ),
+                "reservoir_stein_avg_ess_before": (
+                    float(reservoir_stein_stats.ess_before_sum)
+                    / max(int(reservoir_stein_stats.epochs_applied), 1)
+                ),
+                "reservoir_stein_avg_bandwidth": (
+                    float(reservoir_stein_stats.bandwidth_sum)
+                    / max(int(reservoir_stein_stats.epochs_applied), 1)
+                ),
                 "pr_weight_mode": str(variant.pr_weight_mode),
                 "pr_weight_ref_cn0": float(variant.pr_weight_ref_cn0),
                 "pr_weight_min": float(variant.pr_weight_min),
                 "pr_weight_max": float(variant.pr_weight_max),
+                "pr_systems": ",".join(str(s) for s in variant.pr_systems),
                 "pr_prefit_gate_m": float(variant.pr_prefit_gate_m),
                 "pr_prefit_gate_min_sats": int(variant.pr_prefit_gate_min_sats),
                 "pr_prefit_gate_keep_best": int(variant.pr_prefit_gate_keep_best),
                 "pr_prefit_ref": str(variant.pr_prefit_ref),
+                "pr_prefit_per_system": int(variant.pr_prefit_per_system),
                 "pr_prefit_epochs": int(pr_obs_stats.prefit_epochs),
                 "pr_prefit_sats_kept": int(pr_obs_stats.prefit_sats_kept),
                 "pr_prefit_sats_dropped": int(pr_obs_stats.prefit_sats_dropped),
@@ -6206,6 +7154,63 @@ def main() -> None:
                 "pr_gmm_hybrid_loose_sigma_m": float(variant.pr_gmm_hybrid_loose_sigma_m),
                 "pr_gmm_clock_quantile": float(variant.pr_gmm_clock_quantile),
                 "dd_carrier_afv": int(variant.enable_dd_carrier_afv),
+                "dd_min_elevation_deg": float(variant.dd_min_elevation_deg),
+                "dd_min_snr": float(variant.dd_min_snr),
+                "dd_keep_best": int(variant.dd_keep_best),
+                "dd_pr_pair_residual_max_m": float(variant.dd_pr_pair_residual_max_m),
+                "dd_pr_epoch_median_residual_max_m": float(
+                    variant.dd_pr_epoch_median_residual_max_m
+                ),
+                "dd_pr_gate_min_pairs": int(variant.dd_pr_gate_min_pairs),
+                "dd_pr_ls_anchor": int(variant.enable_dd_pr_ls_anchor),
+                "dd_pr_ls_anchor_mode": str(variant.dd_pr_ls_anchor_mode),
+                "dd_pr_ls_anchor_attempted": int(
+                    fgo_stats.dd_pr_ls_anchor_attempted
+                ),
+                "dd_pr_ls_anchor_accepted": int(
+                    fgo_stats.dd_pr_ls_anchor_accepted
+                ),
+                "dd_pr_ls_anchor_status_skipped": int(
+                    fgo_stats.dd_pr_ls_anchor_status_skipped
+                ),
+                "dd_pr_ls_anchor_rejected_postfit": int(
+                    fgo_stats.dd_pr_ls_anchor_rejected_postfit
+                ),
+                "dd_pr_ls_anchor_rejected_solve": int(
+                    fgo_stats.dd_pr_ls_anchor_rejected_solve
+                ),
+                "dd_pr_ls_anchor_avg_shift_m": (
+                    float(fgo_stats.dd_pr_ls_anchor_shift_sum_m)
+                    / max(int(fgo_stats.dd_pr_ls_anchor_accepted), 1)
+                ),
+                "dd_pr_ls_anchor_avg_postfit_m": (
+                    float(fgo_stats.dd_pr_ls_anchor_postfit_sum_m)
+                    / max(int(fgo_stats.dd_pr_ls_anchor_accepted), 1)
+                ),
+                "dd_pr_ls_anchor_gt_count": int(fgo_stats.dd_pr_ls_anchor_gt_count),
+                "dd_pr_ls_anchor_avg_gt_error_m": (
+                    float(fgo_stats.dd_pr_ls_anchor_gt_error_sum_m)
+                    / max(int(fgo_stats.dd_pr_ls_anchor_gt_count), 1)
+                ),
+                "dd_pr_ls_anchor_avg_seed_error_m": (
+                    float(fgo_stats.dd_pr_ls_anchor_seed_error_sum_m)
+                    / max(int(fgo_stats.dd_pr_ls_anchor_gt_count), 1)
+                ),
+                "dd_pr_ls_anchor_improved_pct": (
+                    100.0
+                    * float(fgo_stats.dd_pr_ls_anchor_improved)
+                    / max(int(fgo_stats.dd_pr_ls_anchor_gt_count), 1)
+                ),
+                "dd_pr_ls_anchor_pass_05m_pct": (
+                    100.0
+                    * float(fgo_stats.dd_pr_ls_anchor_pass_05m)
+                    / max(int(fgo_stats.dd_pr_ls_anchor_gt_count), 1)
+                ),
+                "dd_pr_ls_anchor_pass_5m_pct": (
+                    100.0
+                    * float(fgo_stats.dd_pr_ls_anchor_pass_5m)
+                    / max(int(fgo_stats.dd_pr_ls_anchor_gt_count), 1)
+                ),
                 "dd_epochs_attempted": int(dd_stats.epochs_attempted),
                 "dd_epochs_applied": int(dd_stats.epochs_applied),
                 "dd_pairs_total": int(dd_stats.pairs_total),
@@ -6229,9 +7234,19 @@ def main() -> None:
                 "rbpf_kf_skip_max_spread": int(gate_stats.skipped_max_spread),
                 "hybrid_pu": int(variant.enable_hybrid_pu),
                 "hybrid_sigma_m": float(variant.hybrid_sigma_m),
+                "hybrid_recenter_max_shift_m": float(variant.hybrid_recenter_max_shift_m),
+                "hybrid_emit_pf_statuses": ",".join(
+                    str(int(s)) for s in variant.hybrid_emit_pf_statuses
+                ),
                 "hybrid_attempted": int(hybrid_stats.epochs_attempted),
                 "hybrid_applied": int(hybrid_stats.epochs_applied),
                 "hybrid_lookup_missing": int(hybrid_stats.epochs_lookup_missing),
+                "hybrid_recenter_applied": int(hybrid_stats.recenter_applied),
+                "hybrid_recenter_skipped": int(hybrid_stats.recenter_skipped),
+                "hybrid_recenter_avg_shift_m": (
+                    float(hybrid_stats.recenter_shift_sum_m)
+                    / max(int(hybrid_stats.recenter_applied), 1)
+                ),
                 "rtkdiag_pf": int(variant.enable_rtkdiag_pf_rescue),
                 "rtkdiag_candidate_sigma_m": float(variant.rtkdiag_candidate_sigma_m),
                 "rtkdiag_candidate_ratio_min": float(variant.rtkdiag_candidate_ratio_min),
@@ -6243,6 +7258,18 @@ def main() -> None:
                 ),
                 "rtkdiag_candidate_recenter_max_shift_m": float(
                     variant.rtkdiag_candidate_recenter_max_shift_m
+                ),
+                "rtkdiag_candidate_soft_top_k": int(
+                    variant.rtkdiag_candidate_soft_top_k
+                ),
+                "rtkdiag_candidate_soft_weight_eps": float(
+                    variant.rtkdiag_candidate_soft_weight_eps
+                ),
+                "rtkdiag_candidate_proposal_cloud": int(
+                    variant.rtkdiag_candidate_proposal_cloud
+                ),
+                "rtkdiag_candidate_proposal_spread_m": float(
+                    variant.rtkdiag_candidate_proposal_spread_m
                 ),
                 "rtkdiag_candidate_select_mode": str(variant.rtkdiag_candidate_select_mode),
                 "rtkdiag_candidate_emit_mode": str(variant.rtkdiag_candidate_emit_mode),
@@ -6274,11 +7301,89 @@ def main() -> None:
                     f"{k}:{v}" for k, v in sorted(rtkdiag_pf_stats.selected_counts.items())
                 ),
                 "fgo_lambda": int(variant.enable_fgo_lambda),
+                "fgo_dd_pr_sigma_m": float(variant.fgo_dd_pr_sigma_m),
+                "fgo_lambda_max_epoch_gap": int(variant.fgo_lambda_max_epoch_gap),
+                "fgo_apply_fixed_epochs_only": int(
+                    variant.fgo_apply_fixed_epochs_only
+                ),
                 "fgo_windows_attempted": int(fgo_stats.windows_attempted),
                 "fgo_windows_solved": int(fgo_stats.windows_solved),
                 "fgo_windows_applied": int(fgo_stats.windows_applied),
                 "fgo_n_fixed_total": int(fgo_stats.n_fixed_total),
+                "fgo_n_fixed_observations_total": int(
+                    fgo_stats.n_fixed_observations_total
+                ),
                 "fgo_epochs_replaced": int(fgo_stats.epochs_replaced),
+                "fgo_lambda_tracks_total": int(fgo_stats.lambda_tracks_total),
+                "fgo_lambda_segments_total": int(fgo_stats.lambda_segments_total),
+                "fgo_lambda_candidates_total": int(fgo_stats.lambda_candidates_total),
+                "fgo_lambda_ratio_rejected_total": int(
+                    fgo_stats.lambda_ratio_rejected_total
+                ),
+                "fgo_lambda_best_ratio": float(fgo_stats.lambda_best_ratio),
+                "fgo_lambda_ratio_median_avg": (
+                    float(fgo_stats.lambda_ratio_median_sum)
+                    / max(int(fgo_stats.lambda_diag_windows), 1)
+                ),
+                "fgo_lambda_ratio_p90_avg": (
+                    float(fgo_stats.lambda_ratio_p90_sum)
+                    / max(int(fgo_stats.lambda_diag_windows), 1)
+                ),
+                "fgo_lambda_segment_n_epochs_median_avg": (
+                    float(fgo_stats.lambda_segment_n_epochs_median_sum)
+                    / max(int(fgo_stats.lambda_diag_windows), 1)
+                ),
+                "fgo_lambda_segment_n_epochs_max": int(
+                    fgo_stats.lambda_segment_n_epochs_max
+                ),
+                "fgo_lambda_segment_variance_median_avg": (
+                    float(fgo_stats.lambda_segment_variance_median_sum)
+                    / max(int(fgo_stats.lambda_diag_windows), 1)
+                ),
+                "fgo_lambda_segment_abs_frac_median_avg": (
+                    float(fgo_stats.lambda_segment_abs_frac_median_sum)
+                    / max(int(fgo_stats.lambda_diag_windows), 1)
+                ),
+                "fgo_lambda_segment_abs_frac_p90_avg": (
+                    float(fgo_stats.lambda_segment_abs_frac_p90_sum)
+                    / max(int(fgo_stats.lambda_diag_windows), 1)
+                ),
+                "fgo_postfit_fixed_count_total": int(
+                    fgo_stats.postfit_fixed_count_total
+                ),
+                "fgo_postfit_fixed_abs_cycles_median_avg": (
+                    float(fgo_stats.postfit_fixed_abs_cycles_median_sum)
+                    / max(int(fgo_stats.windows_solved), 1)
+                ),
+                "fgo_postfit_fixed_abs_cycles_p90_avg": (
+                    float(fgo_stats.postfit_fixed_abs_cycles_p90_sum)
+                    / max(int(fgo_stats.windows_solved), 1)
+                ),
+                "fgo_postfit_float_count_total": int(
+                    fgo_stats.postfit_float_count_total
+                ),
+                "fgo_postfit_float_afv_abs_cycles_median_avg": (
+                    float(fgo_stats.postfit_float_afv_abs_cycles_median_sum)
+                    / max(int(fgo_stats.windows_solved), 1)
+                ),
+                "fgo_postfit_float_afv_abs_cycles_p90_avg": (
+                    float(fgo_stats.postfit_float_afv_abs_cycles_p90_sum)
+                    / max(int(fgo_stats.windows_solved), 1)
+                ),
+                "fgo_postfit_dd_pr_count_total": int(
+                    fgo_stats.postfit_dd_pr_count_total
+                ),
+                "fgo_postfit_dd_pr_abs_m_median_avg": (
+                    float(fgo_stats.postfit_dd_pr_abs_m_median_sum)
+                    / max(int(fgo_stats.windows_solved), 1)
+                ),
+                "fgo_postfit_dd_pr_abs_m_p90_avg": (
+                    float(fgo_stats.postfit_dd_pr_abs_m_p90_sum)
+                    / max(int(fgo_stats.windows_solved), 1)
+                ),
+                "ct_spline_motion_prior": int(variant.enable_ct_spline_motion_prior),
+                "ct_spline_smoothing_m": float(variant.ct_spline_smoothing_m),
+                "ct_motion_sigma_m": float(variant.ct_motion_sigma_m),
                 "tdcp_smoother": int(variant.enable_tdcp_smoother),
                 "tdcp_pairs_attempted": int(tdcp_stats.pairs_attempted),
                 "tdcp_pairs_accepted": int(tdcp_stats.pairs_accepted),
@@ -6352,6 +7457,15 @@ def main() -> None:
             if variant.defer_epoch_resample:
                 defer_msg = (
                     f", defer-resample {pr_obs_stats.deferred_resample_epochs}"
+                )
+            if variant.enable_reservoir_stein:
+                avg_ess = (
+                    reservoir_stein_stats.ess_before_sum
+                    / max(reservoir_stein_stats.epochs_applied, 1)
+                )
+                defer_msg = (
+                    f", reservoir-stein {reservoir_stein_stats.epochs_applied}ep "
+                    f"(avg ESS={avg_ess:.0f})"
                 )
             pr_weight_msg = ""
             if str(variant.pr_weight_mode) != "raw":
@@ -6456,11 +7570,34 @@ def main() -> None:
                 )
             fgo_msg = ""
             if variant.enable_fgo_lambda and fgo_stats.windows_attempted > 0:
+                diag_n = max(int(fgo_stats.lambda_diag_windows), 1)
                 fgo_msg = (
                     f", FGO solved {fgo_stats.windows_solved}/"
                     f"{fgo_stats.windows_attempted} applied {fgo_stats.windows_applied} "
-                    f"(fixed {fgo_stats.n_fixed_total}, replaced {fgo_stats.epochs_replaced} ep)"
+                    f"(fixed {fgo_stats.n_fixed_total}, "
+                    f"obs {fgo_stats.n_fixed_observations_total}, "
+                    f"cand {fgo_stats.lambda_candidates_total}, "
+                    f"rej {fgo_stats.lambda_ratio_rejected_total}, "
+                    f"bestR {fgo_stats.lambda_best_ratio:.2f}, "
+                    f"medR {fgo_stats.lambda_ratio_median_sum / diag_n:.2f}, "
+                    f"frac {fgo_stats.lambda_segment_abs_frac_median_sum / diag_n:.2f}, "
+                    f"fixRes {fgo_stats.postfit_fixed_abs_cycles_median_sum / max(int(fgo_stats.windows_solved), 1):.3f}cy, "
+                    f"ddpr {fgo_stats.postfit_dd_pr_abs_m_median_sum / max(int(fgo_stats.windows_solved), 1):.1f}m, "
+                    f"replaced {fgo_stats.epochs_replaced} ep)"
                 )
+                if variant.enable_dd_pr_ls_anchor:
+                    gt_n = max(int(fgo_stats.dd_pr_ls_anchor_gt_count), 1)
+                    fgo_msg += (
+                        f", DDPR-LS {fgo_stats.dd_pr_ls_anchor_accepted}/"
+                        f"{fgo_stats.dd_pr_ls_anchor_attempted} "
+                        f"mode={variant.dd_pr_ls_anchor_mode} "
+                        f"(shift {fgo_stats.dd_pr_ls_anchor_shift_sum_m / max(int(fgo_stats.dd_pr_ls_anchor_accepted), 1):.1f}m, "
+                        f"rms {fgo_stats.dd_pr_ls_anchor_postfit_sum_m / max(int(fgo_stats.dd_pr_ls_anchor_accepted), 1):.1f}m, "
+                        f"gt {fgo_stats.dd_pr_ls_anchor_gt_error_sum_m / gt_n:.1f}m, "
+                        f"seed {fgo_stats.dd_pr_ls_anchor_seed_error_sum_m / gt_n:.1f}m, "
+                        f"imp {100.0 * fgo_stats.dd_pr_ls_anchor_improved / gt_n:.0f}%, "
+                        f"<=0.5 {100.0 * fgo_stats.dd_pr_ls_anchor_pass_05m / gt_n:.0f}%)"
+                    )
             print(
                 f"    PPC honest: {row['honest_ppc_pct']:5.2f}%  "
                 f"(pass {row['honest_pass_m']:.0f} / total {row['honest_total_m']:.0f}m, "

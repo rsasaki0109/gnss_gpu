@@ -37,6 +37,13 @@ _PSEUDORANGE_CODE_PREFERENCES = {
     "C": ("C1I", "C1D", "C1X", "C1P"),
     "R": ("C1C", "C1P"),
 }
+_PSEUDORANGE_CODE_FAMILIES = {
+    "G": (("C1C", "C1W", "C1X", "C1P", "C1S", "C1L", "C1Z"),),
+    "E": (("C1X", "C1C", "C1A", "C1B", "C1Z"),),
+    "J": (("C1C", "C1X", "C1Z", "C1S", "C1L"),),
+    "C": (("C2I", "C1I", "C1P", "C1D", "C1X"),),
+    "R": (("C1C", "C1P"),),
+}
 
 
 @dataclass
@@ -51,6 +58,7 @@ class DDPseudorangeResult:
     dd_weights: np.ndarray  # [n_dd] per-DD-pair weights
     ref_sat_ids: tuple[str, ...]  # [n_dd] reference satellite IDs per DD pair
     n_dd: int  # number of DD pairs
+    sat_ids: tuple[str, ...] = ()  # [n_dd] non-reference satellite IDs per DD pair
 
 
 def _datetime_to_tow(epoch_time) -> float:
@@ -191,6 +199,45 @@ def _select_common_obs_code(
             best_code = code
             best_sats = sats
     return best_code, best_sats
+
+
+def _select_rover_base_obs_codes(
+    sys_char: str,
+    system_sats: Sequence[str],
+    rover_obs: dict[str, dict[str, float]],
+    base_obs: dict[str, dict[str, float]],
+    preferred_code: str | None,
+) -> tuple[str | None, str | None, list[str]]:
+    """Pick exact or same-signal rover/base pseudorange codes."""
+
+    exact_code, exact_sats = _select_common_obs_code(
+        sys_char,
+        system_sats,
+        rover_obs,
+        base_obs,
+        preferred_code,
+    )
+    if exact_code is not None and len(exact_sats) >= 2:
+        return exact_code, exact_code, exact_sats
+
+    best: tuple[int, int, str, str, list[str]] | None = None
+    for family in _PSEUDORANGE_CODE_FAMILIES.get(sys_char, ()):
+        for rover_rank, rover_code in enumerate(family):
+            for base_rank, base_code in enumerate(family):
+                sats = [
+                    sat_id
+                    for sat_id in system_sats
+                    if rover_code in rover_obs.get(sat_id, {})
+                    and base_code in base_obs.get(sat_id, {})
+                ]
+                if len(sats) < 2:
+                    continue
+                cand = (len(sats), -(rover_rank + base_rank), rover_code, base_code, sats)
+                if best is None or cand[:2] > best[:2]:
+                    best = cand
+    if best is None:
+        return exact_code, exact_code, exact_sats
+    return best[2], best[3], best[4]
 
 
 def _pick_single_obs_value(
@@ -426,7 +473,7 @@ class DDPseudorangeComputer:
                 if sat_id in rover_obs and sat_id in base_obs:
                     sats_by_system.setdefault(sat_id[0], []).append(sat_id)
             for sys_char, sys_sats in sats_by_system.items():
-                _code, selected_sats = _select_common_obs_code(
+                rover_code, base_code, selected_sats = _select_rover_base_obs_codes(
                     sys_char,
                     sys_sats,
                     rover_obs,
@@ -436,8 +483,8 @@ class DDPseudorangeComputer:
                 if len(selected_sats) < 2:
                     continue
                 for sat_id in selected_sats:
-                    rover_pr[sat_id] = float(rover_obs[sat_id][_code])
-                    base_pr[sat_id] = float(base_obs[sat_id][_code])
+                    rover_pr[sat_id] = float(rover_obs[sat_id][rover_code])
+                    base_pr[sat_id] = float(base_obs[sat_id][base_code])
         else:
             for sat_id, sat_obs in base_obs.items():
                 pr = _pick_single_obs_value(sat_id[0], sat_obs, self._pseudorange_code)
@@ -455,6 +502,7 @@ class DDPseudorangeComputer:
         base_range_ref_list = []
         dd_weight_list = []
         ref_sat_ids = []
+        sat_ids = []
 
         sats_by_system: dict[str, list[str]] = {}
         for sat_id in common_sats:
@@ -500,6 +548,7 @@ class DDPseudorangeComputer:
                 base_range_ref_list.append(base_range_ref)
                 dd_weight_list.append(meas_weight * elev_weight)
                 ref_sat_ids.append(ref_sat)
+                sat_ids.append(sat_id)
 
         if not dd_pr_list:
             return None
@@ -514,4 +563,5 @@ class DDPseudorangeComputer:
             dd_weights=np.array(dd_weight_list, dtype=np.float64),
             ref_sat_ids=tuple(ref_sat_ids),
             n_dd=n_dd,
+            sat_ids=tuple(sat_ids),
         )

@@ -55,6 +55,12 @@ _CARRIER_CODE_PREFERENCES = {
     "J": ("L1C", "L1X", "L1Z", "L1S", "L1L"),
     "C": ("L1I", "L1D", "L1X", "L1P"),
 }
+_CARRIER_CODE_FAMILIES = {
+    "G": (("L1C", "L1W", "L1X", "L1P", "L1S", "L1L", "L1Z"),),
+    "E": (("L1X", "L1C", "L1A", "L1B", "L1Z"),),
+    "J": (("L1C", "L1X", "L1Z", "L1S", "L1L"),),
+    "C": (("L2I", "L1I", "L1P", "L1D", "L1X"),),
+}
 
 
 @dataclass
@@ -194,6 +200,45 @@ def _select_common_obs_code(
             best_code = code
             best_sats = sats
     return best_code, best_sats
+
+
+def _select_rover_base_obs_codes(
+    sys_char: str,
+    system_sats: Sequence[str],
+    rover_obs: dict[str, dict[str, float]],
+    base_obs: dict[str, dict[str, float]],
+    preferred_code: str | None,
+) -> tuple[str | None, str | None, list[str]]:
+    """Pick exact or same-signal rover/base carrier codes."""
+
+    exact_code, exact_sats = _select_common_obs_code(
+        sys_char,
+        system_sats,
+        rover_obs,
+        base_obs,
+        preferred_code,
+    )
+    if exact_code is not None and len(exact_sats) >= 2:
+        return exact_code, exact_code, exact_sats
+
+    best: tuple[int, int, str, str, list[str]] | None = None
+    for family in _CARRIER_CODE_FAMILIES.get(sys_char, ()):
+        for rover_rank, rover_code in enumerate(family):
+            for base_rank, base_code in enumerate(family):
+                sats = [
+                    sat_id
+                    for sat_id in system_sats
+                    if rover_code in rover_obs.get(sat_id, {})
+                    and base_code in base_obs.get(sat_id, {})
+                ]
+                if len(sats) < 2:
+                    continue
+                cand = (len(sats), -(rover_rank + base_rank), rover_code, base_code, sats)
+                if best is None or cand[:2] > best[:2]:
+                    best = cand
+    if best is None:
+        return exact_code, exact_code, exact_sats
+    return best[2], best[3], best[4]
 
 
 def _pick_single_obs_value(
@@ -425,7 +470,7 @@ class DDCarrierComputer:
                 if sat_id in rover_obs and sat_id in base_obs:
                     sats_by_system.setdefault(sat_id[0], []).append(sat_id)
             for sys_char, sys_sats in sats_by_system.items():
-                _code, selected_sats = _select_common_obs_code(
+                rover_code, base_code, selected_sats = _select_rover_base_obs_codes(
                     sys_char,
                     sys_sats,
                     rover_obs,
@@ -435,8 +480,8 @@ class DDCarrierComputer:
                 if len(selected_sats) < 2:
                     continue
                 for sat_id in selected_sats:
-                    rover_cp[sat_id] = float(rover_obs[sat_id][_code])
-                    base_cp[sat_id] = float(base_obs[sat_id][_code])
+                    rover_cp[sat_id] = float(rover_obs[sat_id][rover_code])
+                    base_cp[sat_id] = float(base_obs[sat_id][base_code])
         else:
             for sat_id, sat_obs in base_obs.items():
                 cp = _pick_single_obs_value(sat_id[0], sat_obs, self._carrier_code)

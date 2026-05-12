@@ -57,6 +57,20 @@ _MIN_PSEUDORANGE_M = 1.0e6
 _MAX_PSEUDORANGE_M = 1.0e8
 _MIN_SAT_ECEF_NORM_M = 1.0e7
 _MAX_SAT_ECEF_NORM_M = 5.0e7
+_PSEUDORANGE_CODE_PREFERENCES = {
+    "G": ("C1C", "C1W", "C1X", "C1P", "C1S", "C1L", "C1Z"),
+    "E": ("C1C", "C1X", "C1A", "C1B", "C1Z"),
+    "J": ("C1C", "C1X", "C1Z", "C1S", "C1L"),
+    "C": ("C1P", "C1I", "C1D", "C1X", "C1Z"),
+    "R": ("C1C", "C1P"),
+}
+_SNR_CODE_PREFERENCES = {
+    "G": ("S1C", "S1W", "S1X", "S1P", "S1S", "S1L", "S1Z"),
+    "E": ("S1C", "S1X", "S1A", "S1B", "S1Z"),
+    "J": ("S1C", "S1X", "S1Z", "S1S", "S1L"),
+    "C": ("S1P", "S1I", "S1D", "S1X", "S1Z"),
+    "R": ("S1C", "S1P"),
+}
 _CARRIER_CODE_PREFERENCES = {
     "G": ("L1C", "L1W", "L1X", "L1P", "L1S", "L1L", "L1Z"),
     "E": ("L1C", "L1X", "L1A", "L1B", "L1Z"),
@@ -341,17 +355,34 @@ class PPCDatasetLoader:
             sat_id_list: list[str] = []
             pseudoranges: list[float] = []
             snr_vals: list[float] = []
+            pseudorange_codes: list[str] = []
 
             for sat_id in epoch.satellites:
                 if not sat_id or sat_id[0] not in systems:
                     continue
                 obs = epoch.observations.get(sat_id, {})
-                pr = obs.get(obs_code, 0.0)
-                if not pr or pr < 1e6:
+                sys_char = sat_id[0]
+                pr, pr_code = _pick_obs_value(
+                    sys_char,
+                    obs,
+                    obs_code,
+                    _PSEUDORANGE_CODE_PREFERENCES,
+                    "C1",
+                    min_abs=1e6,
+                )
+                if not np.isfinite(pr) or pr < 1e6:
                     continue
                 sat_id_list.append(sat_id)
                 pseudoranges.append(float(pr))
-                snr = float(obs.get(snr_code, 1.0))
+                pseudorange_codes.append(pr_code)
+                snr, _snr_code = _pick_obs_value(
+                    sys_char,
+                    obs,
+                    snr_code,
+                    _SNR_CODE_PREFERENCES,
+                    "S1",
+                    min_abs=0.0,
+                )
                 snr_vals.append(snr if np.isfinite(snr) and snr > 0.0 else 1.0)
 
             if len(sat_id_list) < 4:
@@ -360,13 +391,16 @@ class PPCDatasetLoader:
             sat_ecef, sat_clk, used_sat_ids = eph.compute(
                 tow,
                 sat_id_list,
-                obs_codes=[obs_code] * len(sat_id_list),
+                obs_codes=pseudorange_codes,
             )
             if len(used_sat_ids) < 4:
                 continue
 
             pr_map = {sat_id: pr for sat_id, pr in zip(sat_id_list, pseudoranges)}
             snr_map = {sat_id: snr for sat_id, snr in zip(sat_id_list, snr_vals)}
+            pr_code_map = {
+                sat_id: code for sat_id, code in zip(sat_id_list, pseudorange_codes)
+            }
 
             pr_corr = np.array(
                 [pr_map[sat_id] + sat_clk[i] * C_LIGHT for i, sat_id in enumerate(used_sat_ids)],
@@ -436,7 +470,7 @@ class PPCDatasetLoader:
                     eph,
                     tow,
                     list(used_sat_ids),
-                    [obs_code] * len(used_sat_ids),
+                    [pr_code_map.get(sat_id, obs_code) for sat_id in used_sat_ids],
                     sat_velocity_dt,
                 )
                 sat_velocity_list.append(sat_vel)

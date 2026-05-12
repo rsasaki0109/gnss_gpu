@@ -9,6 +9,99 @@ This repo is no longer in a "pick one perfect architecture first" phase. The cur
 3. freeze only the parts that survive
 4. keep rejected or supplemental ideas in `experiments/`, not in the core API
 
+## Current Architecture Map
+
+The current PPC work has two different layers that should not be confused:
+
+- The **core positioning path** should stay small: PPC data loading, GPU PF/RBPF, hybrid floor, DD/FGO rescue, scoring.
+- The **diagnostic path** is allowed to be large: candidate selectors, label policies, oracle probes, local sweeps, and failure-regime audits.
+
+```mermaid
+flowchart LR
+    subgraph Data["PPC / GNSS Inputs"]
+        PPC["PPCDatasetLoader\npython/gnss_gpu/io/ppc.py"]
+        RoverObs["rover.obs"]
+        BaseObs["base.obs"]
+        Ref["reference.csv\nscoring only"]
+        Hybrid["libgnss++ .pos\nhybrid floor"]
+    end
+
+    subgraph Runtime["Runtime Core"]
+        WLS["WLS seed\nexperiments/exp_urbannav_baseline.py"]
+        PF["GPU PF / RBPF\npython/gnss_gpu/particle_filter_device.py\nsrc/particle_filter/pf_device.cu"]
+        PR["Undifferenced PR update\nG/E/J default"]
+        Doppler["Doppler KF velocity update"]
+        HybridPU["Hybrid recenter + PU\nstatus-aware floor"]
+    end
+
+    subgraph DD["Base-Station DD Observations"]
+        DDCP["DD carrier\npython/gnss_gpu/dd_carrier.py"]
+        DDPR["DD pseudorange\npython/gnss_gpu/dd_pseudorange.py"]
+        DDGate["DD PR residual gate\npair/epoch gate"]
+        DDLS["Optional DD-PR LS anchor\nFGO seed/prior"]
+    end
+
+    subgraph FGO["Local CT/FGO Rescue"]
+        CT["CT spline motion prior"]
+        LAMBDA["LAMBDA ambiguity fix\npython/gnss_gpu/local_fgo.py"]
+        Postfit["Postfit diagnostics\nfixed carrier / DD-PR residuals"]
+        Rewrite["Protected trajectory rewrite\nStatus=1/3 by default"]
+    end
+
+    subgraph Eval["Evaluation"]
+        Pos[".pos emission"]
+        Score["Honest PPC score\nfull rover-epoch denominator"]
+        CSV["runs.csv diagnostics"]
+    end
+
+    PPC --> WLS --> PF
+    PPC --> PR --> PF
+    PPC --> Doppler --> PF
+    Hybrid --> HybridPU --> PF
+    RoverObs --> DDCP
+    BaseObs --> DDCP
+    RoverObs --> DDPR
+    BaseObs --> DDPR
+    PF --> DDCP
+    Hybrid --> DDCP
+    DDPR --> DDGate --> DDLS
+    DDCP --> LAMBDA
+    DDGate --> LAMBDA
+    DDLS --> LAMBDA
+    PF --> CT --> LAMBDA
+    LAMBDA --> Postfit --> Rewrite --> Pos
+    PF --> Pos
+    Hybrid --> Pos
+    Pos --> Score
+    Ref --> Score
+    Score --> CSV
+    Postfit --> CSV
+```
+
+### PPC CT/PF/FGO Read
+
+This is the current working interpretation of the PPC branch:
+
+```mermaid
+flowchart TD
+    Goal["Goal\nTURING-class PPC traveled-distance score\n0.5m 3D threshold"]
+    Floor["Hybrid floor\nlibgnss++ is currently the only strong baseline"]
+    GPU["GPU PF/RBPF\nuseful for fast likelihood replay and diagnostics"]
+    Carrier["DD carrier\ncan pass internal fixed-ambiguity postfit"]
+    Abs["Absolute anchor\nDD-PR / RTK candidates / TDCP-height"]
+    Failure["Observed failure\ncarrier fixes can be internally consistent\nwhile absolute position remains meters off"]
+    Next["Important next work\nfind a reliable causal absolute anchor\nbefore more selector complexity"]
+
+    Goal --> Floor
+    Floor --> GPU
+    GPU --> Carrier
+    Carrier --> Failure
+    Abs --> Failure
+    Failure --> Next
+```
+
+In short: if PPC performance is poor, more selector machinery is not automatically the right answer. The key technical question is whether the stack has a reliable causal absolute anchor for the weak hybrid regions. DD carrier alone is relative; DD pseudorange can be useful after gating, but is still meter-class on the hard Nagoya block.
+
 ## Visual snapshot
 
 | Main result (UrbanNav external) | Particle scaling (100 to 1M) |
