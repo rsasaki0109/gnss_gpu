@@ -102,6 +102,22 @@ flowchart TD
 
 In short: if PPC performance is poor, more selector machinery is not automatically the right answer. The key technical question is whether the stack has a reliable causal absolute anchor for the weak hybrid regions. DD carrier alone is relative; DD pseudorange can be useful after gating, but is still meter-class on the hard Nagoya block.
 
+### Current RTKDiag Lowcase Policy
+
+`phase11er` is the current conservative RTKDiag rescue policy for the hard `nagoya/run2` lowcase. It is intentionally narrow:
+
+- `nagoya/run2` only: residual selection over a seven-candidate stack, candidate emission, hybrid fallback, and a 10 m candidate-to-hybrid gate.
+- all other runs: candidates are blocked so the RTKDiag variant is a hybrid passthrough.
+
+The verified p2k aggregate is:
+
+| scope | hybrid | phase11er | delta |
+| --- | ---: | ---: | ---: |
+| 6-run honest p2k | 14.224688% | 14.354783% | +0.130095pp |
+| `nagoya/run2` segment p2k | 45.322161% | 50.785987% | +5.463826pp |
+
+Five nearby `nagoya/run2` 200-epoch windows also matched the manual gate10 experiment exactly: aggregate segment PPC `39.881723% -> 47.775553%` with zero regressions. The key result file is `experiments/results/ppc_phase11er_policy_all_p2k_runs.csv`; future reruns should use `--rtkdiag-candidate-run-index-policy phase11er`.
+
 ## Visual snapshot
 
 | Main result (UrbanNav external) | Particle scaling (100 to 1M) |

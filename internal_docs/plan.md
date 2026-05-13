@@ -249,6 +249,7 @@ ROI 順:
 ### 触る時の注意
 
 - `experiments/exp_ppc_ctrbpf_fgo.py` は run ごとに candidate label pool が違う。正式評価で `--runs all` + union label は使わない。safe aggregate は per-run CSV を合成する。
+  - 例外: `phase11er` は非 `nagoya/run2` の candidate を全ブロックするため、今回の lowcase rescue 検証では `--runs all` + union label で副作用ゼロを確認済み。
 - dirty worktree 前提。既存 dirty/untracked を消さない。
 - `experiments/sim_ppc_learned_selector.py`, `python/gnss_gpu/local_fgo_bridge.py`, `third_party/gnssplusplus` は既に dirty。無関係なら触らない。
 - `rtk` prefix を付けてコマンド実行する。
@@ -287,6 +288,71 @@ rtk python3 -m py_compile \
   experiments/sim_ppc_phase_csv_addcand.py \
   experiments/sweep_ppc_fixed_icb_tdcp_height.py
 rtk git diff --check
+```
+
+## PPC-Dataset 追記 (2026-05-14 = RTKDiag lowcase rescue)
+
+### `phase11er` policy
+
+`phase11er` は `nagoya/run2` lowcase 専用の保守的 RTKDiag rescue。古い 2026-05-08 ログに `phase11eq` という fixedICB 実験名があるため、正式名は `phase11er` にする。`exp_ppc_ctrbpf_fgo.py` では `phase11eq` も互換 alias として残しているが、新規実験名には使わない。
+
+実装:
+
+- `nagoya/run2` のみ:
+  - candidate label whitelist:
+    - `fgo_v14_snr38`
+    - `full_ratio15_lock3_trustedseed_rtkout3oGem3`
+    - `dev_demo5_trusted_o3`
+    - `n2_nobds`
+    - `fgo_v1`
+    - `full_ratio15_lock3_trustedseed_rtkout3mlc1`
+    - `full_ratio15_lock3_trustedseed_rtkout5`
+  - `select_mode=residual`
+  - `ratio_min=1.0`
+  - `residual_rms_max=50.0`
+  - `candidate_max_to_hybrid_m=10.0`
+  - `emit_mode=candidate`
+  - `fallback_mode=hybrid`
+- その他 5 run:
+  - candidate を全ブロックし、rtkdiag variant を hybrid passthrough にする。
+
+検証:
+
+| scope | hybrid | phase11er | delta | note |
+|---|---:|---:|---:|---|
+| 6-run honest p2k | 14.224688% | 14.354783% | +0.130095pp | `experiments/results/ppc_phase11er_policy_all_p2k_runs.csv` |
+| `nagoya/run2` honest p2k | 10.544309% | 11.815481% | +1.271172pp | emit_candidate=1298, hybrid_distance_skip=1160 |
+| `nagoya/run2` segment p2k | 45.322161% | 50.785987% | +5.463826pp | 他 5 run は segment/honest とも完全同値 |
+| `nagoya/run2` 5-window segment | 39.881723% | 47.775553% | +7.893830pp | start=883/983/1083/1183/1283、regression 0/5 |
+
+5-window は手指定 gate10 実験と policy 経由で完全一致:
+
+| start | hybrid | phase11er | delta | emit | hybrid-distance skip |
+|---:|---:|---:|---:|---:|---:|
+| 883 | 97.786379 | 98.871988 | +1.085609 | 200 | 0 |
+| 983 | 96.085192 | 99.475154 | +3.389962 | 200 | 0 |
+| 1083 | 56.576346 | 56.593339 | +0.016993 | 155 | 5 |
+| 1183 | 17.104264 | 27.598295 | +10.494031 | 106 | 17 |
+| 1283 | 0.000000 | 19.954391 | +19.954391 | 53 | 42 |
+
+再現コマンド skeleton:
+
+```bash
+rtk bash -lc 'base=experiments/results/libgnss_diag_phase10
+labels=fgo_v14_snr38,full_ratio15_lock3_trustedseed_rtkout3oGem3,dev_demo5_trusted_o3,n2_nobds,fgo_v1,full_ratio15_lock3_trustedseed_rtkout3mlc1,full_ratio15_lock3_trustedseed_rtkout5
+posdirs=${base}/fgo_v14_snr38,${base}/full_ratio15_lock3_trustedseed_rtkout3oGem3,${base}/dev_demo5_trusted_o3,${base}/n2_nobds,${base}/fgo_v1,${base}/full_ratio15_lock3_trustedseed_rtkout3mlc1,${base}/full_ratio15_lock3_trustedseed_rtkout5
+python3 experiments/exp_ppc_ctrbpf_fgo.py \
+  --results-prefix ppc_phase11er_policy_all_p2k \
+  --runs all \
+  --methods rbpf+dd+gate+hybrid,rbpf+dd+gate+hybrid+rtkdiag_pf \
+  --n-particles 5000 \
+  --start-epoch 0 \
+  --max-epochs 2000 \
+  --hybrid-pos-dir experiments/results/libgnss_rtk_pos_v5 \
+  --rtkdiag-candidate-pos-dirs "$posdirs" \
+  --rtkdiag-candidate-diag-dirs "$posdirs" \
+  --rtkdiag-candidate-labels "$labels" \
+  --rtkdiag-candidate-run-index-policy phase11er'
 ```
 
 ## PPC-Dataset 追記 (2026-05-08 = 最新セッション)
