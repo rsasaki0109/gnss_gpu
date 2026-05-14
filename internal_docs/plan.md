@@ -1,11 +1,12 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-05-11 JST (Phase 19d landed on main via PR #58)
-**現在の HEAD**: `main` after PR #58 merge (`4632a83`) + PR #55 merge (`bd63c08`)
+**最終更新**: 2026-05-15 PM (Phase 19aw rms_prefilter_k=3 landed)
+**現在の HEAD**: `feature/ppc-realtime-turing-target` (PR #59 base) + rms_prefilter_k commit
 **最近の進捗ハイライト**:
-- **PR #58 MERGED 2026-05-10**: Phase 11-19 PPC ceiling 73.76% PF (+1.10pp over Phase 17、 +2.28pp / +1058m over Phase 11ep baseline) を main に統合。 86 commits、 全 5 CI checks green。
-- **PR #55 MERGED 2026-05-10 (upstream)**: GSDC2023 raw bridge / MATLAB final reproduction / submit risk gate / 18 新規 FGO/LAMBDA module を main 投入。
-- **TURING gap 13.5pp → 11.84pp** に縮小 (target 85.6%、 現状 73.76%)。
+- **Phase 19aw 2026-05-15 PM**: **rms_prefilter_k=3 で OFFICIAL 83.42%、 TURING gap 2.18pp**。 oracle gap 解析 (status-free 89.83% reachable / 17.20pp selector mistake headroom) で composite formula が abs_max を denominator にして cluster-bias 候補を promote していた問題を特定、 selector ranking 直前で top-3 by residual_rms に絞る 19 lines insertion で **+8.44pp OFFICIAL**。 n/r2 +16.57pp / n/r3 +15.36pp dominant。 [`rms_prefilter_breakthrough_2026_05_15.md`](rms_prefilter_breakthrough_2026_05_15.md)
+- **Phase 19at 2026-05-15 AM**: Fix=4 gate 撤廃 (status=5 path: rms<=0.3m) + velocity bridge (rms=0.2, max_dt=6.0s) で OFFICIAL 74.97% / +2.87pp。 metric 補正 (pooled→per-run-averaged) も同時実施。
+- **PR #58 MERGED 2026-05-10**: Phase 11-19 PPC ceiling 73.76% (pooled) を main に統合。
+- **TURING gap 13.5pp (補正後) → 2.18pp** に縮小 (target 85.6%、 現状 83.42%)。
 
 ---
 

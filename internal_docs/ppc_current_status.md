@@ -1,14 +1,32 @@
 # PPC Current Status
 
-Last updated: 2026-05-15.
+Last updated: 2026-05-15 (afternoon).
 
 This is the short current-state document for PPC work. The long chronological
 log remains in [`plan.md`](plan.md).
 
 ## Current Conclusion (2026-05-15)
 
-**NEW canonical best: Phase 19al = 76.83% aggregate** (17-variant gici-open TC FGO pool)、
-+5.35pp / +2516m from Phase 11ep canonical 71.48%、 TURING gap 8.77pp remaining。
+**NEW canonical best: Phase 19aw K=3 = 83.42% OFFICIAL** (rms_prefilter_k on top of
+17-variant gici-open pool + status=5 gate + velocity bridge)、+11.94pp / +5,500m from
+Phase 11ep canonical 71.48%、**TURING gap 2.18pp remaining**。
+詳細: [`rms_prefilter_breakthrough_2026_05_15.md`](rms_prefilter_breakthrough_2026_05_15.md)。
+
+1 セッションで 3 stage breakthrough:
+1. **Fix=4 gate 撤廃 + status=5 path** (Phase 19ap): selector が Float candidate (rms<=0.3m)
+   を初めて受理 → +2.71pp (74.81%)
+2. **Velocity/IMU bridge** (Phase 19at): last good anchor + PF velocity × Δt synthetic
+   candidate (rms=0.2, max_dt=6.0s) → +0.16pp (74.97%)
+3. **rms_prefilter_k=3** (Phase 19aw): selector ranking 直前で top-3 by residual_rms に
+   フィルタ → **+8.44pp (83.42%)**。 cluster-bias の温床だった composite formula `residual /
+   (... * abs_max^c)` が高 abs_max 候補を促進していた problem を 19 lines のコードで切断。
+
+過去のメモ (Phase 19al 76.83%) は metric ミス (pooled→per-run-averaged) の補正前数値。
+Phase 19at = 74.97% が正しい補正後 baseline、 Phase 19aw = 83.42% が今の頂点。
+
+## Previous (earlier 2026-05-15)
+
+17-variant gici-open TC FGO pool で 76.83% aggregate (補正前) / 74.97% OFFICIAL (補正後)。
 詳細: [`gici_open_phase19_breakthrough.md`](gici_open_phase19_breakthrough.md)。
 
 2 段 breakthrough (1 セッション):

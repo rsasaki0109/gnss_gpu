@@ -117,6 +117,10 @@ class CTRBPFConfig:
     rtkdiag_candidate_ratio_min: float = 1.5
     rtkdiag_candidate_residual_rms_max: float = 1.8
     rtkdiag_candidate_main_status5_residual_rms_max: float = 0.3
+    # Pre-filter gated candidates to top-K by final_residual_rms (lowest is best)
+    # BEFORE applying the selector ranking. 0 disables. Sweet spot K=3-7 (sim
+    # showed K=5 captures +12pp upper bound; K=20 collapses to baseline).
+    rtkdiag_candidate_rms_prefilter_k: int = 0
     rtkdiag_candidate_bridge_enable: bool = False
     rtkdiag_candidate_bridge_max_s: float = 6.0
     rtkdiag_candidate_bridge_residual_rms_m: float = 0.5
@@ -4924,6 +4928,18 @@ def _run_ctrbpf_on_segment(
                             )
                             gated_options += 1
 
+            # Pre-filter to top-K by residual_rms before applying selector
+            # ranking. Drops cluster-biased high-rms candidates that current
+            # composite formulas inadvertently rank above the truth. Sim shows
+            # K=3-7 captures most of the +12pp ranking headroom; K>=20 collapses.
+            rms_prefilter_k = int(config.rtkdiag_candidate_rms_prefilter_k)
+            if rms_prefilter_k > 0 and len(collected) > rms_prefilter_k:
+                collected = sorted(
+                    collected,
+                    key=lambda c: _diag_float(c[2], "final_residual_rms"),
+                )[:rms_prefilter_k]
+                gated_options = len(collected)
+
             if gated_options > 0:
                 rtkdiag_gated_options_epoch = int(gated_options)
                 rtkdiag_pf_stats.gate_pass += 1
@@ -6110,6 +6126,7 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         rtkdiag_candidate_ratio_min=args.rtkdiag_candidate_ratio_min,
         rtkdiag_candidate_residual_rms_max=args.rtkdiag_candidate_residual_rms_max,
         rtkdiag_candidate_main_status5_residual_rms_max=args.rtkdiag_candidate_main_status5_residual_rms_max,
+        rtkdiag_candidate_rms_prefilter_k=args.rtkdiag_candidate_rms_prefilter_k,
         rtkdiag_candidate_bridge_enable=args.rtkdiag_candidate_bridge_enable,
         rtkdiag_candidate_bridge_max_s=args.rtkdiag_candidate_bridge_max_s,
         rtkdiag_candidate_bridge_residual_rms_m=args.rtkdiag_candidate_bridge_residual_rms_m,
@@ -8933,6 +8950,8 @@ def main() -> None:
                         help="Maximum candidate final_residual_rms for rtkdiag_pf gate (default 1.8)")
     parser.add_argument("--rtkdiag-candidate-main-status5-residual-rms-max", type=float, default=0.3,
                         help="Accept status=5 (Float) candidates in main gate when residual_rms<=this [m] (default 0.3); 0 disables status=5")
+    parser.add_argument("--rtkdiag-candidate-rms-prefilter-k", type=int, default=0,
+                        help="Pre-filter gated candidates to top-K by residual_rms before selector ranking (0=disable). Sim showed K=3-7 captures +12pp upper bound; K>=20 degrades.")
     parser.add_argument("--rtkdiag-candidate-bridge-enable", action="store_true",
                         help="Add synthetic pf_bridge candidate (last good anchor + PF velocity * Δt) when Δt<=bridge_max_s")
     parser.add_argument("--rtkdiag-candidate-bridge-max-s", type=float, default=6.0,
