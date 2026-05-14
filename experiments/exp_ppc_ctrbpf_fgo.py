@@ -130,7 +130,7 @@ class CTRBPFConfig:
     rtkdiag_candidate_require_all_diag_fields: tuple[str, ...] = ()
     rtkdiag_candidate_min_diag_fields: tuple[tuple[str, float], ...] = ()
     rtkdiag_candidate_max_diag_fields: tuple[tuple[str, float], ...] = ()
-    rtkdiag_candidate_fallback_mode: str = "pf"
+    rtkdiag_candidate_fallback_mode: str = "hybrid"
     rtkdiag_candidate_fallback_max_wls_rms_m: float = 0.0
     rtkdiag_candidate_fallback_max_wls_pdop: float = 0.0
     rtkdiag_candidate_fallback_max_wls_to_pf_m: float = 0.0
@@ -8712,8 +8712,8 @@ def main() -> None:
                         help="Comma-separated candidate diagnostic upper bounds, e.g. dd_pr_shift_m=50")
     parser.add_argument("--rtkdiag-candidate-fallback-mode",
                         choices=("pf", "hybrid", "hybrid-last-good", "wls", "quality-wls", "last-good", "wls-last-good", "quality-wls-last-good"),
-                        default="pf",
-                        help="Fallback when rtkdiag candidate is unavailable/rejected (default pf)")
+                        default="hybrid",
+                        help="Fallback when rtkdiag candidate is unavailable/rejected (default hybrid; matches canonical 73.76% behavior)")
     parser.add_argument("--rtkdiag-candidate-fallback-max-wls-rms-m", type=float, default=0.0,
                         help="Maximum WLS postfit RMS for quality WLS rtkdiag fallback; <=0 disables")
     parser.add_argument("--rtkdiag-candidate-fallback-max-wls-pdop", type=float, default=0.0,
