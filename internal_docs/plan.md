@@ -37,10 +37,15 @@
 | Per-run candidate blocking on Phase 19d | -0.06pp regression | PPC selector は既に per-epoch optimal |
 | Tunnel smoothing / vehicle speed FGO args | no-op | PPC で tunnel detection 失敗、 wheel odom 不在 |
 | FGO env vars (BLEND_EXPONENT 等) | (未試行、 期待 +0.0-0.02pp marginal) | 後回し |
+| **Reservoir Stein PF default config (2026-05-14)** | **-31.74pp on tokyo/run1** | **大幅 regression**、 default は PPC に不向き |
+| **BVH NLOS hard-gating (PF3D, phase1 prior)** | **all configs negative, 一部 +63m regression** | `experiments/results/per_particle_nlos_phase1_summary.csv` 既に exhausted。 PLATEAU で 0/301 NLOS detection (coverage 不足) + 30% sats を hard-gate すると PDOP 劣化で catastrophic |
+| **ML NLOS classifier from raw features (2026-05-14)** | **AUC 0.56 cross-run** (chance level) | tokyo/run1 train、 nagoya/run3 test。 within-run AUC 0.95 だが sat-track memorization、 別 run には汎化せず。 Pseudo-label が residual-derived で atmosphere-confounded、 truth NLOS label が PPC では作れない |
 
 ### 残 architectural breakthrough path (ROI 順)
 
-#### 1. Multi-frequency LAMBDA cascade in libgnss++ (~2 週、 期待 +3-5pp、 ROI 最高)
+#### 1. Multi-frequency LAMBDA cascade in libgnss++ (~2 週、 期待 +3-5pp、 ROI 最高) — **2026-05-14 ROI 再評価で deprioritized**
+
+**2026-05-14 ROI 再評価**: Phase 18 で既に L1/L5 WL stage まで land 済 + xd_l5wl_v1 candidate を Phase 17 pool に追加した結果 **-0.017pp neutral**。 つまり plan #1 の "L5 cascade" 部分は既に **exhausted**。 残る差分は (a) Galileo E5b 観測必要な EWL (E5a-E5b、 λ≈9.77m) と (b) NL-only 2nd-stage LAMBDA。 PPC dataset が E5b を含むか未確認 + Phase 18 結果から期待 +pp は plan 記載値より小、 推定 +0.5-1.5pp。 **ROI 順位は #2 (BVH NLOS) と入れ替え** (下記 work order 参照)。
 
 **現状**: `third_party/gnssplusplus` で L1/L2 widelane のみ implement (`compute_wide_lane_float`)、 Phase 18 で L1/L5 widelane も加わったが neutral。 NL stage (L1 narrow-lane ≈0.19m) が未 cascade。
 
@@ -90,20 +95,37 @@
 
 **リスク**: PPC は既に N=2000 で degeneracy 軽い、 gain 小さい可能性
 
-#### 4. GTSAM TC FGO with proper IMU pre-integration (~1 週、 期待 +1-2pp)
+**2026-05-14 ROI 検証結果 (NEGATIVE)**: tokyo/run1 で `--enable-reservoir-stein --reservoir-stein-size 512` を default config で実行 (`/tmp/run_phase19d_t1_stein512.sh`)、 result CSV `experiments/results/ppc_ctrbpf_fgo_phase19d_stein512_tokyo_run1_full_runs.csv`。
+- honest_ppc 72.07% → **40.33% (-31.74pp、 -3275m)**
+- `avg_ess_before=1.1` (PF は 1 particle に collapse)
+- `avg_bandwidth=380.9m` (median heuristic が cb spread 由来で過大、 RBF が flat になり SVGD repulsion 失効)
+- `reservoir_stein_epochs=11923/11924` (ほぼ毎 epoch fire = ESS が常に threshold 下)
+- `ms/epoch: 1.08 → 41.07` (38x slower、 numpy O(N²) SVGD CPU 律速)
+- 古典的 SVGD pathology: bandwidth 過大 → repulsion 弱化 → guide attraction 単独で particle collapse
 
-**現状**: 現使用の `gtsam_gnss_ws/ambiguity_resolution` binary は IMU input 取るが、 PreintegratedImuMeasurements (Forster et al. 2017) が proper TC として活性化されていない (motion factor with IMU velocity prior のみ)。 ins_tc 経由は Phase 11fi で -1.15pp、 但しこれは PPC selector の方式問題で TC 自体は valid。
+**修正案 (どれも未試行)**:
+1. Position と cb の bandwidth を分離 (4D 状態を別カーネルで扱う、 `rbf_median_bandwidth` を per-dim 化)
+2. `--reservoir-stein-guide-sigma-m` を 2.0 → 10.0 等緩めて attraction を弱める
+3. ESS threshold を緩めて fire 頻度を下げる (低 ESS のみ介入)
+4. SVGD step を `0.05` → `0.01` 以下にする
+5. GPU port (~数日) — Python CPU 律速は実装側の問題、 algorithm 側の問題ではない
 
-**必要**:
-- `gtsam_gnss_ws/.../ambiguity_resolution.cpp` の IMU factor を proper `PreintegratedImuMeasurements` に書き換え
-- ImuFactor + ImuBias factor graph、 bias state estimation
-- 高頻度 IMU (100Hz) → 1Hz GNSS epoch間で proper preintegration
+**結論**: ROI 不確実 (~1 週でチューニングが効くとは限らず、 SVGD は PPC の low-ESS 性質と相性悪い)。 ROI 順 #1 (Multi-freq LAMBDA cascade) または #2 (BVH NLOS) への切り替えを推奨。
 
-**期待 PF +pp**: +1-2pp on tokyo/run1 (IMU rich)、 全 aggregate +0.5-1pp、 Phase 19d → **74.3-74.8%**
+#### 4. GTSAM TC FGO with proper IMU pre-integration — **2026-05-14 plan 前提誤り発覚、 既に integrated**
 
-**実装場所**: `gtsam_gnss_ws/gtsam_gnss/examples_cpp/ambiguity_resolution.cpp` (~3000 LOC)
+**2026-05-14 status correction**: `gtsam_gnss_ws/gtsam_gnss/examples_cpp/ambiguity_resolution.cpp` line 2679-2767 を直読、 **`PreintegratedImuMeasurements` + `ImuFactor` + IMU bias `BetweenFactorConstantBias` + stop detection + vehicle speed factor は既に全て実装済 + `config.enable_imu_factors = true` (gnss_types.h line 208) で default 有効**。 Phase 19d で使用された binary (`/media/sasaki/aiueo/ai_coding_ws/gtsam_gnss_ws/gtsam_gnss/examples_cpp/build/ambiguity_resolution`、 mtime 2026-03-03) は既に proper TC FGO 出力で、 Phase 19d 73.76% ceiling は **既にこの TC FGO 込みの値**。 plan の "proper TC として活性化されていない" は誤り。
 
-**リスク**: IMU bias estimation 困難、 short window で over-fitting
+**残る ROI angle (tuning task、 architectural ではない)**:
+- `imu_acc_bias_sigma` / `imu_gyro_bias_sigma` (per-run)
+- Lever arm correction (IMU vs antenna phase center)
+- ImuFactor coordinate transform (line 2708 `Vector3 acc(imu.acc_x, -imu.acc_y, imu.acc_z)` y-flip 検証)
+- RobustImuFactor (outlier-resistant variant)
+- `bias_rw_scale_when_stop` tuning
+
+各 1-3 日 spike、 期待 +0.1-0.3pp/spike (architectural breakthrough ではない)。
+
+**旧 plan (誤り、 記録のみ)**: 「~1 週、 期待 +1-2pp、 IMU factor 書き換え」 — 書き換え対象なし、 既に書いてある。
 
 #### 5. RTKLIB demo5 full port (~1-2 週、 期待 +0.5-1pp)
 
@@ -120,10 +142,65 @@
 
 ### 推奨 work order (Pareto)
 
-1. **#3 Reservoir Stein PF**: 既存 code を wire up するだけ。 期待 +1-2pp、 1 週以下。 まず ROI 確認。
-2. **#1 Multi-freq LAMBDA cascade**: 一番大きな +pp potential。 2 週投資の justification 強い。
-3. **#2 BVH NLOS**: city model 取得が gating factor。 取得できれば urgent ROI。
-4. (#4, #5) 後回し
+1. ~~**#3 Reservoir Stein PF**: 既存 code を wire up するだけ。 期待 +1-2pp、 1 週以下。 まず ROI 確認。~~ **2026-05-14: ROI 検証で -31.74pp 大幅 regression、 default config 不可。 tuning は #1/#2 後**。
+2. ~~**#1 Multi-freq LAMBDA cascade**: 一番大きな +pp potential。 2 週投資の justification 強い。~~ **2026-05-14: Phase 18 L5 WL stage neutral、 ROI 再評価で +0.5-1.5pp 程度に下方修正、 順位を #2 と入替**。
+3. **#2 BVH NLOS**: city model 取得が gating factor だが OSM building footprints から procedural 生成可能。 既存 `python/gnss_gpu/bvh.py` + `_bvh.so` build 済み、 PPC pipeline 統合のみ。 tokyo/run1 (62% PF base) NLOS-dominant、 +5-10pp on t/r1 / +2-4pp aggregate 期待。 ← **次の候補 (2026-05-14 pivot)**、 2026-05-14 city data fetch denied、 ユーザー側で PLATEAU/OSM data 提供が必要
+4. ~~**#4 TC FGO IMU**: ~1 週、 期待 +1-2pp~~ **2026-05-14: 前提誤り発覚、 既に integrated + default 有効。 残るは tuning spikes のみ、 architectural breakthrough ではない**
+5. (#5、 #1 NL-only stage) 後回し
+
+### 残 angle (2026-05-14 web survey 新規追加、 plan §0 #1-5 の補完)
+
+文献 (2024-2026) から PPC dataset で実装可能な新 angle を抽出。 ranking は ROI (gain × feasibility) 順。
+
+| ID | Method | Feasibility | 期待 +pp (PPC realization 50%) | refs / notes |
+|---|---|---|---:|---|
+| **A** | ~~**ML-based NLOS detection from raw features**~~ | **2026-05-14: cross-run AUC 0.56**、 PPC で truth label なしには ML 不可、 deprioritized | scripts: `experiments/extract_nlos_features.py` + `eval_nlos_signal.py` + `train_nlos_classifier.py` (記録のみ) |
+| **B** | ~~**Doppler + IMU two-stage outlier rejection**~~ | **2026-05-14: tokyo/run1 sweep で fix rate -3 〜 -8.7pp regression、 PPC では PR factor 既に \|res\|<3m gate で filtered 済、 二段 gate 追加は good obs を削るのみ。 deprioritized** | 詳細は下段「B 実装結果」参照。 残置コード: `gtsam_gnss/examples_cpp/{gnss_types.h, ambiguity_resolution.cpp, main.cpp}` の `--doppler-outlier-kappa` / `--tddd-outlier-th`、 default 0 で no-op |
+| **F** | **Switchable constraints (SC) on FGO factors** (per-factor switch variable s∈[0,1] joint-optimized) | M (3-5 日) | **+0.3-1pp** | GTSAM has `SwitchableLoss` / `DCS`。 `gtsam_gnss_ws` の DD-PR / pseudorange factor に switch 適用。 既存 huber より soft な outlier handling |
+| **C** | **PLD (Phase Lock Detector) + multi-feature stochastic model** | S/M | +0.3-1pp | 要 PLD field の rover.obs 確認 (PPC RINEX が PLI/SS を含むか)、 含まれなければ S kind off |
+| **D** | **BIE / VIB-BIE with Laplacian distribution** (LAMBDA 4.0 toolbox の BIE estimator port) | L (2-3 週) | +0.5-1pp | urban low-cost RTK で reported gain。 libgnss++ の lambda.cpp に BIE 追加 |
+| **E** | **GICI-LIB / GREAT-FGO selective port** | L (2-4 週) | +0.5-2pp | 別 FGO pipeline、 全体 port は overkill。 個別 robust factor の adoption が現実的 |
+
+**新 work order 提案 (2026-05-14 update v3、 A+B 両失敗後)**:
+
+1. ~~**A (ML NLOS)**~~ ← cross-run AUC 0.56、 truth label 無しで PPC では不可、 exhausted
+2. ~~**B (Doppler+IMU outlier)**~~ ← tokyo/run1 fix rate -3 〜 -8.7pp regression、 PPC では \|res\|<3m gate で先取りされており重複 gate は good obs を削る、 exhausted
+3. **F (Switchable constraints)** ← GTSAM 内蔵 `noiseModel::Robust`、 既存 ImuFactor / PR factor に DCS / Tukey 適用。 3-5 日 spike。 **次の候補**
+4. (#5 demo5 full port、 1-2 週)
+5. (CLAS / madoca PPP-AR、 rebase コスト不明)
+6. (D/E、 long-term)
+
+### B 実装結果 (2026-05-14)
+
+**実装**: `gtsam_gnss_ws/gtsam_gnss/examples_cpp/`:
+- `gnss_types.h`: `Config::doppler_outlier_kappa` + `Config::tddd_outlier_threshold` (default 0 = disabled)
+- `ambiguity_resolution.cpp`:
+  - Stage 1: 各 epoch で \|sd_doppler[sat]\| > kappa*sigma_D の sat を flag、 当該 epoch の DD-PR factor を drop
+  - Stage 2: `code_res(t) - code_res(t-1)` > tddd_threshold の sat の DD-PR factor を drop (pos_ini が IMU-informed なので IMU-aware)
+  - `prev_code_res` map を function scope (iteration ごと reset)、 epoch 末で更新
+  - 末尾に `[two-stage-PR-gate] iter=N doppler_drop=A tddd_drop=B` を出力
+- `main.cpp`: `--doppler-outlier-kappa <val>` / `--tddd-outlier-th <m>` CLI
+
+**tokyo/run1 FGO iter4 fix rate sweep** (FGO base config: `--spp-prior-relax 1 --gap-aware-motion 1`):
+
+| Config | Fix rate | Δ vs baseline | Drop counts (iter4) |
+|---|---:|---:|---|
+| baseline (no gate) | **68.38%** | — | — |
+| Stage 1 only, κ=3 | 64.12% | **-4.27pp** | doppler=7160, tddd=0 |
+| Stage 1 only, κ=4 | 65.91% | **-2.47pp** | doppler=6389, tddd=0 |
+| Stage 1 only, κ=5 | 65.16% | **-3.22pp** | doppler=5974, tddd=0 |
+| Stage 2 only, t=1.0m | 59.51% | **-8.87pp** | doppler=0, tddd=1220 (iter1) |
+| Stage 2 only, t=1.5m | 59.60% | **-8.78pp** | doppler=0, tddd=683 (iter1) |
+| Stage 2 only, t=2.0m | 59.68% | **-8.70pp** | doppler=0, tddd=395 (iter1) |
+| Combo k=4 t=1.5m (smoke) | 64.91% | **-3.47pp** | doppler=6386, tddd=29 (iter4 converged) |
+
+**結論**:
+- **Stage 1 (Doppler residual gate) → -2.5〜-4.3pp regression**: sd_doppler が大きい sat の多くは「multipath/NLOS」ではなく「velocity_ini が未収束」が原因。 Stage 1 は good obs を不必要に削除。
+- **Stage 2 (TDDD-PR gate) → -8.7pp 大幅 regression**: pos_ini が epoch 間で動くため `code_res(t) - code_res(t-1)` は clean sat でも 1-2m 程度 vary、 1.5m threshold で 683 obs/epoch1 を削除し over-filtering。 また Stage 2 alone は LM convergence を著しく遅くする (smoke で >6 min vs baseline 30s)。
+- **PPC dataset 固有の制約**: MATLAB parity refactor で `abs(code_res) >= 3.0` の hard gate が既に PR factor add 直前に入っており、 residual >3m の outlier は最初から排除済み。 残った factor は既に "good" であり、 二段 gate の追加は意味ある outlier を見つけられず、 random good obs を削るだけになる。
+- **arxiv 2510.00524 のクロス検証**: 別 dataset (deep urban smartphone) + 別 architecture (tightly-coupled SPP、 not AR/RTK) での gain。 PPC + libgnss-style AR ではアーキ前提が異なる。
+
+**閉じた path**: B (Doppler+IMU two-stage outlier rejection)。 残置コードは default 無効、 削除予定なし (将来別 dataset で再評価可能性)。
 
 ### TURING まで到達 estimate
 
@@ -136,6 +213,19 @@ Phase 19d:          73.76%
 + #5 demo5 full:     ~82.0% (+0.5pp)
 
 → TURING (85.6%) には依然 +3.6pp 不足
+```
+
+**2026-05-14 update**: 上記 5 path は #1 (Phase 18 で部分済)、 #3 (失敗)、 #4 (既存)、 #2 (data blocked) で大幅に縮んだ。 新 angle 含み再見積:
+
+```
+Phase 19d:                  73.76%
++ A (ML NLOS, no city map):   FAILED (cross-run AUC 0.56)
++ B (Doppler+IMU outlier):    FAILED (-3 to -8.7pp regression)
++ F (Switchable constraints): +0.3-1pp → ~74-75%
++ #2 (BVH NLOS, if data):     +2-4pp → ~76-79%
++ CLAS/madoca (if rebase):    +2-3pp → ~78-82%
+
+→ TURING (85.6%) 到達には F+#2+CLAS の full stack でも +3-7pp 不足
 ```
 
 実は **上記 5 path 全部出しても TURING には届かない**可能性。 残り +3-4pp は:
@@ -354,6 +444,294 @@ python3 experiments/exp_ppc_ctrbpf_fgo.py \
   --rtkdiag-candidate-labels "$labels" \
   --rtkdiag-candidate-run-index-policy phase11er'
 ```
+
+### `phase11er` 内部状態診断: CT-RBPF/FGO は何を改善し、何が残っているか
+
+ユーザー確認: 「TURING を超えたか」「CT-RBPF/FGO は改善したか」への答えは、現時点では次の通り。
+
+- TURING 85.6% は未達。
+- `phase11er` は CT-RBPF/FGO の本体を大きく強くしたわけではなく、RTKDiag candidate emission を安全化した policy 改善。
+- ただし `nagoya/run2` では、使える candidate がある epoch ではかなり強い。問題は「candidate がない / hybrid から遠すぎて落とす / fallback が悪い」区間。
+
+追加で `nagoya/run2` p2k を internal diagnostics 付きで再実行した。
+
+出力:
+
+- `experiments/results/ppc_phase11er_internal_n2_p2k_runs.csv`
+- `experiments/results/ppc_phase11er_internal_n2_p2k_internal_epochs.csv`
+- `experiments/results/ppc_phase11er_internal_n2_p2k_state_summary.csv`
+- `experiments/results/ppc_phase11er_internal_n2_p2k_state_groups.csv`
+- `experiments/results/ppc_phase11er_internal_n2_p2k_state_spans.csv`
+
+実行条件:
+
+- `--runs nagoya/run2`
+- `--max-epochs 2000`
+- `--methods rbpf+dd+gate+hybrid,rbpf+dd+gate+hybrid+rtkdiag_pf`
+- `--rtkdiag-candidate-run-index-policy phase11er`
+- `--write-internal-diagnostics`
+
+#### 1. p2k の headline
+
+| method | honest | pass / total | epoch pass <=0.5m | fail >3m |
+|---|---:|---:|---:|---:|
+| hybrid | 10.544309% | 500.0 / 4741.2m | 1174 / 2000 | 779 |
+| phase11er | 11.815481% | 560.2 / 4741.2m | 1221 / 2000 | 735 |
+
+epoch 単位の transition:
+
+| transition | epochs |
+|---|---:|
+| both pass | 1168 |
+| phase11er gained pass | 53 |
+| phase11er lost pass | 6 |
+| both fail | 773 |
+
+つまり `phase11er` は pass epoch を 53 増やし、6 epoch だけ落としている。p2k honest では +60m / +1.27pp。副作用は小さいが、TURING 級の大玉ではない。
+
+#### 2. stage ごとの重要な観察
+
+PF 内部状態は、単体ではまだ悪い。
+
+| stage | hybrid variant median/p95 3D | phase11er variant median/p95 3D | pass <=0.5m epochs |
+|---|---:|---:|---:|
+| PF epoch start | 14.409 / 58.720m | 1.448 / 52.286m | 24 vs 314 |
+| after PR | 28.014 / 76.734m | 13.380 / 72.057m | 0 vs 0 |
+| after Doppler | 27.807 / 76.734m | 13.285 / 72.057m | 0 vs 0 |
+| after DD carrier | 27.866 / 76.734m | 13.352 / 71.623m | 0 vs 0 |
+| after hybrid PU | 14.067 / 58.391m | 2.524 / 52.285m | 34 vs 180 |
+| after RTKDiag | 14.067 / 58.391m | 1.137 / 52.285m | 34 vs 467 |
+| before emit | 14.067 / 58.391m | 1.137 / 52.285m | 34 vs 467 |
+
+読めること:
+
+- PR update は `nagoya/run2` p2k では PF を 0.5m 方向へ収束させていない。median 13-28m 級で、pass <=0.5m は 0 epoch。
+- Doppler / DD carrier はこの設定では PR 後の絶対位置誤差をほぼ救えていない。相対拘束としては効いていても、absolute anchor にはなっていない。
+- hybrid PU は fallback floor としては重要だが、hard block では 20-30m 級の悪い hybrid epoch が多い。
+- RTKDiag candidate emission は、candidate が出る epoch では明確に強い。`pf_after_rtkdiag_to_ref_m` の pass <=0.5m は 467 epoch まで増える。
+- ただし最終 emit は candidate/hybrid/PF fallback の混合なので、全体 epoch pass は 1221/2000 に留まる。
+
+この結果は「CT-RBPF/FGO の内部が強くなった」というより、「PF が悪い時に外部 RTKDiag candidate を安全に emit できた」という性質が強い。
+
+#### 3. `phase11er` の emission breakdown
+
+`phase11er` の emitted source:
+
+| emitted source | epochs | pass <=0.5m | fail >3m | median emit error | p95 emit error |
+|---|---:|---:|---:|---:|---:|
+| `rtkdiag_candidate` | 1298 | 1220 | 40 | 0.101m | 0.744m |
+| `rtkdiag_fallback_hybrid_rtkdiag` | 654 | 1 | 647 | 26.354m | 31.909m |
+| `pf_rtkdiag` | 42 | 0 | 42 | 27.011m | 48.063m |
+| `pf_min_sats` | 6 | 0 | 6 | 23.560m | 45.204m |
+
+ここが本質。candidate emission された 1298 epoch はかなり良い:
+
+- 1220/1298 epoch が 0.5m pass。
+- 1237/1298 epoch が 1m 以内。
+- 1258/1298 epoch が 3m 以内。
+- median 3D error は 0.101m。
+
+残った大失敗の中心は fallback:
+
+- fallback hybrid 654 epoch のうち 647 epoch が 3m 超。
+- PF fallback 48 epoch は全て 3m 超。
+
+つまり次に効く改善は、selector の小調整ではなく、**candidate が無い / gate で使えない epoch をどう埋めるか**。
+
+#### 4. label ごとの candidate quality
+
+`phase11er` で選ばれた label の quality:
+
+| label | selected epochs | <=0.5m | >3m | median 3D | p95 3D |
+|---|---:|---:|---:|---:|---:|
+| `dev_demo5_trusted_o3` | 343 | 340 | 0 | 0.128m | 0.279m |
+| `fgo_v1` | 93 | 93 | 0 | 0.090m | 0.218m |
+| `fgo_v14_snr38` | 121 | 119 | 0 | 0.087m | 0.228m |
+| `full_ratio15_lock3_trustedseed_rtkout3mlc1` | 435 | 402 | 16 | 0.092m | 1.621m |
+| `full_ratio15_lock3_trustedseed_rtkout3oGem3` | 112 | 105 | 6 | 0.098m | 2.529m |
+| `full_ratio15_lock3_trustedseed_rtkout5` | 122 | 98 | 13 | 0.111m | 4.849m |
+| `n2_nobds` | 72 | 63 | 5 | 0.116m | 3.484m |
+
+解釈:
+
+- `dev_demo5_trusted_o3`, `fgo_v1`, `fgo_v14_snr38` は非常に良い。selected された範囲では p95 も 0.3m 以下。
+- `rtkout3mlc1`, `rtkout3oGem3`, `rtkout5`, `n2_nobds` は median は良いが tail がある。10m hybrid gate がなければ危険。
+- 10m gate は単なる保守策ではなく、tail を抑えて regression を消すために必要。
+
+#### 5. availability/gate の分解
+
+`nagoya/run2` p2k の internal stats:
+
+- candidate epoch ready: 1994
+- gated options positive: 1796
+- candidate available after policy/gate: 1298
+- emitted candidate: 1298
+- candidate missing: 498
+- hybrid-distance skip: 1160 option-level skips
+- fallback hybrid: 654 epochs
+- fallback PF: 48 epochs
+
+candidate-to-ref の分布:
+
+| threshold | candidate epochs |
+|---:|---:|
+| <=0.5m | 1220 / 1298 |
+| <=1m | 1237 / 1298 |
+| <=3m | 1258 / 1298 |
+| <=5m | 1278 / 1298 |
+| <=10m | 1292 / 1298 |
+| <=20m | 1295 / 1298 |
+
+重要:
+
+- candidate が available な epoch はほぼ勝ち。
+- available でない 702 epoch が本丸。
+- その 702 epoch は、fallback hybrid/PF がほぼ 20-30m 級なので、スコアを大きく削る。
+
+#### 6. 「なぜ性能が悪いか」の現時点仮説
+
+今回の内部状態から、`nagoya/run2` の悪さは大きく 3 層に分けられる。
+
+1. **PF/PR 層の絶対位置が悪い**
+   - after PR median が 13-28m。
+   - pass <=0.5m は 0 epoch。
+   - PR likelihood / clock / NLOS / constellation selection のどれか、または複数が hard block で絶対位置を救えていない。
+
+2. **DD carrier / Doppler は absolute anchor になっていない**
+   - after Doppler / after DD carrier の median/p95 は PR 後から大きく改善しない。
+   - DD carrier は相対拘束であり、bad absolute seed を cm 級に戻す力はない。
+   - internal postfit が良くても truth から meters off になる、という既知の問題と整合。
+
+3. **良い RTKDiag candidate はあるが、coverage が足りない**
+   - candidate emission 1298 epoch はかなり強い。
+   - 残り fallback 702 epoch が壊滅的。
+   - したがって次の改善は「良い candidate を増やす」「candidate gap を相対軌跡で補間する」「bad hybrid fallback を検知して別 anchor に逃がす」のどれか。
+
+#### 7. 次にやるべきこと
+
+優先順位:
+
+1. **candidate gap 702 epoch の局所診断**
+   - `rtkdiag_fallback_hybrid_rtkdiag` 654 epoch と `pf_rtkdiag` 42 epoch を連続 span 化。
+   - span ごとに、hybrid error / PF stage error / DD pair count / PR sats / Doppler WLS / missing candidate labels を見る。
+   - 目的: candidate generation が必要なのか、gate が強すぎるのか、hybrid 10m gate が捨てた候補に救えるものがあるのかを切る。
+
+2. **candidate coverage を増やす**
+   - selected quality が高い `dev_demo5_trusted_o3`, `fgo_v1`, `fgo_v14_snr38` 系を fallback span へ局所生成できるか調べる。
+   - 全域候補を増やすのではなく、fallback span の start/end/TOW を使った局所 candidate generation に限定する。
+   - 過去の learned/selector 小手先より ROI が高い。
+
+3. **bad fallback の代替**
+   - fallback hybrid は 654 epoch 中 647 epoch が >3m。ここは「hybrid に戻る」だけでは負ける。
+   - ただし ungated candidate をむやみに使うと regression が出るので、代替は span-level に限定する。
+   - 候補: last-good candidate + hybrid delta、TDCP relative bridge、DD-PR LS anchor、window-local FGO prior。
+
+4. **PF/PR の原因追跡**
+   - after PR が大きく悪いので、PR residual/NLOS/clock correction を調べる。
+   - PR-only を直せれば candidate gap も減るが、これは大きい作業。
+   - immediate ROI は fallback span の局所 candidate generation の方が高い。
+
+次の具体タスク:
+
+- `ppc_phase11er_internal_n2_p2k_internal_epochs.csv` から fallback span CSV を作る。
+- 各 span に対して、既存 candidate pool の raw availability と gated/ungated best を再計算する。
+- その結果を `candidate_generation_needed / gate_too_strict / fallback_policy_bad / PF_only_bad` に分類する。
+
+### `libgnss++` RTK そのものは低いのか: RTKLIB demo5 比較
+
+ユーザー確認: 「そもそも `libgnss++` の RTK 精度も低いのでは。RTKLIB demo5 と比較しよう。`libgnss++` 自体も改善が必要かも」への現時点回答。
+
+結論:
+
+- `libgnss++` は、既存 README/docs の PPC coverage profile では RTKLIB demo5 に全 6 run で勝っている。
+- ただし `nagoya/run2` などの hard span では、`libgnss++` でも PPC official score は 20-30% 級で低い。つまり「demo5 に負けている」のではなく、「demo5 には勝つが、PPC/TURING 水準にはまだ遠い」。
+- CT-RBPF/FGO 側で使っている `experiments/results/libgnss_rtk_pos_v5` は、PPC full-run honest 集計で 50.72%。これは README/docs の sign-off coverage profile と近いが、同一 profile と断定しない。今後は profile 名・生成コマンド・score denominator を揃えて比較する。
+
+README/docs に記載済みの RTKLIB demo5 比較:
+
+| run | gnss++ official | RTKLIB demo5 official | delta |
+|---|---:|---:|---:|
+| tokyo/run1 | 34.9% | 0.0% | +34.9pp |
+| tokyo/run2 | 69.0% | 16.9% | +52.1pp |
+| tokyo/run3 | 60.6% | 35.6% | +25.0pp |
+| nagoya/run1 | 49.5% | 22.4% | +27.1pp |
+| nagoya/run2 | 20.9% | 11.0% | +9.9pp |
+| nagoya/run3 | 27.4% | 7.6% | +19.7pp |
+
+同じ local scorer で手元の `.pos` を流した結果:
+
+| profile / pos-dir | weighted honest PPC | note |
+|---|---:|---|
+| `libgnss_rtk_pos_v5` | 50.72% | CT-RBPF/FGO の hybrid floor |
+| `libgnss_diag_phase10/dev_demo5_trusted_o3` | 54.10% | `nagoya/run2` は 24.49%、v5 より +2.95pp |
+| `libgnss_diag_phase10/demo5_continuous_nojump` | 52.83% | `nagoya/run2` は 29.24%、v5 より +7.71pp |
+
+注意:
+
+- `dev_demo5_*` / `demo5_continuous_*` は名前に demo5 が入るが、ローカル `.pos` と diagnostics を見る限り `libgnss++` 側の実験 profile/出力であり、RTKLIB demo5 の生出力そのものとは区別する。
+- RTKLIB demo5 の正式比較は `third_party/gnssplusplus/docs/ppc_reproduction.md` の `ppc-coverage-matrix --rtklib-root output/benchmark` 経路で再生成する。
+- `libgnss++` 自体の改善は必要。ただし方向は「RTKLIB demo5 parity」ではなく、hard span での coverage/false-fallback 改善。
+
+再現コマンド:
+
+```bash
+rtk python3 experiments/exp_ppc_libgnss_hybrid.py \
+  --skip-solvers \
+  --pos-dir experiments/results/libgnss_rtk_pos_v5 \
+  --spp-dir experiments/results/libgnss_spp_pos \
+  --results-prefix ppc_compare_libgnss_v5
+
+rtk python3 experiments/exp_ppc_libgnss_hybrid.py \
+  --skip-solvers \
+  --pos-dir experiments/results/libgnss_diag_phase10/dev_demo5_trusted_o3 \
+  --spp-dir experiments/results/libgnss_spp_pos \
+  --results-prefix ppc_compare_dev_demo5_trusted_o3
+
+rtk python3 experiments/exp_ppc_libgnss_hybrid.py \
+  --skip-solvers \
+  --pos-dir experiments/results/libgnss_diag_phase10/demo5_continuous_nojump \
+  --spp-dir experiments/results/libgnss_spp_pos \
+  --results-prefix ppc_compare_demo5_continuous_nojump
+```
+
+次の判断:
+
+1. まず RTKLIB demo5 生 baseline を `output/benchmark` 経路で再生成し、README/docs の表と local scorer の denominator を一致させる。
+2. その上で、`libgnss++` profile を「v5 floor」「trusted_o3」「continuous_nojump」「README sign-off profile」に分けて、run/span 単位で wins/losses を出す。
+3. 改善対象は `nagoya/run2` の 20-30% 級 span。demo5 との差ではなく、`libgnss++` profile 間の良い epoch をどう安全に統合するかを見る。
+
+### Repo/README 整理メモ
+
+ユーザー確認: 「`libgnss++` と `gnss_gpu` の整理をした方がよい。README が長すぎるかも」への対応。
+
+実施:
+
+- Root `README.md` を 451 行から 150 行へ短縮。
+- Root README は `gnss_gpu` の入口に限定し、長い数表・古い主張・細かい再現ログは置かない方針に変更。
+- `libgnss++` の RTKLIB demo5 比較は `third_party/gnssplusplus/README.md` / `docs/benchmarks.md` を正とする。
+- 最新の PPC 作業状態、失敗仮説、次タスクはこの `internal_docs/plan.md` を正とする。
+- 追加整理として `internal_docs/README.md`, `internal_docs/ppc_current_status.md`, `experiments/README.md`, `experiments/results/README.md` を作成し、入口/現行/生成物の役割を分離した。
+
+整理後の役割:
+
+| file/area | role |
+|---|---|
+| `README.md` | repo の入口、`gnss_gpu` と `libgnss++` の境界、最短コマンド |
+| `internal_docs/README.md` | internal docs の索引 |
+| `internal_docs/ppc_current_status.md` | 現在の PPC 状態、重要数値、次タスク |
+| `internal_docs/plan.md` | 長い時系列 PPC 作業ログ、provenance |
+| `internal_docs/decisions.md` | durable な採否判断 |
+| `experiments/README.md` | experiment script の分類と current entry point |
+| `experiments/results/README.md` | generated artifact の見方と current result manifest |
+| `third_party/gnssplusplus/README.md` | `libgnss++` 製品/solver 側の入口 |
+| `third_party/gnssplusplus/docs/benchmarks.md` | `libgnss++` の benchmark 詳細 |
+| `docs/index.html` | generated visual snapshot |
+
+次の整理候補:
+
+1. `internal_docs/plan.md` は今後も肥大化しやすいので、現行 summary は `ppc_current_status.md` に集約し、`plan.md` は provenance として扱う。
+2. `experiments/results/README.md` の current artifact 表を更新し、古い sweep 出力と current sign-off を分け続ける。
+3. `third_party/gnssplusplus/README.md` も、トップは CLAS/RTK/PPP の入口だけにして、長い PPC RTK 表は `docs/benchmarks.md` に寄せる。
 
 ## PPC-Dataset 追記 (2026-05-08 = 最新セッション)
 
