@@ -121,6 +121,16 @@ class CTRBPFConfig:
     # BEFORE applying the selector ranking. 0 disables. Sweet spot K=3-7 (sim
     # showed K=5 captures +12pp upper bound; K=20 collapses to baseline).
     rtkdiag_candidate_rms_prefilter_k: int = 0
+    # cluster_vote select_mode parameters: cluster gated candidates by
+    # spatial proximity, pick largest cluster, within it pick lowest rms.
+    # Designed to bypass the rms-only ranking trap on cluster-biased runs
+    # (n/r2 etc.) where the wrong cluster has slightly lower rms than oracle.
+    rtkdiag_candidate_cluster_vote_radius_m: float = 0.5
+    # ranker select_mode: path to predictions CSV from train_selector_ranker.py
+    # Columns: run_id, tow, label, p_pass. When select_mode == "ranker", pick
+    # the gated candidate with highest p_pass per epoch. Supervised LightGBM
+    # ranker trained on path-weighted oracle labels (Path F).
+    rtkdiag_candidate_ranker_score_path: str = ""
     rtkdiag_candidate_bridge_enable: bool = False
     rtkdiag_candidate_bridge_max_s: float = 6.0
     rtkdiag_candidate_bridge_residual_rms_m: float = 0.5
@@ -1963,6 +1973,78 @@ def _reference_position_map(rows: list[tuple[float, np.ndarray]]) -> dict[float,
     return {round(float(tow), 1): np.asarray(ecef, dtype=np.float64) for tow, ecef in rows}
 
 
+_RANKER_PREDICTIONS_CACHE: dict[str, dict[tuple[str, float, str], float]] = {}
+
+
+def _load_ranker_predictions(path: str) -> dict[tuple[str, float, str], float]:
+    """Load ranker predictions CSV into {(run_id, tow, label): p_pass}. Cached."""
+    if not path:
+        return {}
+    if path in _RANKER_PREDICTIONS_CACHE:
+        return _RANKER_PREDICTIONS_CACHE[path]
+    lookup: dict[tuple[str, float, str], float] = {}
+    with open(path) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                run_id = str(row["run_id"])
+                tow = round(float(row["tow"]), 1)
+                label = str(row["label"])
+                p = float(row["p_pass"])
+                lookup[(run_id, tow, label)] = p
+            except (ValueError, KeyError):
+                continue
+    _RANKER_PREDICTIONS_CACHE[path] = lookup
+    return lookup
+
+
+def _ranker_lookup_for_run(path: str, city: str, run: str) -> dict[tuple[float, str], float]:
+    """Slice ranker predictions for a single run into {(tow, label): p_pass}."""
+    if not path:
+        return {}
+    full = _load_ranker_predictions(path)
+    run_id = f"{city}_{run}"
+    return {(t, lbl): p for (rid, t, lbl), p in full.items() if rid == run_id}
+
+
+_NLOS_MASK_CACHE: dict[str, dict[int, set[str]]] = {}
+
+
+def _load_nlos_mask_csv(path: str) -> dict[int, set[str]]:
+    """Load PLATEAU NLOS mask CSV → {epoch_idx: {prn1, prn2, ...}} of NLOS PRNs.
+
+    Expected columns: tow, epoch_idx, prn, is_los (1=LOS, 0=NLOS).
+    Only rows with is_los=0 contribute to the returned set.
+    """
+    if not path:
+        return {}
+    if path in _NLOS_MASK_CACHE:
+        return _NLOS_MASK_CACHE[path]
+    out: dict[int, set[str]] = {}
+    try:
+        with open(path) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    is_los = int(row["is_los"])
+                except (KeyError, ValueError):
+                    continue
+                if is_los != 0:
+                    continue
+                try:
+                    epoch_idx = int(row["epoch_idx"])
+                    prn = str(row["prn"]).strip()
+                except (KeyError, ValueError):
+                    continue
+                if not prn:
+                    continue
+                out.setdefault(epoch_idx, set()).add(prn)
+    except FileNotFoundError:
+        pass
+    _NLOS_MASK_CACHE[path] = out
+    return out
+
+
 def _filter_data_by_systems(data: dict, systems: tuple[str, ...]) -> dict:
     """Return a shallow data copy with per-satellite arrays masked by system."""
     allowed = {str(s).strip() for s in systems if str(s).strip()}
@@ -3117,6 +3199,7 @@ def _run_ctrbpf_on_segment(
     ] | None = None,
     imu: dict[str, np.ndarray] | None = None,
     collect_internal_diagnostics: bool = False,
+    ranker_score_lookup: dict[tuple[float, str], float] | None = None,
 ) -> tuple[
     np.ndarray,
     float,
@@ -4533,6 +4616,8 @@ def _run_ctrbpf_on_segment(
             select_mode = str(config.rtkdiag_candidate_select_mode)
             is_fusion = select_mode in {"wavg3", "wavg5"}
             is_consensus = select_mode in {"consensus3", "consensus5"}
+            is_cluster_vote = select_mode == "cluster_vote"
+            is_ranker = select_mode == "ranker"
             temporal_prevdist_alpha = {
                 "temporal_n2_v1": 0.001,
                 "temporal_n2_v2": 0.0006,
@@ -4964,6 +5049,66 @@ def _run_ctrbpf_on_segment(
                         selected_pos = fused_pos
                         _selected_diag = sorted_top[0][2]
                         _selected_key = sorted_top[0][3]
+                    elif is_ranker:
+                        # Supervised LightGBM ranker (Path F): pick gated
+                        # candidate with highest p_pass from precomputed
+                        # lookup (run_id, tow, label) -> p_pass.
+                        # Falls back to lowest-rms when lookup is missing or
+                        # the epoch is not covered by predictions.
+                        best_score = -float("inf")
+                        best_cand = None
+                        tow_key = round(float(t_key), 1) if ranker_score_lookup else None
+                        if ranker_score_lookup and tow_key is not None:
+                            for cand in collected:
+                                p = ranker_score_lookup.get((tow_key, cand[0]))
+                                if p is None:
+                                    continue
+                                if p > best_score:
+                                    best_score = float(p)
+                                    best_cand = cand
+                        if best_cand is None:
+                            best_cand = min(
+                                collected,
+                                key=lambda c: _diag_float(c[2], "final_residual_rms"),
+                            )
+                        label = best_cand[0] + "+rnk"
+                        selected_pos = best_cand[1]
+                        _selected_diag = best_cand[2]
+                        _selected_key = best_cand[3]
+                    elif is_cluster_vote:
+                        # Greedy single-pass spatial clustering at 50cm radius.
+                        # Pick largest cluster (tie-break: lowest rms member).
+                        # Within winning cluster, pick lowest-rms candidate.
+                        radius = float(config.rtkdiag_candidate_cluster_vote_radius_m)
+                        clusters: list[dict] = []
+                        for cand in collected:
+                            cpos = np.asarray(cand[1], dtype=np.float64)
+                            assigned = False
+                            for cl in clusters:
+                                if float(np.linalg.norm(cpos - cl["centroid"])) <= radius:
+                                    cl["members"].append(cand)
+                                    n_now = len(cl["members"])
+                                    cl["centroid"] = (cl["centroid"] * (n_now - 1) + cpos) / n_now
+                                    assigned = True
+                                    break
+                            if not assigned:
+                                clusters.append({"centroid": cpos.copy(), "members": [cand]})
+
+                        def _cluster_rank(cl: dict) -> tuple[int, float]:
+                            rms_min = min(
+                                _diag_float(m[2], "final_residual_rms") for m in cl["members"]
+                            )
+                            return (-len(cl["members"]), rms_min)
+                        clusters.sort(key=_cluster_rank)
+                        best_cluster = clusters[0]
+                        best_cand = min(
+                            best_cluster["members"],
+                            key=lambda m: _diag_float(m[2], "final_residual_rms"),
+                        )
+                        label = best_cand[0] + "+clv"
+                        selected_pos = best_cand[1]
+                        _selected_diag = best_cand[2]
+                        _selected_key = best_cand[3]
                     elif is_consensus:
                         n_cons = 3 if select_mode == "consensus3" else 5
                         sorted_top = sorted(collected, key=lambda c: c[3])[:n_cons]
@@ -6127,6 +6272,8 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         rtkdiag_candidate_residual_rms_max=args.rtkdiag_candidate_residual_rms_max,
         rtkdiag_candidate_main_status5_residual_rms_max=args.rtkdiag_candidate_main_status5_residual_rms_max,
         rtkdiag_candidate_rms_prefilter_k=args.rtkdiag_candidate_rms_prefilter_k,
+        rtkdiag_candidate_cluster_vote_radius_m=args.rtkdiag_candidate_cluster_vote_radius_m,
+        rtkdiag_candidate_ranker_score_path=args.rtkdiag_candidate_ranker_score_path,
         rtkdiag_candidate_bridge_enable=args.rtkdiag_candidate_bridge_enable,
         rtkdiag_candidate_bridge_max_s=args.rtkdiag_candidate_bridge_max_s,
         rtkdiag_candidate_bridge_residual_rms_m=args.rtkdiag_candidate_bridge_residual_rms_m,
@@ -6557,6 +6704,23 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_hybrid_velocity_guide=True,
             enable_rtkdiag_pf_rescue=True,
             method_label="RBPF-velKF+DD+gate+hybrid+rtkdiag_pf",
+        ))
+    # Phase 19ba: rtkdiag_pf + TDCP smoother. Cluster-vote / K=3 prefilter
+    # picks the per-epoch candidate; TDCP fwd+bwd Kalman smooths the emitted
+    # trajectory using carrier-phase delta velocity. Designed to interpolate
+    # deep-canyon spans (1-5min between fix=4 anchors) where no candidate
+    # is within 50cm but adjacent anchors are.
+    if "rbpf+dd+gate+hybrid+rtkdiag_pf+tdcp" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            enable_rtkdiag_pf_rescue=True,
+            enable_tdcp_smoother=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+rtkdiag_pf+tdcp",
         ))
     # Phase 11cq: rtkdiag_pf + post-process FGO (with bug #3 fixed in motion-delta).
     if "rbpf+dd+gate+hybrid+rtkdiag_pf+phase4" in args.methods:
@@ -8952,6 +9116,25 @@ def main() -> None:
                         help="Accept status=5 (Float) candidates in main gate when residual_rms<=this [m] (default 0.3); 0 disables status=5")
     parser.add_argument("--rtkdiag-candidate-rms-prefilter-k", type=int, default=0,
                         help="Pre-filter gated candidates to top-K by residual_rms before selector ranking (0=disable). Sim showed K=3-7 captures +12pp upper bound; K>=20 degrades.")
+    parser.add_argument("--rtkdiag-candidate-cluster-vote-radius-m", type=float, default=0.5,
+                        help="cluster_vote select_mode: spatial cluster radius (m). Default 0.5 matches 50cm PPC threshold.")
+    parser.add_argument("--rtkdiag-candidate-ranker-score-path", type=str, default="",
+                        help="ranker select_mode: path to predictions CSV (run_id,tow,label,p_pass) from train_selector_ranker.py")
+    parser.add_argument("--spp-nlos-mask-path", type=str, default="",
+                        help="SPP G: PLATEAU NLOS mask CSV (tow,epoch_idx,prn,is_los); is_los=0 → soft-downweight. Format: literal path or template with {city}/{run} (e.g. /tmp/{city}_{run}_per_epoch_nlos.csv).")
+    parser.add_argument("--spp-nlos-k-weak", type=float, default=1.0,
+                        help="SPP G: weak NLOS down-weight factor (weight /= k). 1.0 = off, 3-5 typical.")
+    parser.add_argument("--spp-nlos-k-strong", type=float, default=1.0,
+                        help="SPP G: strong NLOS down-weight factor for confirmed NLOS (1.0 = same as weak). Requires --spp-nlos-strong-mask-path.")
+    parser.add_argument("--spp-nlos-strong-mask-path", type=str, default="",
+                        help="SPP G: optional separate CSV listing strong-NLOS PRNs (same format as --spp-nlos-mask-path).")
+    parser.add_argument("--spp-irls", type=str, default="off",
+                        choices=("off", "cauchy", "huber"),
+                        help="SPP B: post-WLS IRLS refinement weight function. off=disabled.")
+    parser.add_argument("--spp-irls-c", type=float, default=15.0,
+                        help="SPP B: IRLS scale parameter [m] (Cauchy c, Huber threshold).")
+    parser.add_argument("--spp-irls-shift-cap-m", type=float, default=50.0,
+                        help="SPP B: max allowed |IRLS shift| from raw WLS pos (m). Beyond → discard refinement.")
     parser.add_argument("--rtkdiag-candidate-bridge-enable", action="store_true",
                         help="Add synthetic pf_bridge candidate (last good anchor + PF velocity * Δt) when Δt<=bridge_max_s")
     parser.add_argument("--rtkdiag-candidate-bridge-max-s", type=float, default=6.0,
@@ -8980,7 +9163,7 @@ def main() -> None:
     parser.add_argument("--rtkdiag-candidate-proposal-spread-m", type=float, default=0.25,
                         help="Position spread [m] for --rtkdiag-candidate-proposal-cloud")
     parser.add_argument("--rtkdiag-candidate-select-mode",
-                        choices=("residual", "ratio", "score", "maxabs", "nrows", "hybrid_anchor", "wavg3", "wavg5", "consensus3", "consensus5",
+                        choices=("residual", "ratio", "score", "maxabs", "nrows", "hybrid_anchor", "wavg3", "wavg5", "consensus3", "consensus5", "cluster_vote", "ranker",
                                  "rms_per_row", "score_per_row", "score_per_row2", "score_per_row3", "rms_minus_alpha_rows", "log_combined",
                                  "composite_3axis_n2", "composite_3axis_t2", "composite_3axis_n1",
                                  "composite_n2_v2", "composite_n3_v2", "composite_n1_v2", "composite_t2_v2",
@@ -9016,7 +9199,7 @@ def main() -> None:
     parser.add_argument("--rtkdiag-candidate-fallback-mode",
                         choices=("pf", "hybrid", "hybrid-last-good", "wls", "quality-wls", "last-good", "wls-last-good", "quality-wls-last-good"),
                         default="hybrid",
-                        help="Fallback when rtkdiag candidate is unavailable/rejected (default hybrid; matches canonical 73.76% behavior)")
+                        help="Fallback when rtkdiag candidate is unavailable/rejected (default hybrid; matches canonical 73.76%% behavior)")
     parser.add_argument("--rtkdiag-candidate-fallback-max-wls-rms-m", type=float, default=0.0,
                         help="Maximum WLS postfit RMS for quality WLS rtkdiag fallback; <=0 disables")
     parser.add_argument("--rtkdiag-candidate-fallback-max-wls-pdop", type=float, default=0.0,
@@ -9534,6 +9717,36 @@ def main() -> None:
                 f"  PR/WLS systems: {pr_systems_run} "
                 f"(median sats={wls_data['n_satellites']}; loaded={data['constellations']})"
             )
+        spp_kwargs: dict = {}
+        if args.spp_nlos_mask_path:
+            nlos_path_run = args.spp_nlos_mask_path.format(city=city, run=run)
+            nlos_set_run = _load_nlos_mask_csv(nlos_path_run)
+            if nlos_set_run:
+                spp_kwargs["nlos_set_per_epoch"] = nlos_set_run
+                spp_kwargs["nlos_k_weak"] = float(args.spp_nlos_k_weak)
+                spp_kwargs["nlos_k_strong"] = float(args.spp_nlos_k_strong)
+                n_nlos_epochs = sum(1 for s in nlos_set_run.values() if s)
+                n_nlos_obs = sum(len(s) for s in nlos_set_run.values())
+                print(
+                    f"  SPP NLOS mask: {nlos_path_run} → "
+                    f"{n_nlos_obs} obs across {n_nlos_epochs} epochs "
+                    f"(k_weak={args.spp_nlos_k_weak}, k_strong={args.spp_nlos_k_strong})"
+                )
+            else:
+                print(f"  SPP NLOS mask: {nlos_path_run} → empty/missing, skipping")
+        if args.spp_nlos_strong_mask_path:
+            strong_path_run = args.spp_nlos_strong_mask_path.format(city=city, run=run)
+            strong_set_run = _load_nlos_mask_csv(strong_path_run)
+            if strong_set_run:
+                spp_kwargs["nlos_strong_set_per_epoch"] = strong_set_run
+        if args.spp_irls != "off":
+            spp_kwargs["irls_mode"] = str(args.spp_irls)
+            spp_kwargs["irls_c"] = float(args.spp_irls_c)
+            spp_kwargs["irls_threshold_m"] = float(args.spp_irls_c)
+            print(
+                f"  SPP IRLS: {args.spp_irls} c={args.spp_irls_c:.1f}m "
+                f"shift_cap={args.spp_irls_shift_cap_m:.1f}m"
+            )
         wls_atmosphere_model = str(args.pr_atmosphere_model).strip().lower()
         if wls_atmosphere_model == "off" and float(args.pr_slant_delay_zenith_m) > 0.0:
             wls_atmosphere_model = "fixed"
@@ -9705,10 +9918,10 @@ def main() -> None:
                     f"(median sats={wls_data['n_satellites']}, "
                     f"dropped={prefit_dropped}/{prefit_kept + prefit_dropped})"
                 )
-            wls_positions, wls_ms = run_wls(wls_data)
+            wls_positions, wls_ms = run_wls(wls_data, **spp_kwargs)
             wls_ms += wls_seed_ms
         else:
-            wls_positions, wls_ms = run_wls(wls_data)
+            wls_positions, wls_ms = run_wls(wls_data, **spp_kwargs)
             if selected_pr_min_elevation_deg > -90.0:
                 wls_data = _filter_data_by_elevation(
                     wls_data,
@@ -9719,7 +9932,7 @@ def main() -> None:
                     f"  PR/WLS elevation gate: >= {selected_pr_min_elevation_deg:.1f} deg "
                     f"(median sats={wls_data['n_satellites']})"
                 )
-                wls_positions, wls_gate_ms = run_wls(wls_data)
+                wls_positions, wls_gate_ms = run_wls(wls_data, **spp_kwargs)
                 wls_ms += wls_gate_ms
             if float(selected_pr_prefit_gate_m) > 0.0:
                 wls_data, prefit_kept, prefit_dropped = _filter_data_by_pr_prefit(
@@ -9736,7 +9949,7 @@ def main() -> None:
                     f"(median sats={wls_data['n_satellites']}, "
                     f"dropped={prefit_dropped}/{prefit_kept + prefit_dropped})"
                 )
-                wls_positions, wls_prefit_ms = run_wls(wls_data)
+                wls_positions, wls_prefit_ms = run_wls(wls_data, **spp_kwargs)
                 wls_ms += wls_prefit_ms
         wls_quality = _wls_epoch_quality_metrics(wls_data, wls_positions)
         finite_wls_rms = wls_quality["postfit_rms_m"][
@@ -9757,13 +9970,29 @@ def main() -> None:
             wls_quality_msg = ""
         print(f"  WLS init done ({wls_ms:.2f} ms/epoch{wls_quality_msg})", flush=True)
 
+        ranker_lookup_run: dict[tuple[float, str], float] | None = None
+        if args.rtkdiag_candidate_ranker_score_path:
+            ranker_lookup_run = _ranker_lookup_for_run(
+                args.rtkdiag_candidate_ranker_score_path, city, run,
+            )
+            print(
+                f"  ranker predictions loaded for {city}/{run}: {len(ranker_lookup_run)} entries",
+                flush=True,
+            )
+
         for configured_variant in variants:
+            user_select_mode = configured_variant.rtkdiag_candidate_select_mode
             variant = _apply_rtkdiag_run_index_policy(
                 configured_variant,
                 run=run,
                 policy=str(args.rtkdiag_candidate_run_index_policy),
                 city=city,
             )
+            # Preserve explicit user select_mode through per-run policy overrides.
+            # Phase 11ep+ presets unconditionally rewrite select_mode (residual /
+            # temporal_n2_v10 etc.). Bypass when user passed something non-default.
+            if user_select_mode != "residual" and variant.rtkdiag_candidate_select_mode != user_select_mode:
+                variant = replace(variant, rtkdiag_candidate_select_mode=user_select_mode)
             variant = replace(
                 variant,
                 sigma_pr=selected_sigma_pr,
@@ -9846,6 +10075,7 @@ def main() -> None:
                 rtkdiag_candidates=rtkdiag_candidates_for_variant,
                 imu=imu_for_variant,
                 collect_internal_diagnostics=bool(args.write_internal_diagnostics),
+                ranker_score_lookup=ranker_lookup_run,
             )
             if args.write_internal_diagnostics:
                 for diag in variant_internal_diag_rows:
