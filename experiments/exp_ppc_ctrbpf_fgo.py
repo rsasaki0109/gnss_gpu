@@ -131,6 +131,7 @@ class CTRBPFConfig:
     # the gated candidate with highest p_pass per epoch. Supervised LightGBM
     # ranker trained on path-weighted oracle labels (Path F).
     rtkdiag_candidate_ranker_score_path: str = ""
+    rtkdiag_candidate_ranker_stickiness: float = 0.0
     rtkdiag_candidate_bridge_enable: bool = False
     rtkdiag_candidate_bridge_max_s: float = 6.0
     rtkdiag_candidate_bridge_residual_rms_m: float = 0.5
@@ -3200,6 +3201,7 @@ def _run_ctrbpf_on_segment(
     imu: dict[str, np.ndarray] | None = None,
     collect_internal_diagnostics: bool = False,
     ranker_score_lookup: dict[tuple[float, str], float] | None = None,
+    ranker_stickiness: float = 0.0,
 ) -> tuple[
     np.ndarray,
     float,
@@ -3461,6 +3463,7 @@ def _run_ctrbpf_on_segment(
         return pf_arr, f"pf{suffix}"
 
     t0 = time.perf_counter()
+    _prev_ranker_label: str | None = None
     for i in range(n_epochs):
         t_now = float(times[i])
         t_key = round(t_now, 1)
@@ -5055,17 +5058,32 @@ def _run_ctrbpf_on_segment(
                         # lookup (run_id, tow, label) -> p_pass.
                         # Falls back to lowest-rms when lookup is missing or
                         # the epoch is not covered by predictions.
+                        # Optional stickiness: if previous epoch's pick has
+                        # p_pass >= stickiness * max_p, keep that label
+                        # (sequence smoothing for oscillation-prone epochs).
                         best_score = -float("inf")
                         best_cand = None
                         tow_key = round(float(t_key), 1) if ranker_score_lookup else None
+                        scores_this_epoch: dict[str, tuple[float, tuple]] = {}
                         if ranker_score_lookup and tow_key is not None:
                             for cand in collected:
                                 p = ranker_score_lookup.get((tow_key, cand[0]))
                                 if p is None:
                                     continue
+                                scores_this_epoch[cand[0]] = (float(p), cand)
                                 if p > best_score:
                                     best_score = float(p)
                                     best_cand = cand
+                        if (
+                            best_cand is not None
+                            and ranker_stickiness > 0.0
+                            and _prev_ranker_label is not None
+                            and _prev_ranker_label in scores_this_epoch
+                        ):
+                            prev_p, prev_cand = scores_this_epoch[_prev_ranker_label]
+                            if prev_p >= ranker_stickiness * best_score:
+                                best_cand = prev_cand
+                                best_score = prev_p
                         if best_cand is None:
                             best_cand = min(
                                 collected,
@@ -5075,6 +5093,7 @@ def _run_ctrbpf_on_segment(
                         selected_pos = best_cand[1]
                         _selected_diag = best_cand[2]
                         _selected_key = best_cand[3]
+                        _prev_ranker_label = best_cand[0]
                     elif is_cluster_vote:
                         # Greedy single-pass spatial clustering at 50cm radius.
                         # Pick largest cluster (tie-break: lowest rms member).
@@ -6274,6 +6293,7 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         rtkdiag_candidate_rms_prefilter_k=args.rtkdiag_candidate_rms_prefilter_k,
         rtkdiag_candidate_cluster_vote_radius_m=args.rtkdiag_candidate_cluster_vote_radius_m,
         rtkdiag_candidate_ranker_score_path=args.rtkdiag_candidate_ranker_score_path,
+        rtkdiag_candidate_ranker_stickiness=args.rtkdiag_candidate_ranker_stickiness,
         rtkdiag_candidate_bridge_enable=args.rtkdiag_candidate_bridge_enable,
         rtkdiag_candidate_bridge_max_s=args.rtkdiag_candidate_bridge_max_s,
         rtkdiag_candidate_bridge_residual_rms_m=args.rtkdiag_candidate_bridge_residual_rms_m,
@@ -9120,6 +9140,8 @@ def main() -> None:
                         help="cluster_vote select_mode: spatial cluster radius (m). Default 0.5 matches 50cm PPC threshold.")
     parser.add_argument("--rtkdiag-candidate-ranker-score-path", type=str, default="",
                         help="ranker select_mode: path to predictions CSV (run_id,tow,label,p_pass) from train_selector_ranker.py")
+    parser.add_argument("--rtkdiag-candidate-ranker-stickiness", type=float, default=0.0,
+                        help="ranker select_mode: stickiness s in [0,1]. If previous epoch's picked label has p_pass>=s*max_p_pass at current epoch, keep it (sequence smoothing). 0=disabled (max p_pass per epoch independently).")
     parser.add_argument("--spp-nlos-mask-path", type=str, default="",
                         help="SPP G: PLATEAU NLOS mask CSV (tow,epoch_idx,prn,is_los); is_los=0 → soft-downweight. Format: literal path or template with {city}/{run} (e.g. /tmp/{city}_{run}_per_epoch_nlos.csv).")
     parser.add_argument("--spp-nlos-k-weak", type=float, default=1.0,
@@ -10076,6 +10098,7 @@ def main() -> None:
                 imu=imu_for_variant,
                 collect_internal_diagnostics=bool(args.write_internal_diagnostics),
                 ranker_score_lookup=ranker_lookup_run,
+                ranker_stickiness=float(args.rtkdiag_candidate_ranker_stickiness),
             )
             if args.write_internal_diagnostics:
                 for diag in variant_internal_diag_rows:
