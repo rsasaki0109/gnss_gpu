@@ -11,14 +11,93 @@
 
 ## §0. TURING 残戦略 (2026-05-11 update — what's needed to win)
 
-### 現状サマリ
+### 現状サマリ (2026-05-15 10:45 update — METRIC 大規模再校正)
 
-- PPC2024 honest aggregate 6-run PF: **73.7587%** (Phase 19d、 NEW canonical best)
-- 累積進捗: Phase 11ep PF 71.48% → Phase 19d 73.76% = +2.28pp / +1058m
-- TURING target 85.6% への gap: **11.84pp** / ~5.5km equivalent
-- Selector oracle (best per-epoch over 60+ candidates): ~75-78% → 現候補 pool の理論上限が **80% 弱**
+**重大発見 #1 — local scorer の aggregate metric が間違っていた (2026-05-15 GPT Pro 助言で発覚)**:
 
-つまり、 **既存 candidate diversity の追加では +pp が出ない**。 新候補種 (新 observation model / 新 architecture) が必須。
+公式 PPC2024 metric は **per-run-averaged** (各 run の distance-weighted 0.5m score を出して 6 つの平均)、 `internal_docs/ppc2024_realtime_target.md:12-13` にも記載済。 しかし `exp_ppc_ctrbpf_fgo.py` の aggregate 表示は **pooled** (全 run 距離合算) で計算していた。 全 Phase 19 進捗追跡が誤った metric。
+
+**Phase 19 真の trajectory (OFFICIAL per-run-averaged)**:
+
+| Phase | OFFICIAL | pooled (旧表示) | Δ |
+|---|---:|---:|---:|
+| 19l format-fix gici single | 70.84% | 75.38% | -4.54pp |
+| 19u 3-variant | 71.35% | 76.03% | -4.68pp |
+| **19al 17-variant** | **72.09%** | **76.83%** | **-4.73pp** |
+| 19ao 18-variant +window5 | 72.10% | 76.83% | -4.73pp |
+
+**TURING 85.6% も per-run-averaged → 真の gap = 13.50pp** (旧認識 8.77pp の 1.5倍)。
+
+**重大発見 #2 — n/r2 fix の leverage が 2.3 倍**:
+
+per-run-averaged では各 run が 1/6 = 16.7% weight (距離に依存しない)。 n/r2 は pooled で 10.2% weight だが OFFICIAL で 16.7%。
+
+- n/r2 を 44% → 80% local fix:
+  - pooled: +2.6pp aggregate
+  - **OFFICIAL: +6.0pp aggregate** (2.3 倍 leverage)
+
+GPT Pro の n/r2 攻略 priority がさらに正当化。
+
+**scorer 修正済** (`exp_ppc_ctrbpf_fgo.py:10465-10479`): OFFICIAL と pooled の両方を表示、 過去 trajectory との比較も可能。
+
+---
+
+**重大発見 #3 (GPT Pro 助言 2026-05-15)**: 公式 score は **Fix flag を見ず 3D 50cm 以内の距離割合**。 私の selector の `Fix=4 only` 採用基準は **競技ルール上不要な自己制約**。 Float/DR/velocity bridge candidate を「Fix ではない」理由で捨てるのは score 上の損失。
+
+**戦略 pivot**: 「Fix=4 candidate を増やす」 → **「正しい軌跡候補を出す + Fix status と別に採用 + ambiguity/NLOS/IMU を discrete hypothesis 化」**。 詳細 [`gpt_pro_advice_response_2026_05_15.md`](gpt_pro_advice_response_2026_05_15.md)。
+
+**1週間 ROI 順 (期待 +1〜4pp) — Action 1-5 完了、 Phase 19at で +2.87pp OFFICIAL 累積**:
+1. ✅ **scoring script の公式 metric 完全一致確認** (完了、 pooled→OFFICIAL per-run-averaged 修正、 真の score 72.10%、 真の TURING gap 13.50pp 判明)
+2. ✅ **status-free oracle 出力** (完了、 oracle OFFICIAL **89.83%**、 selected との gap **+17.74pp** = TURING +4.23pp 超え可能)
+3. ✅ **Selector reject 理由 per-epoch 解析** (完了、 全 reject reason が `status=5` ハードゲート由来、 n/r2 で 37.5% of oracle-correct epochs を捨てていた)
+4. ✅ **Phase 19ap: status=5 gate 有効化** (完了、 **OFFICIAL +2.71pp / 74.81%、 TURING gap 10.79pp**) — **過去 17 gici variants 合計 +1.26pp の 2.2倍 ROI を 1 行 fix で取得**
+5. ✅ **Phase 19at: velocity/IMU bridge candidate** (完了、 **OFFICIAL +0.16pp / 74.97%、 TURING gap 10.63pp**) — bridge_rms=0.2 が sweet spot、 n/r2 +0.72pp / n/r1 +0.24pp dominant。 anchor が前回 emit なので cluster bias 継承の限界あり
+
+**Phase 19ap per-run**: t/r1 +6.19pp (83.97→90.16), n/r1 +3.79pp, n/r3 +4.32pp, t/r2 +0.49, t/r3 +0.97, n/r2 **+0.53pp 限定**。
+
+**n/r2 残 +33pp gap (oracle 78%)** は **gate blocking ではなく ranking 問題**: selector の `residual_rms` 最小 pick が wrong-fix status=4 (residual 0.02 / 3D 1.5m) を正しい status=5 (residual 0.05 / 3D 0.3m) より上に置く。 residual_rms と 3D error が完全相関でない。
+
+**次の ROI 候補 (1週間 Action 5)**:
+5. **velocity/IMU bridge candidate** (2位再実装 n/r2 で 6秒、 +1-3pp 期待) ← 推奨
+6. **selector ranking 改善** (multi-metric: residual + IMU consistency + Doppler residual、 +1-3pp 期待)
+7. **constellation subset bank** (n/r2 で衛星系 subset)
+8. **emit-max-diff-m sweep** (現 0.4m、 緩めると selector pick が変わる)
+
+---
+
+### 旧現状サマリ (2026-05-15 09:10 update — gici 17-variant ceiling 確定 / 飽和)
+
+- PPC2024 honest aggregate 6-run PF: **76.8256%** (Phase 19al、 NEW canonical best)
+- 累積進捗: Phase 11ep PF 71.48% → Phase 19al 76.83% = **+5.35pp / +2516m**, TURING gap **8.77pp**
+- TURING target 85.6% への gap: **8.77pp** / ~4.1km equivalent (Phase 19d 11.84pp から -3.07pp closed)
+- **2026-05-14/15 gici-open TC FGO + 17-variant pool breakthrough**: format bug fix (`output_added` 列追加) + 17 gici variants で aggregate **+3.07pp**:
+  - default esdfix (`[-0.670, 0.593, -1.216]` lever、 AR ratio 3.0、 max_pr_err 2.5、 max_phase_err 0.06)
+  - zeroarm `[0,0,0]` lever — t/r1 dominant (+0.94pp 単独)
+  - ratio25 `AR=2.5` — small all-run (+0.40pp)
+  - loosepr `max_pr_err=5.0` — t/r1 + t/r2
+  - loosephase `max_phase_err=0.12` — nagoya 系 (n/r3 +0.69pp、 n/r2 +0.15pp)
+  - ratio40 `AR=4.0` — t/r1 marginal
+  - combo (zeroarm+loosephase 2-knob): t/r1 +0.96pp (combo extension breakthrough)
+  - combo4 / lprlph / zr / onarm / lowacc / hisnr40/45/30 / hielev / imurot (各 +0.02-0.20pp)
+- Per-run final (Phase 19al): t/r1 +11.97pp / t/r2 +0.80pp / t/r3 +0.17pp / n/r1 +1.16pp / n/r2 +0.23pp / n/r3 +1.45pp
+- 詳細 [[project-gici-breakthrough-2026-05-14]]
+
+- **飽和確認 (5 連続 marginal/regression)**:
+  - 19ak 16-variant: 76.7911% (+0.04pp)
+  - 19al 17-variant (+imurot): **76.8256%** (+0.03pp, n/r3 +0.24pp)
+  - 19am 18-variant (+himuba `sigma_ba=10/sigma_bg=3`): **76.8256%** (0.00pp redundant)
+  - 19an 19-variant (+tightpr `max_pr_err=1.5`): **76.8105%** (**-0.015pp regression**, t/r1 -7m)
+  - 19ao 18-variant (drop tightpr, +window5 `max_window_length=5`): 走行中 (期待 marginal)
+
+**Pool ceiling 確定 = 76.83%** (Phase 19al 17 variants)。 追加 variant 路完全 exhausted。
+
+**n/r2 構造的限界**: 全 19 variants で 44.21% に張り付き、 lever arm/AR/SNR/IMU/PR/Phase/window の全 knob で改善なし。 PPC selector の per-epoch optimal を既に達成、 残 epoch は recoverable でない。 n/r2 で +25-30pp 上げるには **architectural breakthrough** (multi-base / PPP-AR / city-model NLOS / triple-freq cascade) が必要。
+
+つまり、 **gici 17-variant pool + format bug 修正** で +3.07pp 取れた。 残 gap 8.77pp の breakdown:
+- n/r2 単独で 44.21% → ~70% に上げれば aggregate +2.6pp (architectural、 ~週)
+- t/r2/t/r3 の 86.47%/81.77% を 90%+ に押すには ~+0.5-1pp 余地 (gici 内 tuning は飽和、 残るは PPC pipeline side breakthrough)
+- t/r1 84.04% は libgnss base 72.07% から +12pp 達成、 残 ~1.5pp は dead-zone urban canyon
+- 残 6pp 以上は CLAS/madoca PPP-AR / multi-base / city-model NLOS のいずれかが必要
 
 ### 既に exhausted な path (記録 — 再試行禁止)
 
@@ -43,9 +122,20 @@
 
 ### 残 architectural breakthrough path (ROI 順)
 
-#### 1. Multi-frequency LAMBDA cascade in libgnss++ (~2 週、 期待 +3-5pp、 ROI 最高) — **2026-05-14 ROI 再評価で deprioritized**
+#### 1. Multi-frequency LAMBDA cascade in libgnss++ (~2 週、 期待 +3-5pp、 ROI 最高) — **2026-05-14 完全 exhausted (Phase 19j -0.80pp)**
 
-**2026-05-14 ROI 再評価**: Phase 18 で既に L1/L5 WL stage まで land 済 + xd_l5wl_v1 candidate を Phase 17 pool に追加した結果 **-0.017pp neutral**。 つまり plan #1 の "L5 cascade" 部分は既に **exhausted**。 残る差分は (a) Galileo E5b 観測必要な EWL (E5a-E5b、 λ≈9.77m) と (b) NL-only 2nd-stage LAMBDA。 PPC dataset が E5b を含むか未確認 + Phase 18 結果から期待 +pp は plan 記載値より小、 推定 +0.5-1.5pp。 **ROI 順位は #2 (BVH NLOS) と入れ替え** (下記 work order 参照)。
+**2026-05-14 完全 exhausted (Phase 19j)**: 残り未試行だった `--enable-wlnl-fallback` (MW WL/NL integer fallback after LAMBDA failure) を 6 run 生成・ Phase 19i pool 統合・ PF aggregate 測定し **-0.80pp regression、 全 6 run negative**。 同時に `--enable-wide-lane-ar` 併用 variant も **-1.90pp** で更に悪い。 原因: wlnl_fb 候補は `final_residual_rms` は低いが geometrically wrong (MW pseudo-obs が low residual + wrong integer)、 PPC selector が誤って dev_demo5_trusted_o3 から 213 epoch (tokyo/run1) を奪取。 詳細 [[project-wlnl-fallback-failed-2026-05-14]]。
+
+**+ UWL (Galileo E5a-E5b) は dataset 制約で実行不可**: PPC has E1+E5a のみ、 E5b 観測なし → EWL (λ≈9.77m) は構築不能。
+
+**plan #1 path 結論** (全 exhausted):
+- L1/L2 WL: implemented since Phase 10、 selector で飽和
+- L1/L5 WL (Phase 18): landed neutral
+- WL pre-step AR (--enable-wide-lane-ar, Phase 11fj sweep 0.05/0.15/0.30): +0.000pp
+- WL-NL fallback (--enable-wlnl-fallback, Phase 19j): **-0.80pp regression**
+- UWL E5a-E5b: dataset 構造的に不可能
+
+**2026-05-14 旧 ROI 再評価記録 (参考のみ)**: Phase 18 で既に L1/L5 WL stage まで land 済 + xd_l5wl_v1 candidate を Phase 17 pool に追加した結果 -0.017pp neutral。 期待 +0.5-1.5pp の見積もりは Phase 19j で **-0.80pp に修正される**。
 
 **現状**: `third_party/gnssplusplus` で L1/L2 widelane のみ implement (`compute_wide_lane_float`)、 Phase 18 で L1/L5 widelane も加わったが neutral。 NL stage (L1 narrow-lane ≈0.19m) が未 cascade。
 
@@ -165,10 +255,11 @@
 
 1. ~~**A (ML NLOS)**~~ ← cross-run AUC 0.56、 truth label 無しで PPC では不可、 exhausted
 2. ~~**B (Doppler+IMU outlier)**~~ ← tokyo/run1 fix rate -3 〜 -8.7pp regression、 PPC では \|res\|<3m gate で先取りされており重複 gate は good obs を削る、 exhausted
-3. **F (Switchable constraints)** ← GTSAM 内蔵 `noiseModel::Robust`、 既存 ImuFactor / PR factor に DCS / Tukey 適用。 3-5 日 spike。 **次の候補**
+3. ~~**F (Switchable constraints / robust kernel switch)**~~ ← **2026-05-14: offline +0.40pp (allc2 全 3 factor Cauchy c=2)、 PF aggregate -0.0003pp (transfer 0%)**。 GTSAM `noiseModel::Robust` を PR/Phase/Doppler factor に組込み、 CLI `--{pr,phase,doppler}-kernel cauchy --…-kernel-c 2.0` で switchable。 FGO 単独では valid gain だが、 既存 3-FGO PPC pool (v2_gap + v14_snr38 + v17_el25) が per-epoch optimal を吸収済、 F 候補追加で **0 emit ratio**。 exhausted
 4. (#5 demo5 full port、 1-2 週)
 5. (CLAS / madoca PPP-AR、 rebase コスト不明)
 6. (D/E、 long-term)
+7. **NEW: script regression 調査** ← 当 `exp_ppc_ctrbpf_fgo.py` で同じ Phase 19d pool が aggregate 52.11% に dropped (5/9 当時 73.76%)、 PR #58 後 219 行追加が影響。 canonical reproducibility 失わせている。 F 評価とは別 task
 
 ### B 実装結果 (2026-05-14)
 
@@ -201,6 +292,62 @@
 - **arxiv 2510.00524 のクロス検証**: 別 dataset (deep urban smartphone) + 別 architecture (tightly-coupled SPP、 not AR/RTK) での gain。 PPC + libgnss-style AR ではアーキ前提が異なる。
 
 **閉じた path**: B (Doppler+IMU two-stage outlier rejection)。 残置コードは default 無効、 削除予定なし (将来別 dataset で再評価可能性)。
+
+### F 実装結果 (2026-05-14、 robust kernel switch / Switchable Constraints)
+
+**実装** (`gtsam_gnss_ws/gtsam_gnss/examples_cpp/`, commit `8887e7f`):
+- `gnss_types.h`: `Config::{pr,phase,doppler}_robust_kernel` (string、 default "huber") + `Config::{pr,phase,doppler}_robust_c` (default 0 = fallback to huber_{P,L,D})
+- `ambiguity_resolution.cpp`: `makeRobustNoise(kernel, c, fallback_c, base)` helper を新設、 `noiseModel::Robust::Create(Huber::Create(...), ...)` を 3 箇所 (PR / Phase / Doppler factor) で差し替え。 between-ambiguity / TDCP は graph prior 扱いで huber 固定
+- `main.cpp`: `--{pr,phase,doppler}-kernel <huber|dcs|cauchy|tukey|welsch|gemanmcclure>` + `--{pr,phase,doppler}-kernel-c <c>` の 6 CLI
+
+**tokyo/run1 FGO iter4 PR kernel sweep** (FGO base: `--spp-prior-relax 1 --gap-aware-motion 1`、 baseline huber=68.38%):
+
+| Kernel × c | Fix rate | Δ vs baseline |
+|---|---:|---:|
+| huber (baseline) | 68.38% | — |
+| DCS c=0.5 / 1 / 2 | 63.36 / 68.34 / 68.38 | -5.02 / -0.04 / 0.00 |
+| Cauchy c=0.5 / 1 / 2 / 2.5 / 3 / 4 | 59.05 / 68.47 / 68.84 / 68.84 / 68.80 / 69.22 | -9.33 / +0.09 / +0.46 / +0.46 / +0.42 / +0.84 |
+| **Cauchy c=5** | **69.39** | **+1.00** |
+| Cauchy c=10 | 69.22 | +0.84 |
+| Tukey c=1 / 2 / 4.685 | 55.21 / 59.77 / 68.42 | -13.17 / -8.62 / +0.04 |
+| GemanMcClure c=0.5 / 1 | 53.41 / 52.70 | -14.97 / -15.68 |
+| PR c=2 + Doppler c=2 (Cauchy) | 68.84 | +0.46 |
+| PR c=2 + Phase c=2 (Cauchy) | 69.18 | +0.80 |
+| **all 3 Cauchy c=2** | **69.39** | **+1.00** |
+
+**6-run aggregate** (3 config × 6 run):
+
+| Run | huber base | PR Cauchy c=5 (Δ) | all Cauchy c=2 (Δ) |
+|---|---:|---:|---:|
+| tokyo_run1 | 68.38 | 69.39 (+1.00) | 69.39 (+1.00) |
+| tokyo_run2 | 71.11 | 71.49 (+0.38) | 71.11 (+0.00) |
+| tokyo_run3 | 70.37 | 70.57 (+0.20) | 70.43 (+0.07) |
+| nagoya_run1 | 83.15 | 83.34 (+0.20) | 83.80 (+0.65) |
+| nagoya_run2 | 70.23 | 70.33 (+0.11) | 70.44 (+0.21) |
+| nagoya_run3 | 77.52 | 77.52 (+0.00) | 78.19 (+0.67) |
+| **aggregate** | **72.37** | **72.73 (+0.36)** | **72.77 (+0.40)** |
+
+両 config とも全 6 run で **regression なし**。 PR Cauchy c=5 は 5/6 strictly positive (PR factor のみ relax)、 all Cauchy c=2 は aggregate winner (nagoya 系で stronger gain)。
+
+**洞察**: 既存 PPC Huber c=0.5 は urban canyon で **aggressive すぎ** — residual が容易に 0.5σ_P (~1m) を超えるため good factor も down-weight。 Cauchy c=5 では r=3m での重み w=0.74 (Huber c=0.5 では w=0.17)、 「適度に soft」 が rejected outlier の信号を残しつつ scaling 過剰な down-weight を回避する。 一方 Tukey / GemanMcClure (steeper kernel) は PPC の既存 \|code_res\|>=3m hard gate で outlier が削られた後の "clean" factor を更に削るため逆効果。
+
+**PF aggregate (2026-05-14 完了)**: `/tmp/run_phase20_f_allc2.sh` (Phase 19d pool + fgo_v20_allc2 候補追加) で 6-run 実行 → control (no F) との比較で **-0.0003pp (effectively zero)、 transfer 0%**。 Selector breakdown では `xd_fgo_v20_allc2:89` epochs 選択された (Phase 19d 既存 3 FGO は xd_fgo_v2_gap:25 / v14_snr38:62 / v17_el25:43)、 数 epoch 単位で competitive だが **既存 candidate 群の per-epoch best と本質的に冗長**で aggregate に新規 information なし。 Per-run block も不要 (regression なし)。
+
+**Tokyo/run1 control (no F) vs Phase 20 (with F) — 当 script 公正比較**:
+
+| Run | ctrl (no F) % | P20 F % | Δ pp |
+|---|---:|---:|---:|
+| tokyo/run1 | 40.40 | 40.40 | +0.004 |
+| tokyo/run2 | 71.65 | 71.71 | +0.053 |
+| tokyo/run3 | 62.68 | 62.66 | -0.026 |
+| nagoya/run1 | 53.26 | 53.26 | 0.000 |
+| nagoya/run2 | 21.00 | 21.00 | 0.000 |
+| nagoya/run3 | 37.29 | 37.29 | 0.000 |
+| **aggregate** | **52.1076** | **52.1073** | **-0.0003** |
+
+**結論 — F は閉じた path**: GTSAM FGO 単独の fix-rate +1pp (tokyo/run1) は real な gain だが、 PPC selector pool に投入すると既存 FGO 候補 (v2_gap / v14_snr38 / v17_el25) 群が per-epoch optimal を吸収済で **F の追加 information ≈ 0**。 既存 3-FGO pool は当該 robust kernel angle を実質 cover している。 残置コード: gtsam_gnss commit `8887e7f` で landing 済 (default huber、 byte-identical、 削除予定なし)。
+
+**未解決 (F 検証中に発覚した independent issue) — 2026-05-14 当 script PF aggregate 大幅 regression (-21.65pp)**: 同じ Phase 19d pool / 同じ FGO candidate dir / 同じ CLI args で、 当 script 走らせると **aggregate 52.11%** (5/9 当時の canonical Phase 19d 73.76% から -21.65pp / -10030m)。 `experiments/exp_ppc_ctrbpf_fgo.py` が PR #58 merge 後に 219 行追加 (RTKDiag float-gate / status5-gate / lowcase policy 等)、 これらが PPC selector 結果を大幅に変えている。 Phase 19d 5/9 CSV (`experiments/results/ppc_ctrbpf_fgo_phase19d_*_runs.csv`、 mtime 5/9 22:43-22:45) は今や **reproducible でない** 古 script artifact。 F 評価とは独立した issue だが、 **TURING 戦略全体の前提 (73.76% canonical) が gone** → 別 task として script regression 調査 + canonical 73.76% の再現可否確認が必要。
 
 ### TURING まで到達 estimate
 

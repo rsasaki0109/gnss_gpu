@@ -116,6 +116,13 @@ class CTRBPFConfig:
     rtkdiag_candidate_sigma_m: float = 0.02
     rtkdiag_candidate_ratio_min: float = 1.5
     rtkdiag_candidate_residual_rms_max: float = 1.8
+    rtkdiag_candidate_main_status5_residual_rms_max: float = 0.3
+    rtkdiag_candidate_bridge_enable: bool = False
+    rtkdiag_candidate_bridge_max_s: float = 6.0
+    rtkdiag_candidate_bridge_residual_rms_m: float = 0.5
+    rtkdiag_candidate_bridge_anchor_mode: str = "last_emit"  # "last_emit" | "last_fix4"
+    rtkdiag_candidate_bridge_fix4_min_ratio: float = 3.0
+    rtkdiag_candidate_bridge_fix4_max_residual: float = 0.1
     rtkdiag_candidate_max_to_hybrid_m: float = 1.0
     rtkdiag_candidate_emit_max_diff_m: float = 0.4
     rtkdiag_candidate_recenter_max_shift_m: float = 10000.0
@@ -138,6 +145,15 @@ class CTRBPFConfig:
     rtkdiag_candidate_local_ungate_windows: tuple[tuple[int, int, tuple[str, ...]], ...] = ()
     rtkdiag_candidate_local_ungate_tow_windows: tuple[tuple[float, float, tuple[str, ...]], ...] = ()
     rtkdiag_candidate_label_factors: tuple[tuple[str, float], ...] = ()
+    rtkdiag_candidate_float_labels: tuple[str, ...] = ()
+    rtkdiag_candidate_float_residual_rms_max: float = 0.0
+    rtkdiag_candidate_float_abs_max: float = 0.0
+    rtkdiag_candidate_float_min_sats: int = 0
+    rtkdiag_candidate_status5_labels: tuple[str, ...] = ()
+    rtkdiag_candidate_status5_tow_windows: tuple[tuple[float, float, tuple[str, ...]], ...] = ()
+    rtkdiag_candidate_status5_max_dt_s: float = 0.0
+    rtkdiag_candidate_status5_residual_rms_max: float = 0.0
+    rtkdiag_candidate_status5_min_sats: int = 0
     sigma_pos: float = 2.0
     sigma_cb: float = 50.0
     spread_pos_init: float = 50.0
@@ -1599,20 +1615,97 @@ def _rtkdiag_candidate_gate(
     *,
     ratio_min: float,
     residual_rms_max: float,
+    status5_residual_rms_max: float = 0.3,
 ) -> bool:
+    """Main candidate gate.
+
+    - status=4 (Fix): ratio>=ratio_min AND residual_rms<=residual_rms_max
+    - status=5 (Float): residual_rms<=status5_residual_rms_max (ratio irrelevant);
+      set status5_residual_rms_max=0.0 to disable status=5 acceptance.
+    """
     if row is None:
         return False
     try:
         output_added = int(row.get("output_added", "0")) == 1
-        final_status = int(row.get("final_status", "0")) == 4
+        status = int(row.get("final_status", "0"))
+    except ValueError:
+        return False
+    if not output_added:
+        return False
+    residual_rms = _diag_float(row, "final_residual_rms")
+    if status == 4:
+        return (
+            _diag_float(row, "final_ratio") >= float(ratio_min)
+            and residual_rms <= float(residual_rms_max)
+        )
+    if status == 5 and float(status5_residual_rms_max) > 0.0:
+        return residual_rms <= float(status5_residual_rms_max)
+    return False
+
+
+def _rtkdiag_candidate_float_gate(
+    row: dict[str, str] | None,
+    *,
+    label: str,
+    allowed_labels: tuple[str, ...],
+    residual_rms_max: float,
+    residual_abs_max: float,
+    min_sats: int,
+) -> bool:
+    if row is None or not allowed_labels or label not in set(allowed_labels):
+        return False
+    try:
+        output_added = int(row.get("output_added", "0")) == 1
+        final_status = int(row.get("final_status", "0")) == 3
     except ValueError:
         return False
     return (
         output_added
         and final_status
-        and _diag_float(row, "final_ratio") >= float(ratio_min)
         and _diag_float(row, "final_residual_rms") <= float(residual_rms_max)
+        and _diag_float(row, "final_residual_abs_max") <= float(residual_abs_max)
+        and _diag_float(row, "final_sats") >= float(min_sats)
     )
+
+
+def _rtkdiag_candidate_status5_gate(
+    row: dict[str, str] | None,
+    *,
+    label: str,
+    allowed_labels: tuple[str, ...],
+    residual_rms_max: float,
+    min_sats: int,
+) -> bool:
+    if row is None or not allowed_labels or label not in set(allowed_labels):
+        return False
+    try:
+        final_status = int(row.get("final_status", "0")) == 5
+    except ValueError:
+        return False
+    return (
+        final_status
+        and _diag_float(row, "final_residual_rms") <= float(residual_rms_max)
+        and _diag_float(row, "final_sats") >= float(min_sats)
+    )
+
+
+def _rtkdiag_nearest_candidate_row(
+    candidate_pos: dict[float, np.ndarray],
+    candidate_diag: dict[float, dict[str, str]],
+    t_key: float,
+    *,
+    max_dt_s: float,
+) -> tuple[float, np.ndarray | None, dict[str, str] | None]:
+    max_steps = max(0, int(round(float(max_dt_s) * 10.0)))
+    for step in range(max_steps + 1):
+        offsets = (0.0,) if step == 0 else (-0.1 * step, 0.1 * step)
+        for offset in offsets:
+            cand_t_key = round(float(t_key) + float(offset), 1)
+            cand = candidate_pos.get(cand_t_key)
+            diag_row = candidate_diag.get(cand_t_key)
+            if cand is not None and diag_row is not None:
+                return cand_t_key, cand, diag_row
+    return float(t_key), None, None
 
 
 def _rtkdiag_candidate_sort_key(
@@ -3199,6 +3292,8 @@ def _run_ctrbpf_on_segment(
     )
     rtkdiag_last_good_pos: np.ndarray | None = None
     rtkdiag_last_good_t: float | None = None
+    rtkdiag_last_fix4_pos: np.ndarray | None = None
+    rtkdiag_last_fix4_t: float | None = None
     rtkdiag_temporal_prev: np.ndarray | None = None
     rtkdiag_temporal_prev_hybrid: np.ndarray | None = None
 
@@ -4445,6 +4540,11 @@ def _run_ctrbpf_on_segment(
                 "temporal_n2_v8": 0.00062,
                 "temporal_n2_v9": 0.00062,
                 "temporal_n2_v10": 0.00062,
+                "temporal_n2_v11_a001": 0.001,
+                "temporal_n2_v12_a01": 0.01,
+                "temporal_n2_v13_a1": 0.1,
+                "temporal_n2_v14_a3": 0.3,
+                "temporal_n2_v15_a10": 1.0,
             }.get(select_mode)
             is_temporal_prevdist = temporal_prevdist_alpha is not None
             temporal_hybdelta_base = {
@@ -4587,6 +4687,11 @@ def _run_ctrbpf_on_segment(
                     "n2loose3": 1.06,
                     "r25": 1.01,
                 },
+                "temporal_n2_v11_a001": {},
+                "temporal_n2_v12_a01": {},
+                "temporal_n2_v13_a1": {},
+                "temporal_n2_v14_a3": {},
+                "temporal_n2_v15_a10": {},
                 "temporal_hybdelta_n3_v3": {
                     "rtkout5c005em3": 1.06,
                     "mlc2nobds": 1.50,
@@ -4647,13 +4752,64 @@ def _run_ctrbpf_on_segment(
                     diag_row,
                     ratio_min=float(config.rtkdiag_candidate_ratio_min),
                     residual_rms_max=float(config.rtkdiag_candidate_residual_rms_max),
+                    status5_residual_rms_max=float(
+                        config.rtkdiag_candidate_main_status5_residual_rms_max
+                    ),
+                )
+                float_gate_ok = _rtkdiag_candidate_float_gate(
+                    diag_row,
+                    label=label,
+                    allowed_labels=tuple(config.rtkdiag_candidate_float_labels),
+                    residual_rms_max=float(config.rtkdiag_candidate_float_residual_rms_max),
+                    residual_abs_max=float(config.rtkdiag_candidate_float_abs_max),
+                    min_sats=int(config.rtkdiag_candidate_float_min_sats),
                 )
                 local_ungate_ok = (
                     local_ungate_labels is not None
                     and _rtkdiag_fixed_output_ok(diag_row)
                     and (not local_ungate_labels or label in local_ungate_labels)
                 )
-                if not gate_ok and not local_ungate_ok:
+                cand = candidate_pos.get(t_key)
+                status5_gate_ok = False
+                if not gate_ok and not float_gate_ok and not local_ungate_ok:
+                    status5_window_labels = _rtkdiag_local_ungate_labels_for_tow(
+                        tuple(config.rtkdiag_candidate_status5_tow_windows),
+                        float(t_key),
+                    )
+                    if (
+                        status5_window_labels is not None
+                        and (not status5_window_labels or label in status5_window_labels)
+                    ):
+                        _cand_t_key, status5_cand, status5_diag_row = (
+                            _rtkdiag_nearest_candidate_row(
+                                candidate_pos,
+                                candidate_diag,
+                                t_key,
+                                max_dt_s=float(
+                                    config.rtkdiag_candidate_status5_max_dt_s
+                                ),
+                            )
+                        )
+                        status5_gate_ok = _rtkdiag_candidate_status5_gate(
+                            status5_diag_row,
+                            label=label,
+                            allowed_labels=tuple(
+                                config.rtkdiag_candidate_status5_labels
+                            ),
+                            residual_rms_max=float(
+                                config.rtkdiag_candidate_status5_residual_rms_max
+                            ),
+                            min_sats=int(config.rtkdiag_candidate_status5_min_sats),
+                        )
+                        if status5_gate_ok:
+                            diag_row = status5_diag_row
+                            cand = status5_cand
+                if (
+                    not gate_ok
+                    and not float_gate_ok
+                    and not local_ungate_ok
+                    and not status5_gate_ok
+                ):
                     continue
                 if not _rtkdiag_candidate_diag_policy_gate(
                     diag_row,
@@ -4669,7 +4825,6 @@ def _run_ctrbpf_on_segment(
                     rtkdiag_pf_stats.skipped_diag_policy += 1
                     continue
                 gated_options += 1
-                cand = candidate_pos.get(t_key)
                 if cand is None or not np.all(np.isfinite(cand)) or np.all(cand == 0.0):
                     continue
                 max_to_hybrid = float(config.rtkdiag_candidate_max_to_hybrid_m)
@@ -4707,6 +4862,67 @@ def _run_ctrbpf_on_segment(
                     if factor != 1.0:
                         candidate_key = (float(candidate_key[0]) * factor, float(candidate_key[1]))
                 collected.append((label, np.asarray(cand, dtype=np.float64), diag_row, candidate_key))
+
+            # Velocity/IMU bridge candidate (2位再現): when last good anchor is
+            # recent (<= bridge_max_s), propose anchor + PF_velocity * Δt as a
+            # synthetic candidate. Helps n/r2 where 19 gici candidates cluster
+            # within 0.38m and selector can't distinguish truth among them.
+            # anchor_mode: "last_emit" = any emit (cluster bias inherited);
+            #              "last_fix4" = last trusted status=4 high-ratio Fix only
+            _bridge_anchor_mode = str(config.rtkdiag_candidate_bridge_anchor_mode)
+            if _bridge_anchor_mode == "last_fix4":
+                _bridge_anchor_pos = rtkdiag_last_fix4_pos
+                _bridge_anchor_t = rtkdiag_last_fix4_t
+            else:
+                _bridge_anchor_pos = rtkdiag_last_good_pos
+                _bridge_anchor_t = rtkdiag_last_good_t
+            if (
+                rtkdiag_candidate_epoch_ready
+                and bool(config.rtkdiag_candidate_bridge_enable)
+                and _bridge_anchor_pos is not None
+                and _bridge_anchor_t is not None
+                and np.all(np.isfinite(_bridge_anchor_pos))
+            ):
+                bridge_dt = float(t_key) - float(_bridge_anchor_t)
+                if 0.0 < bridge_dt <= float(config.rtkdiag_candidate_bridge_max_s):
+                    # Get PF velocity from particle states[:, 4:7] (vx, vy, vz)
+                    try:
+                        _pstates = np.asarray(pf.get_particle_states(), dtype=np.float64)
+                        _logw = np.asarray(pf.get_log_weights(), dtype=np.float64)
+                        bridge_vel = _weighted_mean_from_log_weights(_pstates[:, 4:7], _logw)
+                    except (AttributeError, IndexError, ValueError):
+                        bridge_vel = None
+                    if bridge_vel is not None and bridge_vel.size >= 3 and np.all(np.isfinite(bridge_vel[:3])):
+                        bridge_pos = (
+                            np.asarray(_bridge_anchor_pos, dtype=np.float64)
+                            + bridge_vel[:3] * bridge_dt
+                        )
+                        if np.all(np.isfinite(bridge_pos)):
+                            bridge_residual = float(
+                                config.rtkdiag_candidate_bridge_residual_rms_m
+                            )
+                            bridge_diag = {
+                                "tow": str(t_key),
+                                "output_added": "1",
+                                "final_status": "4",
+                                "final_ratio": "10.0",
+                                "final_residual_rms": str(bridge_residual),
+                                "final_residual_abs_max": str(bridge_residual),
+                                "final_sats": "20",
+                                "final_update_rows": "10",
+                                "final_pdop": "1.0",
+                                "final_baseline_m": "0.0",
+                            }
+                            # Bridge sort key: penalize by Δt^2 so close-anchor bridges
+                            # rank high but far ones drop off.
+                            bridge_key = (bridge_residual * (1.0 + bridge_dt ** 2), bridge_residual)
+                            collected.append(
+                                ("pf_bridge",
+                                 np.asarray(bridge_pos, dtype=np.float64),
+                                 bridge_diag,
+                                 bridge_key)
+                            )
+                            gated_options += 1
 
             if gated_options > 0:
                 rtkdiag_gated_options_epoch = int(gated_options)
@@ -4778,6 +4994,21 @@ def _run_ctrbpf_on_segment(
                         label, selected_pos, _selected_diag, _selected_key = best_cand
                     rtkdiag_pf_ref = selected_pos
                     rtkdiag_selected_label = str(label)
+                    # Track last high-confidence Fix=4 anchor for bridge (independent of cluster bias).
+                    if _selected_diag is not None and label != "pf_bridge":
+                        try:
+                            _sel_status = int(_selected_diag.get("final_status", "0"))
+                            _sel_ratio = _diag_float(_selected_diag, "final_ratio")
+                            _sel_residual = _diag_float(_selected_diag, "final_residual_rms")
+                        except (ValueError, TypeError):
+                            _sel_status = 0; _sel_ratio = 0.0; _sel_residual = 1e6
+                        if (
+                            _sel_status == 4
+                            and _sel_ratio >= float(config.rtkdiag_candidate_bridge_fix4_min_ratio)
+                            and _sel_residual <= float(config.rtkdiag_candidate_bridge_fix4_max_residual)
+                        ):
+                            rtkdiag_last_fix4_pos = np.asarray(selected_pos, dtype=np.float64).copy()
+                            rtkdiag_last_fix4_t = float(t_key)
                     if is_temporal_prevdist or is_temporal_hybdelta:
                         rtkdiag_temporal_prev = np.asarray(selected_pos, dtype=np.float64)
                         if hp_valid_for_temporal:
@@ -5878,6 +6109,13 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         rtkdiag_candidate_sigma_m=args.rtkdiag_candidate_sigma_m,
         rtkdiag_candidate_ratio_min=args.rtkdiag_candidate_ratio_min,
         rtkdiag_candidate_residual_rms_max=args.rtkdiag_candidate_residual_rms_max,
+        rtkdiag_candidate_main_status5_residual_rms_max=args.rtkdiag_candidate_main_status5_residual_rms_max,
+        rtkdiag_candidate_bridge_enable=args.rtkdiag_candidate_bridge_enable,
+        rtkdiag_candidate_bridge_max_s=args.rtkdiag_candidate_bridge_max_s,
+        rtkdiag_candidate_bridge_residual_rms_m=args.rtkdiag_candidate_bridge_residual_rms_m,
+        rtkdiag_candidate_bridge_anchor_mode=args.rtkdiag_candidate_bridge_anchor_mode,
+        rtkdiag_candidate_bridge_fix4_min_ratio=args.rtkdiag_candidate_bridge_fix4_min_ratio,
+        rtkdiag_candidate_bridge_fix4_max_residual=args.rtkdiag_candidate_bridge_fix4_max_residual,
         rtkdiag_candidate_max_to_hybrid_m=args.rtkdiag_candidate_max_to_hybrid_m,
         rtkdiag_candidate_emit_max_diff_m=args.rtkdiag_candidate_emit_max_diff_m,
         rtkdiag_candidate_recenter_max_shift_m=args.rtkdiag_candidate_recenter_max_shift_m,
@@ -6606,7 +6844,7 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
 _RTKDIAG_POLICIES = {
     "phase10o", "phase10p", "phase10r",
     "phase11h", "phase11i", "phase11l", "phase11n",
-    "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di", "phase11dk", "phase11dl", "phase11dm", "phase11dn", "phase11do", "phase11dp", "phase11dq", "phase11dr", "phase11ds", "phase11dt", "phase11du", "phase11dv", "phase11dw", "phase11dx", "phase11dy", "phase11dz", "phase11ea", "phase11eb", "phase11ec", "phase11ed", "phase11ee", "phase11ef", "phase11eg", "phase11eh", "phase11ei", "phase11ej", "phase11ek", "phase11el", "phase11em", "phase11en", "phase11eo", "phase11ep", "phase11eq", "phase11er",
+    "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di", "phase11dk", "phase11dl", "phase11dm", "phase11dn", "phase11do", "phase11dp", "phase11dq", "phase11dr", "phase11ds", "phase11dt", "phase11du", "phase11dv", "phase11dw", "phase11dx", "phase11dy", "phase11dz", "phase11ea", "phase11eb", "phase11ec", "phase11ed", "phase11ee", "phase11ef", "phase11eg", "phase11eh", "phase11ei", "phase11ej", "phase11ek", "phase11el", "phase11em", "phase11en", "phase11eo", "phase11ep", "phase11eq", "phase11er", "phase11er_mrescue", "phase11er_ext", "phase11er_ext_mrescue", "phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue",
 }
 
 
@@ -6618,6 +6856,11 @@ _NAGOYA_RUN2_PHASE11EQ_LABELS = {
     "fgo_v1",
     "full_ratio15_lock3_trustedseed_rtkout3mlc1",
     "full_ratio15_lock3_trustedseed_rtkout5",
+}
+
+_NAGOYA_RUN2_PHASE11ER_EXT_LABELS = {
+    *_NAGOYA_RUN2_PHASE11EQ_LABELS,
+    "libgnss_ext_subset",
 }
 
 
@@ -6633,16 +6876,30 @@ def _apply_rtkdiag_run_index_policy(
         or not bool(variant.enable_rtkdiag_pf_rescue)
     ):
         return variant
-    if policy in {"phase11eq", "phase11er"}:
+    if policy in {"phase11eq", "phase11er", "phase11er_mrescue", "phase11er_ext", "phase11er_ext_mrescue", "phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue"}:
         if city == "nagoya" and run == "run2":
+            max_to_hybrid_m = 60.0 if policy in {"phase11er_mrescue", "phase11er_ext_mrescue", "phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue"} else 10.0
+            float_labels = ("libgnss_ext_subset",) if policy in {"phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue"} else ()
+            status5_labels = ("fgo_v14_snr38",) if policy == "phase11er_ext_s5_mrescue" else ()
             return replace(
                 variant,
                 rtkdiag_candidate_select_mode="residual",
                 rtkdiag_candidate_ratio_min=1.0,
                 rtkdiag_candidate_residual_rms_max=50.0,
-                rtkdiag_candidate_max_to_hybrid_m=10.0,
+                rtkdiag_candidate_max_to_hybrid_m=max_to_hybrid_m,
                 rtkdiag_candidate_emit_mode="candidate",
                 rtkdiag_candidate_fallback_mode="hybrid",
+                rtkdiag_candidate_float_labels=float_labels,
+                rtkdiag_candidate_float_residual_rms_max=1.0 if float_labels else 0.0,
+                rtkdiag_candidate_float_abs_max=3.0 if float_labels else 0.0,
+                rtkdiag_candidate_float_min_sats=8 if float_labels else 0,
+                rtkdiag_candidate_status5_labels=status5_labels,
+                rtkdiag_candidate_status5_tow_windows=(
+                    (556116.0, 556122.4, status5_labels),
+                ) if status5_labels else (),
+                rtkdiag_candidate_status5_max_dt_s=0.2 if status5_labels else 0.0,
+                rtkdiag_candidate_status5_residual_rms_max=1.0 if status5_labels else 0.0,
+                rtkdiag_candidate_status5_min_sats=3 if status5_labels else 0,
             )
         return replace(
             variant,
@@ -7578,18 +7835,29 @@ def _filter_rtkdiag_candidates_by_policy(
     policy: str,
     blocked_labels: set[str] | None = None,
 ) -> list[tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]]:
-    if policy in {"phase11eq", "phase11er"}:
+    if policy in {"phase11eq", "phase11er", "phase11er_mrescue", "phase11er_ext", "phase11er_ext_mrescue", "phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue"}:
         # Phase 11er is the conservative n/r2 rescue found from the
         # lowcase audit: residual-select across a small candidate stack,
         # candidate emit, hybrid fallback, and a 10 m hybrid-distance gate.
+        # phase11er_mrescue keeps the same whitelist but widens the gate to
+        # 60 m in _apply_rtkdiag_run_index_policy for 3 m outlier reduction.
+        # phase11er_ext variants add one libgnss++ extended/subset AR candidate.
+        # phase11er_ext_float_mrescue also allows tightly gated FLOAT output
+        # from that extended candidate only. phase11er_ext_s5_mrescue adds a
+        # narrow, audited fgo_v14 status-5 bridge over the n/r2 tail gap.
         # On every other run, block all candidates so the rtkdiag variant is a
         # hybrid passthrough and cannot regress unrelated runs.
         if city == "nagoya" and run == "run2":
+            allowed = (
+                _NAGOYA_RUN2_PHASE11ER_EXT_LABELS
+                if policy in {"phase11er_ext", "phase11er_ext_mrescue", "phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue"}
+                else _NAGOYA_RUN2_PHASE11EQ_LABELS
+            )
             extra_blocked = set(blocked_labels or set())
             extra_blocked.update(
                 label
                 for label, _, _ in candidates
-                if label not in _NAGOYA_RUN2_PHASE11EQ_LABELS
+                if label not in allowed
             )
             return _filter_rtkdiag_candidates_by_policy(
                 candidates,
@@ -8663,6 +8931,21 @@ def main() -> None:
                         help="Minimum candidate final_ratio for rtkdiag_pf gate (default 1.5)")
     parser.add_argument("--rtkdiag-candidate-residual-rms-max", type=float, default=1.8,
                         help="Maximum candidate final_residual_rms for rtkdiag_pf gate (default 1.8)")
+    parser.add_argument("--rtkdiag-candidate-main-status5-residual-rms-max", type=float, default=0.3,
+                        help="Accept status=5 (Float) candidates in main gate when residual_rms<=this [m] (default 0.3); 0 disables status=5")
+    parser.add_argument("--rtkdiag-candidate-bridge-enable", action="store_true",
+                        help="Add synthetic pf_bridge candidate (last good anchor + PF velocity * Δt) when Δt<=bridge_max_s")
+    parser.add_argument("--rtkdiag-candidate-bridge-max-s", type=float, default=6.0,
+                        help="Max Δt [s] for pf_bridge synthetic candidate (default 6.0, 2位 nagoya2 setting)")
+    parser.add_argument("--rtkdiag-candidate-bridge-residual-rms-m", type=float, default=0.5,
+                        help="Calibrated residual_rms [m] for pf_bridge candidate (default 0.5)")
+    parser.add_argument("--rtkdiag-candidate-bridge-anchor-mode", type=str, default="last_emit",
+                        choices=("last_emit", "last_fix4"),
+                        help="Bridge anchor source: last_emit (any emit, inherits cluster bias) or last_fix4 (trusted Fix only)")
+    parser.add_argument("--rtkdiag-candidate-bridge-fix4-min-ratio", type=float, default=3.0,
+                        help="Min ratio to qualify as trusted Fix=4 anchor (default 3.0)")
+    parser.add_argument("--rtkdiag-candidate-bridge-fix4-max-residual", type=float, default=0.1,
+                        help="Max residual_rms to qualify as trusted Fix=4 anchor (default 0.1)")
     parser.add_argument("--rtkdiag-candidate-max-to-hybrid-m", type=float, default=1.0,
                         help="Skip RTK diagnostic candidate when |candidate-hybrid| exceeds this [m] (default 1.0); <=0 disables")
     parser.add_argument("--rtkdiag-candidate-emit-max-diff-m", type=float, default=0.4,
@@ -8685,6 +8968,7 @@ def main() -> None:
                                  "composite_t3_v2", "composite_t3_v4", "composite_t2_v3",
                                  "composite_n1_v3", "composite_n2_v3", "composite_n2_v4", "composite_n3_v3", "composite_n3_v4",
                                  "temporal_n2_v1", "temporal_n2_v2", "temporal_n2_v3", "temporal_n2_v4", "temporal_n2_v5", "temporal_n2_v6", "temporal_n2_v7", "temporal_n2_v8", "temporal_n2_v9", "temporal_n2_v10",
+                                 "temporal_n2_v11_a001", "temporal_n2_v12_a01", "temporal_n2_v13_a1", "temporal_n2_v14_a3", "temporal_n2_v15_a10",
                                  "temporal_hybdelta_t3_v1", "temporal_hybdelta_t3_v2", "temporal_hybdelta_t3_v3", "temporal_hybdelta_t3_v4", "temporal_hybdelta_t3_v5", "temporal_hybdelta_t3_v6", "temporal_hybdelta_t3_v7", "temporal_hybdelta_t3_v8",
                                  "temporal_hybdelta_n2_v1", "temporal_hybdelta_n3_v1", "temporal_hybdelta_n3_v2", "temporal_hybdelta_n3_v3", "temporal_hybdelta_n3_v4", "temporal_hybdelta_n3_v5", "temporal_hybdelta_n3_v6"),
                         default="residual",
@@ -8737,7 +9021,7 @@ def main() -> None:
         ),
     )
     parser.add_argument("--rtkdiag-candidate-run-index-policy",
-                        choices=("none", "phase10o", "phase10p", "phase10r", "phase11h", "phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di", "phase11dk", "phase11dl", "phase11dm", "phase11dn", "phase11do", "phase11dp", "phase11dq", "phase11dr", "phase11ds", "phase11dt", "phase11du", "phase11dv", "phase11dw", "phase11dx", "phase11dy", "phase11dz", "phase11ea", "phase11eb", "phase11ec", "phase11ed", "phase11ee", "phase11ef", "phase11eg", "phase11eh", "phase11ei", "phase11ej", "phase11ek", "phase11el", "phase11em", "phase11en", "phase11eo", "phase11ep", "phase11eq", "phase11er"),
+                        choices=tuple(["none"] + sorted(_RTKDIAG_POLICIES)),
                         default="none",
                         help=(
                             "Experimental per-run-index RTKDiag policy. phase10o uses "
@@ -9067,6 +9351,7 @@ def main() -> None:
     internal_diag_rows: list[dict[str, object]] = []
     agg_pass: dict[str, float] = {v.method_label: 0.0 for v in variants}
     agg_total: dict[str, float] = {v.method_label: 0.0 for v in variants}
+    per_run_pcts: dict[str, list[float]] = {v.method_label: [] for v in variants}
 
     for city, run in runs:
         run_dir = args.data_root / city / run
@@ -9549,11 +9834,14 @@ def main() -> None:
                     diag["run"] = run
                     diag["method"] = variant.method_label
                 internal_diag_rows.extend(variant_internal_diag_rows)
-            score = score_ppc2024(
-                np.asarray([p for p in _aligned_positions(full_ref, data["times"], positions)],
-                           dtype=np.float64),
-                np.array([t for _, t in full_ref], dtype=np.float64),
+            honest_est = np.asarray(
+                [p for p in _aligned_positions(full_ref, data["times"], positions)],
+                dtype=np.float64,
             )
+            honest_ref = np.array([t for _, t in full_ref], dtype=np.float64)
+            score = score_ppc2024(honest_est, honest_ref)
+            score_1m = score_ppc2024(honest_est, honest_ref, threshold_m=1.0)
+            score_3m = score_ppc2024(honest_est, honest_ref, threshold_m=3.0)
             segment_est: list[np.ndarray] = []
             segment_ref: list[np.ndarray] = []
             for t_obs, pos_obs in zip(data["times"], positions, strict=True):
@@ -9565,11 +9853,20 @@ def main() -> None:
                 ):
                     segment_est.append(np.asarray(pos_obs[:3], dtype=np.float64))
                     segment_ref.append(np.asarray(ref_obs[:3], dtype=np.float64))
+            segment_est_arr = np.asarray(segment_est, dtype=np.float64)
+            segment_ref_arr = np.asarray(segment_ref, dtype=np.float64)
             segment_score = (
-                score_ppc2024(
-                    np.asarray(segment_est, dtype=np.float64),
-                    np.asarray(segment_ref, dtype=np.float64),
-                )
+                score_ppc2024(segment_est_arr, segment_ref_arr)
+                if segment_est
+                else None
+            )
+            segment_score_1m = (
+                score_ppc2024(segment_est_arr, segment_ref_arr, threshold_m=1.0)
+                if segment_est
+                else None
+            )
+            segment_score_3m = (
+                score_ppc2024(segment_est_arr, segment_ref_arr, threshold_m=3.0)
                 if segment_est
                 else None
             )
@@ -9597,9 +9894,22 @@ def main() -> None:
                 "honest_ppc_pct": float(score.score_pct),
                 "honest_pass_m": float(score.pass_distance_m),
                 "honest_total_m": float(score.total_distance_m),
+                "honest_ppc_1m_pct": float(score_1m.score_pct),
+                "honest_pass_1m_m": float(score_1m.pass_distance_m),
+                "honest_ppc_3m_pct": float(score_3m.score_pct),
+                "honest_pass_3m_m": float(score_3m.pass_distance_m),
                 "segment_ppc_pct": float(segment_score.score_pct) if segment_score is not None else "",
                 "segment_pass_m": float(segment_score.pass_distance_m) if segment_score is not None else "",
                 "segment_total_m": float(segment_score.total_distance_m) if segment_score is not None else "",
+                "segment_ppc_1m_pct": float(segment_score_1m.score_pct) if segment_score_1m is not None else "",
+                "segment_pass_1m_m": float(segment_score_1m.pass_distance_m) if segment_score_1m is not None else "",
+                "segment_ppc_3m_pct": float(segment_score_3m.score_pct) if segment_score_3m is not None else "",
+                "segment_pass_3m_m": float(segment_score_3m.pass_distance_m) if segment_score_3m is not None else "",
+                "segment_fail_3m_epochs": (
+                    int(np.count_nonzero(np.isfinite(segment_score_3m.errors_3d) & (segment_score_3m.errors_3d > 3.0)))
+                    if segment_score_3m is not None
+                    else 0
+                ),
                 "segment_epoch_pass_pct": float(segment_score.epoch_pass_pct) if segment_score is not None else "",
                 "segment_n_epochs": int(segment_score.n_epochs) if segment_score is not None else 0,
                 "ms_per_epoch": float(ms_per_epoch),
@@ -9858,6 +10168,33 @@ def main() -> None:
                 "rtkdiag_candidate_fallback_max_hold_age_s": float(
                     variant.rtkdiag_candidate_fallback_max_hold_age_s
                 ),
+                "rtkdiag_candidate_float_labels": ",".join(
+                    variant.rtkdiag_candidate_float_labels
+                ),
+                "rtkdiag_candidate_float_residual_rms_max": float(
+                    variant.rtkdiag_candidate_float_residual_rms_max
+                ),
+                "rtkdiag_candidate_float_abs_max": float(
+                    variant.rtkdiag_candidate_float_abs_max
+                ),
+                "rtkdiag_candidate_float_min_sats": int(
+                    variant.rtkdiag_candidate_float_min_sats
+                ),
+                "rtkdiag_candidate_status5_labels": ",".join(
+                    variant.rtkdiag_candidate_status5_labels
+                ),
+                "rtkdiag_candidate_status5_tow_windows": str(
+                    variant.rtkdiag_candidate_status5_tow_windows
+                ),
+                "rtkdiag_candidate_status5_max_dt_s": float(
+                    variant.rtkdiag_candidate_status5_max_dt_s
+                ),
+                "rtkdiag_candidate_status5_residual_rms_max": float(
+                    variant.rtkdiag_candidate_status5_residual_rms_max
+                ),
+                "rtkdiag_candidate_status5_min_sats": int(
+                    variant.rtkdiag_candidate_status5_min_sats
+                ),
                 "rtkdiag_candidate_run_index_policy": str(
                     args.rtkdiag_candidate_run_index_policy
                 ),
@@ -10046,6 +10383,11 @@ def main() -> None:
             rows.append(row)
             agg_pass[variant.method_label] += row["honest_pass_m"]
             agg_total[variant.method_label] += row["honest_total_m"]
+            run_total = float(row["honest_total_m"])
+            if run_total > 0.0:
+                per_run_pcts[variant.method_label].append(
+                    100.0 * float(row["honest_pass_m"]) / run_total
+                )
             dd_msg = ""
             if variant.enable_dd_carrier_afv:
                 applied = dd_stats.epochs_applied
@@ -10255,16 +10597,18 @@ def main() -> None:
 
     print()
     print("=" * 72)
-    print("  Honest aggregates (denominator = full rover-epoch arc length;")
-    print("  TURING target is 85.6%, libgnss++ hybrid baseline is 50.91%)")
+    print("  Honest aggregates (OFFICIAL PPC2024 metric = per-run-averaged;")
+    print("  TURING target 85.6% is per-run-averaged; pooled shown for diagnostics)")
     for method in [v.method_label for v in variants]:
         total = agg_total[method]
         if total <= 0:
             continue
-        pct = 100.0 * agg_pass[method] / total
+        pooled_pct = 100.0 * agg_pass[method] / total
+        per_run = per_run_pcts.get(method, [])
+        official_pct = sum(per_run) / len(per_run) if per_run else 0.0
         print(
-            f"  {method:18s}: {pct:5.2f}%   "
-            f"(pass {agg_pass[method]:.0f}m / total {total:.0f}m)"
+            f"  {method:18s}: OFFICIAL {official_pct:5.2f}%  pooled {pooled_pct:5.2f}%   "
+            f"(pass {agg_pass[method]:.0f}m / total {total:.0f}m, n_runs={len(per_run)})"
         )
     print(f"  Saved: {out_csv}")
     if args.write_internal_diagnostics and internal_diag_rows:
