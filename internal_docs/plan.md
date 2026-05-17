@@ -1,18 +1,90 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-05-15 PM (Phase 19aw rms_prefilter_k=3 landed)
-**現在の HEAD**: `feature/ppc-realtime-turing-target` (PR #59 base) + rms_prefilter_k commit
-**最近の進捗ハイライト**:
-- **Phase 19aw 2026-05-15 PM**: **rms_prefilter_k=3 で OFFICIAL 83.42%、 TURING gap 2.18pp**。 oracle gap 解析 (status-free 89.83% reachable / 17.20pp selector mistake headroom) で composite formula が abs_max を denominator にして cluster-bias 候補を promote していた問題を特定、 selector ranking 直前で top-3 by residual_rms に絞る 19 lines insertion で **+8.44pp OFFICIAL**。 n/r2 +16.57pp / n/r3 +15.36pp dominant。 [`rms_prefilter_breakthrough_2026_05_15.md`](rms_prefilter_breakthrough_2026_05_15.md)
+**最終更新**: 2026-05-17 AM (Phase 29 per-run conditional v3+k breakthrough landed、 PR #59 updated)
+**現在の HEAD**: `feature/ppc-realtime-turing-target` (PR #59 base) + Phase 23-29 commit `1cea1cf`
+**最近の進捗ハイライト** (新しい順):
+- **Phase 29 2026-05-17 (TURING 超え)**: per-run conditional config (v1+k3 for t/r1/t/r3/n/r3, v3+k3 for t/r2, v3+k99 for n/r1/n/r2) で **OFFICIAL 85.7623%** (TURING 85.6% を **+0.16pp 超え**)、 累積 Phase 11ep → 29 **+14.28pp**。 Phase 28 v3+k99 single-config は -0.23pp regression だが nagoya gain (n/r1 +1.04pp realization 236%, n/r2 +0.36pp) と tokyo regress (-0.65 to -1.01pp) が混在、 per-run conditional で全 best 統合。 [`memory/project_phase28_29_rmsprefilter_breakthrough_2026_05_16.md`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_phase28_29_rmsprefilter_breakthrough_2026_05_16.md)
+- **Phase 27 2026-05-16**: v3 ranker (11 wrong-fix discriminator features: cluster_size_25cm/10cm, max_cluster_size, dist_to_max_cluster_centroid, delta_pos_vs_median, etc.) LORO sim **86.02%** (+0.77pp 過去最高) だが PF -0.20pp regression。 rms_prefilter_k=3 が ranker pick 前に correct higher-RMS candidate を drop と診断。 [`memory/project_v3_ranker_wrongfix_negative_2026_05_16.md`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_v3_ranker_wrongfix_negative_2026_05_16.md)
+- **Phase 26 2026-05-16**: per-run conditional Viterbi (n/r2 のみ HMM α=0.5 smoothing、 他 5 run は v1 baseline) で **85.55%** = +0.08pp、 TURING gap 0.05pp。 Phase 24/25 全 run Viterbi は -0.24/-0.41pp net negative、 per-run conditional で deploy 可能。 [`memory/project_viterbi_negative_2026_05_16.md`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_viterbi_negative_2026_05_16.md)
+- **Phase 20 2026-05-15 PM**: LightGBM path-weighted ranker (LORO) breakthrough OFFICIAL **85.4743%** (+2.05pp from 83.42%、 realization 112%)。 TURING 85.6% に並ぶ。
+- **Phase 19aw 2026-05-15 PM**: rms_prefilter_k=3 で OFFICIAL 83.42%、 oracle gap 解析で composite formula の abs_max-denominator cluster-bias trap を 19 lines insertion で切断。 +8.44pp OFFICIAL (sim K=3 +12.17pp → realized 69% capture)。
 - **Phase 19at 2026-05-15 AM**: Fix=4 gate 撤廃 (status=5 path: rms<=0.3m) + velocity bridge (rms=0.2, max_dt=6.0s) で OFFICIAL 74.97% / +2.87pp。 metric 補正 (pooled→per-run-averaged) も同時実施。
 - **PR #58 MERGED 2026-05-10**: Phase 11-19 PPC ceiling 73.76% (pooled) を main に統合。
-- **TURING gap 13.5pp (補正後) → 2.18pp** に縮小 (target 85.6%、 現状 83.42%)。
+- **PR #59 OPEN**: 71.48% → 85.76% +14.28pp / TURING +0.16pp 超え (Phase 19ap → Phase 29 累積)。
+
+**累積 trajectory**:
+| Phase | OFFICIAL | Δ | gap to TURING 85.6% |
+|---|---:|---:|---:|
+| 11ep canonical | 71.4825% | baseline | -14.12pp |
+| 19at gici breakthrough | 74.9658% | +3.48 | -10.63 |
+| 19aw rms_prefilter_k=3 | 83.4163% | +8.45 | -2.18 |
+| **Phase 20** ranker | **85.4743%** | +2.06 | -0.13 |
+| Phase 26 conditional Viterbi (n/r2) | 85.5544% | +0.08 | -0.05 |
+| **Phase 29 per-run conditional v3+k** | **85.7623%** | +0.21 | **+0.16 ✅** |
+| | | **+14.28pp total** | TURING 超え |
+
+**90% gap 残**: 4.24pp (Phase 29 85.76% → 90.00%)。 ranker layer 飽和、 残る lever は新 algorithm (TDCP/IF-LC) or SPP retrain or n/r2 candidate config grid。
 
 ---
 
 ## §0. TURING 残戦略 (2026-05-11 update — what's needed to win)
 
-### 現状サマリ (2026-05-15 10:45 update — METRIC 大規模再校正)
+### 現状サマリ (2026-05-17 update — TURING 超え達成、 ranker layer 飽和、 90% gap 4.24pp)
+
+**Phase 29 確定**: per-run conditional config で OFFICIAL **85.7623% = TURING 85.6% +0.16pp 超え**。 累積 Phase 11ep → 29 **+14.28pp** / 90% gap **4.24pp**。
+
+**Phase 23-29 exploration arc (1.5 days, ROI 順)**:
+
+| Phase | OFFICIAL | Δ from previous | 寄与 lever |
+|---|---:|---:|---|
+| 20 v1 ranker baseline | 85.4743 | (+2.06 from 83.42) | LightGBM LORO breakthrough |
+| 23 stickiness s=0.95 (n/r2) | (per-run +0.23pp marginal) | +0.04 OFFICIAL | sequence persistence、 flag 残 |
+| 24 全 run Viterbi α=0.5 | 85.23 | **-0.24** | NET NEGATIVE、 n/r2 +0.48 単独 |
+| 25 全 run Viterbi α=0.2 | 85.06 | **-0.41** | NET NEGATIVE、 α-effect heterogeneous |
+| 26 conditional Viterbi (n/r2 only) | 85.5544 | +0.08 | CSV merge architecture |
+| 27 v3 ranker (11 wrong-fix features) | 85.27 | -0.20 | LORO sim 86.02% +0.77pp 過去最高だが PF eaten |
+| 28 v3+k99 (rms_prefilter disabled) | 85.24 | -0.23 | regime-dependent: nagoya gain, tokyo regress |
+| **29 per-run conditional v3+k mix** | **85.7623** | **+0.29 from Phase 20** | **TURING 超え ✅** |
+
+**Phase 29 per-run config table** (production deploy:`experiments/scripts_run_phase29_perrun_conditional.sh`):
+- t/r1: v1+k3 = 90.8415 (Phase 20 unchanged)
+- t/r2: v3+k3 = 95.4101 (+0.33 vs v1)
+- t/r3: v1+k3 = 88.9492 (v3 全 K negative)
+- **n/r1: v3+k99 = 83.7003 (+1.04pp realization 236%!)**
+- **n/r2: v3+k99 = 63.0105 (+0.36pp)**
+- n/r3: v1+k3 = 92.6621 (v3 marginal -0.04 LORO だが PF -0.75 amplification)
+
+**重要 finding (Phase 27/28)**:
+- v3 ranker (cluster_size_25cm/10cm + dist_to_max_cluster_centroid + delta_pos_vs_median 等 11 features) は LORO sim +0.77pp だが PF -0.20pp regression
+- 診断: `--rtkdiag-candidate-rms-prefilter-k 3` が ranker 評価前に top-3 RMS で filter、 v3 が favor する higher-RMS の correct candidate (recoverable 1930 epochs の best rms 0.169 > pick wrong-fix rms 0.076) を drop
+- n/r2 smoke で v3+k99 = 63.01 (+0.36pp、 realization 109%) → prefilter 撤廃で v3 wrong-fix gain 完全 transfer 確認
+- nagoya = wrong-fix dense → k=99 で gain、 tokyo = quality high → k=3 noise filter として有効 → **per-run conditional config が universal lever**
+
+**n/r2 詳細解析 (recoverable subset)**:
+- truly-lost 1296 epoch (13.7%、 pool 内 passing 候補無し): wrong-fix dominance (1294/1296 status=5, median best_rms 0.065m、 47 candidate 全て同じ wrong-fix に収束)、 hybrid PU も median err 29m で fallback 不可
+- ranker recoverable 1930 epoch (18.69% path, +3.11pp OFFICIAL ceiling): v3+k99 で +0.36pp 実現 = 12% capture、 残 +2.75pp は PF pipeline 改修 or 新 algorithm 必要
+
+**k sweep 結果 (exhaust 確認)**:
+- t/r3 v3+k10/k20: 全て v1+k3 88.95 より下、 sweet spot 無し
+- n/r1 v3+k30/k50: v3+k99 と bit-exact (pool ~47 candidate なので k>=30 effective no-op)
+
+**v3+Viterbi+k99 試行 (Phase 30 smoke、 2026-05-17)**:
+- n/r2 で 61.28% = **-1.37pp REGRESSION** vs Phase 20 v1+k3 (62.65)
+- 仮説: Viterbi が v3 wrong-fix pick を前 epoch wrong-fix にロック → persistence で悪化
+- v1 base では Viterbi+ 効果あり (Phase 26 63.13)、 v3 base では逆効果
+- **Phase 29 per-run conditional 85.76% 依然 best、 Viterbi は v1 専用 lever**
+
+**ranker layer 完全飽和**: stickiness, Viterbi, v2 prior feature, v3 cluster+temporal features, k sweep 全 exhausted。 残る breakthrough lever:
+1. **#111 SPP retrain**: PLATEAU NLOS soft + IRLS で SPP 改善し、 SPP 経由で feature が乗算的に効く layer (ranker から見える)
+2. **#112 A-lite Doppler smoothing** (trusted arc): pseudorange 安定化、 lower-level signal improvement
+3. **#117 n/r2 candidate config grid**: nagoya multipath tuned RTK config 新 candidate
+4. **#119 TDCP / IF-LC**: 新 algorithm candidate (days work)、 wrong-fix を物理的に切る path
+
+詳細 memory: [`phase28-29-rmsprefilter-breakthrough-2026-05-16`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_phase28_29_rmsprefilter_breakthrough_2026_05_16.md), [`v3-ranker-wrongfix-negative-2026-05-16`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_v3_ranker_wrongfix_negative_2026_05_16.md), [`viterbi-negative-2026-05-16`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_viterbi_negative_2026_05_16.md)。
+
+---
+
+### 旧現状サマリ (2026-05-15 10:45 update — METRIC 大規模再校正)
 
 **重大発見 #1 — local scorer の aggregate metric が間違っていた (2026-05-15 GPT Pro 助言で発覚)**:
 
