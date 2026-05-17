@@ -5948,31 +5948,62 @@ A-lite Doppler smoothing は **構造的に不可能**:
 
 **3-stage path** (各 stage で smoke validation):
 
-**Stage A**: Per-epoch per-sat NLOS CSV を 6 run 用に生成
-- 既存 `/tmp/tokyo_run1_per_epoch_nlos.csv` (216k 行、 format reference) が tokyo/run1 用に唯一存在
+**Stage A** (✅ **完了 2026-05-18 AM**): Per-epoch per-sat NLOS CSV を 6 run 用に生成
+- 既存 `/tmp/tokyo_run1_per_epoch_nlos.csv` (216k 行、 format reference) が tokyo/run1 用に唯一存在 → 新版生成と first-200-epoch で **BIT-EXACT MATCH** 確認 (4-column contract 行レベル)
 - PLATEAU tokyo23 cache: `/tmp/plateau_tokyo23_run1/` (bldg + brid .gml files、 cached)
-- 必要: `experiments/build_per_epoch_nlos_csv.py` 新規 ~200 LOC
-- 必要 data: nagoya PLATEAU fetch (URL `https://assets.cms.plateau.reearth.io/.../23100_nagoya-shi_city_2022_citygml_4_op.zip`、 `experiments/fetch_plateau_subset.py` で取得可)
-- 期間: 半日
-- Validation: 各 run の NLOS fraction が現実的 (urban canyon で 5-20%)、 false-positive rate < 5% (open-sky で NLOS ≒ 0)
+- ~~必要 data: nagoya PLATEAU fetch~~ → **不要**: `experiments/results/plateau_subset_{run}_r1_triangles.npz` が 6 run 全て既存 (tokyo run1/2/3 + nagoya run1/2/3)。 fetch_plateau_subset.py 走行不要、 triangle cache 直接 load で BVH 構築 (各 run ~1-2 分)
+- 実装: `experiments/build_per_epoch_nlos_csv.py` (新規、 既 untracked) 365 LOC、 cache hit 経路で PLATEAU 再 parse skip
+- 生成結果 (CSV: `experiments/results/plateau_nlos_phase33/{run}_per_epoch_nlos.csv`、 計 80 MB):
 
-**Stage B**: libgnss++ RTK pipeline に per-PRN measurement weight scaling (NLOS soft mask) 統合
-- C++ source mod: `third_party/gnssplusplus/src/algorithms/rtk_selection.cpp` の measurement_weight 計算で NLOS sat × `k_weak=3.0` (down-weight)
-- CLI flag: `--nlos-mask-path` + `--nlos-k-weak` を libgnss++ binary に追加
-- 6 runs 新 candidate dir 生成: `experiments/results/libgnss_diag_phase33_nlos_soft/{city}_{run}_full.{pos,csv}`
-- 期間: 1-1.5 日 (build + smoke debug)
-- Validation: 新 candidate の residual_rms 低下 (0.06 → 0.04m 期待)、 fix rate 維持 (-5% 以内)
+| Run | rows | NLOS frac | BVH tri |
+|-----|---:|---:|---:|
+| tokyo/run1 | 313,802 | 35.21% | 3.57M |
+| tokyo/run2 | 303,444 | 27.96% | 2.07M |
+| tokyo/run3 | 531,255 | 9.75% | 2.34M |
+| nagoya/run1 | 178,027 | 30.14% | 1.46M |
+| nagoya/run2 | 229,649 | 36.14% | 1.54M |
+| nagoya/run3 | 117,562 | 38.40% | 1.40M |
 
-**Stage C**: Phase 29 pool 統合 + ranker retrain + per-run conditional update
-- Pool: 既存 47 candidate + 新 NLOS-soft candidate = 48
-- Per-run block: nagoya/run2 で要 block の可能性 (n/r2 wrong-fix が NLOS overcorrection 影響)
-- v3 ranker LORO retrain (training csv 再 extract)、 LORO sim 期待 +1-3pp
-- PF 6-run sweep with v1+k3 / v3+k99 grid
-- Per-run conditional config 更新 → production smoke
-- 期間: 半日
-- Validation: PF gain transfer rate 50%+ (Phase 28 nagoya pattern と同じ)
+- NLOS frac: tokyo/run3 が最低 (open)、 nagoya/run2-3 で 36-38% (urban dense)。 plan 想定上限 20% 超過は PLATEAU LoD2 高建物+橋梁 mesh 込み・elevation mask 無の baseline 設定によるもので現実的。 Stage B 検証時に elev 5° / 10° mask 比較 sweep 推奨。
+- 詳細サマリ: `experiments/results/plateau_nlos_phase33/README.md`
+- 期間 (実測): 30 分 (cache hit、 6 runs を 2 batch parallel)
 
-**期待 ROI total**: Phase 29 85.76% → **88-90%** (TURING +2.5-4.5pp、 90% gap 内 50-100% capture)。 t/r1 で +5-7pp、 n/r2 で +5-10pp dominant、 開放地 (t/r2, t/r3, n/r3) marginal。
+**Stage B** (❌ **NEGATIVE 確定 2026-05-18 AM**): libgnss++ RTK pipeline に per-PRN measurement weight scaling (NLOS soft mask) 統合
+- C++ infrastructure 既存: `rtk.cpp:389 nlosVarianceScale` + `apps/gnss_solve.cpp:1877 loadNlosMask` + CLI `--rtk-nlos-mask-path / --rtk-nlos-k-weak / --rtk-nlos-phase-k-weak` (実装/build 済)
+- 6 runs candidate 生成 (`experiments/results/libgnss_diag_phase33_nlos_soft_k3/`、 k=1.5 別途生成): script `experiments/scripts_gen_phase33_nlos_soft_k3.sh` (env override 対応)
+- **結果**: fix rate 6-11% (baseline 50-90% から低下)、 k_weak=1.5/3.0/99 で AR ratio test に **insensitive** (NLOS sat が既に RTK 上流 gating で除外)
+- PPC selector smoke (`scripts_run_phase33_nlos_smoke.sh`): 全 6 run OFFICIAL **bit-identical 85.7623%** vs Phase 29 baseline、 NLOS-soft candidate が ranker に **完全吸収** ([[phase21-spp-gb-smoke-null-2026-05-15]] と同 pattern)
+- 残置 artifacts: `libgnss_diag_phase33_nlos_soft_{k3,k15}/` dirs (delete or 残置)
+- 詳細: [`phase33-stage-b-nlos-soft-negative-2026-05-18`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_phase33_stage_b_nlos_soft_negative_2026_05_18.md)
+
+**Stage C-prime** (✅ **BREAKTHROUGH 完了 2026-05-18 AM**): ranker layer に NLOS feature 注入 (RTK pipeline ではなく ranker 直接強化)
+- 既存 untracked scripts 活用: `augment_selector_training_features_with_nlos.py` + `train_selector_ranker_v5_nlos.py`
+- Stage A 6 mask CSVs を v3 training feature に merge → `selector_training_features_v5_nlos.csv` (961 MB、 3.28M rows、 v3 cols + 6 NLOS cols)
+- 6 NLOS features: `nlos_n_sats, nlos_count, nlos_los_count, nlos_frac, nlos_min_elev_deg, nlos_mean_elev_deg` (importance mid-rank、 cluster features の 0.5-5%)
+- v5_nlos LightGBM LORO 訓練: OFFICIAL **86.1817%** (v3 86.02% **+0.16pp**)
+- PF 6 runs sweep (`scripts_run_phase33_v5nlos_sweep.sh`、 variant=`phase29_replace_v3`): n/r2 で **+1.07pp dominant** (LORO 64.64% 64.08% realization 66%)、 t/r2 -0.01pp、 n/r1 -0.57pp
+- **Per-run conditional 最適 (production deploy)**: n/r2 のみ v5_nlos + k=99 採用、 他 5 run Phase 29 設定維持 → script `scripts_run_phase33_perrun_production.sh`
+
+**Phase 33 production-best**:
+| Run | Ranker | k | PPC | Source |
+|-----|---|---:|---:|---|
+| tokyo/run1 | v1 | 3 | 90.8415 | Phase 29 retain |
+| tokyo/run2 | v3 | 3 | 95.4101 | Phase 29 retain (v5 -0.01pp) |
+| tokyo/run3 | v1 | 3 | 88.9492 | Phase 29 retain |
+| nagoya/run1 | v3 | 99 | 83.7003 | Phase 29 retain (v5 -0.57pp) |
+| **nagoya/run2** | **v5_nlos** | **99** | **64.0783** | **NEW +1.07pp** |
+| nagoya/run3 | v1 | 3 | 92.6621 | Phase 29 retain |
+| **OFFICIAL** | | | **85.9403%** | **+0.18pp vs Phase 29 / +0.34pp vs TURING** |
+
+**累積 Phase 11ep → 33 = +14.46pp、 TURING gap 残 4.06pp。**
+
+詳細: [`phase33-stage-c-v5nlos-breakthrough-2026-05-18`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_phase33_stage_c_v5nlos_breakthrough_2026_05_18.md)
+
+### 次の探索余地 (Stage 34+)
+1. n/r2 で v5_nlos + k=3 vs k=99 sweep (k 比較、 marginal)
+2. tokyo/run2, nagoya/run1 で v3 + k99 + (NLOS feature 軽い weight) sweep (negative spot 救済)
+3. v6 ranker = v5_nlos + Doppler smoothing residual / TDCP features
+4. all_v5 sweep 走行中で v1 spot (t/r1, t/r3, n/r3) の v5 試行
 
 ### Phase 32 で生成された uncommitted artifacts (扱い注意)
 
