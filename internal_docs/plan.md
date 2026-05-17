@@ -1,8 +1,11 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-05-17 AM (Phase 29 per-run conditional v3+k breakthrough landed、 PR #59 updated)
-**現在の HEAD**: `feature/ppc-realtime-turing-target` (PR #59 base) + Phase 23-29 commit `1cea1cf`
+**最終更新**: 2026-05-17 PM (Phase 32 A-lite Doppler smoothing negative confirmed、 §0 #2 architectural pivot 開始準備)
+**現在の HEAD**: `feature/ppc-realtime-turing-target` (PR #59 base) + Phase 23-29 commit `1cea1cf` (Phase 30/31 commit `59844ab`、 Phase 32 はまだ uncommitted)
+**Codex 引継ぎ section**: 末尾 [Codex 引継ぎ (2026-05-17 PM)](#codex-引継ぎ-2026-05-17-pm) 参照
+
 **最近の進捗ハイライト** (新しい順):
+- **Phase 32 2026-05-17 PM (NEGATIVE 確認、 構造的限界)**: A-lite Doppler smoothing + atmosphere correction + MultiGNSSSolver で SPP candidate を生成 (`experiments/build_hatch_smoothed_spp_candidate_v2.py`)、 tokyo/run1 で **median 17.6m** まで改善 (raw 40m → +atmo 25m → +LOS-proxy 17.6m) だが **mean 1864m / p95 167m** = NLOS multipath 主因。 RTK candidate 1m と 17 倍差で ranker pick rate = 0% 確定。 結論: **PR-domain SPP corrections 全 exhausted、 NLOS map-aided rejection (§0 #2) のみ残る lever**。 詳細 [§0.32 Phase 32 結果](#032-phase-32-a-lite-doppler-smoothing-2026-05-17-pm-negative-構造的限界).
 - **Phase 29 2026-05-17 (TURING 超え)**: per-run conditional config (v1+k3 for t/r1/t/r3/n/r3, v3+k3 for t/r2, v3+k99 for n/r1/n/r2) で **OFFICIAL 85.7623%** (TURING 85.6% を **+0.16pp 超え**)、 累積 Phase 11ep → 29 **+14.28pp**。 Phase 28 v3+k99 single-config は -0.23pp regression だが nagoya gain (n/r1 +1.04pp realization 236%, n/r2 +0.36pp) と tokyo regress (-0.65 to -1.01pp) が混在、 per-run conditional で全 best 統合。 [`memory/project_phase28_29_rmsprefilter_breakthrough_2026_05_16.md`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_phase28_29_rmsprefilter_breakthrough_2026_05_16.md)
 - **Phase 27 2026-05-16**: v3 ranker (11 wrong-fix discriminator features: cluster_size_25cm/10cm, max_cluster_size, dist_to_max_cluster_centroid, delta_pos_vs_median, etc.) LORO sim **86.02%** (+0.77pp 過去最高) だが PF -0.20pp regression。 rms_prefilter_k=3 が ranker pick 前に correct higher-RMS candidate を drop と診断。 [`memory/project_v3_ranker_wrongfix_negative_2026_05_16.md`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_v3_ranker_wrongfix_negative_2026_05_16.md)
 - **Phase 26 2026-05-16**: per-run conditional Viterbi (n/r2 のみ HMM α=0.5 smoothing、 他 5 run は v1 baseline) で **85.55%** = +0.08pp、 TURING gap 0.05pp。 Phase 24/25 全 run Viterbi は -0.24/-0.41pp net negative、 per-run conditional で deploy 可能。 [`memory/project_viterbi_negative_2026_05_16.md`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_viterbi_negative_2026_05_16.md)
@@ -23,7 +26,9 @@
 | **Phase 29 per-run conditional v3+k** | **85.7623%** | +0.21 | **+0.16 ✅** |
 | | | **+14.28pp total** | TURING 超え |
 
-**90% gap 残**: 4.24pp (Phase 29 85.76% → 90.00%)。 ranker layer 飽和、 残る lever は新 algorithm (TDCP/IF-LC) or SPP retrain or n/r2 candidate config grid。
+**90% gap 残**: 4.24pp (Phase 29 85.76% → 90.00%)。 ranker layer + PR-domain SPP corrections **全 exhausted**、 残る lever は **§0 #2 3D map-aided NLOS rejection** (PLATEAU CityGML + BVH ray tracing を PPC RTK pipeline に統合)。 architectural pivot、 weeks of work。 期待 +2-4pp aggregate / +5-10pp on tokyo/run1。
+
+**Phase 32 確定 (2026-05-17 PM)**: A-lite Doppler smoothing は **構造的に不可能** — SPP best case median 17.6m vs RTK 1m = 17 倍差、 ranker pick rate 0%。 詳細下記。
 
 ---
 
@@ -75,12 +80,62 @@
 - **Phase 29 per-run conditional 85.76% 依然 best、 Viterbi は v1 専用 lever**
 
 **ranker layer 完全飽和**: stickiness, Viterbi, v2 prior feature, v3 cluster+temporal features, k sweep 全 exhausted。 残る breakthrough lever:
-1. **#111 SPP retrain**: PLATEAU NLOS soft + IRLS で SPP 改善し、 SPP 経由で feature が乗算的に効く layer (ranker から見える)
-2. **#112 A-lite Doppler smoothing** (trusted arc): pseudorange 安定化、 lower-level signal improvement
-3. **#117 n/r2 candidate config grid**: nagoya multipath tuned RTK config 新 candidate
-4. **#119 TDCP / IF-LC**: 新 algorithm candidate (days work)、 wrong-fix を物理的に切る path
+1. ~~**#111 SPP retrain**~~: Phase 32 で構造的不可能と確定 (下記)
+2. ~~**#112 A-lite Doppler smoothing**~~: Phase 32 で実装 + 検証、 SPP median 17.6m まで改善するも NLOS bound で頭打ち、 **NEGATIVE 確定**
+3. ~~**#117 n/r2 candidate config grid**~~: Phase 31 v4 pool expand で -0.27pp regression、 既存 pool は飽和
+4. ~~**#119 TDCP / IF-LC**~~: 単独では NLOS bound 同様、 architectural 別 path
+5. **§0 #2 PLATEAU NLOS rejection on RTK pipeline** ← **次の唯一の breakthrough path、 codex 引継ぎ対象**
 
 詳細 memory: [`phase28-29-rmsprefilter-breakthrough-2026-05-16`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_phase28_29_rmsprefilter_breakthrough_2026_05_16.md), [`v3-ranker-wrongfix-negative-2026-05-16`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_v3_ranker_wrongfix_negative_2026_05_16.md), [`viterbi-negative-2026-05-16`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_viterbi_negative_2026_05_16.md)。
+
+---
+
+### §0.32 Phase 32 A-lite Doppler smoothing (2026-05-17 PM、 NEGATIVE 構造的限界)
+
+**目的**: trusted-arc Hatch filter で carrier-smoothed PR を計算、 SPP 候補を生成して PPC candidate pool に追加、 ranker pick で wrong-fix を破る (#112 path)。
+
+**実装** (`experiments/build_hatch_smoothed_spp_candidate.py` + `_v2.py`、 合計 ~400 LOC):
+- Trusted arc 検出: 連続 CP (no NaN gap > 3 epochs)、 inter-sat-median 差分 < 0.5m → arc 認定 (min 30 epochs)
+- Hatch filter: `P_smooth[k] = (1/n)*P[k] + ((n-1)/n)*(P_smooth[k-1] + (L[k] - L[k-1]))`、 smoothing_const N=100
+- v2 追加: Klobuchar iono + Saastamoinen tropo + Sagnac (`correct_pseudoranges`) + `MultiGNSSSolver` (ISB 正規)
+- v2 LOS-only mode (`--smoothed-sats-only`): smoothed sats = 連続 CP = stable LOS proxy として NLOS filter 代用
+
+**tokyo/run1 単独 smoke 結果**:
+
+| variant | n_valid | median | mean | p95 | pass<0.5m |
+|-|-|-|-|-|-|
+| v1 raw SPP (no atmo, sat-mean init) | 0/11676 | - | - | - | failed |
+| v1 init=origin (G+E+J) | 11922/11923 | 41.99 m | 52 m | 100 m | 0.00% |
+| v1 GPS-only | 11060/11676 | 39.72 m | 52 m | 97 m | 0.00% |
+| v2 atmo only (no Hatch) | 11921/11923 | **25.17 m** | 1703 m | 220 m | 0.03% |
+| v2 atmo + Hatch | 11921/11923 | 25.17 m | 1703 m | 221 m | 0.04% |
+| v2 atmo + Hatch + LOS-only | 11882/11923 | **17.61 m** | 1865 m | 167 m | 0.04% |
+| `libgnss_rtk_pos_v5` (RTK float baseline) | 11308 | **1.13 m** | 16 m | 55 m | 42.14% |
+
+**重要 finding**:
+1. **Atmosphere correction (Klobuchar + Saastamoinen) = -14.5m median improvement** (40 → 25m)。 PPC SPP では atmo 補正が dominant gain。
+2. **Hatch smoothing on top of atmo = ~0m improvement** (25.17 → 25.17m bit-exact)。 Trusted arc 内の random PR noise smoothing は urban canyon error には効かない (NLOS-bias dominant)。
+3. **LOS-only mode (smoothed sats only) = -7.5m median additional gain** (25 → 17.6m)。 連続 CP sats = stable tracking = LOS proxy として **NLOS filter 代用** に効くが、 epoch によっては smoothed sats < 5 で fallback、 catastrophic geometry epoch 残る (mean 1865m)。
+4. **構造的限界**: best case SPP median 17.6m、 RTK 1m と **17 倍差**、 ranker は `residual_rms` dominant feature で pick rate = 0% 確定。
+5. **n/r2 1296 truly-lost epoch も SPP では救えない**: 既存 hybrid_v5 (RTK float) でも median 29m で fail 確認済、 SPP の 17.6m も同じく NLOS-dominated epoch には対応不能。
+
+**結論**: PR-domain corrections (atmosphere, Hatch smoothing, IRLS, NLOS soft weight) は **all exhausted**、 これ以上 RTK 1m に近づける gain 余地なし。 残る lever は geometry-based NLOS rejection only (§0 #2)。
+
+**生成 artifacts** (uncommitted):
+- `experiments/build_hatch_smoothed_spp_candidate.py` (v1)
+- `experiments/build_hatch_smoothed_spp_candidate_v2.py` (v2 atmo+MultiGNSS+LOS-only)
+- `experiments/eval_hatch_spp_candidate.py` (error vs reference truth)
+- `experiments/debug_spp_on_ppc.py` (SPP diagnostic)
+- `experiments/scripts_smoke_hatch_alite_tr1.sh` (pool 統合 smoke、 未実行 — dead path 確定で skip)
+- `experiments/scripts_smoke_hatch_v2_tr1.sh` (v2 pool 統合 smoke、 未実行 — dead path 確定で skip)
+- `experiments/scripts_gen_hatch_alite_6runs.sh` (6 runs parallel generation、 未実行)
+- `experiments/results/libgnss_hatch_alite_v1/tokyo_run1_full.{pos,csv}` (40m median)
+- `experiments/results/libgnss_hatch_alite_v1_gps/tokyo_run1_full.{pos,csv}` (40m median, GPS-only)
+- `experiments/results/libgnss_hatch_alite_v2/tokyo_run1_full.{pos,csv}` (25m median, atmo+Hatch)
+- `experiments/results/libgnss_hatch_alite_v2_skip/tokyo_run1_full.{pos,csv}` (25m median, atmo only)
+- `experiments/results/libgnss_hatch_alite_v2_los/tokyo_run1_full.{pos,csv}` (17.6m median, LOS-only)
+
+**評価 cost**: 1 generation per tokyo/run1 = ~5min (RINEX parsing 主)、 6 runs ≈ 30min。 Pool smoke = ~5min/run、 6 runs ≈ 30min。 計 ~1h total、 でも dead path で skip。
 
 ---
 
@@ -226,22 +281,78 @@ GPT Pro の n/r2 攻略 priority がさらに正当化。
 
 **リスク**: Galileo E5a 観測が PPC dataset で sparse な場合 effective epoch 少、 +pp 縮小
 
-#### 2. 3D map-aided NLOS rejection (~1-2 週、 期待 +2-4pp、 既存 infrastructure 活用度高)
+#### 2. 3D map-aided NLOS rejection (~2-3 週、 期待 +2-4pp、 既存 infrastructure 活用度高) ← **2026-05-17 codex 引継ぎ対象 (Phase 32 後の pivot)**
 
-**現状**: PR #55 で BVH ray tracing module 投入済 (`python/gnss_gpu/bvh.py`, `src/raytrace/`, `_bvh.so`)、 PPC pipeline 未統合。 PPC urban canyon (特に tokyo/run1) の主要 error 源 = NLOS misfix。
+**現状 (2026-05-17 PM 更新)**:
+- BVH ray tracing module 投入済 (`python/gnss_gpu/bvh.py` `BVHAccelerator`, `python/gnss_gpu/raytrace.py` `BuildingModel`, `_bvh.so`/`_raytrace.so` build 済)
+- PLATEAU CityGML loader 完成 (`python/gnss_gpu/io/plateau.py` `PlateauLoader`、 EGM96 geoid correction 内蔵)
+- PLATEAU subset fetcher 完成 (`experiments/fetch_plateau_subset.py` HTTP range request)
+- PLATEAU 城市 mesh data **cached locally**: `/tmp/plateau_tokyo23_run1/` 配下に `.gml` files (bldg + brid)、 tokyo/run1 用既に取得済 (= NLOS CSV 生成済 `/tmp/tokyo_run1_per_epoch_nlos.csv`)
+- 既存 SPP 経由 NLOS soft-mask hook: `exp_ppc_ctrbpf_fgo.py:9145-9148 --spp-nlos-mask-path` (Phase 21 で smoke、 ranker 完全吸収で gain なし)
+- 既存 PF3D BVH 統合: PR #55 で `pf3d_smoke_nlos_stats.csv`、 `per_particle_nlos_phase1_*` 実装、 PPC 用 wiring 未統合
 
-**必要**:
-- City model 取得 (PPC 撮影地: Tokyo Odaiba、 Nagoya 街区) — 国土地理院 3D 都市モデル / OpenStreetMap building footprints + Manhattan-world height extrusion で代用可
-- Per-particle NLOS gate: 各 particle の hypothesized position から sat LOS → BVH ray cast → block 判定 → likelihood weight = 0 or down-weighted
-- 既存 `exp_ppc_ctrbpf_fgo.py` の per-particle PR likelihood に hook 追加
+**過去 attempt (negative、 記録のみ)**:
+- 2026-05-14 BVH hard-gating on PF3D: all configs negative (-63m regression on tokyo/run1)、 PLATEAU 0/301 NLOS detect (coverage 不足) + 30% sats hard-gate で PDOP catastrophic 劣化 — **hard gate ではなく soft down-weight が必須**
+- 2026-05-14 ML NLOS classifier from raw features: AUC 0.56 cross-run (chance level) — pseudo-label が residual-derived で atmosphere-confounded、 truly NLOS label が PPC では作れない
+- 2026-05-15 SPP G+B (PLATEAU NLOS soft + IRLS) on tokyo/run1: 4 variants 全て baseline 90.84% bit-identical = **ranker 完全吸収** (Phase 21、 [`spp-gb-smoke-null-2026-05-15`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_spp_gb_smoke_null_2026_05_15.md))
 
-**dataset 適合**: tokyo/run1 (62% PF base → +5-10pp expected from NLOS gate)、 n/r1 街区 (+3-5pp)。 開放地 (t/r2, t/r3, n/r3) は marginal。
+**Phase 32 後の新 insight (2026-05-17 PM)**:
+- PR-domain NLOS rejection (SPP weight 調整) は **ranker pick layer で吸収される** ことが Phase 21 で確定済
+- **Position-domain NLOS rejection (RTK pipeline 内 measurement-level reject) が必須**: libgnss++ RTK の residual gating layer で NLOS sat を pre-reject、 fix candidate の residual_rms 自体を改善
+- これにより ranker が見る candidate diagnostics (residual_rms, abs_max) が変化、 wrong-fix candidate が pool から減少する path
 
-**期待 PF +pp**: +2-4pp aggregate (t/r1 で +5pp dominant、 他 +0.5-2pp)、 Phase 19d → **75-77%**
+**新 実装方針 (codex 引継ぎ targets)**:
 
-**実装場所**: `experiments/exp_ppc_ctrbpf_fgo.py` per-particle update loop に BVH NLOS gate、 `experiments/build_ppc_city_model.py` 新規作成
+1. **NLOS CSV 6 run 生成 pipeline**:
+   - 既存 `experiments/scan_ppc_plateau_segments.py` の segment-NLOS-fraction 出力を per-epoch per-sat `tow,epoch_idx,prn,is_los,sat_x,sat_y,sat_z` 形式に拡張
+   - 既存 tokyo/run1 用 NLOS CSV (`/tmp/tokyo_run1_per_epoch_nlos.csv`、 216k 行) が format reference
+   - PLATEAU tokyo23 + nagoya CityGML を `experiments/fetch_plateau_subset.py` で取得 (cache 既存)
+   - 各 run の reference trajectory に沿って per-epoch per-sat LOS/NLOS 判定 (BVH + EGM96 corrected building heights)
+   - 出力: `/tmp/{city}_{run}_per_epoch_nlos.csv` × 6
 
-**リスク**: City model accuracy 不足で false-positive NLOS rejection → fix 減
+2. **libgnss++ RTK pipeline に NLOS soft-mask 統合** (C++ source mod):
+   - `third_party/gnssplusplus/src/algorithms/rtk_selection.cpp` / `rtk_update.cpp` で per-sat per-epoch NLOS mask を CLI flag 経由で受け取る
+   - NLOS sat の measurement weight × `k_weak=3.0` (soft、 完全 reject ではなく down-weight)
+   - 6 run 用 candidate dir 新規生成: `experiments/results/libgnss_diag_phase22_nlos_soft/`
+   - 期待: residual_rms 0.06m → 0.04m、 abs_max 0.05m → 0.03m (NLOS sat が outlier だった epoch 限定)
+   - リスク: libgnss++ build 時間 (~10 min)、 LAMBDA AR pass 率変化で per-run regression 可能性
+
+3. **Pool 統合 + ranker 再評価**:
+   - 新 NLOS-soft candidate を Phase 29 pool に追加 (label `xd_nlos_soft`)
+   - per-run block 必要 (NLOS overcorrection で n/r2 で regression する可能性、 history pattern)
+   - v3 ranker LORO retrain (training csv 再 extract)
+   - PF 6-run sweep with v1+k3 / v3+k3 / v3+k99 grid
+   - Phase 29 per-run conditional config に組み込み
+
+**dataset 適合**: tokyo/run1 (Odaiba 街区、 62% PF base → +5-10pp expected from NLOS gate)、 n/r1 街区 (+3-5pp)、 **n/r2 (44% PF base → +5-15pp expected** — NLOS multipath dominant)、 開放地 (t/r2, t/r3, n/r3) は marginal。
+
+**期待 PF +pp**: +2-4pp aggregate (t/r1 で +5-7pp、 n/r2 で +5-10pp dominant)、 Phase 29 85.76% → **88-90%**、 90% target 射程内。
+
+**主要リスク**:
+- City model height accuracy 不足で false-positive NLOS → fix 減 (Phase 19bb で観測済 -1.5pp on tokyo/run1)
+- libgnss++ side mod が AR pipeline と干渉 (LAMBDA ratio test 変化 → fix candidate 構成変化)
+- PLATEAU が tokyo23 / nagoya 別 ZIP source、 cross-city orchestration 必要
+- nagoya PLATEAU subset 未取得 (tokyo23 のみ cached、 nagoya/run1-3 用 fetch 必要)
+
+**Codex 着手手順** (Day 1-3):
+1. 既存 `/tmp/tokyo_run1_per_epoch_nlos.csv` の生成 script を git log / archive から復元 (or 新規 write、 200 LOC 目安)
+2. tokyo/run2, run3 NLOS CSV 生成 (PLATEAU tokyo23 既 cache 利用、 各 ~10min)
+3. nagoya/run1-3 NLOS CSV 生成 (PLATEAU nagoya fetch + 3 runs、 ~1h)
+4. PPC SPP G+B 6 runs 再 smoke (`experiments/scripts_run_phase21_spp_gb_smoke.sh` の per-run 拡張)、 RANKER 反応確認
+5. libgnss++ RTK pipeline mod (`rtk_selection.cpp` 内 measurement_weight per-PRN scale via CLI flag) ~half day
+6. 6 runs 新 candidate dir 生成 ~1h
+7. Phase 29 pool 統合 + ranker retrain + PF sweep ~2-3h
+8. Phase 29 per-run conditional config update + production smoke ~30min
+
+**実装場所**:
+- `experiments/build_per_epoch_nlos_csv.py` (新規、 NLOS CSV generator)
+- `third_party/gnssplusplus/src/algorithms/rtk_selection.cpp` / `rtk_update.cpp` (per-PRN weight scaling)
+- `experiments/scripts_run_phase33_nlos_rtk.sh` (新規 phase script)
+
+**memory 参照**:
+- [`gici-breakthrough-2026-05-14`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_gici_breakthrough_2026_05_14.md) — gici 17-variant pool 飽和、 candidate generation 既存
+- [`phase28-29-rmsprefilter-breakthrough-2026-05-16`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_phase28_29_rmsprefilter_breakthrough_2026_05_16.md) — per-run conditional config の deploy 方法
+- [`oracle-gap-analysis-2026-05-15`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_oracle_gap_analysis_2026_05_15.md) — 17 pool 飽和論を覆した rms_prefilter breakthrough の type、 NLOS 統合も同じく独立 lever 期待
 
 #### 3. Reservoir Stein PF / FFBSi (~1 週、 期待 +1-2pp、 既存 code 統合のみ)
 
@@ -5796,3 +5907,154 @@ PYTHONPATH=python python3 -m pytest tests/test_exp_pf_smoother_eval.py -q
 
 ### 重要: codex への指示テンプレート
 各セッションは `.codex_handoff{N}.md` に詳細を書いて渡す形式。過去の例は gitignore されているため参照不可だが、plan.md §3 / §10 を元に構成すれば同等。
+
+---
+
+## Codex 引継ぎ (2026-05-17 PM)
+
+**branch**: `feature/ppc-realtime-turing-target` (PR #59 open)
+**HEAD**: `59844ab` (Phase 30/31 negative) + Phase 32 uncommitted artifacts
+**production-best**: Phase 29 per-run conditional **OFFICIAL 85.7623% / TURING +0.16pp 超え** / 累積 Phase 11ep → 29 **+14.28pp**
+
+### 引継ぎ目的
+
+**TURING 超え 85.76% → 90% target** (gap 4.24pp 残) への唯一の breakthrough path = **§0 #2 PLATEAU NLOS rejection on RTK pipeline**。 weeks of work、 architectural pivot。
+
+### Phase 32 で何を確認したか (READ FIRST)
+
+A-lite Doppler smoothing は **構造的に不可能**:
+1. Atmosphere correction (Klobuchar iono + Saastamoinen tropo) で SPP median 40m → 25m (-14.5m gain) 確認
+2. Hatch smoothing 単独効果 = ~0m (atmosphere の上に無効)
+3. Smoothed-as-LOS-proxy で median 25m → 17.6m (-7.5m gain) 確認
+4. **best case 17.6m vs RTK 1m = 17 倍差**、 ranker pick rate 0%
+5. n/r2 1296 truly-lost epoch は SPP でも救えない (NLOS multipath bound、 hybrid_v5 も 29m fail)
+
+詳細: [§0.32 Phase 32 セクション](#032-phase-32-a-lite-doppler-smoothing-2026-05-17-pm-negative-構造的限界)
+
+### 既存 negative paths (再試行禁止)
+
+| Path | Negative reason | Reference |
+|------|----------------|-----------|
+| BVH hard-gate on PF3D | PLATEAU 0/301 coverage + 30% sat reject で PDOP catastrophic (-63m) | [`oracle-gap-analysis-2026-05-15`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_oracle_gap_analysis_2026_05_15.md) |
+| SPP G+B (NLOS soft + IRLS) on Phase 20 pool | ranker 完全吸収、 baseline bit-identical (90.84%) | [`spp-gb-smoke-null-2026-05-15`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_spp_gb_smoke_null_2026_05_15.md) |
+| Phase 32 A-lite Hatch SPP | best case median 17.6m、 RTK 比 17 倍劣、 ranker 0% pick | (本セッション) |
+| ML NLOS classifier (raw features) | AUC 0.56 cross-run (chance level)、 atmosphere-confounded label | plan.md §0.5 |
+| Phase 31 v4 pool expand (loosenl/tcgif/tightpr) | -0.27pp LORO regression、 cluster noise added | [`v4-pool-expand-negative-2026-05-17`](../../.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/project_v4_pool_expand_negative_2026_05_17.md) |
+| Phase 30 v3+Viterbi+k99 | -1.37pp regression on n/r2 (Viterbi が v3 wrong-fix lock) | plan.md §0 |
+
+### 唯一の残 lever = NLOS rejection on RTK pipeline
+
+詳細実装方針は [§0 #2 BVH NLOS セクション](#2-3d-map-aided-nlos-rejection-2-3-週-期待-2-4pp-既存-infrastructure-活用度高---2026-05-17-codex-引継ぎ対象-phase-32-後の-pivot) 参照。
+
+**3-stage path** (各 stage で smoke validation):
+
+**Stage A**: Per-epoch per-sat NLOS CSV を 6 run 用に生成
+- 既存 `/tmp/tokyo_run1_per_epoch_nlos.csv` (216k 行、 format reference) が tokyo/run1 用に唯一存在
+- PLATEAU tokyo23 cache: `/tmp/plateau_tokyo23_run1/` (bldg + brid .gml files、 cached)
+- 必要: `experiments/build_per_epoch_nlos_csv.py` 新規 ~200 LOC
+- 必要 data: nagoya PLATEAU fetch (URL `https://assets.cms.plateau.reearth.io/.../23100_nagoya-shi_city_2022_citygml_4_op.zip`、 `experiments/fetch_plateau_subset.py` で取得可)
+- 期間: 半日
+- Validation: 各 run の NLOS fraction が現実的 (urban canyon で 5-20%)、 false-positive rate < 5% (open-sky で NLOS ≒ 0)
+
+**Stage B**: libgnss++ RTK pipeline に per-PRN measurement weight scaling (NLOS soft mask) 統合
+- C++ source mod: `third_party/gnssplusplus/src/algorithms/rtk_selection.cpp` の measurement_weight 計算で NLOS sat × `k_weak=3.0` (down-weight)
+- CLI flag: `--nlos-mask-path` + `--nlos-k-weak` を libgnss++ binary に追加
+- 6 runs 新 candidate dir 生成: `experiments/results/libgnss_diag_phase33_nlos_soft/{city}_{run}_full.{pos,csv}`
+- 期間: 1-1.5 日 (build + smoke debug)
+- Validation: 新 candidate の residual_rms 低下 (0.06 → 0.04m 期待)、 fix rate 維持 (-5% 以内)
+
+**Stage C**: Phase 29 pool 統合 + ranker retrain + per-run conditional update
+- Pool: 既存 47 candidate + 新 NLOS-soft candidate = 48
+- Per-run block: nagoya/run2 で要 block の可能性 (n/r2 wrong-fix が NLOS overcorrection 影響)
+- v3 ranker LORO retrain (training csv 再 extract)、 LORO sim 期待 +1-3pp
+- PF 6-run sweep with v1+k3 / v3+k99 grid
+- Per-run conditional config 更新 → production smoke
+- 期間: 半日
+- Validation: PF gain transfer rate 50%+ (Phase 28 nagoya pattern と同じ)
+
+**期待 ROI total**: Phase 29 85.76% → **88-90%** (TURING +2.5-4.5pp、 90% gap 内 50-100% capture)。 t/r1 で +5-7pp、 n/r2 で +5-10pp dominant、 開放地 (t/r2, t/r3, n/r3) marginal。
+
+### Phase 32 で生成された uncommitted artifacts (扱い注意)
+
+```
+experiments/build_hatch_smoothed_spp_candidate.py     # v1, 残置 OK
+experiments/build_hatch_smoothed_spp_candidate_v2.py  # v2, 残置 OK (Klobuchar/Saastamoinen 利用例として有用)
+experiments/eval_hatch_spp_candidate.py               # 残置 OK (汎用 candidate eval)
+experiments/debug_spp_on_ppc.py                       # 残置 OK (SPP diagnostic)
+experiments/scripts_smoke_hatch_alite_tr1.sh          # delete or 残置
+experiments/scripts_smoke_hatch_v2_tr1.sh             # delete or 残置
+experiments/scripts_gen_hatch_alite_6runs.sh          # delete or 残置
+experiments/results/libgnss_hatch_alite_v1/           # delete (40m median dead candidate)
+experiments/results/libgnss_hatch_alite_v1_gps/       # delete
+experiments/results/libgnss_hatch_alite_v2/           # delete (25m median dead)
+experiments/results/libgnss_hatch_alite_v2_skip/      # delete
+experiments/results/libgnss_hatch_alite_v2_los/       # delete (17.6m median dead)
+```
+
+**推奨**: Phase 32 negative finding を commit に含める (artifacts は plan.md / memory で参照可能なため code 自体は残置)、 results dir は cleanup。 commit message 例:
+```
+PPC selector: Phase 32 A-lite Doppler smoothing NEGATIVE confirmed
+SPP best case median 17.6m vs RTK 1m = 17x worse, ranker 0% pick.
+PR-domain corrections exhausted, pivot to §0 #2 PLATEAU NLOS rejection.
+```
+
+### Workflow snapshots
+
+**現 production deploy** (Phase 29):
+```bash
+# experiments/scripts_run_phase29_perrun_conditional.sh
+# per-run config:
+#   tokyo/run1: v1 ranker + k=3
+#   tokyo/run2: v3 ranker + k=3
+#   tokyo/run3: v1 ranker + k=3
+#   nagoya/run1: v3 ranker + k=99 (no prefilter)
+#   nagoya/run2: v3 ranker + k=99 (no prefilter)
+#   nagoya/run3: v1 ranker + k=3
+# Result: OFFICIAL 85.7623%
+```
+
+**v3 ranker training pipeline** (再現用):
+```bash
+# Step 1: extract features
+PYTHONPATH=python python experiments/extract_selector_training_features_v3.py
+# → experiments/results/selector_training_features_v3.csv (3.28M rows)
+
+# Step 2: train LORO
+PYTHONPATH=python python experiments/train_selector_ranker_v3.py
+# → experiments/results/selector_ranker_predictions_v3.csv
+# → experiments/results/selector_ranker_model_v3.txt
+# Expected: LORO OFFICIAL 86.02%
+```
+
+**新 NLOS candidate (Phase 33) 想定ファイル**:
+```bash
+experiments/build_per_epoch_nlos_csv.py             # 新規 (Stage A)
+experiments/scripts_run_phase33_nlos_rtk.sh         # 新規 (Stage B/C)
+experiments/extract_selector_training_features_v5.py # 新規 (v3 + NLOS-aware features)
+experiments/train_selector_ranker_v5.py             # 新規
+third_party/gnssplusplus/src/algorithms/rtk_selection.cpp  # source mod (Stage B)
+```
+
+### Codex への質問事項 (open)
+
+1. libgnss++ RTK pipeline の measurement_weight 計算箇所 (`rtk_selection.cpp`) で per-PRN scaling を入れるのが最も clean か、 それとも `rtk_update.cpp` の RTK update step が良いか？
+2. NLOS sat の `k_weak` 値 sweep (1.5 / 3.0 / 5.0 / hard-zero) のどれが optimal か？ Phase 21 では `k_weak=3` だが Phase 21 自体 ranker 吸収で gain なし。
+3. Per-run block strategy: n/r2 で NLOS overcorrection の risk あり、 v3 ranker training で n/r2 block label を default 設定するか？
+
+### コミット regeln (preserve from user)
+
+- Co-Authored-By は **付けない** (自分名義のみ)
+- PR説明文に「🤖 Generated with Claude Code」等の **AI 生成表記を入れない**
+- レスポンスは 日本語
+- NEVER commit changes unless the user explicitly asks
+- Bash prefix: `export PATH="$HOME/.local/bin:$PATH"`
+- 環境: `~/.bashrc` の `JIRA_API_TOKEN`、 `~/.local/bin/jira`、 `~/.local/bin/gh` 利用可
+
+### 開始順序 (Codex)
+
+1. **READ FIRST**: 本 §「Codex 引継ぎ」 + §0.32 Phase 32 セクション + §0 #2 BVH NLOS セクション
+2. memory 一覧 `/home/sasaki/.claude/projects/-media-sasaki-aiueo-ai-coding-ws-gnss-gpu/memory/MEMORY.md` を確認、 過去 negative path 全把握
+3. Stage A 着手 (NLOS CSV 6 runs 生成 pipeline)、 既存 tokyo/run1 CSV を format reference として復元
+4. tokyo/run1 用 NLOS CSV regenerate (cached PLATEAU subset 利用)、 既存版と diff 検証で pipeline 正当性確認
+5. Stage A 完了後、 Stage B/C を順次 (libgnss++ source mod は build cycle 10min 単位、 incremental 推奨)
+
