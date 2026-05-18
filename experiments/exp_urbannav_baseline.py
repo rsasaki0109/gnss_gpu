@@ -235,6 +235,13 @@ def run_wls(
     data: dict,
     weight_scale_by_system: dict[int, float] | None = None,
     quality_veto_config: MultiGNSSQualityVetoConfig | None = None,
+    nlos_set_per_epoch: dict[int, set[str]] | None = None,
+    nlos_k_weak: float = 1.0,
+    nlos_k_strong: float = 1.0,
+    nlos_strong_set_per_epoch: dict[int, set[str]] | None = None,
+    irls_mode: str = "off",
+    irls_c: float = 15.0,
+    irls_threshold_m: float = 30.0,
 ) -> tuple[np.ndarray, float]:
     """Run WLS on every epoch.
 
@@ -248,7 +255,20 @@ def run_wls(
     pseudoranges = data["pseudoranges"]
     weights = data["weights"]
     system_ids = data.get("system_ids")
+    used_prns = data.get("used_prns")
     weight_scale_by_system = weight_scale_by_system or {}
+
+    nlos_active = (
+        (nlos_set_per_epoch is not None or nlos_strong_set_per_epoch is not None)
+        and used_prns is not None
+        and (nlos_k_weak > 1.0 or nlos_k_strong > 1.0)
+    )
+    irls_active = irls_mode in ("cauchy", "huber")
+    if irls_active:
+        from gnss_gpu.robust_spp import robust_spp as _robust_spp
+    n_nlos_downweighted_total = 0
+    n_irls_refined = 0
+    n_irls_failed = 0
 
     # Try GPU-accelerated WLS
     positions = np.zeros((n_epochs, 4))
@@ -265,12 +285,58 @@ def run_wls(
                 system_ids[i],
                 weight_scale_by_system,
             )
+            if nlos_active:
+                prns_epoch = used_prns[i]
+                weak_set = (
+                    nlos_set_per_epoch.get(i, ())
+                    if nlos_set_per_epoch is not None
+                    else ()
+                )
+                strong_set = (
+                    nlos_strong_set_per_epoch.get(i, ())
+                    if nlos_strong_set_per_epoch is not None
+                    else ()
+                )
+                if weak_set or strong_set:
+                    sw = np.asarray(scaled_weights, dtype=np.float64).copy()
+                    for j, prn in enumerate(prns_epoch):
+                        if prn in strong_set and nlos_k_strong > 1.0:
+                            sw[j] /= nlos_k_strong
+                            n_nlos_downweighted_total += 1
+                        elif prn in weak_set and nlos_k_weak > 1.0:
+                            sw[j] /= nlos_k_weak
+                            n_nlos_downweighted_total += 1
+                    scaled_weights = sw
             pos, biases, _ = solver.solve(
                 sat_ecef[i],
                 pseudoranges[i],
                 system_ids[i],
                 scaled_weights,
             )
+            if (
+                irls_active
+                and np.all(np.isfinite(pos))
+                and not np.all(pos == 0)
+            ):
+                refined = _robust_spp(
+                    sat_ecef[i],
+                    pseudoranges[i],
+                    weights=scaled_weights,
+                    init_pos=np.asarray(pos, dtype=np.float64),
+                    threshold=float(irls_threshold_m),
+                    weight_func=irls_mode,
+                    max_iter=5,
+                    min_satellites=5,
+                )
+                if refined is not None and np.all(np.isfinite(refined)):
+                    shift = float(np.linalg.norm(refined - np.asarray(pos)))
+                    if shift < 50.0:
+                        pos = refined
+                        n_irls_refined += 1
+                    else:
+                        n_irls_failed += 1
+                else:
+                    n_irls_failed += 1
             # Fallback: if multi-GNSS solver fails, try single-system GPS WLS
             if np.all(pos == 0) or not np.all(np.isfinite(pos)):
                 ref_mask = np.asarray(system_ids[i]) == SYSTEM_GPS
@@ -358,8 +424,16 @@ def run_wls(
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
+    extra = ""
+    if nlos_active:
+        extra += f", nlos_downweight_obs={n_nlos_downweighted_total}"
+    if irls_active:
+        extra += (
+            f", irls={irls_mode} c={irls_c:.0f} refined={n_irls_refined}"
+            f" failed={n_irls_failed}"
+        )
     print(f"    WLS ({backend}): {elapsed:.1f} ms total, "
-          f"{ms_per_epoch:.3f} ms/epoch")
+          f"{ms_per_epoch:.3f} ms/epoch{extra}")
     return positions, ms_per_epoch
 
 
