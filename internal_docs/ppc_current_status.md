@@ -1,13 +1,52 @@
 # PPC Current Status
 
-Last updated: 2026-05-15 (afternoon).
+Last updated: 2026-05-19.
 
 This is the short current-state document for PPC work. The long chronological
 log remains in [`plan.md`](plan.md).
 
-## Current Conclusion (2026-05-15)
+## Current Conclusion (2026-05-19)
 
-**NEW canonical best: Phase 19aw K=3 = 83.42% OFFICIAL** (rms_prefilter_k on top of
+**Canonical production best: Phase71 OSM road route = 86.205492% OFFICIAL**.
+
+Phase71 keeps the Phase43 per-run conditional setup and adds an
+OSM road-centerline corrected candidate (`xd_gici_osmroad_hs`) only on
+`nagoya/run2`. The gain is isolated to n/r2; the other five production runs are
+unchanged.
+
+| run | Phase43 | Phase71 | delta |
+|---|---:|---:|---:|
+| tokyo/run1 | 90.841510% | 90.841510% | +0.000000pp |
+| tokyo/run2 | 95.410067% | 95.410067% | +0.000000pp |
+| tokyo/run3 | 88.949168% | 88.949168% | +0.000000pp |
+| nagoya/run1 | 83.700284% | 83.700284% | +0.000000pp |
+| nagoya/run2 | 64.426589% | 65.669779% | +1.243190pp |
+| nagoya/run3 | 92.662146% | 92.662146% | +0.000000pp |
+
+Official average:
+
+```text
+Phase43: 85.998294%
+Phase71: 86.205492%
+Delta: +0.207198pp
+TURING 85.6% delta: +0.605492pp
+```
+
+Key implementation files:
+
+- `experiments/materialize_phase70_osm_road_centerline_candidate.py`
+- `experiments/build_phase70_osm_road_ranker_overlay.py`
+- `experiments/scripts_run_phase70_osmroad_neutral_check.sh`
+- `experiments/scripts_run_phase71_osmroad_production.sh`
+
+The Phase71 production script regenerates the OSM candidate and ranker overlay
+under `/tmp` by default. The prep-only smoke command reproduced
+`triggered_epochs=359`, `good/bad=30/0`, and overlay `added_rows=359` after the
+artifact-regeneration change.
+
+## Previous Conclusion (2026-05-15)
+
+**Former canonical best: Phase 19aw K=3 = 83.42% OFFICIAL** (rms_prefilter_k on top of
 17-variant gici-open pool + status=5 gate + velocity bridge)、+11.94pp / +5,500m from
 Phase 11ep canonical 71.48%、**TURING gap 2.18pp remaining**。
 詳細: [`rms_prefilter_breakthrough_2026_05_15.md`](rms_prefilter_breakthrough_2026_05_15.md)。
@@ -22,7 +61,7 @@ Phase 11ep canonical 71.48%、**TURING gap 2.18pp remaining**。
    (... * abs_max^c)` が高 abs_max 候補を促進していた problem を 19 lines のコードで切断。
 
 過去のメモ (Phase 19al 76.83%) は metric ミス (pooled→per-run-averaged) の補正前数値。
-Phase 19at = 74.97% が正しい補正後 baseline、 Phase 19aw = 83.42% が今の頂点。
+Phase 19at = 74.97% が正しい補正後 baseline、 Phase 19aw = 83.42% が当時の頂点。
 
 ## Previous (earlier 2026-05-15)
 
@@ -120,31 +159,41 @@ Interpretation: candidate epochs are strong; fallback epochs are the bottleneck.
 
 ## Current Artifacts
 
+- `experiments/results/phase71_osmroad_production_summary.csv`
+- `experiments/results/phase71_osmroad_block_other_runs_summary.csv`
+- `experiments/results/phase70_osmroad_neutral_check_summary.csv`
+- `experiments/results/ppc_phase57_gap_nagoya_run2_internal_epochs.csv`
+- `experiments/results/ppc_ctrbpf_fgo_phase43_prod_*_full_runs.csv`
+- `experiments/results/ppc_phase71_osmroad_prod_*_full_runs.csv`
+- `experiments/results/selector_ranker_predictions_v5_nlos.csv`
+- `experiments/results/ppc_compare_libgnss_v5_runs.csv`
+- `experiments/results/ppc_compare_dev_demo5_trusted_o3_runs.csv`
+- `experiments/results/ppc_compare_demo5_continuous_nojump_runs.csv`
+
+Legacy phase11er artifacts:
+
 - `experiments/results/ppc_phase11er_policy_all_p2k_runs.csv`
 - `experiments/results/ppc_phase11er_internal_n2_p2k_runs.csv`
 - `experiments/results/ppc_phase11er_internal_n2_p2k_internal_epochs.csv`
 - `experiments/results/ppc_phase11er_internal_n2_p2k_state_summary.csv`
 - `experiments/results/ppc_phase11er_internal_n2_p2k_state_groups.csv`
 - `experiments/results/ppc_phase11er_internal_n2_p2k_state_spans.csv`
-- `experiments/results/ppc_compare_libgnss_v5_runs.csv`
-- `experiments/results/ppc_compare_dev_demo5_trusted_o3_runs.csv`
-- `experiments/results/ppc_compare_demo5_continuous_nojump_runs.csv`
 
 See [`../experiments/results/README.md`](../experiments/results/README.md) for
 artifact conventions.
 
 ## Next Tasks
 
-1. Build a fallback-span CSV from
-   `ppc_phase11er_internal_n2_p2k_internal_epochs.csv`.
-2. Classify each fallback span as `candidate_generation_needed`,
-   `gate_too_strict`, `fallback_policy_bad`, or `PF_only_bad`.
-3. Reproduce RTKLIB demo5 raw baseline through the
+1. Keep Phase71 production replay reproducible without committing `/tmp`
+   materialized OSM candidates or large overlay CSVs.
+2. Phase72: test whether road/map constraints can generalize beyond the n/r2
+   OSM span without perturbing the five neutral runs.
+3. Find stronger absolute candidate sources for stable low-residual wrong
+   solutions that ranker/consensus logic cannot detect.
+4. Reproduce RTKLIB demo5 raw baseline through the
    `third_party/gnssplusplus/docs/ppc_reproduction.md` coverage-matrix path and
    align the denominator with the local scorer.
-4. Compare `libgnss++` profiles at span level, especially on `nagoya/run2`.
-5. Only after the fallback spans are understood, decide whether to improve
-   `libgnss++`, `gnss_gpu` PF/RBPF, or the bridge between them.
+5. Compare `libgnss++` profiles at span level, especially on `nagoya/run2`.
 
 ## Reproduction Snippets
 
@@ -158,7 +207,7 @@ python3 experiments/exp_ppc_libgnss_hybrid.py \
   --results-prefix ppc_compare_libgnss_v5
 ```
 
-Current phase11er skeleton:
+Legacy phase11er skeleton:
 
 ```bash
 base=experiments/results/libgnss_diag_phase10
