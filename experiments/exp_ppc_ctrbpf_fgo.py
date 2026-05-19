@@ -37,8 +37,11 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
 from exp_urbannav_baseline import run_wls  # noqa: E402
+from gnss_gpu.io.nav_rinex import read_gps_klobuchar_from_nav_header
 from gnss_gpu.io.ppc import PPCDatasetLoader
 from gnss_gpu.ppc_score import score_ppc2024
+from gnss_gpu.range_model import rotate_satellites_sagnac
+from gnss_gpu.spp import _iono_klobuchar, _tropo_saastamoinen
 
 RESULTS_DIR = _SCRIPT_DIR / "results"
 _DEFAULT_DATA_ROOT = Path("/media/sasaki/aiueo/ai_coding_ws/datasets/PPC-Dataset-data")
@@ -68,6 +71,8 @@ _WGS84_E2 = 6.694379990141316e-3
 class CTRBPFConfig:
     n_particles: int = 50_000
     sigma_pr: float = 8.0
+    pr_ess_guard_min_ratio: float = 0.0
+    pr_ess_guard_max_iters: int = 12
     enable_pr_gmm: bool = False
     pr_gmm_statuses: tuple[int, ...] = (1, 3)
     pr_gmm_w_los: float = 0.7
@@ -80,6 +85,13 @@ class CTRBPFConfig:
     pr_weight_min: float = 0.25
     pr_weight_max: float = 1.5
     pr_systems: tuple[str, ...] = ("G", "E", "J")
+    pr_min_elevation_deg: float = -90.0
+    pr_atmosphere_model: str = "off"
+    pr_atmosphere_scale: float = 1.0
+    pr_atmosphere_extra_zenith_m: float = 0.0
+    pr_slant_delay_zenith_m: float = 0.0
+    pr_iono_alpha: tuple[float, ...] = ()
+    pr_iono_beta: tuple[float, ...] = ()
     pr_prefit_gate_m: float = 0.0
     pr_prefit_gate_min_sats: int = 6
     pr_prefit_gate_keep_best: int = 0
@@ -104,6 +116,29 @@ class CTRBPFConfig:
     rtkdiag_candidate_sigma_m: float = 0.02
     rtkdiag_candidate_ratio_min: float = 1.5
     rtkdiag_candidate_residual_rms_max: float = 1.8
+    rtkdiag_candidate_main_status5_residual_rms_max: float = 0.3
+    # Pre-filter gated candidates to top-K by final_residual_rms (lowest is best)
+    # BEFORE applying the selector ranking. 0 disables. Sweet spot K=3-7 (sim
+    # showed K=5 captures +12pp upper bound; K=20 collapses to baseline).
+    rtkdiag_candidate_rms_prefilter_k: int = 0
+    # cluster_vote select_mode parameters: cluster gated candidates by
+    # spatial proximity, pick largest cluster, within it pick lowest rms.
+    # Designed to bypass the rms-only ranking trap on cluster-biased runs
+    # (n/r2 etc.) where the wrong cluster has slightly lower rms than oracle.
+    rtkdiag_candidate_cluster_vote_radius_m: float = 0.5
+    # ranker select_mode: path to predictions CSV from train_selector_ranker.py
+    # Columns: run_id, tow, label, p_pass. When select_mode == "ranker", pick
+    # the gated candidate with highest p_pass per epoch. Supervised LightGBM
+    # ranker trained on path-weighted oracle labels (Path F).
+    rtkdiag_candidate_ranker_score_path: str = ""
+    rtkdiag_candidate_ranker_stickiness: float = 0.0
+    rtkdiag_candidate_bridge_enable: bool = False
+    rtkdiag_candidate_bridge_max_s: float = 6.0
+    rtkdiag_candidate_bridge_residual_rms_m: float = 0.5
+    rtkdiag_candidate_bridge_anchor_mode: str = "last_emit"  # "last_emit" | "last_fix4"
+    rtkdiag_candidate_bridge_fix4_min_ratio: float = 3.0
+    rtkdiag_candidate_bridge_fix4_max_residual: float = 0.1
+    rtkdiag_candidate_max_to_hybrid_m: float = 1.0
     rtkdiag_candidate_emit_max_diff_m: float = 0.4
     rtkdiag_candidate_recenter_max_shift_m: float = 10000.0
     rtkdiag_candidate_soft_top_k: int = 1
@@ -112,19 +147,46 @@ class CTRBPFConfig:
     rtkdiag_candidate_proposal_spread_m: float = 0.25
     rtkdiag_candidate_select_mode: str = "residual"
     rtkdiag_candidate_emit_mode: str = "pf"
+    rtkdiag_candidate_min_epoch: int = 0
+    rtkdiag_candidate_require_any_diag_fields: tuple[str, ...] = ()
+    rtkdiag_candidate_require_all_diag_fields: tuple[str, ...] = ()
+    rtkdiag_candidate_min_diag_fields: tuple[tuple[str, float], ...] = ()
+    rtkdiag_candidate_max_diag_fields: tuple[tuple[str, float], ...] = ()
+    rtkdiag_candidate_fallback_mode: str = "hybrid"
+    rtkdiag_candidate_fallback_max_wls_rms_m: float = 0.0
+    rtkdiag_candidate_fallback_max_wls_pdop: float = 0.0
+    rtkdiag_candidate_fallback_max_wls_to_pf_m: float = 0.0
+    rtkdiag_candidate_fallback_max_hold_age_s: float = 5.0
     rtkdiag_candidate_local_ungate_windows: tuple[tuple[int, int, tuple[str, ...]], ...] = ()
     rtkdiag_candidate_local_ungate_tow_windows: tuple[tuple[float, float, tuple[str, ...]], ...] = ()
     rtkdiag_candidate_label_factors: tuple[tuple[str, float], ...] = ()
+    rtkdiag_candidate_float_labels: tuple[str, ...] = ()
+    rtkdiag_candidate_float_residual_rms_max: float = 0.0
+    rtkdiag_candidate_float_abs_max: float = 0.0
+    rtkdiag_candidate_float_min_sats: int = 0
+    rtkdiag_candidate_status5_labels: tuple[str, ...] = ()
+    rtkdiag_candidate_status5_tow_windows: tuple[tuple[float, float, tuple[str, ...]], ...] = ()
+    rtkdiag_candidate_status5_max_dt_s: float = 0.0
+    rtkdiag_candidate_status5_residual_rms_max: float = 0.0
+    rtkdiag_candidate_status5_min_sats: int = 0
     sigma_pos: float = 2.0
     sigma_cb: float = 50.0
     spread_pos_init: float = 50.0
     spread_cb_init: float = 500.0
     sigma_doppler_mps: float = 0.5
+    doppler_systems: tuple[str, ...] = ("G", "E", "J")
+    doppler_prefit_gate_mps: float = 0.0
+    doppler_prefit_gate_min_sats: int = 6
     velocity_init_sigma: float = 1.0
     velocity_process_noise: float = 1.0
     enable_rbpf_velocity_kf: bool = False
     enable_position_update: bool = False
     position_update_sigma_m: float = 30.0
+    position_update_min_epoch: int = 0
+    position_update_min_pr_sats: int = 0
+    position_update_max_wls_rms_m: float = 0.0
+    position_update_max_wls_pdop: float = 0.0
+    position_update_max_wls_to_pf_m: float = 0.0
     enable_correct_clock_bias: bool = True
     enable_dd_carrier_afv: bool = False
     dd_sigma_cycles: float = 0.05
@@ -154,6 +216,8 @@ class CTRBPFConfig:
     rbpf_kf_gate_min_dd_pairs: int | None = None
     rbpf_kf_gate_min_ess_ratio: float | None = None
     rbpf_kf_gate_max_spread_m: float | None = None
+    rbpf_kf_gate_max_doppler_wls_rms_mps: float = 0.0
+    rbpf_kf_gate_max_doppler_wls_speed_mps: float = 0.0
     # Phase 6: libgnss++ hybrid (50.91% baseline) position update. When
     # enabled, ``pf.position_update(hybrid_pos, sigma=hybrid_sigma_m)`` is
     # applied per epoch (if a hybrid sample exists for the rover TOW),
@@ -239,6 +303,14 @@ class CTRBPFConfig:
     tdcp_obs_anchor_sigma_m: float = 0.05
     tdcp_obs_loose_sigma_m: float = 5.0
     tdcp_obs_missing_sigma_m: float = 1000.0
+    enable_low_sat_bridge: bool = False
+    low_sat_bridge_min_pr_sats: int = 11
+    low_sat_bridge_min_span_epochs: int = 3
+    low_sat_bridge_max_span_epochs: int = 25
+    low_sat_bridge_max_gap_s: float = 10.0
+    low_sat_bridge_startup_max_wls_pdop: float = 0.5
+    low_sat_bridge_startup_min_epochs: int = 2
+    low_sat_bridge_startup_max_epochs: int = 10
     # Phase 9a: ZUPT (zero-velocity update) using PPC IMU. Per rover epoch
     # we look at the specific-force / angular-rate norms over the IMU
     # samples that fall in [t_i, t_{i+1}). When the accel norm is close
@@ -494,6 +566,8 @@ class _RBPFGateStats:
     skipped_min_dd_pairs: int = 0
     skipped_min_ess_ratio: int = 0
     skipped_max_spread: int = 0
+    skipped_doppler_wls_rms: int = 0
+    skipped_doppler_wls_speed: int = 0
 
 
 @dataclass
@@ -518,6 +592,13 @@ class _RTKDiagPFStats:
     emit_pf_estimate: int = 0
     emit_candidate: int = 0
     emit_skipped_pf_drift: int = 0
+    skipped_min_epoch: int = 0
+    skipped_diag_policy: int = 0
+    skipped_hybrid_distance: int = 0
+    fallback_pf: int = 0
+    fallback_wls: int = 0
+    fallback_hybrid: int = 0
+    fallback_last_good: int = 0
     selected_counts: dict[str, int] = field(default_factory=dict)
 
 
@@ -572,6 +653,14 @@ class _TDCPSmootherStats:
     pairs_accepted: int = 0
     pairs_rejected_min_sats: int = 0
     pairs_rejected_postfit: int = 0
+
+
+@dataclass
+class _LowSatBridgeStats:
+    spans_applied: int = 0
+    epochs_rewritten: int = 0
+    startup_spans_applied: int = 0
+    startup_epochs_rewritten: int = 0
 
 
 @dataclass
@@ -1175,7 +1264,9 @@ def _apply_tdcp_smoother(
         tdcp_v[i] = (v, dt_i, float(postfit))
         stats.pairs_accepted += 1
 
-    # Per-epoch observation sigma from hybrid Status.
+    # Per-epoch observation sigma from hybrid Status. For pure-PF TDCP variants
+    # there is no hybrid anchor; use the PF trajectory itself as a loose
+    # observation so TDCP can bridge weak-PR gaps without pinning bad epochs.
     obs_sigma = np.full(n, float(config.tdcp_obs_missing_sigma_m), dtype=np.float64)
     if hybrid_pos is not None:
         anchor_set = set(int(s) for s in config.fgo_apply_hybrid_statuses)
@@ -1190,6 +1281,8 @@ def _apply_tdcp_smoother(
                 obs_sigma[i] = float(config.tdcp_obs_loose_sigma_m)
             else:
                 obs_sigma[i] = float(config.tdcp_obs_anchor_sigma_m)
+    else:
+        obs_sigma[:] = float(config.tdcp_obs_loose_sigma_m)
 
     # Anchor mask: Status=4 (or any status NOT in fgo_apply_hybrid_statuses)
     # are HARD-PINNED to the hybrid passthrough. The Kalman smoother only
@@ -1270,6 +1363,113 @@ def _apply_tdcp_smoother(
         if anchor_mask[i]:
             out[i] = positions[i]
 
+    return out
+
+
+def _apply_low_sat_bridge(
+    *,
+    positions: np.ndarray,
+    times: np.ndarray,
+    pr_used_counts: np.ndarray,
+    config: CTRBPFConfig,
+    stats: _LowSatBridgeStats,
+) -> np.ndarray:
+    """Linearly bridge short low-PR spans between stronger PF anchors."""
+    out = np.asarray(positions, dtype=np.float64).copy()
+    counts = np.asarray(pr_used_counts, dtype=np.float64).reshape(-1)
+    t = np.asarray(times, dtype=np.float64).reshape(-1)
+    n = int(out.shape[0])
+    if n < 3 or counts.size != n or t.size != n:
+        return out
+
+    min_sats = int(config.low_sat_bridge_min_pr_sats)
+    min_span = max(1, int(config.low_sat_bridge_min_span_epochs))
+    max_span = max(min_span, int(config.low_sat_bridge_max_span_epochs))
+    max_gap_s = float(config.low_sat_bridge_max_gap_s)
+    if min_sats <= 0 or max_gap_s <= 0.0:
+        return out
+
+    i = 0
+    while i < n:
+        if not np.isfinite(counts[i]) or counts[i] >= min_sats:
+            i += 1
+            continue
+        start = i
+        while i < n and np.isfinite(counts[i]) and counts[i] < min_sats:
+            i += 1
+        end = i - 1
+        span_len = end - start + 1
+        lo = start - 1
+        hi = i
+        if (
+            span_len < min_span
+            or span_len > max_span
+            or lo < 0
+            or hi >= n
+            or not np.isfinite(t[hi] - t[lo])
+            or (t[hi] - t[lo]) <= 0.0
+            or (t[hi] - t[lo]) > max_gap_s
+            or not np.all(np.isfinite(out[lo, :3]))
+            or not np.all(np.isfinite(out[hi, :3]))
+            or counts[lo] < min_sats
+            or counts[hi] < min_sats
+        ):
+            continue
+        for j in range(start, hi):
+            u = float((t[j] - t[lo]) / (t[hi] - t[lo]))
+            out[j, :3] = (1.0 - u) * out[lo, :3] + u * out[hi, :3]
+        stats.spans_applied += 1
+        stats.epochs_rewritten += span_len
+    return out
+
+
+def _apply_startup_wls_bridge(
+    *,
+    positions: np.ndarray,
+    times: np.ndarray,
+    wls_quality: dict[str, np.ndarray] | None,
+    config: CTRBPFConfig,
+    stats: _LowSatBridgeStats,
+) -> np.ndarray:
+    """Back-extrapolate over weak-WLS startup epochs from the first good anchors."""
+    if wls_quality is None or "pdop" not in wls_quality:
+        return positions
+    out = np.asarray(positions, dtype=np.float64).copy()
+    t = np.asarray(times, dtype=np.float64).reshape(-1)
+    pdop = np.asarray(wls_quality["pdop"], dtype=np.float64).reshape(-1)
+    n = int(out.shape[0])
+    if n < 4 or t.size != n or pdop.size != n:
+        return out
+
+    threshold = float(config.low_sat_bridge_startup_max_wls_pdop)
+    min_epochs = max(1, int(config.low_sat_bridge_startup_min_epochs))
+    max_epochs = max(min_epochs, int(config.low_sat_bridge_startup_max_epochs))
+    if threshold <= 0.0:
+        return out
+
+    span = 0
+    while (
+        span < n
+        and span < max_epochs
+        and np.isfinite(pdop[span])
+        and pdop[span] > threshold
+    ):
+        span += 1
+    if span < min_epochs or span + 1 >= n:
+        return out
+    if (
+        not np.all(np.isfinite(out[span, :3]))
+        or not np.all(np.isfinite(out[span + 1, :3]))
+        or not np.isfinite(t[span + 1] - t[span])
+        or (t[span + 1] - t[span]) <= 0.0
+    ):
+        return out
+
+    velocity = (out[span + 1, :3] - out[span, :3]) / (t[span + 1] - t[span])
+    for j in range(span):
+        out[j, :3] = out[span, :3] - velocity * (t[span] - t[j])
+    stats.startup_spans_applied += 1
+    stats.startup_epochs_rewritten += span
     return out
 
 
@@ -1385,25 +1585,142 @@ def _diag_float(row: dict[str, str], key: str) -> float:
         return float("nan")
 
 
+def _diag_bool(row: dict[str, str], key: str) -> bool:
+    value = row.get(key)
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "t", "yes", "y"}:
+        return True
+    if text in {"0", "false", "f", "no", "n", "", "nan"}:
+        return False
+    try:
+        return float(text) != 0.0
+    except ValueError:
+        return bool(text)
+
+
+def _rtkdiag_candidate_diag_policy_gate(
+    row: dict[str, str],
+    *,
+    require_any_fields: tuple[str, ...],
+    require_all_fields: tuple[str, ...],
+    min_fields: tuple[tuple[str, float], ...],
+    max_fields: tuple[tuple[str, float], ...],
+) -> bool:
+    if require_any_fields and not any(_diag_bool(row, key) for key in require_any_fields):
+        return False
+    if require_all_fields and not all(_diag_bool(row, key) for key in require_all_fields):
+        return False
+    for key, threshold in min_fields:
+        value = _diag_float(row, key)
+        if not np.isfinite(value) or value < float(threshold):
+            return False
+    for key, threshold in max_fields:
+        value = _diag_float(row, key)
+        if not np.isfinite(value) or value > float(threshold):
+            return False
+    return True
+
+
 def _rtkdiag_candidate_gate(
     row: dict[str, str] | None,
     *,
     ratio_min: float,
     residual_rms_max: float,
+    status5_residual_rms_max: float = 0.3,
 ) -> bool:
+    """Main candidate gate.
+
+    - status=4 (Fix): ratio>=ratio_min AND residual_rms<=residual_rms_max
+    - status=5 (Float): residual_rms<=status5_residual_rms_max (ratio irrelevant);
+      set status5_residual_rms_max=0.0 to disable status=5 acceptance.
+    """
     if row is None:
         return False
     try:
         output_added = int(row.get("output_added", "0")) == 1
-        final_status = int(row.get("final_status", "0")) == 4
+        status = int(row.get("final_status", "0"))
+    except ValueError:
+        return False
+    if not output_added:
+        return False
+    residual_rms = _diag_float(row, "final_residual_rms")
+    if status == 4:
+        return (
+            _diag_float(row, "final_ratio") >= float(ratio_min)
+            and residual_rms <= float(residual_rms_max)
+        )
+    if status == 5 and float(status5_residual_rms_max) > 0.0:
+        return residual_rms <= float(status5_residual_rms_max)
+    return False
+
+
+def _rtkdiag_candidate_float_gate(
+    row: dict[str, str] | None,
+    *,
+    label: str,
+    allowed_labels: tuple[str, ...],
+    residual_rms_max: float,
+    residual_abs_max: float,
+    min_sats: int,
+) -> bool:
+    if row is None or not allowed_labels or label not in set(allowed_labels):
+        return False
+    try:
+        output_added = int(row.get("output_added", "0")) == 1
+        final_status = int(row.get("final_status", "0")) == 3
     except ValueError:
         return False
     return (
         output_added
         and final_status
-        and _diag_float(row, "final_ratio") >= float(ratio_min)
         and _diag_float(row, "final_residual_rms") <= float(residual_rms_max)
+        and _diag_float(row, "final_residual_abs_max") <= float(residual_abs_max)
+        and _diag_float(row, "final_sats") >= float(min_sats)
     )
+
+
+def _rtkdiag_candidate_status5_gate(
+    row: dict[str, str] | None,
+    *,
+    label: str,
+    allowed_labels: tuple[str, ...],
+    residual_rms_max: float,
+    min_sats: int,
+) -> bool:
+    if row is None or not allowed_labels or label not in set(allowed_labels):
+        return False
+    try:
+        final_status = int(row.get("final_status", "0")) == 5
+    except ValueError:
+        return False
+    return (
+        final_status
+        and _diag_float(row, "final_residual_rms") <= float(residual_rms_max)
+        and _diag_float(row, "final_sats") >= float(min_sats)
+    )
+
+
+def _rtkdiag_nearest_candidate_row(
+    candidate_pos: dict[float, np.ndarray],
+    candidate_diag: dict[float, dict[str, str]],
+    t_key: float,
+    *,
+    max_dt_s: float,
+) -> tuple[float, np.ndarray | None, dict[str, str] | None]:
+    max_steps = max(0, int(round(float(max_dt_s) * 10.0)))
+    for step in range(max_steps + 1):
+        offsets = (0.0,) if step == 0 else (-0.1 * step, 0.1 * step)
+        for offset in offsets:
+            cand_t_key = round(float(t_key) + float(offset), 1)
+            cand = candidate_pos.get(cand_t_key)
+            diag_row = candidate_diag.get(cand_t_key)
+            if cand is not None and diag_row is not None:
+                return cand_t_key, cand, diag_row
+    return float(t_key), None, None
 
 
 def _rtkdiag_candidate_sort_key(
@@ -1657,6 +1974,78 @@ def _reference_position_map(rows: list[tuple[float, np.ndarray]]) -> dict[float,
     return {round(float(tow), 1): np.asarray(ecef, dtype=np.float64) for tow, ecef in rows}
 
 
+_RANKER_PREDICTIONS_CACHE: dict[str, dict[tuple[str, float, str], float]] = {}
+
+
+def _load_ranker_predictions(path: str) -> dict[tuple[str, float, str], float]:
+    """Load ranker predictions CSV into {(run_id, tow, label): p_pass}. Cached."""
+    if not path:
+        return {}
+    if path in _RANKER_PREDICTIONS_CACHE:
+        return _RANKER_PREDICTIONS_CACHE[path]
+    lookup: dict[tuple[str, float, str], float] = {}
+    with open(path) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                run_id = str(row["run_id"])
+                tow = round(float(row["tow"]), 1)
+                label = str(row["label"])
+                p = float(row["p_pass"])
+                lookup[(run_id, tow, label)] = p
+            except (ValueError, KeyError):
+                continue
+    _RANKER_PREDICTIONS_CACHE[path] = lookup
+    return lookup
+
+
+def _ranker_lookup_for_run(path: str, city: str, run: str) -> dict[tuple[float, str], float]:
+    """Slice ranker predictions for a single run into {(tow, label): p_pass}."""
+    if not path:
+        return {}
+    full = _load_ranker_predictions(path)
+    run_id = f"{city}_{run}"
+    return {(t, lbl): p for (rid, t, lbl), p in full.items() if rid == run_id}
+
+
+_NLOS_MASK_CACHE: dict[str, dict[int, set[str]]] = {}
+
+
+def _load_nlos_mask_csv(path: str) -> dict[int, set[str]]:
+    """Load PLATEAU NLOS mask CSV → {epoch_idx: {prn1, prn2, ...}} of NLOS PRNs.
+
+    Expected columns: tow, epoch_idx, prn, is_los (1=LOS, 0=NLOS).
+    Only rows with is_los=0 contribute to the returned set.
+    """
+    if not path:
+        return {}
+    if path in _NLOS_MASK_CACHE:
+        return _NLOS_MASK_CACHE[path]
+    out: dict[int, set[str]] = {}
+    try:
+        with open(path) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    is_los = int(row["is_los"])
+                except (KeyError, ValueError):
+                    continue
+                if is_los != 0:
+                    continue
+                try:
+                    epoch_idx = int(row["epoch_idx"])
+                    prn = str(row["prn"]).strip()
+                except (KeyError, ValueError):
+                    continue
+                if not prn:
+                    continue
+                out.setdefault(epoch_idx, set()).add(prn)
+    except FileNotFoundError:
+        pass
+    _NLOS_MASK_CACHE[path] = out
+    return out
+
+
 def _filter_data_by_systems(data: dict, systems: tuple[str, ...]) -> dict:
     """Return a shallow data copy with per-satellite arrays masked by system."""
     allowed = {str(s).strip() for s in systems if str(s).strip()}
@@ -1708,6 +2097,451 @@ def _filter_data_by_systems(data: dict, systems: tuple[str, ...]) -> dict:
         sorted({sat_id[0] for sats in out.get("used_prns", []) for sat_id in sats if sat_id})
     )
     return out
+
+
+def _filter_data_by_elevation(
+    data: dict,
+    receiver_positions: np.ndarray,
+    min_elevation_deg: float,
+    *,
+    min_sats: int = 5,
+) -> dict:
+    """Return a data copy with low-elevation satellites removed per epoch."""
+    threshold = float(min_elevation_deg)
+    if threshold <= -90.0:
+        return data
+    positions = np.asarray(receiver_positions, dtype=np.float64)
+    out = dict(data)
+    n_epochs = int(data["n_epochs"])
+    sat_counts: list[int] = []
+
+    def mask_for_epoch(i: int) -> np.ndarray:
+        sat = np.asarray(data["sat_ecef"][i], dtype=np.float64)
+        if (
+            i >= positions.shape[0]
+            or positions.shape[1] < 3
+            or not np.all(np.isfinite(positions[i, :3]))
+        ):
+            return np.ones(sat.shape[0], dtype=bool)
+        elevations = np.array(
+            [
+                math.degrees(
+                    _sat_elevation_azimuth(positions[i, :3], sat_row)[0]
+                )
+                for sat_row in sat
+            ],
+            dtype=np.float64,
+        )
+        mask = elevations >= threshold
+        if int(np.count_nonzero(mask)) >= int(min_sats):
+            return mask
+        keep_n = min(max(int(min_sats), 1), int(elevations.size))
+        keep_idx = np.argsort(elevations)[-keep_n:]
+        mask = np.zeros(elevations.size, dtype=bool)
+        mask[keep_idx] = True
+        return mask
+
+    masked_keys = {
+        "sat_ecef",
+        "pseudoranges",
+        "weights",
+        "system_ids",
+        "carrier_phase",
+        "doppler_hz",
+        "sat_velocity",
+        "clock_drift",
+    }
+    for key in masked_keys:
+        if key not in data:
+            continue
+        vals = []
+        for i in range(n_epochs):
+            arr = np.asarray(data[key][i])
+            vals.append(arr[mask_for_epoch(i)])
+        out[key] = vals
+
+    for key in ("used_prns", "carrier_codes", "doppler_codes"):
+        if key not in data:
+            continue
+        vals = []
+        for i in range(n_epochs):
+            mask = mask_for_epoch(i)
+            seq = list(data[key][i])
+            vals.append([v for v, keep in zip(seq, mask) if bool(keep)])
+        out[key] = vals
+
+    for i in range(n_epochs):
+        sat_counts.append(int(np.count_nonzero(mask_for_epoch(i))))
+    out["satellite_counts"] = np.asarray(sat_counts, dtype=np.int32)
+    out["n_satellites"] = int(np.median(out["satellite_counts"])) if sat_counts else 0
+    out["constellations"] = tuple(
+        sorted({sat_id[0] for sats in out.get("used_prns", []) for sat_id in sats if sat_id})
+    )
+    return out
+
+
+def _filter_data_by_pr_prefit(
+    data: dict,
+    receiver_positions: np.ndarray,
+    *,
+    gate_m: float,
+    clock_quantile: float,
+    min_sats: int,
+    keep_best: int,
+    per_system: bool,
+) -> tuple[dict, int, int]:
+    """Return a data copy with robust PR prefit outliers removed per epoch."""
+    if float(gate_m) <= 0.0:
+        return data, 0, 0
+    positions = np.asarray(receiver_positions, dtype=np.float64)
+    out = dict(data)
+    n_epochs = int(data["n_epochs"])
+    sat_counts: list[int] = []
+    kept_total = 0
+    dropped_total = 0
+
+    def mask_for_epoch(i: int) -> np.ndarray:
+        sat = np.asarray(data["sat_ecef"][i], dtype=np.float64)
+        pr = np.asarray(data["pseudoranges"][i], dtype=np.float64)
+        if (
+            i >= positions.shape[0]
+            or positions.shape[1] < 3
+            or not np.all(np.isfinite(positions[i, :3]))
+        ):
+            return np.ones(pr.shape[0], dtype=bool)
+        sat_ref = rotate_satellites_sagnac(positions[i, :3], sat)
+        sids = (
+            np.asarray(data["system_ids"][i], dtype=np.int32)
+            if "system_ids" in data
+            else None
+        )
+        return _pr_prefit_gate_mask(
+            sat_ref,
+            pr,
+            positions[i, :3],
+            gate_m=float(gate_m),
+            clock_quantile=float(clock_quantile),
+            min_sats=int(min_sats),
+            keep_best=int(keep_best),
+            system_ids=sids,
+            per_system=bool(per_system),
+        )
+
+    masks = [mask_for_epoch(i) for i in range(n_epochs)]
+    masked_keys = {
+        "sat_ecef",
+        "pseudoranges",
+        "weights",
+        "system_ids",
+        "carrier_phase",
+        "doppler_hz",
+        "sat_velocity",
+        "clock_drift",
+    }
+    for key in masked_keys:
+        if key not in data:
+            continue
+        vals = []
+        for i in range(n_epochs):
+            arr = np.asarray(data[key][i])
+            vals.append(arr[masks[i]])
+        out[key] = vals
+
+    for key in ("used_prns", "carrier_codes", "doppler_codes"):
+        if key not in data:
+            continue
+        vals = []
+        for i in range(n_epochs):
+            seq = list(data[key][i])
+            vals.append([v for v, keep in zip(seq, masks[i]) if bool(keep)])
+        out[key] = vals
+
+    for mask in masks:
+        kept = int(np.count_nonzero(mask))
+        total = int(mask.size)
+        sat_counts.append(kept)
+        kept_total += kept
+        dropped_total += max(total - kept, 0)
+    out["satellite_counts"] = np.asarray(sat_counts, dtype=np.int32)
+    out["n_satellites"] = int(np.median(out["satellite_counts"])) if sat_counts else 0
+    out["constellations"] = tuple(
+        sorted({sat_id[0] for sats in out.get("used_prns", []) for sat_id in sats if sat_id})
+    )
+    return out, kept_total, dropped_total
+
+
+def _wls_centered_postfit_rms_m(
+    data: dict,
+    receiver_positions: np.ndarray,
+    *,
+    per_system: bool = True,
+) -> float:
+    """Median epoch RMS after centering WLS PR residuals by clock/system bias."""
+    positions = np.asarray(receiver_positions, dtype=np.float64)
+    values: list[float] = []
+    for i, (sat_epoch, pr_epoch) in enumerate(
+        zip(data["sat_ecef"], data["pseudoranges"])
+    ):
+        if (
+            i >= positions.shape[0]
+            or positions.shape[1] < 3
+            or not np.all(np.isfinite(positions[i, :3]))
+        ):
+            continue
+        sat = np.asarray(sat_epoch, dtype=np.float64)
+        pr = np.asarray(pr_epoch, dtype=np.float64)
+        if sat.shape[0] < 4 or pr.size != sat.shape[0]:
+            continue
+        sat_rot = rotate_satellites_sagnac(positions[i, :3], sat)
+        residuals = pr - np.linalg.norm(sat_rot - positions[i, :3], axis=1)
+        finite = np.isfinite(residuals)
+        if int(np.count_nonzero(finite)) < 4:
+            continue
+        centered = residuals.copy()
+        if per_system and "system_ids" in data:
+            sids = np.asarray(data["system_ids"][i], dtype=np.int32)
+            if sids.size == residuals.size:
+                for sid in np.unique(sids[finite]):
+                    group = finite & (sids == int(sid))
+                    if int(np.count_nonzero(group)) > 0:
+                        centered[group] -= float(np.median(residuals[group]))
+            else:
+                centered[finite] -= float(np.median(residuals[finite]))
+        else:
+            centered[finite] -= float(np.median(residuals[finite]))
+        r = centered[finite]
+        values.append(float(math.sqrt(float(np.mean(r * r)))))
+    return float(np.median(values)) if values else float("nan")
+
+
+def _wls_epoch_quality_metrics(
+    data: dict,
+    receiver_positions: np.ndarray,
+    *,
+    per_system: bool = True,
+) -> dict[str, np.ndarray]:
+    """Compute per-epoch WLS residual and geometry metrics for diagnostics/gates."""
+    positions = np.asarray(receiver_positions, dtype=np.float64)
+    sat_ecef = data["sat_ecef"]
+    pr_obs = data["pseudoranges"]
+    weights = data.get("weights")
+    system_ids = data.get("system_ids")
+    n_epochs = int(data["n_epochs"])
+    n_sat = np.zeros(n_epochs, dtype=np.int32)
+    rms = np.full(n_epochs, np.nan, dtype=np.float64)
+    absmax = np.full(n_epochs, np.nan, dtype=np.float64)
+    pdop = np.full(n_epochs, np.nan, dtype=np.float64)
+    cond = np.full(n_epochs, np.nan, dtype=np.float64)
+
+    for i in range(n_epochs):
+        if (
+            i >= positions.shape[0]
+            or positions.shape[1] < 3
+            or not np.all(np.isfinite(positions[i, :3]))
+            or np.all(positions[i, :3] == 0.0)
+        ):
+            continue
+        pos = positions[i, :3]
+        sat = np.asarray(sat_ecef[i], dtype=np.float64)
+        pr = np.asarray(pr_obs[i], dtype=np.float64)
+        if weights is None:
+            w = np.ones(pr.shape, dtype=np.float64)
+        else:
+            w = np.asarray(weights[i], dtype=np.float64)
+        sat_rot = rotate_satellites_sagnac(pos, sat)
+        ranges = np.linalg.norm(sat_rot - pos, axis=1)
+        finite = (
+            np.isfinite(pr)
+            & np.isfinite(ranges)
+            & np.isfinite(w)
+            & (w > 0.0)
+            & (ranges > 1.0)
+        )
+        n_sat[i] = int(np.count_nonzero(finite))
+        if n_sat[i] < 4:
+            continue
+
+        residuals = pr - ranges
+        centered = residuals.copy()
+        if per_system and system_ids is not None:
+            sids = np.asarray(system_ids[i], dtype=np.int32)
+            if sids.size == residuals.size:
+                for sid in np.unique(sids[finite]):
+                    group = finite & (sids == int(sid))
+                    if int(np.count_nonzero(group)) > 0:
+                        centered[group] -= float(np.median(residuals[group]))
+            else:
+                centered[finite] -= float(np.median(residuals[finite]))
+        else:
+            centered[finite] -= float(np.median(residuals[finite]))
+
+        wf = w[finite]
+        cf = centered[finite]
+        sw = float(np.sum(wf))
+        if sw > 0.0:
+            rms[i] = float(math.sqrt(float(np.sum(wf * cf * cf) / sw)))
+            absmax[i] = float(np.max(np.abs(cf)))
+
+        sat_f = sat_rot[finite]
+        ranges_f = ranges[finite]
+        los = (pos[None, :] - sat_f) / ranges_f[:, None]
+        if per_system and system_ids is not None:
+            sids_all = np.asarray(system_ids[i], dtype=np.int32)
+            if sids_all.size == residuals.size:
+                sids_f = sids_all[finite]
+                unique_sids = sorted(int(s) for s in np.unique(sids_f))
+                sid_to_col = {sid: k for k, sid in enumerate(unique_sids)}
+                h = np.zeros((n_sat[i], 3 + len(unique_sids)), dtype=np.float64)
+                h[:, :3] = los
+                for row, sid in enumerate(sids_f):
+                    h[row, 3 + sid_to_col[int(sid)]] = 1.0
+            else:
+                h = np.ones((n_sat[i], 4), dtype=np.float64)
+                h[:, :3] = los
+        else:
+            h = np.ones((n_sat[i], 4), dtype=np.float64)
+            h[:, :3] = los
+        try:
+            normal = h.T @ (wf[:, None] * h)
+            cov = np.linalg.pinv(normal)
+            pdop[i] = float(math.sqrt(max(float(np.trace(cov[:3, :3])), 0.0)))
+            cond[i] = float(np.linalg.cond(normal))
+        except np.linalg.LinAlgError:
+            continue
+
+    return {
+        "n_sat": n_sat,
+        "postfit_rms_m": rms,
+        "postfit_absmax_m": absmax,
+        "pdop": pdop,
+        "normal_cond": cond,
+    }
+
+
+def _sat_elevation_azimuth(
+    rx_ecef: np.ndarray,
+    sat_ecef: np.ndarray,
+) -> tuple[float, float, float, float, float]:
+    lat, lon, alt = _ecef_to_llh(
+        float(rx_ecef[0]), float(rx_ecef[1]), float(rx_ecef[2])
+    )
+    dx = np.asarray(sat_ecef, dtype=np.float64) - np.asarray(rx_ecef, dtype=np.float64)
+    sin_lat = math.sin(lat)
+    cos_lat = math.cos(lat)
+    sin_lon = math.sin(lon)
+    cos_lon = math.cos(lon)
+    e = -sin_lon * dx[0] + cos_lon * dx[1]
+    n = -sin_lat * cos_lon * dx[0] - sin_lat * sin_lon * dx[1] + cos_lat * dx[2]
+    u = cos_lat * cos_lon * dx[0] + cos_lat * sin_lon * dx[1] + sin_lat * dx[2]
+    return math.atan2(float(u), math.hypot(float(e), float(n))), math.atan2(float(e), float(n)), lat, lon, alt
+
+
+def _pr_atmosphere_delay_m(
+    rx_ecef: np.ndarray,
+    sat_ecef: np.ndarray,
+    tow: float,
+    *,
+    model: str,
+    fixed_zenith_m: float,
+    model_scale: float,
+    extra_zenith_m: float,
+    iono_alpha: tuple[float, ...],
+    iono_beta: tuple[float, ...],
+) -> float:
+    mode = str(model).strip().lower()
+    if mode == "off" and float(fixed_zenith_m) > 0.0:
+        mode = "fixed"
+    if mode in {"", "off"}:
+        return 0.0
+    el, az, lat, lon, alt = _sat_elevation_azimuth(rx_ecef, sat_ecef)
+    sin_el = max(math.sin(el), 0.1)
+    if mode == "fixed":
+        return float(fixed_zenith_m) / sin_el
+    if mode == "model":
+        alpha = iono_alpha if len(iono_alpha) == 4 else (
+            1.1176e-08,
+            -7.4506e-09,
+            -5.9605e-08,
+            1.1921e-07,
+        )
+        beta = iono_beta if len(iono_beta) == 4 else (
+            1.1264e05,
+            -3.2768e04,
+            -2.6214e05,
+            4.5875e05,
+        )
+        modeled = float(_tropo_saastamoinen(lat, alt, el)) + float(
+            _iono_klobuchar(list(alpha), list(beta), lat, lon, az, el, float(tow))
+        )
+        return float(model_scale) * modeled + float(extra_zenith_m) / sin_el
+    return 0.0
+
+
+def _apply_atmosphere_to_pseudoranges(
+    data: dict,
+    receiver_positions: np.ndarray,
+    *,
+    model: str,
+    fixed_zenith_m: float,
+    model_scale: float,
+    extra_zenith_m: float,
+    iono_alpha: tuple[float, ...],
+    iono_beta: tuple[float, ...],
+) -> dict:
+    """Return a data copy with modeled PR atmosphere delay removed."""
+    mode = str(model).strip().lower()
+    if mode == "off" and float(fixed_zenith_m) > 0.0:
+        mode = "fixed"
+    if mode in {"", "off"}:
+        return data
+    positions = np.asarray(receiver_positions, dtype=np.float64)
+    out = dict(data)
+    corrected: list[np.ndarray] = []
+    for i, (sat_epoch, pr_epoch) in enumerate(zip(data["sat_ecef"], data["pseudoranges"])):
+        sat_arr = np.asarray(sat_epoch, dtype=np.float64)
+        pr_arr = np.asarray(pr_epoch, dtype=np.float64)
+        if i >= positions.shape[0] or not np.all(np.isfinite(positions[i, :3])):
+            corrected.append(pr_arr.copy())
+            continue
+        rx = positions[i, :3]
+        delay = np.array(
+            [
+                _pr_atmosphere_delay_m(
+                    rx,
+                    sat_row,
+                    float(data["times"][i]),
+                    model=mode,
+                    fixed_zenith_m=float(fixed_zenith_m),
+                    model_scale=float(model_scale),
+                    extra_zenith_m=float(extra_zenith_m),
+                    iono_alpha=iono_alpha,
+                    iono_beta=iono_beta,
+                )
+                for sat_row in sat_arr
+            ],
+            dtype=np.float64,
+        )
+        corrected.append(pr_arr - delay)
+    out["pseudoranges"] = corrected
+    return out
+
+
+def _apply_slant_delay_to_pseudoranges(
+    data: dict,
+    receiver_positions: np.ndarray,
+    zenith_delay_m: float,
+) -> dict:
+    """Return a data copy with a simple elevation-mapped PR delay removed."""
+    return _apply_atmosphere_to_pseudoranges(
+        data,
+        receiver_positions,
+        model="fixed",
+        fixed_zenith_m=float(zenith_delay_m),
+        model_scale=1.0,
+        extra_zenith_m=0.0,
+        iono_alpha=(),
+        iono_beta=(),
+    )
 
 
 def _scale_weights_per_system(weights: np.ndarray, system_ids: np.ndarray) -> np.ndarray:
@@ -1811,6 +2645,378 @@ def _build_pf(config: CTRBPFConfig):
         seed=42,
     )
     return pf
+
+
+def _ess_ratio_from_log_weights(log_weights: np.ndarray) -> float:
+    lw = np.asarray(log_weights, dtype=np.float64).reshape(-1)
+    finite = np.isfinite(lw)
+    if int(np.count_nonzero(finite)) == 0:
+        return float("nan")
+    values = lw[finite]
+    shifted = values - float(np.max(values))
+    weights = np.exp(shifted)
+    sw = float(np.sum(weights))
+    sw2 = float(np.sum(weights * weights))
+    if sw <= 0.0 or sw2 <= 0.0:
+        return float("nan")
+    ess = (sw * sw) / sw2
+    return float(ess / max(int(lw.size), 1))
+
+
+def _apply_pr_ess_guard(
+    pf,
+    pre_pr_log_weights: np.ndarray,
+    *,
+    min_ratio: float,
+    max_iters: int,
+) -> tuple[float, float, float]:
+    """Temper the latest PR log-likelihood increment to preserve PF ESS."""
+    target = float(min_ratio)
+    post_pr_log_weights = np.asarray(pf.get_log_weights(), dtype=np.float64)
+    post_ratio = _ess_ratio_from_log_weights(post_pr_log_weights)
+    if target <= 0.0 or not np.isfinite(post_ratio) or post_ratio >= target:
+        return 1.0, post_ratio, post_ratio
+
+    pre = np.asarray(pre_pr_log_weights, dtype=np.float64)
+    if pre.shape != post_pr_log_weights.shape:
+        return 1.0, post_ratio, post_ratio
+    delta = post_pr_log_weights - pre
+    if not np.all(np.isfinite(delta)):
+        return 1.0, post_ratio, post_ratio
+
+    pre_ratio = _ess_ratio_from_log_weights(pre)
+    if not np.isfinite(pre_ratio) or pre_ratio < target:
+        pf.set_log_weights(pre)
+        return 0.0, post_ratio, pre_ratio
+
+    lo = 0.0
+    hi = 1.0
+    best_alpha = 0.0
+    best_ratio = pre_ratio
+    for _ in range(max(1, int(max_iters))):
+        mid = 0.5 * (lo + hi)
+        candidate = pre + mid * delta
+        ratio = _ess_ratio_from_log_weights(candidate)
+        if np.isfinite(ratio) and ratio >= target:
+            best_alpha = mid
+            best_ratio = ratio
+            lo = mid
+        else:
+            hi = mid
+
+    pf.set_log_weights(pre + best_alpha * delta)
+    final_ratio = _ess_ratio_from_log_weights(np.asarray(pf.get_log_weights(), dtype=np.float64))
+    if np.isfinite(final_ratio):
+        best_ratio = final_ratio
+    return float(best_alpha), float(post_ratio), float(best_ratio)
+
+
+def _capture_pf_internal_state(
+    pf,
+    row: dict[str, object],
+    prefix: str,
+    *,
+    n_particles: int,
+    reference_ecef: np.ndarray | None = None,
+) -> np.ndarray:
+    """Attach scalar PF state diagnostics to ``row`` and return estimate."""
+    est = np.asarray(pf.estimate(), dtype=np.float64)
+    ess = float(pf.get_ess())
+    spread = float(pf.get_position_spread(center=est[:3]))
+    row[f"{prefix}_x"] = float(est[0])
+    row[f"{prefix}_y"] = float(est[1])
+    row[f"{prefix}_z"] = float(est[2])
+    row[f"{prefix}_cb_m"] = float(est[3])
+    row[f"{prefix}_ess"] = ess
+    row[f"{prefix}_ess_ratio"] = ess / max(int(n_particles), 1)
+    row[f"{prefix}_spread_m"] = spread
+    if reference_ecef is not None:
+        ref = np.asarray(reference_ecef, dtype=np.float64).reshape(-1)
+        if ref.size >= 3 and np.all(np.isfinite(ref[:3])):
+            delta = est[:3] - ref[:3]
+            row[f"{prefix}_to_ref_m"] = float(np.linalg.norm(delta))
+            lat, lon, _ = _ecef_to_llh(float(ref[0]), float(ref[1]), float(ref[2]))
+            enu = _ecef_to_enu_rotation(lat, lon) @ delta
+            row[f"{prefix}_err_e_m"] = float(enu[0])
+            row[f"{prefix}_err_n_m"] = float(enu[1])
+            row[f"{prefix}_err_u_m"] = float(enu[2])
+    return est
+
+
+def _diag_distance(
+    lhs: np.ndarray | None,
+    rhs: np.ndarray | None,
+) -> float | str:
+    if lhs is None or rhs is None:
+        return ""
+    a = np.asarray(lhs, dtype=np.float64).reshape(-1)
+    b = np.asarray(rhs, dtype=np.float64).reshape(-1)
+    if a.size < 3 or b.size < 3:
+        return ""
+    if not np.all(np.isfinite(a[:3])) or not np.all(np.isfinite(b[:3])):
+        return ""
+    return float(np.linalg.norm(a[:3] - b[:3]))
+
+
+def _diag_enu_error(
+    lhs: np.ndarray | None,
+    rhs: np.ndarray | None,
+) -> tuple[float | str, float | str, float | str]:
+    if lhs is None or rhs is None:
+        return "", "", ""
+    a = np.asarray(lhs, dtype=np.float64).reshape(-1)
+    b = np.asarray(rhs, dtype=np.float64).reshape(-1)
+    if a.size < 3 or b.size < 3:
+        return "", "", ""
+    if not np.all(np.isfinite(a[:3])) or not np.all(np.isfinite(b[:3])):
+        return "", "", ""
+    delta = a[:3] - b[:3]
+    lat, lon, _ = _ecef_to_llh(float(b[0]), float(b[1]), float(b[2]))
+    enu = _ecef_to_enu_rotation(lat, lon) @ delta
+    return float(enu[0]), float(enu[1]), float(enu[2])
+
+
+def _weighted_mean_from_log_weights(values: np.ndarray, log_weights: np.ndarray) -> np.ndarray:
+    arr = np.asarray(values, dtype=np.float64)
+    lw = np.asarray(log_weights, dtype=np.float64).reshape(-1)
+    if arr.ndim != 2 or arr.shape[0] != lw.size:
+        return np.full(arr.shape[1] if arr.ndim == 2 else 1, np.nan, dtype=np.float64)
+    finite = np.isfinite(lw) & np.all(np.isfinite(arr), axis=1)
+    if int(np.count_nonzero(finite)) == 0:
+        return np.full(arr.shape[1], np.nan, dtype=np.float64)
+    lw_f = lw[finite]
+    weights = np.exp(lw_f - float(np.max(lw_f)))
+    sw = float(np.sum(weights))
+    if sw <= 0.0:
+        return np.full(arr.shape[1], np.nan, dtype=np.float64)
+    return np.sum(arr[finite] * weights[:, None], axis=0) / sw
+
+
+def _capture_pf_velocity_state(pf, row: dict[str, object], prefix: str) -> np.ndarray:
+    states = np.asarray(pf.get_particle_states(), dtype=np.float64)
+    log_weights = np.asarray(pf.get_log_weights(), dtype=np.float64)
+    vel = _weighted_mean_from_log_weights(states[:, 4:7], log_weights)
+    if vel.size >= 3 and np.all(np.isfinite(vel[:3])):
+        row[f"{prefix}_vx_mps"] = float(vel[0])
+        row[f"{prefix}_vy_mps"] = float(vel[1])
+        row[f"{prefix}_vz_mps"] = float(vel[2])
+        row[f"{prefix}_speed_mps"] = float(np.linalg.norm(vel[:3]))
+    return vel
+
+
+def _reference_velocity_for_epoch(
+    times: np.ndarray,
+    reference_pos: dict[float, np.ndarray] | None,
+    idx: int,
+) -> np.ndarray | None:
+    if reference_pos is None:
+        return None
+    t_now = float(times[idx])
+    p_now = reference_pos.get(round(t_now, 1))
+    if p_now is None or not np.all(np.isfinite(p_now)):
+        return None
+
+    prev_vel = None
+    if idx > 0:
+        t_prev = float(times[idx - 1])
+        p_prev = reference_pos.get(round(t_prev, 1))
+        dt_prev = t_now - t_prev
+        if p_prev is not None and dt_prev > 0.0 and np.all(np.isfinite(p_prev)):
+            prev_vel = (np.asarray(p_now, dtype=np.float64) - np.asarray(p_prev, dtype=np.float64)) / dt_prev
+
+    next_vel = None
+    if idx + 1 < len(times):
+        t_next = float(times[idx + 1])
+        p_next = reference_pos.get(round(t_next, 1))
+        dt_next = t_next - t_now
+        if p_next is not None and dt_next > 0.0 and np.all(np.isfinite(p_next)):
+            next_vel = (np.asarray(p_next, dtype=np.float64) - np.asarray(p_now, dtype=np.float64)) / dt_next
+
+    if prev_vel is not None and next_vel is not None:
+        return 0.5 * (prev_vel + next_vel)
+    return prev_vel if prev_vel is not None else next_vel
+
+
+def _doppler_centered_residual_rms(
+    sat_ecef: np.ndarray,
+    sat_vel: np.ndarray,
+    doppler_hz: np.ndarray,
+    weights: np.ndarray,
+    rx_pos: np.ndarray,
+    rx_vel: np.ndarray,
+    *,
+    doppler_sign: float,
+    wavelength_m: float,
+) -> float:
+    sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+    sv = np.asarray(sat_vel, dtype=np.float64).reshape(-1, 3)
+    dop = np.asarray(doppler_hz, dtype=np.float64).reshape(-1)
+    w = np.asarray(weights, dtype=np.float64).reshape(-1)
+    pos = np.asarray(rx_pos, dtype=np.float64).reshape(-1)
+    vel = np.asarray(rx_vel, dtype=np.float64).reshape(-1)
+    if sat.shape != sv.shape or sat.shape[0] != dop.size or dop.size != w.size:
+        return float("nan")
+    if pos.size < 3 or vel.size < 3 or not np.all(np.isfinite(pos[:3])) or not np.all(np.isfinite(vel[:3])):
+        return float("nan")
+    rows_h: list[np.ndarray] = []
+    rows_y: list[float] = []
+    rows_w: list[float] = []
+    for s in range(dop.size):
+        ww = max(float(w[s]), 0.0)
+        if ww <= 0.0 or not np.isfinite(ww) or not np.isfinite(dop[s]):
+            continue
+        los_vec = sat[s] - pos[:3]
+        rng = float(np.linalg.norm(los_vec))
+        if rng < 1.0 or not np.isfinite(rng):
+            continue
+        los = los_vec / rng
+        rows_h.append(-los)
+        rows_y.append(float(doppler_sign) * float(dop[s]) * float(wavelength_m) - float(np.dot(sv[s], los)))
+        rows_w.append(ww)
+    if len(rows_y) < 4:
+        return float("nan")
+    h = np.asarray(rows_h, dtype=np.float64)
+    y = np.asarray(rows_y, dtype=np.float64)
+    ww = np.asarray(rows_w, dtype=np.float64)
+    sw = float(np.sum(ww))
+    if sw <= 0.0:
+        return float("nan")
+    h_center = h - np.sum(h * ww[:, None], axis=0) / sw
+    y_center = y - float(np.sum(y * ww) / sw)
+    residual = y_center - h_center @ vel[:3]
+    return float(math.sqrt(float(np.sum(ww * residual * residual) / sw)))
+
+
+def _doppler_centered_wls_velocity(
+    sat_ecef: np.ndarray,
+    sat_vel: np.ndarray,
+    doppler_hz: np.ndarray,
+    weights: np.ndarray,
+    rx_pos: np.ndarray,
+    *,
+    doppler_sign: float,
+    wavelength_m: float,
+) -> tuple[np.ndarray | None, float]:
+    sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+    sv = np.asarray(sat_vel, dtype=np.float64).reshape(-1, 3)
+    dop = np.asarray(doppler_hz, dtype=np.float64).reshape(-1)
+    w = np.asarray(weights, dtype=np.float64).reshape(-1)
+    pos = np.asarray(rx_pos, dtype=np.float64).reshape(-1)
+    rows_h: list[np.ndarray] = []
+    rows_y: list[float] = []
+    rows_w: list[float] = []
+    for s in range(dop.size):
+        ww = max(float(w[s]), 0.0)
+        if ww <= 0.0 or not np.isfinite(ww) or not np.isfinite(dop[s]):
+            continue
+        los_vec = sat[s] - pos[:3]
+        rng = float(np.linalg.norm(los_vec))
+        if rng < 1.0 or not np.isfinite(rng):
+            continue
+        los = los_vec / rng
+        rows_h.append(-los)
+        rows_y.append(float(doppler_sign) * float(dop[s]) * float(wavelength_m) - float(np.dot(sv[s], los)))
+        rows_w.append(ww)
+    if len(rows_y) < 4:
+        return None, float("nan")
+    h = np.asarray(rows_h, dtype=np.float64)
+    y = np.asarray(rows_y, dtype=np.float64)
+    ww = np.asarray(rows_w, dtype=np.float64)
+    sw = float(np.sum(ww))
+    if sw <= 0.0:
+        return None, float("nan")
+    h_center = h - np.sum(h * ww[:, None], axis=0) / sw
+    y_center = y - float(np.sum(y * ww) / sw)
+    try:
+        vel, *_ = np.linalg.lstsq(h_center * np.sqrt(ww[:, None]), y_center * np.sqrt(ww), rcond=None)
+    except np.linalg.LinAlgError:
+        return None, float("nan")
+    rms = _doppler_centered_residual_rms(
+        sat,
+        sv,
+        dop,
+        ww,
+        pos[:3],
+        vel,
+        doppler_sign=doppler_sign,
+        wavelength_m=wavelength_m,
+    )
+    return vel, rms
+
+
+def _doppler_prefit_gate_mask(
+    sat_ecef: np.ndarray,
+    sat_vel: np.ndarray,
+    doppler_hz: np.ndarray,
+    weights: np.ndarray,
+    rx_pos: np.ndarray,
+    *,
+    gate_mps: float,
+    min_sats: int,
+    doppler_sign: float,
+    wavelength_m: float,
+) -> np.ndarray:
+    n = int(np.asarray(doppler_hz).reshape(-1).size)
+    if n == 0:
+        return np.zeros(0, dtype=bool)
+    if float(gate_mps) <= 0.0:
+        return np.ones(n, dtype=bool)
+    sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+    sv = np.asarray(sat_vel, dtype=np.float64).reshape(-1, 3)
+    dop = np.asarray(doppler_hz, dtype=np.float64).reshape(-1)
+    w = np.asarray(weights, dtype=np.float64).reshape(-1)
+    pos = np.asarray(rx_pos, dtype=np.float64).reshape(-1)
+    vel, _rms = _doppler_centered_wls_velocity(
+        sat,
+        sv,
+        dop,
+        w,
+        pos[:3],
+        doppler_sign=doppler_sign,
+        wavelength_m=wavelength_m,
+    )
+    if vel is None or not np.all(np.isfinite(vel[:3])):
+        return np.ones(n, dtype=bool)
+
+    rows_h: list[np.ndarray] = []
+    rows_y: list[float] = []
+    rows_w: list[float] = []
+    valid_indices: list[int] = []
+    for s in range(n):
+        ww = max(float(w[s]), 0.0)
+        if ww <= 0.0 or not np.isfinite(ww) or not np.isfinite(dop[s]):
+            continue
+        los_vec = sat[s] - pos[:3]
+        rng = float(np.linalg.norm(los_vec))
+        if rng < 1.0 or not np.isfinite(rng):
+            continue
+        los = los_vec / rng
+        rows_h.append(-los)
+        rows_y.append(float(doppler_sign) * float(dop[s]) * float(wavelength_m) - float(np.dot(sv[s], los)))
+        rows_w.append(ww)
+        valid_indices.append(s)
+    if len(valid_indices) < 4:
+        return np.ones(n, dtype=bool)
+
+    h = np.asarray(rows_h, dtype=np.float64)
+    y = np.asarray(rows_y, dtype=np.float64)
+    ww = np.asarray(rows_w, dtype=np.float64)
+    sw = float(np.sum(ww))
+    if sw <= 0.0:
+        return np.ones(n, dtype=bool)
+    h_center = h - np.sum(h * ww[:, None], axis=0) / sw
+    y_center = y - float(np.sum(y * ww) / sw)
+    residual_abs = np.abs(y_center - h_center @ vel[:3])
+    keep_valid = residual_abs <= float(gate_mps)
+    min_keep = max(4, min(int(min_sats), len(valid_indices)))
+    if int(np.count_nonzero(keep_valid)) < min_keep:
+        order = np.argsort(residual_abs)
+        keep_valid = np.zeros(len(valid_indices), dtype=bool)
+        keep_valid[order[:min_keep]] = True
+    out = np.zeros(n, dtype=bool)
+    for local_idx, original_idx in enumerate(valid_indices):
+        out[int(original_idx)] = bool(keep_valid[local_idx])
+    return out
 
 
 def _resample_deferred(config: CTRBPFConfig) -> bool:
@@ -1982,6 +3188,7 @@ def _run_ctrbpf_on_segment(
     data: dict,
     wls_positions: np.ndarray,
     config: CTRBPFConfig,
+    wls_quality: dict[str, np.ndarray] | None = None,
     dd_computer=None,
     dd_pr_computer=None,
     hybrid_pos: dict[float, np.ndarray] | None = None,
@@ -1992,6 +3199,9 @@ def _run_ctrbpf_on_segment(
         tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]
     ] | None = None,
     imu: dict[str, np.ndarray] | None = None,
+    collect_internal_diagnostics: bool = False,
+    ranker_score_lookup: dict[tuple[float, str], float] | None = None,
+    ranker_stickiness: float = 0.0,
 ) -> tuple[
     np.ndarray,
     float,
@@ -2003,9 +3213,11 @@ def _run_ctrbpf_on_segment(
     _RTKDiagPFStats,
     _FGOStats,
     _TDCPSmootherStats,
+    _LowSatBridgeStats,
     _ZUPTStats,
     _IMUTCStats,
     _INSTCStats,
+    list[dict[str, object]],
 ]:
     """Run the PF on the loaded PPC segment and return (positions, ms/epoch).
 
@@ -2030,6 +3242,8 @@ def _run_ctrbpf_on_segment(
         config.rbpf_kf_gate_min_dd_pairs is not None
         or config.rbpf_kf_gate_min_ess_ratio is not None
         or config.rbpf_kf_gate_max_spread_m is not None
+        or float(config.rbpf_kf_gate_max_doppler_wls_rms_mps) > 0.0
+        or float(config.rbpf_kf_gate_max_doppler_wls_speed_mps) > 0.0
     )
     need_dd_compute = (
         config.enable_dd_carrier_afv
@@ -2053,10 +3267,12 @@ def _run_ctrbpf_on_segment(
     fgo_dd_pr_ls_anchor_sigma = np.full(n_epochs, np.nan, dtype=np.float64)
     fgo_stats = _FGOStats()
     tdcp_stats = _TDCPSmootherStats()
+    low_sat_bridge_stats = _LowSatBridgeStats()
     zupt_stats = _ZUPTStats()
     imu_tc_stats = _IMUTCStats()
     ins_tc_stats = _INSTCStats()
     defer_resample = _resample_deferred(config)
+    internal_diagnostics: list[dict[str, object]] = []
 
     # Phase 9b: tight-coupled IMU state (in-loop pre-integration since the
     # last Status=4 hybrid anchor). Initialized lazily on the first epoch
@@ -2106,16 +3322,54 @@ def _run_ctrbpf_on_segment(
         )
 
     positions = np.zeros((n_epochs, 3), dtype=np.float64)
-    init_pos = np.asarray(wls_positions[0, :3], dtype=np.float64)
+    pr_used_counts = np.zeros(n_epochs, dtype=np.int32)
+    init_tow = round(float(times[0]), 1)
+    init_ref = reference_pos.get(init_tow) if reference_pos is not None else None
+    wls_init_pos = np.asarray(wls_positions[0, :3], dtype=np.float64)
+    wls_init_err_e, wls_init_err_n, wls_init_err_u = _diag_enu_error(wls_init_pos, init_ref)
+    init_pos = np.asarray(wls_init_pos, dtype=np.float64)
     init_cb = float(wls_positions[0, 3])
     init_spread = float(config.spread_pos_init)
+    init_source = "wls"
+    hybrid_init_pos: np.ndarray | None = None
+    hybrid_init_available = False
     if use_hybrid:
-        hybrid_init = hybrid_pos.get(round(float(times[0]), 1))
-        if hybrid_init is not None and np.all(np.isfinite(hybrid_init)):
-            init_pos = np.asarray(hybrid_init, dtype=np.float64)
+        hybrid_init_pos = hybrid_pos.get(init_tow)
+        if hybrid_init_pos is not None and np.all(np.isfinite(hybrid_init_pos)):
+            init_pos = np.asarray(hybrid_init_pos, dtype=np.float64)
+            init_source = "hybrid"
+            hybrid_init_available = True
             # Hybrid is already cm-class for "fix" status epochs and m-class
             # for float, so a 5m spread captures both regimes.
             init_spread = max(5.0, float(config.hybrid_sigma_m) * 5.0)
+    init_err_e, init_err_n, init_err_u = _diag_enu_error(init_pos, init_ref)
+    hybrid_init_err_e, hybrid_init_err_n, hybrid_init_err_u = _diag_enu_error(hybrid_init_pos, init_ref)
+    init_diag = {
+        "pf_init_source": init_source,
+        "pf_init_spread_pos_m": float(init_spread),
+        "pf_init_spread_cb_m": float(config.spread_cb_init),
+        "pf_init_velocity_sigma_m": (
+            float(config.velocity_init_sigma) if config.enable_rbpf_velocity_kf else 0.0
+        ),
+        "pf_init_clock_bias_m": float(init_cb),
+        "pf_init_x": float(init_pos[0]),
+        "pf_init_y": float(init_pos[1]),
+        "pf_init_z": float(init_pos[2]),
+        "pf_init_to_ref_m": _diag_distance(init_pos, init_ref),
+        "pf_init_err_e_m": init_err_e,
+        "pf_init_err_n_m": init_err_n,
+        "pf_init_err_u_m": init_err_u,
+        "wls_init_clock_bias_m": float(init_cb),
+        "wls_init_to_ref_m": _diag_distance(wls_init_pos, init_ref),
+        "wls_init_err_e_m": wls_init_err_e,
+        "wls_init_err_n_m": wls_init_err_n,
+        "wls_init_err_u_m": wls_init_err_u,
+        "hybrid_init_available": bool(hybrid_init_available),
+        "hybrid_init_to_ref_m": _diag_distance(hybrid_init_pos, init_ref),
+        "hybrid_init_err_e_m": hybrid_init_err_e,
+        "hybrid_init_err_n_m": hybrid_init_err_n,
+        "hybrid_init_err_u_m": hybrid_init_err_u,
+    }
 
     pf = _build_pf(config)
     pf.initialize(
@@ -2125,6 +3379,10 @@ def _run_ctrbpf_on_segment(
         spread_cb=config.spread_cb_init,
         velocity_init_sigma=config.velocity_init_sigma if config.enable_rbpf_velocity_kf else 0.0,
     )
+    rtkdiag_last_good_pos: np.ndarray | None = None
+    rtkdiag_last_good_t: float | None = None
+    rtkdiag_last_fix4_pos: np.ndarray | None = None
+    rtkdiag_last_fix4_t: float | None = None
     rtkdiag_temporal_prev: np.ndarray | None = None
     rtkdiag_temporal_prev_hybrid: np.ndarray | None = None
 
@@ -2136,7 +3394,76 @@ def _run_ctrbpf_on_segment(
     )
     ins_tc_quality_gate_skip_count = 0
 
+    def _wls_fallback_ok(idx: int, pf_pos: np.ndarray) -> bool:
+        if idx < 0 or idx >= int(wls_positions.shape[0]):
+            return False
+        wls_pos = np.asarray(wls_positions[idx, :3], dtype=np.float64)
+        if not np.all(np.isfinite(wls_pos)) or np.all(wls_pos == 0.0):
+            return False
+        if wls_quality is not None:
+            max_rms = float(config.rtkdiag_candidate_fallback_max_wls_rms_m)
+            if max_rms > 0.0:
+                rms = float("nan")
+                if idx < len(wls_quality.get("postfit_rms_m", ())):
+                    rms = float(wls_quality["postfit_rms_m"][idx])
+                if not np.isfinite(rms) or rms > max_rms:
+                    return False
+            max_pdop = float(config.rtkdiag_candidate_fallback_max_wls_pdop)
+            if max_pdop > 0.0:
+                pdop = float("nan")
+                if idx < len(wls_quality.get("pdop", ())):
+                    pdop = float(wls_quality["pdop"][idx])
+                if not np.isfinite(pdop) or pdop > max_pdop:
+                    return False
+        max_to_pf = float(config.rtkdiag_candidate_fallback_max_wls_to_pf_m)
+        if max_to_pf > 0.0:
+            pf_arr = np.asarray(pf_pos, dtype=np.float64).reshape(-1)[:3]
+            if (
+                not np.all(np.isfinite(pf_arr))
+                or float(np.linalg.norm(wls_pos - pf_arr)) > max_to_pf
+            ):
+                return False
+        return True
+
+    def _select_rtkdiag_fallback(
+        idx: int,
+        tow: float,
+        pf_pos: np.ndarray,
+        *,
+        suffix: str,
+    ) -> tuple[np.ndarray, str]:
+        nonlocal rtkdiag_last_good_pos, rtkdiag_last_good_t
+        mode = str(config.rtkdiag_candidate_fallback_mode).strip().lower()
+        pf_arr = np.asarray(pf_pos, dtype=np.float64).reshape(-1)[:3]
+        if mode in {"hybrid", "hybrid-last-good"} and hp_prefetched_valid:
+            rtkdiag_pf_stats.fallback_hybrid += 1
+            return np.asarray(hp_prefetched, dtype=np.float64), (
+                f"rtkdiag_fallback_hybrid{suffix}"
+            )
+        if mode in {"wls", "quality-wls", "wls-last-good", "quality-wls-last-good"}:
+            if mode == "wls" or _wls_fallback_ok(idx, pf_arr):
+                wls_pos = np.asarray(wls_positions[idx, :3], dtype=np.float64)
+                if np.all(np.isfinite(wls_pos)) and not np.all(wls_pos == 0.0):
+                    rtkdiag_pf_stats.fallback_wls += 1
+                    return wls_pos, f"rtkdiag_fallback_wls{suffix}"
+        if mode in {"last-good", "wls-last-good", "quality-wls-last-good", "hybrid-last-good"}:
+            max_age = float(config.rtkdiag_candidate_fallback_max_hold_age_s)
+            age_ok = (
+                rtkdiag_last_good_pos is not None
+                and rtkdiag_last_good_t is not None
+                and np.all(np.isfinite(rtkdiag_last_good_pos))
+                and (max_age <= 0.0 or float(tow) - float(rtkdiag_last_good_t) <= max_age)
+            )
+            if age_ok:
+                rtkdiag_pf_stats.fallback_last_good += 1
+                return np.asarray(rtkdiag_last_good_pos, dtype=np.float64), (
+                    f"rtkdiag_fallback_last_good{suffix}"
+                )
+        rtkdiag_pf_stats.fallback_pf += 1
+        return pf_arr, f"pf{suffix}"
+
     t0 = time.perf_counter()
+    _prev_ranker_label: str | None = None
     for i in range(n_epochs):
         t_now = float(times[i])
         t_key = round(t_now, 1)
@@ -2153,6 +3480,30 @@ def _run_ctrbpf_on_segment(
             dt = float(times[i] - times[i - 1])
             if not np.isfinite(dt) or dt <= 0.0:
                 dt = float(data.get("dt", 0.2))
+        st_diag = hybrid_status.get(t_key) if hybrid_status is not None else None
+        ref_diag_epoch = reference_pos.get(t_key) if reference_pos is not None else None
+        pf_diag_row: dict[str, object] | None = None
+        if collect_internal_diagnostics:
+            pf_diag_row = {
+                "epoch": int(i),
+                "tow": float(t_now),
+                "dt": float(dt),
+                "hybrid_status": int(st_diag) if st_diag is not None else "",
+                "hybrid_available": bool(hp_prefetched_valid),
+                "hybrid_to_ref_m": _diag_distance(hp_prefetched, ref_diag_epoch),
+            }
+            pf_diag_row.update(init_diag)
+            if ref_diag_epoch is not None and np.all(np.isfinite(ref_diag_epoch[:3])):
+                pf_diag_row["ref_x"] = float(ref_diag_epoch[0])
+                pf_diag_row["ref_y"] = float(ref_diag_epoch[1])
+                pf_diag_row["ref_z"] = float(ref_diag_epoch[2])
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_epoch_start",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
 
         ins_epoch_prepared = False
         if use_ins_tc and ins_ekf is not None:
@@ -2356,6 +3707,19 @@ def _run_ctrbpf_on_segment(
                 rbpf_velocity_kf=config.enable_rbpf_velocity_kf,
                 velocity_process_noise=config.velocity_process_noise,
             )
+        if pf_diag_row is not None:
+            pf_diag_row["predict_source"] = (
+                "particle_imu"
+                if pf_predict_done
+                else ("ins_motion" if v_guide_from_ins else ("hybrid_velocity" if v_guide is not None else "process"))
+            )
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_after_predict",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
 
         sat_i = np.asarray(sat_ecef[i], dtype=np.float64)
         pr_i = np.asarray(pseudoranges[i], dtype=np.float64)
@@ -2366,11 +3730,10 @@ def _run_ctrbpf_on_segment(
                 sid for sid, ch in _SYS_ID_TO_CHAR.items() if ch in set(config.pr_systems)
             }
             pr_sys_mask = np.array([int(sid) in allowed_pr_ids for sid in sids_i_full], dtype=bool)
-            if int(pr_sys_mask.sum()) >= 4:
-                sat_i = sat_i[pr_sys_mask]
-                pr_i = pr_i[pr_sys_mask]
-                w_i = w_i[pr_sys_mask]
-                sids_i_full = sids_i_full[pr_sys_mask]
+            sat_i = sat_i[pr_sys_mask]
+            pr_i = pr_i[pr_sys_mask]
+            w_i = w_i[pr_sys_mask]
+            sids_i_full = sids_i_full[pr_sys_mask]
         if system_ids is not None:
             w_i = _scale_weights_per_system(w_i, sids_i_full)
         w_i = _pr_likelihood_weights(w_i, config)
@@ -2382,13 +3745,105 @@ def _run_ctrbpf_on_segment(
             & (pr_i > 1e6)
         )
         if int(finite.sum()) < 4:
+            pr_used_counts[i] = int(finite.sum())
             est = np.asarray(pf.estimate(), dtype=np.float64)
-            positions[i] = est[:3]
+            if use_rtkdiag_pf:
+                positions[i], _min_sat_source = _select_rtkdiag_fallback(
+                    i,
+                    t_now,
+                    est[:3],
+                    suffix="_min_sats",
+                )
+            else:
+                positions[i] = est[:3]
+                _min_sat_source = "pf_min_sats"
+            if pf_diag_row is not None:
+                pf_diag_row["n_sat_raw"] = int(len(pr_i))
+                pf_diag_row["n_sat_used_pr"] = int(finite.sum())
+                pf_diag_row["pr_update_mode"] = "skip_min_sats"
+                pf_diag_row["emitted_source"] = _min_sat_source
+                pf_diag_row["emit_to_pf_estimate_m"] = _diag_distance(
+                    positions[i],
+                    est[:3],
+                )
+                pf_diag_row["emit_to_hybrid_m"] = _diag_distance(positions[i], hp_prefetched)
+                pf_diag_row["emit_to_ref_m"] = _diag_distance(positions[i], ref_diag_epoch)
+                internal_diagnostics.append(pf_diag_row)
+            if _min_sat_source.startswith("rtkdiag_fallback_wls") and np.all(
+                np.isfinite(positions[i])
+            ):
+                rtkdiag_last_good_pos = np.asarray(positions[i], dtype=np.float64).copy()
+                rtkdiag_last_good_t = t_now
             continue
         sat_i = sat_i[finite]
         pr_i = pr_i[finite]
         w_i = w_i[finite]
         sids_i = None if sids_i_full is None else np.asarray(sids_i_full)[finite]
+        pr_sagnac_ref = np.asarray(pf.estimate(), dtype=np.float64)[:3]
+        if (
+            float(config.pr_min_elevation_deg) > -90.0
+            and np.all(np.isfinite(pr_sagnac_ref))
+        ):
+            min_elev_rad = math.radians(float(config.pr_min_elevation_deg))
+            elev_mask = np.array(
+                [_elevation_rad(pr_sagnac_ref, sat_row) >= min_elev_rad for sat_row in sat_i],
+                dtype=bool,
+            )
+            if int(np.count_nonzero(elev_mask)) >= 4:
+                if pf_diag_row is not None:
+                    pf_diag_row["pr_elevation_gate_deg"] = float(config.pr_min_elevation_deg)
+                    pf_diag_row["pr_elevation_kept_count"] = int(np.count_nonzero(elev_mask))
+                    pf_diag_row["pr_elevation_dropped_count"] = int(elev_mask.size - np.count_nonzero(elev_mask))
+                sat_i = sat_i[elev_mask]
+                pr_i = pr_i[elev_mask]
+                w_i = w_i[elev_mask]
+                if sids_i is not None:
+                    sids_i = sids_i[elev_mask]
+            elif pf_diag_row is not None:
+                pf_diag_row["pr_elevation_gate_deg"] = float(config.pr_min_elevation_deg)
+                pf_diag_row["pr_elevation_kept_count"] = int(np.count_nonzero(elev_mask))
+                pf_diag_row["pr_elevation_dropped_count"] = int(elev_mask.size - np.count_nonzero(elev_mask))
+        pr_used_counts[i] = int(len(pr_i))
+        atmosphere_model = str(config.pr_atmosphere_model).strip().lower()
+        if atmosphere_model == "off" and float(config.pr_slant_delay_zenith_m) > 0.0:
+            atmosphere_model = "fixed"
+        if atmosphere_model not in {"", "off"} and np.all(np.isfinite(pr_sagnac_ref)):
+            atmosphere_delay = np.array(
+                [
+                    _pr_atmosphere_delay_m(
+                        pr_sagnac_ref,
+                        sat_row,
+                        t_now,
+                        model=atmosphere_model,
+                        fixed_zenith_m=float(config.pr_slant_delay_zenith_m),
+                        model_scale=float(config.pr_atmosphere_scale),
+                        extra_zenith_m=float(config.pr_atmosphere_extra_zenith_m),
+                        iono_alpha=tuple(config.pr_iono_alpha),
+                        iono_beta=tuple(config.pr_iono_beta),
+                    )
+                    for sat_row in sat_i
+                ],
+                dtype=np.float64,
+            )
+            pr_i = pr_i - atmosphere_delay
+            if pf_diag_row is not None:
+                pf_diag_row["pr_atmosphere_model"] = atmosphere_model
+                pf_diag_row["pr_atmosphere_scale"] = float(config.pr_atmosphere_scale)
+                pf_diag_row["pr_atmosphere_extra_zenith_m"] = float(
+                    config.pr_atmosphere_extra_zenith_m
+                )
+                pf_diag_row["pr_slant_delay_zenith_m"] = float(
+                    config.pr_slant_delay_zenith_m
+                )
+                pf_diag_row["pr_atmosphere_delay_median_m"] = float(
+                    np.median(atmosphere_delay)
+                )
+        if np.all(np.isfinite(pr_sagnac_ref)):
+            sat_i = rotate_satellites_sagnac(pr_sagnac_ref, sat_i)
+            if pf_diag_row is not None:
+                pf_diag_row["pr_sagnac_applied"] = True
+        elif pf_diag_row is not None:
+            pf_diag_row["pr_sagnac_applied"] = False
         st_obs = hybrid_status.get(t_key) if hybrid_status is not None else None
         skip_pr_here = (
             st_obs is not None
@@ -2426,6 +3881,7 @@ def _run_ctrbpf_on_segment(
                 w_i = w_i[gate_mask]
                 if sids_i is not None:
                     sids_i = sids_i[gate_mask]
+                pr_used_counts[i] = int(len(pr_i))
 
         if (not skip_pr_here) and config.enable_correct_clock_bias and i % 5 == 0:
             pf.correct_clock_bias(sat_i, pr_i, quantile=clock_quantile)
@@ -2433,8 +3889,23 @@ def _run_ctrbpf_on_segment(
         use_pr_gmm_here = bool(config.enable_pr_gmm)
         if use_pr_gmm_here and st_obs is not None and config.pr_gmm_statuses:
             use_pr_gmm_here = int(st_obs) in {int(s) for s in config.pr_gmm_statuses}
+        pr_ess_guard_enabled = (
+            (not skip_pr_here)
+            and float(config.pr_ess_guard_min_ratio) > 0.0
+        )
+        pre_pr_log_weights = (
+            np.asarray(pf.get_log_weights(), dtype=np.float64)
+            if pr_ess_guard_enabled
+            else None
+        )
+        if pf_diag_row is not None:
+            pf_diag_row["pr_ess_guard_enabled"] = bool(pr_ess_guard_enabled)
+            if pre_pr_log_weights is not None:
+                pf_diag_row["pr_ess_guard_pre_ratio"] = _ess_ratio_from_log_weights(pre_pr_log_weights)
         if skip_pr_here:
             pr_obs_stats.epochs_skipped += 1
+            if pf_diag_row is not None:
+                pf_diag_row["pr_update_mode"] = "skipped_status"
         elif use_pr_gmm_here:
             pf.update_gmm(
                 sat_i,
@@ -2444,17 +3915,44 @@ def _run_ctrbpf_on_segment(
                 w_los=float(config.pr_gmm_w_los),
                 mu_nlos=float(config.pr_gmm_mu_nlos_m),
                 sigma_nlos=float(config.pr_gmm_sigma_nlos_m),
-                resample=not defer_resample,
+                resample=(not defer_resample) and not pr_ess_guard_enabled,
             )
             pr_obs_stats.epochs_gmm += 1
+            if pf_diag_row is not None:
+                pf_diag_row["pr_update_mode"] = "gmm"
         else:
             pf.update(
                 sat_i,
                 pr_i,
                 weights=w_i,
-                resample=not defer_resample,
+                resample=(not defer_resample) and not pr_ess_guard_enabled,
             )
             pr_obs_stats.epochs_gaussian += 1
+            if pf_diag_row is not None:
+                pf_diag_row["pr_update_mode"] = "gaussian"
+        if pr_ess_guard_enabled and pre_pr_log_weights is not None:
+            alpha, post_ratio, final_ratio = _apply_pr_ess_guard(
+                pf,
+                pre_pr_log_weights,
+                min_ratio=float(config.pr_ess_guard_min_ratio),
+                max_iters=int(config.pr_ess_guard_max_iters),
+            )
+            if pf_diag_row is not None:
+                pf_diag_row["pr_ess_guard_alpha"] = alpha
+                pf_diag_row["pr_ess_guard_post_ratio"] = post_ratio
+                pf_diag_row["pr_ess_guard_final_ratio"] = final_ratio
+            if not defer_resample:
+                _ = pf.resample_if_needed()
+        if pf_diag_row is not None:
+            pf_diag_row["n_sat_raw"] = int(len(sids_i_full)) if sids_i_full is not None else int(len(pr_i))
+            pf_diag_row["n_sat_used_pr"] = int(len(pr_i))
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_after_pr",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
 
         # Phase 1+2: compute DD once (cached) so both the Doppler-KF gate and
         # the AFV update can read its pair count.
@@ -2494,19 +3992,18 @@ def _run_ctrbpf_on_segment(
                 )
                 # Phase 4 cache: save the DD carrier observation for the
                 # post-process FGO + LAMBDA pass after the loop.
-                if (
-                    config.enable_fgo_lambda
-                    and dd_result is not None
-                    and int(getattr(dd_result, "n_dd", 0)) > 0
-                ):
-                    from gnss_gpu.local_fgo import DDCarrierEpoch
+                if dd_result is not None and int(getattr(dd_result, "n_dd", 0)) > 0:
+                    if config.enable_fgo_lambda:
+                        from gnss_gpu.local_fgo import DDCarrierEpoch
 
-                    fgo_dd_cache[i] = DDCarrierEpoch.from_result(dd_result)
-                    # Phase 4 v2: also cache DD pseudorange so FGO has an
-                    # absolute-position anchor (DD carrier alone is
-                    # cm-relative; the integer ambiguities can absorb a
-                    # systematic absolute bias and pass the ratio test).
-                    if dd_pr_computer is not None:
+                        fgo_dd_cache[i] = DDCarrierEpoch.from_result(dd_result)
+                    # Phase 4 v2 / realtime DD-PR: cache DD pseudorange for
+                    # FGO and optionally turn the same robust LS anchor into a
+                    # PF soft position update. DD carrier alone is relative;
+                    # DD-PR supplies an absolute anchor when PR/WLS is biased.
+                    if dd_pr_computer is not None and (
+                        config.enable_fgo_lambda or config.enable_dd_pr_ls_anchor
+                    ):
                         try:
                             dd_pr_result = dd_pr_computer.compute_dd(
                                 float(times[i]),
@@ -2623,24 +4120,164 @@ def _run_ctrbpf_on_segment(
                                                         fgo_stats.dd_pr_ls_anchor_pass_5m += 1
                                     elif not bool(anchor_diag.get("accepted", False)):
                                         fgo_stats.dd_pr_ls_anchor_rejected_solve += 1
-                            from gnss_gpu.local_fgo import DDPseudorangeEpoch
+                            if config.enable_fgo_lambda:
+                                from gnss_gpu.local_fgo import DDPseudorangeEpoch
 
-                            fgo_dd_pr_cache[i] = DDPseudorangeEpoch.from_result(dd_pr_result)
+                                fgo_dd_pr_cache[i] = DDPseudorangeEpoch.from_result(dd_pr_result)
+        if pf_diag_row is not None:
+            pf_diag_row["dd_carrier_n"] = (
+                int(getattr(dd_result, "n_dd", 0)) if dd_result is not None else 0
+            )
+            pf_diag_row["dd_pr_ls_anchor_available"] = bool(
+                np.all(np.isfinite(fgo_dd_pr_ls_anchor_pos[i, :]))
+            )
+            pf_diag_row["dd_pr_ls_anchor_sigma_m"] = (
+                float(fgo_dd_pr_ls_anchor_sigma[i])
+                if np.isfinite(fgo_dd_pr_ls_anchor_sigma[i])
+                else ""
+            )
+            pf_diag_row["dd_pr_ls_anchor_to_pf_after_pr_m"] = _diag_distance(
+                fgo_dd_pr_ls_anchor_pos[i, :],
+                np.asarray(
+                    [
+                        pf_diag_row.get("pf_after_pr_x", float("nan")),
+                        pf_diag_row.get("pf_after_pr_y", float("nan")),
+                        pf_diag_row.get("pf_after_pr_z", float("nan")),
+                    ],
+                    dtype=np.float64,
+                ),
+            )
+            ref_diag = reference_pos.get(t_key) if reference_pos is not None else None
+            pf_diag_row["dd_pr_ls_anchor_to_ref_m"] = _diag_distance(
+                fgo_dd_pr_ls_anchor_pos[i, :],
+                ref_diag,
+            )
 
+        doppler_update_applied = False
+        doppler_gate_skip_reason = ""
         if config.enable_rbpf_velocity_kf and sat_velocity is not None and doppler_hz is not None:
             sv_full = np.asarray(sat_velocity[i], dtype=np.float64)
             dop_full = np.asarray(doppler_hz[i], dtype=np.float64)
             sat_full = np.asarray(sat_ecef[i], dtype=np.float64)
             w_full = np.asarray(weights[i], dtype=np.float64)
             if system_ids is not None:
-                w_full = _scale_weights_per_system(w_full, system_ids[i])
+                sids_doppler_full = np.asarray(system_ids[i], dtype=np.int32)
+                w_full = _scale_weights_per_system(w_full, sids_doppler_full)
+            else:
+                sids_doppler_full = None
             dop_finite = (
                 np.isfinite(dop_full)
                 & np.all(np.isfinite(sv_full), axis=1)
                 & np.all(np.isfinite(sat_full), axis=1)
                 & np.isfinite(w_full)
             )
+            doppler_raw_finite_count = int(np.count_nonzero(dop_finite))
+            if config.doppler_systems and sids_doppler_full is not None:
+                allowed_doppler_ids = {
+                    sid for sid, ch in _SYS_ID_TO_CHAR.items() if ch in set(config.doppler_systems)
+                }
+                doppler_sys_mask = np.array(
+                    [int(sid) in allowed_doppler_ids for sid in sids_doppler_full],
+                    dtype=bool,
+                )
+                dop_finite &= doppler_sys_mask
+            if pf_diag_row is not None:
+                pf_diag_row["doppler_raw_finite_count"] = int(doppler_raw_finite_count)
+                pf_diag_row["doppler_system_filtered_count"] = int(np.count_nonzero(dop_finite))
+                pf_diag_row["doppler_systems"] = ",".join(str(s) for s in config.doppler_systems)
+            if int(dop_finite.sum()) >= 4 and float(config.doppler_prefit_gate_mps) > 0.0:
+                pf_pos_for_doppler_gate = np.asarray(pf.estimate(), dtype=np.float64)[:3]
+                doppler_prefit_mask = _doppler_prefit_gate_mask(
+                    sat_full[dop_finite],
+                    sv_full[dop_finite],
+                    dop_full[dop_finite],
+                    w_full[dop_finite],
+                    pf_pos_for_doppler_gate,
+                    gate_mps=float(config.doppler_prefit_gate_mps),
+                    min_sats=int(config.doppler_prefit_gate_min_sats),
+                    doppler_sign=-1.0,
+                    wavelength_m=_GPS_L1_WAVELENGTH_M,
+                )
+                doppler_prefit_indices = np.flatnonzero(dop_finite)
+                dop_finite[doppler_prefit_indices[~doppler_prefit_mask]] = False
+                if pf_diag_row is not None:
+                    pf_diag_row["doppler_prefit_gate_mps"] = float(config.doppler_prefit_gate_mps)
+                    pf_diag_row["doppler_prefit_kept_count"] = int(np.count_nonzero(doppler_prefit_mask))
+                    pf_diag_row["doppler_prefit_dropped_count"] = int(doppler_prefit_mask.size - np.count_nonzero(doppler_prefit_mask))
             if int(dop_finite.sum()) >= 4:
+                doppler_gate_wls_rms_mps = float("nan")
+                doppler_gate_wls_speed_mps = float("nan")
+                if (
+                    float(config.rbpf_kf_gate_max_doppler_wls_rms_mps) > 0.0
+                    or float(config.rbpf_kf_gate_max_doppler_wls_speed_mps) > 0.0
+                ):
+                    pf_pos_for_doppler_quality = np.asarray(
+                        pf.estimate(), dtype=np.float64
+                    )[:3]
+                    wls_vel_for_gate, wls_rms_for_gate = _doppler_centered_wls_velocity(
+                        sat_full[dop_finite],
+                        sv_full[dop_finite],
+                        dop_full[dop_finite],
+                        w_full[dop_finite],
+                        pf_pos_for_doppler_quality,
+                        doppler_sign=-1.0,
+                        wavelength_m=_GPS_L1_WAVELENGTH_M,
+                    )
+                    doppler_gate_wls_rms_mps = float(wls_rms_for_gate)
+                    if wls_vel_for_gate is not None and np.all(
+                        np.isfinite(wls_vel_for_gate[:3])
+                    ):
+                        doppler_gate_wls_speed_mps = float(
+                            np.linalg.norm(wls_vel_for_gate[:3])
+                        )
+                if pf_diag_row is not None:
+                    pf_vel_before_doppler = _capture_pf_velocity_state(
+                        pf,
+                        pf_diag_row,
+                        "pf_before_doppler_vel",
+                    )
+                    pf_pos_before_doppler = np.asarray(pf.estimate(), dtype=np.float64)[:3]
+                    ref_vel_diag = _reference_velocity_for_epoch(times, reference_pos, i)
+                    if ref_vel_diag is not None and np.all(np.isfinite(ref_vel_diag[:3])):
+                        pf_diag_row["ref_velocity_speed_mps"] = float(np.linalg.norm(ref_vel_diag[:3]))
+                    for label, sign in (("current", -1.0), ("flipped", 1.0)):
+                        pf_diag_row[f"doppler_{label}_pfvel_rms_mps"] = _doppler_centered_residual_rms(
+                            sat_full[dop_finite],
+                            sv_full[dop_finite],
+                            dop_full[dop_finite],
+                            w_full[dop_finite],
+                            pf_pos_before_doppler,
+                            pf_vel_before_doppler,
+                            doppler_sign=sign,
+                            wavelength_m=_GPS_L1_WAVELENGTH_M,
+                        )
+                        if ref_vel_diag is not None:
+                            pf_diag_row[f"doppler_{label}_refvel_rms_mps"] = _doppler_centered_residual_rms(
+                                sat_full[dop_finite],
+                                sv_full[dop_finite],
+                                dop_full[dop_finite],
+                                w_full[dop_finite],
+                                pf_pos_before_doppler,
+                                ref_vel_diag,
+                                doppler_sign=sign,
+                                wavelength_m=_GPS_L1_WAVELENGTH_M,
+                            )
+                        wls_vel, wls_rms = _doppler_centered_wls_velocity(
+                            sat_full[dop_finite],
+                            sv_full[dop_finite],
+                            dop_full[dop_finite],
+                            w_full[dop_finite],
+                            pf_pos_before_doppler,
+                            doppler_sign=sign,
+                            wavelength_m=_GPS_L1_WAVELENGTH_M,
+                        )
+                        pf_diag_row[f"doppler_{label}_wls_rms_mps"] = wls_rms
+                        if wls_vel is not None and np.all(np.isfinite(wls_vel[:3])):
+                            pf_diag_row[f"doppler_{label}_wls_speed_mps"] = float(np.linalg.norm(wls_vel[:3]))
+                            if ref_vel_diag is not None and np.all(np.isfinite(ref_vel_diag[:3])):
+                                pf_diag_row[f"doppler_{label}_wls_to_refvel_mps"] = float(
+                                    np.linalg.norm(wls_vel[:3] - ref_vel_diag[:3])
+                                )
                 if gate_active:
                     gate_stats.epochs_attempted += 1
                 gate_skipped = False
@@ -2649,17 +4286,44 @@ def _run_ctrbpf_on_segment(
                     if n_dd_now < int(config.rbpf_kf_gate_min_dd_pairs):
                         gate_stats.skipped_min_dd_pairs += 1
                         gate_skipped = True
+                        doppler_gate_skip_reason = "min_dd_pairs"
                 if not gate_skipped and config.rbpf_kf_gate_min_ess_ratio is not None:
                     ess = float(pf.get_ess())
                     ess_ratio = ess / max(int(config.n_particles), 1)
                     if ess_ratio < float(config.rbpf_kf_gate_min_ess_ratio):
                         gate_stats.skipped_min_ess_ratio += 1
                         gate_skipped = True
+                        doppler_gate_skip_reason = "min_ess"
                 if not gate_skipped and config.rbpf_kf_gate_max_spread_m is not None:
                     spread = float(pf.get_position_spread())
                     if spread > float(config.rbpf_kf_gate_max_spread_m):
                         gate_stats.skipped_max_spread += 1
                         gate_skipped = True
+                        doppler_gate_skip_reason = "max_spread"
+                if (
+                    not gate_skipped
+                    and float(config.rbpf_kf_gate_max_doppler_wls_rms_mps) > 0.0
+                    and (
+                        not np.isfinite(doppler_gate_wls_rms_mps)
+                        or doppler_gate_wls_rms_mps
+                        > float(config.rbpf_kf_gate_max_doppler_wls_rms_mps)
+                    )
+                ):
+                    gate_stats.skipped_doppler_wls_rms += 1
+                    gate_skipped = True
+                    doppler_gate_skip_reason = "doppler_wls_rms"
+                if (
+                    not gate_skipped
+                    and float(config.rbpf_kf_gate_max_doppler_wls_speed_mps) > 0.0
+                    and (
+                        not np.isfinite(doppler_gate_wls_speed_mps)
+                        or doppler_gate_wls_speed_mps
+                        > float(config.rbpf_kf_gate_max_doppler_wls_speed_mps)
+                    )
+                ):
+                    gate_stats.skipped_doppler_wls_speed += 1
+                    gate_skipped = True
+                    doppler_gate_skip_reason = "doppler_wls_speed"
                 if not gate_skipped:
                     pf.update_doppler_kf(
                         sat_full[dop_finite],
@@ -2670,9 +4334,27 @@ def _run_ctrbpf_on_segment(
                         sigma_mps=config.sigma_doppler_mps,
                         resample=not defer_resample,
                     )
+                    doppler_update_applied = True
                     if gate_active:
                         gate_stats.epochs_applied += 1
+                if pf_diag_row is not None:
+                    _capture_pf_velocity_state(
+                        pf,
+                        pf_diag_row,
+                        "pf_after_doppler_vel",
+                    )
+        if pf_diag_row is not None:
+            pf_diag_row["doppler_update_applied"] = bool(doppler_update_applied)
+            pf_diag_row["doppler_gate_skip_reason"] = doppler_gate_skip_reason
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_after_doppler",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
 
+        dd_carrier_update_applied = False
         if config.enable_dd_carrier_afv and dd_computer is not None:
             dd_stats.epochs_attempted += 1
             if (
@@ -2686,11 +4368,160 @@ def _run_ctrbpf_on_segment(
                 )
                 dd_stats.epochs_applied += 1
                 dd_stats.pairs_total += int(dd_result.n_dd)
+                dd_carrier_update_applied = True
+        if pf_diag_row is not None:
+            pf_diag_row["dd_carrier_update_applied"] = bool(dd_carrier_update_applied)
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_after_dd_carrier",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
+
+        dd_pr_ls_anchor_update_applied = False
+        anchor_mode_for_pf = str(config.dd_pr_ls_anchor_mode).strip().lower()
+        if (
+            config.enable_dd_pr_ls_anchor
+            and anchor_mode_for_pf in {"pf", "pu", "pf-pu", "prior+pf", "initial+pf"}
+            and np.all(np.isfinite(fgo_dd_pr_ls_anchor_pos[i, :]))
+            and np.isfinite(fgo_dd_pr_ls_anchor_sigma[i])
+            and float(fgo_dd_pr_ls_anchor_sigma[i]) > 0.0
+        ):
+            pf.position_update(
+                np.asarray(fgo_dd_pr_ls_anchor_pos[i, :], dtype=np.float64),
+                sigma_pos=float(fgo_dd_pr_ls_anchor_sigma[i]),
+            )
+            dd_pr_ls_anchor_update_applied = True
+        if pf_diag_row is not None:
+            pf_diag_row["dd_pr_ls_anchor_update_applied"] = bool(
+                dd_pr_ls_anchor_update_applied
+            )
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_after_dd_pr_ls_anchor",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
 
         if config.enable_position_update:
             ref = wls_positions[i, :3]
-            if np.all(np.isfinite(ref)) and not np.all(ref == 0.0):
+            pr_sat_count_for_pu = int(len(pr_i))
+            wls_postfit_rms_m = float("nan")
+            wls_postfit_absmax_m = float("nan")
+            wls_pdop = float("nan")
+            wls_normal_cond = float("nan")
+            if wls_quality is not None:
+                if i < len(wls_quality.get("postfit_rms_m", ())):
+                    wls_postfit_rms_m = float(wls_quality["postfit_rms_m"][i])
+                if i < len(wls_quality.get("postfit_absmax_m", ())):
+                    wls_postfit_absmax_m = float(wls_quality["postfit_absmax_m"][i])
+                if i < len(wls_quality.get("pdop", ())):
+                    wls_pdop = float(wls_quality["pdop"][i])
+                if i < len(wls_quality.get("normal_cond", ())):
+                    wls_normal_cond = float(wls_quality["normal_cond"][i])
+            pu_skip_min_epoch = int(i) < int(config.position_update_min_epoch)
+            pu_skip_min_sats = (
+                int(config.position_update_min_pr_sats) > 0
+                and pr_sat_count_for_pu < int(config.position_update_min_pr_sats)
+            )
+            pu_skip_wls_rms = (
+                float(config.position_update_max_wls_rms_m) > 0.0
+                and (
+                    not np.isfinite(wls_postfit_rms_m)
+                    or wls_postfit_rms_m
+                    > float(config.position_update_max_wls_rms_m)
+                )
+            )
+            pu_skip_wls_pdop = (
+                float(config.position_update_max_wls_pdop) > 0.0
+                and (
+                    not np.isfinite(wls_pdop)
+                    or wls_pdop > float(config.position_update_max_wls_pdop)
+                )
+            )
+            pf_ref_before_pu = np.asarray(pf.estimate(), dtype=np.float64)[:3]
+            wls_to_pf_before_pu_m = (
+                float(np.linalg.norm(ref - pf_ref_before_pu))
+                if np.all(np.isfinite(ref)) and np.all(np.isfinite(pf_ref_before_pu))
+                else float("nan")
+            )
+            pu_skip_wls_to_pf = (
+                float(config.position_update_max_wls_to_pf_m) > 0.0
+                and (
+                    not np.isfinite(wls_to_pf_before_pu_m)
+                    or wls_to_pf_before_pu_m
+                    > float(config.position_update_max_wls_to_pf_m)
+                )
+            )
+            wls_pu_err_e, wls_pu_err_n, wls_pu_err_u = _diag_enu_error(ref, ref_diag_epoch)
+            if pf_diag_row is not None:
+                pf_diag_row["position_update_min_epoch"] = int(
+                    config.position_update_min_epoch
+                )
+                pf_diag_row["position_update_skipped_min_epoch"] = bool(
+                    pu_skip_min_epoch
+                )
+                pf_diag_row["position_update_min_pr_sats"] = int(
+                    config.position_update_min_pr_sats
+                )
+                pf_diag_row["position_update_pr_sats"] = pr_sat_count_for_pu
+                pf_diag_row["position_update_skipped_min_sats"] = bool(
+                    pu_skip_min_sats
+                )
+                pf_diag_row["position_update_max_wls_rms_m"] = float(
+                    config.position_update_max_wls_rms_m
+                )
+                pf_diag_row["position_update_max_wls_pdop"] = float(
+                    config.position_update_max_wls_pdop
+                )
+                pf_diag_row["position_update_max_wls_to_pf_m"] = float(
+                    config.position_update_max_wls_to_pf_m
+                )
+                pf_diag_row["position_update_wls_postfit_rms_m"] = wls_postfit_rms_m
+                pf_diag_row["position_update_wls_postfit_absmax_m"] = (
+                    wls_postfit_absmax_m
+                )
+                pf_diag_row["position_update_wls_pdop"] = wls_pdop
+                pf_diag_row["position_update_wls_normal_cond"] = wls_normal_cond
+                pf_diag_row["position_update_wls_to_pf_before_m"] = (
+                    wls_to_pf_before_pu_m
+                )
+                pf_diag_row["position_update_wls_to_ref_m"] = _diag_distance(
+                    ref,
+                    ref_diag_epoch,
+                )
+                pf_diag_row["position_update_wls_err_e_m"] = wls_pu_err_e
+                pf_diag_row["position_update_wls_err_n_m"] = wls_pu_err_n
+                pf_diag_row["position_update_wls_err_u_m"] = wls_pu_err_u
+                pf_diag_row["position_update_skipped_wls_rms"] = bool(
+                    pu_skip_wls_rms
+                )
+                pf_diag_row["position_update_skipped_wls_pdop"] = bool(
+                    pu_skip_wls_pdop
+                )
+                pf_diag_row["position_update_skipped_wls_to_pf"] = bool(
+                    pu_skip_wls_to_pf
+                )
+            if (
+                not pu_skip_min_epoch
+                and not pu_skip_min_sats
+                and not pu_skip_wls_rms
+                and not pu_skip_wls_pdop
+                and not pu_skip_wls_to_pf
+                and np.all(np.isfinite(ref))
+                and not np.all(ref == 0.0)
+            ):
                 pf.position_update(ref, sigma_pos=config.position_update_sigma_m)
+        if pf_diag_row is not None:
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_after_position_update",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
 
         # Phase 6: hybrid (libgnss++ 50.91%) blend. The runtime PF cannot
         # currently follow the trajectory without a velocity guide (predict
@@ -2748,14 +4579,48 @@ def _run_ctrbpf_on_segment(
                         hybrid_stats.recenter_skipped += 1
                 pf.position_update(hp, sigma_pos=hybrid_sigma_now)
                 hybrid_stats.epochs_applied += 1
+        if pf_diag_row is not None:
+            pf_diag_row["hybrid_pu_applied"] = bool(
+                use_hybrid
+                and hp is not None
+                and np.all(np.isfinite(hp))
+                and not np.all(np.asarray(hp, dtype=np.float64) == 0.0)
+            )
+            pf_diag_row["pf_before_hybrid_to_hybrid_m"] = _diag_distance(
+                np.asarray(
+                    [
+                        pf_diag_row.get("pf_after_position_update_x", float("nan")),
+                        pf_diag_row.get("pf_after_position_update_y", float("nan")),
+                        pf_diag_row.get("pf_after_position_update_z", float("nan")),
+                    ],
+                    dtype=np.float64,
+                ),
+                hp,
+            )
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_after_hybrid",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
 
         rtkdiag_pf_emit_here = False
         rtkdiag_pf_ref: np.ndarray | None = None
+        rtkdiag_selected_label = ""
+        rtkdiag_gated_options_epoch = 0
+        rtkdiag_candidate_epoch_ready = True
         if use_rtkdiag_pf:
             rtkdiag_pf_stats.epochs_evaluated += 1
+            rtkdiag_min_epoch = max(int(config.rtkdiag_candidate_min_epoch), 0)
+            rtkdiag_candidate_epoch_ready = int(i) >= rtkdiag_min_epoch
+            if not rtkdiag_candidate_epoch_ready:
+                rtkdiag_pf_stats.skipped_min_epoch += 1
             select_mode = str(config.rtkdiag_candidate_select_mode)
             is_fusion = select_mode in {"wavg3", "wavg5"}
             is_consensus = select_mode in {"consensus3", "consensus5"}
+            is_cluster_vote = select_mode == "cluster_vote"
+            is_ranker = select_mode == "ranker"
             temporal_prevdist_alpha = {
                 "temporal_n2_v1": 0.001,
                 "temporal_n2_v2": 0.0006,
@@ -2767,6 +4632,11 @@ def _run_ctrbpf_on_segment(
                 "temporal_n2_v8": 0.00062,
                 "temporal_n2_v9": 0.00062,
                 "temporal_n2_v10": 0.00062,
+                "temporal_n2_v11_a001": 0.001,
+                "temporal_n2_v12_a01": 0.01,
+                "temporal_n2_v13_a1": 0.1,
+                "temporal_n2_v14_a3": 0.3,
+                "temporal_n2_v15_a10": 1.0,
             }.get(select_mode)
             is_temporal_prevdist = temporal_prevdist_alpha is not None
             temporal_hybdelta_base = {
@@ -2909,6 +4779,11 @@ def _run_ctrbpf_on_segment(
                     "n2loose3": 1.06,
                     "r25": 1.01,
                 },
+                "temporal_n2_v11_a001": {},
+                "temporal_n2_v12_a01": {},
+                "temporal_n2_v13_a1": {},
+                "temporal_n2_v14_a3": {},
+                "temporal_n2_v15_a10": {},
                 "temporal_hybdelta_n3_v3": {
                     "rtkout5c005em3": 1.06,
                     "mlc2nobds": 1.50,
@@ -2962,22 +4837,103 @@ def _run_ctrbpf_on_segment(
                     float(t_key),
                 )
             for label, candidate_pos, candidate_diag in rtkdiag_candidates or []:
+                if not rtkdiag_candidate_epoch_ready:
+                    continue
                 diag_row = candidate_diag.get(t_key)
                 gate_ok = _rtkdiag_candidate_gate(
                     diag_row,
                     ratio_min=float(config.rtkdiag_candidate_ratio_min),
                     residual_rms_max=float(config.rtkdiag_candidate_residual_rms_max),
+                    status5_residual_rms_max=float(
+                        config.rtkdiag_candidate_main_status5_residual_rms_max
+                    ),
+                )
+                float_gate_ok = _rtkdiag_candidate_float_gate(
+                    diag_row,
+                    label=label,
+                    allowed_labels=tuple(config.rtkdiag_candidate_float_labels),
+                    residual_rms_max=float(config.rtkdiag_candidate_float_residual_rms_max),
+                    residual_abs_max=float(config.rtkdiag_candidate_float_abs_max),
+                    min_sats=int(config.rtkdiag_candidate_float_min_sats),
                 )
                 local_ungate_ok = (
                     local_ungate_labels is not None
                     and _rtkdiag_fixed_output_ok(diag_row)
                     and (not local_ungate_labels or label in local_ungate_labels)
                 )
-                if not gate_ok and not local_ungate_ok:
+                cand = candidate_pos.get(t_key)
+                status5_gate_ok = False
+                if not gate_ok and not float_gate_ok and not local_ungate_ok:
+                    status5_window_labels = _rtkdiag_local_ungate_labels_for_tow(
+                        tuple(config.rtkdiag_candidate_status5_tow_windows),
+                        float(t_key),
+                    )
+                    if (
+                        status5_window_labels is not None
+                        and (not status5_window_labels or label in status5_window_labels)
+                    ):
+                        _cand_t_key, status5_cand, status5_diag_row = (
+                            _rtkdiag_nearest_candidate_row(
+                                candidate_pos,
+                                candidate_diag,
+                                t_key,
+                                max_dt_s=float(
+                                    config.rtkdiag_candidate_status5_max_dt_s
+                                ),
+                            )
+                        )
+                        status5_gate_ok = _rtkdiag_candidate_status5_gate(
+                            status5_diag_row,
+                            label=label,
+                            allowed_labels=tuple(
+                                config.rtkdiag_candidate_status5_labels
+                            ),
+                            residual_rms_max=float(
+                                config.rtkdiag_candidate_status5_residual_rms_max
+                            ),
+                            min_sats=int(config.rtkdiag_candidate_status5_min_sats),
+                        )
+                        if status5_gate_ok:
+                            diag_row = status5_diag_row
+                            cand = status5_cand
+                if (
+                    not gate_ok
+                    and not float_gate_ok
+                    and not local_ungate_ok
+                    and not status5_gate_ok
+                ):
+                    continue
+                if not _rtkdiag_candidate_diag_policy_gate(
+                    diag_row,
+                    require_any_fields=tuple(
+                        config.rtkdiag_candidate_require_any_diag_fields
+                    ),
+                    require_all_fields=tuple(
+                        config.rtkdiag_candidate_require_all_diag_fields
+                    ),
+                    min_fields=tuple(config.rtkdiag_candidate_min_diag_fields),
+                    max_fields=tuple(config.rtkdiag_candidate_max_diag_fields),
+                ):
+                    rtkdiag_pf_stats.skipped_diag_policy += 1
                     continue
                 gated_options += 1
-                cand = candidate_pos.get(t_key)
                 if cand is None or not np.all(np.isfinite(cand)) or np.all(cand == 0.0):
+                    continue
+                max_to_hybrid = float(config.rtkdiag_candidate_max_to_hybrid_m)
+                if (
+                    max_to_hybrid > 0.0
+                    and hp is not None
+                    and np.all(np.isfinite(hp))
+                    and not np.all(np.asarray(hp, dtype=np.float64) == 0.0)
+                    and float(
+                        np.linalg.norm(
+                            np.asarray(cand, dtype=np.float64)
+                            - np.asarray(hp, dtype=np.float64)
+                        )
+                    )
+                    > max_to_hybrid
+                ):
+                    rtkdiag_pf_stats.skipped_hybrid_distance += 1
                     continue
                 if is_fusion or is_consensus:
                     candidate_key = _rtkdiag_candidate_sort_key(diag_row, mode="score")
@@ -2999,7 +4955,81 @@ def _run_ctrbpf_on_segment(
                         candidate_key = (float(candidate_key[0]) * factor, float(candidate_key[1]))
                 collected.append((label, np.asarray(cand, dtype=np.float64), diag_row, candidate_key))
 
+            # Velocity/IMU bridge candidate (2位再現): when last good anchor is
+            # recent (<= bridge_max_s), propose anchor + PF_velocity * Δt as a
+            # synthetic candidate. Helps n/r2 where 19 gici candidates cluster
+            # within 0.38m and selector can't distinguish truth among them.
+            # anchor_mode: "last_emit" = any emit (cluster bias inherited);
+            #              "last_fix4" = last trusted status=4 high-ratio Fix only
+            _bridge_anchor_mode = str(config.rtkdiag_candidate_bridge_anchor_mode)
+            if _bridge_anchor_mode == "last_fix4":
+                _bridge_anchor_pos = rtkdiag_last_fix4_pos
+                _bridge_anchor_t = rtkdiag_last_fix4_t
+            else:
+                _bridge_anchor_pos = rtkdiag_last_good_pos
+                _bridge_anchor_t = rtkdiag_last_good_t
+            if (
+                rtkdiag_candidate_epoch_ready
+                and bool(config.rtkdiag_candidate_bridge_enable)
+                and _bridge_anchor_pos is not None
+                and _bridge_anchor_t is not None
+                and np.all(np.isfinite(_bridge_anchor_pos))
+            ):
+                bridge_dt = float(t_key) - float(_bridge_anchor_t)
+                if 0.0 < bridge_dt <= float(config.rtkdiag_candidate_bridge_max_s):
+                    # Get PF velocity from particle states[:, 4:7] (vx, vy, vz)
+                    try:
+                        _pstates = np.asarray(pf.get_particle_states(), dtype=np.float64)
+                        _logw = np.asarray(pf.get_log_weights(), dtype=np.float64)
+                        bridge_vel = _weighted_mean_from_log_weights(_pstates[:, 4:7], _logw)
+                    except (AttributeError, IndexError, ValueError):
+                        bridge_vel = None
+                    if bridge_vel is not None and bridge_vel.size >= 3 and np.all(np.isfinite(bridge_vel[:3])):
+                        bridge_pos = (
+                            np.asarray(_bridge_anchor_pos, dtype=np.float64)
+                            + bridge_vel[:3] * bridge_dt
+                        )
+                        if np.all(np.isfinite(bridge_pos)):
+                            bridge_residual = float(
+                                config.rtkdiag_candidate_bridge_residual_rms_m
+                            )
+                            bridge_diag = {
+                                "tow": str(t_key),
+                                "output_added": "1",
+                                "final_status": "4",
+                                "final_ratio": "10.0",
+                                "final_residual_rms": str(bridge_residual),
+                                "final_residual_abs_max": str(bridge_residual),
+                                "final_sats": "20",
+                                "final_update_rows": "10",
+                                "final_pdop": "1.0",
+                                "final_baseline_m": "0.0",
+                            }
+                            # Bridge sort key: penalize by Δt^2 so close-anchor bridges
+                            # rank high but far ones drop off.
+                            bridge_key = (bridge_residual * (1.0 + bridge_dt ** 2), bridge_residual)
+                            collected.append(
+                                ("pf_bridge",
+                                 np.asarray(bridge_pos, dtype=np.float64),
+                                 bridge_diag,
+                                 bridge_key)
+                            )
+                            gated_options += 1
+
+            # Pre-filter to top-K by residual_rms before applying selector
+            # ranking. Drops cluster-biased high-rms candidates that current
+            # composite formulas inadvertently rank above the truth. Sim shows
+            # K=3-7 captures most of the +12pp ranking headroom; K>=20 collapses.
+            rms_prefilter_k = int(config.rtkdiag_candidate_rms_prefilter_k)
+            if rms_prefilter_k > 0 and len(collected) > rms_prefilter_k:
+                collected = sorted(
+                    collected,
+                    key=lambda c: _diag_float(c[2], "final_residual_rms"),
+                )[:rms_prefilter_k]
+                gated_options = len(collected)
+
             if gated_options > 0:
+                rtkdiag_gated_options_epoch = int(gated_options)
                 rtkdiag_pf_stats.gate_pass += 1
                 rtkdiag_pf_stats.candidate_options_total += int(gated_options)
                 hp_valid_for_temporal = hp is not None and np.all(np.isfinite(hp)) and not np.all(np.asarray(hp, dtype=np.float64) == 0.0)
@@ -3022,6 +5052,82 @@ def _run_ctrbpf_on_segment(
                         selected_pos = fused_pos
                         _selected_diag = sorted_top[0][2]
                         _selected_key = sorted_top[0][3]
+                    elif is_ranker:
+                        # Supervised LightGBM ranker (Path F): pick gated
+                        # candidate with highest p_pass from precomputed
+                        # lookup (run_id, tow, label) -> p_pass.
+                        # Falls back to lowest-rms when lookup is missing or
+                        # the epoch is not covered by predictions.
+                        # Optional stickiness: if previous epoch's pick has
+                        # p_pass >= stickiness * max_p, keep that label
+                        # (sequence smoothing for oscillation-prone epochs).
+                        best_score = -float("inf")
+                        best_cand = None
+                        tow_key = round(float(t_key), 1) if ranker_score_lookup else None
+                        scores_this_epoch: dict[str, tuple[float, tuple]] = {}
+                        if ranker_score_lookup and tow_key is not None:
+                            for cand in collected:
+                                p = ranker_score_lookup.get((tow_key, cand[0]))
+                                if p is None:
+                                    continue
+                                scores_this_epoch[cand[0]] = (float(p), cand)
+                                if p > best_score:
+                                    best_score = float(p)
+                                    best_cand = cand
+                        if (
+                            best_cand is not None
+                            and ranker_stickiness > 0.0
+                            and _prev_ranker_label is not None
+                            and _prev_ranker_label in scores_this_epoch
+                        ):
+                            prev_p, prev_cand = scores_this_epoch[_prev_ranker_label]
+                            if prev_p >= ranker_stickiness * best_score:
+                                best_cand = prev_cand
+                                best_score = prev_p
+                        if best_cand is None:
+                            best_cand = min(
+                                collected,
+                                key=lambda c: _diag_float(c[2], "final_residual_rms"),
+                            )
+                        label = best_cand[0] + "+rnk"
+                        selected_pos = best_cand[1]
+                        _selected_diag = best_cand[2]
+                        _selected_key = best_cand[3]
+                        _prev_ranker_label = best_cand[0]
+                    elif is_cluster_vote:
+                        # Greedy single-pass spatial clustering at 50cm radius.
+                        # Pick largest cluster (tie-break: lowest rms member).
+                        # Within winning cluster, pick lowest-rms candidate.
+                        radius = float(config.rtkdiag_candidate_cluster_vote_radius_m)
+                        clusters: list[dict] = []
+                        for cand in collected:
+                            cpos = np.asarray(cand[1], dtype=np.float64)
+                            assigned = False
+                            for cl in clusters:
+                                if float(np.linalg.norm(cpos - cl["centroid"])) <= radius:
+                                    cl["members"].append(cand)
+                                    n_now = len(cl["members"])
+                                    cl["centroid"] = (cl["centroid"] * (n_now - 1) + cpos) / n_now
+                                    assigned = True
+                                    break
+                            if not assigned:
+                                clusters.append({"centroid": cpos.copy(), "members": [cand]})
+
+                        def _cluster_rank(cl: dict) -> tuple[int, float]:
+                            rms_min = min(
+                                _diag_float(m[2], "final_residual_rms") for m in cl["members"]
+                            )
+                            return (-len(cl["members"]), rms_min)
+                        clusters.sort(key=_cluster_rank)
+                        best_cluster = clusters[0]
+                        best_cand = min(
+                            best_cluster["members"],
+                            key=lambda m: _diag_float(m[2], "final_residual_rms"),
+                        )
+                        label = best_cand[0] + "+clv"
+                        selected_pos = best_cand[1]
+                        _selected_diag = best_cand[2]
+                        _selected_key = best_cand[3]
                     elif is_consensus:
                         n_cons = 3 if select_mode == "consensus3" else 5
                         sorted_top = sorted(collected, key=lambda c: c[3])[:n_cons]
@@ -3067,6 +5173,22 @@ def _run_ctrbpf_on_segment(
                         best_cand = min(collected, key=lambda c: c[3])
                         label, selected_pos, _selected_diag, _selected_key = best_cand
                     rtkdiag_pf_ref = selected_pos
+                    rtkdiag_selected_label = str(label)
+                    # Track last high-confidence Fix=4 anchor for bridge (independent of cluster bias).
+                    if _selected_diag is not None and label != "pf_bridge":
+                        try:
+                            _sel_status = int(_selected_diag.get("final_status", "0"))
+                            _sel_ratio = _diag_float(_selected_diag, "final_ratio")
+                            _sel_residual = _diag_float(_selected_diag, "final_residual_rms")
+                        except (ValueError, TypeError):
+                            _sel_status = 0; _sel_ratio = 0.0; _sel_residual = 1e6
+                        if (
+                            _sel_status == 4
+                            and _sel_ratio >= float(config.rtkdiag_candidate_bridge_fix4_min_ratio)
+                            and _sel_residual <= float(config.rtkdiag_candidate_bridge_fix4_max_residual)
+                        ):
+                            rtkdiag_last_fix4_pos = np.asarray(selected_pos, dtype=np.float64).copy()
+                            rtkdiag_last_fix4_t = float(t_key)
                     if is_temporal_prevdist or is_temporal_hybdelta:
                         rtkdiag_temporal_prev = np.asarray(selected_pos, dtype=np.float64)
                         if hp_valid_for_temporal:
@@ -3148,6 +5270,31 @@ def _run_ctrbpf_on_segment(
             elif (is_temporal_prevdist or is_temporal_hybdelta) and hp is not None and np.all(np.isfinite(hp)) and not np.all(np.asarray(hp, dtype=np.float64) == 0.0):
                 rtkdiag_temporal_prev = np.asarray(hp, dtype=np.float64)
                 rtkdiag_temporal_prev_hybrid = np.asarray(hp, dtype=np.float64)
+        if pf_diag_row is not None:
+            pf_diag_row["rtkdiag_gated_options"] = int(rtkdiag_gated_options_epoch)
+            pf_diag_row["rtkdiag_selected_label"] = rtkdiag_selected_label
+            pf_diag_row["rtkdiag_candidate_epoch_ready"] = bool(
+                rtkdiag_candidate_epoch_ready
+            )
+            pf_diag_row["rtkdiag_candidate_min_epoch"] = int(
+                config.rtkdiag_candidate_min_epoch
+            )
+            pf_diag_row["rtkdiag_candidate_available"] = rtkdiag_pf_ref is not None
+            pf_diag_row["rtkdiag_candidate_to_hybrid_m"] = _diag_distance(
+                rtkdiag_pf_ref,
+                hp,
+            )
+            pf_diag_row["rtkdiag_candidate_to_ref_m"] = _diag_distance(
+                rtkdiag_pf_ref,
+                ref_diag_epoch,
+            )
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_after_rtkdiag",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
 
         # Phase 9b: tight-coupled IMU. After hybrid PU but BEFORE estimate /
         # emission, integrate IMU since the anchor and apply a per-particle
@@ -3431,6 +5578,16 @@ def _run_ctrbpf_on_segment(
             ins_tc_quality_window.append(
                 int(_st_for_window) if _st_for_window is not None else 0
             )
+        if pf_diag_row is not None:
+            pf_diag_row["imu_tc_emit_pf_here"] = bool(imu_tc_emit_pf_here)
+            pf_diag_row["ins_tc_emit_pf_here"] = bool(ins_tc_emit_pf_here)
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_before_emit",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
 
         resampled_before_emit = False
         if config.enable_reservoir_stein:
@@ -3441,6 +5598,7 @@ def _run_ctrbpf_on_segment(
                 pr_obs_stats.deferred_resample_epochs += 1
 
         est = np.asarray(pf.estimate(), dtype=np.float64)
+        emitted_source = "pf"
         if ins_tc_emit_pf_here:
             if (
                 hp is not None
@@ -3450,9 +5608,11 @@ def _run_ctrbpf_on_segment(
             ):
                 positions[i] = np.asarray(hp, dtype=np.float64)
                 ins_tc_stats.emit_skipped_pf_drift += 1
+                emitted_source = "hybrid_ins_pf_drift"
             else:
                 positions[i] = est[:3]
                 ins_tc_stats.emit_pf_estimate += 1
+                emitted_source = "pf_ins_tc"
         elif imu_tc_emit_pf_here:
             # Phase 9b: emit PF estimate on Status in emit_pf set, as long as
             # the PF didn't wander too far from hybrid (cloud-collapse guard).
@@ -3464,9 +5624,11 @@ def _run_ctrbpf_on_segment(
             ):
                 positions[i] = np.asarray(hp, dtype=np.float64)
                 imu_tc_stats.emit_skipped_pf_drift += 1
+                emitted_source = "hybrid_imu_pf_drift"
             else:
                 positions[i] = est[:3]
                 imu_tc_stats.emit_pf_estimate += 1
+                emitted_source = "pf_imu_tc"
         elif rtkdiag_pf_emit_here and rtkdiag_pf_ref is not None:
             # Phase 10i: a trusted relaxed-RTK candidate is a PF
             # pseudo-observation. The conservative default emits the PF only
@@ -3481,19 +5643,31 @@ def _run_ctrbpf_on_segment(
             if emit_mode == "candidate":
                 positions[i] = np.asarray(rtkdiag_pf_ref, dtype=np.float64)
                 rtkdiag_pf_stats.emit_candidate += 1
+                emitted_source = "rtkdiag_candidate"
             elif pf_close_to_candidate:
                 positions[i] = est[:3]
                 rtkdiag_pf_stats.emit_pf_estimate += 1
+                emitted_source = "pf_rtkdiag"
             elif emit_mode == "candidate-on-drift":
                 positions[i] = np.asarray(rtkdiag_pf_ref, dtype=np.float64)
                 rtkdiag_pf_stats.emit_candidate += 1
                 rtkdiag_pf_stats.emit_skipped_pf_drift += 1
+                emitted_source = "rtkdiag_candidate_on_drift"
             else:
                 if hp is not None and np.all(np.isfinite(hp)) and not np.all(hp == 0.0):
                     positions[i] = np.asarray(hp, dtype=np.float64)
+                    emitted_source = "hybrid_rtkdiag_pf_drift"
                 else:
                     positions[i] = est[:3]
+                    emitted_source = "pf_rtkdiag_no_hybrid"
                 rtkdiag_pf_stats.emit_skipped_pf_drift += 1
+        elif use_rtkdiag_pf:
+            positions[i], emitted_source = _select_rtkdiag_fallback(
+                i,
+                t_now,
+                est[:3],
+                suffix="_rtkdiag",
+            )
         elif (
             use_hybrid
             and not config.hybrid_emit_pf_estimate
@@ -3503,6 +5677,7 @@ def _run_ctrbpf_on_segment(
         ):
             # Phase 6 passthrough: trust hybrid as the floor.
             positions[i] = np.asarray(hp, dtype=np.float64)
+            emitted_source = "hybrid"
         elif (
             use_hybrid
             and config.hybrid_emit_pf_estimate
@@ -3517,17 +5692,50 @@ def _run_ctrbpf_on_segment(
                 int(s) for s in config.hybrid_emit_pf_statuses
             }:
                 positions[i] = np.asarray(hp, dtype=np.float64)
+                emitted_source = "hybrid_status_gate"
             else:
                 positions[i] = est[:3]
+                emitted_source = "pf_hybrid_emit"
         else:
             # Phase 7 / non-hybrid: emit the PF's own weighted-mean estimate
             # so any DD-AFV / Doppler-KF correction shows up in the score.
             positions[i] = est[:3]
+            emitted_source = "pf"
+
+        if (
+            emitted_source.startswith("rtkdiag_candidate")
+            or emitted_source.startswith("rtkdiag_fallback_wls")
+            or emitted_source.startswith("rtkdiag_fallback_hybrid")
+        ):
+            if np.all(np.isfinite(positions[i])):
+                rtkdiag_last_good_pos = np.asarray(positions[i], dtype=np.float64).copy()
+                rtkdiag_last_good_t = t_now
 
         if defer_resample and not config.enable_reservoir_stein:
             did_resample = pf.resample_if_needed()
             if did_resample:
                 pr_obs_stats.deferred_resample_epochs += 1
+        else:
+            did_resample = bool(resampled_before_emit)
+        if pf_diag_row is not None:
+            pf_diag_row["resampled_before_emit"] = bool(resampled_before_emit)
+            pf_diag_row["resampled_epoch_end"] = bool(did_resample)
+            pf_diag_row["emitted_source"] = emitted_source
+            pf_diag_row["emit_to_pf_estimate_m"] = _diag_distance(positions[i], est[:3])
+            pf_diag_row["emit_to_hybrid_m"] = _diag_distance(positions[i], hp)
+            pf_diag_row["emit_to_rtkdiag_candidate_m"] = _diag_distance(
+                positions[i],
+                rtkdiag_pf_ref,
+            )
+            pf_diag_row["emit_to_ref_m"] = _diag_distance(positions[i], ref_diag_epoch)
+            _capture_pf_internal_state(
+                pf,
+                pf_diag_row,
+                "pf_epoch_end",
+                n_particles=int(config.n_particles),
+                reference_ecef=ref_diag_epoch,
+            )
+            internal_diagnostics.append(pf_diag_row)
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
@@ -3557,6 +5765,50 @@ def _run_ctrbpf_on_segment(
             hybrid_status=hybrid_status,
             stats=tdcp_stats,
         )
+
+    if config.enable_low_sat_bridge:
+        positions_before_bridge = positions.copy()
+        positions = _apply_startup_wls_bridge(
+            positions=positions,
+            times=times,
+            wls_quality=wls_quality,
+            config=config,
+            stats=low_sat_bridge_stats,
+        )
+        positions = _apply_low_sat_bridge(
+            positions=positions,
+            times=times,
+            pr_used_counts=pr_used_counts,
+            config=config,
+            stats=low_sat_bridge_stats,
+        )
+        if collect_internal_diagnostics and internal_diagnostics:
+            for row in internal_diagnostics:
+                idx_raw = row.get("epoch")
+                try:
+                    idx = int(idx_raw)
+                except (TypeError, ValueError):
+                    continue
+                if idx < 0 or idx >= int(positions.shape[0]):
+                    continue
+                before = np.asarray(positions_before_bridge[idx], dtype=np.float64)
+                after = np.asarray(positions[idx], dtype=np.float64)
+                changed = (
+                    np.all(np.isfinite(before))
+                    and np.all(np.isfinite(after))
+                    and float(np.linalg.norm(after - before)) > 1.0e-9
+                )
+                row["low_sat_bridge_rewritten"] = bool(changed)
+                if changed:
+                    row["emit_to_ref_pre_bridge_m"] = row.get("emit_to_ref_m", "")
+                    tow_key = round(float(times[idx]), 1)
+                    ref_bridge = (
+                        reference_pos.get(tow_key)
+                        if reference_pos is not None
+                        else None
+                    )
+                    row["emit_to_ref_m"] = _diag_distance(after, ref_bridge)
+                    row["emitted_source"] = f"{row.get('emitted_source', '')}+bridge"
 
     # Phase 4: post-process FGO + LAMBDA partial fix over sliding windows.
     if config.enable_fgo_lambda and any(c is not None for c in fgo_dd_cache):
@@ -3638,9 +5890,11 @@ def _run_ctrbpf_on_segment(
         rtkdiag_pf_stats,
         fgo_stats,
         tdcp_stats,
+        low_sat_bridge_stats,
         zupt_stats,
         imu_tc_stats,
         ins_tc_stats,
+        internal_diagnostics,
     )
 
 
@@ -3889,6 +6143,23 @@ def _write_pos_file(
             )
 
 
+def _write_dict_rows(path: Path, rows: list[dict[str, object]]) -> None:
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        for key in row:
+            if key not in seen:
+                seen.add(key)
+                fieldnames.append(key)
+    with path.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def _parse_path_list(raw: str) -> list[Path]:
     return [Path(p.strip()) for p in raw.split(",") if p.strip()]
 
@@ -3914,6 +6185,28 @@ def _parse_label_factor_list(raw: str) -> tuple[tuple[str, float], ...]:
             )
         factors.append((label, float(factor_raw)))
     return tuple(factors)
+
+
+def _parse_diag_threshold_list(raw: str) -> tuple[tuple[str, float], ...]:
+    thresholds: list[tuple[str, float]] = []
+    for spec in raw.split(","):
+        spec = spec.strip()
+        if not spec:
+            continue
+        if "=" in spec:
+            key, value_raw = (part.strip() for part in spec.split("=", 1))
+        elif ":" in spec:
+            key, value_raw = (part.strip() for part in spec.split(":", 1))
+        else:
+            raise ValueError(
+                f"invalid diagnostic threshold {spec!r}; expected field=value"
+            )
+        if not key:
+            raise ValueError(
+                f"invalid diagnostic threshold {spec!r}; expected field=value"
+            )
+        thresholds.append((key, float(value_raw)))
+    return tuple(thresholds)
 
 
 def _parse_run_label_blocks(raw: str) -> dict[tuple[str, str], set[str]]:
@@ -3955,6 +6248,8 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
     base = dict(
         n_particles=args.n_particles,
         sigma_pr=args.sigma_pr,
+        pr_ess_guard_min_ratio=args.pr_ess_guard_min_ratio,
+        pr_ess_guard_max_iters=args.pr_ess_guard_max_iters,
         pr_gmm_statuses=tuple(
             int(s.strip()) for s in args.pr_gmm_statuses.split(",") if s.strip()
         ),
@@ -3968,6 +6263,11 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         pr_weight_min=args.pr_weight_min,
         pr_weight_max=args.pr_weight_max,
         pr_systems=tuple(s.strip() for s in args.pr_systems.split(",") if s.strip()),
+        pr_min_elevation_deg=args.pr_min_elevation_deg,
+        pr_atmosphere_model=args.pr_atmosphere_model,
+        pr_atmosphere_scale=args.pr_atmosphere_scale,
+        pr_atmosphere_extra_zenith_m=args.pr_atmosphere_extra_zenith_m,
+        pr_slant_delay_zenith_m=args.pr_slant_delay_zenith_m,
         pr_prefit_gate_m=args.pr_prefit_gate_m,
         pr_prefit_gate_min_sats=args.pr_prefit_gate_min_sats,
         pr_prefit_gate_keep_best=args.pr_prefit_gate_keep_best,
@@ -3989,6 +6289,18 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         rtkdiag_candidate_sigma_m=args.rtkdiag_candidate_sigma_m,
         rtkdiag_candidate_ratio_min=args.rtkdiag_candidate_ratio_min,
         rtkdiag_candidate_residual_rms_max=args.rtkdiag_candidate_residual_rms_max,
+        rtkdiag_candidate_main_status5_residual_rms_max=args.rtkdiag_candidate_main_status5_residual_rms_max,
+        rtkdiag_candidate_rms_prefilter_k=args.rtkdiag_candidate_rms_prefilter_k,
+        rtkdiag_candidate_cluster_vote_radius_m=args.rtkdiag_candidate_cluster_vote_radius_m,
+        rtkdiag_candidate_ranker_score_path=args.rtkdiag_candidate_ranker_score_path,
+        rtkdiag_candidate_ranker_stickiness=args.rtkdiag_candidate_ranker_stickiness,
+        rtkdiag_candidate_bridge_enable=args.rtkdiag_candidate_bridge_enable,
+        rtkdiag_candidate_bridge_max_s=args.rtkdiag_candidate_bridge_max_s,
+        rtkdiag_candidate_bridge_residual_rms_m=args.rtkdiag_candidate_bridge_residual_rms_m,
+        rtkdiag_candidate_bridge_anchor_mode=args.rtkdiag_candidate_bridge_anchor_mode,
+        rtkdiag_candidate_bridge_fix4_min_ratio=args.rtkdiag_candidate_bridge_fix4_min_ratio,
+        rtkdiag_candidate_bridge_fix4_max_residual=args.rtkdiag_candidate_bridge_fix4_max_residual,
+        rtkdiag_candidate_max_to_hybrid_m=args.rtkdiag_candidate_max_to_hybrid_m,
         rtkdiag_candidate_emit_max_diff_m=args.rtkdiag_candidate_emit_max_diff_m,
         rtkdiag_candidate_recenter_max_shift_m=args.rtkdiag_candidate_recenter_max_shift_m,
         rtkdiag_candidate_soft_top_k=args.rtkdiag_candidate_soft_top_k,
@@ -3997,6 +6309,32 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         rtkdiag_candidate_proposal_spread_m=args.rtkdiag_candidate_proposal_spread_m,
         rtkdiag_candidate_select_mode=args.rtkdiag_candidate_select_mode,
         rtkdiag_candidate_emit_mode=args.rtkdiag_candidate_emit_mode,
+        rtkdiag_candidate_min_epoch=args.rtkdiag_candidate_min_epoch,
+        rtkdiag_candidate_require_any_diag_fields=tuple(
+            _parse_label_list(args.rtkdiag_candidate_require_any_diag_fields)
+        ),
+        rtkdiag_candidate_require_all_diag_fields=tuple(
+            _parse_label_list(args.rtkdiag_candidate_require_all_diag_fields)
+        ),
+        rtkdiag_candidate_min_diag_fields=_parse_diag_threshold_list(
+            args.rtkdiag_candidate_min_diag_fields
+        ),
+        rtkdiag_candidate_max_diag_fields=_parse_diag_threshold_list(
+            args.rtkdiag_candidate_max_diag_fields
+        ),
+        rtkdiag_candidate_fallback_mode=args.rtkdiag_candidate_fallback_mode,
+        rtkdiag_candidate_fallback_max_wls_rms_m=(
+            args.rtkdiag_candidate_fallback_max_wls_rms_m
+        ),
+        rtkdiag_candidate_fallback_max_wls_pdop=(
+            args.rtkdiag_candidate_fallback_max_wls_pdop
+        ),
+        rtkdiag_candidate_fallback_max_wls_to_pf_m=(
+            args.rtkdiag_candidate_fallback_max_wls_to_pf_m
+        ),
+        rtkdiag_candidate_fallback_max_hold_age_s=(
+            args.rtkdiag_candidate_fallback_max_hold_age_s
+        ),
         rtkdiag_candidate_label_factors=_parse_label_factor_list(
             args.rtkdiag_candidate_label_factors
         ),
@@ -4005,9 +6343,17 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         spread_pos_init=args.spread_pos_init,
         spread_cb_init=args.spread_cb_init,
         sigma_doppler_mps=args.sigma_doppler_mps,
+        doppler_systems=tuple(s.strip() for s in args.doppler_systems.split(",") if s.strip()),
+        doppler_prefit_gate_mps=args.doppler_prefit_gate_mps,
+        doppler_prefit_gate_min_sats=args.doppler_prefit_gate_min_sats,
         velocity_init_sigma=args.velocity_init_sigma,
         velocity_process_noise=args.velocity_process_noise,
         position_update_sigma_m=args.position_update_sigma_m,
+        position_update_min_epoch=args.position_update_min_epoch,
+        position_update_min_pr_sats=args.position_update_min_pr_sats,
+        position_update_max_wls_rms_m=args.position_update_max_wls_rms_m,
+        position_update_max_wls_pdop=args.position_update_max_wls_pdop,
+        position_update_max_wls_to_pf_m=args.position_update_max_wls_to_pf_m,
         enable_correct_clock_bias=not args.disable_correct_clock_bias,
         dd_sigma_cycles=args.dd_sigma_cycles,
         dd_min_pairs=args.dd_min_pairs,
@@ -4032,6 +6378,8 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         ),
         dd_pr_ls_anchor_set_initial=not bool(args.dd_pr_ls_anchor_no_initial),
         dd_pr_ls_anchor_mode=str(args.dd_pr_ls_anchor_mode),
+        rbpf_kf_gate_max_doppler_wls_rms_mps=args.rbpf_velocity_kf_gate_max_doppler_wls_rms_mps,
+        rbpf_kf_gate_max_doppler_wls_speed_mps=args.rbpf_velocity_kf_gate_max_doppler_wls_speed_mps,
         hybrid_sigma_m=args.hybrid_sigma_m,
         hybrid_recenter_max_shift_m=args.hybrid_recenter_max_shift_m,
         hybrid_emit_pf_statuses=tuple(
@@ -4063,6 +6411,13 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         tdcp_obs_anchor_sigma_m=args.tdcp_obs_anchor_sigma_m,
         tdcp_obs_loose_sigma_m=args.tdcp_obs_loose_sigma_m,
         tdcp_obs_missing_sigma_m=args.tdcp_obs_missing_sigma_m,
+        low_sat_bridge_min_pr_sats=args.low_sat_bridge_min_pr_sats,
+        low_sat_bridge_min_span_epochs=args.low_sat_bridge_min_span_epochs,
+        low_sat_bridge_max_span_epochs=args.low_sat_bridge_max_span_epochs,
+        low_sat_bridge_max_gap_s=args.low_sat_bridge_max_gap_s,
+        low_sat_bridge_startup_max_wls_pdop=args.low_sat_bridge_startup_max_wls_pdop,
+        low_sat_bridge_startup_min_epochs=args.low_sat_bridge_startup_min_epochs,
+        low_sat_bridge_startup_max_epochs=args.low_sat_bridge_startup_max_epochs,
         zupt_acc_norm_low_mps2=args.zupt_acc_norm_low_mps2,
         zupt_acc_norm_high_mps2=args.zupt_acc_norm_high_mps2,
         zupt_gyro_norm_max_dps=args.zupt_gyro_norm_max_dps,
@@ -4165,6 +6520,24 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_position_update=True,
             method_label="RBPF-velKF+DD+PU",
         ))
+    if "rbpf+dd+pu+tdcp" in args.methods:
+        variants.append(CTRBPFConfig(
+            **base,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_position_update=True,
+            enable_tdcp_smoother=True,
+            method_label="RBPF-velKF+DD+PU+TDCP",
+        ))
+    if "rbpf+dd+pu+bridge" in args.methods:
+        variants.append(CTRBPFConfig(
+            **base,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_position_update=True,
+            enable_low_sat_bridge=True,
+            method_label="RBPF-velKF+DD+PU+bridge",
+        ))
     # Phase 2 variants: same as rbpf+dd / rbpf+dd+pu but force the
     # AAA-style region-aware gate defaults so a single CLI flag is enough
     # to opt in. Per-knob CLI overrides still apply via args.*.
@@ -4197,6 +6570,110 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_dd_carrier_afv=True,
             enable_position_update=True,
             method_label="RBPF-velKF+DD+gate+PU",
+        ))
+    if "rbpf+dd+gate+pu+tdcp" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_position_update=True,
+            enable_tdcp_smoother=True,
+            method_label="RBPF-velKF+DD+gate+PU+TDCP",
+        ))
+    if "rbpf+dd+gate+pu+bridge" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_position_update=True,
+            enable_low_sat_bridge=True,
+            method_label="RBPF-velKF+DD+gate+PU+bridge",
+        ))
+    dopq_gate = dict(
+        rbpf_kf_gate_min_dd_pairs=None,
+        rbpf_kf_gate_min_ess_ratio=None,
+        rbpf_kf_gate_max_spread_m=args.rbpf_velocity_kf_gate_max_spread_m,
+        rbpf_kf_gate_max_doppler_wls_rms_mps=(
+            args.rbpf_velocity_kf_gate_max_doppler_wls_rms_mps
+            if args.rbpf_velocity_kf_gate_max_doppler_wls_rms_mps > 0.0
+            else 1.0
+        ),
+        rbpf_kf_gate_max_doppler_wls_speed_mps=(
+            args.rbpf_velocity_kf_gate_max_doppler_wls_speed_mps
+            if args.rbpf_velocity_kf_gate_max_doppler_wls_speed_mps > 0.0
+            else 20.0
+        ),
+    )
+    if "rbpf+dd+dopq+pu" in args.methods:
+        variant_kwargs = {**base, **dopq_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_position_update=True,
+            method_label="RBPF-velKF+DD+dopq+PU",
+        ))
+    if "rbpf+dd+dopq+pu+bridge" in args.methods:
+        variant_kwargs = {**base, **dopq_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_position_update=True,
+            enable_low_sat_bridge=True,
+            method_label="RBPF-velKF+DD+dopq+PU+bridge",
+        ))
+    if "rbpf+dd+gate+pu+ddpr" in args.methods:
+        variant_kwargs = {
+            **base,
+            **aaa_gate,
+            "enable_dd_pr_ls_anchor": True,
+            "dd_pr_ls_anchor_mode": "pf-pu",
+            "dd_pr_ls_anchor_statuses": (),
+        }
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_position_update=True,
+            method_label="RBPF-velKF+DD+gate+PU+DDPR",
+        ))
+    if "rbpf+dd+gate+pu+bridge+ddpr" in args.methods:
+        variant_kwargs = {
+            **base,
+            **aaa_gate,
+            "enable_dd_pr_ls_anchor": True,
+            "dd_pr_ls_anchor_mode": "pf-pu",
+            "dd_pr_ls_anchor_statuses": (),
+        }
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_position_update=True,
+            enable_low_sat_bridge=True,
+            method_label="RBPF-velKF+DD+gate+PU+bridge+DDPR",
+        ))
+    if "rbpf+dd+gate+rtkdiag_pf" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_rtkdiag_pf_rescue=True,
+            method_label="RBPF-velKF+DD+gate+rtkdiag_pf",
+        ))
+    if "rbpf+dd+gate+rtkdiag_pf+bridge" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_rtkdiag_pf_rescue=True,
+            enable_low_sat_bridge=True,
+            method_label="RBPF-velKF+DD+gate+rtkdiag_pf+bridge",
         ))
     # Phase 6 variants: layer hybrid (libgnss++ 50.91% baseline) PU on top.
     if "pf+hybrid" in args.methods:
@@ -4247,6 +6724,23 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_hybrid_velocity_guide=True,
             enable_rtkdiag_pf_rescue=True,
             method_label="RBPF-velKF+DD+gate+hybrid+rtkdiag_pf",
+        ))
+    # Phase 19ba: rtkdiag_pf + TDCP smoother. Cluster-vote / K=3 prefilter
+    # picks the per-epoch candidate; TDCP fwd+bwd Kalman smooths the emitted
+    # trajectory using carrier-phase delta velocity. Designed to interpolate
+    # deep-canyon spans (1-5min between fix=4 anchors) where no candidate
+    # is within 50cm but adjacent anchors are.
+    if "rbpf+dd+gate+hybrid+rtkdiag_pf+tdcp" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=True,
+            enable_hybrid_pu=True,
+            enable_hybrid_velocity_guide=True,
+            enable_rtkdiag_pf_rescue=True,
+            enable_tdcp_smoother=True,
+            method_label="RBPF-velKF+DD+gate+hybrid+rtkdiag_pf+tdcp",
         ))
     # Phase 11cq: rtkdiag_pf + post-process FGO (with bug #3 fixed in motion-delta).
     if "rbpf+dd+gate+hybrid+rtkdiag_pf+phase4" in args.methods:
@@ -4551,7 +7045,23 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
 _RTKDIAG_POLICIES = {
     "phase10o", "phase10p", "phase10r",
     "phase11h", "phase11i", "phase11l", "phase11n",
-    "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di", "phase11dk", "phase11dl", "phase11dm", "phase11dn", "phase11do", "phase11dp", "phase11dq", "phase11dr", "phase11ds", "phase11dt", "phase11du", "phase11dv", "phase11dw", "phase11dx", "phase11dy", "phase11dz", "phase11ea", "phase11eb", "phase11ec", "phase11ed", "phase11ee", "phase11ef", "phase11eg", "phase11eh", "phase11ei", "phase11ej", "phase11ek", "phase11el", "phase11em", "phase11en", "phase11eo", "phase11ep",
+    "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di", "phase11dk", "phase11dl", "phase11dm", "phase11dn", "phase11do", "phase11dp", "phase11dq", "phase11dr", "phase11ds", "phase11dt", "phase11du", "phase11dv", "phase11dw", "phase11dx", "phase11dy", "phase11dz", "phase11ea", "phase11eb", "phase11ec", "phase11ed", "phase11ee", "phase11ef", "phase11eg", "phase11eh", "phase11ei", "phase11ej", "phase11ek", "phase11el", "phase11em", "phase11en", "phase11eo", "phase11ep", "phase11eq", "phase11er", "phase11er_mrescue", "phase11er_ext", "phase11er_ext_mrescue", "phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue",
+}
+
+
+_NAGOYA_RUN2_PHASE11EQ_LABELS = {
+    "fgo_v14_snr38",
+    "full_ratio15_lock3_trustedseed_rtkout3oGem3",
+    "dev_demo5_trusted_o3",
+    "n2_nobds",
+    "fgo_v1",
+    "full_ratio15_lock3_trustedseed_rtkout3mlc1",
+    "full_ratio15_lock3_trustedseed_rtkout5",
+}
+
+_NAGOYA_RUN2_PHASE11ER_EXT_LABELS = {
+    *_NAGOYA_RUN2_PHASE11EQ_LABELS,
+    "libgnss_ext_subset",
 }
 
 
@@ -4567,6 +7077,36 @@ def _apply_rtkdiag_run_index_policy(
         or not bool(variant.enable_rtkdiag_pf_rescue)
     ):
         return variant
+    if policy in {"phase11eq", "phase11er", "phase11er_mrescue", "phase11er_ext", "phase11er_ext_mrescue", "phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue"}:
+        if city == "nagoya" and run == "run2":
+            max_to_hybrid_m = 60.0 if policy in {"phase11er_mrescue", "phase11er_ext_mrescue", "phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue"} else 10.0
+            float_labels = ("libgnss_ext_subset",) if policy in {"phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue"} else ()
+            status5_labels = ("fgo_v14_snr38",) if policy == "phase11er_ext_s5_mrescue" else ()
+            return replace(
+                variant,
+                rtkdiag_candidate_select_mode="residual",
+                rtkdiag_candidate_ratio_min=1.0,
+                rtkdiag_candidate_residual_rms_max=50.0,
+                rtkdiag_candidate_max_to_hybrid_m=max_to_hybrid_m,
+                rtkdiag_candidate_emit_mode="candidate",
+                rtkdiag_candidate_fallback_mode="hybrid",
+                rtkdiag_candidate_float_labels=float_labels,
+                rtkdiag_candidate_float_residual_rms_max=1.0 if float_labels else 0.0,
+                rtkdiag_candidate_float_abs_max=3.0 if float_labels else 0.0,
+                rtkdiag_candidate_float_min_sats=8 if float_labels else 0,
+                rtkdiag_candidate_status5_labels=status5_labels,
+                rtkdiag_candidate_status5_tow_windows=(
+                    (556116.0, 556122.4, status5_labels),
+                ) if status5_labels else (),
+                rtkdiag_candidate_status5_max_dt_s=0.2 if status5_labels else 0.0,
+                rtkdiag_candidate_status5_residual_rms_max=1.0 if status5_labels else 0.0,
+                rtkdiag_candidate_status5_min_sats=3 if status5_labels else 0,
+            )
+        return replace(
+            variant,
+            rtkdiag_candidate_emit_mode="candidate",
+            rtkdiag_candidate_fallback_mode="hybrid",
+        )
     if policy == "phase11ep":
         if city == "tokyo" and run == "run1":
             variant = replace(
@@ -5496,6 +8036,38 @@ def _filter_rtkdiag_candidates_by_policy(
     policy: str,
     blocked_labels: set[str] | None = None,
 ) -> list[tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]]:
+    if policy in {"phase11eq", "phase11er", "phase11er_mrescue", "phase11er_ext", "phase11er_ext_mrescue", "phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue"}:
+        # Phase 11er is the conservative n/r2 rescue found from the
+        # lowcase audit: residual-select across a small candidate stack,
+        # candidate emit, hybrid fallback, and a 10 m hybrid-distance gate.
+        # phase11er_mrescue keeps the same whitelist but widens the gate to
+        # 60 m in _apply_rtkdiag_run_index_policy for 3 m outlier reduction.
+        # phase11er_ext variants add one libgnss++ extended/subset AR candidate.
+        # phase11er_ext_float_mrescue also allows tightly gated FLOAT output
+        # from that extended candidate only. phase11er_ext_s5_mrescue adds a
+        # narrow, audited fgo_v14 status-5 bridge over the n/r2 tail gap.
+        # On every other run, block all candidates so the rtkdiag variant is a
+        # hybrid passthrough and cannot regress unrelated runs.
+        if city == "nagoya" and run == "run2":
+            allowed = (
+                _NAGOYA_RUN2_PHASE11ER_EXT_LABELS
+                if policy in {"phase11er_ext", "phase11er_ext_mrescue", "phase11er_ext_float_mrescue", "phase11er_ext_s5_mrescue"}
+                else _NAGOYA_RUN2_PHASE11EQ_LABELS
+            )
+            extra_blocked = set(blocked_labels or set())
+            extra_blocked.update(
+                label
+                for label, _, _ in candidates
+                if label not in allowed
+            )
+            return _filter_rtkdiag_candidates_by_policy(
+                candidates,
+                city=city,
+                run=run,
+                policy="phase11ep",
+                blocked_labels=extra_blocked,
+            )
+        return []
     if policy == "phase11eo":
         # Phase 11eo changes only t/r3 and n/r2 selector label penalties.
         # Candidate pool and block rules are exactly Phase 11en.
@@ -6303,12 +8875,21 @@ def main() -> None:
     parser.add_argument("--data-root", type=Path, default=_DEFAULT_DATA_ROOT)
     parser.add_argument("--results-prefix", type=str, default="ppc_ctrbpf_fgo")
     parser.add_argument(
+        "--write-internal-diagnostics",
+        action="store_true",
+        help="Write per-epoch PF ESS/spread/stage-delta diagnostics to results",
+    )
+    parser.add_argument(
         "--pos-dir",
         type=Path,
         default=RESULTS_DIR / "libgnss_ctrbpf_pos",
     )
     parser.add_argument("--n-particles", type=int, default=50_000)
     parser.add_argument("--sigma-pr", type=float, default=8.0)
+    parser.add_argument("--pr-ess-guard-min-ratio", type=float, default=0.0,
+                        help="If >0, temper each PR log-likelihood increment so PF ESS ratio stays above this target")
+    parser.add_argument("--pr-ess-guard-max-iters", type=int, default=12,
+                        help="Binary-search iterations for --pr-ess-guard-min-ratio")
     parser.add_argument("--pr-gmm-statuses", type=str, default="1,3",
                         help="Hybrid Status values where PR-GMM likelihood is used (default '1,3'; empty means all)")
     parser.add_argument("--pr-gmm-w-los", type=float, default=0.7,
@@ -6331,6 +8912,36 @@ def main() -> None:
                         help="Maximum transformed PR likelihood weight when clipping is active (default 1.5)")
     parser.add_argument("--pr-systems", type=str, default="G,E,J",
                         help="Constellations used for undifferenced PR/WLS/PF updates; data load and DD can still include --systems/--dd-systems (default G,E,J)")
+    parser.add_argument("--pr-min-elevation-deg", type=float, default=-90.0,
+                        help="Drop PR satellites below this elevation angle from the current PF estimate; default off")
+    parser.add_argument("--pr-auto-elevation-gate", action="store_true",
+                        help="Auto-enable a high PR elevation gate when WLS postfit residual is poor and --pr-min-elevation-deg is off")
+    parser.add_argument("--pr-auto-elevation-deg", type=float, default=30.0,
+                        help="Elevation gate selected by --pr-auto-elevation-gate when triggered (default 30)")
+    parser.add_argument("--pr-auto-elevation-postfit-rms-m", type=float, default=6.0,
+                        help="Median centered WLS postfit RMS threshold for --pr-auto-elevation-gate (default 6m)")
+    parser.add_argument("--pr-auto-elevation-min-sat-fraction", type=float, default=0.7,
+                        help="Reject auto elevation gate if median satellites fall below this fraction of ungated WLS; <=0 disables")
+    parser.add_argument("--pr-auto-elevation-max-pdop-ratio", type=float, default=2.0,
+                        help="Reject auto elevation gate if median PDOP grows above this ratio; <=0 disables")
+    parser.add_argument("--pr-auto-robust-profile", action="store_true",
+                        help="Auto-select robust PR settings for high-WLS-residual or low-satellite segments")
+    parser.add_argument("--pr-auto-robust-low-sat-threshold", type=int, default=8,
+                        help="Satellite-count threshold for --pr-auto-robust-profile low-sat detection (default 8)")
+    parser.add_argument("--pr-auto-robust-low-sat-epochs", type=int, default=3,
+                        help="Minimum low-satellite epochs to trigger --pr-auto-robust-profile (default 3)")
+    parser.add_argument("--pr-auto-robust-prefit-gate-m", type=float, default=20.0,
+                        help="PR prefit gate selected by --pr-auto-robust-profile when global --pr-prefit-gate-m is off")
+    parser.add_argument("--pr-auto-robust-sigma-pr", type=float, default=50.0,
+                        help="PR sigma selected by --pr-auto-robust-profile when global --sigma-pr is the default")
+    parser.add_argument("--pr-atmosphere-model", choices=("off", "fixed", "model"), default="off",
+                        help="PR atmosphere correction: off, fixed zenith/sin(el), or Saastamoinen+Klobuchar model")
+    parser.add_argument("--pr-atmosphere-scale", type=float, default=1.0,
+                        help="Scale factor for the Saastamoinen+Klobuchar PR atmosphere model (default 1.0)")
+    parser.add_argument("--pr-atmosphere-extra-zenith-m", type=float, default=0.0,
+                        help="Extra zenith delay mapped by 1/sin(elevation) after the PR atmosphere model (default 0)")
+    parser.add_argument("--pr-slant-delay-zenith-m", type=float, default=0.0,
+                        help="Subtract this zenith delay divided by sin(elevation) from PR updates; default off")
     parser.add_argument("--pr-prefit-gate-m", type=float, default=0.0,
                         help="Drop satellites whose robust clock-centered PR prefit residual exceeds this [m]; <=0 disables")
     parser.add_argument("--pr-prefit-gate-min-sats", type=int, default=6,
@@ -6368,9 +8979,25 @@ def main() -> None:
     parser.add_argument("--spread-pos-init", type=float, default=50.0)
     parser.add_argument("--spread-cb-init", type=float, default=500.0)
     parser.add_argument("--sigma-doppler-mps", type=float, default=0.5)
+    parser.add_argument("--doppler-systems", type=str, default="G,E,J",
+                        help="Constellations used for Doppler-KF updates; default excludes C until BDS Doppler/clock handling is validated")
+    parser.add_argument("--doppler-prefit-gate-mps", type=float, default=0.0,
+                        help="Drop Doppler rows whose centered WLS residual exceeds this [m/s]; <=0 disables")
+    parser.add_argument("--doppler-prefit-gate-min-sats", type=int, default=6,
+                        help="Minimum Doppler rows kept by --doppler-prefit-gate-mps")
     parser.add_argument("--velocity-init-sigma", type=float, default=1.0)
     parser.add_argument("--velocity-process-noise", type=float, default=1.0)
     parser.add_argument("--position-update-sigma-m", type=float, default=30.0)
+    parser.add_argument("--position-update-min-epoch", type=int, default=0,
+                        help="Skip WLS position_update before this local epoch index; <=0 disables")
+    parser.add_argument("--position-update-min-pr-sats", type=int, default=0,
+                        help="Skip WLS position_update when the epoch uses fewer PR satellites than this; <=0 disables")
+    parser.add_argument("--position-update-max-wls-rms-m", type=float, default=0.0,
+                        help="Skip WLS position_update when centered WLS postfit RMS exceeds this [m]; <=0 disables")
+    parser.add_argument("--position-update-max-wls-pdop", type=float, default=0.0,
+                        help="Skip WLS position_update when WLS PDOP exceeds this; <=0 disables")
+    parser.add_argument("--position-update-max-wls-to-pf-m", type=float, default=0.0,
+                        help="Skip WLS position_update when |WLS-PF| before PU exceeds this [m]; <=0 disables")
     parser.add_argument("--disable-correct-clock-bias", action="store_true")
     parser.add_argument("--systems", type=str, default="G,R,E,C,J")
     parser.add_argument(
@@ -6380,6 +9007,11 @@ def main() -> None:
         help=(
             "Comma-separated subset of {pf, pf+pu, rbpf, rbpf+pu, pf+dd, "
             "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+gate+pu, "
+            "rbpf+dd+pu+tdcp, rbpf+dd+gate+pu+tdcp, "
+            "rbpf+dd+pu+bridge, rbpf+dd+gate+pu+bridge, "
+            "rbpf+dd+dopq+pu, rbpf+dd+dopq+pu+bridge, "
+            "rbpf+dd+gate+pu+ddpr, rbpf+dd+gate+pu+bridge+ddpr, "
+            "rbpf+dd+gate+rtkdiag_pf, rbpf+dd+gate+rtkdiag_pf+bridge, "
             "pf+hybrid, rbpf+dd+hybrid, rbpf+dd+gate+hybrid, "
             "rbpf+dd+gate+hybrid+gmm, "
             "rbpf+dd+gate+hybrid+rtkdiag_pf, "
@@ -6438,10 +9070,11 @@ def main() -> None:
     parser.add_argument("--dd-pr-ls-anchor-no-initial", action="store_true",
                         help="Use accepted DD-PR LS anchors as FGO priors only, not initial positions")
     parser.add_argument("--dd-pr-ls-anchor-mode",
-                        choices=("prior", "initial", "diagnostic"),
+                        choices=("prior", "initial", "diagnostic", "pf", "pu", "pf-pu", "prior+pf", "initial+pf"),
                         default="prior",
                         help=("How accepted DD-PR LS anchors enter FGO: prior=initial plus "
-                              "position prior, initial=initial value only, diagnostic=stats only"))
+                              "position prior, initial=initial value only, diagnostic=stats only; "
+                              "pf/pu modes apply a realtime PF position_update"))
     # Phase 2: region-aware gate on RBPF velocity-KF (Doppler) update.
     # Mirrors the AAA gate knobs from internal_docs/plan.md §10.1.
     parser.add_argument("--rbpf-velocity-kf-gate-min-dd-pairs", type=int, default=None,
@@ -6450,6 +9083,10 @@ def main() -> None:
                         help="Skip Doppler KF update unless ESS / n_particles >= ratio (default off)")
     parser.add_argument("--rbpf-velocity-kf-gate-max-spread-m", type=float, default=None,
                         help="Skip Doppler KF update if PF position spread exceeds this [m] (default off)")
+    parser.add_argument("--rbpf-velocity-kf-gate-max-doppler-wls-rms-mps", type=float, default=0.0,
+                        help="Skip Doppler KF update when centered Doppler-WLS RMS exceeds this [m/s]; <=0 disables")
+    parser.add_argument("--rbpf-velocity-kf-gate-max-doppler-wls-speed-mps", type=float, default=0.0,
+                        help="Skip Doppler KF update when centered Doppler-WLS speed exceeds this [m/s]; <=0 disables")
     # Phase 6: libgnss++ hybrid position update (uses .pos files from
     # experiments/results/libgnss_rtk_pos_v5/ — the 50.91% baseline).
     parser.add_argument("--hybrid-pos-dir", type=Path, default=None,
@@ -6495,6 +9132,46 @@ def main() -> None:
                         help="Minimum candidate final_ratio for rtkdiag_pf gate (default 1.5)")
     parser.add_argument("--rtkdiag-candidate-residual-rms-max", type=float, default=1.8,
                         help="Maximum candidate final_residual_rms for rtkdiag_pf gate (default 1.8)")
+    parser.add_argument("--rtkdiag-candidate-main-status5-residual-rms-max", type=float, default=0.3,
+                        help="Accept status=5 (Float) candidates in main gate when residual_rms<=this [m] (default 0.3); 0 disables status=5")
+    parser.add_argument("--rtkdiag-candidate-rms-prefilter-k", type=int, default=0,
+                        help="Pre-filter gated candidates to top-K by residual_rms before selector ranking (0=disable). Sim showed K=3-7 captures +12pp upper bound; K>=20 degrades.")
+    parser.add_argument("--rtkdiag-candidate-cluster-vote-radius-m", type=float, default=0.5,
+                        help="cluster_vote select_mode: spatial cluster radius (m). Default 0.5 matches 50cm PPC threshold.")
+    parser.add_argument("--rtkdiag-candidate-ranker-score-path", type=str, default="",
+                        help="ranker select_mode: path to predictions CSV (run_id,tow,label,p_pass) from train_selector_ranker.py")
+    parser.add_argument("--rtkdiag-candidate-ranker-stickiness", type=float, default=0.0,
+                        help="ranker select_mode: stickiness s in [0,1]. If previous epoch's picked label has p_pass>=s*max_p_pass at current epoch, keep it (sequence smoothing). 0=disabled (max p_pass per epoch independently).")
+    parser.add_argument("--spp-nlos-mask-path", type=str, default="",
+                        help="SPP G: PLATEAU NLOS mask CSV (tow,epoch_idx,prn,is_los); is_los=0 → soft-downweight. Format: literal path or template with {city}/{run} (e.g. /tmp/{city}_{run}_per_epoch_nlos.csv).")
+    parser.add_argument("--spp-nlos-k-weak", type=float, default=1.0,
+                        help="SPP G: weak NLOS down-weight factor (weight /= k). 1.0 = off, 3-5 typical.")
+    parser.add_argument("--spp-nlos-k-strong", type=float, default=1.0,
+                        help="SPP G: strong NLOS down-weight factor for confirmed NLOS (1.0 = same as weak). Requires --spp-nlos-strong-mask-path.")
+    parser.add_argument("--spp-nlos-strong-mask-path", type=str, default="",
+                        help="SPP G: optional separate CSV listing strong-NLOS PRNs (same format as --spp-nlos-mask-path).")
+    parser.add_argument("--spp-irls", type=str, default="off",
+                        choices=("off", "cauchy", "huber"),
+                        help="SPP B: post-WLS IRLS refinement weight function. off=disabled.")
+    parser.add_argument("--spp-irls-c", type=float, default=15.0,
+                        help="SPP B: IRLS scale parameter [m] (Cauchy c, Huber threshold).")
+    parser.add_argument("--spp-irls-shift-cap-m", type=float, default=50.0,
+                        help="SPP B: max allowed |IRLS shift| from raw WLS pos (m). Beyond → discard refinement.")
+    parser.add_argument("--rtkdiag-candidate-bridge-enable", action="store_true",
+                        help="Add synthetic pf_bridge candidate (last good anchor + PF velocity * Δt) when Δt<=bridge_max_s")
+    parser.add_argument("--rtkdiag-candidate-bridge-max-s", type=float, default=6.0,
+                        help="Max Δt [s] for pf_bridge synthetic candidate (default 6.0, 2位 nagoya2 setting)")
+    parser.add_argument("--rtkdiag-candidate-bridge-residual-rms-m", type=float, default=0.5,
+                        help="Calibrated residual_rms [m] for pf_bridge candidate (default 0.5)")
+    parser.add_argument("--rtkdiag-candidate-bridge-anchor-mode", type=str, default="last_emit",
+                        choices=("last_emit", "last_fix4"),
+                        help="Bridge anchor source: last_emit (any emit, inherits cluster bias) or last_fix4 (trusted Fix only)")
+    parser.add_argument("--rtkdiag-candidate-bridge-fix4-min-ratio", type=float, default=3.0,
+                        help="Min ratio to qualify as trusted Fix=4 anchor (default 3.0)")
+    parser.add_argument("--rtkdiag-candidate-bridge-fix4-max-residual", type=float, default=0.1,
+                        help="Max residual_rms to qualify as trusted Fix=4 anchor (default 0.1)")
+    parser.add_argument("--rtkdiag-candidate-max-to-hybrid-m", type=float, default=1.0,
+                        help="Skip RTK diagnostic candidate when |candidate-hybrid| exceeds this [m] (default 1.0); <=0 disables")
     parser.add_argument("--rtkdiag-candidate-emit-max-diff-m", type=float, default=0.4,
                         help="Emit PF only if |PF - candidate| <= this [m] after candidate PU (default 0.4)")
     parser.add_argument("--rtkdiag-candidate-recenter-max-shift-m", type=float, default=10000.0,
@@ -6508,13 +9185,14 @@ def main() -> None:
     parser.add_argument("--rtkdiag-candidate-proposal-spread-m", type=float, default=0.25,
                         help="Position spread [m] for --rtkdiag-candidate-proposal-cloud")
     parser.add_argument("--rtkdiag-candidate-select-mode",
-                        choices=("residual", "ratio", "score", "maxabs", "nrows", "hybrid_anchor", "wavg3", "wavg5", "consensus3", "consensus5",
+                        choices=("residual", "ratio", "score", "maxabs", "nrows", "hybrid_anchor", "wavg3", "wavg5", "consensus3", "consensus5", "cluster_vote", "ranker",
                                  "rms_per_row", "score_per_row", "score_per_row2", "score_per_row3", "rms_minus_alpha_rows", "log_combined",
                                  "composite_3axis_n2", "composite_3axis_t2", "composite_3axis_n1",
                                  "composite_n2_v2", "composite_n3_v2", "composite_n1_v2", "composite_t2_v2",
                                  "composite_t3_v2", "composite_t3_v4", "composite_t2_v3",
                                  "composite_n1_v3", "composite_n2_v3", "composite_n2_v4", "composite_n3_v3", "composite_n3_v4",
                                  "temporal_n2_v1", "temporal_n2_v2", "temporal_n2_v3", "temporal_n2_v4", "temporal_n2_v5", "temporal_n2_v6", "temporal_n2_v7", "temporal_n2_v8", "temporal_n2_v9", "temporal_n2_v10",
+                                 "temporal_n2_v11_a001", "temporal_n2_v12_a01", "temporal_n2_v13_a1", "temporal_n2_v14_a3", "temporal_n2_v15_a10",
                                  "temporal_hybdelta_t3_v1", "temporal_hybdelta_t3_v2", "temporal_hybdelta_t3_v3", "temporal_hybdelta_t3_v4", "temporal_hybdelta_t3_v5", "temporal_hybdelta_t3_v6", "temporal_hybdelta_t3_v7", "temporal_hybdelta_t3_v8",
                                  "temporal_hybdelta_n2_v1", "temporal_hybdelta_n3_v1", "temporal_hybdelta_n3_v2", "temporal_hybdelta_n3_v3", "temporal_hybdelta_n3_v4", "temporal_hybdelta_n3_v5", "temporal_hybdelta_n3_v6"),
                         default="residual",
@@ -6530,6 +9208,28 @@ def main() -> None:
                             "candidate-on-drift=emit PF when close, otherwise emit candidate; "
                             "candidate=always emit selected candidate (default pf)"
                         ))
+    parser.add_argument("--rtkdiag-candidate-min-epoch", type=int, default=0,
+                        help="Skip RTK diagnostic candidate PU/emission before this local epoch index")
+    parser.add_argument("--rtkdiag-candidate-require-any-diag-fields", type=str, default="",
+                        help="Comma-separated candidate diagnostic boolean fields; at least one must be true")
+    parser.add_argument("--rtkdiag-candidate-require-all-diag-fields", type=str, default="",
+                        help="Comma-separated candidate diagnostic boolean fields; all must be true")
+    parser.add_argument("--rtkdiag-candidate-min-diag-fields", type=str, default="",
+                        help="Comma-separated candidate diagnostic lower bounds, e.g. dd_pr_kept=5")
+    parser.add_argument("--rtkdiag-candidate-max-diag-fields", type=str, default="",
+                        help="Comma-separated candidate diagnostic upper bounds, e.g. dd_pr_shift_m=50")
+    parser.add_argument("--rtkdiag-candidate-fallback-mode",
+                        choices=("pf", "hybrid", "hybrid-last-good", "wls", "quality-wls", "last-good", "wls-last-good", "quality-wls-last-good"),
+                        default="hybrid",
+                        help="Fallback when rtkdiag candidate is unavailable/rejected (default hybrid; matches canonical 73.76%% behavior)")
+    parser.add_argument("--rtkdiag-candidate-fallback-max-wls-rms-m", type=float, default=0.0,
+                        help="Maximum WLS postfit RMS for quality WLS rtkdiag fallback; <=0 disables")
+    parser.add_argument("--rtkdiag-candidate-fallback-max-wls-pdop", type=float, default=0.0,
+                        help="Maximum WLS PDOP for quality WLS rtkdiag fallback; <=0 disables")
+    parser.add_argument("--rtkdiag-candidate-fallback-max-wls-to-pf-m", type=float, default=0.0,
+                        help="Maximum |WLS-PF| for quality WLS rtkdiag fallback; <=0 disables")
+    parser.add_argument("--rtkdiag-candidate-fallback-max-hold-age-s", type=float, default=5.0,
+                        help="Maximum age for last-good rtkdiag fallback; <=0 disables age check")
     parser.add_argument("--rtkdiag-candidate-force-emit-mode",
                         choices=("pf", "candidate-on-drift", "candidate"),
                         default="",
@@ -6545,7 +9245,7 @@ def main() -> None:
         ),
     )
     parser.add_argument("--rtkdiag-candidate-run-index-policy",
-                        choices=("none", "phase10o", "phase10p", "phase10r", "phase11h", "phase11i", "phase11l", "phase11n", "phase11x", "phase11y", "phase11z", "phase11aa", "phase11ab", "phase11ac", "phase11ad", "phase11ae", "phase11af", "phase11ag", "phase11ah", "phase11ai", "phase11aj", "phase11ak", "phase11al", "phase11am", "phase11an", "phase11ao", "phase11ap", "phase11aq", "phase11ar", "phase11as", "phase11at", "phase11au", "phase11aw", "phase11ay", "phase11ba", "phase11bc", "phase11be", "phase11bf", "phase11bh", "phase11bk", "phase11bl", "phase11bm", "phase11bn", "phase11bo", "phase11bp", "phase11bq", "phase11br", "phase11bt", "phase11bu", "phase11bv", "phase11bw", "phase11bx", "phase11by", "phase11bz", "phase11ca", "phase11cb", "phase11cc", "phase11cd", "phase11ce", "phase11cf", "phase11cg", "phase11ch", "phase11ci", "phase11cj", "phase11ck", "phase11cl", "phase11cm", "phase11cn", "phase11co", "phase11cp", "phase11cu", "phase11cv", "phase11cw", "phase11cx", "phase11cy", "phase11cz", "phase11da", "phase11db", "phase11dc", "phase11dd", "phase11dg", "phase11dh", "phase11di", "phase11dk", "phase11dl", "phase11dm", "phase11dn", "phase11do", "phase11dp", "phase11dq", "phase11dr", "phase11ds", "phase11dt", "phase11du", "phase11dv", "phase11dw", "phase11dx", "phase11dy", "phase11dz", "phase11ea", "phase11eb", "phase11ec", "phase11ed", "phase11ee", "phase11ef", "phase11eg", "phase11eh", "phase11ei", "phase11ej", "phase11ek", "phase11el", "phase11em", "phase11en", "phase11eo", "phase11ep"),
+                        choices=tuple(["none"] + sorted(_RTKDIAG_POLICIES)),
                         default="none",
                         help=(
                             "Experimental per-run-index RTKDiag policy. phase10o uses "
@@ -6628,6 +9328,20 @@ def main() -> None:
                         help="Smoother observation sigma [m] for rewritable hybrid epochs (default 5.0)")
     parser.add_argument("--tdcp-obs-missing-sigma-m", type=float, default=1000.0,
                         help="Smoother observation sigma [m] when hybrid is missing entirely (default 1000)")
+    parser.add_argument("--low-sat-bridge-min-pr-sats", type=int, default=11,
+                        help="PR satellite count below which low-sat bridge treats an epoch as weak (default 11)")
+    parser.add_argument("--low-sat-bridge-min-span-epochs", type=int, default=3,
+                        help="Minimum consecutive weak-PR epochs to bridge (default 3)")
+    parser.add_argument("--low-sat-bridge-max-span-epochs", type=int, default=25,
+                        help="Maximum consecutive weak-PR epochs to bridge (default 25)")
+    parser.add_argument("--low-sat-bridge-max-gap-s", type=float, default=10.0,
+                        help="Maximum anchor-to-anchor time gap for low-sat bridging [s] (default 10)")
+    parser.add_argument("--low-sat-bridge-startup-max-wls-pdop", type=float, default=0.5,
+                        help="Back-extrapolate initial epochs while WLS PDOP exceeds this; <=0 disables startup bridge")
+    parser.add_argument("--low-sat-bridge-startup-min-epochs", type=int, default=2,
+                        help="Minimum weak-WLS startup epochs required to apply startup bridge (default 2)")
+    parser.add_argument("--low-sat-bridge-startup-max-epochs", type=int, default=10,
+                        help="Maximum initial weak-WLS epochs eligible for startup bridge (default 10)")
     # Phase 9a: ZUPT (zero-velocity update) using PPC IMU
     parser.add_argument("--zupt-acc-norm-low-mps2", type=float, default=9.6,
                         help="Lower bound on accel norm [m/s^2] for static detection (default 9.6)")
@@ -6777,6 +9491,7 @@ def main() -> None:
     )
 
     any_dd = any(v.enable_dd_carrier_afv for v in variants)
+    any_dd_pr = any(v.enable_dd_pr_ls_anchor for v in variants)
     any_dd_for_gate = any(
         (v.enable_rbpf_velocity_kf and v.rbpf_kf_gate_min_dd_pairs is not None)
         for v in variants
@@ -6812,7 +9527,7 @@ def main() -> None:
     print("  CT-RBPF-FGO PPC port — Phase 6 (hybrid blend)")
     print(f"  Methods: {[v.method_label for v in variants]}")
     print(f"  Particles: {args.n_particles}, Systems: {args.systems_tuple}")
-    if any_dd or any_dd_for_gate:
+    if any_dd or any_dd_for_gate or any_dd_pr:
         print(
         f"  DD: sigma_cycles={args.dd_sigma_cycles}, "
         f"min_pairs={args.dd_min_pairs}/{args.dd_min_pairs_update}, "
@@ -6835,20 +9550,32 @@ def main() -> None:
             f"suffix={args.hybrid_pos_suffix}, sigma_m={args.hybrid_sigma_m}"
         )
     if any_rtkdiag_pf:
+        policy_note = (
+            " base"
+            if str(args.rtkdiag_candidate_run_index_policy) != "none"
+            else ""
+        )
         print(
-            f"  RTKDiag PF: candidates={rtkdiag_candidate_labels}, "
+            f"  RTKDiag PF{policy_note}: candidates={rtkdiag_candidate_labels}, "
             f"sigma={args.rtkdiag_candidate_sigma_m}, "
             f"ratio>={args.rtkdiag_candidate_ratio_min}, "
             f"rms<={args.rtkdiag_candidate_residual_rms_max}, "
             f"select={args.rtkdiag_candidate_select_mode}, "
             f"emit={args.rtkdiag_candidate_emit_mode}, "
+            f"min_epoch={args.rtkdiag_candidate_min_epoch}, "
+            f"diag_any={args.rtkdiag_candidate_require_any_diag_fields or '-'}, "
+            f"diag_min={args.rtkdiag_candidate_min_diag_fields or '-'}, "
+            f"diag_max={args.rtkdiag_candidate_max_diag_fields or '-'}, "
+            f"fallback={args.rtkdiag_candidate_fallback_mode}, "
             f"run_policy={args.rtkdiag_candidate_run_index_policy}"
         )
     print("=" * 72)
 
     rows: list[dict[str, object]] = []
+    internal_diag_rows: list[dict[str, object]] = []
     agg_pass: dict[str, float] = {v.method_label: 0.0 for v in variants}
     agg_total: dict[str, float] = {v.method_label: 0.0 for v in variants}
+    per_run_pcts: dict[str, list[float]] = {v.method_label: [] for v in variants}
 
     for city, run in runs:
         run_dir = args.data_root / city / run
@@ -6866,6 +9593,11 @@ def main() -> None:
                 for v in variants
             ),
         )
+        iono_alpha_run, iono_beta_run = read_gps_klobuchar_from_nav_header(
+            run_dir / "base.nav"
+        )
+        iono_alpha_tuple = tuple(float(x) for x in (iono_alpha_run or ()))
+        iono_beta_tuple = tuple(float(x) for x in (iono_beta_run or ()))
         full_ref = _load_full_reference(run_dir / "reference.csv")
         reference_pos_run = _reference_position_map(full_ref)
         n_emit = _emission_count(full_ref, np.asarray(data["times"], dtype=np.float64))
@@ -6879,7 +9611,7 @@ def main() -> None:
         dd_computer = None
         dd_pr_computer = None
         any_fgo = any(v.enable_fgo_lambda for v in variants)
-        if any_dd or any_dd_for_gate or any_fgo:
+        if any_dd or any_dd_for_gate or any_fgo or any_dd_pr:
             from gnss_gpu.dd_carrier import DDCarrierComputer
 
             base_obs_path = run_dir / "base.obs"
@@ -6900,7 +9632,7 @@ def main() -> None:
                     allowed_systems=dd_systems_run,
                     interpolate_base_epochs=bool(args.dd_base_interp),
                 )
-                if any_fgo:
+                if any_fgo or any_dd_pr:
                     from gnss_gpu.dd_pseudorange import DDPseudorangeComputer
 
                     dd_pr_computer = DDPseudorangeComputer(
@@ -6911,7 +9643,7 @@ def main() -> None:
                         interpolate_base_epochs=bool(args.dd_base_interp),
                     )
                     print(
-                        f"  [DD-PR] Loaded for FGO absolute anchor: "
+                        f"  [DD-PR] Loaded for absolute anchor: "
                         f"base_systems={dd_systems_run}"
                     )
 
@@ -7007,15 +9739,289 @@ def main() -> None:
                 f"  PR/WLS systems: {pr_systems_run} "
                 f"(median sats={wls_data['n_satellites']}; loaded={data['constellations']})"
             )
-        wls_positions, wls_ms = run_wls(wls_data)
-        print(f"  WLS init done ({wls_ms:.2f} ms/epoch)", flush=True)
+        spp_kwargs: dict = {}
+        if args.spp_nlos_mask_path:
+            nlos_path_run = args.spp_nlos_mask_path.format(city=city, run=run)
+            nlos_set_run = _load_nlos_mask_csv(nlos_path_run)
+            if nlos_set_run:
+                spp_kwargs["nlos_set_per_epoch"] = nlos_set_run
+                spp_kwargs["nlos_k_weak"] = float(args.spp_nlos_k_weak)
+                spp_kwargs["nlos_k_strong"] = float(args.spp_nlos_k_strong)
+                n_nlos_epochs = sum(1 for s in nlos_set_run.values() if s)
+                n_nlos_obs = sum(len(s) for s in nlos_set_run.values())
+                print(
+                    f"  SPP NLOS mask: {nlos_path_run} → "
+                    f"{n_nlos_obs} obs across {n_nlos_epochs} epochs "
+                    f"(k_weak={args.spp_nlos_k_weak}, k_strong={args.spp_nlos_k_strong})"
+                )
+            else:
+                print(f"  SPP NLOS mask: {nlos_path_run} → empty/missing, skipping")
+        if args.spp_nlos_strong_mask_path:
+            strong_path_run = args.spp_nlos_strong_mask_path.format(city=city, run=run)
+            strong_set_run = _load_nlos_mask_csv(strong_path_run)
+            if strong_set_run:
+                spp_kwargs["nlos_strong_set_per_epoch"] = strong_set_run
+        if args.spp_irls != "off":
+            spp_kwargs["irls_mode"] = str(args.spp_irls)
+            spp_kwargs["irls_c"] = float(args.spp_irls_c)
+            spp_kwargs["irls_threshold_m"] = float(args.spp_irls_c)
+            print(
+                f"  SPP IRLS: {args.spp_irls} c={args.spp_irls_c:.1f}m "
+                f"shift_cap={args.spp_irls_shift_cap_m:.1f}m"
+            )
+        wls_atmosphere_model = str(args.pr_atmosphere_model).strip().lower()
+        if wls_atmosphere_model == "off" and float(args.pr_slant_delay_zenith_m) > 0.0:
+            wls_atmosphere_model = "fixed"
+        selected_pr_min_elevation_deg = float(args.pr_min_elevation_deg)
+        selected_pr_prefit_gate_m = float(args.pr_prefit_gate_m)
+        selected_sigma_pr = float(args.sigma_pr)
+        selected_pr_auto_robust_profile = False
+        auto_elevation_postfit_rms_m = float("nan")
+        auto_elevation_gated_sat_fraction = float("nan")
+        auto_elevation_gated_pdop_ratio = float("nan")
+        auto_elevation_selected = False
+        if (
+            bool(args.pr_auto_elevation_gate)
+            and selected_pr_min_elevation_deg <= -90.0
+        ):
+            auto_wls_data = wls_data
+            auto_seed_positions, auto_ms = run_wls(auto_wls_data)
+            if wls_atmosphere_model not in {"", "off"}:
+                auto_wls_data = _apply_atmosphere_to_pseudoranges(
+                    auto_wls_data,
+                    auto_seed_positions,
+                    model=wls_atmosphere_model,
+                    fixed_zenith_m=float(args.pr_slant_delay_zenith_m),
+                    model_scale=float(args.pr_atmosphere_scale),
+                    extra_zenith_m=float(args.pr_atmosphere_extra_zenith_m),
+                    iono_alpha=iono_alpha_tuple,
+                    iono_beta=iono_beta_tuple,
+                )
+            if float(args.pr_prefit_gate_m) > 0.0:
+                auto_wls_data, _auto_kept, _auto_dropped = _filter_data_by_pr_prefit(
+                    auto_wls_data,
+                    auto_seed_positions,
+                    gate_m=float(args.pr_prefit_gate_m),
+                    clock_quantile=0.5,
+                    min_sats=int(args.pr_prefit_gate_min_sats),
+                    keep_best=int(args.pr_prefit_gate_keep_best),
+                    per_system=bool(args.pr_prefit_per_system),
+                )
+            auto_positions, auto_wls_ms = run_wls(auto_wls_data)
+            auto_ms += auto_wls_ms
+            auto_postfit_rms = _wls_centered_postfit_rms_m(
+                auto_wls_data,
+                auto_positions,
+            )
+            auto_elevation_postfit_rms_m = float(auto_postfit_rms)
+            auto_select_ok = (
+                np.isfinite(auto_postfit_rms)
+                and auto_postfit_rms
+                > float(args.pr_auto_elevation_postfit_rms_m)
+            )
+            auto_guard_msg = ""
+            if auto_select_ok:
+                gated_wls_data = _filter_data_by_elevation(
+                    auto_wls_data,
+                    auto_positions,
+                    float(args.pr_auto_elevation_deg),
+                )
+                gated_positions, gated_wls_ms = run_wls(gated_wls_data)
+                auto_ms += gated_wls_ms
+                base_quality = _wls_epoch_quality_metrics(auto_wls_data, auto_positions)
+                gated_quality = _wls_epoch_quality_metrics(gated_wls_data, gated_positions)
+                base_sat = float(np.nanmedian(base_quality["n_sat"]))
+                gated_sat = float(np.nanmedian(gated_quality["n_sat"]))
+                base_pdop = float(np.nanmedian(base_quality["pdop"]))
+                gated_pdop = float(np.nanmedian(gated_quality["pdop"]))
+                sat_fraction = (
+                    gated_sat / base_sat
+                    if np.isfinite(base_sat) and base_sat > 0.0
+                    else float("nan")
+                )
+                pdop_ratio = (
+                    gated_pdop / base_pdop
+                    if np.isfinite(base_pdop) and base_pdop > 0.0
+                    else float("nan")
+                )
+                auto_elevation_gated_sat_fraction = float(sat_fraction)
+                auto_elevation_gated_pdop_ratio = float(pdop_ratio)
+                min_sat_fraction = float(args.pr_auto_elevation_min_sat_fraction)
+                max_pdop_ratio = float(args.pr_auto_elevation_max_pdop_ratio)
+                sat_guard_ok = (
+                    min_sat_fraction <= 0.0
+                    or (np.isfinite(sat_fraction) and sat_fraction >= min_sat_fraction)
+                )
+                pdop_guard_ok = (
+                    max_pdop_ratio <= 0.0
+                    or (np.isfinite(pdop_ratio) and pdop_ratio <= max_pdop_ratio)
+                )
+                auto_select_ok = bool(sat_guard_ok and pdop_guard_ok)
+                auto_guard_msg = (
+                    f", gated_sats={gated_sat:.0f}/{base_sat:.0f} "
+                    f"({sat_fraction:.2f}), gated_pdop={gated_pdop:.2f}/"
+                    f"{base_pdop:.2f} ({pdop_ratio:.2f})"
+                )
+            if auto_select_ok:
+                selected_pr_min_elevation_deg = float(args.pr_auto_elevation_deg)
+                auto_elevation_selected = True
+            print(
+                f"  PR/WLS auto elevation: postfit_rms={auto_postfit_rms:.2f}m, "
+                f"threshold={float(args.pr_auto_elevation_postfit_rms_m):.2f}m, "
+                f"selected={selected_pr_min_elevation_deg:.1f} deg "
+                f"{auto_guard_msg} "
+                f"({auto_ms:.2f} ms/epoch probe)"
+            )
+        low_sat_threshold = int(args.pr_auto_robust_low_sat_threshold)
+        low_sat_epochs = 0
+        if bool(args.pr_auto_robust_profile) and low_sat_threshold > 0:
+            sat_counts_for_profile = np.asarray(
+                wls_data.get("satellite_counts", []),
+                dtype=np.float64,
+            )
+            if sat_counts_for_profile.size > 0:
+                low_sat_epochs = int(
+                    np.count_nonzero(sat_counts_for_profile < low_sat_threshold)
+                )
+            selected_pr_auto_robust_profile = (
+                selected_pr_min_elevation_deg > -90.0
+                or low_sat_epochs >= int(args.pr_auto_robust_low_sat_epochs)
+            )
+            if selected_pr_auto_robust_profile:
+                if selected_pr_prefit_gate_m <= 0.0:
+                    selected_pr_prefit_gate_m = float(
+                        args.pr_auto_robust_prefit_gate_m
+                    )
+                if abs(float(args.sigma_pr) - 8.0) < 1.0e-9:
+                    selected_sigma_pr = float(args.pr_auto_robust_sigma_pr)
+            print(
+                "  PR auto robust profile: "
+                f"selected={bool(selected_pr_auto_robust_profile)}, "
+                f"low_sat_epochs={low_sat_epochs} below {low_sat_threshold}, "
+                f"prefit={selected_pr_prefit_gate_m:.1f}m, "
+                f"sigma_pr={selected_sigma_pr:.1f}"
+            )
+        if wls_atmosphere_model not in {"", "off"}:
+            wls_seed_positions, wls_seed_ms = run_wls(wls_data)
+            if selected_pr_min_elevation_deg > -90.0:
+                wls_data = _filter_data_by_elevation(
+                    wls_data,
+                    wls_seed_positions,
+                    selected_pr_min_elevation_deg,
+                )
+                print(
+                    f"  PR/WLS elevation gate: >= {selected_pr_min_elevation_deg:.1f} deg "
+                    f"(median sats={wls_data['n_satellites']})"
+                )
+                wls_seed_positions, wls_gate_ms = run_wls(wls_data)
+                wls_seed_ms += wls_gate_ms
+            wls_data = _apply_atmosphere_to_pseudoranges(
+                wls_data,
+                wls_seed_positions,
+                model=wls_atmosphere_model,
+                fixed_zenith_m=float(args.pr_slant_delay_zenith_m),
+                model_scale=float(args.pr_atmosphere_scale),
+                extra_zenith_m=float(args.pr_atmosphere_extra_zenith_m),
+                iono_alpha=iono_alpha_tuple,
+                iono_beta=iono_beta_tuple,
+            )
+            if float(selected_pr_prefit_gate_m) > 0.0:
+                wls_data, prefit_kept, prefit_dropped = _filter_data_by_pr_prefit(
+                    wls_data,
+                    wls_seed_positions,
+                    gate_m=float(selected_pr_prefit_gate_m),
+                    clock_quantile=0.5,
+                    min_sats=int(args.pr_prefit_gate_min_sats),
+                    keep_best=int(args.pr_prefit_gate_keep_best),
+                    per_system=bool(args.pr_prefit_per_system),
+                )
+                print(
+                    f"  PR/WLS prefit gate: <= {float(selected_pr_prefit_gate_m):.1f} m "
+                    f"(median sats={wls_data['n_satellites']}, "
+                    f"dropped={prefit_dropped}/{prefit_kept + prefit_dropped})"
+                )
+            wls_positions, wls_ms = run_wls(wls_data, **spp_kwargs)
+            wls_ms += wls_seed_ms
+        else:
+            wls_positions, wls_ms = run_wls(wls_data, **spp_kwargs)
+            if selected_pr_min_elevation_deg > -90.0:
+                wls_data = _filter_data_by_elevation(
+                    wls_data,
+                    wls_positions,
+                    selected_pr_min_elevation_deg,
+                )
+                print(
+                    f"  PR/WLS elevation gate: >= {selected_pr_min_elevation_deg:.1f} deg "
+                    f"(median sats={wls_data['n_satellites']})"
+                )
+                wls_positions, wls_gate_ms = run_wls(wls_data, **spp_kwargs)
+                wls_ms += wls_gate_ms
+            if float(selected_pr_prefit_gate_m) > 0.0:
+                wls_data, prefit_kept, prefit_dropped = _filter_data_by_pr_prefit(
+                    wls_data,
+                    wls_positions,
+                    gate_m=float(selected_pr_prefit_gate_m),
+                    clock_quantile=0.5,
+                    min_sats=int(args.pr_prefit_gate_min_sats),
+                    keep_best=int(args.pr_prefit_gate_keep_best),
+                    per_system=bool(args.pr_prefit_per_system),
+                )
+                print(
+                    f"  PR/WLS prefit gate: <= {float(selected_pr_prefit_gate_m):.1f} m "
+                    f"(median sats={wls_data['n_satellites']}, "
+                    f"dropped={prefit_dropped}/{prefit_kept + prefit_dropped})"
+                )
+                wls_positions, wls_prefit_ms = run_wls(wls_data, **spp_kwargs)
+                wls_ms += wls_prefit_ms
+        wls_quality = _wls_epoch_quality_metrics(wls_data, wls_positions)
+        finite_wls_rms = wls_quality["postfit_rms_m"][
+            np.isfinite(wls_quality["postfit_rms_m"])
+        ]
+        finite_wls_pdop = wls_quality["pdop"][np.isfinite(wls_quality["pdop"])]
+        if finite_wls_rms.size > 0:
+            wls_quality_msg = (
+                f", postfit_rms med/p90="
+                f"{np.median(finite_wls_rms):.2f}/{np.percentile(finite_wls_rms, 90):.2f}m"
+            )
+            if finite_wls_pdop.size > 0:
+                wls_quality_msg += (
+                    f", PDOP med/p90="
+                    f"{np.median(finite_wls_pdop):.2f}/{np.percentile(finite_wls_pdop, 90):.2f}"
+                )
+        else:
+            wls_quality_msg = ""
+        print(f"  WLS init done ({wls_ms:.2f} ms/epoch{wls_quality_msg})", flush=True)
+
+        ranker_lookup_run: dict[tuple[float, str], float] | None = None
+        if args.rtkdiag_candidate_ranker_score_path:
+            ranker_lookup_run = _ranker_lookup_for_run(
+                args.rtkdiag_candidate_ranker_score_path, city, run,
+            )
+            print(
+                f"  ranker predictions loaded for {city}/{run}: {len(ranker_lookup_run)} entries",
+                flush=True,
+            )
 
         for configured_variant in variants:
+            user_select_mode = configured_variant.rtkdiag_candidate_select_mode
             variant = _apply_rtkdiag_run_index_policy(
                 configured_variant,
                 run=run,
                 policy=str(args.rtkdiag_candidate_run_index_policy),
                 city=city,
+            )
+            # Preserve explicit user select_mode through per-run policy overrides.
+            # Phase 11ep+ presets unconditionally rewrite select_mode (residual /
+            # temporal_n2_v10 etc.). Bypass when user passed something non-default.
+            if user_select_mode != "residual" and variant.rtkdiag_candidate_select_mode != user_select_mode:
+                variant = replace(variant, rtkdiag_candidate_select_mode=user_select_mode)
+            variant = replace(
+                variant,
+                sigma_pr=selected_sigma_pr,
+                pr_iono_alpha=iono_alpha_tuple,
+                pr_iono_beta=iono_beta_tuple,
+                pr_min_elevation_deg=selected_pr_min_elevation_deg,
+                pr_prefit_gate_m=selected_pr_prefit_gate_m,
             )
             if str(args.rtkdiag_candidate_force_emit_mode).strip():
                 variant = replace(
@@ -7023,12 +10029,16 @@ def main() -> None:
                     rtkdiag_candidate_emit_mode=str(args.rtkdiag_candidate_force_emit_mode),
                 )
             print(f"  [{variant.method_label}] running ...", flush=True)
-            need_dd_for_variant = variant.enable_dd_carrier_afv or (
+            need_dd_for_variant = variant.enable_dd_carrier_afv or variant.enable_dd_pr_ls_anchor or (
                 variant.enable_rbpf_velocity_kf
                 and variant.rbpf_kf_gate_min_dd_pairs is not None
             )
             dd_for_variant = dd_computer if need_dd_for_variant else None
-            dd_pr_for_variant = dd_pr_computer if variant.enable_fgo_lambda else None
+            dd_pr_for_variant = (
+                dd_pr_computer
+                if (variant.enable_fgo_lambda or variant.enable_dd_pr_ls_anchor)
+                else None
+            )
             hybrid_for_variant = hybrid_pos_run if variant.enable_hybrid_pu else None
             # Phase 9b also consumes the hybrid velocity guide -- it derives
             # the IMU anchor yaw from the rover's course-over-ground at the
@@ -7075,8 +10085,9 @@ def main() -> None:
                 if rtkdiag_candidates_for_variant is not None
                 else rtkdiag_candidate_labels
             )
-            positions, ms_per_epoch, pr_obs_stats, reservoir_stein_stats, dd_stats, gate_stats, hybrid_stats, rtkdiag_pf_stats, fgo_stats, tdcp_stats, zupt_stats, imu_tc_stats, ins_tc_stats = _run_ctrbpf_on_segment(
+            positions, ms_per_epoch, pr_obs_stats, reservoir_stein_stats, dd_stats, gate_stats, hybrid_stats, rtkdiag_pf_stats, fgo_stats, tdcp_stats, low_sat_bridge_stats, zupt_stats, imu_tc_stats, ins_tc_stats, variant_internal_diag_rows = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
+                wls_quality=wls_quality,
                 dd_computer=dd_for_variant,
                 dd_pr_computer=dd_pr_for_variant,
                 hybrid_pos=hybrid_for_variant,
@@ -7085,11 +10096,51 @@ def main() -> None:
                 reference_pos=reference_pos_run,
                 rtkdiag_candidates=rtkdiag_candidates_for_variant,
                 imu=imu_for_variant,
+                collect_internal_diagnostics=bool(args.write_internal_diagnostics),
+                ranker_score_lookup=ranker_lookup_run,
+                ranker_stickiness=float(args.rtkdiag_candidate_ranker_stickiness),
             )
-            score = score_ppc2024(
-                np.asarray([p for p in _aligned_positions(full_ref, data["times"], positions)],
-                           dtype=np.float64),
-                np.array([t for _, t in full_ref], dtype=np.float64),
+            if args.write_internal_diagnostics:
+                for diag in variant_internal_diag_rows:
+                    diag["city"] = city
+                    diag["run"] = run
+                    diag["method"] = variant.method_label
+                internal_diag_rows.extend(variant_internal_diag_rows)
+            honest_est = np.asarray(
+                [p for p in _aligned_positions(full_ref, data["times"], positions)],
+                dtype=np.float64,
+            )
+            honest_ref = np.array([t for _, t in full_ref], dtype=np.float64)
+            score = score_ppc2024(honest_est, honest_ref)
+            score_1m = score_ppc2024(honest_est, honest_ref, threshold_m=1.0)
+            score_3m = score_ppc2024(honest_est, honest_ref, threshold_m=3.0)
+            segment_est: list[np.ndarray] = []
+            segment_ref: list[np.ndarray] = []
+            for t_obs, pos_obs in zip(data["times"], positions, strict=True):
+                ref_obs = reference_pos_run.get(round(float(t_obs), 1))
+                if (
+                    ref_obs is not None
+                    and np.all(np.isfinite(ref_obs[:3]))
+                    and np.all(np.isfinite(pos_obs[:3]))
+                ):
+                    segment_est.append(np.asarray(pos_obs[:3], dtype=np.float64))
+                    segment_ref.append(np.asarray(ref_obs[:3], dtype=np.float64))
+            segment_est_arr = np.asarray(segment_est, dtype=np.float64)
+            segment_ref_arr = np.asarray(segment_ref, dtype=np.float64)
+            segment_score = (
+                score_ppc2024(segment_est_arr, segment_ref_arr)
+                if segment_est
+                else None
+            )
+            segment_score_1m = (
+                score_ppc2024(segment_est_arr, segment_ref_arr, threshold_m=1.0)
+                if segment_est
+                else None
+            )
+            segment_score_3m = (
+                score_ppc2024(segment_est_arr, segment_ref_arr, threshold_m=3.0)
+                if segment_est
+                else None
             )
             pos_path = args.pos_dir / f"{city}_{run}_{variant.method_label}.pos"
             _write_pos_file(pos_path, np.asarray(data["times"]), positions)
@@ -7098,18 +10149,41 @@ def main() -> None:
                 variant.rbpf_kf_gate_min_dd_pairs is not None
                 or variant.rbpf_kf_gate_min_ess_ratio is not None
                 or variant.rbpf_kf_gate_max_spread_m is not None
+                or float(variant.rbpf_kf_gate_max_doppler_wls_rms_mps) > 0.0
+                or float(variant.rbpf_kf_gate_max_doppler_wls_speed_mps) > 0.0
             )
             row = {
                 "city": city,
                 "run": run,
                 "method": variant.method_label,
                 "n_particles": variant.n_particles,
+                "sigma_pr": float(variant.sigma_pr),
+                "start_epoch": int(args.start_epoch),
+                "max_epochs": int(args.max_epochs) if args.max_epochs is not None else "",
                 "n_ref_epochs": len(full_ref),
                 "n_pf_epochs": int(data["n_epochs"]),
                 "coverage_pct": float(100.0 * n_emit / max(len(full_ref), 1)),
                 "honest_ppc_pct": float(score.score_pct),
                 "honest_pass_m": float(score.pass_distance_m),
                 "honest_total_m": float(score.total_distance_m),
+                "honest_ppc_1m_pct": float(score_1m.score_pct),
+                "honest_pass_1m_m": float(score_1m.pass_distance_m),
+                "honest_ppc_3m_pct": float(score_3m.score_pct),
+                "honest_pass_3m_m": float(score_3m.pass_distance_m),
+                "segment_ppc_pct": float(segment_score.score_pct) if segment_score is not None else "",
+                "segment_pass_m": float(segment_score.pass_distance_m) if segment_score is not None else "",
+                "segment_total_m": float(segment_score.total_distance_m) if segment_score is not None else "",
+                "segment_ppc_1m_pct": float(segment_score_1m.score_pct) if segment_score_1m is not None else "",
+                "segment_pass_1m_m": float(segment_score_1m.pass_distance_m) if segment_score_1m is not None else "",
+                "segment_ppc_3m_pct": float(segment_score_3m.score_pct) if segment_score_3m is not None else "",
+                "segment_pass_3m_m": float(segment_score_3m.pass_distance_m) if segment_score_3m is not None else "",
+                "segment_fail_3m_epochs": (
+                    int(np.count_nonzero(np.isfinite(segment_score_3m.errors_3d) & (segment_score_3m.errors_3d > 3.0)))
+                    if segment_score_3m is not None
+                    else 0
+                ),
+                "segment_epoch_pass_pct": float(segment_score.epoch_pass_pct) if segment_score is not None else "",
+                "segment_n_epochs": int(segment_score.n_epochs) if segment_score is not None else 0,
                 "ms_per_epoch": float(ms_per_epoch),
                 "rbpf_velocity_kf": int(variant.enable_rbpf_velocity_kf),
                 "position_update": int(variant.enable_position_update),
@@ -7135,6 +10209,36 @@ def main() -> None:
                 "pr_weight_min": float(variant.pr_weight_min),
                 "pr_weight_max": float(variant.pr_weight_max),
                 "pr_systems": ",".join(str(s) for s in variant.pr_systems),
+                "pr_min_elevation_deg": float(variant.pr_min_elevation_deg),
+                "pr_auto_elevation_gate": int(bool(args.pr_auto_elevation_gate)),
+                "pr_auto_elevation_selected": int(bool(auto_elevation_selected)),
+                "pr_auto_elevation_postfit_rms_m": float(
+                    auto_elevation_postfit_rms_m
+                ),
+                "pr_auto_elevation_min_sat_fraction": float(
+                    args.pr_auto_elevation_min_sat_fraction
+                ),
+                "pr_auto_elevation_gated_sat_fraction": float(
+                    auto_elevation_gated_sat_fraction
+                ),
+                "pr_auto_elevation_max_pdop_ratio": float(
+                    args.pr_auto_elevation_max_pdop_ratio
+                ),
+                "pr_auto_elevation_gated_pdop_ratio": float(
+                    auto_elevation_gated_pdop_ratio
+                ),
+                "pr_auto_robust_profile": int(bool(args.pr_auto_robust_profile)),
+                "pr_auto_robust_selected": int(
+                    bool(selected_pr_auto_robust_profile)
+                ),
+                "pr_auto_robust_low_sat_epochs": int(low_sat_epochs),
+                "pr_auto_robust_low_sat_threshold": int(low_sat_threshold),
+                "pr_atmosphere_model": str(variant.pr_atmosphere_model),
+                "pr_atmosphere_scale": float(variant.pr_atmosphere_scale),
+                "pr_atmosphere_extra_zenith_m": float(
+                    variant.pr_atmosphere_extra_zenith_m
+                ),
+                "pr_slant_delay_zenith_m": float(variant.pr_slant_delay_zenith_m),
                 "pr_prefit_gate_m": float(variant.pr_prefit_gate_m),
                 "pr_prefit_gate_min_sats": int(variant.pr_prefit_gate_min_sats),
                 "pr_prefit_gate_keep_best": int(variant.pr_prefit_gate_keep_best),
@@ -7153,6 +10257,9 @@ def main() -> None:
                 "pr_gmm_sigma_nlos_m": float(variant.pr_gmm_sigma_nlos_m),
                 "pr_gmm_hybrid_loose_sigma_m": float(variant.pr_gmm_hybrid_loose_sigma_m),
                 "pr_gmm_clock_quantile": float(variant.pr_gmm_clock_quantile),
+                "doppler_systems": ",".join(str(s) for s in variant.doppler_systems),
+                "doppler_prefit_gate_mps": float(variant.doppler_prefit_gate_mps),
+                "doppler_prefit_gate_min_sats": int(variant.doppler_prefit_gate_min_sats),
                 "dd_carrier_afv": int(variant.enable_dd_carrier_afv),
                 "dd_min_elevation_deg": float(variant.dd_min_elevation_deg),
                 "dd_min_snr": float(variant.dd_min_snr),
@@ -7227,13 +10334,40 @@ def main() -> None:
                     -1.0 if variant.rbpf_kf_gate_max_spread_m is None
                     else float(variant.rbpf_kf_gate_max_spread_m)
                 ),
+                "rbpf_kf_gate_max_doppler_wls_rms_mps": float(
+                    variant.rbpf_kf_gate_max_doppler_wls_rms_mps
+                ),
+                "rbpf_kf_gate_max_doppler_wls_speed_mps": float(
+                    variant.rbpf_kf_gate_max_doppler_wls_speed_mps
+                ),
                 "rbpf_kf_attempted": int(gate_stats.epochs_attempted),
                 "rbpf_kf_applied": int(gate_stats.epochs_applied),
                 "rbpf_kf_skip_min_dd_pairs": int(gate_stats.skipped_min_dd_pairs),
                 "rbpf_kf_skip_min_ess_ratio": int(gate_stats.skipped_min_ess_ratio),
                 "rbpf_kf_skip_max_spread": int(gate_stats.skipped_max_spread),
+                "rbpf_kf_skip_doppler_wls_rms": int(
+                    gate_stats.skipped_doppler_wls_rms
+                ),
+                "rbpf_kf_skip_doppler_wls_speed": int(
+                    gate_stats.skipped_doppler_wls_speed
+                ),
                 "hybrid_pu": int(variant.enable_hybrid_pu),
                 "hybrid_sigma_m": float(variant.hybrid_sigma_m),
+                "position_update_min_epoch": int(
+                    variant.position_update_min_epoch
+                ),
+                "position_update_min_pr_sats": int(
+                    variant.position_update_min_pr_sats
+                ),
+                "position_update_max_wls_rms_m": float(
+                    variant.position_update_max_wls_rms_m
+                ),
+                "position_update_max_wls_pdop": float(
+                    variant.position_update_max_wls_pdop
+                ),
+                "position_update_max_wls_to_pf_m": float(
+                    variant.position_update_max_wls_to_pf_m
+                ),
                 "hybrid_recenter_max_shift_m": float(variant.hybrid_recenter_max_shift_m),
                 "hybrid_emit_pf_statuses": ",".join(
                     str(int(s)) for s in variant.hybrid_emit_pf_statuses
@@ -7252,6 +10386,9 @@ def main() -> None:
                 "rtkdiag_candidate_ratio_min": float(variant.rtkdiag_candidate_ratio_min),
                 "rtkdiag_candidate_residual_rms_max": float(
                     variant.rtkdiag_candidate_residual_rms_max
+                ),
+                "rtkdiag_candidate_max_to_hybrid_m": float(
+                    variant.rtkdiag_candidate_max_to_hybrid_m
                 ),
                 "rtkdiag_candidate_emit_max_diff_m": float(
                     variant.rtkdiag_candidate_emit_max_diff_m
@@ -7273,6 +10410,63 @@ def main() -> None:
                 ),
                 "rtkdiag_candidate_select_mode": str(variant.rtkdiag_candidate_select_mode),
                 "rtkdiag_candidate_emit_mode": str(variant.rtkdiag_candidate_emit_mode),
+                "rtkdiag_candidate_min_epoch": int(
+                    variant.rtkdiag_candidate_min_epoch
+                ),
+                "rtkdiag_candidate_require_any_diag_fields": ",".join(
+                    variant.rtkdiag_candidate_require_any_diag_fields
+                ),
+                "rtkdiag_candidate_require_all_diag_fields": ",".join(
+                    variant.rtkdiag_candidate_require_all_diag_fields
+                ),
+                "rtkdiag_candidate_min_diag_fields": str(
+                    variant.rtkdiag_candidate_min_diag_fields
+                ),
+                "rtkdiag_candidate_max_diag_fields": str(
+                    variant.rtkdiag_candidate_max_diag_fields
+                ),
+                "rtkdiag_candidate_fallback_mode": str(
+                    variant.rtkdiag_candidate_fallback_mode
+                ),
+                "rtkdiag_candidate_fallback_max_wls_rms_m": float(
+                    variant.rtkdiag_candidate_fallback_max_wls_rms_m
+                ),
+                "rtkdiag_candidate_fallback_max_wls_pdop": float(
+                    variant.rtkdiag_candidate_fallback_max_wls_pdop
+                ),
+                "rtkdiag_candidate_fallback_max_wls_to_pf_m": float(
+                    variant.rtkdiag_candidate_fallback_max_wls_to_pf_m
+                ),
+                "rtkdiag_candidate_fallback_max_hold_age_s": float(
+                    variant.rtkdiag_candidate_fallback_max_hold_age_s
+                ),
+                "rtkdiag_candidate_float_labels": ",".join(
+                    variant.rtkdiag_candidate_float_labels
+                ),
+                "rtkdiag_candidate_float_residual_rms_max": float(
+                    variant.rtkdiag_candidate_float_residual_rms_max
+                ),
+                "rtkdiag_candidate_float_abs_max": float(
+                    variant.rtkdiag_candidate_float_abs_max
+                ),
+                "rtkdiag_candidate_float_min_sats": int(
+                    variant.rtkdiag_candidate_float_min_sats
+                ),
+                "rtkdiag_candidate_status5_labels": ",".join(
+                    variant.rtkdiag_candidate_status5_labels
+                ),
+                "rtkdiag_candidate_status5_tow_windows": str(
+                    variant.rtkdiag_candidate_status5_tow_windows
+                ),
+                "rtkdiag_candidate_status5_max_dt_s": float(
+                    variant.rtkdiag_candidate_status5_max_dt_s
+                ),
+                "rtkdiag_candidate_status5_residual_rms_max": float(
+                    variant.rtkdiag_candidate_status5_residual_rms_max
+                ),
+                "rtkdiag_candidate_status5_min_sats": int(
+                    variant.rtkdiag_candidate_status5_min_sats
+                ),
                 "rtkdiag_candidate_run_index_policy": str(
                     args.rtkdiag_candidate_run_index_policy
                 ),
@@ -7294,6 +10488,23 @@ def main() -> None:
                 "rtkdiag_pf_recenter_skipped": int(rtkdiag_pf_stats.recenter_skipped),
                 "rtkdiag_pf_emit_pf_estimate": int(rtkdiag_pf_stats.emit_pf_estimate),
                 "rtkdiag_pf_emit_candidate": int(rtkdiag_pf_stats.emit_candidate),
+                "rtkdiag_pf_skipped_min_epoch": int(
+                    rtkdiag_pf_stats.skipped_min_epoch
+                ),
+                "rtkdiag_pf_skipped_diag_policy": int(
+                    rtkdiag_pf_stats.skipped_diag_policy
+                ),
+                "rtkdiag_pf_skipped_hybrid_distance": int(
+                    rtkdiag_pf_stats.skipped_hybrid_distance
+                ),
+                "rtkdiag_pf_fallback_pf": int(rtkdiag_pf_stats.fallback_pf),
+                "rtkdiag_pf_fallback_wls": int(rtkdiag_pf_stats.fallback_wls),
+                "rtkdiag_pf_fallback_hybrid": int(
+                    rtkdiag_pf_stats.fallback_hybrid
+                ),
+                "rtkdiag_pf_fallback_last_good": int(
+                    rtkdiag_pf_stats.fallback_last_good
+                ),
                 "rtkdiag_pf_emit_skipped_pf_drift": int(
                     rtkdiag_pf_stats.emit_skipped_pf_drift
                 ),
@@ -7389,6 +10600,16 @@ def main() -> None:
                 "tdcp_pairs_accepted": int(tdcp_stats.pairs_accepted),
                 "tdcp_pairs_rejected_min_sats": int(tdcp_stats.pairs_rejected_min_sats),
                 "tdcp_pairs_rejected_postfit": int(tdcp_stats.pairs_rejected_postfit),
+                "low_sat_bridge": int(variant.enable_low_sat_bridge),
+                "low_sat_bridge_min_pr_sats": int(variant.low_sat_bridge_min_pr_sats),
+                "low_sat_bridge_spans": int(low_sat_bridge_stats.spans_applied),
+                "low_sat_bridge_epochs": int(low_sat_bridge_stats.epochs_rewritten),
+                "low_sat_bridge_startup_spans": int(
+                    low_sat_bridge_stats.startup_spans_applied
+                ),
+                "low_sat_bridge_startup_epochs": int(
+                    low_sat_bridge_stats.startup_epochs_rewritten
+                ),
                 "zupt": int(variant.enable_zupt),
                 "zupt_evaluated": int(zupt_stats.epochs_evaluated),
                 "zupt_static": int(zupt_stats.epochs_static),
@@ -7434,6 +10655,11 @@ def main() -> None:
             rows.append(row)
             agg_pass[variant.method_label] += row["honest_pass_m"]
             agg_total[variant.method_label] += row["honest_total_m"]
+            run_total = float(row["honest_total_m"])
+            if run_total > 0.0:
+                per_run_pcts[variant.method_label].append(
+                    100.0 * float(row["honest_pass_m"]) / run_total
+                )
             dd_msg = ""
             if variant.enable_dd_carrier_afv:
                 applied = dd_stats.epochs_applied
@@ -7490,7 +10716,9 @@ def main() -> None:
                     f"{gate_stats.epochs_attempted} "
                     f"(skip dd={gate_stats.skipped_min_dd_pairs}, "
                     f"ess={gate_stats.skipped_min_ess_ratio}, "
-                    f"spread={gate_stats.skipped_max_spread})"
+                    f"spread={gate_stats.skipped_max_spread}, "
+                    f"dop_rms={gate_stats.skipped_doppler_wls_rms}, "
+                    f"dop_speed={gate_stats.skipped_doppler_wls_speed})"
                 )
             hybrid_msg = ""
             if variant.enable_hybrid_pu and hybrid_stats.epochs_attempted > 0:
@@ -7512,6 +10740,13 @@ def main() -> None:
                     f"emit_pf={rtkdiag_pf_stats.emit_pf_estimate} "
                     f"emit_cand={rtkdiag_pf_stats.emit_candidate} "
                     f"(miss={rtkdiag_pf_stats.candidate_missing}, "
+                    f"min_skip={rtkdiag_pf_stats.skipped_min_epoch}, "
+                    f"diag_skip={rtkdiag_pf_stats.skipped_diag_policy}, "
+                    f"hyb_skip={rtkdiag_pf_stats.skipped_hybrid_distance}, "
+                    f"fb={rtkdiag_pf_stats.fallback_pf}/"
+                    f"{rtkdiag_pf_stats.fallback_wls}/"
+                    f"{rtkdiag_pf_stats.fallback_hybrid}/"
+                    f"{rtkdiag_pf_stats.fallback_last_good}, "
                     f"drift_skip={rtkdiag_pf_stats.emit_skipped_pf_drift}, "
                     f"rec={rtkdiag_pf_stats.recenter_applied}/"
                     f"{rtkdiag_pf_stats.recenter_skipped}, "
@@ -7568,6 +10803,14 @@ def main() -> None:
                     f"(reject min_sats={tdcp_stats.pairs_rejected_min_sats}, "
                     f"postfit={tdcp_stats.pairs_rejected_postfit})"
                 )
+            low_sat_bridge_msg = ""
+            if variant.enable_low_sat_bridge:
+                low_sat_bridge_msg = (
+                    f", low-sat bridge {low_sat_bridge_stats.epochs_rewritten}ep/"
+                    f"{low_sat_bridge_stats.spans_applied}span"
+                    f", startup {low_sat_bridge_stats.startup_epochs_rewritten}ep/"
+                    f"{low_sat_bridge_stats.startup_spans_applied}span"
+                )
             fgo_msg = ""
             if variant.enable_fgo_lambda and fgo_stats.windows_attempted > 0:
                 diag_n = max(int(fgo_stats.lambda_diag_windows), 1)
@@ -7601,7 +10844,7 @@ def main() -> None:
             print(
                 f"    PPC honest: {row['honest_ppc_pct']:5.2f}%  "
                 f"(pass {row['honest_pass_m']:.0f} / total {row['honest_total_m']:.0f}m, "
-                f"{ms_per_epoch:.1f} ms/epoch{pr_msg}{pr_weight_msg}{prefit_msg}{pr_skip_msg}{defer_msg}{dd_msg}{gate_msg}{hybrid_msg}{rtkdiag_pf_msg}{zupt_msg}{imu_tc_msg}{ins_tc_msg}{tdcp_msg}{fgo_msg})",
+                f"{ms_per_epoch:.1f} ms/epoch{pr_msg}{pr_weight_msg}{prefit_msg}{pr_skip_msg}{defer_msg}{dd_msg}{gate_msg}{hybrid_msg}{rtkdiag_pf_msg}{zupt_msg}{imu_tc_msg}{ins_tc_msg}{tdcp_msg}{low_sat_bridge_msg}{fgo_msg})",
                 flush=True,
             )
 
@@ -7620,21 +10863,28 @@ def main() -> None:
         writer = csv.DictWriter(fh, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
+    internal_diag_path = RESULTS_DIR / f"{args.results_prefix}_internal_epochs.csv"
+    if args.write_internal_diagnostics and internal_diag_rows:
+        _write_dict_rows(internal_diag_path, internal_diag_rows)
 
     print()
     print("=" * 72)
-    print("  Honest aggregates (denominator = full rover-epoch arc length;")
-    print("  TURING target is 85.6%, libgnss++ hybrid baseline is 50.91%)")
+    print("  Honest aggregates (OFFICIAL PPC2024 metric = per-run-averaged;")
+    print("  TURING target 85.6% is per-run-averaged; pooled shown for diagnostics)")
     for method in [v.method_label for v in variants]:
         total = agg_total[method]
         if total <= 0:
             continue
-        pct = 100.0 * agg_pass[method] / total
+        pooled_pct = 100.0 * agg_pass[method] / total
+        per_run = per_run_pcts.get(method, [])
+        official_pct = sum(per_run) / len(per_run) if per_run else 0.0
         print(
-            f"  {method:18s}: {pct:5.2f}%   "
-            f"(pass {agg_pass[method]:.0f}m / total {total:.0f}m)"
+            f"  {method:18s}: OFFICIAL {official_pct:5.2f}%  pooled {pooled_pct:5.2f}%   "
+            f"(pass {agg_pass[method]:.0f}m / total {total:.0f}m, n_runs={len(per_run)})"
         )
     print(f"  Saved: {out_csv}")
+    if args.write_internal_diagnostics and internal_diag_rows:
+        print(f"  Saved internal diagnostics: {internal_diag_path}")
     print("=" * 72)
 
 
