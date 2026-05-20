@@ -26,6 +26,10 @@ GATED_FGO_RAW_WLS_RESCUE_ENABLED = False
 GATED_FGO_RAW_WLS_RESCUE_MSE_PR_MIN = 31.721240912308435
 GATED_FGO_RAW_WLS_RESCUE_QUALITY_MAX = 1.0638132412840764
 GATED_FGO_RAW_WLS_RESCUE_GAP_MAX_M = 100.0
+GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_RATIO_MAX = 1.20
+GATED_FGO_RAW_WLS_PROXY_RESCUE_GAP_STEP_P95_RATIO_MAX = 1.25
+GATED_FGO_RAW_WLS_PROXY_RESCUE_QUALITY_DELTA_MAX = -0.35
+GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_DELTA_MAX = 0.0
 # Broad train diagnostics found no FGO-winning chunks above this PR-MSE.
 FGO_CANDIDATE_MSE_PR_MAX = 400.0
 GATED_CANDIDATE_QUALITY_MARGIN = 0.08
@@ -51,6 +55,22 @@ GATED_HIGH_BASELINE_CANDIDATE_GAP_P95_FLOOR_M = 150.0
 GATED_HIGH_BASELINE_CANDIDATE_GAP_P95_MAX_M = 200.0
 GATED_MI8_BASELINE_JUMP_STEP_P95_M = 100.0
 GATED_MI8_RAW_WLS_BASELINE_GAP_MAX_M = 200.0
+DD_CARRIER_FGO_SOURCE = "fgo_dd_carrier"
+DD_CARRIER_FGO_BASELINE_MSE_PR_MIN = 24.0
+DD_CARRIER_FGO_BASELINE_MSE_PR_RATIO_MAX = 0.90
+DD_CARRIER_FGO_MSE_RATIO_TO_FGO_MAX = 1.005
+DD_CARRIER_FGO_QUALITY_DELTA_TO_FGO_MAX = 0.02
+DD_CARRIER_FGO_BASELINE_GAP_P95_MAX_M = 13.0
+DD_CARRIER_FGO_GAP_P95_DELTA_TO_FGO_MAX_M = 1.0
+DD_CARRIER_FGO_GAP_MAX_DELTA_TO_FGO_MAX_M = 2.0
+# Phase 74 DD anchor coverage gate.  Anchor coverage is the per-trip ratio
+# ``dd_carrier_accepted_anchor_epochs / n_epochs``; when low, the
+# ``fgo_dd_carrier`` candidate is fit to a small subset of anchored epochs and
+# its PR-MSE / quality metrics are an unreliable proxy for the full chunk.
+# The default ``0.6`` matches the audit framework's ``DDAnchorGate`` so the
+# production path can ratify the same envelope.  Pass ``anchor_coverage=None``
+# to disable the gate (default for backward-compatible call sites).
+DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT = 0.6
 # Pixel5 raw_wls high-baseline chunks improved the local PR proxy but worsened
 # Kaggle Private in direct A/B, so keep them disabled until train-backed masked
 # evidence or a direct follow-up A/B proves a narrower exception.
@@ -277,19 +297,83 @@ def fgo_candidate_passes_raw_wls_mse_guard(
 def fgo_candidate_passes_raw_wls_proxy_rescue(
     quality: ChunkCandidateQuality,
     raw_wls: ChunkCandidateQuality | None,
+    baseline: ChunkCandidateQuality,
+    *,
+    enabled: bool = GATED_FGO_RAW_WLS_RESCUE_ENABLED,
+    mse_ratio_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_RATIO_MAX,
+    baseline_gap_step_p95_ratio_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_GAP_STEP_P95_RATIO_MAX,
+    quality_delta_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_QUALITY_DELTA_MAX,
+    mse_delta_vs_baseline_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_DELTA_MAX,
 ) -> bool:
-    if not GATED_FGO_RAW_WLS_RESCUE_ENABLED:
+    if not enabled:
         return False
     return (
         raw_wls is not None
+        and np.isfinite(quality.mse_pr)
         and np.isfinite(raw_wls.mse_pr)
-        and raw_wls.mse_pr >= GATED_FGO_RAW_WLS_RESCUE_MSE_PR_MIN
-        and np.isfinite(raw_wls.quality_score)
-        and raw_wls.quality_score <= GATED_FGO_RAW_WLS_RESCUE_QUALITY_MAX
+        and np.isfinite(baseline.mse_pr)
+        and np.isfinite(quality.quality_score)
+        and np.isfinite(baseline.quality_score)
+        and np.isfinite(quality.baseline_gap_p95_m)
+        and np.isfinite(baseline.step_p95_m)
+        and quality.mse_pr > raw_wls.mse_pr
+        and quality.mse_pr <= raw_wls.mse_pr * float(mse_ratio_max)
+        and quality.mse_pr - baseline.mse_pr <= float(mse_delta_vs_baseline_max)
+        and quality.quality_score - baseline.quality_score <= float(quality_delta_max)
+        and quality.baseline_gap_p95_m
+        <= max(baseline.step_p95_m, 1.0e-9) * float(baseline_gap_step_p95_ratio_max)
+    )
+
+
+def dd_carrier_anchor_coverage_passes(
+    anchor_coverage: float | None,
+    min_coverage: float = DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
+) -> bool:
+    """Per-trip DD-carrier anchor coverage guard.
+
+    Returns ``True`` when the gate is disabled (``anchor_coverage`` is ``None``
+    or non-finite) so the caller keeps the legacy behaviour by default.  When a
+    finite value is supplied, returns ``True`` iff ``anchor_coverage`` is at
+    least ``min_coverage``.  Negative or above-1.0 values are tolerated to
+    accept slightly noisy ratios — the threshold check itself is the contract.
+    """
+
+    if anchor_coverage is None:
+        return True
+    coverage = float(anchor_coverage)
+    if not np.isfinite(coverage):
+        return True
+    return coverage >= float(min_coverage)
+
+
+def dd_carrier_candidate_matches_safe_fgo(
+    quality: ChunkCandidateQuality,
+    fgo: ChunkCandidateQuality | None,
+    baseline: ChunkCandidateQuality,
+) -> bool:
+    """Allow DD-carrier FGO to inherit only a near-identical safe FGO envelope."""
+
+    if fgo is None:
+        return False
+    return (
+        np.isfinite(quality.mse_pr)
+        and np.isfinite(fgo.mse_pr)
+        and np.isfinite(quality.quality_score)
+        and np.isfinite(fgo.quality_score)
+        and np.isfinite(quality.baseline_gap_p95_m)
+        and np.isfinite(fgo.baseline_gap_p95_m)
         and np.isfinite(quality.baseline_gap_max_m)
-        and quality.baseline_gap_max_m <= GATED_FGO_RAW_WLS_RESCUE_GAP_MAX_M
-        and np.isfinite(raw_wls.baseline_gap_max_m)
-        and raw_wls.baseline_gap_max_m <= GATED_FGO_RAW_WLS_RESCUE_GAP_MAX_M
+        and np.isfinite(fgo.baseline_gap_max_m)
+        and np.isfinite(baseline.mse_pr)
+        and baseline.mse_pr >= DD_CARRIER_FGO_BASELINE_MSE_PR_MIN
+        and quality.mse_pr <= baseline.mse_pr * DD_CARRIER_FGO_BASELINE_MSE_PR_RATIO_MAX
+        and quality.mse_pr <= fgo.mse_pr * DD_CARRIER_FGO_MSE_RATIO_TO_FGO_MAX
+        and quality.quality_score <= fgo.quality_score + DD_CARRIER_FGO_QUALITY_DELTA_TO_FGO_MAX
+        and quality.baseline_gap_p95_m <= DD_CARRIER_FGO_BASELINE_GAP_P95_MAX_M
+        and quality.baseline_gap_p95_m
+        <= fgo.baseline_gap_p95_m + DD_CARRIER_FGO_GAP_P95_DELTA_TO_FGO_MAX_M
+        and quality.baseline_gap_max_m
+        <= fgo.baseline_gap_max_m + DD_CARRIER_FGO_GAP_MAX_DELTA_TO_FGO_MAX_M
     )
 
 
@@ -343,6 +427,13 @@ def select_gated_chunk_source(
     *,
     allow_raw_wls_on_mi8_baseline_jump: bool = False,
     raw_wls_max_gap_m: float | None = None,
+    allow_fgo_raw_wls_proxy_rescue: bool = False,
+    fgo_raw_wls_proxy_rescue_mse_ratio_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_RATIO_MAX,
+    fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_GAP_STEP_P95_RATIO_MAX,
+    fgo_raw_wls_proxy_rescue_quality_delta_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_QUALITY_DELTA_MAX,
+    fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_DELTA_MAX,
+    dd_carrier_anchor_coverage: float | None = None,
+    dd_carrier_min_anchor_coverage: float = DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
 ) -> str:
     baseline = record.candidates["baseline"]
     catastrophic_source = catastrophic_baseline_alternative(
@@ -400,13 +491,33 @@ def select_gated_chunk_source(
             ):
                 continue
         if is_fgo_candidate_source(name):
+            if name == DD_CARRIER_FGO_SOURCE and not dd_carrier_anchor_coverage_passes(
+                dd_carrier_anchor_coverage,
+                dd_carrier_min_anchor_coverage,
+            ):
+                continue
             raw_wls = record.candidates.get("raw_wls")
+            dd_carrier_matches_fgo = name == DD_CARRIER_FGO_SOURCE and dd_carrier_candidate_matches_safe_fgo(
+                quality,
+                record.candidates.get("fgo"),
+                baseline,
+            )
             low_baseline_fgo = (
-                baseline.mse_pr < GATED_FGO_BASELINE_MSE_PR_MIN
+                name != DD_CARRIER_FGO_SOURCE
+                and baseline.mse_pr < GATED_FGO_BASELINE_MSE_PR_MIN
                 and raw_wls is not None
                 and fgo_candidate_passes_low_baseline_confidence_guard(quality)
             )
-            raw_proxy_rescue = fgo_candidate_passes_raw_wls_proxy_rescue(quality, raw_wls)
+            raw_proxy_rescue = name == "fgo" and fgo_candidate_passes_raw_wls_proxy_rescue(
+                quality,
+                raw_wls,
+                baseline,
+                enabled=allow_fgo_raw_wls_proxy_rescue,
+                mse_ratio_max=fgo_raw_wls_proxy_rescue_mse_ratio_max,
+                baseline_gap_step_p95_ratio_max=fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max,
+                quality_delta_max=fgo_raw_wls_proxy_rescue_quality_delta_max,
+                mse_delta_vs_baseline_max=fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
+            )
             if not fgo_candidate_passes_mse_guard(quality):
                 continue
             if not low_baseline_fgo and not raw_proxy_rescue and not fgo_candidate_passes_baseline_gap_guard(
@@ -417,6 +528,7 @@ def select_gated_chunk_source(
             if not low_baseline_fgo and not (
                 fgo_candidate_passes_raw_wls_mse_guard(quality, raw_wls)
                 or raw_proxy_rescue
+                or dd_carrier_matches_fgo
             ):
                 continue
         if name == "fgo":
@@ -472,6 +584,13 @@ def chunk_selection_payload(
     *,
     allow_raw_wls_on_mi8_baseline_jump: bool = False,
     raw_wls_max_gap_m: float | None = None,
+    allow_fgo_raw_wls_proxy_rescue: bool = False,
+    fgo_raw_wls_proxy_rescue_mse_ratio_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_RATIO_MAX,
+    fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_GAP_STEP_P95_RATIO_MAX,
+    fgo_raw_wls_proxy_rescue_quality_delta_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_QUALITY_DELTA_MAX,
+    fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_DELTA_MAX,
+    dd_carrier_anchor_coverage: float | None = None,
+    dd_carrier_min_anchor_coverage: float = DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
 ) -> list[dict[str, object]]:
     return [
         {
@@ -483,6 +602,13 @@ def chunk_selection_payload(
                 gated_threshold,
                 allow_raw_wls_on_mi8_baseline_jump=allow_raw_wls_on_mi8_baseline_jump,
                 raw_wls_max_gap_m=raw_wls_max_gap_m,
+                allow_fgo_raw_wls_proxy_rescue=allow_fgo_raw_wls_proxy_rescue,
+                fgo_raw_wls_proxy_rescue_mse_ratio_max=fgo_raw_wls_proxy_rescue_mse_ratio_max,
+                fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max=fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max,
+                fgo_raw_wls_proxy_rescue_quality_delta_max=fgo_raw_wls_proxy_rescue_quality_delta_max,
+                fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
+                dd_carrier_anchor_coverage=dd_carrier_anchor_coverage,
+                dd_carrier_min_anchor_coverage=dd_carrier_min_anchor_coverage,
             ),
             "candidates": {
                 name: chunk_quality_payload(quality)
@@ -500,20 +626,41 @@ def add_tdcp_off_fgo_candidates(
     baseline_state: np.ndarray,
     auto_state: np.ndarray,
 ) -> None:
-    tdcp_off_by_span = {
+    add_fgo_candidate_from_records(
+        records,
+        tdcp_off_records,
+        source_name="fgo_no_tdcp",
+        candidate_state=tdcp_off_fgo_state,
+        baseline_state=baseline_state,
+        auto_state=auto_state,
+    )
+
+
+def add_fgo_candidate_from_records(
+    records: list[ChunkSelectionRecord],
+    candidate_records: list[ChunkSelectionRecord],
+    *,
+    source_name: str,
+    candidate_state: np.ndarray,
+    baseline_state: np.ndarray,
+    auto_state: np.ndarray,
+) -> None:
+    if not is_fgo_candidate_source(source_name):
+        raise ValueError(f"FGO candidate source must be 'fgo' or start with 'fgo_': {source_name}")
+    candidate_by_span = {
         (record.start_epoch, record.end_epoch): record
-        for record in tdcp_off_records
+        for record in candidate_records
     }
     for record in records:
-        tdcp_off_record = tdcp_off_by_span.get((record.start_epoch, record.end_epoch))
-        if tdcp_off_record is None or "fgo" not in tdcp_off_record.candidates:
+        candidate_record = candidate_by_span.get((record.start_epoch, record.end_epoch))
+        if candidate_record is None or "fgo" not in candidate_record.candidates:
             continue
         start = record.start_epoch
         end = record.end_epoch
         prev_tail_xyz = auto_state[start - 1, :3] if start > 0 else None
-        record.candidates["fgo_no_tdcp"] = chunk_candidate_quality(
-            tdcp_off_fgo_state[start:end],
-            tdcp_off_record.candidates["fgo"].mse_pr,
+        record.candidates[source_name] = chunk_candidate_quality(
+            candidate_state[start:end],
+            candidate_record.candidates["fgo"].mse_pr,
             baseline_quality=record.candidates["baseline"],
             prev_tail_xyz=prev_tail_xyz,
             baseline_xyz=baseline_state[start:end, :3],
