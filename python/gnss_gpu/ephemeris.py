@@ -7,7 +7,20 @@ import struct
 
 import numpy as np
 
+from gnss_gpu.gnss_time_scales import (
+    GPS_WEEK_SEC,
+    broadcast_rx_seconds_of_week,
+)
 from gnss_gpu.io.nav_rinex import NavMessage
+from gnss_gpu.nav_validity import (
+    is_broadcast_usable,
+    is_glonass_broadcast_valid,
+    is_kepler_broadcast_valid,
+)
+from gnss_gpu.orbit_glonass import (
+    GlonassBroadcastState,
+    glonass_position_clock,
+)
 
 try:
     from gnss_gpu._gnss_gpu_ephemeris import (
@@ -24,7 +37,6 @@ except ImportError:
 GPS_MU = 3.986005e14  # Earth gravitational parameter [m^3/s^2]
 GPS_OMEGA_E = 7.2921151467e-5  # Earth rotation rate [rad/s]
 GPS_F = -4.442807633e-10  # relativistic correction constant [s/m^0.5]
-GPS_WEEK_SEC = 604800.0  # seconds per GPS week
 
 GAL_MU = 3.986004418e14
 GAL_OMEGA_E = 7.2921151467e-5
@@ -34,6 +46,11 @@ QZS_MU = GPS_MU
 QZS_OMEGA_E = GPS_OMEGA_E
 QZS_F = GPS_F
 
+# BeiDou broadcast orbit uses CGCS2000 constants (μ / ω_e / relativistic F per BDS ICD).
+BDS_MU = GAL_MU
+BDS_OMEGA_E = 7.292115e-5
+BDS_F = GAL_F
+
 
 def _constellation_constants(system: str) -> tuple[float, float, float]:
     system = system.upper()
@@ -41,7 +58,28 @@ def _constellation_constants(system: str) -> tuple[float, float, float]:
         return GAL_MU, GAL_OMEGA_E, GAL_F
     if system == "J":
         return QZS_MU, QZS_OMEGA_E, QZS_F
+    if system == "C":
+        return BDS_MU, BDS_OMEGA_E, BDS_F
     return GPS_MU, GPS_OMEGA_E, GPS_F
+
+
+def _glonass_state_from_nav(nav: NavMessage) -> GlonassBroadcastState:
+    """Adapter: pack a ``NavMessage`` GLONASS record into the orbit module DTO."""
+
+    return GlonassBroadcastState(
+        toe=float(nav.toe),
+        px_m=float(nav.glo_px_m),
+        py_m=float(nav.glo_py_m),
+        pz_m=float(nav.glo_pz_m),
+        vx_m_s=float(nav.glo_vx_m_s),
+        vy_m_s=float(nav.glo_vy_m_s),
+        vz_m_s=float(nav.glo_vz_m_s),
+        ax_m_s2=float(nav.glo_ax_m_s2),
+        ay_m_s2=float(nav.glo_ay_m_s2),
+        az_m_s2=float(nav.glo_az_m_s2),
+        tau_n=float(nav.glo_tau_n),
+        gamma_n=float(nav.glo_gamma_n),
+    )
 
 
 def _normalize_sat_id(sat: int | str) -> int | str:
@@ -184,7 +222,8 @@ class Ephemeris:
         best = None
         best_key = None
         for msg in messages:
-            dt = abs(gps_time - msg.toe)
+            rx_sow = broadcast_rx_seconds_of_week(msg.system, gps_time)
+            dt = abs(rx_sow - msg.toe)
             # Handle week crossover
             if dt > GPS_WEEK_SEC / 2.0:
                 dt = GPS_WEEK_SEC - dt
@@ -213,9 +252,10 @@ class Ephemeris:
         params_bytes = b""
         for prn in prn_list:
             nav = self.select_ephemeris(prn, gps_time)
-            if nav is not None:
-                if nav.system != "G":
-                    raise ValueError("GPU ephemeris path only supports GPS")
+            # GPU kernel currently consumes only GPS Kepler params; multi-GNSS
+            # records are silently skipped so callers can mix them in
+            # ``prn_list`` without triggering a crash on the GPU path.
+            if nav is not None and nav.system == "G" and is_kepler_broadcast_valid(nav):
                 params_bytes += _nav_to_params_bytes(nav)
                 used_prns.append(prn)
 
@@ -314,7 +354,10 @@ class Ephemeris:
         for gps_time in gps_times:
             navs = [self.select_ephemeris(prn, float(gps_time)) for prn in prn_list]
             selected_navs_per_epoch.append(navs)
-            common_mask &= np.array([nav is not None for nav in navs], dtype=bool)
+            common_mask &= np.array(
+                [is_broadcast_usable(nav) for nav in navs],
+                dtype=bool,
+            )
 
         used_prns = [prn for prn, keep in zip(prn_list, common_mask) if keep]
         if not used_prns:
@@ -389,13 +432,29 @@ class Ephemeris:
         *,
         apply_group_delay: bool = True,
     ) -> tuple[np.ndarray, float]:
-        """Compute single satellite position on CPU."""
+        """Compute single satellite position on CPU.
+
+        Dispatches to the GLONASS RK4 propagator for ``system == "R"`` and
+        raises ``ValueError`` only when the record is neither a usable GLONASS
+        state vector nor a finite Kepler broadcast — the caller drops such
+        records cleanly via ``is_broadcast_usable``.
+        """
+
+        if is_glonass_broadcast_valid(nav):
+            return glonass_position_clock(_glonass_state_from_nav(nav), float(gps_time))
+        if not is_kepler_broadcast_valid(nav):
+            raise ValueError(
+                "invalid or unsupported broadcast ephemeris "
+                f"(system={nav.system!r}, sqrt_a={nav.sqrt_a!r}, e={nav.e!r})"
+            )
+
         mu, omega_e, rel_f = _constellation_constants(nav.system)
         a = nav.sqrt_a ** 2
         n0 = math.sqrt(mu / (a ** 3))
         n = n0 + nav.delta_n
 
-        tk = gps_time - nav.toe
+        rx_sow = broadcast_rx_seconds_of_week(nav.system, gps_time)
+        tk = rx_sow - nav.toe
         if tk > GPS_WEEK_SEC / 2.0:
             tk -= GPS_WEEK_SEC
         if tk < -GPS_WEEK_SEC / 2.0:
@@ -439,8 +498,10 @@ class Ephemeris:
             yp * sini,
         ])
 
-        # Clock correction
-        dt = gps_time - nav.toc_seconds
+        # Clock correction (receive sow aligned with broadcast TOC scale when
+        # the system is BDS/GLO and TOC is expressed in BDT/UTC, otherwise
+        # ``rx_sow == gps_time``).
+        dt = rx_sow - nav.toc_seconds
         if dt > GPS_WEEK_SEC / 2.0:
             dt -= GPS_WEEK_SEC
         if dt < -GPS_WEEK_SEC / 2.0:
@@ -470,12 +531,7 @@ class Ephemeris:
         for i, prn in enumerate(prn_list):
             obs_code = None if obs_codes is None else obs_codes[i]
             nav = self.select_ephemeris(prn, gps_time, obs_code)
-            if nav is None:
-                continue
-            # Skip degenerate nav records (sqrt_a==0 or non-finite) which would
-            # blow up `n0 = sqrt(mu / a**3)` inside _compute_single_cpu.
-            sqrt_a = float(getattr(nav, "sqrt_a", 0.0))
-            if not math.isfinite(sqrt_a) or sqrt_a <= 0.0:
+            if not is_broadcast_usable(nav):
                 continue
             try:
                 pos, clk = self._compute_single_cpu(nav, gps_time, obs_code)
