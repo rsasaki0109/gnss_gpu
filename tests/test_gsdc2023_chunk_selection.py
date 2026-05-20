@@ -8,6 +8,7 @@ from experiments.gsdc2023_chunk_selection import (
     add_tdcp_off_fgo_candidates,
     chunk_candidate_quality,
     chunk_selection_payload,
+    compute_dd_carrier_anchor_coverage_ratio,
     dd_carrier_anchor_coverage_passes,
     is_fgo_candidate_source,
     select_auto_chunk_source,
@@ -742,6 +743,20 @@ def _dd_carrier_record_passing_safe_fgo() -> ChunkSelectionRecord:
             "fgo_dd_carrier": _quality(22.88, 0.698, gap_p95=12.5, gap_max=16.8, step_p95=20.2),
         },
     )
+
+
+def test_compute_dd_carrier_anchor_coverage_ratio_basic():
+    assert compute_dd_carrier_anchor_coverage_ratio(20, 100) == 0.2
+    assert compute_dd_carrier_anchor_coverage_ratio(80, 100) == 0.8
+
+
+def test_compute_dd_carrier_anchor_coverage_ratio_returns_none_for_empty_trip():
+    assert compute_dd_carrier_anchor_coverage_ratio(20, 0) is None
+    assert compute_dd_carrier_anchor_coverage_ratio(20, -3) is None
+
+
+def test_compute_dd_carrier_anchor_coverage_ratio_clamps_negative_numerator():
+    assert compute_dd_carrier_anchor_coverage_ratio(-5, 100) == 0.0
 
 
 def test_dd_carrier_anchor_coverage_passes_returns_true_when_signal_is_missing():

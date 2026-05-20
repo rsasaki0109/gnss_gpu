@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
+from dataclasses import replace as _replace_dataclass
 from pathlib import Path
 
 import numpy as np
@@ -34,11 +36,13 @@ from experiments.gsdc2023_chunk_selection import (
     WINDOW_SELECTION_STEP_P95_MAX_M,
     ChunkCandidateQuality,
     ChunkSelectionRecord,
+    add_fgo_candidate_from_records as _add_fgo_candidate_from_records,
     add_tdcp_off_fgo_candidates as _add_tdcp_off_fgo_candidates,
     candidate_passes_gated_quality as _candidate_passes_gated_quality,
     catastrophic_baseline_alternative as _catastrophic_baseline_alternative,
     chunk_candidate_quality as _chunk_candidate_quality,
     chunk_quality_payload as _chunk_quality_payload,
+    compute_dd_carrier_anchor_coverage_ratio as _compute_dd_carrier_anchor_coverage_ratio,
     fgo_candidate_passes_baseline_gap_guard as _fgo_candidate_passes_baseline_gap_guard,
     fgo_candidate_passes_raw_wls_mse_guard as _fgo_candidate_passes_raw_wls_mse_guard,
     is_fgo_candidate_source as _is_fgo_candidate_source,
@@ -51,6 +55,7 @@ from experiments.gsdc2023_chunk_selection import (
 )
 from experiments.gsdc2023_bridge_config import (
     BridgeConfig,
+    DEFAULT_CT_RBPF_MOTION_SIGMA_M,
     DEFAULT_MOTION_SIGMA_M,
     FACTOR_DT_MAX_S,
     OUTLIER_REFINEMENT_CHUNK_EPOCHS,
@@ -198,6 +203,12 @@ from experiments.gsdc2023_result_assembly import (
     assemble_source_outputs as _assemble_source_outputs,
     build_bridge_result as _build_bridge_result,
 )
+from experiments.gsdc2023_dd_carrier_bridge import (
+    DD_CARRIER_FGO_SOURCE,
+    DDCarrierAnchorConfig,
+    DDCarrierBridgeConfig,
+    apply_sparse_dd_carrier_anchors as _apply_sparse_dd_carrier_anchors,
+)
 from experiments.gsdc2023_result_metadata import (
     ImuResultSummary,
     imu_result_summary as _imu_result_summary,
@@ -212,10 +223,12 @@ from experiments.gsdc2023_validation_context import (
 from experiments.gsdc2023_solver_selection import (
     batch_without_tdcp as _batch_without_tdcp,
     build_source_solution_catalog as _build_source_solution_catalog,
+    fgo_raw_wls_proxy_rescue_enabled as _fgo_raw_wls_proxy_rescue_enabled,
     mi8_gated_baseline_jump_guard_enabled as _mi8_gated_baseline_jump_guard_enabled,
     raw_wls_max_gap_guard_m as _raw_wls_max_gap_guard_m,
     select_gated_solution as _select_gated_solution,
     tdcp_off_candidate_enabled as _tdcp_off_candidate_enabled,
+    tdcp_scale_candidate_enabled as _tdcp_scale_candidate_enabled,
     with_fixed_source_solution as _with_fixed_source_solution,
     with_source_solution as _with_source_solution,
 )
@@ -355,7 +368,9 @@ from experiments.gsdc2023_clock_state import (
 )
 from experiments.gsdc2023_output import (
     BridgeResult,
+    CT_RBPF_FGO_SOURCE,
     POSITION_SOURCES,
+    TDCP_SCALE_FGO_SOURCE,
     bridge_position_columns,
     ecef_to_llh_deg,
     export_bridge_outputs,
@@ -1493,7 +1508,104 @@ def run_fgo_chunked(
 
 
 
-def solve_trip(trip: str, batch: TripArrays, config: BridgeConfig) -> BridgeResult:
+def _dd_carrier_anchor_coverage(
+    config: BridgeConfig,
+    dd_carrier_stats: Mapping[str, object],
+    *,
+    n_epoch: int,
+) -> float | None:
+    """Per-trip DD-carrier anchor coverage thread for the gated selector.
+
+    Returns ``None`` when the DD-carrier FGO is disabled so the chunk selector
+    keeps the legacy behaviour.  When enabled, derives the ratio from the
+    ``accepted_anchor_epochs`` stat captured during DD anchor application.
+    """
+
+    if not config.dd_carrier_fgo_enabled:
+        return None
+    accepted = int(dd_carrier_stats.get("accepted_anchor_epochs", 0) or 0)
+    return _compute_dd_carrier_anchor_coverage_ratio(accepted, n_epoch)
+
+
+def _dd_carrier_bridge_config_from_bridge_config(config: BridgeConfig) -> DDCarrierBridgeConfig:
+    return DDCarrierBridgeConfig(
+        tow_snap_tolerance_s=config.dd_carrier_tow_snap_tolerance_s,
+        anchor=DDCarrierAnchorConfig(
+            min_dd_pairs=config.dd_carrier_min_dd_pairs,
+            sigma_cycles=config.dd_carrier_sigma_cycles,
+            prior_sigma_m=config.dd_carrier_prior_sigma_m,
+            max_shift_m=config.dd_carrier_max_shift_m,
+            max_initial_rms_m=config.dd_carrier_max_initial_rms_m,
+            max_final_rms_m=config.dd_carrier_max_final_rms_m,
+        ),
+        base_obs_template=config.dd_carrier_base_obs_template,
+        require_base_obs_template=config.dd_carrier_require_base_obs_template,
+        smooth_corrections=config.dd_carrier_smooth_corrections,
+        anchor_correction_sigma_m=config.dd_carrier_anchor_correction_sigma_m,
+        correction_smooth_sigma_m=config.dd_carrier_correction_smooth_sigma_m,
+        correction_zero_sigma_m=config.dd_carrier_correction_zero_sigma_m,
+    )
+
+
+def _add_fixed_fgo_candidate_quality(
+    records: list[ChunkSelectionRecord],
+    *,
+    source_name: str,
+    candidate_state: np.ndarray,
+    baseline_state: np.ndarray,
+    auto_state: np.ndarray,
+    batch: TripArrays,
+) -> None:
+    if not _is_fgo_candidate_source(source_name):
+        raise ValueError(f"FGO candidate source must be 'fgo' or start with 'fgo_': {source_name}")
+    for record in records:
+        start = int(record.start_epoch)
+        end = int(record.end_epoch)
+        fitted, sse, weight_sum, _ = fit_state_with_clock_bias(
+            batch.sat_ecef[start:end],
+            batch.pseudorange[start:end],
+            batch.weights[start:end],
+            candidate_state[start:end, :3],
+            sys_kind=(batch.sys_kind[start:end] if batch.sys_kind is not None else None),
+            n_clock=batch.n_clock,
+        )
+        candidate_state[start:end] = fitted
+        prev_tail_xyz = auto_state[start - 1, :3] if start > 0 else None
+        record.candidates[source_name] = _chunk_candidate_quality(
+            candidate_state[start:end],
+            weighted_mse(sse, weight_sum),
+            baseline_quality=record.candidates["baseline"],
+            prev_tail_xyz=prev_tail_xyz,
+            baseline_xyz=baseline_state[start:end, :3],
+        )
+
+
+def _apply_tdcp_candidate_weight_scale(
+    batch: TripArrays,
+    *,
+    current_scale: float,
+    candidate_scale: float,
+) -> TripArrays:
+    if batch.tdcp_weights is None:
+        return batch
+    current = float(current_scale)
+    candidate = float(candidate_scale)
+    if not np.isfinite(current) or current <= 0.0:
+        raise ValueError("current TDCP weight scale must be finite and > 0")
+    if not np.isfinite(candidate) or candidate <= 0.0:
+        raise ValueError("candidate TDCP weight scale must be finite and > 0")
+    scaled = np.asarray(batch.tdcp_weights, dtype=np.float64).copy()
+    scaled *= candidate / current
+    return _replace_dataclass(batch, tdcp_weights=scaled)
+
+
+def solve_trip(
+    trip: str,
+    batch: TripArrays,
+    config: BridgeConfig,
+    *,
+    data_root: Path | None = None,
+) -> BridgeResult:
     phone_name = Path(trip).name
     kaggle_state, kaggle_sse, kaggle_weight_sum, _ = fit_state_with_clock_bias(
         batch.sat_ecef,
@@ -1536,6 +1648,12 @@ def solve_trip(trip: str, batch: TripArrays, config: BridgeConfig) -> BridgeResu
     )
     tdcp_off_fgo_state: np.ndarray | None = None
     tdcp_off_chunk_records: list[ChunkSelectionRecord] | None = None
+    tdcp_scale_fgo_state: np.ndarray | None = None
+    tdcp_scale_chunk_records: list[ChunkSelectionRecord] | None = None
+    ct_rbpf_fgo_state: np.ndarray | None = None
+    ct_rbpf_chunk_records: list[ChunkSelectionRecord] | None = None
+    dd_carrier_fgo_state: np.ndarray | None = None
+    dd_carrier_stats: dict[str, object] = {}
     if _tdcp_off_candidate_enabled(config, batch):
         (
             _tdcp_off_auto_state,
@@ -1553,6 +1671,49 @@ def solve_trip(trip: str, batch: TripArrays, config: BridgeConfig) -> BridgeResu
             raw_wls,
             **solver_context_kwargs,
             **fgo_run_kwargs,
+        )
+    if _tdcp_scale_candidate_enabled(config, batch, phone_name):
+        tdcp_scale_batch = _apply_tdcp_candidate_weight_scale(
+            batch,
+            current_scale=config.tdcp_weight_scale,
+            candidate_scale=config.tdcp_scale_candidate_weight_scale,
+        )
+        (
+            _tdcp_scale_auto_state,
+            tdcp_scale_fgo_state,
+            _tdcp_scale_iters,
+            _tdcp_scale_failed_chunks,
+            _tdcp_scale_vd_seed_guard_skipped_segments,
+            _tdcp_scale_vd_seed_guard_skipped_epochs,
+            _tdcp_scale_vd_seed_guard_records,
+            _tdcp_scale_auto_sources,
+            _tdcp_scale_auto_source_counts,
+            tdcp_scale_chunk_records,
+        ) = run_fgo_chunked(
+            tdcp_scale_batch,
+            raw_wls,
+            **solver_context_kwargs,
+            **fgo_run_kwargs,
+        )
+    if config.ct_rbpf_fgo_enabled:
+        ct_rbpf_fgo_run_kwargs = dict(fgo_run_kwargs)
+        ct_rbpf_fgo_run_kwargs["motion_sigma_m"] = config.ct_rbpf_motion_sigma_m
+        (
+            _ct_rbpf_auto_state,
+            ct_rbpf_fgo_state,
+            _ct_rbpf_iters,
+            _ct_rbpf_failed_chunks,
+            _ct_rbpf_vd_seed_guard_skipped_segments,
+            _ct_rbpf_vd_seed_guard_skipped_epochs,
+            _ct_rbpf_vd_seed_guard_records,
+            _ct_rbpf_auto_sources,
+            _ct_rbpf_auto_source_counts,
+            ct_rbpf_chunk_records,
+        ) = run_fgo_chunked(
+            batch,
+            raw_wls,
+            **solver_context_kwargs,
+            **ct_rbpf_fgo_run_kwargs,
         )
     raw_state, raw_sse, raw_weight_sum, _ = fit_state_with_clock_bias(
         batch.sat_ecef,
@@ -1618,9 +1779,105 @@ def solve_trip(trip: str, batch: TripArrays, config: BridgeConfig) -> BridgeResu
             source_catalog.states["baseline"],
             source_catalog.states["auto"],
         )
+    if tdcp_scale_fgo_state is not None and tdcp_scale_chunk_records is not None:
+        tdcp_scale_fgo_state, tdcp_scale_sse, tdcp_scale_weight_sum, _ = fit_state_with_clock_bias(
+            batch.sat_ecef,
+            batch.pseudorange,
+            batch.weights,
+            tdcp_scale_fgo_state[:, :3],
+            sys_kind=batch.sys_kind,
+            n_clock=batch.n_clock,
+        )
+        source_catalog = _with_fixed_source_solution(
+            source_catalog,
+            source=TDCP_SCALE_FGO_SOURCE,
+            state=tdcp_scale_fgo_state,
+            mse_pr=weighted_mse(tdcp_scale_sse, tdcp_scale_weight_sum),
+        )
+        _add_fgo_candidate_from_records(
+            chunk_records,
+            tdcp_scale_chunk_records,
+            source_name=TDCP_SCALE_FGO_SOURCE,
+            candidate_state=tdcp_scale_fgo_state,
+            baseline_state=source_catalog.states["baseline"],
+            auto_state=source_catalog.states["auto"],
+        )
+    if ct_rbpf_fgo_state is not None and ct_rbpf_chunk_records is not None:
+        ct_rbpf_fgo_state, ct_rbpf_sse, ct_rbpf_weight_sum, _ = fit_state_with_clock_bias(
+            batch.sat_ecef,
+            batch.pseudorange,
+            batch.weights,
+            ct_rbpf_fgo_state[:, :3],
+            sys_kind=batch.sys_kind,
+            n_clock=batch.n_clock,
+        )
+        source_catalog = _with_fixed_source_solution(
+            source_catalog,
+            source=CT_RBPF_FGO_SOURCE,
+            state=ct_rbpf_fgo_state,
+            mse_pr=weighted_mse(ct_rbpf_sse, ct_rbpf_weight_sum),
+        )
+        _add_fgo_candidate_from_records(
+            chunk_records,
+            ct_rbpf_chunk_records,
+            source_name=CT_RBPF_FGO_SOURCE,
+            candidate_state=ct_rbpf_fgo_state,
+            baseline_state=source_catalog.states["baseline"],
+            auto_state=source_catalog.states["auto"],
+        )
+    if config.dd_carrier_fgo_enabled:
+        if data_root is None:
+            if config.position_source == DD_CARRIER_FGO_SOURCE:
+                raise RuntimeError(f"{DD_CARRIER_FGO_SOURCE} requires data_root")
+        else:
+            try:
+                dd_carrier_fgo_state, dd_carrier_stats = _apply_sparse_dd_carrier_anchors(
+                    data_root,
+                    trip,
+                    batch,
+                    fgo_state,
+                    _dd_carrier_bridge_config_from_bridge_config(config),
+                )
+            except FileNotFoundError:
+                if config.dd_carrier_require_base_obs_template or config.position_source == DD_CARRIER_FGO_SOURCE:
+                    raise
+                dd_carrier_fgo_state = fgo_state.copy()
+                dd_carrier_stats = {
+                    "base_snapped_epochs": 0,
+                    "dd_epochs": 0,
+                    "accepted_anchor_epochs": 0,
+                    "dd_pairs_mean": 0.0,
+                }
+            if dd_carrier_fgo_state is not None:
+                dd_carrier_fgo_state, dd_sse, dd_weight_sum, _ = fit_state_with_clock_bias(
+                    batch.sat_ecef,
+                    batch.pseudorange,
+                    batch.weights,
+                    dd_carrier_fgo_state[:, :3],
+                    sys_kind=batch.sys_kind,
+                    n_clock=batch.n_clock,
+                )
+                source_catalog = _with_fixed_source_solution(
+                    source_catalog,
+                    source=DD_CARRIER_FGO_SOURCE,
+                    state=dd_carrier_fgo_state,
+                    mse_pr=weighted_mse(dd_sse, dd_weight_sum),
+                )
+                _add_fixed_fgo_candidate_quality(
+                    chunk_records,
+                    source_name=DD_CARRIER_FGO_SOURCE,
+                    candidate_state=dd_carrier_fgo_state,
+                    baseline_state=source_catalog.states["baseline"],
+                    auto_state=source_catalog.states["auto"],
+                    batch=batch,
+                )
 
     allow_mi8_raw_wls_jump = _mi8_gated_baseline_jump_guard_enabled(phone_name, config.position_source)
     raw_wls_max_gap_m = _raw_wls_max_gap_guard_m(phone_name, config.position_source)
+    allow_fgo_raw_wls_proxy_rescue = _fgo_raw_wls_proxy_rescue_enabled(config, phone_name)
+    dd_carrier_anchor_coverage = _dd_carrier_anchor_coverage(
+        config, dd_carrier_stats, n_epoch=int(batch.times_ms.size)
+    )
     gated_state, gated_sources, gated_counts = _select_gated_solution(
         source_catalog,
         chunk_records,
@@ -1628,6 +1885,13 @@ def solve_trip(trip: str, batch: TripArrays, config: BridgeConfig) -> BridgeResu
         baseline_threshold=config.gated_baseline_threshold,
         allow_raw_wls_on_mi8_baseline_jump=allow_mi8_raw_wls_jump,
         raw_wls_max_gap_m=raw_wls_max_gap_m,
+        allow_fgo_raw_wls_proxy_rescue=allow_fgo_raw_wls_proxy_rescue,
+        fgo_raw_wls_proxy_rescue_mse_ratio_max=config.fgo_raw_wls_proxy_rescue_mse_ratio_max,
+        fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max=config.fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max,
+        fgo_raw_wls_proxy_rescue_quality_delta_max=config.fgo_raw_wls_proxy_rescue_quality_delta_max,
+        fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=config.fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
+        dd_carrier_anchor_coverage=dd_carrier_anchor_coverage,
+        dd_carrier_min_anchor_coverage=config.dd_carrier_min_anchor_coverage,
     )
     gated_state, gated_sse, gated_weight_sum, _ = fit_state_with_clock_bias(
         batch.sat_ecef,
@@ -1653,7 +1917,7 @@ def solve_trip(trip: str, batch: TripArrays, config: BridgeConfig) -> BridgeResu
         phone_name=phone_name,
     )
 
-    return _build_bridge_result(
+    result = _build_bridge_result(
         trip=trip,
         batch=batch,
         config=config,
@@ -1669,7 +1933,14 @@ def solve_trip(trip: str, batch: TripArrays, config: BridgeConfig) -> BridgeResu
         chunk_records=chunk_records,
         allow_raw_wls_on_mi8_baseline_jump=allow_mi8_raw_wls_jump,
         raw_wls_max_gap_m=raw_wls_max_gap_m,
+        allow_fgo_raw_wls_proxy_rescue=allow_fgo_raw_wls_proxy_rescue,
     )
+    if config.dd_carrier_fgo_enabled:
+        result.dd_carrier_accepted_anchor_epochs = int(dd_carrier_stats.get("accepted_anchor_epochs", 0) or 0)
+        result.dd_carrier_dd_epochs = int(dd_carrier_stats.get("dd_epochs", 0) or 0)
+        result.dd_carrier_base_snapped_epochs = int(dd_carrier_stats.get("base_snapped_epochs", 0) or 0)
+        result.dd_carrier_dd_pairs_mean = float(dd_carrier_stats.get("dd_pairs_mean", 0.0) or 0.0)
+    return result
 
 
 def validate_raw_gsdc2023_trip(
@@ -1719,11 +1990,11 @@ def validate_raw_gsdc2023_trip(
         imu_frame=cfg.imu_frame,
         factor_dt_max_s=cfg.factor_dt_max_s,
     )
-    result = solve_trip(trip, batch, cfg)
+    result = solve_trip(trip, batch, cfg, data_root=data_root)
     result.parity_audit = context.parity_audit
     refined_cfg = _outlier_refinement_config(cfg, result.selected_mse_pr)
     if refined_cfg is not None:
-        refined = solve_trip(trip, batch, refined_cfg)
+        refined = solve_trip(trip, batch, refined_cfg, data_root=data_root)
         refined.parity_audit = context.parity_audit
         if refined.selected_mse_pr < result.selected_mse_pr:
             return refined
@@ -1765,12 +2036,14 @@ __all__ = [
     "PseudorangeResidualStageProducts",
     "SolverExecutionContext",
     "DEFAULT_MOTION_SIGMA_M",
+    "DEFAULT_CT_RBPF_MOTION_SIGMA_M",
     "DEFAULT_TDCP_GEOMETRY_CORRECTION",
     "DEFAULT_TDCP_WEIGHT_SCALE",
     "IMU_ACCEL_BIAS_PRIOR_SIGMA_MPS2",
     "IMU_ACCEL_BIAS_BETWEEN_SIGMA_MPS2",
     "resolve_gsdc2023_data_root",
     "GATED_BASELINE_THRESHOLD_DEFAULT",
+    "CT_RBPF_FGO_SOURCE",
     "POSITION_SOURCES",
     "RAW_GNSS_COLUMNS",
     "IMUMeasurements",
