@@ -325,6 +325,26 @@ def fgo_candidate_passes_raw_wls_proxy_rescue(
     )
 
 
+def compute_dd_carrier_anchor_coverage_ratio(
+    accepted_anchor_epochs: int,
+    n_epoch: int,
+) -> float | None:
+    """Per-trip DD-carrier anchor coverage ratio.
+
+    Returns ``accepted_anchor_epochs / n_epoch`` when ``n_epoch > 0``.  Returns
+    ``None`` for non-positive ``n_epoch`` so callers can short-circuit the gate
+    (matching :func:`dd_carrier_anchor_coverage_passes` semantics).  Negative
+    numerator clamps to zero — the broadcast loop is expected to emit
+    non-negative counts, but this keeps the helper robust against bad inputs.
+    """
+
+    n = int(n_epoch)
+    if n <= 0:
+        return None
+    numerator = max(int(accepted_anchor_epochs), 0)
+    return float(numerator) / float(n)
+
+
 def dd_carrier_anchor_coverage_passes(
     anchor_coverage: float | None,
     min_coverage: float = DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
