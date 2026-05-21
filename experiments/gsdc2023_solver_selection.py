@@ -10,6 +10,11 @@ import numpy as np
 from experiments.gsdc2023_bridge_config import BridgeConfig
 from experiments.gsdc2023_chunk_selection import (
     ChunkSelectionRecord,
+    DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
+    GATED_FGO_RAW_WLS_PROXY_RESCUE_GAP_STEP_P95_RATIO_MAX,
+    GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_DELTA_MAX,
+    GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_RATIO_MAX,
+    GATED_FGO_RAW_WLS_PROXY_RESCUE_QUALITY_DELTA_MAX,
     GATED_PIXEL5_RAW_WLS_BASELINE_GAP_MAX_M,
     select_gated_chunk_source,
 )
@@ -39,6 +44,30 @@ def tdcp_off_candidate_enabled(config: BridgeConfig, batch: TripArrays) -> bool:
     if batch.tdcp_meas is None or batch.tdcp_weights is None:
         return False
     return bool(np.any(batch.tdcp_weights > 0.0))
+
+
+def tdcp_scale_candidate_enabled(config: BridgeConfig, batch: TripArrays, phone_name: str) -> bool:
+    if not config.tdcp_scale_candidate_enabled:
+        return False
+    if config.position_source != "gated" or not config.use_vd or not config.tdcp_enabled:
+        return False
+    if batch.tdcp_meas is None or batch.tdcp_weights is None:
+        return False
+    phones = {str(phone).lower() for phone in config.tdcp_scale_candidate_phones}
+    if phone_name.lower() not in phones:
+        return False
+    if float(config.tdcp_scale_candidate_weight_scale) == float(config.tdcp_weight_scale):
+        return False
+    return bool(np.any(batch.tdcp_weights > 0.0))
+
+
+def fgo_raw_wls_proxy_rescue_enabled(config: BridgeConfig, phone_name: str) -> bool:
+    if not config.fgo_raw_wls_proxy_rescue_enabled:
+        return False
+    if config.position_source != "gated":
+        return False
+    phones = {str(phone).lower() for phone in config.fgo_raw_wls_proxy_rescue_phones}
+    return phone_name.lower() in phones
 
 
 def batch_without_tdcp(batch: TripArrays) -> TripArrays:
@@ -171,12 +200,20 @@ def select_gated_solution(
     baseline_threshold: float,
     allow_raw_wls_on_mi8_baseline_jump: bool = False,
     raw_wls_max_gap_m: float | None = None,
+    allow_fgo_raw_wls_proxy_rescue: bool = False,
+    fgo_raw_wls_proxy_rescue_mse_ratio_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_RATIO_MAX,
+    fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_GAP_STEP_P95_RATIO_MAX,
+    fgo_raw_wls_proxy_rescue_quality_delta_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_QUALITY_DELTA_MAX,
+    fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_DELTA_MAX,
+    dd_carrier_anchor_coverage: float | None = None,
+    dd_carrier_min_anchor_coverage: float = DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
     gated_state = catalog.states["baseline"].copy()
     gated_sources = fixed_source_array(n_epoch, "baseline")
     gated_counts = fixed_source_counts(n_epoch, "baseline")
-    if "fgo_no_tdcp" in catalog.states:
-        gated_counts["fgo_no_tdcp"] = 0
+    for source in catalog.states:
+        if source.startswith("fgo_"):
+            gated_counts.setdefault(source, 0)
 
     for record in records:
         chosen_source = select_gated_chunk_source(
@@ -184,6 +221,13 @@ def select_gated_solution(
             baseline_threshold,
             allow_raw_wls_on_mi8_baseline_jump=allow_raw_wls_on_mi8_baseline_jump,
             raw_wls_max_gap_m=raw_wls_max_gap_m,
+            allow_fgo_raw_wls_proxy_rescue=allow_fgo_raw_wls_proxy_rescue,
+            fgo_raw_wls_proxy_rescue_mse_ratio_max=fgo_raw_wls_proxy_rescue_mse_ratio_max,
+            fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max=fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max,
+            fgo_raw_wls_proxy_rescue_quality_delta_max=fgo_raw_wls_proxy_rescue_quality_delta_max,
+            fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
+            dd_carrier_anchor_coverage=dd_carrier_anchor_coverage,
+            dd_carrier_min_anchor_coverage=dd_carrier_min_anchor_coverage,
         )
         if chosen_source == "baseline":
             continue
@@ -203,11 +247,13 @@ __all__ = [
     "build_source_solution_catalog",
     "fixed_source_array",
     "fixed_source_counts",
+    "fgo_raw_wls_proxy_rescue_enabled",
     "mi8_gated_baseline_jump_guard_enabled",
     "normalized_source_counts",
     "raw_wls_max_gap_guard_m",
     "select_gated_solution",
     "tdcp_off_candidate_enabled",
+    "tdcp_scale_candidate_enabled",
     "with_fixed_source_solution",
     "with_source_solution",
 ]
