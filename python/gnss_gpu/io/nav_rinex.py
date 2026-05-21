@@ -53,6 +53,20 @@ class NavMessage:
     sv_health: float = 0.0
     fit_interval: float = 0.0
     toc_seconds: float = 0.0  # toc as GPS seconds of week
+    # GLONASS broadcast state vector (PZ-90 ECEF, m / m·s / m·s²) and clock.
+    # Populated only when ``system == "R"``; left at 0.0 for Kepler systems.
+    glo_px_m: float = 0.0
+    glo_py_m: float = 0.0
+    glo_pz_m: float = 0.0
+    glo_vx_m_s: float = 0.0
+    glo_vy_m_s: float = 0.0
+    glo_vz_m_s: float = 0.0
+    glo_ax_m_s2: float = 0.0
+    glo_ay_m_s2: float = 0.0
+    glo_az_m_s2: float = 0.0
+    glo_tau_n: float = 0.0  # SV clock bias [s]
+    glo_gamma_n: float = 0.0  # SV relative frequency bias
+    glo_frequency_channel: int = 0  # K = -7..+13 frequency-channel number
 
     @property
     def sat_id(self) -> str:
@@ -212,7 +226,7 @@ def _v3_record_length(sys_char: str) -> int:
 def _parse_v3_record(
     lines: list[str], idx: int, systems_set: set[str]
 ) -> tuple[NavMessage | None, int]:
-    """Parse a RINEX 3 navigation record (8 lines)."""
+    """Parse a RINEX 3 navigation record (8 lines for Kepler; 4 for GLONASS/SBAS)."""
     if idx >= len(lines):
         return None, 1
 
@@ -225,6 +239,9 @@ def _parse_v3_record(
         return None, 1
     if sys_char not in systems_set:
         return None, record_length
+
+    if sys_char == "R":
+        return _parse_v3_glonass_record(lines, idx)
 
     # PRN
     prn_str = line0[1:3].strip()
@@ -312,6 +329,99 @@ def _parse_v3_record(
     )
 
     return nav, record_length
+
+
+_GLO_KM_TO_M = 1000.0
+
+
+def _parse_v3_glonass_orbit_line(line: str) -> tuple[float, float, float, float]:
+    """Read the four 19-char fields of a GLONASS broadcast-orbit line.
+
+    GLONASS RINEX 3 records skip the 4-space PRN/epoch indent on broadcast lines
+    and place values at columns 4-23, 23-42, 42-61, 61-80 (same widths as the
+    Kepler families).  The returned tuple is ``(field0, field1, field2, field3)``
+    in the order they appear on the line, in the RINEX-native units.  Caller is
+    responsible for km→m conversion since the units differ per line.
+    """
+    vals = []
+    for j in range(4):
+        start = 4 + j * 19
+        end = start + 19
+        vals.append(_parse_nav_float(line[start:end] if end <= len(line) else ""))
+    return vals[0], vals[1], vals[2], vals[3]
+
+
+def _parse_v3_glonass_record(
+    lines: list[str], idx: int
+) -> tuple[NavMessage | None, int]:
+    """Parse a 4-line RINEX 3 GLONASS navigation record.
+
+    Layout (RINEX 3.04 §A.2 / RTKLIB ``decode_glonass_eph``):
+
+    | Line | Field 0     | Field 1     | Field 2     | Field 3                  |
+    |------|-------------|-------------|-------------|--------------------------|
+    | 0    | (header)    | -TauN [s]   | +GammaN     | tk (message frame) [s]   |
+    | 1    | Px [km]     | Vx [km/s]   | Ax [km/s^2] | SV health                |
+    | 2    | Py [km]     | Vy [km/s]   | Ay [km/s^2] | Frequency channel        |
+    | 3    | Pz [km]     | Vz [km/s]   | Az [km/s^2] | Age of operation [days]  |
+
+    Note: RINEX stores ``-TauN`` so we negate it again to recover the canonical
+    SV clock bias ``tau_n`` (RTKLIB convention: ``clk = -tau_n + gamma_n * t``).
+    Position / velocity / acceleration are stored in kilometres; we convert to
+    metres here so downstream consumers see SI units only.
+    """
+    if idx + 3 >= len(lines):
+        return None, 1
+
+    line0 = lines[idx]
+    prn_str = line0[1:3].strip()
+    if not prn_str:
+        return None, 4
+    try:
+        prn = int(prn_str)
+    except ValueError:
+        return None, 4
+
+    year = int(line0[4:8])
+    month = int(line0[9:11])
+    day = int(line0[12:14])
+    hour = int(line0[15:17])
+    minute = int(line0[18:20])
+    sec = int(float(line0[21:23]))
+    toc = datetime(year, month, day, hour, minute, sec)
+
+    minus_tau_n = _parse_nav_float(line0[23:42])
+    gamma_n = _parse_nav_float(line0[42:61])
+    # ``line0[61:80]`` is the message frame time ``tk`` — kept implicit for now.
+
+    px_km, vx_km_s, ax_km_s2, health = _parse_v3_glonass_orbit_line(lines[idx + 1])
+    py_km, vy_km_s, ay_km_s2, freq_channel = _parse_v3_glonass_orbit_line(lines[idx + 2])
+    pz_km, vz_km_s, az_km_s2, _age_days = _parse_v3_glonass_orbit_line(lines[idx + 3])
+
+    toc_sow = _datetime_to_gps_seconds_of_week(toc)
+    nav = NavMessage(
+        prn=prn,
+        toc=toc,
+        system="R",
+        sv_health=health,
+        toe=toc_sow,
+        week=_datetime_to_gps_week(toc),
+        toc_seconds=toc_sow,
+        glo_px_m=px_km * _GLO_KM_TO_M,
+        glo_py_m=py_km * _GLO_KM_TO_M,
+        glo_pz_m=pz_km * _GLO_KM_TO_M,
+        glo_vx_m_s=vx_km_s * _GLO_KM_TO_M,
+        glo_vy_m_s=vy_km_s * _GLO_KM_TO_M,
+        glo_vz_m_s=vz_km_s * _GLO_KM_TO_M,
+        glo_ax_m_s2=ax_km_s2 * _GLO_KM_TO_M,
+        glo_ay_m_s2=ay_km_s2 * _GLO_KM_TO_M,
+        glo_az_m_s2=az_km_s2 * _GLO_KM_TO_M,
+        glo_tau_n=-minus_tau_n,
+        glo_gamma_n=gamma_n,
+        glo_frequency_channel=int(freq_channel),
+    )
+
+    return nav, 4
 
 
 def _parse_v2_record(lines: list[str], idx: int) -> tuple[NavMessage | None, int]:
