@@ -74,9 +74,32 @@ python3 -m pip install -r requirements.txt
 python3 -m pip install pytest pandas scipy requests matplotlib plotly
 ```
 
-Run the test suite. The pure-Python helpers and experiment logic run without a GPU;
-tests that exercise the native CUDA kernels are skipped or fail until you build them
-(see below):
+### Run the demo (no GPU, no data, ~1 second)
+
+The fastest way to see what this repo is about. It simulates a car driving through
+an urban canyon where buildings block some satellites (NLOS multipath), then solves
+each epoch with plain least squares vs. the package's robust SPP solver:
+
+```bash
+PYTHONPATH=python python3 examples/demo_urban_canyon_sim.py
+```
+
+```text
+method                         P50 err     RMS err
+--------------------------------------------------
+naive WLS (L2)                 10.30 m     10.21 m
+robust SPP (Cauchy)             2.00 m      2.39 m
+--------------------------------------------------
+robust vs naive: 81% better P50, 77% better RMS
+```
+
+Robust down-weighting of NLOS-biased measurements is the same idea the GPU
+particle-filter stack scales up to beat RTKLIB demo5 on real UrbanNav data.
+
+### Run the test suite
+
+The pure-Python helpers and experiment logic run without a GPU; tests that exercise
+the native CUDA kernels are skipped or fail until you build them (see below):
 
 ```bash
 PYTHONPATH=python python3 -m pytest tests/ -q
