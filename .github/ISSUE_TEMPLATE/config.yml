@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Live results snapshot
+    url: https://rsasaki0109.github.io/gnss_gpu/
+    about: Current benchmarks, figures, and method freeze — check here before reporting a results question.
+  - name: Project state & decisions
+    url: https://github.com/rsasaki0109/gnss_gpu/blob/main/internal_docs/decisions.md
+    about: Durable decisions and negative results, so you can see what has already been tried.
