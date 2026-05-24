@@ -1,64 +1,123 @@
+<div align="center">
+
 # gnss_gpu
 
-`gnss_gpu` is a research workspace for GNSS positioning experiments. It combines
-Python, CUDA/C++, and `libgnss++`-based tooling for:
+**GPU-accelerated GNSS positioning for the urban canyon — particle filters, ray-traced NLOS, and factor-graph experiments in real cities.**
 
-- GSDC2023 smartphone-decimeter Kaggle submissions.
-- PPC / UrbanNav RTK, PF/RBPF, FGO, selector, and map-aided experiments.
-- Reusable GNSS helpers under `python/gnss_gpu/` and native kernels under `src/`.
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/rsasaki0109/gnss_gpu/actions/workflows/ci.yml/badge.svg)](https://github.com/rsasaki0109/gnss_gpu/actions/workflows/ci.yml)
+[![Live demo](https://img.shields.io/badge/live%20demo-results%20snapshot-brightgreen)](https://rsasaki0109.github.io/gnss_gpu/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
 
-This repository is not a single polished application yet. It is intentionally
-experiment-first: stable code lives in the library/native directories, while
-fast-moving runs, sweeps, generated reports, and Kaggle/PPC handoffs live in
-`experiments/` and `internal_docs/`.
+<img src="docs/assets/media/site_teaser.gif" alt="gnss_gpu particle filter tracking through an urban canyon" width="760">
 
-## Start Here
+[**Live results snapshot**](https://rsasaki0109.github.io/gnss_gpu/) · [Benchmarks](benchmarks/RESULTS.md) · [Examples](examples/) · [How it's built](internal_docs/plan.md)
 
-Choose the path that matches what you are trying to do:
+</div>
 
-| Goal | First place to look |
-|---|---|
-| Continue current GSDC2023 Kaggle work | [`internal_docs/plan.md`](internal_docs/plan.md) |
-| Understand current PPC production state | [`internal_docs/ppc_current_status.md`](internal_docs/ppc_current_status.md) |
-| Find durable decisions and negative results | [`internal_docs/decisions.md`](internal_docs/decisions.md) |
-| Run or inspect experiment scripts | [`experiments/README.md`](experiments/README.md) |
-| Inspect generated result files | [`experiments/results/README.md`](experiments/results/README.md) |
-| Work on reusable Python code | [`python/gnss_gpu/`](python/gnss_gpu/) |
-| Work on native CUDA/C++ code | [`src/`](src/) |
-| Work on the C++ GNSS solver baseline | [`third_party/gnssplusplus/README.md`](third_party/gnssplusplus/README.md) |
+---
 
-## Current Status
+## What is this?
 
-As of 2026-05-25 JST, the two most important active threads are:
+`gnss_gpu` is a research workspace for pushing **smartphone- and survey-grade GNSS
+positioning in dense cities**, where buildings block and reflect satellite signals and
+classic EKF/RTK pipelines fall apart. It pairs CUDA/C++ kernels with Python tooling to
+run **GPU particle filters, double-difference carrier tracking, ray-traced line-of-sight
+checks against 3D city meshes, and factor-graph optimization** — then scores them
+honestly against RTKLIB and EKF baselines on real public datasets (UrbanNav, PLATEAU,
+and the GSDC2023 Kaggle smartphone-decimeter challenge).
 
-- **GSDC2023 Kaggle**: current best submitted CSV is v13 TDCP_on_v8 adaptive
-  row-gate, with Kaggle `public=3.224` and `private=3.783`.
-  The file is
-  `experiments/results/gsdc2023_submission_cauchy_pairwise_hampel_accel3_snap_hdg45_kalman_tdcp_onv8_adaptive_rowgate_20260525.csv`.
-  A v15 fine row-gate candidate is prepared and documented in
-  [`internal_docs/plan.md`](internal_docs/plan.md), but was not submitted at
-  the time this note was written.
-- **PPC / UrbanNav**: the current production-best route is Phase71. Phase71
-  keeps the Phase43 per-run selector setup and adds an OSM road-centerline
-  corrected candidate only for `nagoya/run2`.
+## Why you might care
 
-Keep this section short and current. Put detailed chronology in
-[`internal_docs/plan.md`](internal_docs/plan.md), not in the root README.
+- 🛰️ **It beats the classic baseline where it hurts most.** On UrbanNav Tokyo *Odaiba*,
+  the `PF 100K (DD + smoother + stop-detect)` filter reaches **1.36 m P50 / 4.11 m RMS**
+  versus **RTKLIB demo5 at 2.67 m / 13.08 m** over 12,228 aligned epochs — a **49% better
+  median and 69% better RMS**.
+- ⚡ **It's genuinely fast.** A full **1,000,000-particle** filter step
+  (predict → weight → resample → estimate) runs in **81 ms** (≈12 Hz) on a consumer Ada
+  GPU; a 10,000-epoch batch WLS solve takes **~1 ms**. See [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
+- 🏙️ **City-aware NLOS handling.** Ray tracing against PLATEAU 3D building meshes does
+  line-of-sight / non-line-of-sight classification with a **57.8× BVH speedup**, so urban
+  multipath can be rejected instead of trusted.
+- 📈 **Honest, reproducible scoring.** Every headline number comes from a fixed
+  same-input/same-metric comparison, and the [live snapshot](https://rsasaki0109.github.io/gnss_gpu/)
+  is regenerated straight from the committed result CSVs.
 
-## Repository Layout
+## Results at a glance
+
+| Method | Dataset | P50 | RMS 2D |
+|---|---|--:|--:|
+| **PF 100K (DD + smoother + stop-detect)** | UrbanNav Tokyo Odaiba | **1.36 m** | **4.11 m** |
+| RTKLIB demo5 | UrbanNav Tokyo Odaiba | 2.67 m | 13.08 m |
+| **PF + RobustClear-10K** (external mainline) | UrbanNav, 5 seq / 2 cities | — | **66.6 m** |
+| EKF baseline | UrbanNav, 5 seq / 2 cities | — | 93.25 m |
+
+<div align="center">
+<img src="docs/assets/figures/paper_urbannav_external.png" alt="UrbanNav external validation: PF vs EKF" width="420">
+<img src="docs/assets/figures/paper_particle_scaling.png" alt="Particle-count scaling: PF crosses EKF near 1K particles" width="420">
+</div>
+
+> The external-validation RMS is high in absolute terms because it averages the hardest
+> deep-urban sequences (including failure stretches). The point is the *relative* gap: the
+> GPU PF stack consistently wins against EKF and RTKLIB on the same epochs. Full tables,
+> figures, and limitations live on the [results snapshot](https://rsasaki0109.github.io/gnss_gpu/).
+
+## Quick start
+
+```bash
+git clone --recurse-submodules https://github.com/rsasaki0109/gnss_gpu.git
+cd gnss_gpu
+
+python3 -m venv .venv && source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -r requirements.txt
+python3 -m pip install pytest pandas scipy requests matplotlib plotly
+```
+
+Run the test suite. The pure-Python helpers and experiment logic run without a GPU;
+tests that exercise the native CUDA kernels are skipped or fail until you build them
+(see below):
+
+```bash
+PYTHONPATH=python python3 -m pytest tests/ -q
+```
+
+Browse [`examples/`](examples/) for runnable demos (acquisition, full pipeline,
+interference, urban PLATEAU, real-data replay, visualization). The GPU-accelerated demos
+import native modules, so build the kernels first.
+
+### Building the CUDA/C++ kernels
+
+The native kernels back the signal-sim, particle-filter, ray-tracing, and multi-GNSS
+solver paths:
+
+```bash
+mkdir -p build && cd build
+cmake .. -DCMAKE_CUDA_ARCHITECTURES=native
+make -j"$(nproc)"
+# then copy the generated .so files into python/gnss_gpu/
+```
+
+Once built, try a demo, e.g. signal simulation → acquisition round-trip:
+
+```bash
+PYTHONPATH=python python3 examples/demo_signal_sim.py
+```
+
+## Repository layout
 
 ```text
 python/gnss_gpu/              Reusable Python package code
 src/                          CUDA/C++ kernels and native bindings
+examples/                     Runnable demos (start here)
+benchmarks/                   GPU throughput benchmarks (+ RESULTS.md)
 experiments/                  Experiment runners, sweeps, reports, one-off probes
 experiments/results/          Generated CSV/HTML/plot outputs
+docs/                         Generated visual snapshot site (the live demo)
 internal_docs/                Working notes, decisions, handoffs, current state
-docs/                         Generated visual snapshot site
 third_party/gnssplusplus/     C++ GNSS/RTK/PPP/CLAS solver subproject
 tests/                        Python tests for stable helpers and experiment logic
 ```
-
-The root-level boundary is:
 
 ```mermaid
 flowchart LR
@@ -69,110 +128,40 @@ flowchart LR
     GPU --> Score["honest scoring\nCSV/HTML reports\nKaggle/PPC artifacts"]
 ```
 
-## Quick Setup
+## Where to look next
 
-For Python-only development, avoid an editable package install until the native
-CUDA/CMake toolchain is ready. Most experiment and test work can run with
-`PYTHONPATH=python`.
+| Goal | First place to look |
+|---|---|
+| See the live, regenerated results | [Results snapshot site](https://rsasaki0109.github.io/gnss_gpu/) |
+| Run a demo | [`examples/`](examples/) |
+| Check GPU throughput | [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md) |
+| Continue current GSDC2023 Kaggle work | [`internal_docs/plan.md`](internal_docs/plan.md) |
+| Understand current PPC production state | [`internal_docs/ppc_current_status.md`](internal_docs/ppc_current_status.md) |
+| Find durable decisions and negative results | [`internal_docs/decisions.md`](internal_docs/decisions.md) |
+| Work on reusable Python code | [`python/gnss_gpu/`](python/gnss_gpu/) |
+| Work on native CUDA/C++ code | [`src/`](src/) |
+| Work on the C++ GNSS solver baseline | [`third_party/gnssplusplus/README.md`](third_party/gnssplusplus/README.md) |
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
-python3 -m pip install pytest pandas scipy requests matplotlib plotly
-```
+## A note on scope
 
-Run a smoke test:
+This is **not** a single polished application — it is intentionally experiment-first.
+Stable code lives in the library/native directories (`python/gnss_gpu/`, `src/`), while
+fast-moving runs, sweeps, generated reports, and Kaggle/PPC handoffs live in
+`experiments/` and `internal_docs/`. Many CSV/HTML files are generated or local-only;
+before trusting one, check that it is listed in
+[`experiments/results/README.md`](experiments/results/README.md) and that its build
+command is recorded in [`internal_docs/plan.md`](internal_docs/plan.md).
 
-```bash
-PYTHONPATH=python python3 -m pytest tests/ -q
-```
+## Development policy
 
-Build native extensions only when you need CUDA/C++ bindings:
-
-```bash
-mkdir -p build
-cd build
-cmake .. -DCMAKE_CUDA_ARCHITECTURES=native
-make -j"$(nproc)"
-```
-
-If you build extensions manually, copy the generated `.so` files into
-`python/gnss_gpu/` before running Python-side experiments that import them.
-
-## Common Tasks
-
-Read the live project state:
-
-```bash
-sed -n '1,220p' internal_docs/plan.md
-```
-
-Run the test suite:
-
-```bash
-PYTHONPATH=python python3 -m pytest tests/ -q
-```
-
-Rebuild the generated visual snapshot:
-
-```bash
-python3 experiments/build_githubio_summary.py
-```
-
-Smoke-test the snapshot site:
-
-```bash
-npm install
-npx playwright install chromium
-npm run site:smoke
-```
-
-Rebuild paper-facing summary assets:
-
-```bash
-python3 experiments/build_paper_assets.py
-```
-
-Prepare Phase71 generated artifacts without running the full six-run replay:
-
-```bash
-PHASE71_PREP_ONLY=1 bash experiments/scripts_run_phase71_osmroad_production.sh
-```
-
-Run the current Phase71 PPC production replay:
-
-```bash
-bash experiments/scripts_run_phase71_osmroad_production.sh
-```
-
-## Data And Artifacts
-
-Many useful files in this workspace are generated, local-only, or too large to
-commit. Before trusting a CSV or HTML report, check:
-
-- Whether it is listed in [`experiments/results/README.md`](experiments/results/README.md).
-- Whether the matching command is recorded in [`internal_docs/plan.md`](internal_docs/plan.md)
-  or another topic-specific note.
-- Whether the script is a stable entry point or a one-off probe. The naming
-  conventions in [`experiments/README.md`](experiments/README.md) are the best
-  quick guide.
-
-## Development Policy
-
-- Keep stable reusable code in `python/gnss_gpu/` or `src/`.
-- Keep variant-heavy experiment logic in `experiments/` until it survives fixed
-  evaluation.
-- Do not promote a method because it wins one pilot split.
-- Prefer same-input, same-metric comparisons over new abstractions.
+- Keep stable reusable code in `python/gnss_gpu/` or `src/`; keep variant-heavy logic in
+  `experiments/` until it survives fixed evaluation.
+- Do not promote a method because it wins one pilot split. Prefer same-input,
+  same-metric comparisons over new abstractions.
 - Record durable decisions in [`internal_docs/decisions.md`](internal_docs/decisions.md).
-- Keep current PPC state in
-  [`internal_docs/ppc_current_status.md`](internal_docs/ppc_current_status.md).
-- Keep detailed chronological handoffs in [`internal_docs/plan.md`](internal_docs/plan.md).
-- Do not vendor, link, or derive production code/config from GPL-3.0 reference
-  sources such as `gici-open`.
+- Do not vendor, link, or derive production code/config from GPL-3.0 reference sources
+  such as `gici-open`.
 
 ## License
 
-Apache-2.0
+[Apache-2.0](LICENSE)
