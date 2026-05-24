@@ -19,7 +19,10 @@ from experiments.gsdc2023_tdcp import DEFAULT_TDCP_WEIGHT_SCALE
 
 
 FACTOR_DT_MAX_S = 1.5
-POSITION_SOURCES = ("baseline", "raw_wls", "fgo", "auto", "gated")
+CT_RBPF_FGO_SOURCE = "fgo_ct_rbpf"
+DD_CARRIER_FGO_SOURCE = "fgo_dd_carrier"
+TDCP_SCALE_FGO_SOURCE = "fgo_tdcp_scale"
+POSITION_SOURCES = ("baseline", "raw_wls", "fgo", CT_RBPF_FGO_SOURCE, DD_CARRIER_FGO_SOURCE, "auto", "gated")
 
 
 def validate_position_source(position_source: str) -> str:
@@ -133,8 +136,24 @@ class BridgeResult:
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
     tdcp_geometry_correction_applied: bool = False
     tdcp_geometry_correction_count: int = 0
+    tdcp_scale_candidate_enabled: bool = False
+    tdcp_scale_candidate_weight_scale: float = 1.0e-7
+    fgo_raw_wls_proxy_rescue_enabled: bool = False
+    fgo_raw_wls_proxy_rescue_mse_ratio_max: float = 1.20
+    fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max: float = 1.25
+    fgo_raw_wls_proxy_rescue_quality_delta_max: float = -0.35
+    fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max: float = 0.0
     dual_frequency: bool = False
     graph_relative_height: bool = False
+    ct_rbpf_fgo_enabled: bool = False
+    ct_rbpf_motion_sigma_m: float = 0.2
+    dd_carrier_fgo_enabled: bool = False
+    dd_carrier_base_obs_template: str | None = None
+    dd_carrier_require_base_obs_template: bool = False
+    dd_carrier_accepted_anchor_epochs: int = 0
+    dd_carrier_dd_epochs: int = 0
+    dd_carrier_base_snapped_epochs: int = 0
+    dd_carrier_dd_pairs_mean: float = 0.0
 
     @property
     def n_epochs(self) -> int:
@@ -237,8 +256,26 @@ class BridgeResult:
             "tdcp_weight_scale": float(self.tdcp_weight_scale),
             "tdcp_geometry_correction_applied": bool(self.tdcp_geometry_correction_applied),
             "tdcp_geometry_correction_count": int(self.tdcp_geometry_correction_count),
+            "tdcp_scale_candidate_enabled": bool(self.tdcp_scale_candidate_enabled),
+            "tdcp_scale_candidate_weight_scale": float(self.tdcp_scale_candidate_weight_scale),
+            "fgo_raw_wls_proxy_rescue_enabled": bool(self.fgo_raw_wls_proxy_rescue_enabled),
+            "fgo_raw_wls_proxy_rescue_mse_ratio_max": float(self.fgo_raw_wls_proxy_rescue_mse_ratio_max),
+            "fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max": float(self.fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max),
+            "fgo_raw_wls_proxy_rescue_quality_delta_max": float(self.fgo_raw_wls_proxy_rescue_quality_delta_max),
+            "fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max": float(
+                self.fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
+            ),
             "dual_frequency": bool(self.dual_frequency),
             "graph_relative_height": bool(self.graph_relative_height),
+            "ct_rbpf_fgo_enabled": bool(self.ct_rbpf_fgo_enabled),
+            "ct_rbpf_motion_sigma_m": float(self.ct_rbpf_motion_sigma_m),
+            "dd_carrier_fgo_enabled": bool(self.dd_carrier_fgo_enabled),
+            "dd_carrier_base_obs_template": self.dd_carrier_base_obs_template,
+            "dd_carrier_require_base_obs_template": bool(self.dd_carrier_require_base_obs_template),
+            "dd_carrier_accepted_anchor_epochs": int(self.dd_carrier_accepted_anchor_epochs),
+            "dd_carrier_dd_epochs": int(self.dd_carrier_dd_epochs),
+            "dd_carrier_base_snapped_epochs": int(self.dd_carrier_base_snapped_epochs),
+            "dd_carrier_dd_pairs_mean": float(self.dd_carrier_dd_pairs_mean),
         }
         if self.chunk_selection_records is not None:
             payload["chunk_selection_records"] = self.chunk_selection_records
@@ -337,6 +374,13 @@ class BridgeResult:
             lines.append(f"  tdcp geom   : corrected_pairs={self.tdcp_geometry_correction_count}")
         if self.dual_frequency:
             lines.append("  frequency   : experimental L1/L5 slots enabled")
+        if self.dd_carrier_fgo_enabled:
+            lines.append(
+                f"  dd carrier  : anchors={self.dd_carrier_accepted_anchor_epochs} "
+                f"dd_epochs={self.dd_carrier_dd_epochs} "
+                f"snapped={self.dd_carrier_base_snapped_epochs} "
+                f"pairs_mean={self.dd_carrier_dd_pairs_mean:.2f}"
+            )
         if self.parity_audit is not None:
             lines.append(
                 "  parity      : "
@@ -406,6 +450,9 @@ def bridge_position_columns(
 
 __all__ = [
     "BridgeResult",
+    "CT_RBPF_FGO_SOURCE",
+    "DD_CARRIER_FGO_SOURCE",
+    "TDCP_SCALE_FGO_SOURCE",
     "FACTOR_DT_MAX_S",
     "POSITION_SOURCES",
     "bridge_position_columns",

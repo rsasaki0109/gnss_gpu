@@ -8,10 +8,12 @@ from experiments.gsdc2023_observation_matrix import TripArrays
 from experiments.gsdc2023_solver_selection import (
     batch_without_tdcp,
     build_source_solution_catalog,
+    fgo_raw_wls_proxy_rescue_enabled,
     mi8_gated_baseline_jump_guard_enabled,
     raw_wls_max_gap_guard_m,
     select_gated_solution,
     tdcp_off_candidate_enabled,
+    tdcp_scale_candidate_enabled,
     with_fixed_source_solution,
     with_source_solution,
 )
@@ -72,6 +74,31 @@ def test_tdcp_off_candidate_enabled_requires_gated_vd_tdcp_and_weights() -> None
         _batch(tdcp_weights=np.zeros_like(weights)),
     )
     assert not tdcp_off_candidate_enabled(BridgeConfig(position_source="gated"), _batch(tdcp_weights=None))
+
+
+def test_tdcp_scale_candidate_enabled_requires_allowed_phone_and_tdcp_weights() -> None:
+    weights = np.array([[0.0, 1.0], [0.0, 0.0]], dtype=np.float64)
+    cfg = BridgeConfig(position_source="gated", tdcp_scale_candidate_enabled=True)
+
+    assert tdcp_scale_candidate_enabled(cfg, _batch(tdcp_weights=weights), "pixel4")
+    assert not tdcp_scale_candidate_enabled(cfg, _batch(tdcp_weights=weights), "pixel5")
+    assert not tdcp_scale_candidate_enabled(BridgeConfig(position_source="auto", tdcp_scale_candidate_enabled=True), _batch(tdcp_weights=weights), "pixel4")
+    assert not tdcp_scale_candidate_enabled(BridgeConfig(position_source="gated"), _batch(tdcp_weights=weights), "pixel4")
+    assert not tdcp_scale_candidate_enabled(cfg, _batch(tdcp_weights=np.zeros_like(weights)), "pixel4")
+    assert not tdcp_scale_candidate_enabled(cfg, _batch(tdcp_weights=None), "pixel4")
+
+
+def test_fgo_raw_wls_proxy_rescue_enabled_requires_gated_allowed_phone() -> None:
+    cfg = BridgeConfig(position_source="gated", fgo_raw_wls_proxy_rescue_enabled=True)
+
+    assert fgo_raw_wls_proxy_rescue_enabled(cfg, "pixel4")
+    assert not fgo_raw_wls_proxy_rescue_enabled(cfg, "pixel4xl")
+    assert not fgo_raw_wls_proxy_rescue_enabled(cfg, "pixel5")
+    assert not fgo_raw_wls_proxy_rescue_enabled(BridgeConfig(position_source="gated"), "pixel4")
+    assert not fgo_raw_wls_proxy_rescue_enabled(
+        BridgeConfig(position_source="auto", fgo_raw_wls_proxy_rescue_enabled=True),
+        "pixel4",
+    )
 
 
 def test_batch_without_tdcp_clears_tdcp_arrays_and_counts() -> None:
@@ -183,6 +210,49 @@ def test_select_gated_solution_applies_optional_raw_wls_gap_guard() -> None:
         np.array(["baseline", "baseline", "baseline", "baseline"], dtype=object),
     )
     assert gated_counts == {"baseline": 4, "raw_wls": 0, "fgo": 0}
+
+
+def test_select_gated_solution_applies_optional_fgo_raw_wls_proxy_rescue() -> None:
+    catalog = build_source_solution_catalog(
+        n_epoch=4,
+        baseline_state=_state(0.0),
+        raw_state=_state(7.0),
+        fgo_state=_state(11.0),
+        auto_state=_state(0.0),
+        auto_sources=np.array(["baseline", "baseline", "baseline", "baseline"], dtype=object),
+        auto_source_counts={"baseline": 4, "raw_wls": 0, "fgo": 0},
+        baseline_mse_pr=20.0,
+        raw_wls_mse_pr=10.0,
+        fgo_mse_pr=11.0,
+        auto_mse_pr=20.0,
+    )
+    records = [
+        ChunkSelectionRecord(
+            start_epoch=1,
+            end_epoch=3,
+            auto_source="fgo",
+            candidates={
+                "baseline": _quality(20.0, 1.0),
+                "raw_wls": _quality(10.0, 0.9),
+                "fgo": _quality(11.0, 0.6),
+            },
+        ),
+    ]
+
+    gated_state, gated_sources, gated_counts = select_gated_solution(
+        catalog,
+        records,
+        n_epoch=4,
+        baseline_threshold=500.0,
+        allow_fgo_raw_wls_proxy_rescue=True,
+    )
+
+    np.testing.assert_allclose(gated_state[:, 0], np.array([0.0, 11.0, 11.0, 0.0], dtype=np.float64))
+    np.testing.assert_array_equal(
+        gated_sources.astype(str),
+        np.array(["baseline", "fgo", "fgo", "baseline"], dtype=object),
+    )
+    assert gated_counts == {"baseline": 2, "raw_wls": 0, "fgo": 2}
 
 
 def test_source_catalog_adds_fixed_and_custom_source_entries() -> None:

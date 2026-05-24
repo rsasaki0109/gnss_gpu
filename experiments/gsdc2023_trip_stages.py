@@ -148,6 +148,7 @@ class PreparedObservationProducts:
     adr: np.ndarray | None
     adr_state: np.ndarray | None
     adr_uncertainty: np.ndarray | None
+    weights_fgo: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -371,6 +372,7 @@ def assemble_trip_arrays_stage(
     pseudorange_observable: np.ndarray,
     weights: np.ndarray,
     kaggle_wls: np.ndarray,
+    weights_fgo: np.ndarray | None = None,
     truth: np.ndarray,
     visible_max: int,
     has_truth: bool,
@@ -450,6 +452,7 @@ def assemble_trip_arrays_stage(
         tdcp_consistency_mask_count=tdcp_stage.tdcp_consistency_mask_count,
         tdcp_geometry_correction_count=tdcp_stage.tdcp_geometry_correction_count,
         dual_frequency=dual_frequency,
+        weights_fgo=weights_fgo,
     )
 
 
@@ -495,6 +498,7 @@ def assemble_prepared_trip_arrays_stage(
         pseudorange=observation_products.pseudorange,
         pseudorange_observable=observation_products.pseudorange_observable,
         weights=observation_products.weights,
+        weights_fgo=observation_products.weights_fgo,
         kaggle_wls=observation_products.kaggle_wls,
         truth=observation_products.truth,
         has_truth=has_truth,
@@ -672,6 +676,7 @@ def build_filled_observation_matrix_stage(
     start_epoch: int,
     max_epochs: int,
     weight_mode: str,
+    fgo_weight_mode: str | None = None,
     multi_gnss: bool,
     dual_frequency: bool,
     tdcp_enabled: bool,
@@ -690,6 +695,7 @@ def build_filled_observation_matrix_stage(
     rtklib_tropo_fn: Callable[..., Any],
     matlab_signal_clock_dim: int,
     gps_iono_alpha_beta: Any,
+    use_rtklib_tropo: bool = False,
 ) -> FilledObservationMatrixProducts:
     epochs = select_epoch_observations_fn(
         epoch_time_context.epoch_time_keys,
@@ -709,6 +715,7 @@ def build_filled_observation_matrix_stage(
         source_columns=observation_matrix_input.frame.columns,
         baseline_lookup=metadata_context.baseline_lookup,
         weight_mode=weight_mode,
+        fgo_weight_mode=fgo_weight_mode,
         multi_gnss=multi_gnss,
         dual_frequency=dual_frequency,
         tdcp_enabled=tdcp_enabled,
@@ -730,6 +737,7 @@ def build_filled_observation_matrix_stage(
         rtklib_tropo_fn=rtklib_tropo_fn,
         matlab_signal_clock_dim=matlab_signal_clock_dim,
         gps_iono_alpha_beta=gps_iono_alpha_beta,
+        use_rtklib_tropo=use_rtklib_tropo,
     )
     return FilledObservationMatrixProducts(
         epochs=epochs,
@@ -797,6 +805,7 @@ def build_observation_preparation_stages(
     start_epoch: int,
     max_epochs: int,
     weight_mode: str,
+    fgo_weight_mode: str | None = None,
     tdcp_enabled: bool,
     adr_sign: float,
     multi_gnss_mask_fn: MultiGnssMaskFn,
@@ -826,6 +835,7 @@ def build_observation_preparation_stages(
     matlab_signal_clock_dim: int,
     recompute_rtklib_tropo_matrix_fn: RecomputeRtklibTropoMatrixFn,
     recompute_rtklib_iono_matrix_fn: RecomputeRtklibIonoMatrixFn,
+    use_rtklib_tropo: bool = False,
 ) -> ObservationPreparationStageProducts:
     raw_observation_frame = build_raw_observation_frame(
         raw_frame,
@@ -879,6 +889,7 @@ def build_observation_preparation_stages(
         start_epoch=start_epoch,
         max_epochs=max_epochs,
         weight_mode=weight_mode,
+        fgo_weight_mode=fgo_weight_mode,
         multi_gnss=multi_gnss,
         dual_frequency=dual_frequency,
         tdcp_enabled=tdcp_enabled,
@@ -897,6 +908,7 @@ def build_observation_preparation_stages(
         rtklib_tropo_fn=rtklib_tropo_fn,
         matlab_signal_clock_dim=matlab_signal_clock_dim,
         gps_iono_alpha_beta=observation_matrix_input.gps_iono_alpha_beta,
+        use_rtklib_tropo=use_rtklib_tropo,
     )
     observations = observation_matrix_stage.observations
     post_fill_observation = postprocess_filled_observation_stage(
@@ -970,6 +982,7 @@ def unpack_observation_preparation_stage(
         adr=observations.adr,
         adr_state=observations.adr_state,
         adr_uncertainty=observations.adr_uncertainty,
+        weights_fgo=getattr(observations, "weights_fgo", None),
     )
 
 

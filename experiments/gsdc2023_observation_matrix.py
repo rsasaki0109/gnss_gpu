@@ -12,6 +12,14 @@ import numpy as np
 import pandas as pd
 
 from experiments.gsdc2023_imu import ecef_to_enu_relative as _ecef_to_enu_relative
+from experiments.gsdc2023_taroz_weighting import (
+    SN_PERCENTILE_DEFAULT,
+    TripCN0Percentiles,
+    compute_pr_sigma_sn,
+    compute_trip_cn0_percentiles,
+    constellation_signal_to_sigtype,
+    sigma_to_weight,
+)
 from experiments.gsdc2023_tdcp import ADR_STATE_CYCLE_SLIP, ADR_STATE_RESET, ADR_STATE_VALID
 
 if TYPE_CHECKING:
@@ -136,6 +144,13 @@ class TripArrays:
     tdcp_consistency_mask_count: int = 0
     tdcp_geometry_correction_count: int = 0
     dual_frequency: bool = False
+    # Optional FGO-only observation weights used by the FGO solver when a
+    # ``fgo_weight_mode`` distinct from ``weight_mode`` is requested.  When
+    # ``None`` (the default), ``weights`` is reused for FGO as well, keeping
+    # the legacy single-array path bit-identical.  See lever 1 dual-weight
+    # design (``weight_mode`` controls gate/WLS, ``fgo_weight_mode`` controls
+    # the FGO objective).
+    weights_fgo: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -174,6 +189,7 @@ class ObservationMatrixProducts:
     adr: np.ndarray | None = None
     adr_state: np.ndarray | None = None
     adr_uncertainty: np.ndarray | None = None
+    weights_fgo: np.ndarray | None = None
 
 
 def read_raw_gnss_csv(raw_path: Path, **kwargs) -> pd.DataFrame:
@@ -901,12 +917,46 @@ def recompute_rtklib_tropo_matrix(
     return out
 
 
+def _compute_pr_weight(
+    row: Any,
+    *,
+    mode: str,
+    trip_cn0_percentiles: "TripCN0Percentiles | None",
+    is_l5_signal_fn: Callable[[str], bool],
+) -> float:
+    """PR weight for one observation row under the given ``mode``.
+
+    Falls back to ``max(CN0, 1.0)`` when ``taroz_sn`` yields NaN/zero (e.g.
+    missing per-frequency percentile or unmappable signal type), so the
+    observation is not accidentally masked.
+    """
+    if mode == "sin2el":
+        sin_el = max(np.sin(np.deg2rad(float(row.SvElevationDegrees))), 0.1)
+        return float(sin_el * sin_el)
+    if mode == "taroz_sn" and trip_cn0_percentiles is not None:
+        cn0_val = float(getattr(row, "Cn0DbHz", float("nan")))
+        is_l5 = is_l5_signal_fn(str(row.SignalType))
+        sigtype = constellation_signal_to_sigtype(int(row.ConstellationType), is_l5)
+        sigma_p = compute_pr_sigma_sn(
+            cn0_val,
+            trip_cn0_percentiles.for_frequency(is_l5),
+            sigtype,
+        )
+        pr_w = sigma_to_weight(sigma_p)
+        if pr_w <= 0.0:
+            pr_w = max(cn0_val, 1.0) if np.isfinite(cn0_val) else 1.0
+        return float(pr_w)
+    cn0_val = float(getattr(row, "Cn0DbHz", float("nan")))
+    return max(cn0_val, 1.0) if np.isfinite(cn0_val) else 1.0
+
+
 def fill_observation_matrices(
     epochs: Sequence[RawEpochObservation],
     *,
     source_columns: Iterable[str],
     baseline_lookup: Mapping[int, np.ndarray],
     weight_mode: str,
+    fgo_weight_mode: str | None = None,
     multi_gnss: bool,
     dual_frequency: bool,
     tdcp_enabled: bool,
@@ -928,6 +978,7 @@ def fill_observation_matrices(
     elevation_azimuth_fn: Callable[[np.ndarray, np.ndarray], tuple[float, float]],
     rtklib_tropo_fn: Callable[[float, float, float], float],
     matlab_signal_clock_dim: int,
+    use_rtklib_tropo: bool = False,
 ) -> ObservationMatrixProducts:
     if not epochs:
         raise ValueError("at least one epoch is required")
@@ -943,6 +994,11 @@ def fill_observation_matrices(
     pseudorange = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
     pseudorange_observable = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
     weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
+    weights_fgo = (
+        np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
+        if (fgo_weight_mode is not None and fgo_weight_mode != weight_mode)
+        else None
+    )
     pseudorange_bias_weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
     sat_clock_bias_matrix = np.full((n_epoch, n_sat_slots), np.nan, dtype=np.float64)
     rtklib_iono_m = np.full((n_epoch, n_sat_slots), np.nan, dtype=np.float64)
@@ -1007,6 +1063,24 @@ def fill_observation_matrices(
     gps_sat_product_adjustment_cache: dict[
         tuple[int, int, str], tuple[np.ndarray, np.ndarray | None, float, float | None] | None
     ] = {}
+
+    trip_cn0_percentiles: "TripCN0Percentiles | None" = None
+    if weight_mode == "taroz_sn" or fgo_weight_mode == "taroz_sn":
+        l1_cn0: list[float] = []
+        l5_cn0: list[float] = []
+        for epoch in epochs:
+            for row in epoch.group.itertuples(index=False):
+                cn0_val = float(getattr(row, "Cn0DbHz", float("nan")))
+                if not np.isfinite(cn0_val):
+                    continue
+                if is_l5_signal_fn(str(row.SignalType)):
+                    l5_cn0.append(cn0_val)
+                else:
+                    l1_cn0.append(cn0_val)
+        trip_cn0_percentiles = compute_trip_cn0_percentiles(
+            (np.asarray(l1_cn0, dtype=np.float64), np.asarray(l5_cn0, dtype=np.float64)),
+            percentile=SN_PERCENTILE_DEFAULT,
+        )
 
     for epoch_idx, epoch in enumerate(epochs):
         tow_ms = epoch.time_ms
@@ -1144,13 +1218,8 @@ def fill_observation_matrices(
                 iono_m = recomputed_iono_m
             rtklib_iono_m[epoch_idx, sat_idx] = iono_m
             pseudorange_observable[epoch_idx, sat_idx] = float(row.RawPseudorangeMeters)
-            pseudorange[epoch_idx, sat_idx] = (
-                float(row.RawPseudorangeMeters)
-                + sat_clock_bias_m
-                - iono_m
-                - float(row.TroposphericDelayMeters)
-            )
 
+            android_tropo_m = float(row.TroposphericDelayMeters)
             tropo_m = _rtklib_tropo_for_satellite(
                 kaggle_wls[epoch_idx],
                 sat_ecef[epoch_idx, sat_idx],
@@ -1160,13 +1229,32 @@ def fill_observation_matrices(
             )
             if np.isfinite(tropo_m):
                 rtklib_tropo_m[epoch_idx, sat_idx] = tropo_m
+            tropo_used_m = (
+                tropo_m
+                if (use_rtklib_tropo and np.isfinite(tropo_m))
+                else android_tropo_m
+            )
+            pseudorange[epoch_idx, sat_idx] = (
+                float(row.RawPseudorangeMeters)
+                + sat_clock_bias_m
+                - iono_m
+                - tropo_used_m
+            )
 
             if p_ok:
-                if weight_mode == "sin2el":
-                    sin_el = max(np.sin(np.deg2rad(float(row.SvElevationDegrees))), 0.1)
-                    weights[epoch_idx, sat_idx] = sin_el * sin_el
-                else:
-                    weights[epoch_idx, sat_idx] = max(float(row.Cn0DbHz), 1.0)
+                weights[epoch_idx, sat_idx] = _compute_pr_weight(
+                    row,
+                    mode=weight_mode,
+                    trip_cn0_percentiles=trip_cn0_percentiles,
+                    is_l5_signal_fn=is_l5_signal_fn,
+                )
+                if weights_fgo is not None:
+                    weights_fgo[epoch_idx, sat_idx] = _compute_pr_weight(
+                        row,
+                        mode=str(fgo_weight_mode),
+                        trip_cn0_percentiles=trip_cn0_percentiles,
+                        is_l5_signal_fn=is_l5_signal_fn,
+                    )
             if p_bias_ok:
                 pseudorange_bias_weights[epoch_idx, sat_idx] = 1.0
 
@@ -1248,6 +1336,7 @@ def fill_observation_matrices(
         adr=adr,
         adr_state=adr_state,
         adr_uncertainty=adr_uncertainty,
+        weights_fgo=weights_fgo,
     )
 
 

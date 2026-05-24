@@ -207,6 +207,8 @@ def select_gated_solution(
     fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_DELTA_MAX,
     dd_carrier_anchor_coverage: float | None = None,
     dd_carrier_min_anchor_coverage: float = DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
+    fgo_low_baseline_mse_pr_max: float | None = None,
+    fgo_baseline_mse_pr_min: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
     gated_state = catalog.states["baseline"].copy()
     gated_sources = fixed_source_array(n_epoch, "baseline")
@@ -228,6 +230,8 @@ def select_gated_solution(
             fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
             dd_carrier_anchor_coverage=dd_carrier_anchor_coverage,
             dd_carrier_min_anchor_coverage=dd_carrier_min_anchor_coverage,
+            fgo_low_baseline_mse_pr_max=fgo_low_baseline_mse_pr_max,
+            fgo_baseline_mse_pr_min=fgo_baseline_mse_pr_min,
         )
         if chosen_source == "baseline":
             continue

@@ -119,6 +119,7 @@ def build_bridge_result(
     vd_seed_guard_skipped_epochs: int = 0,
     vd_seed_guard_records: Sequence[dict[str, object]] | None = None,
     raw_wls_max_gap_m: float | None = None,
+    allow_fgo_raw_wls_proxy_rescue: bool = False,
 ) -> BridgeResult:
     return BridgeResult(
         trip=trip,
@@ -152,6 +153,13 @@ def build_bridge_result(
             config.gated_baseline_threshold,
             allow_raw_wls_on_mi8_baseline_jump=allow_raw_wls_on_mi8_baseline_jump,
             raw_wls_max_gap_m=raw_wls_max_gap_m,
+            allow_fgo_raw_wls_proxy_rescue=allow_fgo_raw_wls_proxy_rescue,
+            fgo_raw_wls_proxy_rescue_mse_ratio_max=config.fgo_raw_wls_proxy_rescue_mse_ratio_max,
+            fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max=config.fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max,
+            fgo_raw_wls_proxy_rescue_quality_delta_max=config.fgo_raw_wls_proxy_rescue_quality_delta_max,
+            fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=config.fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
+            fgo_low_baseline_mse_pr_max=getattr(config, "gate_fgo_low_baseline_mse_pr_max", None),
+            fgo_baseline_mse_pr_min=getattr(config, "gate_fgo_baseline_mse_pr_min", None),
         ),
         **bridge_result_metadata_kwargs(config, batch),
     )

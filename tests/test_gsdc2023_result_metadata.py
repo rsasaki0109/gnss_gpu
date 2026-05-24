@@ -124,6 +124,11 @@ def test_bridge_result_metadata_kwargs_maps_config_and_batch_counts() -> None:
         apply_observation_mask=True,
         tdcp_weight_scale=0.5,
         tdcp_geometry_correction=True,
+        fgo_raw_wls_proxy_rescue_enabled=True,
+        fgo_raw_wls_proxy_rescue_mse_ratio_max=1.12,
+        fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max=1.25,
+        fgo_raw_wls_proxy_rescue_quality_delta_max=-0.4,
+        fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=-1.0,
         dual_frequency=True,
         graph_relative_height=True,
     )
@@ -161,6 +166,11 @@ def test_bridge_result_metadata_kwargs_maps_config_and_batch_counts() -> None:
     assert kwargs["tdcp_weight_scale"] == 0.5
     assert kwargs["tdcp_geometry_correction_applied"] is True
     assert kwargs["tdcp_geometry_correction_count"] == 10
+    assert kwargs["fgo_raw_wls_proxy_rescue_enabled"] is True
+    assert kwargs["fgo_raw_wls_proxy_rescue_mse_ratio_max"] == 1.12
+    assert kwargs["fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max"] == 1.25
+    assert kwargs["fgo_raw_wls_proxy_rescue_quality_delta_max"] == -0.4
+    assert kwargs["fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max"] == -1.0
     assert kwargs["dual_frequency"] is True
     assert kwargs["graph_relative_height"] is True
 

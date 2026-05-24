@@ -267,23 +267,37 @@ def raw_wls_candidate_passes_high_baseline_quality_guard(quality: ChunkCandidate
 def fgo_candidate_passes_baseline_gap_guard(
     quality: ChunkCandidateQuality,
     baseline: ChunkCandidateQuality,
+    *,
+    baseline_mse_pr_min: float | None = None,
+    gap_p95_floor_m: float | None = None,
 ) -> bool:
-    if baseline.mse_pr < GATED_FGO_BASELINE_MSE_PR_MIN:
+    threshold = float(baseline_mse_pr_min) if baseline_mse_pr_min is not None else GATED_FGO_BASELINE_MSE_PR_MIN
+    floor_m = float(gap_p95_floor_m) if gap_p95_floor_m is not None else GATED_FGO_BASELINE_GAP_P95_FLOOR_M
+    if baseline.mse_pr < threshold:
         return False
     return quality.baseline_gap_p95_m <= max(
         baseline.step_p95_m,
-        GATED_FGO_BASELINE_GAP_P95_FLOOR_M,
+        floor_m,
     )
 
 
-def fgo_candidate_passes_low_baseline_confidence_guard(quality: ChunkCandidateQuality) -> bool:
+def fgo_candidate_passes_low_baseline_confidence_guard(
+    quality: ChunkCandidateQuality,
+    *,
+    mse_pr_max: float | None = None,
+    quality_max: float | None = None,
+    gap_p95_max_m: float | None = None,
+) -> bool:
+    mse_pr_max_v = float(mse_pr_max) if mse_pr_max is not None else GATED_LOW_BASELINE_FGO_MSE_PR_MAX
+    quality_max_v = float(quality_max) if quality_max is not None else GATED_LOW_BASELINE_FGO_QUALITY_MAX
+    gap_max_v = float(gap_p95_max_m) if gap_p95_max_m is not None else GATED_LOW_BASELINE_FGO_GAP_P95_MAX_M
     return (
         np.isfinite(quality.mse_pr)
-        and quality.mse_pr <= GATED_LOW_BASELINE_FGO_MSE_PR_MAX
+        and quality.mse_pr <= mse_pr_max_v
         and np.isfinite(quality.quality_score)
-        and quality.quality_score <= GATED_LOW_BASELINE_FGO_QUALITY_MAX
+        and quality.quality_score <= quality_max_v
         and np.isfinite(quality.baseline_gap_p95_m)
-        and quality.baseline_gap_p95_m <= GATED_LOW_BASELINE_FGO_GAP_P95_MAX_M
+        and quality.baseline_gap_p95_m <= gap_max_v
     )
 
 
@@ -454,7 +468,15 @@ def select_gated_chunk_source(
     fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_DELTA_MAX,
     dd_carrier_anchor_coverage: float | None = None,
     dd_carrier_min_anchor_coverage: float = DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
+    fgo_low_baseline_mse_pr_max: float | None = None,
+    fgo_baseline_mse_pr_min: float | None = None,
+    fgo_baseline_gap_p95_floor_m: float | None = None,
 ) -> str:
+    fgo_baseline_mse_pr_min_v = (
+        float(fgo_baseline_mse_pr_min)
+        if fgo_baseline_mse_pr_min is not None
+        else GATED_FGO_BASELINE_MSE_PR_MIN
+    )
     baseline = record.candidates["baseline"]
     catastrophic_source = catastrophic_baseline_alternative(
         record.candidates,
@@ -524,9 +546,12 @@ def select_gated_chunk_source(
             )
             low_baseline_fgo = (
                 name != DD_CARRIER_FGO_SOURCE
-                and baseline.mse_pr < GATED_FGO_BASELINE_MSE_PR_MIN
+                and baseline.mse_pr < fgo_baseline_mse_pr_min_v
                 and raw_wls is not None
-                and fgo_candidate_passes_low_baseline_confidence_guard(quality)
+                and fgo_candidate_passes_low_baseline_confidence_guard(
+                    quality,
+                    mse_pr_max=fgo_low_baseline_mse_pr_max,
+                )
             )
             raw_proxy_rescue = name == "fgo" and fgo_candidate_passes_raw_wls_proxy_rescue(
                 quality,
@@ -543,6 +568,8 @@ def select_gated_chunk_source(
             if not low_baseline_fgo and not raw_proxy_rescue and not fgo_candidate_passes_baseline_gap_guard(
                 quality,
                 baseline,
+                baseline_mse_pr_min=fgo_baseline_mse_pr_min,
+                gap_p95_floor_m=fgo_baseline_gap_p95_floor_m,
             ):
                 continue
             if not low_baseline_fgo and not (
@@ -555,7 +582,7 @@ def select_gated_chunk_source(
             tdcp_off_fgo = record.candidates.get("fgo_no_tdcp")
             if (
                 tdcp_off_fgo is not None
-                and fgo_candidate_passes_baseline_gap_guard(tdcp_off_fgo, baseline)
+                and fgo_candidate_passes_baseline_gap_guard(tdcp_off_fgo, baseline, baseline_mse_pr_min=fgo_baseline_mse_pr_min, gap_p95_floor_m=fgo_baseline_gap_p95_floor_m)
                 and fgo_candidate_passes_mse_guard(tdcp_off_fgo)
                 and candidate_passes_gated_quality(tdcp_off_fgo, baseline)
                 and quality.baseline_gap_p95_m
@@ -566,7 +593,7 @@ def select_gated_chunk_source(
             tdcp_fgo = record.candidates.get("fgo")
             if (
                 tdcp_fgo is not None
-                and fgo_candidate_passes_baseline_gap_guard(tdcp_fgo, baseline)
+                and fgo_candidate_passes_baseline_gap_guard(tdcp_fgo, baseline, baseline_mse_pr_min=fgo_baseline_mse_pr_min, gap_p95_floor_m=fgo_baseline_gap_p95_floor_m)
                 and fgo_candidate_passes_mse_guard(tdcp_fgo)
             ):
                 tdcp_gap_increased = (
@@ -611,6 +638,8 @@ def chunk_selection_payload(
     fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max: float = GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_DELTA_MAX,
     dd_carrier_anchor_coverage: float | None = None,
     dd_carrier_min_anchor_coverage: float = DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
+    fgo_low_baseline_mse_pr_max: float | None = None,
+    fgo_baseline_mse_pr_min: float | None = None,
 ) -> list[dict[str, object]]:
     return [
         {
@@ -629,6 +658,8 @@ def chunk_selection_payload(
                 fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
                 dd_carrier_anchor_coverage=dd_carrier_anchor_coverage,
                 dd_carrier_min_anchor_coverage=dd_carrier_min_anchor_coverage,
+                fgo_low_baseline_mse_pr_max=fgo_low_baseline_mse_pr_max,
+                fgo_baseline_mse_pr_min=fgo_baseline_mse_pr_min,
             ),
             "candidates": {
                 name: chunk_quality_payload(quality)

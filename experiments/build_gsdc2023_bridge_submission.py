@@ -193,6 +193,30 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         motion_sigma_m=args.motion_sigma_m,
         factor_dt_max_s=args.factor_dt_max_s,
         fgo_iters=args.fgo_iters,
+        weight_mode=getattr(args, "weight_mode", "sin2el"),
+        fgo_weight_mode=(
+            None
+            if getattr(args, "fgo_weight_mode", "same") == "same"
+            else getattr(args, "fgo_weight_mode", "same")
+        ),
+        fgo_robust_kernel=getattr(args, "fgo_robust_kernel", "huber"),
+        fgo_cauchy_c_m=float(getattr(args, "fgo_cauchy_c_m", 4.0)),
+        fgo_cauchy_outer_iters=int(getattr(args, "fgo_cauchy_outer_iters", 3)),
+        per_type_kernel_enabled=bool(getattr(args, "per_type_kernel", False)),
+        per_type_kernel_huber_enabled=bool(getattr(args, "per_type_kernel_huber", True)),
+        per_type_kernel_motion_enabled=bool(getattr(args, "per_type_kernel_motion", False)),
+        fgo_huber_k_pr=float(getattr(args, "fgo_huber_k_pr", 0.0)),
+        gate_fgo_low_baseline_mse_pr_max=getattr(args, "gate_fgo_low_baseline_mse_pr_max", None),
+        gate_fgo_baseline_mse_pr_min=getattr(args, "gate_fgo_baseline_mse_pr_min", None),
+        pairwise_consistency_enabled=bool(getattr(args, "pairwise_consistency", False)),
+        pairwise_consistency_mad_threshold_m=float(getattr(args, "pairwise_consistency_mad_threshold_m", 3.5)),
+        pairwise_consistency_min_obs_after_filter=int(getattr(args, "pairwise_consistency_min_obs_after_filter", 5)),
+        max_clique_filter_enabled=bool(getattr(args, "max_clique_filter", False)),
+        max_clique_filter_pair_threshold_m=float(getattr(args, "max_clique_filter_pair_threshold_m", 3.0)),
+        max_clique_filter_min_clique_size=int(getattr(args, "max_clique_filter_min_clique_size", 5)),
+        hatch_smoothing_enabled=bool(getattr(args, "hatch_smoothing", False)),
+        hatch_smoothing_n=int(getattr(args, "hatch_smoothing_n", 100)),
+        use_rtklib_tropo=bool(getattr(args, "use_rtklib_tropo", False)),
         position_source=args.position_source,
         chunk_epochs=args.chunk_epochs,
         gated_baseline_threshold=args.gated_threshold,
@@ -425,6 +449,84 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--chunk-epochs", type=int, default=200)
     parser.add_argument("--gated-threshold", type=float, default=GATED_BASELINE_THRESHOLD_DEFAULT)
+    parser.add_argument(
+        "--weight-mode",
+        choices=("sin2el", "cn0", "taroz_sn"),
+        default="sin2el",
+        help="Gate/WLS pseudorange weight model.",
+    )
+    parser.add_argument(
+        "--fgo-weight-mode",
+        choices=("sin2el", "cn0", "taroz_sn", "same"),
+        default="same",
+        help="FGO-only weight model; 'same' uses --weight-mode.",
+    )
+    parser.add_argument(
+        "--fgo-robust-kernel",
+        choices=("huber", "cauchy"),
+        default="huber",
+        help="Robust kernel for FGO PR factor. 'cauchy' wraps the solver in Python-side IRLS.",
+    )
+    parser.add_argument("--fgo-cauchy-c-m", type=float, default=4.0)
+    parser.add_argument("--fgo-cauchy-outer-iters", type=int, default=3)
+    parser.add_argument(
+        "--per-type-kernel",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable taroz per-Type Huber/motion overrides.",
+    )
+    parser.add_argument(
+        "--per-type-kernel-huber",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument(
+        "--per-type-kernel-motion",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument("--fgo-huber-k-pr", type=float, default=0.0)
+    parser.add_argument(
+        "--gate-fgo-low-baseline-mse-pr-max",
+        type=float,
+        default=None,
+        help="Override gate fgo mse_pr_max (default 9.3) to relax for Cauchy.",
+    )
+    parser.add_argument(
+        "--gate-fgo-baseline-mse-pr-min",
+        type=float,
+        default=None,
+        help="Override gate baseline mse_pr threshold for low-baseline FGO guard.",
+    )
+    parser.add_argument(
+        "--pairwise-consistency",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Step 3: TEASER-light pairwise consistency pre-filter on PR.",
+    )
+    parser.add_argument("--pairwise-consistency-mad-threshold-m", type=float, default=3.5)
+    parser.add_argument("--pairwise-consistency-min-obs-after-filter", type=int, default=5)
+    parser.add_argument(
+        "--max-clique-filter",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="lever 4: TEASER max-clique consensus pre-filter on PR.",
+    )
+    parser.add_argument("--max-clique-filter-pair-threshold-m", type=float, default=3.0)
+    parser.add_argument("--max-clique-filter-min-clique-size", type=int, default=5)
+    parser.add_argument(
+        "--hatch-smoothing",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Hatch carrier-phase smoothing on raw PR before WLS/FGO.",
+    )
+    parser.add_argument("--hatch-smoothing-n", type=int, default=100)
+    parser.add_argument(
+        "--use-rtklib-tropo",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Swap Android tropo for Saastamoinen recompute in raw PR.",
+    )
     parser.add_argument("--vd", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--multi-gnss", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--tdcp", action=argparse.BooleanOptionalAction, default=True)
@@ -469,10 +571,97 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fgo-raw-wls-proxy-rescue-gap-step-p95-ratio-max", type=float, default=1.25)
     parser.add_argument("--fgo-raw-wls-proxy-rescue-quality-delta-max", type=float, default=-0.35)
     parser.add_argument("--fgo-raw-wls-proxy-rescue-mse-delta-vs-baseline-max", type=float, default=0.0)
+    parser.add_argument(
+        "--hampel-postprocess",
+        action="store_true",
+        help="apply Hampel filter to the final lat/lng trajectory after gate selection",
+    )
+    parser.add_argument("--hampel-postprocess-window", type=int, default=21)
+    parser.add_argument("--hampel-postprocess-k", type=float, default=2.5)
+    parser.add_argument("--hampel-postprocess-passes", type=int, default=3)
+    parser.add_argument("--hampel-postprocess-mad-floor-deg", type=float, default=5e-7)
+    parser.add_argument(
+        "--accel-smoother",
+        action="store_true",
+        help="apply motion-acceleration smoother (after Hampel) on the final trajectory",
+    )
+    parser.add_argument("--accel-smoother-accel-max", type=float, default=3.0)
+    parser.add_argument("--accel-smoother-passes", type=int, default=2)
+    parser.add_argument(
+        "--stop-snap",
+        action="store_true",
+        help="apply stationary-segment median snap (after Hampel + accel) on the final trajectory",
+    )
+    parser.add_argument("--stop-snap-move-threshold-m", type=float, default=2.0)
+    parser.add_argument("--stop-snap-min-run-length", type=int, default=10)
+    parser.add_argument(
+        "--heading-smoother",
+        action="store_true",
+        help="apply heading-consistency smoother (after Hampel/accel/snap) on the final trajectory",
+    )
+    parser.add_argument("--heading-smoother-max-dps", type=float, default=45.0)
+    parser.add_argument(
+        "--kalman-smoother",
+        action="store_true",
+        help="apply 1D RTS Kalman CV smoother (after Hampel/accel/snap/heading) on the final trajectory",
+    )
+    parser.add_argument("--kalman-smoother-sigma-a", type=float, default=1.0)
+    parser.add_argument("--kalman-smoother-sigma-z", type=float, default=1.0)
     args = parser.parse_args(argv)
 
     output, summary = run_bridge_submission(args)
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    if getattr(args, "hampel_postprocess", False):
+        from experiments.postprocess_gsdc2023_submission_hampel import (
+            apply_hampel_to_submission,
+        )
+        output, hampel_stats = apply_hampel_to_submission(
+            output,
+            window=int(getattr(args, "hampel_postprocess_window", 21)),
+            k=float(getattr(args, "hampel_postprocess_k", 2.5)),
+            mad_floor_deg=float(getattr(args, "hampel_postprocess_mad_floor_deg", 5e-7)),
+            passes=int(getattr(args, "hampel_postprocess_passes", 3)),
+        )
+        summary["hampel_postprocess"] = hampel_stats
+    if getattr(args, "accel_smoother", False):
+        from experiments.postprocess_gsdc2023_submission_accel_smooth import (
+            apply_accel_smoothing_to_submission,
+        )
+        output, accel_stats = apply_accel_smoothing_to_submission(
+            output,
+            accel_max=float(getattr(args, "accel_smoother_accel_max", 3.0)),
+            passes=int(getattr(args, "accel_smoother_passes", 2)),
+        )
+        summary["accel_smoother"] = accel_stats
+    if getattr(args, "stop_snap", False):
+        from experiments.postprocess_gsdc2023_submission_stop_snap import (
+            apply_stop_snap_to_submission,
+        )
+        output, snap_stats = apply_stop_snap_to_submission(
+            output,
+            move_threshold_m=float(getattr(args, "stop_snap_move_threshold_m", 2.0)),
+            min_run_length=int(getattr(args, "stop_snap_min_run_length", 10)),
+        )
+        summary["stop_snap"] = snap_stats
+    if getattr(args, "heading_smoother", False):
+        from experiments.postprocess_gsdc2023_submission_heading import (
+            apply_heading_smoothing_to_submission,
+        )
+        output, hdg_stats = apply_heading_smoothing_to_submission(
+            output,
+            heading_max_dps=float(getattr(args, "heading_smoother_max_dps", 45.0)),
+        )
+        summary["heading_smoother"] = hdg_stats
+    if getattr(args, "kalman_smoother", False):
+        from experiments.postprocess_gsdc2023_submission_kalman import (
+            apply_kalman_smoothing_to_submission,
+        )
+        output, kf_stats = apply_kalman_smoothing_to_submission(
+            output,
+            sigma_a=float(getattr(args, "kalman_smoother_sigma_a", 1.0)),
+            sigma_z=float(getattr(args, "kalman_smoother_sigma_z", 1.0)),
+        )
+        summary["kalman_smoother"] = kf_stats
     output.to_csv(args.output, index=False)
     summary_path = args.summary or args.output.with_suffix(".summary.json")
     summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -485,6 +674,37 @@ def main(argv: list[str] | None = None) -> int:
         f"missing={summary['missing_rows']} sanity={summary['coordinate_sanity_pass']} "
         f"sources={summary['selected_source_counts']}",
     )
+    if "hampel_postprocess" in summary:
+        hp = summary["hampel_postprocess"]
+        print(
+            f"hampel: passes={hp['passes']} rows_changed={hp['rows_changed']}/"
+            f"{hp['rows_total']} per_pass_changed={hp['per_pass_changed']}",
+        )
+    if "accel_smoother" in summary:
+        ac = summary["accel_smoother"]
+        print(
+            f"accel : passes={ac['passes']} accel_max={ac['accel_max']} "
+            f"rows_changed={ac['rows_changed']}/{ac['rows_total']} "
+            f"per_pass_changed={ac['per_pass_changed']}",
+        )
+    if "stop_snap" in summary:
+        sn = summary["stop_snap"]
+        print(
+            f"snap  : move_threshold={sn['move_threshold_m']} min_run={sn['min_run_length']} "
+            f"rows_changed={sn['rows_changed']}/{sn['rows_total']} runs={sn['runs']}",
+        )
+    if "heading_smoother" in summary:
+        hg = summary["heading_smoother"]
+        print(
+            f"hdg   : max_dps={hg['heading_max_dps']} "
+            f"rows_changed={hg['rows_changed']}/{hg['rows_total']}",
+        )
+    if "kalman_smoother" in summary:
+        kf = summary["kalman_smoother"]
+        print(
+            f"kalman: sigma_a={kf['sigma_a']} sigma_z={kf['sigma_z']} "
+            f"rows_changed={kf['rows_changed']}/{kf['rows_total']}",
+        )
     return 0
 
 

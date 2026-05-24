@@ -111,8 +111,22 @@ def bridge_result_metadata_kwargs(config: BridgeConfig, batch: TripArrays) -> di
         "tdcp_weight_scale": config.tdcp_weight_scale,
         "tdcp_geometry_correction_applied": config.tdcp_geometry_correction,
         "tdcp_geometry_correction_count": batch.tdcp_geometry_correction_count,
+        "tdcp_scale_candidate_enabled": config.tdcp_scale_candidate_enabled,
+        "tdcp_scale_candidate_weight_scale": config.tdcp_scale_candidate_weight_scale,
+        "fgo_raw_wls_proxy_rescue_enabled": config.fgo_raw_wls_proxy_rescue_enabled,
+        "fgo_raw_wls_proxy_rescue_mse_ratio_max": config.fgo_raw_wls_proxy_rescue_mse_ratio_max,
+        "fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max": config.fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max,
+        "fgo_raw_wls_proxy_rescue_quality_delta_max": config.fgo_raw_wls_proxy_rescue_quality_delta_max,
+        "fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max": (
+            config.fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max
+        ),
         "dual_frequency": config.dual_frequency,
         "graph_relative_height": config.graph_relative_height,
+        "ct_rbpf_fgo_enabled": config.ct_rbpf_fgo_enabled,
+        "ct_rbpf_motion_sigma_m": config.ct_rbpf_motion_sigma_m,
+        "dd_carrier_fgo_enabled": config.dd_carrier_fgo_enabled,
+        "dd_carrier_base_obs_template": config.dd_carrier_base_obs_template,
+        "dd_carrier_require_base_obs_template": config.dd_carrier_require_base_obs_template,
     }
 
 

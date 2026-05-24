@@ -28,6 +28,10 @@ class FgoRunOptions:
     relative_height_sigma_m: float
     apply_absolute_height: bool
     absolute_height_sigma_m: float
+    fgo_robust_kernel: str = "huber"
+    fgo_cauchy_c_m: float = 4.0
+    fgo_cauchy_outer_iters: int = 3
+    fgo_huber_k_pr: float = 0.0
 
     @classmethod
     def from_config(cls, config: BridgeConfig, *, tol: float = 1e-7) -> "FgoRunOptions":
@@ -50,6 +54,10 @@ class FgoRunOptions:
             relative_height_sigma_m=config.relative_height_sigma_m,
             apply_absolute_height=config.apply_absolute_height,
             absolute_height_sigma_m=config.absolute_height_sigma_m,
+            fgo_robust_kernel=getattr(config, "fgo_robust_kernel", "huber"),
+            fgo_cauchy_c_m=float(getattr(config, "fgo_cauchy_c_m", 4.0)),
+            fgo_cauchy_outer_iters=int(getattr(config, "fgo_cauchy_outer_iters", 3)),
+            fgo_huber_k_pr=float(getattr(config, "fgo_huber_k_pr", 0.0)),
         )
 
     def run_kwargs(self) -> dict[str, Any]:
@@ -72,6 +80,10 @@ class FgoRunOptions:
             "relative_height_sigma_m": self.relative_height_sigma_m,
             "apply_absolute_height": self.apply_absolute_height,
             "absolute_height_sigma_m": self.absolute_height_sigma_m,
+            "fgo_robust_kernel": self.fgo_robust_kernel,
+            "fgo_cauchy_c_m": self.fgo_cauchy_c_m,
+            "fgo_cauchy_outer_iters": self.fgo_cauchy_outer_iters,
+            "fgo_huber_k_pr": self.fgo_huber_k_pr,
         }
 
 

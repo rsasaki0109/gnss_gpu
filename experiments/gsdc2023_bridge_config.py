@@ -56,6 +56,106 @@ class BridgeConfig:
     signal_type: str = "GPS_L1_CA"
     constellation_type: int = 1
     weight_mode: str = "sin2el"
+    # When set to a different mode (e.g. "taroz_sn"), the FGO solver uses a
+    # separate weights array while the gate/WLS keeps using ``weight_mode``.
+    # ``None`` (default) shares ``weight_mode`` for both, matching legacy.
+    fgo_weight_mode: str | None = None
+    # Robust kernel applied inside the FGO solver. "huber" (default) is the
+    # legacy in-CUDA Huber IRLS; "cauchy" wraps the native solver in a
+    # Python-side Cauchy IRLS loop and is targeted at NLOS-heavy trips.
+    fgo_robust_kernel: str = "huber"
+    fgo_cauchy_c_m: float = 4.0
+    fgo_cauchy_outer_iters: int = 3
+    # lever 2: enable the taroz parameters.m per-Type / per-phone huber and
+    # motion-sigma overrides.  When enabled, raw_bridge looks up the trip
+    # Type from ``settings_{split}.csv`` and overrides ``fgo_huber_k_pr``
+    # and ``motion_sigma_m`` based on PR_HUBER_K_BY_TYPE / MOTION_SIGMA_M_BY_TYPE
+    # (with mi8 / pixel4 phone overrides).  Note the existing default is
+    # ``fgo_huber_k_pr = 0.0`` (pure L2) which silently disabled Huber in
+    # production; enabling per-Type kernel is the first time PR Huber is
+    # active on this codepath.
+    per_type_kernel_enabled: bool = False
+    # When ``per_type_kernel_enabled`` is True these sub-flags control which
+    # field overrides are pulled from the taroz Type lookup.  The motion-sigma
+    # override (taroz Highway=0.01 / Street=0.05 / mi8=0.1) is much tighter
+    # than the pipeline default (0.2) and breaks several mi8/Highway trips on
+    # its own, so it is gated separately and OFF by default.  Huber threshold
+    # 0.1-0.2 is a safer drop-in.
+    per_type_kernel_huber_enabled: bool = True
+    per_type_kernel_motion_enabled: bool = False
+    fgo_huber_k_pr: float = 0.0
+    # Gate relaxation knobs.  Defaults (None) preserve legacy constants
+    # GATED_LOW_BASELINE_FGO_MSE_PR_MAX=9.3 and GATED_FGO_BASELINE_MSE_PR_MIN=20.
+    # Setting these higher lets more FGO candidates through (intended for the
+    # Cauchy IRLS pipeline whose FGO mse_pr is ~3x the L2 baseline scale).
+    gate_fgo_low_baseline_mse_pr_max: float | None = None
+    gate_fgo_baseline_mse_pr_min: float | None = None
+    gate_fgo_baseline_gap_p95_floor_m: float | None = None
+    # Step 3: TEASER-light pairwise consistency pre-filter on PR observations.
+    # When enabled, MAD-based per-system outlier masking is applied to the
+    # FGO weights array before the solver runs.  Gate/WLS weights are not
+    # touched (keeps the legacy mse_pr scale).
+    pairwise_consistency_enabled: bool = False
+    pairwise_consistency_mad_threshold_m: float = 3.5
+    pairwise_consistency_min_obs_after_filter: int = 5
+    # lever 4: TEASER max-clique consensus pre-filter (full pairwise graph).
+    # Mutually exclusive with pairwise_consistency_enabled — both apply the
+    # same FGO-only weight mask but with different inlier-selection logic.
+    max_clique_filter_enabled: bool = False
+    max_clique_filter_pair_threshold_m: float = 3.0
+    max_clique_filter_min_clique_size: int = 5
+    # baseline-improvement lever: Hatch carrier-phase smoothing on the raw
+    # pseudorange matrix before WLS/FGO.  Reduces multipath/receiver noise
+    # by ~1/sqrt(N) while leaving slow-varying bias intact.  Affects all
+    # downstream candidates (baseline kaggle_wls untouched).
+    hatch_smoothing_enabled: bool = False
+    hatch_smoothing_n: int = 100
+    # baseline-improvement lever: swap Android-provided TroposphericDelayMeters
+    # for our recomputed Saastamoinen tropo (rtklib_tropo_saastamoinen).  Affects
+    # all downstream candidates that use ``batch.pseudorange``; kaggle_wls
+    # baseline source is unchanged.
+    use_rtklib_tropo: bool = False
+    # post-process lever: Hampel filter on the final per-tripId lat/lng
+    # trajectory.  Applied at submission-CSV build time, *after* gate-based
+    # source selection.  Removes 1-Hz outlier spikes from the baseline
+    # trajectory (physically-impossible jumps).  Defaults: W21 k=2.5
+    # passes=3 mad_floor=5e-7 deg (~5 cm).  See
+    # ``experiments.postprocess_gsdc2023_submission_hampel``.
+    hampel_postprocess_enabled: bool = False
+    hampel_postprocess_window: int = 21
+    hampel_postprocess_k: float = 2.5
+    hampel_postprocess_passes: int = 3
+    hampel_postprocess_mad_floor_deg: float = 5e-7
+    # post-process lever: motion-acceleration outlier smoother.  Independent
+    # signal from Hampel (motion-physics vs position-MAD), stacks additively.
+    # Applied *after* Hampel.  Defaults: accel_max=3.0 m/s², passes=2 — the
+    # train-trip sweet spot (-15 cm aggregate on top of Hampel).  See
+    # ``experiments.postprocess_gsdc2023_submission_accel_smooth``.
+    accel_smoother_enabled: bool = False
+    accel_smoother_accel_max: float = 3.0
+    accel_smoother_passes: int = 2
+    # post-process lever: stationary-segment median snap.  Independent signal
+    # from Hampel and accel-smoother (motion vs stationary, GNSS wobble while
+    # parked).  Applied last.  Defaults: move_threshold_m=2.0 (~7.2 km/h)
+    # min_run_length=10 (~10 s at 1 Hz) — train-trip sweet spot.
+    stop_snap_enabled: bool = False
+    stop_snap_move_threshold_m: float = 2.0
+    stop_snap_min_run_length: int = 10
+    # post-process lever: heading-consistency smoother.  Detects physically
+    # impossible yaw rate (>heading_max_dps deg/s).  Independent of Hampel
+    # (position MAD), accel-smoother (magnitude) and stop-snap (stationary).
+    # Default heading_max_dps=45 (sweet spot on train trips; 30 false-flags
+    # urban intersection turns).  Applied last.
+    heading_smoother_enabled: bool = False
+    heading_smoother_max_dps: float = 45.0
+    # post-process lever: 1D RTS Kalman smoother (CV motion model).  Applies
+    # uniform sub-metre smoothing over the entire trajectory; orthogonal to
+    # the four outlier-replacement layers.  Defaults sigma_a=1.0 (m/s²),
+    # sigma_z=1.0 (m) — train-trip sweet spot (-9.6 cm aggregate on top of v7,
+    # 39 wins / 1 wash / 1 regression).  Applied last.
+    kalman_smoother_enabled: bool = False
+    kalman_smoother_sigma_a: float = 1.0
+    kalman_smoother_sigma_z: float = 1.0
     position_source: str = "baseline"
     chunk_epochs: int = 0
     gated_baseline_threshold: float = GATED_BASELINE_THRESHOLD_DEFAULT
