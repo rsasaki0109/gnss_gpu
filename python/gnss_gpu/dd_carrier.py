@@ -38,9 +38,19 @@ from gnss_gpu.io.rinex import read_rinex_obs
 
 C_LIGHT = 299792458.0
 GPS_L1_WAVELENGTH = C_LIGHT / 1575.42e6
+GPS_L2_WAVELENGTH = C_LIGHT / 1227.60e6
+GPS_L5_WAVELENGTH = C_LIGHT / 1176.45e6
 GALILEO_E1_WAVELENGTH = C_LIGHT / 1575.42e6
+GALILEO_E5A_WAVELENGTH = C_LIGHT / 1176.45e6
+GALILEO_E5B_WAVELENGTH = C_LIGHT / 1207.14e6
+GALILEO_E5AB_WAVELENGTH = C_LIGHT / 1191.795e6
 QZSS_L1_WAVELENGTH = C_LIGHT / 1575.42e6
+QZSS_L2_WAVELENGTH = C_LIGHT / 1227.60e6
+QZSS_L5_WAVELENGTH = C_LIGHT / 1176.45e6
 BEIDOU_B1I_WAVELENGTH = C_LIGHT / 1561.098e6
+BEIDOU_B2A_WAVELENGTH = C_LIGHT / 1176.45e6
+BEIDOU_B2I_WAVELENGTH = C_LIGHT / 1207.14e6
+BEIDOU_B3I_WAVELENGTH = C_LIGHT / 1268.52e6
 
 _SYS_MAP = {0: "G", 1: "R", 2: "E", 3: "C", 4: "J"}
 _SYSTEM_WAVELENGTHS = {
@@ -60,6 +70,46 @@ _CARRIER_CODE_FAMILIES = {
     "E": (("L1X", "L1C", "L1A", "L1B", "L1Z"),),
     "J": (("L1C", "L1X", "L1Z", "L1S", "L1L"),),
     "C": (("L2I", "L1I", "L1P", "L1D", "L1X"),),
+}
+_CARRIER_FAMILIES = {
+    "L1_E1_B1": {
+        "G": ("L1C", "L1W", "L1X", "L1P", "L1S", "L1L", "L1Z"),
+        "E": ("L1X", "L1C", "L1A", "L1B", "L1Z"),
+        "J": ("L1C", "L1X", "L1Z", "L1S", "L1L"),
+        "C": ("L2I", "L1I", "L1P", "L1D", "L1X"),
+    },
+    "L2_E5B_B2": {
+        "G": ("L2W", "L2X", "L2L", "L2C", "L2P"),
+        "E": ("L7X", "L7Q", "L7I"),
+        "J": ("L2X", "L2L", "L2C"),
+        "C": ("L7I", "L7D", "L7P", "L7X"),
+    },
+    "L5_E5A_B2A": {
+        "G": ("L5X", "L5Q", "L5I"),
+        "E": ("L5X", "L5Q", "L5I"),
+        "J": ("L5X", "L5Q", "L5I"),
+        "C": ("L5P", "L5D", "L5X"),
+    },
+    "E5AB_B3": {
+        "E": ("L8X", "L8Q", "L8I"),
+        "C": ("L6I", "L6D", "L6P", "L6X"),
+    },
+}
+_FAMILY_WAVELENGTHS = {
+    ("L1_E1_B1", "G"): GPS_L1_WAVELENGTH,
+    ("L1_E1_B1", "E"): GALILEO_E1_WAVELENGTH,
+    ("L1_E1_B1", "J"): QZSS_L1_WAVELENGTH,
+    ("L1_E1_B1", "C"): BEIDOU_B1I_WAVELENGTH,
+    ("L2_E5B_B2", "G"): GPS_L2_WAVELENGTH,
+    ("L2_E5B_B2", "E"): GALILEO_E5B_WAVELENGTH,
+    ("L2_E5B_B2", "J"): QZSS_L2_WAVELENGTH,
+    ("L2_E5B_B2", "C"): BEIDOU_B2I_WAVELENGTH,
+    ("L5_E5A_B2A", "G"): GPS_L5_WAVELENGTH,
+    ("L5_E5A_B2A", "E"): GALILEO_E5A_WAVELENGTH,
+    ("L5_E5A_B2A", "J"): QZSS_L5_WAVELENGTH,
+    ("L5_E5A_B2A", "C"): BEIDOU_B2A_WAVELENGTH,
+    ("E5AB_B3", "E"): GALILEO_E5AB_WAVELENGTH,
+    ("E5AB_B3", "C"): BEIDOU_B3I_WAVELENGTH,
 }
 
 
@@ -238,6 +288,35 @@ def _select_rover_base_obs_codes(
                     best = cand
     if best is None:
         return exact_code, exact_code, exact_sats
+    return best[2], best[3], best[4]
+
+
+def _select_rover_base_obs_codes_from_family(
+    sys_char: str,
+    system_sats: Sequence[str],
+    rover_obs: dict[str, dict[str, float]],
+    base_obs: dict[str, dict[str, float]],
+    family_codes: Sequence[str],
+) -> tuple[str | None, str | None, list[str]]:
+    """Pick compatible rover/base carrier codes from one frequency family."""
+
+    best: tuple[int, int, str, str, list[str]] | None = None
+    codes = tuple(str(code) for code in family_codes)
+    for rover_rank, rover_code in enumerate(codes):
+        for base_rank, base_code in enumerate(codes):
+            sats = [
+                sat_id
+                for sat_id in system_sats
+                if rover_code in rover_obs.get(sat_id, {})
+                and base_code in base_obs.get(sat_id, {})
+            ]
+            if len(sats) < 2:
+                continue
+            cand = (len(sats), -(rover_rank + base_rank), rover_code, base_code, sats)
+            if best is None or cand[:2] > best[:2]:
+                best = cand
+    if best is None:
+        return None, None, []
     return best[2], best[3], best[4]
 
 
@@ -543,6 +622,130 @@ class DDCarrierComputer:
                 wavelengths_m_list.append(wavelength)
                 ref_sat_ids.append(ref_sat)
                 sat_ids.append(sat_id)
+
+        if not dd_carrier_list:
+            return None
+
+        n_dd = len(dd_carrier_list)
+        return DDResult(
+            dd_carrier_cycles=np.array(dd_carrier_list, dtype=np.float64),
+            sat_ecef_k=np.array(sat_ecef_k_list, dtype=np.float64).reshape(n_dd, 3),
+            sat_ecef_ref=np.array(sat_ecef_ref_list, dtype=np.float64).reshape(n_dd, 3),
+            base_range_k=np.array(base_range_k_list, dtype=np.float64),
+            base_range_ref=np.array(base_range_ref_list, dtype=np.float64),
+            dd_weights=np.array(dd_weight_list, dtype=np.float64),
+            wavelengths_m=np.array(wavelengths_m_list, dtype=np.float64),
+            ref_sat_ids=tuple(ref_sat_ids),
+            n_dd=n_dd,
+            sat_ids=tuple(sat_ids),
+        )
+
+    def compute_dd_families(
+        self,
+        tow: float,
+        rover_measurements,
+        rover_position_approx: np.ndarray | None = None,
+        min_common_sats: int = 2,
+        carrier_families: Sequence[str] = ("L1_E1_B1", "L5_E5A_B2A"),
+    ) -> DDResult | None:
+        """Compute DD carrier observations across multiple frequency families.
+
+        This is intentionally separate from ``compute_dd`` so the historical
+        L1/E1/B1 behavior remains unchanged.  It requires ``rover_obs_path`` at
+        construction time, because gnssplusplus measurement rows only expose one
+        carrier phase value.
+        """
+
+        if self._rover_by_tow is None:
+            return None
+
+        tow_key = round(tow, 1)
+        base_obs = self._base_by_tow.get(tow_key)
+        if base_obs is None and self._interpolate_base_epochs:
+            base_obs = self._interpolate_base_obs(tow_key)
+        rover_obs = self._rover_by_tow.get(tow_key)
+        if base_obs is None or rover_obs is None:
+            return None
+
+        rover_sat_ecef: dict[str, np.ndarray] = {}
+        rover_elev: dict[str, float] = {}
+        rover_rows = _one_row_per_satellite(rover_measurements)
+        for (system_id, prn), m in rover_rows.items():
+            sys_char = _SYS_MAP.get(system_id, "G")
+            if sys_char not in self._allowed_systems:
+                continue
+            sat_id = f"{sys_char}{prn:02d}"
+            sat_pos = np.asarray(m.satellite_ecef, dtype=np.float64).ravel()[:3]
+            if sat_pos.size != 3 or not np.all(np.isfinite(sat_pos)):
+                continue
+            rover_sat_ecef[sat_id] = sat_pos
+            rover_elev[sat_id] = float(getattr(m, "elevation", 0.0))
+
+        sats_by_system: dict[str, list[str]] = {}
+        for sat_id in rover_sat_ecef:
+            if sat_id in rover_obs and sat_id in base_obs:
+                sats_by_system.setdefault(sat_id[0], []).append(sat_id)
+
+        dd_carrier_list = []
+        sat_ecef_k_list = []
+        sat_ecef_ref_list = []
+        base_range_k_list = []
+        base_range_ref_list = []
+        dd_weight_list = []
+        wavelengths_m_list = []
+        ref_sat_ids = []
+        sat_ids = []
+
+        for family_name in carrier_families:
+            family = _CARRIER_FAMILIES.get(str(family_name))
+            if family is None:
+                raise ValueError(f"unknown carrier family: {family_name!r}")
+            for sys_char, sys_sats in sorted(sats_by_system.items()):
+                if sys_char not in family:
+                    continue
+                wavelength = _FAMILY_WAVELENGTHS.get((str(family_name), sys_char))
+                if wavelength is None:
+                    continue
+                rover_code, base_code, selected_sats = _select_rover_base_obs_codes_from_family(
+                    sys_char,
+                    sys_sats,
+                    rover_obs,
+                    base_obs,
+                    family[sys_char],
+                )
+                if len(selected_sats) < max(2, int(min_common_sats)):
+                    continue
+
+                ref_sat = max(selected_sats, key=lambda s: rover_elev.get(s, 0.0))
+                non_ref = [s for s in selected_sats if s != ref_sat]
+                if not non_ref:
+                    continue
+
+                rover_cp_ref = float(rover_obs[ref_sat][rover_code])
+                base_cp_ref = float(base_obs[ref_sat][base_code])
+                ref_ecef = rover_sat_ecef[ref_sat]
+                base_range_ref = float(np.linalg.norm(ref_ecef - self._base_pos))
+                elev_ref = rover_elev.get(ref_sat, 0.3)
+
+                for sat_id in non_ref:
+                    rover_cp_k = float(rover_obs[sat_id][rover_code])
+                    base_cp_k = float(base_obs[sat_id][base_code])
+                    sat_k_ecef = rover_sat_ecef[sat_id]
+                    base_range_k = float(np.linalg.norm(sat_k_ecef - self._base_pos))
+                    dd = (rover_cp_k - rover_cp_ref) - (base_cp_k - base_cp_ref)
+
+                    elev_k = rover_elev.get(sat_id, 0.3)
+                    w = min(np.sin(max(elev_k, 0.05)), np.sin(max(elev_ref, 0.05)))
+
+                    dd_carrier_list.append(dd)
+                    sat_ecef_k_list.append(sat_k_ecef)
+                    sat_ecef_ref_list.append(ref_ecef.copy())
+                    base_range_k_list.append(base_range_k)
+                    base_range_ref_list.append(base_range_ref)
+                    dd_weight_list.append(w)
+                    wavelengths_m_list.append(float(wavelength))
+                    ref_sat_ids.append(f"{ref_sat}@{family_name}")
+                    sat_ids.append(f"{sat_id}@{family_name}")
 
         if not dd_carrier_list:
             return None

@@ -10,6 +10,11 @@ import pandas as pd
 
 from experiments.evaluate import ecef_to_lla, lla_to_ecef
 from gnss_gpu import wls_position
+from experiments.gsdc2023_fgo_cauchy_irls import fgo_gnss_lm_vd_cauchy
+from experiments.gsdc2023_per_type_kernel import (
+    per_type_kernel_for as _per_type_kernel_for,
+    trip_type_from_data_root as _trip_type_from_data_root,
+)
 from gnss_gpu.fgo import fgo_gnss_lm, fgo_gnss_lm_vd
 from gnss_gpu.io.nav_rinex import read_gps_klobuchar_from_nav_header
 from gnss_gpu.multi_gnss import (
@@ -631,6 +636,7 @@ def build_trip_arrays(
     constellation_type: int,
     signal_type: str,
     weight_mode: str,
+    fgo_weight_mode: str | None = None,
     multi_gnss: bool = False,
     use_tdcp: bool = False,
     tdcp_consistency_threshold_m: float = DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M,
@@ -653,6 +659,7 @@ def build_trip_arrays(
     imu_frame: str = "body",
     factor_dt_max_s: float = FACTOR_DT_MAX_S,
     raw_frame_epoch_window: bool = False,
+    use_rtklib_tropo: bool = False,
 ) -> TripArrays:
     raw_path = trip_dir / "device_gnss.csv"
     if not raw_path.is_file():
@@ -691,6 +698,7 @@ def build_trip_arrays(
         start_epoch=start_epoch,
         max_epochs=max_epochs,
         weight_mode=weight_mode,
+        fgo_weight_mode=fgo_weight_mode,
         tdcp_enabled=tdcp_enabled,
         adr_sign=adr_sign,
         multi_gnss_mask_fn=_multi_gnss_mask,
@@ -720,6 +728,7 @@ def build_trip_arrays(
         matlab_signal_clock_dim=MATLAB_SIGNAL_CLOCK_DIM,
         recompute_rtklib_tropo_matrix_fn=_recompute_rtklib_tropo_matrix,
         recompute_rtklib_iono_matrix_fn=_recompute_rtklib_iono_matrix,
+        use_rtklib_tropo=use_rtklib_tropo,
     )
     observation_products = _unpack_observation_preparation_stage(observation_preparation)
 
@@ -1148,6 +1157,10 @@ def run_fgo_chunked(
     imu_accel_bias_prior_sigma_mps2: float = IMU_ACCEL_BIAS_PRIOR_SIGMA_MPS2,
     imu_accel_bias_between_sigma_mps2: float = IMU_ACCEL_BIAS_BETWEEN_SIGMA_MPS2,
     vd_seed_factor_guard: bool = True,
+    fgo_robust_kernel: str = "huber",
+    fgo_cauchy_c_m: float = 4.0,
+    fgo_cauchy_outer_iters: int = 3,
+    fgo_huber_k_pr: float = 0.0,
 ) -> tuple[
     np.ndarray,
     np.ndarray,
@@ -1313,11 +1326,12 @@ def run_fgo_chunked(
                             ox = ref_seg[np.flatnonzero(finite)[0]] if finite.any() else abs_height_ref[np.flatnonzero(finite_abs)[0]]
                             rh_up = enu_up_ecef_from_origin(ox)
                 try:
-                    iters, _ = fgo_gnss_lm_vd(
-                        batch.sat_ecef[seg_start:seg_end],
-                        batch.pseudorange[seg_start:seg_end],
-                        batch.weights[seg_start:seg_end],
-                        seg_state,
+                    fgo_weights = (
+                        batch.weights_fgo[seg_start:seg_end]
+                        if batch.weights_fgo is not None
+                        else batch.weights[seg_start:seg_end]
+                    )
+                    vd_kwargs = dict(
                         sys_kind=(batch.sys_kind[seg_start:seg_end] if batch.sys_kind is not None else None),
                         n_clock=batch.n_clock,
                         motion_sigma_m=motion_sigma_m,
@@ -1325,6 +1339,7 @@ def run_fgo_chunked(
                         clock_use_average_drift=clock_use_average_drift,
                         stop_velocity_sigma_mps=stop_velocity_sigma_mps,
                         stop_position_sigma_m=stop_position_sigma_m,
+                        huber_k=float(fgo_huber_k_pr),
                         max_iter=fgo_iters,
                         tol=tol,
                         sat_vel=(batch.sat_vel[seg_start:seg_end] if batch.sat_vel is not None else None),
@@ -1357,6 +1372,25 @@ def run_fgo_chunked(
                             imu_accel_bias_between_sigma_mps2 if use_imu_accel_bias_state else 0.0
                         ),
                     )
+                    if str(fgo_robust_kernel).lower() == "cauchy":
+                        iters, _mse_unused, _diag = fgo_gnss_lm_vd_cauchy(
+                            batch.sat_ecef[seg_start:seg_end],
+                            batch.pseudorange[seg_start:seg_end],
+                            fgo_weights,
+                            seg_state,
+                            cauchy_c_m=float(fgo_cauchy_c_m),
+                            max_outer_iters=int(fgo_cauchy_outer_iters),
+                            huber_k_warmstart=float(fgo_huber_k_pr),
+                            **vd_kwargs,
+                        )
+                    else:
+                        iters, _ = fgo_gnss_lm_vd(
+                            batch.sat_ecef[seg_start:seg_end],
+                            batch.pseudorange[seg_start:seg_end],
+                            fgo_weights,
+                            seg_state,
+                            **vd_kwargs,
+                        )
                 except RuntimeError:
                     iters = -1
                 if int(iters) < 0:
@@ -1401,10 +1435,15 @@ def run_fgo_chunked(
                 ):
                     seg_state[0] = stitched[start - 1]
                 try:
+                    fgo_weights = (
+                        batch.weights_fgo[seg_start:seg_end]
+                        if batch.weights_fgo is not None
+                        else batch.weights[seg_start:seg_end]
+                    )
                     iters, _ = fgo_gnss_lm(
                         batch.sat_ecef[seg_start:seg_end],
                         batch.pseudorange[seg_start:seg_end],
-                        batch.weights[seg_start:seg_end],
+                        fgo_weights,
                         seg_state,
                         sys_kind=(batch.sys_kind[seg_start:seg_end] if batch.sys_kind is not None else None),
                         n_clock=batch.n_clock,
@@ -1607,6 +1646,22 @@ def solve_trip(
     data_root: Path | None = None,
 ) -> BridgeResult:
     phone_name = Path(trip).name
+    if getattr(config, "hatch_smoothing_enabled", False):
+        from experiments.gsdc2023_hatch_smoothing import apply_hatch_smoothing
+        from dataclasses import replace as _dc_replace
+        smoothed_pr, hatch_stats = apply_hatch_smoothing(
+            batch.pseudorange,
+            getattr(batch, "adr", None),
+            getattr(batch, "adr_state", None),
+            smoothing_n=int(getattr(config, "hatch_smoothing_n", 100)),
+        )
+        batch = _dc_replace(batch, pseudorange=smoothed_pr)
+        print(
+            f"[hatch] arcs={hatch_stats.arcs_total} obs_smoothed={hatch_stats.obs_smoothed}/"
+            f"{hatch_stats.obs_total} mean_arc_len={hatch_stats.mean_arc_length:.1f} "
+            f"mean_n={hatch_stats.mean_smoothing_n:.1f}",
+            flush=True,
+        )
     kaggle_state, kaggle_sse, kaggle_weight_sum, _ = fit_state_with_clock_bias(
         batch.sat_ecef,
         batch.pseudorange,
@@ -1629,6 +1684,60 @@ def solve_trip(
     fgo_run_options = _fgo_run_options_from_config(config)
     fgo_run_kwargs = fgo_run_options.run_kwargs()
     fgo_run_kwargs["vd_seed_factor_guard"] = _vd_seed_factor_guard_enabled_for_phone(phone_name)
+    if getattr(config, "per_type_kernel_enabled", False) and data_root is not None:
+        trip_type = _trip_type_from_data_root(data_root, trip)
+        kernel = _per_type_kernel_for(trip_type, phone=phone_name)
+        if getattr(config, "per_type_kernel_huber_enabled", True):
+            fgo_run_kwargs["fgo_huber_k_pr"] = float(kernel.pr_huber_k)
+        if getattr(config, "per_type_kernel_motion_enabled", False):
+            fgo_run_kwargs["motion_sigma_m"] = float(kernel.motion_sigma_m)
+    if getattr(config, "pairwise_consistency_enabled", False):
+        from experiments.gsdc2023_pairwise_consistency import (
+            apply_pairwise_consistency_pre_filter,
+        )
+        source_w = batch.weights_fgo if batch.weights_fgo is not None else batch.weights
+        filtered_w, pairwise_stats = apply_pairwise_consistency_pre_filter(
+            batch.sat_ecef,
+            batch.pseudorange,
+            source_w,
+            reference_xyz=batch.kaggle_wls,
+            sys_kind=batch.sys_kind,
+            n_clock=batch.n_clock,
+            mad_threshold_m=float(getattr(config, "pairwise_consistency_mad_threshold_m", 3.5)),
+            min_obs_after_filter=int(getattr(config, "pairwise_consistency_min_obs_after_filter", 5)),
+        )
+        # Replace only the FGO weights (gate/WLS keeps original).  Use
+        # dataclass.replace via a small shim because TripArrays is frozen.
+        from dataclasses import replace as _dc_replace
+        batch = _dc_replace(batch, weights_fgo=filtered_w)
+        print(
+            f"[pairwise-filter] epochs={pairwise_stats.epochs_filtered}/{pairwise_stats.epochs_total} "
+            f"obs_masked={pairwise_stats.obs_masked}/{pairwise_stats.obs_before}",
+            flush=True,
+        )
+    if getattr(config, "max_clique_filter_enabled", False):
+        from experiments.gsdc2023_max_clique_filter import (
+            apply_max_clique_consensus_filter,
+        )
+        source_w = batch.weights_fgo if batch.weights_fgo is not None else batch.weights
+        filtered_w, clique_stats = apply_max_clique_consensus_filter(
+            batch.sat_ecef,
+            batch.pseudorange,
+            source_w,
+            reference_xyz=batch.kaggle_wls,
+            sys_kind=batch.sys_kind,
+            n_clock=batch.n_clock,
+            pair_threshold_m=float(getattr(config, "max_clique_filter_pair_threshold_m", 3.0)),
+            min_clique_size=int(getattr(config, "max_clique_filter_min_clique_size", 5)),
+        )
+        from dataclasses import replace as _dc_replace
+        batch = _dc_replace(batch, weights_fgo=filtered_w)
+        print(
+            f"[max-clique-filter] epochs={clique_stats.epochs_filtered}/{clique_stats.epochs_total} "
+            f"obs_masked={clique_stats.obs_masked}/{clique_stats.obs_before} "
+            f"mean_clique_frac={clique_stats.mean_clique_fraction:.3f}",
+            flush=True,
+        )
     (
         auto_state,
         fgo_state,
@@ -1892,6 +2001,8 @@ def solve_trip(
         fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=config.fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
         dd_carrier_anchor_coverage=dd_carrier_anchor_coverage,
         dd_carrier_min_anchor_coverage=config.dd_carrier_min_anchor_coverage,
+        fgo_low_baseline_mse_pr_max=getattr(config, "gate_fgo_low_baseline_mse_pr_max", None),
+        fgo_baseline_mse_pr_min=getattr(config, "gate_fgo_baseline_mse_pr_min", None),
     )
     gated_state, gated_sse, gated_weight_sum, _ = fit_state_with_clock_bias(
         batch.sat_ecef,
@@ -1968,6 +2079,7 @@ def validate_raw_gsdc2023_trip(
         constellation_type=cfg.constellation_type,
         signal_type=cfg.signal_type,
         weight_mode=cfg.weight_mode,
+        fgo_weight_mode=cfg.fgo_weight_mode,
         multi_gnss=cfg.multi_gnss,
         use_tdcp=cfg.tdcp_enabled,
         tdcp_consistency_threshold_m=cfg.tdcp_consistency_threshold_m,
@@ -1989,6 +2101,7 @@ def validate_raw_gsdc2023_trip(
         absolute_height_dist_m=cfg.absolute_height_dist_m,
         imu_frame=cfg.imu_frame,
         factor_dt_max_s=cfg.factor_dt_max_s,
+        use_rtklib_tropo=bool(getattr(cfg, "use_rtklib_tropo", False)),
     )
     result = solve_trip(trip, batch, cfg, data_root=data_root)
     result.parity_audit = context.parity_audit
