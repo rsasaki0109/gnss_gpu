@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in the library, kernels, or experiments is not working as expected.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for filing a bug! Please fill in what you can — even partial reports help.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: I ran `...` and expected `...`, but got `...`.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: A minimal command or code snippet. Include the exact command line.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output / traceback
+      render: shell
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Python library (python/gnss_gpu)
+        - CUDA / C++ kernels (src)
+        - Experiments (experiments)
+        - Examples / docs
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Python version, GPU/CUDA version (if relevant), and whether native kernels were built.
+      placeholder: |
+        OS: Ubuntu 24.04
+        Python: 3.11
+        GPU/CUDA: RTX 40-series / CUDA 12.x (or "CPU-only, no native build")
+    validations:
+      required: true
