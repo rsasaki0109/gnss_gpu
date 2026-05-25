@@ -9,6 +9,7 @@ import pandas as pd
 import experiments.gsdc2023_base_correction as base_correction
 from experiments.gsdc2023_base_correction import (
     GPS_L5_TGD_SCALE,
+    base_metadata_dir,
     compute_base_pseudorange_correction_matrix,
     filter_matrtklib_duplicate_gps_nav_messages,
     matlab_base_time_span_mask,
@@ -234,6 +235,16 @@ def test_base_position_offset_direct(tmp_path):
 
     np.testing.assert_allclose(no_offset, np.array([-2700112.7, -4292747.3, 3855195.5]))
     assert np.linalg.norm(with_offset - no_offset) > 1.0
+
+
+def test_base_metadata_dir_prefers_nested_base_dir(tmp_path):
+    data_root = tmp_path / "dataset_2023"
+    nested = data_root / "base"
+    sibling = tmp_path / "base"
+    nested.mkdir(parents=True)
+    sibling.mkdir()
+
+    assert base_metadata_dir(data_root) == nested
 
 
 def test_rinex_header_base_xyz_preferred_when_valid():

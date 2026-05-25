@@ -109,6 +109,7 @@ def test_bridge_result_positions_payload_and_summary() -> None:
     assert payload["vd_seed_guard_reject_reasons"] == {"doppler": 1}
     assert payload["selected_score_m"] == 1.1
     assert payload["raw_wls_metrics"]["rms_2d_m"] == 2.0
+    assert payload["fgo_raw_wls_proxy_rescue_enabled"] is False
     assert payload["chunk_selection_records"] == [{"start": 0, "end": 2, "source": "fgo"}]
     assert payload["parity_audit"]["base_correction_status"] == "ok"
     assert "parity" in summary
@@ -167,6 +168,10 @@ def test_bridge_position_columns_and_source_validation() -> None:
         "LatitudeDegrees",
         "LongitudeDegrees",
     )
+    assert validate_position_source("fgo_ct_rbpf") == "fgo_ct_rbpf"
+    assert bridge_position_columns("fgo_ct_rbpf", columns) == ("LatitudeDegrees", "LongitudeDegrees")
+    assert validate_position_source("fgo_dd_carrier") == "fgo_dd_carrier"
+    assert bridge_position_columns("fgo_dd_carrier", columns) == ("LatitudeDegrees", "LongitudeDegrees")
     assert bridge_position_columns("gated", columns) == ("LatitudeDegrees", "LongitudeDegrees")
     with pytest.raises(ValueError, match="unsupported position source"):
         validate_position_source("bad")

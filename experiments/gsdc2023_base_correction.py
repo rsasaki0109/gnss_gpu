@@ -73,6 +73,9 @@ def load_settings_frame_cached(data_root_str: str, split: str) -> pd.DataFrame |
 def base_metadata_dir(data_root: Path) -> Path:
     """Directory containing ``base_position.csv`` / ``base_offset.csv``."""
 
+    nested = data_root / "base"
+    if nested.is_dir():
+        return nested
     sibling = data_root.parent / "base"
     if sibling.is_dir():
         return sibling
