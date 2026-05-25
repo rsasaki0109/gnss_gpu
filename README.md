@@ -1,50 +1,64 @@
 # gnss_gpu
 
-`gnss_gpu` is an experiment-first GNSS positioning workspace. The reusable code
-lives under `python/gnss_gpu/` and `src/`; the fast-moving PPC / UrbanNav /
-GSDC evaluations live under `experiments/` and `internal_docs/`.
+`gnss_gpu` is a research workspace for GNSS positioning experiments. It combines
+Python, CUDA/C++, and `libgnss++`-based tooling for:
 
-The current repository is not a single polished product yet. Treat it as two
-connected layers:
+- GSDC2023 smartphone-decimeter Kaggle submissions.
+- PPC / UrbanNav RTK, PF/RBPF, FGO, selector, and map-aided experiments.
+- Reusable GNSS helpers under `python/gnss_gpu/` and native kernels under `src/`.
 
-- `third_party/gnssplusplus/`: C++ GNSS/RTK/PPP/CLAS solver and RTK baseline.
-- `gnss_gpu`: GPU PF/RBPF, DD observations, local FGO/CT rescue experiments,
-  scoring, visualization, and analysis around those solver outputs.
+This repository is not a single polished application yet. It is intentionally
+experiment-first: stable code lives in the library/native directories, while
+fast-moving runs, sweeps, generated reports, and Kaggle/PPC handoffs live in
+`experiments/` and `internal_docs/`.
 
-## Current Read
+## Start Here
 
-The current PPC production-best route is **Phase71**:
+Choose the path that matches what you are trying to do:
+
+| Goal | First place to look |
+|---|---|
+| Continue current GSDC2023 Kaggle work | [`internal_docs/plan.md`](internal_docs/plan.md) |
+| Understand current PPC production state | [`internal_docs/ppc_current_status.md`](internal_docs/ppc_current_status.md) |
+| Find durable decisions and negative results | [`internal_docs/decisions.md`](internal_docs/decisions.md) |
+| Run or inspect experiment scripts | [`experiments/README.md`](experiments/README.md) |
+| Inspect generated result files | [`experiments/results/README.md`](experiments/results/README.md) |
+| Work on reusable Python code | [`python/gnss_gpu/`](python/gnss_gpu/) |
+| Work on native CUDA/C++ code | [`src/`](src/) |
+| Work on the C++ GNSS solver baseline | [`third_party/gnssplusplus/README.md`](third_party/gnssplusplus/README.md) |
+
+## Current Status
+
+As of 2026-05-25 JST, the two most important active threads are:
+
+- **GSDC2023 Kaggle**: current best submitted CSV is v13 TDCP_on_v8 adaptive
+  row-gate, with Kaggle `public=3.224` and `private=3.783`.
+  The file is
+  `experiments/results/gsdc2023_submission_cauchy_pairwise_hampel_accel3_snap_hdg45_kalman_tdcp_onv8_adaptive_rowgate_20260525.csv`.
+  A v15 fine row-gate candidate is prepared and documented in
+  [`internal_docs/plan.md`](internal_docs/plan.md), but was not submitted at
+  the time this note was written.
+- **PPC / UrbanNav**: the current production-best route is Phase71. Phase71
+  keeps the Phase43 per-run selector setup and adds an OSM road-centerline
+  corrected candidate only for `nagoya/run2`.
+
+Keep this section short and current. Put detailed chronology in
+[`internal_docs/plan.md`](internal_docs/plan.md), not in the root README.
+
+## Repository Layout
 
 ```text
-Phase43 official: 85.998294%
-Phase71 official: 86.205492%
-Delta: +0.207198pp
-TURING 85.6% delta: +0.605492pp
+python/gnss_gpu/              Reusable Python package code
+src/                          CUDA/C++ kernels and native bindings
+experiments/                  Experiment runners, sweeps, reports, one-off probes
+experiments/results/          Generated CSV/HTML/plot outputs
+internal_docs/                Working notes, decisions, handoffs, current state
+docs/                         Generated visual snapshot site
+third_party/gnssplusplus/     C++ GNSS/RTK/PPP/CLAS solver subproject
+tests/                        Python tests for stable helpers and experiment logic
 ```
 
-Phase71 keeps the Phase43 per-run conditional selector setup, then adds an
-OSM road-centerline corrected candidate only for `nagoya/run2`. The other five
-production runs are unchanged. The large generated OSM candidate and ranker
-overlay artifacts are regenerated under `/tmp` by the production script and are
-not committed.
-
-The important PPC distinction is now:
-
-- selector/ranker improvements delivered the main jump from the Phase11
-  baseline to the Phase43/71 range;
-- the remaining gap is dominated by candidate-generation and absolute-source
-  failures in hard spans, especially `nagoya/run2`;
-- gici-open remains a local reference/source of generated candidates only. Do
-  not vendor, link, or derive production code/config from GPL-3.0 sources.
-
-For the latest current-state summary, start with
-[`internal_docs/ppc_current_status.md`](internal_docs/ppc_current_status.md).
-For the full chronological PPC log, use [`internal_docs/plan.md`](internal_docs/plan.md).
-For `libgnss++` RTKLIB demo5 comparisons, use
-[`third_party/gnssplusplus/README.md`](third_party/gnssplusplus/README.md) and
-[`third_party/gnssplusplus/docs/benchmarks.md`](third_party/gnssplusplus/docs/benchmarks.md).
-
-## Architecture Boundary
+The root-level boundary is:
 
 ```mermaid
 flowchart LR
@@ -52,64 +66,30 @@ flowchart LR
     Lib --> Floor[".pos / diagnostics\nhybrid floor and candidates"]
     Data --> GPU["gnss_gpu\nPF/RBPF/DD/FGO experiments"]
     Floor --> GPU
-    GPU --> Score["honest scoring\nfull-run diagnostics\nHTML/CSV reports"]
+    GPU --> Score["honest scoring\nCSV/HTML reports\nKaggle/PPC artifacts"]
 ```
 
-Keep durable solver work in `third_party/gnssplusplus` when it belongs to the
-C++ GNSS engine. Keep fast experimental replay, candidate selection, GPU
-particle filtering, and reporting in this repo.
+## Quick Setup
 
-## Where To Look
-
-- [`python/gnss_gpu/`](python/gnss_gpu/): Python library code, dataset adapters,
-  scoring, DD helpers, and GPU-facing APIs.
-- [`src/`](src/): CUDA/C++ kernels and native bindings.
-- [`experiments/`](experiments/): experiment runners, sweeps, report builders,
-  and generated-analysis entry points. See [`experiments/README.md`](experiments/README.md).
-- [`experiments/results/`](experiments/results/): CSV/HTML/plot outputs. Many
-  files are generated; use [`experiments/results/README.md`](experiments/results/README.md)
-  before treating a result as current.
-- [`internal_docs/`](internal_docs/): working plans, decisions, negative
-  results, handoffs, and longer explanations. See
-  [`internal_docs/README.md`](internal_docs/README.md).
-- [`docs/index.html`](docs/index.html): generated visual snapshot site.
-- [`third_party/gnssplusplus/`](third_party/gnssplusplus/): C++ solver
-  subproject and its own docs.
-
-## Current High-Value Threads
-
-- Phase71 production maintenance: keep the n/r2 OSM road candidate
-  materialization reproducible without committing large generated artifacts.
-- Phase72 exploration: test whether road/map constraints generalize beyond the
-  single n/r2 OSM span without perturbing neutral runs.
-- Candidate generation: find absolute sources for stable low-residual wrong
-  solutions that ranker/consensus logic cannot fix.
-- GSDC pivot readiness: keep the PPC work isolated from GSDC reproduction and
-  submission artifacts.
-- Visualization/reporting: keep HTML reports generic enough to compare
-  `gnss_gpu`, `libgnss++`, and RTKLIB-style outputs.
-
-## Quick Start
-
-Install Python package:
+For Python-only development, avoid an editable package install until the native
+CUDA/CMake toolchain is ready. Most experiment and test work can run with
+`PYTHONPATH=python`.
 
 ```bash
-pip install .
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -r requirements.txt
+python3 -m pip install pytest pandas scipy requests matplotlib plotly
 ```
 
-Install experiment dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Run tests:
+Run a smoke test:
 
 ```bash
 PYTHONPATH=python python3 -m pytest tests/ -q
 ```
 
-Build native extensions manually when needed:
+Build native extensions only when you need CUDA/C++ bindings:
 
 ```bash
 mkdir -p build
@@ -119,9 +99,21 @@ make -j"$(nproc)"
 ```
 
 If you build extensions manually, copy the generated `.so` files into
-`python/gnss_gpu/` before running Python-side experiments.
+`python/gnss_gpu/` before running Python-side experiments that import them.
 
-## Common Commands
+## Common Tasks
+
+Read the live project state:
+
+```bash
+sed -n '1,220p' internal_docs/plan.md
+```
+
+Run the test suite:
+
+```bash
+PYTHONPATH=python python3 -m pytest tests/ -q
+```
 
 Rebuild the generated visual snapshot:
 
@@ -143,16 +135,6 @@ Rebuild paper-facing summary assets:
 python3 experiments/build_paper_assets.py
 ```
 
-Run the current `libgnss++` hybrid scorer on existing PPC `.pos` files:
-
-```bash
-python3 experiments/exp_ppc_libgnss_hybrid.py \
-  --skip-solvers \
-  --pos-dir experiments/results/libgnss_rtk_pos_v5 \
-  --spp-dir experiments/results/libgnss_spp_pos \
-  --results-prefix ppc_compare_libgnss_v5
-```
-
 Prepare Phase71 generated artifacts without running the full six-run replay:
 
 ```bash
@@ -165,15 +147,31 @@ Run the current Phase71 PPC production replay:
 bash experiments/scripts_run_phase71_osmroad_production.sh
 ```
 
+## Data And Artifacts
+
+Many useful files in this workspace are generated, local-only, or too large to
+commit. Before trusting a CSV or HTML report, check:
+
+- Whether it is listed in [`experiments/results/README.md`](experiments/results/README.md).
+- Whether the matching command is recorded in [`internal_docs/plan.md`](internal_docs/plan.md)
+  or another topic-specific note.
+- Whether the script is a stable entry point or a one-off probe. The naming
+  conventions in [`experiments/README.md`](experiments/README.md) are the best
+  quick guide.
+
 ## Development Policy
 
 - Keep stable reusable code in `python/gnss_gpu/` or `src/`.
-- Keep variant-heavy logic in `experiments/` until it survives fixed evaluation.
-- Do not promote a method because it wins a pilot split.
+- Keep variant-heavy experiment logic in `experiments/` until it survives fixed
+  evaluation.
+- Do not promote a method because it wins one pilot split.
 - Prefer same-input, same-metric comparisons over new abstractions.
-- Record durable decisions in [`internal_docs/decisions.md`](internal_docs/decisions.md),
-  current PPC state in [`internal_docs/ppc_current_status.md`](internal_docs/ppc_current_status.md),
-  and detailed chronological PPC handoffs in [`internal_docs/plan.md`](internal_docs/plan.md).
+- Record durable decisions in [`internal_docs/decisions.md`](internal_docs/decisions.md).
+- Keep current PPC state in
+  [`internal_docs/ppc_current_status.md`](internal_docs/ppc_current_status.md).
+- Keep detailed chronological handoffs in [`internal_docs/plan.md`](internal_docs/plan.md).
+- Do not vendor, link, or derive production code/config from GPL-3.0 reference
+  sources such as `gici-open`.
 
 ## License
 
