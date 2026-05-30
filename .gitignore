@@ -41,8 +41,28 @@ experiments/results/*.log
 experiments/results/paper_assets/*.mp4
 experiments/results/gsdc2023_bridge_diag_*.csv
 
+# Generated experiment result artifacts (regenerable via CLIs; force-add
+# deliverables you want versioned, e.g. `git add -f <submission>.csv`).
+# Already-tracked result files keep being tracked.
+experiments/results/*.csv
+experiments/results/*.json
+experiments/results/*.pos
+experiments/results/*.txt
+experiments/results/*.npz
+experiments/results/*.html
+
+# GPU / urban-shadow / RF-security lab generated data assets
+docs/assets/data/
+docs/assets/gpu_stress_lab_snapshot.js
+docs/assets/gpu_stress_lab_snapshot.json
+docs/assets/gpu_gnss_stress_lab.html
+docs/gpu_gnss_stress_lab.html
+
 # Experiment data (downloaded, not committed)
 experiments/data/
+
+# Runtime solver output (regenerable)
+output/
 
 # Intermediate frame images (GIFs are committed instead)
 experiments/results/*/frame_*.png
