@@ -818,3 +818,52 @@ Recommended next step:
    a narrowly validated selector rescue, not just a TDCP-weight-scale tweak.
 
 Do not spend a Kaggle submission on the current CT-only candidate.
+
+## TDCP error-state correction smoother (post-v8 lever) — 2026-05-24/25
+
+The earlier naive 4-parameter TDCP least-squares solve broke on Android
+`HardwareClockDiscontinuityCount` increments (mean TDCP delta 1971 m vs GT
+15.6 m).  The deployed approach sidesteps the clock-state problem entirely:
+the bridge applies TDCP **geometry correction against `kaggle_wls`**, so each
+inter-epoch TDCP solve estimates the *difference between consecutive WLS
+position errors* (a correction increment), not absolute displacement.  The
+receiver clock nuisance largely cancels across the geometry-removed interval.
+
+Pipeline (all committed in PR #70):
+
+- `experiments/eval_gsdc2023_tdcp_correction_smoother.py` — per-interval TDCP
+  solve (`_estimate_interval`, Huber IRLS) → quality gate (pair count, postfit
+  RMS, condition number) → tridiagonal error-state smoother
+  `min_c  Σ‖c_i‖²/σ_anchor² + Σ‖(c_{i+1}-c_i)-d_i‖²/σ_tdcp²` per E/N axis.
+  Applies standalone, after the v8 chain (`_v8`), or on top of it (`_on_v8`).
+- `experiments/apply_gsdc2023_tdcp_to_submission.py` — production apply: rebuild
+  TDCP from test raw data, time-match to a submission CSV, add the correction
+  on top of submission positions (graceful `time_mismatch` / `no_tdcp` /
+  `build_failed` fallbacks).
+- `experiments/eval_gsdc2023_tdcp_row_gate.py` — row-level aggressive/conservative
+  gate sweep.
+- `experiments/merge_gsdc2023_tdcp_adaptive_submission.py` — adaptive merge:
+  A32-family phones and LAX/pixel5 trips take the conservative variant, the rest
+  aggressive, with an optional per-row aggressive-vs-conservative displacement
+  gate.
+
+Train verdict (full 41-trip grid sweep, full epochs,
+`gsdc2023_tdcp_onv8_grid_full_candidates_20260524_summary.csv`):
+
+- raw_wls 4.781 m → v8_chain 4.394 m → **best TDCP_on_v8 3.968 m**
+  (`tdcp_a4_t0p05_c30_r0p1_p6_d3_on_v8`).
+- **TDCP_on_v8 gain vs v8 = −0.43 m / −9.7 %** — the single largest post-process
+  lever in the stack (Hampel −5.6 cm, accel −15 cm, snap −4.2 cm, heading
+  −1.6 cm, Kalman −9.6 cm all together ≈ −34 cm; TDCP alone ≈ −43 cm), and far
+  beyond the original −3…−8 cm hope.
+
+Deployed submission (Kaggle freeze release, highest priority):
+`experiments/results/gsdc2023_submission_cauchy_pairwise_hampel_accel3_snap_hdg45_kalman_tdcp_onv8_adaptive_rowgate_fine_20260525.csv`
+(71936 rows, coordinate-sanity PASS).  It changes **62218 / 71936 rows
+(86.5 %)** from v8, mean change 1.17 m / p95 2.98 m / max 19.6 m, touching
+38 / 40 test trips — a broad, train-verified correction, not a few-row tweak.
+
+Unit coverage: `tests/test_eval_gsdc2023_tdcp_correction_smoother.py` exercises
+the deterministic numerical core (tridiagonal solve vs dense solve, correction
+integration / anchor pull / invalid-interval chain split / max-delta clamp,
+ECEF↔LLA round trip, ENU rotation, quality gating).
