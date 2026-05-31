@@ -86,6 +86,34 @@ n/r2-targeted, where production is only ~65% — and measure OFFICIAL, rather th
 trusting the selector-layer delta. A fair (non-fabricated) gate for gici_tc is
 also open work, since it has no native ratio/RMS.
 
+### Resolution (2026-06-01): gici_tc is already fully in production; no upgrade exists
+
+Tracing the production pool settled the question:
+
+1. **gici_tc is already deployed.** The Phase43/71 pool already carries 19 GICI
+   candidates (`xd_gici_def` = `libgnss_diag_phase19/gici_tc_esdfix`, plus
+   `xd_gici_*` for the `gici_full_*` variants). They are part of the 86.21%
+   OFFICIAL — not an un-injected lever.
+2. **The newly-batch-evaluated outputs are byte-identical to production.**
+   Same-config apples-to-apples (production `gici_full_X` vs forppc2024
+   `gici_open_ws/test_nagoya2_X`) matches exactly on every config (combo4 95.0%,
+   window5 84.8%, hisnr 82.4%, … same n/p50/<1 m). The production candidates
+   *are* these forppc2024 runs.
+3. **The earlier "n/r2 +6.17 pp" was a config-mismatch artifact** — production
+   `gici_tc_esdfix` (`def`, 88.85%) vs the new *combo4* (95.0%). But combo4 is
+   already in the pool as `xd_gici_c4` (95.0%). There is no better build to swap
+   in, so a swap treatment is identical to baseline.
+4. **The exact production replay is not reproducible from committed code anyway:**
+   the n/r2 selector mode `ranker_gici_cluster_override` is absent from
+   `exp_ppc_ctrbpf_fgo.py`'s argparse choices (invalid-choice error) and
+   `git log -S` shows it was never committed to that file — the 86.21% run used
+   an uncommitted local build.
+
+Conclusion: the GICI candidate-injection avenue is **closed** (already realized).
+The `eval_gici_tc_ppc2024_batch.py` / `materialize_gici_tc_ppc_candidate.py`
+tooling (PR #72/#73) stands as candidate-quality verification, not a new lever.
+Remaining PPC headroom is in the n/r2 selector/ranker layer, not the GICI pool.
+
 ## Previous Conclusion (2026-05-15)
 
 **Former canonical best: Phase 19aw K=3 = 83.42% OFFICIAL** (rms_prefilter_k on top of
