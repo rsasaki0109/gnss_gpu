@@ -44,6 +44,48 @@ under `/tmp` by default. The prep-only smoke command reproduced
 `triggered_epochs=359`, `good/bad=30/0`, and overlay `added_rows=359` after the
 artifact-regeneration change.
 
+## GICI rtk_imu_tc candidate injection — selector-layer probe (2026-06-01)
+
+GICI `forppc2024 rtk_imu_tc` NMEA outputs were verified across all 6 runs at
+95–100% <1 m (fix4 99–100%) by `experiments/eval_gici_tc_ppc2024_batch.py`
+(PR #72; +18 s leap, coverage-aware best-deployable pick per run). To test
+injection, `experiments/materialize_gici_tc_ppc_candidate.py` converts the best
+per-run NMEA into a selector-pool candidate (`libgnss_diag_phase10/gici_tc/`,
+`.pos` + synthesised gate-passing diag `.csv` — GICI exposes no RTK ratio/RMS,
+so the diag marks every emitted epoch as a trusted external fix; this is a
+deliberate "full-trust" probe).
+
+`sim_ppc_phase_csv_addcand.py --discover-diag-dirs --only-labels xd_gici_tc`
+(policy `phase11dd`, base pool from `ppc_ctrbpf_fgo_phase11dd_full_p2k_runs.csv`):
+
+| run | base | +gici_tc | Δ |
+|---|---:|---:|---:|
+| tokyo/run1 | 66.40% | 85.79% | +19.39pp |
+| tokyo/run2 | 84.86% | 92.82% | +7.96pp |
+| tokyo/run3 | 80.03% | 78.10% | −1.93pp |
+| nagoya/run1 | 64.33% | 76.24% | +11.91pp |
+| nagoya/run2 | 40.21% | 64.75% | +24.54pp |
+| nagoya/run3 | 59.15% | 86.83% | +27.68pp |
+| **aggregate** | **70.65%** | **81.17%** | **+10.52pp** |
+
+Including RTK-float (fix=5) epochs beats `--fix4-only` (+10.52pp vs +4.44pp):
+on this weak base, GICI float still beats the base fill.
+
+**Caveat — not yet a production win.** This base (`phase11dd`, 70.65%) is far
+weaker than the Phase71 production pipeline (86.21% OFFICIAL). Compared against
+the production per-run numbers (tokyo1 90.84%, tokyo2 95.41%, tokyo3 88.95%,
+nagoya1 83.70%, nagoya2 65.67%, nagoya3 92.66%), full-trust gici_tc would
+*regress* 5/6 runs and roughly tie the OSM lever on the weak run (n/r2
+64.75% vs 65.67%). The selector layer is also below the PF+ranker layer that
+yields OFFICIAL, and past one-layer gains have been absorbed by the full
+pipeline (cf. v3-ranker / Viterbi negatives).
+
+**Decisive next test:** inject `gici_tc` into the *production* pool via the full
+`exp_ppc_ctrbpf_fgo.py` replay (Phase43/71 candidate set + ranker) — especially
+n/r2-targeted, where production is only ~65% — and measure OFFICIAL, rather than
+trusting the selector-layer delta. A fair (non-fabricated) gate for gici_tc is
+also open work, since it has no native ratio/RMS.
+
 ## Previous Conclusion (2026-05-15)
 
 **Former canonical best: Phase 19aw K=3 = 83.42% OFFICIAL** (rms_prefilter_k on top of
