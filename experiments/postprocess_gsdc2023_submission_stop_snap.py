@@ -99,8 +99,8 @@ def apply_stop_snap_to_submission(
     original_lng = out["LongitudeDegrees"].to_numpy(dtype=np.float64).copy()
     for _, group in out.groupby("tripId", sort=False):
         idx = group.index.to_numpy()
-        lat = group["LatitudeDegrees"].to_numpy(dtype=np.float64)
-        lng = group["LongitudeDegrees"].to_numpy(dtype=np.float64)
+        lat = group["LatitudeDegrees"].to_numpy(dtype=np.float64).copy()
+        lng = group["LongitudeDegrees"].to_numpy(dtype=np.float64).copy()
         if len(lat) < 2:
             stats["trips"] = int(stats["trips"]) + 1  # type: ignore[arg-type]
             continue
