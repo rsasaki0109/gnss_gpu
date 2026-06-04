@@ -84,6 +84,17 @@ def _load_and_fit(path: Path, size: tuple[int, int]) -> Image.Image:
     return ImageOps.fit(image, size, method=Image.Resampling.LANCZOS)
 
 
+def _load_and_contain(path: Path, size: tuple[int, int], fill: str = "#fffaf1") -> Image.Image:
+    image = Image.open(path).convert("RGBA")
+    image.thumbnail(size, Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", size, fill)
+    canvas.alpha_composite(
+        image,
+        ((size[0] - image.width) // 2, (size[1] - image.height) // 2),
+    )
+    return canvas
+
+
 def _read_csv(name: str) -> list[dict[str, str]]:
     with (RESULTS_DIR / name).open(newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
@@ -122,11 +133,12 @@ def _build_poster() -> Image.Image:
     bg.alpha_composite(glow)
 
     poster = bg.copy()
-    _rounded_panel(poster, (48, 42, 716, 358), "#fffaf1")
-    _rounded_panel(poster, (744, 42, 1552, 248), "#168f86")
-    _rounded_panel(poster, (744, 250, 1130, 852), "#fffaf1")
-    _rounded_panel(poster, (1158, 250, 1552, 552), "#fffaf1")
-    _rounded_panel(poster, (1158, 580, 1552, 852), "#fffaf1")
+    _rounded_panel(poster, (48, 42, 716, 452), "#fffaf1")
+    _rounded_panel(poster, (48, 480, 716, 852), "#fffaf1")
+    _rounded_panel(poster, (744, 42, 1552, 282), "#168f86")
+    _rounded_panel(poster, (744, 310, 1552, 570), "#fffaf1")
+    _rounded_panel(poster, (744, 598, 1130, 852), "#fffaf1")
+    _rounded_panel(poster, (1158, 598, 1552, 852), "#fffaf1")
 
     draw = ImageDraw.Draw(poster)
     ink = "#1f2724"
@@ -166,19 +178,19 @@ def _build_poster() -> Image.Image:
     figure_specs = [
         (
             PAPER_ASSETS_DIR / "paper_urbannav_external.png",
-            (774, 280, 1100, 568),
+            (774, 338, 1522, 550),
             "UrbanNav External",
             "Main accuracy figure",
         ),
         (
             PAPER_ASSETS_DIR / "paper_bvh_runtime.png",
-            (1188, 280, 1522, 458),
+            (774, 628, 1100, 822),
             "BVH Runtime",
             "Same accuracy, 57.8x faster",
         ),
         (
             PAPER_ASSETS_DIR / "paper_ppc_holdout.png",
-            (1188, 610, 1522, 792),
+            (1188, 628, 1522, 822),
             "PPC Holdout",
             "Exploratory gate survives holdout",
         ),
@@ -187,21 +199,36 @@ def _build_poster() -> Image.Image:
     for path, box, title, subtitle in figure_specs:
         x0, y0, x1, y1 = box
         pad = 18
-        img = _load_and_fit(path, (x1 - x0 - pad * 2, y1 - y0 - pad * 2 - 54))
+        img = _load_and_contain(path, (x1 - x0 - pad * 2, y1 - y0 - pad * 2 - 54))
         poster.alpha_composite(img, (x0 + pad, y0 + pad))
         draw.rounded_rectangle((x0 + 16, y1 - 52, x1 - 16, y1 - 16), radius=18, fill="#fff4e6")
         draw.text((x0 + 28, y1 - 48), title, font=_font(24, bold=True), fill=ink)
         draw.text((x0 + 28, y1 - 22), subtitle, font=_font(18), fill=muted)
 
     metric_boxes = [
-        ((90, 288, 330, 356), "PF+RobustClear", "10K frozen winner"),
-        ((350, 288, 560, 356), "93.25 -> 66.60", "UrbanNav vs EKF"),
-        ((580, 288, 692, 356), "440/7", "tests/skips"),
+        ((90, 364, 330, 432), "PF+RobustClear", "10K frozen winner"),
+        ((350, 364, 560, 432), "93.25 -> 66.60", "UrbanNav vs EKF"),
+        ((580, 364, 692, 432), "440/7", "tests/skips"),
     ]
     for box, value, label in metric_boxes:
         draw.rounded_rectangle(box, radius=20, fill=ImageColor.getrgb("#efe5d4"))
         draw.text((box[0] + 16, box[1] + 10), value, font=_font(21, bold=True), fill=ink)
         draw.text((box[0] + 18, box[1] + 38), label, font=_font(16), fill=muted)
+
+    scaling = _load_and_contain(
+        PAPER_ASSETS_DIR / "paper_particle_scaling.png",
+        (572, 204),
+        fill="#fffaf1",
+    )
+    poster.alpha_composite(scaling, (96, 526))
+    draw.rounded_rectangle((90, 744, 674, 832), radius=24, fill="#fff4e6")
+    draw.text((114, 762), "Particle Scaling", font=_font(26, bold=True), fill=ink)
+    draw.text(
+        (114, 796),
+        "PF crosses EKF near N~1,000; tail improves up to 1M.",
+        font=_font(18),
+        fill=muted,
+    )
 
     return poster
 

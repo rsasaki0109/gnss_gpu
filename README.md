@@ -9,7 +9,14 @@
 [![Live demo](https://img.shields.io/badge/live%20demo-results%20snapshot-brightgreen)](https://rsasaki0109.github.io/gnss_gpu/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
 
-<img src="docs/assets/media/site_teaser.gif" alt="gnss_gpu particle filter tracking through an urban canyon" width="760">
+<p align="center">
+  <img
+    src="docs/assets/media/site_teaser.gif"
+    alt="gnss_gpu particle filter tracking through an urban canyon"
+    width="960"
+    height="540"
+  >
+</p>
 
 [**Live results snapshot**](https://rsasaki0109.github.io/gnss_gpu/) · [Benchmarks](benchmarks/RESULTS.md) · [Examples](examples/) · [How it's built](internal_docs/plan.md)
 
