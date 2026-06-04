@@ -79,6 +79,47 @@ def _draw_text_block(
         y = bbox[3] + spacing
 
 
+def _wrap_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.ImageFont,
+    max_width: int,
+) -> list[str]:
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        words = raw_line.split()
+        if not words:
+            lines.append("")
+            continue
+        current = words[0]
+        for word in words[1:]:
+            candidate = f"{current} {word}"
+            if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width:
+                current = candidate
+            else:
+                lines.append(current)
+                current = word
+        lines.append(current)
+    return lines
+
+
+def _draw_wrapped_text(
+    draw: ImageDraw.ImageDraw,
+    xy: tuple[int, int],
+    text: str,
+    font: ImageFont.ImageFont,
+    fill: str,
+    max_width: int,
+    spacing: int = 6,
+) -> int:
+    x, y = xy
+    for line in _wrap_text(draw, text, font, max_width):
+        draw.text((x, y), line, font=font, fill=fill)
+        bbox = draw.textbbox((x, y), line, font=font)
+        y = bbox[3] + spacing
+    return y
+
+
 def _load_and_fit(path: Path, size: tuple[int, int]) -> Image.Image:
     image = Image.open(path).convert("RGBA")
     return ImageOps.fit(image, size, method=Image.Resampling.LANCZOS)
@@ -332,14 +373,24 @@ def _build_teaser(poster: Image.Image) -> list[Image.Image]:
         frame_draw.rounded_rectangle((70, 74, 458, 504), radius=38, fill=(255, 250, 241, 224))
         frame_draw.rounded_rectangle((94, 98, 248, 140), radius=18, fill=spec["accent"])
         frame_draw.text((118, 108), spec["eyebrow"], font=_font(20, bold=True), fill="#f2fffd")
-        _draw_text_block(
+
+        text_y = _draw_wrapped_text(
             frame_draw,
             (96, 172),
-            [
-                (spec["title"], _font(44, bold=True), "#1f2724"),
-                (spec["subtitle"], _font(24), "#55615d"),
-            ],
-            spacing=14,
+            spec["title"],
+            _font(36, bold=True),
+            "#1f2724",
+            max_width=338,
+            spacing=8,
+        )
+        _draw_wrapped_text(
+            frame_draw,
+            (96, text_y + 8),
+            spec["subtitle"],
+            _font(21),
+            "#55615d",
+            max_width=338,
+            spacing=6,
         )
 
         chip_y = 360
