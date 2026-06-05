@@ -12,11 +12,13 @@ from experiments.gsdc2023_solver_selection import (
     mi8_gated_baseline_jump_guard_enabled,
     raw_wls_max_gap_guard_m,
     select_gated_solution,
+    taroz_fgo_candidate_sources_enabled,
     tdcp_off_candidate_enabled,
     tdcp_scale_candidate_enabled,
     with_fixed_source_solution,
     with_source_solution,
 )
+from experiments.gsdc2023_output import TAROZ_FGO_CANDIDATE_SOURCES
 
 
 def _batch(*, tdcp_weights: np.ndarray | None = None) -> TripArrays:
@@ -32,7 +34,9 @@ def _batch(*, tdcp_weights: np.ndarray | None = None) -> TripArrays:
         max_sats=n_sat,
         has_truth=False,
         tdcp_meas=np.ones((n_epoch - 1, n_sat), dtype=np.float64) if tdcp_weights is not None else None,
+        tdcp_raw_meas=np.full((n_epoch - 1, n_sat), 2.0, dtype=np.float64) if tdcp_weights is not None else None,
         tdcp_weights=tdcp_weights,
+        tdcp_weights_fgo=tdcp_weights.copy() if tdcp_weights is not None else None,
         tdcp_consistency_mask_count=4,
         tdcp_geometry_correction_count=5,
     )
@@ -101,16 +105,39 @@ def test_fgo_raw_wls_proxy_rescue_enabled_requires_gated_allowed_phone() -> None
     )
 
 
+def test_taroz_fgo_candidate_sources_enabled_requires_gated_vd_and_flag() -> None:
+    cfg = BridgeConfig(position_source="gated", taroz_fgo_candidate_enabled=True)
+
+    assert taroz_fgo_candidate_sources_enabled(cfg) == TAROZ_FGO_CANDIDATE_SOURCES
+    assert taroz_fgo_candidate_sources_enabled(
+        BridgeConfig(position_source="auto", taroz_fgo_candidate_enabled=True),
+    ) == ()
+    assert taroz_fgo_candidate_sources_enabled(
+        BridgeConfig(position_source="gated", use_vd=False, taroz_fgo_candidate_enabled=True),
+    ) == ()
+    assert taroz_fgo_candidate_sources_enabled(BridgeConfig(position_source="gated")) == ()
+    assert taroz_fgo_candidate_sources_enabled(
+        BridgeConfig(
+            position_source="gated",
+            taroz_fgo_candidate_enabled=True,
+            taroz_fgo_candidate_sources=(TAROZ_FGO_CANDIDATE_SOURCES[1],),
+        ),
+    ) == (TAROZ_FGO_CANDIDATE_SOURCES[1],)
+
+
 def test_batch_without_tdcp_clears_tdcp_arrays_and_counts() -> None:
     batch = _batch(tdcp_weights=np.ones((2, 2), dtype=np.float64))
 
     stripped = batch_without_tdcp(batch)
 
     assert stripped.tdcp_meas is None
+    assert stripped.tdcp_raw_meas is None
     assert stripped.tdcp_weights is None
+    assert stripped.tdcp_weights_fgo is None
     assert stripped.tdcp_consistency_mask_count == 0
     assert stripped.tdcp_geometry_correction_count == 0
     assert batch.tdcp_weights is not None
+    assert batch.tdcp_raw_meas is not None
     assert batch.tdcp_consistency_mask_count == 4
 
 
@@ -245,6 +272,71 @@ def test_select_gated_solution_applies_optional_fgo_raw_wls_proxy_rescue() -> No
         n_epoch=4,
         baseline_threshold=500.0,
         allow_fgo_raw_wls_proxy_rescue=True,
+    )
+
+    np.testing.assert_allclose(gated_state[:, 0], np.array([0.0, 11.0, 11.0, 0.0], dtype=np.float64))
+    np.testing.assert_array_equal(
+        gated_sources.astype(str),
+        np.array(["baseline", "fgo", "fgo", "baseline"], dtype=object),
+    )
+    assert gated_counts == {"baseline": 2, "raw_wls": 0, "fgo": 2}
+
+
+def test_select_gated_solution_passes_fgo_gap_floor_override() -> None:
+    catalog = build_source_solution_catalog(
+        n_epoch=4,
+        baseline_state=_state(0.0),
+        raw_state=_state(1.0),
+        fgo_state=_state(11.0),
+        auto_state=_state(0.0),
+        auto_sources=np.array(["baseline", "baseline", "baseline", "baseline"], dtype=object),
+        auto_source_counts={"baseline": 4, "raw_wls": 0, "fgo": 0},
+        baseline_mse_pr=50.0,
+        raw_wls_mse_pr=60.0,
+        fgo_mse_pr=49.0,
+        auto_mse_pr=50.0,
+    )
+    records = [
+        ChunkSelectionRecord(
+            start_epoch=1,
+            end_epoch=3,
+            auto_source="fgo",
+            candidates={
+                "baseline": ChunkCandidateQuality(
+                    mse_pr=50.0,
+                    step_mean_m=1.0,
+                    step_p95_m=10.0,
+                    accel_mean_m=0.0,
+                    accel_p95_m=0.0,
+                    bridge_jump_m=0.0,
+                    baseline_gap_mean_m=0.0,
+                    baseline_gap_p95_m=0.0,
+                    baseline_gap_max_m=0.0,
+                    quality_score=1.0,
+                ),
+                "raw_wls": _quality(60.0, 1.1, gap_max=30.0),
+                "fgo": ChunkCandidateQuality(
+                    mse_pr=49.0,
+                    step_mean_m=1.0,
+                    step_p95_m=10.0,
+                    accel_mean_m=0.0,
+                    accel_p95_m=0.0,
+                    bridge_jump_m=0.0,
+                    baseline_gap_mean_m=8.0,
+                    baseline_gap_p95_m=16.0,
+                    baseline_gap_max_m=20.0,
+                    quality_score=0.7,
+                ),
+            },
+        ),
+    ]
+
+    gated_state, gated_sources, gated_counts = select_gated_solution(
+        catalog,
+        records,
+        n_epoch=4,
+        baseline_threshold=500.0,
+        fgo_baseline_gap_p95_floor_m=20.0,
     )
 
     np.testing.assert_allclose(gated_state[:, 0], np.array([0.0, 11.0, 11.0, 0.0], dtype=np.float64))

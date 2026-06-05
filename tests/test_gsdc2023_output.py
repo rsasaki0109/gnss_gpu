@@ -72,6 +72,53 @@ def _sample_result(*, with_truth: bool = True, with_metrics: bool = True) -> Bri
         metrics_kaggle=metrics,
         metrics_raw_wls=_metrics(rms_2d=2.0) if with_metrics else None,
         metrics_fgo=metrics,
+        stop_attitude_sigma_rad=0.03,
+        stop_velocity_huber_k=0.5,
+        stop_position_huber_k=0.5,
+        relative_height_huber_k=0.5,
+        absolute_height_huber_k=0.5,
+        imu_prior_applied=True,
+        imu_prior_interval_count=1,
+        imu_frame="taroz_body",
+        imu_sample_dt_mode="taroz",
+        imu_gravity_applied=True,
+        imu_position_sigma_m=0.05,
+        imu_velocity_sigma_mps=0.025,
+        imu_attitude_state_applied=True,
+        imu_attitude_sigma_rad=0.0005,
+        imu_diagonal_covariance_applied=True,
+        imu_preintegration_covariance_applied=True,
+        imu_preintegration_delta_t_applied=True,
+        imu_preintegration_bias_jacobian_applied=True,
+        imu_factor_use_next_bias_applied=True,
+        imu_delta_pv_gyro_bias_correction_applied=True,
+        imu_bias_between_sample_count_scaling_applied=True,
+        imu_accel_bias_state_applied=True,
+        imu_gyro_bias_state_applied=True,
+        imu_gyro_bias_prior_sigma_radps=0.0,
+        imu_gyro_bias_between_sigma_radps=0.0000005,
+        taroz_imu_noise_enabled=True,
+        imu_acc_sigma_mps2_sqrt_hz=0.05,
+        imu_gyro_sigma_radps_sqrt_hz=0.001,
+        imu_acc_sync_coefficient=0.5,
+        imu_gyro_sync_coefficient=0.5,
+        imu_effective_acc_sigma_mps2_sqrt_hz=0.025,
+        imu_effective_gyro_sigma_radps_sqrt_hz=0.0005,
+        taroz_qzss_other_clock_enabled=True,
+        fgo_weight_mode="taroz_sn",
+        fgo_huber_k_pr=0.1,
+        fgo_huber_k_doppler=0.4,
+        fgo_huber_k_tdcp=0.2,
+        fgo_fixed_linearization=True,
+        effective_trip_type="Street",
+        effective_motion_sigma_m=0.05,
+        effective_fgo_huber_k_pr=0.1,
+        effective_fgo_huber_k_doppler=0.4,
+        effective_fgo_huber_k_tdcp=0.2,
+        per_type_kernel_enabled=True,
+        per_type_kernel_motion_enabled=True,
+        clock_drift_sigma_m=0.1,
+        clock_use_average_drift=True,
         vd_seed_guard_records=[
             {
                 "chunk_start_epoch": 0,
@@ -95,11 +142,17 @@ def test_bridge_result_positions_payload_and_summary() -> None:
     result = _sample_result()
 
     positions = result.positions_table()
+    states = result.states_table()
     payload = result.metrics_payload()
     summary = "\n".join(result.summary_lines())
 
     assert list(positions["UnixTimeMillis"]) == [1000, 2000]
     assert list(positions["SelectedSource"]) == ["baseline", "fgo"]
+    assert list(states["UnixTimeMillis"]) == [1000, 2000]
+    assert list(states["SelectedSource"]) == ["baseline", "fgo"]
+    np.testing.assert_allclose(states["FgoEcefYMeters"].to_numpy(), np.ones(2), atol=1e-9)
+    assert "FgoClockBiasMeters0" in states.columns
+    assert "GroundTruthEcefZMeters" in states.columns
     np.testing.assert_allclose(positions["LatitudeDegrees"].to_numpy(), np.zeros(2), atol=1e-9)
     np.testing.assert_allclose(positions["LongitudeDegrees"].to_numpy(), np.zeros(2), atol=1e-9)
     assert payload["n_clock"] == 1
@@ -109,12 +162,64 @@ def test_bridge_result_positions_payload_and_summary() -> None:
     assert payload["vd_seed_guard_reject_reasons"] == {"doppler": 1}
     assert payload["selected_score_m"] == 1.1
     assert payload["raw_wls_metrics"]["rms_2d_m"] == 2.0
+    assert payload["stop_attitude_sigma_rad"] == 0.03
+    assert payload["stop_velocity_huber_k"] == 0.5
+    assert payload["stop_position_huber_k"] == 0.5
+    assert payload["relative_height_huber_k"] == 0.5
+    assert payload["absolute_height_huber_k"] == 0.5
+    assert payload["taroz_imu_noise_enabled"] is True
+    assert payload["imu_acc_sigma_mps2_sqrt_hz"] == 0.05
+    assert payload["imu_gyro_sigma_radps_sqrt_hz"] == 0.001
+    assert payload["imu_effective_acc_sigma_mps2_sqrt_hz"] == 0.025
+    assert payload["imu_effective_gyro_sigma_radps_sqrt_hz"] == 0.0005
+    assert payload["imu_attitude_state_applied"] is True
+    assert payload["imu_sample_dt_mode"] == "taroz"
+    assert payload["imu_gravity_applied"] is True
+    assert payload["imu_attitude_sigma_rad"] == 0.0005
+    assert payload["imu_diagonal_covariance_applied"] is True
+    assert payload["imu_preintegration_covariance_applied"] is True
+    assert payload["imu_preintegration_delta_t_applied"] is True
+    assert payload["imu_preintegration_bias_jacobian_applied"] is True
+    assert payload["imu_factor_use_next_bias_applied"] is True
+    assert payload["imu_delta_pv_gyro_bias_correction_applied"] is True
+    assert payload["imu_bias_between_sample_count_scaling_applied"] is True
+    assert payload["imu_gyro_bias_state_applied"] is True
+    assert payload["imu_gyro_bias_prior_sigma_radps"] == 0.0
+    assert payload["imu_gyro_bias_between_sigma_radps"] == 0.0000005
+    assert payload["taroz_qzss_other_clock_enabled"] is True
+    assert payload["fgo_weight_mode"] == "taroz_sn"
+    assert payload["fgo_huber_k_pr"] == 0.1
+    assert payload["fgo_huber_k_doppler"] == 0.4
+    assert payload["fgo_huber_k_tdcp"] == 0.2
+    assert payload["fgo_fixed_linearization"] is True
+    assert payload["effective_trip_type"] == "Street"
+    assert payload["effective_motion_sigma_m"] == 0.05
+    assert payload["effective_fgo_huber_k_pr"] == 0.1
+    assert payload["effective_fgo_huber_k_doppler"] == 0.4
+    assert payload["effective_fgo_huber_k_tdcp"] == 0.2
+    assert payload["per_type_kernel_enabled"] is True
+    assert payload["per_type_kernel_motion_enabled"] is True
+    assert payload["clock_drift_sigma_m"] == 0.1
+    assert payload["clock_use_average_drift"] is True
     assert payload["fgo_raw_wls_proxy_rescue_enabled"] is False
     assert payload["chunk_selection_records"] == [{"start": 0, "end": 2, "source": "fgo"}]
     assert payload["parity_audit"]["base_correction_status"] == "ok"
     assert "parity" in summary
     assert "vd guard" in summary
     assert "reasons=doppler:1" in summary
+    assert "acc_sigma=0.05" in summary
+    assert "sample_dt=taroz" in summary
+    assert "attitude_state=on" in summary
+    assert "diag_cov=on" in summary
+    assert "preint_cov=on" in summary
+    assert "preint_dt=on" in summary
+    assert "body_gravity=on" in summary
+    assert "preint_bias_jac=on" in summary
+    assert "imu_bias_epoch=next" in summary
+    assert "gyro_pv_corr=on" in summary
+    assert "bias_count_scale=on" in summary
+    assert "gyro_bias_state=on" in summary
+    assert "qzss_other_clk=on" in summary
     assert "improves raw WLS" in summary
 
 
@@ -124,10 +229,12 @@ def test_bridge_result_without_truth_or_metrics_exports_nan_ground_truth(tmp_pat
     export_bridge_outputs(tmp_path, result)
 
     positions = pd.read_csv(tmp_path / "bridge_positions.csv")
+    states = pd.read_csv(tmp_path / "bridge_states.csv")
     payload = load_bridge_metrics(tmp_path)
 
     assert has_valid_bridge_outputs(tmp_path)
     assert np.isnan(positions.loc[0, "GroundTruthLatitudeDegrees"])
+    assert np.isnan(states.loc[0, "GroundTruthEcefXMeters"])
     assert payload["selected_score_m"] is None
     assert payload["selected_metrics"] is None
     assert "ground truth: unavailable" in "\n".join(result.summary_lines())

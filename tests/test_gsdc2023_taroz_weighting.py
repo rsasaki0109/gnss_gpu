@@ -59,8 +59,8 @@ def test_sigtype_factor_table_matches_taroz_parameters_m():
         (CONSTELLATION_GALILEO, True, SIGTYPE_GAL_E5),
         (CONSTELLATION_BEIDOU, True, SIGTYPE_BDS_B2A),
         (CONSTELLATION_GLONASS, True, SIGTYPE_OTHER),
-        (CONSTELLATION_QZSS, False, SIGTYPE_GPS_L1),  # QZSS folded into GPS family
-        (CONSTELLATION_QZSS, True, SIGTYPE_GPS_L5),
+        (CONSTELLATION_QZSS, False, SIGTYPE_OTHER),
+        (CONSTELLATION_QZSS, True, SIGTYPE_OTHER),
         (99, False, SIGTYPE_OTHER),
     ],
 )

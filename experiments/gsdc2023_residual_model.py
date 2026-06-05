@@ -176,7 +176,7 @@ def estimate_residual_clock_series(
 
     clock_drift = np.full(rx_xyz.shape[0], np.nan, dtype=np.float64)
     for epoch_idx in range(rx_xyz.shape[0]):
-        vals = dop[epoch_idx, valid_doppler[epoch_idx]] + geom_rate[epoch_idx, valid_doppler[epoch_idx]]
+        vals = dop[epoch_idx, valid_doppler[epoch_idx]] - geom_rate[epoch_idx, valid_doppler[epoch_idx]]
         if vals.size > 0:
             clock_drift[epoch_idx] = float(np.median(vals))
 
@@ -502,7 +502,7 @@ def mask_doppler_residual_outliers(
         idx = np.flatnonzero(valid[epoch_idx])
         if idx.size == 0:
             continue
-        residual0 = dop[epoch_idx, idx] + geom_rate[epoch_idx, idx]
+        residual0 = dop[epoch_idx, idx] - geom_rate[epoch_idx, idx]
         if clock_drift is not None and np.isfinite(clock_drift[epoch_idx]):
             drift = float(clock_drift[epoch_idx])
         elif idx.size >= 4:

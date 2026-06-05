@@ -54,6 +54,7 @@ from experiments.gsdc2023_trip_stages import (
     build_raw_observation_frame,
     build_tdcp_stage,
     postprocess_filled_observation_stage,
+    taroz_cn0_percentiles_from_raw_frame,
     unpack_observation_preparation_stage,
 )
 
@@ -67,6 +68,7 @@ def test_assemble_trip_arrays_stage_maps_stage_products_to_factory() -> None:
     tdcp_stage = TdcpStageProducts(
         tdcp_meas=np.array([[0.25]], dtype=np.float64),
         tdcp_weights=np.array([[3.0]], dtype=np.float64),
+        tdcp_weights_fgo=np.array([[5.0]], dtype=np.float64),
         signal_tdcp_weights=np.array([[4.0]], dtype=np.float64),
         tdcp_consistency_mask_count=5,
         tdcp_geometry_correction_count=6,
@@ -106,9 +108,12 @@ def test_assemble_trip_arrays_stage_maps_stage_products_to_factory() -> None:
         rtklib_tropo_m=np.ones((2, 1), dtype=np.float64) * 0.2,
         doppler=np.zeros((2, 1), dtype=np.float64),
         doppler_weights=np.ones((2, 1), dtype=np.float64),
+        doppler_weights_fgo=np.ones((2, 1), dtype=np.float64) * 2.0,
         adr=None,
         adr_state=None,
         adr_uncertainty=None,
+        carrier_weights=None,
+        carrier_weights_fgo=None,
         pseudorange_bias_weights=np.ones((2, 1), dtype=np.float64),
         pseudorange_residual_stage=pseudorange_residual_stage,
         time_delta=time_delta,
@@ -144,12 +149,32 @@ def test_assemble_trip_arrays_stage_maps_stage_products_to_factory() -> None:
     assert result["dual_frequency"] is True
     np.testing.assert_array_equal(result["dt"], time_delta.dt)
     np.testing.assert_array_equal(result["tdcp_meas"], tdcp_stage.tdcp_meas)
+    np.testing.assert_array_equal(result["tdcp_weights_fgo"], tdcp_stage.tdcp_weights_fgo)
+    np.testing.assert_allclose(result["doppler_weights_fgo"], [[2.0], [2.0]])
     np.testing.assert_array_equal(result["stop_epochs"], imu_stage.stop_epochs)
     np.testing.assert_array_equal(result["absolute_height_ref_ecef"], absolute_height_stage.absolute_height_ref_ecef)
     np.testing.assert_allclose(result["sat_clock_bias_matrix"], [[0.5], [0.5]])
     np.testing.assert_allclose(result["rtklib_iono_m"], [[0.3], [0.3]])
     np.testing.assert_allclose(result["rtklib_tropo_m"], [[0.2], [0.2]])
     np.testing.assert_allclose(result["pseudorange_observable"], [[1.5], [1.5]])
+
+
+def test_taroz_cn0_percentiles_from_raw_frame_uses_all_system_signal_bands() -> None:
+    frame = pd.DataFrame(
+        {
+            "Cn0DbHz": [10.0, 20.0, 30.0, 40.0],
+            "SignalType": ["GPS_L1_CA", "GLO_G1", "GPS_L5_Q", "GAL_E5A_Q"],
+        },
+    )
+
+    percentiles = taroz_cn0_percentiles_from_raw_frame(
+        frame,
+        is_l5_signal_fn=lambda signal: "L5" in signal or "E5" in signal,
+        percentile=50.0,
+    )
+
+    assert percentiles.l1 == pytest.approx(15.0)
+    assert percentiles.l5 == pytest.approx(35.0)
 
 
 def test_assemble_prepared_trip_arrays_stage_uses_stage_products() -> None:
@@ -188,9 +213,12 @@ def test_assemble_prepared_trip_arrays_stage_uses_stage_products() -> None:
         sat_clock_drift_mps=np.zeros((2, 1), dtype=np.float64),
         doppler=np.ones((2, 1), dtype=np.float64) * -4.0,
         doppler_weights=np.ones((2, 1), dtype=np.float64) * 5.0,
+        doppler_weights_fgo=np.ones((2, 1), dtype=np.float64) * 6.0,
         adr=np.ones((2, 1), dtype=np.float64) * 6.0,
         adr_state=np.ones((2, 1), dtype=np.int32),
         adr_uncertainty=np.ones((2, 1), dtype=np.float64) * 0.1,
+        carrier_weights=np.ones((2, 1), dtype=np.float64) * 7.0,
+        carrier_weights_fgo=np.ones((2, 1), dtype=np.float64) * 8.0,
     )
     post_stages = PostObservationStageProducts(
         gnss_log_stage=GnssLogPseudorangeStageProducts(
@@ -229,6 +257,7 @@ def test_assemble_prepared_trip_arrays_stage_uses_stage_products() -> None:
         tdcp_stage=TdcpStageProducts(
             tdcp_meas=np.ones((2, 1), dtype=np.float64),
             tdcp_weights=np.ones((2, 1), dtype=np.float64) * 2.0,
+            tdcp_weights_fgo=np.ones((2, 1), dtype=np.float64) * 4.0,
             signal_tdcp_weights=np.ones((2, 1), dtype=np.float64) * 3.0,
             tdcp_consistency_mask_count=8,
             tdcp_geometry_correction_count=9,
@@ -2058,9 +2087,12 @@ def test_build_configured_post_observation_stages_uses_bundled_config_and_depend
         sat_clock_drift_mps=None,
         doppler=None,
         doppler_weights=None,
+        doppler_weights_fgo=None,
         adr=None,
         adr_state=None,
         adr_uncertainty=None,
+        carrier_weights=None,
+        carrier_weights_fgo=None,
     )
 
     config = PostObservationStageConfig(
@@ -2092,6 +2124,7 @@ def test_build_configured_post_observation_stages_uses_bundled_config_and_depend
         tdcp_geometry_correction=False,
         tdcp_weight_scale=2.0,
         imu_frame="body",
+        imu_sample_dt_mode="bounded",
         default_pd_l1_threshold_m=40.0,
         default_pd_l5_threshold_m=25.0,
         default_pr_l1_threshold_m=20.0,
@@ -2277,7 +2310,11 @@ def test_build_post_observation_stages_wires_pipeline_and_preserves_signal_weigh
         pseudorange_observable=pseudorange_observable,
         pseudorange_bias_weights=np.ones((2, 2), dtype=np.float64),
         weights=weights,
+        weights_fgo=None,
         doppler_weights=doppler_weights,
+        doppler_weights_fgo=None,
+        carrier_weights=None,
+        carrier_weights_fgo=None,
         apply_absolute_height=True,
         absolute_height_dist_m=7.0,
         kaggle_wls=kaggle_wls,
@@ -2323,6 +2360,7 @@ def test_build_post_observation_stages_wires_pipeline_and_preserves_signal_weigh
         adr_uncertainty=np.ones((2, 2), dtype=np.float64),
         elapsed_ns=np.array([0.0, 1.0], dtype=np.float64),
         imu_frame="body",
+        imu_sample_dt_mode="bounded",
         gnss_log_corrected_pseudorange_matrix_fn=gnss_log_fn,
         load_absolute_height_reference_ecef_fn=abs_height_fn,
         clock_jump_from_epoch_counts_fn=lambda _counts: clock_jump,
@@ -2443,14 +2481,20 @@ def test_build_tdcp_stage_applies_diagnostics_geometry_and_scale(tmp_path: Path)
         tdcp_dt=tdcp_dt,
         tdcp_consistency_threshold_m=1.5,
         doppler_weights=doppler_weights,
+        doppler_weights_fgo=None,
+        carrier_weights=None,
+        carrier_weights_fgo=None,
         clock_jump=np.array([False]),
         tdcp_loffset_m=0.25,
         matlab_residual_diagnostics_mask_path=tmp_path / "diag.csv",
         times_ms=np.array([1000.0], dtype=np.float64),
         slot_keys=["G01", "G02"],
         weights=weights,
+        weights_fgo=None,
         signal_weights=signal_weights,
+        signal_weights_fgo=None,
         signal_doppler_weights=doppler_weights.copy(),
+        signal_doppler_weights_fgo=None,
         sat_ecef=sat_ecef,
         kaggle_wls=kaggle_wls,
         tdcp_geometry_correction=True,
@@ -2469,6 +2513,56 @@ def test_build_tdcp_stage_applies_diagnostics_geometry_and_scale(tmp_path: Path)
     assert calls == ["build", "diagnostics", "geometry", "scale"]
 
 
+def test_build_tdcp_stage_derives_fgo_tdcp_weights_from_carrier_weights() -> None:
+    calls: list[str] = []
+
+    def build_fn(*_args: Any, **_kwargs: Any) -> tuple[np.ndarray, np.ndarray, int]:
+        calls.append("build")
+        return np.array([[1.0, 2.0]], dtype=np.float64), np.array([[2.0, 4.0]], dtype=np.float64), 0
+
+    def scale_fn(weights: np.ndarray | None, scale: float) -> None:
+        calls.append("scale")
+        assert scale == 0.5
+        if weights is not None:
+            weights *= scale
+
+    products = build_tdcp_stage(
+        adr=np.ones((2, 2), dtype=np.float64),
+        adr_state=np.ones((2, 2), dtype=np.float64),
+        adr_uncertainty=np.ones((2, 2), dtype=np.float64),
+        doppler=None,
+        tdcp_dt=np.array([1.0, 0.0], dtype=np.float64),
+        tdcp_consistency_threshold_m=1.5,
+        doppler_weights=None,
+        doppler_weights_fgo=None,
+        carrier_weights=None,
+        carrier_weights_fgo=np.array([[10.0, 20.0], [99.0, 99.0]], dtype=np.float64),
+        clock_jump=None,
+        tdcp_loffset_m=0.0,
+        matlab_residual_diagnostics_mask_path=None,
+        times_ms=np.array([1000.0, 2000.0], dtype=np.float64),
+        slot_keys=["G01", "G02"],
+        weights=np.ones((2, 2), dtype=np.float64),
+        weights_fgo=None,
+        signal_weights=np.ones((2, 2), dtype=np.float64),
+        signal_weights_fgo=None,
+        signal_doppler_weights=None,
+        signal_doppler_weights_fgo=None,
+        sat_ecef=np.zeros((2, 2, 3), dtype=np.float64),
+        kaggle_wls=np.zeros((2, 3), dtype=np.float64),
+        tdcp_geometry_correction=False,
+        tdcp_weight_scale=0.5,
+        build_tdcp_arrays_fn=build_fn,
+        apply_diagnostics_mask_fn=lambda **_kwargs: _raise_unexpected(),
+        apply_geometry_correction_fn=lambda *_args: _raise_unexpected(),
+        apply_weight_scale_fn=scale_fn,
+    )
+
+    np.testing.assert_allclose(products.tdcp_weights, [[1.0, 2.0]])
+    np.testing.assert_allclose(products.tdcp_weights_fgo, [[5.0, 10.0]])
+    assert calls == ["build", "scale", "scale"]
+
+
 def test_build_tdcp_stage_allows_missing_adr_and_still_runs_scale() -> None:
     calls: list[str] = []
 
@@ -2480,14 +2574,20 @@ def test_build_tdcp_stage_allows_missing_adr_and_still_runs_scale() -> None:
         tdcp_dt=np.array([1.0], dtype=np.float64),
         tdcp_consistency_threshold_m=1.5,
         doppler_weights=None,
+        doppler_weights_fgo=None,
+        carrier_weights=None,
+        carrier_weights_fgo=None,
         clock_jump=None,
         tdcp_loffset_m=0.0,
         matlab_residual_diagnostics_mask_path=None,
         times_ms=np.array([1000.0], dtype=np.float64),
         slot_keys=[],
         weights=np.zeros((1, 0), dtype=np.float64),
+        weights_fgo=None,
         signal_weights=np.zeros((1, 0), dtype=np.float64),
+        signal_weights_fgo=None,
         signal_doppler_weights=None,
+        signal_doppler_weights_fgo=None,
         sat_ecef=np.zeros((1, 0, 3), dtype=np.float64),
         kaggle_wls=np.zeros((1, 3), dtype=np.float64),
         tdcp_geometry_correction=False,
@@ -2513,6 +2613,7 @@ def test_build_imu_stage_returns_empty_when_measurements_missing(tmp_path: Path)
         elapsed_ns=None,
         reference_xyz_ecef=np.zeros((1, 3), dtype=np.float64),
         imu_frame="body",
+        imu_sample_dt_mode="bounded",
         load_device_imu_measurements_fn=lambda _trip_dir: (None, object(), None),
         process_device_imu_fn=lambda *_args: (_raise_unexpected()),
         project_stop_to_epochs_fn=lambda *_args: _raise_unexpected(),
@@ -2558,6 +2659,7 @@ def test_build_imu_stage_uses_injected_processing_pipeline(tmp_path: Path) -> No
         got_times_ms: np.ndarray,
         *,
         delta_frame: str,
+        sample_dt_mode: str,
         reference_xyz_ecef: np.ndarray,
     ) -> dict[str, Any]:
         assert gyro_proc == "gyro_proc"
@@ -2565,6 +2667,7 @@ def test_build_imu_stage_uses_injected_processing_pipeline(tmp_path: Path) -> No
         np.testing.assert_allclose(got_times_ms, times_ms)
         np.testing.assert_allclose(reference_xyz_ecef, reference)
         assert delta_frame == "ecef"
+        assert sample_dt_mode == "taroz"
         calls.append("preintegrate")
         return {"ok": True}
 
@@ -2574,6 +2677,7 @@ def test_build_imu_stage_uses_injected_processing_pipeline(tmp_path: Path) -> No
         elapsed_ns=elapsed_ns,
         reference_xyz_ecef=reference,
         imu_frame="ecef",
+        imu_sample_dt_mode="taroz",
         load_device_imu_measurements_fn=load_fn,
         process_device_imu_fn=process_fn,
         project_stop_to_epochs_fn=project_fn,
@@ -2595,6 +2699,7 @@ def test_build_imu_stage_suppresses_processing_failures(tmp_path: Path) -> None:
         elapsed_ns=None,
         reference_xyz_ecef=np.zeros((1, 3), dtype=np.float64),
         imu_frame="body",
+        imu_sample_dt_mode="bounded",
         load_device_imu_measurements_fn=lambda _trip_dir: (object(), object(), None),
         process_device_imu_fn=process_fn,
         project_stop_to_epochs_fn=lambda *_args: _raise_unexpected(),

@@ -38,6 +38,22 @@ fixed evaluation. Until then, keep variant-heavy code here.
 | `build_githubio_summary.py` | generated visual snapshot under `docs/` |
 | `build_paper_assets.py` | paper-facing summary tables and figures |
 | `reproduce_gsdc2023_matlab_reference_final.py` | GSDC MATLAB/reference final-output parity |
+| `run_gsdc2023_taroz_full_parity_gate.py` | fixed Taroz full GNSS+IMU state parity gate over the current smoke-device compare JSONs |
+| `summarize_gsdc2023_taroz_imu_state_parity.py` | flattens Taroz IMU state compare JSONs and applies optional group/metric thresholds |
+
+## Taroz Full Parity Gate
+
+After regenerating the Taroz MATLAB exports and native compare JSONs for the
+current smoke devices, run:
+
+```bash
+env PYTHONPATH=python:. python3 -m experiments.run_gsdc2023_taroz_full_parity_gate
+```
+
+The default gate reads the Pixel5, Pixel6Pro, and SM-G988B 100-epoch compare
+JSONs under `experiments/results/`, writes
+`taroz_imu_state_parity_summary_20260606.{csv,json}`, and fails with exit code
+2 if any fixed threshold is exceeded.
 
 ## Results
 

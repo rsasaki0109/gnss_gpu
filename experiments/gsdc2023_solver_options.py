@@ -14,50 +14,92 @@ class FgoRunOptions:
     clock_drift_sigma_m: float
     stop_velocity_sigma_mps: float
     stop_position_sigma_m: float
+    stop_attitude_sigma_rad: float
+    stop_velocity_huber_k: float
+    stop_position_huber_k: float
     apply_imu_prior: bool
     imu_position_sigma_m: float
     imu_velocity_sigma_mps: float
+    imu_attitude_state: bool
+    imu_attitude_sigma_rad: float
+    imu_preintegration_velocity_noise_mps_sqrt_hz: float
+    imu_preintegration_attitude_noise_rad_sqrt_hz: float
+    imu_diagonal_covariance: bool
+    imu_preintegration_covariance: bool
+    imu_factor_use_next_bias: bool
+    imu_bias_between_sample_count_scaling: bool
     imu_accel_bias_state: bool
     imu_accel_bias_prior_sigma_mps2: float
     imu_accel_bias_between_sigma_mps2: float
+    imu_gyro_bias_state: bool
+    imu_gyro_bias_prior_sigma_radps: float
+    imu_gyro_bias_between_sigma_radps: float
     fgo_iters: int
     tol: float
+    fgo_line_search: bool
+    fgo_lm_damping: float
     chunk_epochs: int
     use_vd: bool
     graph_relative_height: bool
     relative_height_sigma_m: float
+    relative_height_huber_k: float
     apply_absolute_height: bool
     absolute_height_sigma_m: float
+    absolute_height_huber_k: float
     fgo_robust_kernel: str = "huber"
     fgo_cauchy_c_m: float = 4.0
     fgo_cauchy_outer_iters: int = 3
     fgo_huber_k_pr: float = 0.0
+    fgo_huber_k_doppler: float = 0.0
+    fgo_huber_k_tdcp: float = 0.0
+    fgo_fixed_linearization: bool = False
 
     @classmethod
-    def from_config(cls, config: BridgeConfig, *, tol: float = 1e-7) -> "FgoRunOptions":
+    def from_config(cls, config: BridgeConfig, *, tol: float | None = None) -> "FgoRunOptions":
         return cls(
             motion_sigma_m=config.motion_sigma_m,
             clock_drift_sigma_m=config.clock_drift_sigma_m,
             stop_velocity_sigma_mps=config.stop_velocity_sigma_mps,
             stop_position_sigma_m=config.stop_position_sigma_m,
+            stop_attitude_sigma_rad=config.stop_attitude_sigma_rad,
+            stop_velocity_huber_k=config.stop_velocity_huber_k,
+            stop_position_huber_k=config.stop_position_huber_k,
             apply_imu_prior=config.apply_imu_prior,
             imu_position_sigma_m=config.imu_position_sigma_m,
             imu_velocity_sigma_mps=config.imu_velocity_sigma_mps,
+            imu_attitude_state=config.imu_attitude_state,
+            imu_attitude_sigma_rad=config.imu_attitude_sigma_rad,
+            imu_preintegration_velocity_noise_mps_sqrt_hz=config.imu_preintegration_velocity_noise_mps_sqrt_hz,
+            imu_preintegration_attitude_noise_rad_sqrt_hz=config.imu_preintegration_attitude_noise_rad_sqrt_hz,
+            imu_diagonal_covariance=config.imu_diagonal_covariance,
+            imu_preintegration_covariance=config.imu_preintegration_covariance,
+            imu_factor_use_next_bias=config.imu_factor_use_next_bias,
+            imu_bias_between_sample_count_scaling=config.imu_bias_between_sample_count_scaling,
             imu_accel_bias_state=config.imu_accel_bias_state,
             imu_accel_bias_prior_sigma_mps2=config.imu_accel_bias_prior_sigma_mps2,
             imu_accel_bias_between_sigma_mps2=config.imu_accel_bias_between_sigma_mps2,
+            imu_gyro_bias_state=config.imu_gyro_bias_state,
+            imu_gyro_bias_prior_sigma_radps=config.imu_gyro_bias_prior_sigma_radps,
+            imu_gyro_bias_between_sigma_radps=config.imu_gyro_bias_between_sigma_radps,
             fgo_iters=config.fgo_iters,
-            tol=float(tol),
+            tol=float(config.fgo_tol if tol is None else tol),
+            fgo_line_search=bool(getattr(config, "fgo_line_search", True)),
+            fgo_lm_damping=float(getattr(config, "fgo_lm_damping", 0.0)),
             chunk_epochs=config.chunk_epochs,
             use_vd=config.use_vd,
             graph_relative_height=config.graph_relative_height,
             relative_height_sigma_m=config.relative_height_sigma_m,
+            relative_height_huber_k=config.relative_height_huber_k,
             apply_absolute_height=config.apply_absolute_height,
             absolute_height_sigma_m=config.absolute_height_sigma_m,
+            absolute_height_huber_k=config.absolute_height_huber_k,
             fgo_robust_kernel=getattr(config, "fgo_robust_kernel", "huber"),
             fgo_cauchy_c_m=float(getattr(config, "fgo_cauchy_c_m", 4.0)),
             fgo_cauchy_outer_iters=int(getattr(config, "fgo_cauchy_outer_iters", 3)),
             fgo_huber_k_pr=float(getattr(config, "fgo_huber_k_pr", 0.0)),
+            fgo_huber_k_doppler=float(getattr(config, "fgo_huber_k_doppler", 0.0)),
+            fgo_huber_k_tdcp=float(getattr(config, "fgo_huber_k_tdcp", 0.0)),
+            fgo_fixed_linearization=bool(getattr(config, "fgo_fixed_linearization", False)),
         )
 
     def run_kwargs(self) -> dict[str, Any]:
@@ -66,28 +108,49 @@ class FgoRunOptions:
             "clock_drift_sigma_m": self.clock_drift_sigma_m,
             "stop_velocity_sigma_mps": self.stop_velocity_sigma_mps,
             "stop_position_sigma_m": self.stop_position_sigma_m,
+            "stop_attitude_sigma_rad": self.stop_attitude_sigma_rad,
+            "stop_velocity_huber_k": self.stop_velocity_huber_k,
+            "stop_position_huber_k": self.stop_position_huber_k,
             "apply_imu_prior": self.apply_imu_prior,
             "imu_position_sigma_m": self.imu_position_sigma_m,
             "imu_velocity_sigma_mps": self.imu_velocity_sigma_mps,
+            "imu_attitude_state": self.imu_attitude_state,
+            "imu_attitude_sigma_rad": self.imu_attitude_sigma_rad,
+            "imu_preintegration_velocity_noise_mps_sqrt_hz": self.imu_preintegration_velocity_noise_mps_sqrt_hz,
+            "imu_preintegration_attitude_noise_rad_sqrt_hz": self.imu_preintegration_attitude_noise_rad_sqrt_hz,
+            "imu_diagonal_covariance": self.imu_diagonal_covariance,
+            "imu_preintegration_covariance": self.imu_preintegration_covariance,
+            "imu_factor_use_next_bias": self.imu_factor_use_next_bias,
+            "imu_bias_between_sample_count_scaling": self.imu_bias_between_sample_count_scaling,
             "imu_accel_bias_state": self.imu_accel_bias_state,
             "imu_accel_bias_prior_sigma_mps2": self.imu_accel_bias_prior_sigma_mps2,
             "imu_accel_bias_between_sigma_mps2": self.imu_accel_bias_between_sigma_mps2,
+            "imu_gyro_bias_state": self.imu_gyro_bias_state,
+            "imu_gyro_bias_prior_sigma_radps": self.imu_gyro_bias_prior_sigma_radps,
+            "imu_gyro_bias_between_sigma_radps": self.imu_gyro_bias_between_sigma_radps,
             "fgo_iters": self.fgo_iters,
             "tol": self.tol,
+            "fgo_line_search": self.fgo_line_search,
+            "fgo_lm_damping": self.fgo_lm_damping,
             "chunk_epochs": self.chunk_epochs,
             "use_vd": self.use_vd,
             "graph_relative_height": self.graph_relative_height,
             "relative_height_sigma_m": self.relative_height_sigma_m,
+            "relative_height_huber_k": self.relative_height_huber_k,
             "apply_absolute_height": self.apply_absolute_height,
             "absolute_height_sigma_m": self.absolute_height_sigma_m,
+            "absolute_height_huber_k": self.absolute_height_huber_k,
             "fgo_robust_kernel": self.fgo_robust_kernel,
             "fgo_cauchy_c_m": self.fgo_cauchy_c_m,
             "fgo_cauchy_outer_iters": self.fgo_cauchy_outer_iters,
             "fgo_huber_k_pr": self.fgo_huber_k_pr,
+            "fgo_huber_k_doppler": self.fgo_huber_k_doppler,
+            "fgo_huber_k_tdcp": self.fgo_huber_k_tdcp,
+            "fgo_fixed_linearization": self.fgo_fixed_linearization,
         }
 
 
-def fgo_run_options_from_config(config: BridgeConfig, *, tol: float = 1e-7) -> FgoRunOptions:
+def fgo_run_options_from_config(config: BridgeConfig, *, tol: float | None = None) -> FgoRunOptions:
     return FgoRunOptions.from_config(config, tol=tol)
 
 

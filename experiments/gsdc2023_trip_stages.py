@@ -10,6 +10,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from experiments.gsdc2023_taroz_weighting import SN_PERCENTILE_DEFAULT, compute_trip_cn0_percentiles
+
 
 BaseCorrectionMatrixFn = Callable[[Path, str, np.ndarray, Sequence[Any], str], np.ndarray]
 BuildTripArraysFn = Callable[..., Any]
@@ -145,9 +147,12 @@ class PreparedObservationProducts:
     sat_clock_drift_mps: np.ndarray | None
     doppler: np.ndarray | None
     doppler_weights: np.ndarray | None
+    doppler_weights_fgo: np.ndarray | None
     adr: np.ndarray | None
     adr_state: np.ndarray | None
     adr_uncertainty: np.ndarray | None
+    carrier_weights: np.ndarray | None
+    carrier_weights_fgo: np.ndarray | None
     weights_fgo: np.ndarray | None = None
 
 
@@ -231,9 +236,11 @@ class ObservationMaskBaseCorrectionStageProducts:
 class TdcpStageProducts:
     tdcp_meas: np.ndarray | None
     tdcp_weights: np.ndarray | None
+    tdcp_weights_fgo: np.ndarray | None
     signal_tdcp_weights: np.ndarray | None
     tdcp_consistency_mask_count: int
     tdcp_geometry_correction_count: int
+    tdcp_raw_meas: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -280,6 +287,7 @@ class PostObservationStageConfig:
     tdcp_geometry_correction: bool
     tdcp_weight_scale: float
     imu_frame: str
+    imu_sample_dt_mode: str
     default_pd_l1_threshold_m: float
     default_pd_l5_threshold_m: float
     default_pr_l1_threshold_m: float
@@ -385,9 +393,12 @@ def assemble_trip_arrays_stage(
     rtklib_tropo_m: np.ndarray | None,
     doppler: np.ndarray | None,
     doppler_weights: np.ndarray | None,
+    doppler_weights_fgo: np.ndarray | None,
     adr: np.ndarray | None,
     adr_state: np.ndarray | None,
     adr_uncertainty: np.ndarray | None,
+    carrier_weights: np.ndarray | None,
+    carrier_weights_fgo: np.ndarray | None,
     pseudorange_bias_weights: np.ndarray,
     pseudorange_residual_stage: PseudorangeResidualStageProducts,
     time_delta: GraphTimeDeltaProducts,
@@ -425,14 +436,19 @@ def assemble_trip_arrays_stage(
         rtklib_tropo_m=rtklib_tropo_m,
         doppler=doppler,
         doppler_weights=doppler_weights,
+        doppler_weights_fgo=doppler_weights_fgo,
         pseudorange_bias_weights=pseudorange_bias_weights,
         pseudorange_isb_by_group=pseudorange_residual_stage.pseudorange_isb_by_group,
         dt=time_delta.dt,
         tdcp_meas=tdcp_stage.tdcp_meas,
+        tdcp_raw_meas=tdcp_stage.tdcp_raw_meas,
         tdcp_weights=tdcp_stage.tdcp_weights,
+        tdcp_weights_fgo=tdcp_stage.tdcp_weights_fgo,
         adr=adr,
         adr_state=adr_state,
         adr_uncertainty=adr_uncertainty,
+        carrier_weights=carrier_weights,
+        carrier_weights_fgo=carrier_weights_fgo,
         n_sat_slots=n_sat_slots,
         slot_keys=tuple(slot_keys),
         elapsed_ns=elapsed_ns,
@@ -512,9 +528,12 @@ def assemble_prepared_trip_arrays_stage(
         rtklib_tropo_m=observation_products.rtklib_tropo_m,
         doppler=observation_products.doppler,
         doppler_weights=observation_products.doppler_weights,
+        doppler_weights_fgo=observation_products.doppler_weights_fgo,
         adr=observation_products.adr,
         adr_state=observation_products.adr_state,
         adr_uncertainty=observation_products.adr_uncertainty,
+        carrier_weights=observation_products.carrier_weights,
+        carrier_weights_fgo=observation_products.carrier_weights_fgo,
         pseudorange_bias_weights=observation_products.pseudorange_bias_weights,
         pseudorange_residual_stage=mask_base_stage.pseudorange_residual_stage,
         time_delta=post_observation_stages.time_delta,
@@ -646,6 +665,31 @@ def build_raw_observation_frame(
     )
 
 
+def taroz_cn0_percentiles_from_raw_frame(
+    raw_frame: Any,
+    *,
+    is_l5_signal_fn: IsL5SignalFn,
+    percentile: float = SN_PERCENTILE_DEFAULT,
+) -> Any:
+    l1_cn0: list[float] = []
+    l5_cn0: list[float] = []
+    if "Cn0DbHz" not in raw_frame or "SignalType" not in raw_frame:
+        return compute_trip_cn0_percentiles((np.array([], dtype=np.float64), np.array([], dtype=np.float64)))
+    for row in raw_frame[["Cn0DbHz", "SignalType"]].itertuples(index=False):
+        cn0_val = float(getattr(row, "Cn0DbHz", float("nan")))
+        if not np.isfinite(cn0_val):
+            continue
+        signal_type = str(getattr(row, "SignalType", ""))
+        if is_l5_signal_fn(signal_type):
+            l5_cn0.append(cn0_val)
+        else:
+            l1_cn0.append(cn0_val)
+    return compute_trip_cn0_percentiles(
+        (np.asarray(l1_cn0, dtype=np.float64), np.asarray(l5_cn0, dtype=np.float64)),
+        percentile=percentile,
+    )
+
+
 def build_observation_matrix_input_stage(
     filtered_frame: Any,
     *,
@@ -695,7 +739,10 @@ def build_filled_observation_matrix_stage(
     rtklib_tropo_fn: Callable[..., Any],
     matlab_signal_clock_dim: int,
     gps_iono_alpha_beta: Any,
+    use_matlab_signal_clock: bool = False,
     use_rtklib_tropo: bool = False,
+    taroz_full_trip_cn0_percentile: bool = False,
+    trip_cn0_percentiles_override: Any | None = None,
 ) -> FilledObservationMatrixProducts:
     epochs = select_epoch_observations_fn(
         epoch_time_context.epoch_time_keys,
@@ -709,6 +756,23 @@ def build_filled_observation_matrix_stage(
     )
     if not epochs:
         raise RuntimeError("No usable epochs found")
+
+    cn0_percentile_epochs = None
+    if (
+        trip_cn0_percentiles_override is None
+        and taroz_full_trip_cn0_percentile
+        and (weight_mode == "taroz_sn" or fgo_weight_mode == "taroz_sn")
+    ):
+        cn0_percentile_epochs = select_epoch_observations_fn(
+            epoch_time_context.epoch_time_keys,
+            epoch_time_context.grouped_observations,
+            metadata_context.baseline_lookup,
+            gt_times,
+            gt_ecef,
+            start_epoch=0,
+            max_epochs=1_000_000_000,
+            nearest_index_fn=nearest_index_fn,
+        )
 
     observations = fill_observation_matrices_fn(
         epochs,
@@ -736,8 +800,11 @@ def build_filled_observation_matrix_stage(
         elevation_azimuth_fn=elevation_azimuth_fn,
         rtklib_tropo_fn=rtklib_tropo_fn,
         matlab_signal_clock_dim=matlab_signal_clock_dim,
+        use_matlab_signal_clock=use_matlab_signal_clock,
         gps_iono_alpha_beta=gps_iono_alpha_beta,
         use_rtklib_tropo=use_rtklib_tropo,
+        cn0_percentile_epochs=cn0_percentile_epochs,
+        trip_cn0_percentiles_override=trip_cn0_percentiles_override,
     )
     return FilledObservationMatrixProducts(
         epochs=epochs,
@@ -835,7 +902,9 @@ def build_observation_preparation_stages(
     matlab_signal_clock_dim: int,
     recompute_rtklib_tropo_matrix_fn: RecomputeRtklibTropoMatrixFn,
     recompute_rtklib_iono_matrix_fn: RecomputeRtklibIonoMatrixFn,
+    use_matlab_signal_clock: bool = False,
     use_rtklib_tropo: bool = False,
+    taroz_full_trip_cn0_percentile: bool = False,
 ) -> ObservationPreparationStageProducts:
     raw_observation_frame = build_raw_observation_frame(
         raw_frame,
@@ -854,6 +923,12 @@ def build_observation_preparation_stages(
         append_gnss_log_only_gps_rows_fn=append_gnss_log_only_gps_rows_fn,
         matlab_signal_observation_masks_fn=matlab_signal_observation_masks_fn,
     )
+    trip_cn0_percentiles_override = None
+    if taroz_full_trip_cn0_percentile and (weight_mode == "taroz_sn" or fgo_weight_mode == "taroz_sn"):
+        trip_cn0_percentiles_override = taroz_cn0_percentiles_from_raw_frame(
+            raw_frame,
+            is_l5_signal_fn=is_l5_signal_fn,
+        )
     metadata_context = build_epoch_metadata_context(
         epoch_meta,
         repair_baseline_wls_fn=repair_baseline_wls_fn,
@@ -908,7 +983,10 @@ def build_observation_preparation_stages(
         rtklib_tropo_fn=rtklib_tropo_fn,
         matlab_signal_clock_dim=matlab_signal_clock_dim,
         gps_iono_alpha_beta=observation_matrix_input.gps_iono_alpha_beta,
+        use_matlab_signal_clock=use_matlab_signal_clock,
         use_rtklib_tropo=use_rtklib_tropo,
+        taroz_full_trip_cn0_percentile=taroz_full_trip_cn0_percentile,
+        trip_cn0_percentiles_override=trip_cn0_percentiles_override,
     )
     observations = observation_matrix_stage.observations
     post_fill_observation = postprocess_filled_observation_stage(
@@ -979,9 +1057,12 @@ def unpack_observation_preparation_stage(
         sat_clock_drift_mps=observations.sat_clock_drift_mps,
         doppler=observations.doppler,
         doppler_weights=observations.doppler_weights,
+        doppler_weights_fgo=getattr(observations, "doppler_weights_fgo", None),
         adr=observations.adr,
         adr_state=observations.adr_state,
         adr_uncertainty=observations.adr_uncertainty,
+        carrier_weights=getattr(observations, "carrier_weights", None),
+        carrier_weights_fgo=getattr(observations, "carrier_weights_fgo", None),
         weights_fgo=getattr(observations, "weights_fgo", None),
     )
 
@@ -1543,7 +1624,9 @@ def build_post_observation_stages(
     pseudorange_observable: np.ndarray,
     pseudorange_bias_weights: np.ndarray,
     weights: np.ndarray,
+    weights_fgo: np.ndarray | None,
     doppler_weights: np.ndarray | None,
+    doppler_weights_fgo: np.ndarray | None,
     apply_absolute_height: bool,
     absolute_height_dist_m: float,
     kaggle_wls: np.ndarray,
@@ -1587,8 +1670,11 @@ def build_post_observation_stages(
     adr: np.ndarray | None,
     adr_state: np.ndarray | None,
     adr_uncertainty: np.ndarray | None,
+    carrier_weights: np.ndarray | None,
+    carrier_weights_fgo: np.ndarray | None,
     elapsed_ns: Any,
     imu_frame: str,
+    imu_sample_dt_mode: str,
     gnss_log_corrected_pseudorange_matrix_fn: GnssLogPseudorangeMatrixFn,
     load_absolute_height_reference_ecef_fn: LoadAbsoluteHeightFn,
     clock_jump_from_epoch_counts_fn: ClockJumpFromEpochCountsFn,
@@ -1635,7 +1721,9 @@ def build_post_observation_stages(
     )
 
     signal_weights = weights.copy()
+    signal_weights_fgo = weights_fgo.copy() if weights_fgo is not None else None
     signal_doppler_weights = doppler_weights.copy() if doppler_weights is not None else None
+    signal_doppler_weights_fgo = doppler_weights_fgo.copy() if doppler_weights_fgo is not None else None
     absolute_height_stage = build_absolute_height_stage(
         apply_absolute_height=apply_absolute_height,
         trip_dir=trip_dir,
@@ -1739,14 +1827,20 @@ def build_post_observation_stages(
         tdcp_dt=time_delta.tdcp_dt,
         tdcp_consistency_threshold_m=tdcp_consistency_threshold_m,
         doppler_weights=doppler_weights,
+        doppler_weights_fgo=doppler_weights_fgo,
+        carrier_weights=carrier_weights,
+        carrier_weights_fgo=carrier_weights_fgo,
         clock_jump=clock_residual_stage.clock_jump,
         tdcp_loffset_m=tdcp_loffset_m,
         matlab_residual_diagnostics_mask_path=matlab_residual_diagnostics_mask_path,
         times_ms=times_ms,
         slot_keys=slot_keys,
         weights=weights,
+        weights_fgo=weights_fgo,
         signal_weights=signal_weights,
+        signal_weights_fgo=signal_weights_fgo,
         signal_doppler_weights=signal_doppler_weights,
+        signal_doppler_weights_fgo=signal_doppler_weights_fgo,
         sat_ecef=sat_ecef,
         kaggle_wls=kaggle_wls,
         tdcp_geometry_correction=tdcp_geometry_correction,
@@ -1762,6 +1856,7 @@ def build_post_observation_stages(
         elapsed_ns=elapsed_ns,
         reference_xyz_ecef=kaggle_wls,
         imu_frame=imu_frame,
+        imu_sample_dt_mode=imu_sample_dt_mode,
         load_device_imu_measurements_fn=load_device_imu_measurements_fn,
         process_device_imu_fn=process_device_imu_fn,
         project_stop_to_epochs_fn=project_stop_to_epochs_fn,
@@ -1801,7 +1896,9 @@ def build_configured_post_observation_stages(
         pseudorange_observable=observation_products.pseudorange_observable,
         pseudorange_bias_weights=observation_products.pseudorange_bias_weights,
         weights=observation_products.weights,
+        weights_fgo=observation_products.weights_fgo,
         doppler_weights=observation_products.doppler_weights,
+        doppler_weights_fgo=observation_products.doppler_weights_fgo,
         apply_absolute_height=config.apply_absolute_height,
         absolute_height_dist_m=config.absolute_height_dist_m,
         kaggle_wls=observation_products.kaggle_wls,
@@ -1845,8 +1942,11 @@ def build_configured_post_observation_stages(
         adr=observation_products.adr,
         adr_state=observation_products.adr_state,
         adr_uncertainty=observation_products.adr_uncertainty,
+        carrier_weights=observation_products.carrier_weights,
+        carrier_weights_fgo=observation_products.carrier_weights_fgo,
         elapsed_ns=observation_products.elapsed_ns,
         imu_frame=config.imu_frame,
+        imu_sample_dt_mode=config.imu_sample_dt_mode,
         gnss_log_corrected_pseudorange_matrix_fn=dependencies.gnss_log_corrected_pseudorange_matrix_fn,
         load_absolute_height_reference_ecef_fn=dependencies.load_absolute_height_reference_ecef_fn,
         clock_jump_from_epoch_counts_fn=dependencies.clock_jump_from_epoch_counts_fn,
@@ -1887,14 +1987,20 @@ def build_tdcp_stage(
     tdcp_dt: np.ndarray,
     tdcp_consistency_threshold_m: float,
     doppler_weights: np.ndarray | None,
+    doppler_weights_fgo: np.ndarray | None,
+    carrier_weights: np.ndarray | None,
+    carrier_weights_fgo: np.ndarray | None,
     clock_jump: np.ndarray | None,
     tdcp_loffset_m: float,
     matlab_residual_diagnostics_mask_path: Path | None,
     times_ms: np.ndarray,
     slot_keys: Sequence[Any],
     weights: np.ndarray,
+    weights_fgo: np.ndarray | None,
     signal_weights: np.ndarray,
+    signal_weights_fgo: np.ndarray | None,
     signal_doppler_weights: np.ndarray | None,
+    signal_doppler_weights_fgo: np.ndarray | None,
     sat_ecef: np.ndarray,
     kaggle_wls: np.ndarray,
     tdcp_geometry_correction: bool,
@@ -1905,6 +2011,7 @@ def build_tdcp_stage(
     apply_weight_scale_fn: ApplyTdcpWeightScaleFn,
 ) -> TdcpStageProducts:
     tdcp_meas = None
+    tdcp_raw_meas = None
     tdcp_weights = None
     tdcp_consistency_mask_count = 0
     if adr is not None and adr_state is not None:
@@ -1918,9 +2025,11 @@ def build_tdcp_stage(
             tdcp_dt,
             consistency_threshold_m=tdcp_consistency_threshold_m,
             doppler_weights=doppler_weights,
+            carrier_weights=carrier_weights,
             clock_jump=clock_jump,
             loffset_m=tdcp_loffset_m,
         )
+        tdcp_raw_meas = tdcp_meas.copy() if tdcp_meas is not None else None
 
     signal_tdcp_weights = tdcp_weights.copy() if tdcp_weights is not None else None
     if matlab_residual_diagnostics_mask_path is not None:
@@ -1935,9 +2044,26 @@ def build_tdcp_stage(
             tdcp_meas=tdcp_meas,
             tdcp_weights=tdcp_weights,
             signal_tdcp_weights=signal_tdcp_weights,
+            weights_fgo=weights_fgo,
+            signal_weights_fgo=signal_weights_fgo,
+            doppler_weights_fgo=doppler_weights_fgo,
+            signal_doppler_weights_fgo=signal_doppler_weights_fgo,
         )
 
     tdcp_geometry_correction_count = 0
+    tdcp_weights_fgo = None
+    if tdcp_weights is not None and carrier_weights_fgo is not None:
+        tdcp_weights_fgo = tdcp_weights.copy()
+        n_pair = min(tdcp_weights_fgo.shape[0], carrier_weights_fgo.shape[0])
+        n_sat = min(tdcp_weights_fgo.shape[1], carrier_weights_fgo.shape[1])
+        for epoch_idx in range(n_pair):
+            for sat_idx in range(n_sat):
+                if float(tdcp_weights_fgo[epoch_idx, sat_idx]) <= 0.0:
+                    continue
+                candidate_weight = float(carrier_weights_fgo[epoch_idx, sat_idx])
+                if np.isfinite(candidate_weight) and candidate_weight > 0.0:
+                    tdcp_weights_fgo[epoch_idx, sat_idx] = candidate_weight
+
     if tdcp_geometry_correction:
         tdcp_geometry_correction_count = apply_geometry_correction_fn(
             tdcp_meas,
@@ -1946,12 +2072,16 @@ def build_tdcp_stage(
             kaggle_wls,
         )
     apply_weight_scale_fn(tdcp_weights, tdcp_weight_scale)
+    if tdcp_weights_fgo is not None:
+        apply_weight_scale_fn(tdcp_weights_fgo, tdcp_weight_scale)
     return TdcpStageProducts(
         tdcp_meas=tdcp_meas,
         tdcp_weights=tdcp_weights,
+        tdcp_weights_fgo=tdcp_weights_fgo,
         signal_tdcp_weights=signal_tdcp_weights,
         tdcp_consistency_mask_count=tdcp_consistency_mask_count,
         tdcp_geometry_correction_count=tdcp_geometry_correction_count,
+        tdcp_raw_meas=tdcp_raw_meas,
     )
 
 
@@ -1962,6 +2092,7 @@ def build_imu_stage(
     elapsed_ns: Any,
     reference_xyz_ecef: np.ndarray,
     imu_frame: str,
+    imu_sample_dt_mode: str,
     load_device_imu_measurements_fn: LoadImuMeasurementsFn,
     process_device_imu_fn: ProcessImuFn,
     project_stop_to_epochs_fn: ProjectStopFn,
@@ -1979,6 +2110,7 @@ def build_imu_stage(
             gyro_proc,
             times_ms,
             delta_frame=imu_frame,
+            sample_dt_mode=imu_sample_dt_mode,
             reference_xyz_ecef=reference_xyz_ecef,
         )
     except Exception:  # noqa: BLE001

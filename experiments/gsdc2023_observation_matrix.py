@@ -13,8 +13,11 @@ import pandas as pd
 
 from experiments.gsdc2023_imu import ecef_to_enu_relative as _ecef_to_enu_relative
 from experiments.gsdc2023_taroz_weighting import (
+    SIGTYPE_OTHER,
     SN_PERCENTILE_DEFAULT,
     TripCN0Percentiles,
+    compute_carrier_sigma_sn,
+    compute_doppler_sigma_sn,
     compute_pr_sigma_sn,
     compute_trip_cn0_percentiles,
     constellation_signal_to_sigtype,
@@ -117,14 +120,19 @@ class TripArrays:
     rtklib_tropo_m: np.ndarray | None = None
     doppler: np.ndarray | None = None
     doppler_weights: np.ndarray | None = None
+    doppler_weights_fgo: np.ndarray | None = None
     pseudorange_bias_weights: np.ndarray | None = None
     pseudorange_isb_by_group: dict[int, float] | None = None
     dt: np.ndarray | None = None
     tdcp_meas: np.ndarray | None = None
+    tdcp_raw_meas: np.ndarray | None = None
     tdcp_weights: np.ndarray | None = None
+    tdcp_weights_fgo: np.ndarray | None = None
     adr: np.ndarray | None = None
     adr_state: np.ndarray | None = None
     adr_uncertainty: np.ndarray | None = None
+    carrier_weights: np.ndarray | None = None
+    carrier_weights_fgo: np.ndarray | None = None
     n_sat_slots: int = 0
     slot_keys: tuple[tuple[int, int, str], ...] = ()
     elapsed_ns: np.ndarray | None = None
@@ -144,6 +152,8 @@ class TripArrays:
     tdcp_consistency_mask_count: int = 0
     tdcp_geometry_correction_count: int = 0
     dual_frequency: bool = False
+    build_start_epoch: int = 0
+    build_max_epochs: int = 0
     # Optional FGO-only observation weights used by the FGO solver when a
     # ``fgo_weight_mode`` distinct from ``weight_mode`` is requested.  When
     # ``None`` (the default), ``weights`` is reused for FGO as well, keeping
@@ -151,6 +161,19 @@ class TripArrays:
     # design (``weight_mode`` controls gate/WLS, ``fgo_weight_mode`` controls
     # the FGO objective).
     weights_fgo: np.ndarray | None = None
+    # Optional Taroz-export fixed-factor values for FGO parity runs.  These
+    # carry the patched MATLAB factor CSV's measurement/sigma/origin/LOS
+    # directly into the native fixed-linearized solver.
+    fgo_pr_measurement: np.ndarray | None = None
+    fgo_pr_linearization_ref_ecef: np.ndarray | None = None
+    fgo_pr_linearization_los_ecef: np.ndarray | None = None
+    fgo_doppler_measurement: np.ndarray | None = None
+    fgo_doppler_linearization_ref_vel: np.ndarray | None = None
+    fgo_doppler_linearization_los_ecef: np.ndarray | None = None
+    fgo_tdcp_measurement: np.ndarray | None = None
+    fgo_tdcp_linearization_ref_ecef: np.ndarray | None = None
+    fgo_sat_ecef: np.ndarray | None = None
+    fgo_position_origin_ecef: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -186,9 +209,12 @@ class ObservationMatrixProducts:
     sat_clock_drift_mps: np.ndarray | None = None
     doppler: np.ndarray | None = None
     doppler_weights: np.ndarray | None = None
+    doppler_weights_fgo: np.ndarray | None = None
     adr: np.ndarray | None = None
     adr_state: np.ndarray | None = None
     adr_uncertainty: np.ndarray | None = None
+    carrier_weights: np.ndarray | None = None
+    carrier_weights_fgo: np.ndarray | None = None
     weights_fgo: np.ndarray | None = None
 
 
@@ -937,6 +963,8 @@ def _compute_pr_weight(
         cn0_val = float(getattr(row, "Cn0DbHz", float("nan")))
         is_l5 = is_l5_signal_fn(str(row.SignalType))
         sigtype = constellation_signal_to_sigtype(int(row.ConstellationType), is_l5)
+        if sigtype == SIGTYPE_OTHER:
+            return 0.0
         sigma_p = compute_pr_sigma_sn(
             cn0_val,
             trip_cn0_percentiles.for_frequency(is_l5),
@@ -948,6 +976,47 @@ def _compute_pr_weight(
         return float(pr_w)
     cn0_val = float(getattr(row, "Cn0DbHz", float("nan")))
     return max(cn0_val, 1.0) if np.isfinite(cn0_val) else 1.0
+
+
+def _compute_doppler_weight(
+    row: Any,
+    *,
+    mode: str,
+    trip_cn0_percentiles: "TripCN0Percentiles | None",
+    is_l5_signal_fn: Callable[[str], bool],
+    fallback_sigma_mps: float,
+) -> float:
+    if mode == "taroz_sn" and trip_cn0_percentiles is not None:
+        cn0_val = float(getattr(row, "Cn0DbHz", float("nan")))
+        is_l5 = is_l5_signal_fn(str(row.SignalType))
+        sigma_d = compute_doppler_sigma_sn(
+            cn0_val,
+            trip_cn0_percentiles.for_frequency(is_l5),
+        )
+        doppler_w = sigma_to_weight(sigma_d)
+        if doppler_w > 0.0:
+            return float(doppler_w)
+    return float(1.0 / (max(float(fallback_sigma_mps), 0.05) ** 2))
+
+
+def _compute_carrier_weight(
+    row: Any,
+    *,
+    mode: str,
+    trip_cn0_percentiles: "TripCN0Percentiles | None",
+    is_l5_signal_fn: Callable[[str], bool],
+) -> float:
+    if mode != "taroz_sn" or trip_cn0_percentiles is None:
+        return 0.0
+    cn0_val = float(getattr(row, "Cn0DbHz", float("nan")))
+    is_l5 = is_l5_signal_fn(str(row.SignalType))
+    sigtype = constellation_signal_to_sigtype(int(row.ConstellationType), is_l5)
+    sigma_l = compute_carrier_sigma_sn(
+        cn0_val,
+        trip_cn0_percentiles.for_frequency(is_l5),
+        sigtype,
+    )
+    return sigma_to_weight(sigma_l)
 
 
 def fill_observation_matrices(
@@ -978,7 +1047,10 @@ def fill_observation_matrices(
     elevation_azimuth_fn: Callable[[np.ndarray, np.ndarray], tuple[float, float]],
     rtklib_tropo_fn: Callable[[float, float, float], float],
     matlab_signal_clock_dim: int,
+    use_matlab_signal_clock: bool = False,
     use_rtklib_tropo: bool = False,
+    cn0_percentile_epochs: Sequence[RawEpochObservation] | None = None,
+    trip_cn0_percentiles_override: "TripCN0Percentiles | None" = None,
 ) -> ObservationMatrixProducts:
     if not epochs:
         raise ValueError("at least one epoch is required")
@@ -988,7 +1060,7 @@ def fill_observation_matrices(
     n_epoch = len(epochs)
     n_sat_slots = len(slot_keys)
     visible_max = max(len(epoch.group) for epoch in epochs)
-    n_clock = matlab_signal_clock_dim if dual_frequency else (3 if multi_gnss else 1)
+    n_clock = matlab_signal_clock_dim if (dual_frequency or use_matlab_signal_clock) else (3 if multi_gnss else 1)
 
     sat_ecef = np.zeros((n_epoch, n_sat_slots, 3), dtype=np.float64)
     pseudorange = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
@@ -1025,6 +1097,16 @@ def fill_observation_matrices(
     sat_clock_drift_mps = np.zeros((n_epoch, n_sat_slots), dtype=np.float64) if has_sat_clock_drift else None
     doppler = np.zeros((n_epoch, n_sat_slots), dtype=np.float64) if has_doppler else None
     doppler_weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64) if has_doppler else None
+    doppler_weights_fgo = (
+        np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
+        if (
+            has_doppler
+            and fgo_weight_mode is not None
+            and fgo_weight_mode != weight_mode
+            and fgo_weight_mode == "taroz_sn"
+        )
+        else None
+    )
 
     has_adr = tdcp_enabled and {"AccumulatedDeltaRangeMeters", "AccumulatedDeltaRangeState"}.issubset(column_set)
     adr = np.full((n_epoch, n_sat_slots), np.nan, dtype=np.float64) if has_adr else None
@@ -1032,6 +1114,17 @@ def fill_observation_matrices(
     adr_uncertainty = (
         np.full((n_epoch, n_sat_slots), np.nan, dtype=np.float64)
         if has_adr and "AccumulatedDeltaRangeUncertaintyMeters" in column_set
+        else None
+    )
+    carrier_weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64) if has_adr and weight_mode == "taroz_sn" else None
+    carrier_weights_fgo = (
+        np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
+        if (
+            has_adr
+            and fgo_weight_mode is not None
+            and fgo_weight_mode != weight_mode
+            and fgo_weight_mode == "taroz_sn"
+        )
         else None
     )
 
@@ -1066,21 +1159,24 @@ def fill_observation_matrices(
 
     trip_cn0_percentiles: "TripCN0Percentiles | None" = None
     if weight_mode == "taroz_sn" or fgo_weight_mode == "taroz_sn":
-        l1_cn0: list[float] = []
-        l5_cn0: list[float] = []
-        for epoch in epochs:
-            for row in epoch.group.itertuples(index=False):
-                cn0_val = float(getattr(row, "Cn0DbHz", float("nan")))
-                if not np.isfinite(cn0_val):
-                    continue
-                if is_l5_signal_fn(str(row.SignalType)):
-                    l5_cn0.append(cn0_val)
-                else:
-                    l1_cn0.append(cn0_val)
-        trip_cn0_percentiles = compute_trip_cn0_percentiles(
-            (np.asarray(l1_cn0, dtype=np.float64), np.asarray(l5_cn0, dtype=np.float64)),
-            percentile=SN_PERCENTILE_DEFAULT,
-        )
+        trip_cn0_percentiles = trip_cn0_percentiles_override
+        if trip_cn0_percentiles is None:
+            percentile_epochs = cn0_percentile_epochs if cn0_percentile_epochs is not None else epochs
+            l1_cn0: list[float] = []
+            l5_cn0: list[float] = []
+            for epoch in percentile_epochs:
+                for row in epoch.group.itertuples(index=False):
+                    cn0_val = float(getattr(row, "Cn0DbHz", float("nan")))
+                    if not np.isfinite(cn0_val):
+                        continue
+                    if is_l5_signal_fn(str(row.SignalType)):
+                        l5_cn0.append(cn0_val)
+                    else:
+                        l1_cn0.append(cn0_val)
+            trip_cn0_percentiles = compute_trip_cn0_percentiles(
+                (np.asarray(l1_cn0, dtype=np.float64), np.asarray(l5_cn0, dtype=np.float64)),
+                percentile=SN_PERCENTILE_DEFAULT,
+            )
 
     for epoch_idx, epoch in enumerate(epochs):
         tow_ms = epoch.time_ms
@@ -1288,7 +1384,7 @@ def fill_observation_matrices(
                     sat_clock_drift_mps[epoch_idx, sat_idx] = sat_clock_drift
 
             if doppler is not None and doppler_weights is not None:
-                doppler_value = -float(row.PseudorangeRateMetersPerSecond)
+                doppler_value = float(row.PseudorangeRateMetersPerSecond)
                 if np.isfinite(doppler_value):
                     doppler[epoch_idx, sat_idx] = doppler_value
                     sigma = 1.0
@@ -1297,13 +1393,41 @@ def fill_observation_matrices(
                         if np.isfinite(sigma_unc) and sigma_unc > 0.0:
                             sigma = sigma_unc
                     if d_ok:
-                        doppler_weights[epoch_idx, sat_idx] = 1.0 / (max(sigma, 0.05) ** 2)
+                        doppler_weights[epoch_idx, sat_idx] = _compute_doppler_weight(
+                            row,
+                            mode=weight_mode,
+                            trip_cn0_percentiles=trip_cn0_percentiles,
+                            is_l5_signal_fn=is_l5_signal_fn,
+                            fallback_sigma_mps=sigma,
+                        )
+                        if doppler_weights_fgo is not None:
+                            doppler_weights_fgo[epoch_idx, sat_idx] = _compute_doppler_weight(
+                                row,
+                                mode=str(fgo_weight_mode),
+                                trip_cn0_percentiles=trip_cn0_percentiles,
+                                is_l5_signal_fn=is_l5_signal_fn,
+                                fallback_sigma_mps=sigma,
+                            )
 
             if adr is not None and adr_state is not None:
                 adr_value = adr_sign * float(row.AccumulatedDeltaRangeMeters)
                 if l_ok and np.isfinite(adr_value) and adr_value != 0.0:
                     adr[epoch_idx, sat_idx] = adr_value
                     adr_state[epoch_idx, sat_idx] = int(row.AccumulatedDeltaRangeState)
+                    if carrier_weights is not None:
+                        carrier_weights[epoch_idx, sat_idx] = _compute_carrier_weight(
+                            row,
+                            mode=weight_mode,
+                            trip_cn0_percentiles=trip_cn0_percentiles,
+                            is_l5_signal_fn=is_l5_signal_fn,
+                        )
+                    if carrier_weights_fgo is not None:
+                        carrier_weights_fgo[epoch_idx, sat_idx] = _compute_carrier_weight(
+                            row,
+                            mode=str(fgo_weight_mode),
+                            trip_cn0_percentiles=trip_cn0_percentiles,
+                            is_l5_signal_fn=is_l5_signal_fn,
+                        )
                 if l_ok and adr_uncertainty is not None:
                     adr_unc = float(row.AccumulatedDeltaRangeUncertaintyMeters)
                     if np.isfinite(adr_unc) and adr_unc > 0.0:
@@ -1333,9 +1457,12 @@ def fill_observation_matrices(
         sat_clock_drift_mps=sat_clock_drift_mps,
         doppler=doppler,
         doppler_weights=doppler_weights,
+        doppler_weights_fgo=doppler_weights_fgo,
         adr=adr,
         adr_state=adr_state,
         adr_uncertainty=adr_uncertainty,
+        carrier_weights=carrier_weights,
+        carrier_weights_fgo=carrier_weights_fgo,
         weights_fgo=weights_fgo,
     )
 

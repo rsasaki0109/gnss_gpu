@@ -13,11 +13,10 @@ Ports the ``"sn"`` (SNR) branch of ``obserrmodel.m`` and the
     σ_D[i] = D_sn_ratio * sn_base[i]                 # NB: no sigfactor
     σ_L[i] = L_sn_ratio * sn_base[i] * sigfactor[i]
 
-QZSS is folded into the GPS clock family (matching
-``MATLAB_SIGNAL_CLOCK_KIND_L1``/``_L5`` in ``gsdc2023_signal_model``),
-since taroz's ``sysfreq2sigtype.m`` enumerates only GPS/GLO/GAL/BDS and
-QZSS would otherwise be tagged ``Other`` (sigfactor NaN, dropping the
-observation entirely).
+QZSS follows taroz's ``sysfreq2sigtype.m`` behavior: it is not enumerated
+and is therefore tagged ``Other`` (sigfactor NaN).  Pseudorange and carrier
+weights for ``Other`` signals become zero; Doppler weights remain signal-type
+independent, matching ``obserrmodel.m``.
 """
 from __future__ import annotations
 
@@ -65,17 +64,18 @@ CONSTELLATION_GALILEO = 6
 def constellation_signal_to_sigtype(constellation_type: int, is_l5: bool) -> int:
     """Map Android constellation type + L1/L5 flag to taroz sigtype index.
 
-    QZSS is folded into the matching GPS sigtype to avoid sigfactor=NaN.
+    QZSS is intentionally not folded into GPS here because taroz
+    ``sysfreq2sigtype.m`` maps it to ``Other``.
     """
     if is_l5:
-        if constellation_type == CONSTELLATION_GPS or constellation_type == CONSTELLATION_QZSS:
+        if constellation_type == CONSTELLATION_GPS:
             return SIGTYPE_GPS_L5
         if constellation_type == CONSTELLATION_GALILEO:
             return SIGTYPE_GAL_E5
         if constellation_type == CONSTELLATION_BEIDOU:
             return SIGTYPE_BDS_B2A
         return SIGTYPE_OTHER
-    if constellation_type == CONSTELLATION_GPS or constellation_type == CONSTELLATION_QZSS:
+    if constellation_type == CONSTELLATION_GPS:
         return SIGTYPE_GPS_L1
     if constellation_type == CONSTELLATION_GLONASS:
         return SIGTYPE_GLO_G1

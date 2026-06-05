@@ -85,8 +85,12 @@ def test_apply_matlab_residual_diagnostics_mask_restores_signal_weights(tmp_path
     )
     weights = np.full((2, 3), 9.0, dtype=np.float64)
     signal_weights = np.array([[0.25, 0.0, 0.75], [0.5, 0.0, 0.0]], dtype=np.float64)
+    weights_fgo = np.full((2, 3), 99.0, dtype=np.float64)
+    signal_weights_fgo = np.array([[10.0, 0.0, 30.0], [50.0, 0.0, 0.0]], dtype=np.float64)
     doppler_weights = np.full((2, 3), 8.0, dtype=np.float64)
     signal_doppler_weights = np.array([[4.0, 0.0, 2.0], [3.0, 0.0, 0.0]], dtype=np.float64)
+    doppler_weights_fgo = np.full((2, 3), 88.0, dtype=np.float64)
+    signal_doppler_weights_fgo = np.array([[40.0, 0.0, 20.0], [30.0, 0.0, 0.0]], dtype=np.float64)
     tdcp_meas = np.array([[12.0, 13.0, 14.0]], dtype=np.float64)
     tdcp_weights = np.full((1, 3), 7.0, dtype=np.float64)
     signal_tdcp_weights = np.array([[42.0, 0.0, 11.0]], dtype=np.float64)
@@ -102,6 +106,10 @@ def test_apply_matlab_residual_diagnostics_mask_restores_signal_weights(tmp_path
         tdcp_meas=tdcp_meas,
         tdcp_weights=tdcp_weights,
         signal_tdcp_weights=signal_tdcp_weights,
+        weights_fgo=weights_fgo,
+        signal_weights_fgo=signal_weights_fgo,
+        doppler_weights_fgo=doppler_weights_fgo,
+        signal_doppler_weights_fgo=signal_doppler_weights_fgo,
     )
 
     assert (p_count, d_count, l_pair_count) == (3, 2, 1)
@@ -116,10 +124,30 @@ def test_apply_matlab_residual_diagnostics_mask_restores_signal_weights(tmp_path
         ),
     )
     np.testing.assert_allclose(
+        weights_fgo,
+        np.array(
+            [
+                [10.0, 1.0, 30.0],
+                [0.0, 0.0, 0.0],
+            ],
+            dtype=np.float64,
+        ),
+    )
+    np.testing.assert_allclose(
         doppler_weights,
         np.array(
             [
                 [4.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ],
+            dtype=np.float64,
+        ),
+    )
+    np.testing.assert_allclose(
+        doppler_weights_fgo,
+        np.array(
+            [
+                [40.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0],
             ],
             dtype=np.float64,

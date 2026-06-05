@@ -982,14 +982,11 @@ def build_bridge_residual_frame(
         for epoch_idx in range(batch.doppler_weights.shape[0]):
             active = valid[epoch_idx] & (batch.doppler_weights[epoch_idx] > 0.0)
             idx = np.flatnonzero(active)
-            # _build_trip_arrays stores Doppler in the native VD solver convention
-            # (-Android pseudorange-rate). MATLAB residual diagnostics use the
-            # gnsslog2obs/resD convention: raw pseudorange-rate - satr.rate.
-            observation = -batch.doppler[epoch_idx, idx]
+            observation = batch.doppler[epoch_idx, idx]
             model = geom_rate[epoch_idx, idx]
             residual0 = observation - model
             if clock_drift_mps is not None and np.isfinite(clock_drift_mps[epoch_idx]):
-                drift = -float(clock_drift_mps[epoch_idx])
+                drift = float(clock_drift_mps[epoch_idx])
             elif idx.size >= 4:
                 drift = float(np.median(residual0))
             else:
@@ -1033,7 +1030,7 @@ def build_bridge_residual_frame(
             if include_inactive_observations:
                 inactive_idx = np.flatnonzero(valid[epoch_idx] & observable_pseudorange_mask[epoch_idx] & ~active)
                 if inactive_idx.size and np.isfinite(drift):
-                    inactive_observation = -batch.doppler[epoch_idx, inactive_idx]
+                    inactive_observation = batch.doppler[epoch_idx, inactive_idx]
                     inactive_model = geom_rate[epoch_idx, inactive_idx]
                     inactive_pre = inactive_observation - inactive_model
                     inactive_residual = inactive_pre - drift
