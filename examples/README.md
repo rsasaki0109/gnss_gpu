@@ -19,6 +19,74 @@ naive WLS (L2)        P50 10.30 m / RMS 10.21 m
 robust SPP (Cauchy)   P50  2.00 m / RMS  2.39 m   → 81% better P50
 ```
 
+## NLOS simulation research demo — no GPU, no build, no data
+
+```bash
+PYTHONPATH=python python3 examples/demo_nlos_simulation.py
+```
+
+[`demo_nlos_simulation.py`](demo_nlos_simulation.py) builds a deterministic
+box-building street canyon, ray-casts each satellite path, then simulates
+NLOS excess delay, C/N0 attenuation, and larger code tracking noise. It compares
+naive SPP, robust SPP, and a geometry-aware SPP proxy that uses the ray mask.
+
+```bash
+PYTHONPATH=python python3 examples/demo_plateau_nlos_simulation.py
+```
+
+[`demo_plateau_nlos_simulation.py`](demo_plateau_nlos_simulation.py) runs the
+same measurement model on the shipped PLATEAU CityGML sample. It uses the native
+BVH ray tracer when available and falls back to CPU triangle ray-casting
+otherwise.
+
+```bash
+PYTHONPATH=python python3 examples/demo_plateau_nlos_visualization.py
+```
+
+[`demo_plateau_nlos_visualization.py`](demo_plateau_nlos_visualization.py)
+writes a standalone HTML report to `/tmp/gnss_gpu_plateau_nlos_viz.html` with
+the PLATEAU mesh, receiver trajectory, worst-epoch LOS/NLOS sky plot, and error
+timeline. The checked-in Pages copy lives at
+[`../docs/assets/media/plateau_nlos_visualization.html`](../docs/assets/media/plateau_nlos_visualization.html).
+
+To run the full mask export plus SPP/PF/FGO replay comparison:
+
+```bash
+PYTHONPATH=python:. python3 experiments/run_plateau_nlos_demo_suite.py
+```
+
+To turn the same ray mask into the experiment CSV contract used by SPP/FGO/PF:
+
+```bash
+PYTHONPATH=python:. python3 experiments/export_plateau_nlos_demo_mask.py \
+  --out-csv experiments/results/plateau_nlos_demo_mask.csv \
+  --summary-json experiments/results/plateau_nlos_demo_mask_summary.json
+```
+
+Then replay the mask through the downstream SPP consumer path:
+
+```bash
+PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_spp.py \
+  --mask-csv experiments/results/plateau_nlos_demo_mask.csv \
+  --summary-json experiments/results/plateau_nlos_demo_spp_replay_summary.json
+```
+
+Replay the same mask through the downstream particle-filter consumer path:
+
+```bash
+PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_pf.py \
+  --mask-csv experiments/results/plateau_nlos_demo_mask.csv \
+  --summary-json experiments/results/plateau_nlos_demo_pf_replay_summary.json
+```
+
+Replay it through the local-FGO consumer path:
+
+```bash
+PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_fgo.py \
+  --mask-csv experiments/results/plateau_nlos_demo_mask.csv \
+  --summary-json experiments/results/plateau_nlos_demo_fgo_replay_summary.json
+```
+
 ## Demos that need the native CUDA build
 
 These import the compiled kernels (signal sim, acquisition, particle filters,

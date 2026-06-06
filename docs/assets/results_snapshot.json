@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-14T22:21:26+00:00",
+  "generated_at_utc": "2026-06-06T21:28:59+00:00",
   "title": "gnss_gpu Artifact Snapshot",
   "subtitle": "Current Odaiba best: `PF 100K (DD + smoother + stop-detect)`. External mainline remains `PF+RobustClear-10K` across 5 sequences in 2 cities.",
   "status": {
@@ -47,6 +47,11 @@
       "label": "BVH Speedup",
       "value": "57.8x",
       "detail": "PF3D vs PF3D-BVH on the real PLATEAU subset."
+    },
+    {
+      "label": "PLATEAU NLOS Suite",
+      "value": "FGO 0.38 m RMS",
+      "detail": "One exported mask improves SPP, PF, and local-FGO; minimum RMS gain is 65.6%."
     }
   ],
   "repo_summary": [
@@ -94,6 +99,11 @@
       "label": "Snapshot JSON",
       "href": "assets/results_snapshot.json",
       "detail": "Machine-readable version of this page."
+    },
+    {
+      "label": "PLATEAU NLOS Suite",
+      "href": "assets/data/plateau_nlos_demo_suite_summary.md",
+      "detail": "SPP/PF/FGO replay comparison generated from the exported NLOS mask."
     }
   ],
   "method_freeze": [
@@ -140,6 +150,13 @@
           "type": "video/webm"
         }
       ]
+    },
+    {
+      "kind": "html",
+      "title": "PLATEAU NLOS Measurement Demo",
+      "href": "assets/media/plateau_nlos_visualization.html",
+      "caption": "Standalone SVG report from the sample CityGML mesh: PLATEAU/BVH LOS-NLOS mask, sky plot, trajectory, and naive-vs-geometry-aware SPP error timeline.",
+      "badge": "Open HTML"
     },
     {
       "kind": "video",
@@ -272,6 +289,7 @@
     }
   ],
   "reproduce_commands": [
+    "PYTHONPATH=python:. python3 experiments/run_plateau_nlos_demo_suite.py",
     "python3 experiments/build_paper_assets.py",
     "python3 experiments/build_githubio_summary.py",
     "PYTHONPATH=python python3 -m pytest tests/ -q"
@@ -286,6 +304,7 @@
     "Systems result: `PF3D-BVH-10K` keeps PF3D accuracy while cutting runtime from 1028.29 to 17.78 ms/epoch.",
     "Hong Kong supplemental: `PF+AdaptiveGuide-10K` with GPS+BeiDou achieves 66.85 m RMS, outperforming GPS-only `EKF` at 69.49 m. The PF framework generalizes to a second urban geometry when appropriately configured.",
     "PF vs RTKLIB demo5 (Odaiba, gnssplusplus corrections): PF 1M achieves P50=3.64m, RMS=6.72m, >100m=0% vs RTKLIB P50=2.67m, RMS=13.08m. PF wins RMS by 49%, P95 by 59%, with zero catastrophic failures. RTKLIB wins P50 by 27%.",
+    "PLATEAU NLOS replay suite: the same exported `tow,epoch_idx,prn,is_los` mask improves SPP, PF, and local-FGO. FGO reaches 0.38 m mask-soft RMS on the synthetic sample-mesh run.",
     "Urban canyon simulation: PF advantage increases with NLOS severity. At 91% NLOS (80m buildings), PF achieves 7.88m vs WLS 51.72m (85% improvement). Map prior (Oh et al. 2004) adds 14-18% further improvement (PF+Map: 6.47m)."
   ],
   "tables": {
@@ -620,6 +639,52 @@
           "RMS 2D (m)": 55.5,
           "P95 (m)": 58.39,
           "Time (ms/epoch)": 17.78
+        }
+      ]
+    },
+    "plateau_nlos_suite": {
+      "title": "PLATEAU NLOS Replay Suite",
+      "source_csv": "assets/data/plateau_nlos_demo_suite_summary.csv",
+      "columns": [
+        "Estimator",
+        "Baseline RMS (m)",
+        "Mask-soft RMS (m)",
+        "RMS Gain (%)",
+        "Baseline P50 (m)",
+        "Mask-soft P50 (m)",
+        "Wins",
+        "Robust RMS (m)"
+      ],
+      "rows": [
+        {
+          "Estimator": "SPP",
+          "Baseline RMS (m)": 11.85,
+          "Mask-soft RMS (m)": 4.07,
+          "RMS Gain (%)": 65.6,
+          "Baseline P50 (m)": 6.98,
+          "Mask-soft P50 (m)": 2.62,
+          "Wins": "48/68",
+          "Robust RMS (m)": 12.91
+        },
+        {
+          "Estimator": "PF",
+          "Baseline RMS (m)": 11.18,
+          "Mask-soft RMS (m)": 1.4,
+          "RMS Gain (%)": 87.4,
+          "Baseline P50 (m)": 6.91,
+          "Mask-soft P50 (m)": 0.86,
+          "Wins": "70/70",
+          "Robust RMS (m)": ""
+        },
+        {
+          "Estimator": "FGO",
+          "Baseline RMS (m)": 8.1,
+          "Mask-soft RMS (m)": 0.38,
+          "RMS Gain (%)": 95.4,
+          "Baseline P50 (m)": 3.39,
+          "Mask-soft P50 (m)": 0.37,
+          "Wins": "70/70",
+          "Robust RMS (m)": 6.31
         }
       ]
     },

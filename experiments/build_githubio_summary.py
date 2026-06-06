@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,10 @@ MEDIA_DIR = ASSETS_DIR / "media"
 SNAPSHOT_PATH = ASSETS_DIR / "results_snapshot.json"
 SNAPSHOT_JS_PATH = ASSETS_DIR / "results_snapshot.js"
 ODAIBA_PF_SMOOTHER_FREEZE_JSON = RESULTS_DIR / "odaiba_pf_smoother_freeze.json"
+PLATEAU_NLOS_VIS_HTML = "plateau_nlos_visualization.html"
+PLATEAU_NLOS_SUITE_JSON = RESULTS_DIR / "plateau_nlos_demo_suite_summary.json"
+PLATEAU_NLOS_SUITE_CSV = RESULTS_DIR / "plateau_nlos_demo_suite_summary.csv"
+PLATEAU_NLOS_SUITE_MD = RESULTS_DIR / "plateau_nlos_demo_suite_summary.md"
 
 PPC_TUNED_CSV = "pf_strategy_lab_positive6_summary.csv"
 PPC_HOLDOUT_CSV = "pf_strategy_lab_holdout6_r200_s200_summary.csv"
@@ -152,6 +157,88 @@ def _sync_optional_showcase_assets() -> set[str]:
     return copied
 
 
+def _ensure_plateau_nlos_visualization() -> str | None:
+    target = MEDIA_DIR / PLATEAU_NLOS_VIS_HTML
+    sources = [
+        PROJECT_ROOT / "examples" / "demo_plateau_nlos_visualization.py",
+        PROJECT_ROOT / "examples" / "demo_plateau_nlos_simulation.py",
+        PROJECT_ROOT / "data" / "sample_plateau.gml",
+    ]
+    if target.exists() and all(src.exists() for src in sources):
+        latest_input = max(src.stat().st_mtime for src in sources)
+        if target.stat().st_mtime >= latest_input:
+            return PLATEAU_NLOS_VIS_HTML
+
+    if not all(src.exists() for src in sources):
+        return None
+
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    pythonpath_parts = [
+        str(PROJECT_ROOT / "python"),
+        str(PROJECT_ROOT),
+        env.get("PYTHONPATH", ""),
+    ]
+    env["PYTHONPATH"] = os.pathsep.join(part for part in pythonpath_parts if part)
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "examples" / "demo_plateau_nlos_visualization.py"),
+            "--output",
+            str(target),
+        ],
+        cwd=PROJECT_ROOT,
+        env=env,
+        check=True,
+    )
+    return PLATEAU_NLOS_VIS_HTML
+
+
+def _ensure_plateau_nlos_suite() -> dict | None:
+    outputs = [
+        PLATEAU_NLOS_SUITE_JSON,
+        PLATEAU_NLOS_SUITE_CSV,
+        PLATEAU_NLOS_SUITE_MD,
+    ]
+    sources = [
+        PROJECT_ROOT / "experiments" / "run_plateau_nlos_demo_suite.py",
+        PROJECT_ROOT / "experiments" / "summarize_plateau_nlos_replays.py",
+        PROJECT_ROOT / "experiments" / "export_plateau_nlos_demo_mask.py",
+        PROJECT_ROOT / "experiments" / "replay_plateau_nlos_demo_spp.py",
+        PROJECT_ROOT / "experiments" / "replay_plateau_nlos_demo_pf.py",
+        PROJECT_ROOT / "experiments" / "replay_plateau_nlos_demo_fgo.py",
+        PROJECT_ROOT / "examples" / "demo_plateau_nlos_simulation.py",
+        PROJECT_ROOT / "data" / "sample_plateau.gml",
+    ]
+    if all(path.exists() for path in outputs) and all(path.exists() for path in sources):
+        latest_input = max(path.stat().st_mtime for path in sources)
+        oldest_output = min(path.stat().st_mtime for path in outputs)
+        if oldest_output >= latest_input:
+            return _read_json(PLATEAU_NLOS_SUITE_JSON)
+
+    if not all(path.exists() for path in sources):
+        return None
+
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    pythonpath_parts = [
+        str(PROJECT_ROOT / "python"),
+        str(PROJECT_ROOT),
+        env.get("PYTHONPATH", ""),
+    ]
+    env["PYTHONPATH"] = os.pathsep.join(part for part in pythonpath_parts if part)
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "experiments" / "run_plateau_nlos_demo_suite.py"),
+        ],
+        cwd=PROJECT_ROOT,
+        env=env,
+        check=True,
+    )
+    return _read_json(PLATEAU_NLOS_SUITE_JSON)
+
+
 def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -246,6 +333,8 @@ def _ensure_site_media() -> None:
 def _build_snapshot() -> dict:
     _ensure_paper_assets()
     _ensure_site_media()
+    plateau_nlos_html = _ensure_plateau_nlos_visualization()
+    plateau_nlos_suite = _ensure_plateau_nlos_suite()
     optional_media = _sync_optional_showcase_assets()
 
     ppc_tuned_rows = _read_csv(PPC_TUNED_CSV)
@@ -321,6 +410,19 @@ def _build_snapshot() -> dict:
                 else ""
             ),
             "sources": deckgl_sources,
+        })
+
+    if plateau_nlos_html is not None:
+        media_cards.append({
+            "kind": "html",
+            "title": "PLATEAU NLOS Measurement Demo",
+            "href": _media_href(plateau_nlos_html),
+            "caption": (
+                "Standalone SVG report from the sample CityGML mesh: PLATEAU/BVH "
+                "LOS-NLOS mask, sky plot, trajectory, and naive-vs-geometry-aware "
+                "SPP error timeline."
+            ),
+            "badge": "Open HTML",
         })
 
     for viz_name, viz_title, viz_caption in [
@@ -436,6 +538,22 @@ def _build_snapshot() -> dict:
                 f"{_round(bvh_speedup, 1)}x",
                 "PF3D vs PF3D-BVH on the real PLATEAU subset.",
             ),
+            *(
+                [
+                    _card(
+                        "PLATEAU NLOS Suite",
+                        (
+                            f"FGO {_round(plateau_nlos_suite['best_mask_soft_rms_m'])} m RMS"
+                        ),
+                        (
+                            "One exported mask improves SPP, PF, and local-FGO; "
+                            f"minimum RMS gain is {_round(plateau_nlos_suite['min_rms_gain_pct'], 1)}%."
+                        ),
+                    )
+                ]
+                if plateau_nlos_suite is not None
+                else []
+            ),
         ],
         "repo_summary": [
             "This repo is not presenting a single heroic algorithm. It is an experiment-first GNSS package where comparable variants are built, measured, and either kept or discarded.",
@@ -483,6 +601,17 @@ def _build_snapshot() -> dict:
                 "href": "assets/results_snapshot.json",
                 "detail": "Machine-readable version of this page.",
             },
+            *(
+                [
+                    {
+                        "label": "PLATEAU NLOS Suite",
+                        "href": _copy_result_path(PLATEAU_NLOS_SUITE_MD),
+                        "detail": "SPP/PF/FGO replay comparison generated from the exported NLOS mask.",
+                    }
+                ]
+                if plateau_nlos_suite is not None
+                else []
+            ),
         ],
         "method_freeze": [
             _card(
@@ -583,6 +712,7 @@ def _build_snapshot() -> dict:
             },
         ],
         "reproduce_commands": [
+            "PYTHONPATH=python:. python3 experiments/run_plateau_nlos_demo_suite.py",
             "python3 experiments/build_paper_assets.py",
             "python3 experiments/build_githubio_summary.py",
             "PYTHONPATH=python python3 -m pytest tests/ -q",
@@ -638,6 +768,18 @@ def _build_snapshot() -> dict:
                 "PF 1M achieves P50=3.64m, RMS=6.72m, >100m=0% vs "
                 "RTKLIB P50=2.67m, RMS=13.08m. PF wins RMS by 49%, P95 by 59%, "
                 "with zero catastrophic failures. RTKLIB wins P50 by 27%."
+            ),
+            *(
+                [
+                    (
+                        "PLATEAU NLOS replay suite: the same exported "
+                        "`tow,epoch_idx,prn,is_los` mask improves SPP, PF, and "
+                        f"local-FGO. FGO reaches {_round(plateau_nlos_suite['best_mask_soft_rms_m'])} m "
+                        "mask-soft RMS on the synthetic sample-mesh run."
+                    )
+                ]
+                if plateau_nlos_suite is not None
+                else []
             ),
             (
                 "Urban canyon simulation: PF advantage increases with NLOS severity. "
@@ -894,6 +1036,39 @@ def _build_snapshot() -> dict:
                     },
                 ],
             },
+            **(
+                {
+                    "plateau_nlos_suite": {
+                        "title": "PLATEAU NLOS Replay Suite",
+                        "source_csv": _copy_result_path(PLATEAU_NLOS_SUITE_CSV),
+                        "columns": [
+                            "Estimator",
+                            "Baseline RMS (m)",
+                            "Mask-soft RMS (m)",
+                            "RMS Gain (%)",
+                            "Baseline P50 (m)",
+                            "Mask-soft P50 (m)",
+                            "Wins",
+                            "Robust RMS (m)",
+                        ],
+                        "rows": [
+                            {
+                                "Estimator": row["estimator"],
+                                "Baseline RMS (m)": row["baseline_rms_m"],
+                                "Mask-soft RMS (m)": row["mask_soft_rms_m"],
+                                "RMS Gain (%)": row["rms_gain_pct"],
+                                "Baseline P50 (m)": row["baseline_p50_m"],
+                                "Mask-soft P50 (m)": row["mask_soft_p50_m"],
+                                "Wins": row["wins_fraction"],
+                                "Robust RMS (m)": row["robust_rms_m"],
+                            }
+                            for row in plateau_nlos_suite["rows"]
+                        ],
+                    }
+                }
+                if plateau_nlos_suite is not None
+                else {}
+            ),
             "urbannav_runs": {
                 "title": "UrbanNav Per-Run Results",
                 "source_csv": _copy_data_file(URBANNAV_RUNS_CSV),

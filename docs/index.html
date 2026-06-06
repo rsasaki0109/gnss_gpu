@@ -232,6 +232,18 @@
             });
             link.append(video);
             card.append(link);
+          } else if (item.kind === "html") {
+            const link = el("a", "showcase-link");
+            link.href = item.href;
+            link.target = "_blank";
+            link.rel = "noreferrer";
+
+            const preview = el("div", "showcase-html-preview");
+            preview.append(el("p", "showcase-html-kicker", item.badge || "Open HTML"));
+            preview.append(el("p", "showcase-html-title", item.title));
+            preview.append(el("p", "showcase-html-detail", "PLATEAU mesh · LOS/NLOS sky · SPP error timeline"));
+            link.append(preview);
+            card.append(link);
           } else {
             const link = el("a", "showcase-link");
             link.href = item.href;
