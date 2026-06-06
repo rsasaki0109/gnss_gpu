@@ -42,6 +42,10 @@ def apply_matlab_residual_diagnostics_mask(
     tdcp_meas: np.ndarray | None,
     tdcp_weights: np.ndarray | None,
     signal_tdcp_weights: np.ndarray | None,
+    weights_fgo: np.ndarray | None = None,
+    signal_weights_fgo: np.ndarray | None = None,
+    doppler_weights_fgo: np.ndarray | None = None,
+    signal_doppler_weights_fgo: np.ndarray | None = None,
 ) -> tuple[int, int, int]:
     diagnostics = pd.read_csv(diagnostics_path)
     required = {
@@ -87,6 +91,11 @@ def apply_matlab_residual_diagnostics_mask(
     weights[:, :] = 0.0
     weights[p_keep] = signal_weights[p_keep]
     weights[p_keep & (weights <= 0.0)] = 1.0
+    if weights_fgo is not None:
+        p_signal_fgo = signal_weights_fgo if signal_weights_fgo is not None else signal_weights
+        weights_fgo[:, :] = 0.0
+        weights_fgo[p_keep] = p_signal_fgo[p_keep]
+        weights_fgo[p_keep & (weights_fgo <= 0.0)] = 1.0
 
     if doppler_weights is not None and d_keep is not None:
         doppler_weights[:, :] = 0.0
@@ -97,6 +106,17 @@ def apply_matlab_residual_diagnostics_mask(
         )
         doppler_weights[d_keep] = d_signal[d_keep]
         doppler_weights[d_keep & (doppler_weights <= 0.0)] = 1.0
+    if doppler_weights_fgo is not None and d_keep is not None:
+        d_signal_fgo = (
+            signal_doppler_weights_fgo
+            if signal_doppler_weights_fgo is not None
+            else signal_doppler_weights
+            if signal_doppler_weights is not None
+            else np.ones_like(doppler_weights_fgo, dtype=np.float64)
+        )
+        doppler_weights_fgo[:, :] = 0.0
+        doppler_weights_fgo[d_keep] = d_signal_fgo[d_keep]
+        doppler_weights_fgo[d_keep & (doppler_weights_fgo <= 0.0)] = 1.0
 
     l_pair_count = 0
     if tdcp_weights is not None:

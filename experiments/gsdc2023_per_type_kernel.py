@@ -7,10 +7,8 @@ Mirrors the trip-Type/phone-conditional tuning from taroz ``parameters.m``:
 * ``L_robust_prm`` (Carrier/TDCP Huber): 0.2 (Street / Mix), 0.5 (Highway).
 * ``sigma_motion``: 0.05 (Street), 0.01 (Highway / Mix), 0.1 for the ``mi8`` phone.
 
-The native CUDA FGO solver currently honours only a scalar ``huber_k``
-(applied to PR factor residuals).  This module returns just the PR
-``huber_k`` and motion ``sigma_m`` for now; Doppler / TDCP per-Type
-tunings will land alongside their own factor signatures.
+The raw bridge maps these values to PR, Doppler, TDCP and motion factors when
+the taroz per-Type preset is enabled.
 """
 from __future__ import annotations
 

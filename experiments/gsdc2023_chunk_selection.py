@@ -26,9 +26,9 @@ GATED_FGO_RAW_WLS_RESCUE_ENABLED = False
 GATED_FGO_RAW_WLS_RESCUE_MSE_PR_MIN = 31.721240912308435
 GATED_FGO_RAW_WLS_RESCUE_QUALITY_MAX = 1.0638132412840764
 GATED_FGO_RAW_WLS_RESCUE_GAP_MAX_M = 100.0
-GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_RATIO_MAX = 1.20
+GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_RATIO_MAX = 1.15
 GATED_FGO_RAW_WLS_PROXY_RESCUE_GAP_STEP_P95_RATIO_MAX = 1.25
-GATED_FGO_RAW_WLS_PROXY_RESCUE_QUALITY_DELTA_MAX = -0.35
+GATED_FGO_RAW_WLS_PROXY_RESCUE_QUALITY_DELTA_MAX = -0.20
 GATED_FGO_RAW_WLS_PROXY_RESCUE_MSE_DELTA_MAX = 0.0
 # Broad train diagnostics found no FGO-winning chunks above this PR-MSE.
 FGO_CANDIDATE_MSE_PR_MAX = 400.0
@@ -455,6 +455,32 @@ def candidate_passes_gated_quality(
     )
 
 
+def tdcp_gap_increased_over_tdcp_off(
+    tdcp_fgo: ChunkCandidateQuality,
+    tdcp_off_fgo: ChunkCandidateQuality,
+) -> bool:
+    return (
+        tdcp_fgo.baseline_gap_p95_m
+        > tdcp_off_fgo.baseline_gap_p95_m + GATED_TDCP_BASELINE_GAP_INCREASE_MARGIN_M
+        or tdcp_fgo.baseline_gap_max_m
+        > tdcp_off_fgo.baseline_gap_max_m + GATED_TDCP_BASELINE_GAP_INCREASE_MARGIN_M
+    )
+
+
+def tdcp_off_quality_within_tdcp_margin(
+    tdcp_fgo: ChunkCandidateQuality,
+    tdcp_off_fgo: ChunkCandidateQuality,
+) -> bool:
+    return tdcp_off_fgo.quality_score <= tdcp_fgo.quality_score + GATED_TDCP_OFF_CANDIDATE_MARGIN
+
+
+def tdcp_off_not_clearly_better_than_tdcp(
+    tdcp_fgo: ChunkCandidateQuality,
+    tdcp_off_fgo: ChunkCandidateQuality,
+) -> bool:
+    return tdcp_off_fgo.quality_score + GATED_TDCP_OFF_CANDIDATE_MARGIN >= tdcp_fgo.quality_score
+
+
 def select_gated_chunk_source(
     record: ChunkSelectionRecord,
     baseline_threshold: float,
@@ -553,15 +579,18 @@ def select_gated_chunk_source(
                     mse_pr_max=fgo_low_baseline_mse_pr_max,
                 )
             )
-            raw_proxy_rescue = name == "fgo" and fgo_candidate_passes_raw_wls_proxy_rescue(
-                quality,
-                raw_wls,
-                baseline,
-                enabled=allow_fgo_raw_wls_proxy_rescue,
-                mse_ratio_max=fgo_raw_wls_proxy_rescue_mse_ratio_max,
-                baseline_gap_step_p95_ratio_max=fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max,
-                quality_delta_max=fgo_raw_wls_proxy_rescue_quality_delta_max,
-                mse_delta_vs_baseline_max=fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
+            raw_proxy_rescue = (
+                name != DD_CARRIER_FGO_SOURCE
+                and fgo_candidate_passes_raw_wls_proxy_rescue(
+                    quality,
+                    raw_wls,
+                    baseline,
+                    enabled=allow_fgo_raw_wls_proxy_rescue,
+                    mse_ratio_max=fgo_raw_wls_proxy_rescue_mse_ratio_max,
+                    baseline_gap_step_p95_ratio_max=fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max,
+                    quality_delta_max=fgo_raw_wls_proxy_rescue_quality_delta_max,
+                    mse_delta_vs_baseline_max=fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
+                )
             )
             if not fgo_candidate_passes_mse_guard(quality):
                 continue
@@ -585,8 +614,8 @@ def select_gated_chunk_source(
                 and fgo_candidate_passes_baseline_gap_guard(tdcp_off_fgo, baseline, baseline_mse_pr_min=fgo_baseline_mse_pr_min, gap_p95_floor_m=fgo_baseline_gap_p95_floor_m)
                 and fgo_candidate_passes_mse_guard(tdcp_off_fgo)
                 and candidate_passes_gated_quality(tdcp_off_fgo, baseline)
-                and quality.baseline_gap_p95_m
-                > tdcp_off_fgo.baseline_gap_p95_m + GATED_TDCP_BASELINE_GAP_INCREASE_MARGIN_M
+                and tdcp_gap_increased_over_tdcp_off(quality, tdcp_off_fgo)
+                and tdcp_off_quality_within_tdcp_margin(quality, tdcp_off_fgo)
             ):
                 continue
         if name == "fgo_no_tdcp":
@@ -596,13 +625,9 @@ def select_gated_chunk_source(
                 and fgo_candidate_passes_baseline_gap_guard(tdcp_fgo, baseline, baseline_mse_pr_min=fgo_baseline_mse_pr_min, gap_p95_floor_m=fgo_baseline_gap_p95_floor_m)
                 and fgo_candidate_passes_mse_guard(tdcp_fgo)
             ):
-                tdcp_gap_increased = (
-                    tdcp_fgo.baseline_gap_p95_m
-                    > quality.baseline_gap_p95_m + GATED_TDCP_BASELINE_GAP_INCREASE_MARGIN_M
-                )
                 if (
-                    not tdcp_gap_increased
-                    and quality.quality_score + GATED_TDCP_OFF_CANDIDATE_MARGIN >= tdcp_fgo.quality_score
+                    not tdcp_gap_increased_over_tdcp_off(tdcp_fgo, quality)
+                    and tdcp_off_not_clearly_better_than_tdcp(tdcp_fgo, quality)
                 ):
                     continue
         if candidate_passes_gated_quality(quality, baseline):
@@ -640,6 +665,7 @@ def chunk_selection_payload(
     dd_carrier_min_anchor_coverage: float = DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
     fgo_low_baseline_mse_pr_max: float | None = None,
     fgo_baseline_mse_pr_min: float | None = None,
+    fgo_baseline_gap_p95_floor_m: float | None = None,
 ) -> list[dict[str, object]]:
     return [
         {
@@ -660,6 +686,7 @@ def chunk_selection_payload(
                 dd_carrier_min_anchor_coverage=dd_carrier_min_anchor_coverage,
                 fgo_low_baseline_mse_pr_max=fgo_low_baseline_mse_pr_max,
                 fgo_baseline_mse_pr_min=fgo_baseline_mse_pr_min,
+                fgo_baseline_gap_p95_floor_m=fgo_baseline_gap_p95_floor_m,
             ),
             "candidates": {
                 name: chunk_quality_payload(quality)

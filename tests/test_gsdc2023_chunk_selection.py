@@ -108,6 +108,38 @@ def test_select_gated_chunk_source_keeps_safe_tdcp_candidate_when_tdcp_off_tied(
     assert select_gated_chunk_source(record, baseline_threshold=500.0) == "fgo"
 
 
+def test_select_gated_chunk_source_prefers_tdcp_off_when_tdcp_max_gap_regresses():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=120,
+        auto_source="fgo",
+        candidates={
+            "baseline": _quality(20.393, 1.0, step_p95=19.064),
+            "raw_wls": _quality(27.341, 1.592, gap_p95=33.899, gap_max=66.428, step_p95=39.178),
+            "fgo": _quality(18.788, 0.693, gap_p95=12.065, gap_max=19.481, step_p95=18.737),
+            "fgo_no_tdcp": _quality(18.810, 0.696, gap_p95=12.350, gap_max=19.254, step_p95=18.737),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "fgo_no_tdcp"
+
+
+def test_select_gated_chunk_source_keeps_tdcp_when_quality_gain_is_clear():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=120,
+        auto_source="fgo",
+        candidates={
+            "baseline": _quality(20.393, 1.0, step_p95=19.064),
+            "raw_wls": _quality(27.341, 1.592, gap_p95=33.899, gap_max=66.428, step_p95=39.178),
+            "fgo": _quality(18.788, 0.620, gap_p95=12.065, gap_max=19.481, step_p95=18.737),
+            "fgo_no_tdcp": _quality(18.810, 0.696, gap_p95=12.350, gap_max=19.254, step_p95=18.737),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "fgo"
+
+
 def test_select_gated_chunk_source_rejects_high_mse_fgo():
     record = ChunkSelectionRecord(
         start_epoch=0,
@@ -301,6 +333,55 @@ def test_select_gated_chunk_source_allows_opt_in_fgo_over_raw_wls_proxy_rescue()
             fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=0.0,
         )
         == "fgo"
+    )
+
+
+def test_select_gated_chunk_source_allows_opt_in_prefixed_fgo_proxy_rescue():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=200,
+        auto_source="baseline",
+        candidates={
+            "baseline": _quality(50.97, 1.0, step_p95=15.23),
+            "raw_wls": _quality(43.35, 1.01, gap_p95=20.17, gap_max=28.0, step_p95=18.63),
+            "fgo_taroz_pr": _quality(49.85, 0.773, gap_p95=15.67, gap_max=22.0, step_p95=13.45),
+        },
+    )
+
+    assert (
+        select_gated_chunk_source(
+            record,
+            baseline_threshold=500.0,
+            allow_fgo_raw_wls_proxy_rescue=True,
+            fgo_raw_wls_proxy_rescue_mse_ratio_max=1.15,
+            fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max=1.25,
+            fgo_raw_wls_proxy_rescue_quality_delta_max=-0.20,
+            fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=0.0,
+        )
+        == "fgo_taroz_pr"
+    )
+
+
+def test_select_gated_chunk_source_uses_fgo_gap_floor_override():
+    record = ChunkSelectionRecord(
+        start_epoch=0,
+        end_epoch=200,
+        auto_source="baseline",
+        candidates={
+            "baseline": _quality(50.97, 1.0, step_p95=15.23),
+            "raw_wls": _quality(60.0, 1.01, gap_p95=20.17, gap_max=28.0, step_p95=18.63),
+            "fgo_taroz_pr": _quality(49.85, 0.773, gap_p95=15.67, gap_max=22.0, step_p95=13.45),
+        },
+    )
+
+    assert select_gated_chunk_source(record, baseline_threshold=500.0) == "baseline"
+    assert (
+        select_gated_chunk_source(
+            record,
+            baseline_threshold=500.0,
+            fgo_baseline_gap_p95_floor_m=20.0,
+        )
+        == "fgo_taroz_pr"
     )
 
 

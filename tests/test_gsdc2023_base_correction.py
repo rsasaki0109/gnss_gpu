@@ -15,7 +15,10 @@ from experiments.gsdc2023_base_correction import (
     matlab_base_time_span_mask,
     read_base_station_xyz,
     rinex_header_base_xyz_or_metadata,
+    rtklib_broadcast_clock_bias_s,
+    rtklib_corrected_transmit_tow_s,
     select_base_pseudorange_observation,
+    select_base_sat_product_observation,
     select_gps_nav_message,
     signal_type_iono_scale,
     unix_ms_to_gps_abs_seconds,
@@ -114,6 +117,27 @@ def test_matrtklib_sat_product_uses_broadcast_clock_for_transmit_time(monkeypatc
     assert np.isclose(sat_clock_bias_m, 100.0)
 
 
+def test_rtklib_corrected_transmit_tow_uses_eph2clk_polynomial() -> None:
+    message = SimpleNamespace(
+        toc_seconds=100.0,
+        toe=0.0,
+        af0=1.0e-6,
+        af1=2.0e-9,
+        af2=3.0e-12,
+    )
+    arrival_tow_s = 1000.0
+    pseudorange_m = base_correction.LIGHT_SPEED_MPS * 0.1
+    transmit_tow_s = arrival_tow_s - pseudorange_m / base_correction.LIGHT_SPEED_MPS
+    ts = transmit_tow_s - message.toc_seconds
+    t = ts
+    for _ in range(2):
+        t = ts - (message.af0 + message.af1 * t + message.af2 * t * t)
+    clock_s = message.af0 + message.af1 * t + message.af2 * t * t
+
+    assert rtklib_broadcast_clock_bias_s(message, transmit_tow_s) == clock_s
+    assert rtklib_corrected_transmit_tow_s(arrival_tow_s, pseudorange_m, message) == transmit_tow_s - clock_s
+
+
 def test_matrtklib_sat_product_applies_receiver_clock_to_transmit_time(monkeypatch):
     selected = SimpleNamespace(
         toe=0.0,
@@ -210,6 +234,20 @@ def test_base_observation_selector_and_iono_scale_direct():
     assert np.isclose(signal_type_iono_scale("GAL_E5A_Q"), GPS_L5_TGD_SCALE)
 
 
+def test_base_sat_product_observation_prefers_first_frequency_for_l5() -> None:
+    obs = {
+        "C1C": 21_000_001.0,
+        "C5Q": 22_000_005.0,
+    }
+
+    assert select_base_pseudorange_observation(obs, "GPS_L5_Q") == ("C5Q", 22_000_005.0)
+    assert select_base_sat_product_observation(obs, "GPS_L5_Q") == ("C1C", 21_000_001.0)
+    assert select_base_sat_product_observation({"C5Q": 22_000_005.0}, "GPS_L5_Q") == (
+        "C5Q",
+        22_000_005.0,
+    )
+
+
 def test_base_position_offset_direct(tmp_path):
     data_root = tmp_path / "dataset_2023"
     base_dir = tmp_path / "base"
@@ -247,28 +285,27 @@ def test_base_metadata_dir_prefers_nested_base_dir(tmp_path):
     assert base_metadata_dir(data_root) == nested
 
 
-def test_rinex_header_base_xyz_preferred_when_valid():
-    metadata_xyz = np.array([1.0, 2.0, 3.0])
+def test_rinex_header_base_xyz_prefers_metadata_when_valid():
+    metadata_xyz = np.array([-2700729.3481, -4293104.2572, 3854473.9477])
     header_xyz = np.array([-2703115.266, -4291768.344, 3854247.955])
     base_obs = SimpleNamespace(header=SimpleNamespace(approx_position=header_xyz))
 
     selected_xyz = rinex_header_base_xyz_or_metadata(base_obs, metadata_xyz)
 
-    np.testing.assert_allclose(selected_xyz, header_xyz)
+    np.testing.assert_allclose(selected_xyz, metadata_xyz)
 
 
-def test_rinex_header_base_xyz_falls_back_to_metadata_when_missing_or_invalid():
-    metadata_xyz = np.array([-2700729.3481, -4293104.2572, 3854473.9477])
+def test_rinex_header_base_xyz_falls_back_to_header_when_metadata_is_invalid():
+    header_xyz = np.array([-2703115.266, -4291768.344, 3854247.955])
 
-    missing_header = SimpleNamespace()
-    small_header = SimpleNamespace(header=SimpleNamespace(approx_position=np.array([1.0, 2.0, 3.0])))
-    nan_header = SimpleNamespace(
-        header=SimpleNamespace(approx_position=np.array([np.nan, -4291768.344, 3854247.955])),
-    )
+    base_obs = SimpleNamespace(header=SimpleNamespace(approx_position=header_xyz))
 
-    for base_obs in [missing_header, small_header, nan_header]:
+    for metadata_xyz in [
+        np.array([1.0, 2.0, 3.0]),
+        np.array([np.nan, -4293104.2572, 3854473.9477]),
+    ]:
         selected_xyz = rinex_header_base_xyz_or_metadata(base_obs, metadata_xyz)
-        np.testing.assert_allclose(selected_xyz, metadata_xyz)
+        np.testing.assert_allclose(selected_xyz, header_xyz)
 
 
 def test_base_time_span_mask_direct():
@@ -343,3 +380,58 @@ def test_compute_base_correction_matrix_uses_injected_dependencies(tmp_path):
     np.testing.assert_allclose(correction[:, 1], np.array([13.0, 13.0]))
     np.testing.assert_allclose(correction[:, 2], np.array([13.0, 13.0]))
     assert np.isnan(correction[:, 3]).all()
+
+
+def test_compute_base_correction_matrix_accepts_split_root_trip_without_split(tmp_path):
+    data_root = tmp_path / "dataset_2023"
+    split_root = data_root / "train"
+    times_ms = np.array([1000.0, 2000.0], dtype=np.float64)
+    phone_times = unix_ms_to_gps_abs_seconds(times_ms)
+
+    def fake_setting(root, split, course, phone):
+        assert root == data_root
+        assert (split, course, phone) == ("train", "course", "phone")
+        return "BASE", "V3"
+
+    def fake_span(root, split, course, phone, selected_phone_times_gps_s):
+        assert root == data_root
+        assert (split, course, phone) == ("train", "course", "phone")
+        np.testing.assert_allclose(selected_phone_times_gps_s, phone_times)
+        return float(phone_times[0]), float(phone_times[-1])
+
+    def fake_load_base_residuals(
+        data_root_str,
+        split,
+        course,
+        base_name,
+        rinex_type,
+        signal_type,
+        phone_start_gps_s,
+        phone_end_gps_s,
+        sat_ids_key,
+    ):
+        assert data_root_str == str(data_root)
+        assert (split, course, base_name, rinex_type, signal_type) == (
+            "train",
+            "course",
+            "BASE",
+            "V3",
+            "GPS_L1_CA",
+        )
+        assert np.isclose(phone_start_gps_s, phone_times[0])
+        assert np.isclose(phone_end_gps_s, phone_times[-1])
+        assert sat_ids_key == ("G03",)
+        return phone_times, sat_ids_key, np.array([[42.0], [43.0]], dtype=np.float64)
+
+    correction = compute_base_pseudorange_correction_matrix(
+        split_root,
+        "course/phone",
+        times_ms,
+        [(1, 3, "GPS_L1_CA")],
+        "GPS_L1_CA",
+        base_setting_fn=fake_setting,
+        base_residual_loader=fake_load_base_residuals,
+        phone_span_fn=fake_span,
+    )
+
+    np.testing.assert_allclose(correction[:, 0], np.array([42.0, 43.0]))

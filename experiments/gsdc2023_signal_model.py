@@ -31,6 +31,7 @@ DUAL_FREQUENCY_SIGNAL_TYPES = {
 CONSTELLATION_TO_SYS_KIND = {1: 0, 6: 1, 4: 2}
 SYS_KIND_TO_MULTI_SYSTEM = {0: SYSTEM_GPS, 1: SYSTEM_GALILEO, 2: SYSTEM_QZSS, 3: SYSTEM_BEIDOU}
 MATLAB_SIGNAL_CLOCK_DIM = 7
+MATLAB_SIGNAL_CLOCK_KIND_OTHER = 7
 MATLAB_SIGNAL_CLOCK_KIND_L1 = {
     1: 0,  # GPS L1
     3: 1,  # GLONASS G1
@@ -130,6 +131,22 @@ def clock_kind_for_observation(
     if signal_sort_rank(signal_type) > 0:
         return MATLAB_SIGNAL_CLOCK_KIND_L5.get(int(constellation_type), 1)
     return 0
+
+
+def taroz_clock_kind_for_observation(
+    constellation_type: int,
+    signal_type: str,
+    *,
+    dual_frequency: bool,
+    multi_gnss: bool,
+) -> int:
+    del dual_frequency, multi_gnss
+    constellation = int(constellation_type)
+    if constellation == 4:
+        return MATLAB_SIGNAL_CLOCK_KIND_OTHER
+    if signal_sort_rank(signal_type) > 0:
+        return MATLAB_SIGNAL_CLOCK_KIND_L5.get(constellation, MATLAB_SIGNAL_CLOCK_KIND_OTHER)
+    return MATLAB_SIGNAL_CLOCK_KIND_L1.get(constellation, MATLAB_SIGNAL_CLOCK_KIND_OTHER)
 
 
 def multi_system_for_clock_kind(clock_kind: int, n_clock: int) -> int:

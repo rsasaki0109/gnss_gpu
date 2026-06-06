@@ -49,6 +49,7 @@ def build_tdcp_arrays(
     *,
     consistency_threshold_m: float,
     doppler_weights: np.ndarray | None = None,
+    carrier_weights: np.ndarray | None = None,
     clock_jump: np.ndarray | None = None,
     loffset_m: float = 0.0,
 ) -> tuple[np.ndarray | None, np.ndarray | None, int]:
@@ -114,14 +115,21 @@ def build_tdcp_arrays(
             if not valid_phase[t, s] or not valid_phase[t + 1, s]:
                 continue
             meas = float(adr[t + 1, s] - adr[t, s] + loffset_m)
-            sigma = DEFAULT_TDCP_SIGMA_M
-            u0 = float(adr_uncertainty[t, s])
-            u1 = float(adr_uncertainty[t + 1, s])
-            if np.isfinite(u0) and np.isfinite(u1) and u0 > 0.0 and u1 > 0.0:
-                sigma = float(np.sqrt(u0 * u0 + u1 * u1))
-            sigma = max(sigma, 1e-3)
+            weight = 0.0
+            if carrier_weights is not None:
+                candidate_weight = float(carrier_weights[t, s])
+                if np.isfinite(candidate_weight) and candidate_weight > 0.0:
+                    weight = candidate_weight
+            if weight <= 0.0:
+                sigma = DEFAULT_TDCP_SIGMA_M
+                u0 = float(adr_uncertainty[t, s])
+                u1 = float(adr_uncertainty[t + 1, s])
+                if np.isfinite(u0) and np.isfinite(u1) and u0 > 0.0 and u1 > 0.0:
+                    sigma = float(np.sqrt(u0 * u0 + u1 * u1))
+                sigma = max(sigma, 1e-3)
+                weight = 1.0 / (sigma * sigma)
             tdcp_meas[t, s] = meas
-            tdcp_weights[t, s] = 1.0 / (sigma * sigma)
+            tdcp_weights[t, s] = weight
 
     if not np.any(tdcp_weights > 0.0):
         return None, None, consistency_mask_count

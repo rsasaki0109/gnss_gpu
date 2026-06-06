@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import asdict, replace
 import json
 from pathlib import Path
 import sys
@@ -22,7 +23,14 @@ for _path in (_REPO, _REPO / "python"):
 from experiments.gsdc2023_chunk_selection import (  # noqa: E402
     DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
 )
+from experiments.gsdc2023_bridge_config import (  # noqa: E402
+    TAROZ_FGO_WEIGHT_MODE,
+    apply_taroz_fgo_preset,
+    apply_taroz_gnss_only_preset,
+    apply_taroz_marupaku_preset,
+)
 from experiments.gsdc2023_output import (  # noqa: E402
+    TAROZ_FGO_CANDIDATE_SOURCES,
     export_bridge_outputs,
     has_valid_bridge_outputs,
     load_bridge_metrics,
@@ -61,18 +69,79 @@ def bridge_trip_id(sample_trip_id: str) -> str:
     return f"test/{normalize_sample_trip_id(sample_trip_id)}"
 
 
+def phone_from_sample_trip_id(sample_trip_id: str) -> str:
+    parts = Path(normalize_sample_trip_id(sample_trip_id)).parts
+    return parts[-1] if parts else ""
+
+
+def use_taroz_gnss_only_for_phone(phone: str) -> bool:
+    return str(phone).lower().startswith("pixel")
+
+
+def apply_taroz_phone_aware_preset(config: BridgeConfig, sample_trip_id: str) -> BridgeConfig:
+    phone = phone_from_sample_trip_id(sample_trip_id)
+    if use_taroz_gnss_only_for_phone(phone):
+        return apply_taroz_gnss_only_preset(config)
+    return replace(config, fgo_weight_mode=TAROZ_FGO_WEIGHT_MODE)
+
+
 def bridge_output_dir(bridge_output_root: Path, sample_trip_id: str) -> Path:
     return bridge_output_root / normalize_sample_trip_id(sample_trip_id)
+
+
+def _cache_jsonable(value: Any) -> Any:
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _cache_jsonable(item) for key, item in sorted(value.items())}
+    if isinstance(value, (list, tuple)):
+        return [_cache_jsonable(item) for item in value]
+    return value
+
+
+def bridge_cache_metadata(*, max_epochs: int, start_epoch: int, config: BridgeConfig) -> dict[str, Any]:
+    return {
+        "bridge_cache": {
+            "max_epochs": int(max_epochs),
+            "start_epoch": int(start_epoch),
+            "config": _cache_jsonable(asdict(config)),
+        },
+    }
+
+
+def bridge_cache_matches(
+    payload: dict[str, Any],
+    *,
+    max_epochs: int,
+    start_epoch: int,
+    config: BridgeConfig,
+) -> bool:
+    cache = payload.get("bridge_cache")
+    if not isinstance(cache, dict):
+        return False
+    return cache == bridge_cache_metadata(
+        max_epochs=max_epochs,
+        start_epoch=start_epoch,
+        config=config,
+    )["bridge_cache"]
 
 
 def load_cached_bridge_trip(
     bridge_output_root: Path,
     sample_trip_id: str,
+    *,
+    max_epochs: int | None = None,
+    start_epoch: int | None = None,
+    config: BridgeConfig | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]] | None:
     trip_dir = bridge_output_dir(bridge_output_root, sample_trip_id)
     if not has_valid_bridge_outputs(trip_dir):
         return None
-    return pd.read_csv(trip_dir / "bridge_positions.csv"), load_bridge_metrics(trip_dir)
+    payload = load_bridge_metrics(trip_dir)
+    if max_epochs is not None and start_epoch is not None and config is not None:
+        if not bridge_cache_matches(payload, max_epochs=max_epochs, start_epoch=start_epoch, config=config):
+            return None
+    return pd.read_csv(trip_dir / "bridge_positions.csv"), payload
 
 
 def submission_from_bridge_tables(
@@ -189,7 +258,7 @@ def submission_from_bridge_tables(
 
 
 def build_config(args: argparse.Namespace) -> BridgeConfig:
-    return BridgeConfig(
+    cfg = BridgeConfig(
         motion_sigma_m=args.motion_sigma_m,
         factor_dt_max_s=args.factor_dt_max_s,
         fgo_iters=args.fgo_iters,
@@ -206,8 +275,12 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         per_type_kernel_huber_enabled=bool(getattr(args, "per_type_kernel_huber", True)),
         per_type_kernel_motion_enabled=bool(getattr(args, "per_type_kernel_motion", False)),
         fgo_huber_k_pr=float(getattr(args, "fgo_huber_k_pr", 0.0)),
+        fgo_huber_k_doppler=float(getattr(args, "fgo_huber_k_doppler", 0.0)),
+        fgo_huber_k_tdcp=float(getattr(args, "fgo_huber_k_tdcp", 0.0)),
+        stop_attitude_sigma_rad=float(getattr(args, "stop_attitude_sigma_rad", 0.0)),
         gate_fgo_low_baseline_mse_pr_max=getattr(args, "gate_fgo_low_baseline_mse_pr_max", None),
         gate_fgo_baseline_mse_pr_min=getattr(args, "gate_fgo_baseline_mse_pr_min", None),
+        gate_fgo_baseline_gap_p95_floor_m=getattr(args, "gate_fgo_baseline_gap_p95_floor_m", None),
         pairwise_consistency_enabled=bool(getattr(args, "pairwise_consistency", False)),
         pairwise_consistency_mad_threshold_m=float(getattr(args, "pairwise_consistency_mad_threshold_m", 3.5)),
         pairwise_consistency_min_obs_after_filter=int(getattr(args, "pairwise_consistency_min_obs_after_filter", 5)),
@@ -245,7 +318,23 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max=args.fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max,
         fgo_raw_wls_proxy_rescue_quality_delta_max=args.fgo_raw_wls_proxy_rescue_quality_delta_max,
         fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=args.fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
+        taroz_fgo_candidate_enabled=bool(getattr(args, "taroz_fgo_candidates", False)),
+        taroz_fgo_candidate_sources=tuple(
+            item.strip()
+            for item in getattr(
+                args,
+                "taroz_fgo_candidate_sources",
+                ",".join(TAROZ_FGO_CANDIDATE_SOURCES),
+            ).split(",")
+            if item.strip()
+        ),
+        taroz_imu_factor_mask_csv=getattr(args, "taroz_imu_factor_mask_csv", None),
     )
+    if bool(getattr(args, "taroz_marupaku", False)):
+        cfg = apply_taroz_marupaku_preset(cfg)
+    elif bool(getattr(args, "taroz_fgo", False)):
+        cfg = apply_taroz_fgo_preset(cfg)
+    return cfg
 
 
 def run_one_bridge_trip(
@@ -260,7 +349,13 @@ def run_one_bridge_trip(
 ) -> dict[str, Any]:
     start = time.time()
     if bridge_output_root is not None and resume_existing:
-        cached = load_cached_bridge_trip(bridge_output_root, sample_trip_id)
+        cached = load_cached_bridge_trip(
+            bridge_output_root,
+            sample_trip_id,
+            max_epochs=max_epochs,
+            start_epoch=start_epoch,
+            config=config,
+        )
         if cached is not None:
             table, payload = cached
             return {
@@ -278,12 +373,19 @@ def run_one_bridge_trip(
         start_epoch=start_epoch,
         config=config,
     )
+    cache_metadata = bridge_cache_metadata(max_epochs=max_epochs, start_epoch=start_epoch, config=config)
     if bridge_output_root is not None:
-        export_bridge_outputs(bridge_output_dir(bridge_output_root, sample_trip_id), result)
+        export_bridge_outputs(
+            bridge_output_dir(bridge_output_root, sample_trip_id),
+            result,
+            extra_metrics=cache_metadata,
+        )
+    metric_payload = result.metrics_payload()
+    metric_payload.update(cache_metadata)
     return {
         "trip_id": sample_trip_id,
         "bridge_table": result.positions_table(),
-        "metrics": result.metrics_payload(),
+        "metrics": metric_payload,
         "cached": False,
         "elapsed_s": time.time() - start,
     }
@@ -306,6 +408,10 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
         raise RuntimeError("no test trips selected")
 
     config = build_config(args)
+    taroz_phone_aware = bool(getattr(args, "taroz_phone_aware", False))
+    taroz_marupaku = bool(getattr(args, "taroz_marupaku", False))
+    if taroz_marupaku and taroz_phone_aware:
+        raise ValueError("--taroz-marupaku and --taroz-phone-aware are mutually exclusive")
     bridge_tables: dict[str, pd.DataFrame] = {}
     metrics: list[dict[str, Any]] = []
     total = len(trips)
@@ -316,7 +422,7 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
             "sample_trip_id": trip_id,
             "max_epochs": args.max_epochs,
             "start_epoch": args.start_epoch,
-            "config": config,
+            "config": apply_taroz_phone_aware_preset(config, trip_id) if taroz_phone_aware else config,
             "bridge_output_root": args.bridge_output_root,
             "resume_existing": bool(args.resume_existing),
         }
@@ -385,13 +491,15 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
             "resume_existing": bool(args.resume_existing),
             "cached_trips": sum(1 for item in completed if bool(item["cached"])),
             "config": {
-                "position_source": args.position_source,
+                "position_source": config.position_source,
                 "chunk_epochs": args.chunk_epochs,
                 "max_epochs": args.max_epochs,
                 "dual_frequency": bool(args.dual_frequency),
-                "ct_rbpf_fgo": bool(args.ct_rbpf_fgo or args.position_source == CT_RBPF_FGO_SOURCE),
+                "ct_rbpf_fgo": bool(config.ct_rbpf_fgo_enabled),
+                "taroz_marupaku": taroz_marupaku,
+                "taroz_phone_aware": taroz_phone_aware,
                 "ct_rbpf_motion_sigma_m": args.ct_rbpf_motion_sigma_m,
-                "dd_carrier_fgo": bool(args.dd_carrier_fgo or args.position_source == DD_CARRIER_FGO_SOURCE),
+                "dd_carrier_fgo": bool(config.dd_carrier_fgo_enabled),
                 "dd_carrier_base_obs_template": args.dd_carrier_base_obs_template,
                 "dd_carrier_require_base_obs_template": bool(args.dd_carrier_require_base_obs_template),
                 "dd_carrier_tow_snap_tolerance_s": args.dd_carrier_tow_snap_tolerance_s,
@@ -442,6 +550,42 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--motion-sigma-m", type=float, default=0.2)
     parser.add_argument("--factor-dt-max-s", type=float, default=FACTOR_DT_MAX_S)
     parser.add_argument("--fgo-iters", type=int, default=8)
+    parser.add_argument("--stop-attitude-sigma-rad", type=float, default=0.0)
+    parser.add_argument(
+        "--taroz-fgo",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable the taroz parameters.m FGO preset: taroz_sn FGO weights, per-Type PR/D/L Huber and motion, clock/stop/height sigmas.",
+    )
+    parser.add_argument(
+        "--taroz-marupaku",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Closest available taroz full-FGO parity mode: apply --taroz-fgo preset and force --position-source=fgo.",
+    )
+    parser.add_argument(
+        "--taroz-imu-factor-mask-csv",
+        type=Path,
+        default=None,
+        help="optional Taroz IMU factor-mask CSV (or export dir) used to filter full-FGO IMU interval support",
+    )
+    parser.add_argument(
+        "--taroz-phone-aware",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Apply the guarded taroz preset per phone: Pixel uses GNSS-only taroz; non-Pixel uses taroz SNR FGO weights only.",
+    )
+    parser.add_argument(
+        "--taroz-fgo-candidates",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Add taroz-weight / PR-Huber / PR-D-L-Huber FGO variants as gated candidate sources.",
+    )
+    parser.add_argument(
+        "--taroz-fgo-candidate-sources",
+        default=",".join(TAROZ_FGO_CANDIDATE_SOURCES),
+        help="Comma-separated taroz FGO candidate sources.",
+    )
     parser.add_argument(
         "--position-source",
         choices=("auto", "gated", "fgo", CT_RBPF_FGO_SOURCE, DD_CARRIER_FGO_SOURCE),
@@ -486,6 +630,8 @@ def main(argv: list[str] | None = None) -> int:
         default=False,
     )
     parser.add_argument("--fgo-huber-k-pr", type=float, default=0.0)
+    parser.add_argument("--fgo-huber-k-doppler", type=float, default=0.0)
+    parser.add_argument("--fgo-huber-k-tdcp", type=float, default=0.0)
     parser.add_argument(
         "--gate-fgo-low-baseline-mse-pr-max",
         type=float,
@@ -497,6 +643,12 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         default=None,
         help="Override gate baseline mse_pr threshold for low-baseline FGO guard.",
+    )
+    parser.add_argument(
+        "--gate-fgo-baseline-gap-p95-floor-m",
+        type=float,
+        default=None,
+        help="Override FGO-vs-baseline gap p95 floor for gated candidate acceptance.",
     )
     parser.add_argument(
         "--pairwise-consistency",
@@ -567,9 +719,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--fgo-raw-wls-proxy-rescue", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--fgo-raw-wls-proxy-rescue-phones", default="pixel4")
-    parser.add_argument("--fgo-raw-wls-proxy-rescue-mse-ratio-max", type=float, default=1.20)
+    parser.add_argument("--fgo-raw-wls-proxy-rescue-mse-ratio-max", type=float, default=1.15)
     parser.add_argument("--fgo-raw-wls-proxy-rescue-gap-step-p95-ratio-max", type=float, default=1.25)
-    parser.add_argument("--fgo-raw-wls-proxy-rescue-quality-delta-max", type=float, default=-0.35)
+    parser.add_argument("--fgo-raw-wls-proxy-rescue-quality-delta-max", type=float, default=-0.20)
     parser.add_argument("--fgo-raw-wls-proxy-rescue-mse-delta-vs-baseline-max", type=float, default=0.0)
     parser.add_argument(
         "--hampel-postprocess",

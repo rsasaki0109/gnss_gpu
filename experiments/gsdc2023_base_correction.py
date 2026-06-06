@@ -143,6 +143,27 @@ def select_base_pseudorange_observation(
     return None
 
 
+def base_sat_product_signal_type(signal_type: str) -> str:
+    sig = str(signal_type).upper()
+    if sig.startswith("GAL") or "E5" in sig or "E1" in sig:
+        return "GAL_E1_C_P"
+    if sig.startswith("QZS") or "QZS" in sig:
+        return "QZS_L1_CA"
+    return "GPS_L1_CA"
+
+
+def select_base_sat_product_observation(
+    observations: dict[str, float],
+    signal_type: str,
+) -> tuple[str, float] | None:
+    """Match RTKLIB satposs' first-frequency pseudorange preference."""
+
+    preferred = select_base_pseudorange_observation(observations, base_sat_product_signal_type(signal_type))
+    if preferred is not None:
+        return preferred
+    return select_base_pseudorange_observation(observations, signal_type)
+
+
 def slot_sat_id(constellation_type: int, svid: int) -> str | None:
     if int(constellation_type) == 1:
         return f"G{int(svid):02d}"
@@ -259,7 +280,7 @@ def gps_arrival_tow_s_from_row(row: object) -> float:
     return (arrival_ns * 1.0e-9) % GPS_WEEK_SECONDS
 
 
-def gps_broadcast_clock_bias_s(message: object, transmit_tow_s: float) -> float:
+def rtklib_broadcast_clock_bias_s(message: object, transmit_tow_s: float) -> float:
     """Mirror RTKLIB eph2clk: broadcast clock polynomial without relativity/TGD."""
 
     toc_s = float(getattr(message, "toc_seconds", getattr(message, "toe", 0.0)))
@@ -276,6 +297,19 @@ def gps_broadcast_clock_bias_s(message: object, transmit_tow_s: float) -> float:
     for _ in range(2):
         t = ts - (af0 + af1 * t + af2 * t * t)
     return af0 + af1 * t + af2 * t * t
+
+
+def gps_broadcast_clock_bias_s(message: object, transmit_tow_s: float) -> float:
+    return rtklib_broadcast_clock_bias_s(message, transmit_tow_s)
+
+
+def rtklib_corrected_transmit_tow_s(
+    arrival_tow_s: float,
+    pseudorange_m: float,
+    message: object,
+) -> float:
+    transmit_tow_s = float(arrival_tow_s) - float(pseudorange_m) / LIGHT_SPEED_MPS
+    return transmit_tow_s - rtklib_broadcast_clock_bias_s(message, transmit_tow_s)
 
 
 def gps_matrtklib_sat_product_adjustment(
@@ -331,7 +365,7 @@ def gps_matrtklib_sat_product_adjustment(
     ):
         return None
 
-    corrected_tow_s = transmit_tow_s - gps_broadcast_clock_bias_s(filtered_message, transmit_tow_s)
+    corrected_tow_s = transmit_tow_s - rtklib_broadcast_clock_bias_s(filtered_message, transmit_tow_s)
 
     sat_pos, clock_s = Ephemeris._compute_single_cpu(filtered_message, corrected_tow_s, "C1")
     sat_clock_bias_m = float(clock_s) * LIGHT_SPEED_MPS + float(getattr(filtered_message, "tgd", 0.0)) * LIGHT_SPEED_MPS
@@ -425,13 +459,16 @@ def read_base_station_xyz(data_root: Path, course: str, base_name: str, *, apply
 
 
 def rinex_header_base_xyz_or_metadata(base_obs: object, metadata_xyz: np.ndarray) -> np.ndarray:
-    """Prefer the RINEX header station coordinate when it is present."""
+    """Return the Taroz base coordinate, falling back to the RINEX header if needed."""
 
+    metadata = np.asarray(metadata_xyz, dtype=np.float64)
+    if metadata.shape == (3,) and np.isfinite(metadata).all() and np.linalg.norm(metadata) > 1.0e6:
+        return metadata
     header = getattr(base_obs, "header", None)
     header_xyz = np.asarray(getattr(header, "approx_position", np.zeros(3)), dtype=np.float64)
     if header_xyz.shape == (3,) and np.isfinite(header_xyz).all() and np.linalg.norm(header_xyz) > 1.0e6:
         return header_xyz
-    return np.asarray(metadata_xyz, dtype=np.float64)
+    return metadata
 
 
 def moving_nanmean(values: np.ndarray, window: int) -> np.ndarray:
@@ -599,28 +636,26 @@ def load_base_residual_series_cached(
             if selected is None:
                 continue
             selected_code, selected_pr = selected
-            epoch_observations.append((sat_id, selected_code, selected_pr))
+            product_selected = select_base_sat_product_observation(obs, signal_type) or selected
+            product_code, product_pr = product_selected
+            epoch_observations.append((sat_id, selected_code, selected_pr, product_code, product_pr))
         if not epoch_observations:
             continue
 
-        for sat_id, selected_code, pr in epoch_observations:
+        for sat_id, selected_code, pr, product_code, product_pr in epoch_observations:
             col = sat_to_col.get(str(sat_id))
             if col is None:
                 continue
-            nav_msg = nav.select_ephemeris(sat_id, gps_tow, selected_code)
+            nav_msg = nav.select_ephemeris(sat_id, gps_tow, product_code)
             if nav_msg is None:
                 continue
-            transmit_tow = gps_tow - float(pr) / C_LIGHT
-            sat_pos = None
-            sat_clk_s = np.nan
-            for _ in range(3):
-                sat_pos, sat_clk_s = Ephemeris._compute_single_cpu(
-                    nav_msg,
-                    transmit_tow,
-                    selected_code,
-                    apply_group_delay=False,
-                )
-                transmit_tow = gps_tow - float(pr) / C_LIGHT - float(sat_clk_s)
+            transmit_tow = rtklib_corrected_transmit_tow_s(gps_tow, float(product_pr), nav_msg)
+            sat_pos, sat_clk_s = Ephemeris._compute_single_cpu(
+                nav_msg,
+                transmit_tow,
+                product_code,
+                apply_group_delay=False,
+            )
             if sat_pos is None:
                 continue
             sat_pos = np.asarray(sat_pos, dtype=np.float64)
@@ -652,7 +687,11 @@ def compute_base_pseudorange_correction_matrix(
     base_residual_loader: BaseResidualLoader = load_base_residual_series_cached,
     phone_span_fn: PhoneTimeSpanFn = trip_phone_time_span_for_base_trim,
 ) -> np.ndarray:
+    data_root = Path(data_root)
     split, course, phone = trip_course_phone(trip)
+    if split is None and data_root.name in {"train", "test"} and course is not None and phone is not None:
+        split = data_root.name
+        data_root = data_root.parent
     if split is None or course is None or phone is None:
         raise RuntimeError(f"trip must include split/course/phone for base correction: {trip}")
     base_name, rinex_type = base_setting_fn(data_root, split, course, phone)

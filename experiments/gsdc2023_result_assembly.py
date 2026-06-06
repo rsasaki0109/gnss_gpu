@@ -120,6 +120,7 @@ def build_bridge_result(
     vd_seed_guard_records: Sequence[dict[str, object]] | None = None,
     raw_wls_max_gap_m: float | None = None,
     allow_fgo_raw_wls_proxy_rescue: bool = False,
+    fgo_vd_state: np.ndarray | None = None,
 ) -> BridgeResult:
     return BridgeResult(
         trip=trip,
@@ -130,6 +131,7 @@ def build_bridge_result(
         kaggle_wls=assembled_outputs.output_states["baseline"][:, :3],
         raw_wls=assembled_outputs.output_states["raw_wls"],
         fgo_state=assembled_outputs.output_states["fgo"],
+        fgo_vd_state=fgo_vd_state,
         selected_state=assembled_outputs.selected_state,
         selected_sources=assembled_outputs.selected_sources,
         truth=assembled_outputs.truth,
@@ -160,6 +162,7 @@ def build_bridge_result(
             fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max=config.fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max,
             fgo_low_baseline_mse_pr_max=getattr(config, "gate_fgo_low_baseline_mse_pr_max", None),
             fgo_baseline_mse_pr_min=getattr(config, "gate_fgo_baseline_mse_pr_min", None),
+            fgo_baseline_gap_p95_floor_m=getattr(config, "gate_fgo_baseline_gap_p95_floor_m", None),
         ),
         **bridge_result_metadata_kwargs(config, batch),
     )

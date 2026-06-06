@@ -20,6 +20,7 @@ from experiments.gsdc2023_chunk_selection import (
 )
 from experiments.gsdc2023_clock_state import MULTI_GNSS_BLOCKLIST_PHONES
 from experiments.gsdc2023_observation_matrix import TripArrays
+from experiments.gsdc2023_output import TAROZ_FGO_CANDIDATE_SOURCES
 
 
 @dataclass(frozen=True)
@@ -70,11 +71,26 @@ def fgo_raw_wls_proxy_rescue_enabled(config: BridgeConfig, phone_name: str) -> b
     return phone_name.lower() in phones
 
 
+def taroz_fgo_candidate_sources_enabled(config: BridgeConfig) -> tuple[str, ...]:
+    if not config.taroz_fgo_candidate_enabled:
+        return ()
+    if config.position_source != "gated" or not config.use_vd:
+        return ()
+    allowed = set(TAROZ_FGO_CANDIDATE_SOURCES)
+    return tuple(
+        str(source)
+        for source in config.taroz_fgo_candidate_sources
+        if str(source) in allowed
+    )
+
+
 def batch_without_tdcp(batch: TripArrays) -> TripArrays:
     return replace(
         batch,
         tdcp_meas=None,
+        tdcp_raw_meas=None,
         tdcp_weights=None,
+        tdcp_weights_fgo=None,
         tdcp_consistency_mask_count=0,
         tdcp_geometry_correction_count=0,
     )
@@ -209,6 +225,7 @@ def select_gated_solution(
     dd_carrier_min_anchor_coverage: float = DD_CARRIER_ANCHOR_COVERAGE_MIN_DEFAULT,
     fgo_low_baseline_mse_pr_max: float | None = None,
     fgo_baseline_mse_pr_min: float | None = None,
+    fgo_baseline_gap_p95_floor_m: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
     gated_state = catalog.states["baseline"].copy()
     gated_sources = fixed_source_array(n_epoch, "baseline")
@@ -232,6 +249,7 @@ def select_gated_solution(
             dd_carrier_min_anchor_coverage=dd_carrier_min_anchor_coverage,
             fgo_low_baseline_mse_pr_max=fgo_low_baseline_mse_pr_max,
             fgo_baseline_mse_pr_min=fgo_baseline_mse_pr_min,
+            fgo_baseline_gap_p95_floor_m=fgo_baseline_gap_p95_floor_m,
         )
         if chosen_source == "baseline":
             continue
@@ -256,6 +274,7 @@ __all__ = [
     "normalized_source_counts",
     "raw_wls_max_gap_guard_m",
     "select_gated_solution",
+    "taroz_fgo_candidate_sources_enabled",
     "tdcp_off_candidate_enabled",
     "tdcp_scale_candidate_enabled",
     "with_fixed_source_solution",
