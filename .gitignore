@@ -46,6 +46,7 @@ experiments/results/gsdc2023_bridge_diag_*.csv
 # Already-tracked result files keep being tracked.
 experiments/results/*.csv
 experiments/results/*.json
+experiments/results/*.md
 experiments/results/*.pos
 experiments/results/*.txt
 experiments/results/*.npz
@@ -53,6 +54,9 @@ experiments/results/*.html
 
 # GPU / urban-shadow / RF-security lab generated data assets
 docs/assets/data/
+!docs/assets/data/
+!docs/assets/data/plateau_nlos_demo_suite_summary.csv
+!docs/assets/data/plateau_nlos_demo_suite_summary.md
 docs/assets/gpu_stress_lab_snapshot.js
 docs/assets/gpu_stress_lab_snapshot.json
 docs/assets/gpu_gnss_stress_lab.html

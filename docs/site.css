@@ -248,6 +248,43 @@ h3 {
   object-fit: cover;
 }
 
+.showcase-html-preview {
+  display: grid;
+  align-content: end;
+  min-height: 220px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(15, 118, 110, 0.88), rgba(188, 108, 37, 0.72)),
+    linear-gradient(180deg, rgba(255, 250, 241, 0.18), rgba(255, 250, 241, 0.04));
+  color: #fffaf1;
+}
+
+.showcase-html-kicker,
+.showcase-html-detail {
+  margin: 0;
+  color: rgba(255, 250, 241, 0.82);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.showcase-html-title {
+  margin: 8px 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.45rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.showcase-html-detail {
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-transform: none;
+}
+
 .figure-card {
   background: var(--panel-strong);
 }

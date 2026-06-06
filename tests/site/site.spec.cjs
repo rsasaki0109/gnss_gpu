@@ -25,14 +25,17 @@ test("artifact snapshot renders cleanly", async ({ page }) => {
   await expect(page.locator("#title")).toHaveText("gnss_gpu Artifact Snapshot");
   await expect(page.locator("#subtitle")).toContainText("PF+RobustClear-10K");
   const showcaseCards = page.locator("#showcase-media article");
-  await expect(showcaseCards).toHaveCount(3);
+  await expect(showcaseCards).toHaveCount(4);
   await expect(showcaseCards.filter({ hasText: "UrbanNav LOS/NLOS Map Sweep" })).toHaveCount(1);
-  await expect(page.locator("#hero-cards article")).toHaveCount(8);
+  await expect(showcaseCards.filter({ hasText: "PLATEAU NLOS Measurement Demo" })).toHaveCount(1);
+  await expect(page.locator("#hero-cards article")).toHaveCount(9);
+  await expect(page.locator("#hero-cards article").filter({ hasText: "PLATEAU NLOS Suite" })).toHaveCount(1);
   await expect(page.locator("#method-freeze article")).toHaveCount(5);
-  await expect(page.locator("#quick-links article")).toHaveCount(8);
+  await expect(page.locator("#quick-links article")).toHaveCount(9);
   await expect(page.locator("#figures article")).toHaveCount(4);
   await expect(page.locator("#analysis-charts article")).toHaveCount(5);
-  await expect(page.locator("#tables section")).toHaveCount(8);
+  await expect(page.locator("#tables section")).toHaveCount(9);
+  await expect(page.locator("#tables section").filter({ hasText: "PLATEAU NLOS Replay Suite" })).toHaveCount(1);
   await expect(page.locator(".error-box")).toHaveCount(0);
   await expect(page.locator("#validation-card .metric-value")).toContainText("440 passed");
 

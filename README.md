@@ -18,7 +18,7 @@
   >
 </p>
 
-[**Live results snapshot**](https://rsasaki0109.github.io/gnss_gpu/) · [Benchmarks](benchmarks/RESULTS.md) · [Examples](examples/) · [How it's built](internal_docs/plan.md)
+[**Live results snapshot**](https://rsasaki0109.github.io/gnss_gpu/) · [Benchmarks](benchmarks/RESULTS.md) · [Examples](examples/) · [Experiment log](docs/experiments.md) · [Decisions](docs/decisions.md) · [How it's built](internal_docs/plan.md)
 
 </div>
 
@@ -102,6 +102,47 @@ robust vs naive: 81% better P50, 77% better RMS
 
 Robust down-weighting of NLOS-biased measurements is the same idea the GPU
 particle-filter stack scales up to beat RTKLIB demo5 on real UrbanNav data.
+
+For a measurement-level NLOS simulator with explicit ray-cast building blockage,
+C/N0 attenuation, excess delay, and a geometry-aware SPP comparison:
+
+```bash
+PYTHONPATH=python python3 examples/demo_nlos_simulation.py
+PYTHONPATH=python python3 examples/demo_plateau_nlos_simulation.py
+PYTHONPATH=python python3 examples/demo_plateau_nlos_visualization.py
+PYTHONPATH=python:. python3 experiments/run_plateau_nlos_demo_suite.py
+```
+
+The suite command exports the mask, replays SPP/PF/FGO, and writes combined
+JSON/Markdown/CSV summaries. The individual replay commands are:
+
+| Replay consumer | Baseline RMS | Mask-soft RMS | RMS gain |
+|---|---:|---:|---:|
+| SPP | 11.85 m | 4.07 m | 65.6% |
+| PF | 11.18 m | 1.40 m | 87.4% |
+| local-FGO | 8.10 m | 0.38 m | 95.4% |
+
+```bash
+PYTHONPATH=python:. python3 experiments/export_plateau_nlos_demo_mask.py \
+  --out-csv experiments/results/plateau_nlos_demo_mask.csv \
+  --summary-json experiments/results/plateau_nlos_demo_mask_summary.json
+PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_spp.py \
+  --mask-csv experiments/results/plateau_nlos_demo_mask.csv \
+  --summary-json experiments/results/plateau_nlos_demo_spp_replay_summary.json
+PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_pf.py \
+  --mask-csv experiments/results/plateau_nlos_demo_mask.csv \
+  --summary-json experiments/results/plateau_nlos_demo_pf_replay_summary.json
+PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_fgo.py \
+  --mask-csv experiments/results/plateau_nlos_demo_mask.csv \
+  --summary-json experiments/results/plateau_nlos_demo_fgo_replay_summary.json
+```
+
+The PLATEAU visualization is also checked into the Pages assets at
+[`docs/assets/media/plateau_nlos_visualization.html`](docs/assets/media/plateau_nlos_visualization.html).
+The exported mask CSV uses the existing experiment contract
+`tow,epoch_idx,prn,is_los`; the SPP, particle-filter, and local-FGO replays
+consume only that mask path and show mask-soft downstream estimators recovering
+the simulated NLOS error.
 
 ### Run the test suite
 
