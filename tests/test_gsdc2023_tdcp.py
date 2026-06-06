@@ -64,6 +64,29 @@ def test_build_tdcp_arrays_counts_consistency_rejects_and_ignores_masked_doppler
     assert tdcp_weights[0, 1] > 0.0
 
 
+def test_build_tdcp_arrays_prefers_carrier_weights_direct():
+    adr = np.array([[0.0, 0.0], [1.0, 2.0]], dtype=np.float64)
+    adr_state = np.ones_like(adr, dtype=np.int32)
+    adr_uncertainty = np.full_like(adr, 0.02)
+    carrier_weights = np.array([[25.0, 0.0], [99.0, 99.0]], dtype=np.float64)
+
+    tdcp_meas, tdcp_weights, mask_count = build_tdcp_arrays(
+        adr,
+        adr_state,
+        adr_uncertainty,
+        doppler=None,
+        dt=np.array([1.0, 0.0], dtype=np.float64),
+        consistency_threshold_m=1.5,
+        carrier_weights=carrier_weights,
+    )
+
+    assert mask_count == 0
+    assert tdcp_meas is not None
+    assert tdcp_weights is not None
+    assert tdcp_weights[0, 0] == pytest.approx(25.0)
+    assert tdcp_weights[0, 1] == pytest.approx(1.0 / (np.sqrt(0.02**2 + 0.02**2) ** 2))
+
+
 def test_build_tdcp_arrays_propagates_consistency_rejects_to_adjacent_pairs_direct():
     adr = np.array(
         [

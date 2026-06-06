@@ -96,7 +96,8 @@ PYBIND11_MODULE(_gnss_gpu, m) {
          py::array_t<double> state_io, double motion_sigma_m, int max_iter, double tol, double huber_k,
          int enable_line_search, py::object sys_kind_py, int n_clock,
          py::object motion_displacement_py,
-         py::object tdcp_meas_py, py::object tdcp_weights_py, double tdcp_sigma_m) {
+         py::object tdcp_meas_py, py::object tdcp_weights_py, double tdcp_sigma_m,
+         double tdcp_huber_k) {
         auto bs = sat_ecef.request(), bp = pseudorange.request(), bw = weights.request();
         auto bst = state_io.request();
         if (bs.ndim != 3 || bp.ndim != 2 || bw.ndim != 2 || bst.ndim != 2)
@@ -157,7 +158,7 @@ PYBIND11_MODULE(_gnss_gpu, m) {
             static_cast<double*>(bs.ptr), static_cast<double*>(bp.ptr), static_cast<double*>(bw.ptr),
             sk_ptr, n_clock, static_cast<double*>(bst.ptr), n_epoch, n_sat, motion_sigma_m, max_iter,
             tol, huber_k, enable_line_search, &mse, md_ptr,
-            tdcp_meas_ptr, tdcp_weights_ptr, tdcp_sigma_m);
+            tdcp_meas_ptr, tdcp_weights_ptr, tdcp_sigma_m, tdcp_huber_k);
         return py::make_tuple(iters, mse);
       },
       "GPU FGO: PseudorangeFactor_XC-style clocks (h=[1,0..] or [1,1,0..]) + optional RW motion + TDCP. "
@@ -169,7 +170,8 @@ PYBIND11_MODULE(_gnss_gpu, m) {
       py::arg("n_clock") = 1,
       py::arg("motion_displacement") = py::none(),
       py::arg("tdcp_meas") = py::none(), py::arg("tdcp_weights") = py::none(),
-      py::arg("tdcp_sigma_m") = 0.0);
+      py::arg("tdcp_sigma_m") = 0.0,
+      py::arg("tdcp_huber_k") = 0.0);
 
   // --- Extended FGO with velocity state + Doppler ---
   m.def(
@@ -185,11 +187,29 @@ PYBIND11_MODULE(_gnss_gpu, m) {
          py::object tdcp_meas_py, py::object tdcp_weights_py, double tdcp_sigma_m, bool tdcp_use_drift,
          double relative_height_sigma_m, py::object enu_up_ecef_py, py::object rel_height_i_py,
          py::object rel_height_j_py,
-         py::object imu_delta_p_py, py::object imu_delta_v_py,
-         double imu_position_sigma_m, double imu_velocity_sigma_mps,
+         py::object imu_delta_p_py, py::object imu_delta_v_py, py::object imu_delta_angle_py,
+         py::object imu_delta_t_py,
+         py::object imu_delta_p_bias_accel_jac_py, py::object imu_delta_v_bias_accel_jac_py,
+         py::object imu_delta_p_bias_gyro_jac_py, py::object imu_delta_v_bias_gyro_jac_py,
+         py::object imu_delta_angle_bias_gyro_jac_py,
+         double imu_position_sigma_m, double imu_velocity_sigma_mps, double imu_attitude_sigma_rad,
+         py::object imu_position_weights_py, py::object imu_velocity_weights_py, py::object imu_attitude_weights_py,
+         py::object imu_preintegration_information_py,
+         bool imu_factor_use_next_bias,
          py::object sat_clock_drift_py,
          py::object absolute_height_ref_ecef_py, double absolute_height_sigma_m,
-         double imu_accel_bias_prior_sigma_mps2, double imu_accel_bias_between_sigma_mps2) {
+         double imu_accel_bias_prior_sigma_mps2, double imu_accel_bias_between_sigma_mps2,
+         py::object imu_accel_bias_between_weights_py,
+         double imu_gyro_bias_prior_sigma_radps, double imu_gyro_bias_between_sigma_radps,
+         py::object imu_gyro_bias_between_weights_py,
+         double doppler_huber_k, double tdcp_huber_k,
+	         py::object tdcp_linearization_ref_ecef_py,
+	         double stop_velocity_huber_k, double stop_position_huber_k,
+	         double relative_height_huber_k, double absolute_height_huber_k,
+         py::object imu_gravity_py,
+         py::object pr_linearization_ref_ecef_py, py::object pr_linearization_los_ecef_py,
+         py::object doppler_linearization_ref_vel_py, py::object doppler_linearization_los_ecef_py,
+         double stop_attitude_sigma_rad, double lm_damping) {
         auto bs = sat_ecef.request(), bp = pseudorange.request(), bw = weights.request();
         auto bst = state_io.request();
         if (bs.ndim != 3 || bp.ndim != 2 || bw.ndim != 2 || bst.ndim != 2)
@@ -200,11 +220,16 @@ PYBIND11_MODULE(_gnss_gpu, m) {
         const int base_ss = 7 + n_clock;
         const int ss = static_cast<int>(bst.shape[1]);
         const bool has_accel_bias_state = ss == base_ss + 3;
+        const bool has_imu_bias_state = ss == base_ss + 6;
+        const bool has_attitude_imu_bias_state = ss == base_ss + 9;
+        const bool has_split_pose_attitude_imu_bias_state = ss == base_ss + 12;
         if (bp.shape[0] != n_epoch || bw.shape[0] != n_epoch ||
             static_cast<int>(bp.shape[1]) != n_sat || static_cast<int>(bw.shape[1]) != n_sat)
           throw std::runtime_error("fgo_gnss_lm_vd: pseudorange/weights shape mismatch");
-        if (static_cast<int>(bst.shape[0]) != n_epoch || (ss != base_ss && !has_accel_bias_state))
-          throw std::runtime_error("fgo_gnss_lm_vd: state_io must be [T, 7+n_clock] or [T, 10+n_clock]");
+        if (static_cast<int>(bst.shape[0]) != n_epoch ||
+            (ss != base_ss && !has_accel_bias_state && !has_imu_bias_state &&
+             !has_attitude_imu_bias_state && !has_split_pose_attitude_imu_bias_state))
+          throw std::runtime_error("fgo_gnss_lm_vd: state_io must be [T, 7+n_clock], [T, 10+n_clock], [T, 13+n_clock], [T, 16+n_clock], or [T, 19+n_clock]");
         if (bst.readonly) throw std::runtime_error("fgo_gnss_lm_vd: state_io must be writable");
         if (n_clock < 1 || n_clock > 7)
           throw std::runtime_error("fgo_gnss_lm_vd: n_clock must be in 1..7");
@@ -331,6 +356,105 @@ PYBIND11_MODULE(_gnss_gpu, m) {
           imu_dv_ptr = static_cast<const double*>(dvr.ptr);
         }
 
+        const double* imu_da_ptr = nullptr;
+        if (!imu_delta_angle_py.is_none()) {
+          auto da_arr = py::cast<py::array_t<double>>(imu_delta_angle_py);
+          auto dar = da_arr.request();
+          if (dar.size != (n_epoch - 1) * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_delta_angle must have (T-1)*3 elements");
+          imu_da_ptr = static_cast<const double*>(dar.ptr);
+        }
+
+        const double* imu_dt_ptr = nullptr;
+        if (!imu_delta_t_py.is_none()) {
+          auto dt_arr = py::cast<py::array_t<double>>(imu_delta_t_py);
+          auto dtr = dt_arr.request();
+          if (dtr.size != (n_epoch - 1))
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_delta_t must have T-1 elements");
+          imu_dt_ptr = static_cast<const double*>(dtr.ptr);
+        }
+
+        const double* imu_dp_ba_jac_ptr = nullptr;
+        if (!imu_delta_p_bias_accel_jac_py.is_none()) {
+          auto jac_arr = py::cast<py::array_t<double>>(imu_delta_p_bias_accel_jac_py);
+          auto jacr = jac_arr.request();
+          if (jacr.size != (n_epoch - 1) * 9)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_delta_p_bias_accel_jac must have (T-1)*3*3 elements");
+          imu_dp_ba_jac_ptr = static_cast<const double*>(jacr.ptr);
+        }
+
+        const double* imu_dv_ba_jac_ptr = nullptr;
+        if (!imu_delta_v_bias_accel_jac_py.is_none()) {
+          auto jac_arr = py::cast<py::array_t<double>>(imu_delta_v_bias_accel_jac_py);
+          auto jacr = jac_arr.request();
+          if (jacr.size != (n_epoch - 1) * 9)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_delta_v_bias_accel_jac must have (T-1)*3*3 elements");
+          imu_dv_ba_jac_ptr = static_cast<const double*>(jacr.ptr);
+        }
+
+        const double* imu_dp_bg_jac_ptr = nullptr;
+        if (!imu_delta_p_bias_gyro_jac_py.is_none()) {
+          auto jac_arr = py::cast<py::array_t<double>>(imu_delta_p_bias_gyro_jac_py);
+          auto jacr = jac_arr.request();
+          if (jacr.size != (n_epoch - 1) * 9)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_delta_p_bias_gyro_jac must have (T-1)*3*3 elements");
+          imu_dp_bg_jac_ptr = static_cast<const double*>(jacr.ptr);
+        }
+
+        const double* imu_dv_bg_jac_ptr = nullptr;
+        if (!imu_delta_v_bias_gyro_jac_py.is_none()) {
+          auto jac_arr = py::cast<py::array_t<double>>(imu_delta_v_bias_gyro_jac_py);
+          auto jacr = jac_arr.request();
+          if (jacr.size != (n_epoch - 1) * 9)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_delta_v_bias_gyro_jac must have (T-1)*3*3 elements");
+          imu_dv_bg_jac_ptr = static_cast<const double*>(jacr.ptr);
+        }
+
+        const double* imu_da_bg_jac_ptr = nullptr;
+        if (!imu_delta_angle_bias_gyro_jac_py.is_none()) {
+          auto jac_arr = py::cast<py::array_t<double>>(imu_delta_angle_bias_gyro_jac_py);
+          auto jacr = jac_arr.request();
+          if (jacr.size != (n_epoch - 1) * 9)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_delta_angle_bias_gyro_jac must have (T-1)*3*3 elements");
+          imu_da_bg_jac_ptr = static_cast<const double*>(jacr.ptr);
+        }
+
+        const double* imu_pos_w_ptr = nullptr;
+        if (!imu_position_weights_py.is_none()) {
+          auto pw_arr = py::cast<py::array_t<double>>(imu_position_weights_py);
+          auto pwr = pw_arr.request();
+          if (pwr.size != (n_epoch - 1) * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_position_weights must have (T-1)*3 elements");
+          imu_pos_w_ptr = static_cast<const double*>(pwr.ptr);
+        }
+
+        const double* imu_vel_w_ptr = nullptr;
+        if (!imu_velocity_weights_py.is_none()) {
+          auto vw_arr = py::cast<py::array_t<double>>(imu_velocity_weights_py);
+          auto vwr = vw_arr.request();
+          if (vwr.size != (n_epoch - 1) * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_velocity_weights must have (T-1)*3 elements");
+          imu_vel_w_ptr = static_cast<const double*>(vwr.ptr);
+        }
+
+        const double* imu_att_w_ptr = nullptr;
+        if (!imu_attitude_weights_py.is_none()) {
+          auto aw_arr = py::cast<py::array_t<double>>(imu_attitude_weights_py);
+          auto awr = aw_arr.request();
+          if (awr.size != (n_epoch - 1) * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_attitude_weights must have (T-1)*3 elements");
+          imu_att_w_ptr = static_cast<const double*>(awr.ptr);
+        }
+
+        const double* imu_pva_info_ptr = nullptr;
+        if (!imu_preintegration_information_py.is_none()) {
+          auto info_arr = py::cast<py::array_t<double>>(imu_preintegration_information_py);
+          auto infor = info_arr.request();
+          if (infor.size != (n_epoch - 1) * 81)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_preintegration_information must have (T-1)*9*9 elements");
+          imu_pva_info_ptr = static_cast<const double*>(infor.ptr);
+        }
+
         const double* scd_ptr = nullptr;
         if (!sat_clock_drift_py.is_none()) {
           auto scd_arr = py::cast<py::array_t<double>>(sat_clock_drift_py);
@@ -349,8 +473,84 @@ PYBIND11_MODULE(_gnss_gpu, m) {
           abs_height_ref_ptr = static_cast<const double*>(absr.ptr);
         }
 
-        double mse = 0.0;
-        int iters = gnss_gpu::fgo_gnss_lm_vd(
+        const double* imu_accel_bias_between_w_ptr = nullptr;
+        if (!imu_accel_bias_between_weights_py.is_none()) {
+          auto bw_arr = py::cast<py::array_t<double>>(imu_accel_bias_between_weights_py);
+          auto bwr = bw_arr.request();
+          if (bwr.size != (n_epoch - 1) * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_accel_bias_between_weights must have (T-1)*3 elements");
+          imu_accel_bias_between_w_ptr = static_cast<const double*>(bwr.ptr);
+        }
+
+        const double* imu_gyro_bias_between_w_ptr = nullptr;
+        if (!imu_gyro_bias_between_weights_py.is_none()) {
+          auto bw_arr = py::cast<py::array_t<double>>(imu_gyro_bias_between_weights_py);
+          auto bwr = bw_arr.request();
+          if (bwr.size != (n_epoch - 1) * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: imu_gyro_bias_between_weights must have (T-1)*3 elements");
+          imu_gyro_bias_between_w_ptr = static_cast<const double*>(bwr.ptr);
+        }
+
+	        const double* tdcp_ref_ptr = nullptr;
+	        if (!tdcp_linearization_ref_ecef_py.is_none()) {
+	          auto ref_arr = py::cast<py::array_t<double>>(tdcp_linearization_ref_ecef_py);
+          auto refr = ref_arr.request();
+          if (refr.size != n_epoch * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: tdcp_linearization_ref_ecef must have T*3 elements");
+	          tdcp_ref_ptr = static_cast<const double*>(refr.ptr);
+	        }
+
+	        const double* imu_gravity_ptr = nullptr;
+	        if (!imu_gravity_py.is_none()) {
+	          if (!has_attitude_imu_bias_state && !has_split_pose_attitude_imu_bias_state)
+	            throw std::runtime_error("fgo_gnss_lm_vd: imu_gravity requires [T, 16+n_clock] or [T, 19+n_clock] attitude/bias state");
+	          auto gravity_arr = py::cast<py::array_t<double>>(imu_gravity_py);
+	          auto gravityr = gravity_arr.request();
+	          if (gravityr.size != (n_epoch - 1) * 3)
+	            throw std::runtime_error("fgo_gnss_lm_vd: imu_gravity must have (T-1)*3 elements");
+	          imu_gravity_ptr = static_cast<const double*>(gravityr.ptr);
+	        }
+
+        if (pr_linearization_ref_ecef_py.is_none() != pr_linearization_los_ecef_py.is_none())
+          throw std::runtime_error("fgo_gnss_lm_vd: pr_linearization_ref_ecef and pr_linearization_los_ecef must be both set or both none");
+        const double* pr_ref_ptr = nullptr;
+        if (!pr_linearization_ref_ecef_py.is_none()) {
+          auto ref_arr = py::cast<py::array_t<double>>(pr_linearization_ref_ecef_py);
+          auto refr = ref_arr.request();
+          if (refr.size != n_epoch * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: pr_linearization_ref_ecef must have T*3 elements");
+          pr_ref_ptr = static_cast<const double*>(refr.ptr);
+        }
+        const double* pr_los_ptr = nullptr;
+        if (!pr_linearization_los_ecef_py.is_none()) {
+          auto los_arr = py::cast<py::array_t<double>>(pr_linearization_los_ecef_py);
+          auto losr = los_arr.request();
+          if (losr.size != n_epoch * n_sat * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: pr_linearization_los_ecef must have T*S*3 elements");
+          pr_los_ptr = static_cast<const double*>(losr.ptr);
+        }
+
+        if (doppler_linearization_ref_vel_py.is_none() != doppler_linearization_los_ecef_py.is_none())
+          throw std::runtime_error("fgo_gnss_lm_vd: doppler_linearization_ref_vel and doppler_linearization_los_ecef must be both set or both none");
+        const double* doppler_ref_vel_ptr = nullptr;
+        if (!doppler_linearization_ref_vel_py.is_none()) {
+          auto ref_arr = py::cast<py::array_t<double>>(doppler_linearization_ref_vel_py);
+          auto refr = ref_arr.request();
+          if (refr.size != n_epoch * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: doppler_linearization_ref_vel must have T*3 elements");
+          doppler_ref_vel_ptr = static_cast<const double*>(refr.ptr);
+        }
+        const double* doppler_los_ptr = nullptr;
+        if (!doppler_linearization_los_ecef_py.is_none()) {
+          auto los_arr = py::cast<py::array_t<double>>(doppler_linearization_los_ecef_py);
+          auto losr = los_arr.request();
+          if (losr.size != n_epoch * n_sat * 3)
+            throw std::runtime_error("fgo_gnss_lm_vd: doppler_linearization_los_ecef must have T*S*3 elements");
+          doppler_los_ptr = static_cast<const double*>(losr.ptr);
+        }
+
+	        double mse = 0.0;
+	        int iters = gnss_gpu::fgo_gnss_lm_vd(
             static_cast<double*>(bs.ptr), static_cast<double*>(bp.ptr), static_cast<double*>(bw.ptr),
             sk_ptr, n_clock, static_cast<double*>(bst.ptr), n_epoch, n_sat,
             motion_sigma_m, clock_drift_sigma_m, clock_use_average_drift,
@@ -359,14 +559,27 @@ PYBIND11_MODULE(_gnss_gpu, m) {
             sv_ptr, dop_ptr, dw_ptr, dt_ptr, stop_mask_ptr,
             tdcp_meas_ptr, tdcp_weights_ptr, tdcp_sigma_m, tdcp_use_drift,
             relative_height_sigma_m, enu_up_ptr, n_rel_edges, rel_i_ptr, rel_j_ptr,
-            imu_dp_ptr, imu_dv_ptr, imu_position_sigma_m, imu_velocity_sigma_mps,
-            scd_ptr, abs_height_ref_ptr, absolute_height_sigma_m,
-            ss, imu_accel_bias_prior_sigma_mps2, imu_accel_bias_between_sigma_mps2);
+            imu_dp_ptr, imu_dv_ptr, imu_da_ptr, imu_dt_ptr,
+            imu_dp_ba_jac_ptr, imu_dv_ba_jac_ptr,
+            imu_dp_bg_jac_ptr, imu_dv_bg_jac_ptr, imu_da_bg_jac_ptr,
+            imu_position_sigma_m, imu_velocity_sigma_mps,
+            imu_attitude_sigma_rad,
+            imu_pos_w_ptr, imu_vel_w_ptr, imu_att_w_ptr, imu_pva_info_ptr,
+            imu_factor_use_next_bias, scd_ptr, abs_height_ref_ptr, absolute_height_sigma_m,
+            ss, imu_accel_bias_prior_sigma_mps2, imu_accel_bias_between_sigma_mps2,
+            imu_accel_bias_between_w_ptr,
+	            imu_gyro_bias_prior_sigma_radps, imu_gyro_bias_between_sigma_radps,
+	            imu_gyro_bias_between_w_ptr,
+	            doppler_huber_k, tdcp_huber_k, tdcp_ref_ptr,
+            stop_velocity_huber_k, stop_position_huber_k,
+            relative_height_huber_k, absolute_height_huber_k, imu_gravity_ptr,
+            pr_ref_ptr, pr_los_ptr, doppler_ref_vel_ptr, doppler_los_ptr,
+            stop_attitude_sigma_rad, lm_damping);
         return py::make_tuple(iters, mse);
       },
       "GPU FGO with velocity state + Doppler factor + optional TDCP. "
-      "State: [x,y,z,vx,vy,vz,clk...,drift] per epoch; optionally append [bax,bay,baz]. "
-      "Motion factor couples position/velocity: x_{t+1} = x_t + v_t*dt. "
+      "State: [x,y,z,vx,vy,vz,clk...,drift] per epoch; optionally append [bax,bay,baz], [bax,bay,baz,bgx,bgy,bgz], or [attx,atty,attz,bax,bay,baz,bgx,bgy,bgz]. "
+      "Motion factor couples position/velocity: x_{t+1}-x_t = (v_t+v_{t+1})*dt/2. "
       "Clock drift factor: clk_{t+1} = clk_t + drift_t*dt. "
       "Optional stop factors add v_t=0 priors and x_t=x_t+1 hold factors on stop epochs. "
       "Optional IMU priors constrain x/v deltas between adjacent epochs. "
@@ -388,10 +601,41 @@ PYBIND11_MODULE(_gnss_gpu, m) {
       py::arg("relative_height_sigma_m") = 0.0, py::arg("enu_up_ecef") = py::none(),
       py::arg("rel_height_edge_i") = py::none(), py::arg("rel_height_edge_j") = py::none(),
       py::arg("imu_delta_p") = py::none(), py::arg("imu_delta_v") = py::none(),
+      py::arg("imu_delta_angle") = py::none(),
+      py::arg("imu_delta_t") = py::none(),
+      py::arg("imu_delta_p_bias_accel_jac") = py::none(),
+      py::arg("imu_delta_v_bias_accel_jac") = py::none(),
+      py::arg("imu_delta_p_bias_gyro_jac") = py::none(),
+      py::arg("imu_delta_v_bias_gyro_jac") = py::none(),
+      py::arg("imu_delta_angle_bias_gyro_jac") = py::none(),
       py::arg("imu_position_sigma_m") = 0.0, py::arg("imu_velocity_sigma_mps") = 0.0,
+      py::arg("imu_attitude_sigma_rad") = 0.0,
+      py::arg("imu_position_weights") = py::none(),
+      py::arg("imu_velocity_weights") = py::none(),
+      py::arg("imu_attitude_weights") = py::none(),
+      py::arg("imu_preintegration_information") = py::none(),
+      py::arg("imu_factor_use_next_bias") = false,
       py::arg("sat_clock_drift") = py::none(),
       py::arg("absolute_height_ref_ecef") = py::none(),
       py::arg("absolute_height_sigma_m") = 0.0,
       py::arg("imu_accel_bias_prior_sigma_mps2") = 0.0,
-      py::arg("imu_accel_bias_between_sigma_mps2") = 0.0);
+      py::arg("imu_accel_bias_between_sigma_mps2") = 0.0,
+      py::arg("imu_accel_bias_between_weights") = py::none(),
+      py::arg("imu_gyro_bias_prior_sigma_radps") = 0.0,
+      py::arg("imu_gyro_bias_between_sigma_radps") = 0.0,
+      py::arg("imu_gyro_bias_between_weights") = py::none(),
+      py::arg("doppler_huber_k") = 0.0,
+      py::arg("tdcp_huber_k") = 0.0,
+	      py::arg("tdcp_linearization_ref_ecef") = py::none(),
+	      py::arg("stop_velocity_huber_k") = 0.0,
+	      py::arg("stop_position_huber_k") = 0.0,
+	      py::arg("relative_height_huber_k") = 0.0,
+	      py::arg("absolute_height_huber_k") = 0.0,
+	      py::arg("imu_gravity") = py::none(),
+      py::arg("pr_linearization_ref_ecef") = py::none(),
+      py::arg("pr_linearization_los_ecef") = py::none(),
+      py::arg("doppler_linearization_ref_vel") = py::none(),
+      py::arg("doppler_linearization_los_ecef") = py::none(),
+      py::arg("stop_attitude_sigma_rad") = 0.0,
+      py::arg("lm_damping") = 0.0);
 }

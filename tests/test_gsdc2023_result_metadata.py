@@ -63,6 +63,7 @@ def _preintegration() -> IMUPreintegration:
             ],
             dtype=np.float64,
         ),
+        gravity_ecef=np.tile(np.array([[0.0, 0.0, -9.81]], dtype=np.float64), (3, 1)),
     )
 
 
@@ -110,20 +111,50 @@ def test_imu_result_summary_keeps_bias_summary_when_prior_disabled() -> None:
 def test_bridge_result_metadata_kwargs_maps_config_and_batch_counts() -> None:
     cfg = BridgeConfig(
         factor_dt_max_s=1.25,
+        fgo_tol=2e-8,
         stop_velocity_sigma_mps=0.2,
         stop_position_sigma_m=0.3,
+        stop_attitude_sigma_rad=0.03,
+        stop_velocity_huber_k=0.4,
+        stop_position_huber_k=0.5,
         apply_imu_prior=True,
         imu_accel_bias_state=True,
-        imu_frame="ecef",
+        imu_gyro_bias_state=True,
+        imu_gyro_bias_prior_sigma_radps=0.003,
+        imu_frame="taroz_body",
+        imu_sample_dt_mode="taroz",
         imu_position_sigma_m=11.0,
         imu_velocity_sigma_mps=1.2,
+        imu_attitude_state=True,
+        imu_attitude_sigma_rad=0.002,
+        imu_diagonal_covariance=True,
+        imu_factor_use_next_bias=True,
+        imu_bias_between_sample_count_scaling=True,
+        taroz_imu_noise_enabled=True,
+        imu_acc_sigma_mps2_sqrt_hz=0.05,
+        imu_gyro_sigma_radps_sqrt_hz=0.001,
+        imu_acc_sync_coefficient=0.5,
+        imu_gyro_sync_coefficient=0.5,
+        imu_gyro_bias_between_sigma_radps=0.0000005,
         apply_absolute_height=True,
+        absolute_height_huber_k=0.6,
         apply_relative_height=True,
+        relative_height_huber_k=0.7,
         apply_position_offset=True,
         apply_base_correction=True,
         apply_observation_mask=True,
         tdcp_weight_scale=0.5,
         tdcp_geometry_correction=True,
+        weight_mode="taroz_sn",
+        fgo_weight_mode="taroz_sn",
+        fgo_huber_k_pr=0.1,
+        fgo_huber_k_doppler=0.4,
+        fgo_huber_k_tdcp=0.2,
+        fgo_fixed_linearization=True,
+        per_type_kernel_enabled=True,
+        per_type_kernel_motion_enabled=True,
+        clock_drift_sigma_m=0.1,
+        clock_use_average_drift=True,
         fgo_raw_wls_proxy_rescue_enabled=True,
         fgo_raw_wls_proxy_rescue_mse_ratio_max=1.12,
         fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max=1.25,
@@ -141,19 +172,46 @@ def test_bridge_result_metadata_kwargs_maps_config_and_batch_counts() -> None:
 
     assert kwargs["factor_dt_max_s"] == 1.25
     assert kwargs["factor_dt_gap_count"] == 2
+    assert kwargs["fgo_tol"] == 2e-8
     assert kwargs["stop_velocity_sigma_mps"] == 0.2
     assert kwargs["stop_position_sigma_m"] == 0.3
+    assert kwargs["stop_attitude_sigma_rad"] == 0.03
+    assert kwargs["stop_velocity_huber_k"] == 0.4
+    assert kwargs["stop_position_huber_k"] == 0.5
     assert kwargs["imu_prior_applied"] is True
     assert kwargs["imu_prior_interval_count"] == 1
-    assert kwargs["imu_frame"] == "ecef"
+    assert kwargs["imu_frame"] == "taroz_body"
+    assert kwargs["imu_sample_dt_mode"] == "taroz"
+    assert kwargs["imu_gravity_applied"] is True
     assert kwargs["imu_position_sigma_m"] == 11.0
     assert kwargs["imu_velocity_sigma_mps"] == 1.2
+    assert kwargs["imu_attitude_state_applied"] is True
+    assert kwargs["imu_attitude_sigma_rad"] == 0.002
+    assert kwargs["imu_diagonal_covariance_applied"] is True
+    assert kwargs["imu_preintegration_covariance_applied"] is False
+    assert kwargs["imu_preintegration_delta_t_applied"] is True
+    assert kwargs["imu_preintegration_bias_jacobian_applied"] is True
+    assert kwargs["imu_factor_use_next_bias_applied"] is True
+    assert kwargs["imu_delta_pv_gyro_bias_correction_applied"] is True
+    assert kwargs["imu_bias_between_sample_count_scaling_applied"] is True
     assert kwargs["imu_accel_bias_state_applied"] is True
+    assert kwargs["imu_gyro_bias_state_applied"] is True
+    assert kwargs["imu_gyro_bias_prior_sigma_radps"] == 0.003
+    assert kwargs["taroz_imu_noise_enabled"] is True
+    assert kwargs["imu_acc_sigma_mps2_sqrt_hz"] == 0.05
+    assert kwargs["imu_gyro_sigma_radps_sqrt_hz"] == 0.001
+    assert kwargs["imu_acc_sync_coefficient"] == 0.5
+    assert kwargs["imu_gyro_sync_coefficient"] == 0.5
+    assert kwargs["imu_effective_acc_sigma_mps2_sqrt_hz"] == 0.025
+    assert kwargs["imu_effective_gyro_sigma_radps_sqrt_hz"] == 0.0005
+    assert kwargs["imu_gyro_bias_between_sigma_radps"] == 0.0000005
     assert kwargs["imu_acc_bias_mean_norm_mps2"] == 5.0
     assert kwargs["imu_gyro_bias_mean_norm_radps"] == 2.0
     assert kwargs["absolute_height_applied"] is True
     assert kwargs["absolute_height_ref_count"] == 3
+    assert kwargs["absolute_height_huber_k"] == 0.6
     assert kwargs["relative_height_applied"] is True
+    assert kwargs["relative_height_huber_k"] == 0.7
     assert kwargs["position_offset_applied"] is True
     assert kwargs["base_correction_applied"] is True
     assert kwargs["base_correction_count"] == 4
@@ -166,13 +224,25 @@ def test_bridge_result_metadata_kwargs_maps_config_and_batch_counts() -> None:
     assert kwargs["tdcp_weight_scale"] == 0.5
     assert kwargs["tdcp_geometry_correction_applied"] is True
     assert kwargs["tdcp_geometry_correction_count"] == 10
+    assert kwargs["taroz_qzss_other_clock_enabled"] is True
+    assert kwargs["fgo_weight_mode"] == "taroz_sn"
+    assert kwargs["fgo_robust_kernel"] == "huber"
+    assert kwargs["fgo_huber_k_pr"] == 0.1
+    assert kwargs["fgo_huber_k_doppler"] == 0.4
+    assert kwargs["fgo_huber_k_tdcp"] == 0.2
+    assert kwargs["fgo_fixed_linearization"] is True
+    assert kwargs["per_type_kernel_enabled"] is True
+    assert kwargs["per_type_kernel_huber_enabled"] is True
+    assert kwargs["per_type_kernel_motion_enabled"] is True
+    assert kwargs["clock_drift_sigma_m"] == 0.1
+    assert kwargs["clock_use_average_drift"] is True
     assert kwargs["fgo_raw_wls_proxy_rescue_enabled"] is True
     assert kwargs["fgo_raw_wls_proxy_rescue_mse_ratio_max"] == 1.12
     assert kwargs["fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max"] == 1.25
     assert kwargs["fgo_raw_wls_proxy_rescue_quality_delta_max"] == -0.4
     assert kwargs["fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max"] == -1.0
     assert kwargs["dual_frequency"] is True
-    assert kwargs["graph_relative_height"] is True
+    assert kwargs["graph_relative_height"] is False
 
 
 def test_bridge_result_metadata_kwargs_has_no_imu_applied_without_imu() -> None:
@@ -183,5 +253,6 @@ def test_bridge_result_metadata_kwargs_has_no_imu_applied_without_imu() -> None:
 
     assert kwargs["imu_prior_applied"] is False
     assert kwargs["imu_prior_interval_count"] == 0
+    assert kwargs["imu_gravity_applied"] is False
     assert kwargs["imu_accel_bias_state_applied"] is False
     assert np.isnan(kwargs["imu_acc_bias_mean_norm_mps2"])

@@ -14,6 +14,67 @@ OMEGA_E = 7.2921151467e-5
 DIAG_JITTER = 1e-3
 
 
+def _skew3(v: np.ndarray) -> np.ndarray:
+    x, y, z = np.asarray(v, dtype=np.float64).reshape(3)
+    return np.array(
+        [[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]],
+        dtype=np.float64,
+    )
+
+
+def _rotvec_to_rotm(rotvec_rad: np.ndarray) -> np.ndarray:
+    rv = np.asarray(rotvec_rad, dtype=np.float64).reshape(3)
+    theta = float(np.linalg.norm(rv))
+    kx = _skew3(rv)
+    if theta < 1e-12:
+        return np.eye(3, dtype=np.float64) + kx
+    a = np.sin(theta) / theta
+    b = (1.0 - np.cos(theta)) / (theta * theta)
+    return np.eye(3, dtype=np.float64) + a * kx + b * (kx @ kx)
+
+
+def _rotm_to_rotvec(rotm: np.ndarray) -> np.ndarray:
+    rot = np.asarray(rotm, dtype=np.float64).reshape(3, 3)
+    cos_theta = 0.5 * (float(np.trace(rot)) - 1.0)
+    cos_theta = float(np.clip(cos_theta, -1.0, 1.0))
+    theta = float(np.arccos(cos_theta))
+    vee = np.array(
+        [rot[2, 1] - rot[1, 2], rot[0, 2] - rot[2, 0], rot[1, 0] - rot[0, 1]],
+        dtype=np.float64,
+    )
+    if theta < 1e-12:
+        return 0.5 * vee
+    return theta / (2.0 * np.sin(theta)) * vee
+
+
+def _imu_delta_angle_so3_residual(att0: np.ndarray, att1: np.ndarray, delta_angle: np.ndarray) -> np.ndarray:
+    return _rotm_to_rotvec(
+        _rotvec_to_rotm(-att1) @ _rotvec_to_rotm(att0) @ _rotvec_to_rotm(delta_angle)
+    )
+
+
+def _imu_body_pv_residual(
+    state: np.ndarray,
+    attitude_idx: int,
+    dt: float,
+    gravity: np.ndarray,
+    delta_p: np.ndarray | None,
+    delta_v: np.ndarray | None,
+    delta_angle: np.ndarray | None = None,
+) -> np.ndarray:
+    rot_i = _rotvec_to_rotm(state[0, attitude_idx : attitude_idx + 3])
+    rot_j = _rotvec_to_rotm(state[1, attitude_idx : attitude_idx + 3])
+    delta_r = np.zeros(3, dtype=np.float64) if delta_angle is None else np.asarray(delta_angle, dtype=np.float64)
+    residuals: list[np.ndarray] = []
+    if delta_p is not None:
+        predicted_p_j = state[0, :3] + state[0, 3:6] * dt + 0.5 * gravity * dt * dt + rot_i @ delta_p
+        residuals.append(rot_j.T @ (predicted_p_j - state[1, :3]))
+    if delta_v is not None:
+        predicted_v_j = state[0, 3:6] + gravity * dt + rot_i @ delta_v
+        residuals.append(rot_j.T @ (predicted_v_j - state[1, 3:6]))
+    return np.concatenate(residuals)
+
+
 def _fill_hc(nc: int, sk: int, hc: np.ndarray) -> None:
     hc[:] = 0.0
     hc[0] = 1.0
@@ -61,7 +122,7 @@ def _doppler_model_sagnac(
     drift: float,
     sat_clock_drift: float = 0.0,
 ) -> float:
-    return float(drift - (_geometric_range_rate_sagnac(rx, sat, rv, sat_vel) - sat_clock_drift))
+    return float(drift + (_geometric_range_rate_sagnac(rx, sat, rv, sat_vel) - sat_clock_drift))
 
 
 def _assemble_pr_h_g(
@@ -525,7 +586,7 @@ def test_fgo_vd_basic_convergence():
 
 @pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
 def test_fgo_vd_motion_factor():
-    """Motion factor (x_{t+1} = x_t + v_t*dt) couples position and velocity."""
+    """MotionFactor_XXVV parity: x2 - x1 = (v1 + v2) * dt / 2."""
     rng = np.random.Generator(np.random.PCG64(77))
     n_epoch, n_sat, nc = 6, 8, 1
     ss_old = 3 + nc
@@ -580,7 +641,7 @@ def test_fgo_vd_motion_factor():
 
 @pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
 def test_fgo_vd_motion_factor_reduces_standalone_residual():
-    """Standalone VD motion factor must move along the cost-reducing direction."""
+    """Standalone VD motion factor must reduce the Taroz MotionFactor_XXVV residual."""
     n_epoch, n_sat, nc = 2, 4, 1
     ss_vd = 7 + nc
     sat = np.ones((n_epoch, n_sat, 3), dtype=np.float64)
@@ -590,7 +651,11 @@ def test_fgo_vd_motion_factor_reduces_standalone_residual():
     state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
     state[0, 3] = 1.0
 
-    before = float(state[0, 0] + state[0, 3] * dt[0] - state[1, 0])
+    before = float(
+        state[1, 0]
+        - state[0, 0]
+        - 0.5 * (state[0, 3] + state[1, 3]) * dt[0]
+    )
     iters, _ = fgo_gnss_lm_vd(
         sat,
         pr,
@@ -607,9 +672,129 @@ def test_fgo_vd_motion_factor_reduces_standalone_residual():
         dt=dt,
     )
 
-    after = float(state[0, 0] + state[0, 3] * dt[0] - state[1, 0])
+    after = float(
+        state[1, 0]
+        - state[0, 0]
+        - 0.5 * (state[0, 3] + state[1, 3]) * dt[0]
+    )
     assert iters > 0
     assert abs(after) < abs(before) * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_pr_fixed_linearization_reduces_taroz_residual():
+    """Opt-in PR linearization matches Taroz PseudorangeFactor_XC topology."""
+    n_epoch, n_sat, nc = 1, 4, 1
+    ss_vd = 7 + nc
+    sat = np.ones((n_epoch, n_sat, 3), dtype=np.float64)
+    pr_ref = np.array([[10.0, 20.0, 30.0]], dtype=np.float64)
+    pr_los = np.array(
+        [
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0],
+            ]
+        ],
+        dtype=np.float64,
+    )
+    pr_los[0, 3] /= np.linalg.norm(pr_los[0, 3])
+    true_pos = np.array([3.0, -2.0, 1.0], dtype=np.float64)
+    true_clock = 5.0
+    pr = pr_los[0] @ (true_pos - pr_ref[0]) + true_clock
+    pr = pr.reshape(n_epoch, n_sat)
+    weights = np.ones((n_epoch, n_sat), dtype=np.float64) * 100.0
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[0, :3] = true_pos + np.array([4.0, -3.0, 2.0], dtype=np.float64)
+    state[0, 6] = true_clock - 7.0
+
+    before = pr[0] - (pr_los[0] @ (state[0, :3] - pr_ref[0]) + state[0, 6])
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        weights,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=nc,
+        pr_linearization_ref_ecef=pr_ref,
+        pr_linearization_los_ecef=pr_los,
+    )
+
+    after = pr[0] - (pr_los[0] @ (state[0, :3] - pr_ref[0]) + state[0, 6])
+    assert iters > 0
+    assert np.linalg.norm(after) < np.linalg.norm(before) * 1e-6
+    np.testing.assert_allclose(state[0, :3], true_pos, atol=5e-4)
+    np.testing.assert_allclose(state[0, 6], true_clock, atol=5e-4)
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_doppler_fixed_linearization_reduces_taroz_residual():
+    """Opt-in Doppler linearization matches Taroz DopplerFactor_VD topology."""
+    n_epoch, n_sat, nc = 1, 4, 1
+    ss_vd = 7 + nc
+    sat = np.ones((n_epoch, n_sat, 3), dtype=np.float64)
+    sat_vel = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    pr_weights = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    doppler_ref_vel = np.array([[1.0, -2.0, 3.0]], dtype=np.float64)
+    doppler_los = np.array(
+        [
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0],
+            ]
+        ],
+        dtype=np.float64,
+    )
+    doppler_los[0, 3] /= np.linalg.norm(doppler_los[0, 3])
+    true_vel = np.array([4.0, -5.0, 6.0], dtype=np.float64)
+    true_drift = -0.75
+    doppler = doppler_los[0] @ (true_vel - doppler_ref_vel[0]) + true_drift
+    doppler = doppler.reshape(n_epoch, n_sat)
+    doppler_weights = np.ones((n_epoch, n_sat), dtype=np.float64) * 100.0
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[0, 3:6] = true_vel + np.array([-3.0, 2.0, 1.5], dtype=np.float64)
+    state[0, 6 + nc] = true_drift + 4.0
+
+    before = doppler[0] - (
+        doppler_los[0] @ (state[0, 3:6] - doppler_ref_vel[0]) + state[0, 6 + nc]
+    )
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        pr_weights,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=nc,
+        sat_vel=sat_vel,
+        doppler=doppler,
+        doppler_weights=doppler_weights,
+        doppler_linearization_ref_vel=doppler_ref_vel,
+        doppler_linearization_los_ecef=doppler_los,
+    )
+
+    after = doppler[0] - (
+        doppler_los[0] @ (state[0, 3:6] - doppler_ref_vel[0]) + state[0, 6 + nc]
+    )
+    assert iters > 0
+    assert np.linalg.norm(after) < np.linalg.norm(before) * 1e-6
+    np.testing.assert_allclose(state[0, 3:6], true_vel, atol=5e-4)
+    np.testing.assert_allclose(state[0, 6 + nc], true_drift, atol=5e-4)
 
 
 @pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
@@ -644,6 +829,102 @@ def test_fgo_vd_clock_drift_factor_reduces_standalone_residual():
     after = float(state[0, 6] - state[1, 6] + state[0, 6 + nc] * dt[0])
     assert iters > 0
     assert abs(after) < abs(before) * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_clock_drift_average_factor_smooths_all_clock_slots():
+    """CCDD parity constrains c0 with average drift and all ISB clock slots."""
+    n_epoch, n_sat, nc = 2, 4, 2
+    ss_vd = 7 + nc
+    sat = np.ones((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    dt = np.array([1.0, 0.0], dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[0, 6] = 0.0
+    state[1, 6] = 2.0
+    state[0, 7] = 10.0
+    state[1, 7] = 14.0
+    state[0, 6 + nc] = 0.4
+    state[1, 6 + nc] = 0.8
+
+    before_c0 = float(
+        state[0, 6]
+        - state[1, 6]
+        + 0.5 * (state[0, 6 + nc] + state[1, 6 + nc]) * dt[0]
+    )
+    before_isb = float(state[0, 7] - state[1, 7])
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.1,
+        clock_use_average_drift=True,
+        max_iter=5,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=np.zeros((n_epoch, n_sat), dtype=np.int32),
+        n_clock=nc,
+        dt=dt,
+    )
+
+    after_c0 = float(
+        state[0, 6]
+        - state[1, 6]
+        + 0.5 * (state[0, 6 + nc] + state[1, 6 + nc]) * dt[0]
+    )
+    after_isb = float(state[0, 7] - state[1, 7])
+    assert iters > 0
+    assert abs(after_c0) < abs(before_c0) * 1e-3
+    assert abs(after_isb) < abs(before_isb) * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_signal_clock_slot_uses_taroz_constrained_between_weight():
+    """Taroz zero-sigma CCDD slots keep signal clock offsets nearly epoch-constant."""
+    n_epoch, n_sat, nc = 20, 2, 2
+    ss_vd = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    sys_kind = np.zeros((n_epoch, n_sat), dtype=np.int32)
+    sys_kind[:, 1] = 1
+    dt = np.ones(n_epoch, dtype=np.float64)
+    dt[-1] = 0.0
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+
+    # Linearized PR with zero LOS isolates the clock design. L1 strongly pins c0,
+    # while the L5 measurements try to make the signal-clock slot vary by epoch.
+    pr[:, 0] = 0.0
+    pr[:, 1] = 20.0 * np.sin(np.linspace(0.0, 2.0 * np.pi, n_epoch))
+    w[:, 0] = 1000.0
+    w[:, 1] = 1.0
+    pr_ref = np.zeros((n_epoch, 3), dtype=np.float64)
+    pr_los = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+
+    fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.1,
+        clock_use_average_drift=True,
+        max_iter=10,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=sys_kind,
+        n_clock=nc,
+        dt=dt,
+        pr_linearization_ref_ecef=pr_ref,
+        pr_linearization_los_ecef=pr_los,
+    )
+
+    assert np.ptp(state[:, 7]) < 1e-9
 
 
 @pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
@@ -911,6 +1192,7 @@ def test_fgo_vd_stop_velocity_factor_zeroes_stopped_epochs():
         sat, pr, w, state_with_stop,
         motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
         stop_velocity_sigma_mps=0.01,
+        stop_velocity_huber_k=0.5,
         max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
         sys_kind=None, n_clock=1, stop_mask=stop_mask,
     )
@@ -956,6 +1238,7 @@ def test_fgo_vd_stop_position_factor_holds_consecutive_stop_positions():
         sat, pr, w, state_hold,
         motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
         stop_position_sigma_m=0.02,
+        stop_position_huber_k=0.5,
         max_iter=10, tol=1e-7, huber_k=0.0, enable_line_search=1,
         sys_kind=None, n_clock=1, stop_mask=stop_mask,
     )
@@ -964,6 +1247,59 @@ def test_fgo_vd_stop_position_factor_holds_consecutive_stop_positions():
     diff_no = np.linalg.norm(np.diff(state_no_hold[:, :3], axis=0), axis=1)
     diff_hold = np.linalg.norm(np.diff(state_hold[:, :3], axis=0), axis=1)
     assert float(np.mean(diff_hold)) < float(np.mean(diff_no)) * 0.5
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_stop_attitude_factor_holds_consecutive_stop_attitudes():
+    n_epoch, n_sat, nc = 3, 4, 1
+    ss_vd_att = 16 + nc
+    attitude_idx = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_att), dtype=np.float64)
+    state[:, attitude_idx : attitude_idx + 3] = np.array(
+        [
+            [0.10, -0.05, 0.02],
+            [0.03, 0.02, -0.04],
+            [-0.08, 0.04, 0.01],
+        ],
+        dtype=np.float64,
+    )
+    stop_mask = np.ones(n_epoch, dtype=np.uint8)
+    zero_delta = np.zeros(3, dtype=np.float64)
+
+    def residual_norm(s: np.ndarray) -> float:
+        residuals = [
+            _imu_delta_angle_so3_residual(
+                s[t, attitude_idx : attitude_idx + 3],
+                s[t + 1, attitude_idx : attitude_idx + 3],
+                zero_delta,
+            )
+            for t in range(n_epoch - 1)
+        ]
+        return float(np.linalg.norm(np.concatenate(residuals)))
+
+    before = residual_norm(state)
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        stop_attitude_sigma_rad=0.001,
+        max_iter=20,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        stop_mask=stop_mask,
+    )
+
+    assert iters > 0
+    assert residual_norm(state) < before * 1e-3
 
 
 @pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
@@ -1451,6 +1787,77 @@ def test_tdcp_vd_uses_signal_clock_for_dual_frequency():
 
 
 @pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_tdcp_vd_ref_linearization_xxcc_uses_taroz_c0_only():
+    """Taroz TDCPFactor_XXCC uses only c0 even when sigtype points to an ISB slot."""
+    n_epoch, n_sat, nc = 2, 4, 2
+    ss_vd = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    sat[:, :, 0] = 2.5e7
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    pr_w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    tdcp_meas = np.zeros((n_epoch - 1, n_sat), dtype=np.float64)
+    tdcp_w = np.ones((n_epoch - 1, n_sat), dtype=np.float64)
+    sys_kind = np.ones((n_epoch, n_sat), dtype=np.int32)
+    tdcp_ref = np.zeros((n_epoch, 3), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd), dtype=np.float64)
+    state[1, 7] = 10.0
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        pr_w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=1,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=sys_kind,
+        n_clock=nc,
+        tdcp_meas=tdcp_meas,
+        tdcp_weights=tdcp_w,
+        tdcp_linearization_ref_ecef=tdcp_ref,
+    )
+
+    assert iters > 0
+    np.testing.assert_allclose(state[0, 7], 0.0, atol=1e-12)
+    np.testing.assert_allclose(state[1, 7], 10.0, atol=1e-12)
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_tdcp_vd_xxcc_accepts_full_imu_state_width():
+    """TDCP XXCC Jacobians must be zero-padded across appended attitude/bias state."""
+    rng = np.random.Generator(np.random.PCG64(6061))
+    n_epoch, n_sat, nc = 3, 8, 7
+    ss_vd_att_bias = 16 + nc
+    true_pos = np.tile(np.array([[-3.8e6, 3.5e6, 3.6e6]], dtype=np.float64), (n_epoch, 1))
+    sat = rng.normal(0.0, 2.5e7, (n_epoch, n_sat, 3))
+    sys_kind = np.zeros((n_epoch, n_sat), dtype=np.int32)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pr[t, s] = _geometric_range_sagnacrcv(true_pos[t], sat[t, s])
+    w_pr = np.ones((n_epoch, n_sat), dtype=np.float64)
+    tdcp_meas = np.zeros((n_epoch - 1, n_sat), dtype=np.float64)
+    tdcp_weights = np.ones_like(tdcp_meas) * 1.0e4
+
+    state = np.zeros((n_epoch, ss_vd_att_bias), dtype=np.float64)
+    state[:, :3] = true_pos
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat, pr, w_pr, state,
+        motion_sigma_m=0.0, clock_drift_sigma_m=0.0,
+        max_iter=2, tol=1e-12, huber_k=0.0, enable_line_search=1,
+        sys_kind=sys_kind, n_clock=nc,
+        tdcp_meas=tdcp_meas, tdcp_weights=tdcp_weights,
+    )
+
+    assert iters > 0
+    assert np.isfinite(state).all()
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
 def test_fgo_vd_relative_height_factor_runs():
     """Graph relative-height factor (ENU-up loop closure) runs without error."""
     rng = np.random.Generator(np.random.PCG64(303))
@@ -1495,6 +1902,7 @@ def test_fgo_vd_relative_height_factor_runs():
         n_clock=1,
         dt=dt_arr,
         relative_height_sigma_m=0.5,
+        relative_height_huber_k=0.5,
         enu_up_ecef=up,
         rel_height_edge_i=ei,
         rel_height_edge_j=ej,
@@ -1532,6 +1940,7 @@ def test_fgo_vd_relative_height_factor_reduces_standalone_residual():
         sys_kind=None,
         n_clock=1,
         relative_height_sigma_m=0.1,
+        relative_height_huber_k=0.5,
         enu_up_ecef=up,
         rel_height_edge_i=edge_i,
         rel_height_edge_j=edge_j,
@@ -1571,6 +1980,7 @@ def test_fgo_vd_absolute_height_factor_pulls_up_component_to_reference():
         enu_up_ecef=np.array([0.0, 0.0, 1.0], dtype=np.float64),
         absolute_height_ref_ecef=ref,
         absolute_height_sigma_m=0.1,
+        absolute_height_huber_k=0.5,
     )
 
     assert iters > 0
@@ -1621,3 +2031,763 @@ def test_fgo_vd_imu_accel_bias_state_reduces_delta_v_residual():
     assert iters > 0
     assert abs(after) < abs(before) * 1e-3
     assert state[0, bias_idx] > 0.5
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_delta_t_overrides_graph_dt_for_bias_correction():
+    """IMU residuals should use preintegration deltaTij, not graph epoch dt."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_bias = 10 + nc
+    bias_idx = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_bias), dtype=np.float64)
+    graph_dt = np.array([10.0, 0.0], dtype=np.float64)
+    imu_delta_t = np.array([1.0], dtype=np.float64)
+    stop_mask = np.ones(n_epoch, dtype=np.uint8)
+    imu_delta_v = np.array([[1.0, 0.0, 0.0]], dtype=np.float64)
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.001,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=graph_dt,
+        stop_mask=stop_mask,
+        imu_delta_v=imu_delta_v,
+        imu_delta_t=imu_delta_t,
+        imu_velocity_sigma_mps=0.01,
+        imu_accel_bias_prior_sigma_mps2=10.0,
+    )
+
+    residual = state[0, 3] + imu_delta_v[0, 0] - imu_delta_t[0] * state[0, bias_idx] - state[1, 3]
+    assert iters > 0
+    assert abs(residual) < 1e-3
+    assert state[0, bias_idx] > 0.5
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_bias_jacobian_overrides_delta_t_fallback():
+    """Custom preintegration bias Jacobian should replace the native dt diagonal."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_bias = 10 + nc
+    bias_idx = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_bias), dtype=np.float64)
+    dt = np.ones(n_epoch, dtype=np.float64)
+    stop_mask = np.ones(n_epoch, dtype=np.uint8)
+    imu_delta_v = np.array([[1.0, 0.0, 0.0]], dtype=np.float64)
+    imu_delta_v_bias_accel_jac = np.eye(3, dtype=np.float64).reshape(1, 3, 3)
+    imu_delta_v_bias_accel_jac[0, 0, 0] = 2.0
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.001,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        stop_mask=stop_mask,
+        imu_delta_v=imu_delta_v,
+        imu_delta_v_bias_accel_jac=imu_delta_v_bias_accel_jac,
+        imu_velocity_sigma_mps=0.01,
+        imu_accel_bias_prior_sigma_mps2=10.0,
+    )
+
+    residual = state[0, 3] + imu_delta_v[0, 0] - 2.0 * state[0, bias_idx] - state[1, 3]
+    assert iters > 0
+    assert abs(residual) < 1e-3
+    assert 0.4 < state[0, bias_idx] < 0.6
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_direct_pv_gyro_bias_jacobians_reduce_residuals():
+    """Direct preintegrated P/V gyro-bias Jacobians should be used without attitude fallback."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_bias = 13 + nc
+    accel_bias_idx = 7 + nc
+    gyro_bias_idx = accel_bias_idx + 3
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_bias), dtype=np.float64)
+    dt = np.ones(n_epoch, dtype=np.float64)
+    stop_mask = np.ones(n_epoch, dtype=np.uint8)
+    imu_delta_p = np.array([[2.0, 0.0, 0.0]], dtype=np.float64)
+    imu_delta_v = np.array([[1.0, 0.0, 0.0]], dtype=np.float64)
+    imu_delta_p_bias_accel_jac = np.zeros((1, 3, 3), dtype=np.float64)
+    imu_delta_v_bias_accel_jac = np.zeros((1, 3, 3), dtype=np.float64)
+    imu_delta_p_bias_gyro_jac = np.zeros((1, 3, 3), dtype=np.float64)
+    imu_delta_v_bias_gyro_jac = np.zeros((1, 3, 3), dtype=np.float64)
+    imu_delta_p_bias_gyro_jac[0, 0, 2] = 4.0
+    imu_delta_v_bias_gyro_jac[0, 0, 2] = 2.0
+
+    def residual_norm(s: np.ndarray) -> float:
+        bg_z = s[0, gyro_bias_idx + 2]
+        res_p_x = s[0, 0] + s[0, 3] * dt[0] + imu_delta_p[0, 0] - 4.0 * bg_z - s[1, 0]
+        res_v_x = s[0, 3] + imu_delta_v[0, 0] - 2.0 * bg_z - s[1, 3]
+        return float(np.linalg.norm([res_p_x, res_v_x]))
+
+    before = residual_norm(state)
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.001,
+        stop_position_sigma_m=0.001,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        stop_mask=stop_mask,
+        imu_delta_p=imu_delta_p,
+        imu_delta_v=imu_delta_v,
+        imu_delta_p_bias_accel_jac=imu_delta_p_bias_accel_jac,
+        imu_delta_v_bias_accel_jac=imu_delta_v_bias_accel_jac,
+        imu_delta_p_bias_gyro_jac=imu_delta_p_bias_gyro_jac,
+        imu_delta_v_bias_gyro_jac=imu_delta_v_bias_gyro_jac,
+        imu_position_sigma_m=0.01,
+        imu_velocity_sigma_mps=0.01,
+        imu_gyro_bias_prior_sigma_radps=10.0,
+    )
+
+    assert iters > 0
+    assert residual_norm(state) < before * 1e-3
+    assert 0.4 < state[0, gyro_bias_idx + 2] < 0.6
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_factor_can_use_next_epoch_bias_like_taroz_keyb2():
+    """Taroz fgo_gnss_imu.m wires ImuFactor to keyB2; native mode can match it."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_bias = 10 + nc
+    bias_idx = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_bias), dtype=np.float64)
+    dt = np.ones(n_epoch, dtype=np.float64)
+    stop_mask = np.ones(n_epoch, dtype=np.uint8)
+    imu_delta_v = np.array([[1.0, 0.0, 0.0]], dtype=np.float64)
+
+    def residual_x(s: np.ndarray) -> float:
+        return float(s[0, 3] + imu_delta_v[0, 0] - dt[0] * s[1, bias_idx] - s[1, 3])
+
+    before = residual_x(state)
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.001,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        stop_mask=stop_mask,
+        imu_delta_v=imu_delta_v,
+        imu_velocity_sigma_mps=0.01,
+        imu_factor_use_next_bias=True,
+        imu_accel_bias_prior_sigma_mps2=0.01,
+    )
+
+    after = residual_x(state)
+    assert iters > 0
+    assert abs(after) < abs(before) * 1e-3
+    assert abs(state[0, bias_idx]) < 1e-3
+    assert state[1, bias_idx] > 0.5
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_gyro_bias_state_prior_and_between_reduce_bias_residuals():
+    """Taroz-shaped gyro-bias state should obey native prior/between factors."""
+    n_epoch, n_sat, nc = 3, 4, 1
+    ss_vd_bias = 13 + nc
+    gyro_bias_idx = 7 + nc + 3
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_bias), dtype=np.float64)
+    state[:, gyro_bias_idx : gyro_bias_idx + 3] = np.array(
+        [
+            [0.03, -0.02, 0.01],
+            [0.08, -0.04, 0.03],
+            [-0.01, 0.07, -0.05],
+        ],
+        dtype=np.float64,
+    )
+    before_bias = np.linalg.norm(state[:, gyro_bias_idx : gyro_bias_idx + 3])
+    before_between = np.linalg.norm(np.diff(state[:, gyro_bias_idx : gyro_bias_idx + 3], axis=0))
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        imu_gyro_bias_prior_sigma_radps=0.01,
+        imu_gyro_bias_between_sigma_radps=0.01,
+    )
+
+    after_bias = np.linalg.norm(state[:, gyro_bias_idx : gyro_bias_idx + 3])
+    after_between = np.linalg.norm(np.diff(state[:, gyro_bias_idx : gyro_bias_idx + 3], axis=0))
+    assert iters > 0
+    assert after_bias < before_bias * 1e-3
+    assert after_between < before_between * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_bias_between_weights_enable_smoothness_without_scalar_sigma():
+    """Per-interval bias weights should activate between factors without scalar sigma."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_bias = 13 + nc
+    accel_bias_idx = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_bias), dtype=np.float64)
+    state[0, accel_bias_idx : accel_bias_idx + 3] = np.array([1.0, -2.0, 3.0], dtype=np.float64)
+
+    before = np.linalg.norm(np.diff(state[:, accel_bias_idx : accel_bias_idx + 3], axis=0))
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        imu_accel_bias_between_sigma_mps2=0.0,
+        imu_accel_bias_between_weights=np.ones((1, 3), dtype=np.float64) * 10000.0,
+    )
+
+    after = np.linalg.norm(np.diff(state[:, accel_bias_idx : accel_bias_idx + 3], axis=0))
+    assert iters > 0
+    assert after < before * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_attitude_state_reduces_delta_angle_residual():
+    """Optional attitude state should absorb preintegrated gyro delta-angle residuals."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_att_bias = 16 + nc
+    attitude_idx = 7 + nc
+    gyro_bias_idx = attitude_idx + 6
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_att_bias), dtype=np.float64)
+    dt = np.ones(n_epoch, dtype=np.float64)
+    imu_delta_angle = np.array([[0.1, -0.2, 0.05]], dtype=np.float64)
+
+    def residual_norm(s: np.ndarray) -> float:
+        residual = (
+            s[0, attitude_idx : attitude_idx + 3]
+            + imu_delta_angle[0]
+            - dt[0] * s[0, gyro_bias_idx : gyro_bias_idx + 3]
+            - s[1, attitude_idx : attitude_idx + 3]
+        )
+        return float(np.linalg.norm(residual))
+
+    before = residual_norm(state)
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        imu_delta_angle=imu_delta_angle,
+        imu_attitude_sigma_rad=0.01,
+    )
+
+    assert iters > 0
+    assert residual_norm(state) < before * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_attitude_state_uses_so3_delta_angle_residual():
+    """Noncommuting attitude updates should follow R1 = R0 * DeltaR, not rotvec addition."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_att_bias = 16 + nc
+    attitude_idx = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_att_bias), dtype=np.float64)
+    state[0, attitude_idx : attitude_idx + 3] = np.array([1.0, 0.6, -0.7], dtype=np.float64)
+    dt = np.ones(n_epoch, dtype=np.float64)
+    imu_delta_angle = np.array([[-0.8, 0.9, 0.5]], dtype=np.float64)
+
+    def so3_residual_norm(s: np.ndarray) -> float:
+        return float(
+            np.linalg.norm(
+                _imu_delta_angle_so3_residual(
+                    s[0, attitude_idx : attitude_idx + 3],
+                    s[1, attitude_idx : attitude_idx + 3],
+                    imu_delta_angle[0],
+                )
+            )
+        )
+
+    before = so3_residual_norm(state)
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=20,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        imu_delta_angle=imu_delta_angle,
+        imu_delta_angle_bias_gyro_jac=np.zeros((1, 3, 3), dtype=np.float64),
+        imu_attitude_sigma_rad=0.01,
+        imu_gyro_bias_prior_sigma_radps=0.001,
+    )
+
+    linear_residual = (
+        state[0, attitude_idx : attitude_idx + 3]
+        + imu_delta_angle[0]
+        - state[1, attitude_idx : attitude_idx + 3]
+    )
+    assert iters > 0
+    assert so3_residual_norm(state) < before * 1e-6
+    assert float(np.linalg.norm(linear_residual)) > 0.1
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_split_pose_state_adds_constrained_pose_point_factor():
+    """Taroz split Pose3 state should be constrained to the GNSS point state."""
+    n_epoch, n_sat, nc = 1, 4, 1
+    ss_vd_split_pose = 19 + nc
+    pose_idx = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_split_pose), dtype=np.float64)
+    state[0, pose_idx : pose_idx + 3] = np.array([1.0, -2.0, 0.5], dtype=np.float64)
+    before = float(np.linalg.norm(state[0, pose_idx : pose_idx + 3] - state[0, :3]))
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=5,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=nc,
+        lm_damping=1e-3,
+    )
+
+    after = float(np.linalg.norm(state[0, pose_idx : pose_idx + 3] - state[0, :3]))
+    assert iters > 0
+    assert after < 1e-9
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_attitude_state_couples_delta_position_velocity_residuals():
+    """Attitude state should rotate IMU delta-p/v residuals through SO(3)."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_att_bias = 16 + nc
+    attitude_idx = 7 + nc
+    gyro_bias_idx = attitude_idx + 6
+    accel_bias_idx = attitude_idx + 3
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_att_bias), dtype=np.float64)
+    state[1, 1] = 1.0
+    state[1, 4] = 1.0
+    dt = np.ones(n_epoch, dtype=np.float64)
+    imu_delta_p = np.array([[1.0, 0.0, 0.0]], dtype=np.float64)
+    imu_delta_v = np.array([[1.0, 0.0, 0.0]], dtype=np.float64)
+
+    def residual_norm(s: np.ndarray) -> float:
+        rot = _rotvec_to_rotm(s[0, attitude_idx : attitude_idx + 3])
+        acc_bias = s[0, accel_bias_idx : accel_bias_idx + 3]
+        res_p = (
+            s[0, :3]
+            + s[0, 3:6] * dt[0]
+            + rot @ (imu_delta_p[0] - 0.5 * dt[0] * dt[0] * acc_bias)
+            - s[1, :3]
+        )
+        res_v = (
+            s[0, 3:6]
+            + rot @ (imu_delta_v[0] - dt[0] * acc_bias)
+            - s[1, 3:6]
+        )
+        return float(np.linalg.norm(np.concatenate([res_p, res_v])))
+
+    before = residual_norm(state)
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        imu_delta_p=imu_delta_p,
+        imu_delta_v=imu_delta_v,
+        imu_position_sigma_m=0.01,
+        imu_velocity_sigma_mps=0.01,
+        imu_accel_bias_prior_sigma_mps2=0.001,
+        imu_gyro_bias_prior_sigma_radps=0.001,
+    )
+
+    assert iters > 0
+    assert residual_norm(state) < before * 1e-3
+    assert abs(state[0, attitude_idx + 2]) > 0.05
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_preintegration_information_uses_so3_delta_pv_rotation():
+    """Dense PVA factors should rotate delta-p/v with Exp(att), not first-order cross terms."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_att_bias = 16 + nc
+    attitude_idx = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_att_bias), dtype=np.float64)
+    state[0, :6] = np.array([1.2, -0.5, 0.7, 0.2, -0.1, 0.05], dtype=np.float64)
+    state[1, :6] = np.array([-0.3, 0.9, -0.4, -0.2, 0.4, -0.3], dtype=np.float64)
+    state[0, attitude_idx : attitude_idx + 3] = np.array([1.8, -1.3, 1.1], dtype=np.float64)
+    dt = np.ones(n_epoch, dtype=np.float64) * 1.3
+    imu_delta_p = np.array([[3.0, -2.0, 1.0]], dtype=np.float64)
+    imu_delta_v = np.array([[-1.5, 2.0, 1.2]], dtype=np.float64)
+    zero_jac = np.zeros((1, 3, 3), dtype=np.float64)
+    imu_info = np.zeros((1, 9, 9), dtype=np.float64)
+    imu_info[0, 3:9, 3:9] = np.eye(6, dtype=np.float64) * 10000.0
+
+    def residual(flat: np.ndarray) -> np.ndarray:
+        s = flat.reshape(n_epoch, ss_vd_att_bias)
+        r_att = _rotvec_to_rotm(s[0, attitude_idx : attitude_idx + 3])
+        res_p = s[0, :3] + s[0, 3:6] * dt[0] + r_att @ imu_delta_p[0] - s[1, :3]
+        res_v = s[0, 3:6] + r_att @ imu_delta_v[0] - s[1, 3:6]
+        return np.concatenate([res_p, res_v])
+
+    before = state.copy()
+    flat0 = before.reshape(-1)
+    r0 = residual(flat0)
+    before_norm = float(np.linalg.norm(r0))
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=1,
+        tol=0.0,
+        huber_k=0.0,
+        enable_line_search=0,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        imu_delta_p=imu_delta_p,
+        imu_delta_v=imu_delta_v,
+        imu_delta_p_bias_accel_jac=zero_jac,
+        imu_delta_v_bias_accel_jac=zero_jac,
+        imu_delta_p_bias_gyro_jac=zero_jac,
+        imu_delta_v_bias_gyro_jac=zero_jac,
+        imu_delta_angle_bias_gyro_jac=zero_jac,
+        imu_preintegration_information=imu_info,
+    )
+
+    linear_res_p = (
+        before[0, :3]
+        + before[0, 3:6] * dt[0]
+        + imu_delta_p[0]
+        + np.cross(before[0, attitude_idx : attitude_idx + 3], imu_delta_p[0])
+        - before[1, :3]
+    )
+    exact_res_p = residual(flat0)[:3]
+    assert iters == 1
+    assert float(np.linalg.norm(residual(state.reshape(-1)))) < before_norm * 0.05
+    assert float(np.linalg.norm(linear_res_p - exact_res_p)) > 0.5
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_preintegration_information_uses_body_frame_gravity_residual():
+    """imu_gravity should switch p/v to the GTSAM ImuFactor body-frame topology."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_att_bias = 16 + nc
+    attitude_idx = 7 + nc
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_att_bias), dtype=np.float64)
+    state[0, attitude_idx : attitude_idx + 3] = np.array([0.2, -0.3, 0.4], dtype=np.float64)
+    dt = np.ones(n_epoch, dtype=np.float64)
+    gravity = np.array([[0.3, -0.4, -9.81]], dtype=np.float64)
+    imu_delta_p = np.zeros((1, 3), dtype=np.float64)
+    imu_delta_v = np.zeros((1, 3), dtype=np.float64)
+    imu_delta_angle = np.array([[0.25, -0.10, 0.20]], dtype=np.float64)
+    zero_jac = np.zeros((1, 3, 3), dtype=np.float64)
+    imu_info = np.zeros((1, 9, 9), dtype=np.float64)
+    imu_info[0, 3:9, 3:9] = np.eye(6, dtype=np.float64) * 10000.0
+
+    legacy_res_p = state[0, :3] + state[0, 3:6] * dt[0] + _rotvec_to_rotm(
+        state[0, attitude_idx : attitude_idx + 3]
+    ) @ imu_delta_p[0] - state[1, :3]
+    legacy_res_v = state[0, 3:6] + _rotvec_to_rotm(
+        state[0, attitude_idx : attitude_idx + 3]
+    ) @ imu_delta_v[0] - state[1, 3:6]
+    before = float(
+        np.linalg.norm(
+            _imu_body_pv_residual(
+                state,
+                attitude_idx,
+                float(dt[0]),
+                gravity[0],
+                imu_delta_p[0],
+                imu_delta_v[0],
+                imu_delta_angle[0],
+            )
+        )
+    )
+
+    assert float(np.linalg.norm(np.concatenate([legacy_res_p, legacy_res_v]))) < 1e-12
+    assert before > 5.0
+
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        imu_delta_p=imu_delta_p,
+        imu_delta_v=imu_delta_v,
+        imu_delta_angle=imu_delta_angle,
+        imu_delta_p_bias_accel_jac=zero_jac,
+        imu_delta_v_bias_accel_jac=zero_jac,
+        imu_delta_p_bias_gyro_jac=zero_jac,
+        imu_delta_v_bias_gyro_jac=zero_jac,
+        imu_delta_angle_bias_gyro_jac=zero_jac,
+        imu_preintegration_information=imu_info,
+        imu_gravity=gravity,
+    )
+
+    after = float(
+        np.linalg.norm(
+            _imu_body_pv_residual(
+                state,
+                attitude_idx,
+                float(dt[0]),
+                gravity[0],
+                imu_delta_p[0],
+                imu_delta_v[0],
+                imu_delta_angle[0],
+            )
+        )
+    )
+    assert iters > 0
+    assert after < before * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_preintegration_information_couples_gyro_bias_into_delta_velocity():
+    """Dense PVA factors should use gyro bias in delta-p/v rotation correction."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_att_bias = 16 + nc
+    attitude_idx = 7 + nc
+    gyro_bias_idx = attitude_idx + 6
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_att_bias), dtype=np.float64)
+    state[0, gyro_bias_idx + 2] = 1.0
+    state[1, 3] = 1.0
+    dt = np.ones(n_epoch, dtype=np.float64)
+    imu_delta_v = np.array([[1.0, 0.0, 0.0]], dtype=np.float64)
+    imu_info = np.zeros((1, 9, 9), dtype=np.float64)
+    imu_info[0, 6:9, 6:9] = np.eye(3, dtype=np.float64) * 10000.0
+
+    def residual_norm(s: np.ndarray) -> float:
+        effective_att = (
+            s[0, attitude_idx : attitude_idx + 3]
+            - dt[0] * s[0, gyro_bias_idx : gyro_bias_idx + 3]
+        )
+        res_v = s[0, 3:6] + _rotvec_to_rotm(effective_att) @ imu_delta_v[0] - s[1, 3:6]
+        return float(np.linalg.norm(res_v))
+
+    before = residual_norm(state)
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        imu_delta_v=imu_delta_v,
+        imu_preintegration_information=imu_info,
+    )
+
+    assert iters > 0
+    assert residual_norm(state) < before * 0.25
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_diagonal_weights_enable_delta_angle_factor_without_scalar_sigma():
+    """Per-interval IMU weights should override scalar sigma gating."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_att_bias = 16 + nc
+    attitude_idx = 7 + nc
+    gyro_bias_idx = attitude_idx + 6
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_att_bias), dtype=np.float64)
+    dt = np.ones(n_epoch, dtype=np.float64)
+    imu_delta_angle = np.array([[0.1, 0.0, 0.0]], dtype=np.float64)
+
+    def residual_x(s: np.ndarray) -> float:
+        return float(s[0, attitude_idx] + imu_delta_angle[0, 0] - s[1, attitude_idx] - dt[0] * s[0, gyro_bias_idx])
+
+    before = residual_x(state)
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        imu_delta_angle=imu_delta_angle,
+        imu_attitude_weights=np.ones((1, 3), dtype=np.float64) * 10000.0,
+    )
+
+    assert iters > 0
+    assert abs(residual_x(state)) < abs(before) * 1e-3
+
+
+@pytest.mark.skipif(not HAS_FGO_VD, reason="FGO VD CUDA extension not built")
+def test_fgo_vd_imu_preintegration_information_enables_delta_angle_factor_without_scalar_sigma():
+    """Dense IMU information matrices should replace scalar/diagonal sigma gating."""
+    n_epoch, n_sat, nc = 2, 4, 1
+    ss_vd_att_bias = 16 + nc
+    attitude_idx = 7 + nc
+    gyro_bias_idx = attitude_idx + 6
+    sat = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
+    pr = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    w = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    state = np.zeros((n_epoch, ss_vd_att_bias), dtype=np.float64)
+    dt = np.ones(n_epoch, dtype=np.float64)
+    imu_delta_angle = np.array([[0.1, 0.0, 0.0]], dtype=np.float64)
+    imu_info = np.zeros((1, 9, 9), dtype=np.float64)
+    imu_info[0, 0:3, 0:3] = np.eye(3, dtype=np.float64) * 10000.0
+
+    def residual_x(s: np.ndarray) -> float:
+        return float(s[0, attitude_idx] + imu_delta_angle[0, 0] - s[1, attitude_idx] - dt[0] * s[0, gyro_bias_idx])
+
+    before = residual_x(state)
+    iters, _ = fgo_gnss_lm_vd(
+        sat,
+        pr,
+        w,
+        state,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        max_iter=8,
+        tol=1e-12,
+        huber_k=0.0,
+        enable_line_search=1,
+        sys_kind=None,
+        n_clock=1,
+        dt=dt,
+        imu_delta_angle=imu_delta_angle,
+        imu_preintegration_information=imu_info,
+    )
+
+    assert iters > 0
+    assert abs(residual_x(state)) < abs(before) * 1e-3

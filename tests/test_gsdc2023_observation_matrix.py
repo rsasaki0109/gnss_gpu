@@ -371,7 +371,7 @@ def test_fill_observation_matrices_populates_signal_clock_doppler_and_adr() -> N
     assert products.sys_kind[0, 0] == 0
     np.testing.assert_allclose(products.sat_vel[0, 0], [1.0, 2.0, 3.0])
     assert products.sat_clock_drift_mps[0, 0] == -0.01
-    assert products.doppler[0, 0] == 4.0
+    assert products.doppler[0, 0] == -4.0
     assert products.doppler_weights[0, 0] == 4.0
     assert products.adr[0, 0] == -12.0
     assert products.adr_state[0, 0] == 1
@@ -431,6 +431,178 @@ def test_fill_observation_matrices_taroz_sn_dual_weight_emits_separate_array() -
     # and sigma_P = 0.8 -> weight = 1/0.64.
     assert products.weights_fgo is not None
     assert products.weights_fgo[0, 0] == pytest.approx(1.0 / 0.64)
+
+
+def test_fill_observation_matrices_taroz_sn_uses_explicit_cn0_percentile_epochs() -> None:
+    selected_row = _required_row(
+        utcTimeMillis=1000,
+        Svid=7,
+        Cn0DbHz=40.0,
+        SvElevationDegrees=30.0,
+    )
+    percentile_row = _required_row(
+        utcTimeMillis=2000,
+        Svid=7,
+        Cn0DbHz=20.0,
+        SvElevationDegrees=30.0,
+    )
+    selected_epoch = RawEpochObservation(
+        time_ms=1000.0,
+        group=pd.DataFrame([selected_row]),
+        baseline_xyz=np.array([1.0, 2.0, 3.0], dtype=np.float64),
+        truth_xyz=np.array([4.0, 5.0, 6.0], dtype=np.float64),
+    )
+    percentile_epoch = RawEpochObservation(
+        time_ms=2000.0,
+        group=pd.DataFrame([percentile_row]),
+        baseline_xyz=np.array([1.0, 2.0, 3.0], dtype=np.float64),
+        truth_xyz=np.array([4.0, 5.0, 6.0], dtype=np.float64),
+    )
+
+    products = fill_observation_matrices(
+        [selected_epoch],
+        source_columns=selected_row.keys(),
+        baseline_lookup={1000: np.array([10.0, 20.0, 30.0], dtype=np.float64)},
+        weight_mode="sin2el",
+        fgo_weight_mode="taroz_sn",
+        multi_gnss=True,
+        dual_frequency=False,
+        tdcp_enabled=False,
+        adr_sign=-1.0,
+        elapsed_ns_lookup=None,
+        hcdc_lookup=None,
+        clock_bias_lookup=None,
+        clock_drift_lookup=None,
+        gps_tgd_m_by_svid={},
+        gps_matrtklib_nav_messages={},
+        gps_arrival_tow_s_from_row_fn=lambda _row: 100.0,
+        gps_sat_clock_bias_adjustment_m_fn=lambda _c, _s, _sig, _tgd: 0.0,
+        gps_matrtklib_sat_product_adjustment_fn=lambda **_kw: None,
+        clock_kind_for_observation_fn=lambda const, _signal, **_kw: 0,
+        is_l5_signal_fn=lambda signal: "L5" in signal,
+        slot_sort_key_fn=lambda key: key,
+        ecef_to_lla_fn=lambda _x, _y, _z: (0.5, 0.0, 100.0),
+        elevation_azimuth_fn=lambda _rx, _sat: (np.deg2rad(30.0), 0.0),
+        rtklib_tropo_fn=lambda _lat, _alt, _el: 0.0,
+        matlab_signal_clock_dim=7,
+        cn0_percentile_epochs=[percentile_epoch],
+    )
+
+    assert products.weights_fgo is not None
+    assert products.weights_fgo[0, 0] == pytest.approx(1.0 / (0.08 * 0.08))
+
+
+def test_fill_observation_matrices_taroz_sn_dual_weight_emits_doppler_and_carrier_fgo_weights() -> None:
+    row = _required_row(
+        utcTimeMillis=1000,
+        Svid=7,
+        Cn0DbHz=40.0,
+        SvElevationDegrees=30.0,
+        PseudorangeRateMetersPerSecond=-4.0,
+        PseudorangeRateUncertaintyMetersPerSecond=0.5,
+        AccumulatedDeltaRangeMeters=-12.0,
+        AccumulatedDeltaRangeState=1,
+        AccumulatedDeltaRangeUncertaintyMeters=0.2,
+    )
+    epoch = RawEpochObservation(
+        time_ms=1000.0,
+        group=pd.DataFrame([row]),
+        baseline_xyz=np.array([1.0, 2.0, 3.0], dtype=np.float64),
+        truth_xyz=np.array([4.0, 5.0, 6.0], dtype=np.float64),
+    )
+
+    products = fill_observation_matrices(
+        [epoch],
+        source_columns=row.keys(),
+        baseline_lookup={1000: np.array([10.0, 20.0, 30.0], dtype=np.float64)},
+        weight_mode="sin2el",
+        fgo_weight_mode="taroz_sn",
+        multi_gnss=True,
+        dual_frequency=False,
+        tdcp_enabled=True,
+        adr_sign=-1.0,
+        elapsed_ns_lookup=None,
+        hcdc_lookup=None,
+        clock_bias_lookup=None,
+        clock_drift_lookup=None,
+        gps_tgd_m_by_svid={},
+        gps_matrtklib_nav_messages={},
+        gps_arrival_tow_s_from_row_fn=lambda _row: 100.0,
+        gps_sat_clock_bias_adjustment_m_fn=lambda _c, _s, _sig, _tgd: 0.0,
+        gps_matrtklib_sat_product_adjustment_fn=lambda **_kw: None,
+        clock_kind_for_observation_fn=lambda const, _signal, **_kw: 0,
+        is_l5_signal_fn=lambda signal: "L5" in signal,
+        slot_sort_key_fn=lambda key: key,
+        ecef_to_lla_fn=lambda _x, _y, _z: (0.5, 0.0, 100.0),
+        elevation_azimuth_fn=lambda _rx, _sat: (np.deg2rad(30.0), 0.0),
+        rtklib_tropo_fn=lambda _lat, _alt, _el: 0.0,
+        matlab_signal_clock_dim=7,
+    )
+
+    assert products.doppler_weights is not None
+    assert products.doppler_weights[0, 0] == pytest.approx(4.0)
+    assert products.doppler_weights_fgo is not None
+    assert products.doppler_weights_fgo[0, 0] == pytest.approx(144.0)
+    assert products.carrier_weights is None
+    assert products.carrier_weights_fgo is not None
+    assert products.carrier_weights_fgo[0, 0] == pytest.approx(250000.0)
+
+
+def test_fill_observation_matrices_taroz_sn_qzss_other_zeroes_pr_and_carrier_weights() -> None:
+    row = _required_row(
+        utcTimeMillis=1000,
+        Svid=193,
+        ConstellationType=4,
+        SignalType="QZS_L1_CA",
+        Cn0DbHz=40.0,
+        SvElevationDegrees=30.0,
+        PseudorangeRateMetersPerSecond=-4.0,
+        PseudorangeRateUncertaintyMetersPerSecond=0.5,
+        AccumulatedDeltaRangeMeters=-12.0,
+        AccumulatedDeltaRangeState=1,
+        AccumulatedDeltaRangeUncertaintyMeters=0.2,
+    )
+    epoch = RawEpochObservation(
+        time_ms=1000.0,
+        group=pd.DataFrame([row]),
+        baseline_xyz=np.array([1.0, 2.0, 3.0], dtype=np.float64),
+        truth_xyz=np.array([4.0, 5.0, 6.0], dtype=np.float64),
+    )
+
+    products = fill_observation_matrices(
+        [epoch],
+        source_columns=row.keys(),
+        baseline_lookup={1000: np.array([10.0, 20.0, 30.0], dtype=np.float64)},
+        weight_mode="sin2el",
+        fgo_weight_mode="taroz_sn",
+        multi_gnss=True,
+        dual_frequency=False,
+        tdcp_enabled=True,
+        adr_sign=-1.0,
+        elapsed_ns_lookup=None,
+        hcdc_lookup=None,
+        clock_bias_lookup=None,
+        clock_drift_lookup=None,
+        gps_tgd_m_by_svid={},
+        gps_matrtklib_nav_messages={},
+        gps_arrival_tow_s_from_row_fn=lambda _row: 100.0,
+        gps_sat_clock_bias_adjustment_m_fn=lambda _c, _s, _sig, _tgd: 0.0,
+        gps_matrtklib_sat_product_adjustment_fn=lambda **_kw: None,
+        clock_kind_for_observation_fn=lambda const, _signal, **_kw: 0,
+        is_l5_signal_fn=lambda signal: "L5" in signal,
+        slot_sort_key_fn=lambda key: key,
+        ecef_to_lla_fn=lambda _x, _y, _z: (0.5, 0.0, 100.0),
+        elevation_azimuth_fn=lambda _rx, _sat: (np.deg2rad(30.0), 0.0),
+        rtklib_tropo_fn=lambda _lat, _alt, _el: 0.0,
+        matlab_signal_clock_dim=7,
+    )
+
+    assert products.weights_fgo is not None
+    assert products.weights_fgo[0, 0] == 0.0
+    assert products.doppler_weights_fgo is not None
+    assert products.doppler_weights_fgo[0, 0] == pytest.approx(144.0)
+    assert products.carrier_weights_fgo is not None
+    assert products.carrier_weights_fgo[0, 0] == 0.0
 
 
 def test_fill_observation_matrices_taroz_sn_single_mode_omits_dual_weight_array() -> None:
@@ -742,7 +914,7 @@ def test_fill_observation_matrices_internal_state_snapshot() -> None:
         products.sat_clock_drift_mps,
         [[-0.01, 0.0, 0.0, -0.02], [0.0, -0.03, -0.04, 0.0]],
     )
-    _assert_snapshot_allclose(products.doppler, [[4.0, 0.0, 0.0, -2.0], [0.0, 6.0, 8.0, 0.0]])
+    _assert_snapshot_allclose(products.doppler, [[-4.0, 0.0, 0.0, 2.0], [0.0, -6.0, -8.0, 0.0]])
     _assert_snapshot_allclose(products.doppler_weights, [[4.0, 0.0, 0.0, 1.0], [0.0, 0.0, 16.0, 0.0]])
     _assert_snapshot_allclose(
         products.adr,

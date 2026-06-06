@@ -46,6 +46,9 @@ def test_clock_kind_and_common_bias_group_mapping_are_stable():
     assert signal_model.clock_kind_for_observation(1, "GPS_L1_CA", dual_frequency=True, multi_gnss=True) == 0
     assert signal_model.clock_kind_for_observation(1, "GPS_L5_Q", dual_frequency=True, multi_gnss=True) == 4
     assert signal_model.clock_kind_for_observation(6, "GAL_E1_C_P", dual_frequency=True, multi_gnss=True) == 2
+    assert signal_model.clock_kind_for_observation(4, "QZS_L5_Q", dual_frequency=True, multi_gnss=True) == 4
+    assert signal_model.taroz_clock_kind_for_observation(4, "QZS_L1_CA", dual_frequency=True, multi_gnss=True) == 7
+    assert signal_model.taroz_clock_kind_for_observation(4, "QZS_L5_Q", dual_frequency=True, multi_gnss=True) == 7
     assert signal_model.constellation_to_matlab_sys(6) == 8
 
     np.testing.assert_array_equal(

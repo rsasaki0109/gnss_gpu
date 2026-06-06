@@ -4,15 +4,20 @@ import csv
 from datetime import datetime
 import io
 import json
+from types import SimpleNamespace
 import zipfile
 
 import numpy as np
 import pandas as pd
+import pytest
 from scipy.io import savemat
 
 import experiments.compare_gsdc2023_base_correction_series as base_compare
 import experiments.export_gsdc2023_base_correction_series as base_export
 import experiments.gsdc2023_raw_bridge as raw_bridge
+import experiments.validate_fgo_gsdc2023_raw as validate_cli
+from experiments.gsdc2023_bridge_config import BridgeConfig, apply_taroz_marupaku_preset
+from experiments.gsdc2023_imu import rotvec_to_rotm
 from experiments.gsdc2023_raw_bridge import (
     BridgeResult,
     ChunkCandidateQuality,
@@ -384,7 +389,7 @@ def test_doppler_residual_mask_uses_velocity_context_only_at_window_edges():
         window_velocity[:, None, :],
     )
     doppler = np.zeros((3, 1), dtype=np.float64)
-    doppler[1, 0] = -float(window_model[1, 0])
+    doppler[1, 0] = float(window_model[1, 0])
     doppler_weights = np.array([[0.0], [1.0], [0.0]], dtype=np.float64)
 
     masked = _mask_doppler_residual_outliers(
@@ -1074,7 +1079,7 @@ def test_build_trip_arrays_internal_state_snapshot_from_raw_csv(tmp_path):
                     "DriftNanosPerSecond": 1.0 + epoch_idx,
                     "State": 1 | 8,
                     "MultipathIndicator": 0,
-                    "PseudorangeRateMetersPerSecond": 1.0,
+                    "PseudorangeRateMetersPerSecond": -1.0,
                     "PseudorangeRateUncertaintyMetersPerSecond": 0.5,
                     "AccumulatedDeltaRangeState": 1,
                     "AccumulatedDeltaRangeMeters": 10.0 + epoch_idx,
@@ -1109,7 +1114,7 @@ def test_build_trip_arrays_internal_state_snapshot_from_raw_csv(tmp_path):
                     "DriftNanosPerSecond": 1.0 + epoch_idx,
                     "State": 1 | 8,
                     "MultipathIndicator": 0,
-                    "PseudorangeRateMetersPerSecond": 1.0,
+                    "PseudorangeRateMetersPerSecond": -1.0,
                     "PseudorangeRateUncertaintyMetersPerSecond": 0.25,
                     "AccumulatedDeltaRangeState": 1,
                     "AccumulatedDeltaRangeMeters": 20.0 + epoch_idx,
@@ -1245,6 +1250,22 @@ def test_build_trip_arrays_multi_gnss_dual_frequency_uses_matlab_signal_clock_ki
     )
     np.testing.assert_array_equal(batch.sys_kind[0], np.array([0, 4, 2, 5, 0, 4], dtype=np.int32))
 
+    taroz_batch = _build_trip_arrays(
+        trip,
+        max_epochs=10,
+        start_epoch=0,
+        constellation_type=1,
+        signal_type="GPS_L1_CA",
+        weight_mode="taroz_sn",
+        fgo_weight_mode="taroz_sn",
+        multi_gnss=True,
+        dual_frequency=True,
+    )
+
+    assert taroz_batch.n_clock == raw_bridge.MATLAB_SIGNAL_CLOCK_DIM
+    np.testing.assert_array_equal(taroz_batch.sys_kind[0], np.array([0, 4, 2, 5, 7, 7], dtype=np.int32))
+    np.testing.assert_allclose(taroz_batch.weights[0, 4:], np.zeros(2, dtype=np.float64))
+
 
 def test_multi_system_for_clock_kind_preserves_legacy_and_matlab_signal_mappings():
     assert raw_bridge._multi_system_for_clock_kind(4, raw_bridge.MATLAB_SIGNAL_CLOCK_DIM) == raw_bridge.SYSTEM_GPS
@@ -1285,6 +1306,36 @@ def test_run_wls_uses_signal_clock_kinds_as_independent_bias_labels(monkeypatch)
     np.testing.assert_allclose(state[0, :3], np.array([1000.0, 2000.0, 3000.0]))
     assert state[0, 3] == 100.0
     assert state[0, 3 + 4] == 15.0
+
+
+def test_run_wls_ignores_out_of_range_clock_kind_for_taroz_other(monkeypatch):
+    calls = []
+
+    class FakeSignalClockSolver:
+        def __init__(self, systems, max_iter, tol):
+            self.systems = tuple(systems)
+
+        def solve(self, sat_ecef, pseudoranges, system_ids, weights=None):
+            del sat_ecef, pseudoranges, weights
+            calls.append((self.systems, tuple(int(value) for value in system_ids)))
+            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 4: 115.0}, 3
+
+    monkeypatch.setattr(raw_bridge, "MultiGNSSSolver", FakeSignalClockSolver)
+    sat_ecef = np.ones((1, 7, 3), dtype=np.float64)
+    pseudorange = np.ones((1, 7), dtype=np.float64)
+    weights = np.ones((1, 7), dtype=np.float64)
+    sys_kind = np.array([[0, 4, 0, 4, 0, 7, 7]], dtype=np.int32)
+
+    state = run_wls(
+        sat_ecef,
+        pseudorange,
+        weights,
+        sys_kind=sys_kind,
+        n_clock=raw_bridge.MATLAB_SIGNAL_CLOCK_DIM,
+    )
+
+    assert calls == [((0, 4), (0, 4, 0, 4, 0))]
+    np.testing.assert_allclose(state[0, :3], np.array([1000.0, 2000.0, 3000.0]))
 
 
 def test_build_trip_arrays_applies_matlab_style_observation_mask(tmp_path):
@@ -1480,7 +1531,7 @@ def test_build_trip_arrays_masks_doppler_residual_outlier(tmp_path):
                 "WlsPositionZEcefMeters": rx[2],
                 "State": 1 | 8,
                 "MultipathIndicator": 0,
-                "PseudorangeRateMetersPerSecond": -doppler,
+                "PseudorangeRateMetersPerSecond": doppler,
                 "PseudorangeRateUncertaintyMetersPerSecond": 0.1,
             },
         )
@@ -1528,7 +1579,7 @@ def test_doppler_residual_mask_uses_satellite_clock_drift():
     sat_clock_drift = np.array([[0.0, 2.0, 4.0, 6.0, 8.0]], dtype=np.float64)
     model = geom_rate - sat_clock_drift
     receiver_common = 7.0
-    doppler = -model + receiver_common
+    doppler = model + receiver_common
     weights = np.ones_like(doppler)
 
     masked = _mask_doppler_residual_outliers(
@@ -1576,7 +1627,7 @@ def test_observation_mask_keeps_doppler_and_tdcp_when_only_pseudorange_state_fai
                     "WlsPositionZEcefMeters": 3637870.0,
                     "State": state,
                     "MultipathIndicator": 0,
-                    "PseudorangeRateMetersPerSecond": 1.0,
+                    "PseudorangeRateMetersPerSecond": -1.0,
                     "PseudorangeRateUncertaintyMetersPerSecond": 0.1,
                     "AccumulatedDeltaRangeState": 1,
                     "AccumulatedDeltaRangeMeters": 10.0 * svid + float(epoch_idx),
@@ -1905,7 +1956,7 @@ def test_build_trip_arrays_disables_tdcp_across_hardware_clock_discontinuity(tmp
                     "WlsPositionZEcefMeters": base_xyz[2],
                     "BiasUncertaintyNanos": 10.0,
                     "HardwareClockDiscontinuityCount": hcdc[utc_ms],
-                    "PseudorangeRateMetersPerSecond": 1.0,
+                    "PseudorangeRateMetersPerSecond": -1.0,
                     "PseudorangeRateUncertaintyMetersPerSecond": 0.1,
                     "AccumulatedDeltaRangeState": 1,
                     "AccumulatedDeltaRangeMeters": 10.0 * svid + epoch_idx,
@@ -2008,7 +2059,7 @@ def test_build_trip_arrays_applies_tdcp_loffset_for_samsung_a_family(tmp_path):
                     "WlsPositionXEcefMeters": base_xyz[0] + float(epoch_idx),
                     "WlsPositionYEcefMeters": base_xyz[1],
                     "WlsPositionZEcefMeters": base_xyz[2],
-                    "PseudorangeRateMetersPerSecond": 1.617,
+                    "PseudorangeRateMetersPerSecond": -1.617,
                     "PseudorangeRateUncertaintyMetersPerSecond": 0.1,
                     "AccumulatedDeltaRangeState": 1,
                     "AccumulatedDeltaRangeMeters": 10.0 * svid - 0.5 * epoch_idx,
@@ -2150,7 +2201,7 @@ def test_build_trip_arrays_applies_tdcp_weight_scale(tmp_path):
                     "WlsPositionXEcefMeters": -3947460.0,
                     "WlsPositionYEcefMeters": 3431490.0,
                     "WlsPositionZEcefMeters": 3637870.0,
-                    "PseudorangeRateMetersPerSecond": 1.0,
+                    "PseudorangeRateMetersPerSecond": -1.0,
                     "PseudorangeRateUncertaintyMetersPerSecond": 0.1,
                     "AccumulatedDeltaRangeState": 1,
                     "AccumulatedDeltaRangeMeters": 100.0 * svid + float(epoch_idx),
@@ -2202,7 +2253,7 @@ def test_matlab_residual_diagnostics_mask_preserves_tdcp_signal_weights(tmp_path
                     "WlsPositionXEcefMeters": -3947460.0,
                     "WlsPositionYEcefMeters": 3431490.0,
                     "WlsPositionZEcefMeters": 3637870.0,
-                    "PseudorangeRateMetersPerSecond": 1.0,
+                    "PseudorangeRateMetersPerSecond": -1.0,
                     "PseudorangeRateUncertaintyMetersPerSecond": 0.1,
                     "AccumulatedDeltaRangeState": 1,
                     "AccumulatedDeltaRangeMeters": 100.0 * svid + float(epoch_idx),
@@ -2272,7 +2323,7 @@ def test_build_trip_arrays_applies_tdcp_geometry_correction(tmp_path):
                     "WlsPositionXEcefMeters": baseline[0],
                     "WlsPositionYEcefMeters": baseline[1],
                     "WlsPositionZEcefMeters": baseline[2],
-                    "PseudorangeRateMetersPerSecond": 1.0,
+                    "PseudorangeRateMetersPerSecond": -10.0,
                     "PseudorangeRateUncertaintyMetersPerSecond": 0.1,
                     "AccumulatedDeltaRangeState": 1,
                     "AccumulatedDeltaRangeMeters": 100.0 * svid + 10.0 * epoch_idx,
@@ -2294,8 +2345,12 @@ def test_build_trip_arrays_applies_tdcp_geometry_correction(tmp_path):
     corrected = _build_trip_arrays(trip, tdcp_geometry_correction=True, **kwargs)
 
     assert raw.tdcp_meas is not None
+    assert raw.tdcp_raw_meas is not None
     assert corrected.tdcp_meas is not None
+    assert corrected.tdcp_raw_meas is not None
     assert corrected.tdcp_geometry_correction_count == 4
+    np.testing.assert_allclose(raw.tdcp_raw_meas, raw.tdcp_meas)
+    np.testing.assert_allclose(corrected.tdcp_raw_meas, raw.tdcp_meas)
     rho0 = _geometric_range_with_sagnac(raw.sat_ecef[0, 0], raw.kaggle_wls[0])
     rho1 = _geometric_range_with_sagnac(raw.sat_ecef[1, 0], raw.kaggle_wls[1])
     np.testing.assert_allclose(corrected.tdcp_meas[0, 0], raw.tdcp_meas[0, 0] - (rho1 - rho0), rtol=1e-12)
@@ -2390,7 +2445,7 @@ def test_estimate_residual_clock_series_recovers_bias_and_drift():
     rx_vel = np.gradient(baseline_xyz, times_ms * 1e-3, axis=0, edge_order=1)
     geom_rate = _geometric_range_rate_with_sagnac(sat_ecef, baseline_xyz[:, None, :], sat_vel, rx_vel[:, None, :])
     pseudorange = ranges + clock_bias[:, None]
-    doppler = clock_drift[:, None] - geom_rate
+    doppler = clock_drift[:, None] + geom_rate
     sys_kind = np.array(
         [
             [0, 0, 1, 2],
@@ -2504,7 +2559,7 @@ def test_build_trip_arrays_prefers_residual_clock_series_for_blocklist_phone(tmp
                     "DriftNanosPerSecond": -1000.0 / 299792458.0 * 1.0e9,
                     "State": 1 | 8,
                     "MultipathIndicator": 0,
-                    "PseudorangeRateMetersPerSecond": geom_rate[svid - 1] - clock_drift[epoch_idx],
+                    "PseudorangeRateMetersPerSecond": geom_rate[svid - 1] + clock_drift[epoch_idx],
                     "PseudorangeRateUncertaintyMetersPerSecond": 0.1,
                 },
             )
@@ -2665,6 +2720,46 @@ def test_collect_matlab_parity_audit_detects_ready_base_correction_inputs(tmp_pa
     assert audit["ground_truth_present"] is True
 
 
+def test_collect_matlab_parity_audit_accepts_split_root_trip_without_split(tmp_path):
+    data_root = tmp_path / "dataset_2023"
+    course_dir = data_root / "train" / "course"
+    trip = course_dir / "phone"
+    trip.mkdir(parents=True)
+    (trip / "device_imu.csv").write_text("x\n", encoding="utf-8")
+    (trip / "ground_truth.csv").write_text("x\n", encoding="utf-8")
+    (course_dir / "brdc.23n").write_text("nav\n", encoding="utf-8")
+    (course_dir / "BASE_rnx3.obs").write_text("obs\n", encoding="utf-8")
+    base_dir = tmp_path / "base"
+    base_dir.mkdir(parents=True)
+    (base_dir / "base_position.csv").write_text("Base,Year,X,Y,Z\nBASE,2020,1,2,3\n", encoding="utf-8")
+    (base_dir / "base_offset.csv").write_text("Base,E,N,U\nBASE,0,0,0\n", encoding="utf-8")
+    pd.DataFrame(
+        [
+            {
+                "Course": "course",
+                "Phone": "phone",
+                "Type": "Street",
+                "L5": 0,
+                "BDS": 0,
+                "RINEX": "V3",
+                "Base1": "BASE",
+                "IdxStart": 1,
+                "IdxEnd": 10,
+                "RPYReset": 0,
+            },
+        ],
+    ).to_csv(data_root / "settings_train.csv", index=False)
+
+    audit = collect_matlab_parity_audit(data_root / "train", "course/phone", include_imu_sync=False)
+
+    assert audit["dataset_split"] == "train"
+    assert audit["course"] == "course"
+    assert audit["phone"] == "phone"
+    assert audit["base_correction_status"] == "base_correction_ready"
+    assert audit["base_correction_ready"] is True
+    assert audit["expected_base_obs"] == str(course_dir / "BASE_rnx3.obs")
+
+
 def test_load_device_imu_measurements_and_process_stop_detection(tmp_path):
     trip = tmp_path / "dataset_2023" / "train" / "course" / "phone"
     trip.mkdir(parents=True)
@@ -2763,6 +2858,15 @@ def test_preintegrate_processed_imu_between_gnss_epochs():
     np.testing.assert_allclose(preint.delta_v_body[:, 0], np.array([2.0, 1.0]))
     np.testing.assert_allclose(preint.delta_p_body[:, 0], np.array([1.0, 0.25]))
     np.testing.assert_allclose(preint.delta_angle_rad[:, 2], np.array([0.1, 0.05]))
+    assert preint.delta_p_bias_accel_jac is not None
+    assert preint.delta_v_bias_accel_jac is not None
+    assert preint.delta_angle_bias_gyro_jac is not None
+    np.testing.assert_allclose(preint.delta_v_bias_accel_jac[:, 0, 0], np.array([1.0, 0.5]))
+    np.testing.assert_allclose(preint.delta_p_bias_accel_jac[:, 0, 0], np.array([0.5, 0.125]))
+    np.testing.assert_allclose(preint.delta_angle_bias_gyro_jac[:, 2, 2], np.array([1.0, 0.5]))
+    np.testing.assert_allclose(preint.delta_v_bias_accel_jac[:, 0, 1], 0.0)
+    np.testing.assert_allclose(preint.delta_p_bias_accel_jac[:, 0, 1], 0.0)
+    np.testing.assert_allclose(preint.delta_angle_bias_gyro_jac[:, 2, 0], 0.0)
 
 
 def test_preintegrate_processed_imu_tracks_interval_bias_means():
@@ -2866,18 +2970,122 @@ def test_imu_preintegration_segment_masks_invalid_intervals():
             ],
             dtype=np.float64,
         ),
-        delta_angle_rad=np.zeros((3, 3), dtype=np.float64),
+        delta_angle_rad=np.array(
+            [
+                [0.01, 0.02, 0.03],
+                [9.0, 9.0, 9.0],
+                [0.04, 0.05, 0.06],
+            ],
+            dtype=np.float64,
+        ),
         sample_count=np.array([5, 0, 7], dtype=np.int32),
+        delta_p_bias_accel_jac=np.stack(
+            [
+                np.eye(3, dtype=np.float64),
+                np.eye(3, dtype=np.float64) * 9.0,
+                np.eye(3, dtype=np.float64) * 4.0,
+            ],
+        ),
+        delta_v_bias_accel_jac=np.stack(
+            [
+                np.eye(3, dtype=np.float64) * 2.0,
+                np.eye(3, dtype=np.float64) * 8.0,
+                np.eye(3, dtype=np.float64) * 5.0,
+            ],
+        ),
+        delta_p_bias_gyro_jac=np.stack(
+            [
+                np.eye(3, dtype=np.float64) * 1.5,
+                np.eye(3, dtype=np.float64) * 9.5,
+                np.eye(3, dtype=np.float64) * 4.5,
+            ],
+        ),
+        delta_v_bias_gyro_jac=np.stack(
+            [
+                np.eye(3, dtype=np.float64) * 2.5,
+                np.eye(3, dtype=np.float64) * 8.5,
+                np.eye(3, dtype=np.float64) * 5.5,
+            ],
+        ),
+        delta_angle_bias_gyro_jac=np.stack(
+            [
+                np.eye(3, dtype=np.float64) * 3.0,
+                np.eye(3, dtype=np.float64) * 7.0,
+                np.eye(3, dtype=np.float64) * 6.0,
+            ],
+        ),
     )
 
     delta_p, delta_v, count = _imu_preintegration_segment(preint, 0, 4)
+    delta_p2, delta_v2, delta_angle, count2 = raw_bridge._imu_preintegration_segment_with_angle(preint, 0, 4)
+    delta_p3, delta_v3, delta_angle3, delta_t, count3 = raw_bridge._imu_preintegration_segment_with_angle_and_dt(
+        preint,
+        0,
+        4,
+    )
+    (
+        delta_p4,
+        delta_v4,
+        delta_angle4,
+        delta_t4,
+        delta_p_bias_accel_jac,
+        delta_v_bias_accel_jac,
+        delta_p_bias_gyro_jac,
+        delta_v_bias_gyro_jac,
+        delta_angle_bias_gyro_jac,
+        count4,
+    ) = raw_bridge._imu_preintegration_segment_with_bias_jacobians(preint, 0, 4)
 
     assert count == 2
+    assert count2 == 2
+    assert count3 == 2
+    assert count4 == 2
     assert delta_p is not None and delta_v is not None
+    assert delta_p2 is not None and delta_v2 is not None and delta_angle is not None
+    assert delta_p3 is not None and delta_v3 is not None and delta_angle3 is not None and delta_t is not None
+    assert (
+        delta_p4 is not None
+        and delta_v4 is not None
+        and delta_angle4 is not None
+        and delta_t4 is not None
+        and delta_p_bias_accel_jac is not None
+        and delta_v_bias_accel_jac is not None
+        and delta_p_bias_gyro_jac is not None
+        and delta_v_bias_gyro_jac is not None
+        and delta_angle_bias_gyro_jac is not None
+    )
     np.testing.assert_allclose(delta_p[0], [1.0, 2.0, 3.0])
     np.testing.assert_allclose(delta_v[2], [0.4, 0.5, 0.6])
+    np.testing.assert_allclose(delta_p3, delta_p2)
+    np.testing.assert_allclose(delta_v3, delta_v2)
+    np.testing.assert_allclose(delta_angle3, delta_angle)
+    np.testing.assert_allclose(delta_p4, delta_p3)
+    np.testing.assert_allclose(delta_v4, delta_v3)
+    np.testing.assert_allclose(delta_angle4, delta_angle3)
+    np.testing.assert_allclose(delta_t4, delta_t)
+    np.testing.assert_allclose(delta_angle[0], [0.01, 0.02, 0.03])
+    np.testing.assert_allclose(delta_angle[2], [0.04, 0.05, 0.06])
+    np.testing.assert_allclose(delta_t[0], 1.0)
+    np.testing.assert_allclose(delta_t[2], 1.0)
+    np.testing.assert_allclose(delta_p_bias_accel_jac[0], np.eye(3))
+    np.testing.assert_allclose(delta_v_bias_accel_jac[0], np.eye(3) * 2.0)
+    np.testing.assert_allclose(delta_p_bias_gyro_jac[0], np.eye(3) * 1.5)
+    np.testing.assert_allclose(delta_v_bias_gyro_jac[0], np.eye(3) * 2.5)
+    np.testing.assert_allclose(delta_angle_bias_gyro_jac[0], np.eye(3) * 3.0)
+    np.testing.assert_allclose(delta_p_bias_accel_jac[2], np.eye(3) * 4.0)
+    np.testing.assert_allclose(delta_v_bias_accel_jac[2], np.eye(3) * 5.0)
+    np.testing.assert_allclose(delta_p_bias_gyro_jac[2], np.eye(3) * 4.5)
+    np.testing.assert_allclose(delta_v_bias_gyro_jac[2], np.eye(3) * 5.5)
+    np.testing.assert_allclose(delta_angle_bias_gyro_jac[2], np.eye(3) * 6.0)
     assert np.isnan(delta_p[1]).all()
     assert np.isnan(delta_v[1]).all()
+    assert np.isnan(delta_angle[1]).all()
+    assert np.isnan(delta_t[1])
+    np.testing.assert_allclose(delta_p_bias_accel_jac[1], 0.0)
+    np.testing.assert_allclose(delta_v_bias_accel_jac[1], 0.0)
+    np.testing.assert_allclose(delta_p_bias_gyro_jac[1], 0.0)
+    np.testing.assert_allclose(delta_v_bias_gyro_jac[1], 0.0)
+    np.testing.assert_allclose(delta_angle_bias_gyro_jac[1], 0.0)
 
 
 def test_run_fgo_chunked_forwards_opt_in_imu_prior(monkeypatch):
@@ -2902,11 +3110,27 @@ def test_run_fgo_chunked_forwards_opt_in_imu_prior(monkeypatch):
     raw_wls[:, :3] = true_pos + np.array([[0.0, 0.0, 0.0], [0.2, 0.0, 0.0], [0.4, 0.0, 0.0]])
     preint = raw_bridge.IMUPreintegration(
         epoch_times_ms=np.array([0.0, 1000.0, 2000.0]),
-        delta_t_s=np.array([1.0, 1.0]),
+        delta_t_s=np.array([0.9, 1.1]),
         delta_v_body=np.array([[0.1, 0.0, 0.0], [0.2, 0.0, 0.0]], dtype=np.float64),
         delta_p_body=np.array([[0.5, 0.0, 0.0], [0.6, 0.0, 0.0]], dtype=np.float64),
-        delta_angle_rad=np.zeros((2, 3), dtype=np.float64),
+        delta_angle_rad=np.array([[0.01, 0.0, 0.0], [0.02, 0.0, 0.0]], dtype=np.float64),
         sample_count=np.array([10, 10], dtype=np.int32),
+        delta_p_bias_accel_jac=np.stack(
+            [np.eye(3, dtype=np.float64) * 0.405, np.eye(3, dtype=np.float64) * 0.605],
+        ),
+        delta_v_bias_accel_jac=np.stack(
+            [np.eye(3, dtype=np.float64) * 0.9, np.eye(3, dtype=np.float64) * 1.1],
+        ),
+        delta_p_bias_gyro_jac=np.stack(
+            [np.eye(3, dtype=np.float64) * 0.19, np.eye(3, dtype=np.float64) * 0.21],
+        ),
+        delta_v_bias_gyro_jac=np.stack(
+            [np.eye(3, dtype=np.float64) * 0.29, np.eye(3, dtype=np.float64) * 0.31],
+        ),
+        delta_angle_bias_gyro_jac=np.stack(
+            [np.eye(3, dtype=np.float64) * 0.9, np.eye(3, dtype=np.float64) * 1.1],
+        ),
+        gravity_ecef=np.array([[0.0, 0.0, -9.81], [0.1, 0.0, -9.80]], dtype=np.float64),
     )
     batch = raw_bridge.TripArrays(
         times_ms=np.array([0.0, 1000.0, 2000.0], dtype=np.float64),
@@ -2929,13 +3153,33 @@ def test_run_fgo_chunked_forwards_opt_in_imu_prior(monkeypatch):
         captured["state_shape"] = args[3].shape
         captured["imu_delta_p"] = kwargs.get("imu_delta_p")
         captured["imu_delta_v"] = kwargs.get("imu_delta_v")
+        captured["imu_delta_angle"] = kwargs.get("imu_delta_angle")
+        captured["imu_delta_t"] = kwargs.get("imu_delta_t")
+        captured["imu_delta_p_bias_accel_jac"] = kwargs.get("imu_delta_p_bias_accel_jac")
+        captured["imu_delta_v_bias_accel_jac"] = kwargs.get("imu_delta_v_bias_accel_jac")
+        captured["imu_delta_p_bias_gyro_jac"] = kwargs.get("imu_delta_p_bias_gyro_jac")
+        captured["imu_delta_v_bias_gyro_jac"] = kwargs.get("imu_delta_v_bias_gyro_jac")
+        captured["imu_delta_angle_bias_gyro_jac"] = kwargs.get("imu_delta_angle_bias_gyro_jac")
+        captured["imu_gravity"] = kwargs.get("imu_gravity")
+        captured["imu_position_weights"] = kwargs.get("imu_position_weights")
+        captured["imu_velocity_weights"] = kwargs.get("imu_velocity_weights")
+        captured["imu_attitude_weights"] = kwargs.get("imu_attitude_weights")
+        captured["imu_preintegration_information"] = kwargs.get("imu_preintegration_information")
+        captured["imu_factor_use_next_bias"] = kwargs.get("imu_factor_use_next_bias")
         captured["imu_position_sigma_m"] = kwargs.get("imu_position_sigma_m")
         captured["imu_velocity_sigma_mps"] = kwargs.get("imu_velocity_sigma_mps")
+        captured["imu_attitude_sigma_rad"] = kwargs.get("imu_attitude_sigma_rad")
         captured["imu_accel_bias_prior_sigma_mps2"] = kwargs.get("imu_accel_bias_prior_sigma_mps2")
         captured["imu_accel_bias_between_sigma_mps2"] = kwargs.get("imu_accel_bias_between_sigma_mps2")
+        captured["imu_accel_bias_between_weights"] = kwargs.get("imu_accel_bias_between_weights")
+        captured["imu_gyro_bias_prior_sigma_radps"] = kwargs.get("imu_gyro_bias_prior_sigma_radps")
+        captured["imu_gyro_bias_between_sigma_radps"] = kwargs.get("imu_gyro_bias_between_sigma_radps")
+        captured["imu_gyro_bias_between_weights"] = kwargs.get("imu_gyro_bias_between_weights")
         captured["absolute_height_ref_ecef"] = kwargs.get("absolute_height_ref_ecef")
         captured["absolute_height_sigma_m"] = kwargs.get("absolute_height_sigma_m")
         captured["enu_up_ecef"] = kwargs.get("enu_up_ecef")
+        captured["doppler_huber_k"] = kwargs.get("doppler_huber_k")
+        captured["tdcp_huber_k"] = kwargs.get("tdcp_huber_k")
         return 1, 0.0
 
     monkeypatch.setattr(raw_bridge, "fgo_gnss_lm_vd", fake_fgo_gnss_lm_vd)
@@ -2955,27 +3199,672 @@ def test_run_fgo_chunked_forwards_opt_in_imu_prior(monkeypatch):
         apply_imu_prior=True,
         imu_position_sigma_m=12.5,
         imu_velocity_sigma_mps=2.5,
+        imu_attitude_state=True,
+        imu_attitude_sigma_rad=0.125,
+        imu_diagonal_covariance=True,
+        imu_factor_use_next_bias=True,
+        imu_bias_between_sample_count_scaling=True,
         imu_accel_bias_state=True,
         imu_accel_bias_prior_sigma_mps2=9.5,
         imu_accel_bias_between_sigma_mps2=0.75,
+        imu_gyro_bias_state=True,
+        imu_gyro_bias_prior_sigma_radps=0.25,
+        imu_gyro_bias_between_sigma_radps=0.5,
         fgo_iters=1,
         tol=1e-7,
         chunk_epochs=0,
         use_vd=True,
         apply_absolute_height=True,
         absolute_height_sigma_m=0.75,
+        fgo_huber_k_doppler=0.4,
+        fgo_huber_k_tdcp=0.2,
     )
 
-    assert captured["state_shape"] == (3, 11)
+    assert captured["state_shape"] == (3, 17)
     np.testing.assert_allclose(captured["imu_delta_p"], preint.delta_p_body)
     np.testing.assert_allclose(captured["imu_delta_v"], preint.delta_v_body)
+    np.testing.assert_allclose(captured["imu_delta_angle"], preint.delta_angle_rad)
+    np.testing.assert_allclose(captured["imu_delta_t"], preint.delta_t_s)
+    np.testing.assert_allclose(captured["imu_delta_p_bias_accel_jac"], preint.delta_p_bias_accel_jac)
+    np.testing.assert_allclose(captured["imu_delta_v_bias_accel_jac"], preint.delta_v_bias_accel_jac)
+    np.testing.assert_allclose(captured["imu_delta_p_bias_gyro_jac"], preint.delta_p_bias_gyro_jac)
+    np.testing.assert_allclose(captured["imu_delta_v_bias_gyro_jac"], preint.delta_v_bias_gyro_jac)
+    np.testing.assert_allclose(captured["imu_delta_angle_bias_gyro_jac"], preint.delta_angle_bias_gyro_jac)
+    np.testing.assert_allclose(captured["imu_gravity"], preint.gravity_ecef)
+    assert captured["imu_position_weights"] is not None
+    assert captured["imu_velocity_weights"] is not None
+    assert captured["imu_attitude_weights"] is not None
+    assert captured["imu_position_weights"].shape == (2, 3)
+    assert captured["imu_velocity_weights"].shape == (2, 3)
+    assert captured["imu_attitude_weights"].shape == (2, 3)
+    assert captured["imu_preintegration_information"] is None
+    assert captured["imu_factor_use_next_bias"] is True
     assert captured["imu_position_sigma_m"] == 12.5
     assert captured["imu_velocity_sigma_mps"] == 2.5
+    assert captured["imu_attitude_sigma_rad"] == 0.125
     assert captured["imu_accel_bias_prior_sigma_mps2"] == 9.5
     assert captured["imu_accel_bias_between_sigma_mps2"] == 0.75
+    np.testing.assert_allclose(captured["imu_accel_bias_between_weights"], np.full((2, 3), 1.0 / (10.0 * 0.75 * 0.75)))
+    assert captured["imu_gyro_bias_prior_sigma_radps"] == 0.25
+    assert captured["imu_gyro_bias_between_sigma_radps"] == 0.5
+    np.testing.assert_allclose(captured["imu_gyro_bias_between_weights"], np.full((2, 3), 1.0 / (10.0 * 0.5 * 0.5)))
     np.testing.assert_allclose(captured["absolute_height_ref_ecef"], batch.absolute_height_ref_ecef)
     assert captured["absolute_height_sigma_m"] == 0.75
     assert captured["enu_up_ecef"] is not None
+    assert captured["doppler_huber_k"] == 0.4
+    assert captured["tdcp_huber_k"] == 0.2
+
+
+def test_run_fgo_chunked_fixed_linearization_residualizes_pr_and_doppler(monkeypatch):
+    n_epoch, n_sat = 2, 4
+    true_pos = np.array([1.0e6, 2.0e6, 3.0e6], dtype=np.float64)
+    true_vel = np.array([2.0, -1.0, 0.5], dtype=np.float64)
+    sat = np.array(
+        [
+            [2.1e7, 0.0, 0.0],
+            [0.0, 2.2e7, 0.0],
+            [0.0, 0.0, 2.3e7],
+            [1.8e7, 1.8e7, 1.8e7],
+        ],
+        dtype=np.float64,
+    )
+    sat_ecef = np.tile(sat.reshape(1, n_sat, 3), (n_epoch, 1, 1))
+    sat_vel = np.ones_like(sat_ecef) * np.array([10.0, -4.0, 3.0], dtype=np.float64)
+    pseudorange = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    doppler = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pseudorange[t, s] = _geometric_range_with_sagnac(true_pos, sat_ecef[t, s]) + 7.5
+            doppler[t, s] = _geometric_range_rate_with_sagnac(
+                sat_ecef[t, s],
+                true_pos,
+                sat_vel[t, s],
+                true_vel,
+            ) + 0.25
+    weights = np.ones((n_epoch, n_sat), dtype=np.float64)
+    doppler_weights = np.ones((n_epoch, n_sat), dtype=np.float64) * 4.0
+    tdcp_raw_meas = np.array([[10.0, 20.0, 30.0, 40.0]], dtype=np.float64)
+    tdcp_meas = tdcp_raw_meas - 999.0
+    tdcp_weights = np.ones((n_epoch - 1, n_sat), dtype=np.float64) * 9.0
+    raw_wls = np.zeros((n_epoch, 4), dtype=np.float64)
+    raw_wls[:, :3] = true_pos
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([0.0, 1000.0], dtype=np.float64),
+        sat_ecef=sat_ecef,
+        pseudorange=pseudorange,
+        weights=weights,
+        kaggle_wls=np.tile(true_pos.reshape(1, 3), (n_epoch, 1)),
+        truth=np.full((n_epoch, 3), np.nan, dtype=np.float64),
+        max_sats=n_sat,
+        has_truth=False,
+        n_clock=1,
+        sat_vel=sat_vel,
+        doppler=doppler,
+        doppler_weights=doppler_weights,
+        dt=np.array([1.0, 0.0], dtype=np.float64),
+        tdcp_meas=tdcp_meas,
+        tdcp_raw_meas=tdcp_raw_meas,
+        tdcp_weights=tdcp_weights,
+        tdcp_geometry_correction_count=int(tdcp_weights.size),
+    )
+    captured: dict[str, np.ndarray | None] = {}
+
+    def fake_fgo_gnss_lm_vd(*args, **kwargs):
+        captured["sat_ecef"] = args[0]
+        captured["pseudorange"] = args[1]
+        captured["weights"] = args[2]
+        captured["state"] = args[3].copy()
+        captured["doppler"] = kwargs.get("doppler")
+        captured["doppler_weights"] = kwargs.get("doppler_weights")
+        captured["pr_linearization_ref_ecef"] = kwargs.get("pr_linearization_ref_ecef")
+        captured["pr_linearization_los_ecef"] = kwargs.get("pr_linearization_los_ecef")
+        captured["doppler_linearization_ref_vel"] = kwargs.get("doppler_linearization_ref_vel")
+        captured["doppler_linearization_los_ecef"] = kwargs.get("doppler_linearization_los_ecef")
+        captured["tdcp_meas"] = kwargs.get("tdcp_meas")
+        captured["tdcp_weights"] = kwargs.get("tdcp_weights")
+        captured["tdcp_linearization_ref_ecef"] = kwargs.get("tdcp_linearization_ref_ecef")
+        return 1, 0.0
+
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm_vd", fake_fgo_gnss_lm_vd)
+
+    raw_bridge.run_fgo_chunked(
+        batch,
+        raw_wls,
+        clock_jump=None,
+        clock_drift_seed_mps=None,
+        clock_use_average_drift=True,
+        tdcp_use_drift=False,
+        stop_mask=None,
+        motion_sigma_m=0.05,
+        clock_drift_sigma_m=0.1,
+        stop_velocity_sigma_mps=0.0,
+        stop_position_sigma_m=0.0,
+        apply_imu_prior=False,
+        imu_position_sigma_m=0.0,
+        imu_velocity_sigma_mps=0.0,
+        fgo_iters=1,
+        tol=1e-7,
+        chunk_epochs=0,
+        use_vd=True,
+        vd_seed_factor_guard=False,
+        fgo_fixed_linearization=True,
+    )
+
+    state = np.asarray(captured["state"], dtype=np.float64)
+    pr_ref = np.asarray(captured["pr_linearization_ref_ecef"], dtype=np.float64)
+    pr_los = np.asarray(captured["pr_linearization_los_ecef"], dtype=np.float64)
+    dop_ref = np.asarray(captured["doppler_linearization_ref_vel"], dtype=np.float64)
+    dop_los = np.asarray(captured["doppler_linearization_los_ecef"], dtype=np.float64)
+    tdcp_ref = np.asarray(captured["tdcp_linearization_ref_ecef"], dtype=np.float64)
+    expected_pr, expected_pr_weights, expected_pr_ref, expected_pr_los = raw_bridge._fixed_pr_linearization_inputs(
+        sat_ecef,
+        pseudorange,
+        weights,
+        state,
+    )
+    dop_fixed = raw_bridge._fixed_doppler_linearization_inputs(
+        sat_ecef,
+        sat_vel,
+        doppler,
+        doppler_weights,
+        None,
+        state,
+    )
+    assert dop_fixed is not None
+    expected_doppler, expected_doppler_weights, expected_dop_ref, expected_dop_los = dop_fixed
+    expected_tdcp, expected_tdcp_weights, expected_tdcp_ref = raw_bridge._fixed_tdcp_linearization_inputs(
+        sat_ecef,
+        tdcp_raw_meas,
+        tdcp_weights,
+        state,
+    )
+
+    np.testing.assert_allclose(pr_ref, state[:, :3])
+    np.testing.assert_allclose(pr_ref, expected_pr_ref)
+    np.testing.assert_allclose(pr_los, expected_pr_los)
+    np.testing.assert_allclose(captured["pseudorange"], expected_pr)
+    np.testing.assert_allclose(captured["weights"], expected_pr_weights)
+    np.testing.assert_allclose(dop_ref, expected_dop_ref)
+    np.testing.assert_allclose(dop_los, expected_dop_los)
+    np.testing.assert_allclose(captured["doppler"], expected_doppler)
+    np.testing.assert_allclose(captured["doppler_weights"], expected_doppler_weights)
+    np.testing.assert_allclose(tdcp_ref, expected_tdcp_ref)
+    np.testing.assert_allclose(captured["tdcp_meas"], expected_tdcp)
+    np.testing.assert_allclose(captured["tdcp_weights"], expected_tdcp_weights)
+    assert not np.allclose(captured["tdcp_meas"], tdcp_meas)
+
+
+def test_run_fgo_chunked_fixed_linearization_uses_taroz_factor_overrides(monkeypatch):
+    n_epoch, n_sat = 2, 4
+    true_pos = np.array([1.0e6, 2.0e6, 3.0e6], dtype=np.float64)
+    sat = true_pos + np.array(
+        [
+            [2.1e7, 0.0, 0.0],
+            [0.0, 2.2e7, 0.0],
+            [0.0, 0.0, 2.3e7],
+            [1.8e7, 1.8e7, 1.8e7],
+        ],
+        dtype=np.float64,
+    )
+    sat_ecef = np.tile(sat.reshape(1, n_sat, 3), (n_epoch, 1, 1))
+    raw_wls = np.zeros((n_epoch, 4), dtype=np.float64)
+    raw_wls[:, :3] = true_pos
+    fgo_pr = np.arange(n_epoch * n_sat, dtype=np.float64).reshape(n_epoch, n_sat) + 10.0
+    fgo_doppler = fgo_pr + 100.0
+    fgo_tdcp = np.arange(n_sat, dtype=np.float64).reshape(1, n_sat) + 200.0
+    fgo_pr_ref = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float64)
+    fgo_doppler_ref = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=np.float64)
+    fgo_tdcp_ref = np.array([[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]], dtype=np.float64)
+    fgo_pr_los = np.ones((n_epoch, n_sat, 3), dtype=np.float64) * 0.25
+    fgo_doppler_los = np.ones((n_epoch, n_sat, 3), dtype=np.float64) * -0.5
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([0.0, 1000.0], dtype=np.float64),
+        sat_ecef=sat_ecef,
+        pseudorange=np.linalg.norm(sat_ecef - true_pos, axis=2),
+        weights=np.ones((n_epoch, n_sat), dtype=np.float64),
+        kaggle_wls=np.tile(true_pos.reshape(1, 3), (n_epoch, 1)),
+        truth=np.full((n_epoch, 3), np.nan, dtype=np.float64),
+        max_sats=n_sat,
+        has_truth=False,
+        n_clock=1,
+        sat_vel=np.zeros_like(sat_ecef),
+        doppler=np.zeros((n_epoch, n_sat), dtype=np.float64),
+        doppler_weights=np.ones((n_epoch, n_sat), dtype=np.float64),
+        doppler_weights_fgo=np.ones((n_epoch, n_sat), dtype=np.float64) * 2.0,
+        dt=np.array([1.0, 0.0], dtype=np.float64),
+        tdcp_meas=np.zeros((n_epoch - 1, n_sat), dtype=np.float64),
+        tdcp_raw_meas=np.zeros((n_epoch - 1, n_sat), dtype=np.float64),
+        tdcp_weights=np.ones((n_epoch - 1, n_sat), dtype=np.float64),
+        tdcp_weights_fgo=np.ones((n_epoch - 1, n_sat), dtype=np.float64) * 3.0,
+        weights_fgo=np.ones((n_epoch, n_sat), dtype=np.float64) * 4.0,
+        fgo_pr_measurement=fgo_pr,
+        fgo_pr_linearization_ref_ecef=fgo_pr_ref,
+        fgo_pr_linearization_los_ecef=fgo_pr_los,
+        fgo_doppler_measurement=fgo_doppler,
+        fgo_doppler_linearization_ref_vel=fgo_doppler_ref,
+        fgo_doppler_linearization_los_ecef=fgo_doppler_los,
+        fgo_tdcp_measurement=fgo_tdcp,
+        fgo_tdcp_linearization_ref_ecef=fgo_tdcp_ref,
+        fgo_sat_ecef=np.ones_like(sat_ecef) * 42.0,
+    )
+    captured: dict[str, np.ndarray | None] = {}
+
+    def fake_fgo_gnss_lm_vd(*args, **kwargs):
+        captured["sat_ecef"] = args[0]
+        captured["pseudorange"] = args[1]
+        captured["weights"] = args[2]
+        captured["doppler"] = kwargs.get("doppler")
+        captured["doppler_weights"] = kwargs.get("doppler_weights")
+        captured["pr_linearization_ref_ecef"] = kwargs.get("pr_linearization_ref_ecef")
+        captured["pr_linearization_los_ecef"] = kwargs.get("pr_linearization_los_ecef")
+        captured["doppler_linearization_ref_vel"] = kwargs.get("doppler_linearization_ref_vel")
+        captured["doppler_linearization_los_ecef"] = kwargs.get("doppler_linearization_los_ecef")
+        captured["tdcp_meas"] = kwargs.get("tdcp_meas")
+        captured["tdcp_weights"] = kwargs.get("tdcp_weights")
+        captured["tdcp_linearization_ref_ecef"] = kwargs.get("tdcp_linearization_ref_ecef")
+        return 1, 0.0
+
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm_vd", fake_fgo_gnss_lm_vd)
+
+    raw_bridge.run_fgo_chunked(
+        batch,
+        raw_wls,
+        clock_jump=None,
+        clock_drift_seed_mps=None,
+        clock_use_average_drift=True,
+        tdcp_use_drift=False,
+        stop_mask=None,
+        motion_sigma_m=0.05,
+        clock_drift_sigma_m=0.1,
+        stop_velocity_sigma_mps=0.0,
+        stop_position_sigma_m=0.0,
+        apply_imu_prior=False,
+        imu_position_sigma_m=0.0,
+        imu_velocity_sigma_mps=0.0,
+        fgo_iters=1,
+        tol=1e-7,
+        chunk_epochs=0,
+        use_vd=True,
+        vd_seed_factor_guard=False,
+        fgo_fixed_linearization=True,
+    )
+
+    np.testing.assert_allclose(captured["sat_ecef"], 42.0)
+    np.testing.assert_allclose(captured["pseudorange"], fgo_pr)
+    np.testing.assert_allclose(captured["weights"], 4.0)
+    np.testing.assert_allclose(captured["doppler"], fgo_doppler)
+    np.testing.assert_allclose(captured["doppler_weights"], 2.0)
+    np.testing.assert_allclose(captured["pr_linearization_ref_ecef"], fgo_pr_ref)
+    np.testing.assert_allclose(captured["pr_linearization_los_ecef"], fgo_pr_los)
+    np.testing.assert_allclose(captured["doppler_linearization_ref_vel"], fgo_doppler_ref)
+    np.testing.assert_allclose(captured["doppler_linearization_los_ecef"], fgo_doppler_los)
+    np.testing.assert_allclose(captured["tdcp_meas"], fgo_tdcp)
+    np.testing.assert_allclose(captured["tdcp_weights"], 3.0)
+    np.testing.assert_allclose(captured["tdcp_linearization_ref_ecef"], fgo_tdcp_ref)
+
+
+def test_fixed_tdcp_linearization_inputs_add_sat_clock_bias_delta() -> None:
+    sat_ecef = np.array(
+        [
+            [[2.1e7, 0.0, 0.0], [0.0, 2.1e7, 0.0]],
+            [[2.1e7, 0.0, 0.0], [0.0, 2.1e7, 0.0]],
+        ],
+        dtype=np.float64,
+    )
+    state = np.zeros((2, 7), dtype=np.float64)
+    tdcp_raw = np.array([[10.0, 20.0]], dtype=np.float64)
+    tdcp_weights = np.array([[9.0, 16.0]], dtype=np.float64)
+    sat_clock_bias = np.array([[1.0, np.nan], [1.25, 2.0]], dtype=np.float64)
+
+    measurement, solver_weights, ref = raw_bridge._fixed_tdcp_linearization_inputs(
+        sat_ecef,
+        tdcp_raw,
+        tdcp_weights,
+        state,
+        sat_clock_bias,
+    )
+
+    np.testing.assert_allclose(measurement[0, 0], 10.25)
+    np.testing.assert_allclose(solver_weights, [[9.0, 0.0]])
+    np.testing.assert_allclose(ref, state[:, :3])
+
+
+def test_fixed_pr_linearization_inputs_use_first_order_sagnac_range() -> None:
+    sat_ecef = np.array([[[2.2e7, 1.1e7, 1.9e7]]], dtype=np.float64)
+    state = np.zeros((1, 7), dtype=np.float64)
+    state[0, :3] = np.array([-2.5e6, -4.7e6, 3.5e6], dtype=np.float64)
+    pseudorange = np.array([[2.4e7]], dtype=np.float64)
+    weights = np.array([[4.0]], dtype=np.float64)
+
+    measurement, solver_weights, ref, los = raw_bridge._fixed_pr_linearization_inputs(
+        sat_ecef,
+        pseudorange,
+        weights,
+        state,
+    )
+
+    expected_range = _geometric_range_with_sagnac(sat_ecef[0, 0], state[0, :3])
+    native_range, _native_los = raw_bridge._native_pr_range_los_vd(sat_ecef, state[:, None, :3])
+    expected_los = (state[:, None, :3] - sat_ecef) / np.linalg.norm(state[:, None, :3] - sat_ecef, axis=2)[:, :, None]
+    np.testing.assert_allclose(measurement[0, 0], pseudorange[0, 0] - expected_range)
+    assert abs(float(native_range[0, 0] - expected_range)) > 1.0e-5
+    np.testing.assert_allclose(los, expected_los)
+    assert np.linalg.norm(_native_los[0, 0] - expected_los[0, 0]) > 1.0e-6
+    np.testing.assert_allclose(solver_weights, weights)
+    np.testing.assert_allclose(ref, state[:, :3])
+
+
+def test_fixed_doppler_linearization_inputs_return_taroz_los() -> None:
+    sat_ecef = np.array([[[2.2e7, 1.1e7, 1.9e7]]], dtype=np.float64)
+    sat_vel = np.array([[[10.0, -3.0, 2.0]]], dtype=np.float64)
+    state = np.zeros((1, 8), dtype=np.float64)
+    state[0, :3] = np.array([-2.5e6, -4.7e6, 3.5e6], dtype=np.float64)
+    state[0, 3:6] = np.array([0.5, -0.25, 0.125], dtype=np.float64)
+    doppler = np.array([[4.0]], dtype=np.float64)
+    weights = np.array([[9.0]], dtype=np.float64)
+    sat_clock_drift = np.array([[0.25]], dtype=np.float64)
+
+    measurement, solver_weights, ref, los = raw_bridge._fixed_doppler_linearization_inputs(
+        sat_ecef,
+        sat_vel,
+        doppler,
+        weights,
+        sat_clock_drift,
+        state,
+    )
+
+    assert measurement is not None
+    rate_los = (sat_ecef - state[:, None, :3]) / np.linalg.norm(sat_ecef - state[:, None, :3], axis=2)[:, :, None]
+    expected_los = -rate_los
+    sagnac_rate = raw_bridge.EARTH_ROTATION_RATE_RAD_S * (
+        sat_vel[..., 0] * state[:, None, 1]
+        + sat_ecef[..., 0] * state[:, None, 4]
+        - sat_vel[..., 1] * state[:, None, 0]
+        - sat_ecef[..., 1] * state[:, None, 3]
+    ) / raw_bridge.LIGHT_SPEED_MPS
+    expected_rate = np.sum(rate_los * (sat_vel - state[:, None, 3:6]), axis=2) - sagnac_rate - sat_clock_drift
+
+    np.testing.assert_allclose(measurement, doppler - expected_rate)
+    np.testing.assert_allclose(solver_weights, weights)
+    np.testing.assert_allclose(ref, state[:, 3:6])
+    np.testing.assert_allclose(los, expected_los)
+
+
+def test_tdcp_unit_vectors_use_rtklib_geodist_los() -> None:
+    sat_ecef = np.array([[[2.2e7, 1.1e7, 1.9e7]]], dtype=np.float64)
+    receiver_ecef = np.array([[[-2.5e6, -4.7e6, 3.5e6]]], dtype=np.float64)
+
+    los = raw_bridge._tdcp_unit_vectors_vd(sat_ecef, receiver_ecef)
+
+    expected_los = (receiver_ecef - sat_ecef) / np.linalg.norm(receiver_ecef - sat_ecef, axis=2)[:, :, None]
+    np.testing.assert_allclose(los, expected_los)
+
+
+def test_taroz_fgo_candidate_run_kwargs_enable_fixed_linearization() -> None:
+    kernel = type(
+        "Kernel",
+        (),
+        {"pr_huber_k": 0.1, "doppler_huber_k": 0.4, "carrier_huber_k": 0.2},
+    )()
+
+    kwargs = raw_bridge._taroz_fgo_candidate_run_kwargs(
+        raw_bridge.TAROZ_PR_D_L_FGO_SOURCE,
+        {"fgo_fixed_linearization": False, "fgo_huber_k_pr": 9.0},
+        kernel,
+    )
+
+    assert kwargs["fgo_fixed_linearization"] is True
+    assert kwargs["fgo_huber_k_pr"] == 0.1
+    assert kwargs["fgo_huber_k_doppler"] == 0.4
+    assert kwargs["fgo_huber_k_tdcp"] == 0.2
+
+
+def test_effective_taroz_imu_noise_config_uses_phone_specific_acc_sigma():
+    cfg = apply_taroz_marupaku_preset(BridgeConfig())
+
+    sm_cfg = raw_bridge._effective_taroz_imu_noise_config(cfg, "sm-a325f")
+    pixel_cfg = raw_bridge._effective_taroz_imu_noise_config(cfg, "pixel5")
+
+    assert sm_cfg.imu_acc_sigma_mps2_sqrt_hz == 0.1
+    assert sm_cfg.imu_gyro_sigma_radps_sqrt_hz == 0.001
+    assert sm_cfg.imu_velocity_sigma_mps == 0.05
+    assert sm_cfg.imu_preintegration_velocity_noise_mps_sqrt_hz == 0.1
+    assert sm_cfg.imu_preintegration_attitude_noise_rad_sqrt_hz == 0.001
+    assert pixel_cfg.imu_acc_sigma_mps2_sqrt_hz == 0.05
+    assert pixel_cfg.imu_velocity_sigma_mps == 0.025
+    assert pixel_cfg.imu_attitude_sigma_rad == 0.0005
+    assert pixel_cfg.imu_preintegration_velocity_noise_mps_sqrt_hz == 0.05
+    assert pixel_cfg.imu_preintegration_attitude_noise_rad_sqrt_hz == 0.001
+    assert pixel_cfg.imu_diagonal_covariance is True
+    assert pixel_cfg.imu_preintegration_covariance is True
+    assert pixel_cfg.imu_factor_use_next_bias is True
+    assert pixel_cfg.imu_bias_between_sample_count_scaling is True
+    assert pixel_cfg.imu_gyro_bias_state is True
+    assert pixel_cfg.imu_gyro_bias_between_sigma_radps == 0.0000005
+
+
+def test_imu_bias_between_sample_count_weights_scale_by_sample_count():
+    preint = raw_bridge.IMUPreintegration(
+        epoch_times_ms=np.array([0.0, 1000.0, 2000.0], dtype=np.float64),
+        delta_t_s=np.array([1.0, 0.0], dtype=np.float64),
+        delta_v_body=np.zeros((2, 3), dtype=np.float64),
+        delta_p_body=np.zeros((2, 3), dtype=np.float64),
+        delta_angle_rad=np.zeros((2, 3), dtype=np.float64),
+        sample_count=np.array([4, 0], dtype=np.int32),
+    )
+
+    accel_w, gyro_w = raw_bridge._imu_bias_between_sample_count_weights(
+        preint,
+        0,
+        3,
+        accel_bias_sigma_mps2=0.25,
+        gyro_bias_sigma_radps=0.5,
+    )
+
+    assert accel_w is not None
+    assert gyro_w is not None
+    np.testing.assert_allclose(accel_w[0], np.full(3, 1.0 / (4.0 * 0.25 * 0.25)))
+    np.testing.assert_allclose(gyro_w[0], np.full(3, 1.0 / (4.0 * 0.5 * 0.5)))
+    np.testing.assert_allclose(accel_w[1], np.zeros(3))
+    np.testing.assert_allclose(gyro_w[1], np.zeros(3))
+
+
+def test_imu_preintegration_information_matrices_include_position_velocity_cross_terms():
+    preint = raw_bridge.IMUPreintegration(
+        epoch_times_ms=np.array([0.0, 1000.0, 2000.0], dtype=np.float64),
+        delta_t_s=np.array([1.0, 2.0], dtype=np.float64),
+        delta_v_body=np.zeros((2, 3), dtype=np.float64),
+        delta_p_body=np.zeros((2, 3), dtype=np.float64),
+        delta_angle_rad=np.zeros((2, 3), dtype=np.float64),
+        sample_count=np.array([10, 10], dtype=np.int32),
+    )
+
+    info = raw_bridge._imu_preintegration_information_matrices(
+        preint,
+        0,
+        3,
+        position_sigma_floor_m=0.0,
+        velocity_noise_mps_sqrt_hz=0.5,
+        attitude_noise_rad_sqrt_hz=0.25,
+    )
+
+    assert info is not None
+    assert info.shape == (2, 9, 9)
+    np.testing.assert_allclose(info, np.swapaxes(info, 1, 2))
+    assert info[0, 3, 6] < 0.0
+    assert info[0, 6, 3] == info[0, 3, 6]
+    assert info[0, 0, 0] == pytest.approx(16.0)
+
+
+def test_imu_preintegration_information_matrices_use_sample_propagated_covariance():
+    accel_unit_cov = np.zeros((1, 9, 9), dtype=np.float64)
+    gyro_unit_cov = np.zeros((1, 9, 9), dtype=np.float64)
+    integration_unit_cov = np.zeros((1, 9, 9), dtype=np.float64)
+    for axis in range(3):
+        p = axis
+        v = 3 + axis
+        a = 6 + axis
+        accel_unit_cov[0, p, p] = 0.3125
+        accel_unit_cov[0, p, v] = 0.5
+        accel_unit_cov[0, v, p] = 0.5
+        accel_unit_cov[0, v, v] = 1.0
+        gyro_unit_cov[0, a, a] = 1.0
+        integration_unit_cov[0, p, p] = 1.0
+    preint = raw_bridge.IMUPreintegration(
+        epoch_times_ms=np.array([0.0, 1000.0], dtype=np.float64),
+        delta_t_s=np.array([1.0], dtype=np.float64),
+        delta_v_body=np.zeros((1, 3), dtype=np.float64),
+        delta_p_body=np.zeros((1, 3), dtype=np.float64),
+        delta_angle_rad=np.zeros((1, 3), dtype=np.float64),
+        sample_count=np.array([2], dtype=np.int32),
+        pva_accel_noise_cov=accel_unit_cov,
+        pva_gyro_noise_cov=gyro_unit_cov,
+        pva_integration_noise_cov=integration_unit_cov,
+    )
+
+    info = raw_bridge._imu_preintegration_information_matrices(
+        preint,
+        0,
+        2,
+        position_sigma_floor_m=0.05,
+        velocity_noise_mps_sqrt_hz=0.5,
+        attitude_noise_rad_sqrt_hz=0.25,
+    )
+
+    expected_cov = 0.25 * accel_unit_cov[0] + 0.0625 * gyro_unit_cov[0] + 0.0025 * integration_unit_cov[0]
+    order = np.array([6, 7, 8, 0, 1, 2, 3, 4, 5], dtype=np.int64)
+    expected_cov = expected_cov[np.ix_(order, order)]
+    expected_info = np.linalg.pinv(expected_cov, hermitian=True, rcond=1e-12)
+    assert info is not None
+    np.testing.assert_allclose(info[0], expected_info, rtol=1e-12, atol=1e-12)
+
+
+def test_imu_preintegration_information_matrices_prefer_exported_preint_meas_cov():
+    exported_cov = np.eye(9, dtype=np.float64).reshape(1, 9, 9) * 0.25
+    jac = np.zeros((1, 3, 3), dtype=np.float64)
+    preint = raw_bridge.IMUPreintegration(
+        epoch_times_ms=np.array([0.0, 1000.0], dtype=np.float64),
+        delta_t_s=np.array([1.0], dtype=np.float64),
+        delta_v_body=np.zeros((1, 3), dtype=np.float64),
+        delta_p_body=np.zeros((1, 3), dtype=np.float64),
+        delta_angle_rad=np.zeros((1, 3), dtype=np.float64),
+        sample_count=np.array([2], dtype=np.int32),
+        delta_p_bias_accel_jac=jac,
+        delta_v_bias_accel_jac=jac,
+        delta_p_bias_gyro_jac=jac,
+        delta_v_bias_gyro_jac=jac,
+        delta_angle_bias_gyro_jac=jac,
+        pva_accel_noise_cov=np.zeros((1, 9, 9), dtype=np.float64),
+        pva_gyro_noise_cov=np.zeros((1, 9, 9), dtype=np.float64),
+        pva_integration_noise_cov=np.zeros((1, 9, 9), dtype=np.float64),
+        preint_meas_cov=exported_cov,
+    )
+
+    info = raw_bridge._imu_preintegration_information_matrices(
+        preint,
+        0,
+        2,
+        position_sigma_floor_m=99.0,
+        velocity_noise_mps_sqrt_hz=99.0,
+        attitude_noise_rad_sqrt_hz=99.0,
+    )
+
+    assert info is not None
+    np.testing.assert_allclose(info[0], np.eye(9) * 4.0)
+
+
+def test_imu_preintegration_information_matrices_ignore_exported_cov_without_bias_jacobians():
+    exported_cov = np.eye(9, dtype=np.float64).reshape(1, 9, 9) * 0.25
+    preint = raw_bridge.IMUPreintegration(
+        epoch_times_ms=np.array([0.0, 1000.0], dtype=np.float64),
+        delta_t_s=np.array([1.0], dtype=np.float64),
+        delta_v_body=np.zeros((1, 3), dtype=np.float64),
+        delta_p_body=np.zeros((1, 3), dtype=np.float64),
+        delta_angle_rad=np.zeros((1, 3), dtype=np.float64),
+        sample_count=np.array([2], dtype=np.int32),
+        preint_meas_cov=exported_cov,
+    )
+    reference = raw_bridge.IMUPreintegration(
+        epoch_times_ms=np.array([0.0, 1000.0], dtype=np.float64),
+        delta_t_s=np.array([1.0], dtype=np.float64),
+        delta_v_body=np.zeros((1, 3), dtype=np.float64),
+        delta_p_body=np.zeros((1, 3), dtype=np.float64),
+        delta_angle_rad=np.zeros((1, 3), dtype=np.float64),
+        sample_count=np.array([2], dtype=np.int32),
+    )
+
+    info = raw_bridge._imu_preintegration_information_matrices(
+        preint,
+        0,
+        2,
+        position_sigma_floor_m=0.05,
+        velocity_noise_mps_sqrt_hz=0.5,
+        attitude_noise_rad_sqrt_hz=0.25,
+    )
+    expected = raw_bridge._imu_preintegration_information_matrices(
+        reference,
+        0,
+        2,
+        position_sigma_floor_m=0.05,
+        velocity_noise_mps_sqrt_hz=0.5,
+        attitude_noise_rad_sqrt_hz=0.25,
+    )
+
+    assert info is not None
+    assert expected is not None
+    np.testing.assert_allclose(info, expected)
+    assert not np.allclose(info[0], np.eye(9) * 4.0)
+
+
+def _preintegration_for_gravity(
+    gravity: np.ndarray,
+    *,
+    as_nav: bool = False,
+) -> raw_bridge.IMUPreintegration:
+    gravity = np.asarray(gravity, dtype=np.float64)
+    n_interval = gravity.shape[0]
+    return raw_bridge.IMUPreintegration(
+        epoch_times_ms=np.arange(n_interval + 1, dtype=np.float64) * 1000.0,
+        delta_t_s=np.ones(n_interval, dtype=np.float64),
+        delta_v_body=np.zeros((n_interval, 3), dtype=np.float64),
+        delta_p_body=np.zeros((n_interval, 3), dtype=np.float64),
+        delta_angle_rad=np.zeros((n_interval, 3), dtype=np.float64),
+        sample_count=np.ones(n_interval, dtype=np.int32),
+        gravity_ecef=None if as_nav else gravity.copy(),
+        gravity_nav=gravity.copy() if as_nav else None,
+    )
+
+
+def test_taroz_preintegration_with_native_solver_gravity_prefers_native_ecef():
+    taroz_local_gravity = np.array(
+        [[0.0, 0.0, -9.80665], [0.0, 0.0, -9.80665]],
+        dtype=np.float64,
+    )
+    native_ecef_gravity = np.array(
+        [[-4.1, 7.1, -5.3], [-4.1, 7.1, -5.3]],
+        dtype=np.float64,
+    )
+    taroz = _preintegration_for_gravity(taroz_local_gravity, as_nav=True)
+    native = _preintegration_for_gravity(native_ecef_gravity)
+
+    prepared, has_native_gravity = raw_bridge._taroz_preintegration_with_native_solver_gravity(taroz, native)
+
+    assert has_native_gravity is True
+    np.testing.assert_allclose(prepared.gravity_ecef, native_ecef_gravity)
+    assert taroz.gravity_ecef is None
+    np.testing.assert_allclose(prepared.gravity_nav, taroz_local_gravity)
+    np.testing.assert_allclose(taroz.gravity_nav, taroz_local_gravity)
+    assert prepared is not taroz
+
+
+def test_taroz_preintegration_with_native_solver_gravity_rejects_shape_mismatch():
+    taroz = _preintegration_for_gravity(np.zeros((2, 3), dtype=np.float64))
+    native = _preintegration_for_gravity(np.zeros((1, 3), dtype=np.float64))
+
+    prepared, has_native_gravity = raw_bridge._taroz_preintegration_with_native_solver_gravity(taroz, native)
+
+    assert has_native_gravity is False
+    assert prepared is taroz
 
 
 def test_run_fgo_chunked_masks_imu_prior_across_factor_dt_gap(monkeypatch):
@@ -3025,6 +3914,7 @@ def test_run_fgo_chunked_masks_imu_prior_across_factor_dt_gap(monkeypatch):
     def fake_fgo_gnss_lm_vd(*args, **kwargs):
         captured["imu_delta_p"] = kwargs.get("imu_delta_p")
         captured["imu_delta_v"] = kwargs.get("imu_delta_v")
+        captured["imu_delta_t"] = kwargs.get("imu_delta_t")
         return 1, 0.0
 
     monkeypatch.setattr(raw_bridge, "fgo_gnss_lm_vd", fake_fgo_gnss_lm_vd)
@@ -3053,8 +3943,937 @@ def test_run_fgo_chunked_masks_imu_prior_across_factor_dt_gap(monkeypatch):
     assert captured["imu_delta_p"] is not None and captured["imu_delta_v"] is not None
     assert captured["imu_delta_p"].shape == (1, 3)
     assert captured["imu_delta_v"].shape == (1, 3)
+    assert captured["imu_delta_t"].shape == (1,)
     np.testing.assert_allclose(captured["imu_delta_p"][0], preint.delta_p_body[0])
     np.testing.assert_allclose(captured["imu_delta_v"][0], preint.delta_v_body[0])
+    np.testing.assert_allclose(captured["imu_delta_t"][0], preint.delta_t_s[0])
+
+
+def test_load_taroz_fgo_seed_state_converts_local_enu_to_ecef(tmp_path):
+    trip_dir = tmp_path / "trip"
+    trip_dir.mkdir()
+    origin = np.array([6378137.0, 0.0, 0.0], dtype=np.float64)
+    (trip_dir / "device_gnss.csv").write_text(
+        "\n".join(
+            [
+                "utcTimeMillis,BiasUncertaintyNanos,WlsPositionXEcefMeters,WlsPositionYEcefMeters,WlsPositionZEcefMeters",
+                "500,20000,1,2,3",
+                f"1000,10,{origin[0]},{origin[1]},{origin[2]}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    seed_csv = tmp_path / "phone_data_gnss_initial_state.csv"
+    seed_csv.write_text(
+        "\n".join(
+            [
+                "epoch_index,utcTimeMillis,position_x,position_y,position_z,velocity_x,velocity_y,velocity_z,clock_bias_m_0,clock_bias_m_1,clock_drift_mps",
+                "1,1000,1,2,3,0.1,0.2,0.3,10,20,0.5",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([1000.0, 2000.0], dtype=np.float64),
+        sat_ecef=np.zeros((2, 1, 3), dtype=np.float64),
+        pseudorange=np.zeros((2, 1), dtype=np.float64),
+        weights=np.zeros((2, 1), dtype=np.float64),
+        kaggle_wls=np.zeros((2, 3), dtype=np.float64),
+        truth=np.full((2, 3), np.nan, dtype=np.float64),
+        max_sats=1,
+        has_truth=False,
+        n_clock=2,
+    )
+
+    state = raw_bridge._load_taroz_fgo_seed_state(seed_csv, batch, trip_dir=trip_dir)
+
+    expected_pos = _enu_to_ecef_relative(np.array([[1.0, 2.0, 3.0]], dtype=np.float64), origin)[0]
+    expected_vel = _enu_to_ecef_relative(np.array([[0.1, 0.2, 0.3]], dtype=np.float64), origin)[0] - origin
+    np.testing.assert_allclose(state[0, :3], expected_pos)
+    np.testing.assert_allclose(state[0, 3:6], expected_vel)
+    np.testing.assert_allclose(state[0, 6:8], [10.0, 20.0])
+    assert state[0, 8] == 0.5
+    assert np.isnan(state[1]).all()
+
+
+def test_resolve_taroz_fgo_seed_state_prefers_graph_for_full_seed(tmp_path):
+    initial = tmp_path / "phone_data_gnss_initial_state.csv"
+    graph = tmp_path / "phone_data_gnss_graph_state.csv"
+    initial.write_text("initial\n", encoding="utf-8")
+    graph.write_text("graph\n", encoding="utf-8")
+
+    assert raw_bridge._resolve_taroz_fgo_seed_state_csv(tmp_path) == initial
+    assert raw_bridge._resolve_taroz_fgo_seed_state_csv(tmp_path, prefer_graph_state=True) == graph
+
+
+def test_taroz_split_pose_full_fgo_seed_prefers_initial_gnss_state(tmp_path):
+    legacy_config = BridgeConfig(
+        apply_imu_prior=True,
+        taroz_stop_mask_from_seed_velocity=True,
+    )
+    assert raw_bridge._taroz_fgo_seed_prefer_graph_state(legacy_config) is True
+
+    fixed_linearization_config = apply_taroz_marupaku_preset(
+        BridgeConfig(taroz_fgo_seed_state_csv=tmp_path)
+    )
+    assert raw_bridge._taroz_fgo_seed_prefer_graph_state(fixed_linearization_config) is False
+
+    config = apply_taroz_marupaku_preset(
+        BridgeConfig(
+            taroz_fgo_seed_state_csv=tmp_path,
+            taroz_pose_bias_seed_state_csv=tmp_path,
+        )
+    )
+
+    assert raw_bridge._taroz_fgo_seed_prefer_graph_state(config) is False
+
+
+def test_load_taroz_fgo_seed_state_loads_imu_attitude_and_bias(tmp_path):
+    trip_dir = tmp_path / "trip"
+    trip_dir.mkdir()
+    origin = np.array([6378137.0, 0.0, 0.0], dtype=np.float64)
+    (trip_dir / "device_gnss.csv").write_text(
+        "\n".join(
+            [
+                "utcTimeMillis,BiasUncertaintyNanos,WlsPositionXEcefMeters,WlsPositionYEcefMeters,WlsPositionZEcefMeters",
+                f"1000,10,{origin[0]},{origin[1]},{origin[2]}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    seed_csv = tmp_path / "phone_data_imu_state.csv"
+    seed_csv.write_text(
+        "\n".join(
+            [
+                "epoch_index,utcTimeMillis,position_x,position_y,position_z,roll,pitch,yaw,velocity_x,velocity_y,velocity_z,bias_acc_x,bias_acc_y,bias_acc_z,bias_gyro_x,bias_gyro_y,bias_gyro_z",
+                "1,1000,1,2,3,0.1,-0.2,0.3,0.4,0.5,0.6,0.01,0.02,0.03,0.001,0.002,0.003",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([1000.0], dtype=np.float64),
+        sat_ecef=np.zeros((1, 1, 3), dtype=np.float64),
+        pseudorange=np.zeros((1, 1), dtype=np.float64),
+        weights=np.zeros((1, 1), dtype=np.float64),
+        kaggle_wls=np.zeros((1, 3), dtype=np.float64),
+        truth=np.full((1, 3), np.nan, dtype=np.float64),
+        max_sats=1,
+        has_truth=False,
+        n_clock=1,
+    )
+
+    state = raw_bridge._load_taroz_fgo_seed_state(seed_csv, batch, trip_dir=trip_dir)
+
+    attitude_idx = 8
+    assert state.shape == (1, 17)
+    rot_enu_body = raw_bridge._gtsam_rzryrx_to_rotm(np.array([[0.1, -0.2, 0.3]], dtype=np.float64))[0]
+    enu_basis_ecef = _enu_to_ecef_relative(np.eye(3, dtype=np.float64), origin) - origin
+    expected_rot = enu_basis_ecef.T @ rot_enu_body
+    np.testing.assert_allclose(rotvec_to_rotm(state[0, attitude_idx : attitude_idx + 3]), expected_rot)
+    np.testing.assert_allclose(state[0, attitude_idx + 3 : attitude_idx + 6], [0.01, 0.02, 0.03])
+    np.testing.assert_allclose(state[0, attitude_idx + 6 : attitude_idx + 9], [0.001, 0.002, 0.003])
+
+
+def test_load_taroz_fgo_seed_state_can_merge_split_pose_bias_seed(tmp_path):
+    trip_dir = tmp_path / "trip"
+    trip_dir.mkdir()
+    origin = np.array([6378137.0, 0.0, 0.0], dtype=np.float64)
+    (trip_dir / "device_gnss.csv").write_text(
+        "\n".join(
+            [
+                "utcTimeMillis,BiasUncertaintyNanos,WlsPositionXEcefMeters,WlsPositionYEcefMeters,WlsPositionZEcefMeters",
+                f"1000,10,{origin[0]},{origin[1]},{origin[2]}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    x_seed_csv = tmp_path / "phone_data_gnss_initial_state.csv"
+    x_seed_csv.write_text(
+        "\n".join(
+            [
+                "epoch_index,utcTimeMillis,position_x,position_y,position_z,velocity_x,velocity_y,velocity_z,clock_bias_m_0,clock_drift_mps",
+                "1,1000,10,20,30,0.4,0.5,0.6,7,0.8",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    pose_seed_csv = tmp_path / "phone_data_imu_state.csv"
+    pose_seed_csv.write_text(
+        "\n".join(
+            [
+                "epoch_index,utcTimeMillis,position_x,position_y,position_z,roll,pitch,yaw,velocity_x,velocity_y,velocity_z,bias_acc_x,bias_acc_y,bias_acc_z,bias_gyro_x,bias_gyro_y,bias_gyro_z",
+                "1,1000,1,2,3,0.1,-0.2,0.3,9,9,9,0.01,0.02,0.03,0.001,0.002,0.003",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([1000.0], dtype=np.float64),
+        sat_ecef=np.zeros((1, 1, 3), dtype=np.float64),
+        pseudorange=np.zeros((1, 1), dtype=np.float64),
+        weights=np.zeros((1, 1), dtype=np.float64),
+        kaggle_wls=np.zeros((1, 3), dtype=np.float64),
+        truth=np.full((1, 3), np.nan, dtype=np.float64),
+        max_sats=1,
+        has_truth=False,
+        n_clock=1,
+    )
+
+    state = raw_bridge._load_taroz_fgo_seed_state(
+        x_seed_csv,
+        batch,
+        trip_dir=trip_dir,
+        pose_bias_path=pose_seed_csv,
+    )
+
+    base_width = 8
+    pose_idx = base_width
+    attitude_idx = base_width + 3
+    expected_x = _enu_to_ecef_relative(np.array([[10.0, 20.0, 30.0]], dtype=np.float64), origin)[0]
+    expected_pose = _enu_to_ecef_relative(np.array([[1.0, 2.0, 3.0]], dtype=np.float64), origin)[0]
+    expected_vel = _enu_to_ecef_relative(np.array([[0.4, 0.5, 0.6]], dtype=np.float64), origin)[0] - origin
+    assert state.shape == (1, base_width + 12)
+    np.testing.assert_allclose(state[0, :3], expected_x)
+    np.testing.assert_allclose(state[0, 3:6], expected_vel)
+    np.testing.assert_allclose(state[0, 6:8], [7.0, 0.8])
+    np.testing.assert_allclose(state[0, pose_idx : pose_idx + 3], expected_pose)
+    rot_enu_body = raw_bridge._gtsam_rzryrx_to_rotm(np.array([[0.1, -0.2, 0.3]], dtype=np.float64))[0]
+    enu_basis_ecef = _enu_to_ecef_relative(np.eye(3, dtype=np.float64), origin) - origin
+    expected_rot = enu_basis_ecef.T @ rot_enu_body
+    np.testing.assert_allclose(rotvec_to_rotm(state[0, attitude_idx : attitude_idx + 3]), expected_rot)
+    np.testing.assert_allclose(state[0, attitude_idx + 3 : attitude_idx + 6], [0.01, 0.02, 0.03])
+    np.testing.assert_allclose(state[0, attitude_idx + 6 : attitude_idx + 9], [0.001, 0.002, 0.003])
+
+
+def test_load_taroz_fgo_seed_state_allows_attitude_without_bias(tmp_path):
+    trip_dir = tmp_path / "trip"
+    trip_dir.mkdir()
+    origin = np.array([6378137.0, 0.0, 0.0], dtype=np.float64)
+    (trip_dir / "device_gnss.csv").write_text(
+        "\n".join(
+            [
+                "utcTimeMillis,BiasUncertaintyNanos,WlsPositionXEcefMeters,WlsPositionYEcefMeters,WlsPositionZEcefMeters",
+                f"1000,10,{origin[0]},{origin[1]},{origin[2]}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    seed_csv = tmp_path / "phone_data_gnss_initial_state.csv"
+    seed_csv.write_text(
+        "\n".join(
+            [
+                "epoch_index,utcTimeMillis,position_x,position_y,position_z,roll,pitch,yaw,velocity_x,velocity_y,velocity_z,clock_bias_m_0,clock_drift_mps",
+                "1,1000,1,2,3,0.1,-0.2,0.3,0.4,0.5,0.6,10,0.5",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([1000.0], dtype=np.float64),
+        sat_ecef=np.zeros((1, 1, 3), dtype=np.float64),
+        pseudorange=np.zeros((1, 1), dtype=np.float64),
+        weights=np.zeros((1, 1), dtype=np.float64),
+        kaggle_wls=np.zeros((1, 3), dtype=np.float64),
+        truth=np.full((1, 3), np.nan, dtype=np.float64),
+        max_sats=1,
+        has_truth=False,
+        n_clock=1,
+    )
+
+    state = raw_bridge._load_taroz_fgo_seed_state(seed_csv, batch, trip_dir=trip_dir)
+
+    attitude_idx = 8
+    assert state.shape == (1, 17)
+    assert np.isfinite(state[0, attitude_idx : attitude_idx + 3]).all()
+    assert np.isnan(state[0, attitude_idx + 3 : attitude_idx + 9]).all()
+
+
+def test_load_taroz_fgo_seed_state_loads_imu_clocks_from_result_mat(tmp_path):
+    scipy_io = pytest.importorskip("scipy.io")
+    trip_dir = tmp_path / "trip"
+    trip_dir.mkdir()
+    origin = np.array([6378137.0, 0.0, 0.0], dtype=np.float64)
+    (trip_dir / "device_gnss.csv").write_text(
+        "\n".join(
+            [
+                "utcTimeMillis,BiasUncertaintyNanos,WlsPositionXEcefMeters,WlsPositionYEcefMeters,WlsPositionZEcefMeters",
+                f"1000,10,{origin[0]},{origin[1]},{origin[2]}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    seed_csv = tmp_path / "phone_data_imu_state.csv"
+    seed_csv.write_text(
+        "\n".join(
+            [
+                "epoch_index,utcTimeMillis,position_x,position_y,position_z,roll,pitch,yaw,velocity_x,velocity_y,velocity_z,bias_acc_x,bias_acc_y,bias_acc_z,bias_gyro_x,bias_gyro_y,bias_gyro_z",
+                "2,1000,1,2,3,0.1,-0.2,0.3,0.4,0.5,0.6,0.01,0.02,0.03,0.001,0.002,0.003",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    scipy_io.savemat(
+        tmp_path / "result_gnss_imu.mat",
+        {
+            "clkest": np.array([[10.0, 11.0, 12.0], [20.0, 21.0, 22.0]], dtype=np.float64),
+            "dclkest": np.array([[0.5], [0.75]], dtype=np.float64),
+        },
+    )
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([1000.0], dtype=np.float64),
+        sat_ecef=np.zeros((1, 1, 3), dtype=np.float64),
+        pseudorange=np.zeros((1, 1), dtype=np.float64),
+        weights=np.zeros((1, 1), dtype=np.float64),
+        kaggle_wls=np.zeros((1, 3), dtype=np.float64),
+        truth=np.full((1, 3), np.nan, dtype=np.float64),
+        max_sats=1,
+        has_truth=False,
+        n_clock=3,
+    )
+
+    state = raw_bridge._load_taroz_fgo_seed_state(seed_csv, batch, trip_dir=trip_dir)
+
+    np.testing.assert_allclose(state[0, 6:9], [20.0, 21.0, 22.0])
+    assert state[0, 9] == 0.75
+
+
+def test_validate_cli_explicit_height_override_survives_taroz_preset():
+    args = SimpleNamespace(
+        graph_relative_height=False,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.0,
+        stop_position_sigma_m=0.0,
+        stop_attitude_sigma_rad=0.0,
+        relative_height=False,
+        relative_height_sigma_m=0.25,
+        absolute_height=False,
+        absolute_height_sigma_m=0.4,
+        absolute_height_dist_m=9.0,
+        dual_frequency=False,
+        imu_prior=True,
+        imu_accel_bias_state=True,
+        position_offset=False,
+        base_correction=True,
+        observation_mask=True,
+        vd=True,
+        multi_gnss=True,
+        tdcp=True,
+        tdcp_geometry_correction=True,
+        tdcp_weight_scale=1.0,
+        tdcp_consistency_threshold_m=1.5,
+    )
+    cfg = apply_taroz_marupaku_preset(BridgeConfig(graph_relative_height=True))
+
+    cfg = validate_cli._apply_explicit_cli_overrides(
+        cfg,
+        args,
+        [
+            "--no-graph-relative-height",
+            "--motion-sigma-m",
+            "0",
+            "--clock-drift-sigma-m",
+            "0",
+            "--stop-velocity-sigma-mps",
+            "0",
+            "--stop-position-sigma-m",
+            "0",
+            "--stop-attitude-sigma-rad",
+            "0",
+            "--no-relative-height",
+            "--relative-height-sigma-m",
+            "0.25",
+        ],
+    )
+
+    assert cfg.graph_relative_height is False
+    assert cfg.motion_sigma_m == 0.0
+    assert cfg.clock_drift_sigma_m == 0.0
+    assert cfg.stop_velocity_sigma_mps == 0.0
+    assert cfg.stop_position_sigma_m == 0.0
+    assert cfg.stop_attitude_sigma_rad == 0.0
+    assert cfg.per_type_kernel_motion_enabled is False
+    assert cfg.apply_relative_height is False
+    assert cfg.relative_height_sigma_m == 0.25
+
+
+def test_run_fgo_chunked_uses_external_vd_seed_state(monkeypatch):
+    true_pos = np.array([1.0e6, 2.0e6, 3.0e6], dtype=np.float64)
+    sat = np.array(
+        [
+            [2.1e7, 0.0, 0.0],
+            [0.0, 2.2e7, 0.0],
+            [0.0, 0.0, 2.3e7],
+            [1.8e7, 1.8e7, 1.8e7],
+        ],
+        dtype=np.float64,
+    )
+    n_epoch, n_sat, n_clock = 2, 4, 1
+    sat_ecef = np.tile(sat.reshape(1, n_sat, 3), (n_epoch, 1, 1))
+    pseudorange = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pseudorange[t, s] = raw_bridge._geometric_range_with_sagnac(sat[s], true_pos)
+    weights = np.ones((n_epoch, n_sat), dtype=np.float64)
+    raw_wls = np.zeros((n_epoch, 3 + n_clock), dtype=np.float64)
+    raw_wls[:, :3] = true_pos
+    seed = np.zeros((n_epoch, 7 + n_clock), dtype=np.float64)
+    seed[:, :3] = true_pos + np.array([100.0, -50.0, 25.0], dtype=np.float64)
+    seed[:, 3:6] = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=np.float64)
+    seed[:, 6] = np.array([7.0, 8.0], dtype=np.float64)
+    seed[:, 7] = np.array([0.1, 0.2], dtype=np.float64)
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([0.0, 1000.0], dtype=np.float64),
+        sat_ecef=sat_ecef,
+        pseudorange=pseudorange,
+        weights=weights,
+        kaggle_wls=raw_wls[:, :3],
+        truth=np.full((n_epoch, 3), np.nan, dtype=np.float64),
+        max_sats=n_sat,
+        has_truth=False,
+        sys_kind=np.zeros((n_epoch, n_sat), dtype=np.int32),
+        n_clock=n_clock,
+        dt=np.array([1.0, 0.0], dtype=np.float64),
+    )
+    captured: dict[str, np.ndarray] = {}
+
+    def fake_fgo_gnss_lm_vd(*args, **_kwargs):
+        captured["state"] = args[3].copy()
+        return 1, 0.0
+
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm_vd", fake_fgo_gnss_lm_vd)
+
+    raw_bridge.run_fgo_chunked(
+        batch,
+        raw_wls,
+        clock_jump=None,
+        clock_drift_seed_mps=None,
+        clock_use_average_drift=False,
+        tdcp_use_drift=False,
+        stop_mask=None,
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.0,
+        stop_position_sigma_m=0.0,
+        apply_imu_prior=False,
+        imu_position_sigma_m=0.0,
+        imu_velocity_sigma_mps=0.0,
+        fgo_iters=1,
+        tol=1e-7,
+        chunk_epochs=0,
+        use_vd=True,
+        vd_seed_factor_guard=False,
+        fgo_seed_state=seed,
+    )
+
+    np.testing.assert_allclose(captured["state"][:, : 7 + n_clock], seed)
+
+
+def test_apply_external_vd_seed_state_recomputes_attitude_from_external_velocity() -> None:
+    n_clock = 1
+    base_width = 7 + n_clock
+    attitude_idx = base_width
+    seed = np.zeros((2, base_width + 9), dtype=np.float64)
+    seed[:, :3] = np.array(
+        [
+            [2.0e6, -4.0e6, 3.5e6],
+            [2.0e6 + 1.0, -4.0e6, 3.5e6],
+        ],
+        dtype=np.float64,
+    )
+    seed[:, 3:6] = np.array([[1.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float64)
+    seed[:, attitude_idx : attitude_idx + 3] = np.array([0.2, -0.3, 0.4], dtype=np.float64)
+    external = np.zeros((2, base_width), dtype=np.float64)
+    external[:, :3] = seed[:, :3]
+    external[:, 3:6] = np.array([[0.0, 3.0, 0.0], [0.0, 3.0, 0.0]], dtype=np.float64)
+    external[:, 6] = [10.0, 11.0]
+    external[:, 7] = [0.5, 0.5]
+
+    out = raw_bridge._apply_external_vd_seed_state(
+        seed,
+        external,
+        np.array([1.0, 0.0], dtype=np.float64),
+        n_clock=n_clock,
+    )
+
+    vel_enu = np.vstack(
+        [
+            raw_bridge._ecef_to_enu_relative((external[t, :3] + external[t, 3:6]).reshape(1, 3), external[t, :3])[0]
+            for t in range(external.shape[0])
+        ]
+    )
+    rpy = estimate_rpy_from_velocity(vel_enu)
+    rot_enu_body = raw_bridge._eul_xyz_to_rotm(rpy)
+    expected_att = np.zeros((external.shape[0], 3), dtype=np.float64)
+    for t in range(external.shape[0]):
+        enu_basis_ecef = raw_bridge._enu_to_ecef_relative(np.eye(3, dtype=np.float64), external[t, :3]) - external[t, :3]
+        rot_ecef_enu = enu_basis_ecef.T
+        expected_att[t] = raw_bridge._rotm_to_rotvec(rot_ecef_enu @ rot_enu_body[t])
+
+    np.testing.assert_allclose(out[:, :base_width], external)
+    np.testing.assert_allclose(out[:, attitude_idx : attitude_idx + 3], expected_att)
+    assert not np.allclose(out[:, attitude_idx : attitude_idx + 3], seed[:, attitude_idx : attitude_idx + 3])
+
+
+def test_apply_external_vd_seed_state_keeps_attitude_when_velocity_cannot_seed_rpy() -> None:
+    n_clock = 1
+    base_width = 7 + n_clock
+    attitude_idx = base_width
+    seed = np.zeros((2, base_width + 9), dtype=np.float64)
+    seed[:, :3] = np.array(
+        [
+            [2.0e6, -4.0e6, 3.5e6],
+            [2.0e6 + 1.0, -4.0e6, 3.5e6],
+        ],
+        dtype=np.float64,
+    )
+    seed[:, attitude_idx : attitude_idx + 3] = np.array([[0.2, -0.3, 0.4], [0.25, -0.35, 0.45]])
+    external = np.zeros((2, base_width), dtype=np.float64)
+    external[:, :3] = seed[:, :3]
+    external[:, 6] = [10.0, 11.0]
+    external[:, 7] = [0.5, 0.5]
+
+    out = raw_bridge._apply_external_vd_seed_state(
+        seed,
+        external,
+        np.array([1.0, 0.0], dtype=np.float64),
+        n_clock=n_clock,
+    )
+
+    np.testing.assert_allclose(out[:, attitude_idx : attitude_idx + 3], seed[:, attitude_idx : attitude_idx + 3])
+
+
+def test_run_fgo_chunked_keeps_relative_height_stop_mask_separate(monkeypatch):
+    n_epoch, n_sat, n_clock = 5, 4, 1
+    origin = np.asarray(lla_to_ecef(np.deg2rad(35.0), np.deg2rad(139.0), 10.0), dtype=np.float64)
+    enu = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [50.0, 0.0, 0.0],
+            [100.0, 0.0, 0.0],
+            [150.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    xyz = _enu_to_ecef_relative(enu, origin)
+    sat = np.array(
+        [
+            [2.1e7, 0.0, 0.0],
+            [0.0, 2.2e7, 0.0],
+            [0.0, 0.0, 2.3e7],
+            [1.8e7, 1.8e7, 1.8e7],
+        ],
+        dtype=np.float64,
+    )
+    sat_ecef = np.tile(sat.reshape(1, n_sat, 3), (n_epoch, 1, 1))
+    pseudorange = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pseudorange[t, s] = raw_bridge._geometric_range_with_sagnac(sat_ecef[t, s], xyz[t])
+    raw_wls = np.zeros((n_epoch, 3 + n_clock), dtype=np.float64)
+    raw_wls[:, :3] = xyz
+    batch = raw_bridge.TripArrays(
+        times_ms=np.arange(n_epoch, dtype=np.float64) * 1000.0,
+        sat_ecef=sat_ecef,
+        pseudorange=pseudorange,
+        weights=np.ones((n_epoch, n_sat), dtype=np.float64),
+        kaggle_wls=xyz,
+        truth=np.full((n_epoch, 3), np.nan, dtype=np.float64),
+        max_sats=n_sat,
+        has_truth=False,
+        n_clock=n_clock,
+        sys_kind=np.zeros((n_epoch, n_sat), dtype=np.int32),
+        dt=np.ones(n_epoch, dtype=np.float64),
+    )
+    captured: dict[str, np.ndarray | None] = {}
+
+    def fake_fgo_gnss_lm_vd(*_args, **kwargs):
+        captured["stop_mask"] = kwargs.get("stop_mask")
+        captured["rel_height_edge_i"] = kwargs.get("rel_height_edge_i")
+        captured["rel_height_edge_j"] = kwargs.get("rel_height_edge_j")
+        return 1, 0.0
+
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm_vd", fake_fgo_gnss_lm_vd)
+
+    raw_bridge.run_fgo_chunked(
+        batch,
+        raw_wls,
+        clock_jump=None,
+        clock_drift_seed_mps=None,
+        clock_use_average_drift=False,
+        tdcp_use_drift=False,
+        stop_mask=np.zeros(n_epoch, dtype=bool),
+        motion_sigma_m=0.0,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.01,
+        stop_position_sigma_m=0.02,
+        apply_imu_prior=False,
+        imu_position_sigma_m=0.0,
+        imu_velocity_sigma_mps=0.0,
+        fgo_iters=1,
+        tol=1e-7,
+        chunk_epochs=0,
+        use_vd=True,
+        graph_relative_height=True,
+        relative_height_sigma_m=0.1,
+        relative_height_stop_mask=np.array([False, False, False, False, True], dtype=bool),
+        vd_seed_factor_guard=False,
+    )
+
+    np.testing.assert_array_equal(captured["stop_mask"], np.zeros(n_epoch, dtype=np.uint8))
+    assert captured["rel_height_edge_i"] is not None
+    assert captured["rel_height_edge_j"] is not None
+    assert np.asarray(captured["rel_height_edge_i"]).size == 0
+    assert np.asarray(captured["rel_height_edge_j"]).size == 0
+
+
+def test_apply_taroz_factor_mask_filters_fgo_only_weights(tmp_path):
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([1000.0, 2000.0], dtype=np.float64),
+        sat_ecef=np.zeros((2, 2, 3), dtype=np.float64),
+        pseudorange=np.zeros((2, 2), dtype=np.float64),
+        weights=np.ones((2, 2), dtype=np.float64),
+        kaggle_wls=np.zeros((2, 3), dtype=np.float64),
+        truth=np.full((2, 3), np.nan, dtype=np.float64),
+        max_sats=2,
+        has_truth=False,
+        n_clock=1,
+        doppler_weights=np.ones((2, 2), dtype=np.float64) * 2.0,
+        tdcp_weights=np.ones((1, 2), dtype=np.float64) * 3.0,
+        slot_keys=((1, 3, "GPS_L1_CA"), (1, 3, "GPS_L5_Q")),
+    )
+    factor_mask = tmp_path / "phone_data_gnss_factor_mask.csv"
+    pd.DataFrame(
+        [
+            {"field": "P", "freq": "L1", "utcTimeMillis": 1000, "sys": 1, "svid": 3},
+            {"field": "D", "freq": "L5", "utcTimeMillis": 2000, "sys": 1, "svid": 3},
+            {"field": "L", "freq": "L1", "utcTimeMillis": 1000, "sys": 1, "svid": 3},
+        ]
+    ).to_csv(factor_mask, index=False)
+
+    masked = raw_bridge._apply_taroz_factor_mask_to_batch(batch, factor_mask)
+
+    np.testing.assert_allclose(batch.weights, np.ones((2, 2)))
+    np.testing.assert_allclose(masked.weights_fgo, [[1.0, 0.0], [0.0, 0.0]])
+    np.testing.assert_allclose(masked.doppler_weights_fgo, [[0.0, 0.0], [0.0, 2.0]])
+    np.testing.assert_allclose(masked.tdcp_weights_fgo, [[3.0, 0.0]])
+
+
+def test_apply_taroz_factor_mask_loads_fixed_factor_values(tmp_path):
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([1000.0, 2000.0], dtype=np.float64),
+        sat_ecef=np.zeros((2, 2, 3), dtype=np.float64),
+        pseudorange=np.zeros((2, 2), dtype=np.float64),
+        weights=np.ones((2, 2), dtype=np.float64),
+        kaggle_wls=np.zeros((2, 3), dtype=np.float64),
+        truth=np.full((2, 3), np.nan, dtype=np.float64),
+        max_sats=2,
+        has_truth=False,
+        n_clock=1,
+        doppler_weights=np.ones((2, 2), dtype=np.float64),
+        tdcp_weights=np.ones((1, 2), dtype=np.float64),
+        slot_keys=((1, 3, "GPS_L1_CA"), (1, 3, "GPS_L5_Q")),
+    )
+    factor_mask = tmp_path / "phone_data_gnss_factor_mask.csv"
+    base = {
+        "epoch_index": 1,
+        "next_epoch_index": 0,
+        "nextUtcTimeMillis": 0,
+        "sys": 1,
+        "svid": 3,
+        "sat_col": 1,
+        "factor_model": "XC",
+        "sigtype": 0,
+        "dt_s": 0.0,
+        "origin2_e": np.nan,
+        "origin2_n": np.nan,
+        "origin2_u": np.nan,
+    }
+    pd.DataFrame(
+        [
+            {
+                **base,
+                "field": "P",
+                "freq": "L1",
+                "utcTimeMillis": 1000,
+                "sigma": 2.0,
+                "measurement": 12.0,
+                "los_e": 0.1,
+                "los_n": 0.2,
+                "los_u": 0.3,
+                "origin1_e": 1.0,
+                "origin1_n": 2.0,
+                "origin1_u": 3.0,
+            },
+            {
+                **base,
+                "field": "D",
+                "freq": "L5",
+                "utcTimeMillis": 2000,
+                "sigma": 4.0,
+                "measurement": 21.0,
+                "los_e": -0.1,
+                "los_n": -0.2,
+                "los_u": -0.3,
+                "origin1_e": 4.0,
+                "origin1_n": 5.0,
+                "origin1_u": 6.0,
+            },
+            {
+                **base,
+                "field": "L",
+                "freq": "L1",
+                "utcTimeMillis": 1000,
+                "next_epoch_index": 2,
+                "nextUtcTimeMillis": 2000,
+                "sigma": 5.0,
+                "measurement": 33.0,
+                "los_e": 0.4,
+                "los_n": 0.5,
+                "los_u": 0.6,
+                "origin1_e": 7.0,
+                "origin1_n": 8.0,
+                "origin1_u": 9.0,
+                "origin2_e": 10.0,
+                "origin2_n": 11.0,
+                "origin2_u": 12.0,
+            },
+            {
+                **base,
+                "field": "L",
+                "freq": "L5",
+                "utcTimeMillis": 1000,
+                "next_epoch_index": 2,
+                "nextUtcTimeMillis": 2000,
+                "sigma": 10.0,
+                "measurement": 44.0,
+                "los_e": 0.2,
+                "los_n": 0.3,
+                "los_u": 0.4,
+                "origin1_e": 7.0,
+                "origin1_n": 8.0,
+                "origin1_u": 9.0,
+                "origin2_e": 10.0,
+                "origin2_n": 11.0,
+                "origin2_u": 12.0,
+            },
+        ],
+    ).to_csv(factor_mask, index=False)
+
+    masked = raw_bridge._apply_taroz_factor_mask_to_batch(batch, factor_mask)
+
+    np.testing.assert_allclose(masked.weights_fgo, [[0.25, 0.0], [0.0, 0.0]])
+    np.testing.assert_allclose(masked.doppler_weights_fgo, [[0.0, 0.0], [0.0, 0.0625]])
+    np.testing.assert_allclose(masked.tdcp_weights_fgo, [[0.04, 0.01]])
+    np.testing.assert_allclose(masked.fgo_pr_measurement, [[12.0, 0.0], [0.0, 0.0]])
+    np.testing.assert_allclose(masked.fgo_pr_linearization_ref_ecef, [[1.0, 2.0, 3.0], [0.0, 0.0, 0.0]])
+    np.testing.assert_allclose(masked.fgo_pr_linearization_los_ecef[0, 0], [0.1, 0.2, 0.3])
+    np.testing.assert_allclose(masked.fgo_doppler_measurement, [[0.0, 0.0], [0.0, 21.0]])
+    np.testing.assert_allclose(masked.fgo_doppler_linearization_ref_vel, [[0.0, 0.0, 0.0], [4.0, 5.0, 6.0]])
+    np.testing.assert_allclose(masked.fgo_doppler_linearization_los_ecef[1, 1], [-0.1, -0.2, -0.3])
+    np.testing.assert_allclose(masked.fgo_tdcp_measurement, [[33.0, 44.0]])
+    np.testing.assert_allclose(masked.fgo_tdcp_linearization_ref_ecef, [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]])
+    np.testing.assert_allclose(masked.fgo_sat_ecef[0, 0], [0.0, 0.0, 0.0])
+    np.testing.assert_allclose(masked.fgo_sat_ecef[1, 0], [-390.0, -489.0, -588.0])
+    np.testing.assert_allclose(masked.fgo_sat_ecef[1, 1], [-190.0, -289.0, -388.0])
+
+
+def test_apply_taroz_factor_mask_rebases_fixed_linearization_to_seed_state(tmp_path):
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([1000.0, 2000.0], dtype=np.float64),
+        sat_ecef=np.zeros((2, 2, 3), dtype=np.float64),
+        pseudorange=np.zeros((2, 2), dtype=np.float64),
+        weights=np.ones((2, 2), dtype=np.float64),
+        kaggle_wls=np.zeros((2, 3), dtype=np.float64),
+        truth=np.full((2, 3), np.nan, dtype=np.float64),
+        max_sats=2,
+        has_truth=False,
+        n_clock=1,
+        doppler_weights=np.ones((2, 2), dtype=np.float64),
+        tdcp_weights=np.ones((1, 2), dtype=np.float64),
+        slot_keys=((1, 3, "GPS_L1_CA"), (1, 3, "GPS_L5_Q")),
+    )
+    factor_mask = tmp_path / "phone_data_gnss_factor_mask.csv"
+    base = {
+        "epoch_index": 1,
+        "next_epoch_index": 0,
+        "nextUtcTimeMillis": 0,
+        "sys": 1,
+        "svid": 3,
+        "sat_col": 1,
+        "factor_model": "XC",
+        "sigtype": 0,
+        "dt_s": 0.0,
+        "origin2_e": np.nan,
+        "origin2_n": np.nan,
+        "origin2_u": np.nan,
+    }
+    pd.DataFrame(
+        [
+            {
+                **base,
+                "field": "P",
+                "freq": "L1",
+                "utcTimeMillis": 1000,
+                "sigma": 2.0,
+                "measurement": 12.0,
+                "los_e": 0.1,
+                "los_n": 0.2,
+                "los_u": 0.3,
+                "origin1_e": 1.0,
+                "origin1_n": 2.0,
+                "origin1_u": 3.0,
+            },
+            {
+                **base,
+                "field": "D",
+                "freq": "L5",
+                "utcTimeMillis": 2000,
+                "sigma": 4.0,
+                "measurement": 21.0,
+                "los_e": -0.1,
+                "los_n": -0.2,
+                "los_u": -0.3,
+                "origin1_e": 4.0,
+                "origin1_n": 5.0,
+                "origin1_u": 6.0,
+            },
+            {
+                **base,
+                "field": "L",
+                "freq": "L1",
+                "utcTimeMillis": 1000,
+                "next_epoch_index": 2,
+                "nextUtcTimeMillis": 2000,
+                "sigma": 5.0,
+                "measurement": 33.0,
+                "los_e": 0.4,
+                "los_n": 0.5,
+                "los_u": 0.6,
+                "origin1_e": 7.0,
+                "origin1_n": 8.0,
+                "origin1_u": 9.0,
+                "origin2_e": 10.0,
+                "origin2_n": 11.0,
+                "origin2_u": 12.0,
+            },
+            {
+                **base,
+                "field": "L",
+                "freq": "L5",
+                "utcTimeMillis": 1000,
+                "next_epoch_index": 2,
+                "nextUtcTimeMillis": 2000,
+                "sigma": 10.0,
+                "measurement": 44.0,
+                "los_e": 0.2,
+                "los_n": 0.3,
+                "los_u": 0.4,
+                "origin1_e": 7.0,
+                "origin1_n": 8.0,
+                "origin1_u": 9.0,
+                "origin2_e": 10.0,
+                "origin2_n": 11.0,
+                "origin2_u": 12.0,
+            },
+        ],
+    ).to_csv(factor_mask, index=False)
+    seed = tmp_path / "phone_data_gnss_graph_state.csv"
+    pd.DataFrame(
+        {
+            "utcTimeMillis": [1000, 2000],
+            "position_x": [11.0, 21.0],
+            "position_y": [12.0, 22.0],
+            "position_z": [13.0, 23.0],
+            "velocity_x": [1.0, 14.0],
+            "velocity_y": [1.0, 15.0],
+            "velocity_z": [1.0, 16.0],
+        }
+    ).to_csv(seed, index=False)
+
+    masked = raw_bridge._apply_taroz_factor_mask_to_batch(batch, factor_mask, rebase_state_csv=seed)
+
+    np.testing.assert_allclose(masked.fgo_pr_measurement, [[6.0, 0.0], [0.0, 0.0]])
+    np.testing.assert_allclose(masked.fgo_pr_linearization_ref_ecef, [[11.0, 12.0, 13.0], [0.0, 0.0, 0.0]])
+    np.testing.assert_allclose(masked.fgo_doppler_measurement, [[0.0, 0.0], [0.0, 27.0]])
+    np.testing.assert_allclose(masked.fgo_doppler_linearization_ref_vel, [[0.0, 0.0, 0.0], [14.0, 15.0, 16.0]])
+    np.testing.assert_allclose(masked.fgo_tdcp_measurement, [[22.5, 37.7]])
+    np.testing.assert_allclose(masked.fgo_tdcp_linearization_ref_ecef, [[11.0, 12.0, 13.0], [21.0, 22.0, 23.0]])
+    np.testing.assert_allclose(masked.fgo_sat_ecef[1, 0], [-379.0, -478.0, -577.0])
+    np.testing.assert_allclose(masked.fgo_sat_ecef[1, 1], [-179.0, -278.0, -377.0])
+
+    recompute = raw_bridge._apply_taroz_factor_mask_to_batch(
+        batch,
+        factor_mask,
+        rebase_state_csv=seed,
+        use_fixed_values=False,
+    )
+    np.testing.assert_allclose(recompute.weights_fgo, masked.weights_fgo)
+    np.testing.assert_allclose(recompute.doppler_weights_fgo, masked.doppler_weights_fgo)
+    np.testing.assert_allclose(recompute.tdcp_weights_fgo, masked.tdcp_weights_fgo)
+    assert recompute.fgo_pr_measurement is None
+    assert recompute.fgo_doppler_measurement is None
+    assert recompute.fgo_tdcp_measurement is None
+
+
+def test_apply_taroz_imu_factor_mask_filters_preintegration_intervals(tmp_path):
+    preint = raw_bridge.IMUPreintegration(
+        epoch_times_ms=np.array([1000.0, 2000.0, 3000.0, 4000.0], dtype=np.float64),
+        delta_t_s=np.array([1.0, 1.0, 1.0], dtype=np.float64),
+        delta_v_body=np.arange(9, dtype=np.float64).reshape(3, 3),
+        delta_p_body=np.arange(10.0, 19.0, dtype=np.float64).reshape(3, 3),
+        delta_angle_rad=np.arange(20.0, 29.0, dtype=np.float64).reshape(3, 3),
+        sample_count=np.array([10, 20, 30], dtype=np.int32),
+        delta_p_bias_accel_jac=np.tile(np.eye(3, dtype=np.float64).reshape(1, 3, 3), (3, 1, 1)),
+        delta_v_bias_accel_jac=np.tile((2.0 * np.eye(3, dtype=np.float64)).reshape(1, 3, 3), (3, 1, 1)),
+        preint_meas_cov=np.tile(np.eye(9, dtype=np.float64).reshape(1, 9, 9), (3, 1, 1)),
+        gravity_ecef=np.ones((3, 3), dtype=np.float64),
+    )
+    batch = raw_bridge.TripArrays(
+        times_ms=np.array([1000.0, 2000.0, 3000.0, 4000.0], dtype=np.float64),
+        sat_ecef=np.zeros((4, 1, 3), dtype=np.float64),
+        pseudorange=np.zeros((4, 1), dtype=np.float64),
+        weights=np.zeros((4, 1), dtype=np.float64),
+        kaggle_wls=np.zeros((4, 3), dtype=np.float64),
+        truth=np.full((4, 3), np.nan, dtype=np.float64),
+        max_sats=1,
+        has_truth=False,
+        n_clock=1,
+        imu_preintegration=preint,
+    )
+    imu_mask = tmp_path / "phone_data_imu_factor_mask.csv"
+    pd.DataFrame(
+        [
+            {"field": "IMU_P", "utcTimeMillis": 1000, "nextUtcTimeMillis": 2000},
+            {"field": "IMU_R", "utcTimeMillis": 3000, "nextUtcTimeMillis": 4000},
+        ]
+    ).to_csv(imu_mask, index=False)
+
+    masked = raw_bridge._apply_taroz_imu_factor_mask_to_batch(batch, imu_mask)
+
+    assert masked.imu_preintegration is not None
+    np.testing.assert_array_equal(preint.sample_count, np.array([10, 20, 30], dtype=np.int32))
+    np.testing.assert_array_equal(masked.imu_preintegration.sample_count, np.array([10, 0, 30], dtype=np.int32))
+    assert np.isnan(masked.imu_preintegration.delta_t_s[1])
+    assert np.isnan(masked.imu_preintegration.delta_p_body[1]).all()
+    assert np.isnan(masked.imu_preintegration.gravity_ecef[1]).all()
+    np.testing.assert_allclose(masked.imu_preintegration.delta_p_body[0], preint.delta_p_body[0])
+    np.testing.assert_allclose(masked.imu_preintegration.delta_p_body[2], preint.delta_p_body[2])
+    np.testing.assert_allclose(masked.imu_preintegration.delta_p_bias_accel_jac[1], 0.0)
+    np.testing.assert_allclose(masked.imu_preintegration.preint_meas_cov[1], 0.0)
 
 
 def test_run_fgo_chunked_skips_vd_segment_when_seed_tdcp_residual_is_bad(monkeypatch):
@@ -3109,6 +4928,7 @@ def test_run_fgo_chunked_skips_vd_segment_when_seed_tdcp_residual_is_bad(monkeyp
         _sources,
         _counts,
         _records,
+        _fgo_vd_state,
     ) = raw_bridge.run_fgo_chunked(
         batch,
         raw_wls,
@@ -3168,6 +4988,26 @@ def test_solver_stop_mask_filters_fast_epochs():
     mask = solver_stop_mask(np.ones(5, dtype=bool), xyz, times_ms)
     assert mask is not None
     assert mask.tolist() == [True, True, True, False, False]
+
+
+def test_taroz_stop_mask_from_seed_velocity_filters_non_stationary_seed():
+    stop_mask = np.array([True, True, False, True, True], dtype=bool)
+    seed = np.zeros((5, 8), dtype=np.float64)
+    seed[:, 3:6] = np.array(
+        [
+            [0.1, 0.0, 0.0],
+            [0.4, 0.2, 0.0],
+            [0.1, 0.0, 0.0],
+            [0.5, 0.0, 0.0],
+            [np.nan, 0.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+
+    mask = raw_bridge._taroz_stop_mask_from_seed_velocity(stop_mask, seed)
+
+    assert mask is not None
+    assert mask.tolist() == [True, True, False, False, False]
 
 
 def test_collect_matlab_parity_audit_reports_imu_sync_ready(tmp_path):
@@ -3265,6 +5105,67 @@ def test_estimate_rpy_from_velocity_keeps_east_heading():
     assert rpy.shape == (40, 3)
     assert np.allclose(rpy[:, :2], 0.0)
     assert np.allclose(np.rad2deg(rpy[:, 2]), -180.0)
+
+
+def test_seed_vd_state_initializes_imu_attitude_from_velocity():
+    n_epoch = 40
+    n_clock = 1
+    raw_state = np.zeros((n_epoch, 3 + n_clock), dtype=np.float64)
+    raw_state[:, 0] = 6378137.0
+    raw_state[:, 1] = np.arange(n_epoch, dtype=np.float64) * 2.0
+    baseline_state = raw_state.copy()
+    dt = np.ones(n_epoch, dtype=np.float64)
+
+    state = raw_bridge._seed_vd_state(
+        raw_state,
+        baseline_state,
+        dt,
+        n_clock=n_clock,
+        imu_attitude_state=True,
+        imu_accel_bias_state=True,
+        imu_gyro_bias_state=True,
+    )
+
+    attitude_idx = 7 + n_clock
+    expected_rpy = estimate_rpy_from_velocity(np.tile(np.array([[2.0, 0.0, 0.0]], dtype=np.float64), (n_epoch, 1)))
+    expected_rot_enu_body = raw_bridge._eul_xyz_to_rotm(expected_rpy)
+    expected_rot = np.empty_like(expected_rot_enu_body)
+    for epoch_idx in range(n_epoch):
+        enu_basis_ecef = _enu_to_ecef_relative(np.eye(3, dtype=np.float64), raw_state[epoch_idx, :3]) - raw_state[
+            epoch_idx, :3
+        ]
+        expected_rot[epoch_idx] = enu_basis_ecef.T @ expected_rot_enu_body[epoch_idx]
+    actual_rot = np.stack([rotvec_to_rotm(row[attitude_idx : attitude_idx + 3]) for row in state])
+    assert state.shape == (n_epoch, 16 + n_clock)
+    np.testing.assert_allclose(actual_rot, expected_rot, atol=1e-9)
+
+
+def test_seed_vd_state_can_create_taroz_pose_position_split_layout():
+    n_epoch = 4
+    n_clock = 1
+    raw_state = np.zeros((n_epoch, 3 + n_clock), dtype=np.float64)
+    raw_state[:, 0] = 6378137.0
+    raw_state[:, 1] = np.arange(n_epoch, dtype=np.float64)
+    baseline_state = raw_state.copy()
+    dt = np.ones(n_epoch, dtype=np.float64)
+
+    state = raw_bridge._seed_vd_state(
+        raw_state,
+        baseline_state,
+        dt,
+        n_clock=n_clock,
+        imu_attitude_state=True,
+        imu_pose_position_state=True,
+        imu_accel_bias_state=True,
+        imu_gyro_bias_state=True,
+    )
+
+    base_width = 7 + n_clock
+    pose_idx = base_width
+    attitude_idx = base_width + 3
+    assert state.shape == (n_epoch, 19 + n_clock)
+    np.testing.assert_allclose(state[:, pose_idx : pose_idx + 3], state[:, :3])
+    assert np.isfinite(state[:, attitude_idx : attitude_idx + 3]).all()
 
 
 def test_apply_phone_position_offset_shifts_along_heading():
@@ -3416,6 +5317,14 @@ def test_export_bridge_outputs(tmp_path):
         kaggle_wls=ecef,
         raw_wls=np.column_stack([ecef, np.zeros(2)]),
         fgo_state=np.column_stack([ecef + 1.0, np.zeros(2)]),
+        fgo_vd_state=np.column_stack(
+            [
+                ecef + 2.0,
+                np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=np.float64),
+                np.array([10.0, 11.0], dtype=np.float64),
+                np.array([0.01, 0.02], dtype=np.float64),
+            ]
+        ),
         selected_state=np.column_stack([ecef, np.zeros(2)]),
         selected_sources=np.array(["baseline", "fgo"], dtype=object),
         truth=ecef - 1.0,
@@ -3438,6 +5347,8 @@ def test_export_bridge_outputs(tmp_path):
     _export_bridge_outputs(export_dir, result)
 
     pos = pd.read_csv(export_dir / "bridge_positions.csv")
+    states = pd.read_csv(export_dir / "bridge_states.csv")
+    vd_states = pd.read_csv(export_dir / "bridge_fgo_vd_state.csv")
     meta = json.loads((export_dir / "bridge_metrics.json").read_text(encoding="utf-8"))
 
     assert list(pos["UnixTimeMillis"]) == [1000, 2000]
@@ -3445,6 +5356,17 @@ def test_export_bridge_outputs(tmp_path):
     assert "FgoLatitudeDegrees" in pos.columns
     assert "LatitudeDegrees" in pos.columns
     assert "GroundTruthLongitudeDegrees" in pos.columns
+    assert list(states["UnixTimeMillis"]) == [1000, 2000]
+    assert "FgoEcefXMeters" in states.columns
+    assert "FgoClockBiasMeters0" in states.columns
+    np.testing.assert_allclose(states["FgoEcefXMeters"].to_numpy(), ecef[:, 0] + 1.0)
+    assert list(vd_states["UnixTimeMillis"]) == [1000, 2000]
+    assert "FgoVdVelocityXMps" in vd_states.columns
+    assert "FgoVdClockBiasMeters0" in vd_states.columns
+    assert "FgoVdClockDriftMps" in vd_states.columns
+    np.testing.assert_allclose(vd_states["FgoVdEcefXMeters"].to_numpy(), ecef[:, 0] + 2.0)
+    np.testing.assert_allclose(vd_states["FgoVdVelocityXMps"].to_numpy(), [0.1, 0.4])
+    np.testing.assert_allclose(vd_states["FgoVdClockDriftMps"].to_numpy(), [0.01, 0.02])
     assert meta["trip"] == "train/course/phone"
     assert meta["fgo_iters"] == 3
     assert meta["vd_seed_guard_skipped_segments"] == 2
@@ -3490,9 +5412,11 @@ def test_export_bridge_outputs_without_ground_truth(tmp_path):
     _export_bridge_outputs(export_dir, result)
 
     pos = pd.read_csv(export_dir / "bridge_positions.csv")
+    states = pd.read_csv(export_dir / "bridge_states.csv")
     meta = json.loads((export_dir / "bridge_metrics.json").read_text(encoding="utf-8"))
 
     assert np.isnan(pos.loc[0, "GroundTruthLatitudeDegrees"])
+    assert np.isnan(states.loc[0, "GroundTruthEcefXMeters"])
     assert meta["fgo_score_m"] is None
     assert meta["selected_source_counts"]["raw_wls"] == 1
 
@@ -3642,7 +5566,7 @@ def test_build_trip_arrays_multi_gnss_with_tdcp(tmp_path):
     assert batch.sat_vel is not None
     assert batch.tdcp_meas is not None
     assert batch.tdcp_weights is not None
-    np.testing.assert_allclose(batch.doppler[0, :4], np.array([0.60, 0.50, 0.40, 0.30]))
+    np.testing.assert_allclose(batch.doppler[0, :4], np.array([-0.60, -0.50, -0.40, -0.30]))
     np.testing.assert_allclose(batch.sat_vel[0, 2], np.array([500.0, -59.99, 89.985]))
     np.testing.assert_allclose(batch.tdcp_meas[0, :3], np.array([0.6, 0.5, 0.4]), atol=1e-9)
     assert batch.tdcp_meas[0, 3] == 0.0

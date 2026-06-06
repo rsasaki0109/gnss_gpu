@@ -43,9 +43,9 @@ def test_metrics_row_includes_tdcp_and_source_counts() -> None:
             "tdcp_scale_candidate_enabled": True,
             "tdcp_scale_candidate_weight_scale": 1.0e-7,
             "fgo_raw_wls_proxy_rescue_enabled": True,
-            "fgo_raw_wls_proxy_rescue_mse_ratio_max": 1.20,
+            "fgo_raw_wls_proxy_rescue_mse_ratio_max": 1.15,
             "fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max": 1.25,
-            "fgo_raw_wls_proxy_rescue_quality_delta_max": -0.35,
+            "fgo_raw_wls_proxy_rescue_quality_delta_max": -0.20,
             "fgo_raw_wls_proxy_rescue_mse_delta_vs_baseline_max": 0.0,
             "tdcp_consistency_mask_count": 4,
             "tdcp_geometry_correction_applied": True,
@@ -85,7 +85,7 @@ def test_metrics_row_includes_tdcp_and_source_counts() -> None:
     assert row["selected_fgo_tdcp_scale_epochs"] == 0
     assert row["tdcp_scale_candidate_enabled"] is True
     assert row["fgo_raw_wls_proxy_rescue_enabled"] is True
-    assert row["fgo_raw_wls_proxy_rescue_mse_ratio_max"] == pytest.approx(1.20)
+    assert row["fgo_raw_wls_proxy_rescue_mse_ratio_max"] == pytest.approx(1.15)
     assert row["delta_selected_score_m_vs_default"] == pytest.approx(-0.3)
     assert row["tdcp_geometry_correction_count"] == 5
     assert row["fgo_candidate_chunks"] == 1
