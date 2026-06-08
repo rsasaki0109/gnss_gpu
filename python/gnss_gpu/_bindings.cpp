@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cmath>
 #include <stdexcept>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
@@ -40,9 +41,23 @@ PYBIND11_MODULE(_gnss_gpu, m) {
     return py::make_tuple(x, y, z);
   }, "Convert LLA (radians) to ECEF", py::arg("lat"), py::arg("lon"), py::arg("alt"));
 
-  m.def("satellite_azel", [](double rx, double ry, double rz, py::array_t<double> sat_ecef) {
+  m.def("satellite_azel", [](double rx, double ry, double rz,
+                              py::array_t<double, py::array::c_style | py::array::forcecast> sat_ecef) {
+    if (!std::isfinite(rx) || !std::isfinite(ry) || !std::isfinite(rz))
+      throw std::runtime_error("satellite_azel: receiver ECEF coordinates must be finite");
     auto buf = sat_ecef.request();
-    int n_sat = buf.size / 3;  // accept flat or (N,3)
+    int n_sat = 0;
+    if (buf.ndim == 1) {
+      if (buf.size % 3 != 0)
+        throw std::runtime_error("satellite_azel: flat sat_ecef length must be divisible by 3");
+      n_sat = static_cast<int>(buf.size / 3);
+    } else if (buf.ndim == 2 && buf.shape[1] == 3) {
+      n_sat = static_cast<int>(buf.shape[0]);
+    } else {
+      throw std::runtime_error("satellite_azel: sat_ecef must have shape (n_sat, 3) or flat length n_sat*3");
+    }
+    if (n_sat < 1)
+      throw std::runtime_error("satellite_azel requires at least one satellite");
     auto az = py::array_t<double>(n_sat);
     auto el = py::array_t<double>(n_sat);
     gnss_gpu::satellite_azel(rx, ry, rz, static_cast<double*>(buf.ptr),
