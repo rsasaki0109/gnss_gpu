@@ -1,5 +1,8 @@
+from dataclasses import fields
+
 import pytest
 
+from gnss_gpu.pf_smoother_config import PfSmootherConfig
 from gnss_gpu.pf_smoother_cli_config import (
     namespace_requests_epoch_diagnostics,
     namespace_to_run_config,
@@ -61,6 +64,28 @@ def test_namespace_to_run_config_wraps_cli_kwargs():
     assert kwargs["smoother_tail_guard_expand_epochs"] == 3
     assert kwargs["smoother_tail_guard_expand_dd_pseudorange_max_pairs"] == 0
     assert config.to_kwargs() == kwargs
+
+
+def test_namespace_to_run_kwargs_covers_config_fields_and_aliases():
+    args = _parse_args(
+        "--urban-rover",
+        "septentrio",
+        "--tdcp-tight-rms-max",
+        "2.5",
+        "--gmm",
+    )
+
+    kwargs = namespace_to_run_kwargs(
+        args,
+        position_update_sigma=3.0,
+        use_smoother=False,
+    )
+
+    assert set(kwargs) == {field.name for field in fields(PfSmootherConfig)}
+    assert kwargs["rover_source"] == "septentrio"
+    assert kwargs["tdcp_tight_rms_max_m"] == 2.5
+    assert kwargs["use_gmm"] is True
+    assert kwargs["resampling"] == "megopolis"
 
 
 @pytest.mark.parametrize(
