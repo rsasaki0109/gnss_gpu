@@ -157,6 +157,42 @@ def test_ecef_lla_roundtrip():
     assert abs(z[0] - z2[0]) < 0.01
 
 
+def test_ecef_to_lla_rejects_invalid_inputs():
+    x = np.array([-3957199.0])
+    y = np.array([3310205.0])
+    z = np.array([3737911.0])
+
+    with pytest.raises(RuntimeError, match="must each have shape"):
+        ecef_to_lla(x.reshape(1, 1), y, z)
+
+    with pytest.raises(RuntimeError, match="same length"):
+        ecef_to_lla(np.array([x[0], x[0]]), y, z)
+
+    with pytest.raises(RuntimeError, match="requires at least one coordinate"):
+        ecef_to_lla(np.array([]), np.array([]), np.array([]))
+
+    with pytest.raises(RuntimeError, match="coordinates must be finite"):
+        ecef_to_lla(np.array([np.nan]), y, z)
+
+
+def test_lla_to_ecef_rejects_invalid_inputs():
+    lat = np.array([np.radians(35.0)])
+    lon = np.array([np.radians(139.0)])
+    alt = np.array([10.0])
+
+    with pytest.raises(RuntimeError, match="must each have shape"):
+        lla_to_ecef(lat.reshape(1, 1), lon, alt)
+
+    with pytest.raises(RuntimeError, match="same length"):
+        lla_to_ecef(np.array([lat[0], lat[0]]), lon, alt)
+
+    with pytest.raises(RuntimeError, match="requires at least one coordinate"):
+        lla_to_ecef(np.array([]), np.array([]), np.array([]))
+
+    with pytest.raises(RuntimeError, match="coordinates must be finite"):
+        lla_to_ecef(np.array([np.nan]), lon, alt)
+
+
 def test_satellite_azel_accepts_flat_and_matrix_inputs():
     rx = np.array([6378137.0, 0.0, 0.0])
     sat_ecef = np.array([
