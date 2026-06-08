@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from numbers import Integral
+
 import numpy as np
 
 from gnss_gpu.range_model import geometric_ranges_sagnac, rotate_satellites_sagnac
@@ -19,6 +21,7 @@ _SYSTEM_NAMES = {
     SYSTEM_BEIDOU: "BeiDou",
     SYSTEM_QZSS: "QZSS",
 }
+_SUPPORTED_SYSTEMS = frozenset(_SYSTEM_NAMES)
 
 try:
     from gnss_gpu._gnss_gpu_multi_gnss import wls_multi_gnss as _wls_multi_gnss
@@ -26,6 +29,148 @@ try:
     _HAS_GPU = True
 except ImportError:
     _HAS_GPU = False
+
+
+def _validate_solver_config(systems, max_iter, tol):
+    if systems is None:
+        systems = [SYSTEM_GPS]
+    elif isinstance(systems, Integral) and not isinstance(systems, (bool, np.bool_)):
+        systems = [systems]
+    else:
+        systems = list(systems)
+
+    if not systems:
+        raise RuntimeError("MultiGNSSSolver: systems must contain at least one system")
+
+    validated_systems = []
+    for system in systems:
+        if not isinstance(system, Integral) or isinstance(system, (bool, np.bool_)):
+            raise RuntimeError("MultiGNSSSolver: systems must be integer system IDs")
+        system = int(system)
+        if system not in _SUPPORTED_SYSTEMS:
+            raise RuntimeError("MultiGNSSSolver: systems must be supported GNSS system IDs")
+        validated_systems.append(system)
+
+    if len(set(validated_systems)) != len(validated_systems):
+        raise RuntimeError("MultiGNSSSolver: systems must be unique")
+
+    if not isinstance(max_iter, Integral) or isinstance(max_iter, (bool, np.bool_)):
+        raise RuntimeError("MultiGNSSSolver: max_iter must be an integer")
+    if int(max_iter) < 1:
+        raise RuntimeError("MultiGNSSSolver: max_iter must be >= 1")
+    try:
+        tol = float(tol)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("MultiGNSSSolver: tol must be positive and finite") from exc
+    if not np.isfinite(tol) or tol <= 0.0:
+        raise RuntimeError("MultiGNSSSolver: tol must be positive and finite")
+
+    return sorted(validated_systems), int(max_iter), tol
+
+
+def _system_id_array(name, system_ids, shape, enabled_systems):
+    values = np.asarray(system_ids)
+    if values.shape != shape:
+        expected = ", ".join(str(dim) for dim in shape)
+        raise RuntimeError(f"{name}: system_ids must have shape ({expected})")
+
+    try:
+        values_float = values.astype(np.float64)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"{name}: system_ids must be integer-valued") from exc
+
+    if not np.isfinite(values_float).all() or not np.all(values_float == np.floor(values_float)):
+        raise RuntimeError(f"{name}: system_ids must be integer-valued")
+
+    invalid_mask = ~np.isin(values_float, np.asarray(enabled_systems, dtype=np.float64))
+    if invalid_mask.any():
+        raise RuntimeError(f"{name}: system_ids must be one of the enabled systems")
+
+    return np.ascontiguousarray(values_float.astype(np.int32), dtype=np.int32)
+
+
+def _sat_matrix(name, sat_ecef, n_sat):
+    sat_ecef = np.asarray(sat_ecef, dtype=np.float64)
+    if sat_ecef.ndim == 1 and sat_ecef.size == n_sat * 3:
+        sat_ecef = sat_ecef.reshape(n_sat, 3)
+    elif not (sat_ecef.ndim == 2 and sat_ecef.shape == (n_sat, 3)):
+        raise RuntimeError(
+            f"{name}: sat_ecef must have shape (n_sat, 3) or flat length n_sat*3"
+        )
+    return sat_ecef
+
+
+def _validate_single_inputs(name, systems, sat_ecef, pseudoranges, system_ids, weights):
+    pseudoranges = np.asarray(pseudoranges, dtype=np.float64)
+    if pseudoranges.ndim != 1:
+        raise RuntimeError(f"{name}: pseudoranges must have shape (n_sat,)")
+    n_sat = pseudoranges.size
+
+    sat_ecef = _sat_matrix(name, sat_ecef, n_sat)
+    system_ids = _system_id_array(name, system_ids, (n_sat,), systems)
+
+    if weights is None:
+        weights = np.ones(n_sat, dtype=np.float64)
+    else:
+        weights = np.asarray(weights, dtype=np.float64)
+        if weights.ndim != 1 or weights.size != n_sat:
+            raise RuntimeError(f"{name}: weights must have shape (n_sat,)")
+
+    if not np.isfinite(sat_ecef).all():
+        raise RuntimeError(f"{name}: satellite positions must be finite")
+    if not np.isfinite(pseudoranges).all():
+        raise RuntimeError(f"{name}: pseudoranges must be finite")
+    if not (np.isfinite(weights).all() and np.all(weights >= 0.0)):
+        raise RuntimeError(f"{name}: weights must be finite and nonnegative")
+
+    return (
+        np.ascontiguousarray(sat_ecef, dtype=np.float64),
+        np.ascontiguousarray(pseudoranges, dtype=np.float64),
+        system_ids,
+        np.ascontiguousarray(weights, dtype=np.float64),
+    )
+
+
+def _validate_batch_inputs(name, systems, sat_ecef, pseudoranges, system_ids, weights):
+    sat_ecef = np.asarray(sat_ecef, dtype=np.float64)
+    if sat_ecef.ndim != 3 or sat_ecef.shape[2] != 3:
+        raise RuntimeError(f"{name}: sat_ecef must have shape (n_epoch, n_sat, 3)")
+    n_epoch, n_sat, _ = sat_ecef.shape
+    if n_epoch < 1:
+        raise RuntimeError(f"{name}: n_epoch must be >= 1")
+
+    pseudoranges = np.asarray(pseudoranges, dtype=np.float64)
+    if pseudoranges.ndim != 2 or pseudoranges.shape != (n_epoch, n_sat):
+        raise RuntimeError(f"{name}: pseudoranges must have shape (n_epoch, n_sat)")
+
+    system_ids = _system_id_array(name, system_ids, (n_epoch, n_sat), systems)
+
+    if weights is None:
+        weights = np.ones((n_epoch, n_sat), dtype=np.float64)
+    else:
+        weights = np.asarray(weights, dtype=np.float64)
+        if weights.ndim != 2 or weights.shape != (n_epoch, n_sat):
+            raise RuntimeError(f"{name}: weights must have shape (n_epoch, n_sat)")
+
+    if not np.isfinite(sat_ecef).all():
+        raise RuntimeError(f"{name}: satellite positions must be finite")
+    if not np.isfinite(pseudoranges).all():
+        raise RuntimeError(f"{name}: pseudoranges must be finite")
+    if not (np.isfinite(weights).all() and np.all(weights >= 0.0)):
+        raise RuntimeError(f"{name}: weights must be finite and nonnegative")
+
+    return (
+        np.ascontiguousarray(sat_ecef, dtype=np.float64),
+        np.ascontiguousarray(pseudoranges, dtype=np.float64),
+        system_ids,
+        np.ascontiguousarray(weights, dtype=np.float64),
+    )
+
+
+def _remap_system_ids(system_ids, sys_to_idx):
+    return np.array([sys_to_idx[int(s)] for s in system_ids.ravel()], dtype=np.int32).reshape(
+        system_ids.shape
+    )
 
 
 class MultiGNSSSolver:
@@ -45,9 +190,9 @@ class MultiGNSSSolver:
             max_iter: Maximum Gauss-Newton iterations.
             tol: Convergence tolerance [m].
         """
-        self.systems = sorted(systems or [SYSTEM_GPS])
-        self.max_iter = max_iter
-        self.tol = tol
+        self.systems, self.max_iter, self.tol = _validate_solver_config(
+            systems, max_iter, tol
+        )
         # Build mapping from system enum to contiguous index
         self._sys_to_idx = {s: i for i, s in enumerate(self.systems)}
         self.n_systems = len(self.systems)
@@ -68,14 +213,15 @@ class MultiGNSSSolver:
             clock_biases: dict {system_id: bias_m} for each enabled system.
             n_iter: Number of iterations used.
         """
-        sat_ecef = np.ascontiguousarray(sat_ecef, dtype=np.float64)
-        pseudoranges = np.ascontiguousarray(pseudoranges, dtype=np.float64)
+        sat_ecef, pseudoranges, system_ids, weights = _validate_single_inputs(
+            "MultiGNSSSolver.solve",
+            self.systems,
+            sat_ecef,
+            pseudoranges,
+            system_ids,
+            weights,
+        )
         n_sat = len(pseudoranges)
-
-        if weights is None:
-            weights = np.ones(n_sat, dtype=np.float64)
-        else:
-            weights = np.ascontiguousarray(weights, dtype=np.float64)
 
         n_state = 3 + self.n_systems
         if n_sat < n_state:
@@ -84,8 +230,7 @@ class MultiGNSSSolver:
             }, -1
 
         # Remap system_ids to contiguous indices
-        mapped_ids = np.array([self._sys_to_idx.get(int(s), 0) for s in system_ids],
-                              dtype=np.int32)
+        mapped_ids = _remap_system_ids(system_ids, self._sys_to_idx)
 
         if _HAS_GPU:
             result, n_iter = _wls_multi_gnss(
@@ -116,14 +261,15 @@ class MultiGNSSSolver:
             clock_biases: [n_epoch, n_systems] per-system clock biases.
             n_iters: [n_epoch] iterations used.
         """
-        sat_ecef = np.ascontiguousarray(sat_ecef, dtype=np.float64)
-        pseudoranges = np.ascontiguousarray(pseudoranges, dtype=np.float64)
+        sat_ecef, pseudoranges, system_ids, weights = _validate_batch_inputs(
+            "MultiGNSSSolver.solve_batch",
+            self.systems,
+            sat_ecef,
+            pseudoranges,
+            system_ids,
+            weights,
+        )
         n_epoch, n_sat = pseudoranges.shape
-
-        if weights is None:
-            weights = np.ones_like(pseudoranges)
-        else:
-            weights = np.ascontiguousarray(weights, dtype=np.float64)
 
         n_state = 3 + self.n_systems
         if n_sat < n_state:
@@ -134,9 +280,7 @@ class MultiGNSSSolver:
             )
 
         # Remap system_ids to contiguous indices
-        sys_ids_flat = system_ids.ravel()
-        mapped_ids = np.array([self._sys_to_idx.get(int(s), 0) for s in sys_ids_flat],
-                              dtype=np.int32).reshape(n_epoch, n_sat)
+        mapped_ids = _remap_system_ids(system_ids, self._sys_to_idx)
 
         if _HAS_GPU:
             results, n_iters = _wls_multi_gnss_batch(

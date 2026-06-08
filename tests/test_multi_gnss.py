@@ -191,6 +191,23 @@ class TestMultiGNSSCPU:
         assert MultiGNSSSolver.system_name(SYSTEM_GPS) == "GPS"
         assert MultiGNSSSolver.system_name(SYSTEM_GALILEO) == "Galileo"
 
+    def test_solver_rejects_invalid_configuration(self):
+        """Constructor should reject ambiguous or unsupported solver options."""
+        with pytest.raises(RuntimeError, match="systems must contain"):
+            MultiGNSSSolver(systems=[])
+
+        with pytest.raises(RuntimeError, match="systems must be unique"):
+            MultiGNSSSolver(systems=[SYSTEM_GPS, SYSTEM_GPS])
+
+        with pytest.raises(RuntimeError, match="supported GNSS system IDs"):
+            MultiGNSSSolver(systems=[99])
+
+        with pytest.raises(RuntimeError, match="max_iter must be >= 1"):
+            MultiGNSSSolver(max_iter=0)
+
+        with pytest.raises(RuntimeError, match="tol must be positive"):
+            MultiGNSSSolver(tol=0.0)
+
     def test_insufficient_satellites(self):
         """Should return failure with fewer sats than unknowns."""
         solver = MultiGNSSSolver(systems=[SYSTEM_GPS, SYSTEM_GALILEO])
@@ -200,6 +217,78 @@ class TestMultiGNSSCPU:
 
         pos, biases, n_iter = solver.solve(sat_ecef, pr, sys_ids)
         assert n_iter == -1
+
+    def test_solve_rejects_invalid_wrapper_inputs(self):
+        """Wrapper validation should catch shape and value mistakes before solving."""
+        sat_ecef, pseudoranges, system_ids, *_ = _make_multi_gnss_scenario(
+            isb_galileo=10.0
+        )
+        solver = MultiGNSSSolver(systems=[SYSTEM_GPS, SYSTEM_GALILEO])
+        sat_ecef = sat_ecef[:8]
+        pseudoranges = pseudoranges[:8]
+        system_ids = system_ids[:8]
+        weights = np.ones(len(pseudoranges))
+
+        with pytest.raises(RuntimeError, match="pseudoranges must have shape"):
+            solver.solve(sat_ecef, pseudoranges.reshape(-1, 1), system_ids, weights)
+
+        with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+            solver.solve(sat_ecef.ravel()[:-1], pseudoranges, system_ids, weights)
+
+        with pytest.raises(RuntimeError, match="weights must have shape"):
+            solver.solve(sat_ecef, pseudoranges, system_ids, weights[:-1])
+
+        with pytest.raises(RuntimeError, match="system_ids must have shape"):
+            solver.solve(sat_ecef, pseudoranges, system_ids[:-1], weights)
+
+        bad_systems = system_ids.copy()
+        bad_systems[0] = SYSTEM_BEIDOU
+        with pytest.raises(RuntimeError, match="enabled systems"):
+            solver.solve(sat_ecef, pseudoranges, bad_systems, weights)
+
+        bad_sat = sat_ecef.copy()
+        bad_sat[0, 0] = np.nan
+        with pytest.raises(RuntimeError, match="satellite positions must be finite"):
+            solver.solve(bad_sat, pseudoranges, system_ids, weights)
+
+        bad_weights = weights.copy()
+        bad_weights[0] = -1.0
+        with pytest.raises(RuntimeError, match="weights must be finite and nonnegative"):
+            solver.solve(sat_ecef, pseudoranges, system_ids, bad_weights)
+
+    def test_solve_batch_rejects_invalid_wrapper_inputs(self):
+        """Batch wrapper validation should mirror single-epoch checks."""
+        sat_ecef, pseudoranges, system_ids, *_ = _make_multi_gnss_scenario(
+            isb_galileo=5.0
+        )
+        solver = MultiGNSSSolver(systems=[SYSTEM_GPS, SYSTEM_GLONASS, SYSTEM_GALILEO])
+        n_epoch = 2
+        sat_batch = np.tile(sat_ecef, (n_epoch, 1, 1))
+        pr_batch = np.tile(pseudoranges, (n_epoch, 1))
+        sys_batch = np.tile(system_ids, (n_epoch, 1))
+        weights = np.ones_like(pr_batch)
+
+        with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+            solver.solve_batch(sat_batch.reshape(n_epoch, -1), pr_batch, sys_batch, weights)
+
+        with pytest.raises(RuntimeError, match="pseudoranges must have shape"):
+            solver.solve_batch(sat_batch, pr_batch[:, :-1], sys_batch, weights)
+
+        with pytest.raises(RuntimeError, match="weights must have shape"):
+            solver.solve_batch(sat_batch, pr_batch, sys_batch, weights[:, :-1])
+
+        with pytest.raises(RuntimeError, match="system_ids must have shape"):
+            solver.solve_batch(sat_batch, pr_batch, sys_batch[:, :-1], weights)
+
+        bad_systems = sys_batch.copy()
+        bad_systems[0, 0] = SYSTEM_BEIDOU
+        with pytest.raises(RuntimeError, match="enabled systems"):
+            solver.solve_batch(sat_batch, pr_batch, bad_systems, weights)
+
+        bad_pr = pr_batch.copy()
+        bad_pr[0, 0] = np.inf
+        with pytest.raises(RuntimeError, match="pseudoranges must be finite"):
+            solver.solve_batch(sat_batch, bad_pr, sys_batch, weights)
 
 
 # --- GPU tests (require CUDA module) ---
