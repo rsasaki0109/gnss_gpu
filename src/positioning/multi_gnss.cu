@@ -9,6 +9,28 @@ namespace gnss_gpu {
 // Maximum state dimension: 3 (position) + MAX_SYSTEMS (clock biases)
 static constexpr int MAX_STATE = 3 + MAX_SYSTEMS;
 
+static inline void sagnac_los_host(
+    const double* sat_ecef, int s, double x, double y, double z,
+    double* dx, double* dy, double* dz, double* r) {
+  double sx = sat_ecef[s * 3 + 0];
+  double sy = sat_ecef[s * 3 + 1];
+  double sz = sat_ecef[s * 3 + 2];
+
+  double dx0 = x - sx;
+  double dy0 = y - sy;
+  double dz0 = z - sz;
+  double range_approx = sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+  double theta = 7.2921151467e-5 * (range_approx / 299792458.0);
+  double sx_rot = sx * cos(theta) + sy * sin(theta);
+  double sy_rot = -sx * sin(theta) + sy * cos(theta);
+
+  *dx = x - sx_rot;
+  *dy = y - sy_rot;
+  *dz = z - sz;
+  *r = sqrt((*dx) * (*dx) + (*dy) * (*dy) + (*dz) * (*dz));
+  if (*r < 1e-12) *r = 1e-12;
+}
+
 // Solve NxN augmented matrix [A|b] by Gaussian elimination with partial pivoting
 // A_aug: [n][n+1] augmented matrix, overwritten in-place
 // delta: [n] solution output
@@ -78,10 +100,8 @@ int wls_multi_gnss(const double* sat_ecef, const double* pseudoranges,
   double cb[MAX_SYSTEMS] = {};
   int cb_count[MAX_SYSTEMS] = {};
   for (int s = 0; s < n_sat; s++) {
-    double dx = x - sat_ecef[s * 3 + 0];
-    double dy_v = y - sat_ecef[s * 3 + 1];
-    double dz = z - sat_ecef[s * 3 + 2];
-    double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+    double dx, dy_v, dz, r;
+    sagnac_los_host(sat_ecef, s, x, y, z, &dx, &dy_v, &dz, &r);
     int sys = system_ids[s];
     if (sys >= 0 && sys < n_systems) {
       cb[sys] += pseudoranges[s] - r;
@@ -99,14 +119,8 @@ int wls_multi_gnss(const double* sat_ecef, const double* pseudoranges,
     double HTWdy[MAX_STATE] = {};
 
     for (int s = 0; s < n_sat; s++) {
-      double sx = sat_ecef[s * 3 + 0];
-      double sy = sat_ecef[s * 3 + 1];
-      double sz = sat_ecef[s * 3 + 2];
-
-      // Keep the single-epoch solver consistent with the batch/kernel and the
-      // Python fallback: inputs are expected to already be corrected upstream.
-      double dx = x - sx, dy_v = y - sy, dz = z - sz;
-      double r = sqrt(dx * dx + dy_v * dy_v + dz * dz);
+      double dx, dy_v, dz, r;
+      sagnac_los_host(sat_ecef, s, x, y, z, &dx, &dy_v, &dz, &r);
       int sys = system_ids[s];
       double pr_pred = r + ((sys >= 0 && sys < n_systems) ? cb[sys] : cb[0]);
       double residual = pseudoranges[s] - pr_pred;
