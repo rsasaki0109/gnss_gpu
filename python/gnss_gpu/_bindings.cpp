@@ -13,28 +13,56 @@ PYBIND11_MODULE(_gnss_gpu, m) {
   m.doc() = "GPU-accelerated GNSS signal processing";
 
   // --- Coordinate transforms ---
-  m.def("ecef_to_lla", [](py::array_t<double> x, py::array_t<double> y, py::array_t<double> z) {
+  m.def("ecef_to_lla", [](py::array_t<double, py::array::c_style | py::array::forcecast> x,
+                           py::array_t<double, py::array::c_style | py::array::forcecast> y,
+                           py::array_t<double, py::array::c_style | py::array::forcecast> z) {
     auto bx = x.request(), by = y.request(), bz = z.request();
+    if (bx.ndim != 1 || by.ndim != 1 || bz.ndim != 1)
+      throw std::runtime_error("ecef_to_lla: x, y, and z must each have shape (n,)");
+    if (bx.size < 1)
+      throw std::runtime_error("ecef_to_lla requires at least one coordinate");
+    if (by.size != bx.size || bz.size != bx.size)
+      throw std::runtime_error("ecef_to_lla: x, y, and z must have the same length");
     int n = bx.size;
+    const double* x_ptr = static_cast<const double*>(bx.ptr);
+    const double* y_ptr = static_cast<const double*>(by.ptr);
+    const double* z_ptr = static_cast<const double*>(bz.ptr);
+    for (int i = 0; i < n; i++) {
+      if (!std::isfinite(x_ptr[i]) || !std::isfinite(y_ptr[i]) || !std::isfinite(z_ptr[i]))
+        throw std::runtime_error("ecef_to_lla: coordinates must be finite");
+    }
     auto lat = py::array_t<double>(n);
     auto lon = py::array_t<double>(n);
     auto alt = py::array_t<double>(n);
-    gnss_gpu::ecef_to_lla(static_cast<double*>(bx.ptr), static_cast<double*>(by.ptr),
-                          static_cast<double*>(bz.ptr),
+    gnss_gpu::ecef_to_lla(x_ptr, y_ptr, z_ptr,
                           static_cast<double*>(lat.request().ptr),
                           static_cast<double*>(lon.request().ptr),
                           static_cast<double*>(alt.request().ptr), n);
     return py::make_tuple(lat, lon, alt);
   }, "Convert ECEF to LLA (radians)", py::arg("x"), py::arg("y"), py::arg("z"));
 
-  m.def("lla_to_ecef", [](py::array_t<double> lat, py::array_t<double> lon, py::array_t<double> alt) {
+  m.def("lla_to_ecef", [](py::array_t<double, py::array::c_style | py::array::forcecast> lat,
+                           py::array_t<double, py::array::c_style | py::array::forcecast> lon,
+                           py::array_t<double, py::array::c_style | py::array::forcecast> alt) {
     auto bla = lat.request(), blo = lon.request(), bal = alt.request();
+    if (bla.ndim != 1 || blo.ndim != 1 || bal.ndim != 1)
+      throw std::runtime_error("lla_to_ecef: lat, lon, and alt must each have shape (n,)");
+    if (bla.size < 1)
+      throw std::runtime_error("lla_to_ecef requires at least one coordinate");
+    if (blo.size != bla.size || bal.size != bla.size)
+      throw std::runtime_error("lla_to_ecef: lat, lon, and alt must have the same length");
     int n = bla.size;
+    const double* lat_ptr = static_cast<const double*>(bla.ptr);
+    const double* lon_ptr = static_cast<const double*>(blo.ptr);
+    const double* alt_ptr = static_cast<const double*>(bal.ptr);
+    for (int i = 0; i < n; i++) {
+      if (!std::isfinite(lat_ptr[i]) || !std::isfinite(lon_ptr[i]) || !std::isfinite(alt_ptr[i]))
+        throw std::runtime_error("lla_to_ecef: coordinates must be finite");
+    }
     auto x = py::array_t<double>(n);
     auto y = py::array_t<double>(n);
     auto z = py::array_t<double>(n);
-    gnss_gpu::lla_to_ecef(static_cast<double*>(bla.ptr), static_cast<double*>(blo.ptr),
-                          static_cast<double*>(bal.ptr),
+    gnss_gpu::lla_to_ecef(lat_ptr, lon_ptr, alt_ptr,
                           static_cast<double*>(x.request().ptr),
                           static_cast<double*>(y.request().ptr),
                           static_cast<double*>(z.request().ptr), n);
