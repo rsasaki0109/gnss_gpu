@@ -103,6 +103,34 @@ robust vs naive: 81% better P50, 77% better RMS
 Robust down-weighting of NLOS-biased measurements is the same idea the GPU
 particle-filter stack scales up to beat RTKLIB demo5 on real UrbanNav data.
 
+### Use the robust SPP solver from Python
+
+For library code, the same CPU-only solver is available from the package top level:
+
+```python
+import numpy as np
+from gnss_gpu import robust_spp
+
+sat_ecef = np.asarray(...)       # shape: (n_sat, 3), metres
+pseudoranges = np.asarray(...)   # shape: (n_sat,), metres
+weights = np.ones(len(pseudoranges))
+coarse_ecef = np.asarray(...)    # shape: (3,), metres
+
+position_ecef = robust_spp(
+    sat_ecef,
+    pseudoranges,
+    weights=weights,
+    init_pos=coarse_ecef,
+    weight_func="cauchy",
+    threshold=15.0,
+)
+if position_ecef is None:
+    raise RuntimeError("SPP failed; check satellite count and geometry")
+```
+
+Bad input shapes, non-finite values, negative weights, and invalid solver options
+raise `ValueError` with messages that name the offending argument.
+
 For a measurement-level NLOS simulator with explicit ray-cast building blockage,
 C/N0 attenuation, excess delay, and a geometry-aware SPP comparison:
 

@@ -77,6 +77,7 @@ from gnss_gpu.ekf import EKFPositioner
 from gnss_gpu.raim import raim_check, raim_fde
 from gnss_gpu.doppler import doppler_velocity, doppler_velocity_batch
 from gnss_gpu.fgo import fgo_gnss_lm, fgo_gnss_lm_vd
+from gnss_gpu.robust_spp import robust_spp
 from gnss_gpu.signal_sim import SignalSimulator
 from gnss_gpu.urban_signal_sim import UrbanSignalSimulator
 from gnss_gpu.e2e_helpers import (
@@ -92,6 +93,7 @@ from gnss_gpu.e2e_helpers import (
 )
 
 __all__ = [
+    "__version__",
     # Core positioning
     "ecef_to_lla",
     "lla_to_ecef",
@@ -120,6 +122,7 @@ __all__ = [
     "VectorTracker",
     # Particle filter
     "ParticleFilter",
+    "ParticleFilterDevice",
     # SVGD particle filter
     "SVGDParticleFilter",
     # 3D particle filter
@@ -155,6 +158,8 @@ __all__ = [
     # Doppler velocity estimation
     "doppler_velocity",
     "doppler_velocity_batch",
+    # Robust single point positioning
+    "robust_spp",
     # Signal simulation
     "SignalSimulator",
     "UrbanSignalSimulator",

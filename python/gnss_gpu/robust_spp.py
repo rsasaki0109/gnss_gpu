@@ -53,9 +53,16 @@ def robust_spp(
     position : ndarray, shape (3,) or None
         ECEF position [m], or None if underdetermined / failed to converge.
     """
-    sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
-    pr = np.asarray(pseudoranges, dtype=np.float64).ravel()
+    _validate_solver_options(max_iter, threshold, weight_func, convergence_m, min_satellites)
+
+    sat = _as_satellite_matrix(sat_ecef)
+    pr = _as_vector(pseudoranges, "pseudoranges")
     n_sat = len(pr)
+
+    if len(sat) != n_sat:
+        raise ValueError(
+            f"sat_ecef has {len(sat)} satellites but pseudoranges has {n_sat} values"
+        )
 
     if n_sat < 4:
         return None
@@ -63,11 +70,15 @@ def robust_spp(
     if weights is None:
         w_elev = np.ones(n_sat, dtype=np.float64)
     else:
-        w_elev = np.asarray(weights, dtype=np.float64).ravel().copy()
+        w_elev = _as_vector(weights, "weights").copy()
+        if len(w_elev) != n_sat:
+            raise ValueError(f"weights has {len(w_elev)} values but pseudoranges has {n_sat}")
+        if np.any(w_elev < 0.0):
+            raise ValueError("weights must be non-negative")
 
     # State: [x, y, z, clock_bias]
     if init_pos is not None:
-        pos = np.asarray(init_pos, dtype=np.float64).ravel()[:3].copy()
+        pos = _as_initial_position(init_pos)
     else:
         pos = sat.mean(axis=0).copy()
 
@@ -125,6 +136,54 @@ def robust_spp(
             break
 
     return state[:3].copy()
+
+
+def _as_satellite_matrix(value: np.ndarray) -> np.ndarray:
+    """Return satellite coordinates as a finite ``(n_sat, 3)`` float array."""
+    arr = np.asarray(value, dtype=np.float64)
+    if arr.ndim == 1:
+        if arr.size % 3 != 0:
+            raise ValueError("sat_ecef flat input length must be divisible by 3")
+        arr = arr.reshape(-1, 3)
+    elif arr.ndim != 2 or arr.shape[1] != 3:
+        raise ValueError("sat_ecef must have shape (n_sat, 3) or be a flat xyz array")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("sat_ecef must contain only finite values")
+    return arr
+
+
+def _as_vector(value: np.ndarray, name: str) -> np.ndarray:
+    """Return a finite 1-D float vector."""
+    arr = np.asarray(value, dtype=np.float64).ravel()
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{name} must contain only finite values")
+    return arr
+
+
+def _as_initial_position(value: np.ndarray) -> np.ndarray:
+    arr = _as_vector(value, "init_pos")
+    if len(arr) < 3:
+        raise ValueError("init_pos must contain at least 3 values")
+    return arr[:3].copy()
+
+
+def _validate_solver_options(
+    max_iter: int,
+    threshold: float,
+    weight_func: str,
+    convergence_m: float,
+    min_satellites: int,
+) -> None:
+    if max_iter < 1:
+        raise ValueError("max_iter must be >= 1")
+    if not np.isfinite(threshold) or threshold <= 0.0:
+        raise ValueError("threshold must be a finite positive value")
+    if not np.isfinite(convergence_m) or convergence_m <= 0.0:
+        raise ValueError("convergence_m must be a finite positive value")
+    if min_satellites < 4:
+        raise ValueError("min_satellites must be >= 4")
+    if weight_func not in {"cauchy", "huber"}:
+        raise ValueError(f"Unknown weight function: {weight_func}")
 
 
 def _compute_robust_weights(

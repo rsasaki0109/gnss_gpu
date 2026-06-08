@@ -10,7 +10,8 @@ import pytest
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT / "python"))
 
-from gnss_gpu.robust_spp import robust_spp, _compute_robust_weights
+import gnss_gpu  # noqa: E402
+from gnss_gpu.robust_spp import robust_spp, _compute_robust_weights  # noqa: E402
 
 
 def _make_synthetic_scenario(
@@ -79,6 +80,11 @@ class TestComputeRobustWeights:
         np.testing.assert_array_almost_equal(w, [0.5, 0.25])
 
 
+def test_robust_spp_is_available_from_package_top_level():
+    assert gnss_gpu.robust_spp is robust_spp
+    assert "robust_spp" in gnss_gpu.__all__
+
+
 class TestRobustSPP:
     # True position near Tokyo (ECEF)
     TRUE_POS = np.array([-3_959_340.0, 3_352_854.0, 3_697_471.0])
@@ -140,6 +146,44 @@ class TestRobustSPP:
         pr = np.array([1e7, 1e7, 1e7])
         result = robust_spp(sat, pr)
         assert result is None
+
+    def test_mismatched_satellite_and_pseudorange_counts_raise_clear_error(self):
+        """Input length mistakes should fail before NumPy broadcasting errors."""
+        sat, pr, _ = _make_synthetic_scenario(self.TRUE_POS, n_sat=5)
+        with pytest.raises(ValueError, match="sat_ecef has 5 satellites"):
+            robust_spp(sat, pr[:4])
+
+    def test_weights_length_mismatch_raises_clear_error(self):
+        sat, pr, _ = _make_synthetic_scenario(self.TRUE_POS, n_sat=5)
+        with pytest.raises(ValueError, match="weights has 4 values"):
+            robust_spp(sat, pr, weights=np.ones(4))
+
+    def test_negative_weights_raise_clear_error(self):
+        sat, pr, _ = _make_synthetic_scenario(self.TRUE_POS, n_sat=5)
+        weights = np.ones(5)
+        weights[2] = -1.0
+        with pytest.raises(ValueError, match="weights must be non-negative"):
+            robust_spp(sat, pr, weights=weights)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"max_iter": 0}, "max_iter must be >= 1"),
+            ({"threshold": 0.0}, "threshold must be a finite positive value"),
+            ({"convergence_m": 0.0}, "convergence_m must be a finite positive value"),
+            ({"min_satellites": 3}, "min_satellites must be >= 4"),
+            ({"weight_func": "tukey"}, "Unknown weight function"),
+        ],
+    )
+    def test_invalid_solver_options_raise_clear_error(self, kwargs, message):
+        sat, pr, _ = _make_synthetic_scenario(self.TRUE_POS, n_sat=5)
+        with pytest.raises(ValueError, match=message):
+            robust_spp(sat, pr, **kwargs)
+
+    def test_invalid_init_pos_raises_clear_error(self):
+        sat, pr, _ = _make_synthetic_scenario(self.TRUE_POS, n_sat=5)
+        with pytest.raises(ValueError, match="init_pos must contain at least 3 values"):
+            robust_spp(sat, pr, init_pos=np.array([1.0, 2.0]))
 
     def test_no_init_pos(self):
         """Should work without init_pos (uses satellite centroid)."""
