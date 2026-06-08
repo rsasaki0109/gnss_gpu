@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cmath>
 #include <stdexcept>
+#include <vector>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include "gnss_gpu/coordinates.h"
@@ -31,9 +32,9 @@ PYBIND11_MODULE(_gnss_gpu, m) {
       if (!std::isfinite(x_ptr[i]) || !std::isfinite(y_ptr[i]) || !std::isfinite(z_ptr[i]))
         throw std::runtime_error("ecef_to_lla: coordinates must be finite");
     }
-    auto lat = py::array_t<double>(n);
-    auto lon = py::array_t<double>(n);
-    auto alt = py::array_t<double>(n);
+    auto lat = py::array_t<double>(std::vector<py::ssize_t>{n});
+    auto lon = py::array_t<double>(std::vector<py::ssize_t>{n});
+    auto alt = py::array_t<double>(std::vector<py::ssize_t>{n});
     gnss_gpu::ecef_to_lla(x_ptr, y_ptr, z_ptr,
                           static_cast<double*>(lat.request().ptr),
                           static_cast<double*>(lon.request().ptr),
@@ -59,9 +60,9 @@ PYBIND11_MODULE(_gnss_gpu, m) {
       if (!std::isfinite(lat_ptr[i]) || !std::isfinite(lon_ptr[i]) || !std::isfinite(alt_ptr[i]))
         throw std::runtime_error("lla_to_ecef: coordinates must be finite");
     }
-    auto x = py::array_t<double>(n);
-    auto y = py::array_t<double>(n);
-    auto z = py::array_t<double>(n);
+    auto x = py::array_t<double>(std::vector<py::ssize_t>{n});
+    auto y = py::array_t<double>(std::vector<py::ssize_t>{n});
+    auto z = py::array_t<double>(std::vector<py::ssize_t>{n});
     gnss_gpu::lla_to_ecef(lat_ptr, lon_ptr, alt_ptr,
                           static_cast<double*>(x.request().ptr),
                           static_cast<double*>(y.request().ptr),
@@ -86,8 +87,8 @@ PYBIND11_MODULE(_gnss_gpu, m) {
     }
     if (n_sat < 1)
       throw std::runtime_error("satellite_azel requires at least one satellite");
-    auto az = py::array_t<double>(n_sat);
-    auto el = py::array_t<double>(n_sat);
+    auto az = py::array_t<double>(std::vector<py::ssize_t>{n_sat});
+    auto el = py::array_t<double>(std::vector<py::ssize_t>{n_sat});
     gnss_gpu::satellite_azel(rx, ry, rz, static_cast<double*>(buf.ptr),
                              static_cast<double*>(az.request().ptr),
                              static_cast<double*>(el.request().ptr), n_sat);
@@ -155,7 +156,7 @@ PYBIND11_MODULE(_gnss_gpu, m) {
     if (tol <= 0.0)
       throw std::runtime_error("wls_batch: tol must be positive");
     auto results = py::array_t<double>({n_epoch, 4});
-    auto iters = py::array_t<int>(n_epoch);
+    auto iters = py::array_t<int>(std::vector<py::ssize_t>{n_epoch});
     gnss_gpu::wls_batch(static_cast<double*>(bs.ptr),
                          static_cast<double*>(bp.ptr),
                          static_cast<double*>(bw.ptr),

@@ -1,5 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
+#include <vector>
 #include "gnss_gpu/doppler.h"
 
 namespace py = pybind11;
@@ -53,7 +54,7 @@ PYBIND11_MODULE(_gnss_gpu_doppler, m) {
     int n_sat = bs.shape[1];
 
     auto results = py::array_t<double>({n_epoch, 4});
-    auto iters = py::array_t<int>(n_epoch);
+    auto iters = py::array_t<int>(std::vector<py::ssize_t>{n_epoch});
 
     gnss_gpu::doppler_velocity_batch(
         static_cast<double*>(bs.ptr),

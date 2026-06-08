@@ -41,6 +41,7 @@ void ecef_to_lla(const double* ecef_x, const double* ecef_y, const double* ecef_
   int block = 256;
   int grid = (n + block - 1) / block;
   ecef_to_lla_kernel<<<grid, block>>>(d_ex, d_ey, d_ez, d_lat, d_lon, d_alt, n);
+  CUDA_CHECK_LAST();
 
   CUDA_CHECK(cudaMemcpy(lat, d_lat, sz, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(lon, d_lon, sz, cudaMemcpyDeviceToHost));
@@ -80,6 +81,7 @@ void lla_to_ecef(const double* lat, const double* lon, const double* alt,
   int block = 256;
   int grid = (n + block - 1) / block;
   lla_to_ecef_kernel<<<grid, block>>>(d_lat, d_lon, d_alt, d_ex, d_ey, d_ez, n);
+  CUDA_CHECK_LAST();
 
   CUDA_CHECK(cudaMemcpy(ecef_x, d_ex, sz, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(ecef_y, d_ey, sz, cudaMemcpyDeviceToHost));
@@ -135,6 +137,7 @@ void satellite_azel(double rx, double ry, double rz,
   int grid = (n_sat + block - 1) / block;
   satellite_azel_kernel<<<grid, block>>>(rx, ry, rz, sin_lat, cos_lat, sin_lon, cos_lon,
                                          d_sat, d_az, d_el, n_sat);
+  CUDA_CHECK_LAST();
 
   CUDA_CHECK(cudaMemcpy(az, d_az, sz, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(el, d_el, sz, cudaMemcpyDeviceToHost));

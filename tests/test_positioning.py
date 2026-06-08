@@ -157,6 +157,49 @@ def test_ecef_lla_roundtrip():
     assert abs(z[0] - z2[0]) < 0.01
 
 
+def _lla_to_ecef_reference(lat, lon, alt):
+    a = 6378137.0
+    f = 1.0 / 298.257223563
+    e2 = 2.0 * f - f * f
+    sin_lat = np.sin(lat)
+    cos_lat = np.cos(lat)
+    sin_lon = np.sin(lon)
+    cos_lon = np.cos(lon)
+    n = a / np.sqrt(1.0 - e2 * sin_lat * sin_lat)
+    return np.column_stack(
+        [
+            (n + alt) * cos_lat * cos_lon,
+            (n + alt) * cos_lat * sin_lon,
+            (n * (1.0 - e2) + alt) * sin_lat,
+        ]
+    )
+
+
+def test_lla_to_ecef_handles_distinct_batch_points():
+    lat = np.radians(np.array([0.0, 0.0, 45.0]))
+    lon = np.radians(np.array([0.0, 90.0, 0.0]))
+    alt = np.array([0.0, 0.0, 100.0])
+
+    x, y, z = lla_to_ecef(lat, lon, alt)
+
+    expected = _lla_to_ecef_reference(lat, lon, alt)
+    actual = np.column_stack([x, y, z])
+    np.testing.assert_allclose(actual, expected, atol=1e-3)
+
+
+def test_ecef_to_lla_handles_distinct_batch_points():
+    lat = np.radians(np.array([0.0, 0.0, 45.0]))
+    lon = np.radians(np.array([0.0, 90.0, 0.0]))
+    alt = np.array([0.0, 0.0, 100.0])
+    ecef = _lla_to_ecef_reference(lat, lon, alt)
+
+    out_lat, out_lon, out_alt = ecef_to_lla(ecef[:, 0], ecef[:, 1], ecef[:, 2])
+
+    np.testing.assert_allclose(out_lat, lat, atol=1e-9)
+    np.testing.assert_allclose(out_lon, lon, atol=1e-9)
+    np.testing.assert_allclose(out_alt, alt, atol=1e-3)
+
+
 def test_ecef_to_lla_rejects_invalid_inputs():
     x = np.array([-3957199.0])
     y = np.array([3310205.0])
@@ -209,6 +252,24 @@ def test_satellite_azel_accepts_flat_and_matrix_inputs():
     assert el_matrix.shape == (2,)
     assert np.all(np.isfinite(az_matrix))
     assert np.all(np.isfinite(el_matrix))
+
+
+def test_satellite_azel_matches_local_enu_axes():
+    rx = np.array([6378137.0, 0.0, 0.0])
+    slant_range_m = 20_000_000.0
+    sat_ecef = np.array(
+        [
+            [rx[0] + slant_range_m, 0.0, 0.0],  # up
+            [rx[0], slant_range_m, 0.0],        # east horizon
+            [rx[0], 0.0, slant_range_m],        # north horizon
+            [rx[0] - slant_range_m, 0.0, 0.0],  # down
+        ]
+    )
+
+    az, el = satellite_azel(rx[0], rx[1], rx[2], sat_ecef)
+
+    np.testing.assert_allclose(az, [0.0, np.pi / 2.0, 0.0, 0.0], atol=1e-12)
+    np.testing.assert_allclose(el, [np.pi / 2.0, 0.0, 0.0, -np.pi / 2.0], atol=1e-12)
 
 
 def test_satellite_azel_rejects_invalid_satellite_input():
