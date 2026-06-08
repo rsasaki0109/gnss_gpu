@@ -60,6 +60,20 @@ def test_raim_clean_data():
     assert raim.hpl < 1e6  # Should be a reasonable value, not infinity
 
 
+def test_raim_accepts_matrix_satellite_input():
+    sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
+
+    result, _ = wls_position(sat_ecef, pseudoranges, weights)
+
+    raim_flat = raim_check(sat_ecef.ravel(), pseudoranges, weights, result)
+    raim_matrix = raim_check(sat_ecef, pseudoranges, weights, result)
+
+    assert raim_matrix.integrity_ok == raim_flat.integrity_ok
+    assert raim_matrix.excluded_sat == raim_flat.excluded_sat
+    assert raim_matrix.test_statistic == pytest.approx(raim_flat.test_statistic)
+    assert raim_matrix.threshold == pytest.approx(raim_flat.threshold)
+
+
 def test_raim_detects_faulty_satellite():
     """A large pseudorange error on one satellite should be detected."""
     sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
@@ -102,6 +116,20 @@ def test_fde_excludes_faulty_satellite():
     # Corrected position should be close to truth
     pos_err = np.linalg.norm(corrected_pos[:3] - true_pos)
     assert pos_err < 1.0, f"Corrected position error {pos_err:.4f} m (expected < 1 m)"
+
+
+def test_raim_fde_accepts_matrix_satellite_input():
+    sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
+    faulty_pr = pseudoranges.copy()
+    faulty_pr[3] += 500.0
+
+    result, _ = wls_position(sat_ecef, faulty_pr, weights)
+
+    raim, corrected_pos = raim_fde(sat_ecef, faulty_pr, weights, result)
+
+    assert raim.integrity_ok
+    assert raim.excluded_sat == 3
+    assert np.linalg.norm(corrected_pos[:3] - true_pos) < 1.0
 
 
 def test_raim_with_noise():
@@ -155,3 +183,60 @@ def test_raim_insufficient_satellites():
     # (we trust the solution since we can't test it)
     assert raim.integrity_ok
     assert raim.test_statistic == 0.0
+
+
+def test_raim_rejects_invalid_inputs():
+    sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
+    result, _ = wls_position(sat_ecef, pseudoranges, weights)
+
+    with pytest.raises(RuntimeError, match="pseudoranges must have shape"):
+        raim_check(sat_ecef, pseudoranges.reshape(-1, 1), weights, result)
+
+    with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+        raim_check(sat_ecef.ravel()[:-1], pseudoranges, weights, result)
+
+    with pytest.raises(RuntimeError, match="weights must have shape"):
+        raim_check(sat_ecef, pseudoranges, weights[:-1], result)
+
+    with pytest.raises(RuntimeError, match="position must have shape"):
+        raim_check(sat_ecef, pseudoranges, weights, result.reshape(1, 4))
+
+    with pytest.raises(RuntimeError, match="p_fa must be in"):
+        raim_check(sat_ecef, pseudoranges, weights, result, p_fa=0.0)
+
+
+def test_raim_rejects_nonfinite_inputs():
+    sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
+    result, _ = wls_position(sat_ecef, pseudoranges, weights)
+
+    bad_sat = sat_ecef.copy()
+    bad_sat[0, 0] = np.nan
+    with pytest.raises(RuntimeError, match="satellite positions must be finite"):
+        raim_check(bad_sat, pseudoranges, weights, result)
+
+    bad_pr = pseudoranges.copy()
+    bad_pr[0] = np.inf
+    with pytest.raises(RuntimeError, match="pseudoranges must be finite"):
+        raim_check(sat_ecef, bad_pr, weights, result)
+
+    bad_weights = weights.copy()
+    bad_weights[0] = -1.0
+    with pytest.raises(RuntimeError, match="weights must be finite and nonnegative"):
+        raim_check(sat_ecef, pseudoranges, bad_weights, result)
+
+    bad_result = result.copy()
+    bad_result[0] = np.nan
+    with pytest.raises(RuntimeError, match="position must be finite"):
+        raim_check(sat_ecef, pseudoranges, weights, bad_result)
+
+
+def test_raim_fde_rejects_more_than_64_satellites():
+    sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
+    result, _ = wls_position(sat_ecef, pseudoranges, weights)
+    n_sat = 65
+    sat_many = np.resize(sat_ecef, (n_sat, 3))
+    pr_many = np.resize(pseudoranges, n_sat)
+    w_many = np.ones(n_sat)
+
+    with pytest.raises(RuntimeError, match="supports at most 64 satellites"):
+        raim_fde(sat_many, pr_many, w_many, result)
