@@ -2,6 +2,20 @@
 
 Runnable demos for `gnss_gpu`. Run them from the repo root with `PYTHONPATH=python`.
 
+## Which demo should I run?
+
+| Goal | Run this | Needs GPU build? | Needs downloaded data? |
+|---|---|---:|---:|
+| See the core idea quickly | [`demo_urban_canyon_sim.py`](demo_urban_canyon_sim.py) | No | No |
+| Inspect NLOS measurement effects | [`demo_nlos_simulation.py`](demo_nlos_simulation.py) | No | No |
+| Try the shipped PLATEAU sample | [`demo_plateau_nlos_simulation.py`](demo_plateau_nlos_simulation.py) | No | No |
+| Generate a standalone PLATEAU HTML report | [`demo_plateau_nlos_visualization.py`](demo_plateau_nlos_visualization.py) | No | No |
+| Exercise signal simulation/acquisition kernels | [`demo_signal_sim.py`](demo_signal_sim.py) | Yes | No |
+| Run real-data or full particle-filter flows | [`demo_real_data.py`](demo_real_data.py), [`demo_full_pipeline.py`](demo_full_pipeline.py) | Yes | Usually |
+
+Start with the first row after a fresh clone. Build CUDA/C++ only when you want
+to run the kernel-backed demos listed near the bottom of this page.
+
 ## Start here — no GPU, no build, no data
 
 ```bash
