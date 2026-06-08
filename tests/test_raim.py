@@ -8,6 +8,8 @@ from gnss_gpu.range_model import geometric_ranges_sagnac
 try:
     from gnss_gpu._gnss_gpu import wls_position
     from gnss_gpu._gnss_gpu_raim import raim_check, raim_fde
+    from gnss_gpu.raim import raim_check as wrapper_raim_check
+    from gnss_gpu.raim import raim_fde as wrapper_raim_fde
     HAS_GPU = True
 except ImportError:
     HAS_GPU = False
@@ -240,3 +242,70 @@ def test_raim_fde_rejects_more_than_64_satellites():
 
     with pytest.raises(RuntimeError, match="supports at most 64 satellites"):
         raim_fde(sat_many, pr_many, w_many, result)
+
+
+def test_raim_wrapper_accepts_matrix_satellite_input():
+    sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
+    result, _ = wls_position(sat_ecef, pseudoranges, weights)
+
+    raim = wrapper_raim_check(sat_ecef, pseudoranges, weights, result)
+
+    assert raim.integrity_ok
+    assert raim.excluded_sat == -1
+
+
+def test_raim_wrapper_rejects_invalid_inputs():
+    sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
+    result, _ = wls_position(sat_ecef, pseudoranges, weights)
+
+    with pytest.raises(RuntimeError, match="pseudoranges must have shape"):
+        wrapper_raim_check(sat_ecef, pseudoranges.reshape(-1, 1), weights, result)
+
+    with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+        wrapper_raim_check(sat_ecef.ravel()[:-1], pseudoranges, weights, result)
+
+    with pytest.raises(RuntimeError, match="weights must have shape"):
+        wrapper_raim_check(sat_ecef, pseudoranges, weights[:-1], result)
+
+    with pytest.raises(RuntimeError, match="position must have shape"):
+        wrapper_raim_check(sat_ecef, pseudoranges, weights, result.reshape(1, 4))
+
+    with pytest.raises(RuntimeError, match="p_fa must be in"):
+        wrapper_raim_check(sat_ecef, pseudoranges, weights, result, p_fa=0.0)
+
+
+def test_raim_wrapper_rejects_nonfinite_inputs():
+    sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
+    result, _ = wls_position(sat_ecef, pseudoranges, weights)
+
+    bad_sat = sat_ecef.copy()
+    bad_sat[0, 0] = np.nan
+    with pytest.raises(RuntimeError, match="satellite positions must be finite"):
+        wrapper_raim_check(bad_sat, pseudoranges, weights, result)
+
+    bad_pr = pseudoranges.copy()
+    bad_pr[0] = np.inf
+    with pytest.raises(RuntimeError, match="pseudoranges must be finite"):
+        wrapper_raim_check(sat_ecef, bad_pr, weights, result)
+
+    bad_weights = weights.copy()
+    bad_weights[0] = -1.0
+    with pytest.raises(RuntimeError, match="weights must be finite and nonnegative"):
+        wrapper_raim_check(sat_ecef, pseudoranges, bad_weights, result)
+
+    bad_result = result.copy()
+    bad_result[0] = np.nan
+    with pytest.raises(RuntimeError, match="position must be finite"):
+        wrapper_raim_check(sat_ecef, pseudoranges, weights, bad_result)
+
+
+def test_raim_wrapper_fde_rejects_more_than_64_satellites():
+    sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
+    result, _ = wls_position(sat_ecef, pseudoranges, weights)
+    n_sat = 65
+    sat_many = np.resize(sat_ecef, (n_sat, 3))
+    pr_many = np.resize(pseudoranges, n_sat)
+    w_many = np.ones(n_sat)
+
+    with pytest.raises(RuntimeError, match="supports at most 64 satellites"):
+        wrapper_raim_fde(sat_many, pr_many, w_many, result)
