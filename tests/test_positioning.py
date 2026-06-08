@@ -58,6 +58,40 @@ def test_wls_single():
     assert iters <= 10
 
 
+def test_wls_single_accepts_matrix_satellite_input():
+    sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
+    result, iters = wls_position(sat_ecef, pseudoranges, weights)
+    pos = result[:3]
+    cb = result[3]
+
+    assert np.linalg.norm(pos - true_pos) < 0.01
+    assert abs(cb - true_cb) < 0.01
+    assert iters <= 10
+
+
+def test_wls_single_rejects_shape_mismatch():
+    sat_ecef, pseudoranges, weights, *_ = _make_test_scenario()
+
+    with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+        wls_position(sat_ecef.flatten()[:-1], pseudoranges, weights)
+
+    with pytest.raises(RuntimeError, match="weights length must match"):
+        wls_position(sat_ecef, pseudoranges, weights[:-1])
+
+    with pytest.raises(RuntimeError, match="pseudoranges must have shape"):
+        wls_position(sat_ecef, pseudoranges.reshape(-1, 1), weights)
+
+
+def test_wls_single_rejects_invalid_options():
+    sat_ecef, pseudoranges, weights, *_ = _make_test_scenario()
+
+    with pytest.raises(RuntimeError, match="max_iter must be >= 1"):
+        wls_position(sat_ecef, pseudoranges, weights, max_iter=0)
+
+    with pytest.raises(RuntimeError, match="tol must be positive"):
+        wls_position(sat_ecef, pseudoranges, weights, tol=0.0)
+
+
 def test_wls_batch():
     sat_ecef, pseudoranges, weights, true_pos, true_cb = _make_test_scenario()
     n_epoch = 100
@@ -73,6 +107,35 @@ def test_wls_batch():
     for i in range(n_epoch):
         err = np.linalg.norm(results[i, :3] - true_pos)
         assert err < 20.0, f"Epoch {i}: position error {err:.2f} m"
+
+
+def test_wls_batch_rejects_shape_mismatch():
+    sat_ecef, pseudoranges, weights, *_ = _make_test_scenario()
+    sat_batch = np.tile(sat_ecef, (3, 1, 1))
+    pr_batch = np.tile(pseudoranges, (3, 1))
+    w_batch = np.tile(weights, (3, 1))
+
+    with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+        wls_batch(sat_batch.reshape(3, -1), pr_batch, w_batch)
+
+    with pytest.raises(RuntimeError, match="pseudoranges shape must match"):
+        wls_batch(sat_batch, pr_batch[:, :-1], w_batch)
+
+    with pytest.raises(RuntimeError, match="weights shape must match"):
+        wls_batch(sat_batch, pr_batch, w_batch[:, :-1])
+
+
+def test_wls_batch_rejects_invalid_options():
+    sat_ecef, pseudoranges, weights, *_ = _make_test_scenario()
+    sat_batch = np.tile(sat_ecef, (3, 1, 1))
+    pr_batch = np.tile(pseudoranges, (3, 1))
+    w_batch = np.tile(weights, (3, 1))
+
+    with pytest.raises(RuntimeError, match="max_iter must be >= 1"):
+        wls_batch(sat_batch, pr_batch, w_batch, max_iter=0)
+
+    with pytest.raises(RuntimeError, match="tol must be positive"):
+        wls_batch(sat_batch, pr_batch, w_batch, tol=0.0)
 
 
 def test_ecef_lla_roundtrip():
