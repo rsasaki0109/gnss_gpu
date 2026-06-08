@@ -6,7 +6,13 @@ import pytest
 from gnss_gpu.range_model import geometric_ranges_sagnac
 
 try:
-    from gnss_gpu._gnss_gpu import wls_position, wls_batch, ecef_to_lla, lla_to_ecef
+    from gnss_gpu._gnss_gpu import (
+        wls_position,
+        wls_batch,
+        ecef_to_lla,
+        lla_to_ecef,
+        satellite_azel,
+    )
     HAS_GPU = True
 except ImportError:
     HAS_GPU = False
@@ -149,3 +155,39 @@ def test_ecef_lla_roundtrip():
     assert abs(x[0] - x2[0]) < 0.01
     assert abs(y[0] - y2[0]) < 0.01
     assert abs(z[0] - z2[0]) < 0.01
+
+
+def test_satellite_azel_accepts_flat_and_matrix_inputs():
+    rx = np.array([6378137.0, 0.0, 0.0])
+    sat_ecef = np.array([
+        [6378137.0 + 20_000_000.0, 0.0, 0.0],
+        [6378137.0, 20_000_000.0, 0.0],
+    ])
+
+    az_matrix, el_matrix = satellite_azel(rx[0], rx[1], rx[2], sat_ecef)
+    az_flat, el_flat = satellite_azel(rx[0], rx[1], rx[2], sat_ecef.ravel())
+
+    np.testing.assert_allclose(az_flat, az_matrix)
+    np.testing.assert_allclose(el_flat, el_matrix)
+    assert az_matrix.shape == (2,)
+    assert el_matrix.shape == (2,)
+    assert np.all(np.isfinite(az_matrix))
+    assert np.all(np.isfinite(el_matrix))
+
+
+def test_satellite_azel_rejects_invalid_satellite_input():
+    rx = np.array([6378137.0, 0.0, 0.0])
+
+    with pytest.raises(RuntimeError, match="flat sat_ecef length must be divisible by 3"):
+        satellite_azel(rx[0], rx[1], rx[2], np.zeros(5))
+
+    with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+        satellite_azel(rx[0], rx[1], rx[2], np.zeros((2, 2)))
+
+    with pytest.raises(RuntimeError, match="requires at least one satellite"):
+        satellite_azel(rx[0], rx[1], rx[2], np.empty((0, 3)))
+
+
+def test_satellite_azel_rejects_nonfinite_receiver():
+    with pytest.raises(RuntimeError, match="receiver ECEF coordinates must be finite"):
+        satellite_azel(np.nan, 0.0, 0.0, np.zeros((1, 3)))
