@@ -8,6 +8,8 @@ namespace gnss_gpu {
 // weights: [n_sat] observation weights (1/sigma^2)
 // result: [4] output (x, y, z, clock_bias) in ECEF [m]
 // returns number of iterations used
+// Applies first-order Earth-rotation (Sagnac) range correction internally.
+// Pass raw satellite ECEF positions; do not pre-rotate satellites for Sagnac.
 int wls_position(const double* sat_ecef, const double* pseudoranges,
                  const double* weights, double* result,
                  int n_sat, int max_iter = 10, double tol = 1e-4);
@@ -18,6 +20,7 @@ int wls_position(const double* sat_ecef, const double* pseudoranges,
 // weights: [n_epoch * n_sat]
 // results: [n_epoch * 4] output
 // iters: [n_epoch] iterations used per epoch (optional, can be nullptr)
+// Applies the same first-order Sagnac correction as wls_position().
 void wls_batch(const double* sat_ecef, const double* pseudoranges,
                const double* weights, double* results, int* iters,
                int n_epoch, int n_sat, int max_iter = 10, double tol = 1e-4);
