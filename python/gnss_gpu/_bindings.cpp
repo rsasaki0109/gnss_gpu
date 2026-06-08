@@ -66,7 +66,7 @@ PYBIND11_MODULE(_gnss_gpu, m) {
                                         result_ptr,
                                         n_sat, max_iter, tol);
     return py::make_tuple(result, iters);
-  }, "Single-epoch WLS positioning",
+  }, "Single-epoch WLS positioning with internal first-order Sagnac range correction",
      py::arg("sat_ecef"), py::arg("pseudoranges"), py::arg("weights"),
      py::arg("max_iter") = 10, py::arg("tol") = 1e-4);
 
@@ -86,7 +86,7 @@ PYBIND11_MODULE(_gnss_gpu, m) {
                          static_cast<int*>(iters.request().ptr),
                          n_epoch, n_sat, max_iter, tol);
     return py::make_tuple(results, iters);
-  }, "Batch WLS positioning (GPU parallel)",
+  }, "Batch WLS positioning (GPU parallel) with internal first-order Sagnac range correction",
      py::arg("sat_ecef"), py::arg("pseudoranges"), py::arg("weights"),
      py::arg("max_iter") = 10, py::arg("tol") = 1e-4);
 
