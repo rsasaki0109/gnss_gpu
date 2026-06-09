@@ -8,14 +8,92 @@ import numpy as np
 
 try:
     from gnss_gpu._gnss_gpu_atmosphere import (
-        tropo_saastamoinen,
-        iono_klobuchar,
+        tropo_saastamoinen,  # noqa: F401
+        iono_klobuchar,  # noqa: F401
         tropo_correction_batch,
         iono_correction_batch,
     )
     _HAS_GPU = True
 except ImportError:
     _HAS_GPU = False
+
+
+_DEFAULT_ALPHA = [1.1176e-8, -7.4506e-9, -5.9605e-8, 1.1921e-7]
+_DEFAULT_BETA = [1.1264e5, -3.2768e4, -2.6214e5, 4.5875e5]
+
+
+def _array(name, values):
+    try:
+        return np.asarray(values, dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"{name} must be numeric") from exc
+
+
+def _iono_params(name, values):
+    values = _array(f"AtmosphereCorrection: {name}", values)
+    if values.ndim != 1 or values.size != 4:
+        raise RuntimeError(f"AtmosphereCorrection: {name} must have shape (4,)")
+    if not np.isfinite(values).all():
+        raise RuntimeError(f"AtmosphereCorrection: {name} must be finite")
+    return values.astype(np.float64, copy=False).tolist()
+
+
+def _rx_lla_array(name, rx_lla):
+    rx_lla = _array(f"{name}: rx_lla", rx_lla)
+    if rx_lla.ndim == 1:
+        if rx_lla.size != 3:
+            raise RuntimeError(f"{name}: rx_lla must have shape (3,) or (n_epoch, 3)")
+        n_epoch = 1
+        single_epoch = True
+    elif rx_lla.ndim == 2 and rx_lla.shape[1] == 3:
+        n_epoch = rx_lla.shape[0]
+        if n_epoch < 1:
+            raise RuntimeError(f"{name}: n_epoch must be >= 1")
+        single_epoch = False
+    else:
+        raise RuntimeError(f"{name}: rx_lla must have shape (3,) or (n_epoch, 3)")
+
+    if not np.isfinite(rx_lla).all():
+        raise RuntimeError(f"{name}: rx_lla must be finite")
+
+    return np.ascontiguousarray(rx_lla, dtype=np.float64), single_epoch, n_epoch
+
+
+def _sat_angles(name, label, values, single_epoch, n_epoch):
+    values = _array(f"{name}: {label}", values)
+    if single_epoch and values.ndim == 0:
+        values = values.reshape(1)
+
+    if single_epoch:
+        if values.ndim != 1:
+            raise RuntimeError(f"{name}: {label} must have shape (n_sat,)")
+        n_sat = values.size
+    else:
+        if values.ndim != 2 or values.shape[0] != n_epoch:
+            raise RuntimeError(f"{name}: {label} must have shape (n_epoch, n_sat)")
+        n_sat = values.shape[1]
+
+    if n_sat < 1:
+        raise RuntimeError(f"{name}: n_sat must be >= 1")
+    if not np.isfinite(values).all():
+        raise RuntimeError(f"{name}: {label} must be finite")
+
+    return np.ascontiguousarray(values, dtype=np.float64), n_sat
+
+
+def _gps_times(name, gps_time, n_epoch):
+    gps_times = _array(f"{name}: gps_time", gps_time)
+    if gps_times.ndim == 0:
+        if n_epoch != 1:
+            raise RuntimeError(f"{name}: gps_time must have shape (n_epoch,)")
+        gps_times = gps_times.reshape(1)
+    elif gps_times.ndim != 1 or gps_times.size != n_epoch:
+        raise RuntimeError(f"{name}: gps_time must have shape (n_epoch,)")
+
+    if not np.isfinite(gps_times).all():
+        raise RuntimeError(f"{name}: gps_time must be finite")
+
+    return np.ascontiguousarray(gps_times, dtype=np.float64)
 
 
 def _tropo_saastamoinen_cpu(lat, alt, el):
@@ -97,8 +175,14 @@ class AtmosphereCorrection:
 
     def __init__(self, iono_alpha=None, iono_beta=None):
         # Default alpha/beta from GPS broadcast (typical values)
-        self.alpha = iono_alpha or [1.1176e-8, -7.4506e-9, -5.9605e-8, 1.1921e-7]
-        self.beta = iono_beta or [1.1264e5, -3.2768e4, -2.6214e5, 4.5875e5]
+        self.alpha = _iono_params(
+            "iono_alpha",
+            _DEFAULT_ALPHA if iono_alpha is None else iono_alpha,
+        )
+        self.beta = _iono_params(
+            "iono_beta",
+            _DEFAULT_BETA if iono_beta is None else iono_beta,
+        )
 
     def tropo(self, rx_lla, sat_el):
         """Compute tropospheric delay correction.
@@ -115,23 +199,25 @@ class AtmosphereCorrection:
         numpy.ndarray
             Tropospheric delay corrections in meters.
         """
-        rx_lla = np.asarray(rx_lla, dtype=np.float64)
-        sat_el = np.asarray(sat_el, dtype=np.float64)
+        rx_lla, single_epoch, n_epoch = _rx_lla_array(
+            "AtmosphereCorrection.tropo", rx_lla
+        )
+        sat_el, _ = _sat_angles(
+            "AtmosphereCorrection.tropo", "sat_el", sat_el, single_epoch, n_epoch
+        )
 
         if _HAS_GPU:
-            return np.asarray(tropo_correction_batch(
-                np.ascontiguousarray(rx_lla),
-                np.ascontiguousarray(sat_el)))
+            return np.asarray(tropo_correction_batch(rx_lla, sat_el))
 
         # CPU fallback
-        if rx_lla.ndim == 1:
+        if single_epoch:
             return _tropo_saastamoinen_cpu(rx_lla[0], rx_lla[2], sat_el)
-        else:
-            results = np.empty_like(sat_el)
-            for i in range(rx_lla.shape[0]):
-                results[i] = _tropo_saastamoinen_cpu(
-                    rx_lla[i, 0], rx_lla[i, 2], sat_el[i])
-            return results
+
+        results = np.empty_like(sat_el)
+        for i in range(rx_lla.shape[0]):
+            results[i] = _tropo_saastamoinen_cpu(
+                rx_lla[i, 0], rx_lla[i, 2], sat_el[i])
+        return results
 
     def iono(self, rx_lla, sat_az, sat_el, gps_time):
         """Compute ionospheric delay correction.
@@ -152,37 +238,42 @@ class AtmosphereCorrection:
         numpy.ndarray
             Ionospheric delay corrections in meters (L1 frequency).
         """
-        rx_lla = np.asarray(rx_lla, dtype=np.float64)
-        sat_az = np.asarray(sat_az, dtype=np.float64)
-        sat_el = np.asarray(sat_el, dtype=np.float64)
-        gps_times = np.atleast_1d(np.asarray(gps_time, dtype=np.float64))
+        rx_lla, single_epoch, n_epoch = _rx_lla_array(
+            "AtmosphereCorrection.iono", rx_lla
+        )
+        sat_az, n_sat = _sat_angles(
+            "AtmosphereCorrection.iono", "sat_az", sat_az, single_epoch, n_epoch
+        )
+        sat_el, n_sat_el = _sat_angles(
+            "AtmosphereCorrection.iono", "sat_el", sat_el, single_epoch, n_epoch
+        )
+        if n_sat_el != n_sat:
+            raise RuntimeError(
+                "AtmosphereCorrection.iono: sat_az and sat_el must have matching shape"
+            )
+        gps_times = _gps_times("AtmosphereCorrection.iono", gps_time, n_epoch)
 
         alpha = np.array(self.alpha, dtype=np.float64)
         beta = np.array(self.beta, dtype=np.float64)
 
         if _HAS_GPU:
             return np.asarray(iono_correction_batch(
-                np.ascontiguousarray(rx_lla),
-                np.ascontiguousarray(sat_az),
-                np.ascontiguousarray(sat_el),
-                np.ascontiguousarray(alpha),
-                np.ascontiguousarray(beta),
-                np.ascontiguousarray(gps_times)))
+                rx_lla, sat_az, sat_el, alpha, beta, gps_times))
 
         # CPU fallback
-        if rx_lla.ndim == 1:
+        if single_epoch:
             return _iono_klobuchar_cpu(
                 self.alpha, self.beta,
                 rx_lla[0], rx_lla[1],
                 sat_az, sat_el, gps_times[0])
-        else:
-            results = np.empty_like(sat_el)
-            for i in range(rx_lla.shape[0]):
-                results[i] = _iono_klobuchar_cpu(
-                    self.alpha, self.beta,
-                    rx_lla[i, 0], rx_lla[i, 1],
-                    sat_az[i], sat_el[i], gps_times[i])
-            return results
+
+        results = np.empty_like(sat_el)
+        for i in range(rx_lla.shape[0]):
+            results[i] = _iono_klobuchar_cpu(
+                self.alpha, self.beta,
+                rx_lla[i, 0], rx_lla[i, 1],
+                sat_az[i], sat_el[i], gps_times[i])
+        return results
 
     def total(self, rx_lla, sat_az, sat_el, gps_time=0.0):
         """Compute total atmospheric delay (tropospheric + ionospheric).

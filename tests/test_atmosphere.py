@@ -161,6 +161,14 @@ class TestAtmosphereCorrection:
         assert atm.alpha == alpha
         assert atm.beta == beta
 
+    def test_init_rejects_invalid_iono_params(self):
+        """Invalid Klobuchar parameters should fail with clear messages."""
+        with pytest.raises(RuntimeError, match="iono_alpha must have shape"):
+            AtmosphereCorrection(iono_alpha=[1e-8, 2e-8, 3e-8])
+
+        with pytest.raises(RuntimeError, match="iono_beta must be finite"):
+            AtmosphereCorrection(iono_beta=[1e5, 2e5, np.inf, 4e5])
+
     def test_tropo_single_epoch(self):
         """Test tropo correction with single epoch."""
         atm = AtmosphereCorrection()
@@ -221,6 +229,104 @@ class TestAtmosphereCorrection:
         total = atm.total(rx_lla, sat_az, sat_el, gps_times)
         assert total.shape == (n_epoch, n_sat)
         assert np.all(total > 0)
+
+    def test_scalar_single_satellite_angles(self):
+        """Scalar angles should be accepted as one-satellite single-epoch input."""
+        atm = AtmosphereCorrection()
+        rx_lla = np.array([np.radians(45.0), np.radians(0.0), 0.0])
+
+        total = atm.total(rx_lla, np.radians(90.0), np.radians(45.0), 50400.0)
+
+        assert total.shape == (1,)
+        assert total[0] > 0
+
+    def test_tropo_rejects_invalid_inputs(self):
+        """Tropospheric wrapper validation should reject unsafe inputs."""
+        atm = AtmosphereCorrection()
+        rx_lla = np.array([np.radians(45.0), np.radians(0.0), 0.0])
+        sat_el = np.radians(np.array([30.0, 60.0]))
+
+        with pytest.raises(RuntimeError, match="rx_lla must have shape"):
+            atm.tropo([np.radians(45.0), 0.0], sat_el)
+
+        with pytest.raises(RuntimeError, match="sat_el must have shape"):
+            atm.tropo(rx_lla, sat_el.reshape(1, 2))
+
+        with pytest.raises(RuntimeError, match="n_sat must be >= 1"):
+            atm.tropo(rx_lla, np.array([]))
+
+        bad_rx = rx_lla.copy()
+        bad_rx[0] = np.nan
+        with pytest.raises(RuntimeError, match="rx_lla must be finite"):
+            atm.tropo(bad_rx, sat_el)
+
+        bad_el = sat_el.copy()
+        bad_el[0] = np.inf
+        with pytest.raises(RuntimeError, match="sat_el must be finite"):
+            atm.tropo(rx_lla, bad_el)
+
+        batch_rx = np.vstack([rx_lla, rx_lla])
+        batch_el = np.vstack([sat_el, sat_el])
+        with pytest.raises(RuntimeError, match="sat_el must have shape"):
+            atm.tropo(batch_rx, batch_el[:1])
+
+    def test_iono_rejects_invalid_inputs(self):
+        """Ionospheric wrapper validation should reject unsafe inputs."""
+        atm = AtmosphereCorrection()
+        rx_lla = np.array([np.radians(45.0), np.radians(0.0), 0.0])
+        sat_az = np.radians(np.array([0.0, 90.0]))
+        sat_el = np.radians(np.array([30.0, 60.0]))
+
+        with pytest.raises(RuntimeError, match="sat_az must have shape"):
+            atm.iono(rx_lla, sat_az.reshape(1, 2), sat_el, 50400.0)
+
+        with pytest.raises(
+            RuntimeError,
+            match="sat_az and sat_el must have matching shape",
+        ):
+            atm.iono(rx_lla, sat_az, sat_el[:1], 50400.0)
+
+        bad_az = sat_az.copy()
+        bad_az[0] = np.nan
+        with pytest.raises(RuntimeError, match="sat_az must be finite"):
+            atm.iono(rx_lla, bad_az, sat_el, 50400.0)
+
+        batch_rx = np.vstack([rx_lla, rx_lla])
+        batch_az = np.vstack([sat_az, sat_az])
+        batch_el = np.vstack([sat_el, sat_el])
+        with pytest.raises(RuntimeError, match="gps_time must have shape"):
+            atm.iono(batch_rx, batch_az, batch_el, 50400.0)
+
+        with pytest.raises(RuntimeError, match="gps_time must be finite"):
+            atm.iono(batch_rx, batch_az, batch_el, [50400.0, np.inf])
+
+    def test_native_batch_rejects_invalid_inputs(self):
+        """Native batch functions should validate direct calls too."""
+        native = pytest.importorskip("gnss_gpu._gnss_gpu_atmosphere")
+        rx_lla = np.array([np.radians(45.0), np.radians(0.0), 0.0])
+        sat_az = np.radians(np.array([0.0, 90.0]))
+        sat_el = np.radians(np.array([30.0, 60.0]))
+        alpha = np.zeros(4, dtype=np.float64)
+        beta = np.zeros(4, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="rx_lla must have shape"):
+            native.tropo_correction_batch(np.array([1.0, 2.0]), sat_el)
+
+        with pytest.raises(RuntimeError, match="sat_el must have shape"):
+            native.tropo_correction_batch(rx_lla, sat_el.reshape(1, 2))
+
+        with pytest.raises(RuntimeError, match="alpha and beta must have shape"):
+            native.iono_correction_batch(
+                rx_lla, sat_az, sat_el, alpha[:3], beta, [0.0]
+            )
+
+        batch_rx = np.vstack([rx_lla, rx_lla])
+        batch_az = np.vstack([sat_az, sat_az])
+        batch_el = np.vstack([sat_el, sat_el])
+        with pytest.raises(RuntimeError, match="gps_times must have shape"):
+            native.iono_correction_batch(
+                batch_rx, batch_az, batch_el, alpha, beta, [0.0]
+            )
 
 
 if __name__ == "__main__":
