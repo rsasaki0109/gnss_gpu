@@ -59,6 +59,13 @@ class TestCACodeGeneration:
             codes.add(code)
         assert len(codes) == 32
 
+    def test_invalid_prn_raises(self):
+        """Invalid PRN values must not index past the G2 tap table."""
+        with pytest.raises(RuntimeError, match="prn must be in"):
+            generate_ca_code(0)
+        with pytest.raises(RuntimeError, match="prn must be in"):
+            generate_ca_code(33)
+
 
 class TestAcquisition:
     """Test signal acquisition with synthetic GPS signals."""
@@ -147,3 +154,45 @@ class TestAcquisition:
 
         acquired = [r["prn"] for r in results if r["acquired"]]
         assert len(acquired) == 0, f"False acquisitions on noise: PRNs {acquired}"
+
+    def test_acquire_parallel_rejects_invalid_inputs(self):
+        """Direct binding should reject bad inputs before launching CUDA work."""
+        signal = np.ones(16, dtype=np.float32)
+        prn_list = np.array([1], dtype=np.int32)
+
+        with pytest.raises(RuntimeError, match="signal must be a 1D array"):
+            acquire_parallel(
+                np.ones((2, 8), dtype=np.float32), 4.092e6, 0.0, prn_list,
+                5000.0, 500.0, 2.5)
+        with pytest.raises(RuntimeError, match="signal must contain at least one sample"):
+            acquire_parallel(
+                np.array([], dtype=np.float32), 4.092e6, 0.0, prn_list,
+                5000.0, 500.0, 2.5)
+        bad_signal = signal.copy()
+        bad_signal[0] = np.nan
+        with pytest.raises(RuntimeError, match="signal must be finite"):
+            acquire_parallel(
+                bad_signal, 4.092e6, 0.0, prn_list, 5000.0, 500.0, 2.5)
+        with pytest.raises(RuntimeError, match="prn_list must contain"):
+            acquire_parallel(
+                signal, 4.092e6, 0.0, np.array([], dtype=np.int32),
+                5000.0, 500.0, 2.5)
+        with pytest.raises(RuntimeError, match="prn_list values must be in"):
+            acquire_parallel(
+                signal, 4.092e6, 0.0, np.array([0], dtype=np.int32),
+                5000.0, 500.0, 2.5)
+        with pytest.raises(RuntimeError, match="sampling_freq must be positive"):
+            acquire_parallel(
+                signal, 0.0, 0.0, prn_list, 5000.0, 500.0, 2.5)
+        with pytest.raises(RuntimeError, match="intermediate_freq must be finite"):
+            acquire_parallel(
+                signal, 4.092e6, np.inf, prn_list, 5000.0, 500.0, 2.5)
+        with pytest.raises(RuntimeError, match="doppler_range must be finite"):
+            acquire_parallel(
+                signal, 4.092e6, 0.0, prn_list, np.nan, 500.0, 2.5)
+        with pytest.raises(RuntimeError, match="doppler_step must be positive"):
+            acquire_parallel(
+                signal, 4.092e6, 0.0, prn_list, 5000.0, 0.0, 2.5)
+        with pytest.raises(RuntimeError, match="threshold must be finite"):
+            acquire_parallel(
+                signal, 4.092e6, 0.0, prn_list, 5000.0, 500.0, np.nan)

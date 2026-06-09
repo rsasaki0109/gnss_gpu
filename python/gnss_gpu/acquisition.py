@@ -3,16 +3,88 @@
 import numpy as np
 
 
+def _finite_float(name, value):
+    try:
+        out = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be numeric") from exc
+    if not np.isfinite(out):
+        raise ValueError(f"{name} must be finite")
+    return out
+
+
+def _positive_float(name, value):
+    out = _finite_float(name, value)
+    if out <= 0.0:
+        raise ValueError(f"{name} must be positive")
+    return out
+
+
+def _nonnegative_float(name, value):
+    out = _finite_float(name, value)
+    if out < 0.0:
+        raise ValueError(f"{name} must be non-negative")
+    return out
+
+
+def _validate_prn(name, value):
+    try:
+        prn = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if prn != value:
+        raise ValueError(f"{name} must be an integer")
+    if prn < 1 or prn > 32:
+        raise ValueError(f"{name} must be in [1, 32]")
+    return prn
+
+
+def _as_signal_array(signal):
+    arr = np.asarray(signal, dtype=np.float32)
+    if arr.ndim != 1:
+        raise ValueError("signal must be 1-D")
+    if arr.size == 0:
+        raise ValueError("signal must contain at least one sample")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("signal must be finite")
+    return np.ascontiguousarray(arr, dtype=np.float32)
+
+
+def _as_prn_array(prn_list):
+    arr = np.asarray(prn_list)
+    if arr.ndim != 1:
+        raise ValueError("prn_list must be 1-D")
+    if arr.size == 0:
+        raise ValueError("prn_list must contain at least one PRN")
+
+    if np.issubdtype(arr.dtype, np.integer):
+        prns = arr.astype(np.int64, copy=False)
+    else:
+        try:
+            numeric = arr.astype(np.float64)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("prn_list must contain integers") from exc
+        if not np.all(np.isfinite(numeric)):
+            raise ValueError("prn_list must contain integers")
+        if not np.all(numeric == np.floor(numeric)):
+            raise ValueError("prn_list must contain integers")
+        prns = numeric.astype(np.int64)
+
+    if np.any((prns < 1) | (prns > 32)):
+        raise ValueError("prn_list values must be in [1, 32]")
+    return np.ascontiguousarray(prns, dtype=np.int32)
+
+
 class Acquisition:
     """Parallel code-phase / Doppler search for GPS C/A signals."""
 
     def __init__(self, sampling_freq, intermediate_freq=0,
                  doppler_range=5000, doppler_step=500, threshold=2.5):
-        self.sampling_freq = float(sampling_freq)
-        self.intermediate_freq = float(intermediate_freq)
-        self.doppler_range = float(doppler_range)
-        self.doppler_step = float(doppler_step)
-        self.threshold = float(threshold)
+        self.sampling_freq = _positive_float("sampling_freq", sampling_freq)
+        self.intermediate_freq = _finite_float("intermediate_freq", intermediate_freq)
+        self.doppler_range = _nonnegative_float("doppler_range", doppler_range)
+        self.doppler_step = _positive_float("doppler_step", doppler_step)
+        self.threshold = _nonnegative_float("threshold", threshold)
 
     def acquire(self, signal, prn_list=None):
         """Run acquisition on the given signal.
@@ -24,13 +96,13 @@ class Acquisition:
         Returns:
             List of dicts with keys: prn, acquired, code_phase, doppler_hz, snr.
         """
-        from gnss_gpu._gnss_gpu_acq import acquire_parallel as _acquire
-
         if prn_list is None:
             prn_list = list(range(1, 33))
 
-        signal = np.asarray(signal, dtype=np.float32).ravel()
-        prn_arr = np.asarray(prn_list, dtype=np.int32)
+        signal = _as_signal_array(signal)
+        prn_arr = _as_prn_array(prn_list)
+
+        from gnss_gpu._gnss_gpu_acq import acquire_parallel as _acquire
 
         raw = _acquire(
             signal, self.sampling_freq, self.intermediate_freq,
@@ -56,10 +128,20 @@ class Acquisition:
         Returns:
             1-D float32 array of IF samples.
         """
-        from gnss_gpu._gnss_gpu_acq import generate_ca_code as _gen_code
+        prn = _validate_prn("prn", prn)
+        code_phase = _finite_float("code_phase", code_phase)
+        doppler = _finite_float("doppler", doppler)
+        snr_db = _finite_float("snr_db", snr_db)
+        sampling_freq = _positive_float("sampling_freq", sampling_freq)
+        duration_s = _positive_float("duration_s", duration_s)
+        intermediate_freq = _finite_float("intermediate_freq", intermediate_freq)
 
         n_samples = int(sampling_freq * duration_s)
+        if n_samples < 1:
+            raise ValueError("duration_s and sampling_freq must produce at least one sample")
         chip_rate = 1.023e6
+
+        from gnss_gpu._gnss_gpu_acq import generate_ca_code as _gen_code
 
         # Generate and resample C/A code
         code_1023 = np.array(_gen_code(prn), dtype=np.float32)
