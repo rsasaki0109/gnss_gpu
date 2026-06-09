@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Urban Canyon Playground — gnss_gpu</title>
+    <meta
+      name="description"
+      content="Interactive NLOS playground: block satellites yourself and watch plain least squares drift off the road while robust SPP holds on. Runs entirely in your browser."
+    />
+    <style>
+      :root {
+        --bg: #f5f7f4;
+        --panel: #ffffff;
+        --ink: #172126;
+        --muted: #5b676d;
+        --line: #d9e0df;
+        --teal: #0f766e;
+        --rust: #9f4f2f;
+        --gold: #bf8c32;
+        --naive: #e07b39;
+        --robust: #2d6cdf;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--bg);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .shell {
+        width: min(1180px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 54px;
+      }
+      .hero, .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      .hero { padding: 24px; }
+      .eyebrow, .label, .meta {
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      h1, h2, p { margin: 0; }
+      h1 {
+        margin-top: 8px;
+        font-size: clamp(1.9rem, 4vw, 3.2rem);
+        line-height: 1.02;
+      }
+      h2 { font-size: 1.15rem; }
+      .subtitle {
+        margin-top: 12px;
+        max-width: 78ch;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      main {
+        display: grid;
+        gap: 18px;
+        margin-top: 18px;
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+        gap: 14px;
+      }
+      .panel { padding: 18px; }
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: baseline;
+        margin-bottom: 10px;
+      }
+      canvas {
+        width: 100%;
+        height: auto;
+        display: block;
+        border-radius: 6px;
+        background: #fcfdfc;
+        border: 1px solid var(--line);
+        cursor: pointer;
+      }
+      #map-canvas { cursor: default; }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        align-items: end;
+      }
+      .control label {
+        display: block;
+        font-size: 0.84rem;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .control input[type="range"] { width: 100%; }
+      .control output {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        color: var(--teal);
+      }
+      .scoreboard {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .score {
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      .score .value {
+        margin-top: 8px;
+        font-size: 1.55rem;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.1;
+      }
+      .score.naive .value { color: var(--naive); }
+      .score.robust .value { color: var(--robust); }
+      .score.gain { background: #16302f; border-color: #16302f; color: #eef8f6; }
+      .score.gain .label { color: rgba(238, 248, 246, 0.72); }
+      .score.gain .value { color: #7ef0c7; }
+      .hint {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+      .warn {
+        color: var(--rust);
+        font-weight: 700;
+      }
+      button {
+        font: inherit;
+        font-weight: 700;
+        color: var(--teal);
+        background: #edf2f0;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px 14px;
+        cursor: pointer;
+      }
+      button:hover { color: var(--rust); }
+      a { color: var(--teal); text-decoration: none; font-weight: 700; }
+      a:hover { color: var(--rust); }
+      footer {
+        margin-top: 20px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+      @media (max-width: 880px) {
+        .two-col, .controls, .scoreboard { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <p class="eyebrow">gnss_gpu · interactive</p>
+        <h1>Urban Canyon Playground</h1>
+        <p class="subtitle">
+          A car drives east through a city at 18 km/h while you control the sky.
+          <strong>Click satellites in the sky plot to block them</strong> — blocked
+          satellites deliver a reflected (NLOS) signal whose range is biased long.
+          Every change instantly re-solves all 60 epochs two ways with identical
+          measurements: plain least squares vs. a Cauchy-weighted robust solver
+          (the same IRLS idea as <code>gnss_gpu.robust_spp</code>). No install,
+          no GPU — everything runs in your browser.
+        </p>
+      </header>
+      <main>
+        <section class="two-col">
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Sky plot — click a satellite to block / unblock it</h2>
+            </div>
+            <canvas id="sky-canvas" width="520" height="520"></canvas>
+            <p class="hint" id="sky-hint"></p>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Ground track — truth vs. the two solvers</h2>
+            </div>
+            <canvas id="map-canvas" width="640" height="520"></canvas>
+            <p class="hint">
+              Black: truth. <span style="color:var(--naive);font-weight:700;">Orange: naive WLS</span> —
+              every satellite trusted equally. <span style="color:var(--robust);font-weight:700;">Blue:
+              robust SPP</span> — large residuals softly down-weighted.
+            </p>
+          </article>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Controls</h2>
+            <button id="reset-btn" type="button">Reset scene</button>
+          </div>
+          <div class="controls">
+            <div class="control">
+              <label for="bias-slider">NLOS range bias <output id="bias-out"></output></label>
+              <input id="bias-slider" type="range" min="0" max="120" step="5" value="55" />
+            </div>
+            <div class="control">
+              <label for="noise-slider">Code noise σ <output id="noise-out"></output></label>
+              <input id="noise-slider" type="range" min="0.5" max="5" step="0.5" value="1.5" />
+            </div>
+            <div class="control">
+              <label for="thresh-slider">Cauchy threshold <output id="thresh-out"></output></label>
+              <input id="thresh-slider" type="range" min="3" max="60" step="1" value="15" />
+            </div>
+          </div>
+        </section>
+        <section class="scoreboard">
+          <div class="score naive">
+            <p class="label">naive WLS (L2)</p>
+            <p class="value" id="naive-score">—</p>
+          </div>
+          <div class="score robust">
+            <p class="label">robust SPP (Cauchy)</p>
+            <p class="value" id="robust-score">—</p>
+          </div>
+          <div class="score gain">
+            <p class="label">robust advantage</p>
+            <p class="value" id="gain-score">—</p>
+          </div>
+        </section>
+      </main>
+      <footer>
+        <p>
+          Things to try: block <em>more</em> satellites until the clean majority is gone and even the
+          robust solver gives up — robustness needs redundancy. Lower the Cauchy threshold to reject
+          harder; raise it toward 60 m and watch robust SPP degenerate into naive WLS.
+        </p>
+        <p style="margin-top:8px;">
+          This is the browser twin of
+          <a href="https://github.com/rsasaki0109/gnss_gpu/blob/main/examples/demo_urban_canyon_sim.py">examples/demo_urban_canyon_sim.py</a>
+          (also available as a
+          <a href="https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb">Colab notebook</a>).
+          Scaling this robust-weighting idea up — GPU particle filters, ray-traced NLOS against 3D city
+          meshes — is what lets <a href="https://github.com/rsasaki0109/gnss_gpu">gnss_gpu</a> beat
+          RTKLIB demo5 on real UrbanNav data. <a href="index.html">Back to the results snapshot</a>.
+        </p>
+      </footer>
+    </div>
+    <script>
+      // === core ===
+      // Deterministic PRNG (mulberry32) + Box-Muller gaussian, so every re-solve
+      // with the same settings gives the same picture.
+      function mulberry32(seed) {
+        let a = seed >>> 0;
+        return function () {
+          a |= 0; a = (a + 0x6D2B79F5) | 0;
+          let t = Math.imul(a ^ (a >>> 15), 1 | a);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+      function gaussian(rand) {
+        let u = 0, v = 0;
+        while (u === 0) u = rand();
+        while (v === 0) v = rand();
+        return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+      }
+
+      // Fixed sky geometry: (azimuth from north [deg], elevation [deg]).
+      // Same constellation as examples/demo_urban_canyon_sim.py.
+      const SATS_AZEL = [
+        [25, 70], [80, 62], [150, 55], [210, 68], [290, 58],
+        [330, 48], [45, 42], [110, 38], [180, 45], [260, 40],
+        [70, 15], [200, 18], [310, 12],
+      ];
+      const SLANT_RANGE_M = 21_000_000;
+      const N_EPOCHS = 60;
+      const SPEED_MPS = 5.0;
+      const CLOCK_BIAS_M = 1234.5;
+
+      // Satellite positions in the local East/North/Up frame.
+      function satPositions() {
+        return SATS_AZEL.map(([azDeg, elDeg]) => {
+          const az = (azDeg * Math.PI) / 180;
+          const el = (elDeg * Math.PI) / 180;
+          return [
+            SLANT_RANGE_M * Math.cos(el) * Math.sin(az),
+            SLANT_RANGE_M * Math.cos(el) * Math.cos(az),
+            SLANT_RANGE_M * Math.sin(el),
+          ];
+        });
+      }
+
+      function range3(a, b) {
+        const dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2];
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+      }
+
+      // Solve the 4x4 normal equations by Gaussian elimination with partial pivoting.
+      function solve4(A, b) {
+        const M = A.map((row, i) => [...row, b[i]]);
+        for (let col = 0; col < 4; col++) {
+          let piv = col;
+          for (let r = col + 1; r < 4; r++) {
+            if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+          }
+          if (Math.abs(M[piv][col]) < 1e-12) return null;
+          [M[col], M[piv]] = [M[piv], M[col]];
+          for (let r = 0; r < 4; r++) {
+            if (r === col) continue;
+            const f = M[r][col] / M[col][col];
+            for (let c = col; c < 5; c++) M[r][c] -= f * M[col][c];
+          }
+        }
+        return M.map((row, i) => row[4] / M[i][i]);
+      }
+
+      // IRLS pseudorange solve for state [e, n, u, clock_bias] — a faithful
+      // port of gnss_gpu.robust_spp: clock initialized from the median range
+      // residual, first iteration unweighted, then Cauchy weights on raw
+      // residuals. cauchyThreshold = Infinity recovers plain least squares.
+      // (Cross-checked bit-exact against the Python solver on shared inputs.)
+      function irlsSolve(sats, pseudoranges, initPos, cauchyThreshold) {
+        const n = sats.length;
+        const diffs = pseudoranges
+          .map((p, i) => p - range3(sats[i], initPos))
+          .sort((a, b) => a - b);
+        let state = [initPos[0], initPos[1], initPos[2], diffs[Math.floor(n / 2)]];
+        for (let iter = 0; iter < 10; iter++) {
+          const H = [], res = [], w = [];
+          for (let i = 0; i < n; i++) {
+            const r = Math.max(range3(sats[i], state), 1.0);
+            H.push([(state[0] - sats[i][0]) / r, (state[1] - sats[i][1]) / r, (state[2] - sats[i][2]) / r, 1]);
+            res.push(pseudoranges[i] - (r + state[3]));
+          }
+          for (let i = 0; i < n; i++) {
+            if (iter === 0 || !Number.isFinite(cauchyThreshold)) { w.push(1); continue; }
+            const z = Math.abs(res[i]) / cauchyThreshold;
+            w.push(1 / (1 + z * z));
+          }
+          // Same gate as the Python solver: too few effectively-weighted
+          // satellites means the fix is no longer trustworthy.
+          if (w.filter((wi) => wi > 0.1).length < 5) return null;
+          const AtA = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+          const Atb = [0, 0, 0, 0];
+          for (let i = 0; i < n; i++) {
+            for (let r = 0; r < 4; r++) {
+              Atb[r] += w[i] * H[i][r] * res[i];
+              for (let c = 0; c < 4; c++) AtA[r][c] += w[i] * H[i][r] * H[i][c];
+            }
+          }
+          const dx = solve4(AtA, Atb);
+          if (!dx) return null;
+          state = state.map((v, i) => v + dx[i]);
+          if (Math.hypot(dx[0], dx[1], dx[2]) < 1e-4) break;
+        }
+        return state;
+      }
+
+      // Per-satellite NLOS bias multipliers (0.55-1.45), the same draw the
+      // Python demo uses (uniform(30, 80) / 55 with its fixed seed). Stable
+      // per satellite so toggling one satellite never reshuffles the others;
+      // asymmetric so reflections do not cancel horizontally.
+      const BIAS_MULTS = [
+        0.5498, 1.3192, 1.4050, 1.1287, 1.3275, 1.3089, 0.8588,
+        1.3642, 1.1310, 0.7856, 1.4032, 0.7097, 0.6519,
+      ];
+
+      // Run the full 60-epoch drive for the current settings.
+      function runScenario(blockedMask, nlosBiasM, noiseSigmaM, cauchyThresholdM) {
+        const sats = satPositions();
+        const rand = mulberry32(20260525);
+        const biases = SATS_AZEL.map((_, i) =>
+          blockedMask[i] ? nlosBiasM * BIAS_MULTS[i] : 0
+        );
+        const init = [40, -30, 20];
+        const truth = [], naive = [], robust = [];
+        for (let k = 0; k < N_EPOCHS; k++) {
+          const rx = [SPEED_MPS * k, 0, 0];
+          const pr = sats.map(
+            (s, i) => range3(s, rx) + CLOCK_BIAS_M + noiseSigmaM * gaussian(rand) + biases[i]
+          );
+          const xN = irlsSolve(sats, pr, init, Number.POSITIVE_INFINITY);
+          const xR = irlsSolve(sats, pr, init, cauchyThresholdM);
+          truth.push(rx);
+          naive.push(xN);
+          robust.push(xR);
+        }
+        const errs = (est) =>
+          est.map((x, k) => (x ? Math.hypot(x[0] - truth[k][0], x[1] - truth[k][1]) : NaN));
+        const stats = (e) => {
+          const v = e.filter(Number.isFinite).sort((a, b) => a - b);
+          if (!v.length) return { p50: NaN, rms: NaN };
+          const p50 = v[Math.floor(v.length / 2)];
+          const rms = Math.sqrt(v.reduce((s, x) => s + x * x, 0) / v.length);
+          return { p50, rms };
+        };
+        return {
+          truth, naive, robust,
+          naiveStats: stats(errs(naive)),
+          robustStats: stats(errs(robust)),
+        };
+      }
+      // === /core ===
+
+      // ---------- UI ----------
+      const blocked = SATS_AZEL.map(([, el]) => el < 30); // city blocks low elevations
+      const skyCanvas = document.getElementById("sky-canvas");
+      const mapCanvas = document.getElementById("map-canvas");
+      const biasSlider = document.getElementById("bias-slider");
+      const noiseSlider = document.getElementById("noise-slider");
+      const threshSlider = document.getElementById("thresh-slider");
+
+      function settings() {
+        return {
+          bias: Number(biasSlider.value),
+          noise: Number(noiseSlider.value),
+          thresh: Number(threshSlider.value),
+        };
+      }
+
+      function skyXY(azDeg, elDeg, cx, cy, R) {
+        const r = ((90 - elDeg) / 90) * R;
+        const az = (azDeg * Math.PI) / 180; // az 0 = north = up, clockwise
+        return [cx + r * Math.sin(az), cy - r * Math.cos(az)];
+      }
+
+      function drawSky() {
+        const ctx = skyCanvas.getContext("2d");
+        const W = skyCanvas.width, H = skyCanvas.height;
+        const cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 - 28;
+        ctx.clearRect(0, 0, W, H);
+        ctx.strokeStyle = "#d9e0df";
+        ctx.fillStyle = "#5b676d";
+        ctx.font = "12px Inter, sans-serif";
+        [30, 60, 90].forEach((zd) => {
+          ctx.beginPath();
+          ctx.arc(cx, cy, (zd / 90) * R, 0, 2 * Math.PI);
+          ctx.stroke();
+        });
+        ctx.fillText("N", cx - 4, cy - R - 8);
+        ctx.fillText("E", cx + R + 6, cy + 4);
+        SATS_AZEL.forEach(([az, el], i) => {
+          const [x, y] = skyXY(az, el, cx, cy, R);
+          ctx.beginPath();
+          if (blocked[i]) {
+            ctx.fillStyle = "#c0392b";
+            ctx.arc(x, y, 11, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(x - 5, y - 5); ctx.lineTo(x + 5, y + 5);
+            ctx.moveTo(x + 5, y - 5); ctx.lineTo(x - 5, y + 5);
+            ctx.stroke();
+            ctx.lineWidth = 1;
+          } else {
+            ctx.fillStyle = "#1e8f5a";
+            ctx.arc(x, y, 11, 0, 2 * Math.PI);
+            ctx.fill();
+          }
+        });
+        const nBlocked = blocked.filter(Boolean).length;
+        const nClean = blocked.length - nBlocked;
+        const hint = document.getElementById("sky-hint");
+        if (nClean < 5) {
+          hint.innerHTML =
+            `${nClean} clean / ${nBlocked} blocked — <span class="warn">too few clean satellites:` +
+            ` the clean majority is gone, so even robust weighting cannot tell truth from bias.</span>`;
+        } else {
+          hint.textContent =
+            `${nClean} clean / ${nBlocked} blocked satellites. Each blocked satellite's range reads ` +
+            `0.55–1.45× the NLOS bias slider too long (a fixed per-satellite reflection geometry).`;
+        }
+      }
+
+      function drawMap(result) {
+        const ctx = mapCanvas.getContext("2d");
+        const W = mapCanvas.width, H = mapCanvas.height;
+        ctx.clearRect(0, 0, W, H);
+        const pts = [...result.truth, ...result.naive, ...result.robust].filter(Boolean);
+        let minE = Infinity, maxE = -Infinity, minN = Infinity, maxN = -Infinity;
+        pts.forEach((p) => {
+          minE = Math.min(minE, p[0]); maxE = Math.max(maxE, p[0]);
+          minN = Math.min(minN, p[1]); maxN = Math.max(maxN, p[1]);
+        });
+        const padE = Math.max(8, (maxE - minE) * 0.06);
+        const padN = Math.max(8, (maxN - minN) * 0.2);
+        minE -= padE; maxE += padE; minN -= padN; maxN += padN;
+        // Equal metres-per-pixel on both axes so the geometry is honest.
+        const scale = Math.min(W / (maxE - minE), H / (maxN - minN));
+        const ox = (W - scale * (maxE - minE)) / 2;
+        const oy = (H - scale * (maxN - minN)) / 2;
+        const toXY = (p) => [ox + (p[0] - minE) * scale, H - oy - (p[1] - minN) * scale];
+
+        // 10 m grid for scale feel (drawn only if it stays readable).
+        const gridStep = 10 * scale;
+        if (gridStep > 14) {
+          ctx.strokeStyle = "#eef2f0";
+          for (let e = Math.ceil(minE / 10) * 10; e <= maxE; e += 10) {
+            const [x] = toXY([e, minN, 0]);
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+          }
+          for (let n = Math.ceil(minN / 10) * 10; n <= maxN; n += 10) {
+            const [, y] = toXY([minE, n, 0]);
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+          }
+        }
+
+        function track(series, color, lineWidth) {
+          ctx.strokeStyle = color;
+          ctx.fillStyle = color;
+          ctx.lineWidth = lineWidth;
+          ctx.beginPath();
+          let started = false;
+          series.forEach((p) => {
+            if (!p) return;
+            const [x, y] = toXY(p);
+            if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+          });
+          ctx.stroke();
+          series.forEach((p) => {
+            if (!p) return;
+            const [x, y] = toXY(p);
+            ctx.beginPath(); ctx.arc(x, y, 2.4, 0, 2 * Math.PI); ctx.fill();
+          });
+          ctx.lineWidth = 1;
+        }
+        track(result.naive, "rgba(224, 123, 57, 0.85)", 1.4);
+        track(result.robust, "rgba(45, 108, 223, 0.85)", 1.4);
+        ctx.strokeStyle = "#172126";
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        const [x0, y0] = toXY(result.truth[0]);
+        ctx.moveTo(x0, y0);
+        result.truth.forEach((p) => { const [x, y] = toXY(p); ctx.lineTo(x, y); });
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.fillStyle = "#5b676d";
+        ctx.font = "12px Inter, sans-serif";
+        ctx.fillText("grid: 10 m", 10, H - 10);
+      }
+
+      function fmt(stats) {
+        if (!Number.isFinite(stats.p50)) return "no fix — too few trusted satellites";
+        return `P50 ${stats.p50.toFixed(2)} m · RMS ${stats.rms.toFixed(2)} m`;
+      }
+
+      function update() {
+        const s = settings();
+        document.getElementById("bias-out").value = `${s.bias} m`;
+        document.getElementById("noise-out").value = `${s.noise.toFixed(1)} m`;
+        document.getElementById("thresh-out").value = `${s.thresh} m`;
+        const result = runScenario(blocked, s.bias, s.noise, s.thresh);
+        drawSky();
+        drawMap(result);
+        document.getElementById("naive-score").textContent = fmt(result.naiveStats);
+        document.getElementById("robust-score").textContent = fmt(result.robustStats);
+        const gain = 100 * (1 - result.robustStats.p50 / Math.max(result.naiveStats.p50, 1e-9));
+        document.getElementById("gain-score").textContent =
+          Number.isFinite(gain) ? `${gain >= 0 ? "−" : "+"}${Math.abs(gain).toFixed(0)}% P50 error` : "—";
+      }
+
+      skyCanvas.addEventListener("click", (ev) => {
+        const rect = skyCanvas.getBoundingClientRect();
+        const px = ((ev.clientX - rect.left) / rect.width) * skyCanvas.width;
+        const py = ((ev.clientY - rect.top) / rect.height) * skyCanvas.height;
+        const cx = skyCanvas.width / 2, cy = skyCanvas.height / 2;
+        const R = Math.min(skyCanvas.width, skyCanvas.height) / 2 - 28;
+        let best = -1, bestD = 18;
+        SATS_AZEL.forEach(([az, el], i) => {
+          const [x, y] = skyXY(az, el, cx, cy, R);
+          const d = Math.hypot(px - x, py - y);
+          if (d < bestD) { best = i; bestD = d; }
+        });
+        if (best >= 0) {
+          blocked[best] = !blocked[best];
+          update();
+        }
+      });
+
+      [biasSlider, noiseSlider, threshSlider].forEach((sl) =>
+        sl.addEventListener("input", update)
+      );
+      document.getElementById("reset-btn").addEventListener("click", () => {
+        SATS_AZEL.forEach(([, el], i) => { blocked[i] = el < 30; });
+        biasSlider.value = "55";
+        noiseSlider.value = "1.5";
+        threshSlider.value = "15";
+        update();
+      });
+
+      update();
+    </script>
+  </body>
+</html>
