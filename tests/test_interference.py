@@ -8,7 +8,11 @@ from gnss_gpu.interference import InterferenceDetector
 
 # Skip all tests if GPU bindings are not available
 try:
-    from gnss_gpu._gnss_gpu_interference import compute_stft
+    from gnss_gpu._gnss_gpu_interference import (
+        compute_stft,
+        detect_interference,
+        excise_interference,
+    )
     HAS_GPU = True
 except ImportError:
     HAS_GPU = False
@@ -57,6 +61,25 @@ class TestSTFT:
         n_frames = (n_samples - detector.fft_size) // detector.hop_size + 1
         n_bins = detector.fft_size // 2 + 1
         assert spec.shape == (n_frames, n_bins)
+
+    def test_compute_stft_rejects_invalid_inputs(self):
+        """Direct binding should reject invalid STFT inputs before CUDA work."""
+        signal = np.ones(16, dtype=np.float32)
+
+        with pytest.raises(RuntimeError, match="signal must be a 1D array"):
+            compute_stft(np.ones((2, 8), dtype=np.float32), 8, 4, 10000.0)
+        with pytest.raises(RuntimeError, match="signal length must be >= fft_size"):
+            compute_stft(np.ones(7, dtype=np.float32), 8, 4, 10000.0)
+        bad_signal = signal.copy()
+        bad_signal[0] = np.nan
+        with pytest.raises(RuntimeError, match="signal must be finite"):
+            compute_stft(bad_signal, 8, 4, 10000.0)
+        with pytest.raises(RuntimeError, match="fft_size must be >= 2"):
+            compute_stft(signal, 1, 4, 10000.0)
+        with pytest.raises(RuntimeError, match="hop_size must be >= 1"):
+            compute_stft(signal, 8, 0, 10000.0)
+        with pytest.raises(RuntimeError, match="sampling_freq must be positive"):
+            compute_stft(signal, 8, 4, 0.0)
 
 
 class TestCWDetection:
@@ -109,6 +132,27 @@ class TestCWDetection:
             matches = [df for df in detected_freqs if abs(df - f) < 100.0]
             assert len(matches) >= 1, f"Failed to detect tone at {f} Hz"
 
+    def test_detect_interference_rejects_invalid_inputs(self):
+        """Direct binding should reject invalid spectrogram inputs."""
+        spec = np.ones((3, 5), dtype=np.float32)
+
+        with pytest.raises(RuntimeError, match="spectrogram must be 2D"):
+            detect_interference(np.ones(15, dtype=np.float32), 8, 10000.0, 15.0)
+        with pytest.raises(RuntimeError, match="n_frames must be >= 1"):
+            detect_interference(np.ones((0, 5), dtype=np.float32), 8, 10000.0, 15.0)
+        with pytest.raises(RuntimeError, match="spectrogram must have"):
+            detect_interference(np.ones((3, 4), dtype=np.float32), 8, 10000.0, 15.0)
+        bad_spec = spec.copy()
+        bad_spec[0, 0] = np.inf
+        with pytest.raises(RuntimeError, match="spectrogram must be finite"):
+            detect_interference(bad_spec, 8, 10000.0, 15.0)
+        with pytest.raises(RuntimeError, match="sampling_freq must be positive"):
+            detect_interference(spec, 8, 0.0, 15.0)
+        with pytest.raises(RuntimeError, match="threshold_db must be finite"):
+            detect_interference(spec, 8, 10000.0, np.nan)
+        with pytest.raises(RuntimeError, match="max_detections must be >= 1"):
+            detect_interference(spec, 8, 10000.0, 15.0, max_detections=0)
+
 
 class TestExcision:
     """Test interference excision."""
@@ -143,6 +187,32 @@ class TestExcision:
         signal = np.random.randn(n_samples).astype(np.float32)
         cleaned = detector.excise(signal)
         assert len(cleaned) == n_samples
+
+    def test_excise_interference_rejects_invalid_inputs(self):
+        """Direct binding should reject inconsistent excision inputs."""
+        signal = np.ones(16, dtype=np.float32)
+        spec = np.ones((3, 5), dtype=np.float32)
+
+        with pytest.raises(RuntimeError, match="input must be a 1D array"):
+            excise_interference(np.ones((2, 8), dtype=np.float32), spec, 8, 4, 15.0)
+        with pytest.raises(RuntimeError, match="input length must be >= fft_size"):
+            excise_interference(np.ones(7, dtype=np.float32), spec, 8, 4, 15.0)
+        bad_signal = signal.copy()
+        bad_signal[0] = np.inf
+        with pytest.raises(RuntimeError, match="input must be finite"):
+            excise_interference(bad_signal, spec, 8, 4, 15.0)
+        with pytest.raises(RuntimeError, match="hop_size must be >= 1"):
+            excise_interference(signal, spec, 8, 0, 15.0)
+        with pytest.raises(RuntimeError, match="threshold_db must be finite"):
+            excise_interference(signal, spec, 8, 4, np.nan)
+        with pytest.raises(RuntimeError, match="spectrogram must have"):
+            excise_interference(signal, np.ones((3, 4), dtype=np.float32), 8, 4, 15.0)
+        with pytest.raises(RuntimeError, match="spectrogram n_frames must match"):
+            excise_interference(signal, np.ones((2, 5), dtype=np.float32), 8, 4, 15.0)
+        bad_spec = spec.copy()
+        bad_spec[0, 0] = np.nan
+        with pytest.raises(RuntimeError, match="spectrogram must be finite"):
+            excise_interference(signal, bad_spec, 8, 4, 15.0)
 
 
 class TestCleanSignal:
