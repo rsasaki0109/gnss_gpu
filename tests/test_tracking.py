@@ -15,6 +15,7 @@ try:
         ChannelState,
         batch_correlate,
         scalar_tracking_update,
+        vector_tracking_update,
         cn0_nwpr,
     )
     HAS_GPU = True
@@ -70,6 +71,20 @@ def _get_ca_code(prn):
     if prn not in _ca_code_cache:
         _ca_code_cache[prn] = generate_ca_code(prn)
     return _ca_code_cache[prn]
+
+
+def _make_channel(prn=1, locked=True):
+    ch = ChannelState()
+    ch.prn = prn
+    ch.code_phase = 0.0
+    ch.code_freq = CA_CODE_RATE
+    ch.carrier_phase = 0.0
+    ch.carrier_freq = 4.092e6
+    ch.cn0 = 45.0
+    ch.dll_integrator = 0.0
+    ch.pll_integrator = 0.0
+    ch.locked = locked
+    return ch
 
 
 def generate_ca_signal(prn, code_phase, carrier_freq, n_samples,
@@ -267,6 +282,52 @@ class TestCorrelator:
         correlations = batch_correlate(signal, [ch], 1, n_samples, config)
         assert np.allclose(correlations, 0.0)
 
+    def test_batch_correlate_rejects_invalid_inputs(self):
+        """Direct binding should reject invalid correlator inputs before CUDA work."""
+        signal = np.ones(16, dtype=np.float32)
+        config = TrackingConfig(
+            sampling_freq=4.092e6,
+            intermediate_freq=4.092e6,
+            integration_time=1e-3,
+            dll_bandwidth=2.0,
+            pll_bandwidth=15.0,
+            correlator_spacing=0.5,
+        )
+        ch = _make_channel()
+
+        with pytest.raises(RuntimeError, match="signal must be a 1D array"):
+            batch_correlate(np.ones((2, 8), dtype=np.float32), [ch], 1, 16, config)
+        with pytest.raises(RuntimeError, match="n_samples must be >= 1"):
+            batch_correlate(signal, [ch], 1, 0, config)
+        with pytest.raises(RuntimeError, match="signal length must be >= n_samples"):
+            batch_correlate(signal, [ch], 1, 17, config)
+        bad_signal = signal.copy()
+        bad_signal[0] = np.nan
+        with pytest.raises(RuntimeError, match="signal must be finite"):
+            batch_correlate(bad_signal, [ch], 1, 16, config)
+        with pytest.raises(RuntimeError, match="n_channels must be >= 1"):
+            batch_correlate(signal, [], 0, 16, config)
+        with pytest.raises(RuntimeError, match="channels length must match"):
+            batch_correlate(signal, [], 1, 16, config)
+        bad_ch = _make_channel(prn=0)
+        with pytest.raises(RuntimeError, match="channel PRN must be in"):
+            batch_correlate(signal, [bad_ch], 1, 16, config)
+        bad_ch = _make_channel()
+        bad_ch.code_freq = 0.0
+        with pytest.raises(RuntimeError, match="channel code_freq must be positive"):
+            batch_correlate(signal, [bad_ch], 1, 16, config)
+        bad_config = TrackingConfig(
+            sampling_freq=4.092e6,
+            intermediate_freq=4.092e6,
+            integration_time=1e-3,
+            dll_bandwidth=2.0,
+            pll_bandwidth=15.0,
+            correlator_spacing=0.5,
+        )
+        bad_config.sampling_freq = 0.0
+        with pytest.raises(RuntimeError, match="sampling_freq must be positive"):
+            batch_correlate(signal, [ch], 1, 16, bad_config)
+
 
 # ============================================================
 # Test scalar tracking (requires GPU)
@@ -327,6 +388,84 @@ class TestScalarTracking:
 
         # Channel should still be locked
         assert ch.locked, "Channel should remain locked after 100 blocks"
+
+    def test_scalar_tracking_update_rejects_invalid_inputs(self):
+        """Direct binding should reject invalid scalar update inputs."""
+        config = TrackingConfig()
+        ch = _make_channel()
+        correlations = np.ones(6, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="n_channels must be >= 1"):
+            scalar_tracking_update([], correlations, 0, config)
+        with pytest.raises(RuntimeError, match="channels length must match"):
+            scalar_tracking_update([], correlations, 1, config)
+        with pytest.raises(RuntimeError, match="correlations must have"):
+            scalar_tracking_update([ch], np.ones(5, dtype=np.float64), 1, config)
+        bad_corr = correlations.copy()
+        bad_corr[0] = np.nan
+        with pytest.raises(RuntimeError, match="correlations must be finite"):
+            scalar_tracking_update([ch], bad_corr, 1, config)
+        bad_config = TrackingConfig()
+        bad_config.integration_time = 0.0
+        with pytest.raises(RuntimeError, match="integration_time must be positive"):
+            scalar_tracking_update([ch], correlations, 1, bad_config)
+
+
+@pytest.mark.skipif(not HAS_GPU, reason="GPU bindings not available")
+class TestVectorTracking:
+    """Test vector tracking direct binding validation."""
+
+    def test_vector_tracking_update_rejects_invalid_inputs(self):
+        config = TrackingConfig()
+        channels = [_make_channel(prn=i + 1) for i in range(4)]
+        correlations = np.ones(24, dtype=np.float64)
+        sat_ecef = np.ones((4, 3), dtype=np.float64)
+        sat_vel = np.ones((4, 3), dtype=np.float64)
+        nav_state = np.ones(8, dtype=np.float64)
+        nav_cov = np.eye(8, dtype=np.float64).ravel()
+
+        with pytest.raises(RuntimeError, match="supports at most 32 channels"):
+            vector_tracking_update(
+                [_make_channel(prn=(i % 32) + 1) for i in range(33)],
+                np.ones(33 * 6),
+                np.ones((33, 3)),
+                np.ones((33, 3)),
+                nav_state,
+                nav_cov,
+                33,
+                config,
+                1e-3,
+            )
+        with pytest.raises(RuntimeError, match="dt must be positive"):
+            vector_tracking_update(
+                channels, correlations, sat_ecef, sat_vel, nav_state, nav_cov,
+                4, config, 0.0)
+        with pytest.raises(RuntimeError, match="correlations must have"):
+            vector_tracking_update(
+                channels, np.ones(23), sat_ecef, sat_vel, nav_state, nav_cov,
+                4, config, 1e-3)
+        with pytest.raises(RuntimeError, match="sat_ecef must have"):
+            vector_tracking_update(
+                channels, correlations, np.ones((4, 2)), sat_vel, nav_state, nav_cov,
+                4, config, 1e-3)
+        with pytest.raises(RuntimeError, match="sat_vel must have"):
+            vector_tracking_update(
+                channels, correlations, sat_ecef, np.ones((4, 2)), nav_state, nav_cov,
+                4, config, 1e-3)
+        with pytest.raises(RuntimeError, match="nav_state must have at least 8"):
+            vector_tracking_update(
+                channels, correlations, sat_ecef, sat_vel, np.ones(7), nav_cov,
+                4, config, 1e-3)
+        with pytest.raises(RuntimeError, match="nav_cov must have at least 64"):
+            vector_tracking_update(
+                channels, correlations, sat_ecef, sat_vel, nav_state, np.ones(63),
+                4, config, 1e-3)
+        bad_sat = sat_ecef.copy()
+        bad_sat[0, 0] = np.inf
+        with pytest.raises(RuntimeError, match="sat_ecef must be finite"):
+            vector_tracking_update(
+                channels, correlations, bad_sat, sat_vel, nav_state, nav_cov,
+                4, config, 1e-3)
 
 
 # ============================================================
@@ -417,6 +556,23 @@ class TestCN0:
         for ch in range(n_channels):
             assert 35.0 <= cn0_out[ch] <= 70.0, \
                 f"Channel {ch} CN0 {cn0_out[ch]:.1f} dB-Hz outside range"
+
+    @pytest.mark.skipif(not HAS_GPU, reason="GPU bindings not available")
+    def test_cn0_gpu_rejects_invalid_inputs(self):
+        hist = np.ones((1, 2, 6), dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="n_channels must be >= 1"):
+            cn0_nwpr(hist, 0, 2, 1e-3)
+        with pytest.raises(RuntimeError, match="n_hist must be >= 2"):
+            cn0_nwpr(hist, 1, 1, 1e-3)
+        with pytest.raises(RuntimeError, match="T must be positive"):
+            cn0_nwpr(hist, 1, 2, 0.0)
+        with pytest.raises(RuntimeError, match="correlations_hist must have"):
+            cn0_nwpr(np.ones(11, dtype=np.float64), 1, 2, 1e-3)
+        bad_hist = hist.copy()
+        bad_hist[0, 0, 0] = np.nan
+        with pytest.raises(RuntimeError, match="correlations_hist must be finite"):
+            cn0_nwpr(bad_hist, 1, 2, 1e-3)
 
 
 # ============================================================
