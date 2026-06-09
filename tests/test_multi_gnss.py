@@ -218,6 +218,17 @@ class TestMultiGNSSGPU:
         err = np.linalg.norm(pos - true_pos)
         assert err < 0.01, f"Position error {err:.4f} m"
 
+    def test_single_system_gpu_accepts_matrix_input(self):
+        sat_ecef, pseudoranges, system_ids, true_pos, true_cb = _make_gps_scenario()
+        weights = np.ones(len(pseudoranges))
+
+        result, n_iter = wls_multi_gnss(
+            sat_ecef, pseudoranges, weights, system_ids, 1, 10, 1e-4)
+
+        np.testing.assert_allclose(result[:3], true_pos, atol=0.01)
+        assert result[3] == pytest.approx(true_cb, abs=0.01)
+        assert 0 < n_iter <= 10
+
     def test_dual_system_gpu(self):
         (sat_ecef, pseudoranges, system_ids, true_pos,
          true_cb_gps, isb_gal, _) = _make_multi_gnss_scenario(isb_galileo=10.0)
@@ -233,6 +244,64 @@ class TestMultiGNSSGPU:
         assert err < 0.1, f"Position error {err:.4f} m"
         isb_est = result[4] - result[3]  # cb_GAL - cb_GPS
         assert abs(isb_est - 10.0) < 0.1
+
+    def test_single_gpu_rejects_invalid_inputs(self):
+        (sat_ecef, pseudoranges, system_ids, true_pos,
+         true_cb_gps, isb_gal, _) = _make_multi_gnss_scenario(isb_galileo=10.0)
+        mapped = np.where(system_ids == SYSTEM_GALILEO, 1, 0).astype(np.int32)
+        sat_ecef = sat_ecef[:8]
+        pseudoranges = pseudoranges[:8]
+        mapped = mapped[:8]
+        weights = np.ones(len(pseudoranges))
+
+        with pytest.raises(RuntimeError, match="pseudoranges must have shape"):
+            wls_multi_gnss(sat_ecef, pseudoranges.reshape(-1, 1), weights, mapped, 2, 10, 1e-4)
+
+        with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+            wls_multi_gnss(sat_ecef.ravel()[:-1], pseudoranges, weights, mapped, 2, 10, 1e-4)
+
+        with pytest.raises(RuntimeError, match="weights must have shape"):
+            wls_multi_gnss(sat_ecef, pseudoranges, weights[:-1], mapped, 2, 10, 1e-4)
+
+        with pytest.raises(RuntimeError, match="system_ids must have shape"):
+            wls_multi_gnss(sat_ecef, pseudoranges, weights, mapped[:-1], 2, 10, 1e-4)
+
+        with pytest.raises(RuntimeError, match="n_systems must be in"):
+            wls_multi_gnss(sat_ecef, pseudoranges, weights, mapped, 0, 10, 1e-4)
+
+        with pytest.raises(RuntimeError, match="max_iter must be >= 1"):
+            wls_multi_gnss(sat_ecef, pseudoranges, weights, mapped, 2, 0, 1e-4)
+
+        with pytest.raises(RuntimeError, match="tol must be positive"):
+            wls_multi_gnss(sat_ecef, pseudoranges, weights, mapped, 2, 10, 0.0)
+
+    def test_single_gpu_rejects_nonfinite_and_invalid_systems(self):
+        (sat_ecef, pseudoranges, system_ids, true_pos,
+         true_cb_gps, isb_gal, _) = _make_multi_gnss_scenario(isb_galileo=10.0)
+        mapped = np.where(system_ids == SYSTEM_GALILEO, 1, 0).astype(np.int32)[:8]
+        sat_ecef = sat_ecef[:8]
+        pseudoranges = pseudoranges[:8]
+        weights = np.ones(len(pseudoranges))
+
+        bad_sat = sat_ecef.copy()
+        bad_sat[0, 0] = np.nan
+        with pytest.raises(RuntimeError, match="satellite positions must be finite"):
+            wls_multi_gnss(bad_sat, pseudoranges, weights, mapped, 2, 10, 1e-4)
+
+        bad_pr = pseudoranges.copy()
+        bad_pr[0] = np.inf
+        with pytest.raises(RuntimeError, match="pseudoranges must be finite"):
+            wls_multi_gnss(sat_ecef, bad_pr, weights, mapped, 2, 10, 1e-4)
+
+        bad_weights = weights.copy()
+        bad_weights[0] = -1.0
+        with pytest.raises(RuntimeError, match="weights must be finite and nonnegative"):
+            wls_multi_gnss(sat_ecef, pseudoranges, bad_weights, mapped, 2, 10, 1e-4)
+
+        bad_systems = mapped.copy()
+        bad_systems[0] = 2
+        with pytest.raises(RuntimeError, match="system_ids must be in"):
+            wls_multi_gnss(sat_ecef, pseudoranges, weights, bad_systems, 2, 10, 1e-4)
 
     def test_batch_gpu(self):
         (sat_ecef, pseudoranges, system_ids, true_pos,
@@ -258,3 +327,34 @@ class TestMultiGNSSGPU:
         for i in range(n_epoch):
             err = np.linalg.norm(results[i, :3] - true_pos)
             assert err < 20.0, f"Epoch {i}: position error {err:.2f} m"
+
+    def test_batch_gpu_rejects_invalid_inputs(self):
+        (sat_ecef, pseudoranges, system_ids, true_pos,
+         true_cb_gps, _, _) = _make_multi_gnss_scenario(isb_galileo=5.0)
+        n_epoch = 2
+        sat_batch = np.tile(sat_ecef, (n_epoch, 1, 1))
+        pr_batch = np.tile(pseudoranges, (n_epoch, 1))
+        weights = np.ones_like(pr_batch)
+        sys_map = {SYSTEM_GPS: 0, SYSTEM_GLONASS: 1, SYSTEM_GALILEO: 2}
+        mapped = np.array([sys_map[s] for s in system_ids], dtype=np.int32)
+        sys_batch = np.tile(mapped, (n_epoch, 1))
+
+        with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+            wls_multi_gnss_batch(sat_batch.reshape(n_epoch, -1), pr_batch, weights, sys_batch, 3, 10, 1e-4)
+
+        with pytest.raises(RuntimeError, match="requires at least 3 \\+ n_systems satellites"):
+            wls_multi_gnss_batch(sat_batch[:, :5], pr_batch[:, :5], weights[:, :5], sys_batch[:, :5], 3, 10, 1e-4)
+
+        with pytest.raises(RuntimeError, match="pseudoranges must have shape"):
+            wls_multi_gnss_batch(sat_batch, pr_batch[:, :-1], weights, sys_batch, 3, 10, 1e-4)
+
+        with pytest.raises(RuntimeError, match="weights must have shape"):
+            wls_multi_gnss_batch(sat_batch, pr_batch, weights[:, :-1], sys_batch, 3, 10, 1e-4)
+
+        with pytest.raises(RuntimeError, match="system_ids must have shape"):
+            wls_multi_gnss_batch(sat_batch, pr_batch, weights, sys_batch[:, :-1], 3, 10, 1e-4)
+
+        bad_systems = sys_batch.copy()
+        bad_systems[0, 0] = 3
+        with pytest.raises(RuntimeError, match="system_ids must be in"):
+            wls_multi_gnss_batch(sat_batch, pr_batch, weights, bad_systems, 3, 10, 1e-4)
