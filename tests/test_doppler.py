@@ -133,6 +133,75 @@ def test_doppler_insufficient_sats():
     assert iters == -1
 
 
+def test_doppler_velocity_wrapper_rejects_invalid_inputs():
+    sat_ecef, sat_vel, doppler, rx_pos, weights, *_ = _make_doppler_scenario()
+
+    with pytest.raises(RuntimeError, match="doppler must have shape"):
+        doppler_velocity(sat_ecef, sat_vel, doppler.reshape(-1, 1), rx_pos, weights)
+
+    with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+        doppler_velocity(sat_ecef.ravel()[:-1], sat_vel, doppler, rx_pos, weights)
+
+    with pytest.raises(RuntimeError, match="sat_vel must have shape"):
+        doppler_velocity(sat_ecef, sat_vel[:-1], doppler, rx_pos, weights)
+
+    with pytest.raises(RuntimeError, match="rx_pos must have shape"):
+        doppler_velocity(sat_ecef, sat_vel, doppler, rx_pos.reshape(1, 3), weights)
+
+    with pytest.raises(RuntimeError, match="weights must have shape"):
+        doppler_velocity(sat_ecef, sat_vel, doppler, rx_pos, weights[:-1])
+
+    with pytest.raises(RuntimeError, match="wavelength must be positive"):
+        doppler_velocity(sat_ecef, sat_vel, doppler, rx_pos, weights, wavelength=0.0)
+
+
+def test_doppler_velocity_wrapper_rejects_nonfinite_inputs():
+    sat_ecef, sat_vel, doppler, rx_pos, weights, *_ = _make_doppler_scenario()
+
+    bad_sat = sat_ecef.copy()
+    bad_sat[0, 0] = np.nan
+    with pytest.raises(RuntimeError, match="satellite positions and velocities must be finite"):
+        doppler_velocity(bad_sat, sat_vel, doppler, rx_pos, weights)
+
+    bad_doppler = doppler.copy()
+    bad_doppler[0] = np.inf
+    with pytest.raises(RuntimeError, match="doppler values must be finite"):
+        doppler_velocity(sat_ecef, sat_vel, bad_doppler, rx_pos, weights)
+
+    bad_weights = weights.copy()
+    bad_weights[0] = -1.0
+    with pytest.raises(RuntimeError, match="weights must be finite and nonnegative"):
+        doppler_velocity(sat_ecef, sat_vel, doppler, rx_pos, bad_weights)
+
+
+def test_doppler_velocity_batch_wrapper_rejects_invalid_inputs():
+    sat_ecef, sat_vel, doppler, rx_pos, weights, *_ = _make_doppler_scenario()
+    n_epoch = 2
+    sat_batch = np.tile(sat_ecef, (n_epoch, 1, 1))
+    svel_batch = np.tile(sat_vel, (n_epoch, 1, 1))
+    dop_batch = np.tile(doppler, (n_epoch, 1))
+    rx_batch = np.tile(rx_pos, (n_epoch, 1))
+    w_batch = np.tile(weights, (n_epoch, 1))
+
+    with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+        doppler_velocity_batch(sat_batch.reshape(n_epoch, -1), svel_batch, dop_batch, rx_batch, w_batch)
+
+    with pytest.raises(RuntimeError, match="requires at least 4 satellites"):
+        doppler_velocity_batch(sat_batch[:, :3], svel_batch[:, :3], dop_batch[:, :3], rx_batch, w_batch[:, :3])
+
+    with pytest.raises(RuntimeError, match="sat_vel shape must match"):
+        doppler_velocity_batch(sat_batch, svel_batch[:, :-1], dop_batch, rx_batch, w_batch)
+
+    with pytest.raises(RuntimeError, match="doppler must have shape"):
+        doppler_velocity_batch(sat_batch, svel_batch, dop_batch[:, :-1], rx_batch, w_batch)
+
+    with pytest.raises(RuntimeError, match="rx_pos must have shape"):
+        doppler_velocity_batch(sat_batch, svel_batch, dop_batch, rx_batch[:, :2], w_batch)
+
+    with pytest.raises(RuntimeError, match="weights must have shape"):
+        doppler_velocity_batch(sat_batch, svel_batch, dop_batch, rx_batch, w_batch[:, :-1])
+
+
 @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_doppler_gpu_single():
     """Test that GPU (native) single-epoch matches expected results."""

@@ -15,15 +15,126 @@ except ImportError:
 L1_WAVELENGTH = 0.19029367279836488
 
 
+def _validate_solver_options(name, wavelength, max_iter, tol):
+    if not np.isfinite(wavelength) or wavelength <= 0.0:
+        raise RuntimeError(f"{name}: wavelength must be positive and finite")
+    if max_iter < 1:
+        raise RuntimeError(f"{name}: max_iter must be >= 1")
+    if not np.isfinite(tol) or tol <= 0.0:
+        raise RuntimeError(f"{name}: tol must be positive and finite")
+
+
+def _sat_matrix(name, label, values, n_sat):
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.ndim == 1 and arr.size == n_sat * 3:
+        arr = arr.reshape(n_sat, 3)
+    elif not (arr.ndim == 2 and arr.shape == (n_sat, 3)):
+        raise RuntimeError(
+            f"{name}: {label} must have shape (n_sat, 3) or flat length n_sat*3"
+        )
+    return np.ascontiguousarray(arr, dtype=np.float64)
+
+
+def _validate_doppler_single(sat_ecef, sat_vel, doppler, rx_pos, weights, wavelength, max_iter, tol):
+    name = "doppler_velocity"
+    doppler = np.asarray(doppler, dtype=np.float64)
+    if doppler.ndim != 1:
+        raise RuntimeError(f"{name}: doppler must have shape (n_sat,)")
+    n_sat = doppler.size
+    if n_sat < 1:
+        raise RuntimeError(f"{name} requires at least one satellite")
+
+    sat_ecef = _sat_matrix(name, "sat_ecef", sat_ecef, n_sat)
+    sat_vel = _sat_matrix(name, "sat_vel", sat_vel, n_sat)
+
+    rx_pos = np.asarray(rx_pos, dtype=np.float64)
+    if rx_pos.ndim != 1 or rx_pos.size != 3:
+        raise RuntimeError(f"{name}: rx_pos must have shape (3,)")
+
+    if weights is None:
+        weights = np.ones(n_sat, dtype=np.float64)
+    else:
+        weights = np.asarray(weights, dtype=np.float64)
+        if weights.ndim != 1 or weights.size != n_sat:
+            raise RuntimeError(f"{name}: weights must have shape (n_sat,)")
+
+    _validate_solver_options(name, wavelength, max_iter, tol)
+
+    if not (np.isfinite(sat_ecef).all() and np.isfinite(sat_vel).all()):
+        raise RuntimeError(f"{name}: satellite positions and velocities must be finite")
+    if not np.isfinite(doppler).all():
+        raise RuntimeError(f"{name}: doppler values must be finite")
+    if not np.isfinite(rx_pos).all():
+        raise RuntimeError(f"{name}: rx_pos must be finite")
+    if not (np.isfinite(weights).all() and np.all(weights >= 0.0)):
+        raise RuntimeError(f"{name}: weights must be finite and nonnegative")
+
+    return (
+        sat_ecef,
+        sat_vel,
+        np.ascontiguousarray(doppler, dtype=np.float64),
+        np.ascontiguousarray(rx_pos, dtype=np.float64),
+        np.ascontiguousarray(weights, dtype=np.float64),
+    )
+
+
+def _validate_doppler_batch(sat_ecef, sat_vel, doppler, rx_pos, weights, wavelength, max_iter, tol):
+    name = "doppler_velocity_batch"
+    sat_ecef = np.asarray(sat_ecef, dtype=np.float64)
+    if sat_ecef.ndim != 3 or sat_ecef.shape[2] != 3:
+        raise RuntimeError(f"{name}: sat_ecef must have shape (n_epoch, n_sat, 3)")
+    n_epoch, n_sat, _ = sat_ecef.shape
+    if n_epoch < 1:
+        raise RuntimeError(f"{name}: n_epoch must be >= 1")
+    if n_sat < 4:
+        raise RuntimeError(f"{name} requires at least 4 satellites")
+
+    sat_vel = np.asarray(sat_vel, dtype=np.float64)
+    doppler = np.asarray(doppler, dtype=np.float64)
+    rx_pos = np.asarray(rx_pos, dtype=np.float64)
+    if sat_vel.ndim != 3 or sat_vel.shape != sat_ecef.shape:
+        raise RuntimeError(f"{name}: sat_vel shape must match sat_ecef")
+    if doppler.ndim != 2 or doppler.shape != (n_epoch, n_sat):
+        raise RuntimeError(f"{name}: doppler must have shape (n_epoch, n_sat)")
+    if rx_pos.ndim != 2 or rx_pos.shape != (n_epoch, 3):
+        raise RuntimeError(f"{name}: rx_pos must have shape (n_epoch, 3)")
+
+    if weights is None:
+        weights = np.ones((n_epoch, n_sat), dtype=np.float64)
+    else:
+        weights = np.asarray(weights, dtype=np.float64)
+        if weights.ndim != 2 or weights.shape != (n_epoch, n_sat):
+            raise RuntimeError(f"{name}: weights must have shape (n_epoch, n_sat)")
+
+    _validate_solver_options(name, wavelength, max_iter, tol)
+
+    if not (np.isfinite(sat_ecef).all() and np.isfinite(sat_vel).all()):
+        raise RuntimeError(f"{name}: satellite positions and velocities must be finite")
+    if not np.isfinite(doppler).all():
+        raise RuntimeError(f"{name}: doppler values must be finite")
+    if not np.isfinite(rx_pos).all():
+        raise RuntimeError(f"{name}: rx_pos must be finite")
+    if not (np.isfinite(weights).all() and np.all(weights >= 0.0)):
+        raise RuntimeError(f"{name}: weights must be finite and nonnegative")
+
+    return (
+        np.ascontiguousarray(sat_ecef, dtype=np.float64),
+        np.ascontiguousarray(sat_vel, dtype=np.float64),
+        np.ascontiguousarray(doppler, dtype=np.float64),
+        np.ascontiguousarray(rx_pos, dtype=np.float64),
+        np.ascontiguousarray(weights, dtype=np.float64),
+    )
+
+
 def doppler_velocity(sat_ecef, sat_vel, doppler, rx_pos, weights=None,
                      wavelength=L1_WAVELENGTH, max_iter=10, tol=1e-6):
     """Estimate receiver velocity from Doppler measurements using WLS.
 
     Parameters
     ----------
-    sat_ecef : array_like, shape (n_sat, 3)
+    sat_ecef : array_like, shape (n_sat, 3) or flat length n_sat*3
         Satellite ECEF positions [m].
-    sat_vel : array_like, shape (n_sat, 3)
+    sat_vel : array_like, shape (n_sat, 3) or flat length n_sat*3
         Satellite ECEF velocities [m/s].
     doppler : array_like, shape (n_sat,)
         Doppler frequency measurements [Hz].
@@ -45,20 +156,13 @@ def doppler_velocity(sat_ecef, sat_vel, doppler, rx_pos, weights=None,
     iters : int
         Number of iterations used.
     """
-    sat_ecef = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
-    sat_vel = np.asarray(sat_vel, dtype=np.float64).reshape(-1, 3)
-    doppler = np.asarray(doppler, dtype=np.float64).ravel()
-    rx_pos = np.asarray(rx_pos, dtype=np.float64).ravel()[:3]
-    n_sat = len(doppler)
-
-    if weights is None:
-        weights = np.ones(n_sat, dtype=np.float64)
-    else:
-        weights = np.asarray(weights, dtype=np.float64).ravel()
+    sat_ecef, sat_vel, doppler, rx_pos, weights = _validate_doppler_single(
+        sat_ecef, sat_vel, doppler, rx_pos, weights, wavelength, max_iter, tol
+    )
 
     if _HAS_NATIVE:
         return _doppler_velocity(
-            sat_ecef.ravel(), sat_vel.ravel(), doppler, rx_pos, weights,
+            sat_ecef, sat_vel, doppler, rx_pos, weights,
             wavelength, max_iter, tol)
 
     # Pure-Python fallback
@@ -97,17 +201,10 @@ def doppler_velocity_batch(sat_ecef, sat_vel, doppler, rx_pos, weights=None,
     iters : numpy.ndarray, shape (n_epoch,)
         Iterations used per epoch.
     """
-    sat_ecef = np.asarray(sat_ecef, dtype=np.float64)
-    sat_vel = np.asarray(sat_vel, dtype=np.float64)
-    doppler = np.asarray(doppler, dtype=np.float64)
-    rx_pos = np.asarray(rx_pos, dtype=np.float64)
+    sat_ecef, sat_vel, doppler, rx_pos, weights = _validate_doppler_batch(
+        sat_ecef, sat_vel, doppler, rx_pos, weights, wavelength, max_iter, tol
+    )
     n_epoch = sat_ecef.shape[0]
-    n_sat = sat_ecef.shape[1]
-
-    if weights is None:
-        weights = np.ones((n_epoch, n_sat), dtype=np.float64)
-    else:
-        weights = np.asarray(weights, dtype=np.float64)
 
     if _HAS_NATIVE:
         return _doppler_velocity_batch(
