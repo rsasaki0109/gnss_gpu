@@ -12,6 +12,7 @@ from __future__ import annotations
 import rclpy
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from sensor_msgs.msg import NavSatFix
 
@@ -42,6 +43,7 @@ class RobustNavSatFilter(Node):
         self._path.header.frame_id = str(self.get_parameter("path_frame_id").value)
         self._path_max = int(self.get_parameter("path_max_poses").value)
         self._n_outliers = 0
+        self._warned_zero_stamp = False
 
         self._pub_fix = self.create_publisher(NavSatFix, "fix_filtered", 10)
         self._pub_path = self.create_publisher(Path, "path_filtered", 10)
@@ -52,6 +54,15 @@ class RobustNavSatFilter(Node):
 
     def _on_fix(self, msg: NavSatFix) -> None:
         t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        if t == 0.0:
+            # Driver left header.stamp unset; fall back to receive time so the
+            # Kalman stage still sees monotonic timestamps.
+            if not self._warned_zero_stamp:
+                self._warned_zero_stamp = True
+                self.get_logger().warn(
+                    "incoming NavSatFix has zero header.stamp; using receive time"
+                )
+            t = self.get_clock().now().nanoseconds * 1e-9
         lat, lon, east, north, outlier = self._filter.update(
             t, msg.latitude, msg.longitude
         )
@@ -90,11 +101,12 @@ def main(args: list[str] | None = None) -> None:
     node = RobustNavSatFilter()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        # The rclpy signal handler may have shut the context down already.
+        rclpy.try_shutdown()
 
 
 if __name__ == "__main__":

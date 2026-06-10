@@ -20,7 +20,7 @@ setup(
         "constant-velocity Kalman filter on NavSatFix."
     ),
     license="Apache License 2.0",
-    tests_require=["pytest"],
+    extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [
             "robust_navsat_filter = gnss_gpu_ros.robust_navsat_filter_node:main",

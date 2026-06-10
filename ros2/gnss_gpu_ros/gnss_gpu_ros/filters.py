@@ -34,11 +34,17 @@ _DEFAULT_MAD_FLOOR_M = 0.056
 class CausalHampel:
     """Trailing-window Hampel outlier gate for one axis.
 
-    Keeps the last ``window`` accepted-or-replaced values; an incoming value
-    farther than ``k * 1.4826 * MAD`` (with a floor so a perfectly stationary
-    window does not flag noise) from the window median is replaced by that
-    median. During warm-up (fewer than ``min_samples`` values) everything
-    passes through.
+    Keeps the last ``window`` raw values; an incoming value farther than
+    ``k * 1.4826 * MAD`` (with a floor so a perfectly stationary window does
+    not flag noise) from the window median is *output* as that median, but the
+    raw value still enters the window. Feeding raw values (never the median)
+    into the window is what lets the gate recover from genuine sustained
+    motion changes — a departure from a stop or a re-acquisition jump after an
+    outage shifts the median within about half a window. As a faster escape
+    hatch, after ``max_consecutive`` flagged samples in a row the gate stands
+    down and passes raw values until the stream looks consistent again.
+    During warm-up (fewer than ``min_samples`` values) everything passes
+    through.
     """
 
     def __init__(
@@ -47,15 +53,20 @@ class CausalHampel:
         k: float = 2.5,
         mad_floor: float = _DEFAULT_MAD_FLOOR_M,
         min_samples: int = 5,
+        max_consecutive: int = 5,
     ) -> None:
         if window < 3:
             raise ValueError("window must be >= 3")
         if k <= 0 or mad_floor <= 0:
             raise ValueError("k and mad_floor must be positive")
+        if max_consecutive < 1:
+            raise ValueError("max_consecutive must be >= 1")
         self.k = k
         self.mad_floor = mad_floor
         self.min_samples = max(3, min_samples)
+        self.max_consecutive = max_consecutive
         self._buf: deque[float] = deque(maxlen=window)
+        self._streak = 0
 
     def update(self, value: float) -> tuple[float, bool]:
         """Feed one value; return ``(filtered_value, was_outlier)``."""
@@ -66,10 +77,14 @@ class CausalHampel:
         med = float(np.median(arr))
         mad = float(np.median(np.abs(arr - med)))
         scale = max(1.4826 * mad, self.mad_floor)
-        if abs(value - med) > self.k * scale:
-            self._buf.append(med)
-            return med, True
         self._buf.append(value)
+        if abs(value - med) > self.k * scale:
+            self._streak += 1
+            if self._streak <= self.max_consecutive:
+                return med, True
+            # Too many in a row: this is real motion, not a spike — stand down.
+            return value, False
+        self._streak = 0
         return value, False
 
 

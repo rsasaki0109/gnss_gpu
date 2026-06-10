@@ -37,6 +37,45 @@ class TestCausalHampel:
             flags.append(flagged)
         assert not any(flags)
 
+    def test_departure_from_stop_recovers(self):
+        # Long stop, then accelerate away at 1 m/s^2 (1 Hz fixes). The gate
+        # must not latch onto the stop position forever.
+        h = CausalHampel(window=21, k=2.5, max_consecutive=5)
+        for _ in range(60):
+            h.update(0.0)
+        suppressed = 0
+        last_out = last_pos = None
+        for k in range(1, 31):
+            pos = 0.5 * 1.0 * k * k  # x = a t^2 / 2
+            out, flagged = h.update(pos)
+            if flagged:
+                suppressed += 1
+            else:
+                last_out, last_pos = out, pos
+        assert suppressed <= 5  # bounded by max_consecutive, no latch-up
+        assert last_out == last_pos  # raw values flow once the gate stands down
+
+    def test_reacquisition_jump_recovers(self):
+        # GNSS outage in a tunnel: fixes reappear 300 m ahead. The gate must
+        # follow the new position cluster, not freeze at the old one.
+        h = CausalHampel(window=21, k=2.5, max_consecutive=5)
+        for _ in range(40):
+            h.update(0.0)
+        outputs = [h.update(300.0 + i)[0] for i in range(15)]
+        assert outputs[-1] > 290.0  # following the new cluster
+
+    def test_single_spike_still_gated_with_escape_logic(self):
+        # The escape hatch must not weaken isolated-spike rejection.
+        h = CausalHampel(window=21, k=2.5, max_consecutive=5)
+        for i in range(40):
+            h.update(float(i))
+        out, flagged = h.update(500.0)
+        assert flagged
+        assert out < 60.0
+        out2, flagged2 = h.update(41.0)  # next genuine fix passes again
+        assert not flagged2
+        assert out2 == 41.0
+
     def test_stationary_noise_untouched(self):
         rng = np.random.default_rng(7)
         h = CausalHampel(window=21, k=2.5)
