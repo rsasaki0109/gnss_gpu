@@ -341,6 +341,9 @@
             const z = Math.abs(res[i]) / cauchyThreshold;
             w.push(1 / (1 + z * z));
           }
+          // Same gate as the Python solver: too few effectively-weighted
+          // satellites means the fix is no longer trustworthy.
+          if (w.filter((wi) => wi > 0.1).length < 5) return null;
           const AtA = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
           const Atb = [0, 0, 0, 0];
           for (let i = 0; i < n; i++) {
@@ -542,6 +545,7 @@
       }
 
       function fmt(stats) {
+        if (!Number.isFinite(stats.p50)) return "no fix — too few trusted satellites";
         return `P50 ${stats.p50.toFixed(2)} m · RMS ${stats.rms.toFixed(2)} m`;
       }
 
