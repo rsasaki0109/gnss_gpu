@@ -6,6 +6,7 @@ Runnable demos for `gnss_gpu`. Run them from the repo root with `PYTHONPATH=pyth
 
 | Goal | Run this | Needs GPU build? | Needs downloaded data? |
 |---|---|---:|---:|
+| Try it in the browser, zero install | [`colab_urban_canyon_quickstart.ipynb`](colab_urban_canyon_quickstart.ipynb) ([open in Colab](https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb)) | No | No |
 | See the core idea quickly | [`demo_urban_canyon_sim.py`](demo_urban_canyon_sim.py) | No | No |
 | Inspect NLOS measurement effects | [`demo_nlos_simulation.py`](demo_nlos_simulation.py) | No | No |
 | Try the shipped PLATEAU sample | [`demo_plateau_nlos_simulation.py`](demo_plateau_nlos_simulation.py) | No | No |
@@ -32,6 +33,11 @@ idea behind the project: robust down-weighting of NLOS-biased measurements.
 naive WLS (L2)        P50 10.30 m / RMS 10.21 m
 robust SPP (Cauchy)   P50  2.00 m / RMS  2.39 m   → 81% better P50
 ```
+
+The same scenario, with a sky plot and trajectory/error figures, is available as
+[`colab_urban_canyon_quickstart.ipynb`](colab_urban_canyon_quickstart.ipynb) —
+[open it in Colab](https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb)
+to run everything in the browser with zero install.
 
 ## NLOS simulation research demo — no GPU, no build, no data
 
