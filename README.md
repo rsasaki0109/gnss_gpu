@@ -203,6 +203,17 @@ Once built, try a demo, e.g. signal simulation → acquisition round-trip:
 PYTHONPATH=python python3 examples/demo_signal_sim.py
 ```
 
+## ROS 2 node
+
+For outdoor robots, [`ros2/gnss_gpu_ros`](ros2/gnss_gpu_ros/) packages the
+trajectory-filtering ideas validated on GSDC2023 as a ROS 2 node: it gates
+multipath/NLOS spikes in `sensor_msgs/NavSatFix` streams (Hampel + CV Kalman)
+before they reach your fusion stack, and publishes an RViz-friendly path.
+
+```bash
+ros2 run gnss_gpu_ros robust_navsat_filter --ros-args -r fix:=/your_gnss_driver/fix
+```
+
 ## Repository layout
 
 ```text
@@ -213,6 +224,7 @@ benchmarks/                   GPU throughput benchmarks (+ RESULTS.md)
 experiments/                  Experiment runners, sweeps, reports, one-off probes
 experiments/results/          Generated CSV/HTML/plot outputs
 docs/                         Generated visual snapshot site (the live demo)
+ros2/gnss_gpu_ros/            ROS 2 robust NavSatFix filter node
 internal_docs/                Working notes, decisions, handoffs, current state
 third_party/gnssplusplus/     C++ GNSS/RTK/PPP/CLAS solver subproject
 tests/                        Python tests for stable helpers and experiment logic
