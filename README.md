@@ -8,6 +8,7 @@
 [![CI](https://github.com/rsasaki0109/gnss_gpu/actions/workflows/ci.yml/badge.svg)](https://github.com/rsasaki0109/gnss_gpu/actions/workflows/ci.yml)
 [![Live demo](https://img.shields.io/badge/live%20demo-results%20snapshot-brightgreen)](https://rsasaki0109.github.io/gnss_gpu/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb)
 
 <p align="center">
   <img
@@ -70,6 +71,12 @@ and the GSDC2023 Kaggle smartphone-decimeter challenge).
 > figures, and limitations live on the [results snapshot](https://rsasaki0109.github.io/gnss_gpu/).
 
 ## Quick start
+
+**Zero install:** run the urban-canyon demo — with sky plot and trajectory
+figures — straight in your browser:
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb)
+
+Or locally:
 
 ```bash
 git clone --recurse-submodules https://github.com/rsasaki0109/gnss_gpu.git
