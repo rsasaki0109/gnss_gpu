@@ -18,7 +18,7 @@ gains actually came from**, and the honest list of things that did not work.
 
 1. We built a full FGO (factor-graph optimization) bridge with Cauchy robust
    kernels, consistency pre-filters, and max-clique inlier voting. It improved
-   FGO standalone accuracy by ~30%… and the selection gate still preferred the
+   FGO standalone accuracy by ~27%… and the selection gate still preferred the
    WLS baseline on ~99% of rows. **The gate was right** — forcing FGO in was a
    regression every time we tried.
 2. The wins came from **trajectory-domain post-processing** of the baseline:
@@ -71,7 +71,7 @@ P50+P95, same epochs, same metric). Deltas are vs. the previous layer:
 
 | # | Layer | Idea | Δ train metric | Win/loss ratio |
 |--:|---|---|--:|---|
-| 1 | Hampel ×3 passes | per-trip lat/lng MAD outlier peel-away (window 21, k=2.5) | **−7.0 cm** | 41/41 improve or wash; max frame-to-frame jump −93% (7318 → 485 m) |
+| 1 | Hampel ×3 passes | per-trip lat/lng MAD outlier peel-away (window 21, k=2.5) | **−7.0 cm** | 41/41 improve or wash; max frame-to-frame jump 18,619 → 485 m (−97%) across the three passes |
 | 2 | accel smoother | flag epochs with \|accel\| > 3 m/s², linear-fill; local-max contraction avoids flagging innocent neighbours | **−15.2 cm** | 32 wins / 6 regressions |
 | 3 | stop snap | runs of ≥10 epochs moving <2 m get snapped to their median (traffic lights) | **−4.2 cm** | 29 wins / 8 regressions |
 | 4 | heading smoother | contract isolated yaw-rate spikes (>45°/s) by interpolation | **−1.6 cm** | 9 wins / 30 wash / 2 regressions |
