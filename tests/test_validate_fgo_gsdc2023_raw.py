@@ -1286,7 +1286,7 @@ def test_run_wls_uses_signal_clock_kinds_as_independent_bias_labels(monkeypatch)
         def solve(self, sat_ecef, pseudoranges, system_ids, weights=None):
             del sat_ecef, pseudoranges, weights
             calls.append((self.systems, tuple(int(value) for value in system_ids)))
-            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 4: 115.0}, 3
+            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 1: 115.0}, 3
 
     monkeypatch.setattr(raw_bridge, "MultiGNSSSolver", FakeSignalClockSolver)
     sat_ecef = np.ones((1, 5, 3), dtype=np.float64)
@@ -1302,7 +1302,7 @@ def test_run_wls_uses_signal_clock_kinds_as_independent_bias_labels(monkeypatch)
         n_clock=raw_bridge.MATLAB_SIGNAL_CLOCK_DIM,
     )
 
-    assert calls == [((0, 4), (0, 4, 0, 4, 0))]
+    assert calls == [((0, 1), (0, 1, 0, 1, 0))]
     np.testing.assert_allclose(state[0, :3], np.array([1000.0, 2000.0, 3000.0]))
     assert state[0, 3] == 100.0
     assert state[0, 3 + 4] == 15.0
@@ -1318,7 +1318,7 @@ def test_run_wls_ignores_out_of_range_clock_kind_for_taroz_other(monkeypatch):
         def solve(self, sat_ecef, pseudoranges, system_ids, weights=None):
             del sat_ecef, pseudoranges, weights
             calls.append((self.systems, tuple(int(value) for value in system_ids)))
-            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 4: 115.0}, 3
+            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 1: 115.0}, 3
 
     monkeypatch.setattr(raw_bridge, "MultiGNSSSolver", FakeSignalClockSolver)
     sat_ecef = np.ones((1, 7, 3), dtype=np.float64)
@@ -1334,8 +1334,66 @@ def test_run_wls_ignores_out_of_range_clock_kind_for_taroz_other(monkeypatch):
         n_clock=raw_bridge.MATLAB_SIGNAL_CLOCK_DIM,
     )
 
-    assert calls == [((0, 4), (0, 4, 0, 4, 0))]
+    assert calls == [((0, 1), (0, 1, 0, 1, 0))]
     np.testing.assert_allclose(state[0, :3], np.array([1000.0, 2000.0, 3000.0]))
+
+
+def test_run_wls_relabels_dual_frequency_clock_kinds_above_solver_range(monkeypatch):
+    calls = []
+
+    class FakeSignalClockSolver:
+        def __init__(self, systems, max_iter, tol):
+            self.systems = tuple(systems)
+
+        def solve(self, sat_ecef, pseudoranges, system_ids, weights=None):
+            del sat_ecef, pseudoranges, weights
+            calls.append((self.systems, tuple(int(value) for value in system_ids)))
+            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 1: 110.0, 2: 130.0}, 3
+
+    monkeypatch.setattr(raw_bridge, "MultiGNSSSolver", FakeSignalClockSolver)
+    sat_ecef = np.ones((1, 6, 3), dtype=np.float64)
+    pseudorange = np.ones((1, 6), dtype=np.float64)
+    weights = np.ones((1, 6), dtype=np.float64)
+    # Kinds 5 and 6 occur in dual-frequency mode (MATLAB_SIGNAL_CLOCK_DIM=7)
+    # and exceed the solver's supported system-ID range.
+    sys_kind = np.array([[0, 5, 6, 0, 5, 6]], dtype=np.int32)
+
+    state = run_wls(
+        sat_ecef,
+        pseudorange,
+        weights,
+        sys_kind=sys_kind,
+        n_clock=raw_bridge.MATLAB_SIGNAL_CLOCK_DIM,
+    )
+
+    assert calls == [((0, 1, 2), (0, 1, 2, 0, 1, 2))]
+    np.testing.assert_allclose(state[0, :3], np.array([1000.0, 2000.0, 3000.0]))
+    assert state[0, 3] == 100.0
+    assert state[0, 3 + 5] == 10.0
+    assert state[0, 3 + 6] == 30.0
+
+
+def test_run_wls_falls_back_when_active_kinds_exceed_solver_capacity(monkeypatch):
+    class ExplodingSolver:
+        def __init__(self, systems, max_iter, tol):
+            raise AssertionError("MultiGNSSSolver must not be constructed")
+
+    monkeypatch.setattr(raw_bridge, "MultiGNSSSolver", ExplodingSolver)
+    n_sat = 12
+    sat_ecef = np.ones((1, n_sat, 3), dtype=np.float64)
+    pseudorange = np.ones((1, n_sat), dtype=np.float64)
+    weights = np.ones((1, n_sat), dtype=np.float64)
+    sys_kind = np.array([[0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5]], dtype=np.int32)
+
+    state = run_wls(
+        sat_ecef,
+        pseudorange,
+        weights,
+        sys_kind=sys_kind,
+        n_clock=raw_bridge.MATLAB_SIGNAL_CLOCK_DIM,
+    )
+
+    assert state.shape == (1, 3 + raw_bridge.MATLAB_SIGNAL_CLOCK_DIM)
 
 
 def test_build_trip_arrays_applies_matlab_style_observation_mask(tmp_path):

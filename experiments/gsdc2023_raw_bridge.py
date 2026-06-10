@@ -18,6 +18,7 @@ from experiments.gsdc2023_per_type_kernel import (
 from gnss_gpu.fgo import fgo_gnss_lm, fgo_gnss_lm_vd
 from gnss_gpu.io.nav_rinex import read_gps_klobuchar_from_nav_header
 from gnss_gpu.multi_gnss import (
+    MAX_SYSTEMS as MULTI_GNSS_MAX_SYSTEMS,
     SYSTEM_BEIDOU,
     MultiGNSSSolver,
     SYSTEM_GALILEO,
@@ -877,13 +878,19 @@ def run_wls(
 
         if sys_kind is not None and n_clock > 1:
             active_kinds = sorted({int(sk) for sk in sys_kind[i, idx] if 0 <= int(sk) < n_clock})
-            if len(active_kinds) > 1 and idx.size >= 3 + len(active_kinds):
-                systems = tuple(active_kinds)
+            # MultiGNSSSolver only accepts the five supported system IDs and
+            # treats them as opaque clock-group labels, while dual-frequency
+            # signal/clock kinds can reach MATLAB_SIGNAL_CLOCK_DIM-1, so the
+            # kinds are relabelled onto contiguous solver IDs.  Epochs with
+            # more active kinds than supported labels fall through to the
+            # single-clock WLS below.
+            if 1 < len(active_kinds) <= MULTI_GNSS_MAX_SYSTEMS and idx.size >= 3 + len(active_kinds):
+                systems = tuple(range(len(active_kinds)))
                 solver = solver_cache.get(systems)
                 if solver is None:
                     solver = MultiGNSSSolver(systems=list(systems), max_iter=25, tol=1e-9)
                     solver_cache[systems] = solver
-                kind_to_system = {sk: sk for sk in active_kinds}
+                kind_to_system = {sk: rank for rank, sk in enumerate(active_kinds)}
                 system_ids = np.array([kind_to_system[int(sk)] for sk in sys_kind[i, idx]], dtype=np.int32)
                 pos, biases, n_iter = solver.solve(sat_ecef[i, idx], pseudorange[i, idx], system_ids, weights[i, idx])
                 if n_iter >= 0 and np.linalg.norm(pos) > 1e3:
