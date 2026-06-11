@@ -169,6 +169,7 @@ class BridgeResult:
     pseudorange_doppler_mask_count: int = 0
     tdcp_consistency_mask_count: int = 0
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
+    tdcp_l5_weight_scale: float = 1.0
     tdcp_geometry_correction_applied: bool = False
     tdcp_geometry_correction_count: int = 0
     tdcp_scale_candidate_enabled: bool = False
@@ -414,6 +415,7 @@ class BridgeResult:
             "pseudorange_doppler_mask_count": int(self.pseudorange_doppler_mask_count),
             "tdcp_consistency_mask_count": int(self.tdcp_consistency_mask_count),
             "tdcp_weight_scale": float(self.tdcp_weight_scale),
+            "tdcp_l5_weight_scale": float(self.tdcp_l5_weight_scale),
             "tdcp_geometry_correction_applied": bool(self.tdcp_geometry_correction_applied),
             "tdcp_geometry_correction_count": int(self.tdcp_geometry_correction_count),
             "tdcp_scale_candidate_enabled": bool(self.tdcp_scale_candidate_enabled),
@@ -585,6 +587,8 @@ class BridgeResult:
             lines.append(f"  tdcp mask   : doppler_carrier={self.tdcp_consistency_mask_count}")
         if self.tdcp_weight_scale != DEFAULT_TDCP_WEIGHT_SCALE:
             lines.append(f"  tdcp scale  : {self.tdcp_weight_scale:g}")
+        if self.tdcp_l5_weight_scale != 1.0:
+            lines.append(f"  tdcp l5     : {self.tdcp_l5_weight_scale:g}")
         if self.tdcp_geometry_correction_applied:
             lines.append(f"  tdcp geom   : corrected_pairs={self.tdcp_geometry_correction_count}")
         if self.dual_frequency:

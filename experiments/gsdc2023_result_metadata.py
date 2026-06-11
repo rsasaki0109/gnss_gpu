@@ -201,6 +201,7 @@ def bridge_result_metadata_kwargs(config: BridgeConfig, batch: TripArrays) -> di
         "pseudorange_doppler_mask_count": batch.pseudorange_doppler_mask_count,
         "tdcp_consistency_mask_count": batch.tdcp_consistency_mask_count,
         "tdcp_weight_scale": config.tdcp_weight_scale,
+        "tdcp_l5_weight_scale": config.tdcp_l5_weight_scale,
         "tdcp_geometry_correction_applied": config.tdcp_geometry_correction,
         "tdcp_geometry_correction_count": batch.tdcp_geometry_correction_count,
         "tdcp_scale_candidate_enabled": config.tdcp_scale_candidate_enabled,

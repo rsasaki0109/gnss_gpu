@@ -38,6 +38,7 @@ def _args(**overrides: object) -> SimpleNamespace:
         "multi_gnss": True,
         "tdcp": True,
         "tdcp_weight_scale": 1.0e-4,
+        "tdcp_l5_weight_scale": 25.0,
         "tdcp_geometry_correction": True,
         "dual_frequency": True,
         "ct_rbpf_fgo": False,
@@ -156,6 +157,19 @@ def test_run_one_bridge_trip_returns_cache_metadata_for_solved_trip(
                     "LongitudeDegrees": [-122.0],
                 },
             )
+
+        def states_table(self) -> pd.DataFrame:
+            return pd.DataFrame(
+                {
+                    "UnixTimeMillis": [1000],
+                    "X": [1.0],
+                    "Y": [2.0],
+                    "Z": [3.0],
+                },
+            )
+
+        def fgo_vd_state_table(self) -> None:
+            return None
 
         def metrics_payload(self) -> dict[str, object]:
             return {

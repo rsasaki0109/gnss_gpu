@@ -266,6 +266,7 @@ def _build_batch(data_root: Path, trip: str, config: BridgeConfig, *, max_epochs
         use_tdcp=config.tdcp_enabled,
         tdcp_consistency_threshold_m=config.tdcp_consistency_threshold_m,
         tdcp_weight_scale=config.tdcp_weight_scale,
+        tdcp_l5_weight_scale=config.tdcp_l5_weight_scale,
         tdcp_geometry_correction=config.tdcp_geometry_correction,
         apply_base_correction=config.apply_base_correction,
         data_root=data_root,

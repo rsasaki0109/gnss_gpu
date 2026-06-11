@@ -27,6 +27,7 @@ def test_bridge_config_defaults_match_public_factor_dt() -> None:
     assert cfg.imu_frame == "body"
     assert cfg.imu_sample_dt_mode == "bounded"
     assert cfg.tdcp_weight_scale == DEFAULT_TDCP_WEIGHT_SCALE
+    assert cfg.tdcp_l5_weight_scale == 1.0
     assert cfg.tdcp_geometry_correction is DEFAULT_TDCP_GEOMETRY_CORRECTION
     assert cfg.ct_rbpf_fgo_enabled is False
     assert cfg.ct_rbpf_motion_sigma_m == DEFAULT_CT_RBPF_MOTION_SIGMA_M
@@ -156,6 +157,12 @@ def test_bridge_config_rejects_non_finite_dd_carrier_anchor_coverage() -> None:
 def test_bridge_config_rejects_non_positive_tdcp_scale_candidate() -> None:
     with pytest.raises(ValueError, match="tdcp_scale_candidate_weight_scale must be > 0"):
         BridgeConfig(tdcp_scale_candidate_weight_scale=0.0)
+
+
+@pytest.mark.parametrize("value", [0.0, -1.0, np.inf, np.nan])
+def test_bridge_config_rejects_invalid_tdcp_l5_weight_scale(value: float) -> None:
+    with pytest.raises(ValueError, match="tdcp_l5_weight_scale must be"):
+        BridgeConfig(tdcp_l5_weight_scale=value)
 
 
 def test_bridge_config_rejects_invalid_fgo_raw_wls_proxy_rescue_thresholds() -> None:

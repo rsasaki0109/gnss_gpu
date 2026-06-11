@@ -264,6 +264,7 @@ class BridgeConfig:
     tdcp_enabled: bool = True
     tdcp_consistency_threshold_m: float = DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
+    tdcp_l5_weight_scale: float = 1.0
     tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION
     tdcp_scale_candidate_enabled: bool = False
     tdcp_scale_candidate_weight_scale: float = 1.0e-7
@@ -377,6 +378,10 @@ class BridgeConfig:
             raise ValueError("tdcp_scale_candidate_weight_scale must be finite")
         if float(self.tdcp_scale_candidate_weight_scale) <= 0.0:
             raise ValueError("tdcp_scale_candidate_weight_scale must be > 0")
+        if not np.isfinite(float(self.tdcp_l5_weight_scale)):
+            raise ValueError("tdcp_l5_weight_scale must be finite")
+        if float(self.tdcp_l5_weight_scale) <= 0.0:
+            raise ValueError("tdcp_l5_weight_scale must be > 0")
         for name in (
             "fgo_raw_wls_proxy_rescue_mse_ratio_max",
             "fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max",
