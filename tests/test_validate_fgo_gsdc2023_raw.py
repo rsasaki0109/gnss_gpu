@@ -1267,6 +1267,87 @@ def test_build_trip_arrays_multi_gnss_dual_frequency_uses_matlab_signal_clock_ki
     np.testing.assert_allclose(taroz_batch.weights[0, 4:], np.zeros(2, dtype=np.float64))
 
 
+def test_build_trip_arrays_fgo_extra_constellations_are_fgo_only(tmp_path):
+    trip = tmp_path / "dataset_2023" / "train" / "course" / "phone"
+    trip.mkdir(parents=True)
+
+    rows = []
+    signals = [
+        (1, 1, "GPS_L1_CA"),
+        (1, 2, "GPS_L1_CA"),
+        (1, 3, "GPS_L1_CA"),
+        (1, 4, "GPS_L1_CA"),
+        (3, 5, "GLO_G1_CA"),
+        (5, 6, "BDS_B1_I"),
+    ]
+    for idx, (constellation, svid, signal_type) in enumerate(signals, start=1):
+        rows.append(
+            {
+                "utcTimeMillis": 1000,
+                "Svid": svid,
+                "ConstellationType": constellation,
+                "SignalType": signal_type,
+                "RawPseudorangeMeters": 2.1e7 + 1000 * idx,
+                "IonosphericDelayMeters": 2.0,
+                "TroposphericDelayMeters": 3.0,
+                "SvClockBiasMeters": 10.0,
+                "SvPositionXEcefMeters": 2.6e7 - 1e5 * idx,
+                "SvPositionYEcefMeters": 1.3e7 + 2e5 * idx,
+                "SvPositionZEcefMeters": 2.1e7 - 3e5 * idx,
+                "SvElevationDegrees": 30.0 + idx,
+                "Cn0DbHz": 35.0 + idx,
+                "WlsPositionXEcefMeters": -3947460.0,
+                "WlsPositionYEcefMeters": 3431490.0,
+                "WlsPositionZEcefMeters": 3637870.0,
+            },
+        )
+    _write_zipped_csv(trip / "device_gnss.csv", rows, list(rows[0].keys()))
+
+    flag_off = _build_trip_arrays(
+        trip,
+        max_epochs=10,
+        start_epoch=0,
+        constellation_type=1,
+        signal_type="GPS_L1_CA",
+        weight_mode="sin2el",
+        multi_gnss=True,
+        dual_frequency=True,
+    )
+
+    assert flag_off.slot_keys == (
+        (1, 1, "GPS_L1_CA"),
+        (1, 2, "GPS_L1_CA"),
+        (1, 3, "GPS_L1_CA"),
+        (1, 4, "GPS_L1_CA"),
+    )
+    assert flag_off.weights_fgo is None
+
+    flag_on = _build_trip_arrays(
+        trip,
+        max_epochs=10,
+        start_epoch=0,
+        constellation_type=1,
+        signal_type="GPS_L1_CA",
+        weight_mode="sin2el",
+        multi_gnss=True,
+        dual_frequency=True,
+        fgo_extra_constellations=True,
+    )
+
+    glo_idx = flag_on.slot_keys.index((3, 5, "GLO_G1_CA"))
+    bds_idx = flag_on.slot_keys.index((5, 6, "BDS_B1_I"))
+    assert flag_on.weights[0, glo_idx] == 0.0
+    assert flag_on.weights[0, bds_idx] == 0.0
+    assert flag_on.weights_fgo is not None
+    assert flag_on.weights_fgo[0, glo_idx] > 0.0
+    assert flag_on.weights_fgo[0, bds_idx] > 0.0
+    assert flag_on.sys_kind[0, glo_idx] == 1
+    assert flag_on.sys_kind[0, bds_idx] == 3
+
+    active_kinds_for_wls = sorted({int(kind) for kind in flag_on.sys_kind[0, flag_on.weights[0] > 0.0]})
+    assert active_kinds_for_wls == [0]
+
+
 def test_multi_system_for_clock_kind_preserves_legacy_and_matlab_signal_mappings():
     assert raw_bridge._multi_system_for_clock_kind(4, raw_bridge.MATLAB_SIGNAL_CLOCK_DIM) == raw_bridge.SYSTEM_GPS
     assert raw_bridge._multi_system_for_clock_kind(5, raw_bridge.MATLAB_SIGNAL_CLOCK_DIM) == raw_bridge.SYSTEM_GALILEO

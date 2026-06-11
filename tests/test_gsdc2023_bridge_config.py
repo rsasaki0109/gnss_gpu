@@ -37,11 +37,17 @@ def test_bridge_config_defaults_match_public_factor_dt() -> None:
     assert cfg.stop_attitude_sigma_rad == 0.0
     assert cfg.taroz_imu_factor_mask_csv is None
     assert cfg.taroz_stop_mask_from_seed_velocity is False
+    assert cfg.fgo_extra_constellations is False
 
 
 def test_bridge_config_rejects_invalid_position_source() -> None:
     with pytest.raises(ValueError):
         BridgeConfig(position_source="unsupported")
+
+
+def test_bridge_config_rejects_non_bool_fgo_extra_constellations() -> None:
+    with pytest.raises(ValueError, match="fgo_extra_constellations must be a bool"):
+        BridgeConfig(fgo_extra_constellations=1)  # type: ignore[arg-type]
 
 
 def test_taroz_presets_enable_base_correction_and_unscaled_tdcp_weights() -> None:

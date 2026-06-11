@@ -1472,6 +1472,7 @@ def test_build_full_observation_context_stage_builds_once_and_updates_context(tm
         observation_min_cn0_dbhz=18.0,
         observation_min_elevation_deg=10.0,
         dual_frequency=True,
+        fgo_extra_constellations=False,
         factor_dt_max_s=1.5,
         clock_drift_context_times_ms=np.array([500.0], dtype=np.float64),
         clock_drift_context_mps=np.array([0.1], dtype=np.float64),
@@ -2001,9 +2002,11 @@ def test_build_observation_mask_base_correction_stage_preserves_mask_then_base_o
         sat_vel=np.zeros((1, 3, 3), dtype=np.float64),
         doppler=np.ones((1, 3), dtype=np.float64),
         doppler_weights=doppler_weights,
+        doppler_weights_fgo=None,
         kaggle_wls=np.zeros((1, 3), dtype=np.float64),
         pseudorange_observable=np.ones((1, 3), dtype=np.float64),
         weights=weights,
+        weights_fgo=None,
         phone_name="pixel4",
         sys_kind=np.zeros((1, 3), dtype=np.int32),
         n_clock=1,
@@ -2023,6 +2026,7 @@ def test_build_observation_mask_base_correction_stage_preserves_mask_then_base_o
         pseudorange_residual_mask_m=20.0,
         pseudorange_residual_mask_l5_m=None,
         full_isb_batch=None,
+        fgo_extra_constellations=False,
         signal_type="GPS_L1_CA",
         correction_matrix_fn=correction_matrix_fn,
         mask_doppler_residual_outliers_fn=doppler_mask_fn,
@@ -2046,6 +2050,126 @@ def test_build_observation_mask_base_correction_stage_preserves_mask_then_base_o
     assert products.base_correction_count == 1
     assert calls == ["doppler", "threshold:40", "pd", "threshold:20", "pr", "base"]
     np.testing.assert_allclose(pseudorange, [[100.0, 100.0, 70.0]])
+
+
+def test_build_observation_mask_base_correction_stage_masks_fgo_extra_slots() -> None:
+    calls: list[str] = []
+    times_ms = np.array([1000.0], dtype=np.float64)
+    slot_keys = [(3, 5, "GLO_G1_CA")]
+    weights = np.zeros((1, 1), dtype=np.float64)
+    weights_fgo = np.ones((1, 1), dtype=np.float64)
+    doppler_weights = np.zeros((1, 1), dtype=np.float64)
+    doppler_weights_fgo = np.ones((1, 1), dtype=np.float64)
+
+    def doppler_mask_fn(
+        _times_ms: np.ndarray,
+        _sat_ecef: np.ndarray,
+        _sat_vel: np.ndarray,
+        _doppler: np.ndarray,
+        got_weights: np.ndarray,
+        *_args: object,
+        **_kwargs: object,
+    ) -> int:
+        if got_weights is doppler_weights:
+            calls.append("gate-doppler")
+            np.testing.assert_allclose(got_weights, [[0.0]])
+            return 0
+        calls.append("fgo-doppler")
+        np.testing.assert_allclose(got_weights, [[1.0]])
+        got_weights[0, 0] = 0.0
+        return 1
+
+    def pd_mask_fn(
+        _times_ms: np.ndarray,
+        _pseudorange_observable: np.ndarray,
+        got_weights: np.ndarray,
+        *_args: object,
+        **_kwargs: object,
+    ) -> int:
+        if got_weights is weights:
+            calls.append("gate-pd")
+            np.testing.assert_allclose(got_weights, [[0.0]])
+            return 0
+        calls.append("fgo-pd")
+        np.testing.assert_allclose(got_weights, [[1.0]])
+        got_weights[0, 0] = 0.5
+        return 1
+
+    def pr_mask_fn(
+        _sat_ecef: np.ndarray,
+        _pseudorange: np.ndarray,
+        got_weights: np.ndarray,
+        *_args: object,
+        **_kwargs: object,
+    ) -> int:
+        if got_weights is weights:
+            calls.append("gate-pr")
+            np.testing.assert_allclose(got_weights, [[0.0]])
+            return 0
+        calls.append("fgo-pr")
+        np.testing.assert_allclose(got_weights, [[0.5]])
+        got_weights[0, 0] = 0.0
+        return 1
+
+    products = build_observation_mask_base_correction_stage(
+        apply_observation_mask=True,
+        apply_base_correction=False,
+        data_root=None,
+        trip=None,
+        times_ms=times_ms,
+        sat_ecef=np.zeros((1, 1, 3), dtype=np.float64),
+        sat_vel=np.zeros((1, 1, 3), dtype=np.float64),
+        doppler=np.ones((1, 1), dtype=np.float64),
+        doppler_weights=doppler_weights,
+        doppler_weights_fgo=doppler_weights_fgo,
+        kaggle_wls=np.zeros((1, 3), dtype=np.float64),
+        pseudorange_observable=np.ones((1, 1), dtype=np.float64),
+        weights=weights,
+        weights_fgo=weights_fgo,
+        phone_name="pixel5",
+        sys_kind=np.ones((1, 1), dtype=np.int32),
+        n_clock=7,
+        slot_keys=slot_keys,
+        pseudorange=np.ones((1, 1), dtype=np.float64),
+        pseudorange_isb_sample_weights=np.ones((1, 1), dtype=np.float64),
+        pseudorange_bias_weights=np.ones((1, 1), dtype=np.float64),
+        clock_bias_m=None,
+        clock_drift_mps=np.zeros(1, dtype=np.float64),
+        sat_clock_drift_mps=np.zeros((1, 1), dtype=np.float64),
+        baseline_velocity_times_ms=times_ms,
+        baseline_velocity_xyz=np.zeros((1, 3), dtype=np.float64),
+        clock_drift_context_times_ms=times_ms,
+        clock_drift_context_mps=np.zeros(1, dtype=np.float64),
+        doppler_residual_mask_mps=3.0,
+        pseudorange_doppler_mask_m=40.0,
+        pseudorange_residual_mask_m=20.0,
+        pseudorange_residual_mask_l5_m=None,
+        full_isb_batch=None,
+        fgo_extra_constellations=True,
+        signal_type="GPS_L1_CA",
+        correction_matrix_fn=lambda *_args, **_kwargs: _raise_unexpected(),
+        mask_doppler_residual_outliers_fn=doppler_mask_fn,
+        slot_frequency_thresholds_fn=lambda keys, threshold, **_kwargs: np.full(len(keys), threshold),
+        mask_pseudorange_doppler_consistency_fn=pd_mask_fn,
+        slot_pseudorange_common_bias_groups_fn=lambda keys: np.zeros(len(keys), dtype=np.int32),
+        remap_pseudorange_isb_by_group_fn=lambda *_args: _raise_unexpected(),
+        pseudorange_global_isb_by_group_fn=lambda *_args, **_kwargs: _raise_unexpected(),
+        is_l5_signal_fn=lambda signal: "L5" in signal or "B2" in signal,
+        mask_pseudorange_residual_outliers_fn=pr_mask_fn,
+        default_pd_l1_threshold_m=40.0,
+        default_pd_l5_threshold_m=25.0,
+        default_pr_l1_threshold_m=20.0,
+        default_pr_l5_threshold_m=15.0,
+    )
+
+    assert calls == ["gate-doppler", "gate-pd", "gate-pr", "fgo-doppler", "fgo-pd", "fgo-pr"]
+    np.testing.assert_allclose(weights, [[0.0]])
+    np.testing.assert_allclose(doppler_weights, [[0.0]])
+    np.testing.assert_allclose(weights_fgo, [[0.0]])
+    np.testing.assert_allclose(doppler_weights_fgo, [[0.0]])
+    assert products.doppler_residual_stage.doppler_residual_mask_count == 1
+    assert products.pseudorange_doppler_stage.pseudorange_doppler_mask_count == 1
+    assert products.pseudorange_residual_stage.residual_mask_count == 1
 
 
 def test_build_configured_post_observation_stages_uses_bundled_config_and_dependencies(tmp_path: Path) -> None:
@@ -2336,6 +2460,7 @@ def test_build_post_observation_stages_wires_pipeline_and_preserves_signal_weigh
         observation_min_cn0_dbhz=18.0,
         observation_min_elevation_deg=10.0,
         dual_frequency=True,
+        fgo_extra_constellations=False,
         factor_dt_max_s=1.5,
         clock_drift_context_times_ms=times_ms,
         clock_drift_context_mps=clock_drift,
