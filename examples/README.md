@@ -67,7 +67,7 @@ PYTHONPATH=python python3 examples/demo_plateau_nlos_visualization.py
 writes a standalone HTML report to `/tmp/gnss_gpu_plateau_nlos_viz.html` with
 the PLATEAU mesh, receiver trajectory, worst-epoch LOS/NLOS sky plot, and error
 timeline. The checked-in Pages copy lives at
-[`../docs/assets/media/plateau_nlos_visualization.html`](../docs/assets/media/plateau_nlos_visualization.html).
+[`../docs/assets/media/demos/plateau_nlos_visualization.html`](../docs/assets/media/demos/plateau_nlos_visualization.html).
 
 To run the full mask export plus SPP/PF/FGO replay comparison:
 

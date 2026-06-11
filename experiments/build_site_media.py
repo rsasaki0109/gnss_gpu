@@ -15,16 +15,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PAPER_ASSETS_DIR = PROJECT_ROOT / "experiments" / "results" / "paper_assets"
 RESULTS_DIR = PROJECT_ROOT / "experiments" / "results"
 MEDIA_DIR = PROJECT_ROOT / "docs" / "assets" / "media"
+SITE_MEDIA_DIR = MEDIA_DIR / "site"
 
-POSTER_PATH = MEDIA_DIR / "site_poster.png"
-TEASER_PATH = MEDIA_DIR / "site_teaser.gif"
-TEASER_MP4_PATH = MEDIA_DIR / "site_teaser.mp4"
-TEASER_WEBM_PATH = MEDIA_DIR / "site_teaser.webm"
-URBANNAV_RUNS_CHART_PATH = MEDIA_DIR / "site_urbannav_runs.png"
-WINDOW_WINS_CHART_PATH = MEDIA_DIR / "site_window_wins.png"
-HK_CONTROL_CHART_PATH = MEDIA_DIR / "site_hk_control.png"
-URBANNAV_TIMELINE_CHART_PATH = MEDIA_DIR / "site_urbannav_timeline.png"
-ERROR_BANDS_CHART_PATH = MEDIA_DIR / "site_error_bands.png"
+POSTER_PATH = SITE_MEDIA_DIR / "site_poster.png"
+TEASER_PATH = SITE_MEDIA_DIR / "site_teaser.gif"
+TEASER_MP4_PATH = SITE_MEDIA_DIR / "site_teaser.mp4"
+TEASER_WEBM_PATH = SITE_MEDIA_DIR / "site_teaser.webm"
+URBANNAV_RUNS_CHART_PATH = SITE_MEDIA_DIR / "site_urbannav_runs.png"
+WINDOW_WINS_CHART_PATH = SITE_MEDIA_DIR / "site_window_wins.png"
+HK_CONTROL_CHART_PATH = SITE_MEDIA_DIR / "site_hk_control.png"
+URBANNAV_TIMELINE_CHART_PATH = SITE_MEDIA_DIR / "site_urbannav_timeline.png"
+ERROR_BANDS_CHART_PATH = SITE_MEDIA_DIR / "site_error_bands.png"
 
 URBANNAV_RUNS_CSV = "urbannav_fixed_eval_external_gej_trimble_qualityveto_runs.csv"
 WINDOW_SUMMARY_CSV = "urbannav_window_eval_external_gej_trimble_qualityveto_w500_s250_summary.csv"
@@ -651,7 +652,7 @@ def _plot_error_bands() -> None:
 
 
 def main() -> None:
-    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    SITE_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     poster = _build_poster()
     poster.save(POSTER_PATH, optimize=True)
 

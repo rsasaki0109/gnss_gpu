@@ -12,7 +12,7 @@
 
 <p align="center">
   <img
-    src="docs/assets/media/site_teaser.gif"
+    src="docs/assets/media/site/site_teaser.gif"
     alt="gnss_gpu particle filter tracking through an urban canyon"
     width="960"
     height="540"
@@ -76,6 +76,18 @@ Beyond *rejecting* blocked satellites, the package models **why** an urban pseud
 biased — knife-edge (ITU-R P.526) and **UTD** (Kouyoumjian–Pathak) diffraction plus
 specular reflection over **PLATEAU** 3D building meshes — and scores the physics against
 real **UrbanNav** residuals.
+
+<p align="center">
+  <img
+    src="docs/assets/media/los-nlos/los_nlos_deckgl.gif"
+    alt="Deck.gl LOS/NLOS sweep over an UrbanNav route with PLATEAU building geometry"
+    width="960"
+  >
+</p>
+
+<p align="center">
+  <a href="docs/assets/media/los-nlos/los_nlos_deckgl.html">Open the full LOS/NLOS deck.gl sweep</a>
+</p>
 
 A subtle but decisive step is correcting each satellite to signal-**transmission** time
 (with the Sagnac rotation). Without it a per-satellite *tens-of-metres* range error swamps
@@ -200,7 +212,7 @@ PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_fgo.py \
 ```
 
 The PLATEAU visualization is also checked into the Pages assets at
-[`docs/assets/media/plateau_nlos_visualization.html`](docs/assets/media/plateau_nlos_visualization.html).
+[`docs/assets/media/demos/plateau_nlos_visualization.html`](docs/assets/media/demos/plateau_nlos_visualization.html).
 The exported mask CSV uses the existing experiment contract
 `tow,epoch_idx,prn,is_los`; the SPP, particle-filter, and local-FGO replays
 consume only that mask path and show mask-soft downstream estimators recovering
