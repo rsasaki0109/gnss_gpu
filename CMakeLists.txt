@@ -39,6 +39,12 @@ add_library(gnss_gpu_multipath
 target_include_directories(gnss_gpu_multipath PUBLIC include)
 target_link_libraries(gnss_gpu_multipath CUDA::cudart)
 
+add_library(gnss_gpu_diffraction
+  src/diffraction/diffraction.cu
+)
+target_include_directories(gnss_gpu_diffraction PUBLIC include)
+target_link_libraries(gnss_gpu_diffraction CUDA::cudart)
+
 # --- Skyplot / vulnerability map module ---
 add_library(gnss_gpu_skyplot
   src/skyplot/skyplot.cu
@@ -171,6 +177,9 @@ if(pybind11_FOUND)
   pybind11_add_module(_gnss_gpu_multipath python/gnss_gpu/_multipath_bindings.cpp)
   target_link_libraries(_gnss_gpu_multipath PRIVATE gnss_gpu_multipath)
 
+  pybind11_add_module(_gnss_gpu_diffraction python/gnss_gpu/_diffraction_bindings.cpp)
+  target_link_libraries(_gnss_gpu_diffraction PRIVATE gnss_gpu_diffraction)
+
   # Skyplot bindings
   pybind11_add_module(_gnss_gpu_skyplot python/gnss_gpu/_skyplot_bindings.cpp)
   target_link_libraries(_gnss_gpu_skyplot PRIVATE gnss_gpu_skyplot)
@@ -284,6 +293,7 @@ if(pybind11_FOUND)
   # Install all pybind11 modules into the gnss_gpu package
   install(TARGETS
     _gnss_gpu _gnss_gpu_multi_gnss _raytrace _gnss_gpu_multipath
+    _gnss_gpu_diffraction
     _gnss_gpu_skyplot _gnss_gpu_acq _gnss_gpu_interference
     _gnss_gpu_tracking _gnss_gpu_pf _gnss_gpu_svgd _gnss_gpu_pf3d
     _gnss_gpu_atmosphere _gnss_gpu_ekf _gnss_gpu_raim _bvh
