@@ -2055,7 +2055,7 @@ def test_build_observation_mask_base_correction_stage_preserves_mask_then_base_o
 def test_build_observation_mask_base_correction_stage_masks_fgo_extra_slots() -> None:
     calls: list[str] = []
     times_ms = np.array([1000.0], dtype=np.float64)
-    slot_keys = [(3, 5, "GLO_G1_CA")]
+    slot_keys = [(5, 5, "BDS_B1_I")]
     weights = np.zeros((1, 1), dtype=np.float64)
     weights_fgo = np.ones((1, 1), dtype=np.float64)
     doppler_weights = np.zeros((1, 1), dtype=np.float64)

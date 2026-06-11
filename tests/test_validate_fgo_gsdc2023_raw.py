@@ -1277,7 +1277,7 @@ def test_build_trip_arrays_fgo_extra_constellations_are_fgo_only(tmp_path):
         (1, 2, "GPS_L1_CA"),
         (1, 3, "GPS_L1_CA"),
         (1, 4, "GPS_L1_CA"),
-        (3, 5, "GLO_G1_CA"),
+        (5, 5, "BDS_B2A_I"),
         (5, 6, "BDS_B1_I"),
     ]
     for idx, (constellation, svid, signal_type) in enumerate(signals, start=1):
@@ -1334,14 +1334,14 @@ def test_build_trip_arrays_fgo_extra_constellations_are_fgo_only(tmp_path):
         fgo_extra_constellations=True,
     )
 
-    glo_idx = flag_on.slot_keys.index((3, 5, "GLO_G1_CA"))
+    b2a_idx = flag_on.slot_keys.index((5, 5, "BDS_B2A_I"))
     bds_idx = flag_on.slot_keys.index((5, 6, "BDS_B1_I"))
-    assert flag_on.weights[0, glo_idx] == 0.0
+    assert flag_on.weights[0, b2a_idx] == 0.0
     assert flag_on.weights[0, bds_idx] == 0.0
     assert flag_on.weights_fgo is not None
-    assert flag_on.weights_fgo[0, glo_idx] > 0.0
+    assert flag_on.weights_fgo[0, b2a_idx] > 0.0
     assert flag_on.weights_fgo[0, bds_idx] > 0.0
-    assert flag_on.sys_kind[0, glo_idx] == 1
+    assert flag_on.sys_kind[0, b2a_idx] == 6
     assert flag_on.sys_kind[0, bds_idx] == 3
 
     active_kinds_for_wls = sorted({int(kind) for kind in flag_on.sys_kind[0, flag_on.weights[0] > 0.0]})

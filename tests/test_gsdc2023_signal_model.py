@@ -37,7 +37,7 @@ def test_multi_gnss_mask_uses_configured_signal_set():
     )
     np.testing.assert_array_equal(
         signal_model.multi_gnss_mask(frame, dual_frequency=True, extra_constellations=True),
-        np.array([True, True, True, True, True, True, True]),
+        np.array([True, True, True, True, False, True, True]),
     )
 
 

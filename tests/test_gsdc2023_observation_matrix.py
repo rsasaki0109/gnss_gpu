@@ -438,8 +438,8 @@ def test_fill_observation_matrices_fgo_extra_constellations_zero_gate_weights() 
     rows = [
         _required_row(
             Svid=5,
-            ConstellationType=3,
-            SignalType="GLO_G1_CA",
+            ConstellationType=5,
+            SignalType="BDS_B2A_I",
             Cn0DbHz=40.0,
             PseudorangeRateMetersPerSecond=-4.0,
             PseudorangeRateUncertaintyMetersPerSecond=0.5,
@@ -502,7 +502,7 @@ def test_fill_observation_matrices_fgo_extra_constellations_zero_gate_weights() 
         matlab_signal_clock_dim=7,
     )
 
-    assert products.slot_keys == ((3, 5, "GLO_G1_CA"), (5, 6, "BDS_B1_I"))
+    assert products.slot_keys == ((5, 5, "BDS_B2A_I"), (5, 6, "BDS_B1_I"))
     np.testing.assert_allclose(products.weights, [[0.0, 0.0]])
     assert products.weights_fgo is not None
     assert np.all(products.weights_fgo > 0.0)
@@ -512,7 +512,7 @@ def test_fill_observation_matrices_fgo_extra_constellations_zero_gate_weights() 
     assert products.carrier_weights_fgo is not None
     np.testing.assert_allclose(products.carrier_weights, [[0.0, 0.0]])
     assert np.all(products.carrier_weights_fgo > 0.0)
-    np.testing.assert_array_equal(products.sys_kind[0], np.array([1, 3], dtype=np.int32))
+    np.testing.assert_array_equal(products.sys_kind[0], np.array([6, 3], dtype=np.int32))
 
 
 def test_fill_observation_matrices_taroz_sn_uses_explicit_cn0_percentile_epochs() -> None:

@@ -28,8 +28,12 @@ DUAL_FREQUENCY_SIGNAL_TYPES = {
     6: ("GAL_E1_C_P", "GAL_E5A_Q"),
     4: ("QZS_L1_CA", "QZS_L5_Q"),
 }
+# GLONASS is deliberately excluded: a 3-trip GT A/B (LM16+offset preset)
+# measured GLO-only at +0.55m (sjc-q) and +1.09m (lax-o) while BDS-only was
+# -0.48m (mtv-h) and bit-neutral elsewhere.  Our base correction does not
+# cover R satellites yet, so uncorrected GLONASS pseudoranges poison the
+# graph in exactly the trips where the correction matters.
 FGO_EXTRA_CONSTELLATION_SIGNAL_TYPES = {
-    3: ("GLO_G1_CA",),
     5: ("BDS_B1_I", "BDS_B2A_I"),
 }
 CONSTELLATION_TO_SYS_KIND = {1: 0, 6: 1, 4: 2}
