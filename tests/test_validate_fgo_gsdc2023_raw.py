@@ -2146,6 +2146,7 @@ def test_build_tdcp_arrays_propagates_consistency_rejects_to_adjacent_pairs():
         doppler,
         np.array([1.0, 1.0, 1.0, 0.0], dtype=np.float64),
         consistency_threshold_m=1.5,
+        doppler_endpoint_mask=True,
     )
 
     assert mask_count == 1

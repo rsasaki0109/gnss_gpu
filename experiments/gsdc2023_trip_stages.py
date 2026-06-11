@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from experiments.gsdc2023_signal_model import carrier_wavelength_m
 from experiments.gsdc2023_taroz_weighting import SN_PERCENTILE_DEFAULT, compute_trip_cn0_percentiles
 
 
@@ -292,6 +293,8 @@ class PostObservationStageConfig:
     default_pd_l5_threshold_m: float
     default_pr_l1_threshold_m: float
     default_pr_l5_threshold_m: float
+    tdcp_cycle_jump_mask_cycles: float = 0.0
+    tdcp_doppler_endpoint_mask: bool = False
 
 
 @dataclass(frozen=True)
@@ -1667,6 +1670,8 @@ def build_post_observation_stages(
     matlab_residual_diagnostics_mask_path: Path | None,
     tdcp_geometry_correction: bool,
     tdcp_weight_scale: float,
+    tdcp_cycle_jump_mask_cycles: float = 0.0,
+    tdcp_doppler_endpoint_mask: bool = False,
     adr: np.ndarray | None,
     adr_state: np.ndarray | None,
     adr_uncertainty: np.ndarray | None,
@@ -1845,6 +1850,8 @@ def build_post_observation_stages(
         kaggle_wls=kaggle_wls,
         tdcp_geometry_correction=tdcp_geometry_correction,
         tdcp_weight_scale=tdcp_weight_scale,
+        tdcp_cycle_jump_mask_cycles=tdcp_cycle_jump_mask_cycles,
+        tdcp_doppler_endpoint_mask=tdcp_doppler_endpoint_mask,
         build_tdcp_arrays_fn=build_tdcp_arrays_fn,
         apply_diagnostics_mask_fn=apply_diagnostics_mask_fn,
         apply_geometry_correction_fn=apply_geometry_correction_fn,
@@ -1939,6 +1946,8 @@ def build_configured_post_observation_stages(
         matlab_residual_diagnostics_mask_path=config.matlab_residual_diagnostics_mask_path,
         tdcp_geometry_correction=config.tdcp_geometry_correction,
         tdcp_weight_scale=config.tdcp_weight_scale,
+        tdcp_cycle_jump_mask_cycles=config.tdcp_cycle_jump_mask_cycles,
+        tdcp_doppler_endpoint_mask=config.tdcp_doppler_endpoint_mask,
         adr=observation_products.adr,
         adr_state=observation_products.adr_state,
         adr_uncertainty=observation_products.adr_uncertainty,
@@ -1978,6 +1987,19 @@ def build_configured_post_observation_stages(
     )
 
 
+def _tdcp_adr_wavelengths_for_slots(slot_keys: Sequence[Any]) -> np.ndarray:
+    constellation_by_letter = {"G": 1, "E": 6, "J": 4, "C": 5}
+    wavelengths = np.ones(len(slot_keys), dtype=np.float64)
+    for idx, key in enumerate(slot_keys):
+        if not isinstance(key, tuple) or len(key) < 3:
+            continue
+        constellation = constellation_by_letter.get(str(key[0]).upper())
+        if constellation is None:
+            constellation = int(key[0])
+        wavelengths[idx] = carrier_wavelength_m(constellation, str(key[2]))
+    return wavelengths
+
+
 def build_tdcp_stage(
     *,
     adr: np.ndarray | None,
@@ -2005,6 +2027,8 @@ def build_tdcp_stage(
     kaggle_wls: np.ndarray,
     tdcp_geometry_correction: bool,
     tdcp_weight_scale: float,
+    tdcp_cycle_jump_mask_cycles: float = 0.0,
+    tdcp_doppler_endpoint_mask: bool = False,
     build_tdcp_arrays_fn: BuildTdcpArraysFn,
     apply_diagnostics_mask_fn: ApplyDiagnosticsMaskFn,
     apply_geometry_correction_fn: ApplyTdcpGeometryCorrectionFn,
@@ -2028,6 +2052,9 @@ def build_tdcp_stage(
             carrier_weights=carrier_weights,
             clock_jump=clock_jump,
             loffset_m=tdcp_loffset_m,
+            cycle_jump_mask_cycles=tdcp_cycle_jump_mask_cycles,
+            adr_wavelength_m=_tdcp_adr_wavelengths_for_slots(slot_keys),
+            doppler_endpoint_mask=tdcp_doppler_endpoint_mask,
         )
         tdcp_raw_meas = tdcp_meas.copy() if tdcp_meas is not None else None
 

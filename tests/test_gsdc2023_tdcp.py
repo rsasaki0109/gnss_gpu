@@ -108,6 +108,7 @@ def test_build_tdcp_arrays_propagates_consistency_rejects_to_adjacent_pairs_dire
         doppler,
         np.array([1.0, 1.0, 1.0, 0.0], dtype=np.float64),
         consistency_threshold_m=1.5,
+        doppler_endpoint_mask=True,
     )
 
     assert mask_count == 1
@@ -115,6 +116,112 @@ def test_build_tdcp_arrays_propagates_consistency_rejects_to_adjacent_pairs_dire
     assert tdcp_weights is not None
     assert np.all(tdcp_weights[:, 0] == 0.0)
     assert np.all(tdcp_weights[:, 1] > 0.0)
+
+
+def test_build_tdcp_arrays_default_consistency_rejects_only_offending_pair_direct():
+    adr = np.array(
+        [
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [100.0, 2.0],
+            [101.0, 3.0],
+        ],
+        dtype=np.float64,
+    )
+    adr_state = np.ones_like(adr, dtype=np.int32)
+    adr_uncertainty = np.full_like(adr, 0.02)
+    doppler = np.full_like(adr, -1.0)
+
+    tdcp_meas, tdcp_weights, mask_count = build_tdcp_arrays(
+        adr,
+        adr_state,
+        adr_uncertainty,
+        doppler,
+        np.array([1.0, 1.0, 1.0, 0.0], dtype=np.float64),
+        consistency_threshold_m=1.5,
+    )
+
+    assert mask_count == 1
+    assert tdcp_meas is not None
+    assert tdcp_weights is not None
+    assert tdcp_weights[0, 0] > 0.0
+    assert tdcp_weights[1, 0] == 0.0
+    assert tdcp_weights[2, 0] > 0.0
+    assert np.all(tdcp_weights[:, 1] > 0.0)
+
+
+def test_build_tdcp_arrays_cycle_jump_guard_masks_taroz_later_endpoint_direct():
+    adr = np.array([[0.0], [1.0], [20002.0], [20003.0]], dtype=np.float64)
+    adr_state = np.ones_like(adr, dtype=np.int32)
+    adr_uncertainty = np.full_like(adr, 0.02)
+    dt = np.array([1.0, 1.0, 1.0, 0.0], dtype=np.float64)
+
+    off_meas, off_weights, off_count = build_tdcp_arrays(
+        adr,
+        adr_state,
+        adr_uncertainty,
+        doppler=None,
+        dt=dt,
+        consistency_threshold_m=1.5,
+        cycle_jump_mask_cycles=0.0,
+        adr_wavelength_m=1.0,
+    )
+    on_meas, on_weights, on_count = build_tdcp_arrays(
+        adr,
+        adr_state,
+        adr_uncertainty,
+        doppler=None,
+        dt=dt,
+        consistency_threshold_m=1.5,
+        cycle_jump_mask_cycles=2.0e4,
+        adr_wavelength_m=1.0,
+    )
+
+    assert off_count == 0
+    assert on_count == 0
+    assert off_meas is not None
+    assert off_weights is not None
+    assert on_meas is not None
+    assert on_weights is not None
+    assert np.all(off_weights[:, 0] > 0.0)
+    assert on_weights[0, 0] > 0.0
+    assert on_weights[1, 0] == 0.0
+    assert on_weights[2, 0] == 0.0
+
+
+def test_build_tdcp_arrays_new_flags_disabled_match_defaults_direct():
+    adr = np.array([[0.0], [1.0], [20002.0], [20003.0]], dtype=np.float64)
+    adr_state = np.ones_like(adr, dtype=np.int32)
+    adr_uncertainty = np.full_like(adr, 0.02)
+    doppler = np.full_like(adr, -1.0)
+    dt = np.array([1.0, 1.0, 1.0, 0.0], dtype=np.float64)
+
+    default = build_tdcp_arrays(
+        adr,
+        adr_state,
+        adr_uncertainty,
+        doppler,
+        dt,
+        consistency_threshold_m=1.5,
+    )
+    explicit_off = build_tdcp_arrays(
+        adr,
+        adr_state,
+        adr_uncertainty,
+        doppler,
+        dt,
+        consistency_threshold_m=1.5,
+        cycle_jump_mask_cycles=0.0,
+        doppler_endpoint_mask=False,
+    )
+
+    assert default[2] == explicit_off[2]
+    assert default[0] is not None
+    assert default[1] is not None
+    assert explicit_off[0] is not None
+    assert explicit_off[1] is not None
+    np.testing.assert_allclose(default[0], explicit_off[0])
+    np.testing.assert_allclose(default[1], explicit_off[1])
 
 
 def test_build_tdcp_arrays_uses_matlab_scalar_interval_for_consistency_direct():
