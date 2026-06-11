@@ -338,6 +338,7 @@ def test_apply_taroz_gnss_only_preset_excludes_imu_stop_height_priors() -> None:
     assert cfg.apply_absolute_height is False
     assert cfg.absolute_height_huber_k == 0.0
     assert cfg.apply_relative_height is False
+    assert cfg.apply_position_offset is True
     assert cfg.apply_observation_mask is True
     assert cfg.pseudorange_residual_mask_l5_m == 15.0
 
