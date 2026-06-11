@@ -88,6 +88,15 @@ the baseline can drift through urban-canyon sections.
   <a href="docs/assets/media/particles/particle_viz_odaiba.mp4">Open the Odaiba particle-cloud video</a>
 </p>
 
+For the zero-data terminal demo behind this visual:
+
+```bash
+PYTHONPATH=python:. python3 examples/demo_pf_localization_improvement.py
+```
+
+It reads checked-in artifacts and prints the UrbanNav Odaiba PF-vs-RTKLIB
+improvement plus the PLATEAU LOS/NLOS mask replay gain for PF.
+
 ## Ray-traced NLOS diffraction on real city data
 
 Beyond *rejecting* blocked satellites, the package models **why** an urban pseudorange is
