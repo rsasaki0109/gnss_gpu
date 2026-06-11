@@ -665,7 +665,7 @@ def build_trip_arrays(
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE,
     tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION,
     tdcp_cycle_jump_mask_cycles: float = 0.0,
-    tdcp_doppler_endpoint_mask: bool = False,
+    tdcp_doppler_endpoint_mask: bool = True,
     apply_base_correction: bool = False,
     data_root: Path | None = None,
     trip: str | None = None,

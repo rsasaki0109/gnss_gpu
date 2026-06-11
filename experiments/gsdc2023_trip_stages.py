@@ -294,7 +294,7 @@ class PostObservationStageConfig:
     default_pr_l1_threshold_m: float
     default_pr_l5_threshold_m: float
     tdcp_cycle_jump_mask_cycles: float = 0.0
-    tdcp_doppler_endpoint_mask: bool = False
+    tdcp_doppler_endpoint_mask: bool = True
 
 
 @dataclass(frozen=True)
@@ -1671,7 +1671,7 @@ def build_post_observation_stages(
     tdcp_geometry_correction: bool,
     tdcp_weight_scale: float,
     tdcp_cycle_jump_mask_cycles: float = 0.0,
-    tdcp_doppler_endpoint_mask: bool = False,
+    tdcp_doppler_endpoint_mask: bool = True,
     adr: np.ndarray | None,
     adr_state: np.ndarray | None,
     adr_uncertainty: np.ndarray | None,
@@ -2028,7 +2028,7 @@ def build_tdcp_stage(
     tdcp_geometry_correction: bool,
     tdcp_weight_scale: float,
     tdcp_cycle_jump_mask_cycles: float = 0.0,
-    tdcp_doppler_endpoint_mask: bool = False,
+    tdcp_doppler_endpoint_mask: bool = True,
     build_tdcp_arrays_fn: BuildTdcpArraysFn,
     apply_diagnostics_mask_fn: ApplyDiagnosticsMaskFn,
     apply_geometry_correction_fn: ApplyTdcpGeometryCorrectionFn,

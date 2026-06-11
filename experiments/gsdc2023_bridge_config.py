@@ -266,7 +266,7 @@ class BridgeConfig:
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
     tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION
     tdcp_cycle_jump_mask_cycles: float = 0.0
-    tdcp_doppler_endpoint_mask: bool = False
+    tdcp_doppler_endpoint_mask: bool = True
     tdcp_scale_candidate_enabled: bool = False
     tdcp_scale_candidate_weight_scale: float = 1.0e-7
     tdcp_scale_candidate_phones: tuple[str, ...] = ("pixel4", "pixel4xl", "mi8")

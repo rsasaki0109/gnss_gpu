@@ -108,7 +108,6 @@ def test_build_tdcp_arrays_propagates_consistency_rejects_to_adjacent_pairs_dire
         doppler,
         np.array([1.0, 1.0, 1.0, 0.0], dtype=np.float64),
         consistency_threshold_m=1.5,
-        doppler_endpoint_mask=True,
     )
 
     assert mask_count == 1
@@ -118,7 +117,7 @@ def test_build_tdcp_arrays_propagates_consistency_rejects_to_adjacent_pairs_dire
     assert np.all(tdcp_weights[:, 1] > 0.0)
 
 
-def test_build_tdcp_arrays_default_consistency_rejects_only_offending_pair_direct():
+def test_build_tdcp_arrays_endpoint_mask_opt_out_rejects_only_offending_pair_direct():
     adr = np.array(
         [
             [0.0, 0.0],
@@ -139,6 +138,7 @@ def test_build_tdcp_arrays_default_consistency_rejects_only_offending_pair_direc
         doppler,
         np.array([1.0, 1.0, 1.0, 0.0], dtype=np.float64),
         consistency_threshold_m=1.5,
+        doppler_endpoint_mask=False,
     )
 
     assert mask_count == 1
@@ -190,7 +190,10 @@ def test_build_tdcp_arrays_cycle_jump_guard_masks_taroz_later_endpoint_direct():
 
 
 def test_build_tdcp_arrays_new_flags_disabled_match_defaults_direct():
-    adr = np.array([[0.0], [1.0], [20002.0], [20003.0]], dtype=np.float64)
+    adr = np.array(
+        [[0.0, 0.0], [1.0, 1.0], [20002.0, 2.0], [20003.0, 3.0]],
+        dtype=np.float64,
+    )
     adr_state = np.ones_like(adr, dtype=np.int32)
     adr_uncertainty = np.full_like(adr, 0.02)
     doppler = np.full_like(adr, -1.0)
@@ -212,7 +215,7 @@ def test_build_tdcp_arrays_new_flags_disabled_match_defaults_direct():
         dt,
         consistency_threshold_m=1.5,
         cycle_jump_mask_cycles=0.0,
-        doppler_endpoint_mask=False,
+        doppler_endpoint_mask=True,
     )
 
     assert default[2] == explicit_off[2]

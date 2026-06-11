@@ -54,7 +54,7 @@ def build_tdcp_arrays(
     loffset_m: float = 0.0,
     cycle_jump_mask_cycles: float = 0.0,
     adr_wavelength_m: float | np.ndarray | None = None,
-    doppler_endpoint_mask: bool = False,
+    doppler_endpoint_mask: bool = True,
 ) -> tuple[np.ndarray | None, np.ndarray | None, int]:
     n_epoch, n_sat = adr.shape
     if n_epoch < 2:
