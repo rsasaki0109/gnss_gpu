@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+import warnings
 from collections.abc import Mapping
-from dataclasses import replace as _replace_dataclass
+from dataclasses import dataclass, field, replace as _replace_dataclass
 from pathlib import Path
 
 import numpy as np
@@ -2391,6 +2392,58 @@ def _vd_seed_factor_guard_enabled_for_phone(phone: str) -> bool:
     return phone.lower() == "pixel6pro"
 
 
+@dataclass
+class ChunkedFgoRun:
+    """Result of ``run_fgo_chunked``.
+
+    Iterating yields the legacy 11-tuple layout (without
+    ``failed_chunk_reasons``) so existing tuple unpacks keep working; new
+    fields are attribute-only.
+    """
+
+    auto_state: np.ndarray
+    fgo_state: np.ndarray
+    total_iters: int
+    failed_chunks: int
+    vd_seed_guard_skipped_segments: int
+    vd_seed_guard_skipped_epochs: int
+    vd_seed_guard_records: list[dict[str, object]]
+    auto_sources: np.ndarray
+    auto_source_counts: dict[str, int]
+    chunk_records: list[ChunkSelectionRecord]
+    fgo_vd_state: np.ndarray | None
+    failed_chunk_reasons: dict[str, int] = field(default_factory=dict)
+
+    def __iter__(self):
+        return iter(
+            (
+                self.auto_state,
+                self.fgo_state,
+                self.total_iters,
+                self.failed_chunks,
+                self.vd_seed_guard_skipped_segments,
+                self.vd_seed_guard_skipped_epochs,
+                self.vd_seed_guard_records,
+                self.auto_sources,
+                self.auto_source_counts,
+                self.chunk_records,
+                self.fgo_vd_state,
+            ),
+        )
+
+
+def _record_chunk_fallback(reasons: dict[str, int], reason: str) -> None:
+    """Count a chunk fallback reason and warn the first time it appears."""
+
+    if reason not in reasons:
+        warnings.warn(
+            f"FGO chunk failed and fell back to raw WLS: {reason}",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+    reasons[reason] = reasons.get(reason, 0) + 1
+
+
 def run_fgo_chunked(
     batch: TripArrays,
     raw_wls: np.ndarray,
@@ -2446,19 +2499,7 @@ def run_fgo_chunked(
     fgo_huber_k_tdcp: float = 0.0,
     fgo_fixed_linearization: bool = False,
     fgo_seed_state: np.ndarray | None = None,
-) -> tuple[
-    np.ndarray,
-    np.ndarray,
-    int,
-    int,
-    int,
-    int,
-    list[dict[str, object]],
-    np.ndarray,
-    dict[str, int],
-    list[ChunkSelectionRecord],
-    np.ndarray | None,
-]:
+) -> "ChunkedFgoRun":
     n_epoch = batch.sat_ecef.shape[0]
     chunk_size = n_epoch if chunk_epochs <= 0 or n_epoch <= chunk_epochs else chunk_epochs
     stitched = raw_wls.copy()
@@ -2482,6 +2523,7 @@ def run_fgo_chunked(
     )
     total_iters = 0
     failed_chunks = 0
+    failed_chunk_reasons: dict[str, int] = {}
     vd_seed_guard_skipped_segments = 0
     vd_seed_guard_skipped_epochs = 0
     vd_seed_guard_records: list[dict[str, object]] = []
@@ -3013,9 +3055,13 @@ def run_fgo_chunked(
                             seg_state_for_solver,
                             **vd_kwargs,
                         )
-                except RuntimeError:
+                except RuntimeError as exc:
                     iters = -1
+                    fallback_reason = f"{type(exc).__name__}: {exc}"
+                else:
+                    fallback_reason = "native VD solver returned -1 (rejected inputs, e.g. n_state cap)"
                 if int(iters) < 0:
+                    _record_chunk_fallback(failed_chunk_reasons, fallback_reason)
                     chunk_failed = True
                     fgo_xyz[local_start:local_end] = raw_state[local_start:local_end, :3]
                     continue
@@ -3083,9 +3129,13 @@ def run_fgo_chunked(
                         tol=tol,
                         tdcp_huber_k=float(fgo_huber_k_tdcp),
                     )
-                except RuntimeError:
+                except RuntimeError as exc:
                     iters = -1
+                    fallback_reason = f"{type(exc).__name__}: {exc}"
+                else:
+                    fallback_reason = "native solver returned -1 (rejected inputs, e.g. n_state cap)"
                 if int(iters) < 0:
+                    _record_chunk_fallback(failed_chunk_reasons, fallback_reason)
                     chunk_failed = True
                     fgo_xyz[local_start:local_end] = raw_state[local_start:local_end, :3]
                     continue
@@ -3164,18 +3214,19 @@ def run_fgo_chunked(
         selected_source_counts[source] += end - start
         prev_tail_xyz = stitched[end - 1, :3].copy()
 
-    return (
-        stitched,
-        fgo_stitched,
-        total_iters,
-        failed_chunks,
-        vd_seed_guard_skipped_segments,
-        vd_seed_guard_skipped_epochs,
-        vd_seed_guard_records,
-        selected_sources,
-        selected_source_counts,
-        chunk_records,
-        fgo_vd_stitched,
+    return ChunkedFgoRun(
+        auto_state=stitched,
+        fgo_state=fgo_stitched,
+        total_iters=total_iters,
+        failed_chunks=failed_chunks,
+        vd_seed_guard_skipped_segments=vd_seed_guard_skipped_segments,
+        vd_seed_guard_skipped_epochs=vd_seed_guard_skipped_epochs,
+        vd_seed_guard_records=vd_seed_guard_records,
+        auto_sources=selected_sources,
+        auto_source_counts=selected_source_counts,
+        chunk_records=chunk_records,
+        fgo_vd_state=fgo_vd_stitched,
+        failed_chunk_reasons=failed_chunk_reasons,
     )
 
 
@@ -3591,25 +3642,25 @@ def solve_trip(
             f"kept={after_stop_count}/{before_stop_count} status={seed_status}",
             flush=True,
         )
-    (
-        auto_state,
-        fgo_state,
-        iters,
-        failed_chunks,
-        vd_seed_guard_skipped_segments,
-        vd_seed_guard_skipped_epochs,
-        vd_seed_guard_records,
-        auto_sources,
-        auto_source_counts,
-        chunk_records,
-        fgo_vd_state,
-    ) = run_fgo_chunked(
+    chunked_run = run_fgo_chunked(
         batch,
         raw_wls,
         **solver_context_kwargs,
         **fgo_run_kwargs,
         fgo_seed_state=fgo_seed_state,
     )
+    auto_state = chunked_run.auto_state
+    fgo_state = chunked_run.fgo_state
+    iters = chunked_run.total_iters
+    failed_chunks = chunked_run.failed_chunks
+    failed_chunk_reasons = chunked_run.failed_chunk_reasons
+    vd_seed_guard_skipped_segments = chunked_run.vd_seed_guard_skipped_segments
+    vd_seed_guard_skipped_epochs = chunked_run.vd_seed_guard_skipped_epochs
+    vd_seed_guard_records = chunked_run.vd_seed_guard_records
+    auto_sources = chunked_run.auto_sources
+    auto_source_counts = chunked_run.auto_source_counts
+    chunk_records = chunked_run.chunk_records
+    fgo_vd_state = chunked_run.fgo_vd_state
     tdcp_off_fgo_state: np.ndarray | None = None
     tdcp_off_chunk_records: list[ChunkSelectionRecord] | None = None
     tdcp_scale_fgo_state: np.ndarray | None = None
@@ -3620,72 +3671,42 @@ def solve_trip(
     dd_carrier_stats: dict[str, object] = {}
     taroz_fgo_candidates: dict[str, tuple[np.ndarray, list[ChunkSelectionRecord]]] = {}
     if _tdcp_off_candidate_enabled(config, batch):
-        (
-            _tdcp_off_auto_state,
-            tdcp_off_fgo_state,
-            _tdcp_off_iters,
-            _tdcp_off_failed_chunks,
-            _tdcp_off_vd_seed_guard_skipped_segments,
-            _tdcp_off_vd_seed_guard_skipped_epochs,
-            _tdcp_off_vd_seed_guard_records,
-            _tdcp_off_auto_sources,
-            _tdcp_off_auto_source_counts,
-            tdcp_off_chunk_records,
-            _tdcp_off_fgo_vd_state,
-        ) = run_fgo_chunked(
+        tdcp_off_run = run_fgo_chunked(
             _batch_without_tdcp(batch),
             raw_wls,
             **solver_context_kwargs,
             **fgo_run_kwargs,
             fgo_seed_state=fgo_seed_state,
         )
+        tdcp_off_fgo_state = tdcp_off_run.fgo_state
+        tdcp_off_chunk_records = tdcp_off_run.chunk_records
     if _tdcp_scale_candidate_enabled(config, batch, phone_name):
         tdcp_scale_batch = _apply_tdcp_candidate_weight_scale(
             batch,
             current_scale=config.tdcp_weight_scale,
             candidate_scale=config.tdcp_scale_candidate_weight_scale,
         )
-        (
-            _tdcp_scale_auto_state,
-            tdcp_scale_fgo_state,
-            _tdcp_scale_iters,
-            _tdcp_scale_failed_chunks,
-            _tdcp_scale_vd_seed_guard_skipped_segments,
-            _tdcp_scale_vd_seed_guard_skipped_epochs,
-            _tdcp_scale_vd_seed_guard_records,
-            _tdcp_scale_auto_sources,
-            _tdcp_scale_auto_source_counts,
-            tdcp_scale_chunk_records,
-            _tdcp_scale_fgo_vd_state,
-        ) = run_fgo_chunked(
+        tdcp_scale_run = run_fgo_chunked(
             tdcp_scale_batch,
             raw_wls,
             **solver_context_kwargs,
             **fgo_run_kwargs,
             fgo_seed_state=fgo_seed_state,
         )
+        tdcp_scale_fgo_state = tdcp_scale_run.fgo_state
+        tdcp_scale_chunk_records = tdcp_scale_run.chunk_records
     if config.ct_rbpf_fgo_enabled:
         ct_rbpf_fgo_run_kwargs = dict(fgo_run_kwargs)
         ct_rbpf_fgo_run_kwargs["motion_sigma_m"] = config.ct_rbpf_motion_sigma_m
-        (
-            _ct_rbpf_auto_state,
-            ct_rbpf_fgo_state,
-            _ct_rbpf_iters,
-            _ct_rbpf_failed_chunks,
-            _ct_rbpf_vd_seed_guard_skipped_segments,
-            _ct_rbpf_vd_seed_guard_skipped_epochs,
-            _ct_rbpf_vd_seed_guard_records,
-            _ct_rbpf_auto_sources,
-            _ct_rbpf_auto_source_counts,
-            ct_rbpf_chunk_records,
-            _ct_rbpf_fgo_vd_state,
-        ) = run_fgo_chunked(
+        ct_rbpf_run = run_fgo_chunked(
             batch,
             raw_wls,
             **solver_context_kwargs,
             **ct_rbpf_fgo_run_kwargs,
             fgo_seed_state=fgo_seed_state,
         )
+        ct_rbpf_fgo_state = ct_rbpf_run.fgo_state
+        ct_rbpf_chunk_records = ct_rbpf_run.chunk_records
     if taroz_candidate_sources:
         if data_root is None:
             raise RuntimeError("taroz FGO candidates require data_root")
@@ -3703,26 +3724,14 @@ def solve_trip(
                 taroz_candidate_base_run_kwargs,
                 taroz_kernel,
             )
-            (
-                _taroz_auto_state,
-                taroz_fgo_state,
-                _taroz_iters,
-                _taroz_failed_chunks,
-                _taroz_vd_seed_guard_skipped_segments,
-                _taroz_vd_seed_guard_skipped_epochs,
-                _taroz_vd_seed_guard_records,
-                _taroz_auto_sources,
-                _taroz_auto_source_counts,
-                taroz_chunk_records,
-                _taroz_fgo_vd_state,
-            ) = run_fgo_chunked(
+            taroz_run = run_fgo_chunked(
                 taroz_candidate_batch,
                 raw_wls,
                 **solver_context_kwargs,
                 **taroz_candidate_run_kwargs,
                 fgo_seed_state=fgo_seed_state,
             )
-            taroz_fgo_candidates[str(source_name)] = (taroz_fgo_state, taroz_chunk_records)
+            taroz_fgo_candidates[str(source_name)] = (taroz_run.fgo_state, taroz_run.chunk_records)
     raw_state, raw_sse, raw_weight_sum, _ = fit_state_with_clock_bias(
         batch.sat_ecef,
         batch.pseudorange,
@@ -3958,6 +3967,7 @@ def solve_trip(
         assembled_outputs=assembled_outputs,
         fgo_iters=int(iters),
         failed_chunks=int(failed_chunks),
+        failed_chunk_reasons=failed_chunk_reasons,
         vd_seed_guard_skipped_segments=int(vd_seed_guard_skipped_segments),
         vd_seed_guard_skipped_epochs=int(vd_seed_guard_skipped_epochs),
         vd_seed_guard_records=vd_seed_guard_records,
