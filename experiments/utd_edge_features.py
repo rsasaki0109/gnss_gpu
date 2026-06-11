@@ -25,6 +25,15 @@ class DiffractionEdgeSet:
     length_m: np.ndarray
     dihedral_deg: np.ndarray
     is_boundary: np.ndarray
+    # UTD wedge geometry (optional; populated by extract_diffraction_edges).
+    # face_dir_a/face_dir_b are unit directions in the plane perpendicular to
+    # the edge, pointing from the edge into each adjacent face (the wall
+    # surface). wedge_n is the Keller wedge factor n with exterior angle n*pi.
+    # For boundary (single-face) edges face_dir_b == face_dir_a and wedge_n = 2
+    # (a half-plane / knife edge).
+    face_dir_a: np.ndarray = None
+    face_dir_b: np.ndarray = None
+    wedge_n: np.ndarray = None
 
     @property
     def size(self) -> int:
@@ -32,6 +41,10 @@ class DiffractionEdgeSet:
 
     def subset(self, mask: np.ndarray) -> "DiffractionEdgeSet":
         mask = np.asarray(mask)
+
+        def _sub(arr):
+            return None if arr is None else arr[mask]
+
         return DiffractionEdgeSet(
             start=self.start[mask],
             end=self.end[mask],
@@ -39,6 +52,9 @@ class DiffractionEdgeSet:
             length_m=self.length_m[mask],
             dihedral_deg=self.dihedral_deg[mask],
             is_boundary=self.is_boundary[mask],
+            face_dir_a=_sub(self.face_dir_a),
+            face_dir_b=_sub(self.face_dir_b),
+            wedge_n=_sub(self.wedge_n),
         )
 
 
@@ -108,6 +124,19 @@ def extract_diffraction_edges(
             length = float(np.linalg.norm(b - a))
             if length < min_edge_length_m:
                 continue
+            # In-plane direction from the edge into this face (perpendicular to
+            # the edge tangent), used later to set up the UTD wedge geometry.
+            edge_vec = b - a
+            edge_len = float(np.linalg.norm(edge_vec))
+            face_dir = np.zeros(3, dtype=np.float64)
+            if edge_len > 1e-9:
+                tang = edge_vec / edge_len
+                centroid = corners.mean(axis=0)
+                rel = centroid - mid
+                rel_perp = rel - float(rel @ tang) * tang
+                perp_len = float(np.linalg.norm(rel_perp))
+                if perp_len > 1e-9:
+                    face_dir = rel_perp / perp_len
             key = _edge_key(a, b, quantization_m)
             item = edge_map.get(key)
             if item is None:
@@ -116,9 +145,11 @@ def extract_diffraction_edges(
                     "end": b.copy(),
                     "length": length,
                     "normals": [normal.copy()],
+                    "face_dirs": [face_dir],
                 }
             else:
                 item["normals"].append(normal.copy())  # type: ignore[index, union-attr]
+                item["face_dirs"].append(face_dir)  # type: ignore[index, union-attr]
                 if length > float(item["length"]):
                     item["start"] = a.copy()
                     item["end"] = b.copy()
@@ -129,9 +160,13 @@ def extract_diffraction_edges(
     lengths: list[float] = []
     dihedrals: list[float] = []
     boundaries: list[bool] = []
+    face_dirs_a: list[np.ndarray] = []
+    face_dirs_b: list[np.ndarray] = []
+    wedge_ns: list[float] = []
 
     for item in edge_map.values():
         normals_for_edge = np.asarray(item["normals"], dtype=np.float64)
+        face_dirs = list(item["face_dirs"])  # type: ignore[index, union-attr]
         is_boundary = normals_for_edge.shape[0] < 2
         if is_boundary:
             if not include_boundary_edges:
@@ -143,11 +178,26 @@ def extract_diffraction_edges(
             dihedral = float(np.degrees(np.arccos(np.min(upper)))) if upper.size else 0.0
             if dihedral < min_dihedral_deg:
                 continue
+        # UTD wedge faces. Boundary edges are treated as a half-plane (n=2);
+        # for shared edges the two distinct face directions define the interior
+        # (material) wedge angle WA_int, with exterior n*pi = 2*pi - WA_int.
+        dir_a = face_dirs[0]
+        if is_boundary:
+            dir_b = dir_a.copy()
+            wedge_n = 2.0
+        else:
+            dir_b = face_dirs[1]
+            cos_int = float(np.clip(dir_a @ dir_b, -1.0, 1.0))
+            wa_int = float(np.arccos(cos_int))  # interior sector between faces
+            wedge_n = 2.0 - wa_int / np.pi
         starts.append(np.asarray(item["start"], dtype=np.float64))
         ends.append(np.asarray(item["end"], dtype=np.float64))
         lengths.append(float(item["length"]))
         dihedrals.append(dihedral)
         boundaries.append(is_boundary)
+        face_dirs_a.append(np.asarray(dir_a, dtype=np.float64))
+        face_dirs_b.append(np.asarray(dir_b, dtype=np.float64))
+        wedge_ns.append(float(wedge_n))
 
     if not starts:
         empty = np.empty((0, 3), dtype=np.float64)
@@ -158,6 +208,9 @@ def extract_diffraction_edges(
             length_m=np.empty(0, dtype=np.float64),
             dihedral_deg=np.empty(0, dtype=np.float64),
             is_boundary=np.empty(0, dtype=bool),
+            face_dir_a=empty.copy(),
+            face_dir_b=empty.copy(),
+            wedge_n=np.empty(0, dtype=np.float64),
         )
 
     start = np.vstack(starts)
@@ -170,6 +223,9 @@ def extract_diffraction_edges(
         length_m=length_m,
         dihedral_deg=np.asarray(dihedrals, dtype=np.float64),
         is_boundary=np.asarray(boundaries, dtype=bool),
+        face_dir_a=np.vstack(face_dirs_a),
+        face_dir_b=np.vstack(face_dirs_b),
+        wedge_n=np.asarray(wedge_ns, dtype=np.float64),
     )
     if voxel_size_m > 0.0:
         edges = thin_edges_by_midpoint_voxel(edges, voxel_size_m)

@@ -493,9 +493,21 @@ class UrbanNavLoader:
         return_l1_carrier_per_epoch: bool = False,
         return_l2_pr_per_epoch: bool = False,
         return_l2_carrier_per_epoch: bool = False,
+        correct_transmission_time: bool = True,
     ) -> dict:
-        """Build experiment-ready arrays from an UrbanNav run."""
+        """Build experiment-ready arrays from an UrbanNav run.
+
+        ``correct_transmission_time`` (default True) recomputes each satellite at
+        the signal transmission epoch ``tow - range/c`` and applies the Sagnac
+        rotation, so the returned ``sat_ecef`` are expressed in the reception-time
+        ECEF frame at the point the signal *left* the satellite. Without it the
+        positions are taken at the reception epoch, injecting a per-satellite
+        (range-rate x travel-time) range error of tens of metres that dominates
+        the multipath/NLOS signal in pseudorange residuals. Pass False to recover
+        the legacy (uncorrected) behaviour.
+        """
         from gnss_gpu.ephemeris import Ephemeris
+        from gnss_gpu.transmission_time import transmission_time_sat_positions
 
         rover_obs = self.load_rover_obs(rover_source=rover_source)
         base_obs = self.load_base_obs()
@@ -615,6 +627,26 @@ class UrbanNavLoader:
             if usable_epoch_index < start_epoch:
                 usable_epoch_index += 1
                 continue
+
+            sat_ecef = np.asarray(sat_ecef, dtype=np.float64)
+            if correct_transmission_time:
+                # Re-place each satellite at its transmission epoch (tow - range/c)
+                # and Sagnac-rotate into the reception-time ECEF frame. Seed the
+                # travel time with the ground-truth receiver position; any sat the
+                # ephemeris cannot evaluate at the earlier epoch keeps its
+                # reception-time position rather than being dropped.
+                obs_code_map = dict(zip(sat_id_list, obs_code_list))
+                used_obs_codes = [obs_code_map[sid] for sid in used_sat_ids]
+                sat_tx = transmission_time_sat_positions(
+                    eph,
+                    tow,
+                    gt_ecef[gt_idx],
+                    list(used_sat_ids),
+                    sat_ecef,
+                    obs_codes=used_obs_codes,
+                )
+                ok = np.all(np.isfinite(sat_tx), axis=1)
+                sat_ecef = np.where(ok[:, None], sat_tx, sat_ecef)
 
             dopplers_epoch = np.array(
                 [doppler_map.get(sat_id, np.nan) for sat_id in used_sat_ids],
