@@ -74,18 +74,18 @@ and the GSDC2023 Kaggle smartphone-decimeter challenge).
 
 The README headline is not just a table: the sampled particle cloud is localized
 on the real street network, with the posterior contracting around the driven
-UrbanNav route while the baseline can drift through urban-canyon sections.
+UrbanNav route while the full-view trail is drawn from the continuous trajectory.
 
 <p align="center">
   <img
     src="docs/assets/media/particles/particle_viz_odaiba.gif"
-    alt="Zoomed GPU particle-filter localization on OpenStreetMap in Odaiba"
-    width="620"
+    alt="GPU particle-filter localization on OpenStreetMap in Odaiba"
+    width="960"
   >
 </p>
 
 <p align="center">
-  <a href="docs/assets/media/particles/particle_viz_odaiba.mp4">Open the zoomed Odaiba particle-cloud video</a>
+  <a href="docs/assets/media/particles/particle_viz_odaiba.mp4">Open the Odaiba particle-cloud video</a>
 </p>
 
 For the zero-data terminal demo behind this visual:

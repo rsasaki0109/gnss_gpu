@@ -59,12 +59,8 @@ SLOW_GIF_SPEED_FACTORS = {
     "los-nlos/los_nlos_deckgl.gif": 2.0,
 }
 MEDIA_FILTERS = {
-    "particles/particle_viz_odaiba.mp4": (
-        "crop=555:405:540:35,scale=820:-2:flags=lanczos"
-    ),
     "particles/particle_viz_odaiba.gif": (
-        "setpts=1.5*PTS,fps=5,crop=555:405:540:35,"
-        "scale=620:-1:flags=lanczos,"
+        "setpts=1.5*PTS,fps=6,scale=960:-1:flags=lanczos,"
         "split[s0][s1];[s0]palettegen=stats_mode=diff[p];"
         "[s1][p]paletteuse=dither=bayer:bayer_scale=5"
     ),
@@ -495,9 +491,9 @@ def _build_snapshot() -> dict:
 
     for viz_name, viz_title, viz_caption in [
         ("particles/particle_viz_odaiba.mp4", "Odaiba Particle Cloud",
-         "Sampled particle cloud on OpenStreetMap. Orange: particles. Red: PF estimate. Blue: ground truth."),
+         "Sampled particle cloud on OpenStreetMap (overview + zoom). Orange: particles. Red: PF estimate. Blue: ground truth."),
         ("particles/particle_viz_shinjuku.mp4", "Shinjuku Particle Cloud",
-         "Sampled particle cloud in deep urban Shinjuku. Watch the particle spread in canyon sections."),
+         "Sampled particle cloud in deep urban Shinjuku (overview + zoom). Watch the particle spread in canyon sections."),
     ]:
         if (MEDIA_DIR / viz_name).exists():
             media_cards.append({
