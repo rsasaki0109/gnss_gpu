@@ -52,6 +52,9 @@ def build_tdcp_arrays(
     carrier_weights: np.ndarray | None = None,
     clock_jump: np.ndarray | None = None,
     loffset_m: float = 0.0,
+    cycle_jump_mask_cycles: float = 0.0,
+    adr_wavelength_m: float | np.ndarray | None = None,
+    doppler_endpoint_mask: bool = True,
 ) -> tuple[np.ndarray | None, np.ndarray | None, int]:
     n_epoch, n_sat = adr.shape
     if n_epoch < 2:
@@ -69,6 +72,31 @@ def build_tdcp_arrays(
     for t in range(n_epoch):
         for s in range(n_sat):
             valid_phase[t, s] = np.isfinite(adr[t, s]) and valid_adr_state(int(adr_state[t, s]))
+
+    cycle_jump_mask_cycles = float(cycle_jump_mask_cycles)
+    if not np.isfinite(cycle_jump_mask_cycles):
+        raise ValueError("cycle_jump_mask_cycles must be finite")
+    if cycle_jump_mask_cycles > 0.0:
+        if adr_wavelength_m is None:
+            wavelength = np.ones(n_sat, dtype=np.float64)
+        else:
+            wavelength_arr = np.asarray(adr_wavelength_m, dtype=np.float64)
+            if wavelength_arr.ndim == 0:
+                wavelength = np.full(n_sat, float(wavelength_arr), dtype=np.float64)
+            else:
+                wavelength = wavelength_arr.reshape(-1)
+                if wavelength.size != n_sat:
+                    raise ValueError("adr_wavelength_m length must match adr columns")
+        for s in range(n_sat):
+            wl = float(wavelength[s])
+            if not np.isfinite(wl) or wl <= 0.0:
+                continue
+            for t in range(n_epoch - 1):
+                if not valid_phase[t, s] or not valid_phase[t + 1, s]:
+                    continue
+                delta_cycles = float((adr[t + 1, s] - adr[t, s]) / wl)
+                if abs(delta_cycles) > cycle_jump_mask_cycles:
+                    valid_phase[t + 1, s] = False
 
     for t in range(n_epoch - 1):
         dt_s = float(dt[t])
@@ -101,7 +129,7 @@ def build_tdcp_arrays(
 
     # MATLAB exobs_residuals masks carrier-phase observations at both endpoints
     # of a failed dDL pair, which also removes adjacent TDCP factors.
-    if np.any(rejected_pair):
+    if doppler_endpoint_mask and np.any(rejected_pair):
         valid_phase[:-1, :] &= ~rejected_pair
         valid_phase[1:, :] &= ~rejected_pair
 
@@ -112,6 +140,8 @@ def build_tdcp_arrays(
         if clock_jump is not None and t + 1 < clock_jump.size and bool(clock_jump[t + 1]):
             continue
         for s in range(n_sat):
+            if rejected_pair[t, s]:
+                continue
             if not valid_phase[t, s] or not valid_phase[t + 1, s]:
                 continue
             meas = float(adr[t + 1, s] - adr[t, s] + loffset_m)
