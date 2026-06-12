@@ -339,6 +339,10 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
             if item.strip()
         ),
         taroz_imu_factor_mask_csv=getattr(args, "taroz_imu_factor_mask_csv", None),
+        fgo_extra_constellations=bool(getattr(args, "fgo_extra_constellations", False)),
+        fgo_residual_mask_propagation=bool(
+            getattr(args, "fgo_residual_mask_propagation", False)
+        ),
     )
     if bool(getattr(args, "taroz_marupaku", False)):
         cfg = apply_taroz_marupaku_preset(cfg)
@@ -573,6 +577,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--motion-sigma-m", type=float, default=0.2)
     parser.add_argument("--factor-dt-max-s", type=float, default=FACTOR_DT_MAX_S)
     parser.add_argument("--fgo-iters", type=int, default=8)
+    parser.add_argument(
+        "--fgo-extra-constellations",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Seed the multi-GNSS WLS / FGO with BeiDou (and other extra constellations) beyond the default GPS/GAL/QZSS set.",
+    )
+    parser.add_argument(
+        "--fgo-residual-mask-propagation",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Mirror the post-fill pseudorange residual mask into the FGO weights (weights_fgo), so residual-rejected PR rows are dropped from the FGO objective too.",
+    )
     parser.add_argument("--stop-attitude-sigma-rad", type=float, default=0.0)
     parser.add_argument(
         "--taroz-fgo",
