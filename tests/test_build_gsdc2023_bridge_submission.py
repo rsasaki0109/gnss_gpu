@@ -472,3 +472,8 @@ def test_build_config_wires_fgo_gate_gap_floor() -> None:
     cfg = build_config(_args(gate_fgo_baseline_gap_p95_floor_m=20.0))
 
     assert cfg.gate_fgo_baseline_gap_p95_floor_m == pytest.approx(20.0)
+
+
+def test_build_config_wires_base_correction() -> None:
+    assert build_config(_args()).apply_base_correction is False
+    assert build_config(_args(base_correction=True)).apply_base_correction is True
