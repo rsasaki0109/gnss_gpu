@@ -70,6 +70,33 @@ and the GSDC2023 Kaggle smartphone-decimeter challenge).
 > GPU PF stack consistently wins against EKF and RTKLIB on the same epochs. Full tables,
 > figures, and limitations live on the [results snapshot](https://rsasaki0109.github.io/gnss_gpu/).
 
+## Ray-traced NLOS diffraction on real city data
+
+Beyond *rejecting* blocked satellites, the package models **why** an urban pseudorange is
+biased — knife-edge (ITU-R P.526) and **UTD** (Kouyoumjian–Pathak) diffraction plus
+specular reflection over **PLATEAU** 3D building meshes — and scores the physics against
+real **UrbanNav** residuals.
+
+A subtle but decisive step is correcting each satellite to signal-**transmission** time
+(with the Sagnac rotation). Without it a per-satellite *tens-of-metres* range error swamps
+the multipath signal; with it the residual becomes a clean NLOS ground truth (LOS median
+**1.0 m**, AUC **0.92**). On that clean reference, **UTD reproduces the measured
+multipath-bias distribution better than knife-edge** — reproducing the literature
+(Zhang & Hsu, 2021) on properly corrected real data.
+
+<div align="center">
+<img src="docs/assets/figures/nlos_diffraction_benchmark.png" alt="Ray-traced NLOS diffraction (UTD vs knife-edge) vs real UrbanNav Odaiba residuals" width="860">
+</div>
+
+| Diffraction model | Wasserstein-1 ↓ | KS ↓ |
+|---|--:|--:|
+| knife-edge (ITU-R P.526) | 1.84 | 0.46 |
+| **UTD (Kouyoumjian–Pathak)** | **1.70** | **0.29** |
+
+> UrbanNav Tokyo *Odaiba*, 60 epochs over a 249k-triangle PLATEAU mesh. Reproduce with
+> `PYTHONPATH=examples python examples/plot_nlos_diffraction_figure.py Odaiba 60`
+> (uses the installed package's CUDA ray-tracing for line-of-sight checks).
+
 ## Quick start
 
 **Zero install:** run the urban-canyon demo — with sky plot and trajectory
