@@ -24,7 +24,7 @@ MEDIA_DIR = ASSETS_DIR / "media"
 SNAPSHOT_PATH = ASSETS_DIR / "results_snapshot.json"
 SNAPSHOT_JS_PATH = ASSETS_DIR / "results_snapshot.js"
 ODAIBA_PF_SMOOTHER_FREEZE_JSON = RESULTS_DIR / "odaiba_pf_smoother_freeze.json"
-PLATEAU_NLOS_VIS_HTML = "plateau_nlos_visualization.html"
+PLATEAU_NLOS_VIS_HTML = "demos/plateau_nlos_visualization.html"
 PLATEAU_NLOS_SUITE_JSON = RESULTS_DIR / "plateau_nlos_demo_suite_summary.json"
 PLATEAU_NLOS_SUITE_CSV = RESULTS_DIR / "plateau_nlos_demo_suite_summary.csv"
 PLATEAU_NLOS_SUITE_MD = RESULTS_DIR / "plateau_nlos_demo_suite_summary.md"
@@ -44,32 +44,32 @@ VALIDATION_SUMMARY_JSON = RESULTS_DIR / "freeze_validation_summary.json"
 SITE_MEDIA = {}
 SITE_VIDEO = None
 OPTIONAL_SHOWCASE_ASSETS = {
-    "los_nlos_deckgl.html": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.html",
-    "los_nlos_deckgl.mp4": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.mp4",
-    "los_nlos_deckgl.webm": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.webm",
-    "los_nlos_deckgl.gif": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.gif",
-    "los_nlos_deckgl_still.png": (
+    "los-nlos/los_nlos_deckgl.html": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.html",
+    "los-nlos/los_nlos_deckgl.mp4": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.mp4",
+    "los-nlos/los_nlos_deckgl.webm": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl.webm",
+    "los-nlos/los_nlos_deckgl.gif": RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl_map.gif",
+    "los-nlos/los_nlos_deckgl_still.png": (
         RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl_still.png"
     ),
 }
 SITE_CHARTS = {
-    "site_urbannav_runs.png": {
+    "site/site_urbannav_runs.png": {
         "title": "UrbanNav Per-Run Comparison",
         "caption": "Odaiba and Shinjuku side-by-side for EKF, PF-10K, and PF+RobustClear-10K.",
     },
-    "site_window_wins.png": {
+    "site/site_window_wins.png": {
         "title": "Window Win Rates",
         "caption": "Fixed-window win rates against EKF on UrbanNav Tokyo.",
     },
-    "site_hk_control.png": {
+    "site/site_hk_control.png": {
         "title": "Hong Kong Control",
         "caption": "Cross-geometry control check showing why adaptive guidance stays supplemental.",
     },
-    "site_urbannav_timeline.png": {
+    "site/site_urbannav_timeline.png": {
         "title": "Epoch Error Timeline",
         "caption": "Smoothed Odaiba and Shinjuku traces make the PF-vs-EKF gap visible over time.",
     },
-    "site_error_bands.png": {
+    "site/site_error_bands.png": {
         "title": "Error-Band Composition",
         "caption": "Epoch share in <25 m, 25-50 m, 50-100 m, 100-500 m, and >500 m bands.",
     },
@@ -148,12 +148,19 @@ def _media_href(name: str) -> str:
     return f"assets/media/{name}"
 
 
+def _copy_media_asset(src: Path, rel_path: str) -> str:
+    dst = MEDIA_DIR / rel_path
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    return rel_path
+
+
 def _sync_optional_showcase_assets() -> set[str]:
     copied: set[str] = set()
-    for name, src in OPTIONAL_SHOWCASE_ASSETS.items():
+    for rel_path, src in OPTIONAL_SHOWCASE_ASSETS.items():
         if src.exists():
-            _copy_file(src, MEDIA_DIR)
-            copied.add(name)
+            _copy_media_asset(src, rel_path)
+            copied.add(rel_path)
     return copied
 
 
@@ -385,14 +392,14 @@ def _build_snapshot() -> dict:
 
     media_cards = []
     deckgl_sources = []
-    if "los_nlos_deckgl.mp4" in optional_media:
-        deckgl_sources.append({"src": _media_href("los_nlos_deckgl.mp4"), "type": "video/mp4"})
-    if "los_nlos_deckgl.webm" in optional_media:
-        deckgl_sources.append({"src": _media_href("los_nlos_deckgl.webm"), "type": "video/webm"})
+    if "los-nlos/los_nlos_deckgl.mp4" in optional_media:
+        deckgl_sources.append({"src": _media_href("los-nlos/los_nlos_deckgl.mp4"), "type": "video/mp4"})
+    if "los-nlos/los_nlos_deckgl.webm" in optional_media:
+        deckgl_sources.append({"src": _media_href("los-nlos/los_nlos_deckgl.webm"), "type": "video/webm"})
     if deckgl_sources:
         deckgl_href = (
-            _media_href("los_nlos_deckgl.html")
-            if "los_nlos_deckgl.html" in optional_media
+            _media_href("los-nlos/los_nlos_deckgl.html")
+            if "los-nlos/los_nlos_deckgl.html" in optional_media
             else deckgl_sources[0]["src"]
         )
         media_cards.append({
@@ -405,8 +412,8 @@ def _build_snapshot() -> dict:
                 "satellites projected onto a virtual sky ceiling above the receiver."
             ),
             "poster": (
-                _media_href("los_nlos_deckgl_still.png")
-                if "los_nlos_deckgl_still.png" in optional_media
+                _media_href("los-nlos/los_nlos_deckgl_still.png")
+                if "los-nlos/los_nlos_deckgl_still.png" in optional_media
                 else ""
             ),
             "sources": deckgl_sources,
@@ -426,9 +433,9 @@ def _build_snapshot() -> dict:
         })
 
     for viz_name, viz_title, viz_caption in [
-        ("particle_viz_odaiba.mp4", "Odaiba Particle Cloud",
+        ("particles/particle_viz_odaiba.mp4", "Odaiba Particle Cloud",
          "100K particles on OpenStreetMap (full + zoom). Orange: particles. Red: PF estimate. Blue: ground truth."),
-        ("particle_viz_shinjuku.mp4", "Shinjuku Particle Cloud",
+        ("particles/particle_viz_shinjuku.mp4", "Shinjuku Particle Cloud",
          "100K particles in deep urban Shinjuku (full + zoom). Watch the particle spread in canyon sections."),
     ]:
         if (MEDIA_DIR / viz_name).exists():
