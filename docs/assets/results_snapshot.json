@@ -162,7 +162,7 @@
       "kind": "video",
       "title": "Odaiba Particle Cloud",
       "href": "assets/media/particles/particle_viz_odaiba.mp4",
-      "caption": "Sampled particle cloud on OpenStreetMap. Orange: particles. Red: PF estimate. Blue: ground truth.",
+      "caption": "Sampled particle cloud on OpenStreetMap (overview + zoom). Orange: particles. Red: PF estimate. Blue: ground truth.",
       "poster": "",
       "sources": [
         {
@@ -175,7 +175,7 @@
       "kind": "video",
       "title": "Shinjuku Particle Cloud",
       "href": "assets/media/particles/particle_viz_shinjuku.mp4",
-      "caption": "Sampled particle cloud in deep urban Shinjuku. Watch the particle spread in canyon sections.",
+      "caption": "Sampled particle cloud in deep urban Shinjuku (overview + zoom). Watch the particle spread in canyon sections.",
       "poster": "",
       "sources": [
         {

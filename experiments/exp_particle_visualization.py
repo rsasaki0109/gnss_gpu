@@ -48,6 +48,17 @@ def particles_ecef_to_lonlat(particles: np.ndarray) -> np.ndarray:
     return result
 
 
+def positions_ecef_to_lonlat(positions_ecef: np.ndarray) -> np.ndarray:
+    """Convert ECEF positions to (lon, lat), preserving NaN gaps."""
+    positions = np.asarray(positions_ecef, dtype=np.float64).reshape(-1, 3)
+    result = np.full((len(positions), 2), np.nan, dtype=np.float64)
+    for i, pos in enumerate(positions):
+        if np.all(np.isfinite(pos)):
+            lat, lon, _ = ecef_to_lla(pos[0], pos[1], pos[2])
+            result[i] = [lon, lat]
+    return result
+
+
 def ecef_to_local_enu(positions_ecef: np.ndarray, origin_ecef: np.ndarray) -> np.ndarray:
     """Convert ECEF positions to a local ENU frame anchored at origin_ecef."""
     positions = np.asarray(positions_ecef, dtype=np.float64).reshape(-1, 3)
@@ -230,10 +241,16 @@ def run_pf_with_particle_dumps(
     from evaluate import ecef_errors_2d_3d
     pf_errors_2d, _ = ecef_errors_2d_3d(estimates, gt_ecef)
     ekf_errors_2d, _ = ecef_errors_2d_3d(ekf_pos[:, :3], gt_ecef)
+    trajectory_lonlat = {
+        "gt": positions_ecef_to_lonlat(gt_ecef),
+        "estimate": positions_ecef_to_lonlat(estimates),
+    }
 
     # Attach per-frame metrics
     for f in particle_frames:
         i = f["epoch"]
+        f["history_end"] = int(i)
+        f["trajectory_lonlat"] = trajectory_lonlat
         f["error_2d"] = float(pf_errors_2d[i])
         f["ekf_error_2d"] = float(ekf_errors_2d[i])
         # Running RMS up to this epoch
@@ -396,8 +413,16 @@ def create_animation(
     import matplotlib.pyplot as plt
     from matplotlib.animation import FFMpegWriter
 
-    gt_lons = np.array([f["gt_lonlat"][0] for f in frames])
-    gt_lats = np.array([f["gt_lonlat"][1] for f in frames])
+    trajectory_lonlat = frames[0].get("trajectory_lonlat", {})
+    gt_for_extent = np.asarray(trajectory_lonlat.get("gt", []), dtype=np.float64)
+    if gt_for_extent.size == 0:
+        gt_for_extent = np.array([f["gt_lonlat"] for f in frames], dtype=np.float64)
+    finite_gt = gt_for_extent[np.all(np.isfinite(gt_for_extent), axis=1)]
+    if len(finite_gt) == 0:
+        finite_gt = np.array([f["gt_lonlat"] for f in frames], dtype=np.float64)
+
+    gt_lons = finite_gt[:, 0]
+    gt_lats = finite_gt[:, 1]
 
     # Full view extent from ground truth
     lon_min, lon_max = gt_lons.min() - 0.003, gt_lons.max() + 0.003
@@ -409,8 +434,27 @@ def create_animation(
         y = np.log(np.tan((90 + y_val) * np.pi / 360.0)) * 20037508.34 / np.pi
         return x, y
 
+    def lonlat_array_to_webmerc(points_lonlat: np.ndarray) -> np.ndarray:
+        points = np.asarray(points_lonlat, dtype=np.float64).reshape(-1, 2)
+        result = np.full_like(points, np.nan)
+        finite = np.all(np.isfinite(points), axis=1)
+        if np.any(finite):
+            x, y = lonlat_to_webmerc(points[finite, 0], points[finite, 1])
+            result[finite] = np.column_stack([x, y])
+        return result
+
+    def has_finite_points(points_xy: np.ndarray | None) -> bool:
+        if points_xy is None:
+            return False
+        points = np.asarray(points_xy, dtype=np.float64).reshape(-1, 2)
+        return bool(np.any(np.all(np.isfinite(points), axis=1)))
+
     # Zoom radius in Web Mercator meters (approximate)
     zoom_r = zoom_radius_m * 1.5  # scale factor for Web Mercator at mid-lat
+
+    trajectory_wm: dict[str, np.ndarray] = {}
+    for name, points in trajectory_lonlat.items():
+        trajectory_wm[name] = lonlat_array_to_webmerc(points)
 
     # Pre-convert all coordinates
     for f in frames:
@@ -427,6 +471,24 @@ def create_animation(
     xmin_full, ymin_full = lonlat_to_webmerc(lon_min, lat_min)
     xmax_full, ymax_full = lonlat_to_webmerc(lon_max, lat_max)
 
+    frame_history = np.array(
+        [int(f.get("history_end", f.get("epoch", i))) for i, f in enumerate(frames)],
+        dtype=np.int64,
+    )
+    history_diffs = np.diff(frame_history)
+    positive_diffs = history_diffs[history_diffs > 0]
+    dump_stride = int(np.median(positive_diffs)) if len(positive_diffs) else 1
+    trail_span_epochs = max(1, int(trail_length) * max(1, dump_stride))
+
+    def trajectory_slice(name: str, start_idx: int, end_idx: int) -> np.ndarray | None:
+        points = trajectory_wm.get(name)
+        if points is None or len(points) == 0:
+            return None
+        start_idx = max(0, min(int(start_idx), len(points) - 1))
+        end_idx = max(start_idx, min(int(end_idx), len(points) - 1))
+        segment = points[start_idx:end_idx + 1]
+        return segment if has_finite_points(segment) else None
+
     # --- Render frames manually ---
     output_path.parent.mkdir(parents=True, exist_ok=True)
     writer = FFMpegWriter(fps=fps, bitrate=5000)
@@ -439,7 +501,7 @@ def create_animation(
     ax_full.set_xlim(xmin_full, xmax_full)
     ax_full.set_ylim(ymin_full, ymax_full)
     cx.add_basemap(ax_full, source=cx.providers.OpenStreetMap.Mapnik, zoom="auto")
-    ax_full.set_title("Sampled trajectory", fontsize=12)
+    ax_full.set_title("Continuous trajectory", fontsize=12)
     ax_full.set_axis_off()
 
     # Setup zoom view — download tiles for the FULL possible extent
@@ -475,6 +537,7 @@ def create_animation(
                 patch.remove()
 
             # Trails
+            history_end = int(f.get("history_end", f.get("epoch", frame_idx)))
             gt_trail_x.append(f["gt_wm"][0])
             gt_trail_y.append(f["gt_wm"][1])
             est_trail_x.append(f["estimate_wm"][0])
@@ -487,6 +550,13 @@ def create_animation(
             particles = f["particles_wm"]
             est = f["estimate_wm"]
             gt = f["gt_wm"]
+            full_gt_path = trajectory_slice("gt", 0, history_end)
+            full_est_path = trajectory_slice("estimate", 0, history_end)
+            full_spp_path = trajectory_slice("spp", 0, history_end)
+            trail_start_epoch = max(0, history_end - trail_span_epochs + 1)
+            zoom_gt_path = trajectory_slice("gt", trail_start_epoch, history_end)
+            zoom_est_path = trajectory_slice("estimate", trail_start_epoch, history_end)
+            zoom_spp_path = trajectory_slice("spp", trail_start_epoch, history_end)
 
             # --- Full view ---
             # Remove old lines
@@ -497,13 +567,25 @@ def create_animation(
 
             ax_full.scatter(particles[:, 0], particles[:, 1],
                            s=3, c="#ff6600", alpha=0.3, zorder=3, edgecolors="none")
-            ax_full.plot(gt_trail_x, gt_trail_y, "-", color="#3b82f6",
-                        linewidth=2, alpha=0.7, zorder=4)
-            ax_full.plot(est_trail_x, est_trail_y, "-", color="#ef4444",
-                        linewidth=2, alpha=0.7, zorder=4)
-            if spp_trail_x:
+            if full_gt_path is not None:
+                ax_full.plot(full_gt_path[:, 0], full_gt_path[:, 1], "-",
+                             color="#3b82f6", linewidth=2, alpha=0.7, zorder=4)
+            else:
+                ax_full.plot(gt_trail_x, gt_trail_y, "-", color="#3b82f6",
+                            linewidth=2, alpha=0.7, zorder=4)
+            if full_est_path is not None:
+                ax_full.plot(full_est_path[:, 0], full_est_path[:, 1], "-",
+                             color="#ef4444", linewidth=2, alpha=0.7, zorder=4)
+            else:
+                ax_full.plot(est_trail_x, est_trail_y, "-", color="#ef4444",
+                            linewidth=2, alpha=0.7, zorder=4)
+            if full_spp_path is not None:
+                ax_full.plot(full_spp_path[:, 0], full_spp_path[:, 1], "--",
+                            color="#16a34a", linewidth=3, alpha=0.9, zorder=5)
+            elif spp_trail_x:
                 ax_full.plot(spp_trail_x, spp_trail_y, "--", color="#16a34a",
                             linewidth=3, alpha=0.9, zorder=5)
+            if "spp_wm" in f:
                 ax_full.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#16a34a",
                             markersize=10, markeredgecolor="white", markeredgewidth=2, zorder=7)
             ax_full.plot(est[0], est[1], "o", color="#ef4444", markersize=12,
@@ -544,13 +626,25 @@ def create_animation(
             ax_zoom.scatter(particles[:, 0], particles[:, 1],
                            s=15, c="#ff6600", alpha=0.3, zorder=3,
                            edgecolors="none")
-            ax_zoom.plot(gt_trail_x[start:], gt_trail_y[start:], "-",
-                        color="#3b82f6", linewidth=3, alpha=0.8, zorder=4)
-            ax_zoom.plot(est_trail_x[start:], est_trail_y[start:], "-",
-                        color="#ef4444", linewidth=3, alpha=0.8, zorder=4)
-            if spp_trail_x:
+            if zoom_gt_path is not None:
+                ax_zoom.plot(zoom_gt_path[:, 0], zoom_gt_path[:, 1], "-",
+                             color="#3b82f6", linewidth=3, alpha=0.8, zorder=4)
+            else:
+                ax_zoom.plot(gt_trail_x[start:], gt_trail_y[start:], "-",
+                            color="#3b82f6", linewidth=3, alpha=0.8, zorder=4)
+            if zoom_est_path is not None:
+                ax_zoom.plot(zoom_est_path[:, 0], zoom_est_path[:, 1], "-",
+                             color="#ef4444", linewidth=3, alpha=0.8, zorder=4)
+            else:
+                ax_zoom.plot(est_trail_x[start:], est_trail_y[start:], "-",
+                            color="#ef4444", linewidth=3, alpha=0.8, zorder=4)
+            if zoom_spp_path is not None:
+                ax_zoom.plot(zoom_spp_path[:, 0], zoom_spp_path[:, 1], "--",
+                            color="#16a34a", linewidth=4, alpha=0.9, zorder=5)
+            elif spp_trail_x:
                 ax_zoom.plot(spp_trail_x[start:], spp_trail_y[start:], "--",
                             color="#16a34a", linewidth=4, alpha=0.9, zorder=5)
+            if "spp_wm" in f:
                 ax_zoom.plot(spp_trail_x[-1], spp_trail_y[-1], "D", color="#16a34a",
                             markersize=16, markeredgecolor="white", markeredgewidth=2.5, zorder=7,
                             label=baseline_label if frame_idx == 0 else "")
@@ -734,11 +828,20 @@ def _run_pf_gnssplusplus(
 
     # RTKLIB errors on same epochs
     rtk_err = np.full(len(pf_err), np.nan)
+    rtk_aligned = np.full_like(gt_arr, np.nan, dtype=np.float64)
     for i, tow in enumerate(tow_arr):
         key = round(tow, 1)
         if key in rtklib_lookup:
+            rtk_aligned[i] = rtklib_lookup[key]
             e, _ = ecef_errors_2d_3d(rtklib_lookup[key].reshape(1,3), gt_arr[i:i+1])
             rtk_err[i] = e[0]
+
+    trajectory_lonlat = {
+        "gt": positions_ecef_to_lonlat(gt_arr),
+        "estimate": positions_ecef_to_lonlat(pf_arr),
+    }
+    if np.any(np.all(np.isfinite(rtk_aligned), axis=1)):
+        trajectory_lonlat["spp"] = positions_ecef_to_lonlat(rtk_aligned)
 
     # Attach running RMS to frames (same epoch set for both)
     frame_epochs = [f["epoch"] for f in particle_frames]
@@ -754,6 +857,8 @@ def _run_pf_gnssplusplus(
 
         if i in frame_epochs:
             fi = frame_epochs.index(i)
+            particle_frames[fi]["history_end"] = int(i)
+            particle_frames[fi]["trajectory_lonlat"] = trajectory_lonlat
             particle_frames[fi]["error_2d"] = float(pf_err[i])
             particle_frames[fi]["pf_rms"] = float(np.sqrt(cum_pf_sq / pf_count))
             if rtk_count > 0:
@@ -768,6 +873,8 @@ def _run_pf_gnssplusplus(
 
     # Fill defaults
     for f in particle_frames:
+        f.setdefault("history_end", int(f["epoch"]))
+        f.setdefault("trajectory_lonlat", trajectory_lonlat)
         f.setdefault("error_2d", 0)
         f.setdefault("ekf_error_2d", 0)
         f.setdefault("pf_rms", 0)
