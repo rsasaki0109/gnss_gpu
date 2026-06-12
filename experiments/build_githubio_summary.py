@@ -52,6 +52,9 @@ OPTIONAL_SHOWCASE_ASSETS = {
         RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl_still.png"
     ),
 }
+SLOW_GIF_SPEED_FACTORS = {
+    "los-nlos/los_nlos_deckgl.gif": 2.0,
+}
 SITE_CHARTS = {
     "site/site_urbannav_runs.png": {
         "title": "UrbanNav Per-Run Comparison",
@@ -151,6 +154,27 @@ def _media_href(name: str) -> str:
 def _copy_media_asset(src: Path, rel_path: str) -> str:
     dst = MEDIA_DIR / rel_path
     dst.parent.mkdir(parents=True, exist_ok=True)
+    speed_factor = SLOW_GIF_SPEED_FACTORS.get(rel_path)
+    ffmpeg = shutil.which("ffmpeg")
+    if speed_factor is not None and ffmpeg is not None:
+        try:
+            subprocess.run(
+                [
+                    ffmpeg,
+                    "-y",
+                    "-i",
+                    str(src),
+                    "-vf",
+                    f"setpts={speed_factor}*PTS",
+                    str(dst),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+            return rel_path
+        except subprocess.CalledProcessError:
+            pass
     shutil.copy2(src, dst)
     return rel_path
 
