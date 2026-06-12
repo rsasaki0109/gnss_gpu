@@ -8,6 +8,7 @@ Runnable demos for `gnss_gpu`. Run them from the repo root with `PYTHONPATH=pyth
 |---|---|---:|---:|
 | Try it in the browser, zero install | [`colab_urban_canyon_quickstart.ipynb`](colab_urban_canyon_quickstart.ipynb) ([open in Colab](https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb)) | No | No |
 | See the core idea quickly | [`demo_urban_canyon_sim.py`](demo_urban_canyon_sim.py) | No | No |
+| Show the particle-filter localization improvement | [`demo_pf_localization_improvement.py`](demo_pf_localization_improvement.py) | No | No |
 | Inspect NLOS measurement effects | [`demo_nlos_simulation.py`](demo_nlos_simulation.py) | No | No |
 | Try the shipped PLATEAU sample | [`demo_plateau_nlos_simulation.py`](demo_plateau_nlos_simulation.py) | No | No |
 | Generate a standalone PLATEAU HTML report | [`demo_plateau_nlos_visualization.py`](demo_plateau_nlos_visualization.py) | No | No |
@@ -38,6 +39,24 @@ The same scenario, with a sky plot and trajectory/error figures, is available as
 [`colab_urban_canyon_quickstart.ipynb`](colab_urban_canyon_quickstart.ipynb) —
 [open it in Colab](https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb)
 to run everything in the browser with zero install.
+
+## Particle-filter localization improvement demo -- no GPU, no build, no data
+
+```bash
+PYTHONPATH=python:. python3 examples/demo_pf_localization_improvement.py
+```
+
+[`demo_pf_localization_improvement.py`](demo_pf_localization_improvement.py)
+reads checked-in result artifacts instead of rerunning UrbanNav. It prints the
+Odaiba OpenStreetMap particle-filter comparison against RTKLIB demo5 and the
+PLATEAU LOS/NLOS mask replay gain for the particle-filter consumer.
+
+```text
+RTKLIB demo5                              P50 2.67 m / RMS 13.08 m
+PF 100K (DD + smoother + stop-detect)     P50 1.36 m / RMS  4.11 m
+Improvement vs RTKLIB demo5: P50 49%, RMS 69%.
+PLATEAU PF mask-soft replay: RMS 11.18 m -> 1.40 m, gain 87.4%.
+```
 
 ## NLOS simulation research demo — no GPU, no build, no data
 
