@@ -1,6 +1,7 @@
 """Unit tests for ``experiments.postprocess_gsdc2023_submission_guard``."""
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -159,3 +160,72 @@ def test_deviation_guard_cli_summary_counts(tmp_path, capsys):
     assert "rows_total=4 guarded_rows=2 (50.00%) trips_touched=2" in stdout
     out = pd.read_csv(output_path)
     pd.testing.assert_frame_equal(out, reference)
+
+
+def _chunked_frames(n_rows: int = 40, bad_lo: int = 20, bad_hi: int = 40, offset_deg: float = 0.001):
+    # ~89 m of longitude offset (at lat 37) on rows [bad_lo, bad_hi): below the
+    # 100 m row guard but far beyond the healthy-chunk deviation band.
+    times = 1000 + np.arange(n_rows) * 1000
+    reference = pd.DataFrame({
+        "tripId": ["trip-a"] * n_rows,
+        "UnixTimeMillis": times,
+        "LatitudeDegrees": np.full(n_rows, 37.0),
+        "LongitudeDegrees": np.full(n_rows, -122.0),
+    })
+    candidate = reference.copy()
+    candidate.loc[bad_lo:bad_hi - 1, "LongitudeDegrees"] += offset_deg
+    return candidate, reference
+
+
+def test_chunk_fallback_replaces_diverged_chunk_and_keeps_healthy_chunk():
+    candidate, reference = _chunked_frames()
+
+    out, stats = apply_deviation_guard_to_submission(
+        candidate,
+        reference,
+        max_deviation_m=100.0,
+        chunk_size=20,
+        chunk_deviation_p95_m=50.0,
+    )
+
+    # diverged chunk (rows 20-39) snapped to reference, healthy chunk untouched
+    pd.testing.assert_series_equal(
+        out["LongitudeDegrees"], reference["LongitudeDegrees"], check_names=False, check_exact=True
+    )
+    assert stats["chunk_fallback_rows"] == 20
+    assert stats["guarded_rows"] == 20
+    chunks = stats["chunk_fallback_chunks"]
+    assert len(chunks) == 1
+    assert chunks[0]["tripId"] == "trip-a"
+    assert chunks[0]["chunk"] == 1
+    assert chunks[0]["rows"] == 20
+
+
+def test_chunk_fallback_disabled_by_default_keeps_sub_threshold_rows():
+    candidate, reference = _chunked_frames()
+
+    out, stats = apply_deviation_guard_to_submission(
+        candidate,
+        reference,
+        max_deviation_m=100.0,
+    )
+
+    # ~55 m offsets stay below the row guard, so nothing is replaced
+    assert stats["guarded_rows"] == 0
+    assert stats["chunk_fallback_rows"] == 0
+    pd.testing.assert_frame_equal(out, candidate)
+
+
+def test_chunk_fallback_threshold_boundary_keeps_chunk():
+    candidate, reference = _chunked_frames()
+
+    out, stats = apply_deviation_guard_to_submission(
+        candidate,
+        reference,
+        max_deviation_m=100.0,
+        chunk_size=20,
+        chunk_deviation_p95_m=90.0,
+    )
+
+    assert stats["chunk_fallback_rows"] == 0
+    pd.testing.assert_frame_equal(out, candidate)

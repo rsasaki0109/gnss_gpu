@@ -88,8 +88,18 @@ def apply_deviation_guard_to_submission(
     reference: pd.DataFrame,
     *,
     max_deviation_m: float = 100.0,
+    chunk_size: int = 0,
+    chunk_deviation_p95_m: float = 50.0,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
-    """Return a copy of ``df`` with over-threshold rows replaced by reference coordinates."""
+    """Return a copy of ``df`` with over-threshold rows replaced by reference coordinates.
+
+    When ``chunk_size`` > 0 an additional chunk-level fallback runs first: rows of
+    each trip are grouped into consecutive ``chunk_size`` blocks (in UnixTimeMillis
+    order, matching the bridge solver chunking) and any block whose deviation p95
+    exceeds ``chunk_deviation_p95_m`` is replaced by the reference wholesale.  This
+    catches solver divergences that settle in the 10-90 m band: large enough to
+    ruin the trip p95 yet below the per-row ``max_deviation_m`` guard.
+    """
     _validate_required_columns(df, name="input")
     _validate_required_columns(reference, name="reference")
     _validate_unique_keys(df, name="input")
@@ -109,7 +119,37 @@ def apply_deviation_guard_to_submission(
         ref_aligned[LAT_COLUMN].to_numpy(dtype=np.float64),
         ref_aligned[LNG_COLUMN].to_numpy(dtype=np.float64),
     )
-    guarded = deviation_m > max_deviation_m
+    chunk_fallback = np.zeros(len(df), dtype=bool)
+    per_trip_chunks: list[dict[str, object]] = []
+    if chunk_size > 0:
+        rank_in_trip = (
+            pd.DataFrame({"trip": df["tripId"], "t": df["UnixTimeMillis"]})
+            .groupby("trip", sort=False)["t"]
+            .rank(method="first")
+            .astype(int)
+            - 1
+        )
+        chunk_index = rank_in_trip // int(chunk_size)
+        chunk_frame = pd.DataFrame({
+            "trip": df["tripId"].to_numpy(),
+            "chunk": chunk_index.to_numpy(),
+            "deviation_m": deviation_m,
+        })
+        chunk_p95 = chunk_frame.groupby(["trip", "chunk"], sort=False)["deviation_m"].transform(
+            lambda x: float(np.percentile(x, 95))
+        )
+        chunk_fallback = (chunk_p95 > chunk_deviation_p95_m).to_numpy()
+        if chunk_fallback.any():
+            touched_chunks = chunk_frame.loc[chunk_fallback].groupby(["trip", "chunk"], sort=False)
+            for (trip_id, chunk_id), group in touched_chunks:
+                per_trip_chunks.append({
+                    "tripId": str(trip_id),
+                    "chunk": int(chunk_id),
+                    "rows": int(len(group)),
+                    "deviation_p95_m": float(np.percentile(group["deviation_m"], 95)),
+                })
+
+    guarded = (deviation_m > max_deviation_m) | chunk_fallback
 
     out = df.copy()
     out.loc[guarded, LAT_COLUMN] = ref_aligned.loc[guarded, LAT_COLUMN].to_numpy()
@@ -135,6 +175,8 @@ def apply_deviation_guard_to_submission(
         "trips_touched": len(per_trip),
         "max_deviation_m": float(np.max(deviation_m)) if len(deviation_m) else 0.0,
         "per_trip": per_trip,
+        "chunk_fallback_rows": int(np.sum(chunk_fallback)),
+        "chunk_fallback_chunks": per_trip_chunks,
     }
     return out, stats
 
@@ -147,6 +189,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reference", type=Path, required=True, help="reference submission CSV")
     parser.add_argument("--output", type=Path, required=True, help="output guarded CSV")
     parser.add_argument("--max-deviation-m", type=float, default=100.0)
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=0,
+        help="enable chunk-level fallback over consecutive blocks of this many rows per trip (0 = off)",
+    )
+    parser.add_argument(
+        "--chunk-deviation-p95-m",
+        type=float,
+        default=50.0,
+        help="replace a whole chunk with the reference when its deviation p95 exceeds this threshold",
+    )
     args = parser.parse_args(argv)
 
     if not args.input.is_file():
@@ -163,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
             df,
             reference,
             max_deviation_m=args.max_deviation_m,
+            chunk_size=args.chunk_size,
+            chunk_deviation_p95_m=args.chunk_deviation_p95_m,
         )
     except ValueError as exc:
         print(f"[error] {exc}", file=sys.stderr)
@@ -173,6 +229,12 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"trip={trip['tripId']} guarded_rows={trip['guarded_rows']} "
             f"max_deviation_m={trip['max_deviation_m']:.3f}",
+            flush=True,
+        )
+    for chunk in stats["chunk_fallback_chunks"]:  # type: ignore[index]
+        print(
+            f"trip={chunk['tripId']} chunk={chunk['chunk']} chunk_fallback_rows={chunk['rows']} "
+            f"deviation_p95_m={chunk['deviation_p95_m']:.3f}",
             flush=True,
         )
     guarded_rows = int(stats["guarded_rows"])
