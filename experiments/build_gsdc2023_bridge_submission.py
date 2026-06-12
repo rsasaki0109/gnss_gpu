@@ -78,10 +78,18 @@ def use_taroz_gnss_only_for_phone(phone: str) -> bool:
     return str(phone).lower().startswith("pixel")
 
 
-def apply_taroz_phone_aware_preset(config: BridgeConfig, sample_trip_id: str) -> BridgeConfig:
+def apply_taroz_phone_aware_preset(
+    config: BridgeConfig,
+    sample_trip_id: str,
+    *,
+    pixel_position_source: str | None = None,
+) -> BridgeConfig:
     phone = phone_from_sample_trip_id(sample_trip_id)
     if use_taroz_gnss_only_for_phone(phone):
-        return apply_taroz_gnss_only_preset(config)
+        preset = apply_taroz_gnss_only_preset(config)
+        if pixel_position_source:
+            preset = replace(preset, position_source=pixel_position_source)
+        return preset
     return replace(config, fgo_weight_mode=TAROZ_FGO_WEIGHT_MODE)
 
 
@@ -413,6 +421,9 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
     taroz_marupaku = bool(getattr(args, "taroz_marupaku", False))
     if taroz_marupaku and taroz_phone_aware:
         raise ValueError("--taroz-marupaku and --taroz-phone-aware are mutually exclusive")
+    pixel_position_source = getattr(args, "taroz_phone_aware_pixel_source", None) or None
+    if pixel_position_source and not taroz_phone_aware:
+        raise ValueError("--taroz-phone-aware-pixel-source requires --taroz-phone-aware")
     bridge_tables: dict[str, pd.DataFrame] = {}
     metrics: list[dict[str, Any]] = []
     total = len(trips)
@@ -423,7 +434,15 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
             "sample_trip_id": trip_id,
             "max_epochs": args.max_epochs,
             "start_epoch": args.start_epoch,
-            "config": apply_taroz_phone_aware_preset(config, trip_id) if taroz_phone_aware else config,
+            "config": (
+                apply_taroz_phone_aware_preset(
+                    config,
+                    trip_id,
+                    pixel_position_source=pixel_position_source,
+                )
+                if taroz_phone_aware
+                else config
+            ),
             "bridge_output_root": args.bridge_output_root,
             "resume_existing": bool(args.resume_existing),
         }
@@ -500,6 +519,7 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
                 "ct_rbpf_fgo": bool(config.ct_rbpf_fgo_enabled),
                 "taroz_marupaku": taroz_marupaku,
                 "taroz_phone_aware": taroz_phone_aware,
+                "taroz_phone_aware_pixel_source": pixel_position_source,
                 "ct_rbpf_motion_sigma_m": args.ct_rbpf_motion_sigma_m,
                 "dd_carrier_fgo": bool(config.dd_carrier_fgo_enabled),
                 "dd_carrier_base_obs_template": args.dd_carrier_base_obs_template,
@@ -576,6 +596,16 @@ def main(argv: list[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Apply the guarded taroz preset per phone: Pixel uses GNSS-only taroz; non-Pixel uses taroz SNR FGO weights only.",
+    )
+    parser.add_argument(
+        "--taroz-phone-aware-pixel-source",
+        choices=("gated", "fgo"),
+        default=None,
+        help=(
+            "Position source override for the Pixel branch of --taroz-phone-aware. "
+            "'fgo' trusts the taroz GNSS-only FGO trajectory directly instead of the "
+            "baseline-locked gate; non-Pixel trips keep --position-source."
+        ),
     )
     parser.add_argument(
         "--taroz-fgo-candidates",
