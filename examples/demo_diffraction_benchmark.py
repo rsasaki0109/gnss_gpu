@@ -309,6 +309,20 @@ def main(site="Odaiba", data_root=None, plateau_dir=None, max_epochs=120,
                    "this first-order model does not capture)")
         print(f"  {verdict}")
 
+    # Expose the underlying arrays + reference-quality verdict so callers (e.g. the
+    # README figure generator) can render their own plots without re-running the
+    # whole GPU pipeline. Non-breaking: only adds keys to the returned dict.
+    res["site"] = site
+    res["arrays"] = {
+        "real_cand": np.asarray(real_cand, dtype=float),
+        "sim_knife": np.asarray(sim_knife, dtype=float),
+        "sim_utd": np.asarray(sim_utd, dtype=float),
+        "all_abs_resid": np.asarray(all_abs_resid, dtype=float),
+        "all_is_los": np.asarray(all_is_los, dtype=bool),
+    }
+    if all_abs_resid:
+        res["reference_quality"] = q
+
     try:
         import matplotlib
         matplotlib.use("Agg")
