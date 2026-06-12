@@ -70,6 +70,24 @@ and the GSDC2023 Kaggle smartphone-decimeter challenge).
 > GPU PF stack consistently wins against EKF and RTKLIB on the same epochs. Full tables,
 > figures, and limitations live on the [results snapshot](https://rsasaki0109.github.io/gnss_gpu/).
 
+## Particle-filter localization on OpenStreetMap
+
+The README headline is not just a table: the particle cloud is localized on the real
+street network, with the posterior contracting around the driven UrbanNav route while
+the baseline can drift through urban-canyon sections.
+
+<p align="center">
+  <img
+    src="docs/assets/media/particles/particle_viz_odaiba.gif"
+    alt="GPU particle-filter localization on OpenStreetMap in Odaiba"
+    width="960"
+  >
+</p>
+
+<p align="center">
+  <a href="docs/assets/media/particles/particle_viz_odaiba.mp4">Open the Odaiba particle-cloud video</a>
+</p>
+
 ## Ray-traced NLOS diffraction on real city data
 
 Beyond *rejecting* blocked satellites, the package models **why** an urban pseudorange is

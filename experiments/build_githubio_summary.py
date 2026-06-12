@@ -51,9 +51,19 @@ OPTIONAL_SHOWCASE_ASSETS = {
     "los-nlos/los_nlos_deckgl_still.png": (
         RESULTS_DIR / "los_nlos_verification" / "los_nlos_deckgl_still.png"
     ),
+    "particles/particle_viz_odaiba.mp4": PAPER_ASSETS_DIR / "particle_viz_odaiba_100000.mp4",
+    "particles/particle_viz_odaiba.gif": PAPER_ASSETS_DIR / "particle_viz_odaiba_100000.mp4",
+    "particles/particle_viz_shinjuku.mp4": PAPER_ASSETS_DIR / "particle_viz_shinjuku_100000.mp4",
 }
 SLOW_GIF_SPEED_FACTORS = {
     "los-nlos/los_nlos_deckgl.gif": 2.0,
+}
+MEDIA_FILTERS = {
+    "particles/particle_viz_odaiba.gif": (
+        "setpts=1.5*PTS,fps=6,scale=960:-1:flags=lanczos,"
+        "split[s0][s1];[s0]palettegen=stats_mode=diff[p];"
+        "[s1][p]paletteuse=dither=bayer:bayer_scale=5"
+    ),
 }
 SITE_CHARTS = {
     "site/site_urbannav_runs.png": {
@@ -154,8 +164,30 @@ def _media_href(name: str) -> str:
 def _copy_media_asset(src: Path, rel_path: str) -> str:
     dst = MEDIA_DIR / rel_path
     dst.parent.mkdir(parents=True, exist_ok=True)
+    media_filter = MEDIA_FILTERS.get(rel_path)
     speed_factor = SLOW_GIF_SPEED_FACTORS.get(rel_path)
     ffmpeg = shutil.which("ffmpeg")
+    if media_filter is not None and ffmpeg is not None:
+        try:
+            subprocess.run(
+                [
+                    ffmpeg,
+                    "-y",
+                    "-i",
+                    str(src),
+                    "-vf",
+                    media_filter,
+                    str(dst),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+            return rel_path
+        except subprocess.CalledProcessError:
+            pass
+    if media_filter is not None and src.suffix.lower() != dst.suffix.lower():
+        return rel_path if dst.exists() else ""
     if speed_factor is not None and ffmpeg is not None:
         try:
             subprocess.run(
@@ -183,8 +215,9 @@ def _sync_optional_showcase_assets() -> set[str]:
     copied: set[str] = set()
     for rel_path, src in OPTIONAL_SHOWCASE_ASSETS.items():
         if src.exists():
-            _copy_media_asset(src, rel_path)
-            copied.add(rel_path)
+            copied_path = _copy_media_asset(src, rel_path)
+            if copied_path:
+                copied.add(copied_path)
     return copied
 
 
