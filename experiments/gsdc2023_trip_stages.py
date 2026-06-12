@@ -22,12 +22,13 @@ AppendGnssLogOnlyRowsFn = Callable[..., Any]
 ApplyDiagnosticsMaskFn = Callable[..., None]
 ApplyTdcpGeometryCorrectionFn = Callable[[np.ndarray | None, np.ndarray | None, np.ndarray, np.ndarray], int]
 ApplyTdcpWeightScaleFn = Callable[[np.ndarray | None, float], None]
+IsL5SignalFn = Callable[[str], bool]
+ApplyTdcpL5WeightScaleFn = Callable[[np.ndarray | None, Sequence[Any], float, IsL5SignalFn], None]
 CleanClockDriftFn = Callable[[np.ndarray, np.ndarray | None, np.ndarray | None, str], np.ndarray | None]
 ClockJumpFromEpochCountsFn = Callable[[Any], np.ndarray | None]
 CombineClockJumpMasksFn = Callable[[np.ndarray | None, np.ndarray | None], np.ndarray | None]
 DetectClockJumpsFromClockBiasFn = Callable[[np.ndarray, str], np.ndarray | None]
 EstimateResidualClockSeriesFn = Callable[..., tuple[np.ndarray | None, np.ndarray | None]]
-IsL5SignalFn = Callable[[str], bool]
 GnssLogPseudorangeMatrixFn = Callable[..., tuple[np.ndarray, np.ndarray, np.ndarray] | None]
 GnssLogEpochTimesFn = Callable[[Path], Any]
 GpsMatrtklibNavMessagesForTripFn = Callable[[Path], Any]
@@ -287,6 +288,7 @@ class PostObservationStageConfig:
     matlab_residual_diagnostics_mask_path: Path | None
     tdcp_geometry_correction: bool
     tdcp_weight_scale: float
+    tdcp_l5_weight_scale: float
     imu_frame: str
     imu_sample_dt_mode: str
     default_pd_l1_threshold_m: float
@@ -319,6 +321,7 @@ class PostObservationStageDependencies:
     apply_diagnostics_mask_fn: ApplyDiagnosticsMaskFn
     apply_geometry_correction_fn: ApplyTdcpGeometryCorrectionFn
     apply_weight_scale_fn: ApplyTdcpWeightScaleFn
+    apply_l5_weight_scale_fn: ApplyTdcpL5WeightScaleFn
     load_device_imu_measurements_fn: LoadImuMeasurementsFn
     process_device_imu_fn: ProcessImuFn
     project_stop_to_epochs_fn: ProjectStopFn
@@ -1883,6 +1886,7 @@ def build_post_observation_stages(
     matlab_residual_diagnostics_mask_path: Path | None,
     tdcp_geometry_correction: bool,
     tdcp_weight_scale: float,
+    tdcp_l5_weight_scale: float,
     adr: np.ndarray | None,
     adr_state: np.ndarray | None,
     adr_uncertainty: np.ndarray | None,
@@ -1911,6 +1915,7 @@ def build_post_observation_stages(
     apply_diagnostics_mask_fn: ApplyDiagnosticsMaskFn,
     apply_geometry_correction_fn: ApplyTdcpGeometryCorrectionFn,
     apply_weight_scale_fn: ApplyTdcpWeightScaleFn,
+    apply_l5_weight_scale_fn: ApplyTdcpL5WeightScaleFn,
     load_device_imu_measurements_fn: LoadImuMeasurementsFn,
     process_device_imu_fn: ProcessImuFn,
     project_stop_to_epochs_fn: ProjectStopFn,
@@ -2065,10 +2070,13 @@ def build_post_observation_stages(
         kaggle_wls=kaggle_wls,
         tdcp_geometry_correction=tdcp_geometry_correction,
         tdcp_weight_scale=tdcp_weight_scale,
+        tdcp_l5_weight_scale=tdcp_l5_weight_scale,
         build_tdcp_arrays_fn=build_tdcp_arrays_fn,
         apply_diagnostics_mask_fn=apply_diagnostics_mask_fn,
         apply_geometry_correction_fn=apply_geometry_correction_fn,
         apply_weight_scale_fn=apply_weight_scale_fn,
+        apply_l5_weight_scale_fn=apply_l5_weight_scale_fn,
+        is_l5_signal_fn=is_l5_signal_fn,
     )
     imu_stage = build_imu_stage(
         trip_dir=trip_dir,
@@ -2160,6 +2168,7 @@ def build_configured_post_observation_stages(
         matlab_residual_diagnostics_mask_path=config.matlab_residual_diagnostics_mask_path,
         tdcp_geometry_correction=config.tdcp_geometry_correction,
         tdcp_weight_scale=config.tdcp_weight_scale,
+        tdcp_l5_weight_scale=config.tdcp_l5_weight_scale,
         adr=observation_products.adr,
         adr_state=observation_products.adr_state,
         adr_uncertainty=observation_products.adr_uncertainty,
@@ -2188,6 +2197,7 @@ def build_configured_post_observation_stages(
         apply_diagnostics_mask_fn=dependencies.apply_diagnostics_mask_fn,
         apply_geometry_correction_fn=dependencies.apply_geometry_correction_fn,
         apply_weight_scale_fn=dependencies.apply_weight_scale_fn,
+        apply_l5_weight_scale_fn=dependencies.apply_l5_weight_scale_fn,
         load_device_imu_measurements_fn=dependencies.load_device_imu_measurements_fn,
         process_device_imu_fn=dependencies.process_device_imu_fn,
         project_stop_to_epochs_fn=dependencies.project_stop_to_epochs_fn,
@@ -2197,6 +2207,35 @@ def build_configured_post_observation_stages(
         default_pr_l1_threshold_m=config.default_pr_l1_threshold_m,
         default_pr_l5_threshold_m=config.default_pr_l5_threshold_m,
     )
+
+
+def _slot_signal_type(slot_key: Any) -> str | None:
+    if isinstance(slot_key, (tuple, list)) and len(slot_key) >= 3:
+        return str(slot_key[2])
+    signal_type = getattr(slot_key, "SignalType", None)
+    if signal_type is not None:
+        return str(signal_type)
+    return None
+
+
+def apply_tdcp_l5_weight_scale(
+    tdcp_weights: np.ndarray | None,
+    slot_keys: Sequence[Any],
+    scale: float,
+    is_l5_signal_fn: IsL5SignalFn,
+) -> None:
+    scale_value = float(scale)
+    if not np.isfinite(scale_value):
+        raise ValueError("tdcp_l5_weight_scale must be finite")
+    if scale_value <= 0.0:
+        raise ValueError("tdcp_l5_weight_scale must be > 0")
+    if tdcp_weights is None or scale_value == 1.0:
+        return
+    n_slot = min(tdcp_weights.shape[1], len(slot_keys))
+    for slot_idx in range(n_slot):
+        signal_type = _slot_signal_type(slot_keys[slot_idx])
+        if signal_type is not None and is_l5_signal_fn(signal_type):
+            tdcp_weights[:, slot_idx] *= scale_value
 
 
 def build_tdcp_stage(
@@ -2226,10 +2265,13 @@ def build_tdcp_stage(
     kaggle_wls: np.ndarray,
     tdcp_geometry_correction: bool,
     tdcp_weight_scale: float,
+    tdcp_l5_weight_scale: float,
     build_tdcp_arrays_fn: BuildTdcpArraysFn,
     apply_diagnostics_mask_fn: ApplyDiagnosticsMaskFn,
     apply_geometry_correction_fn: ApplyTdcpGeometryCorrectionFn,
     apply_weight_scale_fn: ApplyTdcpWeightScaleFn,
+    apply_l5_weight_scale_fn: ApplyTdcpL5WeightScaleFn,
+    is_l5_signal_fn: IsL5SignalFn,
 ) -> TdcpStageProducts:
     tdcp_meas = None
     tdcp_raw_meas = None
@@ -2295,6 +2337,9 @@ def build_tdcp_stage(
     apply_weight_scale_fn(tdcp_weights, tdcp_weight_scale)
     if tdcp_weights_fgo is not None:
         apply_weight_scale_fn(tdcp_weights_fgo, tdcp_weight_scale)
+    apply_l5_weight_scale_fn(tdcp_weights, slot_keys, tdcp_l5_weight_scale, is_l5_signal_fn)
+    if tdcp_weights_fgo is not None:
+        apply_l5_weight_scale_fn(tdcp_weights_fgo, slot_keys, tdcp_l5_weight_scale, is_l5_signal_fn)
     return TdcpStageProducts(
         tdcp_meas=tdcp_meas,
         tdcp_weights=tdcp_weights,

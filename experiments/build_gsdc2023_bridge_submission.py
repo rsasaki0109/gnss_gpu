@@ -306,6 +306,7 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         multi_gnss=args.multi_gnss,
         tdcp_enabled=args.tdcp,
         tdcp_weight_scale=args.tdcp_weight_scale,
+        tdcp_l5_weight_scale=args.tdcp_l5_weight_scale,
         tdcp_geometry_correction=args.tdcp_geometry_correction,
         dual_frequency=args.dual_frequency,
         ct_rbpf_fgo_enabled=args.ct_rbpf_fgo or args.position_source == CT_RBPF_FGO_SOURCE,
@@ -721,6 +722,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--multi-gnss", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--tdcp", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--tdcp-weight-scale", type=float, default=DEFAULT_TDCP_WEIGHT_SCALE)
+    parser.add_argument("--tdcp-l5-weight-scale", type=float, default=1.0)
     parser.add_argument(
         "--tdcp-geometry-correction",
         action=argparse.BooleanOptionalAction,
