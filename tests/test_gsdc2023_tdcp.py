@@ -248,6 +248,47 @@ def test_build_tdcp_arrays_uses_matlab_scalar_interval_for_consistency_direct():
     assert np.all(tdcp_weights[:, 0] > 0.0)
 
 
+def test_build_tdcp_arrays_ddl_sign_fixed_keeps_physically_consistent_pairs_direct():
+    # ADR grows +1 m per 1 s epoch while PseudorangeRateMetersPerSecond is
+    # +1 m/s (range rate, positive = receding): physically consistent data.
+    adr = np.array([[0.0], [1.0], [2.0]], dtype=np.float64)
+    adr_state = np.ones_like(adr, dtype=np.int32)
+    adr_uncertainty = np.full_like(adr, 0.02)
+    doppler = np.full_like(adr, 1.0)
+    dt = np.array([1.0, 1.0, 0.0], dtype=np.float64)
+
+    # The corrected sign convention keeps every pair.
+    tdcp_meas, tdcp_weights, mask_count = build_tdcp_arrays(
+        adr,
+        adr_state,
+        adr_uncertainty,
+        doppler,
+        dt,
+        consistency_threshold_m=1.5,
+        ddl_sign_fixed=True,
+    )
+    assert mask_count == 0
+    assert tdcp_meas is not None
+    assert tdcp_weights is not None
+    assert np.all(tdcp_weights[:, 0] > 0.0)
+
+    # The legacy default keeps the inverted-sign prediction and rejects the
+    # same physically consistent pairs (|1 - (-1)| = 2 m > 1.5 m).  This
+    # guards the production default until the corrected sign stops regressing
+    # dense urban trips (sjc-q +0.66m / lax-o +2.72m FGO A/B).
+    tdcp_meas, tdcp_weights, mask_count = build_tdcp_arrays(
+        adr,
+        adr_state,
+        adr_uncertainty,
+        doppler,
+        dt,
+        consistency_threshold_m=1.5,
+    )
+    assert mask_count == 2
+    assert tdcp_meas is None
+    assert tdcp_weights is None
+
+
 def test_apply_tdcp_weight_scale_direct():
     weights = np.array([[2.0, 3.0]], dtype=np.float64)
 

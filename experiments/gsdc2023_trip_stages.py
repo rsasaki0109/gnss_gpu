@@ -299,6 +299,7 @@ class PostObservationStageConfig:
     fgo_extra_constellations: bool = False
     tdcp_cycle_jump_mask_cycles: float = 0.0
     tdcp_doppler_endpoint_mask: bool = True
+    tdcp_ddl_sign_fixed: bool = False
 
 
 @dataclass(frozen=True)
@@ -1885,6 +1886,7 @@ def build_post_observation_stages(
     pseudorange_residual_mask_m: float,
     pseudorange_residual_mask_l5_m: float | None,
     tdcp_consistency_threshold_m: float,
+    tdcp_ddl_sign_fixed: bool = False,
     tdcp_loffset_m: float,
     matlab_residual_diagnostics_mask_path: Path | None,
     tdcp_geometry_correction: bool,
@@ -2056,6 +2058,7 @@ def build_post_observation_stages(
         doppler=doppler,
         tdcp_dt=time_delta.tdcp_dt,
         tdcp_consistency_threshold_m=tdcp_consistency_threshold_m,
+        tdcp_ddl_sign_fixed=tdcp_ddl_sign_fixed,
         doppler_weights=doppler_weights,
         doppler_weights_fgo=doppler_weights_fgo,
         carrier_weights=carrier_weights,
@@ -2171,6 +2174,7 @@ def build_configured_post_observation_stages(
         pseudorange_residual_mask_m=config.pseudorange_residual_mask_m,
         pseudorange_residual_mask_l5_m=config.pseudorange_residual_mask_l5_m,
         tdcp_consistency_threshold_m=config.tdcp_consistency_threshold_m,
+        tdcp_ddl_sign_fixed=bool(getattr(config, "tdcp_ddl_sign_fixed", False)),
         tdcp_loffset_m=config.tdcp_loffset_m,
         matlab_residual_diagnostics_mask_path=config.matlab_residual_diagnostics_mask_path,
         tdcp_geometry_correction=config.tdcp_geometry_correction,
@@ -2266,6 +2270,7 @@ def build_tdcp_stage(
     doppler: np.ndarray | None,
     tdcp_dt: np.ndarray,
     tdcp_consistency_threshold_m: float,
+    tdcp_ddl_sign_fixed: bool = False,
     doppler_weights: np.ndarray | None,
     doppler_weights_fgo: np.ndarray | None,
     carrier_weights: np.ndarray | None,
@@ -2316,6 +2321,7 @@ def build_tdcp_stage(
             cycle_jump_mask_cycles=tdcp_cycle_jump_mask_cycles,
             adr_wavelength_m=_tdcp_adr_wavelengths_for_slots(slot_keys),
             doppler_endpoint_mask=tdcp_doppler_endpoint_mask,
+            ddl_sign_fixed=tdcp_ddl_sign_fixed,
         )
         tdcp_raw_meas = tdcp_meas.copy() if tdcp_meas is not None else None
 
