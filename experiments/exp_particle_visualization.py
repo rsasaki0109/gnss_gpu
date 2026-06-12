@@ -389,7 +389,7 @@ def create_animation(
     zoom_radius_m: float = 80.0,
     baseline_label: str = "RTKLIB demo5",
 ) -> None:
-    """Create mp4 animation with particles on OpenStreetMap (full + zoom)."""
+    """Create mp4 animation with particles on OpenStreetMap (overview + zoom)."""
     import contextily as cx
     import matplotlib
     matplotlib.use("Agg")
@@ -439,7 +439,7 @@ def create_animation(
     ax_full.set_xlim(xmin_full, xmax_full)
     ax_full.set_ylim(ymin_full, ymax_full)
     cx.add_basemap(ax_full, source=cx.providers.OpenStreetMap.Mapnik, zoom="auto")
-    ax_full.set_title("Full trajectory", fontsize=12)
+    ax_full.set_title("Sampled trajectory", fontsize=12)
     ax_full.set_axis_off()
 
     # Setup zoom view — download tiles for the FULL possible extent
