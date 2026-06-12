@@ -17,6 +17,14 @@ import math
 import numpy as np
 
 from gnss_gpu.signal_sim import SignalSimulator
+from gnss_gpu.fresnel import reflection_coefficient
+from gnss_gpu.diffraction import (
+    compute_diffraction_paths,
+    compute_diffraction_paths_gpu,
+)
+from gnss_gpu.double_reflection import compute_double_reflection_paths
+from gnss_gpu.reflection_diffraction import compute_reflection_diffraction_paths
+from gnss_gpu.utd_diffraction import compute_utd_diffraction_paths
 
 C_LIGHT = 299792458.0
 GPS_L1_FREQ = 1575.42e6
@@ -72,7 +80,20 @@ class UrbanSignalSimulator:
     def __init__(self, building_model=None, sampling_freq=2.6e6,
                  intermediate_freq=0.0, noise_floor_db=-20.0,
                  elevation_mask_deg=10.0,
-                 nlos_attenuation_db=6.0, fresnel_coeff=0.5):
+                 nlos_attenuation_db=6.0, fresnel_coeff=0.5,
+                 max_reflection_paths=0, reflector_material=None,
+                 reflection_polarization="rhcp",
+                 carrier_freq_hz=GPS_L1_FREQ,
+                 ground_reflection=False, ground_height_m=0.0,
+                 ground_material="dry_ground",
+                 max_diffraction_paths=0, diffraction_edges=None,
+                 diffraction_edge_kwargs=None, diffraction_path_kwargs=None,
+                 diffraction_use_gpu=False,
+                 diffraction_model="knife_edge", utd_mode="absorbing",
+                 max_double_reflection_paths=0,
+                 max_reflection_diffraction_paths=0,
+                 reflection_diffraction_path_kwargs=None,
+                 reflection_diffraction_orders=("RD", "DR")):
         """
         Args:
             building_model: BuildingModel or BVHAccelerator instance.
@@ -82,12 +103,82 @@ class UrbanSignalSimulator:
             elevation_mask_deg: Minimum satellite elevation [deg].
             nlos_attenuation_db: Signal attenuation for NLOS satellites [dB].
             fresnel_coeff: Reflection coefficient for multipath [0-1].
+            max_reflection_paths: Maximum first-order reflection paths to add
+                per satellite. 0 disables physical reflection paths and keeps
+                legacy single multipath behavior.
+            reflector_material: Material name, (eps_r, sigma) tuple, or complex
+                permittivity for angle-dependent Fresnel reflection. None keeps
+                legacy fixed fresnel_coeff behavior.
+            reflection_polarization: Polarization mode for Fresnel reflection
+                ("rhcp", "rhcp_cross", "parallel", "perpendicular", "average").
+            carrier_freq_hz: Carrier frequency [Hz] for complex permittivity.
+            max_diffraction_paths: Maximum knife-edge diffraction paths to add
+                per satellite. 0 disables diffraction.
+            diffraction_edges: Precomputed DiffractionEdgeSet (start/end/midpoint
+                /size). If None and max_diffraction_paths>0, edges are lazily
+                extracted from building_model.triangles via the experiments
+                helper (best effort; degrades to no diffraction if unavailable).
+            diffraction_edge_kwargs: kwargs for extract_diffraction_edges.
+            diffraction_path_kwargs: kwargs for compute_diffraction_paths
+                (e.g. max_ray_edge_distance_m, max_excess_path_m).
         """
         self.building_model = building_model
         self.sim = SignalSimulator(sampling_freq, intermediate_freq, noise_floor_db)
         self.elevation_mask_rad = math.radians(elevation_mask_deg)
         self.nlos_attenuation_db = nlos_attenuation_db
         self.fresnel_coeff = fresnel_coeff
+        self.max_reflection_paths = int(max_reflection_paths)
+        self.reflector_material = reflector_material
+        self.reflection_polarization = reflection_polarization
+        self.carrier_freq_hz = float(carrier_freq_hz)
+        self.ground_reflection = bool(ground_reflection)
+        self.ground_height_m = float(ground_height_m)
+        self.ground_material = ground_material
+        self.max_diffraction_paths = int(max_diffraction_paths)
+        self.diffraction_use_gpu = bool(diffraction_use_gpu)
+        self.diffraction_model = str(diffraction_model)
+        self.utd_mode = str(utd_mode)
+        self.diffraction_edge_kwargs = dict(diffraction_edge_kwargs or {})
+        self.diffraction_path_kwargs = dict(diffraction_path_kwargs or {})
+        self._diffraction_edges_cache = diffraction_edges
+        self._diffraction_edges_resolved = diffraction_edges is not None
+        self.max_double_reflection_paths = int(max_double_reflection_paths)
+        self.max_reflection_diffraction_paths = int(max_reflection_diffraction_paths)
+        self.reflection_diffraction_path_kwargs = dict(
+            reflection_diffraction_path_kwargs or {})
+        self.reflection_diffraction_orders = tuple(reflection_diffraction_orders)
+
+    def _get_diffraction_edges(self):
+        """Return DiffractionEdgeSet (precomputed or lazily extracted), or None."""
+        if self._diffraction_edges_resolved:
+            return self._diffraction_edges_cache
+        self._diffraction_edges_resolved = True
+        needs_edges = (
+            self.max_diffraction_paths > 0
+            or self.max_reflection_diffraction_paths > 0)
+        if not needs_edges or self.building_model is None:
+            self._diffraction_edges_cache = None
+            return None
+        tris = getattr(self.building_model, "triangles", None)
+        if tris is None:
+            self._diffraction_edges_cache = None
+            return None
+        try:
+            import os
+            import sys
+            exp_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(
+                    os.path.abspath(__file__)))),
+                "experiments",
+            )
+            if exp_dir not in sys.path:
+                sys.path.insert(0, exp_dir)
+            from utd_edge_features import extract_diffraction_edges
+            self._diffraction_edges_cache = extract_diffraction_edges(
+                tris, **self.diffraction_edge_kwargs)
+        except Exception:
+            self._diffraction_edges_cache = None
+        return self._diffraction_edges_cache
 
     def compute_epoch(self, rx_ecef, sat_ecef, sat_clk=None, sat_vel=None,
                       rx_vel=None, rx_clock_bias=0.0,
@@ -142,18 +233,118 @@ class UrbanSignalSimulator:
         # --- LOS / NLOS classification ---
         is_los = np.ones(n_sat, dtype=bool)
         excess_delays = np.zeros(n_sat, dtype=np.float64)
+        reflection_paths = [[] for _ in range(n_sat)]
+        diffraction_paths = [[] for _ in range(n_sat)]
+        double_reflection_paths = [[] for _ in range(n_sat)]
+        reflection_diffraction_paths = [[] for _ in range(n_sat)]
+        use_reflection_paths = (
+            self.max_reflection_paths > 0
+            and self.building_model is not None
+            and hasattr(self.building_model, 'compute_reflection_paths')
+        )
+        use_diffraction_paths = self.max_diffraction_paths > 0
+        use_double_reflection_paths = (
+            self.max_double_reflection_paths > 0
+            and self.building_model is not None
+            and getattr(self.building_model, "triangles", None) is not None
+        )
+        use_reflection_diffraction_paths = (
+            self.max_reflection_diffraction_paths > 0
+            and self.building_model is not None
+            and getattr(self.building_model, "triangles", None) is not None
+        )
+        vis_idx = np.where(visible)[0]
 
         if self.building_model is not None:
-            vis_idx = np.where(visible)[0]
             if len(vis_idx) > 0:
                 los_result = self.building_model.check_los(rx, sats[vis_idx])
                 is_los_vis = np.asarray(los_result, dtype=bool)
                 is_los[vis_idx] = is_los_vis
 
+                if use_reflection_paths:
+                    ground_plane = None
+                    if self.ground_reflection:
+                        lat, lon, _ = ecef_to_lla(rx[0], rx[1], rx[2])
+                        up = np.array([
+                            math.cos(lat) * math.cos(lon),
+                            math.cos(lat) * math.sin(lon),
+                            math.sin(lat),
+                        ], dtype=np.float64)
+                        up_len = float(np.linalg.norm(up))
+                        if up_len > 0.0:
+                            up = up / up_len
+                        ground_point = np.asarray(rx, dtype=np.float64) - up * self.ground_height_m
+                        ground_plane = (ground_point, up)
+
+                    if ground_plane is not None:
+                        try:
+                            paths_per_vis = self.building_model.compute_reflection_paths(
+                                rx, sats[vis_idx], max_paths=self.max_reflection_paths,
+                                ground_plane=ground_plane)
+                        except TypeError:
+                            paths_per_vis = self.building_model.compute_reflection_paths(
+                                rx, sats[vis_idx], max_paths=self.max_reflection_paths)
+                    else:
+                        paths_per_vis = self.building_model.compute_reflection_paths(
+                            rx, sats[vis_idx], max_paths=self.max_reflection_paths)
+                    for sat_idx, paths in zip(vis_idx, paths_per_vis):
+                        sat_paths = [] if paths is None else list(paths)
+                        reflection_paths[sat_idx] = sat_paths
+                        if sat_paths:
+                            excess_delays[sat_idx] = min(
+                                float(path.excess_delay) for path in sat_paths)
                 # Multipath excess delay (if supported by the model)
-                if hasattr(self.building_model, 'compute_multipath'):
+                elif hasattr(self.building_model, 'compute_multipath'):
                     delays, _ = self.building_model.compute_multipath(rx, sats[vis_idx])
                     excess_delays[vis_idx] = np.asarray(delays, dtype=np.float64)
+
+        # --- Knife-edge diffraction paths ---
+        if use_diffraction_paths and len(vis_idx) > 0:
+            edges = self._get_diffraction_edges()
+            if edges is not None and int(getattr(edges, "size", 0) or 0) > 0:
+                if self.diffraction_model == "utd":
+                    dpaths_per_vis = compute_utd_diffraction_paths(
+                        rx, sats[vis_idx], edges,
+                        max_paths=self.max_diffraction_paths,
+                        mode=self.utd_mode,
+                        **self.diffraction_path_kwargs)
+                else:
+                    diffraction_fn = (
+                        compute_diffraction_paths_gpu
+                        if self.diffraction_use_gpu
+                        else compute_diffraction_paths
+                    )
+                    dpaths_per_vis = diffraction_fn(
+                        rx, sats[vis_idx], edges,
+                        max_paths=self.max_diffraction_paths,
+                        **self.diffraction_path_kwargs)
+                for sat_idx, dpaths in zip(vis_idx, dpaths_per_vis):
+                    diffraction_paths[sat_idx] = [] if dpaths is None else list(dpaths)
+
+        # --- Second-order (double-bounce) reflection paths ---
+        if use_double_reflection_paths and len(vis_idx) > 0:
+            tris = np.asarray(self.building_model.triangles, dtype=np.float64)
+            if tris.size > 0:
+                dbl_per_vis = compute_double_reflection_paths(
+                    tris, rx, sats[vis_idx],
+                    max_paths=self.max_double_reflection_paths)
+                for sat_idx, dpaths in zip(vis_idx, dbl_per_vis):
+                    double_reflection_paths[sat_idx] = [] if dpaths is None else list(dpaths)
+
+        # --- Reflection+diffraction composite paths (rx->reflect->diffract->sat
+        #     and rx->diffract->reflect->sat) ---
+        if use_reflection_diffraction_paths and len(vis_idx) > 0:
+            tris = np.asarray(self.building_model.triangles, dtype=np.float64)
+            edges = self._get_diffraction_edges()
+            if tris.size > 0 and edges is not None and int(getattr(edges, "size", 0) or 0) > 0:
+                rd_per_vis = compute_reflection_diffraction_paths(
+                    tris, edges, rx, sats[vis_idx],
+                    max_paths=self.max_reflection_diffraction_paths,
+                    orders=self.reflection_diffraction_orders,
+                    **self.reflection_diffraction_path_kwargs)
+                for sat_idx, dpaths in zip(vis_idx, rd_per_vis):
+                    reflection_diffraction_paths[sat_idx] = (
+                        [] if dpaths is None else list(dpaths))
 
         # --- Geometric range + atmospheric delays ---
         ranges = np.linalg.norm(sats - rx, axis=1)
@@ -188,6 +379,10 @@ class UrbanSignalSimulator:
 
         # --- Build per-satellite channel parameters ---
         channels = []
+        n_reflection_paths = 0
+        n_diffraction_paths = 0
+        n_double_reflection_paths = 0
+        n_reflection_diffraction_paths = 0
         for i in range(n_sat):
             if not visible[i]:
                 continue
@@ -218,23 +413,141 @@ class UrbanSignalSimulator:
             }
             channels.append(ch)
 
-            # Add multipath replica (delayed + attenuated copy)
-            if excess_delays[i] > 0.1:  # >0.1m excess delay
-                mp_pr = pr + excess_delays[i]
-                mp_code_phase = ((mp_pr / C_LIGHT) * CA_CHIP_RATE) % 1023.0
-                mp_carrier_phase = (mp_pr / GPS_L1_WAVELENGTH) * 2.0 * math.pi
-                mp_carrier_phase = mp_carrier_phase % (2.0 * math.pi)
-                mp_amplitude = amplitude * self.fresnel_coeff
+            if use_reflection_paths:
+                # One replica per physical first-order reflection path.
+                for path in reflection_paths[i]:
+                    mp_pr = pr + float(path.excess_delay)
+                    mp_code_phase = ((mp_pr / C_LIGHT) * CA_CHIP_RATE) % 1023.0
+                    mp_carrier_phase = (mp_pr / GPS_L1_WAVELENGTH) * 2.0 * math.pi
+                    mp_carrier_phase = mp_carrier_phase % (2.0 * math.pi)
+                    if self.reflector_material is not None:
+                        mat = (
+                            self.ground_material
+                            if getattr(path, "triangle_id", 0) == -1
+                            else self.reflector_material
+                        )
+                        coeff = reflection_coefficient(
+                            path.incidence_angle,
+                            mat,
+                            freq_hz=self.carrier_freq_hz,
+                            polarization=self.reflection_polarization,
+                        )
+                        mp_amplitude = amplitude * float(coeff)
+                    else:
+                        mp_amplitude = amplitude * self.fresnel_coeff
 
-                mp_ch = {
-                    "prn": int(prn_list[i]),
-                    "code_phase": float(mp_code_phase),
-                    "carrier_phase": float(mp_carrier_phase),
-                    "doppler_hz": float(doppler[i]),
-                    "amplitude": float(mp_amplitude),
-                    "nav_bit": 1,
-                }
-                channels.append(mp_ch)
+                    mp_ch = {
+                        "prn": int(prn_list[i]),
+                        "code_phase": float(mp_code_phase),
+                        "carrier_phase": float(mp_carrier_phase),
+                        "doppler_hz": float(doppler[i]),
+                        "amplitude": float(mp_amplitude),
+                        "nav_bit": 1,
+                    }
+                    channels.append(mp_ch)
+                    n_reflection_paths += 1
+            else:
+                # Add multipath replica (delayed + attenuated copy)
+                if excess_delays[i] > 0.1:  # >0.1m excess delay
+                    mp_pr = pr + excess_delays[i]
+                    mp_code_phase = ((mp_pr / C_LIGHT) * CA_CHIP_RATE) % 1023.0
+                    mp_carrier_phase = (mp_pr / GPS_L1_WAVELENGTH) * 2.0 * math.pi
+                    mp_carrier_phase = mp_carrier_phase % (2.0 * math.pi)
+                    mp_amplitude = amplitude * self.fresnel_coeff
+
+                    mp_ch = {
+                        "prn": int(prn_list[i]),
+                        "code_phase": float(mp_code_phase),
+                        "carrier_phase": float(mp_carrier_phase),
+                        "doppler_hz": float(doppler[i]),
+                        "amplitude": float(mp_amplitude),
+                        "nav_bit": 1,
+                    }
+                    channels.append(mp_ch)
+
+            # One replica per knife-edge diffraction path.
+            if use_diffraction_paths:
+                for path in diffraction_paths[i]:
+                    d_pr = pr + float(path.excess_delay)
+                    d_code_phase = ((d_pr / C_LIGHT) * CA_CHIP_RATE) % 1023.0
+                    d_carrier_phase = (d_pr / GPS_L1_WAVELENGTH) * 2.0 * math.pi
+                    d_carrier_phase = d_carrier_phase % (2.0 * math.pi)
+                    d_amplitude = amplitude * float(path.amplitude)
+
+                    d_ch = {
+                        "prn": int(prn_list[i]),
+                        "code_phase": float(d_code_phase),
+                        "carrier_phase": float(d_carrier_phase),
+                        "doppler_hz": float(doppler[i]),
+                        "amplitude": float(d_amplitude),
+                        "nav_bit": 1,
+                    }
+                    channels.append(d_ch)
+                    n_diffraction_paths += 1
+
+            # One replica per second-order (double-bounce) reflection path.
+            if use_double_reflection_paths:
+                for path in double_reflection_paths[i]:
+                    dr_pr = pr + float(path.excess_delay)
+                    dr_code_phase = ((dr_pr / C_LIGHT) * CA_CHIP_RATE) % 1023.0
+                    dr_carrier_phase = (dr_pr / GPS_L1_WAVELENGTH) * 2.0 * math.pi
+                    dr_carrier_phase = dr_carrier_phase % (2.0 * math.pi)
+                    if self.reflector_material is not None:
+                        inc1, inc2 = path.incidence_angles
+                        coeff1 = reflection_coefficient(
+                            inc1, self.reflector_material,
+                            freq_hz=self.carrier_freq_hz,
+                            polarization=self.reflection_polarization)
+                        coeff2 = reflection_coefficient(
+                            inc2, self.reflector_material,
+                            freq_hz=self.carrier_freq_hz,
+                            polarization=self.reflection_polarization)
+                        dr_amplitude = amplitude * float(coeff1) * float(coeff2)
+                    else:
+                        # Two specular bounces -> coefficient squared.
+                        dr_amplitude = amplitude * self.fresnel_coeff * self.fresnel_coeff
+
+                    dr_ch = {
+                        "prn": int(prn_list[i]),
+                        "code_phase": float(dr_code_phase),
+                        "carrier_phase": float(dr_carrier_phase),
+                        "doppler_hz": float(doppler[i]),
+                        "amplitude": float(dr_amplitude),
+                        "nav_bit": 1,
+                    }
+                    channels.append(dr_ch)
+                    n_double_reflection_paths += 1
+
+            # One replica per reflection+diffraction composite path. Amplitude is
+            # the product of the single Fresnel reflection coefficient and the
+            # knife-edge diffraction amplitude.
+            if use_reflection_diffraction_paths:
+                for path in reflection_diffraction_paths[i]:
+                    rd_pr = pr + float(path.excess_delay)
+                    rd_code_phase = ((rd_pr / C_LIGHT) * CA_CHIP_RATE) % 1023.0
+                    rd_carrier_phase = (rd_pr / GPS_L1_WAVELENGTH) * 2.0 * math.pi
+                    rd_carrier_phase = rd_carrier_phase % (2.0 * math.pi)
+                    if self.reflector_material is not None:
+                        coeff = reflection_coefficient(
+                            path.incidence_angle, self.reflector_material,
+                            freq_hz=self.carrier_freq_hz,
+                            polarization=self.reflection_polarization)
+                        rd_amplitude = (
+                            amplitude * float(coeff) * float(path.amplitude))
+                    else:
+                        rd_amplitude = (
+                            amplitude * self.fresnel_coeff * float(path.amplitude))
+
+                    rd_ch = {
+                        "prn": int(prn_list[i]),
+                        "code_phase": float(rd_code_phase),
+                        "carrier_phase": float(rd_carrier_phase),
+                        "doppler_hz": float(doppler[i]),
+                        "amplitude": float(rd_amplitude),
+                        "nav_bit": 1,
+                    }
+                    channels.append(rd_ch)
+                    n_reflection_diffraction_paths += 1
 
         # --- Generate IQ signal ---
         iq = self.sim.generate_epoch(channels, n_samples=n_samples)
@@ -250,6 +563,14 @@ class UrbanSignalSimulator:
             "n_los": int(np.sum(is_los & visible)),
             "n_nlos": int(np.sum(~is_los & visible)),
             "n_multipath": int(np.sum(excess_delays > 0.1)),
+            "reflection_paths": reflection_paths,
+            "n_reflection_paths": int(n_reflection_paths),
+            "diffraction_paths": diffraction_paths,
+            "n_diffraction_paths": int(n_diffraction_paths),
+            "double_reflection_paths": double_reflection_paths,
+            "n_double_reflection_paths": int(n_double_reflection_paths),
+            "reflection_diffraction_paths": reflection_diffraction_paths,
+            "n_reflection_diffraction_paths": int(n_reflection_diffraction_paths),
         }
 
     def simulate_trajectory(self, rx_positions, sat_ecef_per_epoch,
