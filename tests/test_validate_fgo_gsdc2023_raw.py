@@ -6759,3 +6759,121 @@ def test_select_gated_chunk_source_keeps_plausible_catastrophic_raw_wls_after_mo
     )
 
     assert _select_gated_chunk_source(record, baseline_threshold=500.0) == "raw_wls"
+
+
+def _chunked_failure_batch_and_raw_wls():
+    true_pos = np.array([1.0e6, 2.0e6, 3.0e6], dtype=np.float64)
+    sat = np.array(
+        [
+            [2.1e7, 0.0, 0.0],
+            [0.0, 2.2e7, 0.0],
+            [0.0, 0.0, 2.3e7],
+            [1.8e7, 1.8e7, 1.8e7],
+        ],
+        dtype=np.float64,
+    )
+    n_epoch, n_sat = 6, 4
+    sat_ecef = np.tile(sat.reshape(1, n_sat, 3), (n_epoch, 1, 1))
+    pseudorange = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pseudorange[t, s] = raw_bridge._geometric_range_with_sagnac(sat[s], true_pos)
+    weights = np.ones((n_epoch, n_sat), dtype=np.float64)
+    raw_wls = np.zeros((n_epoch, 4), dtype=np.float64)
+    raw_wls[:, :3] = true_pos
+    batch = raw_bridge.TripArrays(
+        times_ms=np.arange(n_epoch, dtype=np.float64) * 1000.0,
+        sat_ecef=sat_ecef,
+        pseudorange=pseudorange,
+        weights=weights,
+        kaggle_wls=raw_wls[:, :3],
+        truth=np.full((n_epoch, 3), np.nan, dtype=np.float64),
+        max_sats=n_sat,
+        has_truth=False,
+        sys_kind=np.zeros((n_epoch, n_sat), dtype=np.int32),
+        n_clock=1,
+        dt=np.ones(n_epoch, dtype=np.float64),
+    )
+    return batch, raw_wls
+
+
+def _run_fgo_chunked_minimal(batch, raw_wls):
+    return raw_bridge.run_fgo_chunked(
+        batch,
+        raw_wls,
+        clock_jump=None,
+        clock_drift_seed_mps=None,
+        clock_use_average_drift=False,
+        tdcp_use_drift=False,
+        stop_mask=None,
+        motion_sigma_m=0.2,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.0,
+        stop_position_sigma_m=0.0,
+        apply_imu_prior=False,
+        imu_position_sigma_m=0.0,
+        imu_velocity_sigma_mps=0.0,
+        fgo_iters=1,
+        tol=1e-7,
+        chunk_epochs=0,
+        use_vd=False,
+    )
+
+
+def test_run_fgo_chunked_records_runtime_error_fallback_reason(monkeypatch):
+    batch, raw_wls = _chunked_failure_batch_and_raw_wls()
+
+    def broken_solver(*_args, **_kwargs):
+        raise RuntimeError("gnss_gpu native extension must be rebuilt for X")
+
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm", broken_solver)
+
+    with pytest.warns(RuntimeWarning, match="fell back to raw WLS.*must be rebuilt"):
+        run = _run_fgo_chunked_minimal(batch, raw_wls)
+
+    assert run.failed_chunks == 1
+    assert run.failed_chunk_reasons == {
+        "RuntimeError: gnss_gpu native extension must be rebuilt for X": 1,
+    }
+    np.testing.assert_allclose(run.fgo_state[:, :3], raw_wls[:, :3], atol=1e-6)
+
+
+def test_run_fgo_chunked_records_native_minus_one_fallback_reason(monkeypatch):
+    batch, raw_wls = _chunked_failure_batch_and_raw_wls()
+
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm", lambda *a, **k: (-1, 0.0))
+
+    with pytest.warns(RuntimeWarning, match="returned -1"):
+        run = _run_fgo_chunked_minimal(batch, raw_wls)
+
+    assert run.failed_chunks == 1
+    assert list(run.failed_chunk_reasons) == [
+        "native solver returned -1 (rejected inputs, e.g. n_state cap)",
+    ]
+
+
+def test_chunked_fgo_run_supports_legacy_tuple_unpack(monkeypatch):
+    batch, raw_wls = _chunked_failure_batch_and_raw_wls()
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm", lambda *a, **k: (-1, 0.0))
+
+    with pytest.warns(RuntimeWarning):
+        run = _run_fgo_chunked_minimal(batch, raw_wls)
+
+    (
+        auto_state,
+        fgo_state,
+        iters,
+        failed_chunks,
+        _skipped_segments,
+        _skipped_epochs,
+        _guard_records,
+        _sources,
+        counts,
+        _records,
+        fgo_vd_state,
+    ) = run
+
+    np.testing.assert_allclose(fgo_state, run.fgo_state)
+    assert failed_chunks == run.failed_chunks == 1
+    assert counts == run.auto_source_counts
+    assert fgo_vd_state is None
