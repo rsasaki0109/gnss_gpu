@@ -263,6 +263,16 @@ class BridgeConfig:
     multi_gnss: bool = True
     tdcp_enabled: bool = True
     tdcp_consistency_threshold_m: float = DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M
+    # Mirror the post-fill PSEUDORANGE residual mask into ``weights_fgo``.
+    # The dual-weight design only zeroed the gate/WLS ``weights``, so
+    # tens-of-metres pseudorange outliers that taroz's exobs_residuals drops
+    # stayed active in ``weights_fgo`` (sjc-q audit 2026-06-12: 655 extra P
+    # rows, |residual| p50 ~50-75 m).  Scope is the P residual mask only:
+    # mirroring the doppler residual / P-D consistency masks regressed sjc-q
+    # (+1.11 m / +0.52 m) because those gates are far more aggressive than
+    # taroz's, while P-residual-only improved all 3 probe trips
+    # (mtv-h -8 cm, sjc-q -2 cm, lax-o -1.10 m FGO score).
+    fgo_residual_mask_propagation: bool = False
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
     tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION
     tdcp_scale_candidate_enabled: bool = False
