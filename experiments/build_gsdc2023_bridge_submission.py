@@ -343,6 +343,21 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         fgo_residual_mask_propagation=bool(
             getattr(args, "fgo_residual_mask_propagation", False)
         ),
+        fgo_two_stage_residual_resolve=bool(
+            getattr(args, "fgo_two_stage_residual_resolve", False)
+        ),
+        fgo_two_stage_residual_threshold_l1_m=float(
+            getattr(args, "fgo_two_stage_residual_threshold_l1_m", 20.0)
+        ),
+        fgo_two_stage_residual_threshold_l5_m=float(
+            getattr(args, "fgo_two_stage_residual_threshold_l5_m", 15.0)
+        ),
+        fgo_two_stage_residual_min_keep=int(
+            getattr(args, "fgo_two_stage_residual_min_keep", 5)
+        ),
+        fgo_two_stage_residual_guard=bool(
+            getattr(args, "fgo_two_stage_residual_guard", False)
+        ),
     )
     if bool(getattr(args, "taroz_marupaku", False)):
         cfg = apply_taroz_marupaku_preset(cfg)
@@ -588,6 +603,21 @@ def main(argv: list[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Mirror the post-fill pseudorange residual mask into the FGO weights (weights_fgo), so residual-rejected PR rows are dropped from the FGO objective too.",
+    )
+    parser.add_argument(
+        "--fgo-two-stage-residual-resolve",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="taroz-style 2-stage residual re-solve: after the FGO converges, mask pseudorange rows whose fixed-linearization residual exceeds threshold and re-solve warm-started. Big win on degraded dense-urban chunks (lax-o -54.6cm), at most +0.5cm elsewhere. Default off.",
+    )
+    parser.add_argument("--fgo-two-stage-residual-threshold-l1-m", type=float, default=20.0)
+    parser.add_argument("--fgo-two-stage-residual-threshold-l5-m", type=float, default=15.0)
+    parser.add_argument("--fgo-two-stage-residual-min-keep", type=int, default=5)
+    parser.add_argument(
+        "--fgo-two-stage-residual-guard",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Gate the 2-stage re-solve behind a Huber trust-region cost (keep pass-2 only if the full-set Huber residual cost improves). OFF by default: the dense-urban win comes from dropping biased NLOS rows, which lowers position error but *raises* the Huber cost, so the guard rejects exactly the re-solves we want. Retained for experimentation.",
     )
     parser.add_argument("--stop-attitude-sigma-rad", type=float, default=0.0)
     parser.add_argument(

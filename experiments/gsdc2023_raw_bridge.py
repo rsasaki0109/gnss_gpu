@@ -2212,6 +2212,168 @@ def _fixed_pr_linearization_inputs(
     return measurement, solver_weights, ref, los
 
 
+def _pr_linearized_residual(
+    pseudorange: np.ndarray,
+    los: np.ndarray,
+    ref: np.ndarray,
+    state: np.ndarray,
+    sys_kind: np.ndarray | None,
+    n_clock: int,
+) -> np.ndarray:
+    """Per-measurement pseudorange residual in the fixed-linearization domain.
+
+    The VD solver is fed ``z = PR_raw - range(ref)`` together with the line-of-
+    sight ``los`` and linearization point ``ref``; its model is
+    ``z - (los . (x - ref) + clk)`` where ``clk = c0 + (c_sk if sk>0)`` (per-
+    system / per-signal clock from the VD state). This recomputes that residual
+    at the converged ``state`` so outliers only visible after convergence can be
+    masked. Returns ``(T, n_sat)`` in metres.
+    """
+    z = np.asarray(pseudorange, dtype=np.float64)
+    los = np.asarray(los, dtype=np.float64)
+    ref = np.asarray(ref, dtype=np.float64)
+    xyz = np.asarray(state[:, :3], dtype=np.float64)
+    dx = xyz - ref
+    pred_geom = np.einsum("tsj,tj->ts", los, dx)
+    nc = int(n_clock)
+    clocks = np.asarray(state[:, 6 : 6 + nc], dtype=np.float64)
+    clk_common = clocks[:, 0:1]
+    if sys_kind is not None and nc > 1:
+        sk = np.asarray(sys_kind, dtype=np.int64)
+        sk_clamped = np.clip(sk, 0, nc - 1)
+        isb = np.take_along_axis(clocks, sk_clamped, axis=1)
+        clk = clk_common + np.where(sk > 0, isb, 0.0)
+    else:
+        clk = np.broadcast_to(clk_common, z.shape)
+    return z - (pred_geom + clk)
+
+
+def _pr_resolve_thresholds(
+    sys_kind: np.ndarray | None,
+    shape: tuple[int, ...],
+    threshold_l1_m: float,
+    threshold_l5_m: float,
+) -> np.ndarray:
+    """Per-row mask threshold: L5 (clock kind ``sk >= 4``) vs L1 (everything
+    else), matching the signal-aware ``n_clock=7`` layout."""
+    if sys_kind is None:
+        return np.full(shape, float(threshold_l1_m), dtype=np.float64)
+    sk = np.asarray(sys_kind, dtype=np.int64)
+    return np.where(sk >= 4, float(threshold_l5_m), float(threshold_l1_m)).astype(np.float64)
+
+
+def _pr_huber_guard_cost(
+    resid: np.ndarray, weights: np.ndarray, thresholds: np.ndarray
+) -> float:
+    """Sum of ``w * huber_rho(resid; c=threshold)`` over finite, positively
+    weighted rows. The Huber kernel caps each outlier's contribution at the mask
+    threshold, so removing-and-refitting outliers cannot inflate the cost the way
+    a plain L2 cost would (the production path runs ``huber_k=0`` = L2). This is
+    the trust-region acceptance metric for the re-solve.
+    """
+    w = np.asarray(weights, dtype=np.float64)
+    r = np.abs(np.asarray(resid, dtype=np.float64))
+    c = np.asarray(thresholds, dtype=np.float64)
+    valid = np.isfinite(r) & np.isfinite(w) & (w > 0.0)
+    rho = np.where(r <= c, 0.5 * r * r, c * (r - 0.5 * c))
+    return float(np.sum(w[valid] * rho[valid]))
+
+
+def _pr_two_stage_mask(
+    resid: np.ndarray, weights: np.ndarray, thresholds: np.ndarray, min_keep: int
+) -> tuple[np.ndarray, int]:
+    """Return a copy of ``weights`` with outlier rows (``|resid| > threshold``)
+    zeroed, never dropping an epoch below ``min_keep`` surviving rows (worst-
+    first when the cap binds). Returns ``(new_weights, n_masked)``."""
+    new_w = np.asarray(weights, dtype=np.float64).copy()
+    r = np.abs(np.asarray(resid, dtype=np.float64))
+    c = np.asarray(thresholds, dtype=np.float64)
+    n_masked = 0
+    for i in range(new_w.shape[0]):
+        idx = np.flatnonzero(new_w[i] > 0.0)
+        if idx.size <= min_keep:
+            continue
+        ri = r[i, idx]
+        ci = c[i, idx]
+        finite = np.isfinite(ri)
+        out = finite & (ri > ci)
+        if not out.any():
+            continue
+        if int(idx.size - int(out.sum())) < min_keep:
+            order = np.argsort(-np.where(finite, ri, -np.inf))
+            droppable = order[: max(0, idx.size - min_keep)]
+            keep = np.zeros(idx.size, dtype=bool)
+            sel = droppable[finite[droppable] & (ri[droppable] > ci[droppable])]
+            keep[sel] = True
+            out = keep
+            if not out.any():
+                continue
+        new_w[i, idx[out]] = 0.0
+        n_masked += int(out.sum())
+    return new_w, n_masked
+
+
+def two_stage_residual_resolve_vd(
+    solver_fn,
+    sat_ecef: np.ndarray,
+    pseudorange: np.ndarray,
+    weights: np.ndarray,
+    state: np.ndarray,
+    *,
+    threshold_l1_m: float,
+    threshold_l5_m: float,
+    min_keep: int,
+    guard: bool = True,
+    vd_kwargs: dict,
+) -> tuple[int, float]:
+    """taroz-style 2-stage residual re-solve for the VD path. Runs ``solver_fn``
+    (the VD solver), recomputes the fixed-linearization residual at the converged
+    ``state``, masks outliers above threshold, and re-solves warm-started.
+
+    When ``guard`` is True the re-solve is kept only if it lowers the full-set
+    Huber guard cost (a trust region), otherwise ``state`` is restored to the
+    pass-1 result. **The guard is OFF by default in production**: the dense-urban
+    win comes from dropping systematically biased NLOS measurements, which snaps
+    the position toward truth but *raises* the robust residual cost (the dropped
+    outliers are re-added at their original weight, Huber-capped), so the guard
+    rejects exactly the re-solves we want. See PR / memory notes. The guard is
+    retained for experimentation only.
+
+    Returns ``(iters, mse)`` and mutates ``state`` in place (matching the native
+    solver contract). A no-op returning the pass-1 result when fixed
+    linearization inputs are absent, nothing is masked, the re-solve fails, or the
+    guard (when enabled) rejects it.
+    """
+    iters1, mse1 = solver_fn(sat_ecef, pseudorange, weights, state, **vd_kwargs)
+    ref = vd_kwargs.get("pr_linearization_ref_ecef")
+    los = vd_kwargs.get("pr_linearization_los_ecef")
+    if int(iters1) < 0 or ref is None or los is None:
+        return iters1, mse1
+    sys_kind = vd_kwargs.get("sys_kind")
+    n_clock = int(vd_kwargs.get("n_clock", 1))
+    pseudorange = np.asarray(pseudorange, dtype=np.float64)
+    thresholds = _pr_resolve_thresholds(
+        sys_kind, pseudorange.shape, threshold_l1_m, threshold_l5_m
+    )
+    resid1 = _pr_linearized_residual(pseudorange, los, ref, state, sys_kind, n_clock)
+    new_w, n_masked = _pr_two_stage_mask(resid1, weights, thresholds, int(min_keep))
+    if n_masked == 0:
+        return iters1, mse1
+    cost1 = _pr_huber_guard_cost(resid1, weights, thresholds) if guard else 0.0
+    backup = np.array(state, dtype=np.float64, copy=True)
+    iters2, mse2 = solver_fn(sat_ecef, pseudorange, new_w, state, **vd_kwargs)
+    if int(iters2) < 0:
+        state[:, :] = backup
+        return iters1, mse1
+    if guard:
+        resid2 = _pr_linearized_residual(pseudorange, los, ref, state, sys_kind, n_clock)
+        cost2 = _pr_huber_guard_cost(resid2, weights, thresholds)
+        if not (cost2 < cost1):
+            state[:, :] = backup  # guard rejects: re-solve did not improve the fit
+            return iters1, mse1
+    return int(iters1) + int(iters2), mse2
+
+
 def _fixed_doppler_linearization_inputs(
     sat_ecef: np.ndarray,
     sat_vel: np.ndarray | None,
@@ -2520,6 +2682,11 @@ def run_fgo_chunked(
     fgo_huber_k_doppler: float = 0.0,
     fgo_huber_k_tdcp: float = 0.0,
     fgo_fixed_linearization: bool = False,
+    fgo_two_stage_residual_resolve: bool = False,
+    fgo_two_stage_residual_threshold_l1_m: float = 20.0,
+    fgo_two_stage_residual_threshold_l5_m: float = 15.0,
+    fgo_two_stage_residual_min_keep: int = 5,
+    fgo_two_stage_residual_guard: bool = False,
     fgo_seed_state: np.ndarray | None = None,
 ) -> "ChunkedFgoRun":
     n_epoch = batch.sat_ecef.shape[0]
@@ -3069,6 +3236,23 @@ def run_fgo_chunked(
                             huber_k_warmstart=float(fgo_huber_k_pr),
                             **vd_kwargs,
                         )
+                    elif (
+                        fgo_two_stage_residual_resolve
+                        and pr_linearization_ref_ecef is not None
+                        and pr_linearization_los_ecef is not None
+                    ):
+                        iters, _ = two_stage_residual_resolve_vd(
+                            fgo_gnss_lm_vd,
+                            sat_ecef_for_solver,
+                            pseudorange_for_solver,
+                            fgo_weights_for_solver,
+                            seg_state_for_solver,
+                            threshold_l1_m=fgo_two_stage_residual_threshold_l1_m,
+                            threshold_l5_m=fgo_two_stage_residual_threshold_l5_m,
+                            min_keep=fgo_two_stage_residual_min_keep,
+                            guard=fgo_two_stage_residual_guard,
+                            vd_kwargs=vd_kwargs,
+                        )
                     else:
                         iters, _ = fgo_gnss_lm_vd(
                             sat_ecef_for_solver,
@@ -3509,6 +3693,21 @@ def solve_trip(
     fgo_run_options = _fgo_run_options_from_config(config)
     fgo_run_kwargs = fgo_run_options.run_kwargs()
     fgo_run_kwargs["vd_seed_factor_guard"] = _vd_seed_factor_guard_enabled_for_phone(phone_name)
+    fgo_run_kwargs["fgo_two_stage_residual_resolve"] = bool(
+        getattr(config, "fgo_two_stage_residual_resolve", False)
+    )
+    fgo_run_kwargs["fgo_two_stage_residual_threshold_l1_m"] = float(
+        getattr(config, "fgo_two_stage_residual_threshold_l1_m", 20.0)
+    )
+    fgo_run_kwargs["fgo_two_stage_residual_threshold_l5_m"] = float(
+        getattr(config, "fgo_two_stage_residual_threshold_l5_m", 15.0)
+    )
+    fgo_run_kwargs["fgo_two_stage_residual_min_keep"] = int(
+        getattr(config, "fgo_two_stage_residual_min_keep", 5)
+    )
+    fgo_run_kwargs["fgo_two_stage_residual_guard"] = bool(
+        getattr(config, "fgo_two_stage_residual_guard", False)
+    )
     taroz_candidate_sources = _taroz_fgo_candidate_sources_enabled(config)
     taroz_candidate_base_run_kwargs = dict(fgo_run_kwargs)
     effective_trip_type: str | None = None

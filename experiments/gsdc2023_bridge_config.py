@@ -281,6 +281,20 @@ class BridgeConfig:
     # taroz's, while P-residual-only improved all 3 probe trips
     # (mtv-h -8 cm, sjc-q -2 cm, lax-o -1.10 m FGO score).
     fgo_residual_mask_propagation: bool = False
+    # taroz-style 2-stage residual re-solve for the FGO (VD path only). After the
+    # first converged solve, recompute the per-measurement residual in the fixed-
+    # linearization domain (z - (los . (x - ref) + clk)), mask rows whose residual
+    # exceeds threshold (L1 / L5), and RE-SOLVE warm-started. A trust-region guard
+    # only keeps the re-solve when it lowers a Huber cost (kernel = the mask
+    # threshold) over the full measurement set, so trips that do not benefit are
+    # left bit-identical. Big win on degraded dense-urban chunks (lax-o FGO score
+    # -54.6 cm), neutral elsewhere. Requires fixed linearization (the default
+    # gnss_only preset path); a no-op when pr-linearization inputs are absent.
+    fgo_two_stage_residual_resolve: bool = False
+    fgo_two_stage_residual_threshold_l1_m: float = 20.0
+    fgo_two_stage_residual_threshold_l5_m: float = 15.0
+    fgo_two_stage_residual_min_keep: int = 5
+    fgo_two_stage_residual_guard: bool = False
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
     tdcp_l5_weight_scale: float = 1.0
     tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION
@@ -385,6 +399,19 @@ class BridgeConfig:
             raise ValueError("fgo_lm_damping must be >= 0")
         if not isinstance(self.fgo_extra_constellations, bool):
             raise ValueError("fgo_extra_constellations must be a bool")
+        if not isinstance(self.fgo_two_stage_residual_resolve, bool):
+            raise ValueError("fgo_two_stage_residual_resolve must be a bool")
+        if not isinstance(self.fgo_two_stage_residual_guard, bool):
+            raise ValueError("fgo_two_stage_residual_guard must be a bool")
+        for name in (
+            "fgo_two_stage_residual_threshold_l1_m",
+            "fgo_two_stage_residual_threshold_l5_m",
+        ):
+            value = float(getattr(self, name))
+            if not np.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and > 0")
+        if int(self.fgo_two_stage_residual_min_keep) < 4:
+            raise ValueError("fgo_two_stage_residual_min_keep must be >= 4")
         for name in (
             "stop_velocity_huber_k",
             "stop_position_huber_k",
