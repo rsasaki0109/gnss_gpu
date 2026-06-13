@@ -290,6 +290,7 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         hatch_smoothing_enabled=bool(getattr(args, "hatch_smoothing", False)),
         hatch_smoothing_n=int(getattr(args, "hatch_smoothing_n", 100)),
         use_rtklib_tropo=bool(getattr(args, "use_rtklib_tropo", False)),
+        apply_base_correction=bool(getattr(args, "base_correction", False)),
         position_source=args.position_source,
         chunk_epochs=args.chunk_epochs,
         gated_baseline_threshold=args.gated_threshold,
@@ -495,6 +496,7 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
                 "chunk_epochs": args.chunk_epochs,
                 "max_epochs": args.max_epochs,
                 "dual_frequency": bool(args.dual_frequency),
+                "base_correction": bool(config.apply_base_correction),
                 "ct_rbpf_fgo": bool(config.ct_rbpf_fgo_enabled),
                 "taroz_marupaku": taroz_marupaku,
                 "taroz_phone_aware": taroz_phone_aware,
@@ -678,6 +680,12 @@ def main(argv: list[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Swap Android tropo for Saastamoinen recompute in raw PR.",
+    )
+    parser.add_argument(
+        "--base-correction",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="subtract smoothed base-station pseudorange residuals when Base1/RINEX/nav inputs are ready",
     )
     parser.add_argument("--vd", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--multi-gnss", action=argparse.BooleanOptionalAction, default=True)
