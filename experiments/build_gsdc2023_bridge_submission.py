@@ -340,6 +340,7 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         ),
         taroz_imu_factor_mask_csv=getattr(args, "taroz_imu_factor_mask_csv", None),
         fgo_extra_constellations=bool(getattr(args, "fgo_extra_constellations", False)),
+        fgo_doppler_only_constellations=bool(getattr(args, "fgo_doppler_only_constellations", False)),
         fgo_residual_mask_propagation=bool(
             getattr(args, "fgo_residual_mask_propagation", False)
         ),
@@ -582,6 +583,14 @@ def main(argv: list[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Seed the multi-GNSS WLS / FGO with BeiDou (and other extra constellations) beyond the default GPS/GAL/QZSS set.",
+    )
+    parser.add_argument(
+        "--fgo-doppler-only-constellations",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Add GLONASS as a Doppler-ONLY FGO rate factor (no pseudorange/carrier). "
+        "Doppler is base-correction-independent, so it recovers ~16%% more velocity "
+        "constraints without the uncorrected-GLO-pseudorange poison. Off by default.",
     )
     parser.add_argument(
         "--fgo-residual-mask-propagation",

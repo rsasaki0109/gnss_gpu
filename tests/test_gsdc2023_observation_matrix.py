@@ -515,6 +515,76 @@ def test_fill_observation_matrices_fgo_extra_constellations_zero_gate_weights() 
     np.testing.assert_array_equal(products.sys_kind[0], np.array([6, 3], dtype=np.int32))
 
 
+def test_fill_observation_matrices_doppler_only_constellations_emit_rate_factor_only() -> None:
+    rows = [
+        _required_row(
+            Svid=8,
+            ConstellationType=3,
+            SignalType="GLO_G1_CA",
+            Cn0DbHz=41.0,
+            PseudorangeRateMetersPerSecond=-6.0,
+            PseudorangeRateUncertaintyMetersPerSecond=0.5,
+            AccumulatedDeltaRangeMeters=-14.0,
+            AccumulatedDeltaRangeState=1,
+            AccumulatedDeltaRangeUncertaintyMeters=0.2,
+            bridge_p_ok=True,
+            bridge_d_ok=True,
+            bridge_l_ok=True,
+            bridge_p_bias_ok=True,
+        ),
+    ]
+    epoch = RawEpochObservation(
+        time_ms=1000.0,
+        group=pd.DataFrame(rows),
+        baseline_xyz=np.array([1.0, 2.0, 3.0], dtype=np.float64),
+        truth_xyz=np.array([4.0, 5.0, 6.0], dtype=np.float64),
+    )
+
+    products = fill_observation_matrices(
+        [epoch],
+        source_columns=epoch.group.columns,
+        baseline_lookup={1000: np.array([10.0, 20.0, 30.0], dtype=np.float64)},
+        weight_mode="taroz_sn",
+        fgo_doppler_only_constellations=True,
+        multi_gnss=True,
+        dual_frequency=True,
+        tdcp_enabled=True,
+        adr_sign=-1.0,
+        elapsed_ns_lookup=None,
+        hcdc_lookup=None,
+        clock_bias_lookup=None,
+        clock_drift_lookup=None,
+        gps_tgd_m_by_svid={},
+        gps_matrtklib_nav_messages={},
+        gps_arrival_tow_s_from_row_fn=lambda _row: 100.0,
+        gps_sat_clock_bias_adjustment_m_fn=lambda _c, _s, _sig, _tgd: 0.0,
+        gps_matrtklib_sat_product_adjustment_fn=lambda **_kw: None,
+        clock_kind_for_observation_fn=clock_kind_for_observation,
+        is_l5_signal_fn=lambda signal: "L5" in signal or "B2" in signal,
+        slot_sort_key_fn=lambda key: key,
+        ecef_to_lla_fn=lambda _x, _y, _z: (0.5, 0.0, 100.0),
+        elevation_azimuth_fn=lambda _rx, _sat: (np.deg2rad(30.0), 0.0),
+        rtklib_tropo_fn=lambda _lat, _alt, _el: 0.0,
+        matlab_signal_clock_dim=7,
+    )
+
+    assert products.slot_keys == ((3, 8, "GLO_G1_CA"),)
+    # GLONASS contributes ONLY a Doppler FGO rate factor.
+    assert products.doppler_weights_fgo is not None
+    assert np.all(products.doppler_weights_fgo > 0.0)
+    # No pseudorange factor (neither WLS gate nor FGO), no WLS Doppler.
+    np.testing.assert_allclose(products.weights, [[0.0]])
+    assert products.weights_fgo is not None
+    np.testing.assert_allclose(products.weights_fgo, [[0.0]])
+    np.testing.assert_allclose(products.doppler_weights, [[0.0]])
+    np.testing.assert_allclose(products.pseudorange_bias_weights, [[0.0]])
+    # No carrier factor either.
+    if products.carrier_weights is not None:
+        np.testing.assert_allclose(products.carrier_weights, [[0.0]])
+    if products.carrier_weights_fgo is not None:
+        np.testing.assert_allclose(products.carrier_weights_fgo, [[0.0]])
+
+
 def test_fill_observation_matrices_taroz_sn_uses_explicit_cn0_percentile_epochs() -> None:
     selected_row = _required_row(
         utcTimeMillis=1000,

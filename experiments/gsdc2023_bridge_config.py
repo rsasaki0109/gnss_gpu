@@ -135,6 +135,12 @@ class BridgeConfig:
     # ``None`` (default) shares ``weight_mode`` for both, matching legacy.
     fgo_weight_mode: str | None = None
     fgo_extra_constellations: bool = False
+    # Add GLONASS (and other base-correction-incompatible constellations) as a
+    # Doppler-ONLY FGO rate factor: no pseudorange/carrier factor, so the
+    # uncorrected clock bias never enters the graph while the velocity
+    # constraint (16% more on a typical pixel trip) is recovered.  Off by
+    # default; safe for submission because it only touches FGO weights.
+    fgo_doppler_only_constellations: bool = False
     # Robust kernel applied inside the FGO solver. "huber" (default) is the
     # legacy in-CUDA Huber IRLS; "cauchy" wraps the native solver in a
     # Python-side Cauchy IRLS loop and is targeted at NLOS-heavy trips.
@@ -385,6 +391,8 @@ class BridgeConfig:
             raise ValueError("fgo_lm_damping must be >= 0")
         if not isinstance(self.fgo_extra_constellations, bool):
             raise ValueError("fgo_extra_constellations must be a bool")
+        if not isinstance(self.fgo_doppler_only_constellations, bool):
+            raise ValueError("fgo_doppler_only_constellations must be a bool")
         for name in (
             "stop_velocity_huber_k",
             "stop_position_huber_k",

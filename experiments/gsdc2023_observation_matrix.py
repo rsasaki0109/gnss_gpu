@@ -12,7 +12,10 @@ import numpy as np
 import pandas as pd
 
 from experiments.gsdc2023_imu import ecef_to_enu_relative as _ecef_to_enu_relative
-from experiments.gsdc2023_signal_model import is_fgo_extra_constellation_signal
+from experiments.gsdc2023_signal_model import (
+    is_fgo_doppler_only_constellation_signal,
+    is_fgo_extra_constellation_signal,
+)
 from experiments.gsdc2023_taroz_weighting import (
     SIGTYPE_OTHER,
     SN_PERCENTILE_DEFAULT,
@@ -1028,6 +1031,7 @@ def fill_observation_matrices(
     weight_mode: str,
     fgo_weight_mode: str | None = None,
     fgo_extra_constellations: bool = False,
+    fgo_doppler_only_constellations: bool = False,
     multi_gnss: bool,
     dual_frequency: bool,
     tdcp_enabled: bool,
@@ -1070,7 +1074,9 @@ def fill_observation_matrices(
     weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
     weights_fgo = (
         np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
-        if fgo_extra_constellations or (fgo_weight_mode is not None and fgo_weight_mode != weight_mode)
+        if fgo_extra_constellations
+        or fgo_doppler_only_constellations
+        or (fgo_weight_mode is not None and fgo_weight_mode != weight_mode)
         else None
     )
     pseudorange_bias_weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
@@ -1105,6 +1111,7 @@ def fill_observation_matrices(
             has_doppler
             and (
                 fgo_extra_constellations
+                or fgo_doppler_only_constellations
                 or (
                     fgo_weight_mode is not None
                     and fgo_weight_mode != weight_mode
@@ -1209,6 +1216,14 @@ def fill_observation_matrices(
             key = (int(row.ConstellationType), int(row.Svid), str(row.SignalType))
             sat_idx = slot_index[key]
             row_is_fgo_extra = fgo_extra_constellations and is_fgo_extra_constellation_signal(
+                int(row.ConstellationType),
+                str(row.SignalType),
+            )
+            # Doppler-only constellations (e.g. GLONASS) contribute a rate factor
+            # to the FGO graph but no pseudorange/carrier factor: their clock bias
+            # is uncorrected (base correction lacks R support) so only the
+            # base-correction-independent Doppler is trustworthy.
+            row_is_doppler_only = fgo_doppler_only_constellations and is_fgo_doppler_only_constellation_signal(
                 int(row.ConstellationType),
                 str(row.SignalType),
             )
@@ -1354,7 +1369,7 @@ def fill_observation_matrices(
                 - tropo_used_m
             )
 
-            if p_ok:
+            if p_ok and not row_is_doppler_only:
                 weights[epoch_idx, sat_idx] = _compute_pr_weight(
                     row,
                     mode=weight_mode,
@@ -1370,7 +1385,7 @@ def fill_observation_matrices(
                     )
                 if row_is_fgo_extra:
                     weights[epoch_idx, sat_idx] = 0.0
-            if p_bias_ok:
+            if p_bias_ok and not row_is_doppler_only:
                 pseudorange_bias_weights[epoch_idx, sat_idx] = 1.0
 
             if sys_kind is not None:
@@ -1427,10 +1442,12 @@ def fill_observation_matrices(
                                 is_l5_signal_fn=is_l5_signal_fn,
                                 fallback_sigma_mps=sigma,
                             )
-                        if row_is_fgo_extra:
+                        if row_is_fgo_extra or row_is_doppler_only:
+                            # FGO-only rate factor: keep doppler_weights_fgo, but
+                            # never let the WLS seed see it.
                             doppler_weights[epoch_idx, sat_idx] = 0.0
 
-            if adr is not None and adr_state is not None:
+            if adr is not None and adr_state is not None and not row_is_doppler_only:
                 adr_value = adr_sign * float(row.AccumulatedDeltaRangeMeters)
                 if l_ok and np.isfinite(adr_value) and adr_value != 0.0:
                     adr[epoch_idx, sat_idx] = adr_value
