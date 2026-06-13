@@ -264,6 +264,13 @@ class BridgeConfig:
     multi_gnss: bool = True
     tdcp_enabled: bool = True
     tdcp_consistency_threshold_m: float = DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M
+    # Use the physically correct +0.5*(d0+d1)*dt prediction in the dDL
+    # doppler/TDCP consistency check.  Default keeps the legacy inverted sign:
+    # it rejects every doppler-checked pair (an accidental doppler/carrier row
+    # exclusivity filter), and enabling the fix measurably degrades dense urban
+    # trips (sjc-q +0.66m / lax-o +2.72m FGO score) despite growing the TDCP
+    # factor support ~2.2x to taroz-equivalent coverage.
+    tdcp_ddl_sign_fixed: bool = False
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
     tdcp_l5_weight_scale: float = 1.0
     tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION

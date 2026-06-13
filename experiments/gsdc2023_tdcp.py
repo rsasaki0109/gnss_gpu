@@ -55,6 +55,7 @@ def build_tdcp_arrays(
     cycle_jump_mask_cycles: float = 0.0,
     adr_wavelength_m: float | np.ndarray | None = None,
     doppler_endpoint_mask: bool = True,
+    ddl_sign_fixed: bool = False,
 ) -> tuple[np.ndarray | None, np.ndarray | None, int]:
     n_epoch, n_sat = adr.shape
     if n_epoch < 2:
@@ -121,7 +122,20 @@ def build_tdcp_arrays(
                         and float(doppler_weights[t + 1, s]) > 0.0
                     )
                 if doppler_pair_valid and matlab_dt_s > 0.0:
-                    doppler_tdcp = -0.5 * (d0 + d1) * matlab_dt_s
+                    # Android PseudorangeRateMetersPerSecond is already a range
+                    # rate (positive = receding), so the physically correct
+                    # predicted ADR delta is +0.5*(d0+d1)*dt (``ddl_sign_fixed``).
+                    # The legacy default keeps the minus sign that was copied
+                    # from MATLAB's -(D1+D2)*lam/2*dt, where D is a Doppler
+                    # frequency in Hz with the opposite sign of the range rate.
+                    # The inverted prediction rejects every doppler-checked
+                    # pair, which in practice acts as a doppler/carrier row
+                    # exclusivity filter; enabling the corrected sign grows the
+                    # TDCP factor support ~2.2x but measurably degrades dense
+                    # urban trips (sjc-q +0.66m, lax-o +2.72m, p95 blow-up), so
+                    # the legacy behaviour remains the default.
+                    sign = 0.5 if ddl_sign_fixed else -0.5
+                    doppler_tdcp = sign * (d0 + d1) * matlab_dt_s
                     if abs(meas - doppler_tdcp) > consistency_threshold_m:
                         rejected_pair[t, s] = True
                         consistency_mask_count += 1
