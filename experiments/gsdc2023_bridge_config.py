@@ -517,6 +517,14 @@ def apply_taroz_gnss_only_preset(config: BridgeConfig) -> BridgeConfig:
         per_type_kernel_motion_enabled=True,
         fgo_fixed_linearization=True,
         apply_base_correction=True,
+        # fgo_gnss.m always runs add_position_offset on the GNSS-only output
+        apply_position_offset=True,
+        # fgo_gnss.m optimizes with GTSAM Levenberg-Marquardt (max 1000
+        # iterations); the default GN/line-search loop stops on the first
+        # non-improving step.  LM with 16 iterations matches the converged
+        # LM(200) scores on the trips swept while staying ~6x cheaper.
+        fgo_iters=16,
+        fgo_lm_damping=1e-4,
         tdcp_weight_scale=1.0,
         graph_relative_height=False,
         relative_height_huber_k=0.0,
