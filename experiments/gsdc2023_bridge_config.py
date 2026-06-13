@@ -134,6 +134,7 @@ class BridgeConfig:
     # separate weights array while the gate/WLS keeps using ``weight_mode``.
     # ``None`` (default) shares ``weight_mode`` for both, matching legacy.
     fgo_weight_mode: str | None = None
+    fgo_extra_constellations: bool = False
     # Robust kernel applied inside the FGO solver. "huber" (default) is the
     # legacy in-CUDA Huber IRLS; "cauchy" wraps the native solver in a
     # Python-side Cauchy IRLS loop and is targeted at NLOS-heavy trips.
@@ -362,6 +363,8 @@ class BridgeConfig:
             raise ValueError("fgo_lm_damping must be finite")
         if float(self.fgo_lm_damping) < 0.0:
             raise ValueError("fgo_lm_damping must be >= 0")
+        if not isinstance(self.fgo_extra_constellations, bool):
+            raise ValueError("fgo_extra_constellations must be a bool")
         for name in (
             "stop_velocity_huber_k",
             "stop_position_huber_k",
