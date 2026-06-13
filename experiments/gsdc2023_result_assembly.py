@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 
@@ -110,6 +110,7 @@ def build_bridge_result(
     assembled_outputs: AssembledSourceOutputs,
     fgo_iters: int,
     failed_chunks: int,
+    failed_chunk_reasons: Mapping[str, int] | None = None,
     baseline_mse_pr: float,
     raw_wls_mse_pr: float,
     fgo_mse_pr: float,
@@ -138,6 +139,7 @@ def build_bridge_result(
         max_sats=batch.max_sats,
         fgo_iters=fgo_iters,
         failed_chunks=failed_chunks,
+        failed_chunk_reasons=(dict(failed_chunk_reasons) if failed_chunk_reasons else None),
         vd_seed_guard_skipped_segments=vd_seed_guard_skipped_segments,
         vd_seed_guard_skipped_epochs=vd_seed_guard_skipped_epochs,
         vd_seed_guard_records=(list(vd_seed_guard_records) if vd_seed_guard_records is not None else None),

@@ -111,6 +111,7 @@ class BridgeResult:
     metrics_raw_wls: dict | None
     metrics_fgo: dict | None
     fgo_tol: float = 1e-7
+    failed_chunk_reasons: dict[str, int] | None = None
     vd_seed_guard_records: list[dict[str, object]] | None = None
     chunk_selection_records: list[dict[str, object]] | None = None
     parity_audit: dict | None = None
@@ -335,6 +336,7 @@ class BridgeResult:
             "fgo_iters": int(self.fgo_iters),
             "fgo_tol": float(self.fgo_tol),
             "failed_chunks": int(self.failed_chunks),
+            "failed_chunk_reasons": dict(self.failed_chunk_reasons or {}),
             "vd_seed_guard_skipped_segments": int(self.vd_seed_guard_skipped_segments),
             "vd_seed_guard_skipped_epochs": int(self.vd_seed_guard_skipped_epochs),
             "vd_seed_guard_records": vd_guard_records,
@@ -481,6 +483,8 @@ class BridgeResult:
         ]
         if self.failed_chunks > 0:
             lines.append(f"  failed chunks: {self.failed_chunks} (raw WLS fallback)")
+            for reason, count in sorted((self.failed_chunk_reasons or {}).items()):
+                lines.append(f"    {count}x {reason}")
         if self.vd_seed_guard_skipped_segments > 0 or self.vd_seed_guard_skipped_epochs > 0:
             reason_counts: dict[str, int] = {}
             for record in self.vd_seed_guard_records or []:
