@@ -69,6 +69,7 @@ def _apply_explicit_cli_overrides(config: BridgeConfig, args: argparse.Namespace
         "multi_gnss": ("--multi-gnss", "--no-multi-gnss"),
         "tdcp_enabled": ("--tdcp", "--no-tdcp"),
         "tdcp_geometry_correction": ("--tdcp-geometry-correction", "--no-tdcp-geometry-correction"),
+        "tdcp_ddl_sign_fixed": ("--tdcp-ddl-sign-fixed", "--no-tdcp-ddl-sign-fixed"),
         "fgo_line_search": ("--fgo-line-search", "--no-fgo-line-search"),
     }
     for field, names in boolean_options.items():
@@ -85,6 +86,7 @@ def _apply_explicit_cli_overrides(config: BridgeConfig, args: argparse.Namespace
         "absolute_height_sigma_m": ("--absolute-height-sigma-m",),
         "absolute_height_dist_m": ("--absolute-height-dist-m",),
         "tdcp_weight_scale": ("--tdcp-weight-scale",),
+        "tdcp_l5_weight_scale": ("--tdcp-l5-weight-scale",),
         "tdcp_consistency_threshold_m": ("--tdcp-consistency-threshold-m",),
     }
     for field, names in scalar_options.items():
@@ -381,10 +383,27 @@ def main() -> None:
         help="reject TDCP pairs when ADR and Doppler disagree by more than this threshold",
     )
     p.add_argument(
+        "--tdcp-ddl-sign-fixed",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "use the physically correct +0.5*(d0+d1)*dt Doppler prediction in the dDL "
+            "consistency check; default keeps the legacy inverted sign, which rejects "
+            "every doppler-checked TDCP pair (urban A/B regression with the fix: "
+            "sjc-q +0.66m / lax-o +2.72m)"
+        ),
+    )
+    p.add_argument(
         "--tdcp-weight-scale",
         type=float,
         default=DEFAULT_TDCP_WEIGHT_SCALE,
         help="multiply final TDCP weights by this factor; <=0 keeps TDCP arrays but disables their weight",
+    )
+    p.add_argument(
+        "--tdcp-l5-weight-scale",
+        type=float,
+        default=1.0,
+        help="multiply final L5-slot TDCP weights by this factor",
     )
     p.add_argument(
         "--tdcp-geometry-correction",
@@ -463,7 +482,9 @@ def main() -> None:
         multi_gnss=args.multi_gnss,
         tdcp_enabled=args.tdcp,
         tdcp_consistency_threshold_m=args.tdcp_consistency_threshold_m,
+        tdcp_ddl_sign_fixed=args.tdcp_ddl_sign_fixed,
         tdcp_weight_scale=args.tdcp_weight_scale,
+        tdcp_l5_weight_scale=args.tdcp_l5_weight_scale,
         tdcp_geometry_correction=args.tdcp_geometry_correction,
         taroz_fgo_candidate_enabled=args.taroz_fgo_candidates,
         taroz_fgo_candidate_sources=tuple(

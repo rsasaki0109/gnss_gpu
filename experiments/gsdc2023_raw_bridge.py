@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+import warnings
 from collections.abc import Mapping
-from dataclasses import replace as _replace_dataclass
+from dataclasses import dataclass, field, replace as _replace_dataclass
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +19,7 @@ from experiments.gsdc2023_per_type_kernel import (
 from gnss_gpu.fgo import fgo_gnss_lm, fgo_gnss_lm_vd
 from gnss_gpu.io.nav_rinex import read_gps_klobuchar_from_nav_header
 from gnss_gpu.multi_gnss import (
+    MAX_SYSTEMS as MULTI_GNSS_MAX_SYSTEMS,
     SYSTEM_BEIDOU,
     MultiGNSSSolver,
     SYSTEM_GALILEO,
@@ -321,6 +323,7 @@ from experiments.gsdc2023_trip_stages import (
     build_observation_preparation_stages as _build_observation_preparation_stages,
     build_post_observation_stages as _build_post_observation_stages,
     unpack_observation_preparation_stage as _unpack_observation_preparation_stage,
+    apply_tdcp_l5_weight_scale as _apply_tdcp_l5_weight_scale,
     build_pseudorange_doppler_consistency_stage as _build_pseudorange_doppler_consistency_stage,
     build_pseudorange_residual_stage as _build_pseudorange_residual_stage,
     build_raw_observation_frame as _build_raw_observation_frame,
@@ -662,9 +665,13 @@ def build_trip_arrays(
     multi_gnss: bool = False,
     use_tdcp: bool = False,
     tdcp_consistency_threshold_m: float = DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M,
+    tdcp_ddl_sign_fixed: bool = False,
     fgo_residual_mask_propagation: bool = False,
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE,
+    tdcp_l5_weight_scale: float = 1.0,
     tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION,
+    tdcp_cycle_jump_mask_cycles: float = 0.0,
+    tdcp_doppler_endpoint_mask: bool = True,
     apply_base_correction: bool = False,
     data_root: Path | None = None,
     trip: str | None = None,
@@ -677,6 +684,7 @@ def build_trip_arrays(
     pseudorange_doppler_mask_m: float = OBS_MASK_PSEUDORANGE_DOPPLER_THRESHOLD_M,
     matlab_residual_diagnostics_mask_path: Path | None = None,
     dual_frequency: bool = False,
+    fgo_extra_constellations: bool = False,
     apply_absolute_height: bool = False,
     absolute_height_dist_m: float = HEIGHT_ABSOLUTE_DIST_M,
     imu_frame: str = "body",
@@ -723,6 +731,7 @@ def build_trip_arrays(
         signal_type=signal_type,
         multi_gnss=multi_gnss,
         dual_frequency=dual_frequency,
+        fgo_extra_constellations=fgo_extra_constellations,
         apply_observation_mask=apply_observation_mask,
         observation_min_cn0_dbhz=observation_min_cn0_dbhz,
         observation_min_elevation_deg=observation_min_elevation_deg,
@@ -789,6 +798,7 @@ def build_trip_arrays(
             observation_min_cn0_dbhz=observation_min_cn0_dbhz,
             observation_min_elevation_deg=observation_min_elevation_deg,
             dual_frequency=dual_frequency,
+            fgo_extra_constellations=fgo_extra_constellations,
             factor_dt_max_s=factor_dt_max_s,
             apply_base_correction=apply_base_correction,
             data_root=data_root,
@@ -798,11 +808,15 @@ def build_trip_arrays(
             pseudorange_residual_mask_m=pseudorange_residual_mask_m,
             pseudorange_residual_mask_l5_m=pseudorange_residual_mask_l5_m,
             tdcp_consistency_threshold_m=tdcp_consistency_threshold_m,
+            tdcp_ddl_sign_fixed=tdcp_ddl_sign_fixed,
             fgo_residual_mask_propagation=fgo_residual_mask_propagation,
             tdcp_loffset_m=tdcp_loffset_m,
             matlab_residual_diagnostics_mask_path=matlab_residual_diagnostics_mask_path,
             tdcp_geometry_correction=tdcp_geometry_correction,
             tdcp_weight_scale=tdcp_weight_scale,
+            tdcp_l5_weight_scale=tdcp_l5_weight_scale,
+            tdcp_cycle_jump_mask_cycles=tdcp_cycle_jump_mask_cycles,
+            tdcp_doppler_endpoint_mask=tdcp_doppler_endpoint_mask,
             imu_frame=imu_frame,
             imu_sample_dt_mode=imu_sample_dt_mode,
             default_pd_l1_threshold_m=OBS_MASK_PSEUDORANGE_DOPPLER_THRESHOLD_M,
@@ -832,6 +846,7 @@ def build_trip_arrays(
             apply_diagnostics_mask_fn=_apply_matlab_residual_diagnostics_mask,
             apply_geometry_correction_fn=_apply_tdcp_geometry_correction,
             apply_weight_scale_fn=_apply_tdcp_weight_scale,
+            apply_l5_weight_scale_fn=_apply_tdcp_l5_weight_scale,
             load_device_imu_measurements_fn=load_device_imu_measurements,
             process_device_imu_fn=process_device_imu,
             project_stop_to_epochs_fn=project_stop_to_epochs,
@@ -879,13 +894,19 @@ def run_wls(
 
         if sys_kind is not None and n_clock > 1:
             active_kinds = sorted({int(sk) for sk in sys_kind[i, idx] if 0 <= int(sk) < n_clock})
-            if len(active_kinds) > 1 and idx.size >= 3 + len(active_kinds):
-                systems = tuple(active_kinds)
+            # MultiGNSSSolver only accepts the five supported system IDs and
+            # treats them as opaque clock-group labels, while dual-frequency
+            # signal/clock kinds can reach MATLAB_SIGNAL_CLOCK_DIM-1, so the
+            # kinds are relabelled onto contiguous solver IDs.  Epochs with
+            # more active kinds than supported labels fall through to the
+            # single-clock WLS below.
+            if 1 < len(active_kinds) <= MULTI_GNSS_MAX_SYSTEMS and idx.size >= 3 + len(active_kinds):
+                systems = tuple(range(len(active_kinds)))
                 solver = solver_cache.get(systems)
                 if solver is None:
                     solver = MultiGNSSSolver(systems=list(systems), max_iter=25, tol=1e-9)
                     solver_cache[systems] = solver
-                kind_to_system = {sk: sk for sk in active_kinds}
+                kind_to_system = {sk: rank for rank, sk in enumerate(active_kinds)}
                 system_ids = np.array([kind_to_system[int(sk)] for sk in sys_kind[i, idx]], dtype=np.int32)
                 pos, biases, n_iter = solver.solve(sat_ecef[i, idx], pseudorange[i, idx], system_ids, weights[i, idx])
                 if n_iter >= 0 and np.linalg.norm(pos) > 1e3:
@@ -2393,6 +2414,58 @@ def _vd_seed_factor_guard_enabled_for_phone(phone: str) -> bool:
     return phone.lower() == "pixel6pro"
 
 
+@dataclass
+class ChunkedFgoRun:
+    """Result of ``run_fgo_chunked``.
+
+    Iterating yields the legacy 11-tuple layout (without
+    ``failed_chunk_reasons``) so existing tuple unpacks keep working; new
+    fields are attribute-only.
+    """
+
+    auto_state: np.ndarray
+    fgo_state: np.ndarray
+    total_iters: int
+    failed_chunks: int
+    vd_seed_guard_skipped_segments: int
+    vd_seed_guard_skipped_epochs: int
+    vd_seed_guard_records: list[dict[str, object]]
+    auto_sources: np.ndarray
+    auto_source_counts: dict[str, int]
+    chunk_records: list[ChunkSelectionRecord]
+    fgo_vd_state: np.ndarray | None
+    failed_chunk_reasons: dict[str, int] = field(default_factory=dict)
+
+    def __iter__(self):
+        return iter(
+            (
+                self.auto_state,
+                self.fgo_state,
+                self.total_iters,
+                self.failed_chunks,
+                self.vd_seed_guard_skipped_segments,
+                self.vd_seed_guard_skipped_epochs,
+                self.vd_seed_guard_records,
+                self.auto_sources,
+                self.auto_source_counts,
+                self.chunk_records,
+                self.fgo_vd_state,
+            ),
+        )
+
+
+def _record_chunk_fallback(reasons: dict[str, int], reason: str) -> None:
+    """Count a chunk fallback reason and warn the first time it appears."""
+
+    if reason not in reasons:
+        warnings.warn(
+            f"FGO chunk failed and fell back to raw WLS: {reason}",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+    reasons[reason] = reasons.get(reason, 0) + 1
+
+
 def run_fgo_chunked(
     batch: TripArrays,
     raw_wls: np.ndarray,
@@ -2448,19 +2521,7 @@ def run_fgo_chunked(
     fgo_huber_k_tdcp: float = 0.0,
     fgo_fixed_linearization: bool = False,
     fgo_seed_state: np.ndarray | None = None,
-) -> tuple[
-    np.ndarray,
-    np.ndarray,
-    int,
-    int,
-    int,
-    int,
-    list[dict[str, object]],
-    np.ndarray,
-    dict[str, int],
-    list[ChunkSelectionRecord],
-    np.ndarray | None,
-]:
+) -> "ChunkedFgoRun":
     n_epoch = batch.sat_ecef.shape[0]
     chunk_size = n_epoch if chunk_epochs <= 0 or n_epoch <= chunk_epochs else chunk_epochs
     stitched = raw_wls.copy()
@@ -2484,6 +2545,7 @@ def run_fgo_chunked(
     )
     total_iters = 0
     failed_chunks = 0
+    failed_chunk_reasons: dict[str, int] = {}
     vd_seed_guard_skipped_segments = 0
     vd_seed_guard_skipped_epochs = 0
     vd_seed_guard_records: list[dict[str, object]] = []
@@ -3015,9 +3077,13 @@ def run_fgo_chunked(
                             seg_state_for_solver,
                             **vd_kwargs,
                         )
-                except RuntimeError:
+                except RuntimeError as exc:
                     iters = -1
+                    fallback_reason = f"{type(exc).__name__}: {exc}"
+                else:
+                    fallback_reason = "native VD solver returned -1 (rejected inputs, e.g. n_state cap)"
                 if int(iters) < 0:
+                    _record_chunk_fallback(failed_chunk_reasons, fallback_reason)
                     chunk_failed = True
                     fgo_xyz[local_start:local_end] = raw_state[local_start:local_end, :3]
                     continue
@@ -3085,9 +3151,13 @@ def run_fgo_chunked(
                         tol=tol,
                         tdcp_huber_k=float(fgo_huber_k_tdcp),
                     )
-                except RuntimeError:
+                except RuntimeError as exc:
                     iters = -1
+                    fallback_reason = f"{type(exc).__name__}: {exc}"
+                else:
+                    fallback_reason = "native solver returned -1 (rejected inputs, e.g. n_state cap)"
                 if int(iters) < 0:
+                    _record_chunk_fallback(failed_chunk_reasons, fallback_reason)
                     chunk_failed = True
                     fgo_xyz[local_start:local_end] = raw_state[local_start:local_end, :3]
                     continue
@@ -3166,18 +3236,19 @@ def run_fgo_chunked(
         selected_source_counts[source] += end - start
         prev_tail_xyz = stitched[end - 1, :3].copy()
 
-    return (
-        stitched,
-        fgo_stitched,
-        total_iters,
-        failed_chunks,
-        vd_seed_guard_skipped_segments,
-        vd_seed_guard_skipped_epochs,
-        vd_seed_guard_records,
-        selected_sources,
-        selected_source_counts,
-        chunk_records,
-        fgo_vd_stitched,
+    return ChunkedFgoRun(
+        auto_state=stitched,
+        fgo_state=fgo_stitched,
+        total_iters=total_iters,
+        failed_chunks=failed_chunks,
+        vd_seed_guard_skipped_segments=vd_seed_guard_skipped_segments,
+        vd_seed_guard_skipped_epochs=vd_seed_guard_skipped_epochs,
+        vd_seed_guard_records=vd_seed_guard_records,
+        auto_sources=selected_sources,
+        auto_source_counts=selected_source_counts,
+        chunk_records=chunk_records,
+        fgo_vd_state=fgo_vd_stitched,
+        failed_chunk_reasons=failed_chunk_reasons,
     )
 
 
@@ -3295,9 +3366,13 @@ def _build_taroz_fgo_candidate_batch(
         multi_gnss=config.multi_gnss,
         use_tdcp=config.tdcp_enabled,
         tdcp_consistency_threshold_m=config.tdcp_consistency_threshold_m,
+        tdcp_ddl_sign_fixed=bool(getattr(config, "tdcp_ddl_sign_fixed", False)),
         fgo_residual_mask_propagation=bool(getattr(config, "fgo_residual_mask_propagation", False)),
         tdcp_weight_scale=config.tdcp_weight_scale,
+        tdcp_l5_weight_scale=config.tdcp_l5_weight_scale,
         tdcp_geometry_correction=config.tdcp_geometry_correction,
+        tdcp_cycle_jump_mask_cycles=config.tdcp_cycle_jump_mask_cycles,
+        tdcp_doppler_endpoint_mask=config.tdcp_doppler_endpoint_mask,
         apply_base_correction=config.apply_base_correction,
         data_root=data_root,
         trip=trip,
@@ -3310,6 +3385,7 @@ def _build_taroz_fgo_candidate_batch(
         pseudorange_doppler_mask_m=config.pseudorange_doppler_mask_m,
         matlab_residual_diagnostics_mask_path=config.matlab_residual_diagnostics_mask_path,
         dual_frequency=config.dual_frequency,
+        fgo_extra_constellations=config.fgo_extra_constellations,
         apply_absolute_height=config.apply_absolute_height,
         absolute_height_dist_m=config.absolute_height_dist_m,
         imu_frame=config.imu_frame,
@@ -3594,25 +3670,25 @@ def solve_trip(
             f"kept={after_stop_count}/{before_stop_count} status={seed_status}",
             flush=True,
         )
-    (
-        auto_state,
-        fgo_state,
-        iters,
-        failed_chunks,
-        vd_seed_guard_skipped_segments,
-        vd_seed_guard_skipped_epochs,
-        vd_seed_guard_records,
-        auto_sources,
-        auto_source_counts,
-        chunk_records,
-        fgo_vd_state,
-    ) = run_fgo_chunked(
+    chunked_run = run_fgo_chunked(
         batch,
         raw_wls,
         **solver_context_kwargs,
         **fgo_run_kwargs,
         fgo_seed_state=fgo_seed_state,
     )
+    auto_state = chunked_run.auto_state
+    fgo_state = chunked_run.fgo_state
+    iters = chunked_run.total_iters
+    failed_chunks = chunked_run.failed_chunks
+    failed_chunk_reasons = chunked_run.failed_chunk_reasons
+    vd_seed_guard_skipped_segments = chunked_run.vd_seed_guard_skipped_segments
+    vd_seed_guard_skipped_epochs = chunked_run.vd_seed_guard_skipped_epochs
+    vd_seed_guard_records = chunked_run.vd_seed_guard_records
+    auto_sources = chunked_run.auto_sources
+    auto_source_counts = chunked_run.auto_source_counts
+    chunk_records = chunked_run.chunk_records
+    fgo_vd_state = chunked_run.fgo_vd_state
     tdcp_off_fgo_state: np.ndarray | None = None
     tdcp_off_chunk_records: list[ChunkSelectionRecord] | None = None
     tdcp_scale_fgo_state: np.ndarray | None = None
@@ -3623,72 +3699,42 @@ def solve_trip(
     dd_carrier_stats: dict[str, object] = {}
     taroz_fgo_candidates: dict[str, tuple[np.ndarray, list[ChunkSelectionRecord]]] = {}
     if _tdcp_off_candidate_enabled(config, batch):
-        (
-            _tdcp_off_auto_state,
-            tdcp_off_fgo_state,
-            _tdcp_off_iters,
-            _tdcp_off_failed_chunks,
-            _tdcp_off_vd_seed_guard_skipped_segments,
-            _tdcp_off_vd_seed_guard_skipped_epochs,
-            _tdcp_off_vd_seed_guard_records,
-            _tdcp_off_auto_sources,
-            _tdcp_off_auto_source_counts,
-            tdcp_off_chunk_records,
-            _tdcp_off_fgo_vd_state,
-        ) = run_fgo_chunked(
+        tdcp_off_run = run_fgo_chunked(
             _batch_without_tdcp(batch),
             raw_wls,
             **solver_context_kwargs,
             **fgo_run_kwargs,
             fgo_seed_state=fgo_seed_state,
         )
+        tdcp_off_fgo_state = tdcp_off_run.fgo_state
+        tdcp_off_chunk_records = tdcp_off_run.chunk_records
     if _tdcp_scale_candidate_enabled(config, batch, phone_name):
         tdcp_scale_batch = _apply_tdcp_candidate_weight_scale(
             batch,
             current_scale=config.tdcp_weight_scale,
             candidate_scale=config.tdcp_scale_candidate_weight_scale,
         )
-        (
-            _tdcp_scale_auto_state,
-            tdcp_scale_fgo_state,
-            _tdcp_scale_iters,
-            _tdcp_scale_failed_chunks,
-            _tdcp_scale_vd_seed_guard_skipped_segments,
-            _tdcp_scale_vd_seed_guard_skipped_epochs,
-            _tdcp_scale_vd_seed_guard_records,
-            _tdcp_scale_auto_sources,
-            _tdcp_scale_auto_source_counts,
-            tdcp_scale_chunk_records,
-            _tdcp_scale_fgo_vd_state,
-        ) = run_fgo_chunked(
+        tdcp_scale_run = run_fgo_chunked(
             tdcp_scale_batch,
             raw_wls,
             **solver_context_kwargs,
             **fgo_run_kwargs,
             fgo_seed_state=fgo_seed_state,
         )
+        tdcp_scale_fgo_state = tdcp_scale_run.fgo_state
+        tdcp_scale_chunk_records = tdcp_scale_run.chunk_records
     if config.ct_rbpf_fgo_enabled:
         ct_rbpf_fgo_run_kwargs = dict(fgo_run_kwargs)
         ct_rbpf_fgo_run_kwargs["motion_sigma_m"] = config.ct_rbpf_motion_sigma_m
-        (
-            _ct_rbpf_auto_state,
-            ct_rbpf_fgo_state,
-            _ct_rbpf_iters,
-            _ct_rbpf_failed_chunks,
-            _ct_rbpf_vd_seed_guard_skipped_segments,
-            _ct_rbpf_vd_seed_guard_skipped_epochs,
-            _ct_rbpf_vd_seed_guard_records,
-            _ct_rbpf_auto_sources,
-            _ct_rbpf_auto_source_counts,
-            ct_rbpf_chunk_records,
-            _ct_rbpf_fgo_vd_state,
-        ) = run_fgo_chunked(
+        ct_rbpf_run = run_fgo_chunked(
             batch,
             raw_wls,
             **solver_context_kwargs,
             **ct_rbpf_fgo_run_kwargs,
             fgo_seed_state=fgo_seed_state,
         )
+        ct_rbpf_fgo_state = ct_rbpf_run.fgo_state
+        ct_rbpf_chunk_records = ct_rbpf_run.chunk_records
     if taroz_candidate_sources:
         if data_root is None:
             raise RuntimeError("taroz FGO candidates require data_root")
@@ -3706,26 +3752,14 @@ def solve_trip(
                 taroz_candidate_base_run_kwargs,
                 taroz_kernel,
             )
-            (
-                _taroz_auto_state,
-                taroz_fgo_state,
-                _taroz_iters,
-                _taroz_failed_chunks,
-                _taroz_vd_seed_guard_skipped_segments,
-                _taroz_vd_seed_guard_skipped_epochs,
-                _taroz_vd_seed_guard_records,
-                _taroz_auto_sources,
-                _taroz_auto_source_counts,
-                taroz_chunk_records,
-                _taroz_fgo_vd_state,
-            ) = run_fgo_chunked(
+            taroz_run = run_fgo_chunked(
                 taroz_candidate_batch,
                 raw_wls,
                 **solver_context_kwargs,
                 **taroz_candidate_run_kwargs,
                 fgo_seed_state=fgo_seed_state,
             )
-            taroz_fgo_candidates[str(source_name)] = (taroz_fgo_state, taroz_chunk_records)
+            taroz_fgo_candidates[str(source_name)] = (taroz_run.fgo_state, taroz_run.chunk_records)
     raw_state, raw_sse, raw_weight_sum, _ = fit_state_with_clock_bias(
         batch.sat_ecef,
         batch.pseudorange,
@@ -3961,6 +3995,7 @@ def solve_trip(
         assembled_outputs=assembled_outputs,
         fgo_iters=int(iters),
         failed_chunks=int(failed_chunks),
+        failed_chunk_reasons=failed_chunk_reasons,
         vd_seed_guard_skipped_segments=int(vd_seed_guard_skipped_segments),
         vd_seed_guard_skipped_epochs=int(vd_seed_guard_skipped_epochs),
         vd_seed_guard_records=vd_seed_guard_records,
@@ -4017,9 +4052,13 @@ def validate_raw_gsdc2023_trip(
         multi_gnss=cfg.multi_gnss,
         use_tdcp=cfg.tdcp_enabled,
         tdcp_consistency_threshold_m=cfg.tdcp_consistency_threshold_m,
+        tdcp_ddl_sign_fixed=bool(getattr(cfg, "tdcp_ddl_sign_fixed", False)),
         fgo_residual_mask_propagation=bool(getattr(cfg, "fgo_residual_mask_propagation", False)),
         tdcp_weight_scale=cfg.tdcp_weight_scale,
+        tdcp_l5_weight_scale=cfg.tdcp_l5_weight_scale,
         tdcp_geometry_correction=cfg.tdcp_geometry_correction,
+        tdcp_cycle_jump_mask_cycles=cfg.tdcp_cycle_jump_mask_cycles,
+        tdcp_doppler_endpoint_mask=cfg.tdcp_doppler_endpoint_mask,
         apply_base_correction=cfg.apply_base_correction,
         data_root=data_root,
         trip=trip,
@@ -4032,6 +4071,7 @@ def validate_raw_gsdc2023_trip(
         pseudorange_doppler_mask_m=cfg.pseudorange_doppler_mask_m,
         matlab_residual_diagnostics_mask_path=cfg.matlab_residual_diagnostics_mask_path,
         dual_frequency=cfg.dual_frequency,
+        fgo_extra_constellations=cfg.fgo_extra_constellations,
         apply_absolute_height=cfg.apply_absolute_height,
         absolute_height_dist_m=cfg.absolute_height_dist_m,
         imu_frame=cfg.imu_frame,

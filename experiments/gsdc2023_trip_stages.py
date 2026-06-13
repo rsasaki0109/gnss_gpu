@@ -10,6 +10,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from experiments.gsdc2023_signal_model import is_fgo_extra_constellation_signal
+from experiments.gsdc2023_signal_model import carrier_wavelength_m
 from experiments.gsdc2023_taroz_weighting import SN_PERCENTILE_DEFAULT, compute_trip_cn0_percentiles
 
 
@@ -21,12 +23,13 @@ AppendGnssLogOnlyRowsFn = Callable[..., Any]
 ApplyDiagnosticsMaskFn = Callable[..., None]
 ApplyTdcpGeometryCorrectionFn = Callable[[np.ndarray | None, np.ndarray | None, np.ndarray, np.ndarray], int]
 ApplyTdcpWeightScaleFn = Callable[[np.ndarray | None, float], None]
+IsL5SignalFn = Callable[[str], bool]
+ApplyTdcpL5WeightScaleFn = Callable[[np.ndarray | None, Sequence[Any], float, IsL5SignalFn], None]
 CleanClockDriftFn = Callable[[np.ndarray, np.ndarray | None, np.ndarray | None, str], np.ndarray | None]
 ClockJumpFromEpochCountsFn = Callable[[Any], np.ndarray | None]
 CombineClockJumpMasksFn = Callable[[np.ndarray | None, np.ndarray | None], np.ndarray | None]
 DetectClockJumpsFromClockBiasFn = Callable[[np.ndarray, str], np.ndarray | None]
 EstimateResidualClockSeriesFn = Callable[..., tuple[np.ndarray | None, np.ndarray | None]]
-IsL5SignalFn = Callable[[str], bool]
 GnssLogPseudorangeMatrixFn = Callable[..., tuple[np.ndarray, np.ndarray, np.ndarray] | None]
 GnssLogEpochTimesFn = Callable[[Path], Any]
 GpsMatrtklibNavMessagesForTripFn = Callable[[Path], Any]
@@ -287,12 +290,17 @@ class PostObservationStageConfig:
     matlab_residual_diagnostics_mask_path: Path | None
     tdcp_geometry_correction: bool
     tdcp_weight_scale: float
+    tdcp_l5_weight_scale: float
     imu_frame: str
     imu_sample_dt_mode: str
     default_pd_l1_threshold_m: float
     default_pd_l5_threshold_m: float
     default_pr_l1_threshold_m: float
     default_pr_l5_threshold_m: float
+    fgo_extra_constellations: bool = False
+    tdcp_cycle_jump_mask_cycles: float = 0.0
+    tdcp_doppler_endpoint_mask: bool = True
+    tdcp_ddl_sign_fixed: bool = False
     fgo_residual_mask_propagation: bool = False
 
 
@@ -319,6 +327,7 @@ class PostObservationStageDependencies:
     apply_diagnostics_mask_fn: ApplyDiagnosticsMaskFn
     apply_geometry_correction_fn: ApplyTdcpGeometryCorrectionFn
     apply_weight_scale_fn: ApplyTdcpWeightScaleFn
+    apply_l5_weight_scale_fn: ApplyTdcpL5WeightScaleFn
     load_device_imu_measurements_fn: LoadImuMeasurementsFn
     process_device_imu_fn: ProcessImuFn
     project_stop_to_epochs_fn: ProjectStopFn
@@ -591,6 +600,7 @@ def build_raw_observation_frame(
     signal_type: str,
     multi_gnss: bool,
     dual_frequency: bool,
+    fgo_extra_constellations: bool = False,
     apply_observation_mask: bool,
     observation_min_cn0_dbhz: float,
     observation_min_elevation_deg: float,
@@ -602,7 +612,13 @@ def build_raw_observation_frame(
     frame = raw_frame
 
     if multi_gnss:
-        frame = frame[multi_gnss_mask_fn(frame, dual_frequency=dual_frequency)]
+        frame = frame[
+            multi_gnss_mask_fn(
+                frame,
+                dual_frequency=dual_frequency,
+                extra_constellations=fgo_extra_constellations,
+            )
+        ]
     elif dual_frequency:
         signal_types = signal_types_for_constellation_fn(
             constellation_type,
@@ -723,6 +739,7 @@ def build_filled_observation_matrix_stage(
     max_epochs: int,
     weight_mode: str,
     fgo_weight_mode: str | None = None,
+    fgo_extra_constellations: bool = False,
     multi_gnss: bool,
     dual_frequency: bool,
     tdcp_enabled: bool,
@@ -782,6 +799,7 @@ def build_filled_observation_matrix_stage(
         baseline_lookup=metadata_context.baseline_lookup,
         weight_mode=weight_mode,
         fgo_weight_mode=fgo_weight_mode,
+        fgo_extra_constellations=fgo_extra_constellations,
         multi_gnss=multi_gnss,
         dual_frequency=dual_frequency,
         tdcp_enabled=tdcp_enabled,
@@ -866,6 +884,7 @@ def build_observation_preparation_stages(
     signal_type: str,
     multi_gnss: bool,
     dual_frequency: bool,
+    fgo_extra_constellations: bool = False,
     apply_observation_mask: bool,
     observation_min_cn0_dbhz: float,
     observation_min_elevation_deg: float,
@@ -917,6 +936,7 @@ def build_observation_preparation_stages(
         signal_type=signal_type,
         multi_gnss=multi_gnss,
         dual_frequency=dual_frequency,
+        fgo_extra_constellations=fgo_extra_constellations,
         apply_observation_mask=apply_observation_mask,
         observation_min_cn0_dbhz=observation_min_cn0_dbhz,
         observation_min_elevation_deg=observation_min_elevation_deg,
@@ -967,6 +987,7 @@ def build_observation_preparation_stages(
         max_epochs=max_epochs,
         weight_mode=weight_mode,
         fgo_weight_mode=fgo_weight_mode,
+        fgo_extra_constellations=fgo_extra_constellations,
         multi_gnss=multi_gnss,
         dual_frequency=dual_frequency,
         tdcp_enabled=tdcp_enabled,
@@ -1211,6 +1232,7 @@ def build_full_observation_context_stage(
     observation_min_cn0_dbhz: float,
     observation_min_elevation_deg: float,
     dual_frequency: bool,
+    fgo_extra_constellations: bool = False,
     factor_dt_max_s: float,
     clock_drift_context_times_ms: np.ndarray,
     clock_drift_context_mps: np.ndarray | None,
@@ -1245,6 +1267,7 @@ def build_full_observation_context_stage(
         doppler_residual_mask_mps=0.0,
         pseudorange_doppler_mask_m=0.0,
         dual_frequency=dual_frequency,
+        fgo_extra_constellations=fgo_extra_constellations,
         factor_dt_max_s=factor_dt_max_s,
     )
     if needs_clock_drift_context and getattr(batch, "clock_drift_mps", None) is not None:
@@ -1483,6 +1506,145 @@ def build_pseudorange_doppler_consistency_stage(
     )
 
 
+def _fgo_extra_slot_mask(slot_keys: Sequence[Any]) -> np.ndarray:
+    mask = np.zeros(len(slot_keys), dtype=bool)
+    for idx, key in enumerate(slot_keys):
+        if not isinstance(key, tuple) or len(key) < 3:
+            continue
+        if is_fgo_extra_constellation_signal(int(key[0]), str(key[2])):
+            mask[idx] = True
+    return mask
+
+
+def _copy_extra_slot_weights(source: np.ndarray | None, extra_slots: np.ndarray) -> np.ndarray | None:
+    if source is None:
+        return None
+    out = np.zeros_like(source)
+    if out.ndim == 2 and out.shape[1] == extra_slots.size:
+        out[:, extra_slots] = source[:, extra_slots]
+    return out
+
+
+def _apply_fgo_extra_residual_masks(
+    *,
+    apply_observation_mask: bool,
+    slot_keys: Sequence[Any],
+    weights_fgo: np.ndarray | None,
+    doppler_weights_fgo: np.ndarray | None,
+    times_ms: np.ndarray,
+    sat_ecef: np.ndarray,
+    sat_vel: np.ndarray | None,
+    doppler: np.ndarray | None,
+    kaggle_wls: np.ndarray,
+    pseudorange_observable: np.ndarray,
+    phone_name: str,
+    sys_kind: np.ndarray | None,
+    n_clock: int,
+    pseudorange: np.ndarray,
+    pseudorange_bias_weights: np.ndarray,
+    clock_bias_m: np.ndarray | None,
+    clock_drift_mps: np.ndarray | None,
+    sat_clock_drift_mps: np.ndarray | None,
+    baseline_velocity_times_ms: np.ndarray,
+    baseline_velocity_xyz: np.ndarray,
+    clock_drift_context_times_ms: np.ndarray,
+    clock_drift_context_mps: np.ndarray | None,
+    doppler_residual_mask_mps: float,
+    pseudorange_doppler_mask_m: float,
+    pseudorange_residual_mask_m: float,
+    pseudorange_residual_mask_l5_m: float | None,
+    pseudorange_isb_by_group: Any | None,
+    mask_doppler_residual_outliers_fn: MaskDopplerResidualFn,
+    slot_frequency_thresholds_fn: SlotFrequencyThresholdsFn,
+    mask_pseudorange_doppler_consistency_fn: MaskPseudorangeDopplerFn,
+    slot_pseudorange_common_bias_groups_fn: SlotPseudorangeGroupsFn,
+    is_l5_signal_fn: IsL5SignalFn,
+    mask_pseudorange_residual_outliers_fn: MaskPseudorangeResidualFn,
+    default_pd_l1_threshold_m: float,
+    default_pd_l5_threshold_m: float,
+    default_pr_l1_threshold_m: float,
+    default_pr_l5_threshold_m: float,
+) -> tuple[int, int, int]:
+    if not apply_observation_mask or weights_fgo is None:
+        return 0, 0, 0
+    extra_slots = _fgo_extra_slot_mask(slot_keys)
+    if not np.any(extra_slots):
+        return 0, 0, 0
+
+    extra_pr_weights = _copy_extra_slot_weights(weights_fgo, extra_slots)
+    if extra_pr_weights is None:
+        return 0, 0, 0
+    extra_doppler_weights = _copy_extra_slot_weights(doppler_weights_fgo, extra_slots)
+
+    doppler_count = 0
+    if extra_doppler_weights is not None:
+        doppler_count = mask_doppler_residual_outliers_fn(
+            times_ms,
+            sat_ecef,
+            sat_vel,
+            doppler,
+            extra_doppler_weights,
+            kaggle_wls,
+            threshold_mps=doppler_residual_mask_mps,
+            receiver_clock_drift_mps=clock_drift_mps,
+            sat_clock_drift_mps=sat_clock_drift_mps,
+            velocity_times_ms=baseline_velocity_times_ms,
+            velocity_reference_xyz=baseline_velocity_xyz,
+            clock_drift_times_ms=clock_drift_context_times_ms,
+            clock_drift_reference_mps=clock_drift_context_mps,
+        )
+        doppler_weights_fgo[:, extra_slots] = extra_doppler_weights[:, extra_slots]
+
+    pd_threshold = slot_frequency_thresholds_fn(
+        slot_keys,
+        pseudorange_doppler_mask_m,
+        default_l1_threshold=default_pd_l1_threshold_m,
+        default_l5_threshold=default_pd_l5_threshold_m,
+    )
+    pd_count = mask_pseudorange_doppler_consistency_fn(
+        times_ms,
+        pseudorange_observable,
+        extra_pr_weights,
+        doppler,
+        extra_doppler_weights,
+        phone=phone_name,
+        sys_kind=sys_kind,
+        n_clock=n_clock,
+        threshold_m=pd_threshold,
+    )
+
+    common_bias_group = slot_pseudorange_common_bias_groups_fn(slot_keys)
+    if pseudorange_residual_mask_l5_m is None:
+        pr_threshold = slot_frequency_thresholds_fn(
+            slot_keys,
+            pseudorange_residual_mask_m,
+            default_l1_threshold=default_pr_l1_threshold_m,
+            default_l5_threshold=default_pr_l5_threshold_m,
+        )
+    else:
+        pr_threshold = np.full(len(slot_keys), float(pseudorange_residual_mask_m), dtype=np.float64)
+        for slot_idx, key in enumerate(slot_keys):
+            if is_l5_signal_fn(str(key[2])):
+                pr_threshold[slot_idx] = float(pseudorange_residual_mask_l5_m)
+    pr_count = mask_pseudorange_residual_outliers_fn(
+        sat_ecef,
+        pseudorange,
+        extra_pr_weights,
+        kaggle_wls,
+        sys_kind=sys_kind,
+        n_clock=n_clock,
+        threshold_m=pr_threshold,
+        receiver_clock_bias_m=clock_bias_m,
+        common_bias_group=common_bias_group,
+        common_bias_sample_weights=pseudorange_bias_weights,
+        common_bias_by_group=pseudorange_isb_by_group,
+    )
+    weights_fgo[:, extra_slots] = extra_pr_weights[:, extra_slots]
+    if extra_doppler_weights is not None and doppler_weights_fgo is not None:
+        doppler_weights_fgo[:, extra_slots] = extra_doppler_weights[:, extra_slots]
+    return int(doppler_count), int(pd_count), int(pr_count)
+
+
 def build_observation_mask_base_correction_stage(
     *,
     apply_observation_mask: bool,
@@ -1494,9 +1656,11 @@ def build_observation_mask_base_correction_stage(
     sat_vel: np.ndarray | None,
     doppler: np.ndarray | None,
     doppler_weights: np.ndarray | None,
+    doppler_weights_fgo: np.ndarray | None,
     kaggle_wls: np.ndarray,
     pseudorange_observable: np.ndarray,
     weights: np.ndarray,
+    weights_fgo: np.ndarray | None,
     phone_name: str,
     sys_kind: np.ndarray | None,
     n_clock: int,
@@ -1516,6 +1680,7 @@ def build_observation_mask_base_correction_stage(
     pseudorange_residual_mask_m: float,
     pseudorange_residual_mask_l5_m: float | None,
     full_isb_batch: Any | None,
+    fgo_extra_constellations: bool,
     signal_type: str,
     correction_matrix_fn: BaseCorrectionMatrixFn,
     mask_doppler_residual_outliers_fn: MaskDopplerResidualFn,
@@ -1530,8 +1695,6 @@ def build_observation_mask_base_correction_stage(
     default_pd_l5_threshold_m: float,
     default_pr_l1_threshold_m: float,
     default_pr_l5_threshold_m: float,
-    weights_fgo: np.ndarray | None = None,
-    doppler_weights_fgo: np.ndarray | None = None,
     propagate_masks_to_fgo: bool = False,
 ) -> ObservationMaskBaseCorrectionStageProducts:
     pr_active_before = None
@@ -1606,6 +1769,63 @@ def build_observation_mask_base_correction_stage(
         default_l1_threshold_m=default_pr_l1_threshold_m,
         default_l5_threshold_m=default_pr_l5_threshold_m,
     )
+    if fgo_extra_constellations:
+        extra_doppler_count, extra_pd_count, extra_pr_count = _apply_fgo_extra_residual_masks(
+            apply_observation_mask=apply_observation_mask,
+            slot_keys=slot_keys,
+            weights_fgo=weights_fgo,
+            doppler_weights_fgo=doppler_weights_fgo,
+            times_ms=times_ms,
+            sat_ecef=sat_ecef,
+            sat_vel=sat_vel,
+            doppler=doppler,
+            kaggle_wls=kaggle_wls,
+            pseudorange_observable=pseudorange_observable,
+            phone_name=phone_name,
+            sys_kind=sys_kind,
+            n_clock=n_clock,
+            pseudorange=pseudorange,
+            pseudorange_bias_weights=pseudorange_bias_weights,
+            clock_bias_m=clock_bias_m,
+            clock_drift_mps=clock_drift_mps,
+            sat_clock_drift_mps=sat_clock_drift_mps,
+            baseline_velocity_times_ms=baseline_velocity_times_ms,
+            baseline_velocity_xyz=baseline_velocity_xyz,
+            clock_drift_context_times_ms=clock_drift_context_times_ms,
+            clock_drift_context_mps=clock_drift_context_mps,
+            doppler_residual_mask_mps=doppler_residual_mask_mps,
+            pseudorange_doppler_mask_m=pseudorange_doppler_mask_m,
+            pseudorange_residual_mask_m=pseudorange_residual_mask_m,
+            pseudorange_residual_mask_l5_m=pseudorange_residual_mask_l5_m,
+            pseudorange_isb_by_group=pseudorange_residual_stage.pseudorange_isb_by_group,
+            mask_doppler_residual_outliers_fn=mask_doppler_residual_outliers_fn,
+            slot_frequency_thresholds_fn=slot_frequency_thresholds_fn,
+            mask_pseudorange_doppler_consistency_fn=mask_pseudorange_doppler_consistency_fn,
+            slot_pseudorange_common_bias_groups_fn=slot_pseudorange_common_bias_groups_fn,
+            is_l5_signal_fn=is_l5_signal_fn,
+            mask_pseudorange_residual_outliers_fn=mask_pseudorange_residual_outliers_fn,
+            default_pd_l1_threshold_m=default_pd_l1_threshold_m,
+            default_pd_l5_threshold_m=default_pd_l5_threshold_m,
+            default_pr_l1_threshold_m=default_pr_l1_threshold_m,
+            default_pr_l5_threshold_m=default_pr_l5_threshold_m,
+        )
+        if extra_doppler_count:
+            doppler_residual_stage = DopplerResidualStageProducts(
+                doppler_residual_mask_count=(
+                    doppler_residual_stage.doppler_residual_mask_count + extra_doppler_count
+                ),
+            )
+        if extra_pd_count:
+            pseudorange_doppler_stage = PseudorangeDopplerStageProducts(
+                pseudorange_doppler_mask_count=(
+                    pseudorange_doppler_stage.pseudorange_doppler_mask_count + extra_pd_count
+                ),
+            )
+        if extra_pr_count:
+            pseudorange_residual_stage = PseudorangeResidualStageProducts(
+                pseudorange_isb_by_group=pseudorange_residual_stage.pseudorange_isb_by_group,
+                residual_mask_count=pseudorange_residual_stage.residual_mask_count + extra_pr_count,
+            )
 
     base_correction_count = 0
     if apply_base_correction:
@@ -1675,6 +1895,7 @@ def build_post_observation_stages(
     observation_min_cn0_dbhz: float,
     observation_min_elevation_deg: float,
     dual_frequency: bool,
+    fgo_extra_constellations: bool,
     factor_dt_max_s: float,
     clock_drift_context_times_ms: np.ndarray,
     clock_drift_context_mps: np.ndarray | None,
@@ -1690,10 +1911,14 @@ def build_post_observation_stages(
     pseudorange_residual_mask_m: float,
     pseudorange_residual_mask_l5_m: float | None,
     tdcp_consistency_threshold_m: float,
+    tdcp_ddl_sign_fixed: bool = False,
     tdcp_loffset_m: float,
     matlab_residual_diagnostics_mask_path: Path | None,
     tdcp_geometry_correction: bool,
     tdcp_weight_scale: float,
+    tdcp_l5_weight_scale: float,
+    tdcp_cycle_jump_mask_cycles: float = 0.0,
+    tdcp_doppler_endpoint_mask: bool = True,
     fgo_residual_mask_propagation: bool = False,
     adr: np.ndarray | None,
     adr_state: np.ndarray | None,
@@ -1723,6 +1948,7 @@ def build_post_observation_stages(
     apply_diagnostics_mask_fn: ApplyDiagnosticsMaskFn,
     apply_geometry_correction_fn: ApplyTdcpGeometryCorrectionFn,
     apply_weight_scale_fn: ApplyTdcpWeightScaleFn,
+    apply_l5_weight_scale_fn: ApplyTdcpL5WeightScaleFn,
     load_device_imu_measurements_fn: LoadImuMeasurementsFn,
     process_device_imu_fn: ProcessImuFn,
     project_stop_to_epochs_fn: ProjectStopFn,
@@ -1793,6 +2019,7 @@ def build_post_observation_stages(
         observation_min_cn0_dbhz=observation_min_cn0_dbhz,
         observation_min_elevation_deg=observation_min_elevation_deg,
         dual_frequency=dual_frequency,
+        fgo_extra_constellations=fgo_extra_constellations,
         factor_dt_max_s=factor_dt_max_s,
         clock_drift_context_times_ms=clock_drift_context_times_ms,
         clock_drift_context_mps=clock_drift_context_mps,
@@ -1808,9 +2035,11 @@ def build_post_observation_stages(
         sat_vel=sat_vel,
         doppler=doppler,
         doppler_weights=doppler_weights,
+        doppler_weights_fgo=doppler_weights_fgo,
         kaggle_wls=kaggle_wls,
         pseudorange_observable=pseudorange_observable,
         weights=weights,
+        weights_fgo=weights_fgo,
         phone_name=phone_name,
         sys_kind=sys_kind,
         n_clock=n_clock,
@@ -1830,6 +2059,7 @@ def build_post_observation_stages(
         pseudorange_residual_mask_m=pseudorange_residual_mask_m,
         pseudorange_residual_mask_l5_m=pseudorange_residual_mask_l5_m,
         full_isb_batch=full_context_stage.full_isb_batch,
+        fgo_extra_constellations=fgo_extra_constellations,
         signal_type=signal_type,
         correction_matrix_fn=correction_matrix_fn,
         mask_doppler_residual_outliers_fn=mask_doppler_residual_outliers_fn,
@@ -1844,8 +2074,6 @@ def build_post_observation_stages(
         default_pd_l5_threshold_m=default_pd_l5_threshold_m,
         default_pr_l1_threshold_m=default_pr_l1_threshold_m,
         default_pr_l5_threshold_m=default_pr_l5_threshold_m,
-        weights_fgo=weights_fgo,
-        doppler_weights_fgo=doppler_weights_fgo,
         propagate_masks_to_fgo=fgo_residual_mask_propagation,
     )
 
@@ -1857,6 +2085,7 @@ def build_post_observation_stages(
         doppler=doppler,
         tdcp_dt=time_delta.tdcp_dt,
         tdcp_consistency_threshold_m=tdcp_consistency_threshold_m,
+        tdcp_ddl_sign_fixed=tdcp_ddl_sign_fixed,
         doppler_weights=doppler_weights,
         doppler_weights_fgo=doppler_weights_fgo,
         carrier_weights=carrier_weights,
@@ -1876,10 +2105,15 @@ def build_post_observation_stages(
         kaggle_wls=kaggle_wls,
         tdcp_geometry_correction=tdcp_geometry_correction,
         tdcp_weight_scale=tdcp_weight_scale,
+        tdcp_l5_weight_scale=tdcp_l5_weight_scale,
+        tdcp_cycle_jump_mask_cycles=tdcp_cycle_jump_mask_cycles,
+        tdcp_doppler_endpoint_mask=tdcp_doppler_endpoint_mask,
         build_tdcp_arrays_fn=build_tdcp_arrays_fn,
         apply_diagnostics_mask_fn=apply_diagnostics_mask_fn,
         apply_geometry_correction_fn=apply_geometry_correction_fn,
         apply_weight_scale_fn=apply_weight_scale_fn,
+        apply_l5_weight_scale_fn=apply_l5_weight_scale_fn,
+        is_l5_signal_fn=is_l5_signal_fn,
     )
     imu_stage = build_imu_stage(
         trip_dir=trip_dir,
@@ -1951,6 +2185,7 @@ def build_configured_post_observation_stages(
         observation_min_cn0_dbhz=config.observation_min_cn0_dbhz,
         observation_min_elevation_deg=config.observation_min_elevation_deg,
         dual_frequency=config.dual_frequency,
+        fgo_extra_constellations=config.fgo_extra_constellations,
         factor_dt_max_s=config.factor_dt_max_s,
         clock_drift_context_times_ms=observation_products.clock_drift_context_times_ms,
         clock_drift_context_mps=observation_products.clock_drift_context_mps,
@@ -1966,11 +2201,15 @@ def build_configured_post_observation_stages(
         pseudorange_residual_mask_m=config.pseudorange_residual_mask_m,
         pseudorange_residual_mask_l5_m=config.pseudorange_residual_mask_l5_m,
         tdcp_consistency_threshold_m=config.tdcp_consistency_threshold_m,
+        tdcp_ddl_sign_fixed=bool(getattr(config, "tdcp_ddl_sign_fixed", False)),
         fgo_residual_mask_propagation=bool(getattr(config, "fgo_residual_mask_propagation", False)),
         tdcp_loffset_m=config.tdcp_loffset_m,
         matlab_residual_diagnostics_mask_path=config.matlab_residual_diagnostics_mask_path,
         tdcp_geometry_correction=config.tdcp_geometry_correction,
         tdcp_weight_scale=config.tdcp_weight_scale,
+        tdcp_l5_weight_scale=config.tdcp_l5_weight_scale,
+        tdcp_cycle_jump_mask_cycles=config.tdcp_cycle_jump_mask_cycles,
+        tdcp_doppler_endpoint_mask=config.tdcp_doppler_endpoint_mask,
         adr=observation_products.adr,
         adr_state=observation_products.adr_state,
         adr_uncertainty=observation_products.adr_uncertainty,
@@ -1999,6 +2238,7 @@ def build_configured_post_observation_stages(
         apply_diagnostics_mask_fn=dependencies.apply_diagnostics_mask_fn,
         apply_geometry_correction_fn=dependencies.apply_geometry_correction_fn,
         apply_weight_scale_fn=dependencies.apply_weight_scale_fn,
+        apply_l5_weight_scale_fn=dependencies.apply_l5_weight_scale_fn,
         load_device_imu_measurements_fn=dependencies.load_device_imu_measurements_fn,
         process_device_imu_fn=dependencies.process_device_imu_fn,
         project_stop_to_epochs_fn=dependencies.project_stop_to_epochs_fn,
@@ -2010,6 +2250,46 @@ def build_configured_post_observation_stages(
     )
 
 
+def _slot_signal_type(slot_key: Any) -> str | None:
+    if isinstance(slot_key, (tuple, list)) and len(slot_key) >= 3:
+        return str(slot_key[2])
+    signal_type = getattr(slot_key, "SignalType", None)
+    if signal_type is not None:
+        return str(signal_type)
+    return None
+
+
+def apply_tdcp_l5_weight_scale(
+    tdcp_weights: np.ndarray | None,
+    slot_keys: Sequence[Any],
+    scale: float,
+    is_l5_signal_fn: IsL5SignalFn,
+) -> None:
+    scale_value = float(scale)
+    if not np.isfinite(scale_value):
+        raise ValueError("tdcp_l5_weight_scale must be finite")
+    if scale_value <= 0.0:
+        raise ValueError("tdcp_l5_weight_scale must be > 0")
+    if tdcp_weights is None or scale_value == 1.0:
+        return
+    n_slot = min(tdcp_weights.shape[1], len(slot_keys))
+    for slot_idx in range(n_slot):
+        signal_type = _slot_signal_type(slot_keys[slot_idx])
+        if signal_type is not None and is_l5_signal_fn(signal_type):
+            tdcp_weights[:, slot_idx] *= scale_value
+def _tdcp_adr_wavelengths_for_slots(slot_keys: Sequence[Any]) -> np.ndarray:
+    constellation_by_letter = {"G": 1, "E": 6, "J": 4, "C": 5}
+    wavelengths = np.ones(len(slot_keys), dtype=np.float64)
+    for idx, key in enumerate(slot_keys):
+        if not isinstance(key, tuple) or len(key) < 3:
+            continue
+        constellation = constellation_by_letter.get(str(key[0]).upper())
+        if constellation is None:
+            constellation = int(key[0])
+        wavelengths[idx] = carrier_wavelength_m(constellation, str(key[2]))
+    return wavelengths
+
+
 def build_tdcp_stage(
     *,
     adr: np.ndarray | None,
@@ -2018,6 +2298,7 @@ def build_tdcp_stage(
     doppler: np.ndarray | None,
     tdcp_dt: np.ndarray,
     tdcp_consistency_threshold_m: float,
+    tdcp_ddl_sign_fixed: bool = False,
     doppler_weights: np.ndarray | None,
     doppler_weights_fgo: np.ndarray | None,
     carrier_weights: np.ndarray | None,
@@ -2037,10 +2318,15 @@ def build_tdcp_stage(
     kaggle_wls: np.ndarray,
     tdcp_geometry_correction: bool,
     tdcp_weight_scale: float,
+    tdcp_l5_weight_scale: float,
+    tdcp_cycle_jump_mask_cycles: float = 0.0,
+    tdcp_doppler_endpoint_mask: bool = True,
     build_tdcp_arrays_fn: BuildTdcpArraysFn,
     apply_diagnostics_mask_fn: ApplyDiagnosticsMaskFn,
     apply_geometry_correction_fn: ApplyTdcpGeometryCorrectionFn,
     apply_weight_scale_fn: ApplyTdcpWeightScaleFn,
+    apply_l5_weight_scale_fn: ApplyTdcpL5WeightScaleFn,
+    is_l5_signal_fn: IsL5SignalFn,
 ) -> TdcpStageProducts:
     tdcp_meas = None
     tdcp_raw_meas = None
@@ -2060,6 +2346,10 @@ def build_tdcp_stage(
             carrier_weights=carrier_weights,
             clock_jump=clock_jump,
             loffset_m=tdcp_loffset_m,
+            cycle_jump_mask_cycles=tdcp_cycle_jump_mask_cycles,
+            adr_wavelength_m=_tdcp_adr_wavelengths_for_slots(slot_keys),
+            doppler_endpoint_mask=tdcp_doppler_endpoint_mask,
+            ddl_sign_fixed=tdcp_ddl_sign_fixed,
         )
         tdcp_raw_meas = tdcp_meas.copy() if tdcp_meas is not None else None
 
@@ -2106,6 +2396,9 @@ def build_tdcp_stage(
     apply_weight_scale_fn(tdcp_weights, tdcp_weight_scale)
     if tdcp_weights_fgo is not None:
         apply_weight_scale_fn(tdcp_weights_fgo, tdcp_weight_scale)
+    apply_l5_weight_scale_fn(tdcp_weights, slot_keys, tdcp_l5_weight_scale, is_l5_signal_fn)
+    if tdcp_weights_fgo is not None:
+        apply_l5_weight_scale_fn(tdcp_weights_fgo, slot_keys, tdcp_l5_weight_scale, is_l5_signal_fn)
     return TdcpStageProducts(
         tdcp_meas=tdcp_meas,
         tdcp_weights=tdcp_weights,

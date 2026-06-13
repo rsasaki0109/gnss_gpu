@@ -28,7 +28,7 @@ Outputs:
 - `experiments/results/plateau_nlos_demo_{spp,pf,fgo}_replay_summary.json`
 - `experiments/results/plateau_nlos_demo_suite_summary.{json,md,csv}`
 - `docs/assets/data/plateau_nlos_demo_suite_summary.{csv,md}`
-- `docs/assets/media/plateau_nlos_visualization.html`
+- `docs/assets/media/demos/plateau_nlos_visualization.html`
 
 Result:
 

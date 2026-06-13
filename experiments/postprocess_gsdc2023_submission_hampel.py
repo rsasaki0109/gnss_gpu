@@ -58,6 +58,7 @@ def apply_hampel_to_submission(
     k: float,
     mad_floor_deg: float,
     passes: int = 1,
+    exclude_phone_prefixes: tuple[str, ...] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, int]]:
     """Return new DataFrame with Hampel-smoothed lat/lng per tripId.
 
@@ -70,40 +71,54 @@ def apply_hampel_to_submission(
         raise ValueError("passes must be >= 1")
     out = df.copy()
     out = out.sort_values(["tripId", "UnixTimeMillis"]).reset_index(drop=True)
+    exclude_prefixes = tuple(prefix.casefold() for prefix in (exclude_phone_prefixes or ()))
+    use_exclusions = bool(exclude_prefixes)
+    excluded_trips: set[str] = set()
+    if use_exclusions:
+        for trip_id in out["tripId"].astype(str).unique():
+            phone = trip_id.rsplit("/", 1)[-1].casefold()
+            if phone.startswith(exclude_prefixes):
+                excluded_trips.add(trip_id)
     stats: dict[str, int] = {
         "rows_total": len(out),
         "rows_changed": 0,
         "trips": 0,
         "passes": passes,
     }
+    if use_exclusions:
+        stats["skipped_trips"] = len(excluded_trips)
     per_pass_changed: list[int] = []
     original_lat = out["LatitudeDegrees"].to_numpy(dtype=np.float64).copy()
     original_lng = out["LongitudeDegrees"].to_numpy(dtype=np.float64).copy()
     for pass_idx in range(passes):
         pass_changed = 0
-        for _, group in out.groupby("tripId", sort=False):
+        for trip_id, group in out.groupby("tripId", sort=False):
             idx = group.index.to_numpy()
+            if pass_idx == 0:
+                stats["trips"] += 1
+            if str(trip_id) in excluded_trips:
+                continue
             lat = group["LatitudeDegrees"].to_numpy(dtype=np.float64)
             lng = group["LongitudeDegrees"].to_numpy(dtype=np.float64)
             lat_filt = hampel_filter_1d(lat, window=window, k=k, mad_floor=mad_floor_deg)
             lng_filt = hampel_filter_1d(lng, window=window, k=k, mad_floor=mad_floor_deg)
             changed = (lat_filt != lat) | (lng_filt != lng)
             pass_changed += int(changed.sum())
-            if pass_idx == 0:
-                stats["trips"] += 1
             out.loc[idx, "LatitudeDegrees"] = lat_filt
             out.loc[idx, "LongitudeDegrees"] = lng_filt
         per_pass_changed.append(pass_changed)
     final_lat = out["LatitudeDegrees"].to_numpy(dtype=np.float64)
     final_lng = out["LongitudeDegrees"].to_numpy(dtype=np.float64)
-    stats["rows_changed"] = int(
-        np.sum((final_lat != original_lat) | (final_lng != original_lng))
-    )
+    changed = (final_lat != original_lat) | (final_lng != original_lng)
+    if use_exclusions:
+        skipped_mask = out["tripId"].astype(str).isin(excluded_trips).to_numpy()
+        changed &= ~skipped_mask
+    stats["rows_changed"] = int(np.sum(changed))
     stats["per_pass_changed"] = per_pass_changed  # type: ignore[assignment]
     return out, stats
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Apply Hampel filter to a GSDC2023 submission CSV.",
     )
@@ -130,7 +145,16 @@ def main() -> int:
             "replacement when MAD is very small (= stationary segments)."
         ),
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--exclude-phone-prefix",
+        action="append",
+        default=None,
+        help=(
+            "Skip trips whose phone name (last tripId path component) starts "
+            "with this prefix, case-insensitive. May be repeated."
+        ),
+    )
+    args = parser.parse_args(argv)
     if not args.input.is_file():
         print(f"[error] input not found: {args.input}", file=sys.stderr)
         return 1
@@ -146,13 +170,21 @@ def main() -> int:
         k=args.k,
         mad_floor_deg=args.mad_floor_deg,
         passes=args.passes,
+        exclude_phone_prefixes=(
+            tuple(args.exclude_phone_prefix) if args.exclude_phone_prefix else None
+        ),
     )
     out.to_csv(args.output, index=False)
+    skipped = (
+        f" skipped_trips={stats['skipped_trips']}"
+        if args.exclude_phone_prefix
+        else ""
+    )
     print(
         f"trips={stats['trips']} rows_total={stats['rows_total']} "
         f"rows_changed={stats['rows_changed']} "
         f"({100 * stats['rows_changed'] / max(1, stats['rows_total']):.2f}%) "
-        f"window={args.window} k={args.k} passes={args.passes} "
+        f"window={args.window} k={args.k} passes={args.passes}{skipped} "
         f"per_pass_changed={stats.get('per_pass_changed', [])}",
         flush=True,
     )

@@ -111,6 +111,7 @@ class BridgeResult:
     metrics_raw_wls: dict | None
     metrics_fgo: dict | None
     fgo_tol: float = 1e-7
+    failed_chunk_reasons: dict[str, int] | None = None
     vd_seed_guard_records: list[dict[str, object]] | None = None
     chunk_selection_records: list[dict[str, object]] | None = None
     parity_audit: dict | None = None
@@ -169,6 +170,7 @@ class BridgeResult:
     pseudorange_doppler_mask_count: int = 0
     tdcp_consistency_mask_count: int = 0
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
+    tdcp_l5_weight_scale: float = 1.0
     tdcp_geometry_correction_applied: bool = False
     tdcp_geometry_correction_count: int = 0
     tdcp_scale_candidate_enabled: bool = False
@@ -335,6 +337,7 @@ class BridgeResult:
             "fgo_iters": int(self.fgo_iters),
             "fgo_tol": float(self.fgo_tol),
             "failed_chunks": int(self.failed_chunks),
+            "failed_chunk_reasons": dict(self.failed_chunk_reasons or {}),
             "vd_seed_guard_skipped_segments": int(self.vd_seed_guard_skipped_segments),
             "vd_seed_guard_skipped_epochs": int(self.vd_seed_guard_skipped_epochs),
             "vd_seed_guard_records": vd_guard_records,
@@ -414,6 +417,7 @@ class BridgeResult:
             "pseudorange_doppler_mask_count": int(self.pseudorange_doppler_mask_count),
             "tdcp_consistency_mask_count": int(self.tdcp_consistency_mask_count),
             "tdcp_weight_scale": float(self.tdcp_weight_scale),
+            "tdcp_l5_weight_scale": float(self.tdcp_l5_weight_scale),
             "tdcp_geometry_correction_applied": bool(self.tdcp_geometry_correction_applied),
             "tdcp_geometry_correction_count": int(self.tdcp_geometry_correction_count),
             "tdcp_scale_candidate_enabled": bool(self.tdcp_scale_candidate_enabled),
@@ -481,6 +485,8 @@ class BridgeResult:
         ]
         if self.failed_chunks > 0:
             lines.append(f"  failed chunks: {self.failed_chunks} (raw WLS fallback)")
+            for reason, count in sorted((self.failed_chunk_reasons or {}).items()):
+                lines.append(f"    {count}x {reason}")
         if self.vd_seed_guard_skipped_segments > 0 or self.vd_seed_guard_skipped_epochs > 0:
             reason_counts: dict[str, int] = {}
             for record in self.vd_seed_guard_records or []:
@@ -585,6 +591,8 @@ class BridgeResult:
             lines.append(f"  tdcp mask   : doppler_carrier={self.tdcp_consistency_mask_count}")
         if self.tdcp_weight_scale != DEFAULT_TDCP_WEIGHT_SCALE:
             lines.append(f"  tdcp scale  : {self.tdcp_weight_scale:g}")
+        if self.tdcp_l5_weight_scale != 1.0:
+            lines.append(f"  tdcp l5     : {self.tdcp_l5_weight_scale:g}")
         if self.tdcp_geometry_correction_applied:
             lines.append(f"  tdcp geom   : corrected_pairs={self.tdcp_geometry_correction_count}")
         if self.dual_frequency:
