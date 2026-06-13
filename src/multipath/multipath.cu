@@ -225,6 +225,7 @@ void simulate_multipath(const double* rx_ecef, const double* sat_ecef,
   CUDA_CHECK(cudaMemcpy(attenuations, d_atten, sz_out, cudaMemcpyDeviceToHost));
 
   CUDA_CHECK(cudaFree(d_rx)); CUDA_CHECK(cudaFree(d_sat));
+  CUDA_CHECK(cudaFree(d_ref));
   CUDA_CHECK(cudaFree(d_delays)); CUDA_CHECK(cudaFree(d_atten));
 }
 
@@ -268,6 +269,7 @@ void apply_multipath_error(const double* clean_pr, const double* rx_ecef,
   CUDA_CHECK(cudaMemcpy(mp_errors, d_errors, sz_pr, cudaMemcpyDeviceToHost));
 
   CUDA_CHECK(cudaFree(d_pr)); CUDA_CHECK(cudaFree(d_rx));
+  CUDA_CHECK(cudaFree(d_sat)); CUDA_CHECK(cudaFree(d_ref));
   CUDA_CHECK(cudaFree(d_corrupted)); CUDA_CHECK(cudaFree(d_errors));
 }
 

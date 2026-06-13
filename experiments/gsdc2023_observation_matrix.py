@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from experiments.gsdc2023_imu import ecef_to_enu_relative as _ecef_to_enu_relative
+from experiments.gsdc2023_signal_model import is_fgo_extra_constellation_signal
 from experiments.gsdc2023_taroz_weighting import (
     SIGTYPE_OTHER,
     SN_PERCENTILE_DEFAULT,
@@ -1026,6 +1027,7 @@ def fill_observation_matrices(
     baseline_lookup: Mapping[int, np.ndarray],
     weight_mode: str,
     fgo_weight_mode: str | None = None,
+    fgo_extra_constellations: bool = False,
     multi_gnss: bool,
     dual_frequency: bool,
     tdcp_enabled: bool,
@@ -1068,7 +1070,7 @@ def fill_observation_matrices(
     weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
     weights_fgo = (
         np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
-        if (fgo_weight_mode is not None and fgo_weight_mode != weight_mode)
+        if fgo_extra_constellations or (fgo_weight_mode is not None and fgo_weight_mode != weight_mode)
         else None
     )
     pseudorange_bias_weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
@@ -1101,9 +1103,14 @@ def fill_observation_matrices(
         np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
         if (
             has_doppler
-            and fgo_weight_mode is not None
-            and fgo_weight_mode != weight_mode
-            and fgo_weight_mode == "taroz_sn"
+            and (
+                fgo_extra_constellations
+                or (
+                    fgo_weight_mode is not None
+                    and fgo_weight_mode != weight_mode
+                    and fgo_weight_mode == "taroz_sn"
+                )
+            )
         )
         else None
     )
@@ -1121,9 +1128,14 @@ def fill_observation_matrices(
         np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
         if (
             has_adr
-            and fgo_weight_mode is not None
-            and fgo_weight_mode != weight_mode
-            and fgo_weight_mode == "taroz_sn"
+            and (
+                fgo_extra_constellations
+                or (
+                    fgo_weight_mode is not None
+                    and fgo_weight_mode != weight_mode
+                    and fgo_weight_mode == "taroz_sn"
+                )
+            )
         )
         else None
     )
@@ -1196,6 +1208,11 @@ def fill_observation_matrices(
         for row in epoch.group.itertuples(index=False):
             key = (int(row.ConstellationType), int(row.Svid), str(row.SignalType))
             sat_idx = slot_index[key]
+            row_is_fgo_extra = fgo_extra_constellations and is_fgo_extra_constellation_signal(
+                int(row.ConstellationType),
+                str(row.SignalType),
+            )
+            fgo_mode = fgo_weight_mode if fgo_weight_mode is not None else weight_mode
             row_is_gps = int(row.ConstellationType) == 1
             row_is_gps_l5 = row_is_gps and is_l5_signal_fn(str(row.SignalType))
             p_ok = bool(getattr(row, "bridge_p_ok", True))
@@ -1347,10 +1364,12 @@ def fill_observation_matrices(
                 if weights_fgo is not None:
                     weights_fgo[epoch_idx, sat_idx] = _compute_pr_weight(
                         row,
-                        mode=str(fgo_weight_mode),
+                        mode=str(fgo_mode),
                         trip_cn0_percentiles=trip_cn0_percentiles,
                         is_l5_signal_fn=is_l5_signal_fn,
                     )
+                if row_is_fgo_extra:
+                    weights[epoch_idx, sat_idx] = 0.0
             if p_bias_ok:
                 pseudorange_bias_weights[epoch_idx, sat_idx] = 1.0
 
@@ -1403,11 +1422,13 @@ def fill_observation_matrices(
                         if doppler_weights_fgo is not None:
                             doppler_weights_fgo[epoch_idx, sat_idx] = _compute_doppler_weight(
                                 row,
-                                mode=str(fgo_weight_mode),
+                                mode=str(fgo_mode),
                                 trip_cn0_percentiles=trip_cn0_percentiles,
                                 is_l5_signal_fn=is_l5_signal_fn,
                                 fallback_sigma_mps=sigma,
                             )
+                        if row_is_fgo_extra:
+                            doppler_weights[epoch_idx, sat_idx] = 0.0
 
             if adr is not None and adr_state is not None:
                 adr_value = adr_sign * float(row.AccumulatedDeltaRangeMeters)
@@ -1424,10 +1445,12 @@ def fill_observation_matrices(
                     if carrier_weights_fgo is not None:
                         carrier_weights_fgo[epoch_idx, sat_idx] = _compute_carrier_weight(
                             row,
-                            mode=str(fgo_weight_mode),
+                            mode=str(fgo_mode),
                             trip_cn0_percentiles=trip_cn0_percentiles,
                             is_l5_signal_fn=is_l5_signal_fn,
                         )
+                    if row_is_fgo_extra and carrier_weights is not None:
+                        carrier_weights[epoch_idx, sat_idx] = 0.0
                 if l_ok and adr_uncertainty is not None:
                     adr_unc = float(row.AccumulatedDeltaRangeUncertaintyMeters)
                     if np.isfinite(adr_unc) and adr_unc > 0.0:

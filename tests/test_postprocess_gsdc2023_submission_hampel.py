@@ -15,6 +15,7 @@ import pandas as pd
 from experiments.postprocess_gsdc2023_submission_hampel import (
     apply_hampel_to_submission,
     hampel_filter_1d,
+    main,
 )
 
 
@@ -102,3 +103,88 @@ def test_apply_hampel_passes_idempotent_on_clean_input():
     out, stats = apply_hampel_to_submission(df, window=7, k=2.5, mad_floor_deg=1e-6, passes=5)
     assert stats["rows_changed"] == 0
     assert all(p == 0 for p in stats["per_pass_changed"])
+
+
+def test_apply_hampel_exclude_phone_prefix_skips_pixel_trip_only():
+    pixel_lat = [37.0] * 3 + [37.5] + [37.0] * 4
+    samsung_lat = [38.0] * 3 + [38.5] + [38.0] * 4
+    df = pd.DataFrame({
+        "tripId": ["2023-05-01-US-CA/Pixel7Pro"] * 8
+        + ["2023-05-01-US-CA/SamsungS22"] * 8,
+        "UnixTimeMillis": list(range(8)) * 2,
+        "LatitudeDegrees": pixel_lat + samsung_lat,
+        "LongitudeDegrees": [-122.0] * 8 + [-123.0] * 8,
+    })
+
+    out, stats = apply_hampel_to_submission(
+        df,
+        window=5,
+        k=2.5,
+        mad_floor_deg=0.0,
+        exclude_phone_prefixes=("pixel",),
+    )
+
+    pixel = out[out["tripId"].str.endswith("Pixel7Pro")].sort_values("UnixTimeMillis")
+    samsung = out[out["tripId"].str.endswith("SamsungS22")].sort_values("UnixTimeMillis")
+    assert pixel["LatitudeDegrees"].iloc[3] == 37.5
+    assert samsung["LatitudeDegrees"].iloc[3] == 38.0
+    assert stats["rows_changed"] == 1
+    assert stats["skipped_trips"] == 1
+
+
+def test_apply_hampel_without_exclude_prefix_keeps_existing_behavior():
+    df = pd.DataFrame({
+        "tripId": ["2023-05-01-US-CA/Pixel7Pro"] * 8
+        + ["2023-05-01-US-CA/SamsungS22"] * 8,
+        "UnixTimeMillis": list(range(8)) * 2,
+        "LatitudeDegrees": [37.0] * 3 + [37.5] + [37.0] * 4
+        + [38.0] * 3 + [38.5] + [38.0] * 4,
+        "LongitudeDegrees": [-122.0] * 8 + [-123.0] * 8,
+    })
+
+    out, stats = apply_hampel_to_submission(df, window=5, k=2.5, mad_floor_deg=0.0)
+
+    pixel = out[out["tripId"].str.endswith("Pixel7Pro")].sort_values("UnixTimeMillis")
+    samsung = out[out["tripId"].str.endswith("SamsungS22")].sort_values("UnixTimeMillis")
+    assert pixel["LatitudeDegrees"].iloc[3] == 37.0
+    assert samsung["LatitudeDegrees"].iloc[3] == 38.0
+    assert stats["rows_changed"] == 2
+    assert "skipped_trips" not in stats
+
+
+def test_hampel_cli_reports_skipped_trips(tmp_path, capsys):
+    df = pd.DataFrame({
+        "tripId": ["2023-05-01-US-CA/Pixel7Pro"] * 8
+        + ["2023-05-01-US-CA/SamsungS22"] * 8,
+        "UnixTimeMillis": list(range(8)) * 2,
+        "LatitudeDegrees": [37.0] * 3 + [37.5] + [37.0] * 4
+        + [38.0] * 3 + [38.5] + [38.0] * 4,
+        "LongitudeDegrees": [-122.0] * 8 + [-123.0] * 8,
+    })
+    input_path = tmp_path / "input.csv"
+    output_path = tmp_path / "output.csv"
+    df.to_csv(input_path, index=False)
+
+    rc = main([
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_path),
+        "--window",
+        "5",
+        "--k",
+        "2.5",
+        "--mad-floor-deg",
+        "0",
+        "--exclude-phone-prefix",
+        "PIXEL",
+    ])
+
+    assert rc == 0
+    stdout = capsys.readouterr().out
+    assert "skipped_trips=1" in stdout
+    out = pd.read_csv(output_path)
+    pixel = out[out["tripId"].str.endswith("Pixel7Pro")].sort_values("UnixTimeMillis")
+    samsung = out[out["tripId"].str.endswith("SamsungS22")].sort_values("UnixTimeMillis")
+    assert pixel["LatitudeDegrees"].iloc[3] == 37.5
+    assert samsung["LatitudeDegrees"].iloc[3] == 38.0

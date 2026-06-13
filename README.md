@@ -12,7 +12,7 @@
 
 <p align="center">
   <img
-    src="docs/assets/media/site_teaser.gif"
+    src="docs/assets/media/site/site_teaser.gif"
     alt="gnss_gpu particle filter tracking through an urban canyon"
     width="960"
     height="540"
@@ -69,6 +69,72 @@ and the GSDC2023 Kaggle smartphone-decimeter challenge).
 > deep-urban sequences (including failure stretches). The point is the *relative* gap: the
 > GPU PF stack consistently wins against EKF and RTKLIB on the same epochs. Full tables,
 > figures, and limitations live on the [results snapshot](https://rsasaki0109.github.io/gnss_gpu/).
+
+## Particle-filter localization on OpenStreetMap
+
+The README headline is not just a table: the sampled particle cloud is localized
+on the real street network, with the posterior contracting around the driven
+UrbanNav route while the full-view trail is drawn from the continuous trajectory.
+
+<p align="center">
+  <img
+    src="docs/assets/media/particles/particle_viz_odaiba.gif"
+    alt="GPU particle-filter localization on OpenStreetMap in Odaiba"
+    width="960"
+  >
+</p>
+
+<p align="center">
+  <a href="docs/assets/media/particles/particle_viz_odaiba.mp4">Open the Odaiba particle-cloud video</a>
+</p>
+
+For the zero-data terminal demo behind this visual:
+
+```bash
+PYTHONPATH=python:. python3 examples/demo_pf_localization_improvement.py
+```
+
+It reads checked-in artifacts and prints the UrbanNav Odaiba PF-vs-RTKLIB
+improvement plus the PLATEAU LOS/NLOS mask replay gain for PF.
+
+## Ray-traced NLOS diffraction on real city data
+
+Beyond *rejecting* blocked satellites, the package models **why** an urban pseudorange is
+biased — knife-edge (ITU-R P.526) and **UTD** (Kouyoumjian–Pathak) diffraction plus
+specular reflection over **PLATEAU** 3D building meshes — and scores the physics against
+real **UrbanNav** residuals.
+
+<p align="center">
+  <img
+    src="docs/assets/media/los-nlos/los_nlos_deckgl.gif"
+    alt="Deck.gl LOS/NLOS sweep over an UrbanNav route with PLATEAU building geometry"
+    width="960"
+  >
+</p>
+
+<p align="center">
+  <a href="docs/assets/media/los-nlos/los_nlos_deckgl.html">Open the full LOS/NLOS deck.gl sweep</a>
+</p>
+
+A subtle but decisive step is correcting each satellite to signal-**transmission** time
+(with the Sagnac rotation). Without it a per-satellite *tens-of-metres* range error swamps
+the multipath signal; with it the residual becomes a clean NLOS ground truth (LOS median
+**1.0 m**, AUC **0.92**). On that clean reference, **UTD reproduces the measured
+multipath-bias distribution better than knife-edge** — reproducing the literature
+(Zhang & Hsu, 2021) on properly corrected real data.
+
+<div align="center">
+<img src="docs/assets/figures/nlos_diffraction_benchmark.png" alt="Ray-traced NLOS diffraction (UTD vs knife-edge) vs real UrbanNav Odaiba residuals" width="860">
+</div>
+
+| Diffraction model | Wasserstein-1 ↓ | KS ↓ |
+|---|--:|--:|
+| knife-edge (ITU-R P.526) | 1.84 | 0.46 |
+| **UTD (Kouyoumjian–Pathak)** | **1.70** | **0.29** |
+
+> UrbanNav Tokyo *Odaiba*, 60 epochs over a 249k-triangle PLATEAU mesh. Reproduce with
+> `PYTHONPATH=examples python examples/plot_nlos_diffraction_figure.py Odaiba 60`
+> (uses the installed package's CUDA ray-tracing for line-of-sight checks).
 
 ## Quick start
 
@@ -173,7 +239,7 @@ PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_fgo.py \
 ```
 
 The PLATEAU visualization is also checked into the Pages assets at
-[`docs/assets/media/plateau_nlos_visualization.html`](docs/assets/media/plateau_nlos_visualization.html).
+[`docs/assets/media/demos/plateau_nlos_visualization.html`](docs/assets/media/demos/plateau_nlos_visualization.html).
 The exported mask CSV uses the existing experiment contract
 `tow,epoch_idx,prn,is_los`; the SPP, particle-filter, and local-FGO replays
 consume only that mask path and show mask-soft downstream estimators recovering

@@ -86,6 +86,7 @@ def _apply_explicit_cli_overrides(config: BridgeConfig, args: argparse.Namespace
         "absolute_height_sigma_m": ("--absolute-height-sigma-m",),
         "absolute_height_dist_m": ("--absolute-height-dist-m",),
         "tdcp_weight_scale": ("--tdcp-weight-scale",),
+        "tdcp_l5_weight_scale": ("--tdcp-l5-weight-scale",),
         "tdcp_consistency_threshold_m": ("--tdcp-consistency-threshold-m",),
     }
     for field, names in scalar_options.items():
@@ -399,6 +400,12 @@ def main() -> None:
         help="multiply final TDCP weights by this factor; <=0 keeps TDCP arrays but disables their weight",
     )
     p.add_argument(
+        "--tdcp-l5-weight-scale",
+        type=float,
+        default=1.0,
+        help="multiply final L5-slot TDCP weights by this factor",
+    )
+    p.add_argument(
         "--tdcp-geometry-correction",
         action=argparse.BooleanOptionalAction,
         default=DEFAULT_TDCP_GEOMETRY_CORRECTION,
@@ -477,6 +484,7 @@ def main() -> None:
         tdcp_consistency_threshold_m=args.tdcp_consistency_threshold_m,
         tdcp_ddl_sign_fixed=args.tdcp_ddl_sign_fixed,
         tdcp_weight_scale=args.tdcp_weight_scale,
+        tdcp_l5_weight_scale=args.tdcp_l5_weight_scale,
         tdcp_geometry_correction=args.tdcp_geometry_correction,
         taroz_fgo_candidate_enabled=args.taroz_fgo_candidates,
         taroz_fgo_candidate_sources=tuple(

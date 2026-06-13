@@ -78,10 +78,18 @@ def use_taroz_gnss_only_for_phone(phone: str) -> bool:
     return str(phone).lower().startswith("pixel")
 
 
-def apply_taroz_phone_aware_preset(config: BridgeConfig, sample_trip_id: str) -> BridgeConfig:
+def apply_taroz_phone_aware_preset(
+    config: BridgeConfig,
+    sample_trip_id: str,
+    *,
+    pixel_position_source: str | None = None,
+) -> BridgeConfig:
     phone = phone_from_sample_trip_id(sample_trip_id)
     if use_taroz_gnss_only_for_phone(phone):
-        return apply_taroz_gnss_only_preset(config)
+        preset = apply_taroz_gnss_only_preset(config)
+        if pixel_position_source:
+            preset = replace(preset, position_source=pixel_position_source)
+        return preset
     return replace(config, fgo_weight_mode=TAROZ_FGO_WEIGHT_MODE)
 
 
@@ -290,6 +298,7 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         hatch_smoothing_enabled=bool(getattr(args, "hatch_smoothing", False)),
         hatch_smoothing_n=int(getattr(args, "hatch_smoothing_n", 100)),
         use_rtklib_tropo=bool(getattr(args, "use_rtklib_tropo", False)),
+        apply_base_correction=bool(getattr(args, "base_correction", False)),
         position_source=args.position_source,
         chunk_epochs=args.chunk_epochs,
         gated_baseline_threshold=args.gated_threshold,
@@ -297,6 +306,7 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         multi_gnss=args.multi_gnss,
         tdcp_enabled=args.tdcp,
         tdcp_weight_scale=args.tdcp_weight_scale,
+        tdcp_l5_weight_scale=args.tdcp_l5_weight_scale,
         tdcp_geometry_correction=args.tdcp_geometry_correction,
         dual_frequency=args.dual_frequency,
         ct_rbpf_fgo_enabled=args.ct_rbpf_fgo or args.position_source == CT_RBPF_FGO_SOURCE,
@@ -412,6 +422,9 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
     taroz_marupaku = bool(getattr(args, "taroz_marupaku", False))
     if taroz_marupaku and taroz_phone_aware:
         raise ValueError("--taroz-marupaku and --taroz-phone-aware are mutually exclusive")
+    pixel_position_source = getattr(args, "taroz_phone_aware_pixel_source", None) or None
+    if pixel_position_source and not taroz_phone_aware:
+        raise ValueError("--taroz-phone-aware-pixel-source requires --taroz-phone-aware")
     bridge_tables: dict[str, pd.DataFrame] = {}
     metrics: list[dict[str, Any]] = []
     total = len(trips)
@@ -422,7 +435,15 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
             "sample_trip_id": trip_id,
             "max_epochs": args.max_epochs,
             "start_epoch": args.start_epoch,
-            "config": apply_taroz_phone_aware_preset(config, trip_id) if taroz_phone_aware else config,
+            "config": (
+                apply_taroz_phone_aware_preset(
+                    config,
+                    trip_id,
+                    pixel_position_source=pixel_position_source,
+                )
+                if taroz_phone_aware
+                else config
+            ),
             "bridge_output_root": args.bridge_output_root,
             "resume_existing": bool(args.resume_existing),
         }
@@ -495,9 +516,11 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
                 "chunk_epochs": args.chunk_epochs,
                 "max_epochs": args.max_epochs,
                 "dual_frequency": bool(args.dual_frequency),
+                "base_correction": bool(config.apply_base_correction),
                 "ct_rbpf_fgo": bool(config.ct_rbpf_fgo_enabled),
                 "taroz_marupaku": taroz_marupaku,
                 "taroz_phone_aware": taroz_phone_aware,
+                "taroz_phone_aware_pixel_source": pixel_position_source,
                 "ct_rbpf_motion_sigma_m": args.ct_rbpf_motion_sigma_m,
                 "dd_carrier_fgo": bool(config.dd_carrier_fgo_enabled),
                 "dd_carrier_base_obs_template": args.dd_carrier_base_obs_template,
@@ -574,6 +597,16 @@ def main(argv: list[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Apply the guarded taroz preset per phone: Pixel uses GNSS-only taroz; non-Pixel uses taroz SNR FGO weights only.",
+    )
+    parser.add_argument(
+        "--taroz-phone-aware-pixel-source",
+        choices=("gated", "fgo"),
+        default=None,
+        help=(
+            "Position source override for the Pixel branch of --taroz-phone-aware. "
+            "'fgo' trusts the taroz GNSS-only FGO trajectory directly instead of the "
+            "baseline-locked gate; non-Pixel trips keep --position-source."
+        ),
     )
     parser.add_argument(
         "--taroz-fgo-candidates",
@@ -679,10 +712,17 @@ def main(argv: list[str] | None = None) -> int:
         default=False,
         help="Swap Android tropo for Saastamoinen recompute in raw PR.",
     )
+    parser.add_argument(
+        "--base-correction",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="subtract smoothed base-station pseudorange residuals when Base1/RINEX/nav inputs are ready",
+    )
     parser.add_argument("--vd", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--multi-gnss", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--tdcp", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--tdcp-weight-scale", type=float, default=DEFAULT_TDCP_WEIGHT_SCALE)
+    parser.add_argument("--tdcp-l5-weight-scale", type=float, default=1.0)
     parser.add_argument(
         "--tdcp-geometry-correction",
         action=argparse.BooleanOptionalAction,

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLATEAU NLOS Visualization</title>
+<style>
+body {
+  margin: 0;
+  background: #eef2f6;
+  color: #17202a;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px;
+}
+h1 {
+  margin: 0 0 6px;
+  font-size: 28px;
+  letter-spacing: 0;
+}
+p {
+  margin: 0 0 18px;
+  color: #52606d;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+.card {
+  background: #ffffff;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.label {
+  color: #607080;
+  font-size: 13px;
+}
+.value {
+  font-size: 22px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+.panel {
+  background: #ffffff;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  padding: 10px;
+}
+.panel svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.wide {
+  margin-top: 14px;
+}
+.svg-title {
+  font-size: 18px;
+  font-weight: 700;
+  fill: #17202a;
+}
+.svg-note, .legend text {
+  font-size: 12px;
+  fill: #52606d;
+}
+.sat-label {
+  font-size: 12px;
+  font-weight: 700;
+  fill: #17202a;
+}
+@media (max-width: 820px) {
+  main { padding: 16px; }
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>PLATEAU NLOS Visualization</h1>
+  <p>Standalone view of the sample CityGML mesh, BVH/triangle LOS mask, simulated NLOS measurements, and SPP error recovery.</p>
+  <section class="cards"><div class="card"><div class="label">Ray Source</div><div class="value">native BVH</div></div>
+<div class="card"><div class="label">NLOS Signals</div><div class="value">64.4%</div></div>
+<div class="card"><div class="label">Naive RMS</div><div class="value">11.85 m</div></div>
+<div class="card"><div class="label">PLATEAU-aware SPP RMS</div><div class="value">4.07 m</div></div>
+<div class="card"><div class="label">RMS Gain</div><div class="value">66%</div></div></section>
+  <section class="grid">
+    <div class="panel">
+<svg viewBox="0 0 880 500" role="img" aria-label="PLATEAU mesh and receiver trajectory">
+  <rect width="880" height="500" fill="#f7f9fb"/>
+  <g><polygon points="147.5,416.2 295.1,416.1 295.1,268.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.5,416.2 295.1,268.5 147.4,268.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.5,416.2 147.4,268.5 295.1,268.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.5,416.2 295.1,268.5 295.1,416.1" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.5,416.2 147.4,268.5 147.4,268.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.5,416.2 147.4,268.5 147.5,416.2" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="295.1,416.1 295.1,416.1 295.1,268.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="295.1,416.1 295.1,268.5 295.1,268.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.5,416.2 147.5,416.2 295.1,416.1" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.5,416.2 295.1,416.1 295.1,416.1" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,268.5 295.1,268.5 295.1,268.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,268.5 295.1,268.5 147.4,268.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="479.7,453.0 701.1,452.9 701.1,231.4" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="479.7,453.0 701.1,231.4 479.6,231.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="479.7,453.0 479.6,231.5 701.1,231.4" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="479.7,453.0 701.1,231.4 701.1,452.9" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="479.7,453.0 479.6,231.5 479.6,231.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="479.7,453.0 479.6,231.5 479.7,453.0" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="701.1,452.9 701.1,452.9 701.1,231.4" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="701.1,452.9 701.1,231.4 701.1,231.4" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="479.7,453.0 479.7,453.0 701.1,452.9" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="479.7,453.0 701.1,452.9 701.1,452.9" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="479.6,231.5 701.1,231.4 701.1,231.4" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="479.6,231.5 701.1,231.4 479.6,231.5" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,157.8 258.1,157.8 258.1,47.0" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,157.8 258.1,47.0 147.4,47.1" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,157.8 147.4,47.1 258.1,47.0" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,157.8 258.1,47.0 258.1,157.8" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,157.8 147.4,47.1 147.4,47.1" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,157.8 147.4,47.1 147.4,157.8" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="258.1,157.8 258.1,157.8 258.1,47.0" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="258.1,157.8 258.1,47.0 258.1,47.0" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,157.8 147.4,157.8 258.1,157.8" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,157.8 258.1,157.8 258.1,157.8" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,47.1 258.1,47.0 258.1,47.0" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/><polygon points="147.4,47.1 258.1,47.0 147.4,47.1" fill="#d8dee6" stroke="#798694" stroke-width="0.8" opacity="0.82"/></g>
+  <polyline points="34.0,373.8 45.8,373.8 57.5,373.8 69.3,373.8 81.1,373.8 92.8,373.8 104.6,373.8 116.4,373.8 128.1,373.8 139.9,373.8 163.4,373.8 175.2,373.8 187.0,373.8 198.8,373.8 210.5,373.8 222.3,373.8 234.1,373.8 245.8,373.8 269.4,373.8 281.1,373.8 292.9,373.8 304.7,373.8 316.4,373.8 328.2,373.8 340.0,373.8 351.7,373.8 363.5,373.8 375.3,373.8 387.0,373.8 398.8,373.8 410.6,373.8 422.3,373.8 434.1,373.8 445.9,373.8 457.7,373.8 469.4,373.8 481.2,373.8 493.0,373.8 504.7,373.8 516.5,373.8 528.3,373.8 540.0,373.8 551.8,373.8 563.6,373.8 575.3,373.8 587.1,373.8 598.9,373.8 610.6,373.8 622.4,373.8 634.2,373.8 645.9,373.8 657.7,373.8 669.5,373.8 681.2,373.8 693.0,373.8 704.8,373.8 716.6,373.8 728.3,373.8 740.1,373.8 751.9,373.8 763.6,373.8 775.4,373.8 787.2,373.8 798.9,373.8 810.7,373.8 822.5,373.8 834.2,373.8 846.0,373.8" fill="none" stroke="#1f5eff" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="34.0" cy="373.8" r="5" fill="#168a47"/>
+  <circle cx="846.0" cy="373.8" r="5" fill="#111827"/>
+  <circle cx="787.2" cy="373.8" r="7" fill="#d62828" opacity="0.88"/>
+  <text x="22" y="28" class="svg-title">PLATEAU sample mesh + receiver trajectory</text>
+  <text x="22" y="52" class="svg-note">ENU bounds: E -55..55 m, N -22..36 m</text>
+  <text x="22" y="76" class="svg-note">Red point: worst naive epoch, PLATEAU-aware gain 22.2 m</text>
+  <g class="legend">
+    <rect x="690" y="22" width="16" height="10" fill="#d8dee6" stroke="#798694"/>
+    <text x="714" y="32">PLATEAU triangles</text>
+    <line x1="690" y1="52" x2="708" y2="52" stroke="#1f5eff" stroke-width="3"/>
+    <text x="714" y="56">trajectory</text>
+  </g>
+</svg></div>
+    <div class="panel">
+<svg viewBox="0 0 420 420" role="img" aria-label="Sky plot at worst naive epoch">
+  <rect width="420" height="420" fill="#f7f9fb"/>
+  <text x="22" y="30" class="svg-title">Sky plot at worst naive epoch</text>
+  <text x="22" y="54" class="svg-note">Epoch 62: 4/14 satellites NLOS</text>
+  <line x1="56.0" y1="218.0" x2="364.0" y2="218.0" stroke="#d5dde8"/>
+  <line x1="210.0" y1="64.0" x2="210.0" y2="372.0" stroke="#d5dde8"/>
+  <circle cx="210.0" cy="218.0" r="154.0" fill="none" stroke="#d5dde8"/><text x="369.0" y="214.0" class="svg-note">0 deg</text><circle cx="210.0" cy="218.0" r="102.7" fill="none" stroke="#d5dde8"/><text x="317.7" y="214.0" class="svg-note">30 deg</text><circle cx="210.0" cy="218.0" r="51.3" fill="none" stroke="#d5dde8"/><text x="266.3" y="214.0" class="svg-note">60 deg</text>
+  <circle cx="240.8" cy="218.0" r="8" fill="#168a47"/><text x="250.8" y="222.0" class="sat-label">S1</text><circle cx="175.8" cy="218.0" r="8" fill="#d62828"/><text x="185.8" y="222.0" class="sat-label">S2</text><circle cx="210.0" cy="183.8" r="8" fill="#168a47"/><text x="220.0" y="187.8" class="sat-label">S3</text><circle cx="210.0" cy="255.6" r="8" fill="#168a47"/><text x="220.0" y="259.6" class="sat-label">S4</text><circle cx="272.9" cy="155.1" r="8" fill="#168a47"/><text x="282.9" y="159.1" class="sat-label">S5</text><circle cx="276.5" cy="284.5" r="8" fill="#168a47"/><text x="286.5" y="288.5" class="sat-label">S6</text><circle cx="144.7" cy="283.3" r="8" fill="#168a47"/><text x="154.7" y="287.3" class="sat-label">S7</text><circle cx="142.2" cy="150.2" r="8" fill="#d62828"/><text x="152.2" y="154.2" class="sat-label">S8</text><circle cx="331.3" cy="196.6" r="8" fill="#168a47"/><text x="341.3" y="200.6" class="sat-label">S9</text><circle cx="336.4" cy="240.3" r="8" fill="#168a47"/><text x="346.4" y="244.3" class="sat-label">S10</text><circle cx="87.0" cy="239.7" r="8" fill="#d62828"/><text x="97.0" y="243.7" class="sat-label">S11</text><circle cx="83.6" cy="195.7" r="8" fill="#d62828"/><text x="93.6" y="199.7" class="sat-label">S12</text><circle cx="210.0" cy="98.2" r="8" fill="#168a47"/><text x="220.0" y="102.2" class="sat-label">S13</text><circle cx="210.0" cy="334.4" r="8" fill="#168a47"/><text x="220.0" y="338.4" class="sat-label">S14</text>
+  <g class="legend">
+    <circle cx="24" cy="386" r="7" fill="#168a47"/><text x="38" y="391">LOS</text>
+    <circle cx="92" cy="386" r="7" fill="#d62828"/><text x="106" y="391">NLOS</text>
+  </g>
+</svg></div>
+  </section>
+  <section class="panel wide">
+<svg viewBox="0 0 880 330" role="img" aria-label="Positioning error timeline">
+  <rect width="880" height="330" fill="#f7f9fb"/>
+  <text x="22" y="30" class="svg-title">Positioning error timeline</text>
+  <line x1="44" y1="225.5" x2="836" y2="225.5" stroke="#e3e9f0"/><text x="8" y="229.5" class="svg-note">7m</text><line x1="44" y1="165.0" x2="836" y2="165.0" stroke="#e3e9f0"/><text x="8" y="169.0" class="svg-note">14m</text><line x1="44" y1="104.5" x2="836" y2="104.5" stroke="#e3e9f0"/><text x="8" y="108.5" class="svg-note">21m</text><line x1="44" y1="44.0" x2="836" y2="44.0" stroke="#e3e9f0"/><text x="8" y="48.0" class="svg-note">28m</text>
+  <rect x="38.8" y="279.4" width="10.5" height="6.6" fill="#dbe4ee"/><rect x="50.2" y="276.1" width="10.5" height="9.9" fill="#dbe4ee"/><rect x="61.7" y="276.1" width="10.5" height="9.9" fill="#dbe4ee"/><rect x="73.2" y="276.1" width="10.5" height="9.9" fill="#dbe4ee"/><rect x="84.7" y="276.1" width="10.5" height="9.9" fill="#dbe4ee"/><rect x="96.2" y="276.1" width="10.5" height="9.9" fill="#dbe4ee"/><rect x="107.6" y="272.9" width="10.5" height="13.1" fill="#dbe4ee"/><rect x="119.1" y="269.6" width="10.5" height="16.4" fill="#dbe4ee"/><rect x="130.6" y="269.6" width="10.5" height="16.4" fill="#dbe4ee"/><rect x="142.1" y="269.6" width="10.5" height="16.4" fill="#dbe4ee"/><rect x="165.0" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="176.5" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="188.0" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="199.5" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="210.9" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="222.4" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="233.9" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="245.4" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="268.3" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="279.8" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="291.3" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="302.8" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="314.2" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="325.7" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="337.2" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="348.7" y="266.3" width="10.5" height="19.7" fill="#dbe4ee"/><rect x="360.2" y="266.3" width="10.5" height="19.7" fill="#dbe4ee"/><rect x="371.6" y="266.3" width="10.5" height="19.7" fill="#dbe4ee"/><rect x="383.1" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="394.6" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="406.1" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="417.5" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="429.0" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="440.5" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="452.0" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="463.5" y="263.0" width="10.5" height="23.0" fill="#dbe4ee"/><rect x="474.9" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="486.4" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="497.9" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="509.4" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="520.8" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="532.3" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="543.8" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="555.3" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="566.8" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="578.2" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="589.7" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="601.2" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="612.7" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="624.2" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="635.6" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="647.1" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="658.6" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="670.1" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="681.5" y="240.0" width="10.5" height="46.0" fill="#dbe4ee"/><rect x="693.0" y="269.6" width="10.5" height="16.4" fill="#dbe4ee"/><rect x="704.5" y="269.6" width="10.5" height="16.4" fill="#dbe4ee"/><rect x="716.0" y="269.6" width="10.5" height="16.4" fill="#dbe4ee"/><rect x="727.5" y="269.6" width="10.5" height="16.4" fill="#dbe4ee"/><rect x="738.9" y="269.6" width="10.5" height="16.4" fill="#dbe4ee"/><rect x="750.4" y="269.6" width="10.5" height="16.4" fill="#dbe4ee"/><rect x="761.9" y="269.6" width="10.5" height="16.4" fill="#dbe4ee"/><rect x="773.4" y="272.9" width="10.5" height="13.1" fill="#dbe4ee"/><rect x="784.8" y="272.9" width="10.5" height="13.1" fill="#dbe4ee"/><rect x="796.3" y="272.9" width="10.5" height="13.1" fill="#dbe4ee"/><rect x="807.8" y="276.1" width="10.5" height="9.9" fill="#dbe4ee"/><rect x="819.3" y="276.1" width="10.5" height="9.9" fill="#dbe4ee"/><rect x="830.8" y="279.4" width="10.5" height="6.6" fill="#dbe4ee"/>
+  <polyline points="44.0,160.0 55.5,109.0 67.0,143.3 78.4,99.6 89.9,169.0 101.4,124.7 112.9,155.5 124.3,126.4 135.8,100.5 147.3,122.8 170.3,279.0 181.7,272.7 193.2,255.6 204.7,226.1 216.2,259.4 227.7,242.3 239.1,275.5 250.6,276.3 273.6,227.3 285.0,236.4 296.5,231.0 308.0,248.5 319.5,262.5 331.0,279.0 342.4,208.3 353.9,207.7 365.4,256.4 376.9,214.0 388.3,251.3 399.8,229.4 411.3,228.5 422.8,258.4 434.3,244.6 445.7,206.9 457.2,248.6 468.7,252.0 480.2,267.2 491.7,225.5 503.1,209.3 514.6,267.4 526.1,264.3 537.6,249.6 549.0,258.2 560.5,235.9 572.0,238.0 583.5,221.8 595.0,195.9 606.4,261.5 617.9,262.5 629.4,240.7 640.9,215.3 652.3,238.4 663.8,222.0 675.3,196.7 686.8,276.4 698.3,116.6 709.7,119.4 721.2,72.2 732.7,133.5 744.2,165.8 755.7,111.2 767.1,97.2 778.6,69.9 790.1,149.1 801.6,107.6 813.0,130.9 824.5,150.2 836.0,174.9" fill="none" stroke="#c65a00" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+  <polyline points="44.0,227.0 55.5,104.7 67.0,149.5 78.4,207.0 89.9,196.9 101.4,109.4 112.9,160.4 124.3,131.1 135.8,93.7 147.3,123.8 170.3,250.6 181.7,271.9 193.2,258.3 204.7,229.0 216.2,247.0 227.7,231.1 239.1,258.9 250.6,253.0 273.6,252.7 285.0,230.9 296.5,220.3 308.0,247.9 319.5,163.8 331.0,163.9 342.4,166.1 353.9,101.1 365.4,197.7 376.9,109.8 388.3,182.5 399.8,134.3 411.3,186.3 422.8,195.0 434.3,146.0 445.7,168.8 457.2,176.1 468.7,161.9 480.2,238.6 491.7,202.9 503.1,158.4 514.6,260.7 526.1,269.7 537.6,245.7 549.0,238.8 560.5,236.6 572.0,232.6 583.5,250.0 595.0,193.4 606.4,251.7 617.9,276.6 629.4,242.3 640.9,200.3 652.3,237.5 663.8,250.7 675.3,194.7 686.8,264.0 698.3,95.7 709.7,127.0 721.2,83.8 732.7,132.2 744.2,170.4 755.7,106.0 767.1,98.2 778.6,92.1 790.1,155.7 801.6,144.2 813.0,134.6 824.5,186.9 836.0,205.4" fill="none" stroke="#7c3aed" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round"/>
+  <polyline points="44.0,275.4 55.5,272.4 67.0,270.2 78.4,276.9 89.9,260.6 101.4,278.1 112.9,275.8 124.3,265.7 135.8,272.8 147.3,273.6 170.3,257.6 181.7,267.3 193.2,250.1 204.7,232.6 216.2,262.0 227.7,236.1 239.1,271.3 250.6,241.1 273.6,263.1 285.0,235.9 296.5,220.2 308.0,270.6 319.5,265.8 331.0,260.9 342.4,264.3 353.9,266.2 365.4,274.2 376.9,257.8 388.3,261.1 399.8,273.2 411.3,273.2 422.8,258.2 434.3,277.7 445.7,276.8 457.2,252.3 468.7,276.1 480.2,254.3 491.7,224.6 503.1,189.5 514.6,262.7 526.1,263.6 537.6,250.1 549.0,258.0 560.5,234.3 572.0,240.5 583.5,228.0 595.0,202.6 606.4,253.9 617.9,263.6 629.4,237.6 640.9,215.8 652.3,240.7 663.8,231.7 675.3,200.8 686.8,271.7 698.3,280.6 709.7,276.0 721.2,258.6 732.7,268.2 744.2,249.1 755.7,266.3 767.1,279.2 778.6,261.3 790.1,273.6 801.6,284.1 813.0,274.0 824.5,266.7 836.0,280.8" fill="none" stroke="#1f5eff" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+  <line x1="44" y1="286" x2="836" y2="286" stroke="#9aa7b5"/>
+  <line x1="44" y1="44" x2="44" y2="286" stroke="#9aa7b5"/>
+  <text x="778" y="318" class="svg-note">epoch</text>
+  <g class="legend">
+    <line x1="560" y1="28" x2="584" y2="28" stroke="#c65a00" stroke-width="3"/><text x="592" y="33">naive</text>
+    <line x1="650" y1="28" x2="674" y2="28" stroke="#7c3aed" stroke-width="3"/><text x="682" y="33">robust</text>
+    <line x1="744" y1="28" x2="768" y2="28" stroke="#1f5eff" stroke-width="3"/><text x="776" y="33">PLATEAU-aware</text>
+  </g>
+</svg></section>
+</main>
+</body>
+</html>

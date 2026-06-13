@@ -1,0 +1,34 @@
+{
+  "epochs": 120,
+  "changed_epochs": 19,
+  "change_rate": 0.15833333333333333,
+  "mean_risk": 0.01794064255774215,
+  "p50_risk": 0.0,
+  "p95_risk": 0.15311332337114258,
+  "mean_changed_risk": 0.11330932141731885,
+  "baseline_label_counts": {
+    "nominal_gnss": 120
+  },
+  "gpu_label_counts": {
+    "nominal_gnss": 101,
+    "shadow_robust": 19
+  },
+  "truth_cost_col": "proxy_truth_cost",
+  "mean_baseline_truth_cost": 0.01794064255774215,
+  "mean_gpu_truth_cost": 0.010818493972768873,
+  "mean_gpu_minus_baseline_truth_cost": -0.007122148584973282,
+  "improved_epochs": 19,
+  "worse_epochs": 0,
+  "equal_epochs": 101,
+  "mean_baseline_regret": 0.007122148584973282,
+  "mean_gpu_regret": 0.0,
+  "input_csv": "experiments/results/ppc_gpu_urban_shadow_selector_features_tokyo_run1_nav_smoke.csv",
+  "synthesized_candidates": true,
+  "candidate_rows": 240,
+  "risk_col": "gpu_urban_shadow_risk_score",
+  "base_score_col": "selector_base_score",
+  "penalty_weight": 1.0,
+  "rescue_weight": 1.0,
+  "robust_base_penalty": 0.06,
+  "robust_score_gain": 0.8
+}

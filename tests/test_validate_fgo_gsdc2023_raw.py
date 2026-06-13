@@ -1267,6 +1267,87 @@ def test_build_trip_arrays_multi_gnss_dual_frequency_uses_matlab_signal_clock_ki
     np.testing.assert_allclose(taroz_batch.weights[0, 4:], np.zeros(2, dtype=np.float64))
 
 
+def test_build_trip_arrays_fgo_extra_constellations_are_fgo_only(tmp_path):
+    trip = tmp_path / "dataset_2023" / "train" / "course" / "phone"
+    trip.mkdir(parents=True)
+
+    rows = []
+    signals = [
+        (1, 1, "GPS_L1_CA"),
+        (1, 2, "GPS_L1_CA"),
+        (1, 3, "GPS_L1_CA"),
+        (1, 4, "GPS_L1_CA"),
+        (5, 5, "BDS_B2A_I"),
+        (5, 6, "BDS_B1_I"),
+    ]
+    for idx, (constellation, svid, signal_type) in enumerate(signals, start=1):
+        rows.append(
+            {
+                "utcTimeMillis": 1000,
+                "Svid": svid,
+                "ConstellationType": constellation,
+                "SignalType": signal_type,
+                "RawPseudorangeMeters": 2.1e7 + 1000 * idx,
+                "IonosphericDelayMeters": 2.0,
+                "TroposphericDelayMeters": 3.0,
+                "SvClockBiasMeters": 10.0,
+                "SvPositionXEcefMeters": 2.6e7 - 1e5 * idx,
+                "SvPositionYEcefMeters": 1.3e7 + 2e5 * idx,
+                "SvPositionZEcefMeters": 2.1e7 - 3e5 * idx,
+                "SvElevationDegrees": 30.0 + idx,
+                "Cn0DbHz": 35.0 + idx,
+                "WlsPositionXEcefMeters": -3947460.0,
+                "WlsPositionYEcefMeters": 3431490.0,
+                "WlsPositionZEcefMeters": 3637870.0,
+            },
+        )
+    _write_zipped_csv(trip / "device_gnss.csv", rows, list(rows[0].keys()))
+
+    flag_off = _build_trip_arrays(
+        trip,
+        max_epochs=10,
+        start_epoch=0,
+        constellation_type=1,
+        signal_type="GPS_L1_CA",
+        weight_mode="sin2el",
+        multi_gnss=True,
+        dual_frequency=True,
+    )
+
+    assert flag_off.slot_keys == (
+        (1, 1, "GPS_L1_CA"),
+        (1, 2, "GPS_L1_CA"),
+        (1, 3, "GPS_L1_CA"),
+        (1, 4, "GPS_L1_CA"),
+    )
+    assert flag_off.weights_fgo is None
+
+    flag_on = _build_trip_arrays(
+        trip,
+        max_epochs=10,
+        start_epoch=0,
+        constellation_type=1,
+        signal_type="GPS_L1_CA",
+        weight_mode="sin2el",
+        multi_gnss=True,
+        dual_frequency=True,
+        fgo_extra_constellations=True,
+    )
+
+    b2a_idx = flag_on.slot_keys.index((5, 5, "BDS_B2A_I"))
+    bds_idx = flag_on.slot_keys.index((5, 6, "BDS_B1_I"))
+    assert flag_on.weights[0, b2a_idx] == 0.0
+    assert flag_on.weights[0, bds_idx] == 0.0
+    assert flag_on.weights_fgo is not None
+    assert flag_on.weights_fgo[0, b2a_idx] > 0.0
+    assert flag_on.weights_fgo[0, bds_idx] > 0.0
+    assert flag_on.sys_kind[0, b2a_idx] == 6
+    assert flag_on.sys_kind[0, bds_idx] == 3
+
+    active_kinds_for_wls = sorted({int(kind) for kind in flag_on.sys_kind[0, flag_on.weights[0] > 0.0]})
+    assert active_kinds_for_wls == [0]
+
+
 def test_multi_system_for_clock_kind_preserves_legacy_and_matlab_signal_mappings():
     assert raw_bridge._multi_system_for_clock_kind(4, raw_bridge.MATLAB_SIGNAL_CLOCK_DIM) == raw_bridge.SYSTEM_GPS
     assert raw_bridge._multi_system_for_clock_kind(5, raw_bridge.MATLAB_SIGNAL_CLOCK_DIM) == raw_bridge.SYSTEM_GALILEO
@@ -1286,7 +1367,7 @@ def test_run_wls_uses_signal_clock_kinds_as_independent_bias_labels(monkeypatch)
         def solve(self, sat_ecef, pseudoranges, system_ids, weights=None):
             del sat_ecef, pseudoranges, weights
             calls.append((self.systems, tuple(int(value) for value in system_ids)))
-            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 4: 115.0}, 3
+            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 1: 115.0}, 3
 
     monkeypatch.setattr(raw_bridge, "MultiGNSSSolver", FakeSignalClockSolver)
     sat_ecef = np.ones((1, 5, 3), dtype=np.float64)
@@ -1302,7 +1383,7 @@ def test_run_wls_uses_signal_clock_kinds_as_independent_bias_labels(monkeypatch)
         n_clock=raw_bridge.MATLAB_SIGNAL_CLOCK_DIM,
     )
 
-    assert calls == [((0, 4), (0, 4, 0, 4, 0))]
+    assert calls == [((0, 1), (0, 1, 0, 1, 0))]
     np.testing.assert_allclose(state[0, :3], np.array([1000.0, 2000.0, 3000.0]))
     assert state[0, 3] == 100.0
     assert state[0, 3 + 4] == 15.0
@@ -1318,7 +1399,7 @@ def test_run_wls_ignores_out_of_range_clock_kind_for_taroz_other(monkeypatch):
         def solve(self, sat_ecef, pseudoranges, system_ids, weights=None):
             del sat_ecef, pseudoranges, weights
             calls.append((self.systems, tuple(int(value) for value in system_ids)))
-            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 4: 115.0}, 3
+            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 1: 115.0}, 3
 
     monkeypatch.setattr(raw_bridge, "MultiGNSSSolver", FakeSignalClockSolver)
     sat_ecef = np.ones((1, 7, 3), dtype=np.float64)
@@ -1334,8 +1415,66 @@ def test_run_wls_ignores_out_of_range_clock_kind_for_taroz_other(monkeypatch):
         n_clock=raw_bridge.MATLAB_SIGNAL_CLOCK_DIM,
     )
 
-    assert calls == [((0, 4), (0, 4, 0, 4, 0))]
+    assert calls == [((0, 1), (0, 1, 0, 1, 0))]
     np.testing.assert_allclose(state[0, :3], np.array([1000.0, 2000.0, 3000.0]))
+
+
+def test_run_wls_relabels_dual_frequency_clock_kinds_above_solver_range(monkeypatch):
+    calls = []
+
+    class FakeSignalClockSolver:
+        def __init__(self, systems, max_iter, tol):
+            self.systems = tuple(systems)
+
+        def solve(self, sat_ecef, pseudoranges, system_ids, weights=None):
+            del sat_ecef, pseudoranges, weights
+            calls.append((self.systems, tuple(int(value) for value in system_ids)))
+            return np.array([1000.0, 2000.0, 3000.0], dtype=np.float64), {0: 100.0, 1: 110.0, 2: 130.0}, 3
+
+    monkeypatch.setattr(raw_bridge, "MultiGNSSSolver", FakeSignalClockSolver)
+    sat_ecef = np.ones((1, 6, 3), dtype=np.float64)
+    pseudorange = np.ones((1, 6), dtype=np.float64)
+    weights = np.ones((1, 6), dtype=np.float64)
+    # Kinds 5 and 6 occur in dual-frequency mode (MATLAB_SIGNAL_CLOCK_DIM=7)
+    # and exceed the solver's supported system-ID range.
+    sys_kind = np.array([[0, 5, 6, 0, 5, 6]], dtype=np.int32)
+
+    state = run_wls(
+        sat_ecef,
+        pseudorange,
+        weights,
+        sys_kind=sys_kind,
+        n_clock=raw_bridge.MATLAB_SIGNAL_CLOCK_DIM,
+    )
+
+    assert calls == [((0, 1, 2), (0, 1, 2, 0, 1, 2))]
+    np.testing.assert_allclose(state[0, :3], np.array([1000.0, 2000.0, 3000.0]))
+    assert state[0, 3] == 100.0
+    assert state[0, 3 + 5] == 10.0
+    assert state[0, 3 + 6] == 30.0
+
+
+def test_run_wls_falls_back_when_active_kinds_exceed_solver_capacity(monkeypatch):
+    class ExplodingSolver:
+        def __init__(self, systems, max_iter, tol):
+            raise AssertionError("MultiGNSSSolver must not be constructed")
+
+    monkeypatch.setattr(raw_bridge, "MultiGNSSSolver", ExplodingSolver)
+    n_sat = 12
+    sat_ecef = np.ones((1, n_sat, 3), dtype=np.float64)
+    pseudorange = np.ones((1, n_sat), dtype=np.float64)
+    weights = np.ones((1, n_sat), dtype=np.float64)
+    sys_kind = np.array([[0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5]], dtype=np.int32)
+
+    state = run_wls(
+        sat_ecef,
+        pseudorange,
+        weights,
+        sys_kind=sys_kind,
+        n_clock=raw_bridge.MATLAB_SIGNAL_CLOCK_DIM,
+    )
+
+    assert state.shape == (1, 3 + raw_bridge.MATLAB_SIGNAL_CLOCK_DIM)
 
 
 def test_build_trip_arrays_applies_matlab_style_observation_mask(tmp_path):
@@ -6759,3 +6898,121 @@ def test_select_gated_chunk_source_keeps_plausible_catastrophic_raw_wls_after_mo
     )
 
     assert _select_gated_chunk_source(record, baseline_threshold=500.0) == "raw_wls"
+
+
+def _chunked_failure_batch_and_raw_wls():
+    true_pos = np.array([1.0e6, 2.0e6, 3.0e6], dtype=np.float64)
+    sat = np.array(
+        [
+            [2.1e7, 0.0, 0.0],
+            [0.0, 2.2e7, 0.0],
+            [0.0, 0.0, 2.3e7],
+            [1.8e7, 1.8e7, 1.8e7],
+        ],
+        dtype=np.float64,
+    )
+    n_epoch, n_sat = 6, 4
+    sat_ecef = np.tile(sat.reshape(1, n_sat, 3), (n_epoch, 1, 1))
+    pseudorange = np.zeros((n_epoch, n_sat), dtype=np.float64)
+    for t in range(n_epoch):
+        for s in range(n_sat):
+            pseudorange[t, s] = raw_bridge._geometric_range_with_sagnac(sat[s], true_pos)
+    weights = np.ones((n_epoch, n_sat), dtype=np.float64)
+    raw_wls = np.zeros((n_epoch, 4), dtype=np.float64)
+    raw_wls[:, :3] = true_pos
+    batch = raw_bridge.TripArrays(
+        times_ms=np.arange(n_epoch, dtype=np.float64) * 1000.0,
+        sat_ecef=sat_ecef,
+        pseudorange=pseudorange,
+        weights=weights,
+        kaggle_wls=raw_wls[:, :3],
+        truth=np.full((n_epoch, 3), np.nan, dtype=np.float64),
+        max_sats=n_sat,
+        has_truth=False,
+        sys_kind=np.zeros((n_epoch, n_sat), dtype=np.int32),
+        n_clock=1,
+        dt=np.ones(n_epoch, dtype=np.float64),
+    )
+    return batch, raw_wls
+
+
+def _run_fgo_chunked_minimal(batch, raw_wls):
+    return raw_bridge.run_fgo_chunked(
+        batch,
+        raw_wls,
+        clock_jump=None,
+        clock_drift_seed_mps=None,
+        clock_use_average_drift=False,
+        tdcp_use_drift=False,
+        stop_mask=None,
+        motion_sigma_m=0.2,
+        clock_drift_sigma_m=0.0,
+        stop_velocity_sigma_mps=0.0,
+        stop_position_sigma_m=0.0,
+        apply_imu_prior=False,
+        imu_position_sigma_m=0.0,
+        imu_velocity_sigma_mps=0.0,
+        fgo_iters=1,
+        tol=1e-7,
+        chunk_epochs=0,
+        use_vd=False,
+    )
+
+
+def test_run_fgo_chunked_records_runtime_error_fallback_reason(monkeypatch):
+    batch, raw_wls = _chunked_failure_batch_and_raw_wls()
+
+    def broken_solver(*_args, **_kwargs):
+        raise RuntimeError("gnss_gpu native extension must be rebuilt for X")
+
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm", broken_solver)
+
+    with pytest.warns(RuntimeWarning, match="fell back to raw WLS.*must be rebuilt"):
+        run = _run_fgo_chunked_minimal(batch, raw_wls)
+
+    assert run.failed_chunks == 1
+    assert run.failed_chunk_reasons == {
+        "RuntimeError: gnss_gpu native extension must be rebuilt for X": 1,
+    }
+    np.testing.assert_allclose(run.fgo_state[:, :3], raw_wls[:, :3], atol=1e-6)
+
+
+def test_run_fgo_chunked_records_native_minus_one_fallback_reason(monkeypatch):
+    batch, raw_wls = _chunked_failure_batch_and_raw_wls()
+
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm", lambda *a, **k: (-1, 0.0))
+
+    with pytest.warns(RuntimeWarning, match="returned -1"):
+        run = _run_fgo_chunked_minimal(batch, raw_wls)
+
+    assert run.failed_chunks == 1
+    assert list(run.failed_chunk_reasons) == [
+        "native solver returned -1 (rejected inputs, e.g. n_state cap)",
+    ]
+
+
+def test_chunked_fgo_run_supports_legacy_tuple_unpack(monkeypatch):
+    batch, raw_wls = _chunked_failure_batch_and_raw_wls()
+    monkeypatch.setattr(raw_bridge, "fgo_gnss_lm", lambda *a, **k: (-1, 0.0))
+
+    with pytest.warns(RuntimeWarning):
+        run = _run_fgo_chunked_minimal(batch, raw_wls)
+
+    (
+        auto_state,
+        fgo_state,
+        iters,
+        failed_chunks,
+        _skipped_segments,
+        _skipped_epochs,
+        _guard_records,
+        _sources,
+        counts,
+        _records,
+        fgo_vd_state,
+    ) = run
+
+    np.testing.assert_allclose(fgo_state, run.fgo_state)
+    assert failed_chunks == run.failed_chunks == 1
+    assert counts == run.auto_source_counts
+    assert fgo_vd_state is None

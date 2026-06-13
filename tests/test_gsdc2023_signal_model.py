@@ -21,17 +21,23 @@ def test_multi_gnss_mask_uses_configured_signal_set():
             {"ConstellationType": 1, "SignalType": "GPS_L5_Q"},
             {"ConstellationType": 6, "SignalType": "GAL_E1_C_P"},
             {"ConstellationType": 6, "SignalType": "GAL_E5A_Q"},
-            {"ConstellationType": 3, "SignalType": "GLO_G1"},
+            {"ConstellationType": 3, "SignalType": "GLO_G1_CA"},
+            {"ConstellationType": 5, "SignalType": "BDS_B1_I"},
+            {"ConstellationType": 5, "SignalType": "BDS_B2A_I"},
         ],
     )
 
     np.testing.assert_array_equal(
         signal_model.multi_gnss_mask(frame, dual_frequency=False),
-        np.array([True, False, True, False, False]),
+        np.array([True, False, True, False, False, False, False]),
     )
     np.testing.assert_array_equal(
         signal_model.multi_gnss_mask(frame, dual_frequency=True),
-        np.array([True, True, True, True, False]),
+        np.array([True, True, True, True, False, False, False]),
+    )
+    np.testing.assert_array_equal(
+        signal_model.multi_gnss_mask(frame, dual_frequency=True, extra_constellations=True),
+        np.array([True, True, True, True, False, True, True]),
     )
 
 
