@@ -17,6 +17,16 @@ from gnss_gpu.multi_gnss import (
     SYSTEM_QZSS,
 )
 
+C_LIGHT_MPS = 299792458.0
+GPS_L1_WAVELENGTH_M = C_LIGHT_MPS / 1575.42e6
+GPS_L5_WAVELENGTH_M = C_LIGHT_MPS / 1176.45e6
+GALILEO_E1_WAVELENGTH_M = C_LIGHT_MPS / 1575.42e6
+GALILEO_E5A_WAVELENGTH_M = C_LIGHT_MPS / 1176.45e6
+QZSS_L1_WAVELENGTH_M = C_LIGHT_MPS / 1575.42e6
+QZSS_L5_WAVELENGTH_M = C_LIGHT_MPS / 1176.45e6
+BEIDOU_B1I_WAVELENGTH_M = C_LIGHT_MPS / 1561.098e6
+BEIDOU_B2A_WAVELENGTH_M = C_LIGHT_MPS / 1176.45e6
+
 
 DEFAULT_MULTI_GNSS_SIGNAL_TYPES = {
     1: "GPS_L1_CA",
@@ -187,6 +197,20 @@ def factor_frequency_label(signal_type: str) -> str | None:
     if "L1" in sig or "E1" in sig or "B1" in sig:
         return "L1"
     return None
+
+
+def carrier_wavelength_m(constellation_type: int, signal_type: str) -> float:
+    is_l5 = signal_sort_rank(signal_type) == 1
+    constellation = int(constellation_type)
+    if constellation == 1:
+        return GPS_L5_WAVELENGTH_M if is_l5 else GPS_L1_WAVELENGTH_M
+    if constellation == 6:
+        return GALILEO_E5A_WAVELENGTH_M if is_l5 else GALILEO_E1_WAVELENGTH_M
+    if constellation == 4:
+        return QZSS_L5_WAVELENGTH_M if is_l5 else QZSS_L1_WAVELENGTH_M
+    if constellation == 5:
+        return BEIDOU_B2A_WAVELENGTH_M if is_l5 else BEIDOU_B1I_WAVELENGTH_M
+    return GPS_L1_WAVELENGTH_M
 
 
 def constellation_to_matlab_sys(constellation_type: int) -> int:

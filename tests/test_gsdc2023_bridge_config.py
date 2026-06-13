@@ -29,6 +29,8 @@ def test_bridge_config_defaults_match_public_factor_dt() -> None:
     assert cfg.tdcp_weight_scale == DEFAULT_TDCP_WEIGHT_SCALE
     assert cfg.tdcp_l5_weight_scale == 1.0
     assert cfg.tdcp_geometry_correction is DEFAULT_TDCP_GEOMETRY_CORRECTION
+    assert cfg.tdcp_cycle_jump_mask_cycles == 0.0
+    assert cfg.tdcp_doppler_endpoint_mask is True
     assert cfg.ct_rbpf_fgo_enabled is False
     assert cfg.ct_rbpf_motion_sigma_m == DEFAULT_CT_RBPF_MOTION_SIGMA_M
     assert cfg.fgo_raw_wls_proxy_rescue_enabled is False
@@ -59,6 +61,10 @@ def test_taroz_presets_enable_base_correction_and_unscaled_tdcp_weights() -> Non
     assert gnss_only.apply_base_correction is True
     assert fgo.tdcp_weight_scale == 1.0
     assert gnss_only.tdcp_weight_scale == 1.0
+    assert fgo.tdcp_cycle_jump_mask_cycles == 0.0
+    assert gnss_only.tdcp_cycle_jump_mask_cycles == 0.0
+    assert fgo.tdcp_doppler_endpoint_mask is True
+    assert gnss_only.tdcp_doppler_endpoint_mask is True
 
 
 def test_bridge_config_requires_ct_candidate_for_direct_ct_source() -> None:

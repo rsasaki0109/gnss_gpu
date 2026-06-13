@@ -2579,6 +2579,9 @@ def test_build_tdcp_stage_applies_diagnostics_geometry_and_scale(tmp_path: Path)
         np.testing.assert_allclose(got_tdcp_dt, tdcp_dt)
         assert kwargs["consistency_threshold_m"] == 1.5
         assert kwargs["loffset_m"] == 0.25
+        assert kwargs["cycle_jump_mask_cycles"] == 0.0
+        assert kwargs["doppler_endpoint_mask"] is True
+        np.testing.assert_allclose(kwargs["adr_wavelength_m"], [1.0, 1.0])
         calls.append("build")
         return np.array([[10.0, 20.0]], dtype=np.float64), np.array([[2.0, 4.0]], dtype=np.float64), 3
 

@@ -267,6 +267,8 @@ class BridgeConfig:
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
     tdcp_l5_weight_scale: float = 1.0
     tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION
+    tdcp_cycle_jump_mask_cycles: float = 0.0
+    tdcp_doppler_endpoint_mask: bool = True
     tdcp_scale_candidate_enabled: bool = False
     tdcp_scale_candidate_weight_scale: float = 1.0e-7
     tdcp_scale_candidate_phones: tuple[str, ...] = ("pixel4", "pixel4xl", "mi8")
@@ -385,6 +387,10 @@ class BridgeConfig:
             raise ValueError("tdcp_l5_weight_scale must be finite")
         if float(self.tdcp_l5_weight_scale) <= 0.0:
             raise ValueError("tdcp_l5_weight_scale must be > 0")
+        if not np.isfinite(float(self.tdcp_cycle_jump_mask_cycles)):
+            raise ValueError("tdcp_cycle_jump_mask_cycles must be finite")
+        if float(self.tdcp_cycle_jump_mask_cycles) < 0.0:
+            raise ValueError("tdcp_cycle_jump_mask_cycles must be >= 0")
         for name in (
             "fgo_raw_wls_proxy_rescue_mse_ratio_max",
             "fgo_raw_wls_proxy_rescue_gap_step_p95_ratio_max",
