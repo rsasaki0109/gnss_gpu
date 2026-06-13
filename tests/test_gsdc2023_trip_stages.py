@@ -3023,3 +3023,27 @@ def _raw_observation_frame(rows: list[dict[str, object]]) -> pd.DataFrame:
 
 def _raise_unexpected() -> None:
     raise AssertionError("unexpected call")
+
+
+def test_fgo_doppler_only_slot_mask_selects_only_doppler_only_constellations() -> None:
+    from experiments.gsdc2023_trip_stages import (
+        _fgo_doppler_only_slot_mask,
+        _fgo_extra_slot_mask,
+    )
+
+    slot_keys = (
+        (1, 1, "GPS_L1_CA"),    # GPS pseudorange
+        (5, 6, "BDS_B1_I"),     # BeiDou extra constellation
+        (3, 8, "GLO_G1_CA"),    # GLONASS Doppler-only
+        (6, 2, "GAL_E1_C_P"),   # Galileo
+    )
+    np.testing.assert_array_equal(
+        _fgo_doppler_only_slot_mask(slot_keys),
+        np.array([False, False, True, False]),
+    )
+    # The two masks are disjoint: GLONASS is Doppler-only, BeiDou is a
+    # pseudorange extra constellation.
+    np.testing.assert_array_equal(
+        _fgo_extra_slot_mask(slot_keys),
+        np.array([False, True, False, False]),
+    )

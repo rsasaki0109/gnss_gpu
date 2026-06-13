@@ -801,6 +801,7 @@ def build_trip_arrays(
             observation_min_elevation_deg=observation_min_elevation_deg,
             dual_frequency=dual_frequency,
             fgo_extra_constellations=fgo_extra_constellations,
+            fgo_doppler_only_constellations=fgo_doppler_only_constellations,
             factor_dt_max_s=factor_dt_max_s,
             apply_base_correction=apply_base_correction,
             data_root=data_root,

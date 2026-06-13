@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from experiments.gsdc2023_signal_model import is_fgo_extra_constellation_signal
+from experiments.gsdc2023_signal_model import is_fgo_doppler_only_constellation_signal
 from experiments.gsdc2023_signal_model import carrier_wavelength_m
 from experiments.gsdc2023_taroz_weighting import SN_PERCENTILE_DEFAULT, compute_trip_cn0_percentiles
 
@@ -298,6 +299,7 @@ class PostObservationStageConfig:
     default_pr_l1_threshold_m: float
     default_pr_l5_threshold_m: float
     fgo_extra_constellations: bool = False
+    fgo_doppler_only_constellations: bool = False
     tdcp_cycle_jump_mask_cycles: float = 0.0
     tdcp_doppler_endpoint_mask: bool = True
     tdcp_ddl_sign_fixed: bool = False
@@ -1523,6 +1525,16 @@ def _fgo_extra_slot_mask(slot_keys: Sequence[Any]) -> np.ndarray:
     return mask
 
 
+def _fgo_doppler_only_slot_mask(slot_keys: Sequence[Any]) -> np.ndarray:
+    mask = np.zeros(len(slot_keys), dtype=bool)
+    for idx, key in enumerate(slot_keys):
+        if not isinstance(key, tuple) or len(key) < 3:
+            continue
+        if is_fgo_doppler_only_constellation_signal(int(key[0]), str(key[2])):
+            mask[idx] = True
+    return mask
+
+
 def _copy_extra_slot_weights(source: np.ndarray | None, extra_slots: np.ndarray) -> np.ndarray | None:
     if source is None:
         return None
@@ -1574,9 +1586,38 @@ def _apply_fgo_extra_residual_masks(
 ) -> tuple[int, int, int]:
     if not apply_observation_mask or weights_fgo is None:
         return 0, 0, 0
+
+    # Doppler-only constellations (GLONASS) emit no pseudorange factor, so they
+    # are never reached by the BDS extra-slot masking below nor by the WLS-path
+    # Doppler residual stage (their WLS Doppler weight is zero).  Without this
+    # they enter the FGO graph completely unguarded, which is catastrophic in
+    # dense urban canyons where GLO Doppler is NLOS-corrupted.  Apply the same
+    # Doppler residual outlier rejection to their FGO rate factor here.
+    doppler_only_count = 0
+    doppler_only_slots = _fgo_doppler_only_slot_mask(slot_keys)
+    if np.any(doppler_only_slots) and doppler_weights_fgo is not None:
+        dop_only_weights = _copy_extra_slot_weights(doppler_weights_fgo, doppler_only_slots)
+        if dop_only_weights is not None:
+            doppler_only_count = mask_doppler_residual_outliers_fn(
+                times_ms,
+                sat_ecef,
+                sat_vel,
+                doppler,
+                dop_only_weights,
+                kaggle_wls,
+                threshold_mps=doppler_residual_mask_mps,
+                receiver_clock_drift_mps=clock_drift_mps,
+                sat_clock_drift_mps=sat_clock_drift_mps,
+                velocity_times_ms=baseline_velocity_times_ms,
+                velocity_reference_xyz=baseline_velocity_xyz,
+                clock_drift_times_ms=clock_drift_context_times_ms,
+                clock_drift_reference_mps=clock_drift_context_mps,
+            )
+            doppler_weights_fgo[:, doppler_only_slots] = dop_only_weights[:, doppler_only_slots]
+
     extra_slots = _fgo_extra_slot_mask(slot_keys)
     if not np.any(extra_slots):
-        return 0, 0, 0
+        return int(doppler_only_count), 0, 0
 
     extra_pr_weights = _copy_extra_slot_weights(weights_fgo, extra_slots)
     if extra_pr_weights is None:
@@ -1649,7 +1690,7 @@ def _apply_fgo_extra_residual_masks(
     weights_fgo[:, extra_slots] = extra_pr_weights[:, extra_slots]
     if extra_doppler_weights is not None and doppler_weights_fgo is not None:
         doppler_weights_fgo[:, extra_slots] = extra_doppler_weights[:, extra_slots]
-    return int(doppler_count), int(pd_count), int(pr_count)
+    return int(doppler_count) + int(doppler_only_count), int(pd_count), int(pr_count)
 
 
 def build_observation_mask_base_correction_stage(
@@ -1688,6 +1729,7 @@ def build_observation_mask_base_correction_stage(
     pseudorange_residual_mask_l5_m: float | None,
     full_isb_batch: Any | None,
     fgo_extra_constellations: bool,
+    fgo_doppler_only_constellations: bool = False,
     signal_type: str,
     correction_matrix_fn: BaseCorrectionMatrixFn,
     mask_doppler_residual_outliers_fn: MaskDopplerResidualFn,
@@ -1776,7 +1818,7 @@ def build_observation_mask_base_correction_stage(
         default_l1_threshold_m=default_pr_l1_threshold_m,
         default_l5_threshold_m=default_pr_l5_threshold_m,
     )
-    if fgo_extra_constellations:
+    if fgo_extra_constellations or fgo_doppler_only_constellations:
         extra_doppler_count, extra_pd_count, extra_pr_count = _apply_fgo_extra_residual_masks(
             apply_observation_mask=apply_observation_mask,
             slot_keys=slot_keys,
@@ -1903,6 +1945,7 @@ def build_post_observation_stages(
     observation_min_elevation_deg: float,
     dual_frequency: bool,
     fgo_extra_constellations: bool,
+    fgo_doppler_only_constellations: bool = False,
     factor_dt_max_s: float,
     clock_drift_context_times_ms: np.ndarray,
     clock_drift_context_mps: np.ndarray | None,
@@ -2067,6 +2110,7 @@ def build_post_observation_stages(
         pseudorange_residual_mask_l5_m=pseudorange_residual_mask_l5_m,
         full_isb_batch=full_context_stage.full_isb_batch,
         fgo_extra_constellations=fgo_extra_constellations,
+        fgo_doppler_only_constellations=fgo_doppler_only_constellations,
         signal_type=signal_type,
         correction_matrix_fn=correction_matrix_fn,
         mask_doppler_residual_outliers_fn=mask_doppler_residual_outliers_fn,
@@ -2193,6 +2237,7 @@ def build_configured_post_observation_stages(
         observation_min_elevation_deg=config.observation_min_elevation_deg,
         dual_frequency=config.dual_frequency,
         fgo_extra_constellations=config.fgo_extra_constellations,
+        fgo_doppler_only_constellations=config.fgo_doppler_only_constellations,
         factor_dt_max_s=config.factor_dt_max_s,
         clock_drift_context_times_ms=observation_products.clock_drift_context_times_ms,
         clock_drift_context_mps=observation_products.clock_drift_context_mps,
