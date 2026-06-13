@@ -141,6 +141,10 @@ class BridgeConfig:
     # constraint (16% more on a typical pixel trip) is recovered.  Off by
     # default; safe for submission because it only touches FGO weights.
     fgo_doppler_only_constellations: bool = False
+    # Minimum satellite elevation (deg) for a Doppler-only constellation rate
+    # factor. Low-elevation GLONASS is the NLOS-reflected signal that poisons
+    # dense urban canyons; 0.0 disables the gate (keep all elevations).
+    fgo_doppler_only_min_elevation_deg: float = 0.0
     # Robust kernel applied inside the FGO solver. "huber" (default) is the
     # legacy in-CUDA Huber IRLS; "cauchy" wraps the native solver in a
     # Python-side Cauchy IRLS loop and is targeted at NLOS-heavy trips.
@@ -393,6 +397,8 @@ class BridgeConfig:
             raise ValueError("fgo_extra_constellations must be a bool")
         if not isinstance(self.fgo_doppler_only_constellations, bool):
             raise ValueError("fgo_doppler_only_constellations must be a bool")
+        if not (0.0 <= float(self.fgo_doppler_only_min_elevation_deg) < 90.0):
+            raise ValueError("fgo_doppler_only_min_elevation_deg must be in [0, 90)")
         for name in (
             "stop_velocity_huber_k",
             "stop_position_huber_k",

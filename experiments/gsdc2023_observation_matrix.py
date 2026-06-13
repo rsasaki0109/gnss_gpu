@@ -1032,6 +1032,7 @@ def fill_observation_matrices(
     fgo_weight_mode: str | None = None,
     fgo_extra_constellations: bool = False,
     fgo_doppler_only_constellations: bool = False,
+    fgo_doppler_only_min_elevation_deg: float = 0.0,
     multi_gnss: bool,
     dual_frequency: bool,
     tdcp_enabled: bool,
@@ -1446,6 +1447,19 @@ def fill_observation_matrices(
                             # FGO-only rate factor: keep doppler_weights_fgo, but
                             # never let the WLS seed see it.
                             doppler_weights[epoch_idx, sat_idx] = 0.0
+                        if (
+                            row_is_doppler_only
+                            and doppler_weights_fgo is not None
+                            and fgo_doppler_only_min_elevation_deg > 0.0
+                        ):
+                            # Low-elevation GLONASS Doppler is the NLOS-reflected
+                            # signal that poisons dense urban canyons; drop it.
+                            el_rad, _az_rad = elevation_azimuth_fn(
+                                kaggle_wls[epoch_idx],
+                                sat_ecef[epoch_idx, sat_idx],
+                            )
+                            if np.degrees(el_rad) < fgo_doppler_only_min_elevation_deg:
+                                doppler_weights_fgo[epoch_idx, sat_idx] = 0.0
 
             if adr is not None and adr_state is not None and not row_is_doppler_only:
                 adr_value = adr_sign * float(row.AccumulatedDeltaRangeMeters)

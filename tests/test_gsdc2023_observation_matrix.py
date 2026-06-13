@@ -585,6 +585,69 @@ def test_fill_observation_matrices_doppler_only_constellations_emit_rate_factor_
         np.testing.assert_allclose(products.carrier_weights_fgo, [[0.0]])
 
 
+def test_fill_observation_matrices_doppler_only_elevation_gate_drops_low_elevation() -> None:
+    rows = [
+        _required_row(
+            Svid=8,
+            ConstellationType=3,
+            SignalType="GLO_G1_CA",
+            Cn0DbHz=41.0,
+            PseudorangeRateMetersPerSecond=-6.0,
+            PseudorangeRateUncertaintyMetersPerSecond=0.5,
+            bridge_p_ok=True,
+            bridge_d_ok=True,
+            bridge_l_ok=True,
+            bridge_p_bias_ok=True,
+        ),
+    ]
+    epoch = RawEpochObservation(
+        time_ms=1000.0,
+        group=pd.DataFrame(rows),
+        baseline_xyz=np.array([1.0, 2.0, 3.0], dtype=np.float64),
+        truth_xyz=np.array([4.0, 5.0, 6.0], dtype=np.float64),
+    )
+
+    def _fill(min_elev: float):
+        return fill_observation_matrices(
+            [epoch],
+            source_columns=epoch.group.columns,
+            baseline_lookup={1000: np.array([10.0, 20.0, 30.0], dtype=np.float64)},
+            weight_mode="taroz_sn",
+            fgo_doppler_only_constellations=True,
+            fgo_doppler_only_min_elevation_deg=min_elev,
+            multi_gnss=True,
+            dual_frequency=True,
+            tdcp_enabled=True,
+            adr_sign=-1.0,
+            elapsed_ns_lookup=None,
+            hcdc_lookup=None,
+            clock_bias_lookup=None,
+            clock_drift_lookup=None,
+            gps_tgd_m_by_svid={},
+            gps_matrtklib_nav_messages={},
+            gps_arrival_tow_s_from_row_fn=lambda _row: 100.0,
+            gps_sat_clock_bias_adjustment_m_fn=lambda _c, _s, _sig, _tgd: 0.0,
+            gps_matrtklib_sat_product_adjustment_fn=lambda **_kw: None,
+            clock_kind_for_observation_fn=clock_kind_for_observation,
+            is_l5_signal_fn=lambda signal: "L5" in signal or "B2" in signal,
+            slot_sort_key_fn=lambda key: key,
+            ecef_to_lla_fn=lambda _x, _y, _z: (0.5, 0.0, 100.0),
+            # Fixed 30-degree elevation for the satellite.
+            elevation_azimuth_fn=lambda _rx, _sat: (np.deg2rad(30.0), 0.0),
+            rtklib_tropo_fn=lambda _lat, _alt, _el: 0.0,
+            matlab_signal_clock_dim=7,
+        )
+
+    # 35-degree gate drops the 30-degree GLONASS Doppler factor.
+    gated = _fill(35.0)
+    assert gated.doppler_weights_fgo is not None
+    np.testing.assert_allclose(gated.doppler_weights_fgo, [[0.0]])
+    # 20-degree gate keeps it.
+    kept = _fill(20.0)
+    assert kept.doppler_weights_fgo is not None
+    assert np.all(kept.doppler_weights_fgo > 0.0)
+
+
 def test_fill_observation_matrices_taroz_sn_uses_explicit_cn0_percentile_epochs() -> None:
     selected_row = _required_row(
         utcTimeMillis=1000,

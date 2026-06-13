@@ -341,6 +341,7 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         taroz_imu_factor_mask_csv=getattr(args, "taroz_imu_factor_mask_csv", None),
         fgo_extra_constellations=bool(getattr(args, "fgo_extra_constellations", False)),
         fgo_doppler_only_constellations=bool(getattr(args, "fgo_doppler_only_constellations", False)),
+        fgo_doppler_only_min_elevation_deg=float(getattr(args, "fgo_doppler_only_min_elevation_deg", 0.0)),
         fgo_residual_mask_propagation=bool(
             getattr(args, "fgo_residual_mask_propagation", False)
         ),
@@ -591,6 +592,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Add GLONASS as a Doppler-ONLY FGO rate factor (no pseudorange/carrier). "
         "Doppler is base-correction-independent, so it recovers ~16%% more velocity "
         "constraints without the uncorrected-GLO-pseudorange poison. Off by default.",
+    )
+    parser.add_argument(
+        "--fgo-doppler-only-min-elevation-deg",
+        type=float,
+        default=0.0,
+        help="Minimum elevation (deg) for Doppler-only constellation rate factors. "
+        "Drops low-elevation NLOS GLONASS Doppler that poisons dense urban canyons. "
+        "0 disables the gate.",
     )
     parser.add_argument(
         "--fgo-residual-mask-propagation",
