@@ -532,3 +532,28 @@ def test_build_config_wires_fgo_gate_gap_floor() -> None:
 def test_build_config_wires_base_correction() -> None:
     assert build_config(_args()).apply_base_correction is False
     assert build_config(_args(base_correction=True)).apply_base_correction is True
+
+
+def test_build_config_wires_extra_constellations_and_mask_propagation() -> None:
+    default_cfg = build_config(_args())
+    assert default_cfg.fgo_extra_constellations is False
+    assert default_cfg.fgo_residual_mask_propagation is False
+
+    enabled_cfg = build_config(
+        _args(fgo_extra_constellations=True, fgo_residual_mask_propagation=True)
+    )
+    assert enabled_cfg.fgo_extra_constellations is True
+    assert enabled_cfg.fgo_residual_mask_propagation is True
+
+    # The phone-aware policy-A pixel branch must keep both levers alongside the
+    # GNSS-only preset's LM(16, 1e-4) + position-offset bundle.
+    pixel_cfg = apply_taroz_phone_aware_preset(
+        enabled_cfg,
+        "2023-04-27-20-55-us-ca-sjc-q/pixel5",
+        pixel_position_source="fgo",
+    )
+    assert pixel_cfg.position_source == "fgo"
+    assert pixel_cfg.fgo_iters == 16
+    assert pixel_cfg.apply_position_offset is True
+    assert pixel_cfg.fgo_extra_constellations is True
+    assert pixel_cfg.fgo_residual_mask_propagation is True
