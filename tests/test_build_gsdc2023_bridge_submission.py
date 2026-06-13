@@ -38,6 +38,7 @@ def _args(**overrides: object) -> SimpleNamespace:
         "multi_gnss": True,
         "tdcp": True,
         "tdcp_weight_scale": 1.0e-4,
+        "tdcp_l5_weight_scale": 25.0,
         "tdcp_geometry_correction": True,
         "dual_frequency": True,
         "ct_rbpf_fgo": False,
@@ -156,6 +157,19 @@ def test_run_one_bridge_trip_returns_cache_metadata_for_solved_trip(
                     "LongitudeDegrees": [-122.0],
                 },
             )
+
+        def states_table(self) -> pd.DataFrame:
+            return pd.DataFrame(
+                {
+                    "UnixTimeMillis": [1000],
+                    "X": [1.0],
+                    "Y": [2.0],
+                    "Z": [3.0],
+                },
+            )
+
+        def fgo_vd_state_table(self) -> None:
+            return None
 
         def metrics_payload(self) -> dict[str, object]:
             return {
@@ -427,6 +441,47 @@ def test_apply_taroz_phone_aware_preset_uses_gnss_only_for_pixel() -> None:
     assert cfg.graph_relative_height is False
 
 
+def test_apply_taroz_phone_aware_preset_pixel_position_source_override() -> None:
+    base = BridgeConfig(position_source="gated")
+
+    pixel_default = apply_taroz_phone_aware_preset(base, "test/course/pixel5")
+    pixel_fgo = apply_taroz_phone_aware_preset(base, "test/course/pixel5", pixel_position_source="fgo")
+    non_pixel = apply_taroz_phone_aware_preset(base, "test/course/sm-a205u", pixel_position_source="fgo")
+
+    assert pixel_default.position_source == "gated"
+    assert pixel_fgo.position_source == "fgo"
+    assert pixel_fgo.fgo_weight_mode == TAROZ_FGO_WEIGHT_MODE
+    assert non_pixel.position_source == "gated"
+
+
+def test_run_bridge_submission_rejects_pixel_source_without_phone_aware(tmp_path: Path) -> None:
+    sample_path = tmp_path / "sample_submission.csv"
+    sample_path.write_text(
+        "tripId,UnixTimeMillis,LatitudeDegrees,LongitudeDegrees\n"
+        "course/pixel5,1000,37.0,-122.0\n",
+        encoding="utf-8",
+    )
+    args = _args(
+        taroz_phone_aware=False,
+        taroz_phone_aware_pixel_source="fgo",
+        sample_submission=sample_path,
+        data_root=tmp_path,
+        output=tmp_path / "submission.csv",
+        bridge_output_root=None,
+        jobs=1,
+        trip=[],
+        limit=0,
+        allow_partial=False,
+        interpolate_missing=False,
+        max_epochs=0,
+        start_epoch=0,
+        resume_existing=False,
+    )
+
+    with pytest.raises(ValueError, match="requires --taroz-phone-aware"):
+        run_bridge_submission(args)
+
+
 def test_apply_taroz_phone_aware_preset_uses_weights_only_for_non_pixel() -> None:
     base = BridgeConfig(clock_drift_sigma_m=1.0, fgo_huber_k_pr=0.0)
 
@@ -472,3 +527,8 @@ def test_build_config_wires_fgo_gate_gap_floor() -> None:
     cfg = build_config(_args(gate_fgo_baseline_gap_p95_floor_m=20.0))
 
     assert cfg.gate_fgo_baseline_gap_p95_floor_m == pytest.approx(20.0)
+
+
+def test_build_config_wires_base_correction() -> None:
+    assert build_config(_args()).apply_base_correction is False
+    assert build_config(_args(base_correction=True)).apply_base_correction is True

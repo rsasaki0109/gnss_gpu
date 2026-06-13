@@ -38,6 +38,14 @@ DUAL_FREQUENCY_SIGNAL_TYPES = {
     6: ("GAL_E1_C_P", "GAL_E5A_Q"),
     4: ("QZS_L1_CA", "QZS_L5_Q"),
 }
+# GLONASS is deliberately excluded: a 3-trip GT A/B (LM16+offset preset)
+# measured GLO-only at +0.55m (sjc-q) and +1.09m (lax-o) while BDS-only was
+# -0.48m (mtv-h) and bit-neutral elsewhere.  Our base correction does not
+# cover R satellites yet, so uncorrected GLONASS pseudoranges poison the
+# graph in exactly the trips where the correction matters.
+FGO_EXTRA_CONSTELLATION_SIGNAL_TYPES = {
+    5: ("BDS_B1_I", "BDS_B2A_I"),
+}
 CONSTELLATION_TO_SYS_KIND = {1: 0, 6: 1, 4: 2}
 SYS_KIND_TO_MULTI_SYSTEM = {0: SYSTEM_GPS, 1: SYSTEM_GALILEO, 2: SYSTEM_QZSS, 3: SYSTEM_BEIDOU}
 MATLAB_SIGNAL_CLOCK_DIM = 7
@@ -77,11 +85,23 @@ def signal_types_for_constellation(
     return (signal_type,)
 
 
-def multi_gnss_mask(df: pd.DataFrame, *, dual_frequency: bool = False) -> np.ndarray:
+def is_fgo_extra_constellation_signal(constellation_type: int, signal_type: str) -> bool:
+    return str(signal_type) in FGO_EXTRA_CONSTELLATION_SIGNAL_TYPES.get(int(constellation_type), ())
+
+
+def multi_gnss_mask(
+    df: pd.DataFrame,
+    *,
+    dual_frequency: bool = False,
+    extra_constellations: bool = False,
+) -> np.ndarray:
     signal = df["SignalType"].fillna("")
     mask = np.zeros(len(df), dtype=bool)
     if dual_frequency:
-        for constellation_type, signal_types in DUAL_FREQUENCY_SIGNAL_TYPES.items():
+        signal_sets = dict(DUAL_FREQUENCY_SIGNAL_TYPES)
+        if extra_constellations:
+            signal_sets.update(FGO_EXTRA_CONSTELLATION_SIGNAL_TYPES)
+        for constellation_type, signal_types in signal_sets.items():
             for signal_type in signal_types:
                 mask |= (df["ConstellationType"] == constellation_type) & (signal == signal_type)
     else:

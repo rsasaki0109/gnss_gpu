@@ -134,6 +134,7 @@ class BridgeConfig:
     # separate weights array while the gate/WLS keeps using ``weight_mode``.
     # ``None`` (default) shares ``weight_mode`` for both, matching legacy.
     fgo_weight_mode: str | None = None
+    fgo_extra_constellations: bool = False
     # Robust kernel applied inside the FGO solver. "huber" (default) is the
     # legacy in-CUDA Huber IRLS; "cauchy" wraps the native solver in a
     # Python-side Cauchy IRLS loop and is targeted at NLOS-heavy trips.
@@ -264,6 +265,7 @@ class BridgeConfig:
     tdcp_enabled: bool = True
     tdcp_consistency_threshold_m: float = DEFAULT_TDCP_CONSISTENCY_THRESHOLD_M
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
+    tdcp_l5_weight_scale: float = 1.0
     tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION
     tdcp_cycle_jump_mask_cycles: float = 0.0
     tdcp_doppler_endpoint_mask: bool = True
@@ -364,6 +366,8 @@ class BridgeConfig:
             raise ValueError("fgo_lm_damping must be finite")
         if float(self.fgo_lm_damping) < 0.0:
             raise ValueError("fgo_lm_damping must be >= 0")
+        if not isinstance(self.fgo_extra_constellations, bool):
+            raise ValueError("fgo_extra_constellations must be a bool")
         for name in (
             "stop_velocity_huber_k",
             "stop_position_huber_k",
@@ -379,6 +383,10 @@ class BridgeConfig:
             raise ValueError("tdcp_scale_candidate_weight_scale must be finite")
         if float(self.tdcp_scale_candidate_weight_scale) <= 0.0:
             raise ValueError("tdcp_scale_candidate_weight_scale must be > 0")
+        if not np.isfinite(float(self.tdcp_l5_weight_scale)):
+            raise ValueError("tdcp_l5_weight_scale must be finite")
+        if float(self.tdcp_l5_weight_scale) <= 0.0:
+            raise ValueError("tdcp_l5_weight_scale must be > 0")
         if not np.isfinite(float(self.tdcp_cycle_jump_mask_cycles)):
             raise ValueError("tdcp_cycle_jump_mask_cycles must be finite")
         if float(self.tdcp_cycle_jump_mask_cycles) < 0.0:
@@ -520,6 +528,14 @@ def apply_taroz_gnss_only_preset(config: BridgeConfig) -> BridgeConfig:
         per_type_kernel_motion_enabled=True,
         fgo_fixed_linearization=True,
         apply_base_correction=True,
+        # fgo_gnss.m always runs add_position_offset on the GNSS-only output
+        apply_position_offset=True,
+        # fgo_gnss.m optimizes with GTSAM Levenberg-Marquardt (max 1000
+        # iterations); the default GN/line-search loop stops on the first
+        # non-improving step.  LM with 16 iterations matches the converged
+        # LM(200) scores on the trips swept while staying ~6x cheaper.
+        fgo_iters=16,
+        fgo_lm_damping=1e-4,
         tdcp_weight_scale=1.0,
         graph_relative_height=False,
         relative_height_huber_k=0.0,

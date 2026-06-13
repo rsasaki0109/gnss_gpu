@@ -27,6 +27,7 @@ def test_bridge_config_defaults_match_public_factor_dt() -> None:
     assert cfg.imu_frame == "body"
     assert cfg.imu_sample_dt_mode == "bounded"
     assert cfg.tdcp_weight_scale == DEFAULT_TDCP_WEIGHT_SCALE
+    assert cfg.tdcp_l5_weight_scale == 1.0
     assert cfg.tdcp_geometry_correction is DEFAULT_TDCP_GEOMETRY_CORRECTION
     assert cfg.tdcp_cycle_jump_mask_cycles == 0.0
     assert cfg.tdcp_doppler_endpoint_mask is True
@@ -39,11 +40,17 @@ def test_bridge_config_defaults_match_public_factor_dt() -> None:
     assert cfg.stop_attitude_sigma_rad == 0.0
     assert cfg.taroz_imu_factor_mask_csv is None
     assert cfg.taroz_stop_mask_from_seed_velocity is False
+    assert cfg.fgo_extra_constellations is False
 
 
 def test_bridge_config_rejects_invalid_position_source() -> None:
     with pytest.raises(ValueError):
         BridgeConfig(position_source="unsupported")
+
+
+def test_bridge_config_rejects_non_bool_fgo_extra_constellations() -> None:
+    with pytest.raises(ValueError, match="fgo_extra_constellations must be a bool"):
+        BridgeConfig(fgo_extra_constellations=1)  # type: ignore[arg-type]
 
 
 def test_taroz_presets_enable_base_correction_and_unscaled_tdcp_weights() -> None:
@@ -162,6 +169,12 @@ def test_bridge_config_rejects_non_finite_dd_carrier_anchor_coverage() -> None:
 def test_bridge_config_rejects_non_positive_tdcp_scale_candidate() -> None:
     with pytest.raises(ValueError, match="tdcp_scale_candidate_weight_scale must be > 0"):
         BridgeConfig(tdcp_scale_candidate_weight_scale=0.0)
+
+
+@pytest.mark.parametrize("value", [0.0, -1.0, np.inf, np.nan])
+def test_bridge_config_rejects_invalid_tdcp_l5_weight_scale(value: float) -> None:
+    with pytest.raises(ValueError, match="tdcp_l5_weight_scale must be"):
+        BridgeConfig(tdcp_l5_weight_scale=value)
 
 
 def test_bridge_config_rejects_invalid_fgo_raw_wls_proxy_rescue_thresholds() -> None:

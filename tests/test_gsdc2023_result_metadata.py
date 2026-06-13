@@ -144,6 +144,7 @@ def test_bridge_result_metadata_kwargs_maps_config_and_batch_counts() -> None:
         apply_base_correction=True,
         apply_observation_mask=True,
         tdcp_weight_scale=0.5,
+        tdcp_l5_weight_scale=25.0,
         tdcp_geometry_correction=True,
         weight_mode="taroz_sn",
         fgo_weight_mode="taroz_sn",
@@ -222,6 +223,7 @@ def test_bridge_result_metadata_kwargs_maps_config_and_batch_counts() -> None:
     assert kwargs["pseudorange_doppler_mask_count"] == 8
     assert kwargs["tdcp_consistency_mask_count"] == 9
     assert kwargs["tdcp_weight_scale"] == 0.5
+    assert kwargs["tdcp_l5_weight_scale"] == 25.0
     assert kwargs["tdcp_geometry_correction_applied"] is True
     assert kwargs["tdcp_geometry_correction_count"] == 10
     assert kwargs["taroz_qzss_other_clock_enabled"] is True

@@ -33,6 +33,7 @@ from experiments.gsdc2023_trip_stages import (
     TdcpStageProducts,
     apply_base_correction_to_pseudorange,
     apply_gnss_log_pseudorange_stage,
+    apply_tdcp_l5_weight_scale,
     assemble_prepared_trip_arrays_stage,
     assemble_trip_arrays_stage,
     build_absolute_height_stage,
@@ -1472,6 +1473,7 @@ def test_build_full_observation_context_stage_builds_once_and_updates_context(tm
         observation_min_cn0_dbhz=18.0,
         observation_min_elevation_deg=10.0,
         dual_frequency=True,
+        fgo_extra_constellations=False,
         factor_dt_max_s=1.5,
         clock_drift_context_times_ms=np.array([500.0], dtype=np.float64),
         clock_drift_context_mps=np.array([0.1], dtype=np.float64),
@@ -2001,9 +2003,11 @@ def test_build_observation_mask_base_correction_stage_preserves_mask_then_base_o
         sat_vel=np.zeros((1, 3, 3), dtype=np.float64),
         doppler=np.ones((1, 3), dtype=np.float64),
         doppler_weights=doppler_weights,
+        doppler_weights_fgo=None,
         kaggle_wls=np.zeros((1, 3), dtype=np.float64),
         pseudorange_observable=np.ones((1, 3), dtype=np.float64),
         weights=weights,
+        weights_fgo=None,
         phone_name="pixel4",
         sys_kind=np.zeros((1, 3), dtype=np.int32),
         n_clock=1,
@@ -2023,6 +2027,7 @@ def test_build_observation_mask_base_correction_stage_preserves_mask_then_base_o
         pseudorange_residual_mask_m=20.0,
         pseudorange_residual_mask_l5_m=None,
         full_isb_batch=None,
+        fgo_extra_constellations=False,
         signal_type="GPS_L1_CA",
         correction_matrix_fn=correction_matrix_fn,
         mask_doppler_residual_outliers_fn=doppler_mask_fn,
@@ -2046,6 +2051,126 @@ def test_build_observation_mask_base_correction_stage_preserves_mask_then_base_o
     assert products.base_correction_count == 1
     assert calls == ["doppler", "threshold:40", "pd", "threshold:20", "pr", "base"]
     np.testing.assert_allclose(pseudorange, [[100.0, 100.0, 70.0]])
+
+
+def test_build_observation_mask_base_correction_stage_masks_fgo_extra_slots() -> None:
+    calls: list[str] = []
+    times_ms = np.array([1000.0], dtype=np.float64)
+    slot_keys = [(5, 5, "BDS_B1_I")]
+    weights = np.zeros((1, 1), dtype=np.float64)
+    weights_fgo = np.ones((1, 1), dtype=np.float64)
+    doppler_weights = np.zeros((1, 1), dtype=np.float64)
+    doppler_weights_fgo = np.ones((1, 1), dtype=np.float64)
+
+    def doppler_mask_fn(
+        _times_ms: np.ndarray,
+        _sat_ecef: np.ndarray,
+        _sat_vel: np.ndarray,
+        _doppler: np.ndarray,
+        got_weights: np.ndarray,
+        *_args: object,
+        **_kwargs: object,
+    ) -> int:
+        if got_weights is doppler_weights:
+            calls.append("gate-doppler")
+            np.testing.assert_allclose(got_weights, [[0.0]])
+            return 0
+        calls.append("fgo-doppler")
+        np.testing.assert_allclose(got_weights, [[1.0]])
+        got_weights[0, 0] = 0.0
+        return 1
+
+    def pd_mask_fn(
+        _times_ms: np.ndarray,
+        _pseudorange_observable: np.ndarray,
+        got_weights: np.ndarray,
+        *_args: object,
+        **_kwargs: object,
+    ) -> int:
+        if got_weights is weights:
+            calls.append("gate-pd")
+            np.testing.assert_allclose(got_weights, [[0.0]])
+            return 0
+        calls.append("fgo-pd")
+        np.testing.assert_allclose(got_weights, [[1.0]])
+        got_weights[0, 0] = 0.5
+        return 1
+
+    def pr_mask_fn(
+        _sat_ecef: np.ndarray,
+        _pseudorange: np.ndarray,
+        got_weights: np.ndarray,
+        *_args: object,
+        **_kwargs: object,
+    ) -> int:
+        if got_weights is weights:
+            calls.append("gate-pr")
+            np.testing.assert_allclose(got_weights, [[0.0]])
+            return 0
+        calls.append("fgo-pr")
+        np.testing.assert_allclose(got_weights, [[0.5]])
+        got_weights[0, 0] = 0.0
+        return 1
+
+    products = build_observation_mask_base_correction_stage(
+        apply_observation_mask=True,
+        apply_base_correction=False,
+        data_root=None,
+        trip=None,
+        times_ms=times_ms,
+        sat_ecef=np.zeros((1, 1, 3), dtype=np.float64),
+        sat_vel=np.zeros((1, 1, 3), dtype=np.float64),
+        doppler=np.ones((1, 1), dtype=np.float64),
+        doppler_weights=doppler_weights,
+        doppler_weights_fgo=doppler_weights_fgo,
+        kaggle_wls=np.zeros((1, 3), dtype=np.float64),
+        pseudorange_observable=np.ones((1, 1), dtype=np.float64),
+        weights=weights,
+        weights_fgo=weights_fgo,
+        phone_name="pixel5",
+        sys_kind=np.ones((1, 1), dtype=np.int32),
+        n_clock=7,
+        slot_keys=slot_keys,
+        pseudorange=np.ones((1, 1), dtype=np.float64),
+        pseudorange_isb_sample_weights=np.ones((1, 1), dtype=np.float64),
+        pseudorange_bias_weights=np.ones((1, 1), dtype=np.float64),
+        clock_bias_m=None,
+        clock_drift_mps=np.zeros(1, dtype=np.float64),
+        sat_clock_drift_mps=np.zeros((1, 1), dtype=np.float64),
+        baseline_velocity_times_ms=times_ms,
+        baseline_velocity_xyz=np.zeros((1, 3), dtype=np.float64),
+        clock_drift_context_times_ms=times_ms,
+        clock_drift_context_mps=np.zeros(1, dtype=np.float64),
+        doppler_residual_mask_mps=3.0,
+        pseudorange_doppler_mask_m=40.0,
+        pseudorange_residual_mask_m=20.0,
+        pseudorange_residual_mask_l5_m=None,
+        full_isb_batch=None,
+        fgo_extra_constellations=True,
+        signal_type="GPS_L1_CA",
+        correction_matrix_fn=lambda *_args, **_kwargs: _raise_unexpected(),
+        mask_doppler_residual_outliers_fn=doppler_mask_fn,
+        slot_frequency_thresholds_fn=lambda keys, threshold, **_kwargs: np.full(len(keys), threshold),
+        mask_pseudorange_doppler_consistency_fn=pd_mask_fn,
+        slot_pseudorange_common_bias_groups_fn=lambda keys: np.zeros(len(keys), dtype=np.int32),
+        remap_pseudorange_isb_by_group_fn=lambda *_args: _raise_unexpected(),
+        pseudorange_global_isb_by_group_fn=lambda *_args, **_kwargs: _raise_unexpected(),
+        is_l5_signal_fn=lambda signal: "L5" in signal or "B2" in signal,
+        mask_pseudorange_residual_outliers_fn=pr_mask_fn,
+        default_pd_l1_threshold_m=40.0,
+        default_pd_l5_threshold_m=25.0,
+        default_pr_l1_threshold_m=20.0,
+        default_pr_l5_threshold_m=15.0,
+    )
+
+    assert calls == ["gate-doppler", "gate-pd", "gate-pr", "fgo-doppler", "fgo-pd", "fgo-pr"]
+    np.testing.assert_allclose(weights, [[0.0]])
+    np.testing.assert_allclose(doppler_weights, [[0.0]])
+    np.testing.assert_allclose(weights_fgo, [[0.0]])
+    np.testing.assert_allclose(doppler_weights_fgo, [[0.0]])
+    assert products.doppler_residual_stage.doppler_residual_mask_count == 1
+    assert products.pseudorange_doppler_stage.pseudorange_doppler_mask_count == 1
+    assert products.pseudorange_residual_stage.residual_mask_count == 1
 
 
 def test_build_configured_post_observation_stages_uses_bundled_config_and_dependencies(tmp_path: Path) -> None:
@@ -2123,6 +2248,7 @@ def test_build_configured_post_observation_stages_uses_bundled_config_and_depend
         matlab_residual_diagnostics_mask_path=None,
         tdcp_geometry_correction=False,
         tdcp_weight_scale=2.0,
+        tdcp_l5_weight_scale=1.0,
         imu_frame="body",
         imu_sample_dt_mode="bounded",
         default_pd_l1_threshold_m=40.0,
@@ -2175,6 +2301,7 @@ def test_build_configured_post_observation_stages_uses_bundled_config_and_depend
         apply_diagnostics_mask_fn=lambda **_kwargs: _raise_unexpected(),
         apply_geometry_correction_fn=lambda *_args: _raise_unexpected(),
         apply_weight_scale_fn=scale_fn,
+        apply_l5_weight_scale_fn=lambda *_args: None,
         load_device_imu_measurements_fn=lambda _trip_dir: (None, None, None),
         process_device_imu_fn=lambda *_args: _raise_unexpected(),
         project_stop_to_epochs_fn=lambda *_args: _raise_unexpected(),
@@ -2336,6 +2463,7 @@ def test_build_post_observation_stages_wires_pipeline_and_preserves_signal_weigh
         observation_min_cn0_dbhz=18.0,
         observation_min_elevation_deg=10.0,
         dual_frequency=True,
+        fgo_extra_constellations=False,
         factor_dt_max_s=1.5,
         clock_drift_context_times_ms=times_ms,
         clock_drift_context_mps=clock_drift,
@@ -2355,6 +2483,7 @@ def test_build_post_observation_stages_wires_pipeline_and_preserves_signal_weigh
         matlab_residual_diagnostics_mask_path=diagnostics_path,
         tdcp_geometry_correction=True,
         tdcp_weight_scale=2.0,
+        tdcp_l5_weight_scale=1.0,
         adr=np.ones((2, 2), dtype=np.float64),
         adr_state=np.ones((2, 2), dtype=np.float64),
         adr_uncertainty=np.ones((2, 2), dtype=np.float64),
@@ -2381,6 +2510,7 @@ def test_build_post_observation_stages_wires_pipeline_and_preserves_signal_weigh
         apply_diagnostics_mask_fn=diagnostics_fn,
         apply_geometry_correction_fn=geometry_fn,
         apply_weight_scale_fn=scale_fn,
+        apply_l5_weight_scale_fn=lambda *_args: None,
         load_device_imu_measurements_fn=lambda _trip_dir: (None, None, None),
         process_device_imu_fn=lambda *_args: _raise_unexpected(),
         project_stop_to_epochs_fn=lambda *_args: _raise_unexpected(),
@@ -2502,10 +2632,13 @@ def test_build_tdcp_stage_applies_diagnostics_geometry_and_scale(tmp_path: Path)
         kaggle_wls=kaggle_wls,
         tdcp_geometry_correction=True,
         tdcp_weight_scale=0.5,
+        tdcp_l5_weight_scale=1.0,
         build_tdcp_arrays_fn=build_fn,
         apply_diagnostics_mask_fn=diagnostics_fn,
         apply_geometry_correction_fn=geometry_fn,
         apply_weight_scale_fn=scale_fn,
+        apply_l5_weight_scale_fn=lambda *_args: None,
+        is_l5_signal_fn=lambda _signal: _raise_unexpected(),
     )
 
     np.testing.assert_allclose(products.tdcp_meas, [[10.0, 20.0]])
@@ -2555,15 +2688,73 @@ def test_build_tdcp_stage_derives_fgo_tdcp_weights_from_carrier_weights() -> Non
         kaggle_wls=np.zeros((2, 3), dtype=np.float64),
         tdcp_geometry_correction=False,
         tdcp_weight_scale=0.5,
+        tdcp_l5_weight_scale=1.0,
         build_tdcp_arrays_fn=build_fn,
         apply_diagnostics_mask_fn=lambda **_kwargs: _raise_unexpected(),
         apply_geometry_correction_fn=lambda *_args: _raise_unexpected(),
         apply_weight_scale_fn=scale_fn,
+        apply_l5_weight_scale_fn=lambda *_args: None,
+        is_l5_signal_fn=lambda _signal: _raise_unexpected(),
     )
 
     np.testing.assert_allclose(products.tdcp_weights, [[1.0, 2.0]])
     np.testing.assert_allclose(products.tdcp_weights_fgo, [[5.0, 10.0]])
     assert calls == ["build", "scale", "scale"]
+
+
+def test_build_tdcp_stage_scales_only_l5_tdcp_weights_for_primary_and_fgo() -> None:
+    slot_keys = [(1, 1, "GPS_L1_CA"), (1, 2, "GPS_L5_Q")]
+    base_tdcp_weights = np.array([[2.0, 3.0]], dtype=np.float64)
+    carrier_weights_fgo = np.array([[5.0, 7.0], [99.0, 99.0]], dtype=np.float64)
+
+    def build_fn(*_args: Any, **_kwargs: Any) -> tuple[np.ndarray, np.ndarray, int]:
+        return np.array([[1.0, 1.5]], dtype=np.float64), base_tdcp_weights.copy(), 0
+
+    def build_products(tdcp_l5_weight_scale: float) -> TdcpStageProducts:
+        return build_tdcp_stage(
+            adr=np.ones((2, 2), dtype=np.float64),
+            adr_state=np.ones((2, 2), dtype=np.float64),
+            adr_uncertainty=np.ones((2, 2), dtype=np.float64),
+            doppler=None,
+            tdcp_dt=np.array([1.0, 0.0], dtype=np.float64),
+            tdcp_consistency_threshold_m=1.5,
+            doppler_weights=None,
+            doppler_weights_fgo=None,
+            carrier_weights=None,
+            carrier_weights_fgo=carrier_weights_fgo,
+            clock_jump=None,
+            tdcp_loffset_m=0.0,
+            matlab_residual_diagnostics_mask_path=None,
+            times_ms=np.array([1000.0, 2000.0], dtype=np.float64),
+            slot_keys=slot_keys,
+            weights=np.ones((2, 2), dtype=np.float64),
+            weights_fgo=None,
+            signal_weights=np.ones((2, 2), dtype=np.float64),
+            signal_weights_fgo=None,
+            signal_doppler_weights=None,
+            signal_doppler_weights_fgo=None,
+            sat_ecef=np.zeros((2, 2, 3), dtype=np.float64),
+            kaggle_wls=np.zeros((2, 3), dtype=np.float64),
+            tdcp_geometry_correction=False,
+            tdcp_weight_scale=1.0,
+            tdcp_l5_weight_scale=tdcp_l5_weight_scale,
+            build_tdcp_arrays_fn=build_fn,
+            apply_diagnostics_mask_fn=lambda **_kwargs: _raise_unexpected(),
+            apply_geometry_correction_fn=lambda *_args: _raise_unexpected(),
+            apply_weight_scale_fn=lambda _weights, scale: None if scale == 1.0 else _raise_unexpected(),
+            apply_l5_weight_scale_fn=apply_tdcp_l5_weight_scale,
+            is_l5_signal_fn=lambda signal: "L5" in signal,
+        )
+
+    default_products = build_products(1.0)
+    assert default_products.tdcp_weights is not None
+    assert default_products.tdcp_weights_fgo is not None
+    assert default_products.tdcp_weights.tobytes() == base_tdcp_weights.tobytes()
+    assert default_products.tdcp_weights_fgo.tobytes() == np.array([[5.0, 7.0]], dtype=np.float64).tobytes()
+
+    scaled_products = build_products(25.0)
+    np.testing.assert_allclose(scaled_products.tdcp_weights, [[2.0, 75.0]])
+    np.testing.assert_allclose(scaled_products.tdcp_weights_fgo, [[5.0, 175.0]])
 
 
 def test_build_tdcp_stage_allows_missing_adr_and_still_runs_scale() -> None:
@@ -2595,10 +2786,13 @@ def test_build_tdcp_stage_allows_missing_adr_and_still_runs_scale() -> None:
         kaggle_wls=np.zeros((1, 3), dtype=np.float64),
         tdcp_geometry_correction=False,
         tdcp_weight_scale=2.0,
+        tdcp_l5_weight_scale=1.0,
         build_tdcp_arrays_fn=lambda *_args, **_kwargs: _raise_unexpected(),
         apply_diagnostics_mask_fn=lambda **_kwargs: _raise_unexpected(),
         apply_geometry_correction_fn=lambda *_args: _raise_unexpected(),
         apply_weight_scale_fn=lambda weights, scale: calls.append(f"scale:{weights}:{scale}"),
+        apply_l5_weight_scale_fn=lambda *_args: None,
+        is_l5_signal_fn=lambda _signal: _raise_unexpected(),
     )
 
     assert products.tdcp_meas is None

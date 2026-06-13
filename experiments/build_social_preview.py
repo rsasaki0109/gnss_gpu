@@ -5,7 +5,7 @@ shown when the repo link is shared on X / Slack / Hacker News / LinkedIn, etc.).
 
     python3 experiments/build_social_preview.py
 
-Output: docs/assets/media/social_preview.png
+Output: docs/assets/media/site/social_preview.png
 
 Upload is a one-time manual step (GitHub has no API for it):
     GitHub repo -> Settings -> General -> Social preview -> Upload an image.
@@ -21,7 +21,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import FancyBboxPatch  # noqa: E402
 
-OUT_PATH = Path(__file__).resolve().parent.parent / "docs" / "assets" / "media" / "social_preview.png"
+OUT_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "docs"
+    / "assets"
+    / "media"
+    / "site"
+    / "social_preview.png"
+)
 
 # GitHub renders social previews at 1280x640 (2:1).
 WIDTH_PX, HEIGHT_PX = 1280, 640
