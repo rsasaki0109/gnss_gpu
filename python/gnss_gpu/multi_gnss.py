@@ -22,6 +22,7 @@ _SYSTEM_NAMES = {
     SYSTEM_QZSS: "QZSS",
 }
 _SUPPORTED_SYSTEMS = frozenset(_SYSTEM_NAMES)
+MAX_SYSTEMS = len(_SUPPORTED_SYSTEMS)
 
 try:
     from gnss_gpu._gnss_gpu_multi_gnss import wls_multi_gnss as _wls_multi_gnss
