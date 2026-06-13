@@ -233,6 +233,7 @@ class ObservationMaskBaseCorrectionStageProducts:
     pseudorange_doppler_stage: PseudorangeDopplerStageProducts
     pseudorange_residual_stage: PseudorangeResidualStageProducts
     base_correction_count: int
+    fgo_propagated_pr_mask_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -300,6 +301,7 @@ class PostObservationStageConfig:
     tdcp_cycle_jump_mask_cycles: float = 0.0
     tdcp_doppler_endpoint_mask: bool = True
     tdcp_ddl_sign_fixed: bool = False
+    fgo_residual_mask_propagation: bool = False
 
 
 @dataclass(frozen=True)
@@ -1693,7 +1695,9 @@ def build_observation_mask_base_correction_stage(
     default_pd_l5_threshold_m: float,
     default_pr_l1_threshold_m: float,
     default_pr_l5_threshold_m: float,
+    propagate_masks_to_fgo: bool = False,
 ) -> ObservationMaskBaseCorrectionStageProducts:
+    pr_active_before = None
     doppler_residual_stage = build_doppler_residual_stage(
         apply_observation_mask=apply_observation_mask,
         times_ms=times_ms,
@@ -1728,6 +1732,19 @@ def build_observation_mask_base_correction_stage(
         default_l1_threshold_m=default_pd_l1_threshold_m,
         default_l5_threshold_m=default_pd_l5_threshold_m,
     )
+    # Snapshot the gate/WLS pseudorange support right before the P residual
+    # mask so that ONLY rows it zeroes out are mirrored into ``weights_fgo``.
+    # The dual-weight design (gate=sin2el / FGO=taroz_sn) routed all residual
+    # masks through the gate arrays only, leaving tens-of-metres pseudorange
+    # outliers active in ``weights_fgo`` that taroz's exobs_residuals drops.
+    # Scope deliberately excludes the doppler residual and P-D consistency
+    # masks: those gates are far more aggressive than taroz's (sjc-q: D mask
+    # zeroes 28k of 41k rows, P-D mask 12k) and mirroring them regressed
+    # sjc-q +1.11m / +0.52m in the 2026-06-13 A/B, while the P-residual-only
+    # scope improved all three probe trips (mtv-h -8cm, sjc-q -2cm,
+    # lax-o -1.10m).
+    if propagate_masks_to_fgo and weights_fgo is not None:
+        pr_active_before = weights > 0.0
     pseudorange_residual_stage = build_pseudorange_residual_stage(
         apply_observation_mask=apply_observation_mask,
         sat_ecef=sat_ecef,
@@ -1823,11 +1840,19 @@ def build_observation_mask_base_correction_stage(
             correction_matrix_fn=correction_matrix_fn,
         )
 
+    fgo_propagated_pr_mask_count = 0
+    if pr_active_before is not None:
+        newly_masked = pr_active_before & (weights <= 0.0) & (weights_fgo > 0.0)
+        fgo_propagated_pr_mask_count = int(np.count_nonzero(newly_masked))
+        if fgo_propagated_pr_mask_count:
+            weights_fgo[newly_masked] = 0.0
+
     return ObservationMaskBaseCorrectionStageProducts(
         doppler_residual_stage=doppler_residual_stage,
         pseudorange_doppler_stage=pseudorange_doppler_stage,
         pseudorange_residual_stage=pseudorange_residual_stage,
         base_correction_count=base_correction_count,
+        fgo_propagated_pr_mask_count=fgo_propagated_pr_mask_count,
     )
 
 
@@ -1894,6 +1919,7 @@ def build_post_observation_stages(
     tdcp_l5_weight_scale: float,
     tdcp_cycle_jump_mask_cycles: float = 0.0,
     tdcp_doppler_endpoint_mask: bool = True,
+    fgo_residual_mask_propagation: bool = False,
     adr: np.ndarray | None,
     adr_state: np.ndarray | None,
     adr_uncertainty: np.ndarray | None,
@@ -2048,6 +2074,7 @@ def build_post_observation_stages(
         default_pd_l5_threshold_m=default_pd_l5_threshold_m,
         default_pr_l1_threshold_m=default_pr_l1_threshold_m,
         default_pr_l5_threshold_m=default_pr_l5_threshold_m,
+        propagate_masks_to_fgo=fgo_residual_mask_propagation,
     )
 
     time_delta = build_graph_time_delta_products(times_ms, factor_dt_max_s)
@@ -2175,6 +2202,7 @@ def build_configured_post_observation_stages(
         pseudorange_residual_mask_l5_m=config.pseudorange_residual_mask_l5_m,
         tdcp_consistency_threshold_m=config.tdcp_consistency_threshold_m,
         tdcp_ddl_sign_fixed=bool(getattr(config, "tdcp_ddl_sign_fixed", False)),
+        fgo_residual_mask_propagation=bool(getattr(config, "fgo_residual_mask_propagation", False)),
         tdcp_loffset_m=config.tdcp_loffset_m,
         matlab_residual_diagnostics_mask_path=config.matlab_residual_diagnostics_mask_path,
         tdcp_geometry_correction=config.tdcp_geometry_correction,
