@@ -190,6 +190,45 @@ def test_resolve_keeps_pass2_when_guard_disabled():
     assert state[0, 6] == -50.0  # pass-2 state kept despite worse Huber cost
 
 
+def test_divergence_gate_skips_healthy_pass1():
+    # One row just over the 20 m mask threshold (would normally mask + re-solve),
+    # but the pass-1 residual p95 is low (~18 m) -> the divergence gate skips the
+    # re-solve entirely, so pass-1 is kept untouched.
+    z = np.asarray([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 21.0]], dtype=np.float64)
+    w = np.ones((1, 7), dtype=np.float64)
+    state = _state([0.0, 0.0, 0.0], c0=0.0)
+    los = np.zeros((1, 7, 3)); ref = np.zeros((1, 3))
+    kw = dict(pr_linearization_ref_ecef=ref, pr_linearization_los_ecef=los,
+              sys_kind=None, n_clock=1)
+    solver = _MockSolver(pass1_c0=0.0, pass2_c0=1.0)
+    iters, _mse = two_stage_residual_resolve_vd(
+        solver, None, z, w, state,
+        threshold_l1_m=20.0, threshold_l5_m=15.0, min_keep=5,
+        divergence_p95_m=500.0, vd_kwargs=kw)
+    assert solver.calls == 1  # healthy pass-1 -> gate skips the re-solve
+    assert iters == 5
+    assert state[0, 6] == 0.0
+
+
+def test_divergence_gate_fires_on_diverged_pass1():
+    # Pass-1 diverged: every residual ~600 m (p95 > 500 m gate) -> the re-solve
+    # fires even with the divergence gate enabled.
+    z = np.full((1, 7), 600.0, dtype=np.float64)
+    w = np.ones((1, 7), dtype=np.float64)
+    state = _state([0.0, 0.0, 0.0], c0=0.0)
+    los = np.zeros((1, 7, 3)); ref = np.zeros((1, 3))
+    kw = dict(pr_linearization_ref_ecef=ref, pr_linearization_los_ecef=los,
+              sys_kind=None, n_clock=1)
+    solver = _MockSolver(pass1_c0=0.0, pass2_c0=1.0)
+    iters, _mse = two_stage_residual_resolve_vd(
+        solver, None, z, w, state,
+        threshold_l1_m=20.0, threshold_l5_m=15.0, min_keep=5,
+        divergence_p95_m=500.0, vd_kwargs=kw)
+    assert solver.calls == 2  # diverged pass-1 -> re-solve fires
+    assert iters == 12
+    assert state[0, 6] == 1.0
+
+
 def test_resolve_noop_without_fixed_linearization():
     z = np.asarray([[100.0, 100.0, 100.0, 100.0, 100.0, 100.0]], dtype=np.float64)
     w = np.ones((1, 6), dtype=np.float64)

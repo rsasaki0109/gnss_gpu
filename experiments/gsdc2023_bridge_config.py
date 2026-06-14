@@ -295,6 +295,15 @@ class BridgeConfig:
     fgo_two_stage_residual_threshold_l5_m: float = 15.0
     fgo_two_stage_residual_min_keep: int = 5
     fgo_two_stage_residual_guard: bool = False
+    # Recommended acceptance gate for the 2-stage re-solve (0 = disabled).  When
+    # > 0, the re-solve is attempted only on chunks whose pass-1 fixed-
+    # linearization residual p95 (over active rows) exceeds this many metres —
+    # i.e. only chunks where pass-1 diverged.  A diagnostic probe showed the only
+    # net win (lax-o) comes from such diverged chunks (p95 ~39 km) while every
+    # regression trip masks marginal outliers on a healthy pass-1 fit (p95
+    # <= ~50 m), so gating on divergence keeps the rescue and drops the +10 cm
+    # regressions.
+    fgo_two_stage_divergence_p95_m: float = 0.0
     tdcp_weight_scale: float = DEFAULT_TDCP_WEIGHT_SCALE
     tdcp_l5_weight_scale: float = 1.0
     tdcp_geometry_correction: bool = DEFAULT_TDCP_GEOMETRY_CORRECTION
@@ -412,6 +421,9 @@ class BridgeConfig:
                 raise ValueError(f"{name} must be finite and > 0")
         if int(self.fgo_two_stage_residual_min_keep) < 4:
             raise ValueError("fgo_two_stage_residual_min_keep must be >= 4")
+        divergence_p95 = float(self.fgo_two_stage_divergence_p95_m)
+        if not np.isfinite(divergence_p95) or divergence_p95 < 0.0:
+            raise ValueError("fgo_two_stage_divergence_p95_m must be finite and >= 0")
         for name in (
             "stop_velocity_huber_k",
             "stop_position_huber_k",

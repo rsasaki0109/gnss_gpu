@@ -358,6 +358,9 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         fgo_two_stage_residual_guard=bool(
             getattr(args, "fgo_two_stage_residual_guard", False)
         ),
+        fgo_two_stage_divergence_p95_m=float(
+            getattr(args, "fgo_two_stage_divergence_p95_m", 0.0)
+        ),
     )
     if bool(getattr(args, "taroz_marupaku", False)):
         cfg = apply_taroz_marupaku_preset(cfg)
@@ -618,6 +621,12 @@ def main(argv: list[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Gate the 2-stage re-solve behind a Huber trust-region cost (keep pass-2 only if the full-set Huber residual cost improves). OFF by default: the dense-urban win comes from dropping biased NLOS rows, which lowers position error but *raises* the Huber cost, so the guard rejects exactly the re-solves we want. Retained for experimentation.",
+    )
+    parser.add_argument(
+        "--fgo-two-stage-divergence-p95-m",
+        type=float,
+        default=0.0,
+        help="Recommended acceptance gate for the 2-stage re-solve (0 = disabled). When > 0, the re-solve only fires on chunks whose pass-1 fixed-linearization residual p95 (over active rows) exceeds this many metres — i.e. only chunks where pass-1 diverged. Keeps the lax-o divergence-rescue win while skipping the marginal masking that causes +10 cm regressions on healthy chunks.",
     )
     parser.add_argument("--stop-attitude-sigma-rad", type=float, default=0.0)
     parser.add_argument(
