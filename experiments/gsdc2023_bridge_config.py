@@ -355,6 +355,11 @@ class BridgeConfig:
     apply_relative_height: bool = False
     apply_position_offset: bool = False
     apply_base_correction: bool = False
+    # When True, the DGNSS base correction is also applied to FGO-only rows
+    # (weights==0 but weights_fgo>0): FGO-only constellations and rows whose WLS
+    # weight was masked out while the FGO weight was kept.  Off by default keeps
+    # the legacy WLS-active-only behaviour.
+    base_correction_fgo_only_rows: bool = False
     graph_relative_height: bool = False
     relative_height_sigma_m: float = 0.5
     relative_height_huber_k: float = 0.0
@@ -424,6 +429,8 @@ class BridgeConfig:
         divergence_p95 = float(self.fgo_two_stage_divergence_p95_m)
         if not np.isfinite(divergence_p95) or divergence_p95 < 0.0:
             raise ValueError("fgo_two_stage_divergence_p95_m must be finite and >= 0")
+        if not isinstance(self.base_correction_fgo_only_rows, bool):
+            raise ValueError("base_correction_fgo_only_rows must be a bool")
         for name in (
             "stop_velocity_huber_k",
             "stop_position_huber_k",

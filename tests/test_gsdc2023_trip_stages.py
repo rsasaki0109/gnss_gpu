@@ -449,6 +449,60 @@ def test_apply_base_correction_to_pseudorange_subtracts_valid_weighted_entries(t
     assert calls == [(tmp_path, "train/course/phone", ("G01", "G02"), "GPS_L1_CA")]
 
 
+def test_apply_base_correction_to_pseudorange_skips_fgo_only_rows_by_default(tmp_path: Path) -> None:
+    # Row [0, 1] is FGO-only: WLS weight masked (0) but FGO weight kept (>0).
+    pseudorange = np.array([[10.0, 20.0]], dtype=np.float64)
+    weights = np.array([[1.0, 0.0]], dtype=np.float64)
+    weights_fgo = np.array([[1.0, 5.0]], dtype=np.float64)
+    correction = np.array([[1.5, 2.0]], dtype=np.float64)
+
+    def correction_matrix_fn(*_args: object) -> np.ndarray:
+        return correction
+
+    count = apply_base_correction_to_pseudorange(
+        data_root=tmp_path,
+        trip="train/course/phone",
+        times_ms=np.array([1000.0], dtype=np.float64),
+        slot_keys=["G01", "G02"],
+        signal_type="GPS_L1_CA",
+        pseudorange=pseudorange,
+        weights=weights,
+        weights_fgo=weights_fgo,
+        correction_matrix_fn=correction_matrix_fn,
+    )
+
+    # Legacy default: only the WLS-active row [0, 0] is corrected.
+    assert count == 1
+    np.testing.assert_allclose(pseudorange, [[8.5, 20.0]])
+
+
+def test_apply_base_correction_to_pseudorange_corrects_fgo_only_rows_when_enabled(tmp_path: Path) -> None:
+    pseudorange = np.array([[10.0, 20.0]], dtype=np.float64)
+    weights = np.array([[1.0, 0.0]], dtype=np.float64)
+    weights_fgo = np.array([[1.0, 5.0]], dtype=np.float64)
+    correction = np.array([[1.5, 2.0]], dtype=np.float64)
+
+    def correction_matrix_fn(*_args: object) -> np.ndarray:
+        return correction
+
+    count = apply_base_correction_to_pseudorange(
+        data_root=tmp_path,
+        trip="train/course/phone",
+        times_ms=np.array([1000.0], dtype=np.float64),
+        slot_keys=["G01", "G02"],
+        signal_type="GPS_L1_CA",
+        pseudorange=pseudorange,
+        weights=weights,
+        weights_fgo=weights_fgo,
+        include_fgo_only=True,
+        correction_matrix_fn=correction_matrix_fn,
+    )
+
+    # The FGO-only row [0, 1] now also receives the DGNSS correction.
+    assert count == 2
+    np.testing.assert_allclose(pseudorange, [[8.5, 18.0]])
+
+
 def test_apply_base_correction_to_pseudorange_requires_trip_context() -> None:
     with pytest.raises(RuntimeError, match="data_root and trip"):
         apply_base_correction_to_pseudorange(
