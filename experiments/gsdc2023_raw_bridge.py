@@ -2324,11 +2324,23 @@ def two_stage_residual_resolve_vd(
     threshold_l5_m: float,
     min_keep: int,
     guard: bool = True,
+    divergence_p95_m: float = 0.0,
     vd_kwargs: dict,
 ) -> tuple[int, float]:
     """taroz-style 2-stage residual re-solve for the VD path. Runs ``solver_fn``
     (the VD solver), recomputes the fixed-linearization residual at the converged
     ``state``, masks outliers above threshold, and re-solves warm-started.
+
+    ``divergence_p95_m`` is the recommended acceptance criterion (default 0 =
+    disabled). When > 0, the re-solve is attempted ONLY on chunks whose pass-1
+    fit has diverged — i.e. the 95th percentile of the pass-1 fixed-linearization
+    residual over active rows exceeds the threshold. A diagnostic probe across
+    win / wash / regression trips showed the only net win (lax-o) comes from a
+    handful of chunks where pass-1 diverged to multi-km residuals (p95 ~39 km),
+    while every regression trip masks only marginal outliers on a healthy pass-1
+    fit (p95 <= ~50 m); gating on pass-1 divergence keeps the rescue and skips
+    the perturbations that cause the +10 cm regressions. The chunk is left
+    untouched (pass-1 kept) when its pass-1 fit is healthy.
 
     When ``guard`` is True the re-solve is kept only if it lowers the full-set
     Huber guard cost (a trust region), otherwise ``state`` is restored to the
@@ -2337,12 +2349,12 @@ def two_stage_residual_resolve_vd(
     the position toward truth but *raises* the robust residual cost (the dropped
     outliers are re-added at their original weight, Huber-capped), so the guard
     rejects exactly the re-solves we want. See PR / memory notes. The guard is
-    retained for experimentation only.
+    retained for experimentation only and is independent of the divergence gate.
 
     Returns ``(iters, mse)`` and mutates ``state`` in place (matching the native
     solver contract). A no-op returning the pass-1 result when fixed
-    linearization inputs are absent, nothing is masked, the re-solve fails, or the
-    guard (when enabled) rejects it.
+    linearization inputs are absent, the pass-1 fit is healthy (divergence gate),
+    nothing is masked, the re-solve fails, or the guard (when enabled) rejects it.
     """
     iters1, mse1 = solver_fn(sat_ecef, pseudorange, weights, state, **vd_kwargs)
     ref = vd_kwargs.get("pr_linearization_ref_ecef")
@@ -2356,6 +2368,14 @@ def two_stage_residual_resolve_vd(
         sys_kind, pseudorange.shape, threshold_l1_m, threshold_l5_m
     )
     resid1 = _pr_linearized_residual(pseudorange, los, ref, state, sys_kind, n_clock)
+    if float(divergence_p95_m) > 0.0:
+        w = np.asarray(weights, dtype=np.float64)
+        active = np.isfinite(w) & (w > 0.0)
+        ar = np.abs(resid1)[active]
+        ar = ar[np.isfinite(ar)]
+        pass1_p95 = float(np.percentile(ar, 95)) if ar.size else 0.0
+        if pass1_p95 <= float(divergence_p95_m):
+            return iters1, mse1  # pass-1 fit is healthy: skip the re-solve
     new_w, n_masked = _pr_two_stage_mask(resid1, weights, thresholds, int(min_keep))
     if n_masked == 0:
         return iters1, mse1
@@ -2687,6 +2707,7 @@ def run_fgo_chunked(
     fgo_two_stage_residual_threshold_l5_m: float = 15.0,
     fgo_two_stage_residual_min_keep: int = 5,
     fgo_two_stage_residual_guard: bool = False,
+    fgo_two_stage_divergence_p95_m: float = 0.0,
     fgo_seed_state: np.ndarray | None = None,
 ) -> "ChunkedFgoRun":
     n_epoch = batch.sat_ecef.shape[0]
@@ -3251,6 +3272,7 @@ def run_fgo_chunked(
                             threshold_l5_m=fgo_two_stage_residual_threshold_l5_m,
                             min_keep=fgo_two_stage_residual_min_keep,
                             guard=fgo_two_stage_residual_guard,
+                            divergence_p95_m=fgo_two_stage_divergence_p95_m,
                             vd_kwargs=vd_kwargs,
                         )
                     else:
@@ -3707,6 +3729,9 @@ def solve_trip(
     )
     fgo_run_kwargs["fgo_two_stage_residual_guard"] = bool(
         getattr(config, "fgo_two_stage_residual_guard", False)
+    )
+    fgo_run_kwargs["fgo_two_stage_divergence_p95_m"] = float(
+        getattr(config, "fgo_two_stage_divergence_p95_m", 0.0)
     )
     taroz_candidate_sources = _taroz_fgo_candidate_sources_enabled(config)
     taroz_candidate_base_run_kwargs = dict(fgo_run_kwargs)
