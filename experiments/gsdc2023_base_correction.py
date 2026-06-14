@@ -174,6 +174,9 @@ def slot_sat_id(constellation_type: int, svid: int) -> str | None:
         return f"J{prn:02d}"
     if int(constellation_type) == 6:
         return f"E{int(svid):02d}"
+    if int(constellation_type) == 3:
+        # GLONASS: GSDC Svid is the orbital slot number, matching RINEX Rnn.
+        return f"R{int(svid):02d}"
     return None
 
 
@@ -593,7 +596,7 @@ def load_base_residual_series_cached(
         base_obs,
         read_base_station_xyz(data_root, course, base_name, apply_offset=False),
     )
-    nav_messages = read_nav_rinex_multi(nav_path, systems=("G", "E", "J"))
+    nav_messages = read_nav_rinex_multi(nav_path, systems=("G", "E", "J", "R"))
     for sat_id, messages in list(nav_messages.items()):
         system = str(getattr(messages[0], "system", "")).upper() if messages else str(sat_id).upper()[:1]
         if system == "G":
@@ -703,7 +706,7 @@ def compute_base_pseudorange_correction_matrix(
     supported_pairs = [
         (idx, sat_id, normalized_slots[idx][2])
         for idx, sat_id in enumerate(sat_ids)
-        if sat_id is not None and sat_id.startswith(("G", "E", "J"))
+        if sat_id is not None and sat_id.startswith(("G", "E", "J", "R"))
     ]
     correction = np.full((len(times_ms), len(slot_keys)), np.nan, dtype=np.float64)
     if not supported_pairs:

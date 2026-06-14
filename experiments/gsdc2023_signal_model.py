@@ -46,6 +46,15 @@ DUAL_FREQUENCY_SIGNAL_TYPES = {
 FGO_EXTRA_CONSTELLATION_SIGNAL_TYPES = {
     5: ("BDS_B1_I", "BDS_B2A_I"),
 }
+# GLONASS as a base-corrected FGO constellation.  GLO pseudoranges carry a
+# ~10-15 m code bias (DCB/IFB) that made them poison while the base correction
+# lacked R support.  With DGNSS base correction extended to GLONASS, that
+# common-mode bias cancels and GLO becomes a usable FGO-only PR+carrier+Doppler
+# constellation (its own receiver clock kind absorbs the residual GLO bias).
+# Gated behind ``fgo_glonass_constellation`` and only safe with base correction.
+FGO_GLONASS_CONSTELLATION_SIGNAL_TYPES = {
+    3: ("GLO_G1_CA",),
+}
 CONSTELLATION_TO_SYS_KIND = {1: 0, 6: 1, 4: 2}
 SYS_KIND_TO_MULTI_SYSTEM = {0: SYSTEM_GPS, 1: SYSTEM_GALILEO, 2: SYSTEM_QZSS, 3: SYSTEM_BEIDOU}
 MATLAB_SIGNAL_CLOCK_DIM = 7
@@ -89,11 +98,16 @@ def is_fgo_extra_constellation_signal(constellation_type: int, signal_type: str)
     return str(signal_type) in FGO_EXTRA_CONSTELLATION_SIGNAL_TYPES.get(int(constellation_type), ())
 
 
+def is_fgo_glonass_constellation_signal(constellation_type: int, signal_type: str) -> bool:
+    return str(signal_type) in FGO_GLONASS_CONSTELLATION_SIGNAL_TYPES.get(int(constellation_type), ())
+
+
 def multi_gnss_mask(
     df: pd.DataFrame,
     *,
     dual_frequency: bool = False,
     extra_constellations: bool = False,
+    glonass_constellation: bool = False,
 ) -> np.ndarray:
     signal = df["SignalType"].fillna("")
     mask = np.zeros(len(df), dtype=bool)
@@ -101,6 +115,8 @@ def multi_gnss_mask(
         signal_sets = dict(DUAL_FREQUENCY_SIGNAL_TYPES)
         if extra_constellations:
             signal_sets.update(FGO_EXTRA_CONSTELLATION_SIGNAL_TYPES)
+        if glonass_constellation:
+            signal_sets.update(FGO_GLONASS_CONSTELLATION_SIGNAL_TYPES)
         for constellation_type, signal_types in signal_sets.items():
             for signal_type in signal_types:
                 mask |= (df["ConstellationType"] == constellation_type) & (signal == signal_type)

@@ -12,7 +12,10 @@ import numpy as np
 import pandas as pd
 
 from experiments.gsdc2023_imu import ecef_to_enu_relative as _ecef_to_enu_relative
-from experiments.gsdc2023_signal_model import is_fgo_extra_constellation_signal
+from experiments.gsdc2023_signal_model import (
+    is_fgo_extra_constellation_signal,
+    is_fgo_glonass_constellation_signal,
+)
 from experiments.gsdc2023_taroz_weighting import (
     SIGTYPE_OTHER,
     SN_PERCENTILE_DEFAULT,
@@ -1028,6 +1031,7 @@ def fill_observation_matrices(
     weight_mode: str,
     fgo_weight_mode: str | None = None,
     fgo_extra_constellations: bool = False,
+    fgo_glonass_constellation: bool = False,
     multi_gnss: bool,
     dual_frequency: bool,
     tdcp_enabled: bool,
@@ -1070,7 +1074,9 @@ def fill_observation_matrices(
     weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
     weights_fgo = (
         np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
-        if fgo_extra_constellations or (fgo_weight_mode is not None and fgo_weight_mode != weight_mode)
+        if fgo_extra_constellations
+        or fgo_glonass_constellation
+        or (fgo_weight_mode is not None and fgo_weight_mode != weight_mode)
         else None
     )
     pseudorange_bias_weights = np.zeros((n_epoch, n_sat_slots), dtype=np.float64)
@@ -1105,6 +1111,7 @@ def fill_observation_matrices(
             has_doppler
             and (
                 fgo_extra_constellations
+                or fgo_glonass_constellation
                 or (
                     fgo_weight_mode is not None
                     and fgo_weight_mode != weight_mode
@@ -1130,6 +1137,7 @@ def fill_observation_matrices(
             has_adr
             and (
                 fgo_extra_constellations
+                or fgo_glonass_constellation
                 or (
                     fgo_weight_mode is not None
                     and fgo_weight_mode != weight_mode
@@ -1212,6 +1220,14 @@ def fill_observation_matrices(
                 int(row.ConstellationType),
                 str(row.SignalType),
             )
+            row_is_glonass = fgo_glonass_constellation and is_fgo_glonass_constellation_signal(
+                int(row.ConstellationType),
+                str(row.SignalType),
+            )
+            # GLONASS rides the same FGO-only machinery as the BeiDou extra
+            # constellation: pseudorange/carrier/Doppler enter weights_fgo only,
+            # the WLS gate never sees them.
+            row_is_fgo_only = row_is_fgo_extra or row_is_glonass
             fgo_mode = fgo_weight_mode if fgo_weight_mode is not None else weight_mode
             row_is_gps = int(row.ConstellationType) == 1
             row_is_gps_l5 = row_is_gps and is_l5_signal_fn(str(row.SignalType))
@@ -1368,7 +1384,7 @@ def fill_observation_matrices(
                         trip_cn0_percentiles=trip_cn0_percentiles,
                         is_l5_signal_fn=is_l5_signal_fn,
                     )
-                if row_is_fgo_extra:
+                if row_is_fgo_only:
                     weights[epoch_idx, sat_idx] = 0.0
             if p_bias_ok:
                 pseudorange_bias_weights[epoch_idx, sat_idx] = 1.0
@@ -1427,7 +1443,7 @@ def fill_observation_matrices(
                                 is_l5_signal_fn=is_l5_signal_fn,
                                 fallback_sigma_mps=sigma,
                             )
-                        if row_is_fgo_extra:
+                        if row_is_fgo_only:
                             doppler_weights[epoch_idx, sat_idx] = 0.0
 
             if adr is not None and adr_state is not None:
@@ -1449,7 +1465,7 @@ def fill_observation_matrices(
                             trip_cn0_percentiles=trip_cn0_percentiles,
                             is_l5_signal_fn=is_l5_signal_fn,
                         )
-                    if row_is_fgo_extra and carrier_weights is not None:
+                    if row_is_fgo_only and carrier_weights is not None:
                         carrier_weights[epoch_idx, sat_idx] = 0.0
                 if l_ok and adr_uncertainty is not None:
                     adr_unc = float(row.AccumulatedDeltaRangeUncertaintyMeters)

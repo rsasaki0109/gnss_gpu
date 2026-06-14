@@ -53,6 +53,15 @@ def test_bridge_config_rejects_non_bool_fgo_extra_constellations() -> None:
         BridgeConfig(fgo_extra_constellations=1)  # type: ignore[arg-type]
 
 
+def test_bridge_config_defaults_disable_glonass_constellation() -> None:
+    assert BridgeConfig().fgo_glonass_constellation is False
+
+
+def test_bridge_config_rejects_non_bool_fgo_glonass_constellation() -> None:
+    with pytest.raises(ValueError, match="fgo_glonass_constellation must be a bool"):
+        BridgeConfig(fgo_glonass_constellation=1)  # type: ignore[arg-type]
+
+
 def test_taroz_presets_enable_base_correction_and_unscaled_tdcp_weights() -> None:
     fgo = apply_taroz_fgo_preset(BridgeConfig())
     gnss_only = apply_taroz_gnss_only_preset(BridgeConfig())

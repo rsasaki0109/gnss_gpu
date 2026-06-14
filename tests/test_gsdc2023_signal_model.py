@@ -39,6 +39,26 @@ def test_multi_gnss_mask_uses_configured_signal_set():
         signal_model.multi_gnss_mask(frame, dual_frequency=True, extra_constellations=True),
         np.array([True, True, True, True, False, True, True]),
     )
+    # GLONASS constellation selects the GLO_G1_CA row (index 4) independently of
+    # the BeiDou extra constellation.
+    np.testing.assert_array_equal(
+        signal_model.multi_gnss_mask(frame, dual_frequency=True, glonass_constellation=True),
+        np.array([True, True, True, True, True, False, False]),
+    )
+    np.testing.assert_array_equal(
+        signal_model.multi_gnss_mask(
+            frame, dual_frequency=True, extra_constellations=True, glonass_constellation=True,
+        ),
+        np.array([True, True, True, True, True, True, True]),
+    )
+
+
+def test_is_fgo_glonass_constellation_signal():
+    assert signal_model.is_fgo_glonass_constellation_signal(3, "GLO_G1_CA")
+    assert not signal_model.is_fgo_glonass_constellation_signal(3, "GLO_G2_CA")
+    # GLONASS is not a BeiDou-style pseudorange extra constellation and vice versa.
+    assert not signal_model.is_fgo_extra_constellation_signal(3, "GLO_G1_CA")
+    assert not signal_model.is_fgo_glonass_constellation_signal(5, "BDS_B1_I")
 
 
 def test_clock_kind_and_common_bias_group_mapping_are_stable():

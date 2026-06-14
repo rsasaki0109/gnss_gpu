@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from experiments.gsdc2023_signal_model import is_fgo_extra_constellation_signal
+from experiments.gsdc2023_signal_model import is_fgo_glonass_constellation_signal
 from experiments.gsdc2023_signal_model import carrier_wavelength_m
 from experiments.gsdc2023_taroz_weighting import SN_PERCENTILE_DEFAULT, compute_trip_cn0_percentiles
 
@@ -298,6 +299,7 @@ class PostObservationStageConfig:
     default_pr_l1_threshold_m: float
     default_pr_l5_threshold_m: float
     fgo_extra_constellations: bool = False
+    fgo_glonass_constellation: bool = False
     tdcp_cycle_jump_mask_cycles: float = 0.0
     tdcp_doppler_endpoint_mask: bool = True
     tdcp_ddl_sign_fixed: bool = False
@@ -492,6 +494,7 @@ def apply_base_correction_to_pseudorange(
     signal_type: str,
     pseudorange: np.ndarray,
     weights: np.ndarray,
+    weights_fgo: np.ndarray | None = None,
     correction_matrix_fn: BaseCorrectionMatrixFn,
 ) -> int:
     if data_root is None or trip is None:
@@ -503,7 +506,14 @@ def apply_base_correction_to_pseudorange(
         slot_keys,
         signal_type,
     )
-    valid_base_correction = np.isfinite(base_correction) & (weights > 0.0)
+    # The shared pseudorange feeds both WLS (weights) and FGO (weights_fgo);
+    # FGO-only constellations such as GLONASS have weights==0 but a positive
+    # weights_fgo and MUST receive the DGNSS base correction, otherwise their
+    # ~10-15 m code bias poisons the graph.
+    active = weights > 0.0
+    if weights_fgo is not None:
+        active = active | (weights_fgo > 0.0)
+    valid_base_correction = np.isfinite(base_correction) & active
     pseudorange[valid_base_correction] -= base_correction[valid_base_correction]
     return int(np.count_nonzero(valid_base_correction))
 
@@ -601,6 +611,7 @@ def build_raw_observation_frame(
     multi_gnss: bool,
     dual_frequency: bool,
     fgo_extra_constellations: bool = False,
+    fgo_glonass_constellation: bool = False,
     apply_observation_mask: bool,
     observation_min_cn0_dbhz: float,
     observation_min_elevation_deg: float,
@@ -617,6 +628,7 @@ def build_raw_observation_frame(
                 frame,
                 dual_frequency=dual_frequency,
                 extra_constellations=fgo_extra_constellations,
+                glonass_constellation=fgo_glonass_constellation,
             )
         ]
     elif dual_frequency:
@@ -740,6 +752,7 @@ def build_filled_observation_matrix_stage(
     weight_mode: str,
     fgo_weight_mode: str | None = None,
     fgo_extra_constellations: bool = False,
+    fgo_glonass_constellation: bool = False,
     multi_gnss: bool,
     dual_frequency: bool,
     tdcp_enabled: bool,
@@ -800,6 +813,7 @@ def build_filled_observation_matrix_stage(
         weight_mode=weight_mode,
         fgo_weight_mode=fgo_weight_mode,
         fgo_extra_constellations=fgo_extra_constellations,
+        fgo_glonass_constellation=fgo_glonass_constellation,
         multi_gnss=multi_gnss,
         dual_frequency=dual_frequency,
         tdcp_enabled=tdcp_enabled,
@@ -885,6 +899,7 @@ def build_observation_preparation_stages(
     multi_gnss: bool,
     dual_frequency: bool,
     fgo_extra_constellations: bool = False,
+    fgo_glonass_constellation: bool = False,
     apply_observation_mask: bool,
     observation_min_cn0_dbhz: float,
     observation_min_elevation_deg: float,
@@ -937,6 +952,7 @@ def build_observation_preparation_stages(
         multi_gnss=multi_gnss,
         dual_frequency=dual_frequency,
         fgo_extra_constellations=fgo_extra_constellations,
+        fgo_glonass_constellation=fgo_glonass_constellation,
         apply_observation_mask=apply_observation_mask,
         observation_min_cn0_dbhz=observation_min_cn0_dbhz,
         observation_min_elevation_deg=observation_min_elevation_deg,
@@ -988,6 +1004,7 @@ def build_observation_preparation_stages(
         weight_mode=weight_mode,
         fgo_weight_mode=fgo_weight_mode,
         fgo_extra_constellations=fgo_extra_constellations,
+        fgo_glonass_constellation=fgo_glonass_constellation,
         multi_gnss=multi_gnss,
         dual_frequency=dual_frequency,
         tdcp_enabled=tdcp_enabled,
@@ -1233,6 +1250,7 @@ def build_full_observation_context_stage(
     observation_min_elevation_deg: float,
     dual_frequency: bool,
     fgo_extra_constellations: bool = False,
+    fgo_glonass_constellation: bool = False,
     factor_dt_max_s: float,
     clock_drift_context_times_ms: np.ndarray,
     clock_drift_context_mps: np.ndarray | None,
@@ -1268,6 +1286,7 @@ def build_full_observation_context_stage(
         pseudorange_doppler_mask_m=0.0,
         dual_frequency=dual_frequency,
         fgo_extra_constellations=fgo_extra_constellations,
+        fgo_glonass_constellation=fgo_glonass_constellation,
         factor_dt_max_s=factor_dt_max_s,
     )
     if needs_clock_drift_context and getattr(batch, "clock_drift_mps", None) is not None:
@@ -1511,7 +1530,11 @@ def _fgo_extra_slot_mask(slot_keys: Sequence[Any]) -> np.ndarray:
     for idx, key in enumerate(slot_keys):
         if not isinstance(key, tuple) or len(key) < 3:
             continue
-        if is_fgo_extra_constellation_signal(int(key[0]), str(key[2])):
+        # GLONASS rides the same FGO-only residual masking as the BeiDou extra
+        # constellation (PR/Doppler outlier + pseudorange-Doppler consistency).
+        if is_fgo_extra_constellation_signal(int(key[0]), str(key[2])) or is_fgo_glonass_constellation_signal(
+            int(key[0]), str(key[2])
+        ):
             mask[idx] = True
     return mask
 
@@ -1681,6 +1704,7 @@ def build_observation_mask_base_correction_stage(
     pseudorange_residual_mask_l5_m: float | None,
     full_isb_batch: Any | None,
     fgo_extra_constellations: bool,
+    fgo_glonass_constellation: bool = False,
     signal_type: str,
     correction_matrix_fn: BaseCorrectionMatrixFn,
     mask_doppler_residual_outliers_fn: MaskDopplerResidualFn,
@@ -1769,7 +1793,7 @@ def build_observation_mask_base_correction_stage(
         default_l1_threshold_m=default_pr_l1_threshold_m,
         default_l5_threshold_m=default_pr_l5_threshold_m,
     )
-    if fgo_extra_constellations:
+    if fgo_extra_constellations or fgo_glonass_constellation:
         extra_doppler_count, extra_pd_count, extra_pr_count = _apply_fgo_extra_residual_masks(
             apply_observation_mask=apply_observation_mask,
             slot_keys=slot_keys,
@@ -1837,6 +1861,7 @@ def build_observation_mask_base_correction_stage(
             signal_type=signal_type,
             pseudorange=pseudorange,
             weights=weights,
+            weights_fgo=weights_fgo,
             correction_matrix_fn=correction_matrix_fn,
         )
 
@@ -1896,6 +1921,7 @@ def build_post_observation_stages(
     observation_min_elevation_deg: float,
     dual_frequency: bool,
     fgo_extra_constellations: bool,
+    fgo_glonass_constellation: bool = False,
     factor_dt_max_s: float,
     clock_drift_context_times_ms: np.ndarray,
     clock_drift_context_mps: np.ndarray | None,
@@ -2020,6 +2046,7 @@ def build_post_observation_stages(
         observation_min_elevation_deg=observation_min_elevation_deg,
         dual_frequency=dual_frequency,
         fgo_extra_constellations=fgo_extra_constellations,
+        fgo_glonass_constellation=fgo_glonass_constellation,
         factor_dt_max_s=factor_dt_max_s,
         clock_drift_context_times_ms=clock_drift_context_times_ms,
         clock_drift_context_mps=clock_drift_context_mps,
@@ -2060,6 +2087,7 @@ def build_post_observation_stages(
         pseudorange_residual_mask_l5_m=pseudorange_residual_mask_l5_m,
         full_isb_batch=full_context_stage.full_isb_batch,
         fgo_extra_constellations=fgo_extra_constellations,
+        fgo_glonass_constellation=fgo_glonass_constellation,
         signal_type=signal_type,
         correction_matrix_fn=correction_matrix_fn,
         mask_doppler_residual_outliers_fn=mask_doppler_residual_outliers_fn,
@@ -2186,6 +2214,7 @@ def build_configured_post_observation_stages(
         observation_min_elevation_deg=config.observation_min_elevation_deg,
         dual_frequency=config.dual_frequency,
         fgo_extra_constellations=config.fgo_extra_constellations,
+        fgo_glonass_constellation=config.fgo_glonass_constellation,
         factor_dt_max_s=config.factor_dt_max_s,
         clock_drift_context_times_ms=observation_products.clock_drift_context_times_ms,
         clock_drift_context_mps=observation_products.clock_drift_context_mps,

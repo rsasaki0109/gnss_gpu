@@ -340,6 +340,7 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         ),
         taroz_imu_factor_mask_csv=getattr(args, "taroz_imu_factor_mask_csv", None),
         fgo_extra_constellations=bool(getattr(args, "fgo_extra_constellations", False)),
+        fgo_glonass_constellation=bool(getattr(args, "fgo_glonass_constellation", False)),
         fgo_residual_mask_propagation=bool(
             getattr(args, "fgo_residual_mask_propagation", False)
         ),
@@ -582,6 +583,13 @@ def main(argv: list[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Seed the multi-GNSS WLS / FGO with BeiDou (and other extra constellations) beyond the default GPS/GAL/QZSS set.",
+    )
+    parser.add_argument(
+        "--fgo-glonass-constellation",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Add GLONASS as a base-corrected FGO-only constellation (PR+carrier+Doppler). "
+        "Requires --base-correction (now extended to GLONASS) to cancel the GLO code bias. Off by default.",
     )
     parser.add_argument(
         "--fgo-residual-mask-propagation",

@@ -20,6 +20,7 @@ from experiments.gsdc2023_base_correction import (
     select_base_pseudorange_observation,
     select_base_sat_product_observation,
     select_gps_nav_message,
+    slot_sat_id,
     signal_type_iono_scale,
     unix_ms_to_gps_abs_seconds,
 )
@@ -234,6 +235,16 @@ def test_base_observation_selector_and_iono_scale_direct():
     assert np.isclose(signal_type_iono_scale("GAL_E5A_Q"), GPS_L5_TGD_SCALE)
 
 
+def test_slot_sat_id_maps_glonass_to_rinex_slot():
+    # GSDC GLONASS Svid is the orbital slot number == RINEX Rnn.
+    assert slot_sat_id(3, 9) == "R09"
+    assert slot_sat_id(3, 18) == "R18"
+    # Existing systems unchanged.
+    assert slot_sat_id(1, 5) == "G05"
+    assert slot_sat_id(6, 2) == "E02"
+    assert slot_sat_id(4, 193) == "J01"
+
+
 def test_base_sat_product_observation_prefers_first_frequency_for_l5() -> None:
     obs = {
         "C1C": 21_000_001.0,
@@ -367,7 +378,7 @@ def test_compute_base_correction_matrix_uses_injected_dependencies(tmp_path):
             (1, 3, "GPS_L1_CA"),
             (6, 11, "GAL_E1_C_P"),
             (4, 193, "QZS_L1_CA"),
-            (3, 1, "BDS_B1I"),
+            (5, 1, "BDS_B1I"),  # BeiDou: still unsupported by base correction -> NaN
         ],
         "GPS_L1_CA",
         base_setting_fn=fake_setting,
