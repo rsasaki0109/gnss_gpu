@@ -299,6 +299,7 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         hatch_smoothing_n=int(getattr(args, "hatch_smoothing_n", 100)),
         use_rtklib_tropo=bool(getattr(args, "use_rtklib_tropo", False)),
         apply_base_correction=bool(getattr(args, "base_correction", False)),
+        base_correction_fgo_only_rows=bool(getattr(args, "base_correction_fgo_only_rows", False)),
         position_source=args.position_source,
         chunk_epochs=args.chunk_epochs,
         gated_baseline_threshold=args.gated_threshold,
@@ -539,6 +540,7 @@ def run_bridge_submission(args: argparse.Namespace) -> tuple[pd.DataFrame, dict[
                 "max_epochs": args.max_epochs,
                 "dual_frequency": bool(args.dual_frequency),
                 "base_correction": bool(config.apply_base_correction),
+                "base_correction_fgo_only_rows": bool(config.base_correction_fgo_only_rows),
                 "ct_rbpf_fgo": bool(config.ct_rbpf_fgo_enabled),
                 "taroz_marupaku": taroz_marupaku,
                 "taroz_phone_aware": taroz_phone_aware,
@@ -627,6 +629,12 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         default=0.0,
         help="Recommended acceptance gate for the 2-stage re-solve (0 = disabled). When > 0, the re-solve only fires on chunks whose pass-1 fixed-linearization residual p95 (over active rows) exceeds this many metres — i.e. only chunks where pass-1 diverged. Keeps the lax-o divergence-rescue win while skipping the marginal masking that causes +10 cm regressions on healthy chunks.",
+    )
+    parser.add_argument(
+        "--base-correction-fgo-only-rows",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Also apply the DGNSS base correction to FGO-only rows (weights==0 but weights_fgo>0) — rows whose WLS weight was masked while the FGO weight was kept. Off by default keeps the legacy WLS-active-only behaviour.",
     )
     parser.add_argument("--stop-attitude-sigma-rad", type=float, default=0.0)
     parser.add_argument(

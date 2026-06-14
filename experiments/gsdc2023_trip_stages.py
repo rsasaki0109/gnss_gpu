@@ -298,6 +298,7 @@ class PostObservationStageConfig:
     default_pr_l1_threshold_m: float
     default_pr_l5_threshold_m: float
     fgo_extra_constellations: bool = False
+    base_correction_fgo_only_rows: bool = False
     tdcp_cycle_jump_mask_cycles: float = 0.0
     tdcp_doppler_endpoint_mask: bool = True
     tdcp_ddl_sign_fixed: bool = False
@@ -492,6 +493,8 @@ def apply_base_correction_to_pseudorange(
     signal_type: str,
     pseudorange: np.ndarray,
     weights: np.ndarray,
+    weights_fgo: np.ndarray | None = None,
+    include_fgo_only: bool = False,
     correction_matrix_fn: BaseCorrectionMatrixFn,
 ) -> int:
     if data_root is None or trip is None:
@@ -503,7 +506,16 @@ def apply_base_correction_to_pseudorange(
         slot_keys,
         signal_type,
     )
-    valid_base_correction = np.isfinite(base_correction) & (weights > 0.0)
+    # The shared pseudorange feeds both WLS (weights) and FGO (weights_fgo).
+    # By default only WLS-active rows are corrected (legacy behaviour).  When
+    # ``include_fgo_only`` is set, rows that are FGO-only (weights==0 but
+    # weights_fgo>0 — FGO-only constellations, or rows whose WLS weight was
+    # masked while the FGO weight was kept) also receive the DGNSS correction
+    # so the FGO objective sees corrected pseudoranges.
+    active = weights > 0.0
+    if include_fgo_only and weights_fgo is not None:
+        active = active | (weights_fgo > 0.0)
+    valid_base_correction = np.isfinite(base_correction) & active
     pseudorange[valid_base_correction] -= base_correction[valid_base_correction]
     return int(np.count_nonzero(valid_base_correction))
 
@@ -1649,6 +1661,7 @@ def build_observation_mask_base_correction_stage(
     *,
     apply_observation_mask: bool,
     apply_base_correction: bool,
+    base_correction_fgo_only_rows: bool = False,
     data_root: Path | None,
     trip: str | None,
     times_ms: np.ndarray,
@@ -1837,6 +1850,8 @@ def build_observation_mask_base_correction_stage(
             signal_type=signal_type,
             pseudorange=pseudorange,
             weights=weights,
+            weights_fgo=weights_fgo,
+            include_fgo_only=base_correction_fgo_only_rows,
             correction_matrix_fn=correction_matrix_fn,
         )
 
@@ -1901,6 +1916,7 @@ def build_post_observation_stages(
     clock_drift_context_mps: np.ndarray | None,
     build_trip_arrays_fn: BuildTripArraysFn,
     apply_base_correction: bool,
+    base_correction_fgo_only_rows: bool = False,
     data_root: Path | None,
     trip: str | None,
     n_clock: int,
@@ -2028,6 +2044,7 @@ def build_post_observation_stages(
     mask_base_stage = build_observation_mask_base_correction_stage(
         apply_observation_mask=apply_observation_mask,
         apply_base_correction=apply_base_correction,
+        base_correction_fgo_only_rows=base_correction_fgo_only_rows,
         data_root=data_root,
         trip=trip,
         times_ms=times_ms,
@@ -2191,6 +2208,7 @@ def build_configured_post_observation_stages(
         clock_drift_context_mps=observation_products.clock_drift_context_mps,
         build_trip_arrays_fn=dependencies.build_trip_arrays_fn,
         apply_base_correction=config.apply_base_correction,
+        base_correction_fgo_only_rows=config.base_correction_fgo_only_rows,
         data_root=config.data_root,
         trip=config.trip,
         n_clock=observation_products.n_clock,
