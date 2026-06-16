@@ -43,7 +43,9 @@ experiments/results/gsdc2023_bridge_diag_*.csv
 
 # Generated experiment result artifacts (regenerable via CLIs; force-add
 # deliverables you want versioned, e.g. `git add -f <submission>.csv`).
-# Already-tracked result files keep being tracked.
+# These data artifacts are intentionally NOT tracked (untracked 2026-06-17 to
+# fix Windows MAX_PATH breakage from 260+ char sweep filenames). Media and
+# paper_assets under experiments/results are still tracked.
 experiments/results/*.csv
 experiments/results/*.json
 experiments/results/*.md
@@ -51,6 +53,9 @@ experiments/results/*.pos
 experiments/results/*.txt
 experiments/results/*.npz
 experiments/results/*.html
+experiments/results/*.pkl
+experiments/results/*.pkl.gz
+experiments/results/*.parquet
 
 # GPU / urban-shadow / RF-security lab generated data assets
 docs/assets/data/
