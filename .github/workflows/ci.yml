@@ -39,6 +39,24 @@ jobs:
       - run: python -m pip install --upgrade pip ruff
       - run: python -m ruff check python/ --ignore=E501,F401
 
+  repo-hygiene:
+    # Guards cross-platform path safety: long sweep filenames under
+    # experiments/results once hit 266 chars and broke clones/reset on Windows
+    # (MAX_PATH 260). The windows leg is a canary: an over-long tracked path
+    # fails at checkout before the lint even runs.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python tools/lint_repo_paths.py --max-path 180 --max-name 96
+
   test-python-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 15
