@@ -64,6 +64,43 @@ These come from `internal_docs/decisions.md` and the README's development policy
 - **Do not vendor, link, or derive production code/config from GPL-3.0 reference
   sources** such as `gici-open`. This repo is Apache-2.0.
 
+## Git workflow & branch protection
+
+`main` mirrors `origin/main` — never commit to it directly. On 2026-06-17 a local
+`main` diverged into an *unrelated history* (88 local vs 469 remote commits) and a
+`git reset --hard` then failed on Windows because tracked sweep filenames exceeded
+the 260-char `MAX_PATH` limit. These rules keep that from recurring.
+
+Per-clone setup (run once):
+
+```bash
+git config pull.ff only        # never create surprise merge commits on pull
+git config fetch.prune true    # drop deleted remote branches
+git config push.default simple
+git config core.hooksPath .githooks   # enable the tracked pre-push guard
+git config core.longpaths true        # tolerate long paths on Windows (belt-and-braces)
+```
+
+Day-to-day:
+
+```bash
+git fetch --prune origin
+git switch main && git reset --hard origin/main   # main is read-only; just track origin
+git switch -c feat/<topic>                          # do all work on feature branches
+# ... commit ...
+git fetch origin && git rebase origin/main          # stay based on origin/main
+git push -u origin feat/<topic>                     # then open a PR
+```
+
+The tracked `.githooks/pre-push` hook blocks direct pushes to `main` and refuses
+to push a branch that isn't a descendant of `origin/main`. Never use
+`git pull --allow-unrelated-histories`.
+
+**GitHub settings** (repo admin, Settings → Branches → add rule for `main`):
+require a PR before merging, require status checks (`lint`, `repo-hygiene`,
+`test-python-smoke`) to pass, require linear history, and disallow force-pushes
+and deletions. Apply to administrators too.
+
 ## License
 
 By contributing, you agree that your contributions are licensed under the

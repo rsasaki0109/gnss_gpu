@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Local guard against the failure modes that produced the 2026-06-17 incident:
+#  - direct pushes to main
+#  - pushing a branch that has diverged from / is not based on origin/main
+#    (the "unrelated histories" trap)
+#
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+set -euo pipefail
+
+protected="main"
+remote_name="${1:-origin}"
+
+current_branch="$(git rev-parse --abbrev-ref HEAD)"
+
+if [ "$current_branch" = "$protected" ]; then
+  echo "pre-push: direct push to '$protected' is blocked. Open a PR from a feature branch." >&2
+  exit 1
+fi
+
+# Make sure we know where origin/main is, then require the current branch to be
+# a descendant of it (i.e. rebased on top, sharing history).
+git fetch -q "$remote_name" "$protected" || {
+  echo "pre-push: could not fetch $remote_name/$protected; check your remote." >&2
+  exit 1
+}
+
+if ! git merge-base --is-ancestor "$remote_name/$protected" HEAD; then
+  echo "pre-push: HEAD is not based on $remote_name/$protected (diverged/unrelated history)." >&2
+  echo "          Rebase first:  git fetch $remote_name && git rebase $remote_name/$protected" >&2
+  exit 1
+fi
+
+exit 0
