@@ -19,10 +19,21 @@ from gnss_gpu.ephemeris import (
 )
 
 try:
-    from gnss_gpu._gnss_gpu_ephemeris import compute_satellite_position
+    from gnss_gpu._gnss_gpu_ephemeris import (
+        compute_satellite_position,
+        compute_satellite_position_batch,
+    )
     HAS_GPU = True
 except ImportError:
     HAS_GPU = False
+
+
+def _make_gpu_params(n_sat: int = 1) -> np.ndarray:
+    from gnss_gpu.ephemeris import _nav_to_params_bytes
+
+    nav = _make_reference_nav()
+    blob = _nav_to_params_bytes(nav)
+    return np.frombuffer(blob * n_sat, dtype=np.float64)
 
 
 # ---------------------------------------------------------------------------
@@ -540,3 +551,70 @@ class TestGPUComputation:
         for i in range(100):
             r = np.linalg.norm(pos[i, 0])
             assert 25000e3 < r < 28000e3
+
+
+# ---------------------------------------------------------------------------
+# Test: input validation (CPU-light; binding + wrapper)
+# ---------------------------------------------------------------------------
+class TestEphemerisValidation:
+    def test_compute_rejects_nonfinite_gps_time(self):
+        nav = _make_reference_nav()
+        eph = Ephemeris({1: [nav]})
+
+        with pytest.raises(ValueError, match="gps_time must be finite"):
+            eph.compute(float("nan"))
+
+    def test_compute_batch_rejects_nonfinite_gps_times(self):
+        nav = _make_reference_nav()
+        eph = Ephemeris({1: [nav]})
+
+        with pytest.raises(ValueError, match="gps_times must be finite"):
+            eph.compute_batch([518400.0, float("inf")])
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_n_sat(self):
+        params = _make_gpu_params()
+
+        with pytest.raises(RuntimeError, match="n_sat must be positive"):
+            compute_satellite_position(params, 518400.0, 0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_nonfinite_gps_time(self):
+        params = _make_gpu_params()
+
+        with pytest.raises(RuntimeError, match="gps_time must be finite"):
+            compute_satellite_position(params, float("nan"), 1)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_empty_gps_times(self):
+        params = _make_gpu_params()
+
+        with pytest.raises(RuntimeError, match="gps_times must be non-empty"):
+            compute_satellite_position_batch(params, np.array([]), 1)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_short_params_flat(self):
+        params = _make_gpu_params()
+
+        with pytest.raises(RuntimeError, match="params_flat is too small"):
+            compute_satellite_position(params, 518400.0, 2)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_nan_params_flat(self):
+        params = _make_gpu_params().copy()
+        params[0] = np.nan
+
+        with pytest.raises(RuntimeError, match="params_flat must be finite"):
+            compute_satellite_position(params, 518400.0, 1)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_valid_smoke_shapes(self):
+        params = _make_gpu_params()
+        pos, clk = compute_satellite_position(params, 518400.0, 1)
+        assert pos.shape == (1, 3)
+        assert clk.shape == (1,)
+
+        times = np.array([518400.0, 518700.0])
+        batch_pos, batch_clk = compute_satellite_position_batch(params, times, 1)
+        assert batch_pos.shape == (2, 1, 3)
+        assert batch_clk.shape == (2, 1)
