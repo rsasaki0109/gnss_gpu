@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 try:
-    from gnss_gpu._gnss_gpu_skyplot import compute_grid_quality
+    from gnss_gpu._gnss_gpu_skyplot import compute_grid_quality, compute_sky_visibility
     HAS_GPU = True
 except ImportError:
     HAS_GPU = False
@@ -171,3 +171,85 @@ def test_to_geojson():
     # Verify JSON serialisable
     json_str = json.dumps(geojson)
     assert len(json_str) > 0
+
+
+def _valid_grid_and_sat():
+    grid = np.array([[-3957199.0, 3310205.0, 3737911.0]], dtype=np.float64)
+    sat = SAT_ECEF[:1]
+    return grid, sat
+
+
+def _tiny_mesh():
+    return np.array([[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]], dtype=np.float64)
+
+
+class TestSkyplotBindingValidation:
+    def test_grid_quality_rejects_invalid_n_grid(self):
+        grid, sat = _valid_grid_and_sat()
+        with pytest.raises(RuntimeError, match="n_grid must be positive"):
+            compute_grid_quality(grid, sat, 0, 1, np.radians(10.0))
+
+    def test_grid_quality_rejects_invalid_n_sat(self):
+        grid, sat = _valid_grid_and_sat()
+        with pytest.raises(RuntimeError, match="n_sat must be positive"):
+            compute_grid_quality(grid, sat, 1, 0, np.radians(10.0))
+
+    def test_grid_quality_rejects_nonfinite_elevation_mask(self):
+        grid, sat = _valid_grid_and_sat()
+        with pytest.raises(RuntimeError, match="elevation_mask_rad must be finite"):
+            compute_grid_quality(grid, sat, 1, 1, float("nan"))
+
+    def test_grid_quality_rejects_bad_grid_shape(self):
+        grid, sat = _valid_grid_and_sat()
+        with pytest.raises(RuntimeError, match="grid_ecef must have shape"):
+            compute_grid_quality(np.zeros(2), sat, 1, 1, np.radians(10.0))
+
+    def test_grid_quality_rejects_bad_sat_shape(self):
+        grid, sat = _valid_grid_and_sat()
+        with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+            compute_grid_quality(grid, np.zeros(2), 1, 1, np.radians(10.0))
+
+    def test_grid_quality_rejects_nonfinite_grid(self):
+        grid, sat = _valid_grid_and_sat()
+        bad_grid = grid.copy()
+        bad_grid[0, 0] = np.nan
+        with pytest.raises(RuntimeError, match="grid_ecef must be finite"):
+            compute_grid_quality(bad_grid, sat, 1, 1, np.radians(10.0))
+
+    def test_grid_quality_rejects_nonfinite_sat(self):
+        grid, sat = _valid_grid_and_sat()
+        bad_sat = sat.copy()
+        bad_sat[0, 0] = np.inf
+        with pytest.raises(RuntimeError, match="sat_ecef must be finite"):
+            compute_grid_quality(grid, bad_sat, 1, 1, np.radians(10.0))
+
+    def test_sky_visibility_rejects_invalid_counts(self):
+        grid, _ = _valid_grid_and_sat()
+        mesh = _tiny_mesh()
+        with pytest.raises(RuntimeError, match="n_grid must be positive"):
+            compute_sky_visibility(grid, mesh, 0, 1, 4, 4)
+        with pytest.raises(RuntimeError, match="n_tri must be positive"):
+            compute_sky_visibility(grid, mesh, 1, 0, 4, 4)
+        with pytest.raises(RuntimeError, match="n_az must be positive"):
+            compute_sky_visibility(grid, mesh, 1, 1, 0, 4)
+        with pytest.raises(RuntimeError, match="n_el must be positive"):
+            compute_sky_visibility(grid, mesh, 1, 1, 4, 0)
+
+    def test_sky_visibility_rejects_bad_triangle_shape(self):
+        grid, _ = _valid_grid_and_sat()
+        with pytest.raises(RuntimeError, match="triangles must have shape"):
+            compute_sky_visibility(grid, np.zeros((1, 2, 3)), 1, 1, 4, 4)
+
+    def test_sky_visibility_rejects_nonfinite_grid(self):
+        grid, _ = _valid_grid_and_sat()
+        bad_grid = grid.copy()
+        bad_grid[0, 0] = np.nan
+        with pytest.raises(RuntimeError, match="grid_ecef must be finite"):
+            compute_sky_visibility(bad_grid, _tiny_mesh(), 1, 1, 4, 4)
+
+    def test_sky_visibility_rejects_nonfinite_triangles(self):
+        grid, _ = _valid_grid_and_sat()
+        bad_mesh = _tiny_mesh()
+        bad_mesh[0, 0, 0] = np.inf
+        with pytest.raises(RuntimeError, match="triangles must be finite"):
+            compute_sky_visibility(grid, bad_mesh, 1, 1, 4, 4)

@@ -1,10 +1,11 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-06-10 JST (Codex maintenance: user-friendly validation/refactoring wave through `294b3e0`、 tracking wrapper/native binding input validation landing、 direct pybind + Python wrapper の fail-fast 方針を確立、 次 priority は ephemeris/multipath/raytrace 系の境界 validation)
+**最終更新**: 2026-07-03 JST (Codex maintenance: validation wave #1–#3 完了 — ephemeris PR #105、 multipath/raytrace-BVH PR #106、 BVH `compute_multipath` fix PR #104、 legacy `multipath_bvh_kernel` 削除 PR #105； skyplot validation 進行中； 次 priority は EKF binding validation B1)
 **現在の HEAD**: local `main` `294b3e0` before this documentation refresh
 **Codex 引継ぎ section**: 先頭 [Codex maintenance handoff (2026-06-10)](#codex-maintenance-handoff-2026-06-10-refactoring--user-friendly-化) を入口にし、 PPC/GSDC 研究ログは末尾 [Codex 引継ぎ (2026-05-17 PM)](#codex-引継ぎ-2026-05-17-pm) 参照
 
 **最近の進捗ハイライト** (新しい順):
+- **2026-07-03 Codex maintenance / validation wave #1–#3 完了**: ephemeris binding validation (PR #105)、 multipath wrapper/binding validation (PR #106)、 raytrace/BVH validation (PR #106)、 BVH `compute_multipath` fix (PR #104)、 legacy `multipath_bvh_kernel` 削除 (PR #105)。skyplot validation は同一 wave で進行中。次 queue は PF/EKF/SVGD/RTK 系 — EKF binding validation (B1) が first sub-phase。
 - **2026-06-10 Codex maintenance / user-friendly validation wave**: PPC/GSDC の研究スコア改善から一旦離れ、公開 Python API と pybind direct entrypoint の「壊れ方」を user-friendly にする refactoring を連続 landing。`f369f43` satellite azel、`3af9eea` coordinate、`90f6000` native array output strides、`0ccef28` Doppler、`94a7941` RAIM、`76d837e` Python wrapper validation alignment、`24b5a8f` multi-GNSS/Sagnac native validation、`e245fb0` multi-GNSS wrapper validation、`8089045` atmosphere、`ff3c618` acquisition、`fb64bbe` interference、`294b3e0` tracking。方針は「CUDA / C++ kernel に不正 shape・NaN・短い buffer を流さず、Python 入口で意味のある `ValueError` / `RuntimeError` に落とす」「direct binding と public wrapper の両方をテスト」「C++ pybind 変更後は対象 `.so` を rebuild/copy して実 import で確認」。最新 tracking では `TrackingConfig` / `ChannelState` / `ScalarTracker` / `VectorTracker` と native `_gnss_gpu_tracking` に finite/shape/range validation を追加し、 direct wrapper smoke と CI green まで確認済み。
 - **2026-05-22 Phase 80 production wire-up + 40-trip chunk_epochs=100 row-level diff 完了**: Phase 74 で導出した DD anchor coverage gate (`dd_carrier_min_anchor_coverage`、 default 0.6) を inert 状態から production data flow に wire-up (commit `744294e`、 6 files +514/-6、 79 tests pass)。 `build_gsdc2023_bridge_submission.py` 492-line CLI を main に landing (commit `69acb23`)。 ebf-x/mi8 single-trip smoke で chunk_epochs=200 sources={'baseline': 1924, 'fgo': 0} vs chunk_epochs=100 sources={'baseline': 1624, 'fgo': 300}、 300 rows flip / pos delta median 4.43m を確証。 続いて 40-trip chunk_epochs=100 full re-run (PID 254464、 実 ~55 min)、 `experiments/results/gsdc2023_bridge_chunk100_repro_20260522/` 生成、 既存 chunk_epochs=200 baseline (`gsdc2023_bridge_gated_rescue_pixel4_full_20260520/`) と bridge_positions.csv row-level diff (`/tmp/diff_chunk200_vs_chunk100.py`)。 **Aggregate src_diff 2702/72026 = 3.75%、 rows>5m 484/72026 = 0.67%、 16/40 trips で flip**。 **sjc-q/pixel5 max 49.74m / ebf-x/mi8 +300 rows / mtv-ie2 region 境界 shift** が memory prediction と **bit-exact 一致**、 一方 aggregate は Phase 77 prediction (5091 rows / 1168 rows>5m) の **~50%** で、 chunk_epochs 単独効果と DD-carrier path 効果が **凡そ半々で寄与**することが判明。 修正方針確定: chunk_epochs revert + Phase 74 DD anchor coverage gate enabled の 2 段構えが decisive、 単独 revert では Kaggle ~3.99 完全復帰せず。 詳細 plan.md §B `45. Phase 80`。
 - **2026-05-21 PM GSDC2023 bridge vs TaroZ DD-guarded A/B (no-submit)**: private-floor 4 artifact recovery は `gnss_gpu / ref / /tmp / $HOME` 全 root で 0/4 found 確定 (importer dry-run `experiments/results/gsdc2023_private_floor_artifact_import_dryrun_20260521b/summary.json`)。 leaderboard 再提出はできないので、 既存 2 submission の A/B 解析を `experiments/analyze_gsdc2023_source_ab.py` で実施。 結果は `experiments/results/gsdc2023_bridge_vs_tarozdd_ab_20260521/README.md`。 **主結論: `fgo_dd_carrier` rows の 84% (2008/2389) が p95_delta_m>=3m の regression trip に集中**。 12 trips with DD: mean p95 4.34m vs 28 trips w/o DD: 0.84m。 worst single-row spike `ebf-y/pixel5 max=105.72m`、 4 trips が DD-only swap の regression、 5 trips が DD + `fgo_no_tdcp` combo。 DD は broad hard-rule で適用すると negative、 per-trip whitelist 化が必要。 fgo_no_tdcp 拡張 (630→1360) と base correction stale interpolation (sjc-q/pixel5 max=49.74m on baseline-only swap) も regression 源。
@@ -119,112 +120,44 @@ git diff --check
 - 避ける: NumPy の後段 broadcast error に丸投げ
 - 避ける: CUDA call 後に初めてわかる size mismatch
 
-### 次 priority queue
+### 次 priority queue (updated 2026-07-03)
 
-#### 1. Ephemeris binding validation (次にやる)
+#### 1. Ephemeris binding validation — DONE (PR #105, 2026-07)
 
-対象:
+`compute_satellite_position` / `compute_satellite_position_batch` の direct binding と wrapper に boundary validation を landing。`n_sat` / time / `params_flat` shape・finite・buffer length checks、invalid-input tests、valid smoke unchanged。`params_flat` binary layout は untouched。
 
-- `python/gnss_gpu/_ephemeris_bindings.cpp`
-- `python/gnss_gpu/ephemeris.py`
-- `include/gnss_gpu/ephemeris.h`
-- `src/ephemeris/ephemeris.cu`
-- `tests/test_ephemeris.py`
+#### 2. Multipath wrapper/binding validation — DONE (PR #106, 2026-07)
 
-現状の direct binding は `params_flat` を `EphemerisParams*` に `reinterpret_cast` している。最低限の size check はあるが、次の gap が残っている。
+multipath wrapper/binding validation landing。invalid geometry は native kernel 前に reject、valid multipath 結果 unchanged、wrapper + direct binding tests 追加。
 
-- `n_sat <= 0` を明示的に拒否していない
-- `gps_time` / `gps_times` の NaN/Inf を拒否していない
-- `gps_times` の 1D / non-empty validation がない
-- `params_flat` の 1D / finite / non-empty validation がない
-- `params_flat` が struct binary payload として十分な byte length を持つかは見るが、`buf.ndim` / C contiguous / scalar consistency が弱い
-- `EphemerisParams()` default constructor が exposed されるが、field 初期値の扱いは native 側で明示されていない
+#### 3a. Raytrace / BVH validation — DONE (PR #106, 2026-07)
 
-期待 patch:
+raytrace/BVH bindings に synthetic small-fixture validation tests を landing。PR #104 で BVH `compute_multipath` fix、PR #105 で legacy `multipath_bvh_kernel` 削除済み。
 
-- direct `compute_satellite_position()`:
-  - `n_sat > 0`
-  - `gps_time` finite
-  - `params_flat` 1D, finite, large enough for `n_sat * sizeof(EphemerisParams)`
-  - output shape unchanged: `(n_sat, 3)`, `(n_sat,)`
-- direct `compute_satellite_position_batch()`:
-  - `n_sat > 0`
-  - `gps_times` 1D nonempty finite
-  - `params_flat` same checks
-  - output shape unchanged: `(n_epoch, n_sat, 3)`, `(n_epoch, n_sat)`
-- tests:
-  - invalid `n_sat`
-  - non-finite time
-  - empty / wrong-dimensional `gps_times`
-  - short `params_flat`
-  - NaN in `params_flat`
-  - valid smoke still returns expected shapes
-- rebuild target:
-
-```bash
-cmake --build build/codex --target _gnss_gpu_ephemeris -j"$(nproc)"
-cp build/codex/_gnss_gpu_ephemeris.cpython-310-x86_64-linux-gnu.so python/gnss_gpu/
-PYTHONPATH=python python3 -m pytest tests/test_ephemeris.py -q
-python3 -m ruff check python/gnss_gpu/ephemeris.py tests/test_ephemeris.py
-git diff --check
-```
-
-Caution: `params_flat` is a packed struct representation. Do not rewrite the binary layout casually. The safe first patch is boundary validation only.
-
-#### 2. Multipath wrapper/binding validation
+#### 3b. Skyplot validation — IN PROGRESS (same wave)
 
 対象候補:
 
-- `python/gnss_gpu/_multipath_bindings.cpp`
-- `python/gnss_gpu/multipath.py`
-- `tests/test_multipath*.py`
-
-見るべき点:
-
-- receiver position shape `(3,)`
-- satellite positions shape `(n_sat, 3)`
-- satellite IDs / PRNs length consistency
-- plane / reflector data shape and finite values
-- clean pseudorange / correction arrays length consistency
-- empty satellite set behavior
-- negative distances, impossible reflection counts, NaN material params
-
-Acceptance:
-
-- normal multipath computation result unchanged
-- invalid geometry is rejected before native kernel
-- wrapper and direct binding tests both present if both surfaces exist
-
-#### 3. Raytrace / BVH / skyplot validation
-
-対象候補:
-
-- `python/gnss_gpu/_raytrace_bindings.cpp`
-- `python/gnss_gpu/_bvh_bindings.cpp`
 - `python/gnss_gpu/_skyplot_bindings.cpp`
 - related wrappers/tests
 
-この area は shape error が GPU memory access に直結しやすい。優先度は高いが、mesh/BVH fixture が大きくなりやすいので、まず synthetic small fixture で validation tests を作る。
-
 見るべき点:
 
-- vertices shape `(n, 3)` finite
-- triangles shape `(m, 3)` integer, indices in range
-- ray origin/direction shape and finite
-- direction zero-vector rejection
 - satellite az/el arrays 1D same length
-- `n_rays`, `n_triangles`, `n_vertices` scalar consistency
-- empty mesh is either clearly supported or rejected consistently
+- finite az/el range
+- empty satellite set behavior
+- output buffer shape / stride consistency
 
 Acceptance:
 
 - direct binding invalid tests are CPU-light
-- one valid tiny mesh smoke remains
-- no large PLATEAU fixture dependency
+- one valid tiny smoke remains
 
-#### 4. PF / EKF / SVGD / RTK bindings (larger blast radius)
+#### 4. PF / EKF / SVGD / RTK bindings (larger blast radius) — next
 
-これらは state dimension と covariance layout の contract が複雑なので、ephemeris/multipath/raytrace より後に回す。
+**First sub-phase (B1): EKF binding validation.** PF / SVGD / RTK は B1 完了後の future sub-phases。
+
+これらは state dimension と covariance layout の contract が複雑なので、ephemeris/multipath/raytrace/skyplot wave の後に回す。
 
 対象候補:
 

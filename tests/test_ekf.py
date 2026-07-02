@@ -5,6 +5,18 @@ import pytest
 
 from gnss_gpu.ekf import EKFPositioner
 
+try:
+    from gnss_gpu._gnss_gpu_ekf import (
+        EKFConfig,
+        ekf_initialize,
+        ekf_predict,
+        ekf_update,
+        ekf_batch,
+    )
+    HAS_GPU = True
+except ImportError:
+    HAS_GPU = False
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -289,6 +301,97 @@ class TestEKFEdgeCases:
 
         error = np.linalg.norm(ekf.get_position() - true_pos)
         assert error < 15.0
+
+
+class TestEKFValidation:
+    def test_wrapper_initialize_rejects_bad_position(self):
+        ekf = EKFPositioner()
+        with pytest.raises(ValueError, match="position_ecef must have shape"):
+            ekf.initialize([0.0, 0.0])
+
+    def test_wrapper_predict_rejects_nonpositive_dt(self):
+        ekf = EKFPositioner()
+        ekf.initialize(np.array([1.0, 2.0, 3.0]))
+        with pytest.raises(ValueError, match="dt must be positive"):
+            ekf.predict(dt=0.0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_ekf_config(self):
+        with pytest.raises(RuntimeError, match="sigma_pos must be positive"):
+            EKFConfig(sigma_pos=0.0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_initial_pos(self):
+        with pytest.raises(RuntimeError, match="initial_pos must have shape"):
+            ekf_initialize(np.array([1.0, 2.0]), 0.0)
+        with pytest.raises(RuntimeError, match="initial_pos must be finite"):
+            ekf_initialize(np.array([1.0, np.nan, 3.0]), 0.0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_predict_inputs(self):
+        config = EKFConfig()
+        state_x = np.zeros(8)
+        state_P = np.eye(8).ravel()
+
+        with pytest.raises(RuntimeError, match="state_x must have shape"):
+            ekf_predict(np.zeros(7), state_P, 1.0, config)
+        with pytest.raises(RuntimeError, match="state_P must have shape"):
+            ekf_predict(state_x, np.zeros(63), 1.0, config)
+        with pytest.raises(RuntimeError, match="dt must be positive"):
+            ekf_predict(state_x, state_P, 0.0, config)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_update_inputs(self):
+        config = EKFConfig()
+        state_x = np.zeros(8)
+        state_P = np.eye(8).ravel()
+        sat = np.ones((2, 3))
+        pr = np.ones(2)
+        w = np.ones(2)
+
+        with pytest.raises(RuntimeError, match="n_sat must be >= 1"):
+            ekf_update(state_x, state_P, sat[:0], np.array([]), np.array([]))
+        with pytest.raises(RuntimeError, match="sat_ecef shape must match"):
+            ekf_update(state_x, state_P, sat[:1], pr, w)
+        with pytest.raises(RuntimeError, match="weights must be non-negative"):
+            ekf_update(state_x, state_P, sat, pr, np.array([1.0, -1.0]))
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_batch_inputs(self):
+        config = EKFConfig()
+        states_x = np.zeros((2, 8))
+        states_P = np.zeros((2, 8, 8))
+        sat = np.ones((3, 3))
+        pr = np.ones(3)
+        w = np.ones(3)
+
+        with pytest.raises(RuntimeError, match="states_P must have shape"):
+            ekf_batch(states_x, np.zeros((2, 64)), sat, pr, w, 1.0, config)
+        with pytest.raises(RuntimeError, match="n_instances must be >= 1"):
+            ekf_batch(np.zeros((0, 8)), np.zeros((0, 8, 8)), sat, pr, w, 1.0, config)
+        with pytest.raises(RuntimeError, match="weights length must match"):
+            ekf_batch(states_x, states_P, sat, pr, np.ones(2), 1.0, config)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_valid_smoke_shapes(self):
+        config = EKFConfig()
+        pos = np.array([1.0, 2.0, 3.0])
+        state = ekf_initialize(pos, 0.0)
+        state_x = np.asarray(state.get_state(), dtype=np.float64)
+        state_P = np.asarray(state.get_covariance(), dtype=np.float64).ravel()
+
+        ekf_predict(state_x, state_P, 1.0, config)
+
+        sat = np.ones((4, 3))
+        pr = np.full(4, 20e6)
+        w = np.ones(4)
+        ekf_update(state_x, state_P, sat, pr, w)
+
+        states_x = np.tile(state_x, (2, 1))
+        states_P = np.tile(state_P.reshape(8, 8), (2, 1, 1))
+        out_x, out_P = ekf_batch(states_x, states_P, sat, pr, w, 1.0, config)
+        assert out_x.shape == (2, 8)
+        assert out_P.shape == (2, 8, 8)
 
 
 if __name__ == "__main__":
