@@ -304,6 +304,7 @@ class Ephemeris:
             sat_clk: array of shape [n_sat] clock corrections [s]
             used_prns: list of PRN numbers corresponding to output rows
         """
+        _validate_gps_time(gps_time)
         if prn_list is None:
             prn_list = self._prn_list
         if obs_codes is not None and len(obs_codes) != len(prn_list):
@@ -322,7 +323,6 @@ class Ephemeris:
         if not use_gpu:
             return self._compute_cpu(gps_time, prn_list, obs_codes)
 
-        _validate_gps_time(gps_time)
         params_flat, used_prns = self._build_params(gps_time, prn_list)
         if not used_prns:
             return np.array([]).reshape(0, 3), np.array([]), []
