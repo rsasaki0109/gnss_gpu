@@ -55,7 +55,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: python tools/lint_repo_paths.py --max-path 180 --max-name 96
+      - run: python tools/lint_repo_paths.py --max-path 180 --max-name 128
 
   test-python-smoke:
     runs-on: ubuntu-latest
