@@ -199,3 +199,60 @@ class TestBatchEpochs:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+try:
+    from gnss_gpu._gnss_gpu_multipath import apply_multipath_error as _native_apply
+    from gnss_gpu._gnss_gpu_multipath import simulate_multipath as _native_simulate
+    HAS_GPU = True
+except ImportError:
+    HAS_GPU = False
+
+
+PLANE_FLAT = np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 1.0]], dtype=np.float64)
+RX_FLAT = np.array([[0.0, 0.0, 10.0]], dtype=np.float64)
+SAT_FLAT = np.array([[0.0, 0.0, 20200e3]], dtype=np.float64)
+
+
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+class TestMultipathBindingValidation:
+    def test_simulate_rejects_invalid_counts(self):
+        with pytest.raises(RuntimeError, match="n_sat must be positive"):
+            _native_simulate(RX_FLAT, SAT_FLAT, PLANE_FLAT, 1, 0, 1, L1_FREQ, CA_CHIP_RATE)
+
+    def test_simulate_rejects_nonfinite_inputs(self):
+        bad_rx = RX_FLAT.copy()
+        bad_rx[0, 0] = np.nan
+        with pytest.raises(RuntimeError, match="rx_ecef must be finite"):
+            _native_simulate(bad_rx, SAT_FLAT, PLANE_FLAT, 1, 1, 1, L1_FREQ, CA_CHIP_RATE)
+
+    def test_apply_error_rejects_short_clean_pr(self):
+        with pytest.raises(RuntimeError, match="clean_pr must have shape"):
+            _native_apply(
+                np.array([1.0]),
+                RX_FLAT,
+                SAT_FLAT.reshape(1, 3),
+                PLANE_FLAT,
+                1,
+                2,
+                1,
+                L1_FREQ,
+                CA_CHIP_RATE,
+                1.0,
+            )
+
+    def test_apply_error_rejects_invalid_correlator_spacing(self):
+        clean_pr = np.array([[2.0e7]])
+        with pytest.raises(RuntimeError, match="correlator_spacing must be positive"):
+            _native_apply(
+                clean_pr,
+                RX_FLAT,
+                SAT_FLAT.reshape(1, 3),
+                PLANE_FLAT,
+                1,
+                1,
+                1,
+                L1_FREQ,
+                CA_CHIP_RATE,
+                0.0,
+            )

@@ -121,5 +121,33 @@ f 4 8 5 1
             BuildingModel(np.zeros((10, 2, 3)))
 
 
+try:
+    from gnss_gpu._raytrace import raytrace_los_check as _native_los_check
+    HAS_RAYTRACE_GPU = True
+except ImportError:
+    HAS_RAYTRACE_GPU = False
+
+
+def _tiny_mesh():
+    return np.array([[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]], dtype=np.float64)
+
+
+@pytest.mark.skipif(not HAS_RAYTRACE_GPU, reason="CUDA module not available")
+class TestRaytraceBindingValidation:
+    def test_los_check_rejects_invalid_rx_shape(self):
+        sat = np.array([[0.0, 0.0, 2.0e7]], dtype=np.float64)
+        with pytest.raises(RuntimeError, match="rx_ecef must have shape"):
+            _native_los_check(np.zeros(2), sat, _tiny_mesh())
+
+    def test_los_check_rejects_empty_satellites(self):
+        with pytest.raises(RuntimeError, match="sat_ecef must contain at least one satellite"):
+            _native_los_check(np.zeros(3), np.zeros((0, 3)), _tiny_mesh())
+
+    def test_los_check_rejects_bad_triangle_shape(self):
+        sat = np.array([[0.0, 0.0, 2.0e7]], dtype=np.float64)
+        with pytest.raises(RuntimeError, match="triangles must have shape"):
+            _native_los_check(np.zeros(3), sat, np.zeros((1, 2, 3)))
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

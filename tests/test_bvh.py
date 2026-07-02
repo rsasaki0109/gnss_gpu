@@ -260,5 +260,47 @@ def test_legacy_raytrace_multipath_bvh_removed():
     assert hasattr(bvh_mod, "raytrace_multipath_bvh_batch")
 
 
+try:
+    from gnss_gpu._bvh import bvh_build as _native_bvh_build
+    from gnss_gpu._bvh import raytrace_los_check_bvh as _native_los_check_bvh
+    HAS_BVH_GPU = True
+except ImportError:
+    HAS_BVH_GPU = False
+
+
+def _box_triangles():
+    return BuildingModel.create_box(
+        center=[100.0, 0.0, 25.0], width=20.0, depth=20.0, height=50.0
+    ).triangles
+
+
+@pytest.mark.skipif(not HAS_BVH_GPU, reason="CUDA module not available")
+class TestBVHBindingValidation:
+    def test_bvh_build_rejects_empty_mesh(self):
+        with pytest.raises(RuntimeError, match="triangles must contain at least one triangle"):
+            _native_bvh_build(np.zeros((0, 3, 3)))
+
+    def test_los_check_bvh_rejects_invalid_rx(self):
+        nodes, _ = _native_bvh_build(_box_triangles())
+        bvh = BVHAccelerator(_box_triangles())
+        sat = np.array([[0.0, 0.0, 2.0e7]], dtype=np.float64)
+        with pytest.raises(RuntimeError, match="rx_ecef must have shape"):
+            _native_los_check_bvh(np.zeros(2), sat, nodes, bvh._sorted_tris)
+
+    def test_los_check_bvh_batch_rejects_mismatched_leading_dim(self):
+        bvh = BVHAccelerator.from_building_model(
+            BuildingModel.create_box(center=[100, 0, 25], width=20, depth=20, height=50)
+        )
+        from gnss_gpu._bvh import raytrace_los_check_bvh_batch
+
+        with pytest.raises(RuntimeError, match="must share the leading N"):
+            raytrace_los_check_bvh_batch(
+                np.zeros((2, 3)),
+                np.zeros((3, 1, 3)),
+                bvh._nodes_flat,
+                bvh._sorted_tris,
+            )
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
