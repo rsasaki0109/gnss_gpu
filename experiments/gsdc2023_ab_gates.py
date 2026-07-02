@@ -13,6 +13,9 @@ that have *no* DD/no_tdcp activity in the candidate submission are
 ``passthrough``: gates never block them, but they also do not constitute a
 reason to keep the submission's row delta.
 
+``TripWhitelistDDGate`` is a stricter, default-deny replacement for
+``DDAnchorGate`` (Phase 80 follow-up) that drops into ``CombinedGate(dd=...)``.
+
 Inputs are the dataclasses from :mod:`gsdc2023_ab_source_mix` and
 :mod:`gsdc2023_ab_dd_signals`; gates do not touch JSON.
 """
@@ -88,6 +91,51 @@ class CombinedGate:
 
 
 @dataclass(frozen=True)
+class TripWhitelistDDGate:
+    """Default-deny DD-carrier gate (Phase 80 follow-up).
+
+    The broad :class:`DDAnchorGate` (anchor coverage >= 0.6) was net-negative on
+    Kaggle: ~84% of DD rows landed in ``p95_delta >= 3 m`` trips, with a 105.72 m
+    spike on ``ebf-y/pixel5``. Rather than relax/tighten a single floor, this gate
+    keeps ``fgo_dd_carrier`` only for trips that are **explicitly whitelisted**,
+    or that clear **conservative internal-consistency thresholds** (stricter than
+    0.6). A deny-list always wins. It reads only internal signals (anchor
+    coverage, DD density) -- never truth -- so an offline audit can emit the
+    whitelist and production can replay it deterministically.
+
+    Drop-in for :class:`CombinedGate` (``CombinedGate(dd=TripWhitelistDDGate(...))``):
+    same ``decide(signals, counts) -> bool`` shape as :class:`DDAnchorGate`.
+    ``allow`` / ``deny`` accept any container supporting ``in`` (set, frozenset,
+    list); trip ids must already be normalized (no ``train/`` / ``test/`` prefix).
+    """
+
+    allow: frozenset = frozenset()
+    deny: frozenset = frozenset()
+    min_anchor_coverage: float = 0.8
+    min_dd_epochs: int = 1
+    min_dd_pairs_mean: float = 4.0
+    require_no_tdcp_absent: bool = True
+
+    def decide(self, signals: DDSignals, counts: SourceCounts) -> bool:
+        if counts.fgo_dd_carrier <= 0:
+            return False
+        if signals.trip_id in self.deny:
+            return False
+        if signals.trip_id in self.allow:
+            return True
+        # Default-deny: only trips with strong internal evidence survive.
+        if self.require_no_tdcp_absent and counts.fgo_no_tdcp > 0:
+            return False
+        if signals.anchor_coverage < self.min_anchor_coverage:
+            return False
+        if signals.dd_dd_epochs < self.min_dd_epochs:
+            return False
+        if signals.dd_pairs_mean < self.min_dd_pairs_mean:
+            return False
+        return True
+
+
+@dataclass(frozen=True)
 class TripDisposition:
     """Result of applying ``CombinedGate`` to a single trip."""
 
@@ -144,6 +192,7 @@ __all__ = [
     "Disposition",
     "NoTdcpCoexistGate",
     "TripDisposition",
+    "TripWhitelistDDGate",
     "apply_gate",
     "disposition_counts",
 ]
