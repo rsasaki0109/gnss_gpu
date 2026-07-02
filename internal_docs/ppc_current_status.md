@@ -103,11 +103,17 @@ Tracing the production pool settled the question:
    `gici_tc_esdfix` (`def`, 88.85%) vs the new *combo4* (95.0%). But combo4 is
    already in the pool as `xd_gici_c4` (95.0%). There is no better build to swap
    in, so a swap treatment is identical to baseline.
-4. **The exact production replay is not reproducible from committed code anyway:**
-   the n/r2 selector mode `ranker_gici_cluster_override` is absent from
-   `exp_ppc_ctrbpf_fgo.py`'s argparse choices (invalid-choice error) and
-   `git log -S` shows it was never committed to that file — the 86.21% run used
-   an uncommitted local build.
+4. **The n/r2 selector mode `ranker_gici_cluster_override` is now committed**
+   (2026-06-17): implemented in `experiments/ppc_gici_override.py` and wired into
+   `exp_ppc_ctrbpf_fgo.py`'s argparse choices, per the documented Phase 43/71 rule
+   (high-risk GICI pick → re-pick within the xd_gici family toward a tight
+   ≥6-member 50 cm cluster within 0.8 m; cluster count priority, RMS tie-break).
+   Logic is covered by `tests/test_ppc_gici_override.py`. **Caveat:** exact
+   *score* replay of the 86.21% run still needs the regenerated candidate pool
+   (the `libgnss_diag_phase10/19` dirs + `selector_ranker_predictions_v5_nlos.csv`
+   are regenerable via the plan.md CLIs, not all checked in), and some thresholds
+   in the original uncommitted build were under-documented — the committed
+   defaults follow plan.md (12 / 6 / 0.8 / 0.5 m).
 
 Conclusion: the GICI candidate-injection avenue is **closed** (already realized).
 The `eval_gici_tc_ppc2024_batch.py` / `materialize_gici_tc_ppc_candidate.py`

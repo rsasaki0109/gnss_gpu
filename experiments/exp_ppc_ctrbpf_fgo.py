@@ -36,6 +36,7 @@ if str(_PROJECT_ROOT / "python") not in sys.path:
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
+from ppc_gici_override import RANKER_GICI_HIGH_RISK, gici_cluster_override  # noqa: E402
 from exp_urbannav_baseline import run_wls  # noqa: E402
 from gnss_gpu.io.nav_rinex import read_gps_klobuchar_from_nav_header
 from gnss_gpu.io.ppc import PPCDatasetLoader
@@ -4620,7 +4621,10 @@ def _run_ctrbpf_on_segment(
             is_fusion = select_mode in {"wavg3", "wavg5"}
             is_consensus = select_mode in {"consensus3", "consensus5"}
             is_cluster_vote = select_mode == "cluster_vote"
-            is_ranker = select_mode == "ranker"
+            # ranker_gici_cluster_override reuses the base ranker pick, then may
+            # re-pick within the xd_gici family (see _gici_cluster_override).
+            ranker_gici_override = select_mode == "ranker_gici_cluster_override"
+            is_ranker = select_mode in {"ranker", "ranker_gici_cluster_override"}
             temporal_prevdist_alpha = {
                 "temporal_n2_v1": 0.001,
                 "temporal_n2_v2": 0.0006,
@@ -5089,6 +5093,14 @@ def _run_ctrbpf_on_segment(
                                 collected,
                                 key=lambda c: _diag_float(c[2], "final_residual_rms"),
                             )
+                        if (
+                            ranker_gici_override
+                            and best_cand is not None
+                            and str(best_cand[0]) in RANKER_GICI_HIGH_RISK
+                        ):
+                            _override_cand = gici_cluster_override(best_cand, collected)
+                            if _override_cand is not None:
+                                best_cand = _override_cand
                         label = best_cand[0] + "+rnk"
                         selected_pos = best_cand[1]
                         _selected_diag = best_cand[2]
@@ -9185,7 +9197,7 @@ def main() -> None:
     parser.add_argument("--rtkdiag-candidate-proposal-spread-m", type=float, default=0.25,
                         help="Position spread [m] for --rtkdiag-candidate-proposal-cloud")
     parser.add_argument("--rtkdiag-candidate-select-mode",
-                        choices=("residual", "ratio", "score", "maxabs", "nrows", "hybrid_anchor", "wavg3", "wavg5", "consensus3", "consensus5", "cluster_vote", "ranker",
+                        choices=("residual", "ratio", "score", "maxabs", "nrows", "hybrid_anchor", "wavg3", "wavg5", "consensus3", "consensus5", "cluster_vote", "ranker", "ranker_gici_cluster_override",
                                  "rms_per_row", "score_per_row", "score_per_row2", "score_per_row3", "rms_minus_alpha_rows", "log_combined",
                                  "composite_3axis_n2", "composite_3axis_t2", "composite_3axis_n1",
                                  "composite_n2_v2", "composite_n3_v2", "composite_n1_v2", "composite_t2_v2",
@@ -9198,7 +9210,10 @@ def main() -> None:
                         default="residual",
                         help="How to choose among multiple gated RTK candidates (default residual). "
                              "hybrid_anchor picks the candidate closest to the hybrid floor; "
-                             "useful when hybrid is reliable")
+                             "useful when hybrid is reliable. ranker_gici_cluster_override applies "
+                             "the supervised ranker, then re-picks within the xd_gici family toward a "
+                             "tight low-RMS cluster when the pick is a high-risk GICI variant "
+                             "(plan.md Phase 43/71)")
     parser.add_argument("--rtkdiag-candidate-emit-mode",
                         choices=("pf", "candidate-on-drift", "candidate"),
                         default="pf",
