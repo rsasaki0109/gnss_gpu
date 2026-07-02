@@ -9,6 +9,88 @@ except ImportError:
     HAS_RTK = False
 
 
+def _finite_float(name, value):
+    try:
+        out = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be numeric") from exc
+    if not np.isfinite(out):
+        raise ValueError(f"{name} must be finite")
+    return out
+
+
+def _positive_float(name, value):
+    out = _finite_float(name, value)
+    if out <= 0.0:
+        raise ValueError(f"{name} must be positive")
+    return out
+
+
+def _positive_int(name, value):
+    try:
+        out = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if out <= 0:
+        raise ValueError(f"{name} must be positive")
+    return out
+
+
+def _as_base_ecef(base_ecef):
+    arr = np.asarray(base_ecef, dtype=np.float64).ravel()
+    if arr.size != 3:
+        raise ValueError("base_ecef must have shape (3,)")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("base_ecef must be finite")
+    return arr
+
+
+def _finite_1d_obs(name, values, *, min_size=2):
+    arr = np.asarray(values, dtype=np.float64).ravel()
+    if arr.size < min_size:
+        raise ValueError(f"{name} must contain at least {min_size} values")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{name} must be finite")
+    return arr
+
+
+def _as_sat_ecef(sat_ecef, n_sat):
+    sat = np.asarray(sat_ecef, dtype=np.float64)
+    if sat.shape == (n_sat, 3):
+        pass
+    elif sat.size == n_sat * 3:
+        sat = sat.ravel()
+    else:
+        raise ValueError("sat_ecef shape must match n_sat satellites")
+    if not np.all(np.isfinite(sat)):
+        raise ValueError("sat_ecef must be finite")
+    return np.ascontiguousarray(sat, dtype=np.float64)
+
+
+def _as_batch_obs(name, values, n_epoch, n_sat):
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.shape != (n_epoch, n_sat):
+        raise ValueError(f"{name} must have shape (n_epoch, n_sat)")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{name} must be finite")
+    return np.ascontiguousarray(arr, dtype=np.float64)
+
+
+def _as_batch_sat_ecef(sat_ecef, n_epoch, n_sat):
+    sat = np.asarray(sat_ecef, dtype=np.float64)
+    if sat.shape == (n_epoch, n_sat, 3):
+        pass
+    elif sat.shape == (n_epoch, n_sat * 3):
+        pass
+    elif sat.size == n_epoch * n_sat * 3:
+        sat = sat.reshape(n_epoch, n_sat, 3)
+    else:
+        raise ValueError("sat_ecef must have shape (n_epoch, n_sat, 3) or compatible")
+    if not np.all(np.isfinite(sat)):
+        raise ValueError("sat_ecef must be finite")
+    return np.ascontiguousarray(sat, dtype=np.float64)
+
+
 class RTKSolver:
     """Double-difference RTK positioning solver.
 
@@ -25,10 +107,10 @@ class RTKSolver:
     """
 
     def __init__(self, base_ecef, wavelength=0.19029, max_iter=20, tol=1e-4):
-        self.base_ecef = np.asarray(base_ecef, dtype=np.float64).ravel()
-        self.wavelength = float(wavelength)
-        self.max_iter = int(max_iter)
-        self.tol = float(tol)
+        self.base_ecef = _as_base_ecef(base_ecef)
+        self.wavelength = _positive_float("wavelength", wavelength)
+        self.max_iter = _positive_int("max_iter", max_iter)
+        self.tol = _positive_float("tol", tol)
         if not HAS_RTK:
             raise RuntimeError("RTK CUDA module not available. Build with CUDA support.")
 
@@ -57,11 +139,23 @@ class RTKSolver:
         residuals : ndarray, shape (2*(n_sat-1),)
             DD residuals (pseudorange then carrier) [m, cycles].
         """
-        rpr = np.ascontiguousarray(rover_pr, dtype=np.float64).ravel()
-        bpr = np.ascontiguousarray(base_pr, dtype=np.float64).ravel()
-        rcp = np.ascontiguousarray(rover_carrier, dtype=np.float64).ravel()
-        bcp = np.ascontiguousarray(base_carrier, dtype=np.float64).ravel()
-        sat = np.ascontiguousarray(sat_ecef, dtype=np.float64).ravel()
+        rpr = _finite_1d_obs("rover_pr", rover_pr, min_size=2)
+        n_sat = rpr.size
+        bpr = _finite_1d_obs("base_pr", base_pr, min_size=n_sat)
+        rcp = _finite_1d_obs("rover_carrier", rover_carrier, min_size=n_sat)
+        bcp = _finite_1d_obs("base_carrier", base_carrier, min_size=n_sat)
+        if bpr.size != n_sat:
+            raise ValueError("base_pr length must match n_sat")
+        if rcp.size != n_sat:
+            raise ValueError("rover_carrier length must match n_sat")
+        if bcp.size != n_sat:
+            raise ValueError("base_carrier length must match n_sat")
+        sat = _as_sat_ecef(sat_ecef, n_sat)
+
+        rpr = np.ascontiguousarray(rpr, dtype=np.float64)
+        bpr = np.ascontiguousarray(bpr, dtype=np.float64)
+        rcp = np.ascontiguousarray(rcp, dtype=np.float64)
+        bcp = np.ascontiguousarray(bcp, dtype=np.float64)
 
         result, ambiguities, residuals, iters = rtk_float(
             self.base_ecef, rpr, bpr, rcp, bcp, sat,
@@ -91,11 +185,26 @@ class RTKSolver:
         ratio : float
             Ratio test value (second-best / best chi-squared).
         """
-        rpr = np.ascontiguousarray(rover_pr, dtype=np.float64).ravel()
-        bpr = np.ascontiguousarray(base_pr, dtype=np.float64).ravel()
-        rcp = np.ascontiguousarray(rover_carrier, dtype=np.float64).ravel()
-        bcp = np.ascontiguousarray(base_carrier, dtype=np.float64).ravel()
-        sat = np.ascontiguousarray(sat_ecef, dtype=np.float64).ravel()
+        n_candidates = _positive_int("n_candidates", n_candidates)
+        ratio_threshold = _finite_float("ratio_threshold", ratio_threshold)
+
+        rpr = _finite_1d_obs("rover_pr", rover_pr, min_size=2)
+        n_sat = rpr.size
+        bpr = _finite_1d_obs("base_pr", base_pr, min_size=n_sat)
+        rcp = _finite_1d_obs("rover_carrier", rover_carrier, min_size=n_sat)
+        bcp = _finite_1d_obs("base_carrier", base_carrier, min_size=n_sat)
+        if bpr.size != n_sat:
+            raise ValueError("base_pr length must match n_sat")
+        if rcp.size != n_sat:
+            raise ValueError("rover_carrier length must match n_sat")
+        if bcp.size != n_sat:
+            raise ValueError("base_carrier length must match n_sat")
+        sat = _as_sat_ecef(sat_ecef, n_sat)
+
+        rpr = np.ascontiguousarray(rpr, dtype=np.float64)
+        bpr = np.ascontiguousarray(bpr, dtype=np.float64)
+        rcp = np.ascontiguousarray(rcp, dtype=np.float64)
+        bcp = np.ascontiguousarray(bcp, dtype=np.float64)
 
         # Get float solution
         result, ambiguities, residuals, iters = rtk_float(
@@ -138,11 +247,20 @@ class RTKSolver:
         iters : ndarray, shape (n_epoch,)
             Iterations per epoch.
         """
-        rpr = np.ascontiguousarray(rover_pr, dtype=np.float64)
-        bpr = np.ascontiguousarray(base_pr, dtype=np.float64)
-        rcp = np.ascontiguousarray(rover_carrier, dtype=np.float64)
-        bcp = np.ascontiguousarray(base_carrier, dtype=np.float64)
-        sat = np.ascontiguousarray(sat_ecef, dtype=np.float64)
+        rpr = np.asarray(rover_pr, dtype=np.float64)
+        if rpr.ndim != 2:
+            raise ValueError("rover_pr must have shape (n_epoch, n_sat)")
+        if rpr.shape[0] < 1:
+            raise ValueError("n_epoch must be >= 1")
+        if rpr.shape[1] < 2:
+            raise ValueError("n_sat must be >= 2")
+        n_epoch, n_sat = rpr.shape
+
+        rpr = _as_batch_obs("rover_pr", rpr, n_epoch, n_sat)
+        bpr = _as_batch_obs("base_pr", base_pr, n_epoch, n_sat)
+        rcp = _as_batch_obs("rover_carrier", rover_carrier, n_epoch, n_sat)
+        bcp = _as_batch_obs("base_carrier", base_carrier, n_epoch, n_sat)
+        sat = _as_batch_sat_ecef(sat_ecef, n_epoch, n_sat)
 
         results, ambiguities, iters = rtk_float_batch(
             self.base_ecef, rpr, bpr, rcp, bcp, sat,

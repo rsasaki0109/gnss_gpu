@@ -12,6 +12,74 @@ regions and repulsion to maintain particle diversity.
 import numpy as np
 
 
+def _finite_float(name, value):
+    try:
+        out = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be numeric") from exc
+    if not np.isfinite(out):
+        raise ValueError(f"{name} must be finite")
+    return out
+
+
+def _positive_float(name, value):
+    out = _finite_float(name, value)
+    if out <= 0.0:
+        raise ValueError(f"{name} must be positive")
+    return out
+
+
+def _nonnegative_float(name, value):
+    out = _finite_float(name, value)
+    if out < 0.0:
+        raise ValueError(f"{name} must be non-negative")
+    return out
+
+
+def _positive_int(name, value):
+    try:
+        out = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if out <= 0:
+        raise ValueError(f"{name} must be positive")
+    return out
+
+
+def _as_position_ecef(position_ecef):
+    arr = np.asarray(position_ecef, dtype=np.float64)
+    if arr.shape != (3,):
+        raise ValueError("position_ecef must have shape (3,)")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("position_ecef must be finite")
+    return arr
+
+
+def _as_sat_ecef_matrix(sat_ecef, n_sat):
+    sat = np.asarray(sat_ecef, dtype=np.float64)
+    if sat.shape != (n_sat, 3):
+        raise ValueError("sat_ecef must have shape (n_sat, 3)")
+    if not np.all(np.isfinite(sat)):
+        raise ValueError("sat_ecef must be finite")
+    return sat
+
+
+def _finite_1d_array(name, values, *, min_size=1):
+    arr = np.asarray(values, dtype=np.float64).ravel()
+    if arr.size < min_size:
+        raise ValueError(f"{name} must contain at least {min_size} value")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{name} must be finite")
+    return arr
+
+
+def _nonnegative_1d_array(name, values, *, min_size=1):
+    arr = _finite_1d_array(name, values, min_size=min_size)
+    if np.any(arr < 0.0):
+        raise ValueError(f"{name} must be non-negative")
+    return arr
+
+
 class SVGDParticleFilter:
     """Particle filter with SVGD instead of resampling.
 
@@ -61,15 +129,16 @@ class SVGDParticleFilter:
         self._pf_svgd_step = _pf_svgd_step
         self._pf_svgd_estimate = _pf_svgd_estimate
 
-        self.n_particles = n_particles
-        self.sigma_pos = sigma_pos
-        self.sigma_cb = sigma_cb
-        self.sigma_pr = sigma_pr
-        self.svgd_steps = svgd_steps
-        self.step_size = step_size
-        self.n_neighbors = n_neighbors
-        self.n_bandwidth_subsample = n_bandwidth_subsample
-        self.seed = seed
+        self.n_particles = _positive_int("n_particles", n_particles)
+        self.sigma_pos = _positive_float("sigma_pos", sigma_pos)
+        self.sigma_cb = _positive_float("sigma_cb", sigma_cb)
+        self.sigma_pr = _positive_float("sigma_pr", sigma_pr)
+        self.svgd_steps = _positive_int("svgd_steps", svgd_steps)
+        self.step_size = _positive_float("step_size", step_size)
+        self.n_neighbors = _positive_int("n_neighbors", n_neighbors)
+        self.n_bandwidth_subsample = _positive_int(
+            "n_bandwidth_subsample", n_bandwidth_subsample)
+        self.seed = int(seed)
 
         self._px = None
         self._py = None
@@ -93,7 +162,10 @@ class SVGDParticleFilter:
         spread_cb : float
             Standard deviation for initial clock bias scatter [m].
         """
-        pos = np.asarray(position_ecef, dtype=np.float64).ravel()
+        pos = _as_position_ecef(position_ecef)
+        clock_bias = _finite_float("clock_bias", clock_bias)
+        spread_pos = _positive_float("spread_pos", spread_pos)
+        spread_cb = _positive_float("spread_cb", spread_cb)
         n = self.n_particles
 
         self._px = np.empty(n, dtype=np.float64)
@@ -103,8 +175,8 @@ class SVGDParticleFilter:
 
         self._pf_initialize(
             self._px, self._py, self._pz, self._pcb,
-            float(pos[0]), float(pos[1]), float(pos[2]), float(clock_bias),
-            float(spread_pos), float(spread_cb),
+            float(pos[0]), float(pos[1]), float(pos[2]), clock_bias,
+            spread_pos, spread_cb,
             n, self.seed)
 
         self._initialized = True
@@ -124,9 +196,15 @@ class SVGDParticleFilter:
             raise RuntimeError(
                 "SVGDParticleFilter not initialized. Call initialize() first.")
 
+        dt = _nonnegative_float("dt", dt)
+
         if velocity is None:
             velocity = [0.0, 0.0, 0.0]
         vel = np.asarray(velocity, dtype=np.float64).ravel()
+        if vel.shape != (3,):
+            raise ValueError("velocity must have shape (3,)")
+        if not np.all(np.isfinite(vel)):
+            raise ValueError("velocity must be finite")
         vx = np.array([vel[0]], dtype=np.float64)
         vy = np.array([vel[1]], dtype=np.float64)
         vz = np.array([vel[2]], dtype=np.float64)
@@ -135,7 +213,7 @@ class SVGDParticleFilter:
         self._pf_predict(
             self._px, self._py, self._pz, self._pcb,
             vx, vy, vz,
-            float(dt), float(self.sigma_pos), float(self.sigma_cb),
+            dt, self.sigma_pos, self.sigma_cb,
             self.n_particles, self.seed, self._step)
 
     def update(self, sat_ecef, pseudoranges, weights=None):
@@ -157,14 +235,17 @@ class SVGDParticleFilter:
             raise RuntimeError(
                 "SVGDParticleFilter not initialized. Call initialize() first.")
 
-        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
-        pr = np.asarray(pseudoranges, dtype=np.float64).ravel()
-        n_sat = len(pr)
+        pr = _finite_1d_array("pseudoranges", pseudoranges, min_size=1)
+        n_sat = pr.size
+        sat = _as_sat_ecef_matrix(sat_ecef, n_sat)
 
         if weights is None:
-            weights = np.ones(n_sat, dtype=np.float64)
+            w = np.ones(n_sat, dtype=np.float64)
         else:
-            weights = np.asarray(weights, dtype=np.float64).ravel()
+            w = np.asarray(weights, dtype=np.float64).ravel()
+            if w.size != n_sat:
+                raise ValueError("weights length must match pseudoranges")
+            w = _nonnegative_1d_array("weights", w, min_size=n_sat)
 
         for i in range(self.svgd_steps):
             # Estimate bandwidth using median heuristic on random subsample
@@ -176,9 +257,9 @@ class SVGDParticleFilter:
             # Perform one SVGD step
             self._pf_svgd_step(
                 self._px, self._py, self._pz, self._pcb,
-                sat.ravel(), pr, weights,
+                sat.ravel(), pr, w,
                 self.n_particles, n_sat,
-                float(self.sigma_pr), float(self.step_size),
+                self.sigma_pr, self.step_size,
                 self.n_neighbors, bandwidth,
                 self.seed, self._step * 100 + i)
 

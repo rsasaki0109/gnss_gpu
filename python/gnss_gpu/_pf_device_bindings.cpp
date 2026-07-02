@@ -1,8 +1,100 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
+#include <cmath>
+#include <stdexcept>
+#include <string>
 #include "gnss_gpu/pf_device.h"
 
 namespace py = pybind11;
+
+namespace {
+
+void validate_positive_finite(double value, const char* name) {
+    if (!std::isfinite(value) || value <= 0.0) {
+        throw std::runtime_error(std::string(name) + " must be positive and finite");
+    }
+}
+
+void validate_finite(double value, const char* name) {
+    if (!std::isfinite(value)) {
+        throw std::runtime_error(std::string(name) + " must be finite");
+    }
+}
+
+void validate_n_particles(int n_particles) {
+    if (n_particles < 1) {
+        throw std::runtime_error("n_particles must be >= 1");
+    }
+}
+
+void validate_n_sat(int n_sat) {
+    if (n_sat < 1) {
+        throw std::runtime_error("n_sat must be >= 1");
+    }
+}
+
+void validate_device_state(const gnss_gpu::PFDeviceState* state, const char* function_name) {
+    if (state == nullptr) {
+        throw std::runtime_error(std::string(function_name) + ": state must not be null");
+    }
+    if (!state->allocated) {
+        throw std::runtime_error(std::string(function_name) + ": state is not allocated");
+    }
+}
+
+void validate_dt(double dt) {
+    if (!std::isfinite(dt) || dt < 0.0) {
+        throw std::runtime_error("dt must be non-negative and finite");
+    }
+}
+
+void ensure_finite_doubles(const py::buffer_info& buf, const char* message) {
+    const auto* ptr = static_cast<const double*>(buf.ptr);
+    for (py::ssize_t i = 0; i < buf.size; ++i) {
+        if (!std::isfinite(ptr[i])) {
+            throw std::runtime_error(message);
+        }
+    }
+}
+
+void validate_sat_ecef(const py::buffer_info& buf, int n_sat) {
+    if (buf.ndim == 2) {
+        if (buf.shape[0] != n_sat || buf.shape[1] != 3) {
+            throw std::runtime_error("sat_ecef shape must match n_sat satellites");
+        }
+    } else if (buf.ndim == 1) {
+        if (buf.size != static_cast<py::ssize_t>(n_sat) * 3) {
+            throw std::runtime_error("sat_ecef shape must match n_sat satellites");
+        }
+    } else {
+        throw std::runtime_error("sat_ecef must be 1D or 2D");
+    }
+    ensure_finite_doubles(buf, "sat_ecef must be finite");
+}
+
+void validate_pseudoranges(const py::buffer_info& buf, int n_sat) {
+    if (buf.ndim != 1 || buf.size != n_sat) {
+        throw std::runtime_error("pseudoranges length must match n_sat");
+    }
+    ensure_finite_doubles(buf, "pseudoranges must be finite");
+}
+
+void validate_weights_sat(const py::buffer_info& buf, int n_sat) {
+    if (buf.ndim != 1 || buf.size != n_sat) {
+        throw std::runtime_error("weights_sat length must match n_sat");
+    }
+    const auto* ptr = static_cast<const double*>(buf.ptr);
+    for (py::ssize_t i = 0; i < buf.size; ++i) {
+        if (!std::isfinite(ptr[i])) {
+            throw std::runtime_error("weights_sat must be finite");
+        }
+        if (ptr[i] < 0.0) {
+            throw std::runtime_error("weights_sat must be non-negative");
+        }
+    }
+}
+
+}  // namespace
 
 // Custom destructor for PFDeviceState managed by pybind11.
 // When pybind11 deletes the Python wrapper, this frees GPU resources
@@ -28,6 +120,7 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
         .def_readonly("allocated", &gnss_gpu::PFDeviceState::allocated);
 
     m.def("pf_device_create", [](int n_particles) {
+        validate_n_particles(n_particles);
         return std::unique_ptr<gnss_gpu::PFDeviceState, PFDeviceStateDeleter>(
             gnss_gpu::pf_device_create(n_particles), PFDeviceStateDeleter());
     }, "Allocate persistent GPU memory for particle state",
@@ -49,6 +142,18 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
                                      double init_vx, double init_vy, double init_vz,
                                      double spread_vel,
                                      double init_vel_sigma) {
+        validate_device_state(state, "pf_device_initialize");
+        validate_finite(init_x, "init_x");
+        validate_finite(init_y, "init_y");
+        validate_finite(init_z, "init_z");
+        validate_finite(init_cb, "init_cb");
+        validate_positive_finite(spread_pos, "spread_pos");
+        validate_positive_finite(spread_cb, "spread_cb");
+        validate_finite(init_vx, "init_vx");
+        validate_finite(init_vy, "init_vy");
+        validate_finite(init_vz, "init_vz");
+        validate_finite(spread_vel, "spread_vel");
+        validate_finite(init_vel_sigma, "init_vel_sigma");
         gnss_gpu::pf_device_initialize(state, init_x, init_y, init_z, init_cb,
                                        spread_pos, spread_cb, seed,
                                        init_vx, init_vy, init_vz, spread_vel,
@@ -69,6 +174,16 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
                                   double velocity_guide_alpha,
                                   bool velocity_kf,
                                   double velocity_process_noise) {
+        validate_device_state(state, "pf_device_predict");
+        validate_finite(vx, "vx");
+        validate_finite(vy, "vy");
+        validate_finite(vz, "vz");
+        validate_dt(dt);
+        validate_positive_finite(sigma_pos, "sigma_pos");
+        validate_positive_finite(sigma_cb, "sigma_cb");
+        validate_finite(sigma_vel, "sigma_vel");
+        validate_finite(velocity_guide_alpha, "velocity_guide_alpha");
+        validate_finite(velocity_process_noise, "velocity_process_noise");
         gnss_gpu::pf_device_predict(
             state, vx, vy, vz, dt, sigma_pos, sigma_cb, seed, step,
             sigma_vel, velocity_guide_alpha, velocity_kf,
@@ -91,9 +206,18 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
                                  double per_particle_nlos_threshold_m,
                                  bool per_particle_huber,
                                  double per_particle_huber_k) {
+        validate_device_state(state, "pf_device_weight");
+        validate_n_sat(n_sat);
         py::buffer_info b_sat = sat_ecef.request();
         py::buffer_info b_pr = pseudoranges.request();
         py::buffer_info b_w = weights_sat.request();
+        validate_sat_ecef(b_sat, n_sat);
+        validate_pseudoranges(b_pr, n_sat);
+        validate_weights_sat(b_w, n_sat);
+        validate_positive_finite(sigma_pr, "sigma_pr");
+        validate_finite(nu, "nu");
+        validate_finite(per_particle_nlos_threshold_m, "per_particle_nlos_threshold_m");
+        validate_finite(per_particle_huber_k, "per_particle_huber_k");
         gnss_gpu::pf_device_weight(state,
             static_cast<double*>(b_sat.ptr),
             static_cast<double*>(b_pr.ptr),
