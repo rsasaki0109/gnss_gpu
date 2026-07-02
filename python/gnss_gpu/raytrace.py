@@ -67,6 +67,24 @@ def horizontal_ground_plane(height=0.0):
     )
 
 
+def _validate_rx_ecef(rx_ecef) -> np.ndarray:
+    rx = np.asarray(rx_ecef, dtype=np.float64).ravel()
+    if rx.size != 3:
+        raise ValueError("rx_ecef must have shape (3,)")
+    if not np.all(np.isfinite(rx)):
+        raise ValueError("rx_ecef must be finite")
+    return np.ascontiguousarray(rx)
+
+
+def _validate_sat_ecef(sat_ecef) -> np.ndarray:
+    sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+    if sat.shape[0] == 0:
+        raise ValueError("sat_ecef must contain at least one satellite")
+    if not np.all(np.isfinite(sat)):
+        raise ValueError("sat_ecef must be finite")
+    return np.ascontiguousarray(sat)
+
+
 class BuildingModel:
     """3D building model for GNSS ray tracing NLOS detection."""
 
@@ -80,6 +98,8 @@ class BuildingModel:
         self.triangles = np.asarray(triangles, dtype=np.float64)
         if self.triangles.ndim != 3 or self.triangles.shape[1:] != (3, 3):
             raise ValueError("triangles must have shape [N, 3, 3]")
+        if not np.all(np.isfinite(self.triangles)):
+            raise ValueError("triangles must be finite")
 
     def check_los(self, rx_ecef, sat_ecef):
         """Check line-of-sight for each satellite.
@@ -93,8 +113,8 @@ class BuildingModel:
         """
         from gnss_gpu._raytrace import raytrace_los_check
 
-        rx = np.asarray(rx_ecef, dtype=np.float64).ravel()
-        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+        rx = _validate_rx_ecef(rx_ecef)
+        sat = _validate_sat_ecef(sat_ecef)
         tri = self.triangles.reshape(-1, 3, 3)
 
         return raytrace_los_check(rx, sat, tri)
@@ -112,8 +132,8 @@ class BuildingModel:
         """
         from gnss_gpu._raytrace import raytrace_multipath
 
-        rx = np.asarray(rx_ecef, dtype=np.float64).ravel()
-        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+        rx = _validate_rx_ecef(rx_ecef)
+        sat = _validate_sat_ecef(sat_ecef)
         tri = self.triangles.reshape(-1, 3, 3)
 
         reflection_points, excess_delays = raytrace_multipath(rx, sat, tri)

@@ -17,6 +17,10 @@ class BVHAccelerator:
         self.triangles = np.asarray(triangles, dtype=np.float64)
         if self.triangles.ndim != 3 or self.triangles.shape[1:] != (3, 3):
             raise ValueError("triangles must have shape [N, 3, 3]")
+        if self.triangles.shape[0] == 0:
+            raise ValueError("triangles must contain at least one triangle")
+        if not np.all(np.isfinite(self.triangles)):
+            raise ValueError("triangles must be finite")
 
         from gnss_gpu._bvh import bvh_build
 
@@ -51,6 +55,12 @@ class BVHAccelerator:
 
         rx = np.asarray(rx_ecef, dtype=np.float64).ravel()
         sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+        if rx.size != 3:
+            raise ValueError("rx_ecef must have shape (3,)")
+        if sat.shape[0] == 0:
+            raise ValueError("sat_ecef must contain at least one satellite")
+        if not np.all(np.isfinite(rx)) or not np.all(np.isfinite(sat)):
+            raise ValueError("rx_ecef and sat_ecef must be finite")
 
         return raytrace_los_check_bvh(rx, sat, self._nodes_flat,
                                        self._sorted_tris)
@@ -96,6 +106,8 @@ class BVHAccelerator:
             raise ValueError("sat_ecef must have shape (N, n_sat, 3)")
         if rx.shape[0] != sat.shape[0]:
             raise ValueError("rx_ecef and sat_ecef must share the leading N")
+        if rx.shape[0] == 0 or sat.shape[1] == 0:
+            raise ValueError("rx_ecef and sat_ecef must have n_epoch,n_sat >= 1")
 
         return raytrace_los_check_bvh_batch(
             rx, sat, self._nodes_flat, self._sorted_tris)
@@ -124,6 +136,8 @@ class BVHAccelerator:
             raise ValueError("sat_ecef must have shape (N, n_sat, 3)")
         if rx.shape[0] != sat.shape[0]:
             raise ValueError("rx_ecef and sat_ecef must share the leading N")
+        if rx.shape[0] == 0 or sat.shape[1] == 0:
+            raise ValueError("rx_ecef and sat_ecef must have n_epoch,n_sat >= 1")
 
         reflection_points, excess_delays = raytrace_multipath_bvh_batch(
             rx, sat, self._nodes_flat, self._sorted_tris)

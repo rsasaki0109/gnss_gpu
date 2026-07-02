@@ -8,6 +8,93 @@ except ImportError:
     _apply_error = None
 
 
+def _validate_positive_finite(name: str, value: float) -> None:
+    if not np.isfinite(value) or value <= 0.0:
+        raise ValueError(f"{name} must be positive and finite")
+
+
+def _validate_reflector_planes(reflector_planes) -> np.ndarray:
+    planes = np.asarray(reflector_planes, dtype=np.float64)
+    if planes.ndim == 1:
+        if planes.size == 0 or planes.size % 6 != 0:
+            raise ValueError("reflector_planes must have shape (n_ref, 6)")
+        planes = planes.reshape(-1, 6)
+    elif not (planes.ndim == 2 and planes.shape[1] == 6):
+        raise ValueError("reflector_planes must have shape (n_ref, 6)")
+    if planes.shape[0] == 0:
+        raise ValueError("reflector_planes must contain at least one plane")
+    if not np.all(np.isfinite(planes)):
+        raise ValueError("reflector_planes must be finite")
+    return np.ascontiguousarray(planes)
+
+
+def _validate_simulate_geometry(rx_ecef, sat_ecef) -> tuple[np.ndarray, np.ndarray]:
+    rx = np.asarray(rx_ecef, dtype=np.float64)
+    if rx.ndim == 1:
+        if rx.size != 3:
+            raise ValueError("rx_ecef must have shape (3,) or (n_rx, 3)")
+        rx = rx.reshape(1, 3)
+    elif not (rx.ndim == 2 and rx.shape[1] == 3):
+        raise ValueError("rx_ecef must have shape (3,) or (n_rx, 3)")
+    if rx.shape[0] == 0:
+        raise ValueError("rx_ecef must contain at least one receiver")
+
+    sat = np.asarray(sat_ecef, dtype=np.float64)
+    if sat.ndim == 1:
+        if sat.size != 3:
+            raise ValueError("sat_ecef must have shape (n_sat, 3)")
+        sat = sat.reshape(1, 3)
+    elif not (sat.ndim == 2 and sat.shape[1] == 3):
+        raise ValueError("sat_ecef must have shape (n_sat, 3)")
+    if sat.shape[0] == 0:
+        raise ValueError("sat_ecef must contain at least one satellite")
+
+    if not np.all(np.isfinite(rx)) or not np.all(np.isfinite(sat)):
+        raise ValueError("rx_ecef and sat_ecef must be finite")
+    return np.ascontiguousarray(rx), np.ascontiguousarray(sat)
+
+
+def _validate_corrupt_inputs(clean_pr, rx_ecef, sat_ecef) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    pr = np.asarray(clean_pr, dtype=np.float64)
+    if pr.ndim == 1:
+        if pr.size == 0:
+            raise ValueError("clean_pr must be non-empty")
+        pr = pr.reshape(1, -1)
+    elif pr.ndim != 2:
+        raise ValueError("clean_pr must have shape (n_epoch, n_sat)")
+    if pr.shape[0] == 0 or pr.shape[1] == 0:
+        raise ValueError("clean_pr must have shape (n_epoch, n_sat) with n_epoch,n_sat >= 1")
+    if not np.all(np.isfinite(pr)):
+        raise ValueError("clean_pr must be finite")
+
+    rx = np.asarray(rx_ecef, dtype=np.float64)
+    if rx.ndim == 1:
+        if rx.size != 3:
+            raise ValueError("rx_ecef must have shape (3,) or (n_epoch, 3)")
+        rx = rx.reshape(1, 3)
+    elif not (rx.ndim == 2 and rx.shape[1] == 3):
+        raise ValueError("rx_ecef must have shape (n_epoch, 3)")
+    if rx.shape[0] != pr.shape[0]:
+        raise ValueError("rx_ecef must have the same number of epochs as clean_pr")
+
+    sat = np.asarray(sat_ecef, dtype=np.float64)
+    if sat.ndim == 2:
+        if sat.shape[1] != 3:
+            raise ValueError("sat_ecef must have shape (n_epoch, n_sat, 3)")
+        if pr.shape[0] != 1:
+            raise ValueError("sat_ecef must have shape (n_epoch, n_sat, 3)")
+        sat = sat.reshape(1, sat.shape[0], 3)
+    elif sat.ndim == 3:
+        if sat.shape != (pr.shape[0], pr.shape[1], 3):
+            raise ValueError("sat_ecef must have shape (n_epoch, n_sat, 3)")
+    else:
+        raise ValueError("sat_ecef must have shape (n_epoch, n_sat, 3)")
+
+    if not np.all(np.isfinite(rx)) or not np.all(np.isfinite(sat)):
+        raise ValueError("rx_ecef and sat_ecef must be finite")
+    return np.ascontiguousarray(pr), np.ascontiguousarray(rx), np.ascontiguousarray(sat)
+
+
 class MultipathSimulator:
     """GPU-accelerated multipath signal simulation.
 
@@ -25,9 +112,10 @@ class MultipathSimulator:
 
     def __init__(self, reflector_planes, carrier_freq=1575.42e6,
                  chip_rate=1.023e6, correlator_spacing=1.0):
-        self.reflector_planes = np.ascontiguousarray(reflector_planes, dtype=np.float64)
-        if self.reflector_planes.ndim == 1:
-            self.reflector_planes = self.reflector_planes.reshape(1, 6)
+        self.reflector_planes = _validate_reflector_planes(reflector_planes)
+        _validate_positive_finite("carrier_freq", float(carrier_freq))
+        _validate_positive_finite("chip_rate", float(chip_rate))
+        _validate_positive_finite("correlator_spacing", float(correlator_spacing))
         self.carrier_freq = float(carrier_freq)
         self.chip_rate = float(chip_rate)
         self.correlator_spacing = float(correlator_spacing)
@@ -50,10 +138,7 @@ class MultipathSimulator:
         attenuations : ndarray, shape (n_rx, n_sat)
             Composite attenuation factors.
         """
-        rx = np.ascontiguousarray(rx_ecef, dtype=np.float64)
-        if rx.ndim == 1:
-            rx = rx.reshape(1, 3)
-        sat = np.ascontiguousarray(sat_ecef, dtype=np.float64)
+        rx, sat = _validate_simulate_geometry(rx_ecef, sat_ecef)
         n_rx = rx.shape[0]
         n_sat = sat.shape[0]
 
@@ -86,15 +171,7 @@ class MultipathSimulator:
         errors : ndarray, shape (n_epoch, n_sat)
             Multipath-induced errors [m].
         """
-        pr = np.ascontiguousarray(clean_pr, dtype=np.float64)
-        if pr.ndim == 1:
-            pr = pr.reshape(1, -1)
-        rx = np.ascontiguousarray(rx_ecef, dtype=np.float64)
-        if rx.ndim == 1:
-            rx = rx.reshape(1, 3)
-        sat = np.ascontiguousarray(sat_ecef, dtype=np.float64)
-        if sat.ndim == 2:
-            sat = sat.reshape(1, *sat.shape)
+        pr, rx, sat = _validate_corrupt_inputs(clean_pr, rx_ecef, sat_ecef)
 
         n_epoch = pr.shape[0]
         n_sat = pr.shape[1]
