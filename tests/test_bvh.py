@@ -183,11 +183,6 @@ class TestBVHBatch:
         assert not result[1, 1]
 
     def test_compute_multipath_batch_matches_per_epoch(self):
-        # Reference is per-epoch compute_multipath called with n_sat=1 to bypass
-        # an unrelated bug in the existing per-epoch multipath kernel that
-        # broadcasts thread-0 results across threads when n_sat > 1.  The
-        # batched kernel does not have this problem (it uses unique tid per
-        # (epoch, sat) pair).
         rng = np.random.RandomState(11)
         n_epoch = 6
         n_sat = 4
@@ -204,13 +199,41 @@ class TestBVHBatch:
         delay_ref = np.zeros((n_epoch, n_sat), dtype=np.float64)
         refl_ref = np.zeros((n_epoch, n_sat, 3), dtype=np.float64)
         for e in range(n_epoch):
-            for s in range(n_sat):
-                d, r = self.bvh.compute_multipath(rx[e], sat[e, s].reshape(1, 3))
-                delay_ref[e, s] = d[0]
-                refl_ref[e, s] = r[0]
+            d, r = self.bvh.compute_multipath(rx[e], sat[e])
+            delay_ref[e] = d
+            refl_ref[e] = r
 
         np.testing.assert_allclose(delay_batch, delay_ref, atol=1e-9)
         np.testing.assert_allclose(refl_batch, refl_ref, atol=1e-9)
+
+    def test_compute_multipath_distinct_per_satellite(self):
+        """Regression for #49: n_sat>1 must not broadcast thread-0's delay."""
+        rx = np.array([22.49339292, -7.97963954, 4.7373692], dtype=np.float64)
+        sats = np.array(
+            [
+                [200.0, -10.0, 25.0],
+                [210.0, -10.0, 26.0],
+                [220.0, -10.0, 27.0],
+                [230.0, -10.0, 28.0],
+            ],
+            dtype=np.float64,
+        )
+
+        alone = []
+        for s in sats:
+            d, _ = self.bvh.compute_multipath(rx, s.reshape(1, 3))
+            alone.append(d[0])
+
+        together, _ = self.bvh.compute_multipath(rx, sats)
+        np.testing.assert_allclose(together, alone, rtol=0, atol=1e-9)
+
+        reversed_sats = sats[::-1].copy()
+        reversed_alone = []
+        for s in reversed_sats:
+            d, _ = self.bvh.compute_multipath(rx, s.reshape(1, 3))
+            reversed_alone.append(d[0])
+        reversed_together, _ = self.bvh.compute_multipath(rx, reversed_sats)
+        np.testing.assert_allclose(reversed_together, reversed_alone, rtol=0, atol=1e-9)
 
     def test_check_los_batch_rejects_bad_shape(self):
         rx = np.zeros((4, 3), dtype=np.float64)
