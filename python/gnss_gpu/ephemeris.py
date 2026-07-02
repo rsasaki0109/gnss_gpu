@@ -52,6 +52,19 @@ BDS_OMEGA_E = 7.292115e-5
 BDS_F = GAL_F
 
 
+def _validate_gps_time(gps_time: float) -> None:
+    if not math.isfinite(float(gps_time)):
+        raise ValueError("gps_time must be finite")
+
+
+def _validate_gps_times(gps_times: np.ndarray) -> None:
+    times = np.asarray(gps_times, dtype=np.float64).reshape(-1)
+    if times.size == 0:
+        raise ValueError("gps_times must be non-empty")
+    if not np.all(np.isfinite(times)):
+        raise ValueError("gps_times must be finite")
+
+
 def _constellation_constants(system: str) -> tuple[float, float, float]:
     system = system.upper()
     if system == "E":
@@ -291,6 +304,7 @@ class Ephemeris:
             sat_clk: array of shape [n_sat] clock corrections [s]
             used_prns: list of PRN numbers corresponding to output rows
         """
+        _validate_gps_time(gps_time)
         if prn_list is None:
             prn_list = self._prn_list
         if obs_codes is not None and len(obs_codes) != len(prn_list):
@@ -337,6 +351,8 @@ class Ephemeris:
             every requested epoch so that the output shape stays rectangular.
         """
         gps_times = np.asarray(gps_times, dtype=np.float64).reshape(-1)
+        if len(gps_times) > 0:
+            _validate_gps_times(gps_times)
 
         if prn_list is None:
             prn_list = self._prn_list

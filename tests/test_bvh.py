@@ -252,5 +252,13 @@ class TestBVHBatch:
             self.bvh.check_los_batch(rx_short, sat)
 
 
+def test_legacy_raytrace_multipath_bvh_removed():
+    """Single-epoch multipath uses the batch kernel; legacy API is gone."""
+    import gnss_gpu._bvh as bvh_mod
+
+    assert not hasattr(bvh_mod, "raytrace_multipath_bvh")
+    assert hasattr(bvh_mod, "raytrace_multipath_bvh_batch")
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
