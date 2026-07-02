@@ -2,29 +2,11 @@
 
 import numpy as np
 
-
-def _finite_float(name, value):
-    try:
-        out = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be numeric") from exc
-    if not np.isfinite(out):
-        raise ValueError(f"{name} must be finite")
-    return out
-
-
-def _positive_float(name, value):
-    out = _finite_float(name, value)
-    if out <= 0.0:
-        raise ValueError(f"{name} must be positive")
-    return out
-
-
-def _nonnegative_float(name, value):
-    out = _finite_float(name, value)
-    if out < 0.0:
-        raise ValueError(f"{name} must be non-negative")
-    return out
+from gnss_gpu.input_validation import (
+    finite_float,
+    nonnegative_float,
+    positive_float,
+)
 
 
 def _validate_prn(name, value):
@@ -80,11 +62,11 @@ class Acquisition:
 
     def __init__(self, sampling_freq, intermediate_freq=0,
                  doppler_range=5000, doppler_step=500, threshold=2.5):
-        self.sampling_freq = _positive_float("sampling_freq", sampling_freq)
-        self.intermediate_freq = _finite_float("intermediate_freq", intermediate_freq)
-        self.doppler_range = _nonnegative_float("doppler_range", doppler_range)
-        self.doppler_step = _positive_float("doppler_step", doppler_step)
-        self.threshold = _nonnegative_float("threshold", threshold)
+        self.sampling_freq = positive_float("sampling_freq", sampling_freq)
+        self.intermediate_freq = finite_float("intermediate_freq", intermediate_freq)
+        self.doppler_range = nonnegative_float("doppler_range", doppler_range)
+        self.doppler_step = positive_float("doppler_step", doppler_step)
+        self.threshold = nonnegative_float("threshold", threshold)
 
     def acquire(self, signal, prn_list=None):
         """Run acquisition on the given signal.
@@ -129,12 +111,12 @@ class Acquisition:
             1-D float32 array of IF samples.
         """
         prn = _validate_prn("prn", prn)
-        code_phase = _finite_float("code_phase", code_phase)
-        doppler = _finite_float("doppler", doppler)
-        snr_db = _finite_float("snr_db", snr_db)
-        sampling_freq = _positive_float("sampling_freq", sampling_freq)
-        duration_s = _positive_float("duration_s", duration_s)
-        intermediate_freq = _finite_float("intermediate_freq", intermediate_freq)
+        code_phase = finite_float("code_phase", code_phase)
+        doppler = finite_float("doppler", doppler)
+        snr_db = finite_float("snr_db", snr_db)
+        sampling_freq = positive_float("sampling_freq", sampling_freq)
+        duration_s = positive_float("duration_s", duration_s)
+        intermediate_freq = finite_float("intermediate_freq", intermediate_freq)
 
         n_samples = int(sampling_freq * duration_s)
         if n_samples < 1:

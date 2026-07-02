@@ -2,6 +2,12 @@
 
 import numpy as np
 
+from gnss_gpu.input_validation import (
+    finite_float,
+    nonnegative_float,
+    positive_float,
+)
+
 try:
     from gnss_gpu._gnss_gpu_tracking import (
         TrackingConfig as _TrackingConfig,
@@ -20,30 +26,6 @@ except ImportError:
 CA_CODE_RATE = 1.023e6      # chips/s
 CA_CODE_LENGTH = 1023       # chips
 GPS_L1_FREQ = 1575.42e6     # Hz
-
-
-def _finite_float(name, value):
-    try:
-        out = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be numeric") from exc
-    if not np.isfinite(out):
-        raise ValueError(f"{name} must be finite")
-    return out
-
-
-def _positive_float(name, value):
-    out = _finite_float(name, value)
-    if out <= 0.0:
-        raise ValueError(f"{name} must be positive")
-    return out
-
-
-def _nonnegative_float(name, value):
-    out = _finite_float(name, value)
-    if out < 0.0:
-        raise ValueError(f"{name} must be non-negative")
-    return out
 
 
 def _validate_prn(name, value):
@@ -109,12 +91,12 @@ def _as_signal_block(signal_block):
 
 
 def _validate_config_values(config):
-    sampling_freq = _positive_float("sampling_freq", config.sampling_freq)
-    intermediate_freq = _finite_float("intermediate_freq", config.intermediate_freq)
-    integration_time = _positive_float("integration_time", config.integration_time)
-    dll_bandwidth = _nonnegative_float("dll_bandwidth", config.dll_bandwidth)
-    pll_bandwidth = _nonnegative_float("pll_bandwidth", config.pll_bandwidth)
-    correlator_spacing = _positive_float("correlator_spacing", config.correlator_spacing)
+    sampling_freq = positive_float("sampling_freq", config.sampling_freq)
+    intermediate_freq = finite_float("intermediate_freq", config.intermediate_freq)
+    integration_time = positive_float("integration_time", config.integration_time)
+    dll_bandwidth = nonnegative_float("dll_bandwidth", config.dll_bandwidth)
+    pll_bandwidth = nonnegative_float("pll_bandwidth", config.pll_bandwidth)
+    correlator_spacing = positive_float("correlator_spacing", config.correlator_spacing)
     return (
         sampling_freq,
         intermediate_freq,
@@ -150,12 +132,12 @@ class TrackingConfig:
     def __init__(self, sampling_freq=4.092e6, intermediate_freq=4.092e6,
                  integration_time=1e-3, dll_bandwidth=2.0,
                  pll_bandwidth=15.0, correlator_spacing=0.5):
-        self.sampling_freq = _positive_float("sampling_freq", sampling_freq)
-        self.intermediate_freq = _finite_float("intermediate_freq", intermediate_freq)
-        self.integration_time = _positive_float("integration_time", integration_time)
-        self.dll_bandwidth = _nonnegative_float("dll_bandwidth", dll_bandwidth)
-        self.pll_bandwidth = _nonnegative_float("pll_bandwidth", pll_bandwidth)
-        self.correlator_spacing = _positive_float("correlator_spacing", correlator_spacing)
+        self.sampling_freq = positive_float("sampling_freq", sampling_freq)
+        self.intermediate_freq = finite_float("intermediate_freq", intermediate_freq)
+        self.integration_time = positive_float("integration_time", integration_time)
+        self.dll_bandwidth = nonnegative_float("dll_bandwidth", dll_bandwidth)
+        self.pll_bandwidth = nonnegative_float("pll_bandwidth", pll_bandwidth)
+        self.correlator_spacing = positive_float("correlator_spacing", correlator_spacing)
 
 
 def ChannelState(prn, code_phase=0.0, code_freq=CA_CODE_RATE,
@@ -163,13 +145,13 @@ def ChannelState(prn, code_phase=0.0, code_freq=CA_CODE_RATE,
                  dll_integrator=0.0, pll_integrator=0.0, locked=True):
     """Create a ChannelState using the C++ bound type if available."""
     prn = _validate_prn("prn", prn)
-    code_phase = _finite_float("code_phase", code_phase)
-    code_freq = _positive_float("code_freq", code_freq)
-    carrier_phase = _finite_float("carrier_phase", carrier_phase)
-    carrier_freq = _finite_float("carrier_freq", carrier_freq)
-    cn0 = _finite_float("cn0", cn0)
-    dll_integrator = _finite_float("dll_integrator", dll_integrator)
-    pll_integrator = _finite_float("pll_integrator", pll_integrator)
+    code_phase = finite_float("code_phase", code_phase)
+    code_freq = positive_float("code_freq", code_freq)
+    carrier_phase = finite_float("carrier_phase", carrier_phase)
+    carrier_freq = finite_float("carrier_freq", carrier_freq)
+    cn0 = finite_float("cn0", cn0)
+    dll_integrator = finite_float("dll_integrator", dll_integrator)
+    pll_integrator = finite_float("pll_integrator", pll_integrator)
     if _HAS_GPU:
         ch = _ChannelState()
         ch.prn = prn

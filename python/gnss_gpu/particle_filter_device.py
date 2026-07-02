@@ -14,29 +14,13 @@ from types import SimpleNamespace
 
 import numpy as np
 
-
-def _finite_float(name, value):
-    try:
-        out = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be numeric") from exc
-    if not np.isfinite(out):
-        raise ValueError(f"{name} must be finite")
-    return out
-
-
-def _positive_float(name, value):
-    out = _finite_float(name, value)
-    if out <= 0.0:
-        raise ValueError(f"{name} must be positive")
-    return out
-
-
-def _nonnegative_float(name, value):
-    out = _finite_float(name, value)
-    if out < 0.0:
-        raise ValueError(f"{name} must be non-negative")
-    return out
+from gnss_gpu.input_validation import (
+    as_position_ecef,
+    finite_float,
+    nonnegative_float,
+    positive_float,
+    validate_gnss_observation_epoch,
+)
 
 
 def _positive_int(name, value):
@@ -47,42 +31,6 @@ def _positive_int(name, value):
     if out < 1:
         raise ValueError(f"{name} must be >= 1")
     return out
-
-
-def _as_position_ecef(position_ecef):
-    arr = np.asarray(position_ecef, dtype=np.float64)
-    if arr.shape != (3,):
-        raise ValueError("position_ecef must have shape (3,)")
-    if not np.all(np.isfinite(arr)):
-        raise ValueError("position_ecef must be finite")
-    return arr
-
-
-def _validate_sat_pr_weights(sat_ecef, pseudoranges, weights=None):
-    pr = np.asarray(pseudoranges, dtype=np.float64).ravel()
-    if pr.size < 1:
-        raise ValueError("pseudoranges must contain at least 1 value")
-    if not np.all(np.isfinite(pr)):
-        raise ValueError("pseudoranges must be finite")
-
-    n_sat = pr.size
-    sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
-    if sat.shape != (n_sat, 3):
-        raise ValueError("sat_ecef must have shape (n_sat, 3)")
-    if not np.all(np.isfinite(sat)):
-        raise ValueError("sat_ecef must be finite")
-
-    if weights is None:
-        weights = np.ones(n_sat, dtype=np.float64)
-    else:
-        weights = np.asarray(weights, dtype=np.float64).ravel()
-        if weights.size != n_sat:
-            raise ValueError("weights length must match pseudoranges")
-        if not np.all(np.isfinite(weights)):
-            raise ValueError("weights must be finite")
-        if np.any(weights < 0.0):
-            raise ValueError("weights must be non-negative")
-    return sat, pr, weights, n_sat
 
 
 class ParticleFilterDevice:
@@ -176,10 +124,10 @@ class ParticleFilterDevice:
         self._pf_device_sync = pf_device_sync
 
         self.n_particles = _positive_int("n_particles", n_particles)
-        self.sigma_pos = _positive_float("sigma_pos", sigma_pos)
-        self.sigma_cb = _positive_float("sigma_cb", sigma_cb)
-        self.sigma_pr = _positive_float("sigma_pr", sigma_pr)
-        self.nu = _finite_float("nu", nu)  # Student's t DoF. 0=Gaussian, 1=Cauchy, 3-5=moderate
+        self.sigma_pos = positive_float("sigma_pos", sigma_pos)
+        self.sigma_cb = positive_float("sigma_cb", sigma_cb)
+        self.sigma_pr = positive_float("sigma_pr", sigma_pr)
+        self.nu = finite_float("nu", nu)  # Student's t DoF. 0=Gaussian, 1=Cauchy, 3-5=moderate
         self.resampling = resampling
         self.ess_threshold = ess_threshold
         self.seed = seed
@@ -247,11 +195,11 @@ class ParticleFilterDevice:
         velocity_init_sigma : float
             Initial per-particle velocity KF standard deviation [m/s].
         """
-        pos = _as_position_ecef(position_ecef)
-        spread_pos = _positive_float("spread_pos", spread_pos)
-        spread_cb = _positive_float("spread_cb", spread_cb)
-        clock_bias = _finite_float("clock_bias", clock_bias)
-        velocity_init_sigma = _finite_float("velocity_init_sigma", velocity_init_sigma)
+        pos = as_position_ecef(position_ecef)
+        spread_pos = positive_float("spread_pos", spread_pos)
+        spread_cb = positive_float("spread_cb", spread_cb)
+        clock_bias = finite_float("clock_bias", clock_bias)
+        velocity_init_sigma = finite_float("velocity_init_sigma", velocity_init_sigma)
         if velocity is None:
             vel = np.zeros(3, dtype=np.float64)
         else:
@@ -260,7 +208,7 @@ class ParticleFilterDevice:
                 raise ValueError("velocity must have shape (3,)")
             if not np.all(np.isfinite(vel)):
                 raise ValueError("velocity must be finite")
-        spread_vel = _finite_float("spread_vel", spread_vel)
+        spread_vel = finite_float("spread_vel", spread_vel)
 
         self._pf_device_initialize(
             self._state,
@@ -306,7 +254,7 @@ class ParticleFilterDevice:
         if not self._initialized:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
 
-        dt = _nonnegative_float("dt", dt)
+        dt = nonnegative_float("dt", dt)
         if velocity is None:
             vx, vy, vz = 0.0, 0.0, 0.0
         else:
@@ -317,9 +265,9 @@ class ParticleFilterDevice:
                 raise ValueError("velocity must be finite")
             vx, vy, vz = float(vel[0]), float(vel[1]), float(vel[2])
 
-        sp = _positive_float("sigma_pos", self.sigma_pos if sigma_pos is None else sigma_pos)
-        sv = _finite_float("sigma_vel", self.sigma_vel if sigma_vel is None else sigma_vel)
-        alpha = _finite_float(
+        sp = positive_float("sigma_pos", self.sigma_pos if sigma_pos is None else sigma_pos)
+        sv = finite_float("sigma_vel", self.sigma_vel if sigma_vel is None else sigma_vel)
+        alpha = finite_float(
             "velocity_guide_alpha",
             self.velocity_guide_alpha
             if velocity_guide_alpha is None
@@ -330,7 +278,7 @@ class ParticleFilterDevice:
             if rbpf_velocity_kf is None
             else bool(rbpf_velocity_kf)
         )
-        qv = _finite_float(
+        qv = finite_float(
             "velocity_process_noise",
             self.velocity_process_noise
             if velocity_process_noise is None
@@ -367,9 +315,9 @@ class ParticleFilterDevice:
         if not self._initialized:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
 
-        sat, pr, weights, n_sat = _validate_sat_pr_weights(
+        sat, pr, weights, n_sat = validate_gnss_observation_epoch(
             sat_ecef, pseudoranges, weights)
-        sp = _positive_float("sigma_pr", self.sigma_pr if sigma_pr is None else sigma_pr)
+        sp = positive_float("sigma_pr", self.sigma_pr if sigma_pr is None else sigma_pr)
 
         self._pf_device_weight(
             self._state,

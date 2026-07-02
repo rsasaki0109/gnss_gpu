@@ -1,10 +1,11 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-07-03 JST (Codex maintenance: validation wave B2–B4 + docs — PF/RTK/SVGD/PF3D/pf_device binding validation + README smoke / common_input_shapes.md； PR #108)
+**最終更新**: 2026-07-03 JST (Codex maintenance: refactor Wave 1 — shared `gnss_gpu.input_validation` helpers + validation policy docs； branch `refactor/shared-input-validation-wave1`)
 **現在の HEAD**: local `main` `294b3e0` before this documentation refresh
 **Codex 引継ぎ section**: 先頭 [Codex maintenance handoff (2026-06-10)](#codex-maintenance-handoff-2026-06-10-refactoring--user-friendly-化) を入口にし、 PPC/GSDC 研究ログは末尾 [Codex 引継ぎ (2026-05-17 PM)](#codex-引継ぎ-2026-05-17-pm) 参照
 
 **最近の進捗ハイライト** (新しい順):
+- **2026-07-03 Codex maintenance / refactor Wave 1 (A1–A5) start**: validation wave #4 完了後、重複する finite/shape/range チェックを `gnss_gpu.input_validation` に集約する refactor track 着手。Wave 1-C (A5 + D1) で `docs/common_input_shapes.md` validation policy と plan 更新。
 - **2026-07-03 Codex maintenance / validation wave B2–B4 + docs (PR #108)**: PF (`ParticleFilter` + `_gnss_gpu_pf`)、 RTK (`RTKSolver` + `_gnss_gpu_rtk`)、 SVGD (`SVGDParticleFilter` + `_gnss_gpu_svgd`)、 PF3D/pf_device bindings + wrappers に boundary validation landing。`docs/common_input_shapes.md` + README smoke test 追加。wave #4 (PF/EKF/SVGD/RTK) 完了。
 - **2026-07-03 Codex maintenance / validation wave PR #107 merged**: skyplot validation (PR #107)、 EKF binding validation B1 (PR #107) 完了。wave #1–#3 (ephemeris PR #105、 multipath/raytrace-BVH PR #106、 BVH `compute_multipath` fix PR #104) 済。
 - **2026-06-10 Codex maintenance / user-friendly validation wave**: PPC/GSDC の研究スコア改善から一旦離れ、公開 Python API と pybind direct entrypoint の「壊れ方」を user-friendly にする refactoring を連続 landing。`f369f43` satellite azel、`3af9eea` coordinate、`90f6000` native array output strides、`0ccef28` Doppler、`94a7941` RAIM、`76d837e` Python wrapper validation alignment、`24b5a8f` multi-GNSS/Sagnac native validation、`e245fb0` multi-GNSS wrapper validation、`8089045` atmosphere、`ff3c618` acquisition、`fb64bbe` interference、`294b3e0` tracking。方針は「CUDA / C++ kernel に不正 shape・NaN・短い buffer を流さず、Python 入口で意味のある `ValueError` / `RuntimeError` に落とす」「direct binding と public wrapper の両方をテスト」「C++ pybind 変更後は対象 `.so` を rebuild/copy して実 import で確認」。最新 tracking では `TrackingConfig` / `ChannelState` / `ScalarTracker` / `VectorTracker` と native `_gnss_gpu_tracking` に finite/shape/range validation を追加し、 direct wrapper smoke と CI green まで確認済み。
@@ -220,7 +221,7 @@ gh api repos/rsasaki0109/gnss_gpu/actions/runs/<RUN_ID>/jobs \
 
 ### Current next action
 
-次の autonomous task は **PF binding validation (B2)** — `ParticleFilter` / `ParticleFilterDevice` / `ParticleFilter3D` の predict/update/resample surfaces。B3 RTK と B4 SVGD は同一 wave で queue 済。並行 track として **#5 examples/docs** (README smoke test、`docs/common_input_shapes.md`) を landing 中。
+Validation wave **#4 完了** (PR #108: PF/RTK/SVGD/PF3D/pf_device + `docs/common_input_shapes.md`)。次の autonomous task は **refactor Wave 1 (A1–A5)** — 共有 `gnss_gpu.input_validation` helpers への dedup、dt/ess_threshold 等の domain ルール統一、Wave 1-C docs (A5 + D1)。B2–B4 binding validation は landing 済み。
 
 **累積 trajectory**:
 | Phase | OFFICIAL | Δ | gap to TURING 85.6% |
