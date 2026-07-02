@@ -19,7 +19,7 @@
   >
 </p>
 
-[**Live results snapshot**](https://rsasaki0109.github.io/gnss_gpu/) · [Benchmarks](benchmarks/RESULTS.md) · [Examples](examples/) · [GSDC2023 solution](docs/gsdc2023_solution.md) · [Experiment log](docs/experiments.md) · [Decisions](docs/decisions.md) · [How it's built](internal_docs/plan.md)
+[**Live results snapshot**](https://rsasaki0109.github.io/gnss_gpu/) · [Benchmarks](benchmarks/RESULTS.md) · [Examples](examples/) · [Input shapes](docs/common_input_shapes.md) · [GSDC2023 solution](docs/gsdc2023_solution.md) · [Experiment log](docs/experiments.md) · [Decisions](docs/decisions.md) · [How it's built](internal_docs/plan.md)
 
 </div>
 
@@ -244,6 +244,14 @@ The exported mask CSV uses the existing experiment contract
 `tow,epoch_idx,prn,is_los`; the SPP, particle-filter, and local-FGO replays
 consume only that mask path and show mask-soft downstream estimators recovering
 the simulated NLOS error.
+
+### Smoke test
+
+CPU-only wrapper tests validate input shapes and error messages without a GPU rebuild:
+
+```bash
+PYTHONPATH=python pytest tests/test_*_wrapper.py -q
+```
 
 ### Run the test suite
 

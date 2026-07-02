@@ -212,3 +212,88 @@ def test_rtk_solver_class():
     pos_fix, fix_flag, ratio = solver.solve_fixed(rover_pr, base_pr, rcp, bcp, sat_ecef)
     err_fix = np.linalg.norm(pos_fix - rover_true)
     assert err_fix < 1.0, f"RTKSolver fixed error {err_fix:.4f} m"
+
+
+class TestRTKValidation:
+    def test_wrapper_init_rejects_bad_base_ecef(self):
+        from gnss_gpu.rtk import RTKSolver
+
+        with pytest.raises(ValueError, match="base_ecef must have shape"):
+            RTKSolver([0.0, 0.0])
+
+    @pytest.mark.skipif(not HAS_RTK, reason="RTK CUDA module not available")
+    def test_binding_rejects_invalid_rtk_float_inputs(self):
+        base_ecef, _, sat_ecef, rover_pr, base_pr, rcp, bcp = _make_rtk_scenario(n_sat=4)
+
+        with pytest.raises(RuntimeError, match="base_ecef must have shape"):
+            rtk_float(np.array([1.0, 2.0]), rover_pr, base_pr, rcp, bcp, sat_ecef)
+        with pytest.raises(RuntimeError, match="n_sat must be >= 2"):
+            rtk_float(base_ecef, rover_pr[:1], base_pr[:1], rcp[:1], bcp[:1], sat_ecef[:1])
+        with pytest.raises(RuntimeError, match="base_pr length must match"):
+            rtk_float(base_ecef, rover_pr, base_pr[:2], rcp, bcp, sat_ecef)
+        with pytest.raises(RuntimeError, match="sat_ecef must be finite"):
+            bad_sat = sat_ecef.copy()
+            bad_sat[0, 0] = np.nan
+            rtk_float(base_ecef, rover_pr, base_pr, rcp, bcp, bad_sat)
+        with pytest.raises(RuntimeError, match="wavelength must be positive"):
+            rtk_float(base_ecef, rover_pr, base_pr, rcp, bcp, sat_ecef, 0.0)
+        with pytest.raises(RuntimeError, match="max_iter must be positive"):
+            rtk_float(base_ecef, rover_pr, base_pr, rcp, bcp, sat_ecef, L1_WAVELENGTH, 0)
+        with pytest.raises(RuntimeError, match="tol must be positive"):
+            rtk_float(base_ecef, rover_pr, base_pr, rcp, bcp, sat_ecef, L1_WAVELENGTH, 20, 0.0)
+
+    @pytest.mark.skipif(not HAS_RTK, reason="RTK CUDA module not available")
+    def test_binding_rejects_invalid_rtk_float_batch_inputs(self):
+        base_ecef, _, sat_ecef, rover_pr, base_pr, rcp, bcp = _make_rtk_scenario(n_sat=4)
+        rover_batch = np.tile(rover_pr, (2, 1))
+        base_batch = np.tile(base_pr, (2, 1))
+        rcp_batch = np.tile(rcp, (2, 1))
+        bcp_batch = np.tile(bcp, (2, 1))
+        sat_batch = np.tile(sat_ecef, (2, 1, 1))
+
+        with pytest.raises(RuntimeError, match="rover_pr must be 2D"):
+            rtk_float_batch(base_ecef, rover_pr, base_batch, rcp_batch, bcp_batch, sat_batch)
+        with pytest.raises(RuntimeError, match="base_pr must have shape"):
+            rtk_float_batch(base_ecef, rover_batch, base_pr, rcp_batch, bcp_batch, sat_batch)
+        with pytest.raises(RuntimeError, match="sat_ecef must have shape"):
+            rtk_float_batch(base_ecef, rover_batch, base_batch, rcp_batch, bcp_batch, sat_ecef)
+
+    @pytest.mark.skipif(not HAS_RTK, reason="RTK CUDA module not available")
+    def test_binding_rejects_invalid_lambda_inputs(self):
+        float_amb = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+        Q_amb = np.eye(3, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="n_candidates must be positive"):
+            lambda_integer(float_amb, Q_amb.ravel(), 0)
+        with pytest.raises(RuntimeError, match="Q_amb must have shape"):
+            lambda_integer(float_amb, np.eye(2).ravel(), 100)
+        with pytest.raises(RuntimeError, match="float_amb must be finite"):
+            lambda_integer(np.array([1.0, np.nan, 3.0]), Q_amb.ravel(), 100)
+
+    @pytest.mark.skipif(not HAS_RTK, reason="RTK CUDA module not available")
+    def test_binding_valid_smoke_shapes(self):
+        base_ecef, _, sat_ecef, rover_pr, base_pr, rcp, bcp = _make_rtk_scenario(n_sat=4)
+
+        pos, amb, res, iters = rtk_float(
+            base_ecef, rover_pr, base_pr, rcp, bcp, sat_ecef.flatten(),
+            L1_WAVELENGTH, 20, 1e-4,
+        )
+        assert pos.shape == (3,)
+        assert amb.shape == (3,)
+        assert iters <= 20
+
+        rover_batch = np.tile(rover_pr, (2, 1))
+        base_batch = np.tile(base_pr, (2, 1))
+        rcp_batch = np.tile(rcp, (2, 1))
+        bcp_batch = np.tile(bcp, (2, 1))
+        sat_batch = np.tile(sat_ecef, (2, 1, 1))
+        results, amb_batch, batch_iters = rtk_float_batch(
+            base_ecef, rover_batch, base_batch, rcp_batch, bcp_batch, sat_batch,
+            L1_WAVELENGTH, 20, 1e-4,
+        )
+        assert results.shape == (2, 3)
+        assert amb_batch.shape == (2, 3)
+
+        fixed, ratio = lambda_integer(amb, np.eye(3).ravel(), 100)
+        assert fixed.shape == (3,)
+        assert np.isfinite(ratio)

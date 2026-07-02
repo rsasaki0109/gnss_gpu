@@ -501,5 +501,95 @@ class TestPF3DFullPipeline:
         assert 0 < ess <= pf.n_particles
 
 
+class TestPF3DValidation:
+    def test_wrapper_update_rejects_empty_satellites(self):
+        building = _make_box_building()
+        pf = ParticleFilter3D(building_model=building, n_particles=100)
+        pf.initialize(position_ecef=[0.0, 0.0, 0.0], clock_bias=100.0)
+        with pytest.raises(ValueError, match="pseudoranges must contain at least"):
+            pf.update(np.zeros((0, 3)), np.array([]))
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_counts(self):
+        building = _make_box_building()
+        n = 10
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+        sat = np.array([0.0, 0.0, 20000.0], dtype=np.float64)
+        pr = np.array([20000.0 + 100.0], dtype=np.float64)
+        ws = np.ones(1, dtype=np.float64)
+        tri = building.triangles.reshape(-1, 3, 3)
+        log_w = np.zeros(n, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="n_particles must be >= 1"):
+            pf_weight_3d(px, py, pz, pcb, sat, pr, ws, tri, log_w,
+                         0, 1, 3.0, 30.0, 20.0)
+        with pytest.raises(RuntimeError, match="n_sat must be >= 1"):
+            pf_weight_3d(px, py, pz, pcb, sat[:0], np.array([]), np.array([]),
+                         np.zeros((0, 3, 3)), log_w, n, 0, 3.0, 30.0, 20.0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_sigma_params(self):
+        building = _make_box_building()
+        n = 10
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+        sat = np.array([0.0, 0.0, 20000.0], dtype=np.float64)
+        pr = np.array([20000.0 + 100.0], dtype=np.float64)
+        ws = np.ones(1, dtype=np.float64)
+        tri = building.triangles.reshape(-1, 3, 3)
+        log_w = np.zeros(n, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="sigma_pr_los must be positive"):
+            pf_weight_3d(px, py, pz, pcb, sat, pr, ws, tri, log_w,
+                         n, 1, 0.0, 30.0, 20.0)
+        with pytest.raises(RuntimeError, match="sigma_pr_nlos must be positive"):
+            pf_weight_3d(px, py, pz, pcb, sat, pr, ws, tri, log_w,
+                         n, 1, 3.0, np.inf, 20.0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_triangles(self):
+        n = 10
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+        sat = np.array([0.0, 0.0, 20000.0], dtype=np.float64)
+        pr = np.array([20000.0 + 100.0], dtype=np.float64)
+        ws = np.ones(1, dtype=np.float64)
+        log_w = np.zeros(n, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="triangles must have shape"):
+            pf_weight_3d(px, py, pz, pcb, sat, pr, ws,
+                         np.zeros((3, 2, 3)), log_w, n, 1, 3.0, 30.0, 20.0)
+        with pytest.raises(RuntimeError, match="triangles must be finite"):
+            bad_tri = np.zeros((1, 3, 3), dtype=np.float64)
+            bad_tri[0, 0, 0] = np.nan
+            pf_weight_3d(px, py, pz, pcb, sat, pr, ws, bad_tri, log_w,
+                         n, 1, 3.0, 30.0, 20.0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_valid_smoke_shapes(self):
+        building = _make_box_building()
+        n = 32
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+        sat = np.array([0.0, 0.0, 20000.0], dtype=np.float64)
+        pr = np.array([20000.0 + 100.0], dtype=np.float64)
+        ws = np.ones(1, dtype=np.float64)
+        tri = building.triangles.reshape(-1, 3, 3)
+        log_w = np.zeros(n, dtype=np.float64)
+
+        pf_weight_3d(px, py, pz, pcb, sat, pr, ws, tri, log_w,
+                     n, 1, 3.0, 30.0, 20.0)
+        assert np.all(np.isfinite(log_w))
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

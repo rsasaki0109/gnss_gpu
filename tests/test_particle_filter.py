@@ -444,3 +444,128 @@ class TestFullPipeline:
             pf.estimate()
         with pytest.raises(RuntimeError):
             pf.get_ess()
+
+
+class TestPFValidation:
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_initialize(self):
+        N = 100
+        px = np.empty(N, dtype=np.float64)
+        py = np.empty(N, dtype=np.float64)
+        pz = np.empty(N, dtype=np.float64)
+        pcb = np.empty(N, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="n_particles must be >= 1"):
+            pf_initialize(px, py, pz, pcb, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0, SEED)
+        with pytest.raises(RuntimeError, match="px length must match n_particles"):
+            pf_initialize(px[:10], py[:10], pz[:10], pcb[:10],
+                          0.0, 0.0, 0.0, 0.0, 1.0, 1.0, N, SEED)
+        with pytest.raises(RuntimeError, match="spread_pos must be positive"):
+            pf_initialize(px, py, pz, pcb, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, N, SEED)
+        with pytest.raises(RuntimeError, match="init_x must be finite"):
+            pf_initialize(px, py, pz, pcb, np.nan, 0.0, 0.0, 0.0, 1.0, 1.0, N, SEED)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_predict(self):
+        N = 100
+        px = np.zeros(N, dtype=np.float64)
+        py = np.zeros(N, dtype=np.float64)
+        pz = np.zeros(N, dtype=np.float64)
+        pcb = np.zeros(N, dtype=np.float64)
+        vx = np.array([0.0], dtype=np.float64)
+        vy = np.array([0.0], dtype=np.float64)
+        vz = np.array([0.0], dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="dt must be non-negative"):
+            pf_predict(px, py, pz, pcb, vx, vy, vz, -1.0, 1.0, 1.0, N, SEED, 1)
+        with pytest.raises(RuntimeError, match="sigma_pos must be positive"):
+            pf_predict(px, py, pz, pcb, vx, vy, vz, 1.0, 0.0, 1.0, N, SEED, 1)
+        with pytest.raises(RuntimeError, match="vx must contain at least"):
+            pf_predict(px, py, pz, pcb, np.array([]), vy, vz, 1.0, 1.0, 1.0, N, SEED, 1)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_weight(self):
+        N = 100
+        px = np.zeros(N, dtype=np.float64)
+        py = np.zeros(N, dtype=np.float64)
+        pz = np.zeros(N, dtype=np.float64)
+        pcb = np.zeros(N, dtype=np.float64)
+        log_weights = np.zeros(N, dtype=np.float64)
+        sat = np.ones((2, 3))
+        pr = np.ones(2)
+        w = np.ones(2)
+
+        with pytest.raises(RuntimeError, match="n_sat must be >= 1"):
+            pf_weight(px, py, pz, pcb, sat[:0], np.array([]), np.array([]),
+                      log_weights, N, 0, 5.0)
+        with pytest.raises(RuntimeError, match="sat_ecef shape must match"):
+            pf_weight(px, py, pz, pcb, sat[:1], pr, w, log_weights, N, 2, 5.0)
+        with pytest.raises(RuntimeError, match="weights_sat must be non-negative"):
+            pf_weight(px, py, pz, pcb, sat, pr, np.array([1.0, -1.0]),
+                      log_weights, N, 2, 5.0)
+        with pytest.raises(RuntimeError, match="sigma_pr must be positive"):
+            pf_weight(px, py, pz, pcb, sat, pr, w, log_weights, N, 2, 0.0)
+        with pytest.raises(RuntimeError, match="log_weights length must match"):
+            pf_weight(px, py, pz, pcb, sat, pr, w, log_weights[:10], N, 2, 5.0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_ess_and_resample(self):
+        N = 100
+        px = np.zeros(N, dtype=np.float64)
+        py = np.zeros(N, dtype=np.float64)
+        pz = np.zeros(N, dtype=np.float64)
+        pcb = np.zeros(N, dtype=np.float64)
+        log_weights = np.zeros(N, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="log_weights length must match"):
+            pf_compute_ess(log_weights[:10], N)
+        with pytest.raises(RuntimeError, match="px length must match n_particles"):
+            pf_resample_systematic(px[:10], py, pz, pcb, log_weights, N, SEED)
+        with pytest.raises(RuntimeError, match="log_weights length must match"):
+            pf_resample_megopolis(px, py, pz, pcb, log_weights[:10], N, 5, SEED)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_estimate_and_get_particles(self):
+        N = 100
+        px = np.zeros(N, dtype=np.float64)
+        py = np.zeros(N, dtype=np.float64)
+        pz = np.zeros(N, dtype=np.float64)
+        pcb = np.zeros(N, dtype=np.float64)
+        log_weights = np.zeros(N, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="result must have shape"):
+            pf_estimate(px, py, pz, pcb, log_weights, np.zeros(3), N)
+        with pytest.raises(RuntimeError, match="output length must match"):
+            pf_get_particles(px, py, pz, pcb, np.zeros(N * 2), N)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_valid_smoke_shapes(self):
+        N = 100
+        px = np.empty(N, dtype=np.float64)
+        py = np.empty(N, dtype=np.float64)
+        pz = np.empty(N, dtype=np.float64)
+        pcb = np.empty(N, dtype=np.float64)
+        log_weights = np.zeros(N, dtype=np.float64)
+
+        pf_initialize(px, py, pz, pcb, 1.0, 2.0, 3.0, 0.0, 10.0, 10.0, N, SEED)
+
+        vx = np.array([0.0], dtype=np.float64)
+        vy = np.array([0.0], dtype=np.float64)
+        vz = np.array([0.0], dtype=np.float64)
+        pf_predict(px, py, pz, pcb, vx, vy, vz, 1.0, 1.0, 1.0, N, SEED, 1)
+
+        sat = np.ones((4, 3))
+        pr = np.full(4, 20e6)
+        w = np.ones(4)
+        pf_weight(px, py, pz, pcb, sat.ravel(), pr, w, log_weights, N, 4, 5.0)
+
+        ess = pf_compute_ess(log_weights, N)
+        assert 0.0 < ess <= N
+
+        result = np.empty(4, dtype=np.float64)
+        pf_estimate(px, py, pz, pcb, log_weights, result, N)
+        assert result.shape == (4,)
+
+        output = np.empty(N * 4, dtype=np.float64)
+        pf_get_particles(px, py, pz, pcb, output, N)
+        assert output.size == N * 4

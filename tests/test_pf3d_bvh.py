@@ -190,7 +190,6 @@ class TestWeight3DBVHKernel:
 
     def test_empty_mesh_all_los(self):
         """With zero triangles every satellite is LOS; kernel must not crash."""
-        empty = BVHAccelerator(np.zeros((0, 3, 3), dtype=np.float64))
         n = 50
         px = np.zeros(n, dtype=np.float64)
         py = np.zeros(n, dtype=np.float64)
@@ -202,9 +201,15 @@ class TestWeight3DBVHKernel:
         pr = np.array([dist], dtype=np.float64)
         ws = np.ones(1, dtype=np.float64)
 
-        log_w = _run_bvh(px, py, pz, pcb,
-                         sat.reshape(1, 3), pr, ws, empty,
-                         sigma_los=5.0, sigma_nlos=30.0, nlos_bias=20.0)
+        log_w = np.zeros(n, dtype=np.float64)
+        pf_weight_3d_bvh(
+            px, py, pz, pcb,
+            sat.reshape(1, 3).ravel(), pr, ws,
+            np.zeros((0, 10), dtype=np.float64),
+            np.zeros((0, 3, 3), dtype=np.float64),
+            log_w, n, 1,
+            5.0, 30.0, 20.0,
+        )
         # Perfect residual -> all zero
         assert np.allclose(log_w, 0.0, atol=1e-10)
 
@@ -457,6 +462,96 @@ class TestParticleFilter3DBVH:
         result = pf.estimate()
         pos_error = np.linalg.norm(result[:3] - true_pos)
         assert pos_error < 30.0, f"Position error {pos_error:.1f} m too large"
+
+
+class TestPF3DBVHValidation:
+    def test_wrapper_update_rejects_empty_satellites(self):
+        building = _make_box_building()
+        bvh = BVHAccelerator.from_building_model(building)
+        pf = ParticleFilter3DBVH(bvh=bvh, n_particles=100)
+        pf.initialize(position_ecef=[0.0, 0.0, 0.0], clock_bias=100.0)
+        with pytest.raises(ValueError, match="pseudoranges must contain at least"):
+            pf.update(np.zeros((0, 3)), np.array([]))
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_counts(self):
+        building = _make_box_building()
+        bvh = BVHAccelerator.from_building_model(building)
+        n = 10
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+        sat = np.array([0.0, 0.0, 20000.0], dtype=np.float64)
+        pr = np.array([20000.0 + 100.0], dtype=np.float64)
+        ws = np.ones(1, dtype=np.float64)
+        log_w = np.zeros(n, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="n_particles must be >= 1"):
+            pf_weight_3d_bvh(px, py, pz, pcb, sat, pr, ws,
+                             bvh._nodes_flat, bvh._sorted_tris, log_w,
+                             0, 1, 3.0, 30.0, 20.0)
+        with pytest.raises(RuntimeError, match="n_sat must be >= 1"):
+            pf_weight_3d_bvh(px, py, pz, pcb, sat[:0], np.array([]), np.array([]),
+                             bvh._nodes_flat, bvh._sorted_tris, log_w,
+                             n, 0, 3.0, 30.0, 20.0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_empty_nodes_with_triangles(self):
+        building = _make_box_building()
+        bvh = BVHAccelerator.from_building_model(building)
+        n = 10
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+        sat = np.array([0.0, 0.0, 20000.0], dtype=np.float64)
+        pr = np.array([20000.0 + 100.0], dtype=np.float64)
+        ws = np.ones(1, dtype=np.float64)
+        log_w = np.zeros(n, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="nodes_flat must contain at least one node"):
+            pf_weight_3d_bvh(px, py, pz, pcb, sat, pr, ws,
+                             np.zeros((0, 10)), bvh._sorted_tris, log_w,
+                             n, 1, 3.0, 30.0, 20.0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_rejects_invalid_sigma_params(self):
+        building = _make_box_building()
+        bvh = BVHAccelerator.from_building_model(building)
+        n = 10
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+        sat = np.array([0.0, 0.0, 20000.0], dtype=np.float64)
+        pr = np.array([20000.0 + 100.0], dtype=np.float64)
+        ws = np.ones(1, dtype=np.float64)
+        log_w = np.zeros(n, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="sigma_pr_los must be positive"):
+            pf_weight_3d_bvh(px, py, pz, pcb, sat, pr, ws,
+                             bvh._nodes_flat, bvh._sorted_tris, log_w,
+                             n, 1, 0.0, 30.0, 20.0)
+
+    @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+    def test_binding_valid_smoke_shapes(self):
+        building = _make_box_building()
+        bvh = BVHAccelerator.from_building_model(building)
+        n = 32
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+        sat = np.array([0.0, 0.0, 20000.0], dtype=np.float64)
+        pr = np.array([20000.0 + 100.0], dtype=np.float64)
+        ws = np.ones(1, dtype=np.float64)
+        log_w = np.zeros(n, dtype=np.float64)
+
+        pf_weight_3d_bvh(px, py, pz, pcb, sat, pr, ws,
+                         bvh._nodes_flat, bvh._sorted_tris, log_w,
+                         n, 1, 3.0, 30.0, 20.0)
+        assert np.all(np.isfinite(log_w))
 
 
 # ---------------------------------------------------------------------------

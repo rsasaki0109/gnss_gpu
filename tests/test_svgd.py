@@ -281,6 +281,109 @@ class TestSVGDConvergence:
             pf.update(np.zeros((4, 3)), np.zeros(4))
 
 
+class TestSVGDValidation:
+    """Binding and wrapper input validation."""
+
+    def test_wrapper_init_rejects_bad_config(self):
+        with pytest.raises(ValueError, match="n_particles must be positive"):
+            SVGDParticleFilter(n_particles=0)
+        with pytest.raises(ValueError, match="sigma_pr must be positive"):
+            SVGDParticleFilter(sigma_pr=-1.0)
+
+    def test_wrapper_update_rejects_bad_satellites(self):
+        pf = SVGDParticleFilter(n_particles=100, seed=SEED)
+        pf.initialize(np.array([1.0, 2.0, 3.0]))
+        sat = np.ones((4, 3))
+        pr = np.ones(4)
+
+        with pytest.raises(ValueError, match="weights length must match"):
+            pf.update(sat, pr, weights=np.ones(3))
+
+    def test_binding_rejects_invalid_bandwidth_inputs(self):
+        N = 100
+        px = np.ones(N, dtype=np.float64)
+        py = np.ones(N, dtype=np.float64)
+        pz = np.ones(N, dtype=np.float64)
+        pcb = np.ones(N, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="n_particles must be positive"):
+            pf_estimate_bandwidth(px, py, pz, pcb, 0, 1000, SEED)
+        with pytest.raises(RuntimeError, match="px length must match n_particles"):
+            pf_estimate_bandwidth(px[:10], py, pz, pcb, N, 1000, SEED)
+        with pytest.raises(RuntimeError, match="n_subsample must be positive"):
+            pf_estimate_bandwidth(px, py, pz, pcb, N, 0, SEED)
+
+    def test_binding_rejects_invalid_svgd_step_inputs(self):
+        N = 100
+        px = np.ones(N, dtype=np.float64)
+        py = np.ones(N, dtype=np.float64)
+        pz = np.ones(N, dtype=np.float64)
+        pcb = np.ones(N, dtype=np.float64)
+        sat = np.ones((4, 3))
+        pr = np.ones(4)
+        w = np.ones(4)
+
+        with pytest.raises(RuntimeError, match="n_sat must be >= 1"):
+            pf_svgd_step(px, py, pz, pcb, sat[:0], np.array([]), np.array([]),
+                         N, 0, 5.0, 0.5, 32, 10.0, SEED, 0)
+        with pytest.raises(RuntimeError, match="sat_ecef shape must match"):
+            pf_svgd_step(px, py, pz, pcb, sat[:2], pr, w,
+                         N, 4, 5.0, 0.5, 32, 10.0, SEED, 0)
+        with pytest.raises(RuntimeError, match="weights must be non-negative"):
+            pf_svgd_step(px, py, pz, pcb, sat, pr, np.array([1.0, -1.0, 1.0, 1.0]),
+                         N, 4, 5.0, 0.5, 32, 10.0, SEED, 0)
+        with pytest.raises(RuntimeError, match="sigma_pr must be positive"):
+            pf_svgd_step(px, py, pz, pcb, sat, pr, w,
+                         N, 4, 0.0, 0.5, 32, 10.0, SEED, 0)
+        with pytest.raises(RuntimeError, match="step_size must be positive"):
+            pf_svgd_step(px, py, pz, pcb, sat, pr, w,
+                         N, 4, 5.0, 0.0, 32, 10.0, SEED, 0)
+        with pytest.raises(RuntimeError, match="n_neighbors must be positive"):
+            pf_svgd_step(px, py, pz, pcb, sat, pr, w,
+                         N, 4, 5.0, 0.5, 0, 10.0, SEED, 0)
+        with pytest.raises(RuntimeError, match="bandwidth must be positive"):
+            pf_svgd_step(px, py, pz, pcb, sat, pr, w,
+                         N, 4, 5.0, 0.5, 32, 0.0, SEED, 0)
+
+    def test_binding_rejects_invalid_estimate_inputs(self):
+        N = 100
+        px = np.ones(N, dtype=np.float64)
+        py = np.ones(N, dtype=np.float64)
+        pz = np.ones(N, dtype=np.float64)
+        pcb = np.ones(N, dtype=np.float64)
+
+        with pytest.raises(RuntimeError, match="result must have length 4"):
+            pf_svgd_estimate(px, py, pz, pcb, np.empty(3), N)
+        with pytest.raises(RuntimeError, match="pcb must be finite"):
+            bad_pcb = pcb.copy()
+            bad_pcb[0] = np.nan
+            pf_svgd_estimate(px, py, pz, bad_pcb, np.empty(4), N)
+
+    def test_binding_valid_smoke_shapes(self):
+        N = 1000
+        px = np.empty(N, dtype=np.float64)
+        py = np.empty(N, dtype=np.float64)
+        pz = np.empty(N, dtype=np.float64)
+        pcb = np.empty(N, dtype=np.float64)
+        pf_initialize(px, py, pz, pcb,
+                      100.0, 200.0, 300.0, 50.0,
+                      10.0, 10.0, N, SEED)
+
+        bw = pf_estimate_bandwidth(px, py, pz, pcb, N, 1000, SEED)
+        assert bw > 0.0
+
+        sat = np.ones((4, 3))
+        pr = np.ones(4)
+        w = np.ones(4)
+        pf_svgd_step(px, py, pz, pcb, sat.ravel(), pr, w,
+                     N, 4, 5.0, 0.5, 32, bw, SEED, 0)
+
+        result = np.empty(4, dtype=np.float64)
+        pf_svgd_estimate(px, py, pz, pcb, result, N)
+        assert result.shape == (4,)
+        assert np.all(np.isfinite(result))
+
+
 class TestSVGDLargeScale:
     """Test SVGD with large particle counts (GPU stress test)."""
 

@@ -20,7 +20,12 @@ Usage
 
 import numpy as np
 
-from gnss_gpu.particle_filter_3d import ParticleFilter3D
+from gnss_gpu.particle_filter_3d import (
+    ParticleFilter3D,
+    _finite_float,
+    _positive_float,
+    _validate_sat_pr_weights,
+)
 from gnss_gpu.bvh import BVHAccelerator
 
 
@@ -65,11 +70,11 @@ class ParticleFilter3DBVH(ParticleFilter3D):
             raise TypeError("bvh must be a BVHAccelerator instance")
 
         self.bvh = bvh
-        self.sigma_los = sigma_los
-        self.sigma_nlos = sigma_nlos
-        self.nlos_bias = nlos_bias
-        self.blocked_nlos_prob = blocked_nlos_prob
-        self.clear_nlos_prob = clear_nlos_prob
+        self.sigma_los = _positive_float("sigma_los", sigma_los)
+        self.sigma_nlos = _positive_float("sigma_nlos", sigma_nlos)
+        self.nlos_bias = _finite_float("nlos_bias", nlos_bias)
+        self.blocked_nlos_prob = _finite_float("blocked_nlos_prob", blocked_nlos_prob)
+        self.clear_nlos_prob = _finite_float("clear_nlos_prob", clear_nlos_prob)
 
         from gnss_gpu._gnss_gpu_pf3d_bvh import pf_weight_3d_bvh as _pf_weight_3d_bvh
         self._pf_weight_3d_bvh = _pf_weight_3d_bvh
@@ -94,20 +99,27 @@ class ParticleFilter3DBVH(ParticleFilter3D):
             raise RuntimeError(
                 "ParticleFilter3DBVH not initialized. Call initialize() first.")
 
-        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
-        pr  = np.asarray(pseudoranges, dtype=np.float64).ravel()
-        n_sat = len(pr)
+        sat, pr, weights, n_sat = _validate_sat_pr_weights(
+            sat_ecef, pseudoranges, weights)
 
-        if weights is None:
-            weights = np.ones(n_sat, dtype=np.float64)
-        else:
-            weights = np.asarray(weights, dtype=np.float64).ravel()
+        nodes_flat = self.bvh._nodes_flat
+        sorted_tris = self.bvh._sorted_tris
+        if sorted_tris.ndim != 3 or sorted_tris.shape[1:] != (3, 3):
+            raise ValueError("bvh sorted triangles must have shape (n_tri, 3, 3)")
+        n_tri = sorted_tris.shape[0]
+        if n_tri > 0:
+            if nodes_flat.ndim != 2 or nodes_flat.shape[1] != 10 or nodes_flat.shape[0] < 1:
+                raise ValueError("bvh nodes_flat must have shape (n_nodes, 10) with n_nodes >= 1")
+            if not np.all(np.isfinite(nodes_flat)):
+                raise ValueError("bvh nodes_flat must be finite")
+            if not np.all(np.isfinite(sorted_tris)):
+                raise ValueError("bvh sorted triangles must be finite")
 
         self._pf_weight_3d_bvh(
             self._px, self._py, self._pz, self._pcb,
             sat.ravel(), pr, weights,
-            self.bvh._nodes_flat,
-            self.bvh._sorted_tris,
+            nodes_flat,
+            sorted_tris,
             self._log_weights,
             self.n_particles, n_sat,
             float(self.sigma_los), float(self.sigma_nlos),

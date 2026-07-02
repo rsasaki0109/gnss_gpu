@@ -1,11 +1,12 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-07-03 JST (Codex maintenance: validation wave #1–#3 完了 — ephemeris PR #105、 multipath/raytrace-BVH PR #106、 BVH `compute_multipath` fix PR #104、 legacy `multipath_bvh_kernel` 削除 PR #105； skyplot validation 進行中； 次 priority は EKF binding validation B1)
+**最終更新**: 2026-07-03 JST (Codex maintenance: validation wave B2–B4 + docs — PF/RTK/SVGD/PF3D/pf_device binding validation + README smoke / common_input_shapes.md； PR #108)
 **現在の HEAD**: local `main` `294b3e0` before this documentation refresh
 **Codex 引継ぎ section**: 先頭 [Codex maintenance handoff (2026-06-10)](#codex-maintenance-handoff-2026-06-10-refactoring--user-friendly-化) を入口にし、 PPC/GSDC 研究ログは末尾 [Codex 引継ぎ (2026-05-17 PM)](#codex-引継ぎ-2026-05-17-pm) 参照
 
 **最近の進捗ハイライト** (新しい順):
-- **2026-07-03 Codex maintenance / validation wave #1–#3 完了**: ephemeris binding validation (PR #105)、 multipath wrapper/binding validation (PR #106)、 raytrace/BVH validation (PR #106)、 BVH `compute_multipath` fix (PR #104)、 legacy `multipath_bvh_kernel` 削除 (PR #105)。skyplot validation は同一 wave で進行中。次 queue は PF/EKF/SVGD/RTK 系 — EKF binding validation (B1) が first sub-phase。
+- **2026-07-03 Codex maintenance / validation wave B2–B4 + docs (PR #108)**: PF (`ParticleFilter` + `_gnss_gpu_pf`)、 RTK (`RTKSolver` + `_gnss_gpu_rtk`)、 SVGD (`SVGDParticleFilter` + `_gnss_gpu_svgd`)、 PF3D/pf_device bindings + wrappers に boundary validation landing。`docs/common_input_shapes.md` + README smoke test 追加。wave #4 (PF/EKF/SVGD/RTK) 完了。
+- **2026-07-03 Codex maintenance / validation wave PR #107 merged**: skyplot validation (PR #107)、 EKF binding validation B1 (PR #107) 完了。wave #1–#3 (ephemeris PR #105、 multipath/raytrace-BVH PR #106、 BVH `compute_multipath` fix PR #104) 済。
 - **2026-06-10 Codex maintenance / user-friendly validation wave**: PPC/GSDC の研究スコア改善から一旦離れ、公開 Python API と pybind direct entrypoint の「壊れ方」を user-friendly にする refactoring を連続 landing。`f369f43` satellite azel、`3af9eea` coordinate、`90f6000` native array output strides、`0ccef28` Doppler、`94a7941` RAIM、`76d837e` Python wrapper validation alignment、`24b5a8f` multi-GNSS/Sagnac native validation、`e245fb0` multi-GNSS wrapper validation、`8089045` atmosphere、`ff3c618` acquisition、`fb64bbe` interference、`294b3e0` tracking。方針は「CUDA / C++ kernel に不正 shape・NaN・短い buffer を流さず、Python 入口で意味のある `ValueError` / `RuntimeError` に落とす」「direct binding と public wrapper の両方をテスト」「C++ pybind 変更後は対象 `.so` を rebuild/copy して実 import で確認」。最新 tracking では `TrackingConfig` / `ChannelState` / `ScalarTracker` / `VectorTracker` と native `_gnss_gpu_tracking` に finite/shape/range validation を追加し、 direct wrapper smoke と CI green まで確認済み。
 - **2026-05-22 Phase 80 production wire-up + 40-trip chunk_epochs=100 row-level diff 完了**: Phase 74 で導出した DD anchor coverage gate (`dd_carrier_min_anchor_coverage`、 default 0.6) を inert 状態から production data flow に wire-up (commit `744294e`、 6 files +514/-6、 79 tests pass)。 `build_gsdc2023_bridge_submission.py` 492-line CLI を main に landing (commit `69acb23`)。 ebf-x/mi8 single-trip smoke で chunk_epochs=200 sources={'baseline': 1924, 'fgo': 0} vs chunk_epochs=100 sources={'baseline': 1624, 'fgo': 300}、 300 rows flip / pos delta median 4.43m を確証。 続いて 40-trip chunk_epochs=100 full re-run (PID 254464、 実 ~55 min)、 `experiments/results/gsdc2023_bridge_chunk100_repro_20260522/` 生成、 既存 chunk_epochs=200 baseline (`gsdc2023_bridge_gated_rescue_pixel4_full_20260520/`) と bridge_positions.csv row-level diff (`/tmp/diff_chunk200_vs_chunk100.py`)。 **Aggregate src_diff 2702/72026 = 3.75%、 rows>5m 484/72026 = 0.67%、 16/40 trips で flip**。 **sjc-q/pixel5 max 49.74m / ebf-x/mi8 +300 rows / mtv-ie2 region 境界 shift** が memory prediction と **bit-exact 一致**、 一方 aggregate は Phase 77 prediction (5091 rows / 1168 rows>5m) の **~50%** で、 chunk_epochs 単独効果と DD-carrier path 効果が **凡そ半々で寄与**することが判明。 修正方針確定: chunk_epochs revert + Phase 74 DD anchor coverage gate enabled の 2 段構えが decisive、 単独 revert では Kaggle ~3.99 完全復帰せず。 詳細 plan.md §B `45. Phase 80`。
 - **2026-05-21 PM GSDC2023 bridge vs TaroZ DD-guarded A/B (no-submit)**: private-floor 4 artifact recovery は `gnss_gpu / ref / /tmp / $HOME` 全 root で 0/4 found 確定 (importer dry-run `experiments/results/gsdc2023_private_floor_artifact_import_dryrun_20260521b/summary.json`)。 leaderboard 再提出はできないので、 既存 2 submission の A/B 解析を `experiments/analyze_gsdc2023_source_ab.py` で実施。 結果は `experiments/results/gsdc2023_bridge_vs_tarozdd_ab_20260521/README.md`。 **主結論: `fgo_dd_carrier` rows の 84% (2008/2389) が p95_delta_m>=3m の regression trip に集中**。 12 trips with DD: mean p95 4.34m vs 28 trips w/o DD: 0.84m。 worst single-row spike `ebf-y/pixel5 max=105.72m`、 4 trips が DD-only swap の regression、 5 trips が DD + `fgo_no_tdcp` combo。 DD は broad hard-rule で適用すると negative、 per-trip whitelist 化が必要。 fgo_no_tdcp 拡張 (630→1360) と base correction stale interpolation (sjc-q/pixel5 max=49.74m on baseline-only swap) も regression 源。
@@ -134,62 +135,46 @@ multipath wrapper/binding validation landing。invalid geometry は native kerne
 
 raytrace/BVH bindings に synthetic small-fixture validation tests を landing。PR #104 で BVH `compute_multipath` fix、PR #105 で legacy `multipath_bvh_kernel` 削除済み。
 
-#### 3b. Skyplot validation — IN PROGRESS (same wave)
+#### 3b. Skyplot validation — DONE (PR #107, 2026-07)
 
-対象候補:
+`VulnerabilityMap` wrapper + `_gnss_gpu_skyplot` direct binding に boundary validation を landing。`sat_ecef` shape/finite/count、`elevation_mask_deg` finite、grid config positive finite。invalid-input tests は CPU-light、valid tiny smoke unchanged。
 
-- `python/gnss_gpu/_skyplot_bindings.cpp`
-- related wrappers/tests
+#### 4. PF / EKF / SVGD / RTK bindings (larger blast radius)
 
-見るべき点:
+state dimension と covariance layout の contract が複雑な module 群。ephemeris/multipath/raytrace/skyplot wave の後に sub-phase で進める。
 
-- satellite az/el arrays 1D same length
-- finite az/el range
-- empty satellite set behavior
-- output buffer shape / stride consistency
+##### 4a. EKF binding validation (B1) — DONE (PR #107, 2026-07)
 
-Acceptance:
+`EKFPositioner` wrapper + `_gnss_gpu_ekf` direct binding。`position_ecef` `(3,)`、`sat_ecef` `(n_sat, 3)`、`pseudoranges` / `weights` `(n_sat,)`、covariance `(8, 8)` layout。invalid-input tests CPU-light、valid smoke unchanged。
 
-- direct binding invalid tests are CPU-light
-- one valid tiny smoke remains
+##### 4b. Particle Filter binding validation (B2) — DONE (PR #108, 2026-07)
 
-#### 4. PF / EKF / SVGD / RTK bindings (larger blast radius) — next
+`ParticleFilter` + `_gnss_gpu_pf` predict/update/resample/weight surfaces。`n_particles` buffer length、`n_sat` obs shape、nonnegative weights、finite sigmas。`dt >= 0`（zero dt = no motion）と `ess_threshold in [0, 1]` を許容。
 
-**First sub-phase (B1): EKF binding validation.** PF / SVGD / RTK は B1 完了後の future sub-phases。
+##### 4c. RTK binding validation (B3) — DONE (PR #108, 2026-07)
 
-これらは state dimension と covariance layout の contract が複雑なので、ephemeris/multipath/raytrace/skyplot wave の後に回す。
+`RTKSolver` + `_gnss_gpu_rtk` float/batch/lambda surfaces。`base_ecef` `(3,)`、`n_sat >= 2`、obs/sat shape 一致、finite checks。
 
-対象候補:
+##### 4d. SVGD binding validation (B4) — DONE (PR #108, 2026-07)
 
-- particle filter predict/update/resample bindings
-- EKF state/covariance update surfaces
-- SVGD particle arrays
-- RTK / SPP native helper bindings
+`SVGDParticleFilter` + `_gnss_gpu_svgd` step/bandwidth/estimate surfaces。PF と同じ measurement contract + positive `n_neighbors` / step size。
 
-見るべき点:
+##### 4e. PF3D / pf_device validation — DONE (PR #108, 2026-07)
 
-- `state_dim`, `n_particles`, `n_obs`, `n_sat` と array shape の一致
-- covariance square matrix shape
-- finite weights and nonnegative variances
-- zero/negative sigma
-- empty observation epoch behavior
-- output strides
+`ParticleFilter3D` / `ParticleFilter3DBVH` / `ParticleFilterDevice` + `_gnss_gpu_pf3d` / `_gnss_gpu_pf3d_bvh` / `_gnss_gpu_pf_device`。triangles `(n_tri, 3, 3)`、BVH node buffers、device state null/allocated checks。
 
-Acceptance:
+#### 5. Examples / docs usability pass — PARTIAL (PR #108, 2026-07)
 
-- small deterministic CPU/GPU smoke
-- invalid covariance and dimension tests
-- no algorithmic retuning
+Validation wave と並行して docs/examples の entrypoint を user-friendly にする。
 
-#### 5. Examples / docs usability pass
+landing 済 / 進行中:
 
-Validation wave の後で、examples 側の entrypoint を user-friendly にする。
+- README smoke test subsection: `PYTHONPATH=python pytest tests/test_*_wrapper.py -q` (CPU-only wrapper validation、GPU rebuild 不要)
+- `docs/common_input_shapes.md`: Ephemeris / Multipath / EKF / PF / RTK / SVGD / Skyplot の主要 array shape 一覧
 
-候補:
+残候補:
 
 - examples demo chooser の help text / failure mode
-- README の minimal install + smoke command
-- docs に "common input shapes" を 1 ページ追加
 - invalid-input examples は docs ではなく tests で担保し、docs は簡潔にする
 
 ### Do not do during this maintenance wave
@@ -235,7 +220,7 @@ gh api repos/rsasaki0109/gnss_gpu/actions/runs/<RUN_ID>/jobs \
 
 ### Current next action
 
-次の autonomous task は **ephemeris binding validation**。理由は、surface が小さく、direct binding が `EphemerisParams` packed buffer を native struct に渡すため、size/finite/count validation の価値が高い。ここを片付けると、次に multipath/raytrace の geometry validation へ自然に進める。
+次の autonomous task は **PF binding validation (B2)** — `ParticleFilter` / `ParticleFilterDevice` / `ParticleFilter3D` の predict/update/resample surfaces。B3 RTK と B4 SVGD は同一 wave で queue 済。並行 track として **#5 examples/docs** (README smoke test、`docs/common_input_shapes.md`) を landing 中。
 
 **累積 trajectory**:
 | Phase | OFFICIAL | Δ | gap to TURING 85.6% |
