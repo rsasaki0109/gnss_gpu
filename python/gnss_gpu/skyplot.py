@@ -10,6 +10,38 @@ except ImportError:
     HAS_GPU = False
 
 
+def _validate_positive_finite(name, value):
+    if not np.isfinite(value) or value <= 0.0:
+        raise ValueError(f"{name} must be positive and finite")
+
+
+def _validate_origin_lla(origin_lla):
+    if len(origin_lla) != 3:
+        raise ValueError("origin_lla must be (latitude_deg, longitude_deg, altitude_m)")
+    if not np.all(np.isfinite(origin_lla)):
+        raise ValueError("origin_lla must be finite")
+
+
+def _validate_sat_ecef(sat_ecef):
+    sat = np.asarray(sat_ecef, dtype=np.float64)
+    if sat.ndim == 1:
+        if sat.size == 0 or sat.size % 3 != 0:
+            raise ValueError("sat_ecef must have shape (n_sat, 3)")
+        sat = sat.reshape(-1, 3)
+    elif not (sat.ndim == 2 and sat.shape[1] == 3):
+        raise ValueError("sat_ecef must have shape (n_sat, 3)")
+    if sat.shape[0] < 1:
+        raise ValueError("sat_ecef must contain at least one satellite")
+    if not np.all(np.isfinite(sat)):
+        raise ValueError("sat_ecef must be finite")
+    return np.ascontiguousarray(sat)
+
+
+def _validate_elevation_mask_deg(elevation_mask_deg):
+    if not np.isfinite(elevation_mask_deg):
+        raise ValueError("elevation_mask_deg must be finite")
+
+
 def _lla_to_ecef_py(lat, lon, alt):
     """Pure-Python LLA (radians) to ECEF conversion for grid generation."""
     a = 6378137.0
@@ -59,6 +91,10 @@ class VulnerabilityMap:
     """
 
     def __init__(self, origin_lla, grid_size_m=500, resolution_m=5, height_m=1.5):
+        _validate_origin_lla(origin_lla)
+        _validate_positive_finite("grid_size_m", grid_size_m)
+        _validate_positive_finite("resolution_m", resolution_m)
+
         self.origin_lla = origin_lla
         self.grid_size_m = grid_size_m
         self.resolution_m = resolution_m
@@ -120,10 +156,12 @@ class VulnerabilityMap:
             Keys: 'pdop', 'hdop', 'vdop', 'gdop', 'n_visible', each a 2-D
             array of shape (n_side, n_side).
         """
+        sat_ecef = _validate_sat_ecef(sat_ecef)
+        _validate_elevation_mask_deg(elevation_mask_deg)
+
         if not HAS_GPU:
             raise RuntimeError("CUDA skyplot module (_gnss_gpu_skyplot) not available")
 
-        sat_ecef = np.ascontiguousarray(sat_ecef, dtype=np.float64)
         n_sat = sat_ecef.shape[0]
         el_mask_rad = np.radians(elevation_mask_deg)
 

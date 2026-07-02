@@ -15,6 +15,65 @@ try:
 except ImportError:
     _HAS_NATIVE = False
 
+
+def _finite_float(name, value):
+    try:
+        out = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be numeric") from exc
+    if not np.isfinite(out):
+        raise ValueError(f"{name} must be finite")
+    return out
+
+
+def _positive_float(name, value):
+    out = _finite_float(name, value)
+    if out <= 0.0:
+        raise ValueError(f"{name} must be positive")
+    return out
+
+
+def _nonnegative_float(name, value):
+    out = _finite_float(name, value)
+    if out < 0.0:
+        raise ValueError(f"{name} must be non-negative")
+    return out
+
+
+def _as_position_ecef(position_ecef):
+    arr = np.asarray(position_ecef, dtype=np.float64)
+    if arr.shape != (3,):
+        raise ValueError("position_ecef must have shape (3,)")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("position_ecef must be finite")
+    return arr
+
+
+def _as_sat_ecef_matrix(sat_ecef, n_sat):
+    sat = np.asarray(sat_ecef, dtype=np.float64)
+    if sat.shape != (n_sat, 3):
+        raise ValueError("sat_ecef must have shape (n_sat, 3)")
+    if not np.all(np.isfinite(sat)):
+        raise ValueError("sat_ecef must be finite")
+    return sat
+
+
+def _finite_1d_array(name, values, *, min_size=1):
+    arr = np.asarray(values, dtype=np.float64).ravel()
+    if arr.size < min_size:
+        raise ValueError(f"{name} must contain at least {min_size} value")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{name} must be finite")
+    return arr
+
+
+def _nonnegative_1d_array(name, values, *, min_size=1):
+    arr = _finite_1d_array(name, values, min_size=min_size)
+    if np.any(arr < 0.0):
+        raise ValueError(f"{name} must be non-negative")
+    return arr
+
+
 # _NativeState wraps native EKFState's arrays as plain numpy arrays so that
 # ekf_predict / ekf_update (which now operate in-place on numpy arrays) work
 # correctly without relying on pybind11 struct-copy semantics.
@@ -85,16 +144,16 @@ class EKFPositioner:
         sigma_cb : float
             Initial clock bias uncertainty [m].
         """
-        pos = np.asarray(position_ecef, dtype=np.float64).ravel()
-        if len(pos) < 3:
-            raise ValueError("position_ecef must have at least 3 elements")
+        pos = _as_position_ecef(position_ecef)
+        sigma_pos = _positive_float("sigma_pos", sigma_pos)
+        sigma_cb = _positive_float("sigma_cb", sigma_cb)
+        clock_bias = _finite_float("clock_bias", clock_bias)
 
         if _HAS_NATIVE:
-            native = ekf_initialize(pos[:3], float(clock_bias),
-                                    float(sigma_pos), float(sigma_cb))
+            native = ekf_initialize(pos, clock_bias, sigma_pos, sigma_cb)
             self.state = _NativeState(native)
         else:
-            self.state = _PureState(pos[:3], clock_bias, sigma_pos, sigma_cb)
+            self.state = _PureState(pos, clock_bias, sigma_pos, sigma_cb)
 
         self.initialized = True
 
@@ -109,8 +168,10 @@ class EKFPositioner:
         if not self.initialized:
             raise RuntimeError("EKF not initialized. Call initialize() first.")
 
+        dt = _positive_float("dt", dt)
+
         if _HAS_NATIVE:
-            ekf_predict(self.state.x, self.state.P, float(dt), self.config)
+            ekf_predict(self.state.x, self.state.P, dt, self.config)
         else:
             self.state.predict(dt, self.config)
 
@@ -129,14 +190,17 @@ class EKFPositioner:
         if not self.initialized:
             raise RuntimeError("EKF not initialized. Call initialize() first.")
 
-        sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
-        pr = np.asarray(pseudoranges, dtype=np.float64).ravel()
-        n_sat = len(pr)
+        pr = _finite_1d_array("pseudoranges", pseudoranges, min_size=1)
+        n_sat = pr.size
+        sat = _as_sat_ecef_matrix(sat_ecef, n_sat)
 
         if weights is None:
             w = np.full(n_sat, 1.0 / (self.sigma_pr ** 2), dtype=np.float64)
         else:
             w = np.asarray(weights, dtype=np.float64).ravel()
+            if w.size != n_sat:
+                raise ValueError("weights length must match pseudoranges")
+            w = _nonnegative_1d_array("weights", w, min_size=n_sat)
 
         if _HAS_NATIVE:
             ekf_update(self.state.x, self.state.P, sat, pr, w)
