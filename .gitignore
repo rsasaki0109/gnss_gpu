@@ -41,11 +41,12 @@ experiments/results/*.log
 experiments/results/paper_assets/*.mp4
 experiments/results/gsdc2023_bridge_diag_*.csv
 
-# Generated experiment result artifacts (regenerable via CLIs; force-add
-# deliverables you want versioned, e.g. `git add -f <submission>.csv`).
-# These data artifacts are intentionally NOT tracked (untracked 2026-06-17 to
-# fix Windows MAX_PATH breakage from 260+ char sweep filenames). Media and
-# paper_assets under experiments/results are still tracked.
+# Generated experiment result artifacts (regenerable via CLIs). The bulk was
+# untracked 2026-06-17 to fix Windows MAX_PATH breakage from 260+ char sweep
+# filenames. A curated set of short-named result deliverables that the site /
+# paper build chain reads (pf_strategy_lab_*, urbannav_fixed_eval_*, etc.) stays
+# tracked -- those were force-added and survive these ignore rules. To version a
+# new deliverable use `git add -f <path>` and keep the basename short.
 experiments/results/*.csv
 experiments/results/*.json
 experiments/results/*.md
