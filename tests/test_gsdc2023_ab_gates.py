@@ -6,6 +6,7 @@ from experiments.gsdc2023_ab_gates import (
     DDAnchorGate,
     Disposition,
     NoTdcpCoexistGate,
+    TripWhitelistDDGate,
     apply_gate,
     disposition_counts,
 )
@@ -83,6 +84,62 @@ def test_ntdc_gate_blocks_when_dd_coexists():
 def test_ntdc_gate_blocks_when_anchor_below_floor():
     gate = NoTdcpCoexistGate(min_anchor_coverage=0.6)
     assert gate.decide(_signals("a", anchor_cov=0.5), _counts("a", no_tdcp=100)) is False
+
+
+# --- TripWhitelistDDGate ---------------------------------------------------
+
+
+def test_whitelist_gate_requires_dd_rows_present():
+    gate = TripWhitelistDDGate()
+    assert gate.decide(_signals("a", anchor_cov=0.95), _counts("a", dd=0)) is False
+
+
+def test_whitelist_gate_default_denies_marginal_trip_that_broad_gate_kept():
+    # anchor 0.65 clears the old 0.6 floor but not the conservative 0.8 default.
+    broad = DDAnchorGate(min_anchor_coverage=0.6)
+    strict = TripWhitelistDDGate()
+    sig = _signals("a", anchor_cov=0.65)
+    cnt = _counts("a", dd=200)
+    assert broad.decide(sig, cnt) is True
+    assert strict.decide(sig, cnt) is False
+
+
+def test_whitelist_gate_keeps_high_confidence_trip_by_internal_signals():
+    gate = TripWhitelistDDGate()
+    assert gate.decide(_signals("a", anchor_cov=0.9), _counts("a", dd=200)) is True
+
+
+def test_whitelist_gate_allow_overrides_failing_internal_signals():
+    gate = TripWhitelistDDGate(allow={"a"})
+    # Would fail the conservative floor, but the explicit allow keeps it.
+    assert gate.decide(_signals("a", anchor_cov=0.3), _counts("a", dd=200)) is True
+
+
+def test_whitelist_gate_deny_overrides_everything():
+    gate = TripWhitelistDDGate(allow={"a"}, deny={"a"})
+    # Deny wins even over allow and strong internal evidence.
+    assert gate.decide(_signals("a", anchor_cov=0.99), _counts("a", dd=200)) is False
+
+
+def test_whitelist_gate_blocks_low_dd_density():
+    gate = TripWhitelistDDGate(min_dd_pairs_mean=4.0)
+    sig = DDSignals(
+        trip_id="a", n_epochs=1000, dd_anchor_epochs=900,
+        dd_dd_epochs=900, dd_base_snapped_epochs=900, dd_pairs_mean=2.0,
+    )
+    assert gate.decide(sig, _counts("a", dd=200)) is False
+
+
+def test_whitelist_gate_blocks_no_tdcp_coexistence_by_default():
+    gate = TripWhitelistDDGate()
+    assert gate.decide(_signals("a", anchor_cov=0.9), _counts("a", dd=200, no_tdcp=100)) is False
+
+
+def test_whitelist_gate_drops_into_combined_gate():
+    # Duck-typed substitution for the DD leg of CombinedGate.
+    gate = CombinedGate(dd=TripWhitelistDDGate(allow={"a"}))
+    assert gate.decide(_signals("a", anchor_cov=0.2), _counts("a", dd=200)) is Disposition.KEPT
+    assert gate.decide(_signals("b", anchor_cov=0.65), _counts("b", dd=200)) is Disposition.REVERTED
 
 
 # --- CombinedGate ----------------------------------------------------------
