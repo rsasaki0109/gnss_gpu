@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Reject AI tool co-author trailers (Cursor, Claude, Copilot, etc.).
+# Human contributors only — matches internal_docs convention.
+set -euo pipefail
+
+msg_file="${1:?commit-msg hook requires message file path}"
+
+if grep -Eiq '^Co-authored-by:.*(cursor|claude|anthropic|openai|copilot|github copilot|chatgpt|gemini|codex)' "$msg_file"; then
+  echo "commit-msg: Co-authored-by trailers for AI tools are not allowed." >&2
+  echo "          Drop the trailer and commit again." >&2
+  exit 1
+fi
+
+exit 0
