@@ -54,8 +54,9 @@ flowchart TD
 
 candidate pool（per-run の LibGNSS++ `.pos` + 診断 `.csv`、GICI `rtk_imu_tc` を
 含む多 variant）を 3 層で絞り込む。gici_tc は selector pool に投入済。90% 突破の
-残 lever は最下流の n/r2 ranker 層だが、`ranker_gici_cluster_override` mode が
-未コミットで production replay 不可という blocker 付き。
+残 lever は最下流の n/r2 ranker 層。`ranker_gici_cluster_override` mode は
+2026-06-17 にコミット済（`experiments/ppc_gici_override.py`、テスト
+`tests/test_ppc_gici_override.py`）。厳密な score 再現は候補 pool の再生成が前提。
 
 ```mermaid
 flowchart TD
@@ -82,7 +83,7 @@ flowchart TD
     subgraph RANK["ranker 層"]
         direction TB
         R1["features: cluster_min_rms_50cm (dominant)<br/>+ NLOS frac + path features"]
-        R2["per-run conditional:<br/>n/r2 のみ ranker_gici_cluster_override k=99<br/>※ mode 未コミット = replay blocker"]
+        R2["per-run conditional:<br/>n/r2 のみ ranker_gici_cluster_override k=99<br/>※ 2026-06-17 コミット済 (ppc_gici_override.py)"]
         R1 --> R2
     end
     R --> RANK
