@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Strip AI tool Co-authored-by lines before the message is finalized (Cursor and
+# other editors often inject these automatically).
+set -euo pipefail
+
+msg_file="${1:?prepare-commit-msg requires message file path}"
+
+tmp="$(mktemp)"
+grep -viE '^co-authored-by:.*(cursor|claude|anthropic|openai|copilot|github copilot|chatgpt|gemini|codex)' \
+  "$msg_file" >"$tmp" || true
+mv "$tmp" "$msg_file"
+
+exit 0

@@ -97,8 +97,9 @@ to push a branch that isn't a descendant of `origin/main`. Never use
 `git pull --allow-unrelated-histories`.
 
 **Commit messages:** do not add `Co-authored-by:` trailers for AI tools (Cursor,
-Claude, Copilot, etc.). The tracked `.githooks/commit-msg` hook rejects them.
-Human authorship only.
+Claude, Copilot, etc.). `.githooks/prepare-commit-msg` strips auto-injected
+trailers; `.githooks/commit-msg` rejects any that remain. CI also scans PR
+commits via `tools/lint_commit_messages.py`. Human authorship only.
 
 **GitHub settings** (repo admin, Settings → Branches → add rule for `main`):
 require a PR before merging, require status checks (`lint`, `repo-hygiene`,

@@ -56,6 +56,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: python tools/lint_repo_paths.py --max-path 180 --max-name 128
+      - run: git fetch origin main --depth=1
+      - run: python tools/lint_commit_messages.py --base origin/main
 
   test-python-smoke:
     runs-on: ubuntu-latest

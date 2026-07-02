@@ -4,6 +4,7 @@ _cmake_build/
 dist/
 *.egg-info/
 *.so
+*.pyd
 *.o
 *.a
 

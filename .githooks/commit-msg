@@ -5,9 +5,9 @@ set -euo pipefail
 
 msg_file="${1:?commit-msg hook requires message file path}"
 
-if grep -Eiq '^Co-authored-by:.*(cursor|claude|anthropic|openai|copilot|github copilot|chatgpt|gemini|codex)' "$msg_file"; then
+if grep -Eiq '^[[:space:]]*co-authored-by:.*(cursor|claude|anthropic|openai|copilot|github copilot|chatgpt|gemini|codex)' "$msg_file"; then
   echo "commit-msg: Co-authored-by trailers for AI tools are not allowed." >&2
-  echo "          Drop the trailer and commit again." >&2
+  echo "          (Cursor/Claude/Copilot/etc.) Drop the trailer and commit again." >&2
   exit 1
 fi
 
