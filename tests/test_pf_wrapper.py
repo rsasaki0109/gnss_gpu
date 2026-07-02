@@ -3,19 +3,8 @@
 import numpy as np
 import pytest
 
+from gnss_fixtures import generate_satellites
 from gnss_gpu.particle_filter import ParticleFilter
-
-
-def _generate_satellites(n_sat=4, seed=42):
-    rng = np.random.RandomState(seed)
-    R_orbit = 26_571_000.0
-    theta = rng.uniform(0, 2 * np.pi, n_sat)
-    phi = rng.uniform(-np.pi / 3, np.pi / 3, n_sat)
-    sat = np.zeros((n_sat, 3))
-    sat[:, 0] = R_orbit * np.cos(phi) * np.cos(theta)
-    sat[:, 1] = R_orbit * np.cos(phi) * np.sin(theta)
-    sat[:, 2] = R_orbit * np.sin(phi)
-    return sat
 
 
 def test_pf_init_rejects_invalid_config_before_native_call():
@@ -77,7 +66,7 @@ def test_pf_predict_rejects_invalid_velocity_before_native_call():
 def test_pf_update_rejects_invalid_inputs_before_native_call():
     pf = ParticleFilter(n_particles=100)
     pf.initialize(np.array([1.0, 2.0, 3.0]))
-    sat = _generate_satellites(4)
+    sat = generate_satellites(4)
     pr = np.ones(4)
 
     with pytest.raises(ValueError, match="pseudoranges must contain at least"):

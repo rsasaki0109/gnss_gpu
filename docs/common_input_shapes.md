@@ -75,3 +75,21 @@ State vector length 8: `[x, y, z, vx, vy, vz, clock_bias, clock_drift]`.
 | `__init__` | `origin_lla` | `(3,)` | `(lat_deg, lon_deg, alt_m)` |
 | `.evaluate` | `sat_ecef` | `(n_sat, 3)` | `n_sat ≥ 1` |
 | | returns `pdop`, `hdop`, `vdop`, `gdop`, `n_visible` | `(n_side, n_side)` each | `n_side` from grid config |
+
+## Validation policy
+
+Public Python wrappers raise **`ValueError`** for invalid inputs (CPU-side, no GPU
+required). Direct `_gnss_gpu_*` pybind entrypoints raise **`RuntimeError`** with the
+same message text so bypass callers still fail fast before native kernels run.
+
+**`dt` (seconds)** — EKF predict/update and tracking vector updates require **`dt > 0`**
+finite. Particle filters (`ParticleFilter`, `SVGDParticleFilter`, `ParticleFilterDevice`)
+allow **`dt ≥ 0`**; zero means no motion step (position/clock unchanged, weights only).
+
+**`ess_threshold`** — `ParticleFilter` resample gate accepts **`[0, 1]`** inclusive.
+`0` disables automatic resampling (ESS check skipped); values in `(0, 1]` trigger
+resample when normalized ESS falls below the threshold.
+
+Shared finite/shape/range helpers live in **`gnss_gpu.input_validation`**; wrappers
+and bindings call these instead of duplicating checks. Module-specific rules (e.g.
+measurement counts, state vector length) stay in each API section above.

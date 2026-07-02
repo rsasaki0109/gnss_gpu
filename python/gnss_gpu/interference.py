@@ -2,6 +2,8 @@
 
 import numpy as np
 
+from gnss_gpu.input_validation import finite_float, positive_float
+
 try:
     from gnss_gpu._gnss_gpu_interference import (
         compute_stft,
@@ -11,23 +13,6 @@ try:
     _HAS_GPU = True
 except ImportError:
     _HAS_GPU = False
-
-
-def _finite_float(name, value):
-    try:
-        out = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be numeric") from exc
-    if not np.isfinite(out):
-        raise ValueError(f"{name} must be finite")
-    return out
-
-
-def _positive_float(name, value):
-    out = _finite_float(name, value)
-    if out <= 0.0:
-        raise ValueError(f"{name} must be positive")
-    return out
 
 
 def _positive_int(name, value, *, minimum=1):
@@ -71,10 +56,10 @@ class InterferenceDetector:
     """
 
     def __init__(self, sampling_freq, fft_size=1024, hop_size=256, threshold_db=15.0):
-        self.sampling_freq = _positive_float("sampling_freq", sampling_freq)
+        self.sampling_freq = positive_float("sampling_freq", sampling_freq)
         self.fft_size = _positive_int("fft_size", fft_size, minimum=2)
         self.hop_size = _positive_int("hop_size", hop_size)
-        self.threshold_db = _finite_float("threshold_db", threshold_db)
+        self.threshold_db = finite_float("threshold_db", threshold_db)
 
     def compute_spectrogram(self, signal):
         """Compute STFT power spectrogram.

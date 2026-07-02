@@ -11,29 +11,15 @@ regions and repulsion to maintain particle diversity.
 
 import numpy as np
 
-
-def _finite_float(name, value):
-    try:
-        out = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be numeric") from exc
-    if not np.isfinite(out):
-        raise ValueError(f"{name} must be finite")
-    return out
-
-
-def _positive_float(name, value):
-    out = _finite_float(name, value)
-    if out <= 0.0:
-        raise ValueError(f"{name} must be positive")
-    return out
-
-
-def _nonnegative_float(name, value):
-    out = _finite_float(name, value)
-    if out < 0.0:
-        raise ValueError(f"{name} must be non-negative")
-    return out
+from gnss_gpu.input_validation import (
+    as_position_ecef,
+    as_sat_ecef_matrix,
+    finite_1d_array,
+    finite_float,
+    nonnegative_1d_array,
+    nonnegative_float,
+    positive_float,
+)
 
 
 def _positive_int(name, value):
@@ -44,40 +30,6 @@ def _positive_int(name, value):
     if out <= 0:
         raise ValueError(f"{name} must be positive")
     return out
-
-
-def _as_position_ecef(position_ecef):
-    arr = np.asarray(position_ecef, dtype=np.float64)
-    if arr.shape != (3,):
-        raise ValueError("position_ecef must have shape (3,)")
-    if not np.all(np.isfinite(arr)):
-        raise ValueError("position_ecef must be finite")
-    return arr
-
-
-def _as_sat_ecef_matrix(sat_ecef, n_sat):
-    sat = np.asarray(sat_ecef, dtype=np.float64)
-    if sat.shape != (n_sat, 3):
-        raise ValueError("sat_ecef must have shape (n_sat, 3)")
-    if not np.all(np.isfinite(sat)):
-        raise ValueError("sat_ecef must be finite")
-    return sat
-
-
-def _finite_1d_array(name, values, *, min_size=1):
-    arr = np.asarray(values, dtype=np.float64).ravel()
-    if arr.size < min_size:
-        raise ValueError(f"{name} must contain at least {min_size} value")
-    if not np.all(np.isfinite(arr)):
-        raise ValueError(f"{name} must be finite")
-    return arr
-
-
-def _nonnegative_1d_array(name, values, *, min_size=1):
-    arr = _finite_1d_array(name, values, min_size=min_size)
-    if np.any(arr < 0.0):
-        raise ValueError(f"{name} must be non-negative")
-    return arr
 
 
 class SVGDParticleFilter:
@@ -130,11 +82,11 @@ class SVGDParticleFilter:
         self._pf_svgd_estimate = _pf_svgd_estimate
 
         self.n_particles = _positive_int("n_particles", n_particles)
-        self.sigma_pos = _positive_float("sigma_pos", sigma_pos)
-        self.sigma_cb = _positive_float("sigma_cb", sigma_cb)
-        self.sigma_pr = _positive_float("sigma_pr", sigma_pr)
+        self.sigma_pos = positive_float("sigma_pos", sigma_pos)
+        self.sigma_cb = positive_float("sigma_cb", sigma_cb)
+        self.sigma_pr = positive_float("sigma_pr", sigma_pr)
         self.svgd_steps = _positive_int("svgd_steps", svgd_steps)
-        self.step_size = _positive_float("step_size", step_size)
+        self.step_size = positive_float("step_size", step_size)
         self.n_neighbors = _positive_int("n_neighbors", n_neighbors)
         self.n_bandwidth_subsample = _positive_int(
             "n_bandwidth_subsample", n_bandwidth_subsample)
@@ -162,10 +114,10 @@ class SVGDParticleFilter:
         spread_cb : float
             Standard deviation for initial clock bias scatter [m].
         """
-        pos = _as_position_ecef(position_ecef)
-        clock_bias = _finite_float("clock_bias", clock_bias)
-        spread_pos = _positive_float("spread_pos", spread_pos)
-        spread_cb = _positive_float("spread_cb", spread_cb)
+        pos = as_position_ecef(position_ecef)
+        clock_bias = finite_float("clock_bias", clock_bias)
+        spread_pos = positive_float("spread_pos", spread_pos)
+        spread_cb = positive_float("spread_cb", spread_cb)
         n = self.n_particles
 
         self._px = np.empty(n, dtype=np.float64)
@@ -196,7 +148,7 @@ class SVGDParticleFilter:
             raise RuntimeError(
                 "SVGDParticleFilter not initialized. Call initialize() first.")
 
-        dt = _nonnegative_float("dt", dt)
+        dt = nonnegative_float("dt", dt)
 
         if velocity is None:
             velocity = [0.0, 0.0, 0.0]
@@ -235,9 +187,9 @@ class SVGDParticleFilter:
             raise RuntimeError(
                 "SVGDParticleFilter not initialized. Call initialize() first.")
 
-        pr = _finite_1d_array("pseudoranges", pseudoranges, min_size=1)
+        pr = finite_1d_array("pseudoranges", pseudoranges, min_size=1)
         n_sat = pr.size
-        sat = _as_sat_ecef_matrix(sat_ecef, n_sat)
+        sat = as_sat_ecef_matrix(sat_ecef, n_sat)
 
         if weights is None:
             w = np.ones(n_sat, dtype=np.float64)
@@ -245,7 +197,7 @@ class SVGDParticleFilter:
             w = np.asarray(weights, dtype=np.float64).ravel()
             if w.size != n_sat:
                 raise ValueError("weights length must match pseudoranges")
-            w = _nonnegative_1d_array("weights", w, min_size=n_sat)
+            w = nonnegative_1d_array("weights", w, min_size=n_sat)
 
         for i in range(self.svgd_steps):
             # Estimate bandwidth using median heuristic on random subsample

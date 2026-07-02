@@ -6,75 +6,18 @@ pseudorange-based positioning with 1M+ particles on GPU.
 
 import numpy as np
 
+from gnss_gpu.input_validation import (
+    as_position_ecef,
+    as_sat_ecef_matrix,
+    finite_1d_array,
+    finite_float,
+    nonnegative_1d_array,
+    nonnegative_float,
+    positive_float,
+    positive_int,
+)
+
 _ALLOWED_RESAMPLING = frozenset({"megopolis", "systematic"})
-
-
-def _finite_float(name, value):
-    try:
-        out = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be numeric") from exc
-    if not np.isfinite(out):
-        raise ValueError(f"{name} must be finite")
-    return out
-
-
-def _positive_float(name, value):
-    out = _finite_float(name, value)
-    if out <= 0.0:
-        raise ValueError(f"{name} must be positive")
-    return out
-
-
-def _nonnegative_float(name, value):
-    out = _finite_float(name, value)
-    if out < 0.0:
-        raise ValueError(f"{name} must be non-negative")
-    return out
-
-
-def _positive_int(name, value):
-    try:
-        out = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be an integer") from exc
-    if out != value or out < 1:
-        raise ValueError(f"{name} must be a positive integer")
-    return out
-
-
-def _as_position_ecef(position_ecef):
-    arr = np.asarray(position_ecef, dtype=np.float64)
-    if arr.shape != (3,):
-        raise ValueError("position_ecef must have shape (3,)")
-    if not np.all(np.isfinite(arr)):
-        raise ValueError("position_ecef must be finite")
-    return arr
-
-
-def _as_sat_ecef_matrix(sat_ecef, n_sat):
-    sat = np.asarray(sat_ecef, dtype=np.float64)
-    if sat.shape != (n_sat, 3):
-        raise ValueError("sat_ecef must have shape (n_sat, 3)")
-    if not np.all(np.isfinite(sat)):
-        raise ValueError("sat_ecef must be finite")
-    return sat
-
-
-def _finite_1d_array(name, values, *, min_size=1):
-    arr = np.asarray(values, dtype=np.float64).ravel()
-    if arr.size < min_size:
-        raise ValueError(f"{name} must contain at least {min_size} value")
-    if not np.all(np.isfinite(arr)):
-        raise ValueError(f"{name} must be finite")
-    return arr
-
-
-def _nonnegative_1d_array(name, values, *, min_size=1):
-    arr = _finite_1d_array(name, values, min_size=min_size)
-    if np.any(arr < 0.0):
-        raise ValueError(f"{name} must be non-negative")
-    return arr
 
 
 class ParticleFilter:
@@ -101,11 +44,11 @@ class ParticleFilter:
     def __init__(self, n_particles=1_000_000, sigma_pos=1.0, sigma_cb=300.0,
                  sigma_pr=5.0, resampling="megopolis", ess_threshold=0.5,
                  seed=42):
-        self.n_particles = _positive_int("n_particles", n_particles)
-        self.sigma_pos = _positive_float("sigma_pos", sigma_pos)
-        self.sigma_cb = _positive_float("sigma_cb", sigma_cb)
-        self.sigma_pr = _positive_float("sigma_pr", sigma_pr)
-        ess_threshold = _finite_float("ess_threshold", ess_threshold)
+        self.n_particles = positive_int("n_particles", n_particles)
+        self.sigma_pos = positive_float("sigma_pos", sigma_pos)
+        self.sigma_cb = positive_float("sigma_cb", sigma_cb)
+        self.sigma_pr = positive_float("sigma_pr", sigma_pr)
+        ess_threshold = finite_float("ess_threshold", ess_threshold)
         if not (0.0 <= ess_threshold <= 1.0):
             raise ValueError("ess_threshold must be in [0, 1]")
         self.ess_threshold = ess_threshold
@@ -156,10 +99,10 @@ class ParticleFilter:
         spread_cb : float
             Standard deviation for initial clock bias scatter [m].
         """
-        pos = _as_position_ecef(position_ecef)
-        clock_bias = _finite_float("clock_bias", clock_bias)
-        spread_pos = _positive_float("spread_pos", spread_pos)
-        spread_cb = _positive_float("spread_cb", spread_cb)
+        pos = as_position_ecef(position_ecef)
+        clock_bias = finite_float("clock_bias", clock_bias)
+        spread_pos = positive_float("spread_pos", spread_pos)
+        spread_cb = positive_float("spread_cb", spread_cb)
         n = self.n_particles
 
         self._px = np.empty(n, dtype=np.float64)
@@ -190,10 +133,10 @@ class ParticleFilter:
         if not self._initialized:
             raise RuntimeError("ParticleFilter not initialized. Call initialize() first.")
 
-        dt = _nonnegative_float("dt", dt)
+        dt = nonnegative_float("dt", dt)
         if velocity is None:
             velocity = [0.0, 0.0, 0.0]
-        vel = _finite_1d_array("velocity", velocity, min_size=3)
+        vel = finite_1d_array("velocity", velocity, min_size=3)
         vx = np.array([vel[0]], dtype=np.float64)
         vy = np.array([vel[1]], dtype=np.float64)
         vz = np.array([vel[2]], dtype=np.float64)
@@ -220,9 +163,9 @@ class ParticleFilter:
         if not self._initialized:
             raise RuntimeError("ParticleFilter not initialized. Call initialize() first.")
 
-        pr = _finite_1d_array("pseudoranges", pseudoranges, min_size=1)
+        pr = finite_1d_array("pseudoranges", pseudoranges, min_size=1)
         n_sat = pr.size
-        sat = _as_sat_ecef_matrix(sat_ecef, n_sat)
+        sat = as_sat_ecef_matrix(sat_ecef, n_sat)
 
         if weights is None:
             weights = np.ones(n_sat, dtype=np.float64)
@@ -230,7 +173,7 @@ class ParticleFilter:
             w = np.asarray(weights, dtype=np.float64).ravel()
             if w.size != n_sat:
                 raise ValueError("weights length must match pseudoranges")
-            weights = _nonnegative_1d_array("weights", w, min_size=n_sat)
+            weights = nonnegative_1d_array("weights", w, min_size=n_sat)
 
         self._pf_weight(
             self._px, self._py, self._pz, self._pcb,

@@ -8,61 +8,13 @@ observations from dragging the position estimate.
 
 import numpy as np
 
+from gnss_gpu.input_validation import (
+    finite_float,
+    positive_float,
+    validate_gnss_observation_epoch,
+)
 from gnss_gpu.particle_filter import ParticleFilter
 from gnss_gpu.raytrace import BuildingModel
-
-
-def _finite_float(name, value):
-    try:
-        out = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be numeric") from exc
-    if not np.isfinite(out):
-        raise ValueError(f"{name} must be finite")
-    return out
-
-
-def _positive_float(name, value):
-    out = _finite_float(name, value)
-    if out <= 0.0:
-        raise ValueError(f"{name} must be positive")
-    return out
-
-
-def _as_position_ecef(position_ecef):
-    arr = np.asarray(position_ecef, dtype=np.float64)
-    if arr.shape != (3,):
-        raise ValueError("position_ecef must have shape (3,)")
-    if not np.all(np.isfinite(arr)):
-        raise ValueError("position_ecef must be finite")
-    return arr
-
-
-def _validate_sat_pr_weights(sat_ecef, pseudoranges, weights=None):
-    pr = np.asarray(pseudoranges, dtype=np.float64).ravel()
-    if pr.size < 1:
-        raise ValueError("pseudoranges must contain at least 1 value")
-    if not np.all(np.isfinite(pr)):
-        raise ValueError("pseudoranges must be finite")
-
-    n_sat = pr.size
-    sat = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
-    if sat.shape != (n_sat, 3):
-        raise ValueError("sat_ecef must have shape (n_sat, 3)")
-    if not np.all(np.isfinite(sat)):
-        raise ValueError("sat_ecef must be finite")
-
-    if weights is None:
-        weights = np.ones(n_sat, dtype=np.float64)
-    else:
-        weights = np.asarray(weights, dtype=np.float64).ravel()
-        if weights.size != n_sat:
-            raise ValueError("weights length must match pseudoranges")
-        if not np.all(np.isfinite(weights)):
-            raise ValueError("weights must be finite")
-        if np.any(weights < 0.0):
-            raise ValueError("weights must be non-negative")
-    return sat, pr, weights, n_sat
 
 
 class ParticleFilter3D(ParticleFilter):
@@ -97,11 +49,11 @@ class ParticleFilter3D(ParticleFilter):
         if not isinstance(building_model, BuildingModel):
             raise TypeError("building_model must be a BuildingModel instance")
         self.building_model = building_model
-        self.sigma_los = _positive_float("sigma_los", sigma_los)
-        self.sigma_nlos = _positive_float("sigma_nlos", sigma_nlos)
-        self.nlos_bias = _finite_float("nlos_bias", nlos_bias)
-        self.blocked_nlos_prob = _finite_float("blocked_nlos_prob", blocked_nlos_prob)
-        self.clear_nlos_prob = _finite_float("clear_nlos_prob", clear_nlos_prob)
+        self.sigma_los = positive_float("sigma_los", sigma_los)
+        self.sigma_nlos = positive_float("sigma_nlos", sigma_nlos)
+        self.nlos_bias = finite_float("nlos_bias", nlos_bias)
+        self.blocked_nlos_prob = finite_float("blocked_nlos_prob", blocked_nlos_prob)
+        self.clear_nlos_prob = finite_float("clear_nlos_prob", clear_nlos_prob)
 
         from gnss_gpu._gnss_gpu_pf3d import pf_weight_3d as _pf_weight_3d
         self._pf_weight_3d = _pf_weight_3d
@@ -122,7 +74,7 @@ class ParticleFilter3D(ParticleFilter):
             raise RuntimeError(
                 "ParticleFilter3D not initialized. Call initialize() first.")
 
-        sat, pr, weights, n_sat = _validate_sat_pr_weights(
+        sat, pr, weights, n_sat = validate_gnss_observation_epoch(
             sat_ecef, pseudoranges, weights)
 
         tri = self.building_model.triangles.reshape(-1, 3, 3)

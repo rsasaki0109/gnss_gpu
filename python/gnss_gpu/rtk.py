@@ -2,28 +2,17 @@
 
 import numpy as np
 
+from gnss_gpu.input_validation import (
+    as_base_ecef,
+    finite_float,
+    positive_float,
+)
+
 try:
     from gnss_gpu._gnss_gpu_rtk import rtk_float, rtk_float_batch, lambda_integer
     HAS_RTK = True
 except ImportError:
     HAS_RTK = False
-
-
-def _finite_float(name, value):
-    try:
-        out = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be numeric") from exc
-    if not np.isfinite(out):
-        raise ValueError(f"{name} must be finite")
-    return out
-
-
-def _positive_float(name, value):
-    out = _finite_float(name, value)
-    if out <= 0.0:
-        raise ValueError(f"{name} must be positive")
-    return out
 
 
 def _positive_int(name, value):
@@ -34,15 +23,6 @@ def _positive_int(name, value):
     if out <= 0:
         raise ValueError(f"{name} must be positive")
     return out
-
-
-def _as_base_ecef(base_ecef):
-    arr = np.asarray(base_ecef, dtype=np.float64).ravel()
-    if arr.size != 3:
-        raise ValueError("base_ecef must have shape (3,)")
-    if not np.all(np.isfinite(arr)):
-        raise ValueError("base_ecef must be finite")
-    return arr
 
 
 def _finite_1d_obs(name, values, *, min_size=2):
@@ -107,10 +87,10 @@ class RTKSolver:
     """
 
     def __init__(self, base_ecef, wavelength=0.19029, max_iter=20, tol=1e-4):
-        self.base_ecef = _as_base_ecef(base_ecef)
-        self.wavelength = _positive_float("wavelength", wavelength)
+        self.base_ecef = as_base_ecef(base_ecef)
+        self.wavelength = positive_float("wavelength", wavelength)
         self.max_iter = _positive_int("max_iter", max_iter)
-        self.tol = _positive_float("tol", tol)
+        self.tol = positive_float("tol", tol)
         if not HAS_RTK:
             raise RuntimeError("RTK CUDA module not available. Build with CUDA support.")
 
@@ -186,7 +166,7 @@ class RTKSolver:
             Ratio test value (second-best / best chi-squared).
         """
         n_candidates = _positive_int("n_candidates", n_candidates)
-        ratio_threshold = _finite_float("ratio_threshold", ratio_threshold)
+        ratio_threshold = finite_float("ratio_threshold", ratio_threshold)
 
         rpr = _finite_1d_obs("rover_pr", rover_pr, min_size=2)
         n_sat = rpr.size

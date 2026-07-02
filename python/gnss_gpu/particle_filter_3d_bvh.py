@@ -20,12 +20,12 @@ Usage
 
 import numpy as np
 
-from gnss_gpu.particle_filter_3d import (
-    ParticleFilter3D,
-    _finite_float,
-    _positive_float,
-    _validate_sat_pr_weights,
+from gnss_gpu.input_validation import (
+    finite_float,
+    positive_float,
+    validate_gnss_observation_epoch,
 )
+from gnss_gpu.particle_filter_3d import ParticleFilter3D
 from gnss_gpu.bvh import BVHAccelerator
 
 
@@ -70,11 +70,11 @@ class ParticleFilter3DBVH(ParticleFilter3D):
             raise TypeError("bvh must be a BVHAccelerator instance")
 
         self.bvh = bvh
-        self.sigma_los = _positive_float("sigma_los", sigma_los)
-        self.sigma_nlos = _positive_float("sigma_nlos", sigma_nlos)
-        self.nlos_bias = _finite_float("nlos_bias", nlos_bias)
-        self.blocked_nlos_prob = _finite_float("blocked_nlos_prob", blocked_nlos_prob)
-        self.clear_nlos_prob = _finite_float("clear_nlos_prob", clear_nlos_prob)
+        self.sigma_los = positive_float("sigma_los", sigma_los)
+        self.sigma_nlos = positive_float("sigma_nlos", sigma_nlos)
+        self.nlos_bias = finite_float("nlos_bias", nlos_bias)
+        self.blocked_nlos_prob = finite_float("blocked_nlos_prob", blocked_nlos_prob)
+        self.clear_nlos_prob = finite_float("clear_nlos_prob", clear_nlos_prob)
 
         from gnss_gpu._gnss_gpu_pf3d_bvh import pf_weight_3d_bvh as _pf_weight_3d_bvh
         self._pf_weight_3d_bvh = _pf_weight_3d_bvh
@@ -99,7 +99,7 @@ class ParticleFilter3DBVH(ParticleFilter3D):
             raise RuntimeError(
                 "ParticleFilter3DBVH not initialized. Call initialize() first.")
 
-        sat, pr, weights, n_sat = _validate_sat_pr_weights(
+        sat, pr, weights, n_sat = validate_gnss_observation_epoch(
             sat_ecef, pseudoranges, weights)
 
         nodes_flat = self.bvh._nodes_flat
