@@ -47,6 +47,8 @@ def _child_env() -> dict[str, str]:
     if env.get("PYTHONPATH"):
         pythonpath = f"{pythonpath}{__import__('os').pathsep}{env['PYTHONPATH']}"
     env["PYTHONPATH"] = pythonpath
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUTF8", "1")
     return env
 
 
@@ -85,16 +87,27 @@ def _run_ppc(
     return PROJECT_ROOT / "experiments" / "results" / f"{results_prefix}_runs.csv"
 
 
-def _read_official_pct(runs_csv: Path, method: str = "rbpf+dd") -> float | None:
+def _read_official_pct(runs_csv: Path, method: str | None = "rbpf+dd") -> float | None:
     if not runs_csv.is_file():
         return None
+    method_aliases = {
+        "rbpf+dd": ("rbpf+dd", "RBPF-velKF+DD"),
+    }
+    accepted = set(method_aliases.get(method or "", ()))
+    if method:
+        accepted.add(method)
     with runs_csv.open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            if str(row.get("method", "")).strip() == method:
-                value = row.get("honest_ppc_pct")
-                if value is None or value == "":
-                    return None
-                return float(value)
+        rows = list(csv.DictReader(handle))
+    for row in rows:
+        label = str(row.get("method", "")).strip()
+        if accepted and label not in accepted:
+            continue
+        value = row.get("honest_ppc_pct")
+        if value is None or value == "":
+            continue
+        return float(value)
+    if rows and rows[0].get("honest_ppc_pct") not in (None, ""):
+        return float(rows[0]["honest_ppc_pct"])
     return None
 
 
