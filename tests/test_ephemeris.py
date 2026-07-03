@@ -575,7 +575,7 @@ class TestEphemerisValidation:
     def test_binding_rejects_invalid_n_sat(self):
         params = _make_gpu_params()
 
-        with pytest.raises(RuntimeError, match="n_sat must be positive"):
+        with pytest.raises(RuntimeError, match="n_sat must be >= 1"):
             compute_satellite_position(params, 518400.0, 0)
 
     @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")

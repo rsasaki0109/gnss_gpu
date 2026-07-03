@@ -1,33 +1,18 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
-#include <cmath>
 #include <stdexcept>
-#include <string>
 #include "gnss_gpu/ephemeris.h"
+#include "gnss_gpu/pybind_validation.h"
 
 namespace py = pybind11;
 
 namespace {
 
-using DoubleArray = py::array_t<double, py::array::c_style | py::array::forcecast>;
-
-void ensure_finite_doubles(const py::buffer_info& buf, const char* message) {
-  const auto* ptr = static_cast<const double*>(buf.ptr);
-  for (py::ssize_t i = 0; i < buf.size; ++i) {
-    if (!std::isfinite(ptr[i])) {
-      throw std::runtime_error(message);
-    }
-  }
-}
-
-void validate_n_sat(int n_sat) {
-  if (n_sat <= 0) {
-    throw std::runtime_error("n_sat must be positive");
-  }
-}
+using gnss_gpu::pybind_validation::DoubleArray;
+namespace pv = gnss_gpu::pybind_validation;
 
 void validate_params_flat(const py::buffer_info& buf, int n_sat) {
-  validate_n_sat(n_sat);
+  pv::validate_n_sat(n_sat);
   if (buf.ndim != 1) {
     throw std::runtime_error("params_flat must be a 1D array");
   }
@@ -40,13 +25,7 @@ void validate_params_flat(const py::buffer_info& buf, int n_sat) {
   if (buf.size * static_cast<py::ssize_t>(sizeof(double)) < min_bytes) {
     throw std::runtime_error("params_flat is too small for n_sat EphemerisParams structs");
   }
-  ensure_finite_doubles(buf, "params_flat must be finite");
-}
-
-void validate_gps_time(double gps_time) {
-  if (!std::isfinite(gps_time)) {
-    throw std::runtime_error("gps_time must be finite");
-  }
+  pv::ensure_finite_doubles(buf, "params_flat must be finite");
 }
 
 void validate_gps_times(const py::buffer_info& buf) {
@@ -56,7 +35,7 @@ void validate_gps_times(const py::buffer_info& buf) {
   if (buf.size == 0) {
     throw std::runtime_error("gps_times must be non-empty");
   }
-  ensure_finite_doubles(buf, "gps_times must be finite");
+  pv::ensure_finite_doubles(buf, "gps_times must be finite");
 }
 
 }  // namespace
@@ -95,7 +74,7 @@ PYBIND11_MODULE(_gnss_gpu_ephemeris, m) {
         [](DoubleArray params_flat, double gps_time, int n_sat) {
             auto buf = params_flat.request();
             validate_params_flat(buf, n_sat);
-            validate_gps_time(gps_time);
+            pv::validate_finite(gps_time, "gps_time");
 
             const gnss_gpu::EphemerisParams* params =
                 reinterpret_cast<const gnss_gpu::EphemerisParams*>(buf.ptr);

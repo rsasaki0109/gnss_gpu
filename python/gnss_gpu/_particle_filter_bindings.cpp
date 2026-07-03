@@ -4,39 +4,14 @@
 #include <stdexcept>
 #include <string>
 #include "gnss_gpu/particle_filter.h"
+#include "gnss_gpu/pybind_validation.h"
 
 namespace py = pybind11;
 
 namespace {
 
-using DoubleArray = py::array_t<double, py::array::c_style | py::array::forcecast>;
-
-void ensure_finite_doubles(const py::buffer_info& buf, const char* message) {
-    const auto* ptr = static_cast<const double*>(buf.ptr);
-    for (py::ssize_t i = 0; i < buf.size; ++i) {
-        if (!std::isfinite(ptr[i])) {
-            throw std::runtime_error(message);
-        }
-    }
-}
-
-void validate_positive_finite(double value, const char* name) {
-    if (!std::isfinite(value) || value <= 0.0) {
-        throw std::runtime_error(std::string(name) + " must be positive and finite");
-    }
-}
-
-void validate_finite(double value, const char* name) {
-    if (!std::isfinite(value)) {
-        throw std::runtime_error(std::string(name) + " must be finite");
-    }
-}
-
-void validate_n_particles(int n_particles) {
-    if (n_particles < 1) {
-        throw std::runtime_error("n_particles must be >= 1");
-    }
-}
+using gnss_gpu::pybind_validation::DoubleArray;
+namespace pv = gnss_gpu::pybind_validation;
 
 void validate_particle_arrays(const py::buffer_info& px, const py::buffer_info& py_arr,
                               const py::buffer_info& pz, const py::buffer_info& pcb,
@@ -59,26 +34,14 @@ void validate_log_weights(const py::buffer_info& buf, int n_particles) {
     if (buf.ndim != 1 || buf.size != n_particles) {
         throw std::runtime_error("log_weights length must match n_particles");
     }
-    ensure_finite_doubles(buf, "log_weights must be finite");
-}
-
-void validate_dt(double dt) {
-    if (!std::isfinite(dt) || dt < 0.0) {
-        throw std::runtime_error("dt must be non-negative and finite");
-    }
+    pv::ensure_finite_doubles(buf, "log_weights must be finite");
 }
 
 void validate_velocity_array(const py::buffer_info& buf, const char* name) {
     if (buf.ndim != 1 || buf.size < 1) {
         throw std::runtime_error(std::string(name) + " must contain at least 1 value");
     }
-    ensure_finite_doubles(buf, (std::string(name) + " must be finite").c_str());
-}
-
-void validate_n_sat(int n_sat) {
-    if (n_sat < 1) {
-        throw std::runtime_error("n_sat must be >= 1");
-    }
+    pv::ensure_finite_doubles(buf, (std::string(name) + " must be finite").c_str());
 }
 
 void validate_sat_ecef(const py::buffer_info& buf, int n_sat) {
@@ -93,14 +56,14 @@ void validate_sat_ecef(const py::buffer_info& buf, int n_sat) {
     } else {
         throw std::runtime_error("sat_ecef must be 1D or 2D");
     }
-    ensure_finite_doubles(buf, "sat_ecef must be finite");
+    pv::ensure_finite_doubles(buf, "sat_ecef must be finite");
 }
 
 void validate_pseudoranges(const py::buffer_info& buf, int n_sat) {
     if (buf.ndim != 1 || buf.size != n_sat) {
         throw std::runtime_error("pseudoranges length must match n_sat");
     }
-    ensure_finite_doubles(buf, "pseudoranges must be finite");
+    pv::ensure_finite_doubles(buf, "pseudoranges must be finite");
 }
 
 void validate_weights_sat(const py::buffer_info& buf, int n_sat) {
@@ -140,18 +103,18 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
                              double init_x, double init_y, double init_z, double init_cb,
                              double spread_pos, double spread_cb,
                              int n_particles, unsigned long long seed) {
-    validate_n_particles(n_particles);
+    pv::validate_n_particles(n_particles);
     auto bpx = px.request();
     auto bpy = py_arr.request();
     auto bpz = pz.request();
     auto bpcb = pcb.request();
     validate_particle_arrays(bpx, bpy, bpz, bpcb, n_particles);
-    validate_finite(init_x, "init_x");
-    validate_finite(init_y, "init_y");
-    validate_finite(init_z, "init_z");
-    validate_finite(init_cb, "init_cb");
-    validate_positive_finite(spread_pos, "spread_pos");
-    validate_positive_finite(spread_cb, "spread_cb");
+    pv::validate_finite(init_x, "init_x");
+    pv::validate_finite(init_y, "init_y");
+    pv::validate_finite(init_z, "init_z");
+    pv::validate_finite(init_cb, "init_cb");
+    pv::validate_positive_finite(spread_pos, "spread_pos");
+    pv::validate_positive_finite(spread_cb, "spread_cb");
     gnss_gpu::pf_initialize(
         static_cast<double*>(bpx.ptr),
         static_cast<double*>(bpy.ptr),
@@ -172,7 +135,7 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
                           DoubleArray vz,
                           double dt, double sigma_pos, double sigma_cb,
                           int n_particles, unsigned long long seed, int step) {
-    validate_n_particles(n_particles);
+    pv::validate_n_particles(n_particles);
     auto bpx = px.request();
     auto bpy = py_arr.request();
     auto bpz = pz.request();
@@ -181,9 +144,9 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
     validate_velocity_array(vx.request(), "vx");
     validate_velocity_array(vy.request(), "vy");
     validate_velocity_array(vz.request(), "vz");
-    validate_dt(dt);
-    validate_positive_finite(sigma_pos, "sigma_pos");
-    validate_positive_finite(sigma_cb, "sigma_cb");
+    pv::validate_dt_nonnegative(dt);
+    pv::validate_positive_finite(sigma_pos, "sigma_pos");
+    pv::validate_positive_finite(sigma_cb, "sigma_cb");
     gnss_gpu::pf_predict(
         static_cast<double*>(bpx.ptr),
         static_cast<double*>(bpy.ptr),
@@ -205,8 +168,8 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
                          DoubleArray sat_ecef, DoubleArray pseudoranges,
                          DoubleArray weights_sat, DoubleArray log_weights,
                          int n_particles, int n_sat, double sigma_pr) {
-    validate_n_particles(n_particles);
-    validate_n_sat(n_sat);
+    pv::validate_n_particles(n_particles);
+    pv::validate_n_sat(n_sat);
     auto bpx = px.request();
     auto bpy = py_arr.request();
     auto bpz = pz.request();
@@ -216,7 +179,7 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
     validate_pseudoranges(pseudoranges.request(), n_sat);
     validate_weights_sat(weights_sat.request(), n_sat);
     validate_log_weights(log_weights.request(), n_particles);
-    validate_positive_finite(sigma_pr, "sigma_pr");
+    pv::validate_positive_finite(sigma_pr, "sigma_pr");
     gnss_gpu::pf_weight(
         static_cast<double*>(bpx.ptr),
         static_cast<double*>(bpy.ptr),
@@ -234,7 +197,7 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
      py::arg("n_particles"), py::arg("n_sat"), py::arg("sigma_pr"));
 
   m.def("pf_compute_ess", [](DoubleArray log_weights, int n_particles) {
-    validate_n_particles(n_particles);
+    pv::validate_n_particles(n_particles);
     validate_log_weights(log_weights.request(), n_particles);
     return gnss_gpu::pf_compute_ess(
         static_cast<double*>(log_weights.request().ptr),
@@ -246,7 +209,7 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
                                       DoubleArray pz, DoubleArray pcb,
                                       DoubleArray log_weights,
                                       int n_particles, unsigned long long seed) {
-    validate_n_particles(n_particles);
+    pv::validate_n_particles(n_particles);
     auto bpx = px.request();
     auto bpy = py_arr.request();
     auto bpz = pz.request();
@@ -269,7 +232,7 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
                                      DoubleArray log_weights,
                                      int n_particles, int n_iterations,
                                      unsigned long long seed) {
-    validate_n_particles(n_particles);
+    pv::validate_n_particles(n_particles);
     auto bpx = px.request();
     auto bpy = py_arr.request();
     auto bpz = pz.request();
@@ -293,7 +256,7 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
                            DoubleArray log_weights,
                            DoubleArray result,
                            int n_particles) {
-    validate_n_particles(n_particles);
+    pv::validate_n_particles(n_particles);
     auto bpx = px.request();
     auto bpy = py_arr.request();
     auto bpz = pz.request();
@@ -317,7 +280,7 @@ PYBIND11_MODULE(_gnss_gpu_pf, m) {
                                 DoubleArray pz, DoubleArray pcb,
                                 DoubleArray output,
                                 int n_particles) {
-    validate_n_particles(n_particles);
+    pv::validate_n_particles(n_particles);
     auto bpx = px.request();
     auto bpy = py_arr.request();
     auto bpz = pz.request();

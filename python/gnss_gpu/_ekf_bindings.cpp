@@ -4,55 +4,36 @@
 #include <stdexcept>
 #include <string>
 #include "gnss_gpu/ekf.h"
+#include "gnss_gpu/pybind_validation.h"
 #include <cstring>
 
 namespace py = pybind11;
 
 namespace {
 
-using DoubleArray = py::array_t<double, py::array::c_style | py::array::forcecast>;
-
-void ensure_finite_doubles(const py::buffer_info& buf, const char* message) {
-    const auto* ptr = static_cast<const double*>(buf.ptr);
-    for (py::ssize_t i = 0; i < buf.size; ++i) {
-        if (!std::isfinite(ptr[i])) {
-            throw std::runtime_error(message);
-        }
-    }
-}
-
-void validate_positive_finite(double value, const char* name) {
-    if (!std::isfinite(value) || value <= 0.0) {
-        throw std::runtime_error(std::string(name) + " must be positive and finite");
-    }
-}
+using gnss_gpu::pybind_validation::DoubleArray;
+namespace pv = gnss_gpu::pybind_validation;
 
 void validate_ekf_config(const gnss_gpu::EKFConfig& config) {
-    validate_positive_finite(config.sigma_pos, "sigma_pos");
-    validate_positive_finite(config.sigma_vel, "sigma_vel");
-    validate_positive_finite(config.sigma_clk, "sigma_clk");
-    validate_positive_finite(config.sigma_drift, "sigma_drift");
-    validate_positive_finite(config.sigma_pr, "sigma_pr");
-}
-
-void validate_dt(double dt) {
-    if (!std::isfinite(dt) || dt <= 0.0) {
-        throw std::runtime_error("dt must be positive and finite");
-    }
+    pv::validate_positive_finite(config.sigma_pos, "sigma_pos");
+    pv::validate_positive_finite(config.sigma_vel, "sigma_vel");
+    pv::validate_positive_finite(config.sigma_clk, "sigma_clk");
+    pv::validate_positive_finite(config.sigma_drift, "sigma_drift");
+    pv::validate_positive_finite(config.sigma_pr, "sigma_pr");
 }
 
 void validate_initial_pos(const py::buffer_info& buf) {
     if (buf.ndim != 1 || buf.size != 3) {
         throw std::runtime_error("initial_pos must have shape (3,)");
     }
-    ensure_finite_doubles(buf, "initial_pos must be finite");
+    pv::ensure_finite_doubles(buf, "initial_pos must be finite");
 }
 
 void validate_state_x(const py::buffer_info& buf) {
     if (buf.ndim != 1 || buf.size != 8) {
         throw std::runtime_error("state_x must have shape (8,)");
     }
-    ensure_finite_doubles(buf, "state_x must be finite");
+    pv::ensure_finite_doubles(buf, "state_x must be finite");
 }
 
 void validate_state_P(const py::buffer_info& buf) {
@@ -62,13 +43,7 @@ void validate_state_P(const py::buffer_info& buf) {
     if (!flat_ok && !matrix_ok) {
         throw std::runtime_error("state_P must have shape (8, 8) or 64 flat elements");
     }
-    ensure_finite_doubles(buf, "state_P must be finite");
-}
-
-void validate_n_sat(int n_sat) {
-    if (n_sat < 1) {
-        throw std::runtime_error("n_sat must be >= 1");
-    }
+    pv::ensure_finite_doubles(buf, "state_P must be finite");
 }
 
 void validate_sat_ecef(const py::buffer_info& buf, int n_sat) {
@@ -83,14 +58,14 @@ void validate_sat_ecef(const py::buffer_info& buf, int n_sat) {
     } else {
         throw std::runtime_error("sat_ecef must be 1D or 2D");
     }
-    ensure_finite_doubles(buf, "sat_ecef must be finite");
+    pv::ensure_finite_doubles(buf, "sat_ecef must be finite");
 }
 
 void validate_pseudoranges(const py::buffer_info& buf, int n_sat) {
     if (buf.ndim != 1 || buf.size != n_sat) {
         throw std::runtime_error("pseudoranges length must match n_sat");
     }
-    ensure_finite_doubles(buf, "pseudoranges must be finite");
+    pv::ensure_finite_doubles(buf, "pseudoranges must be finite");
 }
 
 void validate_weights(const py::buffer_info& buf, int n_sat) {
@@ -116,7 +91,7 @@ int validate_batch_states_x(const py::buffer_info& buf) {
     if (n_instances < 1) {
         throw std::runtime_error("n_instances must be >= 1");
     }
-    ensure_finite_doubles(buf, "states_x must be finite");
+    pv::ensure_finite_doubles(buf, "states_x must be finite");
     return n_instances;
 }
 
@@ -125,7 +100,7 @@ void validate_batch_states_P(const py::buffer_info& buf, int n_instances) {
         buf.shape[1] != 8 || buf.shape[2] != 8) {
         throw std::runtime_error("states_P must have shape (n_instances, 8, 8)");
     }
-    ensure_finite_doubles(buf, "states_P must be finite");
+    pv::ensure_finite_doubles(buf, "states_P must be finite");
 }
 
 }  // namespace
@@ -175,8 +150,8 @@ PYBIND11_MODULE(_gnss_gpu_ekf, m) {
                                 double initial_cb, double sigma_pos, double sigma_cb) {
         auto bp = initial_pos.request();
         validate_initial_pos(bp);
-        validate_positive_finite(sigma_pos, "sigma_pos");
-        validate_positive_finite(sigma_cb, "sigma_cb");
+        pv::validate_positive_finite(sigma_pos, "sigma_pos");
+        pv::validate_positive_finite(sigma_cb, "sigma_cb");
         gnss_gpu::EKFState state;
         gnss_gpu::ekf_initialize(&state, static_cast<double*>(bp.ptr),
                                   initial_cb, sigma_pos, sigma_cb);
@@ -192,7 +167,7 @@ PYBIND11_MODULE(_gnss_gpu_ekf, m) {
         auto bP = state_P.request();
         validate_state_x(bx);
         validate_state_P(bP);
-        validate_dt(dt);
+        pv::validate_dt_positive(dt);
         validate_ekf_config(config);
         gnss_gpu::EKFState state;
         memcpy(state.x, bx.ptr, 8 * sizeof(double));
@@ -214,7 +189,7 @@ PYBIND11_MODULE(_gnss_gpu_ekf, m) {
         validate_state_x(bx);
         validate_state_P(bP);
         const int n_sat = static_cast<int>(bp.size);
-        validate_n_sat(n_sat);
+        pv::validate_n_sat(n_sat);
         validate_sat_ecef(sat_ecef.request(), n_sat);
         validate_pseudoranges(bp, n_sat);
         validate_weights(weights.request(), n_sat);
@@ -239,7 +214,7 @@ PYBIND11_MODULE(_gnss_gpu_ekf, m) {
         auto bP = states_P.request();
         const int n_instances = validate_batch_states_x(bx);
         validate_batch_states_P(bP, n_instances);
-        validate_dt(dt);
+        pv::validate_dt_positive(dt);
         validate_ekf_config(config);
 
         auto bpr = pseudoranges.request();
@@ -247,7 +222,7 @@ PYBIND11_MODULE(_gnss_gpu_ekf, m) {
             throw std::runtime_error("pseudoranges must be a 1D array");
         }
         const int n_sat = static_cast<int>(bpr.size);
-        validate_n_sat(n_sat);
+        pv::validate_n_sat(n_sat);
         validate_sat_ecef(sat_ecef.request(), n_sat);
         validate_pseudoranges(bpr, n_sat);
         validate_weights(weights.request(), n_sat);
