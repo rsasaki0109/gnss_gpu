@@ -58,3 +58,12 @@ def test_ekf_update_rejects_invalid_inputs_before_native_call():
         ekf.update(sat, pr, weights=np.ones(3))
     with pytest.raises(ValueError, match="weights must be non-negative"):
         ekf.update(sat, pr, weights=[1.0, -1.0, 1.0, 1.0])
+
+
+def test_ekf_public_api_hides_state_backend():
+    """Callers use get_* only; state backend (_NativeState vs _PureState) is internal."""
+    ekf = EKFPositioner()
+    ekf.initialize(np.array([1.0, 2.0, 3.0]))
+    assert ekf.get_position().shape == (3,)
+    assert ekf.get_velocity().shape == (3,)
+    assert ekf.get_covariance().shape == (8, 8)
