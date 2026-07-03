@@ -103,3 +103,18 @@ PYTHONPATH=python:. python experiments/seed_pf_nlos_smoke_mask.py
 
 Writes `experiments/results/plateau_nlos_phase33/tokyo_run1_per_epoch_nlos.csv` from the
 PLATEAU demo mask (gitignored). Pair with `scripts_run_pf_nlos_smoke.sh` once PPC data exists.
+
+## Production prep (PPC on mobile SSD + real BVH mask)
+
+```bash
+PYTHONPATH=python python experiments/prepare_pf_nlos_production.py check --run tokyo/run1
+PYTHONPATH=python python experiments/prepare_pf_nlos_production.py fetch --run tokyo/run1
+PYTHONPATH=python python experiments/prepare_pf_nlos_production.py mask --run tokyo/run1 --max-epochs 120
+PYTHONPATH=python python experiments/prepare_pf_nlos_production.py smoke --run tokyo/run1 --max-epochs 120
+```
+
+SSD layout (when `E:` is present):
+
+- `E:/datasets/PPC-Dataset-data`
+- `E:/datasets/plateau/{city}_{run}`
+- `E:/datasets/plateau_cache/{city}_{run}_triangles.npz`
