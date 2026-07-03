@@ -13,7 +13,6 @@ Use a browser to download the zip, then point this script at the file:
 from __future__ import annotations
 
 import argparse
-import base64
 import shutil
 import sys
 import zipfile
@@ -30,6 +29,8 @@ OFFICIAL_ONEDRIVE = (
     "https://chibakoudai-my.sharepoint.com/:u:/g/personal/"
     "66lsm6_chibatech_ac_jp/ETmyNr1VrcpFjqxgjXJdgkQBkfTwnykhSPOVKClOUBNOMQ"
 )
+OFFICIAL_ONEDRIVE_DOWNLOAD = OFFICIAL_ONEDRIVE + "?download=1"
+DEFAULT_SSD_DEST = Path("E:/datasets/PPC-Dataset-data")
 REQUIRED_RUN_FILES = ("rover.obs", "base.obs", "base.nav", "reference.csv", "imu.csv")
 EXPECTED_RUNS = (
     "tokyo/run1",
@@ -75,22 +76,29 @@ def try_auto_download(dest_zip: Path) -> bool:
     """Best-effort OneDrive fetch. Returns True when a real zip is written."""
     if requests is None:
         return False
-    enc = base64.urlsafe_b64encode(OFFICIAL_ONEDRIVE.encode()).decode().rstrip("=")
-    api = f"https://api.onedrive.com/v1.0/shares/u!{enc}/root/content"
     response = requests.get(
-        api,
+        OFFICIAL_ONEDRIVE_DOWNLOAD,
+        stream=True,
         allow_redirects=True,
-        timeout=120,
+        timeout=300,
         headers={"User-Agent": "Mozilla/5.0"},
     )
     if response.status_code != 200:
         return False
-    if len(response.content) < 1_000_000:
-        return False
-    if response.content[:2] != b"PK":
-        return False
     dest_zip.parent.mkdir(parents=True, exist_ok=True)
-    dest_zip.write_bytes(response.content)
+    written = 0
+    with dest_zip.open("wb") as handle:
+        for chunk in response.iter_content(chunk_size=1024 * 1024):
+            if not chunk:
+                continue
+            handle.write(chunk)
+            written += len(chunk)
+    if written < 1_000_000:
+        dest_zip.unlink(missing_ok=True)
+        return False
+    if dest_zip.read_bytes()[:2] != b"PK":
+        dest_zip.unlink(missing_ok=True)
+        return False
     return True
 
 
@@ -152,6 +160,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to PPC-Dataset.zip downloaded from the official OneDrive link",
     )
     parser.add_argument("--dest", type=Path, default=DEFAULT_DEST)
+    parser.add_argument(
+        "--ssd-dest",
+        type=Path,
+        default=None,
+        help=f"Install on mobile SSD (default when set: {DEFAULT_SSD_DEST})",
+    )
     parser.add_argument("--force", action="store_true", help="Reinstall even if dest exists")
     parser.add_argument(
         "--try-auto",
@@ -159,6 +173,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Attempt OneDrive API download before failing",
     )
     args = parser.parse_args(argv)
+    dest = args.ssd_dest or args.dest
+    if args.ssd_dest is None and DEFAULT_SSD_DEST.drive and Path(f"{DEFAULT_SSD_DEST.drive}/").exists():
+        dest = DEFAULT_SSD_DEST
 
     zip_path = args.zip
     if zip_path is None:
@@ -167,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
             zip_path = candidates[0]
             print(f"[install] using local zip: {zip_path}")
         elif args.try_auto:
-            auto_zip = (args.dest.parent / "PPC-Dataset.zip").resolve()
+            auto_zip = (dest.parent / "PPC-Dataset.zip").resolve()
             print("[install] trying OneDrive auto-download...")
             if try_auto_download(auto_zip):
                 zip_path = auto_zip
@@ -188,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Or place PPC-Dataset.zip in ~/Downloads and rerun without --zip.")
         return 1
 
-    install_from_zip(zip_path.resolve(), args.dest.resolve(), force=bool(args.force))
+    install_from_zip(zip_path.resolve(), dest.resolve(), force=bool(args.force))
     return 0
 
 

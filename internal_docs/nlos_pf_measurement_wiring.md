@@ -89,6 +89,8 @@ Post-review hardening on this branch:
 Remaining before PPC score validation:
 
 1. Install ``datasets/PPC-Dataset-data`` (``experiments/download_ppc_dataset.py``).
+   Default SSD path when ``E:`` is present: ``E:/datasets/PPC-Dataset-data``.
+   Repo junction: ``datasets/PPC-Dataset-data`` → SSD install.
 2. Run smoke A/B: ``PYTHONPATH=python python experiments/run_pf_nlos_smoke.py``.
 3. Generate real BVH masks for target runs.
 4. Record PPC A/B deltas in this doc.
