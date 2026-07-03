@@ -5,6 +5,7 @@
 **Codex 引継ぎ section**: 先頭 [Codex maintenance handoff (2026-06-10)](#codex-maintenance-handoff-2026-06-10-refactoring--user-friendly-化) を入口にし、 PPC/GSDC 研究ログは末尾 [Codex 引継ぎ (2026-05-17 PM)](#codex-引継ぎ-2026-05-17-pm) 参照
 
 **最近の進捗ハイライト** (新しい順):
+- **2026-07-03 Codex maintenance / refactor Wave 6 (D2+D3)**: examples demo chooser (`examples/run_demo.py`) + CI `test-wrapper-smoke` job running `tests/test_*_wrapper.py`.
 - **2026-07-03 Codex maintenance / refactor Wave 1 (A1–A5) start**: validation wave #4 完了後、重複する finite/shape/range チェックを `gnss_gpu.input_validation` に集約する refactor track 着手。Wave 1-C (A5 + D1) で `docs/common_input_shapes.md` validation policy と plan 更新。
 - **2026-07-03 Codex maintenance / validation wave B2–B4 + docs (PR #108)**: PF (`ParticleFilter` + `_gnss_gpu_pf`)、 RTK (`RTKSolver` + `_gnss_gpu_rtk`)、 SVGD (`SVGDParticleFilter` + `_gnss_gpu_svgd`)、 PF3D/pf_device bindings + wrappers に boundary validation landing。`docs/common_input_shapes.md` + README smoke test 追加。wave #4 (PF/EKF/SVGD/RTK) 完了。
 - **2026-07-03 Codex maintenance / validation wave PR #107 merged**: skyplot validation (PR #107)、 EKF binding validation B1 (PR #107) 完了。wave #1–#3 (ephemeris PR #105、 multipath/raytrace-BVH PR #106、 BVH `compute_multipath` fix PR #104) 済。
@@ -172,10 +173,11 @@ landing 済 / 進行中:
 
 - README smoke test subsection: `PYTHONPATH=python pytest tests/test_*_wrapper.py -q` (CPU-only wrapper validation、GPU rebuild 不要)
 - `docs/common_input_shapes.md`: Ephemeris / Multipath / EKF / PF / RTK / SVGD / Skyplot の主要 array shape 一覧
+- examples demo chooser: `examples/run_demo.py` (`--list`, `--describe`, GPU/data preflight)
+- CI job `test-wrapper-smoke`: `scripts/ci/run_wrapper_smoke.sh`
 
 残候補:
 
-- examples demo chooser の help text / failure mode
 - invalid-input examples は docs ではなく tests で担保し、docs は簡潔にする
 
 ### Do not do during this maintenance wave

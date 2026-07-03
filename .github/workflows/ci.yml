@@ -72,6 +72,19 @@ jobs:
       - run: python -m pip install numpy pytest matplotlib requests
       - run: bash scripts/ci/run_python_smoke.sh
 
+  test-wrapper-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install numpy pytest
+      - run: bash scripts/ci/run_wrapper_smoke.sh
+
   site-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 20

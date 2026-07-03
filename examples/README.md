@@ -2,6 +2,17 @@
 
 Runnable demos for `gnss_gpu`. Run them from the repo root with `PYTHONPATH=python`.
 
+## Quick start — demo chooser
+
+```bash
+PYTHONPATH=python python3 examples/run_demo.py --list
+PYTHONPATH=python python3 examples/run_demo.py urban_canyon
+```
+
+[`run_demo.py`](run_demo.py) prints GPU/data requirements, validates the repo layout,
+and forwards extra args to the selected script. Use `--describe <name>` when a demo
+fails and you need the build/data hints.
+
 ## Which demo should I run?
 
 | Goal | Run this | Needs GPU build? | Needs downloaded data? |

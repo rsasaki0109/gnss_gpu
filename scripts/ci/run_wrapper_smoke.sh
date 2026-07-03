@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+export PYTHONPATH="python:."
+
+# CPU-only wrapper validation for public Python APIs. These tests fail fast on
+# invalid shapes without importing compiled CUDA extensions.
+pytest -q tests/test_*_wrapper.py
