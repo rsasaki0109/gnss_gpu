@@ -82,6 +82,18 @@ Public Python wrappers raise **`ValueError`** for invalid inputs (CPU-side, no G
 required). Direct `_gnss_gpu_*` pybind entrypoints raise **`RuntimeError`** with the
 same message text so bypass callers still fail fast before native kernels run.
 
+**Diffraction** — `compute_diffraction_paths` / `compute_diffraction_paths_gpu` require
+finite `rx_ecef (3,)` and `sat_ecef (n_sat, 3)`; tuning parameters
+(`max_edge_range_m`, `max_ray_edge_distance_m`, `max_excess_path_m`, `wavelength_m`)
+must be positive; `max_paths` is a non-negative integer.
+
+**Signal sim** — `SignalSimulator.generate_epoch` expects a list of channel dicts with
+keys `prn`, `code_phase`, `carrier_phase`, `doppler_hz`, `amplitude`, `nav_bit`;
+`sampling_freq > 0`, `n_samples >= 1`.
+
+**RTKLIB SPP** — `rtklib_spp.export_spp_meas` requires non-empty `obs_file` /
+`nav_file` paths and `el_mask_deg in [0, 90]`.
+
 **`dt` (seconds)** — EKF predict/update and tracking vector updates require **`dt > 0`**
 finite. Particle filters (`ParticleFilter`, `SVGDParticleFilter`, `ParticleFilterDevice`)
 allow **`dt ≥ 0`**; zero means no motion step (position/clock unchanged, weights only).

@@ -1,4 +1,5 @@
 #include "gnss_gpu/diffraction.h"
+#include "gnss_gpu/pybind_validation.h"
 
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -6,6 +7,45 @@
 namespace py = pybind11;
 
 namespace {
+
+using gnss_gpu::pybind_validation::DoubleArray;
+namespace pv = gnss_gpu::pybind_validation;
+
+void validate_rx_ecef(const py::buffer_info& buf) {
+  if (buf.ndim != 1 || buf.size != 3) {
+    throw std::runtime_error("rx must have shape (3,)");
+  }
+  pv::ensure_finite_doubles(buf, "rx must be finite");
+}
+
+void validate_flat_xyz(const py::buffer_info& buf, int count, const char* name) {
+  const py::ssize_t expected = static_cast<py::ssize_t>(count) * 3;
+  if (buf.ndim != 1 || buf.size != expected) {
+    throw std::runtime_error(
+        std::string(name) + " must have flat length n*3 matching n_sat/n_edge");
+  }
+  const std::string finite_msg = std::string(name) + " must be finite";
+  pv::ensure_finite_doubles(buf, finite_msg.c_str());
+}
+
+void validate_diffraction_options(
+    int n_sat,
+    int n_edge,
+    double max_edge_range,
+    double max_ray_edge_dist,
+    double max_excess,
+    double wavelength) {
+  if (n_sat < 0) {
+    throw std::runtime_error("n_sat must be >= 0");
+  }
+  if (n_edge < 0) {
+    throw std::runtime_error("n_edge must be >= 0");
+  }
+  pv::validate_positive_finite(max_edge_range, "max_edge_range");
+  pv::validate_positive_finite(max_ray_edge_dist, "max_ray_edge_dist");
+  pv::validate_positive_finite(max_excess, "max_excess");
+  pv::validate_positive_finite(wavelength, "wavelength");
+}
 
 py::tuple diffraction_candidates(
     py::array_t<double> rx,
@@ -19,6 +59,21 @@ py::tuple diffraction_candidates(
     double max_ray_edge_dist,
     double max_excess,
     double wavelength) {
+  validate_diffraction_options(
+      n_sat, n_edge, max_edge_range, max_ray_edge_dist, max_excess, wavelength);
+
+  py::buffer_info rx_info = rx.request();
+  py::buffer_info sats_info = sats.request();
+  py::buffer_info starts_info = starts.request();
+  py::buffer_info ends_info = ends.request();
+  py::buffer_info mids_info = mids.request();
+
+  validate_rx_ecef(rx_info);
+  validate_flat_xyz(sats_info, n_sat, "sats");
+  validate_flat_xyz(starts_info, n_edge, "starts");
+  validate_flat_xyz(ends_info, n_edge, "ends");
+  validate_flat_xyz(mids_info, n_edge, "mids");
+
   const py::ssize_t total =
       static_cast<py::ssize_t>(n_sat) * static_cast<py::ssize_t>(n_edge);
 
@@ -28,12 +83,6 @@ py::tuple diffraction_candidates(
   auto fresnel_v = py::array_t<double>({total});
   auto atten_db = py::array_t<double>({total});
   auto point = py::array_t<double>({total * 3});
-
-  py::buffer_info rx_info = rx.request();
-  py::buffer_info sats_info = sats.request();
-  py::buffer_info starts_info = starts.request();
-  py::buffer_info ends_info = ends.request();
-  py::buffer_info mids_info = mids.request();
 
   py::buffer_info valid_info = valid.request();
   py::buffer_info excess_info = excess.request();
