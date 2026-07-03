@@ -76,6 +76,22 @@ These are **geometry replay** numbers, not PPC2024 official scores.
 2. Smoke `scripts_run_pf_nlos_smoke.sh` on `tokyo/run1` with `rbpf+dd+gate+hybrid+rtkdiag_pf` if ranker pool is available.
 3. Record PPC2024 delta vs baseline; expect heavy-NLOS runs (`n/r2`) to show the most PF-domain gain.
 
+## Fable review (2026-07-03)
+
+**Verdict: PASS with warnings** (strategy aligned; do-nots clean).
+
+Post-review hardening on this branch:
+
+- Mask lookup prefers ``tow`` over ``epoch_idx`` (skipped-epoch drift guard).
+- PPC DD-PR anchor now receives the same NLOS scale as DD carrier.
+- Strong-only NLOS PRNs are down-weighted even when absent from the weak set.
+
+Remaining before PPC score validation:
+
+1. Install ``datasets/PPC-Dataset-data`` (``experiments/download_ppc_dataset.py``).
+2. Generate real BVH masks for target runs.
+3. Run PPC A/B baseline vs ``--pf-nlos-preset soft-k3``.
+
 ## Local smoke prep (no PPC dataset required)
 
 ```bash

@@ -3910,6 +3910,7 @@ def _run_ctrbpf_on_segment(
                     prn_i,
                     w_i,
                     pf_nlos_mask_tables,
+                    tow=float(times[i]),
                     k_weak=float(pf_nlos_k_weak),
                     k_strong=float(pf_nlos_k_strong),
                 ),
@@ -4031,6 +4032,7 @@ def _run_ctrbpf_on_segment(
                     dd_result,
                     i,
                     pf_nlos_mask_tables,
+                    tow=float(times[i]),
                     k_weak=float(pf_nlos_k_weak),
                     k_strong=float(pf_nlos_k_strong),
                 )
@@ -4058,6 +4060,15 @@ def _run_ctrbpf_on_segment(
                             )
                         except Exception:
                             dd_pr_result = None
+                        if dd_pr_result is not None:
+                            scale_dd_result_weights_by_nlos_mask(
+                                dd_pr_result,
+                                i,
+                                pf_nlos_mask_tables,
+                                tow=float(times[i]),
+                                k_weak=float(pf_nlos_k_weak),
+                                k_strong=float(pf_nlos_k_strong),
+                            )
                         if (
                             dd_pr_result is not None
                             and (

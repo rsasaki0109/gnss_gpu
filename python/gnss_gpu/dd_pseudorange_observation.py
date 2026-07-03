@@ -66,6 +66,7 @@ def compute_dd_pseudorange_observation(
                     result,
                     int(epoch_idx),
                     nlos_tables,
+                    tow=tow,
                     k_weak=nlos_k_weak,
                     k_strong=nlos_k_strong,
                 )

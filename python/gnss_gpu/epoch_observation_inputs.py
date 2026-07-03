@@ -37,6 +37,7 @@ def build_epoch_observation_inputs(
     observations: ObservationConfig,
     *,
     epoch_idx: int | None = None,
+    tow: float | None = None,
     nlos_tables: NlosMaskTables | None = None,
 ) -> EpochObservationInputs:
     rows = list(measurements)
@@ -78,6 +79,7 @@ def build_epoch_observation_inputs(
                 prns,
                 weights,
                 nlos_tables,
+                tow=tow,
                 k_weak=observations.robust.nlos_k_weak,
                 k_strong=observations.robust.nlos_k_strong,
             ),

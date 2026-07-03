@@ -61,11 +61,45 @@ def test_epoch_prn_weights_uses_strong_set_when_present():
     tables = NlosMaskTables(
         weak={0: {"G01", "G02"}},
         strong={0: {"G02"}},
+        weak_by_tow={100.0: {"G01", "G02"}},
+        strong_by_tow={100.0: {"G02"}},
+        tow_keys=(100.0,),
     )
     weights = epoch_prn_weights(0, ["G01", "G02", "G03"], tables, k_weak=2.0, k_strong=4.0)
     assert weights["G01"] == pytest.approx(0.5)
     assert weights["G02"] == pytest.approx(0.25)
     assert weights["G03"] == 1.0
+
+
+def test_epoch_prn_weights_strong_only_still_downweights():
+    tables = NlosMaskTables(
+        weak={},
+        strong={0: {"G09"}},
+        weak_by_tow={},
+        strong_by_tow={200.0: {"G09"}},
+        tow_keys=(),
+    )
+    weights = epoch_prn_weights(0, ["G09"], tables, k_weak=3.0, k_strong=3.0)
+    assert weights["G09"] == pytest.approx(1.0 / 3.0)
+
+
+def test_lookup_nlos_sets_prefers_tow_when_epoch_idx_shifted():
+    tables = NlosMaskTables(
+        weak={0: {"G01"}, 1: {"G02"}},
+        strong={},
+        weak_by_tow={100.0: {"G01"}, 101.0: {"G02"}},
+        strong_by_tow={},
+        tow_keys=(100.0, 101.0),
+    )
+    weights = epoch_prn_weights(
+        99,
+        ["G02"],
+        tables,
+        tow=101.0,
+        k_weak=3.0,
+        k_strong=3.0,
+    )
+    assert weights["G02"] == pytest.approx(1.0 / 3.0)
 
 
 def test_apply_mask_to_weights_multiplies_base_weights(tmp_path: Path):
