@@ -1,4 +1,20 @@
-"""Extended Kalman Filter positioning module for GNSS."""
+"""Extended Kalman Filter positioning module for GNSS.
+
+``EKFPositioner`` selects one of two internal state backends at ``initialize()``:
+
+- **Native** (``_NativeState``): when ``_gnss_gpu_ekf`` is importable. State is
+  held as plain ``numpy`` arrays (``x`` length 8, ``P`` length 64) because
+  ``ekf_predict`` / ``ekf_update`` mutate buffers in-place — avoiding pybind11
+  struct-copy semantics on ``EKFState``.
+- **Pure Python** (``_PureState``): when the CUDA extension is absent (CI smoke,
+  editable install without rebuild). Implements the same predict/update math in
+  NumPy.
+
+Both backends expose the same public API (``get_position``, ``get_velocity``,
+``get_covariance``). Callers must not depend on ``ekf.state`` type. Unifying
+into a single class is deferred: behaviour parity is tested via ``tests/test_ekf.py``
+and ``tests/test_ekf_wrapper.py``, not by merging implementations.
+"""
 
 import numpy as np
 
@@ -25,11 +41,9 @@ except ImportError:
     _HAS_NATIVE = False
 
 
-# _NativeState wraps native EKFState's arrays as plain numpy arrays so that
-# ekf_predict / ekf_update (which now operate in-place on numpy arrays) work
-# correctly without relying on pybind11 struct-copy semantics.
+# Native backend: numpy buffers passed to in-place ekf_predict / ekf_update.
 class _NativeState:
-    """Holds EKF state as numpy arrays for use with native bindings."""
+    """Holds EKF state as numpy arrays for the ``_gnss_gpu_ekf`` backend."""
 
     def __init__(self, ekf_state):
         # Extract arrays from the native EKFState returned by ekf_initialize
@@ -40,11 +54,10 @@ class _NativeState:
 class EKFPositioner:
     """Extended Kalman Filter for GNSS positioning.
 
-    State vector: [x, y, z, vx, vy, vz, clock_bias, clock_drift]
+    State vector: ``[x, y, z, vx, vy, vz, clock_bias, clock_drift]``.
 
-    This fills the gap between WLS (no temporal filtering) and
-    ParticleFilter (heavy computation). EKF is the standard approach
-    in most GNSS receivers.
+    Uses a native CUDA backend when available, otherwise a pure-Python fallback
+    with identical validation and array contracts (see module docstring).
 
     Parameters
     ----------
@@ -204,7 +217,7 @@ class EKFPositioner:
 
 
 class _PureState:
-    """Pure-Python fallback EKF state for when native bindings are unavailable."""
+    """CPU-only EKF state used when ``_gnss_gpu_ekf`` is not importable."""
 
     def __init__(self, pos, cb, sigma_pos, sigma_cb):
         self.x = np.zeros(8, dtype=np.float64)

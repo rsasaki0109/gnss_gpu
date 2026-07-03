@@ -41,6 +41,11 @@ State vector length 8: `[x, y, z, vx, vy, vz, clock_bias, clock_drift]`.
 | `.get_position` / `.get_velocity` | returns | `(3,)` | |
 | `.get_covariance` | returns | `(8, 8)` | |
 
+**State backends** — ``EKFPositioner`` uses ``_NativeState`` (in-place CUDA
+``ekf_predict`` / ``ekf_update`` on numpy buffers) when ``_gnss_gpu_ekf`` is
+available, otherwise ``_PureState`` (NumPy fallback). Public methods hide the
+difference; do not branch on ``type(ekf.state)`` in application code.
+
 ## Particle filter (`ParticleFilter`, `SVGDParticleFilter`)
 
 | API | argument | shape | notes |
