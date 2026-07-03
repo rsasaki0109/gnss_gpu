@@ -89,8 +89,9 @@ Post-review hardening on this branch:
 Remaining before PPC score validation:
 
 1. Install ``datasets/PPC-Dataset-data`` (``experiments/download_ppc_dataset.py``).
-2. Generate real BVH masks for target runs.
-3. Run PPC A/B baseline vs ``--pf-nlos-preset soft-k3``.
+2. Run smoke A/B: ``PYTHONPATH=python python experiments/run_pf_nlos_smoke.py``.
+3. Generate real BVH masks for target runs.
+4. Record PPC A/B deltas in this doc.
 
 ## Local smoke prep (no PPC dataset required)
 
