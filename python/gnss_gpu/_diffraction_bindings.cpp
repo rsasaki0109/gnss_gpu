@@ -24,7 +24,8 @@ void validate_flat_xyz(const py::buffer_info& buf, int count, const char* name) 
     throw std::runtime_error(
         std::string(name) + " must have flat length n*3 matching n_sat/n_edge");
   }
-  pv::ensure_finite_doubles(buf, std::string(name) + " must be finite");
+  const std::string finite_msg = std::string(name) + " must be finite";
+  pv::ensure_finite_doubles(buf, finite_msg.c_str());
 }
 
 void validate_diffraction_options(
