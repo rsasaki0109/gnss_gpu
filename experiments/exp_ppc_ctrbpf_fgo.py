@@ -3203,6 +3203,9 @@ def _run_ctrbpf_on_segment(
     collect_internal_diagnostics: bool = False,
     ranker_score_lookup: dict[tuple[float, str], float] | None = None,
     ranker_stickiness: float = 0.0,
+    pf_nlos_mask_tables=None,
+    pf_nlos_k_weak: float = 3.0,
+    pf_nlos_k_strong: float = 3.0,
 ) -> tuple[
     np.ndarray,
     float,
@@ -3725,6 +3728,12 @@ def _run_ctrbpf_on_segment(
         sat_i = np.asarray(sat_ecef[i], dtype=np.float64)
         pr_i = np.asarray(pseudoranges[i], dtype=np.float64)
         w_i = np.asarray(weights[i], dtype=np.float64)
+        prn_i_full = np.asarray(
+            list(used_prns[i]) if i < len(used_prns) else [""] * len(w_i),
+            dtype=object,
+        )
+        if prn_i_full.size != w_i.size:
+            prn_i_full = np.asarray([""] * len(w_i), dtype=object)
         sids_i_full = None if system_ids is None else np.asarray(system_ids[i], dtype=np.int32)
         if config.pr_systems and sids_i_full is not None:
             allowed_pr_ids = {
@@ -3734,6 +3743,7 @@ def _run_ctrbpf_on_segment(
             sat_i = sat_i[pr_sys_mask]
             pr_i = pr_i[pr_sys_mask]
             w_i = w_i[pr_sys_mask]
+            prn_i_full = prn_i_full[pr_sys_mask]
             sids_i_full = sids_i_full[pr_sys_mask]
         if system_ids is not None:
             w_i = _scale_weights_per_system(w_i, sids_i_full)
@@ -3779,6 +3789,7 @@ def _run_ctrbpf_on_segment(
         sat_i = sat_i[finite]
         pr_i = pr_i[finite]
         w_i = w_i[finite]
+        prn_i = prn_i_full[finite]
         sids_i = None if sids_i_full is None else np.asarray(sids_i_full)[finite]
         pr_sagnac_ref = np.asarray(pf.estimate(), dtype=np.float64)[:3]
         if (
@@ -3798,6 +3809,7 @@ def _run_ctrbpf_on_segment(
                 sat_i = sat_i[elev_mask]
                 pr_i = pr_i[elev_mask]
                 w_i = w_i[elev_mask]
+                prn_i = prn_i[elev_mask]
                 if sids_i is not None:
                     sids_i = sids_i[elev_mask]
             elif pf_diag_row is not None:
@@ -3880,9 +3892,31 @@ def _run_ctrbpf_on_segment(
                 sat_i = sat_i[gate_mask]
                 pr_i = pr_i[gate_mask]
                 w_i = w_i[gate_mask]
+                prn_i = prn_i[gate_mask]
                 if sids_i is not None:
                     sids_i = sids_i[gate_mask]
                 pr_used_counts[i] = int(len(pr_i))
+
+        if (
+            (not skip_pr_here)
+            and pf_nlos_mask_tables is not None
+            and (pf_nlos_mask_tables.weak or pf_nlos_mask_tables.strong)
+        ):
+            from gnss_gpu.nlos_mask import apply_mask_to_weights
+
+            w_i = np.asarray(
+                apply_mask_to_weights(
+                    i,
+                    prn_i,
+                    w_i,
+                    pf_nlos_mask_tables,
+                    k_weak=float(pf_nlos_k_weak),
+                    k_strong=float(pf_nlos_k_strong),
+                ),
+                dtype=np.float64,
+            )
+            if pf_diag_row is not None:
+                pf_diag_row["pf_nlos_mask_applied"] = True
 
         if (not skip_pr_here) and config.enable_correct_clock_bias and i % 5 == 0:
             pf.correct_clock_bias(sat_i, pr_i, quantile=clock_quantile)
@@ -3990,6 +4024,15 @@ def _run_ctrbpf_on_segment(
                     measurements,
                     rover_position_approx=dd_select_pos,
                     min_common_sats=config.dd_min_pairs,
+                )
+                from gnss_gpu.nlos_mask import scale_dd_result_weights_by_nlos_mask
+
+                scale_dd_result_weights_by_nlos_mask(
+                    dd_result,
+                    i,
+                    pf_nlos_mask_tables,
+                    k_weak=float(pf_nlos_k_weak),
+                    k_strong=float(pf_nlos_k_strong),
                 )
                 # Phase 4 cache: save the DD carrier observation for the
                 # post-process FGO + LAMBDA pass after the loop.
@@ -9162,6 +9205,20 @@ def main() -> None:
                         help="SPP G: strong NLOS down-weight factor for confirmed NLOS (1.0 = same as weak). Requires --spp-nlos-strong-mask-path.")
     parser.add_argument("--spp-nlos-strong-mask-path", type=str, default="",
                         help="SPP G: optional separate CSV listing strong-NLOS PRNs (same format as --spp-nlos-mask-path).")
+    parser.add_argument("--pf-nlos-mask-path", type=str, default="",
+                        help="PF: PLATEAU NLOS mask CSV (tow,epoch_idx,prn,is_los); is_los=0 -> soft-downweight at PF update. Supports {city}/{run} template.")
+    parser.add_argument("--pf-nlos-k-weak", type=float, default=3.0,
+                        help="PF: weak NLOS down-weight factor (weight /= k). Default off when --pf-nlos-mask-path is unset.")
+    parser.add_argument("--pf-nlos-k-strong", type=float, default=3.0,
+                        help="PF: strong NLOS down-weight factor for confirmed NLOS. Requires --pf-nlos-strong-mask-path.")
+    parser.add_argument("--pf-nlos-strong-mask-path", type=str, default="",
+                        help="PF: optional separate CSV listing strong-NLOS PRNs (same format as --pf-nlos-mask-path).")
+    parser.add_argument(
+        "--pf-nlos-preset",
+        choices=("off", "soft-k3"),
+        default="off",
+        help="Bundle PF NLOS mask path template (plateau_nlos_phase33) and k_weak/k_strong=3.",
+    )
     parser.add_argument("--spp-irls", type=str, default="off",
                         choices=("off", "cauchy", "huber"),
                         help="SPP B: post-WLS IRLS refinement weight function. off=disabled.")
@@ -9466,6 +9523,11 @@ def main() -> None:
         help="Comma-separated run filter, e.g. 'tokyo/run1,nagoya/run3'. 'all' = 6 runs.",
     )
     args = parser.parse_args()
+
+    if str(args.pf_nlos_preset).strip().lower() == "soft-k3":
+        from gnss_gpu.nlos_presets import apply_ppc_pf_nlos_soft_k3_preset
+
+        apply_ppc_pf_nlos_soft_k3_preset(args)
 
     args.methods = [m.strip() for m in args.methods.split(",") if m.strip()]
     args.systems_tuple = tuple(s.strip() for s in args.systems.split(",") if s.strip())
@@ -9776,6 +9838,30 @@ def main() -> None:
             strong_set_run = _load_nlos_mask_csv(strong_path_run)
             if strong_set_run:
                 spp_kwargs["nlos_strong_set_per_epoch"] = strong_set_run
+        pf_nlos_tables_run = None
+        if args.pf_nlos_mask_path:
+            from gnss_gpu.nlos_mask import load_nlos_mask_tables
+
+            pf_nlos_path_run = args.pf_nlos_mask_path.format(city=city, run=run)
+            pf_strong_path_run = (
+                args.pf_nlos_strong_mask_path.format(city=city, run=run)
+                if args.pf_nlos_strong_mask_path
+                else None
+            )
+            pf_nlos_tables_run = load_nlos_mask_tables(
+                pf_nlos_path_run,
+                pf_strong_path_run,
+            )
+            if pf_nlos_tables_run.weak or pf_nlos_tables_run.strong:
+                n_nlos_epochs = sum(1 for s in pf_nlos_tables_run.weak.values() if s)
+                n_nlos_obs = sum(len(s) for s in pf_nlos_tables_run.weak.values())
+                print(
+                    f"  PF NLOS mask: {pf_nlos_path_run} -> "
+                    f"{n_nlos_obs} obs across {n_nlos_epochs} epochs "
+                    f"(k_weak={args.pf_nlos_k_weak}, k_strong={args.pf_nlos_k_strong})"
+                )
+            else:
+                print(f"  PF NLOS mask: {pf_nlos_path_run} -> empty/missing, skipping")
         if args.spp_irls != "off":
             spp_kwargs["irls_mode"] = str(args.spp_irls)
             spp_kwargs["irls_c"] = float(args.spp_irls_c)
@@ -10114,6 +10200,9 @@ def main() -> None:
                 collect_internal_diagnostics=bool(args.write_internal_diagnostics),
                 ranker_score_lookup=ranker_lookup_run,
                 ranker_stickiness=float(args.rtkdiag_candidate_ranker_stickiness),
+                pf_nlos_mask_tables=pf_nlos_tables_run,
+                pf_nlos_k_weak=float(args.pf_nlos_k_weak),
+                pf_nlos_k_strong=float(args.pf_nlos_k_strong),
             )
             if args.write_internal_diagnostics:
                 for diag in variant_internal_diag_rows:

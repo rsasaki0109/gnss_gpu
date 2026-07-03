@@ -23,10 +23,17 @@ def test_expand_cli_preset_argv_rejects_unknown_preset():
         expand_cli_preset_argv(["--preset=missing"])
 
 
+def test_expand_cli_preset_argv_expands_odaiba_pf_nlos_soft():
+    expanded = expand_cli_preset_argv(["--preset", "odaiba_pf_nlos_soft"])
+    assert "--nlos-k-weak" in expanded
+    assert "3.0" in expanded
+    assert "--smoother" in expanded
+
+
 def test_print_cli_presets_lists_available_presets(capsys):
     print_cli_presets()
 
     out = capsys.readouterr().out
     assert "Available presets:" in out
     assert "odaiba_reference:" in out
-    assert set(CLI_PRESETS) >= {"odaiba_reference", "odaiba_best_accuracy"}
+    assert set(CLI_PRESETS) >= {"odaiba_reference", "odaiba_best_accuracy", "odaiba_pf_nlos_soft"}

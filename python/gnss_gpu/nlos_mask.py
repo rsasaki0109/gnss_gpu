@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+import numpy as np
+
 DEFAULT_MIN_WEIGHT = 1.0e-3
 
 
@@ -137,3 +139,70 @@ def apply_mask_to_weights(
         float(w) * factors.get(prn, 1.0)
         for prn, w in zip(prn_list, base_weights)
     ]
+
+
+def normalize_mask_prn(sat_id: str) -> str:
+    """Strip optional DD-carrier suffixes such as ``G01@L1`` -> ``G01``."""
+    return str(sat_id).split("@", 1)[0].strip()
+
+
+def dd_pair_nlos_factors(
+    epoch_idx: int,
+    sat_ids: Iterable[str],
+    ref_sat_ids: Iterable[str],
+    tables: NlosMaskTables,
+    *,
+    k_weak: float = 3.0,
+    k_strong: float = 3.0,
+    min_weight: float = DEFAULT_MIN_WEIGHT,
+) -> list[float]:
+    """Return per-DD-pair multipliers using min(factor(k), factor(ref))."""
+    sat_list = [normalize_mask_prn(s) for s in sat_ids]
+    ref_list = [normalize_mask_prn(s) for s in ref_sat_ids]
+    prn_factors = epoch_prn_weights(
+        epoch_idx,
+        set(sat_list) | set(ref_list),
+        tables,
+        k_weak=k_weak,
+        k_strong=k_strong,
+        min_weight=min_weight,
+    )
+    return [
+        min(prn_factors.get(sat, 1.0), prn_factors.get(ref, 1.0))
+        for sat, ref in zip(sat_list, ref_list)
+    ]
+
+
+def scale_dd_result_weights_by_nlos_mask(
+    dd_result,
+    epoch_idx: int,
+    tables: NlosMaskTables | None,
+    *,
+    k_weak: float = 3.0,
+    k_strong: float = 3.0,
+    min_weight: float = DEFAULT_MIN_WEIGHT,
+) -> None:
+    """Multiply ``dd_result.dd_weights`` in place when a geometry mask is active."""
+    if tables is None or not (tables.weak or tables.strong):
+        return
+    if dd_result is None or int(getattr(dd_result, "n_dd", 0)) <= 0:
+        return
+    sat_ids = getattr(dd_result, "sat_ids", ()) or ()
+    ref_sat_ids = getattr(dd_result, "ref_sat_ids", ()) or ()
+    if not sat_ids or not ref_sat_ids:
+        return
+    factors = dd_pair_nlos_factors(
+        epoch_idx,
+        sat_ids,
+        ref_sat_ids,
+        tables,
+        k_weak=k_weak,
+        k_strong=k_strong,
+        min_weight=min_weight,
+    )
+    if not factors:
+        return
+    dd_result.dd_weights = (
+        np.asarray(dd_result.dd_weights, dtype=np.float64)
+        * np.asarray(factors, dtype=np.float64)
+    )

@@ -8,6 +8,7 @@ import numpy as np
 
 from gnss_gpu.carrier_rescue import _effective_dd_carrier_epoch_median_gate
 from gnss_gpu.dd_quality import dd_carrier_afv_cycles, gate_dd_carrier
+from gnss_gpu.nlos_mask import NlosMaskTables, scale_dd_result_weights_by_nlos_mask
 from gnss_gpu.pf_smoother_config import CarrierRescueConfig, DDCarrierConfig
 
 
@@ -36,6 +37,10 @@ def compute_dd_carrier_observation(
     collect_diagnostics: bool = False,
     gate_scale: float = 1.0,
     min_pairs: int = 3,
+    nlos_tables: NlosMaskTables | None = None,
+    epoch_idx: int | None = None,
+    nlos_k_weak: float = 3.0,
+    nlos_k_strong: float = 3.0,
 ) -> DDCarrierObservationDecision:
     result = None
     input_pairs = 0
@@ -46,6 +51,14 @@ def compute_dd_carrier_observation(
         result = dd_computer.compute_dd(tow, measurements, pf_estimate)
         if result is not None:
             input_pairs = int(getattr(result, "n_dd", 0))
+            if nlos_tables is not None and epoch_idx is not None:
+                scale_dd_result_weights_by_nlos_mask(
+                    result,
+                    int(epoch_idx),
+                    nlos_tables,
+                    k_weak=nlos_k_weak,
+                    k_strong=nlos_k_strong,
+                )
             if _needs_raw_afv_summary(config, carrier_rescue, collect_diagnostics) and input_pairs > 0:
                 raw_median, raw_max = _dd_carrier_abs_afv_summary(result, pf_estimate)
 

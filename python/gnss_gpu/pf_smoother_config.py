@@ -94,6 +94,10 @@ class RobustMeasurementConfig:
     per_particle_huber_dd_pr_k: float = 1.5
     per_particle_huber_dd_carrier_k: float = 1.5
     per_particle_huber_undiff_pr_k: float = 1.5
+    nlos_mask_csv: str = ""
+    nlos_strong_mask_csv: str = ""
+    nlos_k_weak: float = 3.0
+    nlos_k_strong: float = 3.0
 
 
 @dataclass(frozen=True)
@@ -309,6 +313,10 @@ class PfSmootherConfig:
     residual_threshold: float = 15.0
     pr_accel_downweight: bool = False
     pr_accel_threshold: float = 5.0
+    nlos_mask_csv: str = ""
+    nlos_strong_mask_csv: str = ""
+    nlos_k_weak: float = 3.0
+    nlos_k_strong: float = 3.0
     use_gmm: bool = False
     gmm_w_los: float = 0.7
     gmm_mu_nlos: float = 15.0
@@ -586,6 +594,10 @@ class PfSmootherConfig:
                 per_particle_huber_dd_pr_k=self.per_particle_huber_dd_pr_k,
                 per_particle_huber_dd_carrier_k=self.per_particle_huber_dd_carrier_k,
                 per_particle_huber_undiff_pr_k=self.per_particle_huber_undiff_pr_k,
+                nlos_mask_csv=self.nlos_mask_csv,
+                nlos_strong_mask_csv=self.nlos_strong_mask_csv,
+                nlos_k_weak=self.nlos_k_weak,
+                nlos_k_strong=self.nlos_k_strong,
             ),
             mupf=MupfConfig(
                 enabled=self.mupf,

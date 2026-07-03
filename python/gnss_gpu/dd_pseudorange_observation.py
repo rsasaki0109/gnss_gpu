@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from gnss_gpu.dd_quality import dd_pseudorange_residuals_m, gate_dd_pseudorange
+from gnss_gpu.nlos_mask import NlosMaskTables, scale_dd_result_weights_by_nlos_mask
 from gnss_gpu.pf_smoother_config import DDPseudorangeConfig
 
 
@@ -36,6 +37,11 @@ def compute_dd_pseudorange_observation(
     raw_abs_res_max_m: float | None = None,
     gate_scale: float = 1.0,
     min_pairs: int = 3,
+    nlos_tables: NlosMaskTables | None = None,
+    epoch_idx: int | None = None,
+    nlos_k_weak: float = 3.0,
+    nlos_k_strong: float = 3.0,
+    nlos_mask_applied_to_rover_weights: bool = False,
 ) -> DDPseudorangeObservationDecision:
     result = existing_result
     input_pairs = int(existing_input_pairs)
@@ -51,6 +57,18 @@ def compute_dd_pseudorange_observation(
         )
         if result is not None:
             input_pairs = int(getattr(result, "n_dd", 0))
+            if (
+                not nlos_mask_applied_to_rover_weights
+                and nlos_tables is not None
+                and epoch_idx is not None
+            ):
+                scale_dd_result_weights_by_nlos_mask(
+                    result,
+                    int(epoch_idx),
+                    nlos_tables,
+                    k_weak=nlos_k_weak,
+                    k_strong=nlos_k_strong,
+                )
             if collect_diagnostics and int(getattr(result, "n_dd", 0)) > 0:
                 raw_median, raw_max = _dd_pr_abs_residual_summary(result, pf_estimate)
 

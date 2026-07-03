@@ -204,6 +204,18 @@ CLI_PRESETS["odaiba_rbpf_velocity"] = {
     ],
 }
 
+CLI_PRESETS["odaiba_pf_nlos_soft"] = {
+    "description": (
+        "Odaiba reference + geometry NLOS soft weights (k_weak=3). "
+        "Set --nlos-mask-csv to a per-epoch mask CSV to enable."
+    ),
+    "argv": [
+        *CLI_PRESETS["odaiba_reference"]["argv"],
+        "--nlos-k-weak", "3.0",
+        "--nlos-k-strong", "3.0",
+    ],
+}
+
 
 def expand_cli_preset_argv(argv: list[str]) -> list[str]:
     """Inline preset argv fragments so later user flags keep normal precedence."""

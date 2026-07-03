@@ -47,6 +47,10 @@ def apply_carrier_epoch_update(
     observations_config: Any,
     collect_diagnostics: bool,
     min_pairs: int = 3,
+    nlos_tables: Any | None = None,
+    epoch_idx: int | None = None,
+    nlos_k_weak: float = 3.0,
+    nlos_k_strong: float = 3.0,
 ) -> CarrierEpochUpdateResult:
     current_measurements = list(measurements)
     used_carrier_afv = False
@@ -96,6 +100,10 @@ def apply_carrier_epoch_update(
         collect_diagnostics=collect_diagnostics,
         gate_scale=epoch_state.dd_cp_gate_scale,
         min_pairs=min_pairs,
+        nlos_tables=nlos_tables,
+        epoch_idx=epoch_idx,
+        nlos_k_weak=nlos_k_weak,
+        nlos_k_strong=nlos_k_strong,
     )
     dd_result = dd_cp_decision.result
     epoch_state.dd_gate_stats = dd_cp_decision.gate_stats

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from gnss_gpu.nlos_mask import NlosMaskTables
 from gnss_gpu.pf_smoother_config import PfSmootherConfig, PfSmootherConfigParts
 from gnss_gpu.pf_smoother_epoch_history import ForwardEpochHistory
 from gnss_gpu.pf_smoother_forward_stats import ForwardRunStats
@@ -34,3 +35,4 @@ class PfSmootherForwardPassContext:
     history: ForwardEpochHistory
     observation_setup: ObservationComputers
     pr_history: dict[int, list[float]]
+    nlos_tables: NlosMaskTables | None = None
