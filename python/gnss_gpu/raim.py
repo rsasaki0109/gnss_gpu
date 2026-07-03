@@ -78,12 +78,12 @@ def raim_check(sat_ecef, pseudoranges, weights, position, p_fa=1e-5):
     Returns:
         RAIMResult with integrity_ok, hpl, vpl, test_statistic, threshold, excluded_sat.
     """
-    if not HAS_RAIM:
-        raise RuntimeError("RAIM native module not available. Build with CUDA support.")
-
     sat_ecef, pseudoranges, weights, position = _validate_raim_inputs(
         "raim_check", sat_ecef, pseudoranges, weights, position, p_fa
     )
+
+    if not HAS_RAIM:
+        raise RuntimeError("RAIM native module not available. Build with CUDA support.")
 
     n_sat = pseudoranges.size
     if n_sat == 4:
@@ -109,12 +109,12 @@ def raim_fde(sat_ecef, pseudoranges, weights, position, p_fa=1e-5):
         Tuple of (RAIMResult, position_array).
         If a satellite was excluded, position_array contains the corrected solution.
     """
-    if not HAS_RAIM:
-        raise RuntimeError("RAIM native module not available. Build with CUDA support.")
-
     sat_ecef, pseudoranges, weights, position = _validate_raim_inputs(
         "raim_fde", sat_ecef, pseudoranges, weights, position, p_fa
     )
+
+    if not HAS_RAIM:
+        raise RuntimeError("RAIM native module not available. Build with CUDA support.")
 
     n_sat = pseudoranges.size
     if n_sat > 64:
