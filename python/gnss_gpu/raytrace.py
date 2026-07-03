@@ -86,7 +86,11 @@ def _validate_sat_ecef(sat_ecef) -> np.ndarray:
 
 
 class BuildingModel:
-    """3D building model for GNSS ray tracing NLOS detection."""
+    """3D building model for GNSS ray tracing NLOS detection.
+
+    Unlike ``BVHAccelerator``, an empty triangle mesh ``(0, 3, 3)`` is allowed
+    here; linear-scan raytrace kernels treat it as open sky (all satellites LOS).
+    """
 
     def __init__(self, triangles):
         """Initialize with triangle mesh.

@@ -76,6 +76,20 @@ State vector length 8: `[x, y, z, vx, vy, vz, clock_bias, clock_drift]`.
 | `.evaluate` | `sat_ecef` | `(n_sat, 3)` | `n_sat ≥ 1` |
 | | returns `pdop`, `hdop`, `vdop`, `gdop`, `n_visible` | `(n_side, n_side)` each | `n_side` from grid config |
 
+## Raytrace / BVH
+
+| API | triangles | empty mesh (`N=0`) | notes |
+|---|---|---|---|
+| `BuildingModel` | `(N, 3, 3)` | allowed | linear-scan `_raytrace` kernels treat zero triangles as open sky (all LOS) |
+| `BVHAccelerator` | `(N, 3, 3)` | **rejected** | BVH tree build requires `N ≥ 1`; raises `ValueError` at construction |
+| `pf_weight_3d_bvh` (binding) | `bvh_nodes`, `bvh_tris` | allowed | pass empty `(0, 10)` nodes and `(0, 3, 3)` tris for all-LOS weighting; see `tests/test_pf3d_bvh.py::test_empty_mesh_all_los` |
+
+**Empty-mesh policy (intentional):** high-level `BVHAccelerator` rejects an empty
+mesh so accidental `from_building_model(empty)` fails fast. CUDA PF3D/BVH kernels
+and linear `BuildingModel` raytrace still accept zero triangles when callers need
+open-sky semantics. Do not change `BVHAccelerator` to allow `N=0` without a
+breaking-release note — use the binding path or `BuildingModel` instead.
+
 ## Validation policy
 
 Public Python wrappers raise **`ValueError`** for invalid inputs (CPU-side, no GPU
