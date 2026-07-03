@@ -38,6 +38,11 @@ ZONE_BY_CITY = {
     "tokyo": 9,
     "nagoya": 7,
 }
+# Constant orthometric→ellipsoid N (m) when EGM96 grids are unavailable.
+GEOID_CONSTANT_BY_CITY = {
+    "tokyo": "36.7",
+    "nagoya": "43.0",
+}
 
 
 def _ppc_root(explicit: Path | None) -> Path:
@@ -176,7 +181,10 @@ def cmd_mask(args: argparse.Namespace) -> int:
         cmd.extend(["--max-epochs", str(int(args.max_epochs))])
     if int(args.start_epoch) > 0:
         cmd.extend(["--start-epoch", str(int(args.start_epoch))])
-    cmd.extend(["--geoid-correction", str(args.geoid_correction)])
+    geoid = args.geoid_correction
+    if geoid is None:
+        geoid = GEOID_CONSTANT_BY_CITY.get(city, "none")
+    cmd.extend(["--geoid-correction", str(geoid)])
     _run(cmd)
     return 0
 
@@ -228,8 +236,8 @@ def main(argv: list[str] | None = None) -> int:
     mask.add_argument("--batch-size", type=int, default=256)
     mask.add_argument(
         "--geoid-correction",
-        default="none",
-        help="egm96 needs pyproj grid files; use none when grids are unavailable",
+        default=None,
+        help="egm96, none, or constant metres; default uses city constant when EGM96 grids are missing",
     )
     mask.set_defaults(func=cmd_mask)
 

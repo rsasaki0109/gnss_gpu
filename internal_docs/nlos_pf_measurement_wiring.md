@@ -118,3 +118,7 @@ SSD layout (when `E:` is present):
 - `E:/datasets/PPC-Dataset-data`
 - `E:/datasets/plateau/{city}_{run}`
 - `E:/datasets/plateau_cache/{city}_{run}_triangles.npz`
+
+Geoid note: if `pyproj` EGM96 grids are missing on Windows, use the city
+constant from `prepare_pf_nlos_production.py` (Tokyo `36.7` m). Triangle
+cache must be rebuilt when geoid correction changes.
