@@ -27,8 +27,21 @@ def test_building_model_rejects_invalid_los_inputs():
 
 
 def test_bvh_accelerator_rejects_empty_mesh():
+    """BVH wrapper rejects N=0; kernels allow empty — see common_input_shapes.md."""
     with pytest.raises(ValueError, match="triangles must contain at least one triangle"):
         BVHAccelerator(np.zeros((0, 3, 3)))
+
+
+def test_building_model_allows_empty_mesh_for_open_sky():
+    """BuildingModel accepts N=0; linear scan treats it as all LOS (no GPU required)."""
+    model = BuildingModel(np.zeros((0, 3, 3), dtype=np.float64))
+    sat = np.array([[0.0, 0.0, 2.0e7]], dtype=np.float64)
+    try:
+        is_los = model.check_los([0.0, 0.0, 0.0], sat)
+    except ImportError:
+        pytest.skip("raytrace extension not available")
+    assert is_los.shape == (1,)
+    assert bool(is_los[0])
 
 
 def test_bvh_check_los_rejects_invalid_inputs():

@@ -6,6 +6,13 @@ class BVHAccelerator:
 
     Wraps BuildingModel to provide O(log n) ray-triangle intersection
     instead of O(n) linear scan. Useful for urban meshes with 10K+ triangles.
+
+    **Empty mesh:** construction requires at least one triangle. An empty
+    `(0, 3, 3)` mesh raises ``ValueError`` — this is intentional (fail-fast
+    for accidental empty CityGML loads). For open-sky / no-occluder scenarios,
+    use ``BuildingModel`` linear scan (zero triangles ⇒ all LOS) or call
+    ``pf_weight_3d_bvh`` directly with empty BVH buffers. See
+    ``docs/common_input_shapes.md`` (Raytrace / BVH).
     """
 
     def __init__(self, triangles):
