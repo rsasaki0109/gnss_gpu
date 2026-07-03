@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
+from gnss_gpu.input_validation import finite_float, positive_float, positive_int
+
 # GNSS system constants (must match C++ GnssSystem enum)
 GNSS_GPS = 0
 GNSS_GLONASS = 1
@@ -40,11 +42,68 @@ def prn_label_to_system(label):
     return mapping[prefix], int(prn_str)
 
 
+_REQUIRED_CHANNEL_KEYS = (
+    "prn", "code_phase", "carrier_phase", "doppler_hz", "amplitude", "nav_bit",
+)
+
+
+def _validate_signal_sim_config(
+    sampling_freq,
+    intermediate_freq,
+    noise_floor_db,
+    noise_seed=None,
+):
+    positive_float("sampling_freq", sampling_freq)
+    finite_float("intermediate_freq", intermediate_freq)
+    finite_float("noise_floor_db", noise_floor_db)
+    if noise_seed is not None:
+        try:
+            int(noise_seed)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("noise_seed must be an integer") from exc
+
+
+def _validate_channel_dict(channel, index):
+    if not isinstance(channel, dict):
+        raise ValueError(f"channels[{index}] must be a dict")
+    for key in _REQUIRED_CHANNEL_KEYS:
+        if key not in channel:
+            raise ValueError(f"channels[{index}] missing required key '{key}'")
+    positive_int(f"channels[{index}].prn", channel["prn"])
+    finite_float(f"channels[{index}].code_phase", channel["code_phase"])
+    finite_float(f"channels[{index}].carrier_phase", channel["carrier_phase"])
+    finite_float(f"channels[{index}].doppler_hz", channel["doppler_hz"])
+    finite_float(f"channels[{index}].amplitude", channel["amplitude"])
+    try:
+        int(channel["nav_bit"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"channels[{index}].nav_bit must be an integer") from exc
+    if "system" in channel:
+        try:
+            system = int(channel["system"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"channels[{index}].system must be an integer") from exc
+        if system < 0:
+            raise ValueError(f"channels[{index}].system must be non-negative")
+    if "nav_bit_rate" in channel:
+        positive_float(f"channels[{index}].nav_bit_rate", channel["nav_bit_rate"])
+
+
+def _validate_channels(channels):
+    if not isinstance(channels, list):
+        raise ValueError("channels must be a list of dicts")
+    for index, channel in enumerate(channels):
+        _validate_channel_dict(channel, index)
+
+
 class SignalSimulator:
     """CUDA-accelerated GNSS IQ signal generator."""
 
     def __init__(self, sampling_freq=2.6e6, intermediate_freq=0,
                  noise_floor_db=-20, noise_seed=None):
+        _validate_signal_sim_config(
+            sampling_freq, intermediate_freq, noise_floor_db, noise_seed,
+        )
         self.sampling_freq = float(sampling_freq)
         self.intermediate_freq = float(intermediate_freq)
         self.noise_floor_db = float(noise_floor_db)
@@ -61,10 +120,13 @@ class SignalSimulator:
         Returns:
             float32 array of shape [2*n_samples] with interleaved I/Q.
         """
-        from gnss_gpu._gnss_gpu_signal_sim import generate_signal
-
+        _validate_channels(channels)
         if n_samples is None:
             n_samples = int(self.sampling_freq * 1e-3)
+        else:
+            positive_int("n_samples", n_samples)
+
+        from gnss_gpu._gnss_gpu_signal_sim import generate_signal
 
         return generate_signal(
             self.sampling_freq, self.intermediate_freq,
@@ -85,6 +147,12 @@ class SignalSimulator:
         Returns:
             float32 array of interleaved I/Q samples.
         """
+        positive_int("prn", prn)
+        finite_float("code_phase", code_phase)
+        finite_float("doppler", doppler)
+        finite_float("cn0_dbhz", cn0_dbhz)
+        positive_float("duration_s", duration_s)
+
         n_samples = max(1, int(self.sampling_freq * duration_s))
         channels = [{
             "prn": int(prn),
@@ -94,6 +162,7 @@ class SignalSimulator:
             "amplitude": 1.0,
             "nav_bit": 1,
         }]
+        _validate_channels(channels)
         from gnss_gpu._gnss_gpu_signal_sim import generate_signal
 
         return generate_signal(
@@ -111,6 +180,10 @@ class SignalSimulator:
             fmt: 'int8' (HackRF), 'int16' (USRP), or 'float32' (GnuRadio).
         """
         arr = np.asarray(iq_data, dtype=np.float32).ravel()
+        if arr.size == 0:
+            raise ValueError("iq_data must be non-empty")
+        if not np.all(np.isfinite(arr)):
+            raise ValueError("iq_data must be finite")
         if fmt == "int8":
             data = np.clip(np.rint(arr * 127.0), -127, 127).astype(np.int8)
         elif fmt == "int16":

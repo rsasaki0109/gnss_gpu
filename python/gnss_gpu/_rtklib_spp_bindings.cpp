@@ -10,9 +10,32 @@
 #include <cstring>
 #include <stdexcept>
 #include <vector>
+#include "gnss_gpu/pybind_validation.h"
 #include "rtklib_spp/rtklib_spp.h"
 
 namespace py = pybind11;
+
+namespace {
+
+namespace pv = gnss_gpu::pybind_validation;
+
+void validate_export_paths(const std::string& obs_file, const std::string& nav_file) {
+  if (obs_file.empty()) {
+    throw std::runtime_error("obs_file must be a non-empty path");
+  }
+  if (nav_file.empty()) {
+    throw std::runtime_error("nav_file must be a non-empty path");
+  }
+}
+
+void validate_el_mask_deg(double el_mask_deg) {
+  pv::validate_finite(el_mask_deg, "el_mask_deg");
+  if (el_mask_deg < 0.0 || el_mask_deg > 90.0) {
+    throw std::runtime_error("el_mask_deg must be in [0, 90]");
+  }
+}
+
+}  // namespace
 
 PYBIND11_MODULE(_gnss_gpu_rtklib_spp, m) {
     m.doc() = "RTKLIB pntpos SPP measurement export (pybind11 wrapper)";
@@ -21,6 +44,9 @@ PYBIND11_MODULE(_gnss_gpu_rtklib_spp, m) {
         [](const std::string &obs_file, const std::string &nav_file,
            double el_mask_deg) -> py::dict
         {
+            validate_export_paths(obs_file, nav_file);
+            validate_el_mask_deg(el_mask_deg);
+
             rtklib_spp_result_t result = {};
             int stat = rtklib_spp_export(obs_file.c_str(), nav_file.c_str(),
                                          el_mask_deg, &result);

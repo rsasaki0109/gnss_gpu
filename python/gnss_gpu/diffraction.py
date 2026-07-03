@@ -5,6 +5,8 @@ from typing import Union
 
 import numpy as np
 
+from gnss_gpu.input_validation import positive_float
+
 
 GPS_L1_FREQ = 1575.42e6
 SPEED_OF_LIGHT = 299792458.0
@@ -194,6 +196,30 @@ def _edge_size(edges) -> int:
     return int(start.reshape((-1, 3)).shape[0])
 
 
+def _validate_diffraction_options(
+    rx_ecef,
+    *,
+    max_paths: int,
+    max_edge_range_m: float,
+    max_ray_edge_distance_m: float,
+    max_excess_path_m: float,
+    wavelength_m: float,
+) -> np.ndarray:
+    rx = np.asarray(rx_ecef, dtype=np.float64)
+    if rx.shape != (3,):
+        raise ValueError("rx_ecef must have shape (3,)")
+    if not np.all(np.isfinite(rx)):
+        raise ValueError("rx_ecef must be finite")
+
+    if not isinstance(max_paths, int) or max_paths < 0:
+        raise ValueError("max_paths must be a non-negative integer")
+    positive_float("max_edge_range_m", max_edge_range_m)
+    positive_float("max_ray_edge_distance_m", max_ray_edge_distance_m)
+    positive_float("max_excess_path_m", max_excess_path_m)
+    positive_float("wavelength_m", wavelength_m)
+    return rx.reshape(3)
+
+
 def _satellite_array(sat_ecef) -> np.ndarray:
     sats = np.asarray(sat_ecef, dtype=float)
     if sats.size == 0:
@@ -204,6 +230,8 @@ def _satellite_array(sat_ecef) -> np.ndarray:
         return sats.reshape(1, 3)
     if sats.ndim != 2 or sats.shape[1] != 3:
         raise ValueError("sat_ecef must have shape [3] or [N, 3]")
+    if not np.all(np.isfinite(sats)):
+        raise ValueError("sat_ecef must be finite")
     return sats
 
 
@@ -235,7 +263,14 @@ def compute_diffraction_paths(
     are frequently lit edges of unrelated buildings, not the silhouette edge that
     actually shadows the satellite.
     """
-    rx = np.asarray(rx_ecef, dtype=float).reshape(3)
+    rx = _validate_diffraction_options(
+        rx_ecef,
+        max_paths=max_paths,
+        max_edge_range_m=max_edge_range_m,
+        max_ray_edge_distance_m=max_ray_edge_distance_m,
+        max_excess_path_m=max_excess_path_m,
+        wavelength_m=wavelength_m,
+    )
     sats = _satellite_array(sat_ecef)
     n_sat = int(sats.shape[0])
 
@@ -352,10 +387,17 @@ def compute_diffraction_paths_gpu(
 
     Requires the compiled ``_gnss_gpu_diffraction`` extension.
     """
-    from gnss_gpu._gnss_gpu_diffraction import diffraction_candidates
-
-    rx = np.asarray(rx_ecef, dtype=float).reshape(3)
+    rx = _validate_diffraction_options(
+        rx_ecef,
+        max_paths=max_paths,
+        max_edge_range_m=max_edge_range_m,
+        max_ray_edge_distance_m=max_ray_edge_distance_m,
+        max_excess_path_m=max_excess_path_m,
+        wavelength_m=wavelength_m,
+    )
     sats = _satellite_array(sat_ecef)
+
+    from gnss_gpu._gnss_gpu_diffraction import diffraction_candidates
     n_sat = int(sats.shape[0])
     if n_sat == 0:
         return []
