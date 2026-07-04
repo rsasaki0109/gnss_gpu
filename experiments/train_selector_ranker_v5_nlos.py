@@ -9,7 +9,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
-REPO = Path("gnss_gpu")
+REPO = Path(__file__).resolve().parents[1]
 
 FEATURE_COLS = [
     "rms", "ratio", "abs_max", "update_rows", "sats", "status",
