@@ -48,7 +48,14 @@ GEOID_CONSTANT_BY_CITY = {
     "nagoya": "43.0",
 }
 
-FULL_RUNS = (
+RESULTS_DIR = PROJECT_ROOT / "experiments" / "results"
+SELECTOR_V3_FEATURES = RESULTS_DIR / "selector_training_features_v3.csv"
+SELECTOR_V5_FEATURES = RESULTS_DIR / "selector_training_features_v5_nlos.csv"
+V5_RANKER_PREDICTIONS = RESULTS_DIR / "selector_ranker_predictions_v5_nlos.csv"
+PHASE33_CANDIDATE_DIRS = (
+    RESULTS_DIR / "libgnss_diag_phase10/fgo_v2_gap",
+    RESULTS_DIR / "libgnss_diag_phase19/gici_tc_esdfix",
+)
     "tokyo/run1",
     "tokyo/run2",
     "tokyo/run3",
@@ -343,6 +350,67 @@ def cmd_gaps(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_wave2_check(args: argparse.Namespace) -> int:
+    """Report readiness for ranker/rtkdiag Wave 2 (v5_nlos + candidate pool)."""
+    runs = _parse_runs(args.runs)
+    masks = {run: _mask_csv(run).is_file() for run in runs}
+    report: dict[str, object] = {
+        "wave2_target": "ranker/rtkdiag with v5_nlos + 50+ candidate pool (see scripts_run_phase33_perrun_production.sh)",
+        "masks_ready": masks,
+        "all_masks_ready": all(masks.values()),
+        "selector_v3_features": str(SELECTOR_V3_FEATURES),
+        "selector_v3_exists": SELECTOR_V3_FEATURES.is_file(),
+        "selector_v5_features": str(SELECTOR_V5_FEATURES),
+        "selector_v5_exists": SELECTOR_V5_FEATURES.is_file(),
+        "v5_ranker_predictions": str(V5_RANKER_PREDICTIONS),
+        "v5_ranker_predictions_exists": V5_RANKER_PREDICTIONS.is_file(),
+        "sample_candidate_dirs": {
+            str(p): p.is_dir() for p in PHASE33_CANDIDATE_DIRS
+        },
+        "candidate_pool_hint": (
+            "Phase 33 expects /tmp/{city}_{run}_phase11fa_dirs.txt labels + "
+            "experiments/results/libgnss_diag_phase{10,19}/* candidate pos/diag dirs on disk"
+        ),
+        "ready_for_ranker_features": SELECTOR_V3_FEATURES.is_file() and all(masks.values()),
+        "ready_for_phase33_smoke": (
+            SELECTOR_V3_FEATURES.is_file()
+            and V5_RANKER_PREDICTIONS.is_file()
+            and any(p.is_dir() for p in PHASE33_CANDIDATE_DIRS)
+        ),
+        "next_commands": [
+            "python experiments/prepare_pf_nlos_production.py ranker-features",
+            "python experiments/train_selector_ranker_v5_nlos.py  # after ranker-features + lightgbm",
+            "bash experiments/scripts_run_phase33_perrun_production.sh  # needs candidate pool + /tmp labels",
+        ],
+    }
+    print(json.dumps(report, indent=2), flush=True)
+    return 0 if report["ready_for_ranker_features"] else 2
+
+
+def cmd_ranker_features(args: argparse.Namespace) -> int:
+    """Merge plateau_nlos_phase33 mask stats into selector v3 training features."""
+    if not SELECTOR_V3_FEATURES.is_file():
+        raise SystemExit(
+            f"missing base features: {SELECTOR_V3_FEATURES}\n"
+            "Generate selector_training_features_v3.csv from the Phase 11/29 pipeline first."
+        )
+    for run in _parse_runs(args.runs):
+        if not _mask_csv(run).is_file():
+            raise SystemExit(f"missing mask for {run}: {_mask_csv(run)}")
+    cmd = [
+        sys.executable,
+        str(PROJECT_ROOT / "experiments" / "augment_selector_training_features_with_nlos.py"),
+        "--in-csv",
+        str(SELECTOR_V3_FEATURES),
+        "--mask-dir",
+        str(MASK_DIR),
+        "--out-csv",
+        str(SELECTOR_V5_FEATURES),
+    ]
+    _run(cmd)
+    return 0
+
+
 def cmd_batch_prep(args: argparse.Namespace) -> int:
     """fetch + full mask + hybrid for each run missing SSD artifacts."""
     runs = _parse_runs(args.runs)
@@ -505,6 +573,19 @@ def main(argv: list[str] | None = None) -> int:
     gaps.add_argument("--top", type=int, default=5)
     gaps.add_argument("--hybrid-pos-dir", type=Path, default=HYBRID_POS_DIR)
     gaps.set_defaults(func=cmd_gaps)
+
+    wave2_common = argparse.ArgumentParser(add_help=False)
+    wave2_common.add_argument("--runs", default="all")
+
+    wave2_check = sub.add_parser("wave2-check", parents=[wave2_common], help="Check ranker/rtkdiag Wave 2 prerequisites")
+    wave2_check.set_defaults(func=cmd_wave2_check)
+
+    ranker_features = sub.add_parser(
+        "ranker-features",
+        parents=[wave2_common],
+        help="Build selector_training_features_v5_nlos.csv from v3 + plateau_nlos_phase33 masks",
+    )
+    ranker_features.set_defaults(func=cmd_ranker_features)
 
     batch_common = argparse.ArgumentParser(add_help=False)
     batch_common.add_argument("--runs", default="all", help="all or comma-separated city/run list")
