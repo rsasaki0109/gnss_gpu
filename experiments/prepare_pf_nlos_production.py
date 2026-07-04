@@ -29,6 +29,10 @@ FALLBACK_PPC_ROOT = PROJECT_ROOT / "datasets" / "PPC-Dataset-data"
 DEFAULT_PLATEAU_ROOT = Path("E:/datasets/plateau")
 DEFAULT_CACHE_ROOT = Path("E:/datasets/plateau_cache")
 MASK_DIR = PROJECT_ROOT / "experiments" / "results" / "plateau_nlos_phase33"
+HYBRID_POS_DIR = PROJECT_ROOT / "experiments" / "results" / "libgnss_rtk_pos_v5"
+GNSS_SOLVE_WSL = (
+    PROJECT_ROOT / "third_party" / "gnssplusplus" / "build" / "apps" / "gnss_solve"
+)
 
 PRESET_BY_CITY = {
     "tokyo": "tokyo23",
@@ -43,6 +47,15 @@ GEOID_CONSTANT_BY_CITY = {
     "tokyo": "36.7",
     "nagoya": "43.0",
 }
+
+FULL_RUNS = (
+    "tokyo/run1",
+    "tokyo/run2",
+    "tokyo/run3",
+    "nagoya/run1",
+    "nagoya/run2",
+    "nagoya/run3",
+)
 
 
 def _ppc_root(explicit: Path | None) -> Path:
@@ -75,6 +88,30 @@ def _triangle_cache(root: Path, run: str) -> Path:
 def _mask_csv(run: str) -> Path:
     city, run_name = _city_run(run)
     return MASK_DIR / f"{city}_{run_name}_per_epoch_nlos.csv"
+
+
+def _hybrid_pos(run: str) -> Path:
+    city, run_name = _city_run(run)
+    return HYBRID_POS_DIR / f"{city}_{run_name}_full.pos"
+
+
+def _parse_runs(text: str) -> tuple[str, ...]:
+    if str(text).strip().lower() in {"", "all"}:
+        return FULL_RUNS
+    return tuple(r.strip().strip("/") for r in str(text).split(",") if r.strip())
+
+
+def _run_status(args: argparse.Namespace, run: str) -> dict[str, bool]:
+    ppc_root = _ppc_root(args.data_root)
+    run_dir = _run_dir(ppc_root, run)
+    required = ("rover.obs", "base.obs", "base.nav", "reference.csv", "imu.csv")
+    return {
+        "ppc_ok": all((run_dir / name).is_file() for name in required),
+        "plateau_ok": _plateau_dir(args.plateau_root, run).is_dir(),
+        "cache_ok": _triangle_cache(args.cache_root, run).is_file(),
+        "mask_ok": _mask_csv(run).is_file(),
+        "hybrid_ok": _hybrid_pos(run).is_file(),
+    }
 
 
 def _child_env() -> dict[str, str]:
@@ -189,6 +226,74 @@ def cmd_mask(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hybrid(args: argparse.Namespace) -> int:
+    """Generate libgnss++ RTK hybrid .pos for one PPC run (WSL build required)."""
+    city, run_name = _city_run(args.run)
+    ppc_root = _ppc_root(args.data_root)
+    run_dir = _run_dir(ppc_root, args.run)
+    out_dir = HYBRID_POS_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_pos = out_dir / f"{city}_{run_name}_full.pos"
+    if out_pos.is_file() and not args.force:
+        print(f"[hybrid] reuse existing {out_pos}", flush=True)
+        return 0
+    if not GNSS_SOLVE_WSL.is_file():
+        raise SystemExit(
+            f"missing gnss_solve binary: {GNSS_SOLVE_WSL}\n"
+            "Build in WSL: third_party/gnssplusplus with g++-10, then rerun hybrid."
+        )
+    script = PROJECT_ROOT / "experiments" / "scripts" / f"run_libgnss_rtk_{city}_{run_name}.sh"
+    if script.is_file():
+        cmd = ["wsl", "bash", str(script).replace("\\", "/").replace("C:", "/mnt/c", 1)]
+        print("[prep] " + " ".join(cmd), flush=True)
+        subprocess.run(cmd, cwd=PROJECT_ROOT, check=True, env=_child_env())
+        return 0
+    wrapper = PROJECT_ROOT / "experiments" / "run_libgnss_rtk_wsl.py"
+    if wrapper.is_file():
+        cmd = [
+            sys.executable,
+            str(wrapper),
+            "--run",
+            args.run,
+            "--data-root",
+            str(ppc_root),
+            "--out-dir",
+            str(out_dir),
+        ]
+        if args.force:
+            cmd.append("--force")
+        if args.with_diagnostics:
+            cmd.append("--with-diagnostics")
+        _run(cmd)
+        return 0
+    gnss = str(GNSS_SOLVE_WSL).replace("\\", "/")
+    if gnss.startswith("C:"):
+        gnss = "/mnt/c" + gnss[2:]
+    data = str(run_dir).replace("\\", "/")
+    if data.startswith("C:"):
+        data = "/mnt/c" + data[2:]
+    elif data.startswith("E:"):
+        data = "/mnt/e" + data[2:]
+    out = str(out_pos).replace("\\", "/")
+    if out.startswith("C:"):
+        out = "/mnt/c" + out[2:]
+    profile_args = (
+        "--preset low-cost --arfilter --arfilter-margin 0.35 "
+        "--min-hold-count 8 --hold-ratio-threshold 2.6"
+        if city == "tokyo"
+        else "--preset low-cost --min-hold-count 7 --hold-ratio-threshold 2.4"
+    )
+    cmd = (
+        f'wsl -e bash -lc "set -euo pipefail; '
+        f'echo [hybrid] {args.run}; '
+        f'"{gnss}" --rover "{data}/rover.obs" --base "{data}/base.obs" '
+        f'--nav "{data}/base.nav" --skip-epochs 0 --out "{out}" --no-kml {profile_args}"'
+    )
+    print("[prep] " + cmd, flush=True)
+    subprocess.run(cmd, cwd=PROJECT_ROOT, check=True, shell=True, env=_child_env())
+    return 0
+
+
 def cmd_smoke(args: argparse.Namespace) -> int:
     cmd = [
         sys.executable,
@@ -199,15 +304,141 @@ def cmd_smoke(args: argparse.Namespace) -> int:
         str(_ppc_root(args.data_root)),
         "--max-epochs",
         str(int(args.max_epochs)),
+        "--start-epoch",
+        str(int(args.start_epoch)),
         "--n-particles",
         str(int(args.n_particles)),
     ]
     mask_csv = _mask_csv(args.run)
     if mask_csv.is_file():
         cmd.extend(["--mask-csv", str(mask_csv)])
+    cmd.extend(["--profile", str(args.profile)])
+    hybrid_dir = args.hybrid_pos_dir
+    if hybrid_dir is not None and (hybrid_dir / f"{_city_run(args.run)[0]}_{_city_run(args.run)[1]}_full.pos").is_file():
+        cmd.extend(["--hybrid-pos-dir", str(hybrid_dir)])
+    elif args.profile == "signal":
+        pass  # run_pf_nlos_smoke falls back to reference oracle when hybrid is missing
     if args.skip_ab:
         cmd.append("--skip-ab")
     _run(cmd)
+    return 0
+
+
+def cmd_gaps(args: argparse.Namespace) -> int:
+    cmd = [
+        sys.executable,
+        str(PROJECT_ROOT / "experiments" / "find_pf_nlos_hybrid_gaps.py"),
+        "--run",
+        args.run,
+        "--window",
+        str(int(args.window)),
+        "--top",
+        str(int(args.top)),
+    ]
+    if args.hybrid_pos_dir is not None:
+        city, run_name = _city_run(args.run)
+        pos = args.hybrid_pos_dir / f"{city}_{run_name}_full.pos"
+        cmd.extend(["--pos-file", str(pos)])
+    _run(cmd)
+    return 0
+
+
+def cmd_batch_prep(args: argparse.Namespace) -> int:
+    """fetch + full mask + hybrid for each run missing SSD artifacts."""
+    runs = _parse_runs(args.runs)
+    report: list[dict[str, object]] = []
+    for run in runs:
+        status = _run_status(args, run)
+        row: dict[str, object] = {"run": run, "before": status, "steps": []}
+        if not status["ppc_ok"]:
+            print(f"[batch] skip {run}: missing PPC data", flush=True)
+            row["skipped"] = "missing_ppc"
+            report.append(row)
+            continue
+        run_args = argparse.Namespace(
+            **{
+                **vars(args),
+                "run": run,
+                "max_epochs": int(getattr(args, "max_epochs", 0)),
+                "start_epoch": int(getattr(args, "start_epoch", 0)),
+            }
+        )
+        if not status["plateau_ok"] or args.force_fetch:
+            cmd_fetch(run_args)
+            row["steps"].append("fetch")
+        elif status["plateau_ok"]:
+            print(f"[batch] reuse plateau {run}", flush=True)
+        status = _run_status(args, run)
+        if not status["mask_ok"] or args.force_mask:
+            cmd_mask(run_args)
+            row["steps"].append("mask")
+        elif status["mask_ok"]:
+            print(f"[batch] reuse mask {run}", flush=True)
+        if not status["hybrid_ok"] or args.force_hybrid:
+            cmd_hybrid(run_args)
+            row["steps"].append("hybrid")
+        elif status["hybrid_ok"]:
+            print(f"[batch] reuse hybrid {run}", flush=True)
+        row["after"] = _run_status(args, run)
+        report.append(row)
+    out = PROJECT_ROOT / "experiments" / "results" / "pf_nlos_batch_prep_report.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=2), flush=True)
+    failed = [
+        r
+        for r in report
+        if "skipped" not in r and not r.get("after", {}).get("mask_ok", False)
+    ]
+    return 0 if not failed else 2
+
+
+def cmd_batch_smoke(args: argparse.Namespace) -> int:
+    """Run signal-profile mask A/B smoke on all prepared runs; aggregate deltas."""
+    runs = _parse_runs(args.runs)
+    summaries: list[dict[str, object]] = []
+    for run in runs:
+        status = _run_status(args, run)
+        if not status["ppc_ok"]:
+            summaries.append({"run": run, "skipped": "missing_ppc"})
+            continue
+        if not status["mask_ok"]:
+            summaries.append({"run": run, "skipped": "missing_mask"})
+            continue
+        run_args = argparse.Namespace(
+            **{
+                **vars(args),
+                "run": run,
+                "max_epochs": int(getattr(args, "max_epochs", 0)),
+                "start_epoch": int(getattr(args, "start_epoch", 0)),
+            }
+        )
+        cmd_smoke(run_args)
+        city, run_name = _city_run(run)
+        summary_path = (
+            PROJECT_ROOT
+            / "experiments"
+            / "results"
+            / f"ppc_pf_nlos_smoke_{city}_{run_name}_{args.profile}_summary.json"
+        )
+        if summary_path.is_file():
+            summaries.append(json.loads(summary_path.read_text(encoding="utf-8")))
+        else:
+            summaries.append({"run": run, "skipped": "missing_summary"})
+    agg = {
+        "profile": str(args.profile),
+        "start_epoch": int(args.start_epoch),
+        "max_epochs": int(args.max_epochs),
+        "runs": summaries,
+        "delta_pp_by_run": {
+            str(s.get("run", "?")): s.get("delta_pp")
+            for s in summaries
+            if "delta_pp" in s
+        },
+    }
+    out = PROJECT_ROOT / "experiments" / "results" / "ppc_pf_nlos_batch_smoke_summary.json"
+    out.write_text(json.dumps(agg, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(agg, indent=2), flush=True)
     return 0
 
 
@@ -241,13 +472,81 @@ def main(argv: list[str] | None = None) -> int:
     )
     mask.set_defaults(func=cmd_mask)
 
+    hybrid = sub.add_parser("hybrid", parents=[common], help="Generate libgnss RTK .pos for one run via WSL")
+    hybrid.add_argument("--force", action="store_true", help="Regenerate even if .pos exists")
+    hybrid.add_argument(
+        "--with-diagnostics",
+        action="store_true",
+        help="Also emit gnss_solve diagnostics CSV (required for rtkdiag_pf smoke)",
+    )
+    hybrid.set_defaults(func=cmd_hybrid)
+
     smoke = sub.add_parser("smoke", parents=[common], help="Run baseline vs soft-k3 PPC smoke")
     smoke.add_argument("--max-epochs", type=int, default=120)
+    smoke.add_argument("--start-epoch", type=int, default=1000)
     smoke.add_argument("--n-particles", type=int, default=2000)
+    smoke.add_argument(
+        "--profile",
+        choices=("minimal", "gate", "signal", "full"),
+        default="signal",
+        help="signal=rbpf+dd+gate+hybrid (default); pass --hybrid-pos-dir for libgnss",
+    )
+    smoke.add_argument(
+        "--hybrid-pos-dir",
+        type=Path,
+        default=HYBRID_POS_DIR,
+        help="libgnss RTK .pos directory (default: experiments/results/libgnss_rtk_pos_v5)",
+    )
     smoke.add_argument("--skip-ab", action="store_true")
     smoke.set_defaults(func=cmd_smoke)
 
+    gaps = sub.add_parser("gaps", parents=[common], help="Find hybrid-low PPC windows for mask A/B")
+    gaps.add_argument("--window", type=int, default=1200)
+    gaps.add_argument("--top", type=int, default=5)
+    gaps.add_argument("--hybrid-pos-dir", type=Path, default=HYBRID_POS_DIR)
+    gaps.set_defaults(func=cmd_gaps)
+
+    batch_common = argparse.ArgumentParser(add_help=False)
+    batch_common.add_argument("--runs", default="all", help="all or comma-separated city/run list")
+    batch_common.add_argument("--data-root", type=Path, default=None)
+    batch_common.add_argument("--plateau-root", type=Path, default=DEFAULT_PLATEAU_ROOT)
+    batch_common.add_argument("--cache-root", type=Path, default=DEFAULT_CACHE_ROOT)
+
+    batch_prep = sub.add_parser(
+        "batch-prep",
+        parents=[batch_common],
+        help="fetch+mask+hybrid for all runs missing SSD artifacts",
+    )
+    batch_prep.add_argument("--max-epochs", type=int, default=0)
+    batch_prep.add_argument("--start-epoch", type=int, default=0)
+    batch_prep.add_argument("--mesh-radius", type=int, default=1)
+    batch_prep.add_argument("--include-bridges", action="store_true", default=True)
+    batch_prep.add_argument("--max-rows", type=int, default=0)
+    batch_prep.add_argument("--batch-size", type=int, default=256)
+    batch_prep.add_argument("--geoid-correction", default=None)
+    batch_prep.add_argument("--force-fetch", action="store_true")
+    batch_prep.add_argument("--force-mask", action="store_true")
+    batch_prep.add_argument("--force-hybrid", action="store_true")
+    batch_prep.add_argument("--force", action="store_true", help="Alias for --force-hybrid")
+    batch_prep.add_argument("--with-diagnostics", action="store_true")
+    batch_prep.set_defaults(func=cmd_batch_prep)
+
+    batch_smoke = sub.add_parser(
+        "batch-smoke",
+        parents=[batch_common],
+        help="signal smoke A/B on all prepared runs",
+    )
+    batch_smoke.add_argument("--max-epochs", type=int, default=1200)
+    batch_smoke.add_argument("--start-epoch", type=int, default=1000)
+    batch_smoke.add_argument("--n-particles", type=int, default=2000)
+    batch_smoke.add_argument("--profile", choices=("minimal", "gate", "signal", "full"), default="signal")
+    batch_smoke.add_argument("--hybrid-pos-dir", type=Path, default=HYBRID_POS_DIR)
+    batch_smoke.add_argument("--skip-ab", action="store_true")
+    batch_smoke.set_defaults(func=cmd_batch_smoke)
+
     args = parser.parse_args(argv)
+    if args.command == "batch-prep" and args.force:
+        args.force_hybrid = True
     return int(args.func(args))
 
 
