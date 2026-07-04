@@ -1,6 +1,6 @@
 # NLOS geometry mask at PF measurement layer (Waves 1-4)
 
-Status: **CPU wiring complete** (2026-07-03). PPC full-run score impact is **not yet measured** on the 6-run dataset.
+Status: **Wave 1 complete — negative on PPC** (2026-07-04). CPU wiring and 6-run production A/B measured; **PF/DD soft-k3 does not move official PPC on any run**.
 
 ## Strategy (Fable)
 
@@ -16,6 +16,26 @@ Status: **CPU wiring complete** (2026-07-03). PPC full-run score impact is **not
 | 2 | PF smoother + PPC PF undiff weights | Done |
 | 3 | PPC CPU eval, DD pair weights, demo doc | Done |
 | 4 | Presets + this doc | Done |
+| 5 | 6-run SSD prep + production smoke | Done (Δ=0 all runs) |
+
+## Production A/B (6-run, 2026-07-04)
+
+Method: `rbpf+dd+gate+hybrid`, soft-k3 vs baseline, `start_epoch=1000`, `max_epochs=1200`.
+
+| Run | baseline honest | segment | hybrid_applied | Δ honest |
+|-----|----------------:|--------:|---------------:|---------:|
+| tokyo/run1 | 5.77% | 36.73% | 1131/1200 | **0** |
+| tokyo/run2 | 0.60% | 4.67% | 1018/1200 | **0** |
+| tokyo/run3 | 2.13% | 33.63% | 829/1200 | **0** |
+| nagoya/run1 | 10.79% | 37.46% | 689/1200 | **0** |
+| nagoya/run2 | 4.35% | 25.40% | 654/1191 | **0** |
+| nagoya/run3 | 0.05% | 0.39% | 438/1200 | **0** |
+
+Additional tokyo/run1 checks: k=3/5/10/20 sweep → Δ=0; hybrid-gap window (epoch 7370, 82% hybrid-missing) → Δ=0 (per-epoch mean +0.6 m worse).
+
+**Interpretation:** mask applies on all epochs in mask-soft runs (wiring OK). Hybrid PU dominates emitted trajectory on most epochs; on hybrid-missing windows PF error is ~80–100 m so soft down-weight at k=3 is the wrong scale for the 1.5 m PPC threshold.
+
+Aggregated JSON (local): `experiments/results/ppc_pf_nlos_batch_smoke_summary.json`
 
 ## Presets
 
@@ -70,13 +90,16 @@ These are **geometry replay** numbers, not PPC2024 official scores.
 | PPC PF undiff | `--pf-nlos-mask-path`, `--pf-nlos-preset soft-k3` |
 | DD carrier/PR | `scale_dd_result_weights_by_nlos_mask` (PPC + smoother DD carrier; smoother DD-PR uses rover-weight path) |
 
-## Next (outside Wave 4)
+## Next (post–Wave 1)
 
-1. Generate `plateau_nlos_phase33` CSVs for target PPC runs (GPU/BVH, manual).
-2. Smoke `scripts_run_pf_nlos_smoke.sh` on `tokyo/run1` with `rbpf+dd+gate+hybrid+rtkdiag_pf` if ranker pool is available.
-3. Record PPC2024 delta vs baseline; expect heavy-NLOS runs (`n/r2`) to show the most PF-domain gain.
+Wave 1 PF/DD soft-weight is **closed as a PPC improvement path**. Do not extend k-sweep or 6-run PF A/B without a new hypothesis.
 
-## Fable review (2026-07-03)
+Candidate Wave 2 (needs explicit approval — strategy pivot):
+
+1. **Ranker/rtkdiag layer:** PLATEAU NLOS features already exist in `train_selector_ranker_v5_nlos.py` (`nlos_frac`, `nlos_count`, …). Production scripts use `selector_ranker_predictions_v5_nlos.csv` with `--rtkdiag-candidate-select-mode ranker` (see `scripts_run_phase33_perrun_production.sh`). Re-run nagoya/run2 with v5_nlos ranker + current BVH masks.
+2. **Do-not revive:** SPP NLOS, hard gate default, more PF k-sweep on hybrid-dominated windows.
+
+## Fable review (2026-07-03, initial)
 
 **Verdict: PASS with warnings** (strategy aligned; do-nots clean).
 
@@ -86,14 +109,26 @@ Post-review hardening on this branch:
 - PPC DD-PR anchor now receives the same NLOS scale as DD carrier.
 - Strong-only NLOS PRNs are down-weighted even when absent from the weak set.
 
-Remaining before PPC score validation:
+## Fable-style post-mortem (2026-07-04, after 6-run A/B)
 
-1. Install ``datasets/PPC-Dataset-data`` (``experiments/download_ppc_dataset.py``).
-   Default SSD path when ``E:`` is present: ``E:/datasets/PPC-Dataset-data``.
-   Repo junction: ``datasets/PPC-Dataset-data`` → SSD install.
-2. Run smoke A/B: ``PYTHONPATH=python python experiments/run_pf_nlos_smoke.py``.
-3. Generate real BVH masks for target runs.
-4. Record PPC A/B deltas in this doc.
+**Verdict: CLOSE Wave 1; do not merge expecting PPC gain from PF soft-weight alone.**
+
+| Finding | Action |
+|---|---|
+| 6/6 runs Δ honest = 0 | Accept negative result; PR #117 documents tooling + evidence |
+| Hybrid applies 55–94% of epochs | PF weight changes do not reach emitted trajectory |
+| Hybrid-missing windows: ~80–100 m PF error | Soft-k3 is wrong scale; down-weight can harm mean error |
+| Mask + BVH pipeline works | Keep assets on SSD; reuse for ranker features |
+| rtkdiag_pf_pu=0 in smoke (single libgnss pool) | Not a Wave 1 blocker; production uses 50+ candidate pool + ranker CSV |
+
+Recommended next experiment (if approved): **nagoya/run2** with `selector_ranker_predictions_v5_nlos.csv` + full candidate pool — historically +1.07 pp in Phase 33; validate whether refreshed PLATEAU masks change ranker inputs materially.
+
+~~Remaining before PPC score validation:~~
+
+~~1. Install PPC data~~ ✓  
+~~2. Smoke A/B~~ ✓ (6-run batch)  
+~~3. Real BVH masks~~ ✓  
+~~4. Record deltas~~ ✓ (all zero)
 
 ## Local smoke prep (no PPC dataset required)
 
@@ -108,10 +143,12 @@ PLATEAU demo mask (gitignored). Pair with `scripts_run_pf_nlos_smoke.sh` once PP
 
 ```bash
 PYTHONPATH=python python experiments/prepare_pf_nlos_production.py check --run tokyo/run1
-PYTHONPATH=python python experiments/prepare_pf_nlos_production.py fetch --run tokyo/run1
-PYTHONPATH=python python experiments/prepare_pf_nlos_production.py mask --run tokyo/run1 --max-epochs 120
-PYTHONPATH=python python experiments/prepare_pf_nlos_production.py smoke --run tokyo/run1 --max-epochs 120
+PYTHONPATH=python python experiments/prepare_pf_nlos_production.py batch-prep --runs all --with-diagnostics
+PYTHONPATH=python python experiments/prepare_pf_nlos_production.py batch-smoke --runs all --profile signal --start-epoch 1000 --max-epochs 1200
+PYTHONPATH=python python experiments/prepare_pf_nlos_production.py gaps --run tokyo/run1
 ```
+
+Single-run equivalents: `fetch`, `mask`, `hybrid`, `smoke`, `gaps`.
 
 SSD layout (when `E:` is present):
 
