@@ -1,9 +1,11 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 import gnss_gpu.epoch_observation_inputs as epoch_inputs
 from gnss_gpu.epoch_observation_inputs import build_epoch_observation_inputs
+from gnss_gpu.nlos_mask import load_nlos_mask_tables
 from gnss_gpu.pf_smoother_config import ObservationConfig, PfSmootherConfig
 
 
@@ -81,6 +83,38 @@ def test_build_epoch_observation_inputs_extracts_arrays_and_delegates_helpers(mo
     assert calls["weighting"]["kwargs"]["residual_threshold"] == 9.0
     assert calls["weighting"]["kwargs"]["pr_accel_downweight"] is True
     assert calls["weighting"]["kwargs"]["pr_accel_threshold"] == 4.0
+
+
+def test_build_epoch_observation_inputs_applies_nlos_mask_after_weighting(tmp_path):
+    mask_path = tmp_path / "mask.csv"
+    mask_path.write_text(
+        "tow,epoch_idx,prn,is_los\n100.0,2,G01,0\n",
+        encoding="utf-8",
+    )
+    tables = load_nlos_mask_tables(mask_path)
+    prepared = build_epoch_observation_inputs(
+        [
+            _measurement("G01", [10.0, 0.0, 0.0], 100.0, 1.0),
+            _measurement("G02", [20.0, 0.0, 0.0], 200.0, 1.0),
+        ],
+        np.array([1.0, 2.0, 3.0]),
+        {},
+        _observations(),
+        epoch_idx=2,
+        nlos_tables=tables,
+    )
+    assert prepared.weights[0] == pytest.approx(1.0 / 3.0)
+    assert prepared.weights[1] == pytest.approx(1.0)
+
+
+def test_build_epoch_observation_inputs_without_mask_is_unchanged():
+    prepared = build_epoch_observation_inputs(
+        [_measurement("G01", [10.0, 0.0, 0.0], 100.0, 0.75)],
+        np.array([1.0, 2.0, 3.0]),
+        {},
+        _observations(),
+    )
+    assert prepared.weights[0] == pytest.approx(0.75)
 
 
 def test_build_epoch_observation_inputs_updates_pr_history_with_real_weighting():

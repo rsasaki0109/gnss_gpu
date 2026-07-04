@@ -33,12 +33,17 @@ def prepare_forward_epoch_measurements(
     epoch_state: EpochForwardState,
     sol_epoch: Any,
     measurements: list[Any],
+    *,
+    tow: float | None = None,
 ) -> ForwardEpochMeasurementInputs:
     observation_inputs = build_epoch_observation_inputs(
         measurements,
         np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64),
         context.pr_history,
         context.config_parts.observations,
+        epoch_idx=context.history.epochs_done,
+        tow=tow,
+        nlos_tables=context.nlos_tables,
     )
     epoch_state.carrier_anchor_rows = observation_inputs.carrier_anchor_rows
     epoch_state.dd_pr_result = None

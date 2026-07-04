@@ -10,6 +10,7 @@ from gnss_gpu.pf_smoother_epoch_history import ForwardEpochHistory
 from gnss_gpu.pf_smoother_forward_context import PfSmootherForwardPassContext
 from gnss_gpu.pf_smoother_forward_loop import run_pf_smoother_forward_pass
 from gnss_gpu.pf_smoother_forward_stats import ForwardRunStats
+from gnss_gpu.nlos_mask import load_nlos_mask_tables
 from gnss_gpu.pf_smoother_postrun import finalize_pf_smoother_postrun
 from gnss_gpu.pf_smoother_run_context import (
     PfSmootherRunDependencies,
@@ -70,6 +71,13 @@ def run_pf_smoother_evaluation(
     buffers = ForwardRunBuffers()
     pr_history: dict[int, list[float]] = {}
     history = ForwardEpochHistory()
+    robust = config_parts.observations.robust
+    nlos_tables = None
+    if str(robust.nlos_mask_csv).strip():
+        nlos_tables = load_nlos_mask_tables(
+            robust.nlos_mask_csv,
+            robust.nlos_strong_mask_csv or None,
+        )
     elapsed_ms = run_pf_smoother_forward_pass(
         PfSmootherForwardPassContext(
             run_name=run_name,
@@ -85,6 +93,7 @@ def run_pf_smoother_evaluation(
             history=history,
             observation_setup=observation_setup,
             pr_history=pr_history,
+            nlos_tables=nlos_tables,
         )
     )
 

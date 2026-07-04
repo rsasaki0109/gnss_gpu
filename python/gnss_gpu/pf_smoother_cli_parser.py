@@ -228,6 +228,30 @@ def build_pf_smoother_arg_parser(default_sigma_pos: float) -> argparse.ArgumentP
     parser.add_argument("--gmm-mu-nlos", type=float, default=15.0, help="GMM NLOS mean bias (m)")
     parser.add_argument("--gmm-sigma-nlos", type=float, default=30.0, help="GMM NLOS sigma (m)")
     parser.add_argument(
+        "--nlos-mask-csv",
+        type=str,
+        default="",
+        help="PLATEAU NLOS mask CSV (tow,epoch_idx,prn,is_los); soft-downweight is_los=0 at PF update",
+    )
+    parser.add_argument(
+        "--nlos-strong-mask-csv",
+        type=str,
+        default="",
+        help="Optional strong-NLOS mask CSV (same format as --nlos-mask-csv)",
+    )
+    parser.add_argument(
+        "--nlos-k-weak",
+        type=float,
+        default=3.0,
+        help="Weak NLOS down-weight factor (weight /= k). Default off when --nlos-mask-csv is unset.",
+    )
+    parser.add_argument(
+        "--nlos-k-strong",
+        type=float,
+        default=3.0,
+        help="Strong NLOS down-weight factor when PRN is in --nlos-strong-mask-csv",
+    )
+    parser.add_argument(
         "--doppler-position-update",
         action="store_true",
         help="Apply a second position_update using Doppler-predicted position (prev_estimate + velocity*dt)",

@@ -34,6 +34,9 @@ tmp/site_visual_check/
 # Runtime cache
 cache/
 
+# Downloaded benchmark data (install via experiments/download_ppc_dataset.py)
+datasets/
+
 # Experiment artifacts
 experiments/results/*/
 !experiments/results/paper_assets/

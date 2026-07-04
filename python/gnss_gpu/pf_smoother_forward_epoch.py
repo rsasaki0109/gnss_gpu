@@ -26,6 +26,7 @@ def process_pf_smoother_forward_epoch(
         epoch_state,
         sol_epoch,
         measurements,
+        tow=tow,
     )
 
     updates_result = apply_forward_epoch_updates(

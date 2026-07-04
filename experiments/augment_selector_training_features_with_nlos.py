@@ -72,7 +72,7 @@ def main() -> None:
     parser.add_argument(
         "--mask-dir",
         type=Path,
-        default=REPO / "experiments/results/nlos_masks",
+        default=REPO / "experiments/results/plateau_nlos_phase33",
     )
     parser.add_argument(
         "--out-csv",
