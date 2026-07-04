@@ -1,8 +1,8 @@
 # Fable5 advice request — NLOS Wave 1 closed, Wave 2 ranker pivot
 
 Date: 2026-07-04  
-Status: **awaiting Fable5 response**  
-Related: PR #117 merged to `main`; follow-up branch `feat/nlos-wave2-ranker`
+Status: **answered — Wave 2 6-pool CLOSED (gate failed)**  
+Related: PR #117 merged; PR #118 draft
 
 ## Goal
 

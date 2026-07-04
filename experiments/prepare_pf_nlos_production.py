@@ -52,6 +52,9 @@ RESULTS_DIR = PROJECT_ROOT / "experiments" / "results"
 SELECTOR_V3_FEATURES = RESULTS_DIR / "selector_training_features_v3.csv"
 SELECTOR_V5_FEATURES = RESULTS_DIR / "selector_training_features_v5_nlos.csv"
 V5_RANKER_PREDICTIONS = RESULTS_DIR / "selector_ranker_predictions_v5_nlos.csv"
+WAVE2_SELECTOR_V5_FEATURES = RESULTS_DIR / "selector_training_features_v5_nlos_w2pool.csv"
+WAVE2_RANKER_PREDICTIONS = RESULTS_DIR / "selector_ranker_predictions_v5_nlos_w2pool.csv"
+WAVE2_RANKER_MODEL = RESULTS_DIR / "selector_ranker_model_v5_nlos_w2pool.txt"
 MANIFEST_DIR = PROJECT_ROOT / "experiments" / "results" / "rtkdiag_manifest"
 WAVE2_ROOT = PROJECT_ROOT / "experiments" / "results" / "libgnss_rtk_wave2"
 PHASE33_CANDIDATE_DIRS = (
@@ -452,13 +455,35 @@ def cmd_wave2_features(args: argparse.Namespace) -> int:
         if not manifest.is_file():
             raise SystemExit(f"missing manifest: {manifest} (run wave2-bootstrap first)")
     _run([sys.executable, str(PROJECT_ROOT / "experiments" / "extract_selector_training_features_v3.py")])
-    return cmd_ranker_features(args)
+    cmd = [
+        sys.executable,
+        str(PROJECT_ROOT / "experiments" / "augment_selector_training_features_with_nlos.py"),
+        "--in-csv",
+        str(SELECTOR_V3_FEATURES),
+        "--mask-dir",
+        str(MASK_DIR),
+        "--out-csv",
+        str(WAVE2_SELECTOR_V5_FEATURES),
+    ]
+    _run(cmd)
+    return 0
 
 
 def cmd_wave2_train(args: argparse.Namespace) -> int:
-    if not SELECTOR_V5_FEATURES.is_file():
-        raise SystemExit(f"missing {SELECTOR_V5_FEATURES} (run wave2-features first)")
-    _run([sys.executable, str(PROJECT_ROOT / "experiments" / "train_selector_ranker_v5_nlos.py")])
+    if not WAVE2_SELECTOR_V5_FEATURES.is_file():
+        raise SystemExit(f"missing {WAVE2_SELECTOR_V5_FEATURES} (run wave2-features first)")
+    _run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "experiments" / "train_selector_ranker_v5_nlos.py"),
+            "--features-csv",
+            str(WAVE2_SELECTOR_V5_FEATURES),
+            "--predictions-csv",
+            str(WAVE2_RANKER_PREDICTIONS),
+            "--model-out",
+            str(WAVE2_RANKER_MODEL),
+        ]
+    )
     return 0
 
 
@@ -475,8 +500,8 @@ def _load_manifest(run: str) -> tuple[str, str]:
 
 def cmd_wave2_smoke(args: argparse.Namespace) -> int:
     """Single-run rtkdiag_pf smoke with Wave 2 candidate pool + v5_nlos ranker."""
-    if not V5_RANKER_PREDICTIONS.is_file():
-        raise SystemExit(f"missing ranker CSV: {V5_RANKER_PREDICTIONS} (run wave2-train first)")
+    if not WAVE2_RANKER_PREDICTIONS.is_file():
+        raise SystemExit(f"missing ranker CSV: {WAVE2_RANKER_PREDICTIONS} (run wave2-train first)")
     run = str(args.run).strip().strip("/")
     city, run_name = _city_run(run)
     dirs, labels = _load_manifest(run)
@@ -512,7 +537,7 @@ def cmd_wave2_smoke(args: argparse.Namespace) -> int:
         "--rtkdiag-candidate-select-mode",
         "ranker",
         "--rtkdiag-candidate-ranker-score-path",
-        str(V5_RANKER_PREDICTIONS),
+        str(WAVE2_RANKER_PREDICTIONS),
         "--rtkdiag-candidate-emit-mode",
         "candidate",
         "--rtkdiag-candidate-fallback-mode",
@@ -523,6 +548,12 @@ def cmd_wave2_smoke(args: argparse.Namespace) -> int:
         "1.0",
         "--rtkdiag-candidate-rms-prefilter-k",
         str(k),
+        "--rtkdiag-candidate-recenter-max-shift-m",
+        "10000.0",
+        "--rtkdiag-candidate-emit-max-diff-m",
+        "0.4",
+        "--rtkdiag-candidate-max-to-hybrid-m",
+        "0",
         "--rtkdiag-candidate-bridge-enable",
         "--rtkdiag-candidate-bridge-max-s",
         "6.0",
@@ -532,6 +563,28 @@ def cmd_wave2_smoke(args: argparse.Namespace) -> int:
     _run(cmd)
     runs_csv = RESULTS_DIR / f"{prefix}_runs.csv"
     print(f"[wave2-smoke] wrote {runs_csv}", flush=True)
+    return 0
+
+
+def cmd_wave2_oracle(args: argparse.Namespace) -> int:
+    """Oracle ceiling: best-of hybrid + Wave 2 candidates on one run window."""
+    cmd = [
+        sys.executable,
+        str(PROJECT_ROOT / "experiments" / "analyze_wave2_oracle_ceiling.py"),
+        "--run",
+        str(args.run).strip().strip("/"),
+        "--data-root",
+        str(_ppc_root(args.data_root)),
+        "--hybrid-pos-dir",
+        str(HYBRID_POS_DIR),
+        "--manifest-dir",
+        str(MANIFEST_DIR),
+        "--start-epoch",
+        str(int(args.start_epoch)),
+        "--max-epochs",
+        str(int(args.max_epochs)),
+    ]
+    _run(cmd)
     return 0
 
 
@@ -739,6 +792,11 @@ def main(argv: list[str] | None = None) -> int:
     wave2_smoke.add_argument("--n-particles", type=int, default=2000)
     wave2_smoke.add_argument("--rms-prefilter-k", type=int, default=3)
     wave2_smoke.set_defaults(func=cmd_wave2_smoke)
+
+    wave2_oracle = sub.add_parser("wave2-oracle", parents=[common], help="Oracle ceiling on Wave 2 pool")
+    wave2_oracle.add_argument("--max-epochs", type=int, default=1200)
+    wave2_oracle.add_argument("--start-epoch", type=int, default=1000)
+    wave2_oracle.set_defaults(func=cmd_wave2_oracle)
 
     batch_common = argparse.ArgumentParser(add_help=False)
     batch_common.add_argument("--runs", default="all", help="all or comma-separated city/run list")
