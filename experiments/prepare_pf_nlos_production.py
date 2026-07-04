@@ -56,6 +56,8 @@ PHASE33_CANDIDATE_DIRS = (
     RESULTS_DIR / "libgnss_diag_phase10/fgo_v2_gap",
     RESULTS_DIR / "libgnss_diag_phase19/gici_tc_esdfix",
 )
+
+FULL_RUNS = (
     "tokyo/run1",
     "tokyo/run2",
     "tokyo/run3",
