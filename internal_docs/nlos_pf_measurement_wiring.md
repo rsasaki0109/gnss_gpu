@@ -123,6 +123,28 @@ Post-review hardening on this branch:
 
 Recommended next experiment (if approved): **nagoya/run2** with `selector_ranker_predictions_v5_nlos.csv` + full candidate pool — historically +1.07 pp in Phase 33; validate whether refreshed PLATEAU masks change ranker inputs materially.
 
+## Wave 2 exploratory (2026-07-04, local — pending Fable5)
+
+Bootstrap with **6-candidate pool** (Phase 10/19 50+ dirs not on SSD). nagoya/run2 smoke, same window as Wave 1:
+
+| Config | honest | segment | rtkdiag PU |
+|--------|-------:|--------:|-----------:|
+| hybrid-only (Wave 1) | 4.35% | 25.40% | 0 |
+| ranker+rtkdiag (6-pool) | 2.31% | 13.47% | 1191/1191 |
+
+rtkdiag engages (`pf_bridge+rnk:1050`, `w2_def+rnk:141`) but **regresses** vs hybrid-only. Do not treat 6-pool smoke as Phase 33 reproduction.
+
+**Gate experiments (2026-07-04, Fable5 action items):**
+
+| Check | Result |
+|-------|--------|
+| Config-parity re-smoke (+ emit guards) | honest still **2.31%** (no recovery to 4.35%) |
+| Oracle ceiling (4853 tows) | **headroom 0.0 pp** — hybrid beats all w2 variants |
+
+**Verdict: CLOSE Wave 2 6-pool bootstrap.** No oracle headroom; 50+ pool rebuild not justified for PPC gain from this avenue alone (Fable5 gate failed).
+
+Advice: `internal_docs/fable5_nlos_wave2_advice_request_2026_07_04.md`, response `fable5_nlos_wave2_advice_response_2026_07_04.md`. Follow-up: PR #118.
+
 ~~Remaining before PPC score validation:~~
 
 ~~1. Install PPC data~~ ✓  

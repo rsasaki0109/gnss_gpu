@@ -19,13 +19,15 @@ experiments/results/selector_training_features_v3.csv
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-REPO = Path("gnss_gpu")
+REPO = Path(__file__).resolve().parents[1]
 REF_BASE = Path("datasets/PPC-Dataset-data")
+MANIFEST_DIR = REPO / "experiments/results/rtkdiag_manifest"
 
 RUNS = [
     ("tokyo", "run1"), ("tokyo", "run2"), ("tokyo", "run3"),
@@ -144,8 +146,14 @@ def load_diag_csv(p):
     return out
 
 
-def per_run_dirs_labels(city, run):
+def per_run_dirs_labels(city, run, manifest_dir: Path | None = None):
     key = f"{city}_{run}"
+    manifest_path = (manifest_dir or MANIFEST_DIR) / f"{key}.json"
+    if manifest_path.is_file():
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        dirs = [REPO / d for d in payload["dirs"]]
+        labels = list(payload["labels"])
+        return dirs, labels
     base_dirs = (Path("/tmp") / f"{key}_phase11fa_dirs.txt").read_text().strip().split(",")
     base_labels = (Path("/tmp") / f"{key}_phase11fa_labels.txt").read_text().strip().split(",")
     dirs = [REPO / d for d in base_dirs] + [REPO / d for d in PHASE19_EXTRA_DIRS]

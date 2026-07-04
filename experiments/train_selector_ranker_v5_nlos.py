@@ -9,7 +9,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
-REPO = Path("gnss_gpu")
+REPO = Path(__file__).resolve().parents[1]
 
 FEATURE_COLS = [
     "rms", "ratio", "abs_max", "update_rows", "sats", "status",
@@ -95,7 +95,27 @@ def evaluate_official(df: pd.DataFrame, label_col: str = "p_pass") -> dict[str, 
 
 
 def main() -> None:
-    feat_path = REPO / "experiments/results/selector_training_features_v5_nlos.csv"
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--features-csv",
+        type=Path,
+        default=REPO / "experiments/results/selector_training_features_v5_nlos.csv",
+    )
+    parser.add_argument(
+        "--predictions-csv",
+        type=Path,
+        default=REPO / "experiments/results/selector_ranker_predictions_v5_nlos.csv",
+    )
+    parser.add_argument(
+        "--model-out",
+        type=Path,
+        default=REPO / "experiments/results/selector_ranker_model_v5_nlos.txt",
+    )
+    args = parser.parse_args()
+
+    feat_path = args.features_csv
     print(f"Loading {feat_path} ...", flush=True)
     df = pd.read_csv(feat_path)
     print(f"  rows: {len(df)}, epochs: {df.groupby(['run_id', 'tow']).ngroups}", flush=True)
@@ -119,7 +139,8 @@ def main() -> None:
         preds.append(pred_df)
 
     pred_all = pd.concat(preds, ignore_index=True)
-    out_pred = REPO / "experiments/results/selector_ranker_predictions_v5_nlos.csv"
+    out_pred = args.predictions_csv
+    out_pred.parent.mkdir(parents=True, exist_ok=True)
     pred_all.to_csv(out_pred, index=False)
     print(f"\nSaved: {out_pred}", flush=True)
 
@@ -132,7 +153,7 @@ def main() -> None:
     idx = rng.permutation(len(df))
     split = int(0.9 * len(df))
     final_model = fit_one(df.iloc[idx[:split]], df.iloc[idx[split:]], label_categories)
-    out_model = REPO / "experiments/results/selector_ranker_model_v5_nlos.txt"
+    out_model = args.model_out
     final_model.save_model(str(out_model))
     print(f"Saved: {out_model}", flush=True)
 
