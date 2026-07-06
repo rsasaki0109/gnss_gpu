@@ -1,0 +1,4 @@
+method,city,run,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,traj_path
+scores,tokyo,run1,11924,11928,99.966,114.038938,,0.000,0.000,0.000,0.000,results\wp3c\tokyo_run1_fgo_variant_d.csv
+scores,tokyo,run1,11923,11928,99.958,121.920896,,0.000,0.000,0.000,0.000,results\wp3c\tokyo_run1_fgo_variant_e_fallback_gej.csv
+scores,tokyo,run1,11924,11928,99.966,111.468461,,0.000,0.000,0.000,0.000,results\wp3c\tokyo_run1_fgo_variant_d_tuned.csv

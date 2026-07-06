@@ -1,0 +1,4 @@
+name,note,extra_args,wall_s,returncode,engine_total_solutions,engine_valid_solutions,engine_fixed_solutions,engine_fix_rate_pct,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,n_fix,n_fix_after_warmup,frac_fix_after_warmup
+wp6_winner_jumprate_2.3,,--max-pos-jump-rate 2.3,408.8,0,12875.0,12875.0,668.0,5.19,12875,15301,84.145,5.6371,0.0811,5.188,51.961,43.723,40.69,668,4,0.006
+c0_bare_preset,,,394.1,0,12833.0,12833.0,818.0,6.37,12833,15301,83.87,5.281,0.0484,6.374,52.108,43.703,40.664,818,0,0.0
+c0_v5_baseline_flags,v5 baseline's exact extra flags beyond --preset low-cost,--arfilter --arfilter-margin 0.35 --min-hold-count 8 --hold-ratio-threshold 2.6,375.8,0,12833.0,12833.0,818.0,6.37,12833,15301,83.87,5.281,0.0484,6.374,52.108,43.703,40.664,818,0,0.0

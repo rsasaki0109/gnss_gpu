@@ -1,0 +1,11 @@
+{
+  "n_fix_epochs": 1130,
+  "n_float_epochs": 6355,
+  "n_none_epochs": 4438,
+  "n_ref_covered": 11923,
+  "n_pass_lt_50cm": 3050,
+  "n_extension_pass_lt_50cm": 1939,
+  "extension_epochs_median": 1385.0,
+  "extension_epochs_p90": 3371.2,
+  "extension_epochs_max": 3565.0
+}

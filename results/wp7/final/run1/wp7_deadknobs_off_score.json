@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp7\\final\\run1\\d0_deadknobs_forced_off.pos",
+  "format": "pos",
+  "n_scored": 7485,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 62.75150905432596,
+  "n_fix": 1130,
+  "all_rms_m": 19.47603314791053,
+  "fix_rms_m": 0.31142330881816216,
+  "fix_pct": 15.09686038744155,
+  "lt50cm_pct": 42.89913159652639,
+  "lt50cm_full_pct": 26.919852448021462,
+  "ppc_official_pct": 24.18836936056448,
+  "ppc_note": null
+}

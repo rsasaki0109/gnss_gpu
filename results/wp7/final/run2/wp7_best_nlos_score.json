@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run2",
+  "traj_path": "results\\wp7\\final\\run2\\f3_continuous_floor0.5.pos",
+  "format": "pos",
+  "n_scored": 6460,
+  "n_rover_epochs": 9151,
+  "coverage_pct": 70.59337777292099,
+  "n_fix": 1362,
+  "all_rms_m": 9.106041678208236,
+  "fix_rms_m": 0.24130058119031192,
+  "fix_pct": 21.08359133126935,
+  "lt50cm_pct": 64.70588235294117,
+  "lt50cm_full_pct": 45.678067970713585,
+  "ppc_official_pct": 49.06384104488373,
+  "ppc_note": null
+}
