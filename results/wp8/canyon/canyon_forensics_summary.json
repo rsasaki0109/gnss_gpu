@@ -1,0 +1,239 @@
+{
+  "debug_log_summary": {
+    "n_epochs": 751,
+    "tow_lo": 188925.0,
+    "tow_hi": 189075.0,
+    "slip_totals": {
+      "gf_slip_count": 23,
+      "doppler_slip_l1_count": 1,
+      "doppler_slip_l2_count": 11,
+      "code_slip_l1_count": 0,
+      "code_slip_l2_count": 4,
+      "lli_slip_l1_count": 35,
+      "lli_slip_l2_count": 14,
+      "ambiguity_reset_l1_count": 24,
+      "ambiguity_reset_l2_count": 25
+    },
+    "postfix_residual_rms_m": {
+      "n": 751,
+      "median": 0.190544,
+      "min": 0.0,
+      "max": 1.441736
+    },
+    "prefit_residual_rms_m": {
+      "n": 751,
+      "median": 25.116543,
+      "min": 0.256768,
+      "max": 68.99695
+    },
+    "nis_per_observation": {
+      "n": 751,
+      "median": 0.38252,
+      "min": 0.0,
+      "max": 48.962966
+    },
+    "float_position_covariance_trace_m2": {
+      "n": 751,
+      "median": 1800.000153,
+      "min": 0.003235,
+      "max": 2700.0
+    },
+    "float_position_covariance_trace_regime": {
+      "n": 751,
+      "frac_wide_untrusted_reset_gt500": 0.7350199733688415,
+      "frac_partially_shrunk_50_500": 0.017310252996005325,
+      "frac_converged_lt50": 0.24766977363515313,
+      "frac_fully_converged_lt1": 0.20772303595206393
+    },
+    "num_sats": {
+      "n": 751,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 30.0
+    },
+    "reject_reasons": {
+      "adaptive_position_jump": 478,
+      "lambda_not_fixed": 37
+    }
+  },
+  "lli_summary": {
+    "C34": {
+      "n_obs": 129,
+      "n_slip_flagged": 0,
+      "slip_tows": []
+    },
+    "C38": {
+      "n_obs": 550,
+      "n_slip_flagged": 3,
+      "slip_tows": [
+        188946.0,
+        188961.4,
+        188977.8
+      ]
+    },
+    "C43": {
+      "n_obs": 734,
+      "n_slip_flagged": 0,
+      "slip_tows": []
+    },
+    "E09": {
+      "n_obs": 751,
+      "n_slip_flagged": 0,
+      "slip_tows": []
+    },
+    "E11": {
+      "n_obs": 700,
+      "n_slip_flagged": 0,
+      "slip_tows": []
+    },
+    "E36": {
+      "n_obs": 727,
+      "n_slip_flagged": 1,
+      "slip_tows": [
+        188960.8
+      ]
+    },
+    "G06": {
+      "n_obs": 188,
+      "n_slip_flagged": 1,
+      "slip_tows": [
+        188958.4
+      ]
+    },
+    "G11": {
+      "n_obs": 751,
+      "n_slip_flagged": 0,
+      "slip_tows": []
+    },
+    "G20": {
+      "n_obs": 524,
+      "n_slip_flagged": 2,
+      "slip_tows": [
+        188976.8,
+        188982.8
+      ]
+    },
+    "G30": {
+      "n_obs": 307,
+      "n_slip_flagged": 1,
+      "slip_tows": [
+        189050.8
+      ]
+    },
+    "J03": {
+      "n_obs": 745,
+      "n_slip_flagged": 0,
+      "slip_tows": []
+    },
+    "J04": {
+      "n_obs": 727,
+      "n_slip_flagged": 0,
+      "slip_tows": []
+    },
+    "E10": {
+      "n_obs": 86,
+      "n_slip_flagged": 5,
+      "slip_tows": [
+        188926.4,
+        188935.8,
+        188944.0,
+        188959.0,
+        188962.0
+      ]
+    },
+    "G13": {
+      "n_obs": 409,
+      "n_slip_flagged": 3,
+      "slip_tows": [
+        188934.4,
+        189018.8,
+        189048.8
+      ]
+    },
+    "C33": {
+      "n_obs": 592,
+      "n_slip_flagged": 4,
+      "slip_tows": [
+        188932.4,
+        188970.6,
+        188985.6,
+        189050.4
+      ]
+    },
+    "C42": {
+      "n_obs": 582,
+      "n_slip_flagged": 1,
+      "slip_tows": [
+        188961.4
+      ]
+    },
+    "G05": {
+      "n_obs": 453,
+      "n_slip_flagged": 2,
+      "slip_tows": [
+        188934.6,
+        188996.0
+      ]
+    },
+    "E04": {
+      "n_obs": 579,
+      "n_slip_flagged": 2,
+      "slip_tows": [
+        188936.6,
+        188957.6
+      ]
+    },
+    "C40": {
+      "n_obs": 115,
+      "n_slip_flagged": 1,
+      "slip_tows": [
+        188952.4
+      ]
+    },
+    "E05": {
+      "n_obs": 81,
+      "n_slip_flagged": 1,
+      "slip_tows": [
+        188957.4
+      ]
+    },
+    "G07": {
+      "n_obs": 43,
+      "n_slip_flagged": 3,
+      "slip_tows": [
+        188982.8,
+        189012.4,
+        189063.6
+      ]
+    },
+    "C39": {
+      "n_obs": 383,
+      "n_slip_flagged": 1,
+      "slip_tows": [
+        188996.6
+      ]
+    }
+  },
+  "n_nlos_mask_entries": 20770,
+  "n_nlos_sat_epochs": 7526,
+  "residual_by_los": {
+    "los": {
+      "n": 13244,
+      "median": 7.215368905104697,
+      "mean": 9.564078677449025,
+      "max": 267.080308040604
+    },
+    "nlos": {
+      "n": 7526,
+      "median": 20.524360347539186,
+      "mean": 51.37873068562313,
+      "max": 641.4577924162149
+    },
+    "unknown": {
+      "n": 0,
+      "median": NaN,
+      "mean": NaN,
+      "max": NaN
+    }
+  }
+}

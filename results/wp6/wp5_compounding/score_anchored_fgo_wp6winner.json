@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp6\\wp5_compounding\\tokyo_run1_anchored_fgo_wp6winner.csv",
+  "format": "csv",
+  "n_scored": 11923,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 99.958081824279,
+  "n_fix": 8882,
+  "all_rms_m": 93.70183743413988,
+  "fix_rms_m": 58.233761783004184,
+  "fix_pct": 74.49467415918812,
+  "lt50cm_pct": 25.580810198775477,
+  "lt50cm_full_pct": 25.5700871898055,
+  "ppc_official_pct": 19.97688180311082,
+  "ppc_note": null
+}

@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run2",
+  "traj_path": "results\\wp7\\final\\run2\\f3_baseline_no_nlos.pos",
+  "format": "pos",
+  "n_scored": 6466,
+  "n_rover_epochs": 9151,
+  "coverage_pct": 70.65894437766364,
+  "n_fix": 843,
+  "all_rms_m": 9.334779750226618,
+  "fix_rms_m": 0.12497800627572415,
+  "fix_pct": 13.037426538818435,
+  "lt50cm_pct": 61.08877203835447,
+  "lt50cm_full_pct": 43.164681455578624,
+  "ppc_official_pct": 48.046154635547516,
+  "ppc_note": null
+}

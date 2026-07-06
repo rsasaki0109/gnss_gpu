@@ -1,0 +1,3 @@
+method,city,run,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,traj_path
+scores,tokyo,run1,11923,11928,99.958,107.681199,92.631451,86.002,0.000,0.000,0.000,results\wp4\tokyo_run1_local_fgo_lambda.csv
+scores,tokyo,run1,11928,11928,100.000,107.683211,,0.000,0.000,0.000,0.000,results\wp4\tokyo_run1_seed_full_coverage.pos

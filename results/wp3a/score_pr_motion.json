@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp3a\\tokyo_run1_fgo_backbone_pr_motion.csv",
+  "format": "csv",
+  "n_scored": 11676,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 97.88732394366197,
+  "n_fix": 0,
+  "all_rms_m": 115.26444153178596,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 0.0,
+  "lt50cm_full_pct": 0.0,
+  "ppc_official_pct": 0.0,
+  "ppc_note": null
+}

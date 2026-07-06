@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run3",
+  "traj_path": "results\\wp6\\final\\run3\\wp6_winner_jumprate_2.3.pos",
+  "format": "pos",
+  "n_scored": 12875,
+  "n_rover_epochs": 15301,
+  "coverage_pct": 84.14482713548134,
+  "n_fix": 668,
+  "all_rms_m": 5.637149093256431,
+  "fix_rms_m": 0.08111504409090287,
+  "fix_pct": 5.1883495145631064,
+  "lt50cm_pct": 51.96116504854369,
+  "lt50cm_full_pct": 43.722632507679236,
+  "ppc_official_pct": 40.6897411537513,
+  "ppc_note": null
+}

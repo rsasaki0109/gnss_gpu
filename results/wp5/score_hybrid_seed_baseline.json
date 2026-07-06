@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp5\\tokyo_run1_hybrid_seed.pos",
+  "format": "pos",
+  "n_scored": 11928,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 100.0,
+  "n_fix": 0,
+  "all_rms_m": 94.15255473207142,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 25.38564721663313,
+  "lt50cm_full_pct": 25.38564721663313,
+  "ppc_official_pct": 21.07762163119293,
+  "ppc_note": null
+}

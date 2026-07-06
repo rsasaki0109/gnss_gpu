@@ -1,0 +1,3 @@
+name,note,extra_args,wall_s,returncode,engine_total_solutions,engine_valid_solutions,engine_fixed_solutions,engine_fix_rate_pct,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,n_fix,n_fix_after_warmup,frac_fix_after_warmup
+c5_ratio_2.4_full,,--ratio 2.4,225.6,0,7397.0,7397.0,777.0,10.5,7397,11928,62.014,19.8612,0.0837,10.504,40.936,25.386,22.883,777,0,0.0
+c5_ratio_2.6_full,,--ratio 2.6,213.5,0,7397.0,7397.0,776.0,10.49,7397,11928,62.014,19.8612,0.0836,10.491,40.936,25.386,22.883,776,0,0.0
