@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "C:\\Users\\rsasa\\Workspace\\old\\gnss_gpu\\results\\wp12d\\probe_naive_lambda_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 1220,
+  "all_rms_m": 156.27870905594102,
+  "fix_rms_m": 32.58115688366493,
+  "fix_pct": 31.28205128205128,
+  "lt50cm_pct": 20.71794871794872,
+  "lt50cm_full_pct": 6.773977196512408,
+  "ppc_official_pct": 6.780074563368087,
+  "ppc_note": null
+}

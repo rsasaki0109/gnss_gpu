@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "C:\\Users\\rsasa\\Workspace\\old\\gnss_gpu\\results\\wp12e\\probe_float_dense_anchor_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 0,
+  "all_rms_m": 66.73593392343118,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 20.794871794871796,
+  "lt50cm_full_pct": 6.799128101945003,
+  "ppc_official_pct": 6.773454415090976,
+  "ppc_note": null
+}

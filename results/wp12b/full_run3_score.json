@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run3",
+  "traj_path": "results\\wp12b\\full_run3.pos",
+  "format": "pos",
+  "n_scored": 15291,
+  "n_rover_epochs": 15301,
+  "coverage_pct": 99.93464479445788,
+  "n_fix": 0,
+  "all_rms_m": 27.341631570834053,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 2.733634163887254,
+  "lt50cm_full_pct": 2.7318475916606757,
+  "ppc_official_pct": 1.1312807597602237,
+  "ppc_note": null
+}

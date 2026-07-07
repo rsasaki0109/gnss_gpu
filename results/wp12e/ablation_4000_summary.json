@@ -1,0 +1,21 @@
+{
+  "probe_epochs": 4000,
+  "rows": [
+    {
+      "stage": "float_dense_anchor",
+      "all_rms_m": 66.73593392343118,
+      "fix_rms_m": null,
+      "fix_pct": 0.0,
+      "lt50cm_full_pct": 6.799128101945003,
+      "n_fix": 0
+    },
+    {
+      "stage": "cert_dense_hold",
+      "all_rms_m": 66.73595863136335,
+      "fix_rms_m": 0.4046756881154777,
+      "fix_pct": 14.871794871794872,
+      "lt50cm_full_pct": 6.866197183098592,
+      "n_fix": 580
+    }
+  ]
+}

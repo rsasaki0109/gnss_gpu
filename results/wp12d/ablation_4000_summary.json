@@ -1,0 +1,47 @@
+{
+  "probe_epochs": 4000,
+  "cert_tight_flags": [
+    "--ar-cert-max-pos-sigma",
+    "0.15",
+    "--ar-cert-max-dd-pr-rms",
+    "1.0"
+  ],
+  "rows": [
+    {
+      "stage": "float_no_ar",
+      "all_rms_m": 156.41679132856575,
+      "fix_rms_m": null,
+      "fix_pct": 0.0,
+      "lt50cm_full_pct": 6.790744466800805,
+      "n_fix": 0,
+      "pos": "results\\wp12d\\probe_float_no_ar_4000.pos"
+    },
+    {
+      "stage": "cert_tight",
+      "all_rms_m": 156.41686117052953,
+      "fix_rms_m": 1.2343052081463317,
+      "fix_pct": 18.05128205128205,
+      "lt50cm_full_pct": 6.790744466800805,
+      "n_fix": 704,
+      "pos": "results\\wp12d\\probe_cert_tight_4000.pos"
+    },
+    {
+      "stage": "cert_tight_subset",
+      "all_rms_m": 156.41686117052953,
+      "fix_rms_m": 0.6980874393907718,
+      "fix_pct": 15.102564102564102,
+      "lt50cm_full_pct": 6.790744466800805,
+      "n_fix": 589,
+      "pos": "results\\wp12d\\probe_cert_tight_subset_4000.pos"
+    },
+    {
+      "stage": "cert_tight_hold",
+      "all_rms_m": 156.41686117052953,
+      "fix_rms_m": 0.7099404293499253,
+      "fix_pct": 14.666666666666666,
+      "lt50cm_full_pct": 6.790744466800805,
+      "n_fix": 572,
+      "pos": "results\\wp12d\\probe_cert_tight_hold_4000.pos"
+    }
+  ]
+}

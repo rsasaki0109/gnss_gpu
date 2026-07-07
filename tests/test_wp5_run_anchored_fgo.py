@@ -13,11 +13,14 @@ sys.path.insert(0, str(PROJECT_ROOT / "experiments"))
 sys.path.insert(0, str(PROJECT_ROOT / "python"))
 
 from wp5_run_anchored_fgo import (  # noqa: E402
+    RtkPosRecord,
+    anchor_sigma_m,
     build_hybrid_coverage_seed,
     build_hybrid_seed,
     classify_anchor_status,
     compute_extension_stats,
     load_rtk_pos_with_status,
+    nearest_anchor_distance_epochs,
     nearest_fix_distance_epochs,
 )
 
@@ -171,3 +174,18 @@ def test_build_hybrid_coverage_seed_end_to_end(tmp_path: Path) -> None:
     seed = mod.read_pos_ecef(out_pos)
     np.testing.assert_allclose(seed[round(tow1, 1)], [5.0, 5.0, 5.0])
     np.testing.assert_allclose(seed[round(tow0, 1)], [10.0, 0.0, 0.0])
+
+
+def test_anchor_sigma_m_float_uses_pdop_floor_and_quality_weight() -> None:
+    rec = RtkPosRecord(ecef=np.zeros(3), status=3, nsats=4, pdop=6.0, ratio=2.0)
+    sigma = anchor_sigma_m(rec, 1, fix_sigma_m=0.15, float_sigma_m=3.0, quality_weight=True)
+    assert sigma > 3.0
+    assert sigma <= 5.0 * 1.5 * np.sqrt(8.0 / 4.0)
+
+
+def test_nearest_anchor_distance_epochs_includes_float_when_enabled() -> None:
+    anchor_class = np.array([1, 0, 0, 2, 0])
+    dist_fix = nearest_anchor_distance_epochs(anchor_class, include_fix=True, include_float=False)
+    dist_dense = nearest_anchor_distance_epochs(anchor_class, include_fix=True, include_float=True)
+    assert dist_fix[1] == pytest.approx(2.0)
+    assert dist_dense[1] == pytest.approx(1.0)

@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp12d\\probe_float_no_ar_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 0,
+  "all_rms_m": 156.41679132856575,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 20.76923076923077,
+  "lt50cm_full_pct": 6.790744466800805,
+  "ppc_official_pct": 6.757048225934179,
+  "ppc_note": null
+}
