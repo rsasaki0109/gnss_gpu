@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp12d\\probe_cert_tight_hold_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 572,
+  "all_rms_m": 156.41705286565042,
+  "fix_rms_m": 0.7096451645780566,
+  "fix_pct": 14.666666666666666,
+  "lt50cm_pct": 20.76923076923077,
+  "lt50cm_full_pct": 6.790744466800805,
+  "ppc_official_pct": 6.757048225934179,
+  "ppc_note": null
+}

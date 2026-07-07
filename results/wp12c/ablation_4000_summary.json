@@ -1,0 +1,124 @@
+[
+  {
+    "config": "wp12b_persist_no_schur",
+    "span": 4000,
+    "path": "results/wp12b/probe_persist_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.69617706237425,
+    "all_rms_m": 109.7,
+    "fix_rms_m": null,
+    "fix_pct": 0.0,
+    "lt50cm_full_pct": 5.1,
+    "notes": "WP12b reference; diagonal marginal"
+  },
+  {
+    "config": "wp12b_win25_no_schur_1k",
+    "span": 1000,
+    "path": "results/wp12b/probe_win25_1000.pos",
+    "n_scored": 1000,
+    "coverage_pct": 8.38430583433937,
+    "all_rms_m": 1.9,
+    "fix_rms_m": null,
+    "fix_pct": 0.0,
+    "lt50cm_full_pct": 5.6,
+    "notes": "WP12b; 728 s wall"
+  },
+  {
+    "config": "schur_broken_v1_bias",
+    "span": 4000,
+    "path": "results/wp12c/probe_schur_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.69617706237425,
+    "all_rms_m": 1365.8509803670804,
+    "fix_rms_m": null,
+    "fix_pct": 0.0,
+    "lt50cm_full_pct": 0.5700871898054997,
+    "notes": "first Schur wiring + bias in state"
+  },
+  {
+    "config": "schur_broken_v2",
+    "span": 4000,
+    "path": "results/wp12c/probe_schur_fix_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.69617706237425,
+    "all_rms_m": 211.64672502749934,
+    "fix_rms_m": null,
+    "fix_pct": 0.0,
+    "lt50cm_full_pct": 3.043259557344064,
+    "notes": "partial mean fix"
+  },
+  {
+    "config": "schur_broken_win10",
+    "span": 4000,
+    "path": "results/wp12c/probe_schur_win10_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.69617706237425,
+    "all_rms_m": 1384.6193123916996,
+    "fix_rms_m": null,
+    "fix_pct": 0.0,
+    "lt50cm_full_pct": 0.9725016767270288,
+    "notes": "broken Schur, window=10"
+  },
+  {
+    "config": "schur_broken_nobias",
+    "span": 4000,
+    "path": "results/wp12c/probe_schur_nobias_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.69617706237425,
+    "all_rms_m": 232.32083579996106,
+    "fix_rms_m": null,
+    "fix_pct": 0.0,
+    "lt50cm_full_pct": 6.773977196512408,
+    "notes": "broken Schur, no IMU bias in state"
+  },
+  {
+    "config": "schur_broken_win25_1k",
+    "span": 1000,
+    "path": "results/wp12c/probe_schur_win25_1000.pos",
+    "n_scored": 1000,
+    "coverage_pct": 8.38430583433937,
+    "all_rms_m": 144.691542,
+    "fix_rms_m": null,
+    "fix_pct": 0.0,
+    "lt50cm_full_pct": 1.0049895581832968,
+    "notes": "broken Schur, window=25, 1k only"
+  },
+  {
+    "config": "schur_fixed_win5",
+    "span": 4000,
+    "path": "results/wp12c/probe_schur_fixed_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.69617706237425,
+    "all_rms_m": 156.4167913232724,
+    "fix_rms_m": null,
+    "fix_pct": 0.0,
+    "lt50cm_full_pct": 6.790744466800805,
+    "notes": "352 s wall"
+  },
+  {
+    "config": "schur_fixed_win10",
+    "span": 4000,
+    "path": "results/wp12c/probe_schur_fixed_win10_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.69617706237425,
+    "all_rms_m": 149.86444539573088,
+    "fix_rms_m": null,
+    "fix_pct": 0.0,
+    "lt50cm_full_pct": 6.790744466800805,
+    "notes": "1036 s wall"
+  },
+  {
+    "config": "schur_fixed_win25",
+    "span": 4000,
+    "path": "results/wp12c/probe_schur_fixed_win25_4000.pos",
+    "status": "pending",
+    "notes": "PID 17028 running at report time"
+  },
+  {
+    "config": "noschur_win25",
+    "span": 4000,
+    "path": "results/wp12c/probe_noschur_win25_4000.pos",
+    "status": "pending",
+    "notes": "decisive experiment; launched WP12c"
+  }
+]

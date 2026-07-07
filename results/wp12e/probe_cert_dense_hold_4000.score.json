@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "C:\\Users\\rsasa\\Workspace\\old\\gnss_gpu\\results\\wp12e\\probe_cert_dense_hold_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 580,
+  "all_rms_m": 66.73595863136335,
+  "fix_rms_m": 0.4046756881154777,
+  "fix_pct": 14.871794871794872,
+  "lt50cm_pct": 21.0,
+  "lt50cm_full_pct": 6.866197183098592,
+  "ppc_official_pct": 7.205111248024734,
+  "ppc_note": null
+}

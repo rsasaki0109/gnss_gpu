@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp12c\\probe_schur_nobias_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 0,
+  "all_rms_m": 232.32083579996106,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 20.71794871794872,
+  "lt50cm_full_pct": 6.773977196512408,
+  "ppc_official_pct": 6.659331203423581,
+  "ppc_note": null
+}

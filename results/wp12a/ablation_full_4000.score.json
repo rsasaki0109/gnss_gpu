@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp12a\\ablation_full_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 0,
+  "all_rms_m": 2238.8384603500253,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 20.82051282051282,
+  "lt50cm_full_pct": 6.807511737089202,
+  "ppc_official_pct": 6.604353132695118,
+  "ppc_note": null
+}

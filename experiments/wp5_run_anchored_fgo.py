@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import sys
 import time
 from dataclasses import dataclass
@@ -69,16 +70,23 @@ DEFAULT_BACKBONE_CSV = _PROJECT_ROOT / "results" / "wp3b" / "tokyo_run1_fgo_imu_
 # --------------------------------------------------------------------------
 
 
-def load_rtk_pos_with_status(path: Path) -> dict[float, tuple[np.ndarray, int]]:
-    """Parse a libgnss++ ``.pos`` file into ``TOW -> (ECEF, Status)``.
+@dataclass(frozen=True)
+class RtkPosRecord:
+    """One libgnss++ ``.pos`` row with optional quality metadata (WP12e)."""
 
-    Column layout: ``GPS_Week GPS_TOW X Y Z Lat Lon Height Status ...``
-    (see ``experiments/results/libgnss_rtk_pos_v5/tokyo_run1_full.pos``
-    header). Unlike ``exp_ppc_ctrbpf_fgo._load_hybrid_pos_file`` (which
-    drops Status==0 rows), this keeps every parseable row so callers can
-    decide their own fix/float/none classification.
+    ecef: np.ndarray
+    status: int
+    nsats: int = 0
+    pdop: float = 0.0
+    ratio: float = 0.0
+
+
+def load_rtk_pos_extended(path: Path) -> dict[float, RtkPosRecord]:
+    """Parse a libgnss++ ``.pos`` file into ``TOW -> RtkPosRecord``.
+
+    Column layout: ``GPS_Week GPS_TOW X Y Z Lat Lon Height Status NumSat PDOP Ratio ...``
     """
-    out: dict[float, tuple[np.ndarray, int]] = {}
+    out: dict[float, RtkPosRecord] = {}
     with Path(path).open() as fh:
         for line in fh:
             line = line.strip()
@@ -91,12 +99,61 @@ def load_rtk_pos_with_status(path: Path) -> dict[float, tuple[np.ndarray, int]]:
                 tow = round(float(parts[1]), 1)
                 ecef = np.array([float(parts[2]), float(parts[3]), float(parts[4])], dtype=np.float64)
                 status = int(float(parts[8]))
+                nsats = int(float(parts[9])) if len(parts) > 9 else 0
+                pdop = float(parts[10]) if len(parts) > 10 else 0.0
+                ratio = float(parts[11]) if len(parts) > 11 else 0.0
             except ValueError:
                 continue
             if not np.all(np.isfinite(ecef)):
                 continue
-            out[tow] = (ecef, status)
+            out[tow] = RtkPosRecord(
+                ecef=ecef,
+                status=status,
+                nsats=max(0, nsats),
+                pdop=max(0.0, pdop),
+                ratio=max(0.0, ratio),
+            )
     return out
+
+
+def load_rtk_pos_with_status(path: Path) -> dict[float, tuple[np.ndarray, int]]:
+    """Parse a libgnss++ ``.pos`` file into ``TOW -> (ECEF, Status)``.
+
+    Column layout: ``GPS_Week GPS_TOW X Y Z Lat Lon Height Status ...``
+    (see ``experiments/results/libgnss_rtk_pos_v5/tokyo_run1_full.pos``
+    header). Unlike ``exp_ppc_ctrbpf_fgo._load_hybrid_pos_file`` (which
+    drops Status==0 rows), this keeps every parseable row so callers can
+    decide their own fix/float/none classification.
+    """
+    return {tow: (rec.ecef, rec.status) for tow, rec in load_rtk_pos_extended(path).items()}
+
+
+def anchor_sigma_m(
+    record: RtkPosRecord,
+    anchor_class: int,
+    *,
+    fix_sigma_m: float,
+    float_sigma_m: float,
+    sigma_scale: float = 1.0,
+    quality_weight: bool = True,
+) -> float:
+    """Truth-honest anchor σ for FIX (class 2) or FLOAT (class 1) rows (WP12e)."""
+
+    if int(anchor_class) == 2:
+        base = float(fix_sigma_m)
+    elif int(anchor_class) == 1:
+        pdop_sigma = float(record.pdop) * 0.8 if record.pdop > 0.0 else 0.0
+        base = float(max(float_sigma_m, pdop_sigma, 2.0))
+        base = min(base, 5.0)
+    else:
+        return float("inf")
+    sigma = base * max(float(sigma_scale), 1.0e-6)
+    if quality_weight:
+        ns = max(int(record.nsats), 4)
+        sigma *= math.sqrt(8.0 / float(ns))
+        if int(anchor_class) == 1 and record.ratio > 0.0 and record.ratio < 3.0:
+            sigma *= 1.5
+    return float(max(sigma, 0.05))
 
 
 def build_hybrid_seed(
@@ -154,24 +211,40 @@ def nearest_fix_distance_epochs(anchor_class: np.ndarray) -> np.ndarray:
     length" diagnostic (work item 4/6): how far decimeter accuracy
     propagates outward from an anchor.
     """
+    return nearest_anchor_distance_epochs(anchor_class, include_fix=True, include_float=False)
+
+
+def nearest_anchor_distance_epochs(
+    anchor_class: np.ndarray,
+    *,
+    include_fix: bool = True,
+    include_float: bool = False,
+) -> np.ndarray:
+    """Epoch-count distance to the nearest enabled anchor class (WP12e)."""
+
     anchor_class = np.asarray(anchor_class)
     n = anchor_class.size
     dist = np.full(n, np.inf, dtype=np.float64)
-    fix_idx = np.flatnonzero(anchor_class == 2)
-    if fix_idx.size == 0:
+    anchor_mask = np.zeros(n, dtype=bool)
+    if include_fix:
+        anchor_mask |= anchor_class == 2
+    if include_float:
+        anchor_mask |= anchor_class == 1
+    anchor_idx = np.flatnonzero(anchor_mask)
+    if anchor_idx.size == 0:
         return dist
-    # Forward pass.
     last = -np.inf
     for i in range(n):
-        if anchor_class[i] == 2:
+        if anchor_mask[i]:
             last = i
-        dist[i] = min(dist[i], i - last)
-    # Backward pass.
+        if np.isfinite(last):
+            dist[i] = min(dist[i], i - last)
     last = np.inf
     for i in range(n - 1, -1, -1):
-        if anchor_class[i] == 2:
+        if anchor_mask[i]:
             last = i
-        dist[i] = min(dist[i], last - i)
+        if np.isfinite(last):
+            dist[i] = min(dist[i], last - i)
     return dist
 
 
