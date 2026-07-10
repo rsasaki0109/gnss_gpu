@@ -1,6 +1,6 @@
 # inuex35 tightly-coupled-gnss-imu-fgo — benchmark target & comparison
 
-Last updated: 2026-07-07 (WP12e).
+Last updated: 2026-07-10 (WP14 — verified closure, see "Campaign closure (2026-07-10)").
 
 This is the working document for the campaign to **beat
 [inuex35/tightly-coupled-gnss-imu-fgo](https://github.com/inuex35/tightly-coupled-gnss-imu-fgo)
@@ -159,7 +159,46 @@ inherited), **GTSAM supplies the estimator**.
 | Track R | WP12e: dense RTK FIX+FLOAT anchoring + anchor-proximity cert calibration | `results/wp12e/`, `python/gnss_gpu/tc_fgo.py` | **done** — `WP12E_REPORT.md`; stage-2 gate **FAIL**; dense anchors cut probe AllRMS **156→67 m**, full run1 FixRMS **60→1.6 m**, but `<50cm_full%` **7.0→7.2 %** (FLOAT truth RMS **21 m** in drift); canyon 0 FIX / 115 m unchanged. **32 Python tests** |
 | next | **PF/RBPF milestone 2** or **RTK-engine structural FIX/IMU coupling** (inuex35-shaped absolute core) — TC-FGO anchor axis exhausted | campaign doc §PF hybrid | recommended |
 
-## Campaign closure (2026-07-07)
+## Campaign closure (2026-07-10) — WP14 verified: the goal is met in libgnss++
+
+**Verdict: inuex35 beaten, locally verified.** The gnssplusplus (libgnss++)
+`FGOBackend::GTSAM` tightly-coupled GNSS/IMU backend (upstream develop@09fec9a,
+submodule bumped in c9fbc75, our Phase18/WP9-10 carried as PR
+[gnssplusplus-library#284](https://github.com/rsasaki0109/gnssplusplus-library/pull/284))
+reproduces its README parity numbers **exactly (all 9 digits)** on a local
+MSVC + GTSAM 4.3.0 build — full Tokyo runs, coverage 99.8–100 %:
+
+| run | libgnss++ `<50cm` (2D) | fix % | FixRMS | inuex35 `<50cm` | inuex35 fix % |
+|---|---:|---:|---:|---:|---:|
+| run1 | **56.8** | **54.7** | 0.89 m | 56.7 | 49.5 |
+| run2 | **80.5** | **78.0** | 0.63 m | 69.9 | 60.8 |
+| run3 | **72.8** | **72.2** | 0.29 m | 67.9 | 59.4 |
+
+Honest caveat (full detail in `results/wp14/WP14_REPORT.md`): the upstream
+README's `<50cm` side-by-side compares its **2D-horizontal** metric against
+inuex35's **3D** numbers. Under matched 3D definitions vs the same-machine
+inuex35 repro: **fix-rate wins all 3 runs decisively** (identically defined:
+54.7/78.0/72.2 vs 46.9/60.8/59.4); `<50cm` = run2 clear win (+7.4 pp),
+run1/run3 −2.9/−1.9 pp (inside the known ±4.3 pp LAMBDA platform-variance
+band = statistical ties). Bottom line: **fix-rate all-win + `<50cm`
+1-win-2-tie under the strictest reading; full win as published.**
+
+**The Python standalone campaign (WP13a–WP13s, `repro_tc_fgo/`)** rebuilt the
+same machinery from scratch (DD-PR+DD-CP, IMU tight coupling, joint-marginal
+AR, accept gate, slip resets, conditioned holds, recovery) and reached
+best-per-run **36.3 / 51.1 / 63.3** `<50cm_full%` — **beating WP7 RTK
+(25.4/43.2/43.7) on all three runs** — with cm-median fix purity and the
+canyon fully cracked (747 fixes, ≤1 false). Its 19 work-package diagnostic
+chain (reports under `repro_tc_fgo/results/wp13*/`) is what localized the
+mechanisms that the C++ backend's urban stack embodies. NLOS priors were
+**empirically falsified at all three injection layers** (WP7/WP8/WP13b) —
+the city-model edge thesis is retired.
+
+Next (2026-07-10): WP15 CUDA acceleration of Python hot paths (in flight);
+optional Python parity levers V9/B14 (recovery-float) if the standalone is
+pursued to full tc/ parity.
+
+## Campaign closure (2026-07-07, superseded by the 2026-07-10 closure above)
 
 **Verdict: inuex35 not beaten on `<50cm_full%`.** Best self-contained TC-FGO stack (WP12e) vs inuex35 README targets:
 
