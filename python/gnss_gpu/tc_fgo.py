@@ -336,12 +336,12 @@ def imu_preintegration_residual(
     dt = float(segment.delta_t_s)
     R_i = _quat_to_rotmat(q_i)
     R_j = _quat_to_rotmat(q_j)
-    l = np.asarray(lever_arm_body_m, dtype=np.float64).reshape(3)
+    lever_arm = np.asarray(lever_arm_body_m, dtype=np.float64).reshape(3)
     dp, dv = bias_corrected_preintegration(segment, b_a, b_g, b_a_lin, b_g_lin)
     dp_enu = R_i @ dp
     dv_enu = R_i @ dv
-    lever_i = R_i @ l
-    lever_j = R_j @ l
+    lever_i = R_i @ lever_arm
+    lever_j = R_j @ lever_arm
     r_p = (
         np.asarray(p_j, dtype=np.float64).reshape(3)
         - np.asarray(p_i, dtype=np.float64).reshape(3)
