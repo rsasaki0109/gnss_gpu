@@ -1,6 +1,6 @@
 # inuex35 tightly-coupled-gnss-imu-fgo — benchmark target & comparison
 
-Last updated: 2026-07-10 (WP14 — verified closure, see "Campaign closure (2026-07-10)").
+Last updated: 2026-07-11 (RB-FGO-PF milestone 2).
 
 This is the working document for the campaign to **beat
 [inuex35/tightly-coupled-gnss-imu-fgo](https://github.com/inuex35/tightly-coupled-gnss-imu-fgo)
@@ -13,6 +13,37 @@ on the shared Tokyo PPC benchmark**. Sequencing decided 2026-07-04:
 Win criterion: side-by-side on **both metric families** (their
 AllRMS/FixRMS/fix%/<50cm *and* our `ppc_score` OFFICIAL%), same runs, same
 epochs, coverage reported honestly. Headline metric: **<50cm%**.
+
+## RB-FGO-PF milestone 2 (2026-07-11) — inuex35 beaten
+
+Our Rao-Blackwellized particle filter over integer-ambiguity basins beats the
+inuex35 README result on all three Tokyo PPC runs using the matched-3D official
+scorer:
+
+| `<50cm_full%` (3D) | run1 | run2 | run3 |
+|---|---:|---:|---:|
+| inuex35 README | 56.7 | 69.9 | 67.9 |
+| libgnss++ GTSAM (2D reference) | 56.8 | 80.5 | 72.8 |
+| **RB-FGO-PF (ours, 3D)** | **59.6** | **78.7** | **78.1** |
+
+Shipped FixRMS is 0.104/0.121/0.150 m, median fixed error is about 3 cm,
+fix rate is 43.1/75.1/73.7%, and PPC OFFICIAL is 57.8/80.0/82.2%. The canyon
+probe produced 283 fixes and no false fix. The shipped result uses the `nb >= 9`
+floor and output guards `RBPF_FIX_VOTE_DD=6` and `RBPF_FIX_VOTE_DPR=3.5`.
+
+Run 3 false-fix rate is 3.09%, above the approximately 2% target, due to 281
+false fixes in a coherent 0.53 m shift at tow `[179700,179900)`. Posterior
+confidence is approximately 0.9999, while DDPR is affected by the roughly 1 m
+multipath-bias floor; DDPR hold-release and challenger spawns proved
+unshippable. An `nb >= 11` analysis reaches 0.82% but was not substituted for
+the shipped result. Per-cluster relinearization is the identified next fix.
+
+Gamma is calibrated where coherent multipath shifts are absent (96.3–97.1%
+full-scale accuracy for gamma >= 0.99), not universally perfect. Run 1 AllRMS
+is 19.5 m because of its tunnel float tail; its fixed layer is unaffected. The
+CUDA batch-LAMBDA path is 0.71x at batch size one because the architecture
+normally submits one shared problem per epoch, so CPU remains the default.
+FFBSi was descoped because basin-lineage smoothing requires new design work.
 
 ## Target numbers (their README, Tokyo PPC, full length, defaults, NF=3)
 

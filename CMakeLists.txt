@@ -159,6 +159,18 @@ add_library(gnss_gpu_rtk
 target_include_directories(gnss_gpu_rtk PUBLIC include)
 target_link_libraries(gnss_gpu_rtk CUDA::cudart)
 
+# --- Batched LAMBDA AR module (WP15) ---
+# --fmad=false: the kernel transcribes cssrlib mlambda.py's floating-point
+# operation order exactly; FMA contraction would break bit-parity with the
+# CPU (numba njit) reference.
+add_library(gnss_gpu_ar
+  src/ar/lambda_batch.cu
+)
+target_include_directories(gnss_gpu_ar PUBLIC include)
+target_link_libraries(gnss_gpu_ar CUDA::cudart)
+target_compile_options(gnss_gpu_ar PRIVATE
+  $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>)
+
 # --- Python bindings ---
 if(pybind11_FOUND)
   # Original bindings (positioning + coordinates)
@@ -211,6 +223,10 @@ if(pybind11_FOUND)
   # RTK bindings
   pybind11_add_module(_gnss_gpu_rtk python/gnss_gpu/_rtk_bindings.cpp)
   target_link_libraries(_gnss_gpu_rtk PRIVATE gnss_gpu_rtk)
+
+  # Batched LAMBDA AR bindings (WP15)
+  pybind11_add_module(_gnss_gpu_lambda_batch python/gnss_gpu/_lambda_batch_bindings.cpp)
+  target_link_libraries(_gnss_gpu_lambda_batch PRIVATE gnss_gpu_ar)
 
   # Ephemeris bindings
   pybind11_add_module(_gnss_gpu_ephemeris python/gnss_gpu/_ephemeris_bindings.cpp)
@@ -298,7 +314,8 @@ if(pybind11_FOUND)
     _gnss_gpu_tracking _gnss_gpu_pf _gnss_gpu_svgd _gnss_gpu_pf3d
     _gnss_gpu_atmosphere _gnss_gpu_ekf _gnss_gpu_raim _bvh
     _gnss_gpu_pf3d_bvh _gnss_gpu_pf_device _gnss_gpu_doppler
-    _gnss_gpu_rtk _gnss_gpu_ephemeris _gnss_gpu_signal_sim
+    _gnss_gpu_rtk _gnss_gpu_lambda_batch _gnss_gpu_ephemeris
+    _gnss_gpu_signal_sim
     DESTINATION gnss_gpu
   )
 endif()
