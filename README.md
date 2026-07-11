@@ -70,6 +70,41 @@ and the GSDC2023 Kaggle smartphone-decimeter challenge).
 > GPU PF stack consistently wins against EKF and RTKLIB on the same epochs. Full tables,
 > figures, and limitations live on the [results snapshot](https://rsasaki0109.github.io/gnss_gpu/).
 
+## RB-FGO-PF: integer ambiguity without premature collapse
+
+The milestone-2 estimator treats integer ambiguities as persistent discrete
+**basins** and Rao-Blackwellizes the continuous fixed-lag GNSS/IMU graph. On the
+shared Tokyo PPC benchmark, the shipped WP18 configuration beats the published
+inuex35 `<50cm_full%` result on all three runs using the stricter matched-3D
+score (missing rover epochs count as failures).
+
+| `<50cm_full%` | Tokyo run1 | Tokyo run2 | Tokyo run3 |
+|---|---:|---:|---:|
+| inuex35 README | 56.7% | 69.9% | 67.9% |
+| libgnss++ GTSAM | 56.8% | **80.5%** | 72.8% |
+| **RB-FGO-PF (ours, 3D)** | **59.6%** | 78.7% | **78.1%** |
+
+<p align="center">
+  <img src="docs/assets/figures/rbpf_fgo_tokyo.svg" alt="RB-FGO-PF compared with inuex35 and libgnss++ on three Tokyo PPC runs" width="900">
+</p>
+
+| Shipped RB-FGO-PF quality | run1 | run2 | run3 |
+|---|---:|---:|---:|
+| FixRMS ↓ | **0.104 m** | **0.121 m** | **0.150 m** |
+| Fix rate | 43.1% | 75.1% | 73.7% |
+| Median fixed error | 3.3 cm | 2.6 cm | 3.2 cm |
+| False fixes / shipped fixes ↓ | 0.59% | 0.37% | 3.09% |
+| PPC OFFICIAL | 57.80% | 80.02% | 82.19% |
+
+The result is deliberately reported with its limits: run3's 3.09% false-fix
+rate is above the approximately 2% integrity target, and run1 AllRMS is dominated
+by a tunnel float tail. A later basin-memory ablation improves full-run run3 to
+83.32% `<50cm_full%` and 0.67% false fixes, but regresses run2 purity; it is
+preserved as a negative result and is **not** the shipped configuration. See the
+[benchmark record](internal_docs/inuex35_tc_fgo_benchmark.md),
+[RB-FGO-PF design](internal_docs/rbpf_fgo_design.md), and
+[WP15 CUDA batch-LAMBDA report](results/wp15/WP15_REPORT.md).
+
 ## Particle-filter localization on OpenStreetMap
 
 The README headline is not just a table: the sampled particle cloud is localized
