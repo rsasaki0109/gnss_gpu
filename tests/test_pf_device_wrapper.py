@@ -11,6 +11,11 @@ try:
         pf_device_initialize,
         pf_device_predict,
         pf_device_weight,
+        pf_device_weight_dd_pseudorange,
+        pf_device_weight_dd_carrier_afv,
+        pf_device_weight_dd_joint,
+        pf_device_get_log_weights,
+        pf_device_sync,
     )
     HAS_GPU = True
 except ImportError:
@@ -130,3 +135,48 @@ def test_pf_device_binding_valid_smoke_shapes():
     pr = np.array([20000.0 + 100.0], dtype=np.float64)
     ws = np.ones(1, dtype=np.float64)
     pf_device_weight(state, sat, pr, ws, 1, 5.0)
+
+
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+def test_pf_device_joint_dd_update_matches_sequential_updates():
+    n_particles = 256
+    n_dd = 3
+    receiver = np.array([1.0e6, 2.0e6, 3.0e6], dtype=np.float64)
+    sat_k = np.array([
+        [2.1e7, 1.2e7, 1.6e7],
+        [1.4e7, 2.2e7, 1.1e7],
+        [2.3e7, 0.8e7, 1.5e7],
+    ], dtype=np.float64)
+    sat_ref = np.tile([1.8e7, 1.9e7, 1.3e7], (n_dd, 1)).astype(np.float64)
+    base_range_k = np.linalg.norm(sat_k - receiver, axis=1)
+    base_range_ref = np.linalg.norm(sat_ref - receiver, axis=1)
+    dd_pr = np.array([0.4, -0.7, 1.1], dtype=np.float64)
+    dd_cp = np.array([0.04, -0.02, 0.07], dtype=np.float64)
+    weights = np.array([1.0, 0.8, 0.6], dtype=np.float64)
+    wavelengths = np.full(n_dd, 0.190293673, dtype=np.float64)
+
+    sequential = pf_device_create(n_particles)
+    joint = pf_device_create(n_particles)
+    for state in (sequential, joint):
+        pf_device_initialize(state, *receiver, 0.0, 10.0, 100.0, 42)
+
+    pf_device_weight_dd_pseudorange(
+        sequential, sat_k.ravel(), sat_ref.ravel(), dd_pr,
+        base_range_k, base_range_ref, weights, n_dd, 0.75,
+        0.0, False, 1.5)
+    pf_device_weight_dd_carrier_afv(
+        sequential, sat_k.ravel(), sat_ref.ravel(), dd_cp,
+        base_range_k, base_range_ref, weights, wavelengths, n_dd, 0.05,
+        0.0, False, 1.5)
+    pf_device_weight_dd_joint(
+        joint, sat_k.ravel(), sat_ref.ravel(), dd_pr, dd_cp,
+        base_range_k, base_range_ref, weights, wavelengths, n_dd,
+        0.75, 0.05, 0.0, 0.0, False, 1.5, 1.5)
+    pf_device_sync(sequential)
+    pf_device_sync(joint)
+
+    sequential_weights = np.empty(n_particles, dtype=np.float64)
+    joint_weights = np.empty(n_particles, dtype=np.float64)
+    pf_device_get_log_weights(sequential, sequential_weights)
+    pf_device_get_log_weights(joint, joint_weights)
+    np.testing.assert_array_equal(joint_weights, sequential_weights)

@@ -2187,6 +2187,69 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
 
 }
 
+void pf_device_weight_dd_joint(PFDeviceState* state,
+    const double* sat_ecef_k, const double* ref_ecef,
+    const double* dd_pseudorange, const double* dd_carrier,
+    const double* base_range_k, const double* base_range_ref,
+    const double* weights_dd, const double* wavelengths_m,
+    int n_dd, double sigma_pr, double sigma_cycles,
+    double per_particle_nlos_threshold_m,
+    double per_particle_nlos_threshold_cycles,
+    bool per_particle_huber,
+    double per_particle_huber_dd_pr_k,
+    double per_particle_huber_dd_carrier_k) {
+
+    if (n_dd <= 0 || sigma_pr <= 0.0 || sigma_cycles <= 0.0) return;
+
+    int N = state->n_particles;
+    int grid = state->grid_size;
+    int pr_doubles = n_dd * 10;
+    int cp_doubles = n_dd * 11;
+    int total_doubles = pr_doubles + cp_doubles;
+    size_t total_bytes = (size_t)total_doubles * sizeof(double);
+
+    ensure_obs_scratch(state, total_doubles);
+    double* h_pr = state->h_obs_scratch;
+    double* h_cp = h_pr + pr_doubles;
+    int off = 0;
+    memcpy(h_pr + off, sat_ecef_k, n_dd * 3 * sizeof(double)); off += n_dd * 3;
+    memcpy(h_pr + off, ref_ecef, n_dd * 3 * sizeof(double)); off += n_dd * 3;
+    memcpy(h_pr + off, dd_pseudorange, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_pr + off, base_range_k, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_pr + off, base_range_ref, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_pr + off, weights_dd, n_dd * sizeof(double));
+
+    off = 0;
+    memcpy(h_cp + off, sat_ecef_k, n_dd * 3 * sizeof(double)); off += n_dd * 3;
+    memcpy(h_cp + off, ref_ecef, n_dd * 3 * sizeof(double)); off += n_dd * 3;
+    memcpy(h_cp + off, dd_carrier, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_cp + off, base_range_k, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_cp + off, base_range_ref, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_cp + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_cp + off, wavelengths_m, n_dd * sizeof(double));
+
+    CUDA_CHECK(cudaMemcpyAsync(
+        state->d_obs_scratch, h_pr, total_bytes,
+        cudaMemcpyHostToDevice, state->stream));
+    double* d_pr = state->d_obs_scratch;
+    double* d_cp = d_pr + pr_doubles;
+
+    pfd_weight_dd_pseudorange_kernel<<<
+        grid, BLOCK_SIZE, (size_t)pr_doubles * sizeof(double), state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        d_pr, state->d_log_weights,
+        N, n_dd, sigma_pr, per_particle_nlos_threshold_m,
+        per_particle_huber, per_particle_huber_dd_pr_k);
+    CUDA_CHECK_LAST();
+    pfd_weight_dd_carrier_afv_kernel<<<
+        grid, BLOCK_SIZE, (size_t)cp_doubles * sizeof(double), state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        d_cp, state->d_log_weights,
+        N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles,
+        per_particle_huber, per_particle_huber_dd_carrier_k);
+    CUDA_CHECK_LAST();
+}
+
 // ============================================================
 // Weight/update: Doppler velocity
 // ============================================================

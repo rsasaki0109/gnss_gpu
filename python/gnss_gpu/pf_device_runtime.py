@@ -433,6 +433,49 @@ class ParticleFilterDeviceRuntime:
         if resample:
             _ = self.resample_if_needed()
 
+    def update_dd_joint(self, dd_result, wavelength=None, sigma_pr=0.75,
+                        sigma_cycles=0.05, resample=True):
+        """Apply DD pseudorange and carrier AFV weights in one native update.
+
+        This is numerically equivalent to calling ``update_dd_pseudorange``
+        and ``update_dd_carrier_afv`` without intermediate resampling, while
+        packing and transferring the shared observation epoch only once.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+
+        if wavelength is None:
+            wavelengths = getattr(dd_result, "wavelengths_m", None)
+            if wavelengths is None:
+                wavelengths = np.full(dd_result.n_dd, 0.190293673, dtype=np.float64)
+            else:
+                wavelengths = np.asarray(wavelengths, dtype=np.float64).ravel()
+        else:
+            wavelengths = np.full(dd_result.n_dd, float(wavelength), dtype=np.float64)
+
+        self._pf_device_weight_dd_joint(
+            self._state,
+            dd_result.sat_ecef_k.ravel(),
+            dd_result.sat_ecef_ref.ravel(),
+            dd_result.dd_pseudorange_m,
+            dd_result.dd_carrier_cycles,
+            dd_result.base_range_k,
+            dd_result.base_range_ref,
+            dd_result.dd_weights,
+            wavelengths,
+            dd_result.n_dd,
+            float(sigma_pr),
+            float(sigma_cycles),
+            self._per_particle_threshold(self.per_particle_nlos_dd_pr_threshold_m),
+            self._per_particle_threshold(self.per_particle_nlos_dd_carrier_threshold_cycles),
+            self.per_particle_huber,
+            self._per_particle_huber_k(self.per_particle_huber_dd_pr_k),
+            self._per_particle_huber_k(self.per_particle_huber_dd_carrier_k),
+        )
+
+        if resample:
+            _ = self.resample_if_needed()
+
     def update_doppler(self, sat_ecef, sat_vel, doppler_hz, weights=None,
                        wavelength=0.19029367279836488, sigma_mps=0.5,
                        velocity_update_gain=0.25,

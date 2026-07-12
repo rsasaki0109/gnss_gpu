@@ -156,6 +156,20 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     bool per_particle_huber = false,
     double per_particle_huber_k = 1.5);
 
+// Fused DD pseudorange + carrier AFV update. Packs both kernel inputs into one
+// H2D transfer and launches the existing likelihood kernels on the same stream.
+void pf_device_weight_dd_joint(PFDeviceState* state,
+    const double* sat_ecef_k, const double* ref_ecef,
+    const double* dd_pseudorange, const double* dd_carrier,
+    const double* base_range_k, const double* base_range_ref,
+    const double* weights_dd, const double* wavelengths_m,
+    int n_dd, double sigma_pr, double sigma_cycles,
+    double per_particle_nlos_threshold_m = 0.0,
+    double per_particle_nlos_threshold_cycles = 0.0,
+    bool per_particle_huber = false,
+    double per_particle_huber_dd_pr_k = 1.5,
+    double per_particle_huber_dd_carrier_k = 1.5);
+
 // Velocity-domain update using Doppler observations.
 // sat_ecef: [n_sat, 3] satellite positions [m]
 // sat_vel: [n_sat, 3] satellite velocities [m/s]
