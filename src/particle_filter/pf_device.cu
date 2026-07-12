@@ -1355,11 +1355,18 @@ PFDeviceState* pf_device_create(int n_particles) {
     CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, MAX_SATS * 3 * sizeof(double)));
     CUDA_CHECK(cudaMalloc(&state->d_pseudoranges, MAX_SATS * sizeof(double)));
     CUDA_CHECK(cudaMalloc(&state->d_weights_sat, MAX_SATS * sizeof(double)));
+    state->obs_scratch_capacity = MAX_SATS * 11;
+    CUDA_CHECK(cudaMalloc(
+        &state->d_obs_scratch,
+        (size_t)state->obs_scratch_capacity * sizeof(double)));
 
     // Pinned host memory for async transfers
     CUDA_CHECK(cudaMallocHost(&state->h_sat_pinned, MAX_SATS * 5 * sizeof(double)));
     CUDA_CHECK(cudaMallocHost(&state->h_result_pinned, 4 * sizeof(double)));
     CUDA_CHECK(cudaMallocHost(&state->h_reduction_pinned, grid * 6 * sizeof(double)));
+    CUDA_CHECK(cudaMallocHost(
+        &state->h_obs_scratch,
+        (size_t)state->obs_scratch_capacity * sizeof(double)));
 
     state->allocated = true;
     return state;
@@ -1401,11 +1408,13 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     cudaFree(state->d_sat_ecef);
     cudaFree(state->d_pseudoranges);
     cudaFree(state->d_weights_sat);
+    cudaFree(state->d_obs_scratch);
 
     // Free pinned host memory
     cudaFreeHost(state->h_sat_pinned);
     cudaFreeHost(state->h_result_pinned);
     cudaFreeHost(state->h_reduction_pinned);
+    cudaFreeHost(state->h_obs_scratch);
 
     // Null out all pointers to prevent use-after-free
     state->d_px = nullptr;
@@ -1417,6 +1426,8 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     state->d_vcov = nullptr;
     state->d_pcb = nullptr;
     state->d_log_weights = nullptr;
+    state->d_obs_scratch = nullptr;
+    state->h_obs_scratch = nullptr;
     state->d_px_tmp = nullptr;
     state->d_py_tmp = nullptr;
     state->d_pz_tmp = nullptr;
@@ -1513,6 +1524,22 @@ void pf_device_predict(PFDeviceState* state,
 // Weight
 // ============================================================
 
+static void ensure_obs_scratch(PFDeviceState* state, int required_doubles) {
+    // The host buffer is pinned and may still be the source of an async copy.
+    // Synchronizing here makes it safe to overwrite while allowing unrelated
+    // kernels to remain asynchronous until another packed-observation update.
+    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+    if (required_doubles <= state->obs_scratch_capacity) return;
+
+    cudaFree(state->d_obs_scratch);
+    cudaFreeHost(state->h_obs_scratch);
+    CUDA_CHECK(cudaMalloc(
+        &state->d_obs_scratch, (size_t)required_doubles * sizeof(double)));
+    CUDA_CHECK(cudaMallocHost(
+        &state->h_obs_scratch, (size_t)required_doubles * sizeof(double)));
+    state->obs_scratch_capacity = required_doubles;
+}
+
 void pf_device_weight(PFDeviceState* state,
     const double* sat_ecef, const double* pseudoranges,
     const double* weights_sat,
@@ -1590,8 +1617,8 @@ void pf_device_weight_dd_pseudorange(PFDeviceState* state,
     int total_doubles = n_dd * 10;
     size_t total_bytes = (size_t)total_doubles * sizeof(double);
 
-    double* h_buf = (double*)malloc(total_bytes);
-    if (!h_buf) return;
+    ensure_obs_scratch(state, total_doubles);
+    double* h_buf = state->h_obs_scratch;
 
     int off = 0;
     memcpy(h_buf + off, sat_ecef_k, n_dd * 3 * sizeof(double)); off += n_dd * 3;
@@ -1601,22 +1628,18 @@ void pf_device_weight_dd_pseudorange(PFDeviceState* state,
     memcpy(h_buf + off, base_range_ref, n_dd * sizeof(double)); off += n_dd;
     memcpy(h_buf + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
 
-    double* d_dd_data = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_dd_data, total_bytes));
     CUDA_CHECK(cudaMemcpyAsync(
-        d_dd_data, h_buf, total_bytes, cudaMemcpyHostToDevice, state->stream));
+        state->d_obs_scratch, h_buf, total_bytes,
+        cudaMemcpyHostToDevice, state->stream));
 
     size_t smem = (size_t)total_doubles * sizeof(double);
     pfd_weight_dd_pseudorange_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
-        d_dd_data, state->d_log_weights,
+        state->d_obs_scratch, state->d_log_weights,
         N, n_dd, sigma_pr, per_particle_nlos_threshold_m,
         per_particle_huber, per_particle_huber_k);
     CUDA_CHECK_LAST();
 
-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
-    CUDA_CHECK(cudaFree(d_dd_data));
-    free(h_buf);
 }
 
 void pf_device_weight_gmm(PFDeviceState* state,
@@ -2137,11 +2160,8 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     int total_doubles = n_dd * 11;
     size_t total_bytes = (size_t)total_doubles * sizeof(double);
 
-    // Check if we need to reallocate (reuse pinned capacity; need total_doubles <= pinned_capacity * 5)
-    // For safety, just use malloc/free for the staging buffer since n_dd is small (~10)
-    // and this is called once per epoch.
-    double* h_buf = (double*)malloc(total_bytes);
-    if (!h_buf) return;
+    ensure_obs_scratch(state, total_doubles);
+    double* h_buf = state->h_obs_scratch;
 
     // Pack
     int off = 0;
@@ -2153,27 +2173,18 @@ void pf_device_weight_dd_carrier_afv(PFDeviceState* state,
     memcpy(h_buf + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
     memcpy(h_buf + off, wavelengths_m, n_dd * sizeof(double)); off += n_dd;
 
-    // Allocate device buffer for DD data (small, ~hundreds of bytes)
-    double* d_dd_data = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_dd_data, total_bytes));
-
-    // Synchronous copy (data is tiny)
-    CUDA_CHECK(cudaMemcpyAsync(d_dd_data, h_buf, total_bytes,
+    CUDA_CHECK(cudaMemcpyAsync(state->d_obs_scratch, h_buf, total_bytes,
                                 cudaMemcpyHostToDevice, state->stream));
 
     // Launch DD-AFV kernel
     size_t smem = (size_t)total_doubles * sizeof(double);
     pfd_weight_dd_carrier_afv_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
-        d_dd_data, state->d_log_weights,
+        state->d_obs_scratch, state->d_log_weights,
         N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles,
         per_particle_huber, per_particle_huber_k);
     CUDA_CHECK_LAST();
 
-    // Free device buffer after kernel completes
-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
-    CUDA_CHECK(cudaFree(d_dd_data));
-    free(h_buf);
 }
 
 // ============================================================
@@ -2197,8 +2208,8 @@ void pf_device_weight_doppler(PFDeviceState* state,
 
     int total_doubles = n_sat * 8;
     size_t total_bytes = (size_t)total_doubles * sizeof(double);
-    double* h_buf = (double*)malloc(total_bytes);
-    if (!h_buf) return;
+    ensure_obs_scratch(state, total_doubles);
+    double* h_buf = state->h_obs_scratch;
 
     int off = 0;
     memcpy(h_buf + off, sat_ecef, n_sat * 3 * sizeof(double)); off += n_sat * 3;
@@ -2206,23 +2217,19 @@ void pf_device_weight_doppler(PFDeviceState* state,
     memcpy(h_buf + off, doppler_hz, n_sat * sizeof(double)); off += n_sat;
     memcpy(h_buf + off, weights_sat, n_sat * sizeof(double)); off += n_sat;
 
-    double* d_doppler_data = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_doppler_data, total_bytes));
     CUDA_CHECK(cudaMemcpyAsync(
-        d_doppler_data, h_buf, total_bytes, cudaMemcpyHostToDevice, state->stream));
+        state->d_obs_scratch, h_buf, total_bytes,
+        cudaMemcpyHostToDevice, state->stream));
 
     size_t smem = (size_t)total_doubles * sizeof(double);
     pfd_weight_doppler_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
         state->d_vx, state->d_vy, state->d_vz,
-        d_doppler_data, state->d_log_weights,
+        state->d_obs_scratch, state->d_log_weights,
         N, n_sat, wavelength_m, sigma_mps,
         velocity_update_gain, max_velocity_update_mps);
     CUDA_CHECK_LAST();
 
-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
-    CUDA_CHECK(cudaFree(d_doppler_data));
-    free(h_buf);
 }
 
 void pf_device_doppler_kf_update(PFDeviceState* state,
@@ -2240,8 +2247,8 @@ void pf_device_doppler_kf_update(PFDeviceState* state,
 
     int total_doubles = n_sat * 8;
     size_t total_bytes = (size_t)total_doubles * sizeof(double);
-    double* h_buf = (double*)malloc(total_bytes);
-    if (!h_buf) return;
+    ensure_obs_scratch(state, total_doubles);
+    double* h_buf = state->h_obs_scratch;
 
     int off = 0;
     memcpy(h_buf + off, sat_ecef, n_sat * 3 * sizeof(double)); off += n_sat * 3;
@@ -2249,22 +2256,18 @@ void pf_device_doppler_kf_update(PFDeviceState* state,
     memcpy(h_buf + off, doppler_hz, n_sat * sizeof(double)); off += n_sat;
     memcpy(h_buf + off, weights_sat, n_sat * sizeof(double)); off += n_sat;
 
-    double* d_doppler_data = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_doppler_data, total_bytes));
     CUDA_CHECK(cudaMemcpyAsync(
-        d_doppler_data, h_buf, total_bytes, cudaMemcpyHostToDevice, state->stream));
+        state->d_obs_scratch, h_buf, total_bytes,
+        cudaMemcpyHostToDevice, state->stream));
 
     size_t smem = (size_t)total_doubles * sizeof(double);
     pfd_doppler_kf_update_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
         state->d_vx, state->d_vy, state->d_vz, state->d_vcov,
-        d_doppler_data, state->d_log_weights,
+        state->d_obs_scratch, state->d_log_weights,
         N, n_sat, wavelength_m, sigma_mps);
     CUDA_CHECK_LAST();
 
-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
-    CUDA_CHECK(cudaFree(d_doppler_data));
-    free(h_buf);
 }
 
 // ============================================================

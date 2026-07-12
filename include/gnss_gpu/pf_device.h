@@ -46,13 +46,18 @@ struct PFDeviceState {
     double* d_sat_ecef;     // [pinned_capacity * 3]
     double* d_pseudoranges; // [pinned_capacity]
     double* d_weights_sat;  // [pinned_capacity]
+    // Reusable packed observation scratch for DD carrier/PR and Doppler.
+    // Capacity is measured in doubles and grows on demand.
+    double* d_obs_scratch;
 
     // Pinned host memory for async H2D transfers
     double* h_sat_pinned;    // pinned memory for satellite data
     double* h_result_pinned; // pinned memory for estimate result (4 doubles)
     // Scratch for ESS / estimate / systematic-resample CPU reductions (6 * grid doubles)
     double* h_reduction_pinned;
+    double* h_obs_scratch;
     int pinned_capacity;     // max satellites supported without realloc
+    int obs_scratch_capacity;
 
     int n_particles;
     int grid_size;  // precomputed (n_particles + 255) / 256
