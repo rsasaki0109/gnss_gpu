@@ -21,6 +21,7 @@ pytest -q \
   tests/test_local_fgo.py \
   tests/test_nmea_writer.py \
   tests/test_ppc.py \
+  tests/test_run_demo.py \
   tests/test_sbas.py \
   tests/test_urbannav.py \
   tests/test_viz.py
