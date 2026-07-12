@@ -36,6 +36,11 @@ def apply_widelane_dd_pseudorange_update(
     observations_config: Any,
     collect_diagnostics: bool,
     min_pairs: int = 3,
+    nlos_tables: Any | None = None,
+    epoch_idx: int | None = None,
+    nlos_k_weak: float = 3.0,
+    nlos_k_strong: float = 3.0,
+    nlos_mask_applied_to_rover_weights: bool = False,
 ) -> PseudorangeEpochUpdateResult:
     current_measurements = list(measurements)
 
@@ -87,6 +92,11 @@ def apply_widelane_dd_pseudorange_update(
         raw_abs_res_max_m=epoch_state.dd_pr_raw_abs_res_max_m,
         gate_scale=epoch_state.dd_pr_gate_scale,
         min_pairs=min_pairs,
+        nlos_tables=nlos_tables,
+        epoch_idx=epoch_idx,
+        nlos_k_weak=nlos_k_weak,
+        nlos_k_strong=nlos_k_strong,
+        nlos_mask_applied_to_rover_weights=nlos_mask_applied_to_rover_weights,
     )
     epoch_state.dd_pr_result = dd_pr_decision.result
     epoch_state.dd_pr_gate_stats = dd_pr_decision.gate_stats

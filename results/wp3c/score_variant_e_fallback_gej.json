@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp3c\\tokyo_run1_fgo_variant_e_fallback_gej.csv",
+  "format": "csv",
+  "n_scored": 11923,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 99.958081824279,
+  "n_fix": 0,
+  "all_rms_m": 121.9208958805468,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 0.0,
+  "lt50cm_full_pct": 0.0,
+  "ppc_official_pct": 0.0,
+  "ppc_note": null
+}

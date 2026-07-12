@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
+  <title id="title">RB-FGO-PF Tokyo PPC benchmark</title>
+  <desc id="desc">Grouped bars compare matched 3D under-50-centimeter full-epoch accuracy on three Tokyo runs. A second panel shows shipped RB-FGO-PF FixRMS.</desc>
+  <rect width="960" height="520" rx="16" fill="#0d1117"/>
+  <text x="48" y="48" fill="#f0f6fc" font-family="system-ui,sans-serif" font-size="25" font-weight="700">Tokyo PPC: integer-basin RB-FGO-PF</text>
+  <text x="48" y="76" fill="#8b949e" font-family="system-ui,sans-serif" font-size="14">Matched 3D · missing rover epochs count as failures · WP18 shipped configuration</text>
+
+  <g font-family="system-ui,sans-serif">
+    <text x="48" y="116" fill="#f0f6fc" font-size="17" font-weight="600">&lt;50 cm full-epoch accuracy (%) ↑</text>
+    <line x1="62" y1="384" x2="590" y2="384" stroke="#30363d"/>
+    <line x1="62" y1="318" x2="590" y2="318" stroke="#21262d"/>
+    <line x1="62" y1="252" x2="590" y2="252" stroke="#21262d"/>
+    <line x1="62" y1="186" x2="590" y2="186" stroke="#21262d"/>
+    <line x1="62" y1="120" x2="590" y2="120" stroke="#21262d"/>
+    <g fill="#8b949e" font-size="12" text-anchor="end">
+      <text x="54" y="388">0</text><text x="54" y="322">20</text><text x="54" y="256">40</text><text x="54" y="190">60</text><text x="54" y="124">80</text>
+    </g>
+
+    <!-- run 1: scale 3.3 px / percentage point from y=384 -->
+    <rect x="105" y="197" width="32" height="187" rx="4" fill="#8b949e"/>
+    <rect x="141" y="197" width="32" height="187" rx="4" fill="#58a6ff"/>
+    <rect x="177" y="187" width="32" height="197" rx="4" fill="#3fb950"/>
+    <g fill="#f0f6fc" font-size="11" text-anchor="middle"><text x="121" y="190">56.7</text><text x="157" y="190">56.8</text><text x="193" y="180">59.6</text></g>
+
+    <!-- run 2 -->
+    <rect x="275" y="153" width="32" height="231" rx="4" fill="#8b949e"/>
+    <rect x="311" y="118" width="32" height="266" rx="4" fill="#58a6ff"/>
+    <rect x="347" y="124" width="32" height="260" rx="4" fill="#3fb950"/>
+    <g fill="#f0f6fc" font-size="11" text-anchor="middle"><text x="291" y="146">69.9</text><text x="327" y="111">80.5</text><text x="363" y="117">78.7</text></g>
+
+    <!-- run 3 -->
+    <rect x="445" y="160" width="32" height="224" rx="4" fill="#8b949e"/>
+    <rect x="481" y="144" width="32" height="240" rx="4" fill="#58a6ff"/>
+    <rect x="517" y="126" width="32" height="258" rx="4" fill="#3fb950"/>
+    <g fill="#f0f6fc" font-size="11" text-anchor="middle"><text x="461" y="153">67.9</text><text x="497" y="137">72.8</text><text x="533" y="119">78.1</text></g>
+    <g fill="#c9d1d9" font-size="14" text-anchor="middle"><text x="157" y="410">run1</text><text x="327" y="410">run2</text><text x="497" y="410">run3</text></g>
+    <g font-size="12"><rect x="82" y="445" width="14" height="14" rx="2" fill="#8b949e"/><text x="103" y="457" fill="#c9d1d9">inuex35 README</text><rect x="225" y="445" width="14" height="14" rx="2" fill="#58a6ff"/><text x="246" y="457" fill="#c9d1d9">libgnss++ GTSAM (2D reference)</text><rect x="460" y="445" width="14" height="14" rx="2" fill="#3fb950"/><text x="481" y="457" fill="#c9d1d9">RB-FGO-PF (3D)</text></g>
+
+    <line x1="620" y1="104" x2="620" y2="470" stroke="#30363d"/>
+    <text x="654" y="116" fill="#f0f6fc" font-size="17" font-weight="600">Shipped FixRMS (m) ↓</text>
+    <g fill="#8b949e" font-size="12"><text x="654" y="151">run1</text><text x="654" y="231">run2</text><text x="654" y="311">run3</text></g>
+    <g>
+      <rect x="704" y="132" width="187" height="28" rx="6" fill="#21262d"/><rect x="704" y="132" width="130" height="28" rx="6" fill="#3fb950"/><text x="846" y="151" fill="#f0f6fc" font-size="13">0.104</text>
+      <rect x="704" y="212" width="187" height="28" rx="6" fill="#21262d"/><rect x="704" y="212" width="151" height="28" rx="6" fill="#3fb950"/><text x="867" y="231" fill="#f0f6fc" font-size="13">0.121</text>
+      <rect x="704" y="292" width="187" height="28" rx="6" fill="#21262d"/><rect x="704" y="292" width="187" height="28" rx="6" fill="#3fb950"/><text x="902" y="311" fill="#f0f6fc" font-size="13">0.150</text>
+    </g>
+    <text x="654" y="360" fill="#8b949e" font-size="13">Median fixed error: 2.6–3.3 cm</text>
+    <text x="654" y="384" fill="#8b949e" font-size="13">PPC OFFICIAL: 57.8 / 80.0 / 82.2%</text>
+    <rect x="654" y="414" width="260" height="56" rx="8" fill="#161b22" stroke="#30363d"/>
+    <text x="670" y="437" fill="#d29922" font-size="12" font-weight="600">Integrity caveat</text>
+    <text x="670" y="457" fill="#c9d1d9" font-size="12">run3 shipped false-fix: 3.09%</text>
+  </g>
+</svg>

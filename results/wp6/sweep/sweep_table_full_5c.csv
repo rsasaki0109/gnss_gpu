@@ -1,0 +1,2 @@
+name,note,extra_args,wall_s,returncode,engine_total_solutions,engine_valid_solutions,engine_fixed_solutions,engine_fix_rate_pct,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,n_fix,n_fix_after_warmup,frac_fix_after_warmup
+c5_elev10_full,,--elevation-mask-deg 10,229.9,0,7398.0,7398.0,775.0,10.48,7398,11928,62.022,19.8249,0.0835,10.476,40.254,24.966,22.47,775,0,0.0

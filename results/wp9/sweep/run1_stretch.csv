@@ -1,0 +1,33 @@
+name,note,extra_args,wall_s,returncode,engine_total_solutions,engine_valid_solutions,engine_fixed_solutions,engine_fix_rate_pct,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,n_fix,n_fix_after_warmup,frac_fix_after_warmup,canyon_n_scored,canyon_all_rms_m,canyon_fix_rms_m,canyon_fix_pct,canyon_lt50cm_full_pct,stdout_tail
+d0_scaled-reset_qpos0.1_nlosminlos4,winner + WP7 continuous weighting + WP8-rec-2 min-LOS-sats stretch,--max-pos-jump-rate 2.3 --float-trust-policy scaled-reset --trust-lapse-qpos 0.1 --nlos-weight-mode continuous --nlos-continuous-floor 0.5 --nlos-min-los-sats 4 --nlos-weights tokyo_run1_per_epoch_nlos.csv,0.2,1,,,,,0,,,,,,,,,,,,,,,,,"                            in slow bounded segments (default: 12)
+  --float-bridge-tail-min-segment-epochs <n>
+                             Minimum bounded FLOAT-tail segment length to inspect (default: 20)
+  --fixed-bridge-burst-guard
+                             Enable short FIX burst bridge-residual rejection (default: off)
+  --no-fixed-bridge-burst-guard
+                             Disable short FIX burst bridge-residual rejection
+  --fixed-bridge-burst-max-anchor-gap <s>
+                             Max FIX-anchor gap for fixed-burst guard (default: 30)
+  --fixed-bridge-burst-min-boundary-gap <s>
+                             Min gap around a short FIX burst (default: 1)
+  --fixed-bridge-burst-max-residual <m>
+                             Reject burst FIX epochs farther than this from FIX bridge (default: 20)
+  --fixed-bridge-burst-max-segment-epochs <n>
+                             Max short FIX segment length to inspect (default: 12)
+  --max-baseline-m <v>       Max baseline length in meters (default: 20000)
+  --base-ecef <x> <y> <z>    Override base ECEF position in meters
+  --skip-epochs <n>          Skip the first n rover epochs before solving
+  --max-epochs <n>           Stop after n rover epochs
+  --debug-epoch-log <csv>    Write per-epoch AR/debug telemetry CSV
+  --prefer-trusted-seed      Prefer recent trusted/fixed solution as seed
+  --rover-seed-pos <file>    Inject ECEF seed positions from .pos file per epoch
+  --diagnostics-csv <file>   Write per-epoch RTK candidate diagnostics CSV (PPC pipeline format)
+  --rtk-update-outlier-threshold <v>
+                             Outlier rejection threshold for RTK measurement update (default: 30.0)
+  --no-kinematic-post-filter Disable the kinematic output post-filter
+  --no-base-interp           Require exact rover/base epoch alignment
+  --verbose                  Print per-epoch progress summary
+  -h, --help                 Show this help
+Argument error: unknown or incomplete argument: --nlos-min-los-sats
+
+"

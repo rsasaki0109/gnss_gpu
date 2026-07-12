@@ -1,0 +1,66 @@
+[
+  {
+    "config": "baseline_wp11",
+    "path": "results/wp12a/ablation_baseline_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.7,
+    "all_rms_m": 1100.56,
+    "lt50cm_full_pct": 0.16,
+    "notes": "pre-fix ablation (WP11-equivalent flags)"
+  },
+  {
+    "config": "bias",
+    "path": "results/wp12a/ablation_bias_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.7,
+    "all_rms_m": 1098.37,
+    "lt50cm_full_pct": 0.06,
+    "notes": "pre-fix ablation"
+  },
+  {
+    "config": "anchor_fix",
+    "path": "results/wp12a/ablation_anchor_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.7,
+    "all_rms_m": 1095.98,
+    "lt50cm_full_pct": 6.84,
+    "notes": "pre-fix ablation"
+  },
+  {
+    "config": "full_stack_pre_fix",
+    "path": "results/wp12a/ablation_full_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.7,
+    "all_rms_m": 2238.84,
+    "lt50cm_full_pct": 6.81,
+    "notes": "pre-fix; recovery=0 bug (max_shift 50 m rejection)"
+  },
+  {
+    "config": "probe_baseline",
+    "path": "results/wp12a/probe_baseline_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.7,
+    "all_rms_m": 19520.79,
+    "lt50cm_full_pct": 0.16,
+    "notes": "post-fix telemetry run, no recovery"
+  },
+  {
+    "config": "probe_recovery",
+    "path": "results/wp12a/probe_recovery_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.7,
+    "all_rms_m": 330.56,
+    "lt50cm_full_pct": 0.16,
+    "recovery_events": 323
+  },
+  {
+    "config": "probe_best",
+    "path": "results/wp12a/probe_best_4000.pos",
+    "n_scored": 3900,
+    "coverage_pct": 32.7,
+    "all_rms_m": 173.15,
+    "lt50cm_full_pct": 6.81,
+    "recovery_events": 332,
+    "flags": "recovery+anchor-fix+adaptive-huber"
+  }
+]

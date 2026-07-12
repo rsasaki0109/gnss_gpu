@@ -1,0 +1,2 @@
+name,note,extra_args,wall_s,returncode,engine_total_solutions,engine_valid_solutions,engine_fixed_solutions,engine_fix_rate_pct,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,n_fix,n_fix_after_warmup,frac_fix_after_warmup
+c7b_jump0_combo_rms1_nis2,,--max-pos-jump 0 --demote-fixed-status-post-rms 1.0 --demote-fixed-status-nis-per-obs 2,281.8,0,7474.0,7474.0,3174.0,42.47,7474,11928,62.659,18.3617,13.8073,42.467,50.656,31.74,32.881,3174,2062,0.6497

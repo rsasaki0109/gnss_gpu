@@ -28,6 +28,21 @@ from gnss_gpu.raytrace import BuildingModel  # noqa: E402
 
 DEFAULT_DATA_ROOT = Path("datasets/PPC-Dataset-data")
 
+MINIMAL_NLOS_CSV_HEADER = (
+    "tow",
+    "epoch_idx",
+    "prn",
+    "is_los",
+)
+
+EXTENDED_NLOS_CSV_HEADER = MINIMAL_NLOS_CSV_HEADER + (
+    "system",
+    "svid",
+    "elevation_deg",
+    "receiver_source",
+    "receiver_time_delta_s",
+)
+
 
 def _parse_csv_list(text: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in str(text).split(",") if part.strip())
@@ -245,19 +260,7 @@ def build_nlos_csv(args: argparse.Namespace) -> dict[str, float]:
     n_epochs = int(data["n_epochs"])
     with args.out_csv.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(
-            [
-                "tow",
-                "epoch_idx",
-                "prn",
-                "is_los",
-                "system",
-                "svid",
-                "elevation_deg",
-                "receiver_source",
-                "receiver_time_delta_s",
-            ]
-        )
+        writer.writerow(list(EXTENDED_NLOS_CSV_HEADER))
         for start in range(0, n_epochs, int(args.batch_size)):
             end = min(start + int(args.batch_size), n_epochs)
             rx_rows: list[np.ndarray] = []

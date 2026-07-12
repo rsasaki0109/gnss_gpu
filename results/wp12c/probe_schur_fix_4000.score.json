@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp12c\\probe_schur_fix_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 0,
+  "all_rms_m": 211.64672502749934,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 9.307692307692308,
+  "lt50cm_full_pct": 3.043259557344064,
+  "ppc_official_pct": 4.078681133197435,
+  "ppc_note": null
+}

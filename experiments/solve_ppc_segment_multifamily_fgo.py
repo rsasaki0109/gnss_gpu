@@ -110,6 +110,72 @@ def _write_summary(path: Path, row: dict[str, object]) -> None:
         writer.writerow(row)
 
 
+def _parse_status_list(text: str) -> tuple[int, ...]:
+    return tuple(int(s.strip()) for s in str(text).split(",") if s.strip())
+
+
+def _build_rtk_anchor_priors(
+    *,
+    tows: np.ndarray,
+    seed_positions: np.ndarray,
+    anchor_pos_path: Path | None,
+    fix_sigma_m: float,
+    float_sigma_m: float,
+    fix_statuses: tuple[int, ...],
+    float_statuses: tuple[int, ...],
+) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
+    """WP5 work item 2: RTK-status-gated two-tier anchor priors.
+
+    Unlike ``--anchor-source=truth``/``pos`` (oracle-bound: they filter
+    anchors by comparing to the reference trajectory, i.e. ground truth),
+    this source decides anchor quality purely from the libgnss++ ``.pos``
+    Status column (RTK FIX vs FLOAT) -- no ground truth is consulted, so
+    this is usable in a real (non-oracle) pipeline. Status==4 (FIX, cm-class
+    per the campaign benchmark doc) gets ``fix_sigma_m``; Status in
+    ``float_statuses`` (default ``{1, 3}``, m-class) gets the looser
+    ``float_sigma_m``; all other/missing epochs get no prior (sigma 0,
+    endpoint-only priors apply as before).
+    """
+    if anchor_pos_path is None:
+        raise ValueError("--anchor-pos is required when --anchor-source=rtk")
+    if float(fix_sigma_m) <= 0.0 or float(float_sigma_m) <= 0.0:
+        raise ValueError("--anchor-fix-sigma-m and --anchor-float-sigma-m must both be >0")
+    pos_lookup, status_lookup = _load_hybrid_pos_file(anchor_pos_path)
+
+    prior_positions = np.asarray(seed_positions, dtype=np.float64).copy()
+    prior_sigmas = np.zeros(len(prior_positions), dtype=np.float64)
+    n_fix = 0
+    n_float = 0
+    for i, tow in enumerate(np.asarray(tows, dtype=np.float64)):
+        key = round(float(tow), 1)
+        pos = pos_lookup.get(key)
+        status = status_lookup.get(key)
+        if pos is None or status is None:
+            continue
+        if int(status) in fix_statuses:
+            sigma = float(fix_sigma_m)
+            n_fix += 1
+        elif int(status) in float_statuses:
+            sigma = float(float_sigma_m)
+            n_float += 1
+        else:
+            continue
+        prior_positions[i] = np.asarray(pos, dtype=np.float64)
+        prior_sigmas[i] = sigma
+
+    stats: dict[str, object] = {
+        "anchor_source": "rtk",
+        "anchor_count": int(n_fix + n_float),
+        "anchor_fix_count": int(n_fix),
+        "anchor_float_count": int(n_float),
+        "anchor_fix_sigma_m": float(fix_sigma_m),
+        "anchor_float_sigma_m": float(float_sigma_m),
+        "anchor_fix_statuses": ",".join(str(s) for s in fix_statuses),
+        "anchor_float_statuses": ",".join(str(s) for s in float_statuses),
+    }
+    return prior_positions, prior_sigmas, stats
+
+
 def _build_anchor_priors(
     *,
     tows: np.ndarray,
@@ -350,9 +416,26 @@ def main() -> None:
         help="Use SNR weights for undifferenced PR factors; default uses unit weights.",
     )
     parser.add_argument("--lambda-ratio", type=float, default=3.0)
-    parser.add_argument("--lambda-min-epochs", type=int, default=2)
+    parser.add_argument(
+        "--lambda-min-epochs",
+        type=int,
+        default=2,
+        help="Segment-length gate (WP5 work item 3, gate 1): minimum contiguous "
+        "epoch run length required before a track is even offered to the ratio "
+        "test. WP4 used 2 (too permissive -- median accepted segment was 3 "
+        "epochs of pure self-consistency); WP5 uses >=5.",
+    )
     parser.add_argument("--lambda-max-epoch-gap", type=int, default=6)
     parser.add_argument("--lambda-slip-threshold-cycles", type=float, default=1.5)
+    parser.add_argument(
+        "--lambda-ddpr-reject-threshold",
+        type=float,
+        default=0.0,
+        help="DD-pseudorange cross-check gate (WP5 work item 3, gate 2): reject a batch of "
+        "newly-proposed LAMBDA fixes if applying them increases the DD-pseudorange residual "
+        "RMS (over the touched epochs) by more than this fraction relative to the pre-fix "
+        "position. <=0 disables the gate (default; requires --dd-pr data to have any effect).",
+    )
     parser.add_argument("--prior-sigma-m", type=float, default=0.5)
     parser.add_argument(
         "--per-epoch-prior-sigma-m",
@@ -362,9 +445,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--anchor-source",
-        choices=("none", "truth", "pos"),
+        choices=("none", "truth", "pos", "rtk"),
         default="none",
-        help="Optional sparse absolute anchor prior source for oracle-bound checks.",
+        help="Anchor prior source. 'truth'/'pos' are oracle-bound (filter by ground-truth "
+        "error; validation-only). 'rtk' (WP5) is non-oracle: two-tier sigma gated purely by "
+        "the --anchor-pos file's RTK Status column (FIX vs FLOAT), no ground truth involved.",
     )
     parser.add_argument("--anchor-pos", type=Path, default=None)
     parser.add_argument("--anchor-sigma-m", type=float, default=0.05)
@@ -379,6 +464,28 @@ def main() -> None:
         type=float,
         default=0.0,
         help="For --anchor-source=pos, keep only anchors within this truth error; <=0 disables.",
+    )
+    parser.add_argument(
+        "--anchor-fix-sigma-m",
+        type=float,
+        default=0.07,
+        help="--anchor-source=rtk: prior sigma (m) at RTK FIX epochs.",
+    )
+    parser.add_argument(
+        "--anchor-float-sigma-m",
+        type=float,
+        default=2.0,
+        help="--anchor-source=rtk: prior sigma (m) at RTK FLOAT epochs.",
+    )
+    parser.add_argument(
+        "--anchor-fix-statuses",
+        default="4",
+        help="--anchor-source=rtk: comma-separated .pos Status values treated as FIX.",
+    )
+    parser.add_argument(
+        "--anchor-float-statuses",
+        default="1,3",
+        help="--anchor-source=rtk: comma-separated .pos Status values treated as FLOAT.",
     )
     parser.add_argument("--motion-sigma-m", type=float, default=0.25)
     parser.add_argument("--dd-sigma-cycles", type=float, default=0.20)
@@ -452,16 +559,27 @@ def main() -> None:
     motion_deltas = np.diff(seed_positions, axis=0)
     prior_sigmas = None
     prior_positions = seed_positions
-    anchor_positions, anchor_sigmas, anchor_stats = _build_anchor_priors(
-        tows=tows,
-        seed_positions=seed_positions,
-        truth=truth,
-        source=str(args.anchor_source),
-        anchor_pos_path=args.anchor_pos,
-        sigma_m=float(args.anchor_sigma_m),
-        every_n=max(1, int(args.anchor_every_n)),
-        max_error_m=float(args.anchor_max_error_m),
-    )
+    if str(args.anchor_source).strip().lower() == "rtk":
+        anchor_positions, anchor_sigmas, anchor_stats = _build_rtk_anchor_priors(
+            tows=tows,
+            seed_positions=seed_positions,
+            anchor_pos_path=args.anchor_pos,
+            fix_sigma_m=float(args.anchor_fix_sigma_m),
+            float_sigma_m=float(args.anchor_float_sigma_m),
+            fix_statuses=_parse_status_list(args.anchor_fix_statuses),
+            float_statuses=_parse_status_list(args.anchor_float_statuses),
+        )
+    else:
+        anchor_positions, anchor_sigmas, anchor_stats = _build_anchor_priors(
+            tows=tows,
+            seed_positions=seed_positions,
+            truth=truth,
+            source=str(args.anchor_source),
+            anchor_pos_path=args.anchor_pos,
+            sigma_m=float(args.anchor_sigma_m),
+            every_n=max(1, int(args.anchor_every_n)),
+            max_error_m=float(args.anchor_max_error_m),
+        )
     if anchor_positions is not None and anchor_sigmas is not None:
         prior_positions = anchor_positions
         prior_sigmas = anchor_sigmas
@@ -492,6 +610,7 @@ def main() -> None:
         max_epoch_gap=int(args.lambda_max_epoch_gap),
         slip_threshold_cycles=float(args.lambda_slip_threshold_cycles),
         fixed_sigma_cycles=float(args.dd_fixed_sigma_cycles),
+        ddpr_reject_threshold=float(args.lambda_ddpr_reject_threshold),
     )
     result, lambda_summary = solve_local_fgo_with_lambda(problem, config, lambda_config)
 
@@ -537,10 +656,14 @@ def main() -> None:
         **anchor_stats,
         "lambda_ratio": float(args.lambda_ratio),
         "lambda_min_epochs": int(args.lambda_min_epochs),
+        "lambda_ddpr_reject_threshold": float(args.lambda_ddpr_reject_threshold),
         "lambda_n_fixed": int(lambda_summary.get("n_fixed", 0)),
         "lambda_n_fixed_observations": int(lambda_summary.get("n_fixed_observations", 0)),
         "lambda_fixed_epoch_count": int(len(fixed_epochs)),
         "lambda_fixed_by_system": lambda_summary.get("fixed_by_system", {}),
+        "lambda_n_segments_rejected_short": int(lambda_summary.get("n_segments_rejected_short", 0)),
+        "lambda_n_ddpr_rejected_iterations": int(lambda_summary.get("n_ddpr_rejected_iterations", 0)),
+        "lambda_n_ddpr_rejected_observations": int(lambda_summary.get("n_ddpr_rejected_observations", 0)),
         "lambda_iterations": lambda_summary.get("iterations", []),
         "factor_counts": result.factor_counts,
         "initial_error": float(result.initial_error),

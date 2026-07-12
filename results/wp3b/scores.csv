@@ -1,0 +1,4 @@
+method,city,run,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,traj_path
+scores,tokyo,run1,11924,11928,99.966,131.267029,,0.000,0.000,0.000,0.000,results\wp3b\tokyo_run1_fgo_multi_gnss_pr_motion.csv
+scores,tokyo,run1,11676,11928,97.887,110.215534,,0.000,0.000,0.000,0.000,results\wp3b\tokyo_run1_fgo_doppler_huber.csv
+scores,tokyo,run1,11676,11928,97.887,105.734517,,0.000,0.000,0.000,0.000,results\wp3b\tokyo_run1_fgo_imu_doppler_huber.csv

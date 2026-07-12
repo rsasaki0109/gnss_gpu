@@ -1,0 +1,2 @@
+name,note,extra_args,wall_s,returncode,engine_total_solutions,engine_valid_solutions,engine_fixed_solutions,engine_fix_rate_pct,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,n_fix,n_fix_after_warmup,frac_fix_after_warmup
+c7_jump0_demotemaxratio_5,,--max-pos-jump 0 --demote-fixed-status-max-ratio 5,226.0,0,7464.0,7464.0,3005.0,40.26,7464,11928,62.575,18.3678,13.8077,40.26,50.723,31.74,32.881,3005,2163,0.7198

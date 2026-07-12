@@ -1,0 +1,4 @@
+name,note,extra_args,wall_s,returncode,engine_total_solutions,engine_valid_solutions,engine_fixed_solutions,engine_fix_rate_pct,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,n_fix,n_fix_after_warmup,frac_fix_after_warmup
+c7b_jump0_demotepostrms_0.5,,--max-pos-jump 0 --demote-fixed-status-post-rms 0.5,281.1,0,7447.0,7447.0,1185.0,15.91,7447,11928,62.433,18.3887,19.585,15.912,50.611,31.598,32.881,1185,772,0.6515
+c7b_jump0_demotepostrms_1.0,,--max-pos-jump 0 --demote-fixed-status-post-rms 1.0,233.5,0,7433.0,7433.0,3965.0,53.34,7433,11928,62.316,17.9581,14.5283,53.343,50.935,31.74,32.881,3965,2697,0.6802
+c7b_jump0_demotepostrms_2.0,,--max-pos-jump 0 --demote-fixed-status-post-rms 2.0,250.0,0,7474.0,7474.0,4200.0,56.19,7474,11928,62.659,18.3617,14.3838,56.195,50.656,31.74,32.881,4200,2932,0.6981

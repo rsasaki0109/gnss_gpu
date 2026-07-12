@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "C:\\Users\\rsasa\\Workspace\\old\\gnss_gpu\\results\\wp12d\\probe_full_stack_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 431,
+  "all_rms_m": 156.42057086469256,
+  "fix_rms_m": 2.7974404293499253,
+  "fix_pct": 11.051282051282051,
+  "lt50cm_pct": 20.743589743589745,
+  "lt50cm_full_pct": 6.782360831656606,
+  "ppc_official_pct": 6.70835624162769,
+  "ppc_note": null
+}

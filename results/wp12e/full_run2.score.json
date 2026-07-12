@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run2",
+  "traj_path": "C:\\Users\\rsasa\\Workspace\\old\\gnss_gpu\\results\\wp12e\\full_run2.pos",
+  "format": "pos",
+  "n_scored": 9148,
+  "n_rover_epochs": 9151,
+  "coverage_pct": 99.96721669762867,
+  "n_fix": 1234,
+  "all_rms_m": 56.61062632044166,
+  "fix_rms_m": 2.304919599031714,
+  "fix_pct": 13.489287275907301,
+  "lt50cm_pct": 11.718408395277656,
+  "lt50cm_full_pct": 11.714566714020325,
+  "ppc_official_pct": 12.143617032483208,
+  "ppc_note": null
+}

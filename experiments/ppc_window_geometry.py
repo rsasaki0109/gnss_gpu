@@ -22,13 +22,64 @@ from gnss_gpu.io.ppc import (  # noqa: E402
     _PSEUDORANGE_CODE_PREFERENCES,
     _SNR_CODE_PREFERENCES,
     _SYSTEM_ID_MAP,
-    _compute_at_transmit_time,
     _nearest_index,
     _pick_col,
     _pick_obs_value,
     _safe_float,
     _valid_nav_obs_mask,
 )
+
+
+def _compute_at_transmit_time(
+    eph: Ephemeris,
+    tow: float,
+    sat_ids: list[str],
+    pseudorange_codes: list[str],
+    pseudoranges: list[float],
+    n_iterations: int,
+) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """Compute satellite ECEF/clock at each satellite's own transmit time.
+
+    ``gnss_gpu.io.ppc.load_experiment_data`` (the native-FGO backbone loader)
+    evaluates ephemerides at the *reception* epoch ``tow`` directly, which is
+    an acceptable approximation for coarse SPP/WLS but leaves a ~60-90 ms
+    satellite-motion error (order of ~10s of m in ECEF) that is too coarse
+    for the mm/cm-level double-difference carrier work this module feeds.
+    This iterates, per satellite, ``transmit_time = tow - range/c`` using the
+    previous iteration's clock estimate, mirroring the standard SPP
+    transmit-time correction. Not shared with ``ppc.py`` because that loader
+    intentionally stays "reception time" for speed/parity with existing WP3
+    results; this is a local, additive fix (see PROGRESS.md TrackF) for a
+    helper this module always expected to have but that does not exist in
+    ``gnss_gpu.io.ppc`` at the pinned repo revision.
+    """
+    if int(n_iterations) <= 0 or not sat_ids:
+        return eph.compute(float(tow), sat_ids, obs_codes=pseudorange_codes)
+
+    transmit_time = {
+        sat_id: float(tow) - float(pr) / C_LIGHT
+        for sat_id, pr in zip(sat_ids, pseudoranges)
+    }
+    sat_ecef_by_id: dict[str, np.ndarray] = {}
+    sat_clk_by_id: dict[str, float] = {}
+    for _ in range(int(n_iterations)):
+        for sat_id, code, pr in zip(sat_ids, pseudorange_codes, pseudoranges):
+            ecef, clk, used = eph.compute(transmit_time[sat_id], [sat_id], obs_codes=[code])
+            if not used:
+                sat_ecef_by_id.pop(sat_id, None)
+                sat_clk_by_id.pop(sat_id, None)
+                continue
+            sat_ecef_by_id[sat_id] = np.asarray(ecef[0], dtype=np.float64)
+            clk_s = float(clk[0])
+            sat_clk_by_id[sat_id] = clk_s
+            transmit_time[sat_id] = float(tow) - float(pr) / C_LIGHT - clk_s
+
+    used_sat_ids = [sat_id for sat_id in sat_ids if sat_id in sat_ecef_by_id]
+    if not used_sat_ids:
+        return np.zeros((0, 3), dtype=np.float64), np.zeros(0, dtype=np.float64), []
+    sat_ecef = np.vstack([sat_ecef_by_id[sat_id] for sat_id in used_sat_ids])
+    sat_clk = np.array([sat_clk_by_id[sat_id] for sat_id in used_sat_ids], dtype=np.float64)
+    return sat_ecef, sat_clk, used_sat_ids
 
 
 _TIME_ALIASES = ("GPS TOW (s)", "GPS TOW", "gps_tow", "GPS_time", "time")

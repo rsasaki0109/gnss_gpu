@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run3",
+  "traj_path": "results\\wp14\\tokyo_run3_fgo_gtsam.csv",
+  "format": "csv",
+  "n_scored": 15294,
+  "n_rover_epochs": 15301,
+  "coverage_pct": 99.95425135612051,
+  "n_fix": 11049,
+  "all_rms_m": 13.203822687102571,
+  "fix_rms_m": 0.9822835707860843,
+  "fix_pct": 72.24401726167125,
+  "lt50cm_pct": 66.02589250686543,
+  "lt50cm_full_pct": 65.99568655643422,
+  "ppc_official_pct": 62.489955502451146,
+  "ppc_note": null
+}

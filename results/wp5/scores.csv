@@ -1,0 +1,4 @@
+method,city,run,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,traj_path
+scores,tokyo,run1,7397,11928,62.014,19.861196,0.083711,10.477,40.936,25.386,22.883,experiments\results\libgnss_rtk_pos_v5\tokyo_run1_full.pos
+scores,tokyo,run1,11923,11928,99.958,94.052041,58.909646,74.251,24.524,24.514,19.531,results\wp5\tokyo_run1_anchored_fgo.csv
+scores,tokyo,run1,11928,11928,100.000,94.152555,,0.000,25.386,25.386,21.078,results\wp5\tokyo_run1_hybrid_seed.pos

@@ -34,6 +34,9 @@ tmp/site_visual_check/
 # Runtime cache
 cache/
 
+# Downloaded benchmark data (install via experiments/download_ppc_dataset.py)
+datasets/
+
 # Experiment artifacts
 experiments/results/*/
 !experiments/results/paper_assets/
@@ -85,3 +88,13 @@ experiments/results/los_nlos_verification/real_eph_*.png
 .codex_handoff*.md
 plan.md
 experiments/results/pf_smoother_eval.csv.bak
+
+# inuex35 benchmark campaign: local-only bulk artifacts
+data/urbannav/
+third_party/eigen/
+third_party/eigen_install/
+results/**/*.pos
+results/**/*.log
+results/**/*.txt
+results/**/*.npy
+results/**/*.npz

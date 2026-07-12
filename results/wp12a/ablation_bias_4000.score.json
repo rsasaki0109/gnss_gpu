@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp12a\\ablation_bias_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 0,
+  "all_rms_m": 1098.3712042421826,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 0.1794871794871795,
+  "lt50cm_full_pct": 0.05868544600938967,
+  "ppc_official_pct": 0.044599287859608025,
+  "ppc_note": null
+}

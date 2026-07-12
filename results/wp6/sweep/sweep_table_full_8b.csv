@@ -1,0 +1,4 @@
+name,note,extra_args,wall_s,returncode,engine_total_solutions,engine_valid_solutions,engine_fixed_solutions,engine_fix_rate_pct,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,n_fix,n_fix_after_warmup,frac_fix_after_warmup
+c8_jumprate_10,,--max-pos-jump-rate 10.0,305.4,0,7472.0,7472.0,4017.0,53.76,7472,11928,62.643,18.648,13.1764,53.761,52.235,32.721,27.407,4017,2924,0.7279
+c8_jumprate_20,,--max-pos-jump-rate 20.0,219.9,0,7520.0,7520.0,4498.0,59.81,7520,11928,63.045,17.9662,8.7617,59.814,53.963,34.021,26.172,4498,3661,0.8139
+c8_jumprate_30,,--max-pos-jump-rate 30.0,221.4,0,7518.0,7518.0,4511.0,60.0,7518,11928,63.028,18.75,8.8206,60.003,54.057,34.071,25.683,4511,3674,0.8145

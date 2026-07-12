@@ -1,0 +1,26 @@
+{
+  "probe_epochs": 4000,
+  "n_scored": 3900,
+  "base_config": "recovery+anchor-fix",
+  "rows": [
+    {"config": "wp12a baseline", "flags": [], "all_rms_m": 111.925, "fix_rms_m": null, "fix_pct": 0.0, "lt50cm_full_pct": 6.8},
+    {"config": "+dynamic-dd-rebuild", "flags": ["dynamic-dd-rebuild"], "all_rms_m": 111.921, "fix_rms_m": null, "fix_pct": 0.0, "lt50cm_full_pct": 6.8},
+    {"config": "+dd-carrier (float amb)", "flags": ["dynamic-dd-rebuild", "dd-carrier"], "all_rms_m": 110.384, "fix_rms_m": null, "fix_pct": 0.0, "lt50cm_full_pct": 6.8},
+    {"config": "full (+lambda-ar)", "flags": ["dynamic-dd-rebuild", "dd-carrier", "lambda-ar"], "all_rms_m": 110.384, "fix_rms_m": 23.669, "fix_pct": 80.2, "lt50cm_full_pct": 6.8},
+    {"config": "best (window-state fix)", "flags": ["dynamic-dd-rebuild", "dd-carrier", "lambda-ar"], "all_rms_m": 110.205, "fix_rms_m": 23.251, "fix_pct": 80.1, "lt50cm_full_pct": 6.8, "notes": "prior agent window-state fix"},
+    {"config": "strict AR (min_epochs=8)", "flags": ["dynamic-dd-rebuild", "dd-carrier", "lambda-ar"], "all_rms_m": 110.199, "fix_rms_m": null, "fix_pct": 0.0, "lt50cm_full_pct": 6.8, "notes": "lambda_min_epochs=8"},
+    {"config": "+persistent-ambiguities", "flags": ["dynamic-dd-rebuild", "dd-carrier", "persistent-ambiguities"], "all_rms_m": 109.700, "fix_rms_m": null, "fix_pct": 0.0, "lt50cm_full_pct": 5.1, "recovery_events": 259, "cross_window_prior_mean": 19.7},
+    {"config": "window_epochs=25 (first 1000 ep)", "flags": ["dynamic-dd-rebuild", "dd-carrier", "persistent-ambiguities", "window-epochs=25"], "all_rms_m": 1.880, "fix_rms_m": null, "fix_pct": 0.0, "lt50cm_full_pct": 5.6, "n_scored": 1000, "wall_s": 728.0, "notes": "early segment only; 7.3x s/epoch vs window=5"}
+  ],
+  "telemetry_highlights": {
+    "persist_probe": {
+      "pre1000_rms_m": 2.32,
+      "ep500_800_rms_m": 0.44,
+      "post2500_rms_m": 181.5,
+      "first_gt100m_epoch": 3601,
+      "recovery_at_err_mean_m": 27.8,
+      "err_10ep_after_recovery_mean_m": 25.0,
+      "outside_anchor_lt1m_pct": 3.9
+    }
+  }
+}

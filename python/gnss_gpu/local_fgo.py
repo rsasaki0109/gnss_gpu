@@ -161,6 +161,14 @@ class LambdaFixConfig:
     variance_floor_cycles: float = 0.04
     max_group_size: int = 8
     max_epoch_gap: int = 1
+    # External AR validation (WP5 work item 3): reject an iteration's whole
+    # batch of newly-proposed LAMBDA fixes if applying them makes the
+    # DD-pseudorange (code-based, independent of the carrier ambiguity being
+    # validated) residual RMS worse than before, mirroring inuex35's DDPR
+    # cross-validation / post-AR cost gate. ``<= 0`` disables the gate
+    # (always accept) so existing callers that never set this or never pass
+    # ``LocalFgoProblem.dd_pseudorange`` keep their prior behaviour exactly.
+    ddpr_reject_threshold: float = 0.0
 
 
 @dataclass
@@ -989,10 +997,14 @@ def solve_local_fgo_with_lambda(
         "ratio_threshold": float(lam_cfg.ratio_threshold),
         "sigma_cycles": float(lam_cfg.fixed_sigma_cycles),
         "min_epochs": int(lam_cfg.min_epochs),
+        "ddpr_reject_threshold": float(lam_cfg.ddpr_reject_threshold),
         "iterations": [],
         "n_fixed": 0,
         "n_fixed_observations": 0,
         "fixed_by_system": {},
+        "n_segments_rejected_short": 0,
+        "n_ddpr_rejected_iterations": 0,
+        "n_ddpr_rejected_observations": 0,
     }
     fixed_epoch_pairs: dict[tuple[int, tuple[str, str, str, str]], int] = {}
 
@@ -1008,26 +1020,61 @@ def solve_local_fgo_with_lambda(
             for key, value in iteration_fixes.items()
             if key not in fixed_epoch_pairs
         }
-        fixed_epoch_pairs.update(new_fixes)
         iteration_info["iteration"] = int(iteration + 1)
         iteration_info["n_new_fixed_observations"] = int(len(new_fixes))
-        summary["iterations"].append(iteration_info)
+        summary["n_segments_rejected_short"] = int(summary["n_segments_rejected_short"]) + int(
+            iteration_info.get("n_segments_rejected_short", 0)
+        )
         if not new_fixes:
+            summary["iterations"].append(iteration_info)
             break
 
-        fixed_dd = _apply_lambda_fixes_to_dd(current_problem.dd_carrier, fixed_epoch_pairs)
+        # Tentatively apply this iteration's new fixes and re-solve, then
+        # validate the resulting position with an external (DD-pseudorange,
+        # i.e. carrier-independent) cross-check before committing (WP5 work
+        # item 3 / AR validation gate 2). Gate is a no-op (always accepts)
+        # when `ddpr_reject_threshold <= 0` or when no DD-pseudorange data
+        # was supplied, preserving pre-WP5 behaviour exactly.
+        candidate_fixed_epoch_pairs = dict(fixed_epoch_pairs)
+        candidate_fixed_epoch_pairs.update(new_fixes)
+        fixed_dd = _apply_lambda_fixes_to_dd(current_problem.dd_carrier, candidate_fixed_epoch_pairs)
         initial_positions = inject_into_pf(
             current_problem.initial_positions_ecef,
             current_result.positions_ecef,
             current_result.window,
         )
         fixed_config = replace(base_config, dd_fixed_sigma_cycles=float(lam_cfg.fixed_sigma_cycles))
-        current_problem = replace(
+        candidate_problem = replace(
             current_problem,
             initial_positions_ecef=np.asarray(initial_positions, dtype=np.float64),
             dd_carrier=fixed_dd,
         )
-        current_result = solve_local_fgo(current_problem, fixed_config)
+        candidate_result = solve_local_fgo(candidate_problem, fixed_config)
+
+        touched_epochs = sorted({int(epoch) for epoch, _key in new_fixes})
+        accepted, ddpr_rms_before, ddpr_rms_after = _ddpr_cross_check(
+            current_problem.dd_pseudorange,
+            current_result.window,
+            touched_epochs,
+            current_result.positions_ecef,
+            candidate_result.positions_ecef,
+            float(lam_cfg.ddpr_reject_threshold),
+        )
+        iteration_info["ddpr_rms_before"] = ddpr_rms_before
+        iteration_info["ddpr_rms_after"] = ddpr_rms_after
+        iteration_info["ddpr_gate_accepted"] = bool(accepted)
+        summary["iterations"].append(iteration_info)
+
+        if not accepted:
+            summary["n_ddpr_rejected_iterations"] = int(summary["n_ddpr_rejected_iterations"]) + 1
+            summary["n_ddpr_rejected_observations"] = int(
+                summary["n_ddpr_rejected_observations"]
+            ) + int(len(new_fixes))
+            break
+
+        fixed_epoch_pairs = candidate_fixed_epoch_pairs
+        current_problem = candidate_problem
+        current_result = candidate_result
 
     fixed_segments = {
         (epoch_pair[1], integer)
@@ -1156,6 +1203,79 @@ def _postfit_observation_diagnostics(
     return out
 
 
+def _ddpr_cross_check(
+    dd_pseudorange: Sequence[DDPseudorangeEpoch | None] | None,
+    window: LocalFgoWindow,
+    epoch_indices: Sequence[int],
+    positions_before: np.ndarray,
+    positions_after: np.ndarray,
+    threshold: float,
+) -> tuple[bool, float | None, float | None]:
+    """External AR validation (WP5 work item 3, gate 2): DD-pseudorange cross-check.
+
+    Compares the DD-pseudorange (code-based, independent of the carrier
+    ambiguity being validated) residual RMS at ``positions_before`` (the
+    pre-fix position) vs ``positions_after`` (the position after tentatively
+    applying and re-solving with the new LAMBDA fixes), restricted to
+    ``epoch_indices`` (the epochs touched by this batch of fixes). Mirrors
+    inuex35's "DDPR cross-validation at the fixed position (reject if
+    residual worsens)" / post-AR cost gate.
+
+    Returns ``(accepted, rms_before, rms_after)``. Accepts unconditionally
+    (``rms_before``/``rms_after`` both ``None``) when ``threshold <= 0`` (gate
+    disabled) or when no DD-pseudorange data is available/valid for the
+    touched epochs (nothing to validate against, so this cannot reject —
+    consistent with the gate being an *additional* veto, not a replacement
+    for the ratio test).
+    """
+    if threshold is None or float(threshold) <= 0.0:
+        return True, None, None
+    if dd_pseudorange is None:
+        return True, None, None
+    positions_before_arr = _as_positions(positions_before)
+    positions_after_arr = _as_positions(positions_after)
+    before_residuals: list[float] = []
+    after_residuals: list[float] = []
+    for epoch_index in epoch_indices:
+        epoch_index = int(epoch_index)
+        if epoch_index < window.start or epoch_index > window.end:
+            continue
+        if epoch_index >= len(dd_pseudorange):
+            continue
+        obs = dd_pseudorange[epoch_index]
+        if obs is None:
+            continue
+        rel_index = epoch_index - window.start
+        if rel_index < 0 or rel_index >= len(positions_before_arr) or rel_index >= len(positions_after_arr):
+            continue
+        x_before = positions_before_arr[rel_index]
+        x_after = positions_after_arr[rel_index]
+        dd = np.asarray(obs.dd_pseudorange_m, dtype=np.float64).ravel()
+        sat_k = np.asarray(obs.sat_ecef_k, dtype=np.float64).reshape(-1, 3)
+        sat_ref = np.asarray(obs.sat_ecef_ref, dtype=np.float64).reshape(-1, 3)
+        base_k = np.asarray(obs.base_range_k, dtype=np.float64).ravel()
+        base_ref = np.asarray(obs.base_range_ref, dtype=np.float64).ravel()
+        for row in range(len(dd)):
+            if not _valid_dd_row(dd[row], sat_k[row], sat_ref[row], base_k[row], base_ref[row], 1.0):
+                continue
+            expected_before = _dd_expected_m(
+                x_before, sat_k[row], sat_ref[row], float(base_k[row]), float(base_ref[row])
+            )
+            expected_after = _dd_expected_m(
+                x_after, sat_k[row], sat_ref[row], float(base_k[row]), float(base_ref[row])
+            )
+            if np.isfinite(expected_before):
+                before_residuals.append(expected_before - float(dd[row]))
+            if np.isfinite(expected_after):
+                after_residuals.append(expected_after - float(dd[row]))
+    if not before_residuals or not after_residuals:
+        return True, None, None
+    rms_before = float(np.sqrt(np.mean(np.square(before_residuals))))
+    rms_after = float(np.sqrt(np.mean(np.square(after_residuals))))
+    accepted = rms_after <= max(rms_before, 1e-9) * (1.0 + float(threshold))
+    return bool(accepted), rms_before, rms_after
+
+
 def _estimate_lambda_fixes(
     dd_epochs: Sequence[DDCarrierEpoch | None] | None,
     positions_ecef: np.ndarray,
@@ -1220,6 +1340,23 @@ def _estimate_lambda_fixes(
 
     info["n_tracks"] = int(len(tracks))
     segments: list[dict[str, Any]] = []
+    n_segments_rejected_short = 0
+
+    def _try_append_segment(seg_key: tuple[str, str, str, str], rows: list[tuple[int, float, float]]) -> None:
+        nonlocal n_segments_rejected_short
+        segment = _lambda_segment_from_rows(seg_key, rows, config)
+        if segment is not None:
+            segments.append(segment)
+        else:
+            # WP5 work item 3 (AR validation gate 1 / segment-length gate):
+            # `_lambda_segment_from_rows` only returns None for length
+            # reasons (raw run shorter than `min_epochs`, or too few
+            # finite/positive-weight rows survive to reach it) — count
+            # these separately from ratio-test rejections so accept/reject
+            # counts are reportable even though this gate runs "silently"
+            # inside segmenting.
+            n_segments_rejected_short += 1
+
     for key, rows in tracks.items():
         rows_sorted = sorted(rows, key=lambda item: item[0])
         current: list[tuple[int, float, float]] = []
@@ -1239,20 +1376,18 @@ def _estimate_lambda_fixes(
             ):
                 split = True
             if split and current:
-                segment = _lambda_segment_from_rows(key, current, config)
-                if segment is not None:
-                    segments.append(segment)
+                _try_append_segment(key, current)
                 current = []
             current.append(row)
             prev_epoch = epoch
             prev_value = value
         if current:
-            segment = _lambda_segment_from_rows(key, current, config)
-            if segment is not None:
-                segments.append(segment)
+            _try_append_segment(key, current)
 
     info["n_segments"] = int(len(segments))
     info["n_candidates"] = int(len(segments))
+    info["n_segments_rejected_short"] = int(n_segments_rejected_short)
+    info["min_segment_epochs"] = int(config.min_epochs)
     if segments:
         segment_lengths = np.asarray(
             [int(segment["n_epochs"]) for segment in segments],

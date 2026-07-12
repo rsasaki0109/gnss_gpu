@@ -7,7 +7,12 @@
 
 ---
 
-## Area 1: Non-Gaussian 尤度モデル (NLOS 対応)
+## PF measurement-layer NLOS (2026-07)
+
+Geometry mask CSV → soft weight at **PF / DD update** (not SPP). See
+[`nlos_pf_measurement_wiring.md`](nlos_pf_measurement_wiring.md) for presets,
+module map, and CPU replay numbers.
+
 
 ### 1A. Gaussian Mixture Model (GMM) 尤度 ★★★ 最有望
 **出典**: Sadiki et al., "GNSS Positioning Enhancement Based on NLOS Multipath Biases Estimation Using Gaussian Mixture Noise"; NASA "Robust Positioning in the Presence of Multipath and NLOS GNSS Signals" (2019)

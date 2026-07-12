@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run1",
+  "traj_path": "results\\wp12a\\probe_recovery_4000.pos",
+  "format": "pos",
+  "n_scored": 3900,
+  "n_rover_epochs": 11928,
+  "coverage_pct": 32.69617706237425,
+  "n_fix": 0,
+  "all_rms_m": 330.5625689898203,
+  "fix_rms_m": null,
+  "fix_pct": 0.0,
+  "lt50cm_pct": 0.5128205128205128,
+  "lt50cm_full_pct": 0.1676727028839705,
+  "ppc_official_pct": 0.17319898607508297,
+  "ppc_note": null
+}

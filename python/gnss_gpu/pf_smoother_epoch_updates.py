@@ -42,6 +42,14 @@ def apply_forward_epoch_updates(
     gate_ess_ratio = measurement_inputs.gate_ess_ratio
     gate_spread_m = measurement_inputs.gate_spread_m
 
+    robust = config_parts.observations.robust
+    nlos_tables = context.nlos_tables
+    nlos_mask_applied_to_rover_weights = bool(
+        nlos_tables is not None
+        and (nlos_tables.weak or nlos_tables.strong)
+        and str(robust.nlos_mask_csv).strip()
+    )
+
     apply_widelane_dd_pseudorange_update(
         context.pf,
         epoch_state,
@@ -58,6 +66,11 @@ def apply_forward_epoch_updates(
         gate_spread_m=gate_spread_m,
         observations_config=config_parts.observations,
         collect_diagnostics=run_config.collect_epoch_diagnostics,
+        nlos_tables=context.nlos_tables,
+        epoch_idx=context.history.epochs_done,
+        nlos_k_weak=config_parts.observations.robust.nlos_k_weak,
+        nlos_k_strong=config_parts.observations.robust.nlos_k_strong,
+        nlos_mask_applied_to_rover_weights=nlos_mask_applied_to_rover_weights,
     )
 
     spp_position_ecef = np.array(sol_epoch.position_ecef_m[:3], dtype=np.float64)
@@ -80,6 +93,10 @@ def apply_forward_epoch_updates(
         dt=dt,
         observations_config=config_parts.observations,
         collect_diagnostics=run_config.collect_epoch_diagnostics,
+        nlos_tables=context.nlos_tables,
+        epoch_idx=context.history.epochs_done,
+        nlos_k_weak=config_parts.observations.robust.nlos_k_weak,
+        nlos_k_strong=config_parts.observations.robust.nlos_k_strong,
     )
 
     apply_doppler_epoch_update(

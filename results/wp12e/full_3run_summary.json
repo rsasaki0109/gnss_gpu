@@ -1,0 +1,53 @@
+{
+  "run2": {
+    "city": "tokyo",
+    "run": "run2",
+    "traj_path": "C:\\Users\\rsasa\\Workspace\\old\\gnss_gpu\\results\\wp12e\\full_run2.pos",
+    "format": "pos",
+    "n_scored": 9148,
+    "n_rover_epochs": 9151,
+    "coverage_pct": 99.96721669762867,
+    "n_fix": 1234,
+    "all_rms_m": 56.61062632044166,
+    "fix_rms_m": 2.304919599031714,
+    "fix_pct": 13.489287275907301,
+    "lt50cm_pct": 11.718408395277656,
+    "lt50cm_full_pct": 11.714566714020325,
+    "ppc_official_pct": 12.143617032483208,
+    "ppc_note": null
+  },
+  "run1": {
+    "city": "tokyo",
+    "run": "run1",
+    "traj_path": "C:\\Users\\rsasa\\Workspace\\old\\gnss_gpu\\results\\wp12e\\full_run1.pos",
+    "format": "pos",
+    "n_scored": 11676,
+    "n_rover_epochs": 11928,
+    "coverage_pct": 97.88732394366197,
+    "n_fix": 608,
+    "all_rms_m": 206.31161769403693,
+    "fix_rms_m": 1.590637256502519,
+    "fix_pct": 5.207262761219596,
+    "lt50cm_pct": 7.348406988694759,
+    "lt50cm_full_pct": 7.193158953722334,
+    "ppc_official_pct": 2.6035421240586123,
+    "ppc_note": null
+  },
+  "run3": {
+    "city": "tokyo",
+    "run": "run3",
+    "traj_path": "C:\\Users\\rsasa\\Workspace\\old\\gnss_gpu\\results\\wp12e\\full_run3.pos",
+    "format": "pos",
+    "n_scored": 15291,
+    "n_rover_epochs": 15301,
+    "coverage_pct": 99.93464479445788,
+    "n_fix": 3595,
+    "all_rms_m": 23.66511041909056,
+    "fix_rms_m": 3.458070671418229,
+    "fix_pct": 23.510561768360475,
+    "lt50cm_pct": 5.9446733372572105,
+    "lt50cm_full_pct": 5.940788183778838,
+    "ppc_official_pct": 1.7276664517184102,
+    "ppc_note": null
+  }
+}

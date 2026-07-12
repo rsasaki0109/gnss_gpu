@@ -1,0 +1,4 @@
+name,note,extra_args,wall_s,returncode,engine_total_solutions,engine_valid_solutions,engine_fixed_solutions,engine_fix_rate_pct,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,n_fix,n_fix_after_warmup,frac_fix_after_warmup
+c6_maxposjump_0_full,disable the jump gate entirely,--max-pos-jump 0,200.8,0,7474.0,7474.0,4200.0,56.19,7474,11928,62.659,18.3617,14.3838,56.195,50.656,31.74,32.881,4200,2932,0.6981
+c6_maxposjump_15_full,,--max-pos-jump 15,200.6,0,7397.0,7397.0,775.0,10.48,7397,11928,62.014,19.8612,0.0837,10.477,40.936,25.386,22.883,775,0,0.0
+c6_maxposjump_30_full,,--max-pos-jump 30,199.1,0,7397.0,7397.0,775.0,10.48,7397,11928,62.014,19.8612,0.0837,10.477,40.936,25.386,22.883,775,0,0.0
