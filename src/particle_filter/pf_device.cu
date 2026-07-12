@@ -603,6 +603,102 @@ __global__ void pfd_weight_dd_carrier_afv_kernel(
     log_weights[tid] += log_w;
 }
 
+// Joint DD pseudorange + carrier update. Sharing the range geometry avoids a
+// second kernel launch and the duplicate square roots in the common path.
+__global__ void pfd_weight_dd_joint_kernel(
+    const double* px, const double* py, const double* pz,
+    const double* dd_data,
+    double* log_weights, int N, int n_dd,
+    double sigma_pr, double sigma_cycles,
+    double nlos_threshold_m, double nlos_threshold_cycles,
+    bool huber_enabled, double huber_pr_k, double huber_carrier_k) {
+
+    extern __shared__ double s_data[];
+    double* s_sat_k = s_data;
+    double* s_ref = s_data + n_dd * 3;
+    double* s_dd_pr = s_data + n_dd * 6;
+    double* s_dd_cp = s_data + n_dd * 7;
+    double* s_br_k = s_data + n_dd * 8;
+    double* s_br_ref = s_data + n_dd * 9;
+    double* s_ws = s_data + n_dd * 10;
+    double* s_wl = s_data + n_dd * 11;
+
+    int total_shared = n_dd * 12;
+    for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
+        s_data[i] = dd_data[i];
+    }
+    __syncthreads();
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+    double x = px[tid];
+    double y = py[tid];
+    double z = pz[tid];
+    bool gate_pr = nlos_threshold_m > 0.0;
+    bool gate_cp = nlos_threshold_cycles > 0.0;
+
+    if (gate_pr || gate_cp) {
+        int kept_pr = 0;
+        int kept_cp = 0;
+        for (int d = 0; d < n_dd; d++) {
+            double dx_k = x - s_sat_k[d * 3 + 0];
+            double dy_k = y - s_sat_k[d * 3 + 1];
+            double dz_k = z - s_sat_k[d * 3 + 2];
+            double dx_ref = x - s_ref[d * 3 + 0];
+            double dy_ref = y - s_ref[d * 3 + 1];
+            double dz_ref = z - s_ref[d * 3 + 2];
+            double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+            double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+            double dd_range = r_k - r_ref - s_br_k[d] + s_br_ref[d];
+            if (gate_pr && fabs(s_dd_pr[d] - dd_range) <= nlos_threshold_m) {
+                kept_pr++;
+            }
+            double inv_wl = 1.0 / s_wl[d];
+            double cp_residual = s_dd_cp[d] - dd_range * inv_wl;
+            double afv = cp_residual - rint(cp_residual);
+            if (gate_cp && fabs(afv) <= nlos_threshold_cycles) {
+                kept_cp++;
+            }
+        }
+        int min_kept = (n_dd < 3) ? n_dd : 3;
+        if (gate_pr && kept_pr < min_kept) gate_pr = false;
+        if (gate_cp && kept_cp < min_kept) gate_cp = false;
+    }
+
+    double pr_log_w = 0.0;
+    double cp_log_w = 0.0;
+    double inv_pr_sigma2 = 1.0 / (sigma_pr * sigma_pr);
+    double inv_cp_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
+    bool huber_pr = huber_enabled && huber_pr_k > 0.0;
+    bool huber_cp = huber_enabled && huber_carrier_k > 0.0;
+    for (int d = 0; d < n_dd; d++) {
+        double dx_k = x - s_sat_k[d * 3 + 0];
+        double dy_k = y - s_sat_k[d * 3 + 1];
+        double dz_k = z - s_sat_k[d * 3 + 2];
+        double dx_ref = x - s_ref[d * 3 + 0];
+        double dy_ref = y - s_ref[d * 3 + 1];
+        double dz_ref = z - s_ref[d * 3 + 2];
+        double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+        double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+        double dd_range = r_k - r_ref - s_br_k[d] + s_br_ref[d];
+        double pr_residual = s_dd_pr[d] - dd_range;
+        if (!gate_pr || fabs(pr_residual) <= nlos_threshold_m) {
+            pr_log_w += huber_pr
+                ? -pfd_weighted_huber_cost(pr_residual, sigma_pr, s_ws[d], huber_pr_k)
+                : -0.5 * s_ws[d] * pr_residual * pr_residual * inv_pr_sigma2;
+        }
+        double inv_wl = 1.0 / s_wl[d];
+        double cp_residual = s_dd_cp[d] - dd_range * inv_wl;
+        double afv = cp_residual - rint(cp_residual);
+        if (!gate_cp || fabs(afv) <= nlos_threshold_cycles) {
+            cp_log_w += huber_cp
+                ? -pfd_weighted_huber_cost(afv, sigma_cycles, s_ws[d], huber_carrier_k)
+                : -0.5 * s_ws[d] * afv * afv * inv_cp_sigma2;
+        }
+    }
+    log_weights[tid] = pr_log_w + cp_log_w;
+}
+
 // --- Doppler velocity-domain update kernel ---
 // Applies a per-particle Doppler likelihood using each particle's velocity
 // state, then optionally nudges velocity toward a per-particle WLS solution.
@@ -2203,50 +2299,32 @@ void pf_device_weight_dd_joint(PFDeviceState* state,
 
     int N = state->n_particles;
     int grid = state->grid_size;
-    int pr_doubles = n_dd * 10;
-    int cp_doubles = n_dd * 11;
-    int total_doubles = pr_doubles + cp_doubles;
+    int total_doubles = n_dd * 12;
     size_t total_bytes = (size_t)total_doubles * sizeof(double);
 
     ensure_obs_scratch(state, total_doubles);
-    double* h_pr = state->h_obs_scratch;
-    double* h_cp = h_pr + pr_doubles;
+    double* h_buf = state->h_obs_scratch;
     int off = 0;
-    memcpy(h_pr + off, sat_ecef_k, n_dd * 3 * sizeof(double)); off += n_dd * 3;
-    memcpy(h_pr + off, ref_ecef, n_dd * 3 * sizeof(double)); off += n_dd * 3;
-    memcpy(h_pr + off, dd_pseudorange, n_dd * sizeof(double)); off += n_dd;
-    memcpy(h_pr + off, base_range_k, n_dd * sizeof(double)); off += n_dd;
-    memcpy(h_pr + off, base_range_ref, n_dd * sizeof(double)); off += n_dd;
-    memcpy(h_pr + off, weights_dd, n_dd * sizeof(double));
-
-    off = 0;
-    memcpy(h_cp + off, sat_ecef_k, n_dd * 3 * sizeof(double)); off += n_dd * 3;
-    memcpy(h_cp + off, ref_ecef, n_dd * 3 * sizeof(double)); off += n_dd * 3;
-    memcpy(h_cp + off, dd_carrier, n_dd * sizeof(double)); off += n_dd;
-    memcpy(h_cp + off, base_range_k, n_dd * sizeof(double)); off += n_dd;
-    memcpy(h_cp + off, base_range_ref, n_dd * sizeof(double)); off += n_dd;
-    memcpy(h_cp + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
-    memcpy(h_cp + off, wavelengths_m, n_dd * sizeof(double));
+    memcpy(h_buf + off, sat_ecef_k, n_dd * 3 * sizeof(double)); off += n_dd * 3;
+    memcpy(h_buf + off, ref_ecef, n_dd * 3 * sizeof(double)); off += n_dd * 3;
+    memcpy(h_buf + off, dd_pseudorange, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_buf + off, dd_carrier, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_buf + off, base_range_k, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_buf + off, base_range_ref, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_buf + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
+    memcpy(h_buf + off, wavelengths_m, n_dd * sizeof(double));
 
     CUDA_CHECK(cudaMemcpyAsync(
-        state->d_obs_scratch, h_pr, total_bytes,
+        state->d_obs_scratch, h_buf, total_bytes,
         cudaMemcpyHostToDevice, state->stream));
-    double* d_pr = state->d_obs_scratch;
-    double* d_cp = d_pr + pr_doubles;
-
-    pfd_weight_dd_pseudorange_kernel<<<
-        grid, BLOCK_SIZE, (size_t)pr_doubles * sizeof(double), state->stream>>>(
+    pfd_weight_dd_joint_kernel<<<
+        grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
-        d_pr, state->d_log_weights,
-        N, n_dd, sigma_pr, per_particle_nlos_threshold_m,
-        per_particle_huber, per_particle_huber_dd_pr_k);
-    CUDA_CHECK_LAST();
-    pfd_weight_dd_carrier_afv_kernel<<<
-        grid, BLOCK_SIZE, (size_t)cp_doubles * sizeof(double), state->stream>>>(
-        state->d_px, state->d_py, state->d_pz,
-        d_cp, state->d_log_weights,
-        N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles,
-        per_particle_huber, per_particle_huber_dd_carrier_k);
+        state->d_obs_scratch, state->d_log_weights,
+        N, n_dd, sigma_pr, sigma_cycles,
+        per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
+        per_particle_huber, per_particle_huber_dd_pr_k,
+        per_particle_huber_dd_carrier_k);
     CUDA_CHECK_LAST();
 }
 

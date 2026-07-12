@@ -138,7 +138,12 @@ def test_pf_device_binding_valid_smoke_shapes():
 
 
 @pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
-def test_pf_device_joint_dd_update_matches_sequential_updates():
+@pytest.mark.parametrize(
+    "pr_gate,cp_gate,huber,pr_huber_k,cp_huber_k",
+    [(0.0, 0.0, False, 1.5, 1.5), (2.0, 0.2, True, 1.2, 1.8)],
+)
+def test_pf_device_joint_dd_update_matches_sequential_updates(
+        pr_gate, cp_gate, huber, pr_huber_k, cp_huber_k):
     n_particles = 256
     n_dd = 3
     receiver = np.array([1.0e6, 2.0e6, 3.0e6], dtype=np.float64)
@@ -163,15 +168,15 @@ def test_pf_device_joint_dd_update_matches_sequential_updates():
     pf_device_weight_dd_pseudorange(
         sequential, sat_k.ravel(), sat_ref.ravel(), dd_pr,
         base_range_k, base_range_ref, weights, n_dd, 0.75,
-        0.0, False, 1.5)
+        pr_gate, huber, pr_huber_k)
     pf_device_weight_dd_carrier_afv(
         sequential, sat_k.ravel(), sat_ref.ravel(), dd_cp,
         base_range_k, base_range_ref, weights, wavelengths, n_dd, 0.05,
-        0.0, False, 1.5)
+        cp_gate, huber, cp_huber_k)
     pf_device_weight_dd_joint(
         joint, sat_k.ravel(), sat_ref.ravel(), dd_pr, dd_cp,
         base_range_k, base_range_ref, weights, wavelengths, n_dd,
-        0.75, 0.05, 0.0, 0.0, False, 1.5, 1.5)
+        0.75, 0.05, pr_gate, cp_gate, huber, pr_huber_k, cp_huber_k)
     pf_device_sync(sequential)
     pf_device_sync(joint)
 
@@ -179,4 +184,5 @@ def test_pf_device_joint_dd_update_matches_sequential_updates():
     joint_weights = np.empty(n_particles, dtype=np.float64)
     pf_device_get_log_weights(sequential, sequential_weights)
     pf_device_get_log_weights(joint, joint_weights)
-    np.testing.assert_array_equal(joint_weights, sequential_weights)
+    np.testing.assert_allclose(
+        joint_weights, sequential_weights, rtol=1e-14, atol=1e-12)
