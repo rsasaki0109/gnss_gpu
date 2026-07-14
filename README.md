@@ -13,7 +13,7 @@
 <p align="center">
   <img
     src="docs/assets/media/site/site_teaser.gif"
-    alt="gnss_gpu particle filter tracking through an urban canyon"
+    alt="gnss_gpu structural-method audit and urban GNSS positioning results"
     width="960"
     height="540"
   >

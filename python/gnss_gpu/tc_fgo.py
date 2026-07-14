@@ -30,7 +30,6 @@ from gnss_gpu.ins_ekf import (
     _quat_multiply,
     _quat_normalize,
     _quat_to_rotmat,
-    _skew,
 )
 from gnss_gpu.local_fgo import (
     DDCarrierEpoch,
@@ -38,7 +37,6 @@ from gnss_gpu.local_fgo import (
     LambdaFixConfig,
     LocalFgoConfig,
     LocalFgoWindow,
-    _apply_lambda_fixes_to_dd,
     _dd_expected_and_jacobian_m,
     _dd_pair_key,
     _ddpr_cross_check,
@@ -50,6 +48,8 @@ from gnss_gpu.local_fgo import (
     _wrap_cycles,
 )
 from gnss_gpu.lambda_ambiguity import solve_lambda
+from gnss_gpu.switchable_factor import ReducedSwitchFactor, reduce_switchable_factor
+from gnss_gpu.wcp_factor import single_arc_wcp
 
 _G_ENU = np.array([0.0, 0.0, -9.81], dtype=np.float64)
 _NAV_DIM = 6  # pos(3) + vel(3)
@@ -98,6 +98,8 @@ class TcFgoEpochObs:
 
     dd_pseudorange: DDPseudorangeEpoch | None = None
     dd_carrier: DDCarrierEpoch | None = None
+    # Optional per-row slip-generation identifiers. WCP never crosses a change.
+    dd_carrier_arc_ids: tuple[int, ...] | None = None
     enable_nhc: bool = False
     enable_zupt: bool = False
     anchor_pos_enu: np.ndarray | None = None
@@ -175,6 +177,21 @@ class TcFgoConfig:
     schur_info_cap_ratio: float = 1.0
     schur_front_nav_only: bool = True
     schur_use_bank_ambiguity_priors: bool = False
+    # Ambiguity-eliminated multi-epoch carrier factor (alternative to explicit N).
+    enable_wcp: bool = False
+    wcp_sigma_cycles: float = 0.05
+    wcp_min_epochs: int = 3
+    wcp_slip_threshold_cycles: float = 1.5
+    # Closed-form switchable DD pseudorange constraints.
+    enable_switchable_pseudorange: bool = False
+    commit_switchable_pseudorange: bool = False
+    switch_prior_strength: float = 4.0
+    switch_diagnostic_threshold: float = 0.5
+    # Preserve DD geometry when independent switches collectively collapse.
+    # In that case the entire epoch abstains from switching and uses the
+    # ordinary pseudorange factors.
+    switch_min_reliable_rows: int = 4
+    switch_max_downweighted_fraction: float = 0.5
 
 
 def state_dim(config: TcFgoConfig | None = None) -> int:
@@ -1347,6 +1364,12 @@ def _linearize_window(
         "dd_pseudorange": 0,
         "dd_carrier": 0,
         "dd_carrier_fixed": 0,
+        "wcp": 0,
+        "switchable_pseudorange": 0,
+        "switched_pseudorange": 0,
+        "switch_integrity_abstained_epochs": 0,
+        "switch_integrity_abstained_rows": 0,
+        "switch_shadow_epochs": 0,
         "n_continuity": 0,
         "n_cross_window_prior": 0,
         "nhc": 0,
@@ -1489,13 +1512,61 @@ def _linearize_window(
                 fgo_config,
                 last_raw_rms_m=float(problem.last_dd_pr_rms_m),
             )
-            for r_blk, j_blk, sigma in zip(dd_residuals, dd_jacs, dd_sigmas, strict=True):
+            epoch_blocks: list[
+                tuple[np.ndarray, np.ndarray, float, ReducedSwitchFactor | None]
+            ] = []
+            switches: list[float] = []
+            for r_blk, j_blk, sigma in zip(
+                dd_residuals, dd_jacs, dd_sigmas, strict=True
+            ):
                 jac_enu = np.zeros((1, sdim), dtype=np.float64)
                 jac_enu[0, 0:3] = j_blk[0] @ R_ecef_enu
-                add_block(i, r_blk, jac_enu, sigma)
+                if config.enable_switchable_pseudorange:
+                    reduced = reduce_switchable_factor(
+                        np.asarray(r_blk, dtype=np.float64).ravel() / float(sigma),
+                        jac_enu / float(sigma),
+                        float(config.switch_prior_strength),
+                    )
+                    counts["switchable_pseudorange"] += int(r_blk.size)
+                    counts["switched_pseudorange"] += int(
+                        np.sum(reduced.switches < float(config.switch_diagnostic_threshold))
+                    )
+                    switches.extend(float(value) for value in reduced.switches)
+                    epoch_blocks.append((r_blk, jac_enu, float(sigma), reduced))
+                else:
+                    epoch_blocks.append((r_blk, jac_enu, float(sigma), None))
                 counts["dd_pseudorange"] += int(r_blk.size)
 
-        if config.enable_dd_carrier and obs.dd_carrier is not None:
+            switch_abstained = False
+            if config.enable_switchable_pseudorange and switches:
+                if int(config.switch_min_reliable_rows) < 1:
+                    raise ValueError("switch_min_reliable_rows must be positive")
+                if not 0.0 <= float(config.switch_max_downweighted_fraction) <= 1.0:
+                    raise ValueError(
+                        "switch_max_downweighted_fraction must be in [0, 1]"
+                    )
+                threshold = float(config.switch_diagnostic_threshold)
+                reliable = sum(value >= threshold for value in switches)
+                downweighted_fraction = 1.0 - reliable / len(switches)
+                switch_abstained = (
+                    not bool(config.commit_switchable_pseudorange)
+                    or reliable < max(1, int(config.switch_min_reliable_rows))
+                    or downweighted_fraction
+                    > float(config.switch_max_downweighted_fraction)
+                )
+                if switch_abstained:
+                    counts["switch_integrity_abstained_epochs"] += 1
+                    counts["switch_integrity_abstained_rows"] += len(switches)
+                    if not config.commit_switchable_pseudorange:
+                        counts["switch_shadow_epochs"] += 1
+
+            for r_blk, jac_enu, sigma, reduced in epoch_blocks:
+                if reduced is not None and not switch_abstained:
+                    add_block(i, reduced.residual, reduced.jacobian, 1.0)
+                else:
+                    add_block(i, r_blk, jac_enu, sigma)
+
+        if config.enable_dd_carrier and not config.enable_wcp and obs.dd_carrier is not None:
             pos_ecef = enu_to_ecef(nav_i.p_enu, problem.origin_ecef, problem.origin_lat, problem.origin_lon)
             cp = obs.dd_carrier
             n_rows = int(cp.n)
@@ -1574,6 +1645,115 @@ def _linearize_window(
                 jac_vel[0, 3:6] = j_z[rr]
                 add_block(i, np.array([r_z[rr]]), jac_vel, config.zupt_sigma_mps)
             counts["zupt"] += 3
+
+    if config.enable_wcp:
+        slip_threshold = float(config.wcp_slip_threshold_cycles)
+        if not np.isfinite(slip_threshold) or slip_threshold <= 0.0:
+            raise ValueError("wcp_slip_threshold_cycles must be finite and > 0")
+        if int(config.wcp_min_epochs) < 2:
+            raise ValueError("wcp_min_epochs must be >= 2")
+        arcs: dict[tuple[tuple[str, str, str, str], int], list[tuple[int, int]]] = {}
+        # Explicit receiver slip generations remain authoritative. If they are
+        # unavailable, derive conservative generations from the
+        # geometry-corrected float ambiguity at the initial trajectory.
+        auto_arc_state: dict[
+            tuple[str, str, str, str], tuple[int, float, int]
+        ] = {}
+        for local_i, epoch_obs in enumerate(problem.observations):
+            cp = epoch_obs.dd_carrier
+            if cp is None:
+                continue
+            arc_ids = epoch_obs.dd_carrier_arc_ids
+            initial_ecef = enu_to_ecef(
+                problem.initial_states[local_i].p_enu,
+                problem.origin_ecef,
+                problem.origin_lat,
+                problem.origin_lon,
+            )
+            for row in range(int(cp.n)):
+                pair_key = _dd_pair_key(cp, row)
+                if arc_ids is not None and row < len(arc_ids):
+                    arc_id = int(arc_ids[row])
+                else:
+                    dd = float(np.asarray(cp.dd_carrier_cycles, dtype=np.float64).ravel()[row])
+                    wavelength = float(np.asarray(cp.wavelengths_m, dtype=np.float64).ravel()[row])
+                    expected_m, _jacobian = _dd_expected_and_jacobian_m(
+                        initial_ecef,
+                        np.asarray(cp.sat_ecef_k, dtype=np.float64).reshape(-1, 3)[row],
+                        np.asarray(cp.sat_ecef_ref, dtype=np.float64).reshape(-1, 3)[row],
+                        float(np.asarray(cp.base_range_k, dtype=np.float64).ravel()[row]),
+                        float(np.asarray(cp.base_range_ref, dtype=np.float64).ravel()[row]),
+                    )
+                    ambiguity = (
+                        dd - expected_m / wavelength
+                        if np.isfinite(dd) and np.isfinite(wavelength) and wavelength > 0.0
+                        else np.nan
+                    )
+                    previous = auto_arc_state.get(pair_key)
+                    if previous is None:
+                        generation = 0
+                    else:
+                        previous_epoch, previous_ambiguity, previous_generation = previous
+                        continuous = (
+                            local_i == previous_epoch + 1
+                            and np.isfinite(ambiguity)
+                            and np.isfinite(previous_ambiguity)
+                            and abs(ambiguity - previous_ambiguity) <= slip_threshold
+                        )
+                        generation = previous_generation if continuous else previous_generation + 1
+                    auto_arc_state[pair_key] = (local_i, float(ambiguity), generation)
+                    arc_id = generation
+                arcs.setdefault((pair_key, arc_id), []).append((local_i, row))
+        for _arc_key, entries in arcs.items():
+            ordered = sorted(entries)
+            contiguous: list[list[tuple[int, int]]] = []
+            for entry in ordered:
+                if not contiguous or entry[0] != contiguous[-1][-1][0] + 1:
+                    contiguous.append([entry])
+                else:
+                    contiguous[-1].append(entry)
+            for segment in contiguous:
+                if len(segment) < int(config.wcp_min_epochs):
+                    continue
+                arc_residual: list[float] = []
+                arc_jacobian = np.zeros((len(segment), n_vars), dtype=np.float64)
+                arc_sigmas: list[float] = []
+                valid = True
+                for arc_row, (local_i, row) in enumerate(segment):
+                    cp = problem.observations[local_i].dd_carrier
+                    assert cp is not None
+                    nav_i = nav_from_state_vector(x_nav[local_i], problem.initial_states[local_i], config)
+                    pos_ecef = enu_to_ecef(
+                        nav_i.p_enu, problem.origin_ecef, problem.origin_lat, problem.origin_lon
+                    )
+                    dd = float(np.asarray(cp.dd_carrier_cycles, dtype=np.float64).ravel()[row])
+                    wavelength = float(np.asarray(cp.wavelengths_m, dtype=np.float64).ravel()[row])
+                    expected_m, jac_m = _dd_expected_and_jacobian_m(
+                        pos_ecef,
+                        np.asarray(cp.sat_ecef_k, dtype=np.float64).reshape(-1, 3)[row],
+                        np.asarray(cp.sat_ecef_ref, dtype=np.float64).reshape(-1, 3)[row],
+                        float(np.asarray(cp.base_range_k, dtype=np.float64).ravel()[row]),
+                        float(np.asarray(cp.base_range_ref, dtype=np.float64).ravel()[row]),
+                    )
+                    if not (np.isfinite(dd) and np.isfinite(wavelength) and wavelength > 0.0):
+                        valid = False
+                        break
+                    arc_residual.append(expected_m / wavelength - dd)
+                    col0 = local_i * sdim
+                    arc_jacobian[arc_row, col0 : col0 + 3] = (jac_m @ R_ecef_enu) / wavelength
+                    weight = _weights(cp.weights, int(cp.n))[row]
+                    arc_sigmas.append(
+                        _weighted_sigma(config.wcp_sigma_cycles, weight, config.min_weight)
+                    )
+                if not valid:
+                    continue
+                projected = single_arc_wcp(
+                    np.asarray(arc_residual), arc_jacobian, np.asarray(arc_sigmas)
+                )
+                if projected.residual.size:
+                    residual_blocks.append(projected.residual)
+                    jacobian_blocks.append(projected.jacobian)
+                    counts["wcp"] += int(projected.residual.size)
 
     if layout is not None and layout.n_amb > 0 and x_amb is not None:
         nav_base = _window_nav_dim(n, config)

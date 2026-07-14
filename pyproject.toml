@@ -59,6 +59,13 @@ CMAKE_CUDA_ARCHITECTURES = "native"
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
+addopts = "-p no:xonsh --import-mode=importlib"
+pythonpath = [
+    "python",
+    "experiments",
+    "tests",
+    "ros2/gnss_gpu_ros",
+]
 markers = [
     "gpu: requires compiled GPU-backed bindings",
     "cuda: requires CUDA-backed runtime support",

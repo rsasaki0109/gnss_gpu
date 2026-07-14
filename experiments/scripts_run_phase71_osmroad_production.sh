@@ -6,8 +6,9 @@
 #   Phase71 official: 86.205492% (+0.207198pp)
 set -euo pipefail
 
-cd gnss_gpu
-source .venv/bin/activate
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
+cd "$REPO_ROOT"
 OSM_PY=/usr/bin/python3
 
 FGO_V2_DIR=experiments/results/libgnss_diag_phase10/fgo_v2_gap
@@ -60,7 +61,16 @@ candidate_labels() {
   local city=$1
   local run=$2
   local old_labels
-  old_labels=$(cat "/tmp/${city}_${run}_phase11fa_labels.txt")
+  local volatile_manifest="/tmp/${city}_${run}_phase11fa_labels.txt"
+  local tracked_manifest="experiments/results/rtkdiag_manifest/${city}_${run}_labels.txt"
+  if [[ -s "$volatile_manifest" ]]; then
+    old_labels=$(cat "$volatile_manifest")
+  elif [[ -s "$tracked_manifest" ]]; then
+    old_labels=$(cat "$tracked_manifest")
+  else
+    echo "missing base label manifest: $volatile_manifest or $tracked_manifest" >&2
+    return 1
+  fi
   if [[ "$city" == "nagoya" && "$run" == "run2" ]]; then
     printf '%s,%s,xd_gici_osmroad_hs' "$old_labels" "$(base_extra_labels)"
   else
@@ -72,13 +82,65 @@ candidate_dirs() {
   local city=$1
   local run=$2
   local old_dirs
-  old_dirs=$(cat "/tmp/${city}_${run}_phase11fa_dirs.txt")
+  local volatile_manifest="/tmp/${city}_${run}_phase11fa_dirs.txt"
+  local tracked_manifest="experiments/results/rtkdiag_manifest/${city}_${run}_dirs.txt"
+  if [[ -s "$volatile_manifest" ]]; then
+    old_dirs=$(cat "$volatile_manifest")
+  elif [[ -s "$tracked_manifest" ]]; then
+    old_dirs=$(cat "$tracked_manifest")
+  else
+    echo "missing base directory manifest: $volatile_manifest or $tracked_manifest" >&2
+    return 1
+  fi
   if [[ "$city" == "nagoya" && "$run" == "run2" ]]; then
     printf '%s,%s,%s' "$old_dirs" "$(base_extra_dirs)" "$G_OSM"
   else
     printf '%s,%s' "$old_dirs" "$(base_extra_dirs)"
   fi
 }
+
+preflight_phase71_inputs() {
+  local missing=0
+  local path
+  for path in "$V1_CSV" "$V3_CSV" "$V5_CSV" "$NAGOYA_RUN2_INTERNAL" \
+      experiments/results/libgnss_rtk_pos_v5 \
+      $FGO_V2_DIR $FGO_V14_DIR $FGO_V17_DIR \
+      $G_DEFAULT $G_Z $G_R $G_LP $G_LH $G_R4 $G_COMBO $G_C4 $G_LL \
+      $G_ZR $G_OA $G_LA $G_HS $G_HS45 $G_HS30 $G_HE $G_IR $G_MB $G_W5; do
+    if [[ ! -e "$path" ]]; then
+      echo "missing Phase71 input: $path" >&2
+      missing=1
+    fi
+  done
+  for path in tokyo_run1 tokyo_run2 tokyo_run3 nagoya_run1 nagoya_run2 nagoya_run3; do
+    if [[ ! -s "experiments/results/rtkdiag_manifest/${path}_labels.txt" && \
+          ! -s "/tmp/${path}_phase11fa_labels.txt" ]]; then
+      echo "missing Phase71 label manifest for: $path" >&2
+      missing=1
+    fi
+    if [[ ! -s "experiments/results/rtkdiag_manifest/${path}_dirs.txt" && \
+          ! -s "/tmp/${path}_phase11fa_dirs.txt" ]]; then
+      echo "missing Phase71 directory manifest for: $path" >&2
+      missing=1
+    fi
+  done
+  if [[ "$missing" -ne 0 ]]; then
+    echo "Phase71 preflight failed; no evaluation was started." >&2
+    return 1
+  fi
+}
+
+preflight_phase71_inputs
+if [[ "${PHASE71_PREFLIGHT_ONLY:-0}" == "1" ]]; then
+  echo "Phase71 preflight passed."
+  exit 0
+fi
+
+if [[ ! -f .venv/bin/activate ]]; then
+  echo "missing Phase71 Python environment: $REPO_ROOT/.venv/bin/activate" >&2
+  exit 1
+fi
+source .venv/bin/activate
 
 echo "=== Phase 71 prep: materialize n/r2 OSM road candidate ==="
 if [[ ! -f "$NAGOYA_RUN2_INTERNAL" ]]; then
@@ -141,7 +203,8 @@ for CR in tokyo/run1 tokyo/run2 tokyo/run3 nagoya/run1 nagoya/run2 nagoya/run3; 
     --rtkdiag-candidate-fallback-mode hybrid \
     --rtkdiag-candidate-bridge-enable --rtkdiag-candidate-bridge-max-s 6.0 --rtkdiag-candidate-bridge-residual-rms-m 0.2 \
     --rtkdiag-candidate-rms-prefilter-k "$K" \
-    --n-particles 2000 --pos-dir "/tmp/ppc_phase71_osmroad_prod_${KEY}" \
+    --n-particles 2000 --pf-mode-policy off --doppler-systems G,E,J \
+    --pos-dir "/tmp/ppc_phase71_osmroad_prod_${KEY}" \
     --results-prefix "ppc_phase71_osmroad_prod_${KEY}_full"
   PPC=$(awk -F, 'NR==2 {printf "%.6f", $11}' "experiments/results/ppc_phase71_osmroad_prod_${KEY}_full_runs.csv")
   echo "FIN ${CITY}/${RUN}: ${PPC}%"

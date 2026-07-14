@@ -1,0 +1,7 @@
+span_id,city,run,start_epoch,end_epoch_exclusive,evaluation_role,tcfgo_evaluation_role,recurrence_evaluation_role,provenance
+nagoya_run1_seg0,nagoya,run1,0,100,development,development,development,preexisting_ppc_pf3dbvh_nagoya_run1_seg0
+nagoya_run2_seg983,nagoya,run2,983,1083,holdout,development_smoke,holdout,preexisting_ppc_pf3dbvh_nagoya_run2_seg983
+nagoya_run3_seg235,nagoya,run3,235,335,holdout,holdout,holdout,preexisting_ppc_pf3dbvh_nagoya_run3_seg235
+tokyo_run1_seg1463,tokyo,run1,1463,1563,holdout,holdout,development,preexisting_ppc_pf3dbvh_tokyo_run1_seg1463
+tokyo_run2_seg808,tokyo,run2,808,908,holdout,holdout,holdout,preexisting_ppc_pf3dbvh_tokyo_run2_seg808
+tokyo_run3_seg774,tokyo,run3,774,874,holdout,holdout,holdout,preexisting_ppc_pf3dbvh_tokyo_run3_seg774

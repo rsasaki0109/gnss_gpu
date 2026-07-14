@@ -16,7 +16,8 @@ L1_WAVELENGTH = 0.19029367279836488
 
 
 def _validate_solver_options(name, wavelength, max_iter, tol):
-    if not np.isfinite(wavelength) or wavelength <= 0.0:
+    wavelength_arr = np.asarray(wavelength, dtype=np.float64)
+    if wavelength_arr.size == 0 or not np.isfinite(wavelength_arr).all() or np.any(wavelength_arr <= 0.0):
         raise RuntimeError(f"{name}: wavelength must be positive and finite")
     if max_iter < 1:
         raise RuntimeError(f"{name}: max_iter must be >= 1")
@@ -160,7 +161,10 @@ def doppler_velocity(sat_ecef, sat_vel, doppler, rx_pos, weights=None,
         sat_ecef, sat_vel, doppler, rx_pos, weights, wavelength, max_iter, tol
     )
 
-    if _HAS_NATIVE:
+    wavelength_arr = np.asarray(wavelength, dtype=np.float64)
+    if wavelength_arr.ndim > 0 and wavelength_arr.size not in (1, doppler.size):
+        raise RuntimeError("doppler_velocity: wavelength must be scalar or shape (n_sat,)")
+    if _HAS_NATIVE and wavelength_arr.size == 1:
         return _doppler_velocity(
             sat_ecef, sat_vel, doppler, rx_pos, weights,
             wavelength, max_iter, tol)
@@ -253,7 +257,8 @@ def _doppler_velocity_py(sat_ecef, sat_vel, doppler, rx_pos, weights,
             pred = ((sat_vel[s, 0] - vx) * lx +
                     (sat_vel[s, 1] - vy) * ly +
                     (sat_vel[s, 2] - vz) * lz + cd)
-            obs = doppler[s] * wavelength
+            wavelength_s = float(np.asarray(wavelength).reshape(-1)[0]) if np.asarray(wavelength).size == 1 else float(np.asarray(wavelength).reshape(-1)[s])
+            obs = doppler[s] * wavelength_s
             residual = obs - pred
             w = weights[s]
 

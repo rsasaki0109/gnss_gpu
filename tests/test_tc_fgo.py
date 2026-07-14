@@ -9,8 +9,8 @@ import math
 import numpy as np
 import pytest
 
-from gnss_gpu.ins_ekf import _quat_from_axis_angle, _quat_normalize, _quat_to_rotmat
-from gnss_gpu.local_fgo import DDCarrierEpoch, DDPseudorangeEpoch
+from gnss_gpu.ins_ekf import _quat_from_axis_angle, _quat_normalize
+from gnss_gpu.local_fgo import DDCarrierEpoch, DDPseudorangeEpoch, LocalFgoConfig
 from gnss_gpu.tc_fgo import (
     DEFAULT_LEVER_ARM_BODY_M,
     ImuPreintSegment,
@@ -25,9 +25,7 @@ from gnss_gpu.tc_fgo import (
     bias_corrected_preintegration,
     bias_random_walk_residual,
     build_ambiguity_layout,
-    build_window_hessian_gradient,
     clamp_information_eigenvalues,
-    compute_schur_marginal_from_window,
     dd_pr_position_update_from_epoch,
     enu_to_ecef,
     ecef_to_enu,
@@ -41,17 +39,15 @@ from gnss_gpu.tc_fgo import (
     position_anchor_residual_and_jacobian,
     quality_scaled_marginalization_prior,
     evaluate_float_quality_certificate,
-    FloatQualityCertificate,
     marginal_pos_sigma_from_schur,
-    run_tc_window_ar,
     schur_complement_marginalize,
-    SchurMarginalBlocks,
     solve_tc_fgo_window,
     state_vector_from_nav,
     subset_ar_select,
     tc_dd_pair_key,
     update_ambiguity_bank_from_window,
     zupt_residual_and_jacobian,
+    _linearize_window,
 )
 
 
@@ -490,6 +486,155 @@ def _synthetic_carrier_epoch(sats, base_pos, x, cycles_offset=0.0) -> DDCarrierE
         sat_ids=("G02", "G03"),
         ref_sat_ids=("G01", "G01"),
     )
+
+
+def test_tc_fgo_wcp_and_switchable_pseudorange_are_wired_into_linearization():
+    origin = np.array([4_000_000.0, 3_000_000.0, 2_000_000.0], dtype=np.float64)
+    origin_lat, origin_lon = 0.35, 0.65
+    sats = _synthetic_satellites()
+    base_pos = origin + np.array([100.0, -50.0, 20.0])
+    states = []
+    observations = []
+    for i in range(3):
+        state = TcFgoNavState(
+            p_enu=np.array([float(i), 0.0, 0.0]),
+            v_enu=np.array([1.0, 0.0, 0.0]),
+            q_body_to_enu=np.array([0.0, 0.0, 0.0, 1.0]),
+            b_a=np.zeros(3),
+            b_g=np.zeros(3),
+        )
+        states.append(state)
+        pos_ecef = enu_to_ecef(state.p_enu, origin, origin_lat, origin_lon)
+        pr = _dd_epoch_for_position(pos_ecef, sats, base_pos)
+        if i == 1:
+            pr.dd_pseudorange_m = pr.dd_pseudorange_m.copy()
+            pr.dd_pseudorange_m[0] += 100.0
+        observations.append(
+            TcFgoEpochObs(
+                dd_pseudorange=pr,
+                dd_carrier=_synthetic_carrier_epoch(sats, base_pos, pos_ecef, 7.0),
+                dd_carrier_arc_ids=(0, 0),
+            )
+        )
+    problem = TcFgoWindowProblem(
+        initial_states=states,
+        imu_segments=[None, None],
+        observations=observations,
+        origin_ecef=origin,
+        origin_lat=origin_lat,
+        origin_lon=origin_lon,
+    )
+    config = TcFgoConfig(
+        enable_wcp=True,
+        wcp_min_epochs=3,
+        enable_switchable_pseudorange=True,
+        commit_switchable_pseudorange=True,
+        switch_prior_strength=4.0,
+        switch_min_reliable_rows=2,
+        pr_huber_k=0.0,
+    )
+    x = np.vstack([state_vector_from_nav(state, config) for state in states])
+    _cost, _residual, _jacobian, counts = _linearize_window(
+        x, problem, config, LocalFgoConfig()
+    )
+    assert counts["wcp"] == 4  # two three-epoch arcs, one null direction removed each
+    assert counts["switchable_pseudorange"] == 9
+    assert counts["switched_pseudorange"] >= 1
+    assert counts["switch_integrity_abstained_epochs"] == 0
+
+    strict_config = replace(config, switch_max_downweighted_fraction=0.0)
+    _cost, _residual, _jacobian, strict_counts = _linearize_window(
+        x, problem, strict_config, LocalFgoConfig()
+    )
+    assert strict_counts["switch_integrity_abstained_epochs"] >= 1
+    assert strict_counts["switch_integrity_abstained_rows"] >= 3
+
+    shadow_config = replace(config, commit_switchable_pseudorange=False)
+    _cost, shadow_residual, shadow_jacobian, shadow_counts = _linearize_window(
+        x, problem, shadow_config, LocalFgoConfig()
+    )
+    baseline_config = replace(config, enable_switchable_pseudorange=False)
+    _cost, baseline_residual, baseline_jacobian, _counts = _linearize_window(
+        x, problem, baseline_config, LocalFgoConfig()
+    )
+    assert shadow_counts["switch_shadow_epochs"] == 3
+    assert np.allclose(shadow_residual, baseline_residual)
+    assert np.allclose(shadow_jacobian, baseline_jacobian)
+
+
+def test_tc_fgo_wcp_does_not_cross_slip_generation():
+    origin = np.array([4_000_000.0, 3_000_000.0, 2_000_000.0], dtype=np.float64)
+    origin_lat, origin_lon = 0.35, 0.65
+    sats = _synthetic_satellites()
+    base_pos = origin + np.array([100.0, -50.0, 20.0])
+    states = []
+    observations = []
+    for i in range(3):
+        state = TcFgoNavState(
+            p_enu=np.array([float(i), 0.0, 0.0]), v_enu=np.array([1.0, 0.0, 0.0]),
+            q_body_to_enu=np.array([0.0, 0.0, 0.0, 1.0]), b_a=np.zeros(3), b_g=np.zeros(3)
+        )
+        states.append(state)
+        pos_ecef = enu_to_ecef(state.p_enu, origin, origin_lat, origin_lon)
+        observations.append(
+            TcFgoEpochObs(
+                dd_carrier=_synthetic_carrier_epoch(sats, base_pos, pos_ecef, 2.0),
+                dd_carrier_arc_ids=((0 if i < 2 else 1), 0),
+            )
+        )
+    problem = TcFgoWindowProblem(
+        initial_states=states, imu_segments=[None, None], observations=observations,
+        origin_ecef=origin, origin_lat=origin_lat, origin_lon=origin_lon
+    )
+    config = TcFgoConfig(enable_wcp=True, wcp_min_epochs=3)
+    x = np.vstack([state_vector_from_nav(state, config) for state in states])
+    _cost, _residual, _jacobian, counts = _linearize_window(
+        x, problem, config, LocalFgoConfig()
+    )
+    assert counts["wcp"] == 2  # only the second pair remains a three-epoch arc
+
+
+def test_tc_fgo_wcp_auto_generations_detect_geometry_corrected_cycle_slip():
+    origin = np.array([4_000_000.0, 3_000_000.0, 2_000_000.0], dtype=np.float64)
+    origin_lat, origin_lon = 0.35, 0.65
+    sats = _synthetic_satellites()
+    base_pos = origin + np.array([100.0, -50.0, 20.0])
+    states = []
+    observations = []
+    for i in range(4):
+        state = TcFgoNavState(
+            p_enu=np.array([float(i), 0.0, 0.0]),
+            v_enu=np.array([1.0, 0.0, 0.0]),
+            q_body_to_enu=np.array([0.0, 0.0, 0.0, 1.0]),
+            b_a=np.zeros(3),
+            b_g=np.zeros(3),
+        )
+        states.append(state)
+        pos_ecef = enu_to_ecef(state.p_enu, origin, origin_lat, origin_lon)
+        carrier = _synthetic_carrier_epoch(sats, base_pos, pos_ecef, 2.0)
+        if i >= 2:
+            carrier.dd_carrier_cycles[0] += 5.0
+        observations.append(TcFgoEpochObs(dd_carrier=carrier))
+    problem = TcFgoWindowProblem(
+        initial_states=states,
+        imu_segments=[None, None, None],
+        observations=observations,
+        origin_ecef=origin,
+        origin_lat=origin_lat,
+        origin_lon=origin_lon,
+    )
+    config = TcFgoConfig(
+        enable_wcp=True,
+        wcp_min_epochs=2,
+        wcp_slip_threshold_cycles=1.5,
+    )
+    x = np.vstack([state_vector_from_nav(state, config) for state in states])
+    _cost, _residual, _jacobian, counts = _linearize_window(
+        x, problem, config, LocalFgoConfig()
+    )
+    # Slipped pair: two 2-epoch arcs -> 2 rows. Continuous pair: one
+    # 4-epoch arc -> 3 rows. Without automatic segmentation this would be 6.
+    assert counts["wcp"] == 5
 
 
 def test_ambiguity_carrier_jacobian_finite_difference():

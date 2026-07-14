@@ -20,9 +20,17 @@ def transition_logpdf(
     sigma_cb: float,
 ) -> np.ndarray:
     """Log p(x_next | x_t) under one predict step. x_t shape (N, 4), x_next (4,)."""
-    v = np.asarray(vel, dtype=np.float64).ravel()
+    v = np.asarray(vel, dtype=np.float64)
     xt = np.asarray(x_t, dtype=np.float64)
-    dp = x_next[:3] - (xt[:, :3] + v * float(dt))
+    if v.ndim == 1:
+        if v.size != 3:
+            raise ValueError("vel must have shape (3,) or (N, 3)")
+        predicted = xt[:, :3] + v.reshape(1, 3) * float(dt)
+    elif v.shape == (xt.shape[0], 3):
+        predicted = xt[:, :3] + v * float(dt)
+    else:
+        raise ValueError("vel must have shape (3,) or (N, 3)")
+    dp = x_next[:3] - predicted
     dcb = x_next[3] - xt[:, 3]
     inv_sp2 = 1.0 / (float(sigma_pos) ** 2)
     inv_sc2 = 1.0 / (float(sigma_cb) ** 2)
@@ -37,6 +45,7 @@ def ffbsi_sample_indices(
     sigma_pos: np.ndarray,
     sigma_cb: float,
     rng: np.random.Generator,
+    terminal_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """One FFBSi backward trajectory as ancestor indices I[0..T-1].
 
@@ -64,11 +73,28 @@ def ffbsi_sample_indices(
     sigma_pos = np.asarray(sigma_pos, dtype=np.float64)
     if vel.shape[0] != T or dt.shape[0] != T or sigma_pos.shape[0] != T:
         raise ValueError("vel, dt, sigma_pos must have length T")
+    if vel.ndim not in (2, 3):
+        raise ValueError("vel must have shape (T, 3) or (T, N, 3)")
+    if vel.ndim == 2 and vel.shape[1] != 3:
+        raise ValueError("vel must have shape (T, 3) or (T, N, 3)")
+    if vel.ndim == 3 and vel.shape[1:] != (N, 3):
+        raise ValueError("vel must have shape (T, 3) or (T, N, 3)")
 
     idx = np.empty(T, dtype=np.int64)
 
-    mx = lw[T - 1].max()
-    w = np.exp(lw[T - 1] - mx)
+    terminal_lw = lw[T - 1].copy()
+    if terminal_mask is not None:
+        mask = np.asarray(terminal_mask, dtype=bool).reshape(-1)
+        if mask.size != N:
+            raise ValueError(f"terminal_mask length {mask.size} != {N}")
+        terminal_lw[~mask] = -np.inf
+    finite_terminal = np.isfinite(terminal_lw)
+    if not np.any(finite_terminal):
+        idx[:] = 0
+        return idx
+    mx = float(np.max(terminal_lw[finite_terminal]))
+    w = np.zeros(N, dtype=np.float64)
+    w[finite_terminal] = np.exp(terminal_lw[finite_terminal] - mx)
     s = w.sum()
     if s <= 0.0 or not np.isfinite(s):
         idx[:] = 0
@@ -112,9 +138,19 @@ def ffbsi_smooth_sample(
     sigma_pos: np.ndarray,
     sigma_cb: float,
     rng: np.random.Generator,
+    terminal_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """One smoothed path (T, 3) ECEF from FFBSi indices."""
-    idx = ffbsi_sample_indices(log_weights, X, vel, dt, sigma_pos, sigma_cb, rng)
+    idx = ffbsi_sample_indices(
+        log_weights,
+        X,
+        vel,
+        dt,
+        sigma_pos,
+        sigma_cb,
+        rng,
+        terminal_mask=terminal_mask,
+    )
     return np.asarray(X[np.arange(X.shape[0]), idx, :3], dtype=np.float64)
 
 
@@ -122,6 +158,7 @@ def genealogy_smooth_indices(
     log_weights: np.ndarray,
     ancestors: np.ndarray,
     rng: np.random.Generator,
+    terminal_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Backward trace along resampling genealogy (one ancestral lineage).
 
@@ -138,8 +175,19 @@ def genealogy_smooth_indices(
         raise ValueError(f"ancestors shape {anc.shape} != ({T},{N})")
 
     idx = np.empty(T, dtype=np.int64)
-    mx = lw[T - 1].max()
-    w = np.exp(lw[T - 1] - mx)
+    terminal_lw = lw[T - 1].copy()
+    if terminal_mask is not None:
+        mask = np.asarray(terminal_mask, dtype=bool).reshape(-1)
+        if mask.size != N:
+            raise ValueError(f"terminal_mask length {mask.size} != {N}")
+        terminal_lw[~mask] = -np.inf
+    finite = np.isfinite(terminal_lw)
+    if not np.any(finite):
+        idx[:] = 0
+        return idx
+    mx = float(np.max(terminal_lw[finite]))
+    w = np.zeros(N, dtype=np.float64)
+    w[finite] = np.exp(terminal_lw[finite] - mx)
     s = float(w.sum())
     if s <= 0.0 or not np.isfinite(s):
         idx[:] = 0
@@ -156,8 +204,11 @@ def genealogy_smooth_sample(
     X: np.ndarray,
     ancestors: np.ndarray,
     rng: np.random.Generator,
+    terminal_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """One smoothed path (T, 3) ECEF via genealogy backward sampling."""
-    idx = genealogy_smooth_indices(log_weights, ancestors, rng)
+    idx = genealogy_smooth_indices(
+        log_weights, ancestors, rng, terminal_mask=terminal_mask
+    )
     X = np.asarray(X, dtype=np.float64)
     return np.asarray(X[np.arange(X.shape[0]), idx, :3], dtype=np.float64)

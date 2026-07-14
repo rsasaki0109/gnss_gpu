@@ -41,6 +41,13 @@ from exp_urbannav_baseline import run_wls  # noqa: E402
 from gnss_gpu.io.nav_rinex import read_gps_klobuchar_from_nav_header
 from gnss_gpu.io.ppc import PPCDatasetLoader
 from gnss_gpu.ppc_score import score_ppc2024
+from gnss_gpu.particle_modes import extract_particle_modes, select_particle_mode
+from gnss_gpu.particle_fixed_lag import FixedLagParticleSmoother, nearest_mode_mask
+from gnss_gpu.doppler_signals import (
+    doppler_wavelengths_m,
+    normalize_constellation_clock_drifts,
+    normalize_doppler_to_reference,
+)
 from gnss_gpu.range_model import rotate_satellites_sagnac
 from gnss_gpu.spp import _iono_klobuchar, _tropo_saastamoinen
 
@@ -242,6 +249,33 @@ class CTRBPFConfig:
     # PF at every hybrid epoch. For PPC, Status=4 anchors are often cm-class,
     # so GPU/PF diagnostics should usually emit PF only on weak statuses.
     hybrid_emit_pf_statuses: tuple[int, ...] = ()
+    # Preserve multimodal PF posteriors at emission. ``diagnostic`` computes
+    # and records modes without changing the trajectory; ``emit`` replaces a
+    # PF-sourced weighted mean only when the selector accepts a reachable mode.
+    pf_mode_policy: str = "off"  # off | diagnostic | emit
+    pf_mode_voxel_size_m: float = 2.0
+    pf_mode_min_core_cell_mass: float = 1.0e-4
+    pf_mode_min_core_cell_particles: int = 3
+    pf_mode_min_mass: float = 0.01
+    pf_mode_assignment_radius_m: float = 6.0
+    pf_mode_max_modes: int = 8
+    pf_mode_max_particles: int = 8192
+    pf_mode_select_min_mass: float = 0.20
+    pf_mode_select_min_score_ratio: float = 1.5
+    pf_mode_require_multiple_modes: bool = True
+    pf_mode_min_epoch: int = 10
+    pf_mode_prediction_sigma_m: float = 5.0
+    pf_mode_max_prediction_distance_m: float = 20.0
+    pf_mode_min_mean_distance_m: float = 0.5
+    pf_mode_max_mean_distance_m: float = 20.0
+    enable_pf_ffbsi_smoother: bool = False
+    pf_ffbsi_lag_epochs: int = 25
+    pf_ffbsi_paths: int = 32
+    pf_ffbsi_seed: int = 20260713
+    pf_ffbsi_mode: str = "marginal"
+    pf_ffbsi_max_std_m: float = 5.0
+    pf_ffbsi_max_correction_m: float = 10.0
+    pf_ffbsi_min_unique_particles: int = 2
     # Phase 4: post-process FGO + LAMBDA partial fix. After the PF loop
     # completes, slide a window over the trajectory and call
     # ``solve_local_fgo_with_lambda`` per window using cached DD-carrier
@@ -2642,7 +2676,7 @@ def _build_pf(config: CTRBPFConfig):
         sigma_pos=config.sigma_pos,
         sigma_cb=config.sigma_cb,
         sigma_pr=config.sigma_pr,
-        resampling="megopolis",
+        resampling=("systematic" if config.enable_pf_ffbsi_smoother else "megopolis"),
         seed=42,
     )
     return pf
@@ -2757,6 +2791,116 @@ def _diag_distance(
     if not np.all(np.isfinite(a[:3])) or not np.all(np.isfinite(b[:3])):
         return ""
     return float(np.linalg.norm(a[:3] - b[:3]))
+
+
+def _emission_prediction(
+    positions: np.ndarray,
+    times: np.ndarray,
+    idx: int,
+) -> np.ndarray | None:
+    """Constant-velocity prediction from already emitted positions."""
+    if idx <= 0 or not np.all(np.isfinite(positions[idx - 1])):
+        return None
+    previous = np.asarray(positions[idx - 1], dtype=np.float64)
+    if idx <= 1 or not np.all(np.isfinite(positions[idx - 2])):
+        return previous.copy()
+    dt_previous = float(times[idx - 1] - times[idx - 2])
+    dt_next = float(times[idx] - times[idx - 1])
+    if dt_previous <= 0.0 or dt_next < 0.0:
+        return previous.copy()
+    velocity = (previous - np.asarray(positions[idx - 2], dtype=np.float64)) / dt_previous
+    return previous + velocity * dt_next
+
+
+def _attach_particle_mode_diagnostics(row, result, selection) -> None:
+    row["pf_mode_count"] = int(len(result.modes))
+    row["pf_mode_assigned_mass"] = float(result.assigned_mass)
+    row["pf_mode_noise_mass"] = float(result.noise_mass)
+    row["pf_mode_ess"] = float(result.effective_sample_size)
+    row["pf_mode_input_particles"] = int(result.input_particle_count)
+    row["pf_mode_analyzed_particles"] = int(result.analyzed_particle_count)
+    row["pf_mode_selection_accepted"] = bool(selection.accepted)
+    row["pf_mode_selection_reason"] = str(selection.reason)
+    row["pf_mode_selected_index"] = (
+        int(selection.mode_index) if selection.mode_index is not None else ""
+    )
+    row["pf_mode_selected_mass"] = float(selection.selected_mass)
+    row["pf_mode_runner_up_mass"] = float(selection.runner_up_mass)
+    row["pf_mode_score_ratio"] = float(selection.score_ratio)
+    row["pf_mode_prediction_distance_m"] = float(selection.prediction_distance_m)
+    row["pf_mode_weighted_mean_distance_m"] = float(
+        selection.weighted_mean_distance_m
+    )
+    if selection.mode_index is not None and selection.mode_index < len(result.modes):
+        mode = result.modes[selection.mode_index]
+        row["pf_mode_selected_x"] = float(mode.position[0])
+        row["pf_mode_selected_y"] = float(mode.position[1])
+        row["pf_mode_selected_z"] = float(mode.position[2])
+        row["pf_mode_selected_std_max_m"] = float(
+            np.sqrt(max(float(np.max(np.linalg.eigvalsh(mode.covariance))), 0.0))
+        )
+        row["pf_mode_selected_particles"] = int(mode.particle_count)
+        row["pf_mode_selected_peak_cell_mass"] = float(mode.peak_cell_mass)
+    if len(result.modes) >= 2:
+        row["pf_mode_top2_separation_m"] = float(
+            np.linalg.norm(result.modes[0].position - result.modes[1].position)
+        )
+
+
+def _apply_particle_mode_emission(position, emitted_source, policy, selection):
+    """Apply an accepted mode only to a PF-sourced output in emit mode."""
+    current = np.asarray(position, dtype=np.float64)
+    if (
+        policy != "emit"
+        or selection is None
+        or not selection.accepted
+        or selection.position is None
+        or not str(emitted_source).startswith("pf")
+    ):
+        return current, str(emitted_source)
+    return (
+        np.asarray(selection.position, dtype=np.float64),
+        f"{emitted_source}_mode",
+    )
+
+
+def _apply_fixed_lag_output(
+    positions,
+    emitted_sources,
+    output,
+    *,
+    max_std_m,
+    max_correction_m,
+    min_unique_particles,
+):
+    """Apply a genealogy result only to an eligible PF-sourced epoch."""
+    idx = int(output.epoch_index)
+    if idx < 0 or idx >= len(positions):
+        return False, "epoch_range", np.nan, np.nan
+    covariance = np.asarray(output.covariance, dtype=np.float64).reshape(3, 3)
+    max_variance = float(np.max(np.linalg.eigvalsh(covariance)))
+    max_std = float(np.sqrt(max(max_variance, 0.0)))
+    correction = float(
+        np.linalg.norm(np.asarray(output.position) - np.asarray(positions[idx]))
+    )
+    reason = "accepted"
+    if not bool(output.rewrite_allowed):
+        reason = "terminal_abstain"
+    elif not str(emitted_sources[idx]).startswith("pf"):
+        reason = "non_pf_source"
+    elif int(output.unique_oldest_particles) < int(min_unique_particles):
+        reason = "lineage_degeneracy"
+    elif max_std_m > 0.0 and (not np.isfinite(max_std) or max_std > max_std_m):
+        reason = "path_spread"
+    elif max_correction_m > 0.0 and correction > max_correction_m:
+        reason = "correction"
+    elif not np.all(np.isfinite(output.position)):
+        reason = "nonfinite"
+    if reason != "accepted":
+        return False, reason, correction, max_std
+    positions[idx] = np.asarray(output.position, dtype=np.float64)
+    emitted_sources[idx] = f"{emitted_sources[idx]}_ffbsi"
+    return True, reason, correction, max_std
 
 
 def _diag_enu_error(
@@ -3021,7 +3165,11 @@ def _doppler_prefit_gate_mask(
 
 
 def _resample_deferred(config: CTRBPFConfig) -> bool:
-    return bool(config.defer_epoch_resample) or bool(config.enable_reservoir_stein)
+    return (
+        bool(config.defer_epoch_resample)
+        or bool(config.enable_reservoir_stein)
+        or bool(config.enable_pf_ffbsi_smoother)
+    )
 
 
 def _reservoir_stein_resample_if_needed(
@@ -3234,6 +3382,7 @@ def _run_ctrbpf_on_segment(
     system_ids = data.get("system_ids")
     sat_velocity = data.get("sat_velocity")
     doppler_hz = data.get("doppler_hz")
+    doppler_codes = data.get("doppler_codes")
     used_prns = data.get("used_prns") or [[] for _ in range(n_epochs)]
     times = np.asarray(data["times"], dtype=np.float64)
     pr_obs_stats = _PRObsStats()
@@ -3277,6 +3426,19 @@ def _run_ctrbpf_on_segment(
     ins_tc_stats = _INSTCStats()
     defer_resample = _resample_deferred(config)
     internal_diagnostics: list[dict[str, object]] = []
+    if config.enable_pf_ffbsi_smoother and config.enable_reservoir_stein:
+        raise ValueError("PF FFBSi smoother is incompatible with reservoir-Stein resampling")
+    pf_ffbsi = (
+        FixedLagParticleSmoother(
+            lag_epochs=int(config.pf_ffbsi_lag_epochs),
+            n_paths=int(config.pf_ffbsi_paths),
+            seed=int(config.pf_ffbsi_seed),
+            smoother_mode=str(config.pf_ffbsi_mode),
+            sigma_cb=float(config.sigma_cb),
+        )
+        if config.enable_pf_ffbsi_smoother
+        else None
+    )
 
     # Phase 9b: tight-coupled IMU state (in-loop pre-integration since the
     # last Status=4 hybrid anchor). Initialized lazily on the first epoch
@@ -3326,6 +3488,52 @@ def _run_ctrbpf_on_segment(
         )
 
     positions = np.zeros((n_epochs, 3), dtype=np.float64)
+    emitted_sources = [""] * n_epochs
+    diagnostic_by_epoch: dict[int, dict[str, object]] = {}
+
+    def _consume_ffbsi_output(output) -> None:
+        idx = int(output.epoch_index)
+        baseline_position = (
+            np.asarray(positions[idx], dtype=np.float64).copy()
+            if 0 <= idx < n_epochs
+            else None
+        )
+        baseline_source = emitted_sources[idx] if 0 <= idx < n_epochs else ""
+        applied, reason, correction, max_std = _apply_fixed_lag_output(
+            positions,
+            emitted_sources,
+            output,
+            max_std_m=float(config.pf_ffbsi_max_std_m),
+            max_correction_m=float(config.pf_ffbsi_max_correction_m),
+            min_unique_particles=int(config.pf_ffbsi_min_unique_particles),
+        )
+        row = diagnostic_by_epoch.get(int(output.epoch_index))
+        if row is None:
+            return
+        row["pf_ffbsi_available"] = True
+        row["pf_ffbsi_applied"] = bool(applied)
+        row["pf_ffbsi_reason"] = str(reason)
+        row["pf_ffbsi_correction_m"] = float(correction)
+        row["pf_ffbsi_max_std_m"] = float(max_std)
+        row["pf_ffbsi_unique_oldest_particles"] = int(
+            output.unique_oldest_particles
+        )
+        row["pf_ffbsi_terminal_particles"] = int(output.terminal_particle_count)
+        row["pf_ffbsi_terminal_conditioned"] = bool(output.terminal_conditioned)
+        row["pf_ffbsi_mode"] = str(output.smoother_mode)
+        row["pf_ffbsi_x"] = float(output.position[0])
+        row["pf_ffbsi_y"] = float(output.position[1])
+        row["pf_ffbsi_z"] = float(output.position[2])
+        ref = (
+            reference_pos.get(round(float(times[idx]), 1))
+            if reference_pos is not None and 0 <= idx < n_epochs
+            else None
+        )
+        row["pf_ffbsi_baseline_source"] = str(baseline_source)
+        row["pf_ffbsi_baseline_to_ref_m"] = _diag_distance(baseline_position, ref)
+        row["pf_ffbsi_to_ref_m"] = _diag_distance(output.position, ref)
+        row["emitted_source"] = emitted_sources[idx]
+        row["emit_to_ref_m"] = _diag_distance(positions[idx], ref)
     pr_used_counts = np.zeros(n_epochs, dtype=np.int32)
     init_tow = round(float(times[0]), 1)
     init_ref = reference_pos.get(init_tow) if reference_pos is not None else None
@@ -3509,7 +3717,6 @@ def _run_ctrbpf_on_segment(
                 reference_ecef=ref_diag_epoch,
             )
 
-        ins_epoch_prepared = False
         if use_ins_tc and ins_ekf is not None:
             if ins_origin_ecef is None and hp_prefetched_valid:
                 ins_origin_ecef = np.asarray(hp_prefetched, dtype=np.float64).copy()
@@ -3571,8 +3778,6 @@ def _run_ctrbpf_on_segment(
                         if ins_ekf.initialize_yaw_from_velocity(v_enu):
                             if ins_tc_stats.yaw_initialized_at_epoch < 0:
                                 ins_tc_stats.yaw_initialized_at_epoch = i
-
-                ins_epoch_prepared = True
 
         pf_predict_done = False
         if (
@@ -4213,6 +4418,8 @@ def _run_ctrbpf_on_segment(
         if config.enable_rbpf_velocity_kf and sat_velocity is not None and doppler_hz is not None:
             sv_full = np.asarray(sat_velocity[i], dtype=np.float64)
             dop_full = np.asarray(doppler_hz[i], dtype=np.float64)
+            dop_model_full = dop_full.copy()
+            wavelengths_full = np.full(dop_full.shape, _GPS_L1_WAVELENGTH_M, dtype=np.float64)
             sat_full = np.asarray(sat_ecef[i], dtype=np.float64)
             w_full = np.asarray(weights[i], dtype=np.float64)
             if system_ids is not None:
@@ -4226,6 +4433,23 @@ def _run_ctrbpf_on_segment(
                 & np.all(np.isfinite(sat_full), axis=1)
                 & np.isfinite(w_full)
             )
+            wavelength_known = np.ones(dop_full.shape, dtype=bool)
+            if (
+                doppler_codes is not None
+                and i < len(doppler_codes)
+                and i < len(used_prns)
+                and len(doppler_codes[i]) == dop_full.size
+                and len(used_prns[i]) == dop_full.size
+            ):
+                wavelengths_full = doppler_wavelengths_m(
+                    used_prns[i], doppler_codes[i]
+                )
+                wavelength_known = np.isfinite(wavelengths_full) & (wavelengths_full > 0.0)
+                dop_finite &= wavelength_known
+                if np.any(wavelength_known):
+                    dop_model_full[wavelength_known] = normalize_doppler_to_reference(
+                        dop_full[wavelength_known], wavelengths_full[wavelength_known]
+                    )
             doppler_raw_finite_count = int(np.count_nonzero(dop_finite))
             if config.doppler_systems and sids_doppler_full is not None:
                 allowed_doppler_ids = {
@@ -4236,16 +4460,51 @@ def _run_ctrbpf_on_segment(
                     dtype=bool,
                 )
                 dop_finite &= doppler_sys_mask
+            doppler_clock_fit = None
+            if int(np.count_nonzero(dop_finite)) >= 4 and sids_doppler_full is not None:
+                try:
+                    doppler_clock_position = np.asarray(pf.estimate(), dtype=np.float64)[:3]
+                    normalized_doppler, doppler_clock_fit = normalize_constellation_clock_drifts(
+                        sat_full[dop_finite],
+                        sv_full[dop_finite],
+                        dop_full[dop_finite],
+                        wavelengths_full[dop_finite],
+                        doppler_clock_position,
+                        sids_doppler_full[dop_finite],
+                        weights=w_full[dop_finite],
+                    )
+                    dop_model_full[dop_finite] = normalized_doppler
+                except (ValueError, np.linalg.LinAlgError):
+                    doppler_clock_fit = None
             if pf_diag_row is not None:
                 pf_diag_row["doppler_raw_finite_count"] = int(doppler_raw_finite_count)
                 pf_diag_row["doppler_system_filtered_count"] = int(np.count_nonzero(dop_finite))
                 pf_diag_row["doppler_systems"] = ",".join(str(s) for s in config.doppler_systems)
+                pf_diag_row["doppler_signal_wavelength_known_count"] = int(
+                    np.count_nonzero(wavelength_known)
+                )
+                pf_diag_row["doppler_signal_wavelength_unknown_count"] = int(
+                    wavelength_known.size - np.count_nonzero(wavelength_known)
+                )
+                pf_diag_row["doppler_clock_group_count"] = int(
+                    doppler_clock_fit.group_ids.size if doppler_clock_fit is not None else 0
+                )
+                pf_diag_row["doppler_clock_fit_rms_mps"] = float(
+                    doppler_clock_fit.residual_rms_mps
+                    if doppler_clock_fit is not None
+                    else float("nan")
+                )
+                pf_diag_row["doppler_clock_drift_span_mps"] = float(
+                    np.ptp(doppler_clock_fit.clock_drifts_mps)
+                    if doppler_clock_fit is not None
+                    else float("nan")
+                )
             if int(dop_finite.sum()) >= 4 and float(config.doppler_prefit_gate_mps) > 0.0:
                 pf_pos_for_doppler_gate = np.asarray(pf.estimate(), dtype=np.float64)[:3]
                 doppler_prefit_mask = _doppler_prefit_gate_mask(
                     sat_full[dop_finite],
                     sv_full[dop_finite],
-                    dop_full[dop_finite],
+                    dop_model_full[dop_finite],
                     w_full[dop_finite],
                     pf_pos_for_doppler_gate,
                     gate_mps=float(config.doppler_prefit_gate_mps),
@@ -4272,7 +4531,7 @@ def _run_ctrbpf_on_segment(
                     wls_vel_for_gate, wls_rms_for_gate = _doppler_centered_wls_velocity(
                         sat_full[dop_finite],
                         sv_full[dop_finite],
-                        dop_full[dop_finite],
+                        dop_model_full[dop_finite],
                         w_full[dop_finite],
                         pf_pos_for_doppler_quality,
                         doppler_sign=-1.0,
@@ -4299,7 +4558,7 @@ def _run_ctrbpf_on_segment(
                         pf_diag_row[f"doppler_{label}_pfvel_rms_mps"] = _doppler_centered_residual_rms(
                             sat_full[dop_finite],
                             sv_full[dop_finite],
-                            dop_full[dop_finite],
+                            dop_model_full[dop_finite],
                             w_full[dop_finite],
                             pf_pos_before_doppler,
                             pf_vel_before_doppler,
@@ -4310,7 +4569,7 @@ def _run_ctrbpf_on_segment(
                             pf_diag_row[f"doppler_{label}_refvel_rms_mps"] = _doppler_centered_residual_rms(
                                 sat_full[dop_finite],
                                 sv_full[dop_finite],
-                                dop_full[dop_finite],
+                                dop_model_full[dop_finite],
                                 w_full[dop_finite],
                                 pf_pos_before_doppler,
                                 ref_vel_diag,
@@ -4320,7 +4579,7 @@ def _run_ctrbpf_on_segment(
                         wls_vel, wls_rms = _doppler_centered_wls_velocity(
                             sat_full[dop_finite],
                             sv_full[dop_finite],
-                            dop_full[dop_finite],
+                            dop_model_full[dop_finite],
                             w_full[dop_finite],
                             pf_pos_before_doppler,
                             doppler_sign=sign,
@@ -4383,7 +4642,7 @@ def _run_ctrbpf_on_segment(
                     pf.update_doppler_kf(
                         sat_full[dop_finite],
                         sv_full[dop_finite],
-                        dop_full[dop_finite],
+                        dop_model_full[dop_finite],
                         weights=w_full[dop_finite],
                         wavelength=_GPS_L1_WAVELENGTH_M,
                         sigma_mps=config.sigma_doppler_mps,
@@ -5247,7 +5506,9 @@ def _run_ctrbpf_on_segment(
                             _sel_ratio = _diag_float(_selected_diag, "final_ratio")
                             _sel_residual = _diag_float(_selected_diag, "final_residual_rms")
                         except (ValueError, TypeError):
-                            _sel_status = 0; _sel_ratio = 0.0; _sel_residual = 1e6
+                            _sel_status = 0
+                            _sel_ratio = 0.0
+                            _sel_residual = 1e6
                         if (
                             _sel_status == 4
                             and _sel_ratio >= float(config.rtkdiag_candidate_bridge_fix4_min_ratio)
@@ -5664,6 +5925,55 @@ def _run_ctrbpf_on_segment(
                 pr_obs_stats.deferred_resample_epochs += 1
 
         est = np.asarray(pf.estimate(), dtype=np.float64)
+        particle_snapshot = None
+        particle_velocity_snapshot = None
+        log_weight_snapshot = None
+        mode_result = None
+        mode_selection = None
+        if config.pf_mode_policy != "off" or pf_ffbsi is not None:
+            if pf_ffbsi is not None:
+                full_particle_snapshot = np.asarray(
+                    pf.get_particle_states(), dtype=np.float64
+                )
+                particle_snapshot = full_particle_snapshot[:, :4]
+                particle_velocity_snapshot = full_particle_snapshot[:, 4:7]
+                if (
+                    not config.enable_rbpf_velocity_kf
+                    and not pf_predict_done
+                    and v_guide is not None
+                    and np.all(np.isfinite(v_guide))
+                ):
+                    particle_velocity_snapshot = np.broadcast_to(
+                        np.asarray(v_guide, dtype=np.float64).reshape(1, 3),
+                        particle_velocity_snapshot.shape,
+                    ).copy()
+            else:
+                particle_snapshot = np.asarray(pf.get_particles(), dtype=np.float64)
+            log_weight_snapshot = np.asarray(pf.get_log_weights(), dtype=np.float64)
+            mode_result = extract_particle_modes(
+                particle_snapshot,
+                log_weight_snapshot,
+                voxel_size_m=float(config.pf_mode_voxel_size_m),
+                min_core_cell_mass=float(config.pf_mode_min_core_cell_mass),
+                min_core_cell_particles=int(config.pf_mode_min_core_cell_particles),
+                min_mode_mass=float(config.pf_mode_min_mass),
+                assignment_radius_m=float(config.pf_mode_assignment_radius_m),
+                max_modes=int(config.pf_mode_max_modes),
+                max_particles=int(config.pf_mode_max_particles),
+            )
+            mode_selection = select_particle_mode(
+                mode_result,
+                predicted_position=_emission_prediction(positions, times, i),
+                prediction_sigma_m=float(config.pf_mode_prediction_sigma_m),
+                min_selected_mass=float(config.pf_mode_select_min_mass),
+                min_score_ratio=float(config.pf_mode_select_min_score_ratio),
+                require_multiple_modes=bool(config.pf_mode_require_multiple_modes),
+                max_prediction_distance_m=float(
+                    config.pf_mode_max_prediction_distance_m
+                ),
+                min_weighted_mean_distance_m=float(config.pf_mode_min_mean_distance_m),
+                max_weighted_mean_distance_m=float(config.pf_mode_max_mean_distance_m),
+            )
         emitted_source = "pf"
         if ins_tc_emit_pf_here:
             if (
@@ -5768,6 +6078,15 @@ def _run_ctrbpf_on_segment(
             positions[i] = est[:3]
             emitted_source = "pf"
 
+        mode_emit_epoch_eligible = i >= int(config.pf_mode_min_epoch)
+        effective_mode_policy = (
+            config.pf_mode_policy if mode_emit_epoch_eligible else "diagnostic"
+        )
+        previous_emitted_source = emitted_source
+        positions[i], emitted_source = _apply_particle_mode_emission(
+            positions[i], emitted_source, effective_mode_policy, mode_selection
+        )
+
         if (
             emitted_source.startswith("rtkdiag_candidate")
             or emitted_source.startswith("rtkdiag_fallback_wls")
@@ -5783,7 +6102,18 @@ def _run_ctrbpf_on_segment(
                 pr_obs_stats.deferred_resample_epochs += 1
         else:
             did_resample = bool(resampled_before_emit)
+        emitted_sources[i] = emitted_source
         if pf_diag_row is not None:
+            if mode_result is not None and mode_selection is not None:
+                _attach_particle_mode_diagnostics(
+                    pf_diag_row, mode_result, mode_selection
+                )
+                pf_diag_row["pf_mode_emit_epoch_eligible"] = bool(
+                    mode_emit_epoch_eligible
+                )
+                pf_diag_row["pf_mode_emit_applied"] = bool(
+                    emitted_source != previous_emitted_source
+                )
             pf_diag_row["resampled_before_emit"] = bool(resampled_before_emit)
             pf_diag_row["resampled_epoch_end"] = bool(did_resample)
             pf_diag_row["emitted_source"] = emitted_source
@@ -5802,6 +6132,55 @@ def _run_ctrbpf_on_segment(
                 reference_ecef=ref_diag_epoch,
             )
             internal_diagnostics.append(pf_diag_row)
+            diagnostic_by_epoch[int(i)] = pf_diag_row
+
+        if pf_ffbsi is not None:
+            if particle_snapshot is None or log_weight_snapshot is None:
+                raise RuntimeError("PF FFBSi requires a pre-resample particle snapshot")
+            ancestors = (
+                np.asarray(pf.get_resample_ancestors(), dtype=np.int64)
+                if did_resample
+                else np.arange(int(config.n_particles), dtype=np.int64)
+            )
+            terminal_mask = None
+            smoother_rewrite_allowed = False
+            if (
+                mode_result is not None
+                and mode_selection is not None
+                and mode_selection.mode_index is not None
+                and len(mode_result.modes) > 0
+            ):
+                terminal_mask = nearest_mode_mask(
+                    particle_snapshot,
+                    np.stack([mode.position for mode in mode_result.modes], axis=0),
+                    int(mode_selection.mode_index),
+                )
+                smoother_rewrite_allowed = (
+                    i >= int(config.pf_mode_min_epoch)
+                    and mode_selection.reason
+                    in {"accepted", "single_mode", "weighted_mean_proximity"}
+                )
+            smoother_output = pf_ffbsi.append(
+                i,
+                particle_snapshot,
+                log_weight_snapshot,
+                ancestors,
+                terminal_mask=terminal_mask,
+                rewrite_allowed=smoother_rewrite_allowed,
+                velocities=particle_velocity_snapshot,
+                dt=float(dt),
+                sigma_pos=(
+                    float(config.ins_tc_predict_sigma_pos_m)
+                    if v_guide_from_ins
+                    else float(config.sigma_pos)
+                ),
+            )
+            if smoother_output is not None:
+                _consume_ffbsi_output(smoother_output)
+
+    if pf_ffbsi is not None:
+        for smoother_output in pf_ffbsi.flush():
+            _consume_ffbsi_output(smoother_output)
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     ms_per_epoch = elapsed / max(n_epochs, 1)
@@ -6451,6 +6830,30 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         hybrid_emit_pf_statuses=tuple(
             int(s.strip()) for s in args.hybrid_emit_pf_statuses.split(",") if s.strip()
         ),
+        pf_mode_policy=str(args.pf_mode_policy),
+        pf_mode_voxel_size_m=args.pf_mode_voxel_size_m,
+        pf_mode_min_core_cell_mass=args.pf_mode_min_core_cell_mass,
+        pf_mode_min_core_cell_particles=args.pf_mode_min_core_cell_particles,
+        pf_mode_min_mass=args.pf_mode_min_mass,
+        pf_mode_assignment_radius_m=args.pf_mode_assignment_radius_m,
+        pf_mode_max_modes=args.pf_mode_max_modes,
+        pf_mode_max_particles=args.pf_mode_max_particles,
+        pf_mode_select_min_mass=args.pf_mode_select_min_mass,
+        pf_mode_select_min_score_ratio=args.pf_mode_select_min_score_ratio,
+        pf_mode_require_multiple_modes=not bool(args.pf_mode_allow_single_mode),
+        pf_mode_min_epoch=args.pf_mode_min_epoch,
+        pf_mode_prediction_sigma_m=args.pf_mode_prediction_sigma_m,
+        pf_mode_max_prediction_distance_m=args.pf_mode_max_prediction_distance_m,
+        pf_mode_min_mean_distance_m=args.pf_mode_min_mean_distance_m,
+        pf_mode_max_mean_distance_m=args.pf_mode_max_mean_distance_m,
+        enable_pf_ffbsi_smoother=bool(args.enable_pf_ffbsi_smoother),
+        pf_ffbsi_lag_epochs=args.pf_ffbsi_lag_epochs,
+        pf_ffbsi_paths=args.pf_ffbsi_paths,
+        pf_ffbsi_seed=args.pf_ffbsi_seed,
+        pf_ffbsi_mode=args.pf_ffbsi_mode,
+        pf_ffbsi_max_std_m=args.pf_ffbsi_max_std_m,
+        pf_ffbsi_max_correction_m=args.pf_ffbsi_max_correction_m,
+        pf_ffbsi_min_unique_particles=args.pf_ffbsi_min_unique_particles,
         fgo_window_size=args.fgo_window_size,
         fgo_window_stride=args.fgo_window_stride,
         fgo_lambda_ratio=args.fgo_lambda_ratio,
@@ -8946,6 +9349,55 @@ def main() -> None:
         help="Write per-epoch PF ESS/spread/stage-delta diagnostics to results",
     )
     parser.add_argument(
+        "--pf-mode-policy",
+        choices=("off", "diagnostic", "emit"),
+        default="off",
+        help=(
+            "Weighted particle-mode policy: diagnostic records modes without "
+            "trajectory changes; emit replaces accepted PF weighted means"
+        ),
+    )
+    parser.add_argument("--pf-mode-voxel-size-m", type=float, default=2.0)
+    parser.add_argument("--pf-mode-min-core-cell-mass", type=float, default=1.0e-4)
+    parser.add_argument("--pf-mode-min-core-cell-particles", type=int, default=3)
+    parser.add_argument("--pf-mode-min-mass", type=float, default=0.01)
+    parser.add_argument("--pf-mode-assignment-radius-m", type=float, default=6.0)
+    parser.add_argument("--pf-mode-max-modes", type=int, default=8)
+    parser.add_argument("--pf-mode-max-particles", type=int, default=8192)
+    parser.add_argument("--pf-mode-select-min-mass", type=float, default=0.20)
+    parser.add_argument("--pf-mode-select-min-score-ratio", type=float, default=1.5)
+    parser.add_argument(
+        "--pf-mode-allow-single-mode",
+        action="store_true",
+        help="Permit mode emission for a single detected mode (default: multimodal only)",
+    )
+    parser.add_argument("--pf-mode-min-epoch", type=int, default=10)
+    parser.add_argument("--pf-mode-prediction-sigma-m", type=float, default=5.0)
+    parser.add_argument("--pf-mode-max-prediction-distance-m", type=float, default=20.0)
+    parser.add_argument("--pf-mode-min-mean-distance-m", type=float, default=0.5)
+    parser.add_argument("--pf-mode-max-mean-distance-m", type=float, default=20.0)
+    parser.add_argument(
+        "--enable-pf-ffbsi-smoother",
+        action="store_true",
+        help=(
+            "Enable mode-conditioned systematic-ancestor fixed-lag smoothing; "
+            "it smooths stored post-Doppler filtering particles without a second "
+            "Doppler update (the separate offline backward replay reverses both "
+            "satellite velocity and Doppler sign)"
+        ),
+    )
+    parser.add_argument("--pf-ffbsi-lag-epochs", type=int, default=25)
+    parser.add_argument("--pf-ffbsi-paths", type=int, default=32)
+    parser.add_argument("--pf-ffbsi-seed", type=int, default=20260713)
+    parser.add_argument(
+        "--pf-ffbsi-mode",
+        choices=("marginal", "genealogy"),
+        default="marginal",
+    )
+    parser.add_argument("--pf-ffbsi-max-std-m", type=float, default=5.0)
+    parser.add_argument("--pf-ffbsi-max-correction-m", type=float, default=10.0)
+    parser.add_argument("--pf-ffbsi-min-unique-particles", type=int, default=2)
+    parser.add_argument(
         "--pos-dir",
         type=Path,
         default=RESULTS_DIR / "libgnss_ctrbpf_pos",
@@ -9594,6 +10046,9 @@ def main() -> None:
         for v in variants
     )
     any_hybrid = any(v.enable_hybrid_pu for v in variants)
+    any_mode_diagnostics = any(
+        v.pf_mode_policy != "off" or v.enable_pf_ffbsi_smoother for v in variants
+    )
     if any_hybrid and args.hybrid_pos_dir is None:
         raise SystemExit(
             "--hybrid-pos-dir is required when any *+hybrid method is selected"
@@ -10197,6 +10652,11 @@ def main() -> None:
                 if rtkdiag_candidates_for_variant is not None
                 else rtkdiag_candidate_labels
             )
+            collect_variant_diagnostics = bool(
+                args.write_internal_diagnostics
+                or variant.pf_mode_policy != "off"
+                or variant.enable_pf_ffbsi_smoother
+            )
             positions, ms_per_epoch, pr_obs_stats, reservoir_stein_stats, dd_stats, gate_stats, hybrid_stats, rtkdiag_pf_stats, fgo_stats, tdcp_stats, low_sat_bridge_stats, zupt_stats, imu_tc_stats, ins_tc_stats, variant_internal_diag_rows = _run_ctrbpf_on_segment(
                 data, wls_positions, variant,
                 wls_quality=wls_quality,
@@ -10208,14 +10668,14 @@ def main() -> None:
                 reference_pos=reference_pos_run,
                 rtkdiag_candidates=rtkdiag_candidates_for_variant,
                 imu=imu_for_variant,
-                collect_internal_diagnostics=bool(args.write_internal_diagnostics),
+                collect_internal_diagnostics=collect_variant_diagnostics,
                 ranker_score_lookup=ranker_lookup_run,
                 ranker_stickiness=float(args.rtkdiag_candidate_ranker_stickiness),
                 pf_nlos_mask_tables=pf_nlos_tables_run,
                 pf_nlos_k_weak=float(args.pf_nlos_k_weak),
                 pf_nlos_k_strong=float(args.pf_nlos_k_strong),
             )
-            if args.write_internal_diagnostics:
+            if collect_variant_diagnostics:
                 for diag in variant_internal_diag_rows:
                     diag["city"] = city
                     diag["run"] = run
@@ -10979,7 +11439,7 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(rows)
     internal_diag_path = RESULTS_DIR / f"{args.results_prefix}_internal_epochs.csv"
-    if args.write_internal_diagnostics and internal_diag_rows:
+    if (args.write_internal_diagnostics or any_mode_diagnostics) and internal_diag_rows:
         _write_dict_rows(internal_diag_path, internal_diag_rows)
 
     print()
@@ -10998,7 +11458,7 @@ def main() -> None:
             f"(pass {agg_pass[method]:.0f}m / total {total:.0f}m, n_runs={len(per_run)})"
         )
     print(f"  Saved: {out_csv}")
-    if args.write_internal_diagnostics and internal_diag_rows:
+    if (args.write_internal_diagnostics or any_mode_diagnostics) and internal_diag_rows:
         print(f"  Saved internal diagnostics: {internal_diag_path}")
     print("=" * 72)
 

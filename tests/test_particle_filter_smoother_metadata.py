@@ -28,6 +28,15 @@ class _FakeBackwardPF:
     def update(self, sat_ecef, pseudoranges, weights=None, sigma_pr=None):
         self.calls.append(("pr", len(pseudoranges), sigma_pr))
 
+    def update_doppler(self, sat_ecef, sat_vel, doppler_hz, **_kwargs):
+        self.calls.append(
+            (
+                "doppler",
+                np.asarray(sat_vel, dtype=np.float64).copy(),
+                np.asarray(doppler_hz, dtype=np.float64).copy(),
+            )
+        )
+
     def estimate(self):
         return self._estimate
 
@@ -127,3 +136,28 @@ def test_smooth_skip_widelane_keeps_regular_dd_pseudorange_replay(monkeypatch):
         skip_widelane_dd_pseudorange=True,
     )
     assert any(call[0] == "dd_pr" for call in _FakeBackwardPF.instances[-1].calls)
+
+
+def test_smooth_replays_doppler_in_reverse_time(monkeypatch):
+    original_pf = pfd.ParticleFilterDevice
+    monkeypatch.setattr(pfd, "ParticleFilterDevice", _FakeBackwardPF)
+    shell = _smooth_shell(None)
+    forward_sat_vel = np.array(
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]
+    )
+    forward_doppler = np.array([-10.0, 20.0, -30.0, 40.0])
+    shell._smooth_epochs[0]["doppler_update"] = {
+        "sat_ecef": shell._smooth_epochs[0]["sat_ecef"],
+        "sat_vel": forward_sat_vel,
+        "doppler_hz": forward_doppler,
+        "weights": np.ones(4),
+        "wavelength_m": 0.19,
+        "n_sat": 4,
+    }
+
+    _FakeBackwardPF.instances = []
+    original_pf.smooth(shell)
+
+    call = next(call for call in _FakeBackwardPF.instances[-1].calls if call[0] == "doppler")
+    np.testing.assert_array_equal(call[1], -forward_sat_vel)
+    np.testing.assert_array_equal(call[2], -forward_doppler)

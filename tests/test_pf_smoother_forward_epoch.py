@@ -42,7 +42,15 @@ def test_process_pf_smoother_forward_epoch_wires_update_sequence(monkeypatch):
 
     monkeypatch.setattr(epoch_mod, "apply_forward_epoch_prediction", fake_predict)
 
-    def fake_measurements(context_arg, epoch_state_arg, sol_epoch_arg, measurements_arg):
+    def fake_measurements(
+        context_arg,
+        epoch_state_arg,
+        sol_epoch_arg,
+        measurements_arg,
+        *,
+        tow,
+    ):
+        calls.append(("measurements", tow))
         epoch_state_arg.carrier_anchor_rows = ["anchor"]
         return ForwardEpochMeasurementInputs(
             observation_inputs=EpochObservationInputs(
@@ -113,10 +121,12 @@ def test_process_pf_smoother_forward_epoch_wires_update_sequence(monkeypatch):
     assert [call[0] for call in calls] == [
         "predict",
         "pf_predict",
+        "measurements",
         "updates",
         "record",
     ]
     assert calls[1][1]["sigma_pos"] == 0.25
-    assert calls[2] == ("updates", 123.4, 0.1)
+    assert calls[2] == ("measurements", 123.4)
+    assert calls[3] == ("updates", 123.4, 0.1)
     assert calls[-1] == ("record", 123.4, 0.1)
     assert epoch_state.carrier_anchor_rows == ["anchor"]
