@@ -57,7 +57,7 @@ def estimate_velocity_from_doppler(
     sat_ecef: np.ndarray,
     doppler_hz: np.ndarray,
     sat_velocities: np.ndarray | None = None,
-    wavelength: float = C_LIGHT / L1_FREQ,
+    wavelength: float | np.ndarray = C_LIGHT / L1_FREQ,
 ) -> np.ndarray | None:
     """Estimate 3D receiver velocity from Doppler observations.
 
@@ -94,7 +94,13 @@ def estimate_velocity_from_doppler(
     n_sat = len(dop)
 
     # Range rate from Doppler: dr/dt = -lambda * f_doppler
-    range_rate = -wavelength * dop  # [m/s]
+    wavelengths = np.asarray(wavelength, dtype=np.float64)
+    if wavelengths.ndim == 0:
+        wavelengths = np.full(valid.size, float(wavelengths), dtype=np.float64)
+    wavelengths = wavelengths.reshape(-1)
+    if wavelengths.size != valid.size:
+        raise ValueError("wavelength must be scalar or match Doppler rows")
+    range_rate = -wavelengths[valid] * dop  # [m/s]
 
     # Unit vectors from receiver to satellites
     dx = sat - pos[np.newaxis, :]

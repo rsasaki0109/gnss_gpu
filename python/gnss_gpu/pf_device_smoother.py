@@ -226,7 +226,12 @@ class ParticleFilterDeviceSmootherMixin:
             last['sat_ecef'].reshape(-1, 3) - init_pos, axis=1)
         init_cb = float(np.median(init_cb_candidates))
 
-        bwd_pf = type(self)(**clone_pf_device_init_kwargs(self))
+        # Resolve the public class lazily.  Besides avoiding an import cycle
+        # with ``particle_filter_device``, this keeps the smoother usable with
+        # test doubles and subclasses whose ``self`` is only a state shell.
+        from gnss_gpu import particle_filter_device as pfd
+
+        bwd_pf = pfd.ParticleFilterDevice(**clone_pf_device_init_kwargs(self))
         bwd_pf.initialize(
             init_pos,
             clock_bias=init_cb,
@@ -253,10 +258,13 @@ class ParticleFilterDeviceSmootherMixin:
             dd_cp_ep = ep.get('dd_carrier')
             carrier_anchor_ep = ep.get('carrier_anchor_pseudorange')
             carrier_afv_ep = ep.get('carrier_afv')
-            # Doppler constrains forward-time receiver velocity.  The backward
-            # PF runs with reversed velocity, so replaying the same Doppler rows
-            # would apply the wrong sign until a direction-aware model exists.
-            doppler_ep = None
+            # Reverse the complete range-rate observation model, not only the
+            # receiver motion used by predict().  Under tau=-t, both satellite
+            # velocity and measured range rate change sign; since
+            # range_rate=-wavelength*doppler_hz, Doppler changes sign too.
+            # This makes the ordinary forward update solve for v_tau=-v_t and
+            # preserves the clock-drift nuisance sign consistently.
+            doppler_ep = ep.get('doppler_update')
             if dd_ep is not None and not skip_dd_ep:
                 bwd_pf.update_dd_pseudorange(
                     SimpleNamespace(**dd_ep),
@@ -311,8 +319,8 @@ class ParticleFilterDeviceSmootherMixin:
             if doppler_ep is not None:
                 bwd_pf.update_doppler(
                     doppler_ep['sat_ecef'],
-                    doppler_ep['sat_vel'],
-                    doppler_ep['doppler_hz'],
+                    -doppler_ep['sat_vel'],
+                    -doppler_ep['doppler_hz'],
                     weights=doppler_ep['weights'],
                     wavelength=float(doppler_ep.get('wavelength_m', 0.19029367279836488)),
                     sigma_mps=(

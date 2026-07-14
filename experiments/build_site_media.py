@@ -40,6 +40,8 @@ def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.I
             [
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                 "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+                "C:/Windows/Fonts/segoeuib.ttf",
+                "C:/Windows/Fonts/arialbd.ttf",
             ]
         )
     else:
@@ -47,6 +49,8 @@ def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.I
             [
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
                 "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+                "C:/Windows/Fonts/segoeui.ttf",
+                "C:/Windows/Fonts/arial.ttf",
             ]
         )
     for candidate in candidates:
@@ -185,7 +189,6 @@ def _build_poster() -> Image.Image:
     draw = ImageDraw.Draw(poster)
     ink = "#1f2724"
     muted = "#55615d"
-    teal = "#0f766e"
     rust = "#bc6c25"
 
     _draw_text_block(
@@ -207,9 +210,9 @@ def _build_poster() -> Image.Image:
         (788, 78),
         [
             ("CURRENT READ", _font(22, bold=True), "#d6fffa"),
-            ("66.60 m external RMS\n57.8x BVH speedup", _font(40, bold=True), "#ffffff"),
+            ("7/7 methods audited\n17/17 artifacts complete", _font(40, bold=True), "#ffffff"),
             (
-                "UrbanNav trimble + G,E,J is the frozen headline.\nPPC holdout stays smaller, while BVH carries the systems story.",
+                "Phase71 remains the production baseline at 86.205492%.\nExperimental paths are explicit, gated, and reproducible.",
                 _font(17),
                 "#e7fffc",
             ),
@@ -250,7 +253,7 @@ def _build_poster() -> Image.Image:
     metric_boxes = [
         ((90, 364, 330, 432), "PF+RobustClear", "10K frozen winner"),
         ((350, 364, 560, 432), "93.25 -> 66.60", "UrbanNav vs EKF"),
-        ((580, 364, 692, 432), "440/7", "tests/skips"),
+        ((580, 364, 692, 432), "142/142", "focused tests"),
     ]
     for box, value, label in metric_boxes:
         draw.rounded_rectangle(box, radius=20, fill=ImageColor.getrgb("#efe5d4"))
@@ -280,6 +283,22 @@ def _build_teaser(poster: Image.Image) -> list[Image.Image]:
     base = poster.resize(target_size, Image.Resampling.LANCZOS).convert("RGBA")
 
     focus_specs = [
+        {
+            "image_path": None,
+            "eyebrow": "2026 AUDIT",
+            "title": "Seven methods, honestly evaluated",
+            "subtitle": "Full-six runs and blocked holdouts keep production conservative.",
+            "metrics": [("7/7", "decisions closed"), ("17/17", "artifacts verified")],
+            "footer": "C++20 host/CUDA; experimental paths stay gated.",
+            "preview_rows": [
+                ("RETAIN", "signal-aware G/E/J"),
+                ("DIAGNOSTIC", "PF modes · switch · recurrence"),
+                ("RESEARCH", "FFBSi · DD/IMU · WCP"),
+            ],
+            "accent": "#0f766e",
+            "panel": "#fffaf1",
+            "chip": "#dff6f3",
+        },
         {
             "image_path": PAPER_ASSETS_DIR / "paper_urbannav_external.png",
             "eyebrow": "MAINLINE",
@@ -350,24 +369,53 @@ def _build_teaser(poster: Image.Image) -> list[Image.Image]:
         frame_draw.rounded_rectangle((548, 102, 654, 138), radius=16, fill=spec["chip"])
         frame_draw.text((572, 110), f"0{index}", font=_font(20, bold=True), fill=spec["accent"])
 
-        preview = _load_and_fit(spec["image_path"], (preview_box[2] - preview_box[0] - 42, 250))
-        frame.alpha_composite(preview, (preview_box[0] + 21, preview_box[1] + 56))
+        if spec["image_path"] is None:
+            preview_left = preview_box[0] + 34
+            preview_top = preview_box[1] + 66
+            frame_draw.text(
+                (preview_left, preview_top),
+                "STRUCTURAL METHOD DECISIONS",
+                font=_font(22, bold=True),
+                fill=spec["accent"],
+            )
+            for row_index, (status, method) in enumerate(spec["preview_rows"]):
+                row_top = preview_top + 48 + row_index * 58
+                frame_draw.rounded_rectangle(
+                    (preview_left, row_top, preview_box[2] - 34, row_top + 44),
+                    radius=16,
+                    fill=spec["chip"] if row_index == 0 else "#efe5d4",
+                )
+                frame_draw.text(
+                    (preview_left + 16, row_top + 11),
+                    status,
+                    font=_font(16, bold=True),
+                    fill=spec["accent"],
+                )
+                frame_draw.text(
+                    (preview_left + 146, row_top + 9),
+                    method,
+                    font=_font(19),
+                    fill="#1f2724",
+                )
+        else:
+            preview = _load_and_fit(spec["image_path"], (preview_box[2] - preview_box[0] - 42, 220))
+            frame.alpha_composite(preview, (preview_box[0] + 21, preview_box[1] + 56))
 
         frame_draw.rounded_rectangle(
-            (preview_box[0] + 22, preview_box[1] + 322, preview_box[2] - 22, preview_box[3] - 20),
+            (preview_box[0] + 22, preview_box[1] + 276, preview_box[2] - 22, preview_box[3] - 20),
             radius=24,
             fill="#fff4e6",
         )
         frame_draw.text(
-            (preview_box[0] + 44, preview_box[1] + 338),
+            (preview_box[0] + 44, preview_box[1] + 290),
             spec["title"],
-            font=_font(30, bold=True),
+            font=_font(27, bold=True),
             fill="#1f2724",
         )
         frame_draw.text(
-            (preview_box[0] + 44, preview_box[1] + 378),
+            (preview_box[0] + 44, preview_box[1] + 331),
             spec["footer"],
-            font=_font(18),
+            font=_font(16),
             fill="#55615d",
         )
 
@@ -394,18 +442,18 @@ def _build_teaser(poster: Image.Image) -> list[Image.Image]:
             spacing=6,
         )
 
-        chip_y = 360
+        chip_y = 342
         for metric_value, metric_label in spec["metrics"]:
-            chip_box = (96, chip_y, 412, chip_y + 74)
+            chip_box = (96, chip_y, 412, chip_y + 64)
             frame_draw.rounded_rectangle(chip_box, radius=24, fill=spec["chip"])
-            frame_draw.text((118, chip_y + 12), metric_value, font=_font(28, bold=True), fill="#1f2724")
-            frame_draw.text((118, chip_y + 44), metric_label, font=_font(17), fill="#55615d")
-            chip_y += 88
+            frame_draw.text((118, chip_y + 7), metric_value, font=_font(26, bold=True), fill="#1f2724")
+            frame_draw.text((118, chip_y + 37), metric_label, font=_font(16), fill="#55615d")
+            chip_y += 76
 
         frame_draw.rounded_rectangle((70, 548, 1130, 624), radius=26, fill=(255, 250, 241, 226))
         frame_draw.text(
             (98, 570),
-            "artifact snapshot: frozen headline, systems result, and holdout context",
+            "artifact snapshot: audited methods, frozen headline, systems, and holdout context",
             font=_font(24, bold=True),
             fill="#273330",
         )
@@ -661,7 +709,7 @@ def main() -> None:
         TEASER_PATH,
         save_all=True,
         append_images=teaser_frames[1:],
-        duration=[1200, 1100, 1100, 1100],
+        duration=[1400, 1300, 1100, 1100, 1100],
         loop=0,
         optimize=True,
         disposal=2,

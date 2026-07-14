@@ -24,6 +24,7 @@ for _p in (_PROJECT_ROOT / "python", _PROJECT_ROOT, _SCRIPT_DIR):
 
 from gnss_gpu.local_fgo import LocalFgoConfig  # noqa: E402
 from gnss_gpu.tc_fgo import (  # noqa: E402
+    PhaseInitConfig,
     TcAmbiguityBank,
     TcFgoConfig,
     TcFgoEpochObs,
@@ -50,7 +51,6 @@ from wp11_run_tc_fgo import (  # noqa: E402
     DEFAULT_BASELINE_POS,
     build_dd_carrier_epoch_at_index,
     build_dd_pr_epoch_at_index,
-    build_dd_measurements_for_epoch,
     build_ppc_imu_preintegration,
     collect_all_rtk_fixes,
     collect_rtk_fixes_while_static,
@@ -63,7 +63,6 @@ from wp11_run_tc_fgo import (  # noqa: E402
     resolve_data_root,
     resolve_run_dir,
     run_two_phase_initialization,
-    write_tc_pos_file,
     collapse_imu_preintegration_segment,
     _dd_measurement_kwargs,
 )
@@ -89,6 +88,12 @@ class EpochTelemetry:
     recovery_fired: bool = False
     imu_fill: bool = False
     n_dd_carrier: int = 0
+    n_wcp_factors: int = 0
+    n_switchable_pseudorange: int = 0
+    n_switched_pseudorange: int = 0
+    n_switch_integrity_abstained_epochs: int = 0
+    n_switch_integrity_abstained_rows: int = 0
+    n_switch_shadow_epochs: int = 0
     n_cross_window_prior: int = 0
     ar_accepted: bool = False
     epoch_fixed: bool = False
@@ -183,6 +188,7 @@ def run_tc_fgo_sequence_wp12(
     held_ambiguities: dict | None = None,
     reference_ecef_by_tow: dict[float, np.ndarray] | None = None,
     telemetry: list[EpochTelemetry] | None = None,
+    epoch_index_offset: int = 0,
 ) -> tuple[np.ndarray, list[TcFgoNavState], dict[str, int], list[int]]:
     n = int(tows.size)
     window = max(1, int(config.window_epochs))
@@ -471,7 +477,7 @@ def run_tc_fgo_sequence_wp12(
                     fix_truth_err = pos_err
                 telemetry.append(
                     EpochTelemetry(
-                        epoch=i,
+                        epoch=int(epoch_index_offset) + i,
                         tow=float(tows[i]),
                         pos_err_m=pos_err,
                         n_dd_factors=int(result.factor_counts.get("dd_pseudorange", 0)),
@@ -485,6 +491,26 @@ def run_tc_fgo_sequence_wp12(
                         recovery_fired=recovery_fired,
                         imu_fill=len(win_states) < 2,
                         n_dd_carrier=int(result.factor_counts.get("dd_carrier", 0)),
+                        n_wcp_factors=int(result.factor_counts.get("wcp", 0)),
+                        n_switchable_pseudorange=int(
+                            result.factor_counts.get("switchable_pseudorange", 0)
+                        ),
+                        n_switched_pseudorange=int(
+                            result.factor_counts.get("switched_pseudorange", 0)
+                        ),
+                        n_switch_integrity_abstained_epochs=int(
+                            result.factor_counts.get(
+                                "switch_integrity_abstained_epochs", 0
+                            )
+                        ),
+                        n_switch_integrity_abstained_rows=int(
+                            result.factor_counts.get(
+                                "switch_integrity_abstained_rows", 0
+                            )
+                        ),
+                        n_switch_shadow_epochs=int(
+                            result.factor_counts.get("switch_shadow_epochs", 0)
+                        ),
                         n_cross_window_prior=int(result.factor_counts.get("n_cross_window_prior", 0)),
                         ar_accepted=bool(result.ar_accepted),
                         epoch_fixed=epoch_is_fixed,
@@ -512,7 +538,7 @@ def run_tc_fgo_sequence_wp12(
                 )
             telemetry.append(
                 EpochTelemetry(
-                    epoch=i,
+                    epoch=int(epoch_index_offset) + i,
                     tow=float(tows[i]),
                     pos_err_m=pos_err,
                     imu_fill=True,
@@ -538,7 +564,24 @@ def build_config_from_args(args: argparse.Namespace) -> TcFgoConfig:
         bias_rw_sigma_accel=float(args.bias_rw_sigma_accel),
         bias_rw_sigma_gyro_radps=float(args.bias_rw_sigma_gyro),
         doppler_body_vel_sigma_mps=float(args.doppler_sigma_mps),
-        enable_dd_carrier=bool(args.dd_carrier),
+        enable_dd_carrier=bool(args.dd_carrier or args.wcp),
+        enable_wcp=bool(args.wcp),
+        wcp_sigma_cycles=float(args.wcp_sigma_cycles),
+        wcp_min_epochs=int(args.wcp_min_epochs),
+        wcp_slip_threshold_cycles=float(args.wcp_slip_threshold_cycles),
+        enable_switchable_pseudorange=bool(
+            args.switchable_pseudorange
+            or args.switchable_pseudorange_experimental
+        ),
+        commit_switchable_pseudorange=bool(
+            args.switchable_pseudorange_experimental
+        ),
+        switch_prior_strength=float(args.switch_prior_strength),
+        switch_diagnostic_threshold=float(args.switch_diagnostic_threshold),
+        switch_min_reliable_rows=int(args.switch_min_reliable_rows),
+        switch_max_downweighted_fraction=float(
+            args.switch_max_downweighted_fraction
+        ),
         enable_persistent_ambiguities=bool(args.persistent_ambiguities),
         enable_lambda_ar=bool(args.lambda_ar),
         lambda_ratio_threshold=float(args.lambda_ratio),
@@ -567,6 +610,8 @@ def write_tc_pos_file_with_status(
     tows: np.ndarray,
     positions_ecef: np.ndarray,
     statuses: list[int],
+    *,
+    gps_week: int,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
@@ -579,7 +624,7 @@ def write_tc_pos_file_with_status(
             lat, lon, height = ecef_to_lla(float(pos[0]), float(pos[1]), float(pos[2]))
             status = int(statuses[i]) if i < len(statuses) else 5
             fh.write(
-                f"2324 {float(tow):14.4f} "
+                f"{int(gps_week)} {float(tow):14.4f} "
                 f"{pos[0]:16.4f} {pos[1]:16.4f} {pos[2]:16.4f}  "
                 f"{lat:10.6f} {lon:11.6f} {height:8.3f} {status}   0  "
                 f"0.000  0.000  0.000  0.00  0.0\n"
@@ -589,11 +634,28 @@ def write_tc_pos_file_with_status(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="WP12a/WP12b TC-FGO runner")
     parser.add_argument("--run", default="tokyo/run1", help="PPC run path under dataset root")
+    parser.add_argument(
+        "--start-epoch",
+        type=int,
+        default=0,
+        help="Zero-based rover epoch at which evaluation starts",
+    )
     parser.add_argument("--max-epochs", type=int, default=0, help="Limit epochs (0 = all)")
     parser.add_argument("--export-pos", type=Path, required=True, help="Output RTKLIB-like .pos path")
-    parser.add_argument("--baseline-pos", type=Path, default=DEFAULT_BASELINE_POS)
+    parser.add_argument(
+        "--baseline-pos",
+        type=Path,
+        default=None,
+        help="RTK seed/anchor trajectory (default: matching libgnss_rtk_pos_v5 run)",
+    )
     parser.add_argument("--systems", default="G", help="Comma-separated GNSS systems")
     parser.add_argument("--window-epochs", type=int, default=5)
+    parser.add_argument(
+        "--phase-init-static-fixes",
+        type=int,
+        default=5,
+        help="Number of causal static RTK FIX epochs used by phase-1 initialization",
+    )
     parser.add_argument("--data-root", type=Path, default=None)
     # WP12a stabilization flags
     parser.add_argument("--optimize-imu-biases", action="store_true", help="Promote ba/bg into LM state")
@@ -634,6 +696,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dynamic-dd-rebuild", action="store_true", help="Rebuild DD rows from float position")
     parser.add_argument("--dd-carrier", action="store_true", help="Enable DD carrier-phase factors")
     parser.add_argument(
+        "--wcp",
+        action="store_true",
+        help="Use slip-segmented WCP left-nullspace factors instead of explicit ambiguities",
+    )
+    parser.add_argument("--wcp-sigma-cycles", type=float, default=0.05)
+    parser.add_argument("--wcp-min-epochs", type=int, default=3)
+    parser.add_argument("--wcp-slip-threshold-cycles", type=float, default=1.5)
+    parser.add_argument(
+        "--switchable-pseudorange",
+        action="store_true",
+        help="Shadow-evaluate closed-form DD pseudorange switches without committing them",
+    )
+    parser.add_argument(
+        "--switchable-pseudorange-experimental",
+        action="store_true",
+        help="Commit switch factors that pass the integrity gate (unstable research ablation)",
+    )
+    parser.add_argument("--switch-prior-strength", type=float, default=4.0)
+    parser.add_argument("--switch-diagnostic-threshold", type=float, default=0.5)
+    parser.add_argument("--switch-min-reliable-rows", type=int, default=4)
+    parser.add_argument("--switch-max-downweighted-fraction", type=float, default=0.5)
+    parser.add_argument(
         "--persistent-ambiguities",
         action="store_true",
         help="Carry float DD ambiguities across sliding windows (WP12b)",
@@ -670,13 +754,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--schur-min-eigenvalue", type=float, default=1.0e-6)
     args = parser.parse_args(argv)
+    if int(args.phase_init_static_fixes) < 1:
+        parser.error("--phase-init-static-fixes must be at least 1")
 
     data_root = Path(args.data_root) if args.data_root is not None else resolve_data_root()
     run_dir = resolve_run_dir(data_root, str(args.run))
     systems = tuple(s.strip() for s in str(args.systems).split(",") if s.strip())
 
     all_tows = parse_rover_tows_from_obs(run_dir / "rover.obs")
-    tows = all_tows[: int(args.max_epochs)] if int(args.max_epochs) > 0 else all_tows
+    start_epoch = int(args.start_epoch)
+    if start_epoch < 0 or start_epoch >= int(all_tows.size):
+        raise ValueError(
+            f"--start-epoch must be in [0, {int(all_tows.size) - 1}], got {start_epoch}"
+        )
+    stop_epoch = (
+        min(int(all_tows.size), start_epoch + int(args.max_epochs))
+        if int(args.max_epochs) > 0
+        else int(all_tows.size)
+    )
+    tows = all_tows[start_epoch:stop_epoch]
     if tows.size == 0:
         raise ValueError("no rover epochs")
 
@@ -694,7 +790,22 @@ def main(argv: list[str] | None = None) -> int:
             if key in data and hasattr(data[key], "__len__"):
                 data[key] = data[key][:n]
 
-    rtk_by_tow = load_rtk_pos_extended(Path(args.baseline_pos))
+    run_parts = Path(str(args.run).replace("\\", "/")).parts
+    if len(run_parts) < 2:
+        raise ValueError(f"--run must include city/run, got {args.run!r}")
+    city_name, run_name = run_parts[-2:]
+    baseline_path = (
+        Path(args.baseline_pos)
+        if args.baseline_pos is not None
+        else _PROJECT_ROOT
+        / "experiments"
+        / "results"
+        / "libgnss_rtk_pos_v5"
+        / f"{city_name}_{run_name}_full.pos"
+    )
+    if not baseline_path.exists() and args.baseline_pos is None and city_name == "tokyo" and run_name == "run1":
+        baseline_path = DEFAULT_BASELINE_POS
+    rtk_by_tow = load_rtk_pos_extended(baseline_path)
     rtk_status_by_tow = {k: (v.ecef, v.status) for k, v in rtk_by_tow.items()}
     anchor_class = classify_anchor_status(tows, rtk_status_by_tow)
     nearest_anchor_dist = nearest_anchor_distance_epochs(
@@ -702,11 +813,16 @@ def main(argv: list[str] | None = None) -> int:
         include_fix=bool(args.anchor_fix),
         include_float=bool(args.anchor_float),
     )
-    static_fixes = collect_rtk_fixes_while_static(tows, rtk_status_by_tow)
-    all_fixes = collect_all_rtk_fixes(tows, rtk_status_by_tow)
-    if len(static_fixes) < 5:
+    # A blocked-span replay still needs the initial static alignment and a
+    # course estimate.  Use only the RTK history available through the end of
+    # the requested window, never later epochs.
+    initialization_tows = all_tows[:stop_epoch]
+    static_fixes = collect_rtk_fixes_while_static(initialization_tows, rtk_status_by_tow)
+    all_fixes = collect_all_rtk_fixes(initialization_tows, rtk_status_by_tow)
+    phase_init_static_fixes = int(args.phase_init_static_fixes)
+    if len(static_fixes) < phase_init_static_fixes:
         raise ValueError(f"insufficient static RTK FIX epochs for phase-1 init: {len(static_fixes)}")
-    if len(all_fixes) < 5:
+    if len(all_fixes) < phase_init_static_fixes:
         raise ValueError(f"insufficient RTK FIX epochs for phase-2 heading: {len(all_fixes)}")
 
     loader = PPCDatasetLoader(run_dir)
@@ -738,7 +854,7 @@ def main(argv: list[str] | None = None) -> int:
         imu_acc,
         imu_gyro_dps,
         float(static_fixes[0][0]),
-        float(static_fixes[min(len(static_fixes) - 1, 4)][0]),
+        float(static_fixes[phase_init_static_fixes - 1][0]),
     )
     ins = INSEKF(INSConfig())
     init_state, phase2_idx = run_two_phase_initialization(
@@ -750,7 +866,18 @@ def main(argv: list[str] | None = None) -> int:
         origin_ecef=origin_ecef,
         origin_lat=origin_lat,
         origin_lon=origin_lon,
+        phase_cfg=PhaseInitConfig(n_collect_fixes=phase_init_static_fixes),
     )
+    if start_epoch > 0:
+        # A sliced replay does not mechanize the preceding thousands of IMU
+        # samples.  Warm-start position from the same causal RTK trajectory
+        # already used by the full runner's anchor path; attitude and biases
+        # remain those obtained from the two-phase initialization above.
+        first_seed = rtk_by_tow.get(round(float(tows[0]), 1))
+        if first_seed is not None and int(first_seed.status) != 0:
+            init_state.p_enu = ecef_to_enu(
+                first_seed.ecef, origin_ecef, origin_lat, origin_lon
+            )
 
     dd_pr_computer, dd_cp_computer = make_dd_computers(run_dir, data, systems)
     config = build_config_from_args(args)
@@ -760,8 +887,7 @@ def main(argv: list[str] | None = None) -> int:
     if telemetry_rows is not None:
         from score_vs_inuex35 import load_reference_grid  # noqa: E402
 
-        run_name = str(args.run).split("/")[-1]
-        reference_ecef_by_tow = load_reference_grid("tokyo", run_name)
+        reference_ecef_by_tow = load_reference_grid(city_name, run_name)
 
     positions_ecef, _states, seq_stats, epoch_status = run_tc_fgo_sequence_wp12(
         tows=tows,
@@ -799,6 +925,7 @@ def main(argv: list[str] | None = None) -> int:
         dynamic_dd_rebuild=bool(args.dynamic_dd_rebuild),
         reference_ecef_by_tow=reference_ecef_by_tow,
         telemetry=telemetry_rows,
+        epoch_index_offset=start_epoch,
     )
 
     if telemetry_rows is not None and args.telemetry_csv is not None:
@@ -810,13 +937,36 @@ def main(argv: list[str] | None = None) -> int:
                 writer.writerow({k: getattr(row, k) for k in _telemetry_fieldnames()})
         print(f"Wrote telemetry: {args.telemetry_csv}")
 
-    write_tc_pos_file_with_status(Path(args.export_pos), tows, positions_ecef, epoch_status)
+    gps_week_by_run = {
+        ("tokyo", "run1"): 2324,
+        ("tokyo", "run2"): 2324,
+        ("tokyo", "run3"): 2324,
+        ("nagoya", "run1"): 2325,
+        ("nagoya", "run2"): 2323,
+        ("nagoya", "run3"): 2325,
+    }
+    gps_week = gps_week_by_run.get((city_name, run_name))
+    if gps_week is None:
+        raise ValueError(f"unknown PPC GPS week for {city_name}/{run_name}")
+    write_tc_pos_file_with_status(
+        Path(args.export_pos),
+        tows,
+        positions_ecef,
+        epoch_status,
+        gps_week=gps_week,
+    )
     elapsed = time.perf_counter() - t0
     flags = []
     if args.dynamic_dd_rebuild:
         flags.append("dyn_dd")
     if args.dd_carrier:
         flags.append("dd_cp")
+    if args.wcp:
+        flags.append("wcp")
+    if args.switchable_pseudorange_experimental:
+        flags.append("switch_pr_experimental")
+    elif args.switchable_pseudorange:
+        flags.append("switch_pr_shadow")
     if args.persistent_ambiguities:
         flags.append("persist_amb")
     if args.lambda_ar:

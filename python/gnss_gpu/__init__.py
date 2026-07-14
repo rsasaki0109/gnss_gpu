@@ -78,6 +78,17 @@ from gnss_gpu.raim import raim_check, raim_fde
 from gnss_gpu.doppler import doppler_velocity, doppler_velocity_batch
 from gnss_gpu.fgo import fgo_gnss_lm, fgo_gnss_lm_vd
 from gnss_gpu.robust_spp import robust_spp
+from gnss_gpu.candidate_3dma import (
+    Candidate3DMAResult,
+    cn0_to_los_probability,
+    horizontal_candidates_ecef,
+    multipivot_consensus_scores,
+    road_mode_trigger,
+    robust_subset_consensus_scores,
+    score_candidate_positions,
+    temporal_bias_consistency_scores,
+    visibility_mode_cluster_scores,
+)
 from gnss_gpu.signal_sim import SignalSimulator
 from gnss_gpu.urban_signal_sim import UrbanSignalSimulator
 from gnss_gpu.e2e_helpers import (
@@ -160,6 +171,16 @@ __all__ = [
     "doppler_velocity_batch",
     # Robust single point positioning
     "robust_spp",
+    # Candidate-centred 3DMA positioning
+    "Candidate3DMAResult",
+    "cn0_to_los_probability",
+    "horizontal_candidates_ecef",
+    "multipivot_consensus_scores",
+    "road_mode_trigger",
+    "robust_subset_consensus_scores",
+    "score_candidate_positions",
+    "temporal_bias_consistency_scores",
+    "visibility_mode_cluster_scores",
     # Signal simulation
     "SignalSimulator",
     "UrbanSignalSimulator",
