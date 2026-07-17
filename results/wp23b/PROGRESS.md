@@ -15,8 +15,8 @@
 | --- | --- | --- |
 | G1 annealed staged tempering | **pass** | 52 tests; run2/1200 AllRMS 10.742 m |
 | G2 independent float seed | **pass, limited** | SPD 0 failures; partial top-16 oracle coverage 25.94% |
-| G3 basin RBPF core | pending | — |
-| G4 first PF-only FIX | pending | — |
+| G3 basin RBPF core | **pass** | 5 focused basin tests; versioned slips, dedup, cumulative evidence |
+| G4 first PF-only FIX | **pass (run2/1200)** | gamma 0.995996; 14/14 correct declared FIX epochs |
 | G5 purity and scale-up | pending | — |
 
 ## 2026-07-18 — G1 annealed SMC
@@ -56,6 +56,31 @@ python experiments/exp_ppc_ctrbpf_fgo.py --runs tokyo/run2 `
   --pos-dir results/wp23b/pos/g1_annealed_off `
   --results-prefix wp23b_g1_annealed_off
 ```
+
+## 2026-07-18 — G3/G4 integer basins and first FIX
+
+Implemented `ambiguity_basin_pf.py` with versioned integer assignments and a
+six-state ECEF position/velocity KF conditional per basin. Candidate weights
+accumulate KF marginal likelihood across epochs; identical assignments are
+deduplicated by Gaussian moment matching and stale slip generations are
+discarded. Five synthetic tests cover clean-basin concentration, fixed-carrier
+likelihood, deduplication, release, respawn, and population capping.
+
+The PPC production arm uses the independent DD float KF, lowest-variance eight
+ambiguities, CPU top-12 LAMBDA, 1% candidate birth mass, and at most 128 live
+basins. FIX requires the same assignment to have `gamma > 0.99` for three rover
+epochs and its conditional position to agree with the independent float KF
+within 0.5 m. Reference truth is joined only after the decision.
+
+Tokyo run2/1200 result: max gamma **0.995996**, 26 gamma-qualified epochs,
+12 rejected by the independent consistency gate, 14 declared FIX epochs,
+14 correct, 0 false. Scoring: FixRMS **0.181 m**, `<50cm_full%=1.7`, and
+AllRMS 6.262 m. A gamma-only ablation produced 12/26 false fixes, proving the
+consistency gate is necessary rather than cosmetic.
+
+The main PPC runner now exposes this arm as the sole opt-in method
+`--methods rbpf+dd+ar+gate`; it dispatches to the compact FGO-free harness.
+G5 multi-run scale-up remains open.
 
 Scored artifact: `results/wp23b/csv/g1_annealed_run2_score.csv`.
 

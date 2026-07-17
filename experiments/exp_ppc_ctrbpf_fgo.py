@@ -10420,7 +10420,7 @@ def main() -> None:
         default="pf,pf+pu,rbpf,rbpf+pu",
         help=(
             "Comma-separated subset of {pf, pf+pu, rbpf, rbpf+pu, pf+dd, "
-            "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+cp+gate, rbpf+dd+gate+pu, "
+            "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+ar+gate, rbpf+dd+cp+gate, rbpf+dd+gate+pu, "
             "rbpf+dd+pu+tdcp, rbpf+dd+gate+pu+tdcp, "
             "rbpf+dd+pu+bridge, rbpf+dd+gate+pu+bridge, "
             "rbpf+dd+dopq+pu, rbpf+dd+dopq+pu+bridge, "
@@ -11053,6 +11053,31 @@ def main() -> None:
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     args.pos_dir.mkdir(parents=True, exist_ok=True)
+
+    # WP23b is an independent float-KF + integer-basin RBPF, not a switch on
+    # the legacy diffuse position-particle loop.  Keep it as an explicit
+    # runner method while delegating to its compact, independently testable
+    # harness.  Mixed legacy/WP23b method invocations are rejected so output
+    # semantics and FIX status cannot be confused.
+    if "rbpf+dd+ar+gate" in args.methods:
+        if args.methods != ["rbpf+dd+ar+gate"]:
+            raise SystemExit("rbpf+dd+ar+gate must be run as the sole --methods value")
+        from exp_wp23b_basin_ar import main as run_basin_ar
+
+        csv_dir = _PROJECT_ROOT / "results" / "wp23b" / "csv"
+        for city, run in runs:
+            stem = f"{args.results_prefix}_{city}_{run}"
+            basin_args = [
+                "--run", f"{city}/{run}",
+                "--data-root", str(args.data_root),
+                "--out-diagnostics", str(csv_dir / f"{stem}_epochs.csv"),
+                "--out-summary", str(csv_dir / f"{stem}_summary.json"),
+                "--out-trajectory", str(args.pos_dir / f"{stem}.csv"),
+            ]
+            if args.max_epochs is not None:
+                basin_args.extend(["--max-epochs", str(args.max_epochs)])
+            run_basin_ar(basin_args)
+        return
 
     variants = _config_variants(args)
     rtkdiag_candidate_pos_dirs = (

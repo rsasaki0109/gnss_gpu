@@ -1,0 +1,2 @@
+method,city,run,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,traj_path
+basin_run2_score,tokyo,run2,1200,9151,13.113,6.262454,0.180628,1.167,12.583,1.650,2.396,results\wp23b\pos\basin_run2.csv
