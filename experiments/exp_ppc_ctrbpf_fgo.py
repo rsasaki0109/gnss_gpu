@@ -486,6 +486,51 @@ class CTRBPFConfig:
     imu_preint_velocity_blend_alpha: float = 0.3
     imu_preint_sigma_spp_pos_m: float = 30.0
     imu_preint_min_heading_fix_disp_m: float = 2.0
+    # WP22b item 2: adaptive likelihood tempering. A per-epoch temperature
+    # beta in (0,1] scales the *total* log-likelihood increment applied that
+    # epoch (across whichever of PR/GMM/Doppler-KF/DD-carrier updates ran)
+    # so that ESS/N after tempering hits ``epoch_tempering_target_ess_ratio``
+    # (bisection; see ``_apply_pr_ess_guard``, reused as-is since it is
+    # already a generic log-weight-delta tempering primitive, not PR-
+    # specific). Requires end-of-epoch deferred resampling so there is a
+    # single well-defined "this epoch's full log-likelihood delta" to temper
+    # (see ``_resample_deferred``). Trades statistical efficiency/bias for
+    # particle diversity -- tempering does not target the true posterior,
+    # only a flattened version of it; see the WP22b report for the caveat.
+    enable_epoch_tempering: bool = False
+    epoch_tempering_target_ess_ratio: float = 0.10
+    epoch_tempering_max_iters: int = 20
+    # WP22b item 3: C/N0- and elevation-driven per-satellite GMM mixture
+    # weight (w_los), replacing the fixed scalar ``pr_gmm_w_los`` when
+    # ``enable_pr_gmm`` is also set. ``pf_device_weight_gmm`` only accepts
+    # one scalar w_los per kernel call, so satellites are grouped into
+    # ``cn0_gmm_n_buckets`` bins by their computed w_los and one kernel call
+    # is issued per non-empty bucket (exact under the independent-
+    # observation PF model -- product of per-satellite mixture likelihoods
+    # -- up to w_los quantization within a bucket). See
+    # ``_cn0_elevation_w_los`` for the calibrated logistic mapping.
+    enable_cn0_gmm: bool = False
+    cn0_gmm_baseline_dbhz0: float = 30.0
+    cn0_gmm_baseline_dbhz90: float = 45.0
+    cn0_gmm_gap_mid_db: float = 14.0
+    cn0_gmm_logistic_scale_db: float = 4.0
+    cn0_gmm_w_los_min: float = 0.05
+    cn0_gmm_w_los_max: float = 0.97
+    cn0_gmm_n_buckets: int = 5
+    # WP22b item 4: particle-wise NLOS deweighting. The native undifferenced
+    # and DD-carrier-AFV weight kernels already gate each satellite's
+    # contribution per particle (each particle computes its own residual
+    # from its own hypothesized state, so the same scalar threshold rejects
+    # a different satellite subset per particle -- see
+    # ``pfd_weight_kernel``/``pfd_weight_dd_carrier_afv_kernel`` in
+    # ``pf_device.cu``). This was never wired into ``_build_pf`` before
+    # WP22b; enabling it requires no CUDA changes.
+    enable_particle_nlos: bool = False
+    particle_nlos_undiff_pr_threshold_m: float = 30.0
+    particle_nlos_dd_carrier_threshold_cycles: float = 0.5
+    particle_nlos_huber: bool = False
+    particle_nlos_huber_undiff_pr_k: float = 1.5
+    particle_nlos_huber_dd_carrier_k: float = 1.5
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -621,6 +666,14 @@ class _PRObsStats:
     imu_preint_predict_used: int = 0
     imu_preint_fallback_used: int = 0
     imu_preint_mean_sigma_pos_m: float = float("nan")
+    # WP22b item 2: mean bisected tempering alpha and mean post-tempering
+    # ESS/N across epochs where ``enable_epoch_tempering`` fired (NaN if it
+    # never fired / disabled).
+    epoch_tempering_epochs: int = 0
+    epoch_tempering_mean_alpha: float = float("nan")
+    epoch_tempering_mean_post_ratio: float = float("nan")
+    # WP22b item 3: mean per-satellite w_los across cn0-gmm epochs.
+    cn0_gmm_mean_w_los: float = float("nan")
 
 
 @dataclass
@@ -2617,6 +2670,119 @@ def _apply_slant_delay_to_pseudoranges(
     )
 
 
+def _cn0_elevation_w_los(
+    cn0_dbhz: np.ndarray,
+    elevation_deg: np.ndarray,
+    config: "CTRBPFConfig",
+) -> np.ndarray:
+    """Map measured C/N0 + elevation to a per-satellite GMM LOS weight.
+
+    WP22b item 3. Calibrated on the validated ray-traced-vs-measured C/N0
+    separation (``python/gnss_gpu/validation/cn0_validation.py``,
+    ``results/validation/`` -- commit "Add C/N0 validation against measured
+    UrbanNav signal strength"): predicted-NLOS satellites there read ~12-16
+    dB-Hz weaker than predicted-LOS satellites at the same elevation (mean
+    gap 16.5 dB-Hz Odaiba / 11.9 dB-Hz Shinjuku), and C/N0 alone separates
+    the two ray-traced classes at AUC 0.985 / 0.944 -- i.e. a fairly sharp,
+    near-monotonic classifier. This reproduces that shape as a simple
+    logistic on the C/N0 deficit below a clear-sky elevation baseline:
+
+        baseline(elev)  = cn0_gmm_baseline_dbhz0
+                           + (cn0_gmm_baseline_dbhz90 - cn0_gmm_baseline_dbhz0)
+                             * sin(elev)
+        deficit         = baseline(elev) - cn0
+        w_los           = sigmoid((cn0_gmm_gap_mid_db - deficit)
+                                   / cn0_gmm_logistic_scale_db)
+
+    A satellite whose deficit equals the validated mean NLOS gap
+    (``cn0_gmm_gap_mid_db``, default 14.0 = mean of the two site gaps) gets
+    w_los=0.5; weaker-than-that reads more NLOS-like (w_los -> min), at or
+    above the clear-sky baseline reads more LOS-like (w_los -> max). This is
+    NOT a re-fit of the UrbanNav elevation-binned regression on this
+    pipeline's own PPC tokyo dataset (different site/receiver/antenna); it
+    is a simple, documented, order-of-magnitude-consistent mapping, exactly
+    as the task spec allows ("simple logistic or lookup calibrated on the
+    validation data"). ``cn0_dbhz`` is this pipeline's own per-satellite
+    C/N0-like observation weight (``data['weights']``, the same quantity
+    ``_pr_likelihood_weights`` already treats as "PPC C/N0-like values"),
+    taken *before* any ``pr_weight_mode`` transform so it stays in raw
+    dB-Hz units regardless of that config's setting.
+    """
+    cn0 = np.asarray(cn0_dbhz, dtype=np.float64)
+    elev = np.clip(np.asarray(elevation_deg, dtype=np.float64), 0.0, 90.0)
+    baseline = (
+        float(config.cn0_gmm_baseline_dbhz0)
+        + (float(config.cn0_gmm_baseline_dbhz90) - float(config.cn0_gmm_baseline_dbhz0))
+        * np.sin(np.radians(elev))
+    )
+    deficit = baseline - cn0
+    scale = max(float(config.cn0_gmm_logistic_scale_db), 1.0e-6)
+    z = (float(config.cn0_gmm_gap_mid_db) - deficit) / scale
+    w_los = 1.0 / (1.0 + np.exp(-z))
+    lo = float(config.cn0_gmm_w_los_min)
+    hi = float(config.cn0_gmm_w_los_max)
+    return np.clip(w_los, lo, hi)
+
+
+def _pf_update_gmm_cn0(
+    pf,
+    sat_i: np.ndarray,
+    pr_i: np.ndarray,
+    w_i: np.ndarray,
+    w_los_per_sat: np.ndarray,
+    *,
+    sigma_pr: float,
+    mu_nlos: float,
+    sigma_nlos: float,
+    n_buckets: int,
+    resample: bool,
+) -> tuple[int, float]:
+    """Apply the GMM likelihood with a per-satellite w_los (WP22b item 3).
+
+    ``pf_device_weight_gmm`` only accepts one scalar w_los per kernel call
+    (see ``include/gnss_gpu/pf_device.h``). Per the task spec's preferred
+    approach ("first try per-satellite grouping... multiple kernel calls
+    over satellite subsets sharing parameters"), satellites are grouped
+    into ``n_buckets`` equal-width bins over ``[0, 1]`` by their computed
+    w_los and one ``pf.update_gmm`` call is issued per non-empty bucket
+    using that bucket's mean w_los. Under the PF's independent-observation
+    measurement model, the joint likelihood is the product of each
+    satellite's own two-component mixture likelihood, so this bucketing is
+    exact up to the w_los quantization within a bucket (bounded by
+    ``1/n_buckets``) -- not an approximation of the mixture model itself.
+
+    Returns ``(n_buckets_used, mean_w_los)``.
+    """
+    n_sat = int(len(pr_i))
+    if n_sat == 0:
+        if resample:
+            pf.resample_if_needed()
+        return 0, float("nan")
+    n_buckets = max(1, int(n_buckets))
+    w_los = np.clip(np.asarray(w_los_per_sat, dtype=np.float64), 0.0, 1.0)
+    edges = np.linspace(0.0, 1.0, n_buckets + 1)
+    idx = np.clip(np.digitize(w_los, edges[1:-1]), 0, n_buckets - 1)
+    used = 0
+    for b in range(n_buckets):
+        mask = idx == b
+        if not np.any(mask):
+            continue
+        used += 1
+        pf.update_gmm(
+            sat_i[mask],
+            pr_i[mask],
+            weights=w_i[mask],
+            sigma_pr=sigma_pr,
+            w_los=float(np.mean(w_los[mask])),
+            mu_nlos=mu_nlos,
+            sigma_nlos=sigma_nlos,
+            resample=False,
+        )
+    if resample:
+        pf.resample_if_needed()
+    return used, float(np.mean(w_los))
+
+
 def _scale_weights_per_system(weights: np.ndarray, system_ids: np.ndarray) -> np.ndarray:
     out = np.asarray(weights, dtype=np.float64).copy()
     sids = np.asarray(system_ids, dtype=np.int32)
@@ -2716,6 +2882,19 @@ def _build_pf(config: CTRBPFConfig):
         sigma_pr=config.sigma_pr,
         resampling=("systematic" if config.enable_pf_ffbsi_smoother else "megopolis"),
         seed=42,
+        # WP22b item 4: particle-wise NLOS deweighting. Off by default
+        # (matches every pre-WP22b variant's behavior exactly); only
+        # ``enable_particle_nlos`` variants opt in.
+        per_particle_nlos_gate=bool(config.enable_particle_nlos),
+        per_particle_nlos_undiff_pr_threshold_m=float(
+            config.particle_nlos_undiff_pr_threshold_m
+        ),
+        per_particle_nlos_dd_carrier_threshold_cycles=float(
+            config.particle_nlos_dd_carrier_threshold_cycles
+        ),
+        per_particle_huber=bool(config.particle_nlos_huber),
+        per_particle_huber_undiff_pr_k=float(config.particle_nlos_huber_undiff_pr_k),
+        per_particle_huber_dd_carrier_k=float(config.particle_nlos_huber_dd_carrier_k),
     )
     return pf
 
@@ -3207,6 +3386,9 @@ def _resample_deferred(config: CTRBPFConfig) -> bool:
         bool(config.defer_epoch_resample)
         or bool(config.enable_reservoir_stein)
         or bool(config.enable_pf_ffbsi_smoother)
+        # WP22b item 2: epoch tempering needs one end-of-epoch log-weight
+        # snapshot to bisect against, so it forces deferred resampling.
+        or bool(config.enable_epoch_tempering)
     )
 
 
@@ -3424,6 +3606,9 @@ def _run_ctrbpf_on_segment(
     used_prns = data.get("used_prns") or [[] for _ in range(n_epochs)]
     times = np.asarray(data["times"], dtype=np.float64)
     pr_obs_stats = _PRObsStats()
+    _epoch_tempering_alphas: list[float] = []
+    _epoch_tempering_post_ratios: list[float] = []
+    _cn0_gmm_w_los_means: list[float] = []
     reservoir_stein_stats = _ReservoirSteinStats()
     dd_stats = _DDStats()
     gate_stats = _RBPFGateStats()
@@ -3801,6 +3986,16 @@ def _run_ctrbpf_on_segment(
     _prev_ranker_label: str | None = None
     for i in range(n_epochs):
         _pf_health_epoch[0] = i
+        # WP22b item 2: snapshot log-weights before this epoch's predict/
+        # update chain runs, so the end-of-epoch tempering step (below) can
+        # bisect a temperature beta on the *whole* epoch's log-likelihood
+        # increment (not just one sub-update). Only paid for when tempering
+        # is enabled (one extra D2H sync per epoch).
+        pre_epoch_log_weights = (
+            np.asarray(pf.get_log_weights(), dtype=np.float64)
+            if config.enable_epoch_tempering
+            else None
+        )
         t_now = float(times[i])
         t_key = round(t_now, 1)
         hp_prefetched = hybrid_pos.get(t_key) if use_hybrid else None
@@ -4111,6 +4306,11 @@ def _run_ctrbpf_on_segment(
         sat_i = np.asarray(sat_ecef[i], dtype=np.float64)
         pr_i = np.asarray(pseudoranges[i], dtype=np.float64)
         w_i = np.asarray(weights[i], dtype=np.float64)
+        # WP22b item 3: raw C/N0-like weight, tracked through the same masks
+        # as sat_i/pr_i/w_i but *not* run through `_pr_likelihood_weights`
+        # (which can rescale/clip w_i depending on `pr_weight_mode`) so the
+        # GMM w_los mapping always sees the actual measured C/N0 units.
+        cn0_i_full = np.asarray(weights[i], dtype=np.float64)
         prn_i_full = np.asarray(
             list(used_prns[i]) if i < len(used_prns) else [""] * len(w_i),
             dtype=object,
@@ -4126,6 +4326,7 @@ def _run_ctrbpf_on_segment(
             sat_i = sat_i[pr_sys_mask]
             pr_i = pr_i[pr_sys_mask]
             w_i = w_i[pr_sys_mask]
+            cn0_i_full = cn0_i_full[pr_sys_mask]
             prn_i_full = prn_i_full[pr_sys_mask]
             sids_i_full = sids_i_full[pr_sys_mask]
         if system_ids is not None:
@@ -4172,6 +4373,7 @@ def _run_ctrbpf_on_segment(
         sat_i = sat_i[finite]
         pr_i = pr_i[finite]
         w_i = w_i[finite]
+        cn0_i = cn0_i_full[finite]
         prn_i = prn_i_full[finite]
         sids_i = None if sids_i_full is None else np.asarray(sids_i_full)[finite]
         pr_sagnac_ref = np.asarray(pf.estimate(), dtype=np.float64)[:3]
@@ -4192,6 +4394,7 @@ def _run_ctrbpf_on_segment(
                 sat_i = sat_i[elev_mask]
                 pr_i = pr_i[elev_mask]
                 w_i = w_i[elev_mask]
+                cn0_i = cn0_i[elev_mask]
                 prn_i = prn_i[elev_mask]
                 if sids_i is not None:
                     sids_i = sids_i[elev_mask]
@@ -4275,6 +4478,7 @@ def _run_ctrbpf_on_segment(
                 sat_i = sat_i[gate_mask]
                 pr_i = pr_i[gate_mask]
                 w_i = w_i[gate_mask]
+                cn0_i = cn0_i[gate_mask]
                 prn_i = prn_i[gate_mask]
                 if sids_i is not None:
                     sids_i = sids_i[gate_mask]
@@ -4325,6 +4529,33 @@ def _run_ctrbpf_on_segment(
             pr_obs_stats.epochs_skipped += 1
             if pf_diag_row is not None:
                 pf_diag_row["pr_update_mode"] = "skipped_status"
+        elif use_pr_gmm_here and bool(config.enable_cn0_gmm):
+            elev_i_deg = np.degrees(
+                np.array(
+                    [_elevation_rad(pr_sagnac_ref, sat_row) for sat_row in sat_i],
+                    dtype=np.float64,
+                )
+            )
+            w_los_i = _cn0_elevation_w_los(cn0_i, elev_i_deg, config)
+            n_gmm_buckets, mean_w_los = _pf_update_gmm_cn0(
+                pf,
+                sat_i,
+                pr_i,
+                w_i,
+                w_los_i,
+                sigma_pr=float(config.sigma_pr),
+                mu_nlos=float(config.pr_gmm_mu_nlos_m),
+                sigma_nlos=float(config.pr_gmm_sigma_nlos_m),
+                n_buckets=int(config.cn0_gmm_n_buckets),
+                resample=(not defer_resample) and not pr_ess_guard_enabled,
+            )
+            pr_obs_stats.epochs_gmm += 1
+            if np.isfinite(mean_w_los):
+                _cn0_gmm_w_los_means.append(float(mean_w_los))
+            if pf_diag_row is not None:
+                pf_diag_row["pr_update_mode"] = "cn0_gmm"
+                pf_diag_row["cn0_gmm_buckets_used"] = int(n_gmm_buckets)
+                pf_diag_row["cn0_gmm_w_los_mean"] = float(mean_w_los)
         elif use_pr_gmm_here:
             pf.update_gmm(
                 sat_i,
@@ -6094,6 +6325,26 @@ def _run_ctrbpf_on_segment(
                 reference_ecef=ref_diag_epoch,
             )
 
+        # WP22b item 2: temper this epoch's total log-likelihood increment
+        # (predict does not change weights, so the delta since
+        # ``pre_epoch_log_weights`` is exactly this epoch's PR/GMM/Doppler-
+        # KF/DD-carrier/position-update contribution) *before* the estimate
+        # used for emission is computed, so the tempered weights actually
+        # affect this epoch's output -- not just the next epoch's resample.
+        if config.enable_epoch_tempering and pre_epoch_log_weights is not None:
+            temper_alpha, temper_pre_ratio, temper_post_ratio = _apply_pr_ess_guard(
+                pf,
+                pre_epoch_log_weights,
+                min_ratio=float(config.epoch_tempering_target_ess_ratio),
+                max_iters=int(config.epoch_tempering_max_iters),
+            )
+            _epoch_tempering_alphas.append(temper_alpha)
+            _epoch_tempering_post_ratios.append(temper_post_ratio)
+            if pf_diag_row is not None:
+                pf_diag_row["epoch_tempering_alpha"] = temper_alpha
+                pf_diag_row["epoch_tempering_pre_ratio"] = temper_pre_ratio
+                pf_diag_row["epoch_tempering_post_ratio"] = temper_post_ratio
+
         resampled_before_emit = False
         if config.enable_reservoir_stein:
             resampled_before_emit = _reservoir_stein_resample_if_needed(
@@ -6509,6 +6760,16 @@ def _run_ctrbpf_on_segment(
         float(np.mean(_finite_ess)) if _finite_ess.size > 0 else float("nan")
     )
     pr_obs_stats.resample_rate = float(np.mean(pf_health_resampled)) if n_epochs > 0 else float("nan")
+
+    # WP22b: finalize tempering / cn0-gmm summary stats.
+    pr_obs_stats.epoch_tempering_epochs = int(len(_epoch_tempering_alphas))
+    if _epoch_tempering_alphas:
+        pr_obs_stats.epoch_tempering_mean_alpha = float(np.mean(_epoch_tempering_alphas))
+        pr_obs_stats.epoch_tempering_mean_post_ratio = float(
+            np.mean(_epoch_tempering_post_ratios)
+        )
+    if _cn0_gmm_w_los_means:
+        pr_obs_stats.cn0_gmm_mean_w_los = float(np.mean(_cn0_gmm_w_los_means))
     if use_imu_preint:
         pr_obs_stats.imu_preint_predict_used = int(imu_preint_predict_used)
         pr_obs_stats.imu_preint_fallback_used = int(imu_preint_fallback_used)
@@ -7145,6 +7406,28 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         imu_preint_velocity_blend_alpha=args.imu_preint_velocity_blend_alpha,
         imu_preint_sigma_spp_pos_m=args.imu_preint_sigma_spp_pos_m,
         imu_preint_min_heading_fix_disp_m=args.imu_preint_min_heading_fix_disp_m,
+        # WP22b: applied uniformly to every selected variant, same pattern
+        # as --imu {off,preint} above, so the ablation grid (item 5) is a
+        # single command per {imu arm} x {tempering/GMM/NLOS toggle combo}
+        # rather than new method-label branches.
+        enable_epoch_tempering=bool(args.enable_epoch_tempering),
+        epoch_tempering_target_ess_ratio=args.epoch_tempering_target_ess_ratio,
+        epoch_tempering_max_iters=args.epoch_tempering_max_iters,
+        enable_cn0_gmm=bool(args.enable_cn0_gmm),
+        enable_pr_gmm=bool(args.enable_cn0_gmm),
+        cn0_gmm_baseline_dbhz0=args.cn0_gmm_baseline_dbhz0,
+        cn0_gmm_baseline_dbhz90=args.cn0_gmm_baseline_dbhz90,
+        cn0_gmm_gap_mid_db=args.cn0_gmm_gap_mid_db,
+        cn0_gmm_logistic_scale_db=args.cn0_gmm_logistic_scale_db,
+        cn0_gmm_w_los_min=args.cn0_gmm_w_los_min,
+        cn0_gmm_w_los_max=args.cn0_gmm_w_los_max,
+        cn0_gmm_n_buckets=int(args.cn0_gmm_n_buckets),
+        enable_particle_nlos=bool(args.enable_particle_nlos),
+        particle_nlos_undiff_pr_threshold_m=args.particle_nlos_undiff_pr_threshold_m,
+        particle_nlos_dd_carrier_threshold_cycles=args.particle_nlos_dd_carrier_threshold_cycles,
+        particle_nlos_huber=bool(args.particle_nlos_huber),
+        particle_nlos_huber_undiff_pr_k=args.particle_nlos_huber_undiff_pr_k,
+        particle_nlos_huber_dd_carrier_k=args.particle_nlos_huber_dd_carrier_k,
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -10207,6 +10490,63 @@ def main() -> None:
                         help="Documented raw-SPP horizontal sigma [m] used for the heading-uncertainty term.")
     parser.add_argument("--imu-preint-min-heading-fix-disp-m", type=float, default=2.0)
     parser.add_argument(
+        "--enable-epoch-tempering", action="store_true",
+        help=(
+            "WP22b item 2: adaptive likelihood tempering. Scales this "
+            "epoch's total log-likelihood increment by a bisected "
+            "temperature beta in (0,1] targeting "
+            "--epoch-tempering-target-ess-ratio ESS/N (default 0.10), "
+            "applied uniformly to every selected --methods variant. "
+            "Forces end-of-epoch deferred resampling internally."
+        ),
+    )
+    parser.add_argument("--epoch-tempering-target-ess-ratio", type=float, default=0.10,
+                        help="Target post-tempering ESS/N (default 0.10).")
+    parser.add_argument("--epoch-tempering-max-iters", type=int, default=20,
+                        help="Bisection iterations for the tempering solve (default 20).")
+    parser.add_argument(
+        "--enable-cn0-gmm", action="store_true",
+        help=(
+            "WP22b item 3: drive the PR-GMM LOS/NLOS mixture weight w_los "
+            "per satellite from measured C/N0 + elevation (see "
+            "_cn0_elevation_w_los), instead of the fixed --pr-gmm-w-los "
+            "scalar. Implies enable_pr_gmm=True. Applied uniformly to "
+            "every selected --methods variant."
+        ),
+    )
+    parser.add_argument("--cn0-gmm-baseline-dbhz0", type=float, default=30.0,
+                        help="Clear-sky C/N0 baseline at 0deg elevation [dB-Hz] (default 30).")
+    parser.add_argument("--cn0-gmm-baseline-dbhz90", type=float, default=45.0,
+                        help="Clear-sky C/N0 baseline at 90deg elevation [dB-Hz] (default 45).")
+    parser.add_argument("--cn0-gmm-gap-mid-db", type=float, default=14.0,
+                        help="C/N0 deficit [dB] below baseline at which w_los=0.5; default 14.0 is the "
+                             "mean of the two validated UrbanNav site gaps (16.5/11.9 dB).")
+    parser.add_argument("--cn0-gmm-logistic-scale-db", type=float, default=4.0,
+                        help="Logistic transition width [dB] (default 4.0, sharp -- matches the validated "
+                             "0.94-0.985 AUC separation).")
+    parser.add_argument("--cn0-gmm-w-los-min", type=float, default=0.05)
+    parser.add_argument("--cn0-gmm-w-los-max", type=float, default=0.97)
+    parser.add_argument("--cn0-gmm-n-buckets", type=int, default=5,
+                        help="Number of per-satellite w_los buckets (kernel calls) per epoch (default 5).")
+    parser.add_argument(
+        "--enable-particle-nlos", action="store_true",
+        help=(
+            "WP22b item 4: enable the native per-particle NLOS threshold "
+            "gate (undifferenced PR + DD-carrier-AFV kernels; each "
+            "particle computes its own residual from its own hypothesized "
+            "state, so the same scalar threshold rejects a different "
+            "satellite subset per particle). Applied uniformly to every "
+            "selected --methods variant. No CUDA changes -- this wires an "
+            "existing kernel feature that was never plumbed through this "
+            "runner's _build_pf before WP22b."
+        ),
+    )
+    parser.add_argument("--particle-nlos-undiff-pr-threshold-m", type=float, default=30.0)
+    parser.add_argument("--particle-nlos-dd-carrier-threshold-cycles", type=float, default=0.5)
+    parser.add_argument("--particle-nlos-huber", action="store_true")
+    parser.add_argument("--particle-nlos-huber-undiff-pr-k", type=float, default=1.5)
+    parser.add_argument("--particle-nlos-huber-dd-carrier-k", type=float, default=1.5)
+    parser.add_argument(
         "--runs",
         type=str,
         default="all",
@@ -11074,6 +11414,25 @@ def main() -> None:
                 "pr_gmm_sigma_nlos_m": float(variant.pr_gmm_sigma_nlos_m),
                 "pr_gmm_hybrid_loose_sigma_m": float(variant.pr_gmm_hybrid_loose_sigma_m),
                 "pr_gmm_clock_quantile": float(variant.pr_gmm_clock_quantile),
+                # WP22b ablation columns.
+                "epoch_tempering": int(variant.enable_epoch_tempering),
+                "epoch_tempering_target_ess_ratio": float(
+                    variant.epoch_tempering_target_ess_ratio
+                ),
+                "epoch_tempering_epochs": int(pr_obs_stats.epoch_tempering_epochs),
+                "epoch_tempering_mean_alpha": float(pr_obs_stats.epoch_tempering_mean_alpha),
+                "epoch_tempering_mean_post_ratio": float(
+                    pr_obs_stats.epoch_tempering_mean_post_ratio
+                ),
+                "cn0_gmm": int(variant.enable_cn0_gmm),
+                "cn0_gmm_mean_w_los": float(pr_obs_stats.cn0_gmm_mean_w_los),
+                "particle_nlos": int(variant.enable_particle_nlos),
+                "particle_nlos_undiff_pr_threshold_m": float(
+                    variant.particle_nlos_undiff_pr_threshold_m
+                ),
+                "particle_nlos_dd_carrier_threshold_cycles": float(
+                    variant.particle_nlos_dd_carrier_threshold_cycles
+                ),
                 "doppler_systems": ",".join(str(s) for s in variant.doppler_systems),
                 "doppler_prefit_gate_mps": float(variant.doppler_prefit_gate_mps),
                 "doppler_prefit_gate_min_sats": int(variant.doppler_prefit_gate_min_sats),
