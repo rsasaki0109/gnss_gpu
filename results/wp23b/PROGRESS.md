@@ -17,7 +17,7 @@
 | G2 independent float seed | **pass, limited** | SPD 0 failures; partial top-16 oracle coverage 25.94% |
 | G3 basin RBPF core | **pass** | 5 focused basin tests; versioned slips, dedup, cumulative evidence |
 | G4 first PF-only FIX | **pass (run2/1200)** | gamma 0.995996; 14/14 correct declared FIX epochs |
-| G5 purity and scale-up | pending | — |
+| G5 purity and scale-up | **partial pass** | Tokyo 3-run/1200: 24/24 correct FIX; full runs pending |
 
 ## 2026-07-18 — G1 annealed SMC
 
@@ -143,3 +143,27 @@ python experiments/exp_wp23b_float_seed.py --max-epochs 1200 `
   --out-epochs results/wp23b/csv/float_seed_partial_run2_epochs.csv `
   --out-summary results/wp23b/csv/float_seed_partial_run2_summary.json
 ```
+
+## 2026-07-18 — G5 trusted-DDPR commit and Tokyo 3-run grid
+
+The original Float/basin agreement gate did not generalize safely. On the
+unmodified Tokyo 3-run/1200 grid, run1 declared 14 fixes with 4 false
+(28.57%), run2 remained 14/14 correct, and run3 declared none. The run1 false
+fixes occurred while Float and the integer basin coherently drifted together.
+
+Added a third, carrier-independent navigation arm: a DDPR+Doppler-only KF.
+Production FIX now additionally requires MAP-to-DDPR separation <=1.75 m, at
+least 9 DDPR pairs in the most recent trusted update, and DDPR age <=4 rover
+epochs.
+
+The final same-window grid declared **24/24 correct fixes, 0 false**: run1
+10/10, run2 14/14, run3 0/0. Run1 FixRMS improved from 0.496 m to 0.211 m
+because the four drifting fixes were rejected. The `n_dd` ablation from 0 to
+18 did not change decisions in these windows; the active discriminator was
+DDPR-only position consistency. `n_dd=24` reduced run1 to 4 correct fixes, so
+9 remains a conservative support floor rather than a tuned accuracy lever.
+
+Artifacts: `csv/g5_tokyo_3run_summary.{csv,json}`,
+`csv/g5_min_dd_ablation.{csv,json}`, per-run `g5_trusted_*` diagnostics/scores,
+and `pos/g5_trusted/` trajectories. Full-run scaling and cluster-specific
+relinearization remain pending.

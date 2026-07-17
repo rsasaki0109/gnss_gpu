@@ -52,8 +52,8 @@ declared fixes was false.
 - G3 pass: basin core and five focused synthetic scenarios implemented.
 - G4 pass for the specified run2/1200 production arm. The main runner opt-in is
   `rbpf+dd+ar+gate`.
-- G5 pending: trusted-DDPR commit, three-run grid, and full-run scaling remain
-  future work.
+- G5 partial pass: trusted-DDPR commit and the Tokyo three-run/1200 grid pass;
+  full-run scaling and cluster-specific relinearization remain future work.
 
 ## Reproduction
 
@@ -85,3 +85,29 @@ The repository-wide suite completed with 3543 passed, 187 skipped, and 90
 failures; those failures are pre-existing environment/artifact failures led by
 a missing generated product prediction CSV and third-party `gnssplusplus`
 CLI/build dependencies. No focused WP23b test failed.
+
+## G5 addendum — trusted-DDPR commit
+
+The original two-way consistency gate was unsafe outside run2. On Tokyo
+run1/1200 it declared 14 fixes, including 4 false fixes (28.57%), because the
+Float KF and integer basin drifted coherently together. A carrier-independent
+DDPR+Doppler guard KF exposes that failure: correct run1 fixes had MAP-to-guard
+separation 1.05-1.56 m, while false fixes had 2.01-2.79 m.
+
+The production commit gate now requires all three navigation arms to agree,
+with MAP-to-Float <=0.5 m, MAP-to-DDPR <=1.75 m, most-recent DDPR support >=9
+pairs, and DDPR age <=4 rover epochs.
+
+| Run, first 1200 epochs | Baseline FIX/false | Trusted FIX/correct/false | FixRMS [m] | `<50cm_full%` |
+| --- | ---: | ---: | ---: | ---: |
+| Tokyo run1 | 14 / 4 | **10 / 10 / 0** | 0.211 | 1.652 |
+| Tokyo run2 | 14 / 0 | **14 / 14 / 0** | 0.181 | 1.650 |
+| Tokyo run3 | 0 / 0 | **0 / 0 / 0** | n/a | 0.333 |
+
+Across declared fixes this is **24/24 correct and 0 false**. The minimum-DD
+ablation shows thresholds 0, 6, 9, 12, and 18 produce identical decisions in
+these windows; 24 reduces run1 to four correct fixes. Thus `n_dd>=9` is a
+support floor, while independent DDPR consistency is the measured safety gain.
+The 3600-epoch final grid took 334 seconds, so full-run compute scaling remains
+an explicit open issue. After the G5 gate addition, the relevant regression
+subset passed with **73 passed, 2 skipped**.

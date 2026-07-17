@@ -1,0 +1,2 @@
+method,city,run,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,traj_path
+g5_baseline_tokyo_run1_score,tokyo,run1,1200,11928,10.060,1.492086,0.495974,1.167,16.417,1.652,12.805,results\wp23b\pos\g5_baseline\g5_baseline_tokyo_run1.csv

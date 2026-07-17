@@ -34,6 +34,7 @@ from gnss_gpu.dd_float_kf import DDFloatKalmanFilter  # noqa: E402
 from gnss_gpu.dd_pseudorange import DDPseudorangeComputer  # noqa: E402
 from gnss_gpu.io.ppc import PPCDatasetLoader  # noqa: E402
 from gnss_gpu.lambda_ambiguity import integer_search  # noqa: E402
+from gnss_gpu.rtk_fix_gate import trusted_fix_gate  # noqa: E402
 
 
 def _write_trajectory(path: Path, rows: list[dict[str, object]]) -> None:
@@ -67,6 +68,14 @@ def main(argv: list[str] | None = None) -> None:
         default=0.5,
         help="Maximum MAP-basin versus independent float-KF position separation",
     )
+    parser.add_argument(
+        "--fix-ddpr-consistency-m",
+        type=float,
+        default=1.75,
+        help="Maximum MAP-basin separation from the DDPR/Doppler-only guard KF",
+    )
+    parser.add_argument("--fix-min-dd-pairs", type=int, default=9)
+    parser.add_argument("--fix-max-ddpr-age-epochs", type=int, default=4)
     parser.add_argument("--out-diagnostics", type=Path, default=Path("results/wp23b/csv/basin_run2_epochs.csv"))
     parser.add_argument("--out-summary", type=Path, default=Path("results/wp23b/csv/basin_run2_summary.json"))
     parser.add_argument("--out-trajectory", type=Path, default=Path("results/wp23b/pos/basin_run2.csv"))
@@ -103,6 +112,12 @@ def main(argv: list[str] | None = None) -> None:
         ambiguity_init_sigma_cycles=40.0,
         max_track_age_epochs=10,
     )
+    ddpr_guard = BasinKalmanState.from_position(
+        np.asarray(wls_positions[0, :3], dtype=np.float64),
+        np.eye(3, dtype=np.float64) * 50.0**2,
+        velocity_sigma_mps=10.0,
+        accel_process_sigma_mps2=3.0,
+    )
     basin_pf = AmbiguityBasinParticleFilter(
         max_basins=int(args.max_basins),
         fix_gamma_threshold=float(args.fix_gamma),
@@ -119,17 +134,22 @@ def main(argv: list[str] | None = None) -> None:
     n_gamma_fix = 0
     n_consistency_reject = 0
     max_gamma = 0.0
+    last_ddpr_epoch = -1_000_000
+    last_ddpr_pairs = 0
+    last_ddpr_nis = float("nan")
 
     for i, tow in enumerate(times):
         if i > 0:
             dt = max(float(times[i] - times[i - 1]), 1e-3)
             float_kf.predict(dt)
             basin_pf.predict(dt)
+            ddpr_guard.predict(dt)
         velocity, doppler_rms = _doppler_velocity(data, i, float_kf.position_ecef)
         if velocity is not None:
             velocity_sigma = max(0.5, min(float(doppler_rms), 5.0))
             float_kf.update_velocity(velocity, sigma_mps=velocity_sigma)
             basin_pf.update_velocity(velocity, sigma_mps=velocity_sigma)
+            ddpr_guard.update_velocity(velocity, sigma_mps=velocity_sigma)
 
         measurements = _build_dd_measurements(
             np.asarray(data["sat_ecef"][i], dtype=np.float64),
@@ -154,6 +174,10 @@ def main(argv: list[str] | None = None) -> None:
             pr_diag = float_kf.update_pseudorange(
                 dd_pr, sigma_pr_m=float(args.sigma_dd_pr_m)
             )
+            ddpr_guard.update_pseudorange(dd_pr, sigma_pr_m=float(args.sigma_dd_pr_m))
+            last_ddpr_epoch = i
+            last_ddpr_pairs = int(dd_pr.n_dd)
+            last_ddpr_nis = float(pr_diag.normalized_innovation_sq)
         if dd_cp is not None and int(dd_cp.n_dd) >= 3:
             cp_diag = float_kf.update_carrier(
                 dd_cp,
@@ -232,11 +256,24 @@ def main(argv: list[str] | None = None) -> None:
             if map_basin is not None
             else float("nan")
         )
-        gamma_fixed = bool(posterior.fixed and map_basin is not None)
-        consistency_pass = bool(
-            np.isfinite(map_float_separation)
-            and map_float_separation <= float(args.fix_consistency_m)
+        map_ddpr_separation = (
+            float(np.linalg.norm(map_basin.conditional.mean[:3] - ddpr_guard.mean[:3]))
+            if map_basin is not None
+            else float("nan")
         )
+        ddpr_age_epochs = i - last_ddpr_epoch
+        gamma_fixed = bool(posterior.fixed and map_basin is not None)
+        gate = trusted_fix_gate(
+            map_float_separation_m=map_float_separation,
+            map_ddpr_separation_m=map_ddpr_separation,
+            last_ddpr_pairs=last_ddpr_pairs,
+            ddpr_age_epochs=ddpr_age_epochs,
+            max_float_separation_m=float(args.fix_consistency_m),
+            max_ddpr_separation_m=float(args.fix_ddpr_consistency_m),
+            min_ddpr_pairs=int(args.fix_min_dd_pairs),
+            max_ddpr_age_epochs=int(args.fix_max_ddpr_age_epochs),
+        )
+        consistency_pass = gate.passed
         fixed = bool(gamma_fixed and consistency_pass)
         n_gamma_fix += int(gamma_fixed)
         n_consistency_reject += int(gamma_fixed and not consistency_pass)
@@ -265,7 +302,19 @@ def main(argv: list[str] | None = None) -> None:
                 "fix": int(fixed),
                 "gamma_fixed": int(gamma_fixed),
                 "consistency_pass": int(consistency_pass),
+                "float_consistency_pass": int(gate.float_consistent),
+                "ddpr_consistency_pass": int(gate.ddpr_consistent),
+                "ddpr_support_pass": int(gate.ddpr_supported),
+                "ddpr_freshness_pass": int(gate.ddpr_fresh),
                 "map_float_separation_m": map_float_separation,
+                "map_ddpr_separation_m": map_ddpr_separation,
+                "ddpr_guard_error_m": (
+                    float(np.linalg.norm(ddpr_guard.mean[:3] - ref))
+                    if ref is not None else float("nan")
+                ),
+                "last_ddpr_pairs": int(last_ddpr_pairs),
+                "ddpr_age_epochs": int(ddpr_age_epochs),
+                "last_ddpr_nis": last_ddpr_nis,
                 "output_error_m": output_error,
                 "float_error_m": (
                     float(np.linalg.norm(float_kf.position_ecef - ref))
@@ -297,6 +346,12 @@ def main(argv: list[str] | None = None) -> None:
         "n_epochs": len(rows),
         "subset_size": int(args.subset_size),
         "top_k": int(args.top_k),
+        "fix_gamma_threshold": float(args.fix_gamma),
+        "fix_min_streak": int(args.fix_streak),
+        "fix_float_consistency_m": float(args.fix_consistency_m),
+        "fix_ddpr_consistency_m": float(args.fix_ddpr_consistency_m),
+        "fix_min_dd_pairs": int(args.fix_min_dd_pairs),
+        "fix_max_ddpr_age_epochs": int(args.fix_max_ddpr_age_epochs),
         "birth_epochs": int(n_birth_epochs),
         "declared_fix_epochs": int(n_declared_fix),
         "gamma_fix_epochs": int(n_gamma_fix),

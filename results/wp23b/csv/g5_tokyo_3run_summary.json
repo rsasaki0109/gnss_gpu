@@ -1,0 +1,41 @@
+[
+  {
+    "run": "tokyo/run1",
+    "baseline_fix": 14,
+    "baseline_false": 4,
+    "trusted_fix": 10,
+    "trusted_correct": 10,
+    "trusted_false": 0,
+    "max_gamma": 0.9970356459601885,
+    "fix_rms_m": 0.21096332057273182,
+    "all_rms_m": 1.4920251186433622,
+    "lt50cm_full_pct": 1.6515761234071094,
+    "ppc_official_pct": 12.804730584637248
+  },
+  {
+    "run": "tokyo/run2",
+    "baseline_fix": 14,
+    "baseline_false": 0,
+    "trusted_fix": 14,
+    "trusted_correct": 14,
+    "trusted_false": 0,
+    "max_gamma": 0.9959958496266205,
+    "fix_rms_m": 0.18062849413410717,
+    "all_rms_m": 6.26245373734388,
+    "lt50cm_full_pct": 1.6500928860233854,
+    "ppc_official_pct": 2.3956352158650085
+  },
+  {
+    "run": "tokyo/run3",
+    "baseline_fix": 0,
+    "baseline_false": 0,
+    "trusted_fix": 0,
+    "trusted_correct": 0,
+    "trusted_false": 0,
+    "max_gamma": 0.9948807365548555,
+    "fix_rms_m": null,
+    "all_rms_m": 4.076882439375382,
+    "lt50cm_full_pct": 0.3333115482648193,
+    "ppc_official_pct": 0.0
+  }
+]
