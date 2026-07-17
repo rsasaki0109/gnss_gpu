@@ -415,3 +415,74 @@ class TestRealPlateauMesh:
         )
         result = run_scenario(config)
         assert result.n_epochs == 2
+
+
+# ---------------------------------------------------------------------------
+# RINEX export
+# ---------------------------------------------------------------------------
+
+
+class TestToRinex:
+    def test_round_trips_through_read_rinex_obs(self, tmp_path):
+        from gnss_gpu.io.rinex import read_rinex_obs
+
+        nav_file = _write_nav(tmp_path, _NAV_GPS_ONLY)
+        result = run_scenario(_base_config(nav_file))
+        out_path = tmp_path / "sim.obs"
+        result.to_rinex(out_path)
+
+        obs = read_rinex_obs(out_path)
+        assert len(obs.epochs) == result.n_epochs
+
+        # No carrier phase was simulated -- L1C must not appear in the header.
+        for codes in obs.header.obs_types.values():
+            assert "L1C" not in codes
+            assert set(codes) == {"C1C", "D1C", "S1C"}
+
+        for expected_ep, actual_ep in zip(result.epochs, obs.epochs):
+            assert actual_ep.time == expected_ep.time_utc
+            assert list(actual_ep.satellites) == list(expected_ep.sat_id)
+            for i, sat_id in enumerate(expected_ep.sat_id):
+                sat_obs = actual_ep.observations[sat_id]
+                assert sat_obs["C1C"] == pytest.approx(
+                    float(expected_ep.pseudorange_m[i]), abs=1e-3
+                )
+                assert sat_obs["S1C"] == pytest.approx(
+                    float(expected_ep.cn0_dbhz[i]), abs=1e-3
+                )
+
+    def test_header_approx_position_is_first_epoch_rx_ecef(self, tmp_path):
+        nav_file = _write_nav(tmp_path, _NAV_GPS_ONLY)
+        result = run_scenario(_base_config(nav_file))
+        out_path = tmp_path / "sim2.obs"
+        result.to_rinex(out_path)
+
+        text = out_path.read_text()
+        pos_line = [ln for ln in text.splitlines() if "APPROX POSITION XYZ" in ln][0]
+        x = float(pos_line[0:14])
+        assert x == pytest.approx(float(result.epochs[0].rx_ecef[0]), abs=1e-3)
+
+    def test_cli_rinex_out(self, tmp_path):
+        import gnss_gpu.scenario_cli as scenario_cli
+        from gnss_gpu.io.rinex import read_rinex_obs
+
+        nav_file = _write_nav(tmp_path, _NAV_GPS_ONLY)
+        rinex_out = tmp_path / "cli_out.obs"
+        argv = [
+            "--nav", nav_file,
+            "--lat", str(_RX_LAT),
+            "--lon", str(_RX_LON),
+            "--alt", str(_RX_ALT),
+            "--start", _START_TIME,
+            "--duration", "2.0",
+            "--step", "1.0",
+            "--constellations", "G",
+            "--elevation-mask-deg", "0.0",
+            "--rinex-out", str(rinex_out),
+        ]
+        rc = scenario_cli.main(argv)
+        assert rc == 0
+        assert rinex_out.exists()
+
+        obs = read_rinex_obs(rinex_out)
+        assert len(obs.epochs) == 3

@@ -300,6 +300,60 @@ class ScenarioResult:
             "doppler_hz": _cat("doppler_hz", np.float64),
         }
 
+    def to_rinex(
+        self,
+        path: str | Path,
+        marker_name: str = "SIM",
+        receiver_type: str = "gnss_gpu simulator",
+    ) -> None:
+        """Export this scenario as a RINEX 3.04 observation file.
+
+        Maps ``pseudorange_m`` -> ``C1C``, ``doppler_hz`` -> ``D1C`` and
+        ``cn0_dbhz`` -> ``S1C``. No carrier-phase observable is simulated,
+        so ``L1C`` is omitted entirely (not written as all-blank).
+        """
+        # Imported lazily so importing :mod:`gnss_gpu.scenario` does not
+        # pull in the RINEX writer module for callers who never export.
+        from gnss_gpu.io.rinex_writer import (
+            EpochRecord as _RinexEpochRecord,
+            RinexObsHeader,
+            write_rinex_obs,
+        )
+
+        codes = ("C1C", "D1C", "S1C")
+        systems = sorted({ep.sat_id[i][0] for ep in self.epochs for i in range(ep.n_sat)})
+        obs_types = {sys: list(codes) for sys in systems}
+
+        rinex_epochs = [
+            _RinexEpochRecord(
+                time=ep.time_utc,
+                sat_ids=list(ep.sat_id),
+                obs={
+                    "C1C": ep.pseudorange_m,
+                    "D1C": ep.doppler_hz,
+                    "S1C": ep.cn0_dbhz,
+                },
+            )
+            for ep in self.epochs
+        ]
+
+        approx_position_ecef = self.epochs[0].rx_ecef if self.epochs else np.zeros(3)
+        time_first_obs = self.epochs[0].time_utc if self.epochs else None
+        interval_s = float(self.config.step_s)
+        if len(self.epochs) >= 2:
+            interval_s = abs(self.epochs[1].time_sow - self.epochs[0].time_sow) or interval_s
+
+        header = RinexObsHeader(
+            marker_name=marker_name,
+            receiver_type=receiver_type,
+            approx_position_ecef=np.asarray(approx_position_ecef, dtype=np.float64),
+            obs_types=obs_types,
+            interval_s=interval_s,
+            time_first_obs=time_first_obs,
+        )
+
+        write_rinex_obs(path, header, rinex_epochs)
+
 
 # ---------------------------------------------------------------------------
 # Epoch time / receiver position resolution

@@ -46,6 +46,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--cn0-zenith-dbhz", type=float, default=45.0)
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--out", default=None, help="output CSV path (default: print summary only)")
+    p.add_argument(
+        "--rinex-out", default=None,
+        help="output RINEX 3.04 OBS path (C1C/D1C/S1C only, no carrier phase)",
+    )
     return p
 
 
@@ -100,6 +104,10 @@ def main(argv=None) -> int:
     if args.out:
         _write_csv(arrays, args.out)
         print(f"wrote {len(arrays['epoch_index'])} rows to {args.out}")
+
+    if args.rinex_out:
+        result.to_rinex(args.rinex_out)
+        print(f"wrote {result.n_epochs} epochs to {args.rinex_out}")
 
     _print_summary(result, arrays)
     return 0
