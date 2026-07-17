@@ -82,6 +82,7 @@ class UrbanSignalSimulator:
                  elevation_mask_deg=10.0,
                  nlos_attenuation_db=6.0, fresnel_coeff=0.5,
                  max_reflection_paths=0, reflector_material=None,
+                 triangle_materials=None,
                  reflection_polarization="rhcp",
                  carrier_freq_hz=GPS_L1_FREQ,
                  ground_reflection=False, ground_height_m=0.0,
@@ -106,9 +107,20 @@ class UrbanSignalSimulator:
             max_reflection_paths: Maximum first-order reflection paths to add
                 per satellite. 0 disables physical reflection paths and keeps
                 legacy single multipath behavior.
-            reflector_material: Material name, (eps_r, sigma) tuple, or complex
-                permittivity for angle-dependent Fresnel reflection. None keeps
-                legacy fixed fresnel_coeff behavior.
+            reflector_material: Material name, (eps_r, sigma) tuple, complex
+                permittivity, or the literal string "per_triangle" for
+                angle-dependent Fresnel reflection. None keeps legacy fixed
+                fresnel_coeff behavior. "per_triangle" opts into per-surface
+                materials: each reflection path looks up its own reflecting
+                triangle's material in `triangle_materials` instead of using
+                one material for the whole scene (requires
+                `triangle_materials` to be supplied; ground-plane paths
+                (`triangle_id == -1`) still use `ground_material`).
+            triangle_materials: Array of material names/specs aligned 1:1
+                with `building_model.triangles` (e.g. from
+                `gnss_gpu.surface_materials.classify_surface_materials` or
+                `PlateauLoader.load_citygml(..., return_materials=True)`).
+                Only consulted when `reflector_material == "per_triangle"`.
             reflection_polarization: Polarization mode for Fresnel reflection
                 ("rhcp", "rhcp_cross", "parallel", "perpendicular", "average").
             carrier_freq_hz: Carrier frequency [Hz] for complex permittivity.
@@ -129,6 +141,12 @@ class UrbanSignalSimulator:
         self.fresnel_coeff = fresnel_coeff
         self.max_reflection_paths = int(max_reflection_paths)
         self.reflector_material = reflector_material
+        self.triangle_materials = triangle_materials
+        if reflector_material == "per_triangle" and triangle_materials is None:
+            raise ValueError(
+                "reflector_material='per_triangle' requires triangle_materials "
+                "(a material name/spec per building_model.triangles entry)"
+            )
         self.reflection_polarization = reflection_polarization
         self.carrier_freq_hz = float(carrier_freq_hz)
         self.ground_reflection = bool(ground_reflection)
@@ -147,6 +165,23 @@ class UrbanSignalSimulator:
         self.reflection_diffraction_path_kwargs = dict(
             reflection_diffraction_path_kwargs or {})
         self.reflection_diffraction_orders = tuple(reflection_diffraction_orders)
+
+    def _triangle_material(self, triangle_id):
+        """Return the reflection material for a mesh triangle in "per_triangle" mode.
+
+        `triangle_id == -1` denotes a ground-plane bounce (see
+        `raytrace.BuildingModel.compute_reflection_paths`); callers are
+        expected to have already special-cased that to `ground_material`
+        before reaching here. Any other out-of-range index (should not
+        happen if `triangle_materials` was built from the same
+        `building_model.triangles`) falls back to `ground_material` as a
+        conservative default rather than raising mid-simulation.
+        """
+        materials = self.triangle_materials
+        idx = int(triangle_id)
+        if materials is None or idx < 0 or idx >= len(materials):
+            return self.ground_material
+        return materials[idx]
 
     def _get_diffraction_edges(self):
         """Return DiffractionEdgeSet (precomputed or lazily extracted), or None."""
@@ -421,11 +456,13 @@ class UrbanSignalSimulator:
                     mp_carrier_phase = (mp_pr / GPS_L1_WAVELENGTH) * 2.0 * math.pi
                     mp_carrier_phase = mp_carrier_phase % (2.0 * math.pi)
                     if self.reflector_material is not None:
-                        mat = (
-                            self.ground_material
-                            if getattr(path, "triangle_id", 0) == -1
-                            else self.reflector_material
-                        )
+                        tri_id = getattr(path, "triangle_id", 0)
+                        if tri_id == -1:
+                            mat = self.ground_material
+                        elif self.reflector_material == "per_triangle":
+                            mat = self._triangle_material(tri_id)
+                        else:
+                            mat = self.reflector_material
                         coeff = reflection_coefficient(
                             path.incidence_angle,
                             mat,
@@ -494,12 +531,18 @@ class UrbanSignalSimulator:
                     dr_carrier_phase = dr_carrier_phase % (2.0 * math.pi)
                     if self.reflector_material is not None:
                         inc1, inc2 = path.incidence_angles
+                        if self.reflector_material == "per_triangle":
+                            tri_ids = getattr(path, "triangle_ids", (0, 0))
+                            mat1 = self._triangle_material(tri_ids[0])
+                            mat2 = self._triangle_material(tri_ids[1])
+                        else:
+                            mat1 = mat2 = self.reflector_material
                         coeff1 = reflection_coefficient(
-                            inc1, self.reflector_material,
+                            inc1, mat1,
                             freq_hz=self.carrier_freq_hz,
                             polarization=self.reflection_polarization)
                         coeff2 = reflection_coefficient(
-                            inc2, self.reflector_material,
+                            inc2, mat2,
                             freq_hz=self.carrier_freq_hz,
                             polarization=self.reflection_polarization)
                         dr_amplitude = amplitude * float(coeff1) * float(coeff2)
@@ -528,8 +571,13 @@ class UrbanSignalSimulator:
                     rd_carrier_phase = (rd_pr / GPS_L1_WAVELENGTH) * 2.0 * math.pi
                     rd_carrier_phase = rd_carrier_phase % (2.0 * math.pi)
                     if self.reflector_material is not None:
+                        if self.reflector_material == "per_triangle":
+                            mat = self._triangle_material(
+                                getattr(path, "triangle_id", 0))
+                        else:
+                            mat = self.reflector_material
                         coeff = reflection_coefficient(
-                            path.incidence_angle, self.reflector_material,
+                            path.incidence_angle, mat,
                             freq_hz=self.carrier_freq_hz,
                             polarization=self.reflection_polarization)
                         rd_amplitude = (

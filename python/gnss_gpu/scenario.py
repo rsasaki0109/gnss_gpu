@@ -40,6 +40,7 @@ from typing import Sequence
 
 import numpy as np
 
+from gnss_gpu.antenna import AntennaPattern
 from gnss_gpu.atmosphere import AtmosphereCorrection
 from gnss_gpu.ephemeris import Ephemeris
 from gnss_gpu.io.nav_rinex import (
@@ -119,6 +120,14 @@ class ScenarioConfig:
 
     The epoch time grid is either ``epoch_times`` (explicit list) or derived
     from ``start_time`` + (``end_time`` or ``duration_s``) + ``step_s``.
+
+    ``antenna`` selects the receiver antenna gain pattern added into the
+    C/N0 computation: ``None`` (default) keeps the original isotropic-ish
+    ``cn0_zenith_dbhz * sin(elevation)`` model unchanged, a preset name
+    string (``"isotropic"``, ``"patch"``, ``"helix"``, ``"smartphone"``,
+    see :meth:`gnss_gpu.antenna.AntennaPattern.preset`) resolves to a
+    built-in pattern, or an :class:`~gnss_gpu.antenna.AntennaPattern`
+    instance may be passed directly for a custom pattern.
     """
 
     nav_file: str
@@ -147,6 +156,7 @@ class ScenarioConfig:
     diffraction_model: str | None = "knife_edge"
     utd_mode: str = "absorbing"
     cn0_zenith_dbhz: float = 45.0
+    antenna: str | AntennaPattern | None = None
     rx_clock_bias_m: float = 0.0
     nlos_attenuation_db: float = 15.0
     nlos_excess_fallback_m: float = 20.0
@@ -505,6 +515,19 @@ def _finite_difference_velocity(
     return vel
 
 
+def _resolve_antenna(antenna: str | AntennaPattern | None) -> AntennaPattern | None:
+    """Resolve ``ScenarioConfig.antenna`` into an :class:`AntennaPattern` or ``None``.
+
+    ``None`` is passed straight through (today's isotropic-ish behavior,
+    unchanged bit-for-bit); an :class:`AntennaPattern` instance is passed
+    straight through too; a string is resolved via
+    :meth:`AntennaPattern.preset`.
+    """
+    if antenna is None or isinstance(antenna, AntennaPattern):
+        return antenna
+    return AntennaPattern.preset(antenna)
+
+
 def _pr_noise_sigma_m(el_rad: np.ndarray, sigma_zenith: float, sigma_horizon: float) -> np.ndarray:
     sin_el = np.clip(np.sin(el_rad), 1.0e-3, 1.0)
     sigma = sigma_zenith / sin_el
@@ -664,6 +687,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
     el_mask_rad = math.radians(float(config.elevation_mask_deg))
     rng = np.random.default_rng(config.seed)
     available_prns = eph.available_prns
+    antenna_pattern = _resolve_antenna(config.antenna)
 
     epochs: list[EpochRecord] = []
     for i, t in enumerate(epoch_times):
@@ -724,6 +748,8 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
         )
 
         cn0_dbhz = config.cn0_zenith_dbhz * np.sin(el_m) - atten_db
+        if antenna_pattern is not None:
+            cn0_dbhz = cn0_dbhz + antenna_pattern.gain_db(el_m, az_m)
         cn0_dbhz = np.maximum(cn0_dbhz, 0.0)
 
         sat_vel = _finite_difference_velocity(eph, sow, list(sat_id), sat_ecef_m)

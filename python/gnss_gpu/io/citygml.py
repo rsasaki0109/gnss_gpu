@@ -55,18 +55,29 @@ class CityFeature:
         lod: Level of detail (1, 2, 3, or 4).  ``0`` if unknown.
         polygons: List of polygon coordinate arrays, each with shape ``(N, 3)``.
         kind: ``"bldg"`` or ``"brid"`` — see :data:`SUPPORTED_KINDS`.
+        surface_kinds: Parallel list to ``polygons`` classifying each polygon
+            by its enclosing CityGML boundary-surface element: ``"wall"``
+            (``bldg:WallSurface``), ``"roof"`` (``bldg:RoofSurface``),
+            ``"ground"`` (``bldg:GroundSurface``), or ``"unknown"`` when the
+            polygon is not nested inside one of those tags (e.g. LOD1
+            ``lod1Solid``/``lod1MultiSurface`` extrusions, which PLATEAU
+            ships without per-surface tagging).  Always the same length as
+            ``polygons``.
 
     Field order note: ``kind`` is intentionally last so that the
     historical positional signature ``Building(id, lod, polygons)``
     keeps producing a building feature.  Inserting ``kind`` between
     ``id`` and ``lod`` would silently shift caller arguments and drop
-    geometry (Codex review round 2, P1 #2).
+    geometry (Codex review round 2, P1 #2).  ``surface_kinds`` is appended
+    after ``kind`` for the same reason -- it must never shift existing
+    positional arguments.
     """
 
     id: Optional[str] = None
     lod: int = 0
     polygons: List[np.ndarray] = field(default_factory=list)
     kind: str = "bldg"
+    surface_kinds: List[str] = field(default_factory=list)
 
 
 # Back-compat alias: callers historically imported ``Building``.
@@ -168,6 +179,74 @@ def _extract_polygons(element, ns):
     return polygons
 
 
+# CityGML LOD2+ boundary-surface elements -> our simplified surface
+# category.  These are always in the ``bldg`` namespace family (even for
+# ``brid`` bridge features, which do not carry them), so callers resolve
+# the ``bldg`` URI explicitly rather than using ``ns_family``.
+_BOUNDARY_SURFACE_CATEGORY = {
+    "WallSurface": "wall",
+    "RoofSurface": "roof",
+    "GroundSurface": "ground",
+}
+
+
+def _extract_polygons_with_kinds(element, ns):
+    """Extract polygons together with a parallel surface-kind list.
+
+    Walks ``element`` depth-first, tracking the nearest enclosing
+    ``bldg:WallSurface`` / ``RoofSurface`` / ``GroundSurface`` ancestor (if
+    any) so each extracted polygon can be tagged ``"wall"``, ``"roof"``,
+    ``"ground"``, or ``"unknown"`` (untagged, e.g. LOD1 solids that carry no
+    boundary-surface elements at all).
+
+    Returns
+    -------
+    (polygons, kinds) : tuple[list[np.ndarray], list[str]]
+        Same order and length as :func:`_extract_polygons` would produce for
+        the same element.
+    """
+    gml = ns.get("gml", "http://www.opengis.net/gml")
+    bldg_uri = _resolve_family_uri(ns, "bldg")
+
+    wall_tag = f"{{{bldg_uri}}}WallSurface"
+    roof_tag = f"{{{bldg_uri}}}RoofSurface"
+    ground_tag = f"{{{bldg_uri}}}GroundSurface"
+    poslist_tag = f"{{{gml}}}posList"
+    ring_tag = f"{{{gml}}}LinearRing"
+
+    polygons: List[np.ndarray] = []
+    kinds: List[str] = []
+
+    def _walk(elem, current_kind):
+        tag = elem.tag
+        if tag == wall_tag:
+            current_kind = "wall"
+        elif tag == roof_tag:
+            current_kind = "roof"
+        elif tag == ground_tag:
+            current_kind = "ground"
+
+        if tag == poslist_tag and elem.text:
+            polygons.append(_parse_poslist(elem.text))
+            kinds.append(current_kind)
+        elif tag == ring_tag:
+            pos_elems = elem.findall(f"{{{gml}}}pos")
+            if pos_elems:
+                coords = []
+                for p in pos_elems:
+                    vals = p.text.strip().split()
+                    coords.extend(float(v) for v in vals)
+                arr = np.array(coords, dtype=np.float64).reshape(-1, 3)
+                polygons.append(arr)
+                kinds.append(current_kind)
+
+        for child in elem:
+            _walk(child, current_kind)
+
+    _walk(element, "unknown")
+    return polygons, kinds
+
+
 def _resolve_family_uri(ns: dict, ns_family: str) -> str:
     """Return the namespace URI for a CityGML family, with a 2.0 fallback."""
     return ns.get(
@@ -224,12 +303,14 @@ def parse_citygml(filepath, kind: CityGmlKind = "bldg") -> List[CityFeature]:
     features: List[CityFeature] = []
     for feat_elem in root.iter(f"{{{feature_uri}}}{root_tag}"):
         gml_id = feat_elem.get(f"{{{gml_uri}}}id") or feat_elem.get("id")
+        polygons, surface_kinds = _extract_polygons_with_kinds(feat_elem, ns)
         features.append(
             CityFeature(
                 id=gml_id,
                 kind=kind,
                 lod=_determine_lod(feat_elem, ns, ns_family=ns_family),
-                polygons=_extract_polygons(feat_elem, ns),
+                polygons=polygons,
+                surface_kinds=surface_kinds,
             )
         )
     return features

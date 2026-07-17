@@ -42,6 +42,7 @@ import numpy as np
 
 from gnss_gpu.io.citygml import SUPPORTED_KINDS, parse_citygml
 from gnss_gpu.raytrace import BuildingModel
+from gnss_gpu.surface_materials import classify_surface_materials
 
 # Type alias for any caller-supplied geoid model.
 # Accepts ``"egm96"`` (uses pyproj if available), a constant float (m),
@@ -261,8 +262,12 @@ class PlateauLoader:
     # ------------------------------------------------------------------
 
     def load_citygml(
-        self, filepath: Union[str, Path], kind: str = "bldg"
-    ) -> BuildingModel:
+        self,
+        filepath: Union[str, Path],
+        kind: str = "bldg",
+        *,
+        return_materials: bool = False,
+    ):
         """Load CityGML features from a single file.
 
         Parameters
@@ -271,12 +276,30 @@ class PlateauLoader:
             Path to a ``.gml`` file.
         kind : str
             CityGML feature kind: ``"bldg"`` (default) or ``"brid"``.
+        return_materials : bool, optional
+            If ``True``, also classify every mesh triangle by reflection
+            material (see :func:`gnss_gpu.surface_materials.classify_surface_materials`)
+            and return ``(BuildingModel, materials)`` instead of a bare
+            ``BuildingModel``. CityGML LOD2+ boundary-surface tags
+            (``bldg:WallSurface``/``RoofSurface``/``GroundSurface``) are used
+            where present; untagged polygons (e.g. LOD1 solids) fall back to
+            a triangle-normal heuristic. Default ``False`` preserves the
+            historical return type for existing callers.
 
         Returns
         -------
-        BuildingModel
+        BuildingModel, or (BuildingModel, np.ndarray) when
+        ``return_materials=True``.
         """
         features = parse_citygml(filepath, kind=kind)
+        if return_materials:
+            triangles, surface_kinds = self._buildings_to_triangles(
+                features, collect_kinds=True
+            )
+            materials = classify_surface_materials(
+                triangles, surface_kinds=surface_kinds
+            )
+            return BuildingModel(triangles), materials
         triangles = self._buildings_to_triangles(features)
         return BuildingModel(triangles)
 
@@ -287,7 +310,8 @@ class PlateauLoader:
         *,
         kinds: Iterable[str] = ("bldg",),
         include_bridges: Optional[bool] = None,
-    ) -> BuildingModel:
+        return_materials: bool = False,
+    ):
         """Load CityGML features from a directory tree.
 
         Parameters
@@ -304,10 +328,16 @@ class PlateauLoader:
         include_bridges : bool, optional
             Deprecated.  ``True`` is equivalent to adding ``"brid"`` to
             ``kinds``; preserved for the v1 API of this loader.
+        return_materials : bool, optional
+            If ``True``, also classify every mesh triangle by reflection
+            material and return ``(BuildingModel, materials)``. See
+            :meth:`load_citygml`. Default ``False`` preserves the historical
+            return type for existing callers.
 
         Returns
         -------
-        BuildingModel
+        BuildingModel, or (BuildingModel, np.ndarray) when
+        ``return_materials=True``.
         """
         active_kinds = set(_normalise_kinds(kinds, include_bridges=include_bridges))
 
@@ -319,6 +349,7 @@ class PlateauLoader:
             )
 
         all_triangles = []
+        all_kinds = [] if return_materials else None
         for f in files:
             # Files without a ``_<kind>_`` infix (e.g. legacy single-feature
             # exports) are treated as buildings to preserve historical behaviour.
@@ -326,26 +357,54 @@ class PlateauLoader:
             if kind not in active_kinds:
                 continue
             features = parse_citygml(f, kind=kind)
-            tri = self._buildings_to_triangles(features)
+            if return_materials:
+                tri, tri_kinds = self._buildings_to_triangles(
+                    features, collect_kinds=True
+                )
+            else:
+                tri = self._buildings_to_triangles(features)
             if tri.size > 0:
                 all_triangles.append(tri)
+                if return_materials:
+                    all_kinds.append(tri_kinds)
 
         if not all_triangles:
             raise ValueError("No building geometry found in the provided files")
 
         combined = np.concatenate(all_triangles, axis=0)
+        if return_materials:
+            combined_kinds = (
+                np.concatenate(all_kinds, axis=0)
+                if all_kinds
+                else np.array([], dtype=object)
+            )
+            materials = classify_surface_materials(
+                combined, surface_kinds=combined_kinds
+            )
+            return BuildingModel(combined), materials
         return BuildingModel(combined)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _buildings_to_triangles(self, buildings):
-        """Convert parsed buildings to an ``(N, 3, 3)`` ECEF triangle array."""
+    def _buildings_to_triangles(self, buildings, *, collect_kinds: bool = False):
+        """Convert parsed buildings to an ``(N, 3, 3)`` ECEF triangle array.
+
+        When ``collect_kinds`` is True, also returns a parallel ``(N,)``
+        object array of per-triangle CityGML surface-kind strings
+        (``"wall"``/``"roof"``/``"ground"``/``"unknown"``), replicating each
+        polygon's :attr:`CityFeature.surface_kinds` entry across every
+        triangle its fan triangulation produced -- this guarantees the kinds
+        array stays aligned with the triangle array 1:1, since it is built
+        in the same loop.
+        """
         all_tris = []
+        all_kinds = [] if collect_kinds else None
 
         for bldg in buildings:
-            for polygon in bldg.polygons:
+            kinds_list = getattr(bldg, "surface_kinds", None) or []
+            for poly_idx, polygon in enumerate(bldg.polygons):
                 # polygon shape: (M, 3) -- coordinates in the Japanese plane
                 # rectangular system (y_north, x_east, z_up) -- PLATEAU uses
                 # the order (y, x, z) where y is northing and x is easting.
@@ -358,11 +417,24 @@ class PlateauLoader:
                 tris = self._polygon_to_triangles(ecef_coords)
                 if tris is not None:
                     all_tris.append(tris)
+                    if collect_kinds:
+                        kind = (
+                            kinds_list[poly_idx]
+                            if poly_idx < len(kinds_list)
+                            else "unknown"
+                        )
+                        all_kinds.extend([kind] * tris.shape[0])
 
         if not all_tris:
-            return np.empty((0, 3, 3), dtype=np.float64)
+            empty = np.empty((0, 3, 3), dtype=np.float64)
+            if collect_kinds:
+                return empty, np.array([], dtype=object)
+            return empty
 
-        return np.concatenate(all_tris, axis=0)
+        combined = np.concatenate(all_tris, axis=0)
+        if collect_kinds:
+            return combined, np.array(all_kinds, dtype=object)
+        return combined
 
     def _polygon_to_ecef(self, coords):
         """Convert polygon coordinates from plane rectangular to ECEF.
@@ -632,6 +704,7 @@ def load_plateau(
     kinds: Iterable[str] = ("bldg",),
     include_bridges: Optional[bool] = None,
     geoid_correction: GeoidCorrection = GEOID_CORRECTION_DEFAULT,
+    return_materials: bool = False,
 ):
     """Convenience function to load PLATEAU CityGML data.
 
@@ -653,17 +726,27 @@ def load_plateau(
         heights before ECEF conversion.  See module docstring for the
         supported values.  Default is ``None`` (no correction, with a
         one-time UserWarning).
+    return_materials : bool, optional
+        If ``True``, also classify every mesh triangle by reflection
+        material (see :func:`gnss_gpu.surface_materials.classify_surface_materials`)
+        and return ``(BuildingModel, materials)`` instead of a bare
+        ``BuildingModel``. Default ``False`` preserves the historical
+        return type for existing callers.
 
     Returns
     -------
-    BuildingModel
+    BuildingModel, or (BuildingModel, np.ndarray) when
+    ``return_materials=True``.
     """
     p = Path(filepath_or_dir)
     loader = PlateauLoader(zone=zone, geoid_correction=geoid_correction)
     if p.is_dir():
         return loader.load_directory(
-            p, kinds=kinds, include_bridges=include_bridges
+            p,
+            kinds=kinds,
+            include_bridges=include_bridges,
+            return_materials=return_materials,
         )
     # Single-file mode infers kind from filename prefix.
     inferred = _infer_kind_from_filename(p.name) or "bldg"
-    return loader.load_citygml(p, kind=inferred)
+    return loader.load_citygml(p, kind=inferred, return_materials=return_materials)
