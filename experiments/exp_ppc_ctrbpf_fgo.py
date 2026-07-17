@@ -461,6 +461,31 @@ class CTRBPFConfig:
     # also suppresses ins_tc PF position_update (PU), not just emit. Default
     # off so the existing emit-only gate behaviour is preserved.
     ins_tc_quality_gate_pu_skip: bool = False
+    # WP22a: WP21b IMU-preintegration predict-step guide
+    # (python/gnss_gpu/pf_imu_preint_adapter.py::ImuPreintPfGuide), wired as
+    # a standalone switch independent of imu_tc/ins_tc/hybrid-velocity-guide.
+    # Between consecutive rover epochs, the buffered 100 Hz PPC IMU segment
+    # is preintegrated and closed into (a) an ECEF velocity guide fed to
+    # ``pf.predict(velocity=..., rbpf_velocity_kf=True)`` in place of the
+    # baseline's guide-less RBPF-velKF predict, (b) a heading-uncertainty-
+    # aware ``sigma_pos`` (WP21b item 1: cross-track lever
+    # ``|displacement|*sigma_heading``, heading driven by
+    # ``gnss_gpu.imu.ComplementaryHeadingFilter`` corrected against this
+    # pipeline's own causal ``wls_positions``), and (c) the segment's
+    # accel/gyro-derived delta_v covariance fed into every particle's
+    # velocity-KF ``Sigma_v`` via ``pf.set_velocity_covariance`` (WP21b item
+    # 2). Falls back to the baseline no-guide predict for any epoch with an
+    # empty/degenerate IMU segment. Not combined with imu_tc/ins_tc in this
+    # ablation (both are alternative predict-step IMU integrations; running
+    # them together is untested).
+    enable_imu_preint: bool = False
+    imu_preint_sigma_accel_mps2_sqrthz: float = 0.05
+    imu_preint_sigma_gyro_radps_sqrthz: float = 0.005
+    imu_preint_sigma_pos_floor_m: float = 0.05
+    imu_preint_sigma_pos_scale: float = 1.0
+    imu_preint_velocity_blend_alpha: float = 0.3
+    imu_preint_sigma_spp_pos_m: float = 30.0
+    imu_preint_min_heading_fix_disp_m: float = 2.0
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -583,6 +608,19 @@ class _PRObsStats:
     prefit_sats_kept: int = 0
     prefit_sats_dropped: int = 0
     epochs_skipped: int = 0
+    # WP22a: filter-health instrumentation (mean pre-resample ESS/N and the
+    # fraction of epochs that triggered a resample), populated by a
+    # zero-behavior-change monkeypatch around ``pf.resample_if_needed`` in
+    # ``_run_ctrbpf_on_segment`` -- see the "WP22a filter health" comment
+    # there. NaN/-1 when not collected (should not happen; collection is
+    # unconditional).
+    mean_ess_ratio: float = float("nan")
+    resample_rate: float = float("nan")
+    # WP22a: IMU-preintegration predict-step guide bookkeeping (only
+    # populated when ``config.enable_imu_preint``; zero/NaN otherwise).
+    imu_preint_predict_used: int = 0
+    imu_preint_fallback_used: int = 0
+    imu_preint_mean_sigma_pos_m: float = float("nan")
 
 
 @dataclass
@@ -3447,11 +3485,64 @@ def _run_ctrbpf_on_segment(
         raise ValueError("enable_imu_tc and enable_ins_tc are mutually exclusive")
     use_imu_tc = config.enable_imu_tc and imu is not None
     use_ins_tc = config.enable_ins_tc and imu is not None
-    imu_t = _build_imu_segment_index(imu) if (use_imu_tc or use_ins_tc) else None
+    use_imu_preint = config.enable_imu_preint and imu is not None
+    imu_t = (
+        _build_imu_segment_index(imu) if (use_imu_tc or use_ins_tc or use_imu_preint) else None
+    )
     if use_imu_tc and imu_t is None:
         use_imu_tc = False  # IMU file present but empty
     if use_ins_tc and imu_t is None:
         use_ins_tc = False
+    if use_imu_preint and imu_t is None:
+        use_imu_preint = False
+
+    # WP22a: WP21b IMU-preintegration predict-step guide state. Heading is
+    # tracked outside the particle state (gnss_gpu.imu.ComplementaryHeadingFilter),
+    # matching WP21/WP21b's design; the causal heading/velocity reference
+    # comes from this pipeline's own WLS point solutions (``wls_positions``),
+    # not a separately-run robust_spp (this ablation reuses whatever causal
+    # point-solve the DD-RBPF pipeline already computes upstream).
+    imu_preint_guide = None
+    imu_preint_heading_filter = None
+    imu_preint_accel = None
+    imu_preint_gyro_radps = None
+    imu_preint_dt = None
+    imu_preint_sigma_pos_used = np.zeros(n_epochs, dtype=np.float64)
+    imu_preint_predict_used = 0
+    imu_preint_fallback_used = 0
+    if use_imu_preint:
+        from gnss_gpu.imu import ComplementaryHeadingFilter as _ComplementaryHeadingFilter
+        from gnss_gpu.pf_imu_preint_adapter import ImuPreintPfGuide as _ImuPreintPfGuide
+        from gnss_gpu.pf_imu_preint_adapter import ecef_to_enu_rotation, ecef_to_lla_rad
+
+        _imu_dict_conv = {
+            "tow": np.asarray(imu["time"], dtype=np.float64),
+            "gyro": np.column_stack(
+                [imu["gyro_x"], imu["gyro_y"], imu["gyro_z"]]
+            ).astype(np.float64)
+            * (math.pi / 180.0),
+            "wheel_vel": np.full(imu_t.shape[0], np.nan, dtype=np.float64),
+        }
+        imu_preint_heading_filter = _ComplementaryHeadingFilter(_imu_dict_conv, alpha=0.05)
+        imu_preint_guide = _ImuPreintPfGuide(
+            imu_preint_heading_filter,
+            sigma_accel_mps2_sqrthz=float(config.imu_preint_sigma_accel_mps2_sqrthz),
+            sigma_gyro_radps_sqrthz=float(config.imu_preint_sigma_gyro_radps_sqrthz),
+            sigma_pos_floor=float(config.imu_preint_sigma_pos_floor_m),
+            sigma_pos_scale=float(config.imu_preint_sigma_pos_scale),
+            velocity_blend_alpha=float(config.imu_preint_velocity_blend_alpha),
+            use_heading_uncertainty=True,
+            sigma_spp_pos_m=float(config.imu_preint_sigma_spp_pos_m),
+            min_heading_fix_disp_m=float(config.imu_preint_min_heading_fix_disp_m),
+        )
+        imu_preint_accel = np.column_stack(
+            [imu["acc_x"], imu["acc_y"], imu["acc_z"]]
+        ).astype(np.float64)
+        imu_preint_gyro_radps = _imu_dict_conv["gyro"]
+        _dt_fwd = np.diff(imu_t)
+        imu_preint_dt = (
+            np.concatenate([_dt_fwd, _dt_fwd[-1:]]) if _dt_fwd.size else np.zeros(0)
+        )
     imu_tc_anchor: _IMUAnchor | None = None
     imu_tc_anchor_acc: np.ndarray | None = None
     imu_tc_anchor_gyro: np.ndarray | None = None
@@ -3591,6 +3682,38 @@ def _run_ctrbpf_on_segment(
         spread_cb=config.spread_cb_init,
         velocity_init_sigma=config.velocity_init_sigma if config.enable_rbpf_velocity_kf else 0.0,
     )
+
+    # WP22a filter health: wrap ``pf.resample_if_needed`` (called internally
+    # by ``pf.update``/``update_gmm``/etc. whenever they run with their
+    # default ``resample=True``, and explicitly at a couple of call sites
+    # below) to record the pre-resample ESS/N and whether a resample fired,
+    # attributed to the current epoch index. ``update(resample=True)`` is
+    # exactly ``_pf_device_weight(...)`` followed by ``resample_if_needed()``
+    # (see ``pf_device_runtime.py``), so this wrapper changes no behavior --
+    # it only observes the existing resample decision. Multiple
+    # ``resample_if_needed`` calls can occur within one epoch (PR + DD +
+    # Doppler + ESS-guard updates); the epoch's ESS/N is the minimum
+    # (worst/most-degenerate) observed pre-resample ratio, and the epoch
+    # counts as "resampled" if any call actually resampled.
+    pf_health_ess_ratio = np.full(n_epochs, np.nan, dtype=np.float64)
+    pf_health_resampled = np.zeros(n_epochs, dtype=bool)
+    _pf_health_epoch = [-1]
+    _orig_resample_if_needed = pf.resample_if_needed
+
+    def _wp22a_instrumented_resample_if_needed():
+        ess_ratio = float(pf.get_ess()) / max(int(config.n_particles), 1)
+        did = _orig_resample_if_needed()
+        idx_h = _pf_health_epoch[0]
+        if 0 <= idx_h < n_epochs:
+            prev = pf_health_ess_ratio[idx_h]
+            if not np.isfinite(prev) or ess_ratio < prev:
+                pf_health_ess_ratio[idx_h] = ess_ratio
+            if did:
+                pf_health_resampled[idx_h] = True
+        return did
+
+    pf.resample_if_needed = _wp22a_instrumented_resample_if_needed
+
     rtkdiag_last_good_pos: np.ndarray | None = None
     rtkdiag_last_good_t: float | None = None
     rtkdiag_last_fix4_pos: np.ndarray | None = None
@@ -3677,6 +3800,7 @@ def _run_ctrbpf_on_segment(
     t0 = time.perf_counter()
     _prev_ranker_label: str | None = None
     for i in range(n_epochs):
+        _pf_health_epoch[0] = i
         t_now = float(times[i])
         t_key = round(t_now, 1)
         hp_prefetched = hybrid_pos.get(t_key) if use_hybrid else None
@@ -3866,6 +3990,56 @@ def _run_ctrbpf_on_segment(
                     pf_predict_done = True
                     ins_particle_imu_last_t = t_now
 
+        imu_preint_predict_done = False
+        if not pf_predict_done and use_imu_preint and i > 0 and imu_preint_guide is not None:
+            t_prev_imu = float(times[i - 1])
+            imu_preint_heading_filter.update_heading_gyro(t_prev_imu, t_now)
+            idx0 = int(np.searchsorted(imu_t, t_prev_imu, side="left"))
+            idx1 = int(np.searchsorted(imu_t, t_now, side="left"))
+            for k in range(idx0, idx1):
+                imu_preint_guide.add_sample(
+                    imu_preint_accel[k], imu_preint_gyro_radps[k], float(imu_preint_dt[k])
+                )
+            v_gnss_wls = None
+            spp_heading_wls = None
+            spp_disp_wls_m = None
+            wls_prev = np.asarray(wls_positions[i - 1, :3], dtype=np.float64)
+            wls_cur = np.asarray(wls_positions[i, :3], dtype=np.float64)
+            if np.all(np.isfinite(wls_prev)) and np.all(np.isfinite(wls_cur)) and dt > 0.0:
+                displacement_wls = wls_cur - wls_prev
+                spp_disp_wls_m = float(np.linalg.norm(displacement_wls))
+                v_gnss_wls = displacement_wls / dt
+                lat_wls, lon_wls = ecef_to_lla_rad(wls_cur)
+                v_enu_wls = ecef_to_enu_rotation(lat_wls, lon_wls) @ v_gnss_wls
+                speed_wls = math.hypot(float(v_enu_wls[0]), float(v_enu_wls[1]))
+                spp_heading_wls = (
+                    math.atan2(float(v_enu_wls[0]), float(v_enu_wls[1])) if speed_wls > 0.5 else None
+                )
+            p_i_imu = np.asarray(pf.estimate(), dtype=np.float64)[:3]
+            velocity_guide_imu, sigma_pos_eff_imu = imu_preint_guide.close_segment(
+                p_i_imu, dt, v_gnss_ecef=v_gnss_wls, spp_heading_rad=spp_heading_wls,
+                spp_displacement_m=spp_disp_wls_m,
+            )
+            if velocity_guide_imu is not None and np.all(np.isfinite(velocity_guide_imu)):
+                vel_cov_imu = imu_preint_guide.velocity_covariance_ecef
+                if vel_cov_imu is not None:
+                    pf.set_velocity_covariance(vel_cov_imu)
+                pf.predict(
+                    velocity=velocity_guide_imu,
+                    dt=dt,
+                    sigma_pos=sigma_pos_eff_imu,
+                    velocity_guide_alpha=1.0,
+                    rbpf_velocity_kf=True,
+                    velocity_process_noise=config.velocity_process_noise,
+                )
+                pf_predict_done = True
+                imu_preint_predict_done = True
+                imu_preint_sigma_pos_used[i] = sigma_pos_eff_imu
+                imu_preint_predict_used += 1
+            else:
+                imu_preint_fallback_used += 1
+            imu_preint_guide.reset_segment()
+
         v_guide = None
         v_guide_from_ins = False
         if (
@@ -3918,9 +4092,13 @@ def _run_ctrbpf_on_segment(
             )
         if pf_diag_row is not None:
             pf_diag_row["predict_source"] = (
-                "particle_imu"
-                if pf_predict_done
-                else ("ins_motion" if v_guide_from_ins else ("hybrid_velocity" if v_guide is not None else "process"))
+                "imu_preint"
+                if imu_preint_predict_done
+                else (
+                    "particle_imu"
+                    if pf_predict_done
+                    else ("ins_motion" if v_guide_from_ins else ("hybrid_velocity" if v_guide is not None else "process"))
+                )
             )
             _capture_pf_internal_state(
                 pf,
@@ -6324,6 +6502,21 @@ def _run_ctrbpf_on_segment(
         )
         ins_tc_stats.final_pos_sigma_m = float(ins_ekf.position_sigma_m())
 
+    # WP22a: finalize filter-health + IMU-preint summary stats (see the
+    # "WP22a filter health" block after ``pf.initialize`` above).
+    _finite_ess = pf_health_ess_ratio[np.isfinite(pf_health_ess_ratio)]
+    pr_obs_stats.mean_ess_ratio = (
+        float(np.mean(_finite_ess)) if _finite_ess.size > 0 else float("nan")
+    )
+    pr_obs_stats.resample_rate = float(np.mean(pf_health_resampled)) if n_epochs > 0 else float("nan")
+    if use_imu_preint:
+        pr_obs_stats.imu_preint_predict_used = int(imu_preint_predict_used)
+        pr_obs_stats.imu_preint_fallback_used = int(imu_preint_fallback_used)
+        _used_sigma = imu_preint_sigma_pos_used[imu_preint_sigma_pos_used > 0.0]
+        pr_obs_stats.imu_preint_mean_sigma_pos_m = (
+            float(np.mean(_used_sigma)) if _used_sigma.size > 0 else float("nan")
+        )
+
     return (
         positions,
         ms_per_epoch,
@@ -6941,6 +7134,17 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         ins_tc_quality_gate_window_epochs=int(args.ins_tc_quality_gate_window_epochs),
         ins_tc_quality_gate_max_fix_rate=float(args.ins_tc_quality_gate_max_fix_rate),
         ins_tc_quality_gate_pu_skip=bool(args.ins_tc_quality_gate_pu_skip),
+        # WP22a: applied uniformly via --imu {off,preint} to every variant
+        # selected by --methods (not gated by method-label string tokens,
+        # unlike imu_tc/ins_tc which are opt-in per method combo).
+        enable_imu_preint=(args.imu == "preint"),
+        imu_preint_sigma_accel_mps2_sqrthz=args.imu_preint_sigma_accel,
+        imu_preint_sigma_gyro_radps_sqrthz=args.imu_preint_sigma_gyro,
+        imu_preint_sigma_pos_floor_m=args.imu_preint_sigma_pos_floor,
+        imu_preint_sigma_pos_scale=args.imu_preint_sigma_pos_scale,
+        imu_preint_velocity_blend_alpha=args.imu_preint_velocity_blend_alpha,
+        imu_preint_sigma_spp_pos_m=args.imu_preint_sigma_spp_pos_m,
+        imu_preint_min_heading_fix_disp_m=args.imu_preint_min_heading_fix_disp_m,
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -9980,6 +10184,29 @@ def main() -> None:
                         help="Cap epochs per run (smoke / debug). None = full run.")
     parser.add_argument("--start-epoch", type=int, default=0)
     parser.add_argument(
+        "--imu", choices=("off", "preint"), default="off",
+        help=(
+            "WP22a ablation switch: 'off' (default) = baseline predict step "
+            "unchanged (no IMU guide, i.e. reproduces the pre-WP22a "
+            "RBPF-velKF+DD+gate+hybrid numbers). 'preint' = wire in the "
+            "WP21b IMU-preintegration predict-step guide "
+            "(ImuPreintPfGuide, heading-uncertainty sigma_pos + "
+            "set_velocity_covariance Sigma_v feeding) using the PPC 100 Hz "
+            "IMU, applied uniformly to every selected --methods variant."
+        ),
+    )
+    parser.add_argument("--imu-preint-sigma-accel", type=float, default=0.05,
+                        help="ImuPreintPfGuide sigma_accel_mps2_sqrthz (WP21b default).")
+    parser.add_argument("--imu-preint-sigma-gyro", type=float, default=0.005,
+                        help="ImuPreintPfGuide sigma_gyro_radps_sqrthz (WP21b default).")
+    parser.add_argument("--imu-preint-sigma-pos-floor", type=float, default=0.05,
+                        help="Small numerical-stability floor on sigma_pos (WP21b default, not a tuning knob).")
+    parser.add_argument("--imu-preint-sigma-pos-scale", type=float, default=1.0)
+    parser.add_argument("--imu-preint-velocity-blend-alpha", type=float, default=0.3)
+    parser.add_argument("--imu-preint-sigma-spp-pos-m", type=float, default=30.0,
+                        help="Documented raw-SPP horizontal sigma [m] used for the heading-uncertainty term.")
+    parser.add_argument("--imu-preint-min-heading-fix-disp-m", type=float, default=2.0)
+    parser.add_argument(
         "--runs",
         type=str,
         default="all",
@@ -10197,7 +10424,10 @@ def main() -> None:
             tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]
         ] = []
         imu_run: dict[str, np.ndarray] | None = None
-        if any(v.enable_zupt or v.enable_imu_tc or v.enable_ins_tc for v in variants):
+        if any(
+            v.enable_zupt or v.enable_imu_tc or v.enable_ins_tc or v.enable_imu_preint
+            for v in variants
+        ):
             try:
                 imu_run = loader.load_imu()
             except FileNotFoundError as exc:
@@ -10641,7 +10871,12 @@ def main() -> None:
             )
             imu_for_variant = (
                 imu_run
-                if (variant.enable_zupt or variant.enable_imu_tc or variant.enable_ins_tc)
+                if (
+                    variant.enable_zupt
+                    or variant.enable_imu_tc
+                    or variant.enable_ins_tc
+                    or variant.enable_imu_preint
+                )
                 else None
             )
             rtkdiag_candidates_for_variant = (
@@ -10827,6 +11062,13 @@ def main() -> None:
                 "pr_gmm": int(variant.enable_pr_gmm),
                 "pr_gmm_epochs": int(pr_obs_stats.epochs_gmm),
                 "pr_gaussian_epochs": int(pr_obs_stats.epochs_gaussian),
+                # WP22a: filter-health + IMU-preint ablation columns.
+                "mean_ess_ratio": float(pr_obs_stats.mean_ess_ratio),
+                "resample_rate": float(pr_obs_stats.resample_rate),
+                "imu_mode": ("preint" if variant.enable_imu_preint else "off"),
+                "imu_preint_predict_used": int(pr_obs_stats.imu_preint_predict_used),
+                "imu_preint_fallback_used": int(pr_obs_stats.imu_preint_fallback_used),
+                "imu_preint_mean_sigma_pos_m": float(pr_obs_stats.imu_preint_mean_sigma_pos_m),
                 "pr_gmm_w_los": float(variant.pr_gmm_w_los),
                 "pr_gmm_mu_nlos_m": float(variant.pr_gmm_mu_nlos_m),
                 "pr_gmm_sigma_nlos_m": float(variant.pr_gmm_sigma_nlos_m),
