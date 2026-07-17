@@ -45,6 +45,7 @@ target_link_libraries(gnss_gpu_multipath CUDA::cudart)
 
 add_library(gnss_gpu_diffraction
   src/diffraction/diffraction.cu
+  src/diffraction/utd.cu
 )
 target_include_directories(gnss_gpu_diffraction PUBLIC include)
 target_link_libraries(gnss_gpu_diffraction CUDA::cudart)
