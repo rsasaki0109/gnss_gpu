@@ -171,6 +171,44 @@ multipath-bias distribution better than knife-edge** — reproducing the literat
 > `PYTHONPATH=examples python examples/plot_nlos_diffraction_figure.py Odaiba 60`
 > (uses the installed package's CUDA ray-tracing for line-of-sight checks).
 
+## Simulate GNSS anywhere in a city — and predict how well it will work
+
+The same city-aware physics also runs *forward*: given a place (or a route), a time
+window, the constellations, and a PLATEAU mesh, the **scenario engine**
+(`gnss_gpu.scenario`) simulates the observables a receiver would see there — visible
+satellites, LOS/NLOS, pseudorange with clock/ionosphere/troposphere/multipath errors,
+C/N0 and Doppler — and can export them as **RINEX 3.04 OBS** (`--rinex-out`) to feed
+RTKLIB or any receiver-evaluation pipeline. On top of it, **GPU area sweeps**
+(`gnss_gpu.coverage_map`) batch the line-of-sight rays for *all grid cells × all
+satellites* into single CUDA launches and map predicted GNSS quality — visible/LOS
+counts, availability, DOP, expected horizontal error — over a whole district in
+seconds.
+
+<div align="center">
+<img src="docs/assets/figures/coverage_map_odaiba_hpe.png" alt="Predicted horizontal-position-error map over the Odaiba PLATEAU mesh" width="620">
+</div>
+
+```bash
+PYTHONPATH=python python examples/demo_scenario_engine.py   # observables at a point
+PYTHONPATH=python python examples/demo_coverage_map.py      # per-cell quality map (PNG + deck.gl)
+```
+
+Three worked use cases on the same real Odaiba data (UrbanNav route + PLATEAU mesh):
+
+| Use case | Demo | What it surfaces |
+|---|---|---|
+| **Test-course / route evaluation** | `demo_route_accuracy.py` | Availability (≥4 LOS) stays 100%, yet expected HPE spikes past 300 m where the surviving 4-satellite geometry goes near-singular — a quality cliff a satellite-count threshold would miss. |
+| **RTK base-station placement** | `demo_rtk_base_placement.py` | Open-sky candidate cells tie on LOS count and HDOP; the **common-view satellite count** against the rover route is what actually ranks them. |
+| **Site multipath assessment** | `demo_urban_multipath.py` | Fixed-site sky map of LOS/NLOS tracks with per-satellite multipath excess and C/N0 (UTD diffraction): 28.6% NLOS, 18.9 dB-Hz LOS-vs-NLOS C/N0 gap at a canyon point. |
+
+<div align="center">
+<img src="docs/assets/figures/route_accuracy_odaiba.png" alt="Expected horizontal position error along a real Odaiba route with an available-but-near-singular segment" width="620">
+</div>
+
+Unlike closed propagation tools, every model here is scored against real measured
+residuals (the UTD-vs-knife-edge benchmark above), and the whole pipeline is open —
+from CityGML parsing to the CUDA kernels.
+
 ## Quick start
 
 **Zero install:** run the urban-canyon demo — with sky plot and trajectory
