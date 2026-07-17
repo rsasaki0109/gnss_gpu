@@ -39,5 +39,45 @@ Spec: `internal_docs/task_wp21_imu_preint.md`. Branch: `agent/wp21-imu-preint`.
   **All 12 pass.** G1 result: max relative difference on real PPC data is
   ~8e-17 (delta_p), 0.0 (delta_v, delta_angle) -- i.e. floating-point-exact
   agreement with the engine `tc_fgo` actually uses. **G1: PASS.**
-- Next: PF integration adapter (deliverable 3), then the 3-arm ablation
-  experiment (deliverable 4) on PPC Tokyo run2.
+- Implemented `python/gnss_gpu/pf_imu_preint_adapter.py` (deliverable 3, thin
+  adapter, no changes to `pf_device_runtime.py` / CUDA): `ImuPreintPfGuide`
+  closes a buffered `PreintegratedIMU` segment into a per-epoch ECEF
+  velocity guide + `sigma_pos` (from the preintegration covariance's
+  position block), feeding the *existing* `pf.predict(velocity=...,
+  sigma_pos=..., rbpf_velocity_kf=False)` interface. Heading stays outside
+  the particle state via the existing `imu.ComplementaryHeadingFilter`
+  (roll/pitch=0 flat-vehicle approximation, documented, matches
+  `experiments/ppc_imu_adapter.py`'s existing assumption for this same
+  dataset). A single non-particle nominal-velocity accumulator bridges
+  segments across epochs (needed to close `p_j = p_i + v_i*dt + 0.5*g*dt^2 +
+  R_i@dp`), complementary-blended toward a GNSS-derived velocity each epoch
+  to bound open-loop IMU drift over a multi-minute run.
+- 7 unit tests in `tests/test_pf_imu_preint_adapter.py` (no GPU/CUDA
+  required; a stub PF object). All pass, including a static-segment check
+  that gravity is properly cancelled (guards against the failure mode where
+  raw accel's ~9.81 m/s^2 gravity reading leaks into the displacement guide
+  as a huge phantom climb).
+- Implemented `experiments/exp_wp21_imu_rbpf.py` (deliverable 4): three-arm
+  ablation (cv / heuristic-IMU / preint-IMU) on PPC Tokyo run2, scored with
+  `experiments/score_vs_inuex35.py`. Debugged `robust_spp` needing a
+  reasonable seed (`data["origin_ecef"]`, not the satellite-cloud centroid)
+  to converge at all on PPC pseudoranges.
+- Ran the full 3000-epoch / 100k-particle / GPS-only ablation (~3 min total).
+  Results: cv AllRMS=76.164m, heuristic AllRMS=1,575,084m (diagnosed:
+  `imu.IMUPredictor`'s gravity-compensation sign assumes accel_z~-9.81 at
+  rest; PPC's accel_z~+9.81 at rest, so it *adds* a second g every sample --
+  pre-existing dataset-convention bug in reused legacy code, not modified
+  per non-goals), preint (default) AllRMS=97.429m. G1/G2 pass; G3 passes
+  literally (preint beats the buggy heuristic by 4 orders of magnitude) but
+  the more informative honest finding is preint-default underperforms plain
+  CV -- diagnosed as `sigma_pos` floor (0.3m) too tight once heading
+  uncertainty is accounted for (the 9x9 covariance only models accel/gyro
+  white noise). Confirmed via a `sigma_pos_floor=2.0` sensitivity re-run:
+  preint AllRMS drops to 73.349m, *beating* CV by ~4%. Full diagnosis +
+  concrete Phase B recommendations written up in `WP21_REPORT.md`.
+- Ran the existing PF test suite subset (`tests/test_*pf*`,
+  `tests/test_*rbpf*`, 38 files, 188 tests): 184 passed, 3 skipped, 1
+  pre-existing unrelated failure (Windows path-separator assertion in
+  `test_eval_gsdc2023_ct_rbpf_fgo.py`, confirmed present without any WP21
+  changes via `git stash`).
+- Wrote `results/wp21/WP21_REPORT.md`. WP21 deliverables 1-5 complete.
