@@ -1,26 +1,36 @@
 #!/usr/bin/env python3
 # ruff: noqa: E402
-"""WP21 three-arm PF ablation on PPC: CV vs heuristic-IMU-guide vs preint-IMU-guide.
+"""WP21/WP21b PF ablation on PPC: CV vs heuristic-IMU-guide vs preint-IMU-guide.
 
-Arms (see internal_docs/task_wp21_imu_preint.md):
-  (a) cv        -- current CV predict, no IMU (velocity=None).
-  (b) heuristic -- current velocity-guide IMU: gnss_gpu.imu.IMUPredictor
-                   (open-loop accel+gyro dead-reckoning, no wheel data on
-                   PPC), same sigma_pos as (a) for a fair "guide-only" test.
-  (c) preint    -- new gnss_gpu.pf_imu_preint_adapter.ImuPreintPfGuide:
-                   preintegrates the 100 Hz IMU between GNSS epochs and
-                   feeds pf.predict() a velocity guide + sigma_pos derived
-                   from the preintegration covariance.
+Arms (see internal_docs/task_wp21_imu_preint.md, internal_docs/task_wp21b_preint_payoff.md):
+  (a) cv         -- current CV predict, no IMU (velocity=None).
+  (b) heuristic  -- current velocity-guide IMU: gnss_gpu.imu.IMUPredictor
+                    (open-loop accel+gyro dead-reckoning, no wheel data on
+                    PPC; WP21b fixed the pre-existing gravity-sign bug --
+                    see gnss_gpu.imu.IMUPredictor's docstring), same
+                    sigma_pos as (a) for a fair "guide-only" test.
+  (c) preint_v1  -- WP21 Phase A gnss_gpu.pf_imu_preint_adapter.ImuPreintPfGuide:
+                    preintegrates the 100 Hz IMU between GNSS epochs and
+                    feeds pf.predict() a scalar velocity guide + sigma_pos
+                    derived from the accel/gyro-only preintegration
+                    covariance (rbpf_velocity_kf=False). Kept byte-identical
+                    to the WP21 Phase A code path for continuity.
+  (d) preint_v2  -- WP21b: same preintegration, but (1) sigma_pos also folds
+                    in heading uncertainty via the cross-track lever
+                    |displacement|*sigma_heading, and (2) the segment's
+                    delta_v covariance feeds the per-particle velocity KF
+                    (pf.set_velocity_covariance + predict(rbpf_velocity_kf=True))
+                    instead of a one-shot scalar guide.
 
-All three arms use the identical GNSS pseudorange stream, particle count,
-seed, and scoring (experiments/score_vs_inuex35.py), so any difference is
+All arms use the identical GNSS pseudorange stream, particle count, seed,
+and scoring (experiments/score_vs_inuex35.py), so any difference is
 attributable to the predict-step guide alone.
 
-Heading source (arms b, c): per-epoch robust_spp point fixes are used as the
-causal (no ground truth) "GNSS bearing" reference; arm (c) additionally
-feeds them to a gnss_gpu.imu.ComplementaryHeadingFilter shared with the
-preintegration adapter, per the WP21 spec ("use the existing INSEKF or
-ComplementaryHeadingFilter outside the particle state").
+Heading source (arms b, c, d): per-epoch robust_spp point fixes are used as
+the causal (no ground truth) "GNSS bearing" reference; arms (c)/(d)
+additionally feed them to a gnss_gpu.imu.ComplementaryHeadingFilter shared
+with the preintegration adapter, per the WP21 spec ("use the existing
+INSEKF or ComplementaryHeadingFilter outside the particle state").
 """
 
 from __future__ import annotations
@@ -49,6 +59,7 @@ from gnss_gpu.pf_imu_preint_adapter import (  # noqa: E402
     ecef_to_enu_rotation,
     ecef_to_lla_rad,
     imu_preint_predict,
+    imu_preint_predict_velocity_kf,
 )
 from gnss_gpu.robust_spp import robust_spp  # noqa: E402
 
@@ -115,20 +126,27 @@ def compute_epoch_spp_fixes(data: dict) -> np.ndarray:
 
 def spp_velocity_and_heading(
     fixes: np.ndarray, times: np.ndarray, i: int
-) -> tuple[np.ndarray | None, float | None]:
-    """Finite-difference ECEF velocity + heading (rad, north-clockwise) from fixes[i-1]->fixes[i]."""
+) -> tuple[np.ndarray | None, float | None, float | None]:
+    """Finite-difference ECEF velocity + heading (rad, north-clockwise) from fixes[i-1]->fixes[i].
+
+    Also returns the consecutive-fix displacement magnitude [m] (WP21b item
+    1: converted into a per-epoch SPP-heading measurement uncertainty by
+    ``ImuPreintPfGuide`` when ``use_heading_uncertainty=True``).
+    """
 
     if i <= 0 or not np.all(np.isfinite(fixes[i])) or not np.all(np.isfinite(fixes[i - 1])):
-        return None, None
+        return None, None, None
     dt = float(times[i] - times[i - 1])
     if dt <= 0.0:
-        return None, None
-    v_ecef = (fixes[i] - fixes[i - 1]) / dt
+        return None, None, None
+    displacement = fixes[i] - fixes[i - 1]
+    displacement_m = float(np.linalg.norm(displacement))
+    v_ecef = displacement / dt
     lat, lon = ecef_to_lla_rad(fixes[i])
     v_enu = ecef_to_enu_rotation(lat, lon) @ v_ecef
     speed = math.hypot(float(v_enu[0]), float(v_enu[1]))
     heading = math.atan2(float(v_enu[0]), float(v_enu[1])) if speed > 0.5 else None
-    return v_ecef, heading
+    return v_ecef, heading, displacement_m
 
 
 def initial_position_and_clock_bias(
@@ -240,10 +258,16 @@ def run_arm_heuristic_imu(data: dict, imu_dict: dict, *, n_particles: int, sigma
     return ArmResult("heuristic_imu", positions, ess_ratio, resampled, wall_s, n)
 
 
-def run_arm_preint(data: dict, imu_dict: dict, spp_fixes: np.ndarray, *, n_particles: int,
-                    sigma_pos_floor: float, sigma_pos_scale: float, sigma_accel: float,
-                    sigma_gyro: float, velocity_blend_alpha: float, sigma_cb: float,
-                    sigma_pr: float, ess_threshold: float, resampling: str, seed: int) -> ArmResult:
+def run_arm_preint_v1(data: dict, imu_dict: dict, spp_fixes: np.ndarray, *, n_particles: int,
+                       sigma_pos_floor: float, sigma_pos_scale: float, sigma_accel: float,
+                       sigma_gyro: float, velocity_blend_alpha: float, sigma_cb: float,
+                       sigma_pr: float, ess_threshold: float, resampling: str, seed: int) -> ArmResult:
+    """WP21 Phase A preint arm: scalar sigma_pos guide, rbpf_velocity_kf=False.
+
+    Kept byte-identical to the original WP21 code path (``use_heading_uncertainty``
+    left at its False default) so this arm's numbers reproduce
+    ``results/wp21/WP21_REPORT.md``'s Sec. 5 table for continuity.
+    """
     n = data["n_epochs"]
     times = data["times"]
     positions = np.zeros((n, 3), dtype=np.float64)
@@ -286,7 +310,7 @@ def run_arm_preint(data: dict, imu_dict: dict, spp_fixes: np.ndarray, *, n_parti
             idx1 = int(np.searchsorted(imu_tow, t_cur, side="left"))
             for k in range(idx0, idx1):
                 guide.add_sample(imu_accel[k], imu_gyro[k], float(imu_dt[k]))
-            v_gnss, spp_heading = spp_velocity_and_heading(spp_fixes, times, i)
+            v_gnss, spp_heading, _ = spp_velocity_and_heading(spp_fixes, times, i)
             p_i = np.asarray(pf.estimate())[:3]
             velocity_guide, sigma_pos_eff = guide.close_segment(
                 p_i, dt, v_gnss_ecef=v_gnss, spp_heading_rad=spp_heading
@@ -311,7 +335,90 @@ def run_arm_preint(data: dict, imu_dict: dict, spp_fixes: np.ndarray, *, n_parti
         ess_ratio[i] = ess / n_particles
         resampled[i] = did_resample
     wall_s = time.perf_counter() - t0
-    result = ArmResult("preint", positions, ess_ratio, resampled, wall_s, n)
+    result = ArmResult("preint_v1", positions, ess_ratio, resampled, wall_s, n)
+    result.mean_sigma_pos = float(np.mean(sigma_pos_used[1:])) if n > 1 else float("nan")  # type: ignore[attr-defined]
+    return result
+
+
+def run_arm_preint_v2(data: dict, imu_dict: dict, spp_fixes: np.ndarray, *, n_particles: int,
+                       sigma_pos_floor: float, sigma_pos_scale: float, sigma_accel: float,
+                       sigma_gyro: float, velocity_blend_alpha: float, sigma_spp_pos_m: float,
+                       velocity_process_noise: float, sigma_cb: float, sigma_pr: float,
+                       ess_threshold: float, resampling: str, seed: int) -> ArmResult:
+    """WP21b preint-v2 arm: items 1 (heading-uncertainty -> sigma_pos) +
+    2 (per-particle velocity-KF fed from the preintegration's delta_v
+    covariance, rbpf_velocity_kf=True) combined.
+    """
+    n = data["n_epochs"]
+    times = data["times"]
+    positions = np.zeros((n, 3), dtype=np.float64)
+    ess_ratio = np.zeros(n, dtype=np.float64)
+    resampled = np.zeros(n, dtype=bool)
+    sigma_pos_used = np.zeros(n, dtype=np.float64)
+
+    init_pos, init_cb = initial_position_and_clock_bias(
+        data["sat_ecef"][0], data["pseudoranges"][0], data["weights"][0], data["origin_ecef"]
+    )
+    pf = _new_pf(n_particles, max(sigma_pos_floor, 0.1), sigma_cb, sigma_pr, ess_threshold, resampling, seed)
+    pf.initialize(init_pos, clock_bias=init_cb, spread_pos=50.0, spread_cb=500.0)
+
+    heading_filter = ComplementaryHeadingFilter(imu_dict, alpha=0.05)
+    guide = ImuPreintPfGuide(
+        heading_filter,
+        sigma_accel_mps2_sqrthz=sigma_accel,
+        sigma_gyro_radps_sqrthz=sigma_gyro,
+        sigma_pos_floor=sigma_pos_floor,
+        sigma_pos_scale=sigma_pos_scale,
+        velocity_blend_alpha=velocity_blend_alpha,
+        use_heading_uncertainty=True,
+        sigma_spp_pos_m=sigma_spp_pos_m,
+    )
+
+    imu_tow = imu_dict["tow"]
+    imu_accel = imu_dict["accel"]
+    imu_gyro = imu_dict["gyro"]
+    imu_dt = np.diff(imu_tow)
+    imu_dt = np.concatenate([imu_dt, imu_dt[-1:]]) if imu_dt.size else np.zeros(0)
+
+    t0 = time.perf_counter()
+    for i in range(n):
+        dt = float(times[i] - times[i - 1]) if i > 0 else 0.0
+        if i > 0:
+            t_prev, t_cur = float(times[i - 1]), float(times[i])
+            heading_filter.update_heading_gyro(t_prev, t_cur)
+            idx0 = int(np.searchsorted(imu_tow, t_prev, side="left"))
+            idx1 = int(np.searchsorted(imu_tow, t_cur, side="left"))
+            for k in range(idx0, idx1):
+                guide.add_sample(imu_accel[k], imu_gyro[k], float(imu_dt[k]))
+            v_gnss, spp_heading, spp_disp_m = spp_velocity_and_heading(spp_fixes, times, i)
+            p_i = np.asarray(pf.estimate())[:3]
+            velocity_guide, sigma_pos_eff = guide.close_segment(
+                p_i, dt, v_gnss_ecef=v_gnss, spp_heading_rad=spp_heading,
+                spp_displacement_m=spp_disp_m,
+            )
+            if velocity_guide is None:
+                pf.predict(velocity=None, dt=dt, sigma_pos=sigma_pos_floor)
+                sigma_pos_used[i] = sigma_pos_floor
+            else:
+                vel_cov = guide.velocity_covariance_ecef
+                if vel_cov is not None:
+                    pf.set_velocity_covariance(vel_cov)
+                pf.predict(
+                    velocity=velocity_guide,
+                    dt=dt,
+                    sigma_pos=sigma_pos_eff,
+                    velocity_guide_alpha=1.0,
+                    rbpf_velocity_kf=True,
+                    velocity_process_noise=velocity_process_noise,
+                )
+                sigma_pos_used[i] = sigma_pos_eff
+            guide.reset_segment()
+        ess, did_resample = _step_update(pf, data["sat_ecef"][i], data["pseudoranges"][i], data["weights"][i])
+        positions[i] = np.asarray(pf.estimate())[:3]
+        ess_ratio[i] = ess / n_particles
+        resampled[i] = did_resample
+    wall_s = time.perf_counter() - t0
+    result = ArmResult("preint_v2", positions, ess_ratio, resampled, wall_s, n)
     result.mean_sigma_pos = float(np.mean(sigma_pos_used[1:])) if n > 1 else float("nan")  # type: ignore[attr-defined]
     return result
 
@@ -359,10 +466,37 @@ def main() -> None:
     parser.add_argument("--sigma-pos-heuristic", type=float, default=2.0)
     parser.add_argument("--preint-sigma-accel", type=float, default=0.05)
     parser.add_argument("--preint-sigma-gyro", type=float, default=0.005)
-    parser.add_argument("--preint-sigma-pos-floor", type=float, default=0.3)
+    parser.add_argument(
+        "--preint-sigma-pos-floor", type=float, default=0.3,
+        help=(
+            "preint_v1 (WP21 Phase A) only: hand-tuned-in-effect floor kept at its "
+            "original 0.3 default for exact continuity with WP21_REPORT.md. "
+            "preint_v2 uses --preint-v2-sigma-pos-floor instead (default 0.05, a "
+            "small numerical-stability floor -- WP21b item 1)."
+        ),
+    )
     parser.add_argument("--preint-sigma-pos-scale", type=float, default=1.0)
     parser.add_argument("--preint-velocity-blend-alpha", type=float, default=0.3)
-    parser.add_argument("--arms", default="cv,heuristic,preint", help="comma-separated subset to run")
+    parser.add_argument(
+        "--preint-v2-sigma-pos-floor", type=float, default=0.05,
+        help="WP21b item 1: small numerical-stability floor for preint_v2 (not a tuning knob).",
+    )
+    parser.add_argument(
+        "--preint-v2-sigma-spp-pos-m", type=float, default=30.0,
+        help=(
+            "WP21b item 1: documented raw-SPP horizontal sigma [m] used to convert "
+            "consecutive-fix displacement into a per-epoch SPP-heading measurement "
+            "uncertainty (see ImuPreintPfGuide docstring / WP21_REPORT.md Sec. 7)."
+        ),
+    )
+    parser.add_argument(
+        "--preint-v2-velocity-process-noise", type=float, default=0.0,
+        help="WP21b item 2: velocity_process_noise passed to predict(rbpf_velocity_kf=True).",
+    )
+    parser.add_argument(
+        "--arms", default="cv,heuristic,preint_v1,preint_v2",
+        help="comma-separated subset to run: cv,heuristic,preint_v1,preint_v2",
+    )
     parser.add_argument("--results-prefix", default="wp21_imu_rbpf")
     args = parser.parse_args()
 
@@ -372,7 +506,7 @@ def main() -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     print("=" * 78)
-    print("  WP21 IMU-RBPF three-arm ablation")
+    print("  WP21/WP21b IMU-RBPF ablation")
     print("=" * 78)
     print(f"  {args.city}/{args.run}  systems={systems}  "
           f"start_epoch={args.start_epoch}  max_epochs={args.max_epochs}  "
@@ -419,9 +553,9 @@ def main() -> None:
         )
         print(f"    wall={arm_results['heuristic'].wall_s:.1f}s")
 
-    if "preint" in arms_to_run:
-        print("\n  [arm c] preint (IMU preintegration guide) ...")
-        arm_results["preint"] = run_arm_preint(
+    if "preint_v1" in arms_to_run:
+        print("\n  [arm c] preint_v1 (WP21 Phase A: scalar sigma_pos guide) ...")
+        arm_results["preint_v1"] = run_arm_preint_v1(
             data, imu_dict, spp_fixes,
             sigma_pos_floor=args.preint_sigma_pos_floor,
             sigma_pos_scale=args.preint_sigma_pos_scale,
@@ -430,8 +564,24 @@ def main() -> None:
             velocity_blend_alpha=args.preint_velocity_blend_alpha,
             **common,
         )
-        print(f"    wall={arm_results['preint'].wall_s:.1f}s  "
-              f"mean_sigma_pos={getattr(arm_results['preint'], 'mean_sigma_pos', float('nan')):.3f}m")
+        print(f"    wall={arm_results['preint_v1'].wall_s:.1f}s  "
+              f"mean_sigma_pos={getattr(arm_results['preint_v1'], 'mean_sigma_pos', float('nan')):.3f}m")
+
+    if "preint_v2" in arms_to_run:
+        print("\n  [arm d] preint_v2 (WP21b: heading-uncertainty sigma_pos + velocity-KF) ...")
+        arm_results["preint_v2"] = run_arm_preint_v2(
+            data, imu_dict, spp_fixes,
+            sigma_pos_floor=args.preint_v2_sigma_pos_floor,
+            sigma_pos_scale=args.preint_sigma_pos_scale,
+            sigma_accel=args.preint_sigma_accel,
+            sigma_gyro=args.preint_sigma_gyro,
+            velocity_blend_alpha=args.preint_velocity_blend_alpha,
+            sigma_spp_pos_m=args.preint_v2_sigma_spp_pos_m,
+            velocity_process_noise=args.preint_v2_velocity_process_noise,
+            **common,
+        )
+        print(f"    wall={arm_results['preint_v2'].wall_s:.1f}s  "
+              f"mean_sigma_pos={getattr(arm_results['preint_v2'], 'mean_sigma_pos', float('nan')):.3f}m")
 
     print("\n" + "=" * 78)
     print("  Scoring")

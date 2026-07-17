@@ -31,6 +31,20 @@ velocity estimate (e.g. consecutive WLS-fix finite differences) with
 ``velocity_blend_alpha`` to bound long-run open-loop IMU drift -- the same
 complementary-filter pattern already used by
 ``gnss_gpu.imu.ComplementaryHeadingFilter`` for heading.
+
+**WP21b additions** (see ``internal_docs/task_wp21b_preint_payoff.md``):
+
+1. Heading-uncertainty propagation into ``sigma_pos`` (opt-in via
+   ``ImuPreintPfGuide(use_heading_uncertainty=True)``): folds
+   ``ComplementaryHeadingFilter.heading_variance_rad2`` into ``sigma_pos``
+   through the cross-track lever ``|displacement| * sigma_heading_rad``.
+2. Per-particle velocity-KF feeding (:func:`imu_preint_predict_velocity_kf`):
+   pushes the preintegration's delta_v covariance into every particle's
+   ``Sigma_v`` via ``ParticleFilterDeviceRuntime.set_velocity_covariance``
+   and runs ``predict(..., rbpf_velocity_kf=True)`` so uncertainty is
+   propagated through the device's existing covariance-aware predict
+   (``x_new ~ N(x + mu_v*dt, sigma_pos^2*I + dt^2*Sigma_v)``) instead of a
+   scalar one-shot guide.
 """
 
 from __future__ import annotations
@@ -112,8 +126,11 @@ class ImuPreintPfGuide:
     sigma_accel_mps2_sqrthz, sigma_gyro_radps_sqrthz : float
         Forwarded to the underlying ``PreintegratedIMU``.
     sigma_pos_floor : float
-        Minimum ``sigma_pos`` [m] fed to ``pf.predict()`` (guards against a
-        near-zero covariance during very short/quiet segments).
+        Minimum ``sigma_pos`` [m] fed to ``pf.predict()`` (small numerical
+        floor for stability only -- WP21b item 1 replaces the WP21 Phase A
+        hand-tuned floor with a derived heading-uncertainty term; this
+        residual floor exists only to guard a near-zero total during a
+        perfectly quiet, perfectly-known-heading segment).
     sigma_pos_scale : float
         Multiplicative tuning knob on the covariance-derived ``sigma_pos``.
     velocity_blend_alpha : float
@@ -121,6 +138,34 @@ class ImuPreintPfGuide:
         velocity estimate each epoch; see module docstring.
     g_enu : ndarray, shape (3,)
         Local ENU gravity vector, rotated into ECEF internally each epoch.
+    use_heading_uncertainty : bool
+        WP21b item 1. When True, ``close_segment`` folds the heading
+        filter's ``heading_variance_rad2`` into ``sigma_pos`` via the
+        cross-track lever ``sigma_pos_heading = |displacement| *
+        sigma_heading_rad`` (combined in quadrature with the existing
+        accel/gyro-covariance-derived term), and passes a heading-
+        measurement uncertainty to ``heading_filter.correct_heading_spp``
+        so the heading variance itself updates correctly. Defaults to
+        False so the WP21 Phase A ("preint-v1") code path and its reported
+        numbers stay exactly reproducible byte-for-byte.
+    sigma_spp_pos_m : float
+        Only used when ``use_heading_uncertainty``. Documented (not
+        per-epoch-fitted) approximation of the causal ``robust_spp`` point
+        fix's horizontal position sigma [m] -- this repo's own
+        characterization of raw, uncorrected single-frequency GPS-only SPP
+        on this dataset is "tens of meters" (see
+        ``results/wp21/WP21_REPORT.md`` Sec. 7); default 30.0 m sits inside
+        that documented range. Converted into a per-epoch SPP-heading
+        uncertainty via error propagation through
+        ``heading = atan2(v_east, v_north)`` for
+        ``v = (fix_i - fix_{i-1})/dt``: two independent fixes each with
+        sigma ``sigma_spp_pos_m`` give a relative-displacement sigma of
+        ``sqrt(2)*sigma_spp_pos_m``, and for a unit-vector angle,
+        ``sigma_heading ~= sigma_perp_displacement / |displacement|``.
+    min_heading_fix_disp_m : float
+        Below this consecutive-fix displacement, the SPP-derived heading is
+        treated as fully uninformative (``sigma_spp_heading = pi``) rather
+        than dividing by a near-zero displacement.
     """
 
     def __init__(
@@ -132,6 +177,9 @@ class ImuPreintPfGuide:
         sigma_pos_scale: float = 1.0,
         velocity_blend_alpha: float = 0.3,
         g_enu: np.ndarray = GRAVITY_ENU,
+        use_heading_uncertainty: bool = False,
+        sigma_spp_pos_m: float = 30.0,
+        min_heading_fix_disp_m: float = 2.0,
     ) -> None:
         self.heading_filter = heading_filter
         self.preint = PreintegratedIMU(
@@ -143,6 +191,14 @@ class ImuPreintPfGuide:
         self.velocity_blend_alpha = float(velocity_blend_alpha)
         self.g_enu = np.asarray(g_enu, dtype=np.float64).reshape(3)
         self.v_ecef: np.ndarray | None = None
+        self.use_heading_uncertainty = bool(use_heading_uncertainty)
+        self.sigma_spp_pos_m = float(sigma_spp_pos_m)
+        self.min_heading_fix_disp_m = float(min_heading_fix_disp_m)
+        # WP21b item 2: velocity covariance (ECEF, [m^2/s^2]) from the last
+        # closed segment's accel/gyro-derived delta_v covariance block,
+        # exposed for feeding the per-particle velocity KF
+        # (`ParticleFilterDeviceRuntime.set_velocity_covariance`).
+        self._last_velocity_cov_ecef: np.ndarray | None = None
 
     def reset_segment(self) -> None:
         self.preint.reset()
@@ -154,18 +210,41 @@ class ImuPreintPfGuide:
     def n_samples(self) -> int:
         return self.preint.n_samples
 
+    @property
+    def velocity_covariance_ecef(self) -> np.ndarray | None:
+        """Velocity covariance [m^2/s^2] (ECEF) from the last closed segment, or None."""
+        if self._last_velocity_cov_ecef is None:
+            return None
+        return self._last_velocity_cov_ecef.copy()
+
+    def _sigma_spp_heading_rad(self, spp_displacement_m: float | None) -> float:
+        if spp_displacement_m is None or not np.isfinite(spp_displacement_m):
+            return math.pi
+        if spp_displacement_m <= self.min_heading_fix_disp_m:
+            return math.pi
+        sigma = math.sqrt(2.0) * self.sigma_spp_pos_m / spp_displacement_m
+        return min(sigma, math.pi)
+
     def close_segment(
         self,
         p_i_ecef: np.ndarray,
         dt: float,
         v_gnss_ecef: np.ndarray | None = None,
         spp_heading_rad: float | None = None,
+        spp_displacement_m: float | None = None,
     ) -> tuple[np.ndarray | None, float | None]:
         """Close the buffered segment into ``(velocity_guide_ecef, sigma_pos_eff)``.
 
         Advances the internal nominal-velocity accumulator. Returns
         ``(None, None)`` if the segment has no usable samples or ``dt<=0``
         (caller should fall back to the CV predict for that epoch).
+
+        ``spp_displacement_m`` (WP21b item 1, only consulted when
+        ``use_heading_uncertainty``): ``|fix_i - fix_{i-1}|`` for the
+        consecutive causal SPP fixes that produced ``spp_heading_rad``,
+        used to convert ``sigma_spp_pos_m`` into a per-epoch heading
+        measurement uncertainty. When omitted (or ``use_heading_uncertainty``
+        is False), the correction call is byte-identical to WP21 Phase A.
         """
 
         p_i = np.asarray(p_i_ecef, dtype=np.float64).reshape(3)
@@ -174,7 +253,13 @@ class ImuPreintPfGuide:
             return None, None
 
         if spp_heading_rad is not None and np.isfinite(spp_heading_rad):
-            self.heading_filter.correct_heading_spp(float(spp_heading_rad))
+            if self.use_heading_uncertainty:
+                sigma_spp_heading = self._sigma_spp_heading_rad(spp_displacement_m)
+                self.heading_filter.correct_heading_spp(
+                    float(spp_heading_rad), sigma_spp_heading_rad=sigma_spp_heading
+                )
+            else:
+                self.heading_filter.correct_heading_spp(float(spp_heading_rad))
         heading = float(self.heading_filter.heading)
         r_body_to_ecef, r_enu_to_ecef = body_to_ecef_frame(heading, p_i)
         g_ecef = r_enu_to_ecef @ self.g_enu
@@ -198,10 +283,25 @@ class ImuPreintPfGuide:
         velocity_guide = displacement / dt_f
         self.v_ecef = v_j
 
-        cov_p_body = self.preint.covariance9[0:3, 0:3]
+        cov9 = self.preint.covariance9
+        cov_p_body = cov9[0:3, 0:3]
         cov_p_ecef = r_body_to_ecef @ cov_p_body @ r_body_to_ecef.T
-        sigma_pos_eff = math.sqrt(max(float(np.trace(cov_p_ecef)) / 3.0, 0.0))
-        sigma_pos_eff = max(sigma_pos_eff * self.sigma_pos_scale, self.sigma_pos_floor)
+        sigma_pos_cov = math.sqrt(max(float(np.trace(cov_p_ecef)) / 3.0, 0.0))
+
+        # WP21b item 2: expose the delta_v covariance block (rotated to
+        # ECEF) for the caller's per-particle velocity KF.
+        cov_v_body = cov9[3:6, 3:6]
+        self._last_velocity_cov_ecef = r_body_to_ecef @ cov_v_body @ r_body_to_ecef.T
+
+        sigma_pos_heading = 0.0
+        if self.use_heading_uncertainty:
+            heading_sigma_rad = math.sqrt(
+                max(getattr(self.heading_filter, "heading_variance_rad2", 0.0), 0.0)
+            )
+            sigma_pos_heading = float(np.linalg.norm(displacement)) * heading_sigma_rad
+
+        sigma_pos_combined = math.hypot(sigma_pos_cov, sigma_pos_heading)
+        sigma_pos_eff = max(sigma_pos_combined * self.sigma_pos_scale, self.sigma_pos_floor)
         return velocity_guide, sigma_pos_eff
 
 
@@ -209,7 +309,10 @@ def imu_preint_predict(pf, guide: ImuPreintPfGuide, dt: float, **close_segment_k
     """Run one ``pf.predict()`` using ``guide``'s buffered segment, then reset it.
 
     Falls back to the plain CV predict (``velocity=None``) when the segment
-    has no usable samples (e.g. an IMU dropout for this epoch).
+    has no usable samples (e.g. an IMU dropout for this epoch). This is the
+    WP21 Phase A ("preint-v1") predict path: a scalar isotropic ``sigma_pos``
+    guide, no per-particle velocity KF. Kept unchanged for continuity; see
+    :func:`imu_preint_predict_velocity_kf` for the WP21b ("preint-v2") path.
     """
 
     p_i = np.asarray(pf.estimate(), dtype=np.float64)[:3]
@@ -229,9 +332,57 @@ def imu_preint_predict(pf, guide: ImuPreintPfGuide, dt: float, **close_segment_k
     guide.reset_segment()
 
 
+def imu_preint_predict_velocity_kf(
+    pf,
+    guide: ImuPreintPfGuide,
+    dt: float,
+    velocity_process_noise: float = 0.0,
+    **close_segment_kwargs,
+) -> None:
+    """WP21b item 2: run one ``pf.predict()`` using the per-particle velocity KF path.
+
+    Unlike :func:`imu_preint_predict` (which feeds the closing velocity as a
+    one-shot guide with ``rbpf_velocity_kf=False``), this feeds the
+    preintegrated segment's ECEF velocity covariance
+    (``guide.velocity_covariance_ecef``) into every particle's ``Sigma_v``
+    via ``pf.set_velocity_covariance`` (see
+    ``ParticleFilterDeviceRuntime.set_velocity_covariance``) *before*
+    calling ``pf.predict(..., rbpf_velocity_kf=True)``, so the device
+    predict's ``x_new ~ N(x + mu_v*dt, sigma_pos^2*I + dt^2*Sigma_v)``
+    propagation uses this epoch's modeled (accel/gyro-derived) velocity
+    uncertainty instead of only the generic isotropic
+    ``velocity_process_noise`` growth term. ``mu_v`` is reset to the
+    preintegrated closing velocity via ``velocity_guide_alpha=1.0``, same as
+    :func:`imu_preint_predict`.
+
+    Requires ``pf`` to implement ``set_velocity_covariance`` (i.e. a real
+    ``ParticleFilterDeviceRuntime``/``ParticleFilterDevice``, not the bare
+    stub used by some adapter-only unit tests).
+    """
+
+    p_i = np.asarray(pf.estimate(), dtype=np.float64)[:3]
+    velocity_guide, sigma_pos_eff = guide.close_segment(p_i, dt, **close_segment_kwargs)
+    if velocity_guide is None:
+        pf.predict(velocity=None, dt=dt)
+    else:
+        vel_cov = guide.velocity_covariance_ecef
+        if vel_cov is not None:
+            pf.set_velocity_covariance(vel_cov)
+        pf.predict(
+            velocity=velocity_guide,
+            dt=dt,
+            sigma_pos=sigma_pos_eff,
+            velocity_guide_alpha=1.0,
+            rbpf_velocity_kf=True,
+            velocity_process_noise=velocity_process_noise,
+        )
+    guide.reset_segment()
+
+
 __all__ = [
     "ImuPreintPfGuide",
     "imu_preint_predict",
+    "imu_preint_predict_velocity_kf",
     "body_to_ecef_frame",
     "ecef_to_lla_rad",
     "ecef_to_enu_rotation",

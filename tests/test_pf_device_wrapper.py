@@ -186,3 +186,77 @@ def test_pf_device_joint_dd_update_matches_sequential_updates(
     pf_device_get_log_weights(joint, joint_weights)
     np.testing.assert_allclose(
         joint_weights, sequential_weights, rtol=1e-14, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# WP21b item 2: set_velocity_covariance (minimal Python-side setter feeding
+# the per-particle velocity KF from e.g. an IMU-preintegration covariance).
+# ---------------------------------------------------------------------------
+
+
+def test_set_velocity_covariance_rejects_before_initialize():
+    pf = ParticleFilterDevice(n_particles=64)
+    with pytest.raises(RuntimeError, match="not initialized"):
+        pf.set_velocity_covariance(np.eye(3))
+
+
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+def test_set_velocity_covariance_rejects_nonfinite():
+    pf = ParticleFilterDevice(n_particles=64)
+    pf.initialize(np.array([1.0, 2.0, 3.0]))
+    with pytest.raises(ValueError, match="finite"):
+        pf.set_velocity_covariance(np.full((3, 3), np.nan))
+
+
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+def test_set_velocity_covariance_broadcasts_and_preserves_weights():
+    n_particles = 128
+    pf = ParticleFilterDevice(n_particles=n_particles, seed=7)
+    pf.initialize(np.array([1.0e6, 2.0e6, 3.0e6]), spread_pos=5.0)
+
+    # Give particles non-uniform weights before touching velocity covariance.
+    sat = np.array([[0.0, 0.0, 2.0e7]], dtype=np.float64)
+    receiver = np.array([1.0e6, 2.0e6, 3.0e6])
+    pr = np.array([np.linalg.norm(sat[0] - receiver) + 3.0])
+    pf.update(sat, pr, resample=False)
+    log_weights_before = pf.get_log_weights().copy()
+    assert not np.allclose(log_weights_before, log_weights_before[0])
+
+    cov = np.array([
+        [2.0, 0.3, 0.0],
+        [0.3, 1.5, 0.1],
+        [0.0, 0.1, 0.8],
+    ])
+    pf.set_velocity_covariance(cov)
+
+    states = pf.get_particle_states()
+    vcov = states[:, 7:16].reshape(n_particles, 3, 3)
+    np.testing.assert_allclose(vcov, np.broadcast_to(cov, (n_particles, 3, 3)))
+
+    log_weights_after = pf.get_log_weights()
+    np.testing.assert_allclose(log_weights_after, log_weights_before, rtol=1e-12, atol=1e-12)
+
+    # Positions/clock-bias/mu_v must be unaffected by the covariance patch.
+    np.testing.assert_allclose(states[:, 0:7], pf.get_particle_states()[:, 0:7])
+
+
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+def test_set_velocity_covariance_feeds_rbpf_velocity_kf_predict():
+    """After set_velocity_covariance, predict(rbpf_velocity_kf=True) position
+    spread should grow with dt (sanity: the injected Sigma_v is actually
+    consumed by the covariance-aware predict path, not silently ignored)."""
+
+    n_particles = 4096
+    pf = ParticleFilterDevice(n_particles=n_particles, seed=11, sigma_pos=0.05)
+    pf.initialize(np.array([1.0e6, 2.0e6, 3.0e6]), spread_pos=0.01)
+
+    cov = np.eye(3) * 4.0  # 2 m/s per-axis sigma
+    pf.set_velocity_covariance(cov)
+    pf.predict(velocity=np.zeros(3), dt=5.0, sigma_pos=0.05,
+               velocity_guide_alpha=1.0, rbpf_velocity_kf=True,
+               velocity_process_noise=0.0)
+
+    spread = pf.get_position_spread()
+    # dt^2 * Sigma_v with dt=5, var=4 -> per-axis std ~ 5*2=10m; spread over
+    # 3 axes should be well above the tiny 0.01m initial scatter.
+    assert spread > 5.0

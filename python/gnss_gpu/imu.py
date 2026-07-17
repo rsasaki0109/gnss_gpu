@@ -63,12 +63,30 @@ class ComplementaryHeadingFilter:
     Reference: complementary filter for attitude estimation (Mahony et al.)
     """
 
-    def __init__(self, imu_data: dict, alpha: float = 0.05):
+    def __init__(
+        self,
+        imu_data: dict,
+        alpha: float = 0.05,
+        sigma_gyro_radps_sqrthz: float = 0.005,
+        heading_variance_init_rad2: float = 0.0,
+    ):
         self.tow = imu_data["tow"]
         self.gyro_z = imu_data["gyro"][:, 2]  # yaw rate
         self.wheel_vel = imu_data["wheel_vel"]
         self.heading = 0.0
         self.alpha = alpha
+        # WP21b: optional heading-variance tracking (opt-in via the
+        # `sigma_spp_heading_rad` argument to `correct_heading_spp`; callers
+        # that never pass it see byte-identical behavior to WP21 Phase A --
+        # `heading_variance_rad2` is simply an extra, ignorable attribute).
+        # Growth model: pure gyro-integration angular random walk, i.e. the
+        # variance of an integrated zero-mean white-noise gyro signal with
+        # continuous-time noise density `sigma_gyro_radps_sqrthz` grows as
+        # `sigma_gyro^2 * dt` per second of open-loop integration (same
+        # noise-density convention as `ins_ekf.INSConfig.sigma_gyro_noise`
+        # and `imu_preintegration.PreintegratedIMU`'s default).
+        self.sigma_gyro = float(sigma_gyro_radps_sqrthz)
+        self.heading_variance_rad2 = float(heading_variance_init_rad2)
 
     def update_heading_gyro(self, t_start: float, t_end: float) -> None:
         """Integrate gyroscope for heading between GNSS epochs."""
@@ -79,12 +97,35 @@ class ComplementaryHeadingFilter:
             if dt <= 0:
                 dt = 0.02
             self.heading += self.gyro_z[i] * dt
+            self.heading_variance_rad2 += (self.sigma_gyro ** 2) * dt
 
-    def correct_heading_spp(self, spp_heading_rad: float) -> None:
-        """Correct heading drift using SPP-derived heading."""
+    def correct_heading_spp(
+        self, spp_heading_rad: float, sigma_spp_heading_rad: float | None = None
+    ) -> None:
+        """Correct heading drift using SPP-derived heading.
+
+        Parameters
+        ----------
+        spp_heading_rad : float
+            SPP-derived bearing correction target.
+        sigma_spp_heading_rad : float, optional
+            Standard deviation of ``spp_heading_rad`` [rad]. When given,
+            propagates ``heading_variance_rad2`` through the exact
+            fixed-gain complementary-filter update this method performs
+            (``heading <- (1-alpha)*heading + alpha*spp_heading``), i.e.
+            ``Var[heading_new] = (1-alpha)^2*Var[heading] +
+            alpha^2*Var[spp_heading]`` (heading and the SPP measurement are
+            treated as independent). When omitted (the WP21 Phase A default
+            call pattern), ``heading_variance_rad2`` is left untouched.
+        """
         diff = spp_heading_rad - self.heading
         diff = (diff + math.pi) % (2 * math.pi) - math.pi  # wrap to [-pi, pi]
         self.heading += self.alpha * diff
+        if sigma_spp_heading_rad is not None and math.isfinite(sigma_spp_heading_rad):
+            self.heading_variance_rad2 = (
+                (1.0 - self.alpha) ** 2 * self.heading_variance_rad2
+                + (self.alpha ** 2) * sigma_spp_heading_rad ** 2
+            )
 
     def get_wheel_speed(self, t_start: float, t_end: float) -> float:
         """Get latest wheel velocity in the interval."""
@@ -133,9 +174,39 @@ class IMUPredictor:
     - Providing velocity during predict (instead of EKF/SPP guide)
 
     NOTE: ComplementaryHeadingFilter is preferred over this class.
+
+    Gravity convention (WP21b fix)
+    -------------------------------
+    Static accelerometer Z readings follow one of two conventions
+    depending on the dataset/sensor:
+
+    - "positive at rest" (specific-force convention, ``accel_z ~ +9.81``
+      when stationary and level) -- used by PPC's ``imu.csv`` and by this
+      repo's ``ins_ekf.py`` / ``gsdc2023_imu.py`` / ``imu_preintegration.py``.
+      Gravity is removed by *subtracting* ``9.81``.
+    - "negative at rest" (``accel_z ~ -9.81`` when stationary) -- the
+      convention this class originally assumed unconditionally (it added
+      back ``9.81``), which silently double-counts gravity (~2g phantom
+      upward acceleration every sample) on datasets using the other
+      convention -- this was a pre-existing, previously-undetected bug on
+      PPC data (see ``results/wp21/WP21_REPORT.md`` Sec. 6.1).
+
+    ``gravity_convention`` selects which one applies; ``None`` (default)
+    auto-detects it from the mean accelerometer Z reading over the first
+    ``align_samples`` IMU samples (assumed quasi-stationary, matching PPC's
+    and most logged datasets' typical stationary warm-up at recording
+    start): a positive mean selects "positive_at_rest", a non-positive mean
+    keeps the original "negative_at_rest" behavior so pre-existing callers
+    of this class on legacy-convention data are unaffected.
     """
 
-    def __init__(self, imu_data: dict, initial_heading: float = 0.0):
+    def __init__(
+        self,
+        imu_data: dict,
+        initial_heading: float = 0.0,
+        gravity_convention: str | None = None,
+        align_samples: int = 100,
+    ):
         self.tow = imu_data["tow"]
         self.accel = imu_data["accel"]
         self.gyro = imu_data["gyro"]
@@ -143,6 +214,19 @@ class IMUPredictor:
         self.heading = initial_heading  # radians, from north
         self.velocity_enu = np.zeros(3)  # East, North, Up
         self._idx = 0  # current read position
+
+        if gravity_convention is None:
+            n_align = max(1, min(int(align_samples), self.accel.shape[0]))
+            accel_z0 = float(np.mean(self.accel[:n_align, 2])) if n_align > 0 else 0.0
+            gravity_convention = "positive_at_rest" if accel_z0 > 0.0 else "negative_at_rest"
+        if gravity_convention not in ("positive_at_rest", "negative_at_rest"):
+            raise ValueError(
+                "gravity_convention must be 'positive_at_rest', 'negative_at_rest', or None"
+            )
+        self.gravity_convention = gravity_convention
+        # az_body = accel_z + self._gravity_removal_bias removes gravity
+        # regardless of which raw-sign convention the sensor uses.
+        self._gravity_removal_bias = -9.81 if gravity_convention == "positive_at_rest" else 9.81
 
     def get_velocity_enu(self, t_start: float, t_end: float) -> np.ndarray | None:
         """Integrate IMU from t_start to t_end, return velocity in ENU.
@@ -170,8 +254,8 @@ class IMUPredictor:
             ax_body = self.accel[i, 0]
             ay_body = self.accel[i, 1]
 
-            # Remove gravity from Z
-            az_body = self.accel[i, 2] + 9.81  # gravity compensation
+            # Remove gravity from Z (sign resolved by gravity_convention; see class docstring)
+            az_body = self.accel[i, 2] + self._gravity_removal_bias
 
             # Rotate to ENU using heading
             cos_h = math.cos(self.heading)

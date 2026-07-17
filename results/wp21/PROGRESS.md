@@ -81,3 +81,147 @@ Spec: `internal_docs/task_wp21_imu_preint.md`. Branch: `agent/wp21-imu-preint`.
   `test_eval_gsdc2023_ct_rbpf_fgo.py`, confirmed present without any WP21
   changes via `git stash`).
 - Wrote `results/wp21/WP21_REPORT.md`. WP21 deliverables 1-5 complete.
+
+## 2026-07-17 (WP21b, Phase B: make preint pay)
+
+Spec: `internal_docs/task_wp21b_preint_payoff.md`. Continuing on the same
+branch `agent/wp21-imu-preint`.
+
+- Read `internal_docs/task_wp21b_preint_payoff.md`,
+  `internal_docs/task_wp21_imu_preint.md`, `results/wp21/WP21_REPORT.md`,
+  `python/gnss_gpu/imu_preintegration.py`,
+  `python/gnss_gpu/pf_imu_preint_adapter.py`,
+  `experiments/exp_wp21_imu_rbpf.py`, `python/gnss_gpu/pf_device_runtime.py`,
+  `include/gnss_gpu/pf_device.h`, and the CUDA predict kernel
+  (`src/particle_filter/pf_device.cu::pfd_predict_kernel`) to understand the
+  exact `rbpf_velocity_kf` semantics: with `velocity_kf=true`, `mu_v` per
+  particle blends toward the (single, global) `vel_guide` via
+  `velocity_guide_alpha`, then position noise is drawn from
+  `sigma_pos^2*I + dt^2*Sigma_v` (per-particle `Sigma_v`), and `Sigma_v`'s
+  diagonal grows by `velocity_process_noise*dt` -- there is no existing
+  mechanism to inject a specific (non-isotropic, freshly-modeled) `Sigma_v`
+  each epoch other than through the generic scalar process-noise growth, or
+  by writing `d_vcov` directly via the existing
+  `get_particle_states`/`set_particle_states` (16-col: `[x,y,z,cb,
+  mu_vx,mu_vy,mu_vz, Sigma_v(3x3 row-major)]`) round trip.
+- **Item 3 (gravity-sign fix, done first since it only touches `imu.py` and
+  is easy to verify in isolation)**: `IMUPredictor.__init__` now takes
+  `gravity_convention: str | None = None` (`"positive_at_rest"` /
+  `"negative_at_rest"`), auto-detected from the mean accel-Z of the first
+  `align_samples` (default 100) IMU samples when `None`. PPC's `imu.csv`
+  (+9.81 at rest) now correctly auto-selects `"positive_at_rest"` and
+  subtracts gravity instead of adding a second `g`. Explicit override
+  supported for datasets using the other convention (preserves the
+  pre-existing behavior for any future caller relying on it). New tests in
+  `tests/test_imu.py` (8 tests): autodetect both conventions, explicit
+  override reproduces both the fixed and the original (buggy-on-PPC-data)
+  behavior on demand, invalid-value rejection, plus
+  `ComplementaryHeadingFilter` heading-variance tests (below). All pass.
+- **Item 1 (heading-uncertainty -> predict noise)**: extended
+  `gnss_gpu.imu.ComplementaryHeadingFilter` (backward-compatible additive
+  change -- old call patterns produce byte-identical `.heading` output;
+  `.heading_variance_rad2` is a new, ignorable attribute) with a heading
+  variance state: grows via gyro-integration angular random walk
+  (`sigma_gyro_radps_sqrthz^2 * dt` per `update_heading_gyro` sample, same
+  noise-density convention as `ins_ekf.INSConfig`/`imu_preintegration`), and
+  shrinks on `correct_heading_spp(spp_heading_rad, sigma_spp_heading_rad=...)`
+  via the *exact* variance propagation of the fixed-gain complementary
+  filter's own update formula (`Var_new = (1-alpha)^2*Var +
+  alpha^2*sigma_meas^2`) -- an optional kwarg, so existing single-arg call
+  sites are unaffected.
+  `pf_imu_preint_adapter.ImuPreintPfGuide` gained `use_heading_uncertainty`
+  (default False, preserves WP21 Phase A "preint-v1" numbers exactly) and
+  `sigma_spp_pos_m` (documented default 30m, this repo's own characterized
+  raw-SPP accuracy scale for this dataset/pipeline -- see WP21_REPORT.md
+  Sec.7 -- not a hand-fit constant): converts consecutive-fix displacement
+  into a per-epoch SPP-heading measurement sigma via
+  `sqrt(2)*sigma_spp_pos_m/|displacement|` (capped at pi, i.e. fully
+  uninformative below `min_heading_fix_disp_m`). When enabled,
+  `close_segment` folds `sigma_pos_heading = |segment_displacement| *
+  sqrt(heading_variance_rad2)` into `sigma_pos` in quadrature with the
+  existing accel/gyro-covariance term, floored only by the small
+  `sigma_pos_floor` (default 0.05m, numerical-stability floor, not a
+  tuning knob).
+- **Item 2 (per-particle velocity-KF feeding)**: added
+  `ParticleFilterDeviceRuntime.set_velocity_covariance(cov_3x3)` --
+  the "minimal Python-side setter" the spec calls for when the native API
+  lacks one: round-trips `get/set_particle_states` (patching only the
+  Sigma_v block, columns 7:16) and restores log-weights afterward (since
+  `set_particle_states` resets them to uniform), broadcasting one
+  covariance to every particle. No CUDA kernel edits.
+  `ImuPreintPfGuide.close_segment` now also exposes
+  `velocity_covariance_ecef` (the preintegration's delta_v covariance
+  block, rotated body->ECEF) after each closed segment. New function
+  `pf_imu_preint_adapter.imu_preint_predict_velocity_kf` calls
+  `pf.set_velocity_covariance(guide.velocity_covariance_ecef)` then
+  `pf.predict(..., rbpf_velocity_kf=True, velocity_guide_alpha=1.0)`, so
+  `dt^2*Sigma_v` in the existing CUDA predict path carries this epoch's
+  modeled accel/gyro velocity uncertainty (kept separate from item 1's
+  heading term, which lives in the isotropic `sigma_pos` channel, to avoid
+  double-counting).
+- New/updated tests: `tests/test_imu.py` (new, 8 tests: gravity-sign fix +
+  heading-variance tracking), `tests/test_pf_imu_preint_adapter.py` (+11
+  tests: heading-uncertainty-disabled-by-default exact reproducibility,
+  heading-uncertainty-enabled monotonicity + cross-track-lever-formula
+  check, `_sigma_spp_heading_rad` edge cases, heading-variance shrink on a
+  confident correction, `velocity_covariance_ecef` PSD/symmetry check,
+  `imu_preint_predict_velocity_kf` covariance-injection + CV-fallback
+  checks), `tests/test_pf_device_wrapper.py` (+4 GPU tests:
+  `set_velocity_covariance` pre-init guard, non-finite rejection,
+  broadcast + weight-preservation, and an end-to-end sanity check that the
+  injected `Sigma_v` actually inflates the post-predict particle spread
+  under `rbpf_velocity_kf=True`). All new tests confirmed to actually
+  execute on this machine (not skipped) -- CUDA extension is available
+  here.
+- Ran all 52 new WP21/WP21b-specific tests (`test_imu.py`,
+  `test_imu_preintegration.py`, `test_pf_imu_preint_adapter.py`,
+  `test_pf_device_wrapper.py`): **all 52 pass.** Ran the broader
+  `tests/test_*pf*.py tests/test_*rbpf*.py` subset (39 files, 201 tests):
+  **197 passed, 3 skipped, 1 failed** -- the 1 failure is the same
+  pre-existing, WP21-unrelated Windows-path-separator assertion documented
+  in the Phase A section above, confirmed still present and still
+  unrelated. **G1: PASS.**
+- **Item 4 (ablation re-run)**: updated `experiments/exp_wp21_imu_rbpf.py`
+  with a 4th arm (`preint_v1` = Phase A path unchanged, `preint_v2` = items
+  1+2 combined); `spp_velocity_and_heading` now also returns the
+  consecutive-fix displacement magnitude, threaded through to
+  `ImuPreintPfGuide.close_segment(spp_displacement_m=...)`. Ran the full
+  3000-epoch/100k-particle/GPS-only ablation twice (once as a stray
+  backgrounded run that outlived its originating turn, once as a
+  foreground re-run after the coordinator flagged the missing result) --
+  **both produced numerically identical AllRMS/ESS/resample-rate figures**
+  (only wall-clock differed from GPU contention between the two concurrent
+  processes), confirming determinism. Results (`experiments/results/wp21/wp21b_full_tokyo_run2.csv`,
+  gitignored per `experiments/results/*/` like all other experiment
+  outputs in this repo):
+
+  | arm | AllRMS [m] | mean ESS/N | resample rate | mean sigma_pos [m] | wall [s] |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | cv | 76.164 | 1.12e-05 | 1.000 | 2.0 (fixed) | 72.4 |
+  | heuristic (gravity-fixed) | 11,728.284 | 1.00e-05 | 1.000 | 2.0 (fixed) | 74.6 |
+  | preint_v1 (Phase A path, re-run) | 97.429 | 1.14e-05 | 1.000 | 0.300 (=floor) | 67.4 |
+  | preint_v2 (items 1+2) | **75.332** | 1.35e-05 | 1.000 | 1.589 | 101.3 |
+
+  `cv` and `preint_v1` reproduce Phase A's numbers exactly (76.164m,
+  97.429m), confirming the re-run environment matches and that
+  `use_heading_uncertainty=False` is a true no-op. `heuristic`'s AllRMS
+  drops from Phase A's buggy 1,575,084m to 11,728m (99.26% reduction) after
+  the gravity-sign fix, but is still far worse than cv (expected: open-loop
+  accel double-integration with no bias estimate or wheel-speed correction
+  on PPC). **preint_v2 AllRMS=75.332m beats cv's 76.164m by 1.09%**,
+  achieved with only a small (0.05m) numerical-stability floor and no
+  hand-tuned override -- **G2: PASS**. `mean_sigma_pos=1.589m` for
+  preint_v2 (vs `0.300m` = the floor, for preint_v1) confirms the
+  heading-uncertainty term is the actively dominant contributor, not the
+  floor. Full honest diagnosis (why the margin is modest, not larger than
+  Phase A's hand-tuned `floor=2.0` check's 3.85%, and concrete follow-up
+  recommendations) written up in `results/wp21/WP21_REPORT.md` Phase B
+  §B.6. **G3: PASS** (measured positive result with full diagnosis).
+- Wrote the Phase B section of `results/wp21/WP21_REPORT.md` (§B.1-B.8):
+  what was built, G1/G2/G3 results, the ablation table with Phase A
+  numbers alongside, and deviations from the spec (Doppler-KF second table
+  skipped as the spec's own "optional if time permits" item;
+  `sigma_spp_pos_m` is a documented constant rather than a per-epoch
+  DOP/residual estimate; heading uncertainty routed through `sigma_pos`
+  rather than `Sigma_v` to avoid double-counting with item 2).
+  **WP21b deliverables complete: G1/G2/G3 all PASS.**
