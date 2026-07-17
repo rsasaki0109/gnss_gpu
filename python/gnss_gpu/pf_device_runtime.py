@@ -678,6 +678,17 @@ class ParticleFilterDeviceRuntime:
         else:
             self._pf_device_resample_systematic(self._state, self.seed)
 
+    def resample(self):
+        """Force one resampling step regardless of the current ESS.
+
+        Annealed SMC requires a new equally-weighted population between
+        likelihood-power increments, even when its ESS target differs from
+        the filter's ordinary ``ess_threshold``.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        self._resample()
+
     def resample_if_needed(self):
         """Resample when ESS falls below ``ess_threshold * n_particles``.
 

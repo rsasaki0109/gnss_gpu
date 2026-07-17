@@ -41,6 +41,7 @@ from exp_urbannav_baseline import run_wls  # noqa: E402
 from gnss_gpu.io.nav_rinex import read_gps_klobuchar_from_nav_header
 from gnss_gpu.io.ppc import PPCDatasetLoader
 from gnss_gpu.ppc_score import score_ppc2024
+from gnss_gpu.annealed_smc import annealed_smc_update
 from gnss_gpu.particle_modes import extract_particle_modes, select_particle_mode
 from gnss_gpu.particle_fixed_lag import FixedLagParticleSmoother, nearest_mode_mask
 from gnss_gpu.doppler_signals import (
@@ -230,6 +231,7 @@ class CTRBPFConfig:
     cp_mupf_dd_cp_sigma_sequence_cycles: tuple[float, ...] = (2.0, 0.5, 0.05)
     cp_mupf_cp_stage_target_ess_ratio: float = 0.10
     cp_mupf_stage_max_iters: int = 20
+    cp_mupf_stage_max_tempering_steps: int = 64
     cp_mupf_min_pairs: int = 3
     # >1 splits the (post-slip-gate) DD-CP pairs round-robin into this many
     # sequential sub-updates per sigma stage -- the spec's documented
@@ -701,12 +703,16 @@ class _DDStats:
     mupf_pr_resample_count: int = 0
     mupf_pr_alpha_sum: float = 0.0
     mupf_pr_post_ratio_sum: float = 0.0
+    mupf_pr_tempering_steps_total: int = 0
+    mupf_pr_log_evidence_sum: float = 0.0
     mupf_cp_epochs_applied: int = 0
     mupf_cp_pairs_total: int = 0
     mupf_cp_resample_count: int = 0
     mupf_cp_stage_calls: int = 0
     mupf_cp_alpha_sum: float = 0.0
     mupf_cp_post_ratio_sum: float = 0.0
+    mupf_cp_tempering_steps_total: int = 0
+    mupf_cp_log_evidence_sum: float = 0.0
     mupf_cp_slips_flagged_total: int = 0
     mupf_cp_slip_epochs: int = 0
     # WP23a item 3: cloud-spread-vs-lambda/2 diagnostic, measured after the
@@ -3037,43 +3043,25 @@ def _apply_pr_ess_guard(
 
 def _mupf_stage_update(
     pf, apply_fn, *, target_ess_ratio: float, max_iters: int,
-    resample_before: bool = False,
+    max_tempering_steps: int = 64, resample_before: bool = False,
 ):
-    """WP23a: one Suzuki-style MUPF stage.
+    """WP23b: consume one staged likelihood completely via annealed SMC.
 
-    ``apply_fn`` must call the device weight update with ``resample=False``
-    (log-weight domain only). This then tempers *this stage's* log-
-    likelihood increment to ``target_ess_ratio`` (reusing
-    ``_apply_pr_ess_guard``, WP22b's per-epoch bisection primitive, at a new
-    per-stage call site) and finally calls ``pf.resample_if_needed()`` --
-    i.e. exactly "update -> temper to ESS target -> resample-if-needed" per
-    stage, as specified.
-
-    ``resample_before``: diagnostic option (default off; see
-    ``--cp-mupf-resample-before-stage`` / WP23A_REPORT.md's root-cause
-    section). Root-caused via a targeted diagnostic re-run: with
-    ``resample_before=False`` (the spec-literal default), a stage's own
-    ``pre`` snapshot inherits whatever ESS/N the *untempered* updates
-    earlier in the same epoch already left behind; when that is already
-    below ``target_ess_ratio`` (routinely true here -- PR+Doppler-KF alone
-    push ESS/N to ~1e-4 before DD-PR even runs), ``_apply_pr_ess_guard``'s
-    own "pre_ratio < target -> revert entirely" branch fires, so the stage
-    contributes *nothing* (alpha=0.0) even though it "ran". Calling
-    ``resample_if_needed()`` *before* the update instead (mirroring the
-    validated coarse-to-fine pattern in
-    ``gnss_gpu.dd_carrier_epoch_update.apply_carrier_epoch_update``, which
-    resamples before, not after, each sigma step) resets entering ESS/N to
-    ~1.0 first, so the guard can actually bisect a nonzero alpha.
+    WP23a's one-shot guard could return alpha=0 when the entering ESS was
+    already low and otherwise retained only a fractional likelihood.  Basin
+    posterior mass requires cumulative marginal likelihood, so this primitive
+    advances beta all the way to one, resampling and re-evaluating ``apply_fn``
+    as needed.  It fails loudly instead of silently discarding information.
     """
-    if resample_before:
-        pf.resample_if_needed()
-    pre = np.asarray(pf.get_log_weights(), dtype=np.float64)
-    apply_fn()
-    alpha, pre_temper_ratio, post_ratio = _apply_pr_ess_guard(
-        pf, pre, min_ratio=float(target_ess_ratio), max_iters=int(max_iters),
+    return annealed_smc_update(
+        pf,
+        apply_fn,
+        target_ess_ratio=float(target_ess_ratio),
+        max_bisection_iters=int(max_iters),
+        max_tempering_steps=int(max_tempering_steps),
+        resample_before=bool(resample_before),
+        resample_at_end=True,
     )
-    did_resample = bool(pf.resample_if_needed())
-    return alpha, pre_temper_ratio, post_ratio, did_resample
 
 
 def _dd_result_slice(dd_result, idx: np.ndarray):
@@ -5327,22 +5315,34 @@ def _run_ctrbpf_on_segment(
                         resample=False,
                     )
 
-                pr_alpha, _pr_pre_ratio, pr_post_ratio, pr_resampled = _mupf_stage_update(
+                pr_temper = _mupf_stage_update(
                     pf, _pr_stage_apply,
                     target_ess_ratio=float(config.cp_mupf_pr_stage_target_ess_ratio),
                     max_iters=int(config.cp_mupf_stage_max_iters),
+                    max_tempering_steps=int(config.cp_mupf_stage_max_tempering_steps),
                     resample_before=bool(config.cp_mupf_resample_before_stage),
                 )
+                pr_alpha = float(pr_temper.beta_consumed)
+                pr_post_ratio = float(pr_temper.final_ess_ratio)
+                pr_resampled = bool(pr_temper.resample_count > 0)
                 any_stage_resampled = any_stage_resampled or pr_resampled
                 dd_stats.mupf_pr_epochs_applied += 1
                 dd_stats.mupf_pr_pairs_total += int(dd_pr_result_mupf.n_dd)
                 dd_stats.mupf_pr_resample_count += int(pr_resampled)
                 dd_stats.mupf_pr_alpha_sum += float(pr_alpha)
                 dd_stats.mupf_pr_post_ratio_sum += float(pr_post_ratio)
+                dd_stats.mupf_pr_tempering_steps_total += len(pr_temper.beta_increments)
+                dd_stats.mupf_pr_log_evidence_sum += float(pr_temper.log_evidence)
                 if pf_diag_row is not None:
                     pf_diag_row["mupf_pr_alpha"] = float(pr_alpha)
                     pf_diag_row["mupf_pr_post_ess_ratio"] = float(pr_post_ratio)
                     pf_diag_row["mupf_pr_resampled"] = bool(pr_resampled)
+                    pf_diag_row["mupf_pr_tempering_steps"] = len(
+                        pr_temper.beta_increments
+                    )
+                    pf_diag_row["mupf_pr_log_evidence"] = float(
+                        pr_temper.log_evidence
+                    )
 
             # WP23a item 3: cloud-spread-vs-lambda/2 diagnostic, measured on
             # the post-PR-stage cloud -- exactly what the sharp CP-AFV
@@ -5408,20 +5408,30 @@ def _run_ctrbpf_on_segment(
                                 resample=False,
                             )
 
-                        cp_alpha, _cp_pre_ratio, cp_post_ratio, cp_resampled = (
-                            _mupf_stage_update(
-                                pf, _cp_stage_apply,
-                                target_ess_ratio=float(
-                                    config.cp_mupf_cp_stage_target_ess_ratio
-                                ),
-                                max_iters=int(config.cp_mupf_stage_max_iters),
-                                resample_before=bool(config.cp_mupf_resample_before_stage),
-                            )
+                        cp_temper = _mupf_stage_update(
+                            pf, _cp_stage_apply,
+                            target_ess_ratio=float(
+                                config.cp_mupf_cp_stage_target_ess_ratio
+                            ),
+                            max_iters=int(config.cp_mupf_stage_max_iters),
+                            max_tempering_steps=int(
+                                config.cp_mupf_stage_max_tempering_steps
+                            ),
+                            resample_before=bool(config.cp_mupf_resample_before_stage),
                         )
+                        cp_alpha = float(cp_temper.beta_consumed)
+                        cp_post_ratio = float(cp_temper.final_ess_ratio)
+                        cp_resampled = bool(cp_temper.resample_count > 0)
                         cp_alphas.append(cp_alpha)
                         cp_post_ratios.append(cp_post_ratio)
                         any_cp_resampled = any_cp_resampled or cp_resampled
                         dd_stats.mupf_cp_stage_calls += 1
+                        dd_stats.mupf_cp_tempering_steps_total += len(
+                            cp_temper.beta_increments
+                        )
+                        dd_stats.mupf_cp_log_evidence_sum += float(
+                            cp_temper.log_evidence
+                        )
                     cp_pairs_this_epoch += int(group.n_dd)
                 if cp_alphas:
                     any_stage_resampled = any_stage_resampled or any_cp_resampled
@@ -7635,6 +7645,7 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         ),
         cp_mupf_cp_stage_target_ess_ratio=args.cp_mupf_cp_stage_target_ess_ratio,
         cp_mupf_stage_max_iters=args.cp_mupf_stage_max_iters,
+        cp_mupf_stage_max_tempering_steps=args.cp_mupf_stage_max_tempering_steps,
         cp_mupf_min_pairs=args.cp_mupf_min_pairs,
         cp_mupf_cp_n_groups=args.cp_mupf_cp_n_groups,
         cp_mupf_slip_gate_enabled=not args.disable_cp_mupf_slip_gate,
@@ -10466,7 +10477,15 @@ def main() -> None:
     )
     parser.add_argument(
         "--cp-mupf-stage-max-iters", type=int, default=20, dest="cp_mupf_stage_max_iters",
-        help="WP23a MUPF per-stage tempering bisection iterations (default 20).",
+        help="MUPF per-stage annealing bisection iterations (default 20).",
+    )
+    parser.add_argument(
+        "--cp-mupf-stage-max-tempering-steps", type=int, default=64,
+        dest="cp_mupf_stage_max_tempering_steps",
+        help=(
+            "WP23b maximum annealed-SMC beta increments per staged likelihood "
+            "(default 64; exhausting the limit is a hard error)."
+        ),
     )
     parser.add_argument(
         "--cp-mupf-min-pairs", type=int, default=3, dest="cp_mupf_min_pairs",
@@ -11991,6 +12010,16 @@ def main() -> None:
                     dd_stats.mupf_pr_post_ratio_sum / dd_stats.mupf_pr_epochs_applied
                     if dd_stats.mupf_pr_epochs_applied else float("nan")
                 ),
+                "mupf_pr_mean_tempering_steps": (
+                    dd_stats.mupf_pr_tempering_steps_total
+                    / dd_stats.mupf_pr_epochs_applied
+                    if dd_stats.mupf_pr_epochs_applied else float("nan")
+                ),
+                "mupf_pr_mean_log_evidence": (
+                    dd_stats.mupf_pr_log_evidence_sum
+                    / dd_stats.mupf_pr_epochs_applied
+                    if dd_stats.mupf_pr_epochs_applied else float("nan")
+                ),
                 "mupf_cp_epochs_applied": int(dd_stats.mupf_cp_epochs_applied),
                 "mupf_cp_pairs_total": int(dd_stats.mupf_cp_pairs_total),
                 "mupf_cp_stage_calls": int(dd_stats.mupf_cp_stage_calls),
@@ -12005,6 +12034,16 @@ def main() -> None:
                 "mupf_cp_mean_post_ess_ratio": (
                     dd_stats.mupf_cp_post_ratio_sum / dd_stats.mupf_cp_epochs_applied
                     if dd_stats.mupf_cp_epochs_applied else float("nan")
+                ),
+                "mupf_cp_mean_tempering_steps_per_call": (
+                    dd_stats.mupf_cp_tempering_steps_total
+                    / dd_stats.mupf_cp_stage_calls
+                    if dd_stats.mupf_cp_stage_calls else float("nan")
+                ),
+                "mupf_cp_mean_log_evidence_per_call": (
+                    dd_stats.mupf_cp_log_evidence_sum
+                    / dd_stats.mupf_cp_stage_calls
+                    if dd_stats.mupf_cp_stage_calls else float("nan")
                 ),
                 "mupf_cp_slips_flagged_total": int(dd_stats.mupf_cp_slips_flagged_total),
                 "mupf_cp_slip_epochs": int(dd_stats.mupf_cp_slip_epochs),
