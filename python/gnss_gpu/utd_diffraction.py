@@ -17,8 +17,11 @@ __all__ = [
     "utd_coefficient",
     "fresnel_transition",
     "compute_utd_diffraction_paths",
+    "compute_utd_diffraction_paths_gpu",
     "GPS_L1_WAVELENGTH",
 ]
+
+_UTD_MODE_CODES = {"absorbing": 0, "soft": 1, "hard": 2}
 
 
 @dataclass
@@ -441,4 +444,135 @@ def compute_utd_diffraction_paths(
         paths.sort(key=lambda path: path.amplitude, reverse=True)
         results.append(paths[:max_paths_i])
 
+    return results
+
+
+def compute_utd_diffraction_paths_gpu(
+    rx_ecef,
+    sat_ecef,
+    edges,
+    *,
+    max_paths=4,
+    max_edge_range_m=250.0,
+    max_ray_edge_distance_m=25.0,
+    max_excess_path_m=80.0,
+    wavelength_m=GPS_L1_WAVELENGTH,
+    mode="absorbing",
+) -> list[list[UTDDiffractionPath]]:
+    """GPU-accelerated equivalent of :func:`compute_utd_diffraction_paths`.
+
+    Offloads the O(n_sat * n_edge) edge search and Kouyoumjian-Pathak UTD
+    coefficient evaluation to a CUDA kernel, then gathers/sorts the
+    surviving candidates on the host. Returns the same structure as the
+    pure-Python version (per-satellite lists of :class:`UTDDiffractionPath`,
+    strongest first, capped at ``max_paths``).
+
+    Requires the compiled ``_gnss_gpu_diffraction`` extension.
+    """
+    rx = np.asarray(rx_ecef, dtype=float).reshape(3)
+    if not np.all(np.isfinite(rx)):
+        raise ValueError("rx_ecef must be finite")
+
+    sats = _as_satellite_array(sat_ecef)
+    n_sat = int(sats.shape[0])
+    if n_sat == 0:
+        return []
+
+    empty = [[] for _ in range(n_sat)]
+
+    if int(max_paths) <= 0:
+        return empty
+    if edges is None:
+        return empty
+    if not all(
+        hasattr(edges, name)
+        for name in ("start", "end", "face_dir_a", "face_dir_b", "wedge_n")
+    ):
+        return empty
+
+    wavelength_m = float(wavelength_m)
+    if not math.isfinite(wavelength_m) or wavelength_m <= 0.0:
+        raise ValueError("wavelength_m must be positive")
+
+    mode_key = str(mode).strip().lower()
+    if mode_key not in _UTD_MODE_CODES:
+        raise ValueError("mode must be 'soft', 'hard', or 'absorbing'")
+
+    start = _as_point_array(getattr(edges, "start"))
+    end = _as_point_array(getattr(edges, "end"))
+    face_dir_a = _as_point_array(getattr(edges, "face_dir_a"))
+    face_dir_b = _as_point_array(getattr(edges, "face_dir_b"))
+    if start is None or end is None or face_dir_a is None or face_dir_b is None:
+        return empty
+
+    n_edges = _edge_count(edges, start, end)
+    n_edges = min(n_edges, face_dir_a.shape[0], face_dir_b.shape[0])
+    if n_edges <= 0:
+        return empty
+
+    midpoint_value = getattr(edges, "midpoint", None)
+    if callable(midpoint_value):
+        try:
+            midpoint_value = midpoint_value()
+        except TypeError:
+            midpoint_value = None
+    midpoint = _as_point_array(midpoint_value) if midpoint_value is not None else None
+    if midpoint is None or midpoint.shape[0] < n_edges:
+        midpoint = 0.5 * (start[:n_edges] + end[:n_edges])
+
+    wedge_n = _as_wedge_array(getattr(edges, "wedge_n"))
+
+    start = np.ascontiguousarray(start[:n_edges], dtype=float)
+    end = np.ascontiguousarray(end[:n_edges], dtype=float)
+    midpoint = np.ascontiguousarray(midpoint[:n_edges], dtype=float)
+    face_dir_a = np.ascontiguousarray(face_dir_a[:n_edges], dtype=float)
+    face_dir_b = np.ascontiguousarray(face_dir_b[:n_edges], dtype=float)
+    wedge_n = np.ascontiguousarray(wedge_n, dtype=float)
+
+    from gnss_gpu._gnss_gpu_diffraction import utd_diffraction_candidates
+
+    (valid, excess, amplitude, beta0_arr, phi_arr, phi_p_arr, wedge_n_arr,
+     atten_db, point) = utd_diffraction_candidates(
+        np.ascontiguousarray(rx),
+        np.ascontiguousarray(sats.reshape(-1)),
+        start.reshape(-1), end.reshape(-1), midpoint.reshape(-1),
+        face_dir_a.reshape(-1), face_dir_b.reshape(-1), wedge_n,
+        n_sat, n_edges,
+        float(max_edge_range_m), float(max_ray_edge_distance_m),
+        float(max_excess_path_m), wavelength_m,
+        _UTD_MODE_CODES[mode_key],
+    )
+
+    valid = np.asarray(valid).reshape(n_sat, n_edges).astype(bool)
+    excess = np.asarray(excess).reshape(n_sat, n_edges)
+    amplitude = np.asarray(amplitude).reshape(n_sat, n_edges)
+    beta0_arr = np.asarray(beta0_arr).reshape(n_sat, n_edges)
+    phi_arr = np.asarray(phi_arr).reshape(n_sat, n_edges)
+    phi_p_arr = np.asarray(phi_p_arr).reshape(n_sat, n_edges)
+    wedge_n_arr = np.asarray(wedge_n_arr).reshape(n_sat, n_edges)
+    atten_db = np.asarray(atten_db).reshape(n_sat, n_edges)
+    point = np.asarray(point).reshape(n_sat, n_edges, 3)
+
+    max_paths_i = int(max_paths)
+    results: list[list[UTDDiffractionPath]] = []
+    for s in range(n_sat):
+        e_idx = np.flatnonzero(valid[s])
+        if e_idx.size == 0:
+            results.append([])
+            continue
+        order = e_idx[np.argsort(-amplitude[s, e_idx], kind="stable")][:max_paths_i]
+        results.append([
+            UTDDiffractionPath(
+                excess_delay=float(excess[s, e]),
+                diffraction_point=point[s, e].copy(),
+                edge_id=int(e),
+                beta0=float(beta0_arr[s, e]),
+                phi=float(phi_arr[s, e]),
+                phi_p=float(phi_p_arr[s, e]),
+                wedge_n=float(wedge_n_arr[s, e]),
+                amplitude=float(amplitude[s, e]),
+                attenuation_db=float(atten_db[s, e]),
+            )
+            for e in order
+        ])
     return results
