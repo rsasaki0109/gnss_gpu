@@ -756,7 +756,9 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
 
 
 def _empty_epoch(week: int, sow: float, t: datetime, rx_ecef: np.ndarray) -> EpochRecord:
-    z_f = lambda: np.zeros(0, dtype=np.float64)
+    def z_f() -> np.ndarray:
+        return np.zeros(0, dtype=np.float64)
+
     return EpochRecord(
         time_gps_week=week,
         time_sow=sow,
