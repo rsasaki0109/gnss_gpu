@@ -284,6 +284,13 @@ class DDFloatKalmanFilter:
             position_ambiguity_cov=self.covariance[np.ix_(np.arange(3), indices)].copy(),
         )
 
+    def ambiguity_generations(
+        self,
+        keys: Iterable[AmbiguityKey] | None = None,
+    ) -> dict[AmbiguityKey, int]:
+        selected = tuple(self._tracks if keys is None else keys)
+        return {key: int(self._tracks[key].generation) for key in selected if key in self._tracks}
+
     def condition_position_on_integers(
         self,
         keys: Iterable[AmbiguityKey],
