@@ -200,6 +200,58 @@ class CTRBPFConfig:
     dd_sigma_cycles: float = 0.05
     dd_min_pairs: int = 4
     dd_min_pairs_update: int = 3
+    # WP23a: Suzuki-style (ICRA 2024, "Multiple Update Particle Filter",
+    # arXiv:2403.03394) multiple-update schedule. When enabled, this
+    # REPLACES the single-shot ``enable_dd_carrier_afv`` DD-carrier update
+    # (mutually exclusive at the call site -- see the DD block in
+    # ``_run_ctrbpf_on_segment``) with two sequential, independently
+    # ESS-tempered stages per epoch: (i) DD-pseudorange (absolute,
+    # position-only geometry, least sharp) -> temper to
+    # ``cp_mupf_pr_stage_target_ess_ratio`` -> resample-if-needed; (ii)
+    # DD-carrier AFV (fractional-cycle, sharpest) -> applied as a
+    # coarse-to-fine SIGMA SEQUENCE (each value -> temper to
+    # ``cp_mupf_cp_stage_target_ess_ratio`` -> resample-if-needed) rather
+    # than a single jump to the tight target sigma. The coarse-to-fine
+    # sequence idea is not new to this task: it is exactly the pattern
+    # already validated elsewhere in this codebase for the (different,
+    # GSDC2023/Trimble) PF-smoother track --
+    # ``gnss_gpu.dd_carrier_epoch_update.apply_carrier_epoch_update`` /
+    # ``gnss_gpu.pf_smoother_config.MupfConfig.sigma_cycles`` with a
+    # validated ``sigma_sequence_cycles=(2.0, 0.5, 0.05)`` default -- reused
+    # here rather than reinvented.
+    enable_cp_mupf: bool = False
+    # Starting sigmas: documented as inherited from tc_fgo/rbpf_fgo's own
+    # DD sigmas (``fgo_dd_pr_sigma_m=5.0``, ``fgo_dd_sigma_cycles=0.20``,
+    # see below) -- independently tunable copies, not aliases, so changing
+    # one does not silently perturb the (unrelated, FGO-postprocess-only)
+    # ``enable_fgo_lambda`` feature.
+    cp_mupf_dd_pr_sigma_m: float = 5.0
+    cp_mupf_pr_stage_target_ess_ratio: float = 0.10
+    cp_mupf_dd_cp_sigma_sequence_cycles: tuple[float, ...] = (2.0, 0.5, 0.05)
+    cp_mupf_cp_stage_target_ess_ratio: float = 0.10
+    cp_mupf_stage_max_iters: int = 20
+    cp_mupf_min_pairs: int = 3
+    # >1 splits the (post-slip-gate) DD-CP pairs round-robin into this many
+    # sequential sub-updates per sigma stage -- the spec's documented
+    # fallback "if a single CP update is still too sharp". Off (1) by
+    # default; the coarse-to-fine sigma sequence is tried first.
+    cp_mupf_cp_n_groups: int = 1
+    # WP23a item 3: cycle-slip proxy. No slip detector exists elsewhere in
+    # this codebase's DD machinery for the PPC/non-hybrid path (grepped
+    # dd_carrier.py and this file for "slip": none found). Gate CP usage on
+    # raw epoch-to-epoch DD-carrier-phase continuity per (ref_sat, sat)
+    # pair instead -- see ``_cp_slip_gate``.
+    cp_mupf_slip_gate_enabled: bool = True
+    cp_mupf_slip_max_delta_cycles: float = 2.0
+    cp_mupf_slip_max_dt_s: float = 2.0
+    # WP23a diagnostic (default off -- see ``_mupf_stage_update``'s
+    # docstring and WP23A_REPORT.md's root-cause section): resample-if-
+    # needed *before*, not just after, each MUPF stage's update, so a
+    # stage's own tempering guard always starts from a fresh (~ESS/N=1.0)
+    # baseline instead of inheriting an already-degenerate ESS/N from
+    # earlier untempered updates this same epoch (which otherwise causes
+    # ``_apply_pr_ess_guard`` to revert the stage entirely, alpha=0.0).
+    cp_mupf_resample_before_stage: bool = False
     dd_systems: tuple[str, ...] = ("G", "E", "J", "C")
     dd_base_interp: bool = False
     dd_min_elevation_deg: float = -90.0
@@ -642,6 +694,26 @@ class _DDStats:
     epochs_attempted: int = 0
     epochs_applied: int = 0
     pairs_total: int = 0
+    # WP23a: Suzuki-style multiple-update (MUPF) DD-PR + DD-CP-AFV schedule
+    # diagnostics, populated only when ``config.enable_cp_mupf``.
+    mupf_pr_epochs_applied: int = 0
+    mupf_pr_pairs_total: int = 0
+    mupf_pr_resample_count: int = 0
+    mupf_pr_alpha_sum: float = 0.0
+    mupf_pr_post_ratio_sum: float = 0.0
+    mupf_cp_epochs_applied: int = 0
+    mupf_cp_pairs_total: int = 0
+    mupf_cp_resample_count: int = 0
+    mupf_cp_stage_calls: int = 0
+    mupf_cp_alpha_sum: float = 0.0
+    mupf_cp_post_ratio_sum: float = 0.0
+    mupf_cp_slips_flagged_total: int = 0
+    mupf_cp_slip_epochs: int = 0
+    # WP23a item 3: cloud-spread-vs-lambda/2 diagnostic, measured after the
+    # DD-PR stage (i.e. the cloud the sharp CP-AFV stage will actually see).
+    mupf_cloud_spread_sum_m: float = 0.0
+    mupf_cloud_spread_over_half_lambda_sum: float = 0.0
+    mupf_cloud_spread_epochs: int = 0
 
 
 @dataclass
@@ -2963,6 +3035,142 @@ def _apply_pr_ess_guard(
     return float(best_alpha), float(post_ratio), float(best_ratio)
 
 
+def _mupf_stage_update(
+    pf, apply_fn, *, target_ess_ratio: float, max_iters: int,
+    resample_before: bool = False,
+):
+    """WP23a: one Suzuki-style MUPF stage.
+
+    ``apply_fn`` must call the device weight update with ``resample=False``
+    (log-weight domain only). This then tempers *this stage's* log-
+    likelihood increment to ``target_ess_ratio`` (reusing
+    ``_apply_pr_ess_guard``, WP22b's per-epoch bisection primitive, at a new
+    per-stage call site) and finally calls ``pf.resample_if_needed()`` --
+    i.e. exactly "update -> temper to ESS target -> resample-if-needed" per
+    stage, as specified.
+
+    ``resample_before``: diagnostic option (default off; see
+    ``--cp-mupf-resample-before-stage`` / WP23A_REPORT.md's root-cause
+    section). Root-caused via a targeted diagnostic re-run: with
+    ``resample_before=False`` (the spec-literal default), a stage's own
+    ``pre`` snapshot inherits whatever ESS/N the *untempered* updates
+    earlier in the same epoch already left behind; when that is already
+    below ``target_ess_ratio`` (routinely true here -- PR+Doppler-KF alone
+    push ESS/N to ~1e-4 before DD-PR even runs), ``_apply_pr_ess_guard``'s
+    own "pre_ratio < target -> revert entirely" branch fires, so the stage
+    contributes *nothing* (alpha=0.0) even though it "ran". Calling
+    ``resample_if_needed()`` *before* the update instead (mirroring the
+    validated coarse-to-fine pattern in
+    ``gnss_gpu.dd_carrier_epoch_update.apply_carrier_epoch_update``, which
+    resamples before, not after, each sigma step) resets entering ESS/N to
+    ~1.0 first, so the guard can actually bisect a nonzero alpha.
+    """
+    if resample_before:
+        pf.resample_if_needed()
+    pre = np.asarray(pf.get_log_weights(), dtype=np.float64)
+    apply_fn()
+    alpha, pre_temper_ratio, post_ratio = _apply_pr_ess_guard(
+        pf, pre, min_ratio=float(target_ess_ratio), max_iters=int(max_iters),
+    )
+    did_resample = bool(pf.resample_if_needed())
+    return alpha, pre_temper_ratio, post_ratio, did_resample
+
+
+def _dd_result_slice(dd_result, idx: np.ndarray):
+    """Return a copy of a DD result (carrier or pseudorange) restricted to
+    pair indices ``idx`` (WP23a: cycle-slip gating / satellite-group split).
+    """
+    idx = np.asarray(idx, dtype=np.int64)
+    ref_sat_ids = tuple(dd_result.ref_sat_ids)
+    sat_ids = tuple(dd_result.sat_ids) if dd_result.sat_ids else ()
+    kwargs = dict(
+        sat_ecef_k=np.asarray(dd_result.sat_ecef_k)[idx],
+        sat_ecef_ref=np.asarray(dd_result.sat_ecef_ref)[idx],
+        base_range_k=np.asarray(dd_result.base_range_k)[idx],
+        base_range_ref=np.asarray(dd_result.base_range_ref)[idx],
+        dd_weights=np.asarray(dd_result.dd_weights)[idx],
+        ref_sat_ids=tuple(ref_sat_ids[j] for j in idx) if ref_sat_ids else (),
+        n_dd=int(idx.size),
+    )
+    if sat_ids:
+        kwargs["sat_ids"] = tuple(sat_ids[j] for j in idx)
+    if hasattr(dd_result, "dd_carrier_cycles"):
+        kwargs["dd_carrier_cycles"] = np.asarray(dd_result.dd_carrier_cycles)[idx]
+    if hasattr(dd_result, "wavelengths_m"):
+        kwargs["wavelengths_m"] = np.asarray(dd_result.wavelengths_m)[idx]
+    if hasattr(dd_result, "dd_pseudorange_m"):
+        kwargs["dd_pseudorange_m"] = np.asarray(dd_result.dd_pseudorange_m)[idx]
+    return replace(dd_result, **kwargs)
+
+
+def _cp_slip_gate(
+    dd_result,
+    history: dict[tuple[str, str], tuple[float, float]],
+    tow: float,
+    *,
+    max_delta_cycles: float,
+    max_dt_s: float,
+):
+    """WP23a item 3: epoch-to-epoch DD-carrier phase continuity gate.
+
+    No cycle-slip detector exists elsewhere in this codebase's DD machinery
+    for the PPC/non-hybrid path (``dd_carrier.py`` and this file have none).
+    This is a minimal proxy: a DD pair is dropped from this epoch's CP-AFV
+    update if its raw DD carrier phase [cycles] changed by more than
+    ``max_delta_cycles`` since the last epoch that pair was seen, within
+    ``max_dt_s`` seconds. ``history`` maps (ref_sat_id, sat_id) -> (tow,
+    dd_carrier_cycles) from the last epoch that pair was used, and is
+    mutated in place (updated for every pair seen this epoch, flagged or
+    not, so continuity resumes fresh after a flagged jump).
+    """
+    n = int(getattr(dd_result, "n_dd", 0))
+    if n == 0:
+        return dd_result, 0
+    ref_ids = dd_result.ref_sat_ids
+    sat_ids = dd_result.sat_ids if dd_result.sat_ids else tuple("" for _ in range(n))
+    cycles = np.asarray(dd_result.dd_carrier_cycles, dtype=np.float64)
+    keep = np.ones(n, dtype=bool)
+    n_flagged = 0
+    for j in range(n):
+        key = (
+            ref_ids[j] if j < len(ref_ids) else "",
+            sat_ids[j] if j < len(sat_ids) else "",
+        )
+        cyc = float(cycles[j])
+        prev = history.get(key)
+        if prev is not None:
+            prev_tow, prev_cyc = prev
+            dt = tow - prev_tow
+            if 0.0 < dt <= max_dt_s and abs(cyc - prev_cyc) > max_delta_cycles:
+                keep[j] = False
+                n_flagged += 1
+        history[key] = (tow, cyc)
+    if n_flagged == 0:
+        return dd_result, 0
+    idx = np.nonzero(keep)[0]
+    return _dd_result_slice(dd_result, idx), n_flagged
+
+
+def _dd_result_groups(dd_result, n_groups: int):
+    """WP23a item 2: round-robin split of DD-CP pairs into ``n_groups``
+    sequential sub-updates -- the spec's documented fallback "if a single
+    CP update is still too sharp". Round-robin (pair index j -> group
+    j % n_groups) spreads constellations roughly evenly across groups since
+    the DD pair ordering follows ``_build_dd_measurements``'s stable
+    per-epoch satellite order (not grouped by system).
+    """
+    n = int(getattr(dd_result, "n_dd", 0))
+    if int(n_groups) <= 1 or n == 0:
+        return [dd_result]
+    groups = []
+    for g in range(int(n_groups)):
+        idx = np.arange(g, n, int(n_groups))
+        if idx.size == 0:
+            continue
+        groups.append(_dd_result_slice(dd_result, idx))
+    return groups or [dd_result]
+
+
 def _capture_pf_internal_state(
     pf,
     row: dict[str, object],
@@ -3614,6 +3822,10 @@ def _run_ctrbpf_on_segment(
     gate_stats = _RBPFGateStats()
     hybrid_stats = _HybridStats()
     rtkdiag_pf_stats = _RTKDiagPFStats()
+    # WP23a: epoch-to-epoch DD-carrier phase continuity history for the
+    # cycle-slip proxy gate (see ``_cp_slip_gate``); one dict per run/
+    # variant invocation, keyed by (ref_sat_id, sat_id).
+    _cp_slip_history: dict[tuple[str, str], tuple[float, float]] = {}
     gate_active = config.enable_rbpf_velocity_kf and (
         config.rbpf_kf_gate_min_dd_pairs is not None
         or config.rbpf_kf_gate_min_ess_ratio is not None
@@ -3623,6 +3835,7 @@ def _run_ctrbpf_on_segment(
     )
     need_dd_compute = (
         config.enable_dd_carrier_afv
+        or config.enable_cp_mupf
         or (gate_active and config.rbpf_kf_gate_min_dd_pairs is not None)
         or config.enable_fgo_lambda
     )
@@ -4607,6 +4820,11 @@ def _run_ctrbpf_on_segment(
         # Phase 1+2: compute DD once (cached) so both the Doppler-KF gate and
         # the AFV update can read its pair count.
         dd_result = None
+        # WP23a: DD-pseudorange result captured for the MUPF stage (i) --
+        # reset every epoch (unlike the FGO/anchor-only ``dd_pr_result``
+        # local below, whose lifetime stays nested inside its own ``if``
+        # block and is never read outside it).
+        dd_pr_result_mupf = None
         if need_dd_compute and dd_computer is not None:
             rover_pos_now = np.asarray(pf.estimate(), dtype=np.float64)[:3]
             dd_select_pos = (
@@ -4662,7 +4880,9 @@ def _run_ctrbpf_on_segment(
                     # PF soft position update. DD carrier alone is relative;
                     # DD-PR supplies an absolute anchor when PR/WLS is biased.
                     if dd_pr_computer is not None and (
-                        config.enable_fgo_lambda or config.enable_dd_pr_ls_anchor
+                        config.enable_fgo_lambda
+                        or config.enable_dd_pr_ls_anchor
+                        or config.enable_cp_mupf
                     ):
                         try:
                             dd_pr_result = dd_pr_computer.compute_dd(
@@ -4707,6 +4927,11 @@ def _run_ctrbpf_on_segment(
                                 ),
                                 min_pairs=max(1, int(config.dd_pr_gate_min_pairs)),
                             )
+                        # WP23a: capture the fully-gated DD-PR result for the
+                        # MUPF stage (i) update below, regardless of which of
+                        # the FGO/anchor consumers further down also use it.
+                        if config.enable_cp_mupf:
+                            dd_pr_result_mupf = dd_pr_result
                         if (
                             dd_pr_result is not None
                             and int(getattr(dd_pr_result, "n_dd", 0)) > 0
@@ -5078,7 +5303,153 @@ def _run_ctrbpf_on_segment(
             )
 
         dd_carrier_update_applied = False
-        if config.enable_dd_carrier_afv and dd_computer is not None:
+        if config.enable_cp_mupf and dd_computer is not None:
+            # WP23a: Suzuki-style multiple-update (MUPF) schedule -- this
+            # REPLACES the single-shot ``enable_dd_carrier_afv`` block
+            # (mutually exclusive via elif below) with two independently
+            # tempered stages.
+            dd_stats.epochs_attempted += 1
+            any_stage_resampled = False
+
+            # Stage (i): DD pseudorange -- absolute, position-only
+            # geometry, least sharp of the two DD families (Suzuki 2024:
+            # apply least-to-most-sharp).
+            if (
+                dd_pr_result_mupf is not None
+                and int(getattr(dd_pr_result_mupf, "n_dd", 0)) >= int(config.cp_mupf_min_pairs)
+            ):
+                _pr_result_for_stage = dd_pr_result_mupf
+
+                def _pr_stage_apply():
+                    pf.update_dd_pseudorange(
+                        _pr_result_for_stage,
+                        sigma_pr=float(config.cp_mupf_dd_pr_sigma_m),
+                        resample=False,
+                    )
+
+                pr_alpha, _pr_pre_ratio, pr_post_ratio, pr_resampled = _mupf_stage_update(
+                    pf, _pr_stage_apply,
+                    target_ess_ratio=float(config.cp_mupf_pr_stage_target_ess_ratio),
+                    max_iters=int(config.cp_mupf_stage_max_iters),
+                    resample_before=bool(config.cp_mupf_resample_before_stage),
+                )
+                any_stage_resampled = any_stage_resampled or pr_resampled
+                dd_stats.mupf_pr_epochs_applied += 1
+                dd_stats.mupf_pr_pairs_total += int(dd_pr_result_mupf.n_dd)
+                dd_stats.mupf_pr_resample_count += int(pr_resampled)
+                dd_stats.mupf_pr_alpha_sum += float(pr_alpha)
+                dd_stats.mupf_pr_post_ratio_sum += float(pr_post_ratio)
+                if pf_diag_row is not None:
+                    pf_diag_row["mupf_pr_alpha"] = float(pr_alpha)
+                    pf_diag_row["mupf_pr_post_ess_ratio"] = float(pr_post_ratio)
+                    pf_diag_row["mupf_pr_resampled"] = bool(pr_resampled)
+
+            # WP23a item 3: cloud-spread-vs-lambda/2 diagnostic, measured on
+            # the post-PR-stage cloud -- exactly what the sharp CP-AFV
+            # stage below is about to see.
+            if dd_result is not None and int(getattr(dd_result, "n_dd", 0)) > 0:
+                spread_m = float(pf.get_position_spread())
+                half_lambda_m = float(np.median(dd_result.wavelengths_m)) / 2.0
+                dd_stats.mupf_cloud_spread_sum_m += spread_m
+                dd_stats.mupf_cloud_spread_epochs += 1
+                if half_lambda_m > 0.0:
+                    dd_stats.mupf_cloud_spread_over_half_lambda_sum += (
+                        spread_m / half_lambda_m
+                    )
+                if pf_diag_row is not None:
+                    pf_diag_row["mupf_pre_cp_spread_m"] = spread_m
+                    pf_diag_row["mupf_half_lambda_m"] = half_lambda_m
+
+            # Stage (ii): DD carrier AFV -- fractional-cycle, sharpest.
+            # Gated on epoch-to-epoch phase continuity (cycle-slip proxy;
+            # no slip detector exists elsewhere in the DD machinery), then
+            # applied as a coarse-to-fine sigma sequence (validated
+            # pattern reused from ``gnss_gpu.dd_carrier_epoch_update`` --
+            # see the ``enable_cp_mupf`` docstring in ``CTRBPFConfig``),
+            # each value independently ESS-tempered and resample-gated.
+            cp_dd_result = dd_result
+            n_slips = 0
+            if (
+                cp_dd_result is not None
+                and bool(config.cp_mupf_slip_gate_enabled)
+                and int(getattr(cp_dd_result, "n_dd", 0)) > 0
+            ):
+                cp_dd_result, n_slips = _cp_slip_gate(
+                    cp_dd_result,
+                    _cp_slip_history,
+                    float(times[i]),
+                    max_delta_cycles=float(config.cp_mupf_slip_max_delta_cycles),
+                    max_dt_s=float(config.cp_mupf_slip_max_dt_s),
+                )
+                dd_stats.mupf_cp_slips_flagged_total += n_slips
+                if n_slips > 0:
+                    dd_stats.mupf_cp_slip_epochs += 1
+
+            if (
+                cp_dd_result is not None
+                and int(getattr(cp_dd_result, "n_dd", 0)) >= int(config.cp_mupf_min_pairs)
+            ):
+                groups = _dd_result_groups(cp_dd_result, int(config.cp_mupf_cp_n_groups))
+                cp_alphas: list[float] = []
+                cp_post_ratios: list[float] = []
+                any_cp_resampled = False
+                cp_pairs_this_epoch = 0
+                for group in groups:
+                    if group is None or int(getattr(group, "n_dd", 0)) == 0:
+                        continue
+                    for sigma_c in config.cp_mupf_dd_cp_sigma_sequence_cycles:
+                        _group_for_stage = group
+                        _sigma_for_stage = float(sigma_c)
+
+                        def _cp_stage_apply():
+                            pf.update_dd_carrier_afv(
+                                _group_for_stage,
+                                sigma_cycles=_sigma_for_stage,
+                                resample=False,
+                            )
+
+                        cp_alpha, _cp_pre_ratio, cp_post_ratio, cp_resampled = (
+                            _mupf_stage_update(
+                                pf, _cp_stage_apply,
+                                target_ess_ratio=float(
+                                    config.cp_mupf_cp_stage_target_ess_ratio
+                                ),
+                                max_iters=int(config.cp_mupf_stage_max_iters),
+                                resample_before=bool(config.cp_mupf_resample_before_stage),
+                            )
+                        )
+                        cp_alphas.append(cp_alpha)
+                        cp_post_ratios.append(cp_post_ratio)
+                        any_cp_resampled = any_cp_resampled or cp_resampled
+                        dd_stats.mupf_cp_stage_calls += 1
+                    cp_pairs_this_epoch += int(group.n_dd)
+                if cp_alphas:
+                    any_stage_resampled = any_stage_resampled or any_cp_resampled
+                    dd_stats.mupf_cp_epochs_applied += 1
+                    dd_stats.mupf_cp_pairs_total += cp_pairs_this_epoch
+                    dd_stats.mupf_cp_resample_count += int(any_cp_resampled)
+                    dd_stats.mupf_cp_alpha_sum += float(np.mean(cp_alphas))
+                    dd_stats.mupf_cp_post_ratio_sum += float(np.mean(cp_post_ratios))
+                    dd_carrier_update_applied = True
+                    dd_stats.epochs_applied += 1
+                    dd_stats.pairs_total += cp_pairs_this_epoch
+                    if pf_diag_row is not None:
+                        pf_diag_row["mupf_cp_mean_alpha"] = float(np.mean(cp_alphas))
+                        pf_diag_row["mupf_cp_mean_post_ess_ratio"] = float(
+                            np.mean(cp_post_ratios)
+                        )
+                        pf_diag_row["mupf_cp_slips_flagged"] = int(n_slips)
+                        pf_diag_row["mupf_cp_n_groups_used"] = int(len(groups))
+
+            # A mid-epoch resample (either stage above) invalidates the
+            # particle-wise pre/post log-weight correspondence the
+            # epoch-blanket ``enable_epoch_tempering`` snapshot assumes
+            # (WP22b item 2). Re-anchor that snapshot here so a later
+            # blanket temper this same epoch (if any updates still follow)
+            # only covers what happens after this point.
+            if config.enable_epoch_tempering and any_stage_resampled:
+                pre_epoch_log_weights = np.asarray(pf.get_log_weights(), dtype=np.float64)
+        elif config.enable_dd_carrier_afv and dd_computer is not None:
             dd_stats.epochs_attempted += 1
             if (
                 dd_result is not None
@@ -7257,6 +7628,19 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         dd_sigma_cycles=args.dd_sigma_cycles,
         dd_min_pairs=args.dd_min_pairs,
         dd_min_pairs_update=args.dd_min_pairs_update,
+        cp_mupf_dd_pr_sigma_m=args.cp_mupf_dd_pr_sigma_m,
+        cp_mupf_pr_stage_target_ess_ratio=args.cp_mupf_pr_stage_target_ess_ratio,
+        cp_mupf_dd_cp_sigma_sequence_cycles=tuple(
+            float(x) for x in args.cp_mupf_dd_cp_sigma_sequence_cycles.split(",") if x.strip()
+        ),
+        cp_mupf_cp_stage_target_ess_ratio=args.cp_mupf_cp_stage_target_ess_ratio,
+        cp_mupf_stage_max_iters=args.cp_mupf_stage_max_iters,
+        cp_mupf_min_pairs=args.cp_mupf_min_pairs,
+        cp_mupf_cp_n_groups=args.cp_mupf_cp_n_groups,
+        cp_mupf_slip_gate_enabled=not args.disable_cp_mupf_slip_gate,
+        cp_mupf_slip_max_delta_cycles=args.cp_mupf_slip_max_delta_cycles,
+        cp_mupf_slip_max_dt_s=args.cp_mupf_slip_max_dt_s,
+        cp_mupf_resample_before_stage=bool(args.cp_mupf_resample_before_stage),
         dd_systems=dd_systems,
         dd_base_interp=bool(args.dd_base_interp),
         dd_min_elevation_deg=args.dd_min_elevation_deg,
@@ -7517,6 +7901,20 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_rbpf_velocity_kf=True,
             enable_dd_carrier_afv=True,
             method_label="RBPF-velKF+DD+gate",
+        ))
+    # WP23a: Suzuki-style DD-PR + DD-CP-AFV multiple-update (MUPF) schedule
+    # on top of the WP22b winner (rbpf+dd+gate). ``enable_dd_carrier_afv``
+    # is explicitly turned off here -- ``enable_cp_mupf`` takes over the
+    # DD-carrier weighting (mutually exclusive at the call site) with the
+    # two-stage tempered schedule instead of the single-shot call.
+    if "rbpf+dd+cp+gate" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=False,
+            enable_cp_mupf=True,
+            method_label="RBPF-velKF+DD+CP-MUPF+gate",
         ))
     if "rbpf+dd+gate+pu" in args.methods:
         variant_kwargs = {**base, **aaa_gate}
@@ -10011,7 +10409,7 @@ def main() -> None:
         default="pf,pf+pu,rbpf,rbpf+pu",
         help=(
             "Comma-separated subset of {pf, pf+pu, rbpf, rbpf+pu, pf+dd, "
-            "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+gate+pu, "
+            "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+cp+gate, rbpf+dd+gate+pu, "
             "rbpf+dd+pu+tdcp, rbpf+dd+gate+pu+tdcp, "
             "rbpf+dd+pu+bridge, rbpf+dd+gate+pu+bridge, "
             "rbpf+dd+dopq+pu, rbpf+dd+dopq+pu+bridge, "
@@ -10040,6 +10438,70 @@ def main() -> None:
                         help="Min common rover/base sats to attempt DD (default 4)")
     parser.add_argument("--dd-min-pairs-update", type=int, default=3,
                         help="Min DD pairs required to apply pf.update_dd_carrier_afv (default 3)")
+    parser.add_argument(
+        "--cp-mupf-dd-pr-sigma-m", type=float, default=5.0, dest="cp_mupf_dd_pr_sigma_m",
+        help=(
+            "WP23a MUPF stage (i): DD-pseudorange sigma [m] (default 5.0, "
+            "inherited from --fgo-dd-pr-sigma-m's tc_fgo/rbpf_fgo default)."
+        ),
+    )
+    parser.add_argument(
+        "--cp-mupf-pr-stage-target-ess-ratio", type=float, default=0.10,
+        dest="cp_mupf_pr_stage_target_ess_ratio",
+        help="WP23a MUPF stage (i) target post-tempering ESS/N (default 0.10).",
+    )
+    parser.add_argument(
+        "--cp-mupf-dd-cp-sigma-sequence-cycles", type=str, default="2.0,0.5,0.05",
+        dest="cp_mupf_dd_cp_sigma_sequence_cycles",
+        help=(
+            "WP23a MUPF stage (ii): comma-separated coarse-to-fine DD-carrier "
+            "AFV sigma sequence [cycles] (default 2.0,0.5,0.05 -- reused from "
+            "the validated gnss_gpu.pf_smoother_config.MupfConfig default)."
+        ),
+    )
+    parser.add_argument(
+        "--cp-mupf-cp-stage-target-ess-ratio", type=float, default=0.10,
+        dest="cp_mupf_cp_stage_target_ess_ratio",
+        help="WP23a MUPF stage (ii) target post-tempering ESS/N per sigma step (default 0.10).",
+    )
+    parser.add_argument(
+        "--cp-mupf-stage-max-iters", type=int, default=20, dest="cp_mupf_stage_max_iters",
+        help="WP23a MUPF per-stage tempering bisection iterations (default 20).",
+    )
+    parser.add_argument(
+        "--cp-mupf-min-pairs", type=int, default=3, dest="cp_mupf_min_pairs",
+        help="WP23a MUPF: min DD pairs required to attempt a given stage's update (default 3).",
+    )
+    parser.add_argument(
+        "--cp-mupf-cp-n-groups", type=int, default=1, dest="cp_mupf_cp_n_groups",
+        help=(
+            "WP23a MUPF stage (ii): split DD-CP pairs round-robin into this "
+            "many sequential sub-updates per sigma step (default 1 = off; "
+            "the spec's documented fallback if a single CP update is still "
+            "too sharp)."
+        ),
+    )
+    parser.add_argument(
+        "--disable-cp-mupf-slip-gate", action="store_true",
+        help="WP23a: disable the epoch-to-epoch DD-carrier phase continuity (cycle-slip proxy) gate.",
+    )
+    parser.add_argument(
+        "--cp-mupf-slip-max-delta-cycles", type=float, default=2.0,
+        dest="cp_mupf_slip_max_delta_cycles",
+        help="WP23a cycle-slip proxy: max tolerated |delta DD-carrier cycles| between consecutive epochs (default 2.0).",
+    )
+    parser.add_argument(
+        "--cp-mupf-slip-max-dt-s", type=float, default=2.0, dest="cp_mupf_slip_max_dt_s",
+        help="WP23a cycle-slip proxy: max epoch gap [s] over which continuity is checked (default 2.0).",
+    )
+    parser.add_argument(
+        "--cp-mupf-resample-before-stage", action="store_true",
+        help=(
+            "WP23a diagnostic: resample-if-needed before, not just after, "
+            "each MUPF stage's update (root-cause of the DD-PR stage's "
+            "measured alpha=0.0 inertness -- see WP23A_REPORT.md)."
+        ),
+    )
     parser.add_argument("--dd-systems", type=str, default="G,E,J,C",
                         help="Constellations used for DD (GLONASS skipped, default G,E,J,C)")
     parser.add_argument("--dd-base-interp", action="store_true",
@@ -10597,8 +11059,8 @@ def main() -> None:
         args.rtkdiag_candidate_block_labels_by_run
     )
 
-    any_dd = any(v.enable_dd_carrier_afv for v in variants)
-    any_dd_pr = any(v.enable_dd_pr_ls_anchor for v in variants)
+    any_dd = any(v.enable_dd_carrier_afv or v.enable_cp_mupf for v in variants)
+    any_dd_pr = any(v.enable_dd_pr_ls_anchor or v.enable_cp_mupf for v in variants)
     any_dd_for_gate = any(
         (v.enable_rbpf_velocity_kf and v.rbpf_kf_gate_min_dd_pairs is not None)
         for v in variants
@@ -11166,14 +11628,23 @@ def main() -> None:
                     rtkdiag_candidate_emit_mode=str(args.rtkdiag_candidate_force_emit_mode),
                 )
             print(f"  [{variant.method_label}] running ...", flush=True)
-            need_dd_for_variant = variant.enable_dd_carrier_afv or variant.enable_dd_pr_ls_anchor or (
-                variant.enable_rbpf_velocity_kf
-                and variant.rbpf_kf_gate_min_dd_pairs is not None
+            need_dd_for_variant = (
+                variant.enable_dd_carrier_afv
+                or variant.enable_dd_pr_ls_anchor
+                or variant.enable_cp_mupf
+                or (
+                    variant.enable_rbpf_velocity_kf
+                    and variant.rbpf_kf_gate_min_dd_pairs is not None
+                )
             )
             dd_for_variant = dd_computer if need_dd_for_variant else None
             dd_pr_for_variant = (
                 dd_pr_computer
-                if (variant.enable_fgo_lambda or variant.enable_dd_pr_ls_anchor)
+                if (
+                    variant.enable_fgo_lambda
+                    or variant.enable_dd_pr_ls_anchor
+                    or variant.enable_cp_mupf
+                )
                 else None
             )
             hybrid_for_variant = hybrid_pos_run if variant.enable_hybrid_pu else None
@@ -11437,6 +11908,12 @@ def main() -> None:
                 "doppler_prefit_gate_mps": float(variant.doppler_prefit_gate_mps),
                 "doppler_prefit_gate_min_sats": int(variant.doppler_prefit_gate_min_sats),
                 "dd_carrier_afv": int(variant.enable_dd_carrier_afv),
+                "cp_mupf": int(variant.enable_cp_mupf),
+                "cp_mupf_dd_pr_sigma_m": float(variant.cp_mupf_dd_pr_sigma_m),
+                "cp_mupf_dd_cp_sigma_sequence_cycles": ",".join(
+                    str(s) for s in variant.cp_mupf_dd_cp_sigma_sequence_cycles
+                ),
+                "cp_mupf_cp_n_groups": int(variant.cp_mupf_cp_n_groups),
                 "dd_min_elevation_deg": float(variant.dd_min_elevation_deg),
                 "dd_min_snr": float(variant.dd_min_snr),
                 "dd_keep_best": int(variant.dd_keep_best),
@@ -11497,6 +11974,49 @@ def main() -> None:
                 "dd_epochs_attempted": int(dd_stats.epochs_attempted),
                 "dd_epochs_applied": int(dd_stats.epochs_applied),
                 "dd_pairs_total": int(dd_stats.pairs_total),
+                # WP23a: MUPF per-stage diagnostics (0/NaN when enable_cp_mupf
+                # is off -- the single-shot dd_stats.* fields above already
+                # cover that case).
+                "mupf_pr_epochs_applied": int(dd_stats.mupf_pr_epochs_applied),
+                "mupf_pr_pairs_total": int(dd_stats.mupf_pr_pairs_total),
+                "mupf_pr_resample_rate": (
+                    float(dd_stats.mupf_pr_resample_count) / dd_stats.mupf_pr_epochs_applied
+                    if dd_stats.mupf_pr_epochs_applied else float("nan")
+                ),
+                "mupf_pr_mean_alpha": (
+                    dd_stats.mupf_pr_alpha_sum / dd_stats.mupf_pr_epochs_applied
+                    if dd_stats.mupf_pr_epochs_applied else float("nan")
+                ),
+                "mupf_pr_mean_post_ess_ratio": (
+                    dd_stats.mupf_pr_post_ratio_sum / dd_stats.mupf_pr_epochs_applied
+                    if dd_stats.mupf_pr_epochs_applied else float("nan")
+                ),
+                "mupf_cp_epochs_applied": int(dd_stats.mupf_cp_epochs_applied),
+                "mupf_cp_pairs_total": int(dd_stats.mupf_cp_pairs_total),
+                "mupf_cp_stage_calls": int(dd_stats.mupf_cp_stage_calls),
+                "mupf_cp_resample_rate": (
+                    float(dd_stats.mupf_cp_resample_count) / dd_stats.mupf_cp_epochs_applied
+                    if dd_stats.mupf_cp_epochs_applied else float("nan")
+                ),
+                "mupf_cp_mean_alpha": (
+                    dd_stats.mupf_cp_alpha_sum / dd_stats.mupf_cp_epochs_applied
+                    if dd_stats.mupf_cp_epochs_applied else float("nan")
+                ),
+                "mupf_cp_mean_post_ess_ratio": (
+                    dd_stats.mupf_cp_post_ratio_sum / dd_stats.mupf_cp_epochs_applied
+                    if dd_stats.mupf_cp_epochs_applied else float("nan")
+                ),
+                "mupf_cp_slips_flagged_total": int(dd_stats.mupf_cp_slips_flagged_total),
+                "mupf_cp_slip_epochs": int(dd_stats.mupf_cp_slip_epochs),
+                "mupf_cloud_spread_mean_m": (
+                    dd_stats.mupf_cloud_spread_sum_m / dd_stats.mupf_cloud_spread_epochs
+                    if dd_stats.mupf_cloud_spread_epochs else float("nan")
+                ),
+                "mupf_cloud_spread_over_half_lambda_mean": (
+                    dd_stats.mupf_cloud_spread_over_half_lambda_sum
+                    / dd_stats.mupf_cloud_spread_epochs
+                    if dd_stats.mupf_cloud_spread_epochs else float("nan")
+                ),
                 "rbpf_kf_gate_active": int(variant_gate_active),
                 "rbpf_kf_gate_min_dd_pairs": (
                     -1 if variant.rbpf_kf_gate_min_dd_pairs is None
@@ -11837,13 +12357,24 @@ def main() -> None:
                     100.0 * float(row["honest_pass_m"]) / run_total
                 )
             dd_msg = ""
-            if variant.enable_dd_carrier_afv:
+            if variant.enable_dd_carrier_afv or variant.enable_cp_mupf:
                 applied = dd_stats.epochs_applied
                 attempted = max(dd_stats.epochs_attempted, 1)
                 avg_pairs = dd_stats.pairs_total / max(applied, 1)
                 dd_msg = (
                     f", DD applied {applied}/{dd_stats.epochs_attempted} "
                     f"({100.0 * applied / attempted:.1f}%, avg pairs={avg_pairs:.1f})"
+                )
+            if variant.enable_cp_mupf:
+                mupf_cloud = (
+                    dd_stats.mupf_cloud_spread_over_half_lambda_sum
+                    / max(dd_stats.mupf_cloud_spread_epochs, 1)
+                )
+                dd_msg += (
+                    f", MUPF pr={dd_stats.mupf_pr_epochs_applied}/{dd_stats.epochs_attempted}"
+                    f" cp={dd_stats.mupf_cp_epochs_applied}/{dd_stats.epochs_attempted}"
+                    f" slips={dd_stats.mupf_cp_slips_flagged_total}"
+                    f" spread/halfLambda={mupf_cloud:.2f}"
                 )
             pr_msg = ""
             if variant.enable_pr_gmm:
