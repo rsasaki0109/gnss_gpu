@@ -291,6 +291,7 @@ class AmbiguityBasinParticleFilter:
         min_fixed_ambiguities: int = 6,
         diversity_reserve_fraction: float = 0.0,
         diversity_radius_m: float = 1.0,
+        dedup_position_radius_m: float = np.inf,
     ) -> None:
         self.max_basins = int(max_basins)
         self.fix_gamma_threshold = float(fix_gamma_threshold)
@@ -298,10 +299,13 @@ class AmbiguityBasinParticleFilter:
         self.min_fixed_ambiguities = int(min_fixed_ambiguities)
         self.diversity_reserve_fraction = float(diversity_reserve_fraction)
         self.diversity_radius_m = float(diversity_radius_m)
+        self.dedup_position_radius_m = float(dedup_position_radius_m)
         if not 0.0 <= self.diversity_reserve_fraction < 1.0:
             raise ValueError("diversity_reserve_fraction must be in [0, 1)")
         if not np.isfinite(self.diversity_radius_m) or self.diversity_radius_m <= 0.0:
             raise ValueError("diversity_radius_m must be finite and positive")
+        if np.isnan(self.dedup_position_radius_m) or self.dedup_position_radius_m <= 0.0:
+            raise ValueError("dedup_position_radius_m must be positive")
         self.basins: list[IntegerBasin] = []
         self.epoch = -1
         self._ids = count()
@@ -566,31 +570,53 @@ class AmbiguityBasinParticleFilter:
         for basin in self.basins:
             grouped.setdefault(basin.assignment, []).append(basin)
         merged: list[IntegerBasin] = []
-        for assignment, group in grouped.items():
-            if len(group) == 1:
-                merged.append(group[0])
-                continue
-            log_weights = np.asarray([basin.log_weight for basin in group])
-            total_log_weight = _logsumexp(log_weights)
-            weights = np.exp(log_weights - total_log_weight)
-            mean = sum(w * basin.conditional.mean for w, basin in zip(weights, group))
-            covariance = np.zeros((6, 6), dtype=np.float64)
-            for weight, basin in zip(weights, group):
-                delta = basin.conditional.mean - mean
-                covariance += weight * (basin.conditional.covariance + np.outer(delta, delta))
-            representative = max(group, key=lambda basin: basin.log_weight)
-            representative.assignment = assignment
-            representative.log_weight = float(total_log_weight)
-            representative.conditional = BasinKalmanState(
-                mean, covariance, representative.conditional.accel_process_sigma_mps2
+        for assignment, assignment_group in grouped.items():
+            remaining = sorted(
+                assignment_group, key=lambda basin: basin.log_weight, reverse=True
             )
-            representative.cumulative_log_marginal = float(
-                sum(w * b.cumulative_log_marginal for w, b in zip(weights, group))
-            )
-            representative.epoch_log_marginal = float(
-                sum(w * b.epoch_log_marginal for w, b in zip(weights, group))
-            )
-            merged.append(representative)
+            groups: list[list[IntegerBasin]] = []
+            while remaining:
+                center = remaining[0].conditional.mean[:3]
+                group = [
+                    basin
+                    for basin in remaining
+                    if np.linalg.norm(basin.conditional.mean[:3] - center)
+                    <= self.dedup_position_radius_m
+                ]
+                group_ids = {basin.basin_id for basin in group}
+                remaining = [
+                    basin for basin in remaining if basin.basin_id not in group_ids
+                ]
+                groups.append(group)
+            for group in groups:
+                if len(group) == 1:
+                    merged.append(group[0])
+                    continue
+                log_weights = np.asarray([basin.log_weight for basin in group])
+                total_log_weight = _logsumexp(log_weights)
+                weights = np.exp(log_weights - total_log_weight)
+                mean = sum(w * basin.conditional.mean for w, basin in zip(weights, group))
+                covariance = np.zeros((6, 6), dtype=np.float64)
+                for weight, basin in zip(weights, group):
+                    delta = basin.conditional.mean - mean
+                    covariance += weight * (
+                        basin.conditional.covariance + np.outer(delta, delta)
+                    )
+                representative = max(group, key=lambda basin: basin.log_weight)
+                representative.assignment = assignment
+                representative.log_weight = float(total_log_weight)
+                representative.conditional = BasinKalmanState(
+                    mean,
+                    covariance,
+                    representative.conditional.accel_process_sigma_mps2,
+                )
+                representative.cumulative_log_marginal = float(
+                    sum(w * b.cumulative_log_marginal for w, b in zip(weights, group))
+                )
+                representative.epoch_log_marginal = float(
+                    sum(w * b.epoch_log_marginal for w, b in zip(weights, group))
+                )
+                merged.append(representative)
         self.basins = merged
 
     def _normalize_and_cap(self) -> None:

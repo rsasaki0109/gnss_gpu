@@ -63,3 +63,8 @@ bank immediately after pruning, while 14/40 anchors never generate a correct
 proposal. WP28 therefore needs both source-aware cap allocation and a new
 generation source. The fixed recall and survival gates remain unmet, and the
 trusted output path remains unchanged.
+
+A 1 m spatial deduplication radius was also tested and is trajectory-identical
+to unrestricted assignment deduplication, with the same 134/200 recall and
+8/26 supplied-then-absent anchors. This rejects cross-position moment merging
+as the active bottleneck for this arm.

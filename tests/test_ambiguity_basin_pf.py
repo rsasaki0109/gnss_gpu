@@ -90,6 +90,18 @@ def test_duplicate_assignments_merge_mass_and_conditionals():
     assert pf.basins[0].conditional.covariance[0, 0] > 1.0
 
 
+def test_duplicate_assignments_preserve_distant_position_modes_when_requested():
+    assignment = {_versioned_key(): 7}
+    pf = AmbiguityBasinParticleFilter(dedup_position_radius_m=1.0)
+    pf.spawn([assignment, assignment], [_conditional(0.0), _conditional(2.0)])
+
+    assert len(pf.basins) == 2
+    np.testing.assert_allclose(
+        sorted(basin.conditional.mean[0] for basin in pf.basins), [0.0, 2.0]
+    )
+    assert np.isclose(sum(np.exp(basin.log_weight) for basin in pf.basins), 1.0)
+
+
 def test_release_removes_generation_and_deduplicates_result():
     key = _versioned_key()
     pf = AmbiguityBasinParticleFilter()

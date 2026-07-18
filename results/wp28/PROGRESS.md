@@ -88,3 +88,12 @@ between generation (14/40 anchors have no correct proposal) and retention
 (8/26 generated-correct anchors are immediately absent). The next implementation
 must preserve proposal-source coverage under a fixed cap; another unstructured
 increase in basin count is not justified.
+
+### Spatial deduplication check
+
+An opt-in 1 m deduplication radius preserves distinct conditional-position
+modes that share the same integer assignment. On the age-50 arm it is exactly
+neutral: live recall remains 134/200, supplied-then-absent remains 8/26, and
+the trajectory hash is unchanged. Cross-position Gaussian merging is therefore
+not the measured loss mechanism in this window. The option remains disabled by
+default; source-aware fixed-cap allocation is still the next diagnostic.

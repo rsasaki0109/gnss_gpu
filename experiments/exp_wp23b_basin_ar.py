@@ -87,6 +87,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--max-basins", type=int, default=128)
     parser.add_argument("--basin-diversity-reserve-fraction", type=float, default=0.0)
     parser.add_argument("--basin-diversity-radius-m", type=float, default=1.0)
+    parser.add_argument("--basin-dedup-position-radius-m", type=float, default=float("inf"))
     parser.add_argument("--birth-mass", type=float, default=0.01)
     parser.add_argument("--sigma-dd-pr-m", type=float, default=5.0)
     parser.add_argument(
@@ -254,6 +255,7 @@ def main(argv: list[str] | None = None) -> None:
         min_fixed_ambiguities=int(args.subset_size),
         diversity_reserve_fraction=float(args.basin_diversity_reserve_fraction),
         diversity_radius_m=float(args.basin_diversity_radius_m),
+        dedup_position_radius_m=float(args.basin_dedup_position_radius_m),
     )
     policy_config = TrustedFixPolicyConfig(
         gamma_threshold=float(args.fix_gamma),
@@ -1273,6 +1275,11 @@ def main(argv: list[str] | None = None) -> None:
             args.basin_diversity_reserve_fraction
         ),
         "basin_diversity_radius_m": float(args.basin_diversity_radius_m),
+        "basin_dedup_position_radius_m": (
+            float(args.basin_dedup_position_radius_m)
+            if np.isfinite(float(args.basin_dedup_position_radius_m))
+            else None
+        ),
         "fix_gamma_threshold": float(args.fix_gamma),
         "fix_min_streak": int(args.fix_streak),
         "fix_float_consistency_m": float(args.fix_consistency_m),
