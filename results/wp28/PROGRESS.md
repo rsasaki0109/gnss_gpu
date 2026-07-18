@@ -170,3 +170,10 @@ to 32/200 (16%). Wrong completion basins feed the position-history bank and
 degrade later proposals. Direct conditional completion is rejected. Any
 follow-up must first run as a shadow proposal source with no PF/history
 feedback, and earn a recall gain before receiving nonzero mass.
+
+The shadow audit is now complete. With the 70.5% best arm frozen, completion
+finds a correct candidate on 11/39 eligible anchors, but every one is already a
+correct proposal anchor in the control. Incremental recovery is **0/14 missing
+anchors**. The shadow trajectory is hash-identical to the best arm. Conditional
+completion is therefore fully rejected: it adds no recall where needed and its
+direct insertion creates harmful feedback.

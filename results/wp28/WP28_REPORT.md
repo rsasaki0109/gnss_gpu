@@ -99,3 +99,8 @@ partial-assignment completion arm was tested and rejected: direct insertion
 reduces live recall to 32/200 and proposal recall to 9/40. Completion proposals
 must remain shadow-only until their independent oracle recall is established;
 they are not eligible for the recovery bank or trusted output.
+
+Shadow-only replay confirms the rejection without feedback confounding. It is
+correct on 11/39 eligible anchors, but recovers zero of the best arm's 14
+missing anchors; all 11 overlap already-supplied epochs. The shadow and control
+trajectories are bit-identical. No completion proposal receives PF mass.

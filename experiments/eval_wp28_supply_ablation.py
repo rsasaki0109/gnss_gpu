@@ -50,6 +50,9 @@ def _summarize(path: Path) -> dict[str, object]:
         reset_age_by_epoch[epoch] = (
             None if last_reset_epoch is None else epoch - last_reset_epoch
         )
+    shadow_rows = [
+        row for row in rows if int(row.get("completion_shadow_candidates", "0")) > 0
+    ]
     spans = _true_spans(live)
     return {
         "epochs": len(rows),
@@ -88,6 +91,16 @@ def _summarize(path: Path) -> dict[str, object]:
         "maximum_assignment_candidates": max(
             int(row.get("n_respawn_assignment_candidates", "0")) for row in rows
         ),
+        "completion_shadow_anchor_epochs": len(shadow_rows),
+        "completion_shadow_correct_anchor_epochs": sum(
+            float(row.get("completion_shadow_oracle_min_error_m", "nan")) < 0.5
+            for row in shadow_rows
+        ),
+        "completion_shadow_correct_epochs": [
+            int(row.get("epoch", -1))
+            for row in shadow_rows
+            if float(row.get("completion_shadow_oracle_min_error_m", "nan")) < 0.5
+        ],
         "declared_fix_epochs": sum(row["fix"] == "1" for row in rows),
         "false_fix_epochs": sum(
             row["fix"] == "1" and float(row["output_error_m"]) >= 0.5

@@ -179,6 +179,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--ddpr-respawn-assignment-completion-top-k", type=int, default=0)
     parser.add_argument("--ddpr-respawn-assignment-completion-min-stable", type=int, default=4)
+    parser.add_argument(
+        "--ddpr-respawn-assignment-completion-shadow-only", action="store_true"
+    )
     parser.add_argument("--out-diagnostics", type=Path, default=Path("results/wp23b/csv/basin_run2_epochs.csv"))
     parser.add_argument("--out-summary", type=Path, default=Path("results/wp23b/csv/basin_run2_summary.json"))
     parser.add_argument("--out-trajectory", type=Path, default=Path("results/wp23b/pos/basin_run2.csv"))
@@ -355,6 +358,8 @@ def main(argv: list[str] | None = None) -> None:
     n_gamma_fix = 0
     n_consistency_reject = 0
     n_respawn_epochs = 0
+    n_completion_shadow_epochs = 0
+    n_completion_shadow_correct = 0
     n_float_resets = 0
     n_temporal_map_sub50 = 0
     n_temporal_map_disagreement = 0
@@ -551,6 +556,8 @@ def main(argv: list[str] | None = None) -> None:
         n_respawn_assignment_candidates = 0
         respawn_oracle_min_error = float("nan")
         respawn_oracle_rank = -1
+        completion_shadow_candidates = 0
+        completion_shadow_oracle_min_error = float("nan")
         if dd_cp is not None and int(dd_cp.n_dd) >= int(args.subset_size):
             current_pairs = {
                 (str(ref), str(sat)) for ref, sat in zip(dd_cp.ref_sat_ids, dd_cp.sat_ids)
@@ -619,6 +626,7 @@ def main(argv: list[str] | None = None) -> None:
             conditionals = []
             respawn_source_ids: list[str] = []
             all_respawn_residuals: list[float] = []
+            completion_shadow_states: list[BasinKalmanState] = []
             if recovery_assignment_bank is not None:
                 assignment_seed = ddpr_centered_ambiguity_seed(
                     dd_cp,
@@ -651,9 +659,30 @@ def main(argv: list[str] | None = None) -> None:
                             previous = completed.get(canonical)
                             if previous is None or distance < previous[1]:
                                 completed[canonical] = (completed_assignment, distance)
-                    replay_proposals = sorted(
+                    completion_proposals = sorted(
                         completed.values(), key=lambda item: item[1]
                     )
+                    if args.ddpr_respawn_assignment_completion_shadow_only:
+                        replay_proposals = [
+                            (assignment, float("nan"))
+                            for assignment in recovery_assignment_bank.compatible_assignments(
+                                active_versioned,
+                                assignment_seed.keys,
+                            )
+                        ]
+                        for assignment, _distance in completion_proposals:
+                            shadow_keys = tuple(key[0] for key in assignment)
+                            shadow_integers = np.asarray(
+                                [assignment[key] for key in assignment], dtype=np.float64
+                            )
+                            position, covariance, _ = condition_respawn_position(
+                                assignment_seed, shadow_keys, shadow_integers
+                            )
+                            completion_shadow_states.append(
+                                BasinKalmanState.from_position(position, covariance)
+                            )
+                    else:
+                        replay_proposals = completion_proposals
                 else:
                     replay_proposals = [
                         (assignment, float("nan"))
@@ -759,6 +788,20 @@ def main(argv: list[str] | None = None) -> None:
                     )
                     respawn_oracle_rank = int(np.argmin(candidate_errors)) + 1
                     respawn_oracle_min_error = float(np.min(candidate_errors))
+                if epoch_ref is not None and completion_shadow_states:
+                    shadow_errors = np.asarray(
+                        [
+                            float(np.linalg.norm(state.mean[:3] - epoch_ref))
+                            for state in completion_shadow_states
+                        ],
+                        dtype=np.float64,
+                    )
+                    completion_shadow_candidates = len(completion_shadow_states)
+                    completion_shadow_oracle_min_error = float(np.min(shadow_errors))
+                    n_completion_shadow_epochs += 1
+                    n_completion_shadow_correct += int(
+                        completion_shadow_oracle_min_error < 0.5
+                    )
                 if assignments:
                     basin_pf.spawn(
                         assignments,
@@ -1352,6 +1395,8 @@ def main(argv: list[str] | None = None) -> None:
                 "n_respawn_assignment_candidates": n_respawn_assignment_candidates,
                 "respawn_oracle_min_error_m": respawn_oracle_min_error,
                 "respawn_oracle_rank": int(respawn_oracle_rank),
+                "completion_shadow_candidates": completion_shadow_candidates,
+                "completion_shadow_oracle_min_error_m": completion_shadow_oracle_min_error,
                 "n_dd_pr": 0 if dd_pr is None else int(dd_pr.n_dd),
                 "n_dd_cp": 0 if dd_cp is None else int(dd_cp.n_dd),
             }
@@ -1414,6 +1459,11 @@ def main(argv: list[str] | None = None) -> None:
         "ddpr_respawn_assignment_completion_min_stable": int(
             args.ddpr_respawn_assignment_completion_min_stable
         ),
+        "ddpr_respawn_assignment_completion_shadow_only": bool(
+            args.ddpr_respawn_assignment_completion_shadow_only
+        ),
+        "completion_shadow_epochs": int(n_completion_shadow_epochs),
+        "completion_shadow_correct_epochs": int(n_completion_shadow_correct),
         "ddpr_respawn_epochs": int(n_respawn_epochs),
         "temporal_lineage_enabled": bool(args.enable_temporal_lineage),
         "temporal_map_disagreement_epochs": int(n_temporal_map_disagreement),
