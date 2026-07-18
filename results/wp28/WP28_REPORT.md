@@ -49,3 +49,17 @@ and an explicit compute budget. Candidate recall must reach at least 90%,
 conditional survival p90 at least 5 seconds, and incorrect holdover must remain
 zero before recovery can advance. Candidate ranking and safety calibration are
 separate later gates; this increment does not authorize production output.
+
+## Round-2 addendum
+
+Longer causal memory is modestly better than more simultaneous spatial seeds.
+An age-50 history bank reaches 134/200 live epochs and 26/40 correct proposal
+anchors, versus 122/200 and 24/40 for the combined axis/history arm. Lambda
+integer-residual priors reach 133/200, so scalar proposal reweighting does not
+solve retention.
+
+Eight of the age-50 arm's 26 correct proposal anchors are absent from the live
+bank immediately after pruning, while 14/40 anchors never generate a correct
+proposal. WP28 therefore needs both source-aware cap allocation and a new
+generation source. The fixed recall and survival gates remain unmet, and the
+trusted output path remains unchanged.

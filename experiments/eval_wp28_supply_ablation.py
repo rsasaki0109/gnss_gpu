@@ -34,12 +34,22 @@ def _summarize(path: Path) -> dict[str, object]:
         if np.isfinite(float(row["respawn_oracle_min_error_m"]))
         and float(row["respawn_oracle_min_error_m"]) < 0.5
     ]
+    proposal_pruned = [
+        row
+        for row in proposal_correct
+        if not np.isfinite(float(row["basin_oracle_min_error_m"]))
+        or float(row["basin_oracle_min_error_m"]) >= 0.5
+    ]
     spans = _true_spans(live)
     return {
         "epochs": len(rows),
         "oracle_live_sub50cm_epochs": sum(live),
         "oracle_live_pct": 100.0 * sum(live) / max(len(rows), 1),
         "proposal_correct_anchor_epochs": len(proposal_correct),
+        "proposal_correct_anchor_pct": (
+            100.0 * len(proposal_correct) / max(len(triggered), 1)
+        ),
+        "proposal_correct_but_not_live_anchor_epochs": len(proposal_pruned),
         "respawn_anchor_epochs": len(triggered),
         "proposal_correct_ranks": [
             int(row["respawn_oracle_rank"]) for row in proposal_correct

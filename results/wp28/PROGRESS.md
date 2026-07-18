@@ -66,3 +66,25 @@ budget, then test longer history age and source-aware retention. Advance only
 if frozen Nagoya run3 candidate recall approaches 90% without changing output
 or FIX. Once supply passes, redesign absolute ranking for a broad candidate
 bank before any safety calibration or Tokyo headline run.
+
+## 2026-07-18 — recovery round 2
+
+Two frozen follow-up arms tested whether more spatial sources or longer causal
+memory closes the recall gap. Combining the 5 m covariance-axis shell with the
+32-entry history bank produces 24/40 correct proposal anchors, but live recall
+falls to 122/200 because the 624 proposals compete for the same 512 slots.
+More breadth without source-aware retention is therefore counterproductive.
+
+Extending history age from 25 to 50 epochs, with proposal count fixed at 528,
+improves correct proposal anchors from 23/40 to 26/40 and live recall from
+129/200 to **134/200 (67.0%)**. It does not improve survival: p90 falls from
+23.3 to 17.6 epochs. Integer-search residual priors produce 133/200 and do not
+materially change that verdict.
+
+The new supplied-then-pruned audit finds that 8 of the 26 correct age-50
+proposal anchors have no live sub-50 cm basin immediately after pruning.
+Correct proposals reach rank 509. The remaining gap is now quantitatively split
+between generation (14/40 anchors have no correct proposal) and retention
+(8/26 generated-correct anchors are immediately absent). The next implementation
+must preserve proposal-source coverage under a fixed cap; another unstructured
+increase in basin count is not justified.
