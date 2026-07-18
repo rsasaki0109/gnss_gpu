@@ -73,3 +73,22 @@ A 90% round-robin reserve across current position-proposal sources is also
 trajectory-identical and leaves every recall/pruning metric unchanged. The
 next implementation target is generation-aware replay of historical ambiguity
 assignments; neither spatial deduplication nor source quotas is promoted.
+
+## Assignment-replay addendum
+
+Generation-versioned ambiguity replay is now implemented and causally audited.
+It rejects slip-invalid generations, intersects assignments with current DD
+carrier support, requires eight integers, and reconditions position from the
+current DDPR guard.
+
+The best 416-proposal allocation (eight historical positions × top-32 plus 128
+assignment replays) reaches 141/200 live sub-50 cm epochs. It improves the
+position-only age-50 arm by seven epochs while reducing immediate loss of a
+correct proposal from 8/26 to 1/26. Longest survival rises from 27 to 80 epochs
+and p90 from 3.52 to 10.5 seconds, passing the survival gate.
+
+The 90% recall gate remains unmet at 70.5%, and no candidate is connected to
+output or FIX. A wider 256-assignment bank and a deeper top-64/four-position
+allocation both regress. The next audit must explain the 14/40 DD anchors where
+no correct proposal is generated; retention is no longer the dominant failure
+for the best arm.

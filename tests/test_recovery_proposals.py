@@ -2,9 +2,17 @@ import numpy as np
 import pytest
 
 from gnss_gpu.recovery_proposals import (
+    RecoveryAssignmentBank,
     RecoveryPositionBank,
     covariance_axis_position_seeds,
 )
+
+
+def _assignment(value: int, generation: int = 0):
+    return {
+        (("G01", f"G{sat:02d}", 190293673), generation): value + sat
+        for sat in range(2, 10)
+    }
 
 
 def test_covariance_axis_seeds_are_deterministic_and_symmetric():
@@ -46,3 +54,32 @@ def test_recovery_position_bank_keeps_distinct_history_until_expiry():
     assert any(position[0] == 5.0 for position in bank.positions)
     bank.update(3, np.asarray([[0.1, 0.0, 0.0]]), np.asarray([0.0]))
     assert all(position[0] != 5.0 for position in bank.positions)
+
+
+def test_assignment_bank_projects_only_exact_active_generations():
+    bank = RecoveryAssignmentBank(
+        max_assignments=4, max_age_epochs=10, min_assignment_size=8
+    )
+    bank.update(0, [_assignment(3), _assignment(4)], [0.0, -1.0])
+    active = set(_assignment(0))
+    observed = {key[0] for key in active}
+    compatible = bank.compatible_assignments(active, observed)
+    assert len(compatible) == 2
+    assert all(len(assignment) == 8 for assignment in compatible)
+
+    slipped = {((raw_key), 1) for raw_key, _generation in active}
+    assert bank.compatible_assignments(slipped, observed) == ()
+
+
+def test_assignment_bank_expires_and_deduplicates():
+    bank = RecoveryAssignmentBank(
+        max_assignments=2, max_age_epochs=2, min_assignment_size=8
+    )
+    bank.update(0, [_assignment(1), _assignment(1), _assignment(2)], [0.0, 1.0, -1.0])
+    active = set(_assignment(0))
+    observed = {key[0] for key in active}
+    assert len(bank.compatible_assignments(active, observed)) == 2
+    bank.update(3, [_assignment(3)], [0.0])
+    compatible = bank.compatible_assignments(active, observed)
+    assert len(compatible) == 1
+    assert next(iter(compatible[0].values())) >= 5

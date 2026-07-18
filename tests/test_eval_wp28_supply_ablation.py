@@ -19,13 +19,14 @@ def test_summarize_separates_generated_then_pruned_candidate(tmp_path):
         "n_respawn_candidates_born",
         "n_respawn_position_seeds",
         "n_respawn_history_seeds",
+        "n_respawn_assignment_candidates",
         "fix",
         "output_error_m",
         "integrity_map_error_m",
     ]
     rows = [
-        ["0.8", "1", "0.2", "9", "8", "10", "2", "1", "0", "3", "nan"],
-        ["0.3", "1", "0.1", "2", "8", "10", "2", "1", "0", "2", "0.4"],
+        ["0.8", "1", "0.2", "9", "8", "10", "2", "1", "7", "0", "3", "nan"],
+        ["0.3", "1", "0.1", "2", "8", "10", "2", "1", "5", "0", "2", "0.4"],
     ]
     with path.open("w", newline="") as fh:
         writer = csv.writer(fh)
@@ -35,3 +36,4 @@ def test_summarize_separates_generated_then_pruned_candidate(tmp_path):
     assert summary["proposal_correct_anchor_epochs"] == 2
     assert summary["proposal_correct_anchor_pct"] == 100.0
     assert summary["proposal_correct_but_not_live_anchor_epochs"] == 1
+    assert summary["maximum_assignment_candidates"] == 7

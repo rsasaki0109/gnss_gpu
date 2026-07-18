@@ -55,6 +55,7 @@ from gnss_gpu.rtk_evidence import (  # noqa: E402
     replay_fix_decisions,
 )
 from gnss_gpu.recovery_proposals import (  # noqa: E402
+    RecoveryAssignmentBank,
     RecoveryPositionBank,
     covariance_axis_position_seeds,
 )
@@ -171,6 +172,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--ddpr-respawn-history-seeds", type=int, default=0)
     parser.add_argument("--ddpr-respawn-history-separation-m", type=float, default=1.0)
     parser.add_argument("--ddpr-respawn-history-max-age-epochs", type=int, default=25)
+    parser.add_argument("--ddpr-respawn-assignment-history", type=int, default=0)
+    parser.add_argument(
+        "--ddpr-respawn-assignment-history-max-age-epochs", type=int, default=50
+    )
     parser.add_argument("--out-diagnostics", type=Path, default=Path("results/wp23b/csv/basin_run2_epochs.csv"))
     parser.add_argument("--out-summary", type=Path, default=Path("results/wp23b/csv/basin_run2_summary.json"))
     parser.add_argument("--out-trajectory", type=Path, default=Path("results/wp23b/pos/basin_run2.csv"))
@@ -314,7 +319,6 @@ def main(argv: list[str] | None = None) -> None:
         if int(args.ddpr_respawn_history_seeds) > 0
         else None
     )
-
     times = np.asarray(data["times"], dtype=np.float64)
     respawn_subset_size = (
         int(args.ddpr_respawn_subset_size)
@@ -325,6 +329,15 @@ def main(argv: list[str] | None = None) -> None:
         int(args.ddpr_respawn_top_k)
         if int(args.ddpr_respawn_top_k) > 0
         else int(args.top_k)
+    )
+    recovery_assignment_bank = (
+        RecoveryAssignmentBank(
+            max_assignments=int(args.ddpr_respawn_assignment_history),
+            max_age_epochs=int(args.ddpr_respawn_assignment_history_max_age_epochs),
+            min_assignment_size=int(respawn_subset_size),
+        )
+        if int(args.ddpr_respawn_assignment_history) > 0
+        else None
     )
     basin_ddpr_sigma = (
         float(args.sigma_basin_dd_pr_m)
@@ -532,6 +545,7 @@ def main(argv: list[str] | None = None) -> None:
         n_respawn_candidates = 0
         n_respawn_position_seeds = 0
         n_respawn_history_seeds = 0
+        n_respawn_assignment_candidates = 0
         respawn_oracle_min_error = float("nan")
         respawn_oracle_rank = -1
         if dd_cp is not None and int(dd_cp.n_dd) >= int(args.subset_size):
@@ -602,6 +616,39 @@ def main(argv: list[str] | None = None) -> None:
             conditionals = []
             respawn_source_ids: list[str] = []
             all_respawn_residuals: list[float] = []
+            if recovery_assignment_bank is not None:
+                assignment_seed = ddpr_centered_ambiguity_seed(
+                    dd_cp,
+                    ddpr_guard.mean[:3],
+                    ddpr_guard.covariance[:3, :3],
+                    sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+                )
+                replay_assignments = recovery_assignment_bank.compatible_assignments(
+                    active_versioned,
+                    assignment_seed.keys,
+                )
+                for assignment_index, assignment in enumerate(replay_assignments):
+                    replay_keys = tuple(key[0] for key in assignment)
+                    replay_integers = np.asarray(
+                        [assignment[key] for key in assignment], dtype=np.float64
+                    )
+                    position, covariance, distance = condition_respawn_position(
+                        assignment_seed, replay_keys, replay_integers
+                    )
+                    assignments.append(assignment)
+                    conditionals.append(
+                        BasinKalmanState.from_position(
+                            position,
+                            covariance,
+                            velocity_ecef=ddpr_guard.mean[3:6],
+                            velocity_sigma_mps=1.0,
+                            accel_process_sigma_mps2=3.0,
+                        )
+                    )
+                    respawn_source_ids.append(f"{i}:assignment:{assignment_index}")
+                    all_respawn_residuals.append(float(distance))
+                n_respawn_assignment_candidates = len(replay_assignments)
+            n_replayed_assignments = len(assignments)
             for position_index, respawn_position in enumerate(respawn_positions):
                 respawn_seed = ddpr_centered_ambiguity_seed(
                     dd_cp,
@@ -650,6 +697,14 @@ def main(argv: list[str] | None = None) -> None:
                     respawn_source_ids.append(f"{i}:{position_index}")
                 all_respawn_residuals.extend(
                     float(value) for value in np.asarray(seed_residuals).reshape(-1)
+                )
+            if recovery_assignment_bank is not None:
+                fresh_assignments = assignments[n_replayed_assignments:]
+                fresh_residuals = all_respawn_residuals[n_replayed_assignments:]
+                recovery_assignment_bank.update(
+                    i,
+                    fresh_assignments,
+                    (-0.5 * np.asarray(fresh_residuals, dtype=np.float64)).tolist(),
                 )
             if conditionals:
                 # Diagnostic only: truth never changes candidates, weights,
@@ -1255,6 +1310,7 @@ def main(argv: list[str] | None = None) -> None:
                 "n_respawn_candidates_born": n_respawn_candidates,
                 "n_respawn_position_seeds": n_respawn_position_seeds,
                 "n_respawn_history_seeds": n_respawn_history_seeds,
+                "n_respawn_assignment_candidates": n_respawn_assignment_candidates,
                 "respawn_oracle_min_error_m": respawn_oracle_min_error,
                 "respawn_oracle_rank": int(respawn_oracle_rank),
                 "n_dd_pr": 0 if dd_pr is None else int(dd_pr.n_dd),
@@ -1306,6 +1362,12 @@ def main(argv: list[str] | None = None) -> None:
         ),
         "ddpr_respawn_history_max_age_epochs": int(
             args.ddpr_respawn_history_max_age_epochs
+        ),
+        "ddpr_respawn_assignment_history": int(
+            args.ddpr_respawn_assignment_history
+        ),
+        "ddpr_respawn_assignment_history_max_age_epochs": int(
+            args.ddpr_respawn_assignment_history_max_age_epochs
         ),
         "ddpr_respawn_epochs": int(n_respawn_epochs),
         "temporal_lineage_enabled": bool(args.enable_temporal_lineage),

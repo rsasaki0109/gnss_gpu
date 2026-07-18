@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import TypeAlias
 
 import numpy as np
+
+
+RawAmbiguityKey: TypeAlias = tuple[str, str, int]
+VersionedAmbiguityKey: TypeAlias = tuple[RawAmbiguityKey, int]
+AssignmentItem: TypeAlias = tuple[VersionedAmbiguityKey, int]
 
 
 @dataclass(frozen=True)
@@ -13,6 +19,81 @@ class _BankEntry:
     epoch: int
     position_ecef: np.ndarray
     log_weight: float
+
+
+@dataclass(frozen=True)
+class _AssignmentBankEntry:
+    epoch: int
+    assignment: tuple[AssignmentItem, ...]
+    log_weight: float
+
+
+class RecoveryAssignmentBank:
+    """Bounded causal bank of generation-versioned integer assignments."""
+
+    def __init__(
+        self,
+        max_assignments: int,
+        max_age_epochs: int,
+        min_assignment_size: int,
+    ) -> None:
+        self.max_assignments = int(max_assignments)
+        self.max_age_epochs = int(max_age_epochs)
+        self.min_assignment_size = int(min_assignment_size)
+        if min(self.max_assignments, self.max_age_epochs, self.min_assignment_size) < 1:
+            raise ValueError("assignment bank size, age, and dimension must be positive")
+        self._entries: list[_AssignmentBankEntry] = []
+
+    def update(
+        self,
+        epoch: int,
+        assignments: Iterable[dict[VersionedAmbiguityKey, int]],
+        log_weights: Iterable[float],
+    ) -> None:
+        assignment_list = [
+            tuple(sorted((key, int(value)) for key, value in assignment.items()))
+            for assignment in assignments
+        ]
+        weights = np.asarray(list(log_weights), dtype=np.float64).reshape(-1)
+        if len(assignment_list) != len(weights):
+            raise ValueError("assignments and log_weights must have equal length")
+        if not np.all(np.isfinite(weights)):
+            raise ValueError("assignment bank weights must be finite")
+        candidates = [
+            _AssignmentBankEntry(int(epoch), assignment, float(weight))
+            for assignment, weight in zip(assignment_list, weights)
+            if len(assignment) >= self.min_assignment_size
+        ]
+        candidates.extend(
+            entry
+            for entry in self._entries
+            if int(epoch) - entry.epoch <= self.max_age_epochs
+        )
+        candidates.sort(key=lambda entry: (entry.log_weight, entry.epoch), reverse=True)
+        selected: dict[tuple[AssignmentItem, ...], _AssignmentBankEntry] = {}
+        for entry in candidates:
+            selected.setdefault(entry.assignment, entry)
+            if len(selected) >= self.max_assignments:
+                break
+        self._entries = list(selected.values())
+
+    def compatible_assignments(
+        self,
+        active_versioned_keys: Iterable[VersionedAmbiguityKey],
+        observed_raw_keys: Iterable[RawAmbiguityKey],
+    ) -> tuple[dict[VersionedAmbiguityKey, int], ...]:
+        active = set(active_versioned_keys)
+        observed = set(observed_raw_keys)
+        compatible: dict[tuple[AssignmentItem, ...], dict[VersionedAmbiguityKey, int]] = {}
+        for entry in self._entries:
+            projected = tuple(
+                item
+                for item in entry.assignment
+                if item[0] in active and item[0][0] in observed
+            )
+            if len(projected) >= self.min_assignment_size:
+                compatible.setdefault(projected, dict(projected))
+        return tuple(compatible.values())
 
 
 class RecoveryPositionBank:

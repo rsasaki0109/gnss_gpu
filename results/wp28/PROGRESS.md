@@ -110,3 +110,46 @@ The next recovery source should replay compatible historical ambiguity
 assignments, not only historical positions. It must enforce ambiguity
 generation IDs and current active-key support, and remain diagnostic until the
 90% recall and 5 s survival gates pass.
+
+## 2026-07-18 — generation-safe assignment replay
+
+Implemented a bounded causal ambiguity-assignment bank. Every stored integer
+is keyed by satellite pair and float-KF generation. Replay projects only keys
+whose generation is still active and which occur in the current DD carrier
+observation, then requires at least eight compatible integers. The assignment
+is reconditioned from the current DDPR guard; no stale position state or
+truth-derived choice is reused.
+
+Assignment replay exposes a useful supply/retention trade. With 32 historical
+positions and top-16 per position, 128 replay assignments raise correct
+proposal anchors from 26/40 to 32/40 (65% to 80%), but 656 candidates competing
+for 512 basins lower live coverage from 134 to 128 epochs. Reducing position
+history to 16 keeps 32/40 proposal anchors with only 400 candidates and raises
+survival p90 to 24.8 epochs, just below five seconds.
+
+The best fixed-budget split is eight historical positions, top-32 per
+position, and 128 assignment replays:
+
+| Metric | Position-only age-50 | Assignment replay best |
+| --- | ---: | ---: |
+| Maximum proposals | 528 | 416 |
+| Correct proposal anchors | 26/40 | 26/40 |
+| Supplied then immediately absent | 8/26 | **1/26** |
+| Live sub-50 cm epochs | 134/200 | **141/200** |
+| Longest live span | 27 epochs | **80 epochs** |
+| Live-span p90 | 17.6 epochs | **52.5 epochs (10.5 s)** |
+
+This is the first WP28 arm to pass the predeclared five-second survival gate.
+It does not pass the 90% live-recall gate: coverage is 70.5%. Increasing the
+assignment bank to 256 lowers recall, and reallocating to four position sources
+with top-64 lowers it to 53.5%; both are rejected. Declared and false FIX remain
+zero because recovery is still disconnected from trusted output.
+
+With assignment replay disabled, the default Nagoya run3/200 trajectory remains
+bit-identical to WP27 (`C7B175...F001`).
+
+The remaining failure is generation rather than immediate pruning: the best
+arm produces a correct candidate on only 26/40 anchors, while losing only one
+of those after insertion. Next, audit the 14 missing anchors by ambiguity
+generation/reset state and per-source oracle rank before adding another
+proposal mechanism.

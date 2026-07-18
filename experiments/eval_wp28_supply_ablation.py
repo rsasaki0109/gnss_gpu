@@ -40,6 +40,16 @@ def _summarize(path: Path) -> dict[str, object]:
         if not np.isfinite(float(row["basin_oracle_min_error_m"]))
         or float(row["basin_oracle_min_error_m"]) >= 0.5
     ]
+    proposal_missing = [row for row in triggered if row not in proposal_correct]
+    last_reset_epoch: int | None = None
+    reset_age_by_epoch: dict[int, int | None] = {}
+    for row_index, row in enumerate(rows):
+        epoch = int(row.get("epoch", row_index))
+        if int(row.get("ambiguities_reset", "0")) > 0:
+            last_reset_epoch = epoch
+        reset_age_by_epoch[epoch] = (
+            None if last_reset_epoch is None else epoch - last_reset_epoch
+        )
     spans = _true_spans(live)
     return {
         "epochs": len(rows),
@@ -50,6 +60,13 @@ def _summarize(path: Path) -> dict[str, object]:
             100.0 * len(proposal_correct) / max(len(triggered), 1)
         ),
         "proposal_correct_but_not_live_anchor_epochs": len(proposal_pruned),
+        "proposal_missing_anchor_epochs": [
+            int(row.get("epoch", -1)) for row in proposal_missing
+        ],
+        "proposal_missing_reset_age_epochs": [
+            reset_age_by_epoch.get(int(row.get("epoch", -1)))
+            for row in proposal_missing
+        ],
         "respawn_anchor_epochs": len(triggered),
         "proposal_correct_ranks": [
             int(row["respawn_oracle_rank"]) for row in proposal_correct
@@ -67,6 +84,9 @@ def _summarize(path: Path) -> dict[str, object]:
         ),
         "maximum_history_seeds": max(
             int(row.get("n_respawn_history_seeds", "0")) for row in rows
+        ),
+        "maximum_assignment_candidates": max(
+            int(row.get("n_respawn_assignment_candidates", "0")) for row in rows
         ),
         "declared_fix_epochs": sum(row["fix"] == "1" for row in rows),
         "false_fix_epochs": sum(
