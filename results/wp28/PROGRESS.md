@@ -228,6 +228,11 @@ and increases compute/state. Raising respawn cohort mass from 0.05 to 0.20 does
 not help live recall at either cap. The cap-768 result is a retention ceiling,
 not a production promotion. Declared and false FIX remain zero in every arm.
 
+LAMBDA-residual proposal priors add one live epoch at cap 512 (150/200, 75.0%)
+without changing proposal-anchor recall, but reduce live-span p90 from 43.6 to
+35.8 epochs. The gain is real but marginal; both arms remain above the 5 s
+survival gate and below the 90% recall gate.
+
 Farthest-point history selection is also rejected. Unbounded spatial coverage
 collapses live recall to 15/200; restricting candidates to 10 m from the DDPR
 guard still reaches only 24/200. Low-weight spatial extremes are not useful

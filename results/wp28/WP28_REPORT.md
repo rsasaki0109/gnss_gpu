@@ -121,6 +121,10 @@ but remains below the 90% recall gate and is not a fixed-budget production
 candidate. Higher respawn mass, age-100 memory, and neighboring 10×28/16×20
 allocations regress. The trusted FIX path remains disconnected with zero FIX.
 
+Using the existing truth-free LAMBDA residual as the proposal prior reaches the
+best cap-512 recall, 150/200 (75.0%), at the cost of lower but still passing
+7.16-second p90 survival. This does not change the WP28 gate verdict.
+
 Farthest-point history selection is strongly negative both unrestricted
 (15/200) and within a 10 m DDPR-guard radius (24/200). Weight-first history
 selection remains the only advancing policy.
