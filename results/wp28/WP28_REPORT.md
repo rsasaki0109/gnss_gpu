@@ -109,3 +109,14 @@ A 5 m covariance-axis shadow adds only one missing anchor and regresses to
 111/200 when inserted directly. Respawn-time max-cost satellite exclusion is
 fully neutral. These results reject broad position shells and single-satellite
 subset exclusion as solutions to the remaining reset-recovery gap.
+
+Multi-subset shadows likewise add only one missing anchor and are rejected.
+The productive change is causal TDCP propagation of retained position
+hypotheses. With a 12-position/top-24 allocation and 128 assignment replays,
+cap-512 live recall reaches 149/200 (74.5%), proposal recall 31/40, longest
+survival 87 epochs, and p90 8.72 seconds. Doppler propagation regresses.
+
+Cap 768 raises the diagnostic ceiling to 154/200 (77.0%) and p90 to 14 seconds,
+but remains below the 90% recall gate and is not a fixed-budget production
+candidate. Higher respawn mass, age-100 memory, and neighboring 10×28/16×20
+allocations regress. The trusted FIX path remains disconnected with zero FIX.

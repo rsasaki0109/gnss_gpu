@@ -191,3 +191,39 @@ recall, and trajectory metrics match the 141/200 best arm. The excluded
 satellites (C19/E24/J03 across this window) do not control the selected
 low-variance ambiguity subset. Satellite exclusion is therefore useful for
 absolute selection but not this generation failure.
+
+## 2026-07-18 — multi-subset and causal motion recovery
+
+One-swap and four shifted-window ambiguity subsets were evaluated shadow-only.
+They produce correct candidates on 19/40 and 18/40 anchors respectively, but
+each adds only epoch 90 among the then-14 missing anchors. A dense 26-direction
+5 m position shell is identical to the six-axis shell at the oracle level and
+also adds only epoch 40. Neither subset diversity nor angular shell density
+explains the reset gap.
+
+Position-history motion is decisive. Per-basin Doppler velocity propagation is
+negative (live recall 129/200), while robust causal TDCP displacement improves
+the eight-position/top-32 arm from 141 to 143 epochs and removes its sole
+same-anchor pruning loss. TDCP uses 199/199 causal intervals and never touches
+trusted output.
+
+Reallocating the fixed proposal budget to 12 historical positions × top-24,
+plus 128 generation-safe assignment replays, gives the best cap-512 arm:
+
+| Metric | Previous best | TDCP 12×24 |
+| --- | ---: | ---: |
+| Maximum proposals | 416 | 440 |
+| Correct proposal anchors | 26/40 | **31/40** |
+| Live sub-50 cm epochs | 141/200 | **149/200 (74.5%)** |
+| Longest live span | 80 | **87 epochs** |
+| Live-span p90 | 52.5 | 43.6 epochs (8.72 s) |
+
+The neighboring 10×28 and 16×20 allocations reach only 142 and 144 live
+epochs, so 12×24 is the frozen fixed-budget point. Extending history age to 100
+regresses to 131; Doppler extrapolation and long stale memory are rejected.
+
+A diagnostic cap increase from 512 to 768 reaches 154/200 (77.0%), a longest
+span of 115 epochs, and p90 of 70 epochs, but still misses the 90% recall gate
+and increases compute/state. Raising respawn cohort mass from 0.05 to 0.20 does
+not help live recall at either cap. The cap-768 result is a retention ceiling,
+not a production promotion. Declared and false FIX remain zero in every arm.

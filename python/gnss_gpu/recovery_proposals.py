@@ -20,6 +20,7 @@ AssignmentItem: TypeAlias = tuple[VersionedAmbiguityKey, int]
 class _BankEntry:
     epoch: int
     position_ecef: np.ndarray
+    velocity_ecef: np.ndarray
     log_weight: float
 
 
@@ -196,19 +197,51 @@ class RecoveryPositionBank:
         epoch: int,
         positions_ecef: np.ndarray,
         log_weights: np.ndarray,
+        *,
+        velocities_ecef: np.ndarray | None = None,
+        dt_seconds: float = 0.0,
+        displacement_ecef_m: np.ndarray | None = None,
     ) -> None:
         positions = np.asarray(positions_ecef, dtype=np.float64).reshape(-1, 3)
         weights = np.asarray(log_weights, dtype=np.float64).reshape(-1)
         if len(positions) != len(weights):
             raise ValueError("positions and log_weights must have equal length")
+        velocities = (
+            np.zeros_like(positions)
+            if velocities_ecef is None
+            else np.asarray(velocities_ecef, dtype=np.float64).reshape(-1, 3)
+        )
+        if len(velocities) != len(positions):
+            raise ValueError("positions and velocities must have equal length")
         if not np.all(np.isfinite(positions)) or not np.all(np.isfinite(weights)):
             raise ValueError("bank inputs must be finite")
+        if not np.all(np.isfinite(velocities)) or not np.isfinite(dt_seconds):
+            raise ValueError("bank velocities and time step must be finite")
+        displacement = (
+            None
+            if displacement_ecef_m is None
+            else np.asarray(displacement_ecef_m, dtype=np.float64).reshape(3)
+        )
+        if displacement is not None and not np.all(np.isfinite(displacement)):
+            raise ValueError("bank displacement must be finite")
         current = [
-            _BankEntry(int(epoch), position.copy(), float(weight))
-            for position, weight in zip(positions, weights)
+            _BankEntry(
+                int(epoch), position.copy(), velocity.copy(), float(weight)
+            )
+            for position, velocity, weight in zip(positions, velocities, weights)
         ]
         retained = [
-            entry
+            _BankEntry(
+                entry.epoch,
+                entry.position_ecef
+                + (
+                    displacement
+                    if displacement is not None
+                    else entry.velocity_ecef * float(dt_seconds)
+                ),
+                entry.velocity_ecef,
+                entry.log_weight,
+            )
             for entry in self._entries
             if int(epoch) - entry.epoch <= self.max_age_epochs
         ]

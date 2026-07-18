@@ -56,6 +56,9 @@ def _summarize(path: Path) -> dict[str, object]:
     position_shadow_rows = [
         row for row in rows if int(row.get("position_shadow_candidates", "0")) > 0
     ]
+    subset_shadow_rows = [
+        row for row in rows if int(row.get("subset_shadow_candidates", "0")) > 0
+    ]
     spans = _true_spans(live)
     return {
         "epochs": len(rows),
@@ -113,6 +116,16 @@ def _summarize(path: Path) -> dict[str, object]:
             int(row.get("epoch", -1))
             for row in position_shadow_rows
             if float(row.get("position_shadow_oracle_min_error_m", "nan")) < 0.5
+        ],
+        "subset_shadow_anchor_epochs": len(subset_shadow_rows),
+        "subset_shadow_correct_anchor_epochs": sum(
+            float(row.get("subset_shadow_oracle_min_error_m", "nan")) < 0.5
+            for row in subset_shadow_rows
+        ),
+        "subset_shadow_correct_epochs": [
+            int(row.get("epoch", -1))
+            for row in subset_shadow_rows
+            if float(row.get("subset_shadow_oracle_min_error_m", "nan")) < 0.5
         ],
         "declared_fix_epochs": sum(row["fix"] == "1" for row in rows),
         "false_fix_epochs": sum(

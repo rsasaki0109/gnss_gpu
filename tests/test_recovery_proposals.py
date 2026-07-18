@@ -57,6 +57,36 @@ def test_recovery_position_bank_keeps_distinct_history_until_expiry():
     assert all(position[0] != 5.0 for position in bank.positions)
 
 
+def test_recovery_position_bank_propagates_retained_velocity():
+    bank = RecoveryPositionBank(max_seeds=2, separation_m=1.0, max_age_epochs=5)
+    bank.update(
+        0,
+        np.asarray([[0.0, 0.0, 0.0]]),
+        np.asarray([0.0]),
+        velocities_ecef=np.asarray([[2.0, 0.0, 0.0]]),
+    )
+    bank.update(
+        1,
+        np.asarray([[10.0, 0.0, 0.0]]),
+        np.asarray([1.0]),
+        velocities_ecef=np.asarray([[0.0, 0.0, 0.0]]),
+        dt_seconds=0.5,
+    )
+    assert any(np.isclose(position[0], 1.0) for position in bank.positions)
+
+
+def test_recovery_position_bank_propagates_retained_tdcp_displacement():
+    bank = RecoveryPositionBank(max_seeds=2, separation_m=1.0, max_age_epochs=5)
+    bank.update(0, np.asarray([[0.0, 0.0, 0.0]]), np.asarray([0.0]))
+    bank.update(
+        1,
+        np.asarray([[10.0, 0.0, 0.0]]),
+        np.asarray([1.0]),
+        displacement_ecef_m=np.asarray([0.5, 0.25, 0.0]),
+    )
+    assert any(np.allclose(position, [0.5, 0.25, 0.0]) for position in bank.positions)
+
+
 def test_assignment_bank_projects_only_exact_active_generations():
     bank = RecoveryAssignmentBank(
         max_assignments=4, max_age_epochs=10, min_assignment_size=8

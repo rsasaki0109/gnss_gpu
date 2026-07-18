@@ -174,9 +174,16 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--ddpr-respawn-exclude-max-cost-satellite", action="store_true"
     )
+    parser.add_argument("--ddpr-respawn-shadow-one-swap-top-k", type=int, default=0)
+    parser.add_argument("--ddpr-respawn-shadow-window-count", type=int, default=0)
+    parser.add_argument("--ddpr-respawn-shadow-window-top-k", type=int, default=0)
     parser.add_argument("--ddpr-respawn-history-seeds", type=int, default=0)
     parser.add_argument("--ddpr-respawn-history-separation-m", type=float, default=1.0)
     parser.add_argument("--ddpr-respawn-history-max-age-epochs", type=int, default=25)
+    parser.add_argument(
+        "--ddpr-respawn-history-propagate-velocity", action="store_true"
+    )
+    parser.add_argument("--ddpr-respawn-history-propagate-tdcp", action="store_true")
     parser.add_argument("--ddpr-respawn-assignment-history", type=int, default=0)
     parser.add_argument(
         "--ddpr-respawn-assignment-history-max-age-epochs", type=int, default=50
@@ -373,6 +380,8 @@ def main(argv: list[str] | None = None) -> None:
     n_completion_shadow_correct = 0
     n_position_shadow_epochs = 0
     n_position_shadow_correct = 0
+    n_subset_shadow_epochs = 0
+    n_subset_shadow_correct = 0
     n_float_resets = 0
     n_temporal_map_sub50 = 0
     n_temporal_map_disagreement = 0
@@ -405,7 +414,7 @@ def main(argv: list[str] | None = None) -> None:
             float_kf.predict(epoch_dt)
             basin_pf.predict(epoch_dt)
             ddpr_guard.predict(epoch_dt)
-        if integrity_filter is not None:
+        if integrity_filter is not None or args.ddpr_respawn_history_propagate_tdcp:
             current_tdcp_measurements = [
                 measurement
                 for measurement in _epoch_measurements(data, i)
@@ -515,6 +524,25 @@ def main(argv: list[str] | None = None) -> None:
                     [basin.log_weight for basin in basin_pf.basins],
                     dtype=np.float64,
                 ),
+                velocities_ecef=(
+                    np.asarray(
+                        [basin.conditional.mean[3:6] for basin in basin_pf.basins],
+                        dtype=np.float64,
+                    )
+                    if args.ddpr_respawn_history_propagate_velocity
+                    else None
+                ),
+                dt_seconds=(
+                    float(epoch_dt)
+                    if args.ddpr_respawn_history_propagate_velocity
+                    else 0.0
+                ),
+                displacement_ecef_m=(
+                    integrity_tdcp.displacement_ecef_m
+                    if args.ddpr_respawn_history_propagate_tdcp
+                    and integrity_tdcp is not None
+                    else None
+                ),
             )
         active_versioned = {(key, generation) for key, generation in generations.items()}
         basin_pf.retain_compatible(active_versioned)
@@ -573,6 +601,8 @@ def main(argv: list[str] | None = None) -> None:
         completion_shadow_oracle_min_error = float("nan")
         position_shadow_candidates = 0
         position_shadow_oracle_min_error = float("nan")
+        subset_shadow_candidates = 0
+        subset_shadow_oracle_min_error = float("nan")
         respawn_excluded_satellite = ""
         if dd_cp is not None and int(dd_cp.n_dd) >= int(args.subset_size):
             current_pairs = {
@@ -657,6 +687,7 @@ def main(argv: list[str] | None = None) -> None:
             all_respawn_residuals: list[float] = []
             completion_shadow_states: list[BasinKalmanState] = []
             position_shadow_states: list[BasinKalmanState] = []
+            subset_shadow_states: list[BasinKalmanState] = []
             if recovery_assignment_bank is not None:
                 assignment_seed = ddpr_centered_ambiguity_seed(
                     dd_cp,
@@ -778,7 +809,8 @@ def main(argv: list[str] | None = None) -> None:
                 if available.size < respawn_subset_size:
                     continue
                 variances = np.diag(respawn_seed.qahat_cycles2)[available]
-                selected = available[np.argsort(variances)[:respawn_subset_size]]
+                ranked = available[np.argsort(variances)]
+                selected = ranked[:respawn_subset_size]
                 selected = np.sort(selected)
                 respawn_keys = tuple(respawn_seed.keys[j] for j in selected)
                 candidates, seed_residuals = integer_search(
@@ -809,6 +841,60 @@ def main(argv: list[str] | None = None) -> None:
                 all_respawn_residuals.extend(
                     float(value) for value in np.asarray(seed_residuals).reshape(-1)
                 )
+                shadow_subset_top_k = int(args.ddpr_respawn_shadow_one_swap_top_k)
+                if shadow_subset_top_k > 0 and ranked.size > respawn_subset_size:
+                    alternate = int(ranked[respawn_subset_size])
+                    for dropped in selected:
+                        shadow_selected = np.sort(
+                            np.asarray(
+                                [value for value in selected if value != dropped]
+                                + [alternate],
+                                dtype=np.int64,
+                            )
+                        )
+                        shadow_keys = tuple(
+                            respawn_seed.keys[j] for j in shadow_selected
+                        )
+                        shadow_candidates, _ = integer_search(
+                            respawn_seed.ahat_cycles[shadow_selected],
+                            respawn_seed.qahat_cycles2[
+                                np.ix_(shadow_selected, shadow_selected)
+                            ],
+                            n_candidates=shadow_subset_top_k,
+                        )
+                        for candidate in shadow_candidates:
+                            position, covariance, _ = condition_respawn_position(
+                                respawn_seed, shadow_keys, candidate
+                            )
+                            subset_shadow_states.append(
+                                BasinKalmanState.from_position(position, covariance)
+                            )
+                shadow_window_count = int(args.ddpr_respawn_shadow_window_count)
+                shadow_window_top_k = int(args.ddpr_respawn_shadow_window_top_k)
+                for offset in range(1, shadow_window_count + 1):
+                    if (
+                        shadow_window_top_k <= 0
+                        or offset + respawn_subset_size > ranked.size
+                    ):
+                        break
+                    shadow_selected = np.sort(
+                        ranked[offset : offset + respawn_subset_size]
+                    )
+                    shadow_keys = tuple(respawn_seed.keys[j] for j in shadow_selected)
+                    shadow_candidates, _ = integer_search(
+                        respawn_seed.ahat_cycles[shadow_selected],
+                        respawn_seed.qahat_cycles2[
+                            np.ix_(shadow_selected, shadow_selected)
+                        ],
+                        n_candidates=shadow_window_top_k,
+                    )
+                    for candidate in shadow_candidates:
+                        position, covariance, _ = condition_respawn_position(
+                            respawn_seed, shadow_keys, candidate
+                        )
+                        subset_shadow_states.append(
+                            BasinKalmanState.from_position(position, covariance)
+                        )
             if shadow_seed_radii:
                 shadow_positions = covariance_axis_position_seeds(
                     ddpr_guard.mean[:3],
@@ -896,6 +982,16 @@ def main(argv: list[str] | None = None) -> None:
                     n_position_shadow_epochs += 1
                     n_position_shadow_correct += int(
                         position_shadow_oracle_min_error < 0.5
+                    )
+                if epoch_ref is not None and subset_shadow_states:
+                    subset_shadow_candidates = len(subset_shadow_states)
+                    subset_shadow_oracle_min_error = min(
+                        float(np.linalg.norm(state.mean[:3] - epoch_ref))
+                        for state in subset_shadow_states
+                    )
+                    n_subset_shadow_epochs += 1
+                    n_subset_shadow_correct += int(
+                        subset_shadow_oracle_min_error < 0.5
                     )
                 if assignments:
                     basin_pf.spawn(
@@ -1494,6 +1590,8 @@ def main(argv: list[str] | None = None) -> None:
                 "completion_shadow_oracle_min_error_m": completion_shadow_oracle_min_error,
                 "position_shadow_candidates": position_shadow_candidates,
                 "position_shadow_oracle_min_error_m": position_shadow_oracle_min_error,
+                "subset_shadow_candidates": subset_shadow_candidates,
+                "subset_shadow_oracle_min_error_m": subset_shadow_oracle_min_error,
                 "respawn_excluded_satellite": respawn_excluded_satellite,
                 "n_dd_pr": 0 if dd_pr is None else int(dd_pr.n_dd),
                 "n_dd_cp": 0 if dd_cp is None else int(dd_cp.n_dd),
@@ -1542,12 +1640,27 @@ def main(argv: list[str] | None = None) -> None:
         "ddpr_respawn_exclude_max_cost_satellite": bool(
             args.ddpr_respawn_exclude_max_cost_satellite
         ),
+        "ddpr_respawn_shadow_one_swap_top_k": int(
+            args.ddpr_respawn_shadow_one_swap_top_k
+        ),
+        "ddpr_respawn_shadow_window_count": int(
+            args.ddpr_respawn_shadow_window_count
+        ),
+        "ddpr_respawn_shadow_window_top_k": int(
+            args.ddpr_respawn_shadow_window_top_k
+        ),
         "ddpr_respawn_history_seeds": int(args.ddpr_respawn_history_seeds),
         "ddpr_respawn_history_separation_m": float(
             args.ddpr_respawn_history_separation_m
         ),
         "ddpr_respawn_history_max_age_epochs": int(
             args.ddpr_respawn_history_max_age_epochs
+        ),
+        "ddpr_respawn_history_propagate_velocity": bool(
+            args.ddpr_respawn_history_propagate_velocity
+        ),
+        "ddpr_respawn_history_propagate_tdcp": bool(
+            args.ddpr_respawn_history_propagate_tdcp
         ),
         "ddpr_respawn_assignment_history": int(
             args.ddpr_respawn_assignment_history
@@ -1568,6 +1681,8 @@ def main(argv: list[str] | None = None) -> None:
         "completion_shadow_correct_epochs": int(n_completion_shadow_correct),
         "position_shadow_epochs": int(n_position_shadow_epochs),
         "position_shadow_correct_epochs": int(n_position_shadow_correct),
+        "subset_shadow_epochs": int(n_subset_shadow_epochs),
+        "subset_shadow_correct_epochs": int(n_subset_shadow_correct),
         "ddpr_respawn_epochs": int(n_respawn_epochs),
         "temporal_lineage_enabled": bool(args.enable_temporal_lineage),
         "temporal_map_disagreement_epochs": int(n_temporal_map_disagreement),
