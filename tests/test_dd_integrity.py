@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from gnss_gpu.dd_integrity import multipivot_ddpr_scores
+from gnss_gpu.dd_integrity import multipivot_ddpr_scores, satellite_pair_costs
 
 
 def _dd_result(positions, observations, reference, system="G"):
@@ -13,7 +13,7 @@ def _dd_result(positions, observations, reference, system="G"):
     rover = np.zeros(3)
     base_ranges = np.linalg.norm(positions - base, axis=1)
     rover_ranges = np.linalg.norm(positions - rover, axis=1)
-    single = observations - (rover_ranges - base_ranges)
+    single = np.asarray(observations, dtype=float)
     return SimpleNamespace(
         dd_pseudorange_m=np.asarray(
             [
@@ -104,3 +104,38 @@ def test_multipivot_rejects_insufficient_support():
     )
     with pytest.raises(ValueError, match="insufficient"):
         multipivot_ddpr_scores(empty, np.zeros((1, 3)))
+
+
+def test_multipivot_can_exclude_biased_original_reference():
+    satellites = np.array(
+        [[20e6, 0, 0], [0, 21e6, 0], [0, 0, 22e6], [15e6, 15e6, 10e6]],
+        dtype=float,
+    )
+    observations = np.array([30.0, 0.1, -0.1, 0.0])
+    candidates = np.array([[0.0, 0.0, 0.0], [10.0, -8.0, 5.0]])
+    dd_result = _dd_result(satellites, observations, 0)
+    result = multipivot_ddpr_scores(
+        dd_result,
+        candidates,
+        scale_m=1.0,
+        excluded_satellites=("G01",),
+    )
+    assert result.best_index == 0
+    assert result.n_satellites == 3
+
+
+def test_satellite_pair_costs_are_pivot_invariant_and_find_bias():
+    satellites = np.array(
+        [[20e6, 0, 0], [0, 21e6, 0], [0, 0, 22e6], [15e6, 15e6, 10e6]],
+        dtype=float,
+    )
+    innovations = np.array([0.0, 0.1, 25.0, -0.1])
+    first = satellite_pair_costs(
+        _dd_result(satellites, innovations, 0), np.zeros(3), scale_m=1.0
+    )
+    second = satellite_pair_costs(
+        _dd_result(satellites, innovations, 1), np.zeros(3), scale_m=1.0
+    )
+    assert first.satellite_ids == second.satellite_ids
+    np.testing.assert_allclose(first.mean_pair_costs, second.mean_pair_costs, atol=1e-8)
+    assert first.satellite_ids[int(np.argmax(first.mean_pair_costs))] == "G03"

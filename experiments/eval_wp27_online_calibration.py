@@ -146,13 +146,20 @@ def main(argv: list[str] | None = None) -> None:
         },
         "runs": run_summary,
         "observed_safe_configurations": len(observed_safe),
+        "observed_safe_with_common_coverage": sum(
+            item["minimum_correct_epochs"] > 0 for item in observed_safe
+        ),
         "wilson95_safe_configurations": len(wilson_safe),
         "best_unrestricted": max(evaluated, key=ranking),
         "best_observed_safe": max(observed_safe, key=ranking),
         "verdict": (
-            "no common safe coverage: observed-safe configurations accept zero "
-            "correct epochs on at least one run; no configuration has a <=1% "
-            "Wilson 95% false-rate upper bound on every run"
+            "common zero-observed-false coverage exists, but statistical support "
+            "is insufficient: no configuration has a <=1% Wilson 95% false-rate "
+            "upper bound on every run"
+            if any(item["minimum_correct_epochs"] > 0 for item in observed_safe)
+            else "no common safe coverage: observed-safe configurations accept "
+            "zero correct epochs on at least one run; no configuration has a "
+            "<=1% Wilson 95% false-rate upper bound on every run"
         ),
     }
     args.out_summary.parent.mkdir(parents=True, exist_ok=True)

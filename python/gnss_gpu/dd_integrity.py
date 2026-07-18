@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 import numpy as np
@@ -18,6 +19,13 @@ class MultiPivotDDPRResult:
     best_index: int
 
 
+@dataclass(frozen=True)
+class SatellitePairCostResult:
+    satellite_ids: tuple[str, ...]
+    mean_pair_costs: np.ndarray
+    pair_counts: np.ndarray
+
+
 def _system_id(satellite_id: str) -> str:
     value = str(satellite_id)
     return value[0] if value else "?"
@@ -30,6 +38,7 @@ def multipivot_ddpr_scores(
     scale_m: float = 5.0,
     trim_largest_pairs: int = 1,
     temperature: float = 1.0,
+    excluded_satellites: Iterable[str] = (),
 ) -> MultiPivotDDPRResult:
     """Score candidates using all constellation-local satellite pair residuals.
 
@@ -51,6 +60,7 @@ def multipivot_ddpr_scores(
     trim = int(trim_largest_pairs)
     if trim < 0:
         raise ValueError("trim_largest_pairs must be non-negative")
+    excluded = {str(value) for value in excluded_satellites}
 
     residuals = np.asarray(
         [dd_pseudorange_residuals_m(dd_result, position) for position in positions],
@@ -81,6 +91,14 @@ def multipivot_ddpr_scores(
             continue
         innovations = np.zeros((len(positions), len(satellites)), dtype=np.float64)
         innovations[:, 1:] = residuals[:, row_indices]
+        retained = [
+            index for index, satellite in enumerate(satellites)
+            if satellite not in excluded
+        ]
+        satellites = [satellites[index] for index in retained]
+        innovations = innovations[:, retained]
+        if len(set(satellites)) < 2:
+            continue
         pair_costs: list[np.ndarray] = []
         for left in range(len(satellites)):
             for right in range(left + 1, len(satellites)):
@@ -106,4 +124,59 @@ def multipivot_ddpr_scores(
         n_constellations=constellation_count,
         n_satellites=len(unique_satellites),
         best_index=int(np.argmax(scores)),
+    )
+
+
+def satellite_pair_costs(
+    dd_result,
+    receiver_position_ecef: np.ndarray,
+    *,
+    scale_m: float = 5.0,
+) -> SatellitePairCostResult:
+    """Return pivot-invariant mean pair cost incident to each satellite."""
+
+    position = np.asarray(receiver_position_ecef, dtype=np.float64).reshape(3)
+    scale = float(scale_m)
+    if not np.all(np.isfinite(position)):
+        raise ValueError("receiver_position_ecef must be finite")
+    if not np.isfinite(scale) or scale <= 0.0:
+        raise ValueError("scale_m must be finite and positive")
+    residuals = np.asarray(
+        dd_pseudorange_residuals_m(dd_result, position), dtype=np.float64
+    )
+    ref_ids = tuple(str(value) for value in dd_result.ref_sat_ids)
+    sat_ids = tuple(str(value) for value in dd_result.sat_ids)
+    cost_sum: dict[str, float] = {}
+    pair_count: dict[str, int] = {}
+    for system in sorted({_system_id(value) for value in ref_ids + sat_ids}):
+        row_indices = [
+            index
+            for index, (ref, sat) in enumerate(zip(ref_ids, sat_ids))
+            if _system_id(ref) == system and _system_id(sat) == system
+        ]
+        if not row_indices:
+            continue
+        references = {ref_ids[index] for index in row_indices}
+        if len(references) != 1:
+            raise ValueError("each constellation must use one reference in a DD result")
+        satellites = [next(iter(references))] + [sat_ids[index] for index in row_indices]
+        innovations = np.zeros(len(satellites), dtype=np.float64)
+        innovations[1:] = residuals[row_indices]
+        for left in range(len(satellites)):
+            for right in range(left + 1, len(satellites)):
+                difference = innovations[left] - innovations[right]
+                cost = float(np.log1p((difference / scale) ** 2))
+                for satellite in (satellites[left], satellites[right]):
+                    cost_sum[satellite] = cost_sum.get(satellite, 0.0) + cost
+                    pair_count[satellite] = pair_count.get(satellite, 0) + 1
+    if not pair_count:
+        raise ValueError("DD result has insufficient same-constellation support")
+    ordered = tuple(sorted(pair_count))
+    return SatellitePairCostResult(
+        satellite_ids=ordered,
+        mean_pair_costs=np.asarray(
+            [cost_sum[satellite] / pair_count[satellite] for satellite in ordered],
+            dtype=np.float64,
+        ),
+        pair_counts=np.asarray([pair_count[satellite] for satellite in ordered], dtype=np.int64),
     )

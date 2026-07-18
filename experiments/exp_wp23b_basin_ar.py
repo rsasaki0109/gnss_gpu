@@ -36,7 +36,10 @@ from gnss_gpu.ambiguity_respawn import (  # noqa: E402
 )
 from gnss_gpu.dd_carrier import DDCarrierComputer  # noqa: E402
 from gnss_gpu.dd_float_kf import DDFloatKalmanFilter  # noqa: E402
-from gnss_gpu.dd_integrity import multipivot_ddpr_scores  # noqa: E402
+from gnss_gpu.dd_integrity import (  # noqa: E402
+    multipivot_ddpr_scores,
+    satellite_pair_costs,
+)
 from gnss_gpu.dd_pseudorange import DDPseudorangeComputer  # noqa: E402
 from gnss_gpu.io.ppc import PPCDatasetLoader  # noqa: E402
 from gnss_gpu.io.rinex_cache import RinexObservationCache  # noqa: E402
@@ -116,6 +119,17 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--integrity-scale-m", type=float, default=3.0)
     parser.add_argument("--integrity-trim-pairs", type=int, default=0)
     parser.add_argument("--integrity-weight", type=float, default=5.0)
+    parser.add_argument(
+        "--integrity-exclude-max-cost-satellite",
+        action="store_true",
+        help="Exclude the largest guard-position incident pair-cost satellite",
+    )
+    parser.add_argument(
+        "--integrity-satellite-cost-memory",
+        type=float,
+        default=0.0,
+        help="EMA memory in [0,1) for causal per-satellite incident pair cost",
+    )
     parser.add_argument("--integrity-tdcp-systems", default="G,E,J")
     parser.add_argument("--integrity-tdcp-min-sats", type=int, default=5)
     parser.add_argument("--integrity-tdcp-max-postfit-rms-m", type=float, default=0.5)
@@ -157,7 +171,15 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Optional truth-free per-basin trace for temporal replay",
     )
+    parser.add_argument(
+        "--out-integrity-satellite-diagnostics",
+        type=Path,
+        default=None,
+        help="Optional truth-joined leave-one-satellite-out DDPR diagnostics",
+    )
     args = parser.parse_args(argv)
+    if not 0.0 <= float(args.integrity_satellite_cost_memory) < 1.0:
+        parser.error("--integrity-satellite-cost-memory must be in [0, 1)")
 
     city, run = str(args.run).split("/", 1)
     run_dir = args.data_root / city / run
@@ -218,6 +240,7 @@ def main(argv: list[str] | None = None) -> None:
     evidence_ledger = EvidenceLedger()
     traces: list[RTKEpochTrace] = []
     basin_trace_rows: list[dict[str, object]] = []
+    integrity_satellite_rows: list[dict[str, object]] = []
     temporal_filter = (
         TemporalAmbiguityFilter(
             TemporalAmbiguityConfig(
@@ -249,6 +272,7 @@ def main(argv: list[str] | None = None) -> None:
         if value.strip() in system_id_map
     }
     previous_tdcp_measurements = None
+    integrity_satellite_cost_state: dict[str, float] = {}
 
     times = np.asarray(data["times"], dtype=np.float64)
     respawn_subset_size = (
@@ -282,6 +306,7 @@ def main(argv: list[str] | None = None) -> None:
     n_integrity_map_disagreement = 0
     n_integrity_anchor_epochs = 0
     n_integrity_tdcp_intervals = 0
+    n_integrity_satellite_exclusions = 0
     n_basin_oracle_sub50 = 0
     n_integrity_ball_gamma99 = 0
     n_integrity_ball_gamma99_correct = 0
@@ -636,10 +661,36 @@ def main(argv: list[str] | None = None) -> None:
         integrity_posterior = None
         integrity_map_basin = None
         integrity_result = None
+        integrity_excluded_satellite = ""
         integrity_position_ball = None
         if integrity_filter is not None and basin_pf.basins:
             integrity_scores = np.zeros(len(basin_pf.basins), dtype=np.float64)
             if dd_pr is not None:
+                excluded_satellites: tuple[str, ...] = ()
+                if args.integrity_exclude_max_cost_satellite:
+                    satellite_cost = satellite_pair_costs(
+                        dd_pr,
+                        ddpr_guard.mean[:3],
+                        scale_m=float(args.integrity_scale_m),
+                    )
+                    cost_memory = float(args.integrity_satellite_cost_memory)
+                    for satellite, current_cost in zip(
+                        satellite_cost.satellite_ids,
+                        satellite_cost.mean_pair_costs,
+                    ):
+                        previous_cost = integrity_satellite_cost_state.get(satellite)
+                        integrity_satellite_cost_state[satellite] = (
+                            float(current_cost)
+                            if previous_cost is None
+                            else cost_memory * previous_cost
+                            + (1.0 - cost_memory) * float(current_cost)
+                        )
+                    integrity_excluded_satellite = max(
+                        satellite_cost.satellite_ids,
+                        key=integrity_satellite_cost_state.__getitem__,
+                    )
+                    excluded_satellites = (integrity_excluded_satellite,)
+                    n_integrity_satellite_exclusions += 1
                 integrity_result = multipivot_ddpr_scores(
                     dd_pr,
                     np.asarray(
@@ -648,6 +699,7 @@ def main(argv: list[str] | None = None) -> None:
                     ),
                     scale_m=float(args.integrity_scale_m),
                     trim_largest_pairs=int(args.integrity_trim_pairs),
+                    excluded_satellites=excluded_satellites,
                 )
                 integrity_scores = (
                     float(args.integrity_weight) * integrity_result.scores
@@ -767,6 +819,101 @@ def main(argv: list[str] | None = None) -> None:
             else float("nan")
         )
         n_basin_oracle_sub50 += int(basin_oracle_min_error < 0.5)
+        if (
+            args.out_integrity_satellite_diagnostics is not None
+            and integrity_result is not None
+            and ref is not None
+        ):
+            integrity_positions = np.asarray(
+                [basin.conditional.mean[:3] for basin in basin_pf.basins],
+                dtype=np.float64,
+            )
+            integrity_errors = np.linalg.norm(
+                integrity_positions - ref[None, :], axis=1
+            )
+            full_error = float(integrity_errors[integrity_result.best_index])
+            guard_satellite_cost = satellite_pair_costs(
+                dd_pr,
+                ddpr_guard.mean[:3],
+                scale_m=float(args.integrity_scale_m),
+            )
+            selected_satellite_cost = satellite_pair_costs(
+                dd_pr,
+                integrity_positions[integrity_result.best_index],
+                scale_m=float(args.integrity_scale_m),
+            )
+            guard_cost_by_satellite = dict(
+                zip(
+                    guard_satellite_cost.satellite_ids,
+                    guard_satellite_cost.mean_pair_costs,
+                )
+            )
+            selected_cost_by_satellite = dict(
+                zip(
+                    selected_satellite_cost.satellite_ids,
+                    selected_satellite_cost.mean_pair_costs,
+                )
+            )
+            satellite_ids = sorted(
+                set(str(value) for value in dd_pr.ref_sat_ids + dd_pr.sat_ids)
+            )
+            for excluded_satellite in satellite_ids:
+                try:
+                    excluded_result = multipivot_ddpr_scores(
+                        dd_pr,
+                        integrity_positions,
+                        scale_m=float(args.integrity_scale_m),
+                        trim_largest_pairs=int(args.integrity_trim_pairs),
+                        excluded_satellites=(excluded_satellite,),
+                    )
+                except ValueError:
+                    continue
+                ordered_scores = np.sort(excluded_result.scores)
+                score_margin = (
+                    float(ordered_scores[-1] - ordered_scores[-2])
+                    if len(ordered_scores) >= 2
+                    else float("inf")
+                )
+                excluded_error = float(
+                    integrity_errors[excluded_result.best_index]
+                )
+                integrity_satellite_rows.append(
+                    {
+                        "epoch": i,
+                        "tow": float(tow),
+                        "excluded_satellite": excluded_satellite,
+                        "full_selected_error_m": full_error,
+                        "excluded_selected_error_m": excluded_error,
+                        "full_selected_sub50cm": int(full_error < 0.5),
+                        "excluded_selected_sub50cm": int(excluded_error < 0.5),
+                        "exclusion_recovers_sub50cm": int(
+                            full_error >= 0.5 and excluded_error < 0.5
+                        ),
+                        "exclusion_breaks_sub50cm": int(
+                            full_error < 0.5 and excluded_error >= 0.5
+                        ),
+                        "oracle_min_error_m": basin_oracle_min_error,
+                        "excluded_best_probability": float(
+                            excluded_result.probabilities[
+                                excluded_result.best_index
+                            ]
+                        ),
+                        "excluded_score_margin": score_margin,
+                        "excluded_best_assignment_id": ambiguity_assignment_id(
+                            basin_pf.basins[excluded_result.best_index].assignment
+                        ),
+                        "guard_mean_pair_cost": float(
+                            guard_cost_by_satellite[excluded_satellite]
+                        ),
+                        "selected_mean_pair_cost": float(
+                            selected_cost_by_satellite[excluded_satellite]
+                        ),
+                        "n_constellations": int(
+                            excluded_result.n_constellations
+                        ),
+                        "n_satellites": int(excluded_result.n_satellites),
+                    }
+                )
         output_error = (
             float(np.linalg.norm(output_position - ref))
             if ref is not None and np.all(np.isfinite(ref))
@@ -913,6 +1060,7 @@ def main(argv: list[str] | None = None) -> None:
                 "temporal_map_error_m": temporal_map_error,
                 "integrity_lineage_enabled": int(integrity_filter is not None),
                 "integrity_anchor_available": int(integrity_result is not None),
+                "integrity_excluded_satellite": integrity_excluded_satellite,
                 "integrity_tdcp_available": int(integrity_tdcp is not None),
                 "integrity_tdcp_postfit_rms_m": (
                     float("nan")
@@ -1062,6 +1210,13 @@ def main(argv: list[str] | None = None) -> None:
         "integrity_scale_m": float(args.integrity_scale_m),
         "integrity_trim_pairs": int(args.integrity_trim_pairs),
         "integrity_weight": float(args.integrity_weight),
+        "integrity_exclude_max_cost_satellite": bool(
+            args.integrity_exclude_max_cost_satellite
+        ),
+        "integrity_satellite_cost_memory": float(
+            args.integrity_satellite_cost_memory
+        ),
+        "integrity_satellite_exclusions": int(n_integrity_satellite_exclusions),
         "integrity_anchor_epochs": int(n_integrity_anchor_epochs),
         "integrity_tdcp_intervals": int(n_integrity_tdcp_intervals),
         "integrity_map_disagreement_epochs": int(n_integrity_map_disagreement),
@@ -1121,6 +1276,19 @@ def main(argv: list[str] | None = None) -> None:
             writer = csv.DictWriter(fh, fieldnames=list(basin_trace_rows[0]))
             writer.writeheader()
             writer.writerows(basin_trace_rows)
+    if (
+        args.out_integrity_satellite_diagnostics is not None
+        and integrity_satellite_rows
+    ):
+        args.out_integrity_satellite_diagnostics.parent.mkdir(
+            parents=True, exist_ok=True
+        )
+        with args.out_integrity_satellite_diagnostics.open("w", newline="") as fh:
+            writer = csv.DictWriter(
+                fh, fieldnames=list(integrity_satellite_rows[0])
+            )
+            writer.writeheader()
+            writer.writerows(integrity_satellite_rows)
     args.out_summary.parent.mkdir(parents=True, exist_ok=True)
     args.out_summary.write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))

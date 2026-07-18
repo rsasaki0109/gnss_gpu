@@ -58,3 +58,15 @@ Promotion gate: one common configuration must retain nonzero correct coverage
 on every run, observed false rate `<=1%`, and a Wilson 95% upper bound `<=1%`.
 Otherwise keep the arm diagnostic and proceed to satellite-specific failure
 attribution.
+
+## Satellite attribution and latent-cost arm
+
+At each 1 Hz anchor, compute pivot-invariant incident pair cost per satellite at
+the causal DDPR guard position. Measure every leave-one-satellite-out score only
+for truth-joined attribution. The deployable diagnostic rule may exclude the
+single maximum-cost satellite; it may not use the oracle exclusion identity.
+
+Also evaluate a causal EMA of satellite cost as the minimal persistent
+`clean/biased` state. EMA memory is development-only until frozen transfer to
+Nagoya. Both arms remain disconnected from output/FIX and must preserve the
+existing evidence and replay audits.

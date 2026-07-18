@@ -84,10 +84,37 @@ Calibration also varies materially: Brier/ECE are 0.167/0.148 (run1),
 0.427/0.491 (run2), and 0.412/0.432 (run3). A single scalar temperature or
 threshold cannot repair the measured run-dependent ranking failure.
 
+## Satellite leave-one-out attribution
+
+One-satellite exclusion can recover 13/24 wrong anchors on run1, 9/15 on run2,
+and 13/21 on run3. Recovery identities persist over adjacent anchors but differ
+by run: G09/C14/C40 dominate run1, C22/E36 run2, and C22/C13/C12 run3.
+
+A causal rule that excludes the largest guard-position incident pair-cost
+satellite captures much of that oracle gain:
+
+| Run | Full anchor score | Max-cost exclusion | Recover / break |
+| --- | ---: | ---: | ---: |
+| run1 | 16/40 | 24/40 | 8 / 0 |
+| run2 | 25/40 | 28/40 | 6 / 3 |
+| run3 | 19/40 | 25/40 | 11 / 5 |
+
+When fed through the 5 Hz TDCP lineage, selected sub-50 cm epochs improve from
+33/130/91 to **107/138/97** for run1/2/3. This is the first WP27 change that
+improves all three Tokyo windows with one truth-free rule. The production
+trajectory and FIX policy remain disconnected.
+
+An EMA memory of 0.75 raises raw selection slightly to 111/138/96, but loses the
+only common zero-observed-false calibration cell found by instantaneous cost.
+It is retained as a diagnostic latent-state result, not promoted.
+
+The instantaneous max-cost arm has one common grid cell with observed false
+0/88 (21/66/1 by run), but Wilson 95% upper bounds remain 15.5%, 5.5%, and
+79.3%. This is insufficient for a FIX claim.
+
 ## Next
 
-Attribute anchor failures per satellite with leave-one-satellite-out
-multi-pivot replay. Measure whether a stable satellite subset or persistent
-innovation mode explains run1/run3 wrong blocks. Only then introduce causal
-`clean/biased/blocked/recovering` latent states; do not tune a production
-threshold against these windows.
+Freeze instantaneous max-cost exclusion and transfer it unchanged to Nagoya
+first-200 windows against the no-exclusion control. If the gain transfers,
+extend the latent mode with recovery/hysteresis and begin WP28 hypothesis
+recovery; otherwise retain the result as Tokyo-specific diagnosis.

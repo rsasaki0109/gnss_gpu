@@ -51,6 +51,18 @@ Even the existing trusted float/DDPR guard admits 31 false diagnostic
 candidates across the three windows. Therefore no integrity policy is promoted
 to output or FIX.
 
+Satellite attribution identifies a deployable improvement. Excluding the
+single satellite with maximum pivot-invariant incident pair cost at the causal
+DDPR guard position increases 5 Hz diagnostic selection from 33/130/91 to
+107/138/97 epochs on Tokyo run1/2/3. Anchor selection rises from 16/25/19 to
+24/28/25. The rule is truth-free, uses one common setting, and does not alter
+the operational trajectory or FIX state.
+
+Safety remains unproven. The best common zero-observed-false diagnostic cell
+accepts 21/66/1 correct epochs, whose Wilson 95% false-rate upper bounds are
+15.5%/5.5%/79.3%. EMA satellite memory does not improve this safety result.
+The max-cost arm therefore advances satellite selection but is not promoted.
+
 Artifacts:
 
 - `csv/wp27_multipivot_run3_200_sweep.json`;
@@ -62,7 +74,10 @@ Artifacts:
 - `csv/wp27_online_integrity_run3_200_evidence.csv`;
 - `csv/wp27_online_integrity_run1_200_summary.json`;
 - `csv/wp27_online_integrity_run2_200_summary.json`;
-- `csv/wp27_online_calibration_3x200.json`.
+- `csv/wp27_online_calibration_3x200.json`;
+- `csv/wp27_integrity_satellite_loo_3x200_summary.json`;
+- `csv/wp27_online_maxcost_calibration_3x200.json`;
+- `csv/wp27_online_satema75_calibration_3x200.json`.
 
 Reproduce the enabled run and neutrality audit:
 
