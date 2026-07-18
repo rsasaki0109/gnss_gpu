@@ -38,9 +38,31 @@ a production output or a full-denominator `<50cm_full%` claim. Error is also
 clustered in five-epoch RINEX anchor blocks, and no truth-free accept/reject
 threshold yet separates the correct and wrong blocks.
 
+## Online causal diagnostic arm
+
+The offline winner is now integrated into `exp_wp23b_basin_ar.py` behind
+`--enable-integrity-lineage`. It computes multi-pivot DDPR directly from the
+current raw observation and live basins, computes robust TDCP from only the
+current and previous epoch, and records both sources under the separate
+`integrity_lineage` evidence target. Neither score is connected to the basin PF,
+emitted position, or trusted commit policy.
+
+Tokyo run3/200 reproduced the offline result exactly:
+
+- 40/200 multi-pivot anchors and 199/199 TDCP intervals;
+- 91/200 diagnostic sub-50 cm selections;
+- evidence ledger 1,034 records/updates, zero beta errors;
+- control versus enabled position/FIX/MAP/gamma mismatches: zero;
+- control and enabled trajectory SHA-256 are identical;
+- commit replay mismatches: zero, declared FIX: zero.
+
+The online arm therefore passes causal integration and neutrality, but remains
+diagnostic-only. Its maximum gamma is only 0.0627 and is not a FIX confidence.
+
 ## Next
 
-Productionize the integrity anchor and TDCP holdover behind an opt-in diagnostic
-arm, emit a causal evidence ledger, and validate calibration on held-out run1
-and run2 before any FIX gate is permitted. Add per-satellite persistence states
-if held-out failures show stable satellite-specific contamination.
+Run the frozen online policy on the predeclared run1/run2 development windows.
+Measure calibration, candidate availability, integrity selection, satellite
+support loss, and wrong-block persistence. Add per-satellite persistence states
+only if those failures show stable satellite-specific contamination; do not
+tune against validation output.

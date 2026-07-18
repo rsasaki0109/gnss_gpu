@@ -23,6 +23,7 @@ from exp_ppc_ctrbpf_fgo import (  # noqa: E402
     _load_full_reference,
     _reference_position_map,
 )
+from exp_ppc_tdcp_velocity import _epoch_measurements  # noqa: E402
 from exp_urbannav_baseline import run_wls  # noqa: E402
 from exp_wp23b_float_seed import _doppler_velocity  # noqa: E402
 from gnss_gpu.ambiguity_basin_pf import (  # noqa: E402
@@ -35,6 +36,7 @@ from gnss_gpu.ambiguity_respawn import (  # noqa: E402
 )
 from gnss_gpu.dd_carrier import DDCarrierComputer  # noqa: E402
 from gnss_gpu.dd_float_kf import DDFloatKalmanFilter  # noqa: E402
+from gnss_gpu.dd_integrity import multipivot_ddpr_scores  # noqa: E402
 from gnss_gpu.dd_pseudorange import DDPseudorangeComputer  # noqa: E402
 from gnss_gpu.io.ppc import PPCDatasetLoader  # noqa: E402
 from gnss_gpu.io.rinex_cache import RinexObservationCache  # noqa: E402
@@ -54,6 +56,7 @@ from gnss_gpu.temporal_ambiguity import (  # noqa: E402
     TemporalAmbiguityConfig,
     TemporalAmbiguityFilter,
 )
+from gnss_gpu.tdcp_velocity import estimate_displacement_from_tdcp  # noqa: E402
 
 
 def _write_trajectory(path: Path, rows: list[dict[str, object]]) -> None:
@@ -109,6 +112,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--temporal-incompatible-cost", type=float, default=12.0)
     parser.add_argument("--temporal-death-cost", type=float, default=6.0)
     parser.add_argument("--temporal-motion-sigma-m", type=float, default=3.0)
+    parser.add_argument("--enable-integrity-lineage", action="store_true")
+    parser.add_argument("--integrity-scale-m", type=float, default=3.0)
+    parser.add_argument("--integrity-trim-pairs", type=int, default=0)
+    parser.add_argument("--integrity-weight", type=float, default=5.0)
+    parser.add_argument("--integrity-tdcp-systems", default="G,E,J")
+    parser.add_argument("--integrity-tdcp-min-sats", type=int, default=5)
+    parser.add_argument("--integrity-tdcp-max-postfit-rms-m", type=float, default=0.5)
+    parser.add_argument("--integrity-tdcp-slip-threshold-m", type=float, default=0.25)
     parser.add_argument("--enable-ddpr-respawn", action="store_true")
     parser.add_argument("--ddpr-respawn-trigger-m", type=float, default=1.75)
     parser.add_argument("--ddpr-respawn-mass", type=float, default=0.05)
@@ -219,6 +230,25 @@ def main(argv: list[str] | None = None) -> None:
         )
         if args.enable_temporal_lineage else None
     )
+    integrity_filter = (
+        TemporalAmbiguityFilter(
+            TemporalAmbiguityConfig(
+                birth_mass=float(args.temporal_birth_mass),
+                assignment_change_cost=float(args.temporal_change_cost),
+                incompatible_cost=float(args.temporal_incompatible_cost),
+                death_cost=float(args.temporal_death_cost),
+                motion_sigma_m=float(args.temporal_motion_sigma_m),
+            )
+        )
+        if args.enable_integrity_lineage else None
+    )
+    system_id_map = {"G": 0, "R": 1, "E": 2, "C": 3, "J": 4}
+    integrity_tdcp_system_ids = {
+        system_id_map[value.strip()]
+        for value in str(args.integrity_tdcp_systems).split(",")
+        if value.strip() in system_id_map
+    }
+    previous_tdcp_measurements = None
 
     times = np.asarray(data["times"], dtype=np.float64)
     respawn_subset_size = (
@@ -248,6 +278,11 @@ def main(argv: list[str] | None = None) -> None:
     n_temporal_map_sub50 = 0
     n_temporal_map_disagreement = 0
     max_temporal_gamma = 0.0
+    n_integrity_map_sub50 = 0
+    n_integrity_map_disagreement = 0
+    n_integrity_anchor_epochs = 0
+    n_integrity_tdcp_intervals = 0
+    max_integrity_gamma = 0.0
     max_gamma = 0.0
     last_ddpr_epoch = -1_000_000
     last_ddpr_pairs = 0
@@ -257,11 +292,33 @@ def main(argv: list[str] | None = None) -> None:
         evidence_start = len(evidence_ledger)
         observation_id = f"tow={float(tow):.3f}"
         epoch_dt = 0.0
+        integrity_tdcp = None
+        current_tdcp_measurements = None
         if i > 0:
             epoch_dt = max(float(times[i] - times[i - 1]), 1e-3)
             float_kf.predict(epoch_dt)
             basin_pf.predict(epoch_dt)
             ddpr_guard.predict(epoch_dt)
+        if integrity_filter is not None:
+            current_tdcp_measurements = [
+                measurement
+                for measurement in _epoch_measurements(data, i)
+                if int(measurement.system_id) in integrity_tdcp_system_ids
+            ]
+            if i > 0 and previous_tdcp_measurements is not None:
+                integrity_tdcp = estimate_displacement_from_tdcp(
+                    float_kf.position_ecef,
+                    previous_tdcp_measurements,
+                    current_tdcp_measurements,
+                    epoch_dt,
+                    min_sats=int(args.integrity_tdcp_min_sats),
+                    max_postfit_rms_m=float(args.integrity_tdcp_max_postfit_rms_m),
+                    slip_residual_threshold_m=float(
+                        args.integrity_tdcp_slip_threshold_m
+                    ),
+                )
+                n_integrity_tdcp_intervals += int(integrity_tdcp is not None)
+            previous_tdcp_measurements = current_tdcp_measurements
         velocity, doppler_rms = _doppler_velocity(data, i, float_kf.position_ecef)
         if velocity is not None:
             velocity_sigma = max(0.5, min(float(doppler_rms), 5.0))
@@ -570,6 +627,84 @@ def main(argv: list[str] | None = None) -> None:
                 and map_basin is not None
                 and temporal_map_basin.basin_id != map_basin.basin_id
             )
+        integrity_posterior = None
+        integrity_map_basin = None
+        integrity_result = None
+        if integrity_filter is not None and basin_pf.basins:
+            integrity_scores = np.zeros(len(basin_pf.basins), dtype=np.float64)
+            if dd_pr is not None:
+                integrity_result = multipivot_ddpr_scores(
+                    dd_pr,
+                    np.asarray(
+                        [basin.conditional.mean[:3] for basin in basin_pf.basins],
+                        dtype=np.float64,
+                    ),
+                    scale_m=float(args.integrity_scale_m),
+                    trim_largest_pairs=int(args.integrity_trim_pairs),
+                )
+                integrity_scores = (
+                    float(args.integrity_weight) * integrity_result.scores
+                )
+                n_integrity_anchor_epochs += 1
+                evidence_ledger.record(
+                    epoch=i,
+                    target="integrity_lineage",
+                    source="multipivot_dd_pseudorange",
+                    observation_id=observation_id,
+                    n_rows=int(dd_pr.n_dd),
+                    log_evidence=float(np.max(integrity_scores)),
+                )
+            integrity_candidates = [
+                TemporalAmbiguityCandidate(
+                    candidate_id=ambiguity_assignment_id(basin.assignment),
+                    assignment=basin.assignment,
+                    epoch_log_likelihood=float(integrity_scores[index]),
+                    position_ecef=basin.conditional.mean[:3],
+                    velocity_ecef=basin.conditional.mean[3:6],
+                )
+                for index, basin in enumerate(basin_pf.basins)
+            ]
+            integrity_motion: dict[str, object] = {"motion_mode": "none"}
+            if integrity_tdcp is not None:
+                integrity_motion = {
+                    "motion_mode": "external",
+                    "external_displacement_ecef_m": integrity_tdcp.displacement_ecef_m,
+                    "external_covariance_m2": integrity_tdcp.covariance_m2,
+                }
+                evidence_ledger.record(
+                    epoch=i,
+                    target="integrity_lineage",
+                    source="tdcp_displacement",
+                    observation_id=(
+                        f"tow={float(times[i - 1]):.3f}->{float(tow):.3f}"
+                    ),
+                    n_rows=int(integrity_tdcp.n_used),
+                )
+            integrity_posterior = integrity_filter.step(
+                i,
+                epoch_dt,
+                integrity_candidates,
+                **integrity_motion,
+            )
+            integrity_map_basin = next(
+                (
+                    basin
+                    for basin in basin_pf.basins
+                    if ambiguity_assignment_id(basin.assignment)
+                    == integrity_posterior.map_candidate_id
+                ),
+                None,
+            )
+            max_integrity_gamma = max(
+                max_integrity_gamma, float(integrity_posterior.gamma)
+            )
+            n_integrity_map_disagreement += int(
+                integrity_map_basin is not None
+                and map_basin is not None
+                and integrity_map_basin.basin_id != map_basin.basin_id
+            )
+        elif integrity_filter is not None:
+            integrity_filter.step(i, epoch_dt, ())
         map_float_separation = (
             float(np.linalg.norm(map_basin.conditional.mean[:3] - float_kf.position_ecef))
             if map_basin is not None
@@ -629,6 +764,12 @@ def main(argv: list[str] | None = None) -> None:
             else float("nan")
         )
         n_temporal_map_sub50 += int(temporal_map_error < 0.5)
+        integrity_map_error = (
+            float(np.linalg.norm(integrity_map_basin.conditional.mean[:3] - ref))
+            if integrity_map_basin is not None and ref is not None
+            else float("nan")
+        )
+        n_integrity_map_sub50 += int(integrity_map_error < 0.5)
         cluster_error = (
             float(np.linalg.norm(position_cluster.mean_position_ecef - ref))
             if ref is not None and np.all(np.isfinite(position_cluster.mean_position_ecef))
@@ -703,6 +844,34 @@ def main(argv: list[str] | None = None) -> None:
                     else int(temporal_posterior.dwell_epochs)
                 ),
                 "temporal_map_error_m": temporal_map_error,
+                "integrity_lineage_enabled": int(integrity_filter is not None),
+                "integrity_anchor_available": int(integrity_result is not None),
+                "integrity_tdcp_available": int(integrity_tdcp is not None),
+                "integrity_tdcp_postfit_rms_m": (
+                    float("nan")
+                    if integrity_tdcp is None
+                    else float(integrity_tdcp.postfit_rms_m)
+                ),
+                "integrity_map_assignment_id": (
+                    "" if integrity_posterior is None
+                    else integrity_posterior.map_candidate_id
+                ),
+                "integrity_gamma": (
+                    0.0
+                    if integrity_posterior is None
+                    else float(integrity_posterior.gamma)
+                ),
+                "integrity_ess": (
+                    0.0
+                    if integrity_posterior is None
+                    else float(integrity_posterior.ess)
+                ),
+                "integrity_dwell_epochs": (
+                    0
+                    if integrity_posterior is None
+                    else int(integrity_posterior.dwell_epochs)
+                ),
+                "integrity_map_error_m": integrity_map_error,
                 "position_cluster_error_m": cluster_error,
                 "position_cluster_gamma": float(position_cluster.gamma),
                 "position_cluster_spread_m": float(position_cluster.rms_spread_m),
@@ -788,6 +957,15 @@ def main(argv: list[str] | None = None) -> None:
         "temporal_map_disagreement_epochs": int(n_temporal_map_disagreement),
         "temporal_map_sub50cm_epochs": int(n_temporal_map_sub50),
         "max_temporal_gamma": float(max_temporal_gamma),
+        "integrity_lineage_enabled": bool(args.enable_integrity_lineage),
+        "integrity_scale_m": float(args.integrity_scale_m),
+        "integrity_trim_pairs": int(args.integrity_trim_pairs),
+        "integrity_weight": float(args.integrity_weight),
+        "integrity_anchor_epochs": int(n_integrity_anchor_epochs),
+        "integrity_tdcp_intervals": int(n_integrity_tdcp_intervals),
+        "integrity_map_disagreement_epochs": int(n_integrity_map_disagreement),
+        "integrity_map_sub50cm_epochs": int(n_integrity_map_sub50),
+        "max_integrity_gamma": float(max_integrity_gamma),
         "float_ambiguity_resets": int(n_float_resets),
         "declared_fix_epochs": int(n_declared_fix),
         "gamma_fix_epochs": int(n_gamma_fix),

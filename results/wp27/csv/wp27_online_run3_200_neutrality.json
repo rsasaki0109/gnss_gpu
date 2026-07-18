@@ -1,0 +1,32 @@
+{
+  "epochs": 200,
+  "operational_fields": [
+    "tow",
+    "ecef_x",
+    "ecef_y",
+    "ecef_z",
+    "fix",
+    "gamma_fixed",
+    "map_assignment_id",
+    "gamma"
+  ],
+  "operational_field_mismatches": {
+    "tow": 0,
+    "ecef_x": 0,
+    "ecef_y": 0,
+    "ecef_z": 0,
+    "fix": 0,
+    "gamma_fixed": 0,
+    "map_assignment_id": 0,
+    "gamma": 0
+  },
+  "operational_mismatches": 0,
+  "maximum_position_delta_m": 0.0,
+  "control_trajectory_sha256": "cb606f060e9b449466f136cecb13cfe4c06d0502edc27b42dbc57802bfce73a7",
+  "integrity_trajectory_sha256": "cb606f060e9b449466f136cecb13cfe4c06d0502edc27b42dbc57802bfce73a7",
+  "trajectory_bit_identical": true,
+  "integrity_anchor_epochs": 40,
+  "integrity_tdcp_intervals": 199,
+  "integrity_map_sub50cm_epochs": 91,
+  "truth_used_by_integrity_filter": false
+}

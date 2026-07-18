@@ -28,3 +28,18 @@ robust DD pseudorange consensus over the live ambiguity basins.
 - If DDPR consensus remains ambiguous, measure whether per-satellite residual
   histories expose persistent biased/blocked modes before adding a latent
   integrity state.
+
+## Online diagnostic increment
+
+1. Add an opt-in causal arm to `exp_wp23b_basin_ar.py`.
+2. Feed only multi-pivot DDPR scores into the observation term; never reuse the
+   basin PF's cumulative/current DDPR/DDCP likelihood.
+3. Feed robust TDCP displacement and covariance into the transition term.
+4. Record both sources under the separate `integrity_lineage` evidence target.
+5. Keep the selected candidate, gamma, and error diagnostic-only. The existing
+   output position, MAP posterior, and trusted commit policy must be bit-identical
+   to a control run.
+
+Online gate: Tokyo run3/200 must reproduce the offline 91/200 diagnostic result,
+accept 199 TDCP intervals and 40 DDPR anchors, pass the evidence audit, and have
+zero operational-field mismatch plus identical trajectory SHA-256.
