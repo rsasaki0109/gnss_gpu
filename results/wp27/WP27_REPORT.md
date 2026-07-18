@@ -2,7 +2,7 @@
 
 ## Verdict
 
-**Absolute selection and causal integration pass; production/FIX gate not yet passed.**
+**Satellite-selection and transfer pass; production/FIX gate fail.**
 Multi-pivot DDPR breaks enough of the coherent-translation ambiguity to improve
 diagnostic selection from 0/200 to 91/200 epochs when paired with TDCP holdover.
 The signal is sparse and not yet calibrated for safe output.
@@ -63,6 +63,13 @@ accepts 21/66/1 correct epochs, whose Wilson 95% false-rate upper bounds are
 15.5%/5.5%/79.3%. EMA satellite memory does not improve this safety result.
 The max-cost arm therefore advances satellite selection but is not promoted.
 
+Frozen Nagoya transfer is non-degrading: run1 improves 4→6 selected epochs,
+run2 improves 23→31, and run3 remains 0. Nagoya run3 contains a live sub-50 cm
+basin on only 13/200 epochs, so its dominant failure is candidate supply rather
+than the satellite selector. No common safe accept configuration exists on the
+three Nagoya windows. WP27 therefore hands candidate recovery to WP28 while
+keeping all new output/FIX connections disabled.
+
 Artifacts:
 
 - `csv/wp27_multipivot_run3_200_sweep.json`;
@@ -77,7 +84,9 @@ Artifacts:
 - `csv/wp27_online_calibration_3x200.json`;
 - `csv/wp27_integrity_satellite_loo_3x200_summary.json`;
 - `csv/wp27_online_maxcost_calibration_3x200.json`;
-- `csv/wp27_online_satema75_calibration_3x200.json`.
+- `csv/wp27_online_satema75_calibration_3x200.json`;
+- `csv/wp27_nagoya_transfer_3x200.json`;
+- `csv/wp27_nagoya_maxcost_calibration_3x200.json`.
 
 Reproduce the enabled run and neutrality audit:
 

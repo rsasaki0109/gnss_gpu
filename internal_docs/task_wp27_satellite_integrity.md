@@ -70,3 +70,8 @@ Also evaluate a causal EMA of satellite cost as the minimal persistent
 `clean/biased` state. EMA memory is development-only until frozen transfer to
 Nagoya. Both arms remain disconnected from output/FIX and must preserve the
 existing evidence and replay audits.
+
+Freeze the instantaneous rule before Nagoya transfer. Transfer passes if
+selection is non-degrading on every Nagoya first-200 window and improves at
+least one; this is not a production/FIX gate. Report oracle candidate supply so
+an unrecoverable selection failure is not misclassified as satellite scoring.

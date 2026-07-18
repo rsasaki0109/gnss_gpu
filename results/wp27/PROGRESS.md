@@ -112,9 +112,27 @@ The instantaneous max-cost arm has one common grid cell with observed false
 0/88 (21/66/1 by run), but Wilson 95% upper bounds remain 15.5%, 5.5%, and
 79.3%. This is insufficient for a FIX claim.
 
+## Frozen Nagoya transfer
+
+The instantaneous max-cost rule was frozen and run unchanged against the
+no-exclusion arm on Nagoya first-200 windows:
+
+| Run | Oracle live | No exclusion | Max-cost | Gain |
+| --- | ---: | ---: | ---: | ---: |
+| run1 | 99/200 | 4/200 | 6/200 | +2 |
+| run2 | 200/200 | 23/200 | 31/200 | +8 |
+| run3 | 13/200 | 0/200 | 0/200 | 0 |
+
+The rule is non-degrading on every transfer run and improves two, so its
+satellite-selection effect is not Tokyo-only. Nagoya run3 has only 13 oracle
+epochs and therefore exposes the next bottleneck: candidate supply and
+recovery. No common safe accept configuration exists on Nagoya, so the arm
+remains diagnostic.
+
 ## Next
 
-Freeze instantaneous max-cost exclusion and transfer it unchanged to Nagoya
-first-200 windows against the no-exclusion control. If the gain transfers,
-extend the latent mode with recovery/hysteresis and begin WP28 hypothesis
-recovery; otherwise retain the result as Tokyo-specific diagnosis.
+WP27 has identified and causally mitigated satellite contamination, transferred
+the rule, and rejected unsafe confidence. Start WP28 with outage/generation
+state, proposal-source priors, diversity-aware basin retention, and explicit
+candidate recall/survival audits. Keep max-cost exclusion as an opt-in evidence
+source until WP28 produces enough independent samples for safety calibration.
