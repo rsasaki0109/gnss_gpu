@@ -143,3 +143,17 @@ store pivot-free integer potentials with causal arc identifiers, detect and
 invalidate only slipped satellite arcs, and materialize DD assignments only at
 proposal time. It must first exceed the frozen 31/40 anchor recall in shadow
 mode before it may receive PF mass.
+
+That shadow gate is now passed. A TDCP-referenced satellite-arc ledger plus
+generation-safe partial completion reaches a **38/40 (95.0%)** union proposal
+recall on Nagoya run3/200. It adds epochs 35 and 50–75 without carrying any
+integer across the six BeiDou arc resets detected at epoch 45. Startup epochs 0
+and 5 are the only remaining misses.
+
+Eight completions per history source establish the ceiling but produce up to
+1024 shadow candidates. Two completions per source preserve all seven
+incremental anchors with at most 256 candidates; the incremental candidates all
+rank within the first 108 by the same truth-free residual. A 128-candidate
+replacement allocation therefore preserves the shadow gate while matching the
+old assignment replay budget. Promotion is still withheld until completion is
+computed within that cap and a live PF arm proves survival and runtime gates.

@@ -3,7 +3,9 @@ import pytest
 
 from gnss_gpu.recovery_proposals import (
     RecoveryAssignmentBank,
+    RecoveryArcAssignmentBank,
     RecoveryPositionBank,
+    SatelliteArcTracker,
     complete_versioned_assignment,
     covariance_axis_position_seeds,
 )
@@ -167,6 +169,87 @@ def test_assignment_bank_rebases_integer_differences_to_new_pivot():
     )
     bank.clear()
     assert bank.rebased_assignments(current, [key[0] for key in current]) == ()
+
+
+def test_satellite_arc_tracker_is_pivot_invariant_and_resets_only_slipped_satellite():
+    wavelength = 190293673
+    tracker = SatelliteArcTracker(slip_threshold_cycles=2.0)
+    old_keys = (
+        ("G01", "G02", wavelength),
+        ("G01", "G03", wavelength),
+        ("G01", "G04", wavelength),
+    )
+    assert tracker.update(0, old_keys, (5.0, 8.0, 11.0)) == ()
+
+    new_keys = (
+        ("G02", "G01", wavelength),
+        ("G02", "G03", wavelength),
+        ("G02", "G04", wavelength),
+    )
+    assert tracker.update(1, new_keys, (-5.1, 3.0, 6.1)) == ()
+    before = tracker.generations
+    slipped = tracker.update(2, new_keys, (-5.0, 7.2, 6.0))
+    assert slipped == (("G03", wavelength),)
+    assert tracker.generations[("G03", wavelength)] == before[("G03", wavelength)] + 1
+    assert tracker.generations[("G01", wavelength)] == before[("G01", wavelength)]
+    assert tracker.generations[("G02", wavelength)] == before[("G02", wavelength)]
+
+
+def test_satellite_arc_tracker_recognizes_a_slipped_old_pivot_after_rebase():
+    wavelength = 190293673
+    tracker = SatelliteArcTracker(slip_threshold_cycles=2.0)
+    tracker.update(
+        0,
+        (("G01", "G02", wavelength), ("G01", "G03", wavelength)),
+        (5.0, 8.0),
+    )
+    slipped = tracker.update(
+        1,
+        (("G02", "G01", wavelength), ("G02", "G03", wavelength)),
+        (-9.0, 3.0),
+    )
+    assert slipped == (("G01", wavelength),)
+
+
+def test_arc_assignment_bank_rebases_pivot_and_invalidates_only_slipped_arcs():
+    wavelength = 190293673
+    arcs = {
+        ("G01", wavelength): 0,
+        ("G02", wavelength): 0,
+        ("G03", wavelength): 0,
+    }
+    old = {
+        (("G01", "G02", wavelength), 0): 5,
+        (("G01", "G03", wavelength), 0): 8,
+    }
+    current = {
+        (("G02", "G01", wavelength), 4),
+        (("G02", "G03", wavelength), 7),
+    }
+    bank = RecoveryArcAssignmentBank(
+        max_assignments=4, max_age_epochs=10, min_assignment_size=2
+    )
+    bank.update(0, [old], [0.0], arcs)
+    assert bank.compatible_assignments(
+        current, [key[0] for key in current], arcs
+    ) == (
+        {
+            (("G02", "G01", wavelength), 4): -5,
+            (("G02", "G03", wavelength), 7): 3,
+        },
+    )
+
+    slipped_arcs = dict(arcs)
+    slipped_arcs[("G03", wavelength)] = 1
+    assert bank.compatible_assignments(
+        current,
+        [key[0] for key in current],
+        slipped_arcs,
+        min_size=1,
+    ) == ({(("G02", "G01", wavelength), 4): -5},)
+    assert bank.compatible_assignments(
+        current, [key[0] for key in current], slipped_arcs
+    ) == ()
 
 
 def test_assignment_completion_preserves_stable_and_fills_current_generation():

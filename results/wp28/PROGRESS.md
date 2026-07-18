@@ -260,3 +260,34 @@ but discards useful unaffected integer relations, including correct anchors at
 epochs 25 and 180. The next assignment design must use pivot-invariant
 per-satellite arc identities and invalidate only relations incident to a
 causally detected slipped satellite.
+
+### Per-satellite arc ledger and selective completion
+
+A pivot-free satellite-arc ledger now reconstructs integer node potentials
+from DD assignments. Arc continuity is observed against a TDCP-propagated
+position reference, the constellation gauge is aligned from common satellites,
+and only a satellite whose continuity residual exceeds 2 cycles receives a new
+generation. A 50-epoch maximum gap matches the bounded assignment memory. The
+ledger and every candidate in this section remain shadow-only.
+
+At epoch 45 the detector identifies six BeiDou arcs while leaving the other
+constellations intact. Requiring eight unchanged DD dimensions therefore
+remains too strict. Holding at least four unchanged arc dimensions fixed and
+using current-epoch LAMBDA to complete only the reset dimensions recovers the
+entire epoch-50–75 burst. With eight diagnostic completions per historical
+source, the union of frozen proposals and arc proposals reaches **38/40
+(95.0%)** anchors. The seven incremental anchors are epochs 35, 50, 55, 60,
+65, 70, and 75; only startup epochs 0 and 5 remain missing. This passes the
+predeclared 90% shadow proposal-recall gate for the first time.
+
+The unrestricted diagnostic arm generates as many as 1024 candidates. Keeping
+only two current-generation completions per historical source preserves the
+same 38/40 union with at most 256 arc candidates. All seven incremental correct
+candidates have truth-free residual rank at most 108, so a 128-candidate cap
+preserves the recall result and can replace, rather than augment, the existing
+128 DD-key replay allocation. Global top-72 residual pruning is rejected; it
+retains only 5/15 eligible correct shadow anchors in the first 80 epochs.
+
+WP28B's proposal-recall gate is complete. WP28C must avoid computing discarded
+LAMBDA completions, verify the 128-candidate arm end to end without shadow
+feedback, and measure wall-clock cost before any PF-mass promotion.

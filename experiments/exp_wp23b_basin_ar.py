@@ -56,7 +56,9 @@ from gnss_gpu.rtk_evidence import (  # noqa: E402
 )
 from gnss_gpu.recovery_proposals import (  # noqa: E402
     RecoveryAssignmentBank,
+    RecoveryArcAssignmentBank,
     RecoveryPositionBank,
+    SatelliteArcTracker,
     complete_versioned_assignment,
     covariance_axis_position_seeds,
 )
@@ -198,6 +200,26 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--ddpr-respawn-assignment-pivot-rebase", action="store_true"
+    )
+    parser.add_argument("--ddpr-respawn-assignment-arc-shadow", action="store_true")
+    parser.add_argument(
+        "--ddpr-respawn-assignment-arc-slip-threshold-cycles",
+        type=float,
+        default=2.0,
+    )
+    parser.add_argument(
+        "--ddpr-respawn-assignment-arc-max-gap-epochs", type=int, default=1
+    )
+    parser.add_argument(
+        "--ddpr-respawn-assignment-arc-completion-top-k", type=int, default=0
+    )
+    parser.add_argument(
+        "--ddpr-respawn-assignment-arc-completion-per-assignment",
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        "--ddpr-respawn-assignment-arc-shadow-max-candidates", type=int, default=0
     )
     parser.add_argument("--ddpr-respawn-assignment-completion-top-k", type=int, default=0)
     parser.add_argument("--ddpr-respawn-assignment-completion-min-stable", type=int, default=4)
@@ -375,6 +397,26 @@ def main(argv: list[str] | None = None) -> None:
         if int(args.ddpr_respawn_assignment_history) > 0
         else None
     )
+    satellite_arc_tracker = (
+        SatelliteArcTracker(
+            slip_threshold_cycles=float(
+                args.ddpr_respawn_assignment_arc_slip_threshold_cycles
+            ),
+            max_gap_epochs=int(args.ddpr_respawn_assignment_arc_max_gap_epochs),
+        )
+        if args.ddpr_respawn_assignment_arc_shadow
+        else None
+    )
+    recovery_arc_assignment_bank = (
+        RecoveryArcAssignmentBank(
+            max_assignments=int(args.ddpr_respawn_assignment_history),
+            max_age_epochs=int(args.ddpr_respawn_assignment_history_max_age_epochs),
+            min_assignment_size=int(respawn_subset_size),
+        )
+        if args.ddpr_respawn_assignment_arc_shadow
+        and int(args.ddpr_respawn_assignment_history) > 0
+        else None
+    )
     basin_ddpr_sigma = (
         float(args.sigma_basin_dd_pr_m)
         if float(args.sigma_basin_dd_pr_m) > 0.0
@@ -396,6 +438,9 @@ def main(argv: list[str] | None = None) -> None:
     n_subset_shadow_correct = 0
     n_float_resets = 0
     n_assignment_history_clears = 0
+    n_arc_slips = 0
+    n_arc_shadow_epochs = 0
+    n_arc_shadow_correct = 0
     n_temporal_map_sub50 = 0
     n_temporal_map_disagreement = 0
     max_temporal_gamma = 0.0
@@ -415,6 +460,7 @@ def main(argv: list[str] | None = None) -> None:
     last_ddpr_epoch = -1_000_000
     last_ddpr_pairs = 0
     last_ddpr_nis = float("nan")
+    arc_reference_position = None
 
     for i, tow in enumerate(times):
         evidence_start = len(evidence_ledger)
@@ -427,7 +473,11 @@ def main(argv: list[str] | None = None) -> None:
             float_kf.predict(epoch_dt)
             basin_pf.predict(epoch_dt)
             ddpr_guard.predict(epoch_dt)
-        if integrity_filter is not None or args.ddpr_respawn_history_propagate_tdcp:
+        if (
+            integrity_filter is not None
+            or args.ddpr_respawn_history_propagate_tdcp
+            or satellite_arc_tracker is not None
+        ):
             current_tdcp_measurements = [
                 measurement
                 for measurement in _epoch_measurements(data, i)
@@ -526,6 +576,33 @@ def main(argv: list[str] | None = None) -> None:
             )
 
         generations = float_kf.ambiguity_generations()
+        epoch_arc_slips = 0
+        epoch_arc_slip_ids = ""
+        if satellite_arc_tracker is not None and dd_cp is not None:
+            if arc_reference_position is None:
+                arc_reference_position = float_kf.position_ecef.copy()
+            elif integrity_tdcp is not None:
+                arc_reference_position = (
+                    arc_reference_position + integrity_tdcp.displacement_ecef_m
+                )
+            elif epoch_dt > 0.0:
+                arc_reference_position = (
+                    arc_reference_position + float_kf.velocity_ecef * epoch_dt
+                )
+            arc_seed = ddpr_centered_ambiguity_seed(
+                dd_cp,
+                arc_reference_position,
+                float_kf.covariance[:3, :3],
+                sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+            )
+            arc_slips = satellite_arc_tracker.update(
+                i, arc_seed.keys, arc_seed.ahat_cycles
+            )
+            epoch_arc_slips = len(arc_slips)
+            epoch_arc_slip_ids = ",".join(
+                f"{satellite}@{wavelength}" for satellite, wavelength in arc_slips
+            )
+            n_arc_slips += epoch_arc_slips
         assignment_history_cleared = False
         if (
             recovery_assignment_bank is not None
@@ -630,6 +707,9 @@ def main(argv: list[str] | None = None) -> None:
         position_shadow_oracle_min_error = float("nan")
         subset_shadow_candidates = 0
         subset_shadow_oracle_min_error = float("nan")
+        arc_shadow_candidates = 0
+        arc_shadow_oracle_min_error = float("nan")
+        arc_shadow_oracle_rank = -1
         respawn_excluded_satellite = ""
         if dd_cp is not None and int(dd_cp.n_dd) >= int(args.subset_size):
             current_pairs = {
@@ -715,6 +795,7 @@ def main(argv: list[str] | None = None) -> None:
             completion_shadow_states: list[BasinKalmanState] = []
             position_shadow_states: list[BasinKalmanState] = []
             subset_shadow_states: list[BasinKalmanState] = []
+            arc_shadow_states: list[BasinKalmanState] = []
             if recovery_assignment_bank is not None:
                 assignment_seed = ddpr_centered_ambiguity_seed(
                     dd_cp,
@@ -727,6 +808,87 @@ def main(argv: list[str] | None = None) -> None:
                     for key in assignment_seed.keys
                     if respawn_excluded_satellite not in key[:2]
                 )
+                if (
+                    recovery_arc_assignment_bank is not None
+                    and satellite_arc_tracker is not None
+                ):
+                    arc_completion_top_k = int(
+                        args.ddpr_respawn_assignment_arc_completion_top_k
+                    )
+                    arc_replays = recovery_arc_assignment_bank.compatible_assignments(
+                        active_versioned,
+                        observed_assignment_keys,
+                        satellite_arc_tracker.generations,
+                        min_size=(
+                            int(args.ddpr_respawn_assignment_completion_min_stable)
+                            if arc_completion_top_k > 0
+                            else None
+                        ),
+                    )
+                    arc_candidates: dict[
+                        tuple[tuple[tuple[tuple[str, str, int], int], int], ...],
+                        tuple[dict, float],
+                    ] = {}
+                    for arc_assignment in arc_replays:
+                        if (
+                            arc_completion_top_k > 0
+                            and len(arc_assignment) < respawn_subset_size
+                        ):
+                            completed = complete_versioned_assignment(
+                                assignment_seed.keys,
+                                generations,
+                                assignment_seed.ahat_cycles,
+                                assignment_seed.qahat_cycles2,
+                                arc_assignment,
+                                target_size=respawn_subset_size,
+                                n_candidates=arc_completion_top_k,
+                            )
+                            per_assignment_limit = int(
+                                args.ddpr_respawn_assignment_arc_completion_per_assignment
+                            )
+                            if per_assignment_limit > 0:
+                                completed = completed[:per_assignment_limit]
+                            for assignment, distance in completed:
+                                canonical = tuple(sorted(assignment.items()))
+                                previous = arc_candidates.get(canonical)
+                                if previous is None or float(distance) < previous[1]:
+                                    arc_candidates[canonical] = (
+                                        assignment,
+                                        float(distance),
+                                    )
+                        else:
+                            arc_keys = tuple(key[0] for key in arc_assignment)
+                            arc_integers = np.asarray(
+                                [arc_assignment[key] for key in arc_assignment],
+                                dtype=np.float64,
+                            )
+                            _position, _covariance, distance = condition_respawn_position(
+                                assignment_seed, arc_keys, arc_integers
+                            )
+                            arc_candidates.setdefault(
+                                tuple(sorted(arc_assignment.items())),
+                                (arc_assignment, float(distance)),
+                            )
+                    ranked_arc_candidates = sorted(
+                        arc_candidates.values(), key=lambda item: item[1]
+                    )
+                    arc_shadow_limit = int(
+                        args.ddpr_respawn_assignment_arc_shadow_max_candidates
+                    )
+                    if arc_shadow_limit > 0:
+                        ranked_arc_candidates = ranked_arc_candidates[:arc_shadow_limit]
+                    for arc_assignment, _proposal_distance in ranked_arc_candidates:
+                        arc_keys = tuple(key[0] for key in arc_assignment)
+                        arc_integers = np.asarray(
+                            [arc_assignment[key] for key in arc_assignment],
+                            dtype=np.float64,
+                        )
+                        position, covariance, _distance = condition_respawn_position(
+                            assignment_seed, arc_keys, arc_integers
+                        )
+                        arc_shadow_states.append(
+                            BasinKalmanState.from_position(position, covariance)
+                        )
 
                 def assignment_replays(
                     *, min_size: int | None = None
@@ -973,6 +1135,16 @@ def main(argv: list[str] | None = None) -> None:
                     fresh_assignments,
                     (-0.5 * np.asarray(fresh_residuals, dtype=np.float64)).tolist(),
                 )
+                if (
+                    recovery_arc_assignment_bank is not None
+                    and satellite_arc_tracker is not None
+                ):
+                    recovery_arc_assignment_bank.update(
+                        i,
+                        fresh_assignments,
+                        (-0.5 * np.asarray(fresh_residuals, dtype=np.float64)).tolist(),
+                        satellite_arc_tracker.generations,
+                    )
             if conditionals:
                 # Diagnostic only: truth never changes candidates, weights,
                 # output selection, or the FIX gate.
@@ -1021,6 +1193,19 @@ def main(argv: list[str] | None = None) -> None:
                     n_subset_shadow_correct += int(
                         subset_shadow_oracle_min_error < 0.5
                     )
+                if epoch_ref is not None and arc_shadow_states:
+                    arc_shadow_candidates = len(arc_shadow_states)
+                    arc_shadow_errors = np.asarray(
+                        [
+                            float(np.linalg.norm(state.mean[:3] - epoch_ref))
+                            for state in arc_shadow_states
+                        ],
+                        dtype=np.float64,
+                    )
+                    arc_shadow_oracle_rank = int(np.argmin(arc_shadow_errors)) + 1
+                    arc_shadow_oracle_min_error = float(np.min(arc_shadow_errors))
+                    n_arc_shadow_epochs += 1
+                    n_arc_shadow_correct += int(arc_shadow_oracle_min_error < 0.5)
                 if assignments:
                     basin_pf.spawn(
                         assignments,
@@ -1601,6 +1786,8 @@ def main(argv: list[str] | None = None) -> None:
                     0 if cp_diag is None else int(cp_diag.ambiguities_reset)
                 ),
                 "assignment_history_cleared": int(assignment_history_cleared),
+                "assignment_arc_slips": int(epoch_arc_slips),
+                "assignment_arc_slip_ids": epoch_arc_slip_ids,
                 "gamma": float(posterior.gamma),
                 "fix_streak": int(commit.fix_streak),
                 "map_assignment_id": assignment_id,
@@ -1621,6 +1808,9 @@ def main(argv: list[str] | None = None) -> None:
                 "position_shadow_oracle_min_error_m": position_shadow_oracle_min_error,
                 "subset_shadow_candidates": subset_shadow_candidates,
                 "subset_shadow_oracle_min_error_m": subset_shadow_oracle_min_error,
+                "arc_shadow_candidates": arc_shadow_candidates,
+                "arc_shadow_oracle_min_error_m": arc_shadow_oracle_min_error,
+                "arc_shadow_oracle_rank": int(arc_shadow_oracle_rank),
                 "respawn_excluded_satellite": respawn_excluded_satellite,
                 "n_dd_pr": 0 if dd_pr is None else int(dd_pr.n_dd),
                 "n_dd_cp": 0 if dd_cp is None else int(dd_cp.n_dd),
@@ -1709,6 +1899,25 @@ def main(argv: list[str] | None = None) -> None:
         "ddpr_respawn_assignment_history_clears": int(
             n_assignment_history_clears
         ),
+        "ddpr_respawn_assignment_arc_shadow": bool(
+            args.ddpr_respawn_assignment_arc_shadow
+        ),
+        "ddpr_respawn_assignment_arc_slip_threshold_cycles": float(
+            args.ddpr_respawn_assignment_arc_slip_threshold_cycles
+        ),
+        "ddpr_respawn_assignment_arc_max_gap_epochs": int(
+            args.ddpr_respawn_assignment_arc_max_gap_epochs
+        ),
+        "ddpr_respawn_assignment_arc_completion_top_k": int(
+            args.ddpr_respawn_assignment_arc_completion_top_k
+        ),
+        "ddpr_respawn_assignment_arc_completion_per_assignment": int(
+            args.ddpr_respawn_assignment_arc_completion_per_assignment
+        ),
+        "ddpr_respawn_assignment_arc_shadow_max_candidates": int(
+            args.ddpr_respawn_assignment_arc_shadow_max_candidates
+        ),
+        "ddpr_respawn_assignment_arc_slips": int(n_arc_slips),
         "ddpr_respawn_assignment_completion_top_k": int(
             args.ddpr_respawn_assignment_completion_top_k
         ),
@@ -1724,6 +1933,8 @@ def main(argv: list[str] | None = None) -> None:
         "position_shadow_correct_epochs": int(n_position_shadow_correct),
         "subset_shadow_epochs": int(n_subset_shadow_epochs),
         "subset_shadow_correct_epochs": int(n_subset_shadow_correct),
+        "arc_shadow_epochs": int(n_arc_shadow_epochs),
+        "arc_shadow_correct_epochs": int(n_arc_shadow_correct),
         "ddpr_respawn_epochs": int(n_respawn_epochs),
         "temporal_lineage_enabled": bool(args.enable_temporal_lineage),
         "temporal_map_disagreement_epochs": int(n_temporal_map_disagreement),

@@ -14,6 +14,9 @@ from gnss_gpu.lambda_ambiguity import integer_search
 RawAmbiguityKey: TypeAlias = tuple[str, str, int]
 VersionedAmbiguityKey: TypeAlias = tuple[RawAmbiguityKey, int]
 AssignmentItem: TypeAlias = tuple[VersionedAmbiguityKey, int]
+SatelliteArcKey: TypeAlias = tuple[str, int]
+VersionedSatelliteArcKey: TypeAlias = tuple[SatelliteArcKey, int]
+ArcPotentialItem: TypeAlias = tuple[VersionedSatelliteArcKey, int]
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,232 @@ class _AssignmentBankEntry:
     epoch: int
     assignment: tuple[AssignmentItem, ...]
     log_weight: float
+
+
+@dataclass(frozen=True)
+class _ArcAssignmentBankEntry:
+    epoch: int
+    potentials: tuple[ArcPotentialItem, ...]
+    log_weight: float
+
+
+class SatelliteArcTracker:
+    """Track pivot-invariant per-satellite carrier continuity generations."""
+
+    def __init__(self, slip_threshold_cycles: float, max_gap_epochs: int = 1) -> None:
+        self.slip_threshold_cycles = float(slip_threshold_cycles)
+        self.max_gap_epochs = int(max_gap_epochs)
+        if not np.isfinite(self.slip_threshold_cycles) or self.slip_threshold_cycles <= 0:
+            raise ValueError("arc slip threshold must be finite and positive")
+        if self.max_gap_epochs < 1:
+            raise ValueError("arc maximum gap must be positive")
+        self._generations: dict[SatelliteArcKey, int] = {}
+        self._potentials: dict[SatelliteArcKey, float] = {}
+        self._last_seen: dict[SatelliteArcKey, int] = {}
+
+    @property
+    def generations(self) -> dict[SatelliteArcKey, int]:
+        return dict(self._generations)
+
+    def update(
+        self,
+        epoch: int,
+        raw_keys: Iterable[RawAmbiguityKey],
+        ambiguity_cycles: Iterable[float],
+    ) -> tuple[SatelliteArcKey, ...]:
+        """Update arcs from DD float values and return selectively reset satellites."""
+
+        keys = tuple(raw_keys)
+        values = np.asarray(tuple(ambiguity_cycles), dtype=np.float64).reshape(-1)
+        if len(keys) != values.size:
+            raise ValueError("arc keys and ambiguity values must have equal length")
+        if not np.all(np.isfinite(values)):
+            raise ValueError("arc ambiguity values must be finite")
+        current: dict[SatelliteArcKey, float] = {}
+        by_group: dict[tuple[str, int], list[tuple[str, str, float]]] = {}
+        for (ref, sat, wavelength), value in zip(keys, values):
+            group = (ref[:1], int(wavelength))
+            by_group.setdefault(group, []).append((ref, sat, float(value)))
+        for (constellation, wavelength), edges in by_group.items():
+            adjacency: dict[str, list[tuple[str, float]]] = {}
+            for ref, sat, value in edges:
+                adjacency.setdefault(ref, []).append((sat, value))
+                adjacency.setdefault(sat, []).append((ref, -value))
+            potentials: dict[str, float] = {}
+            for start in adjacency:
+                if start in potentials:
+                    continue
+                potentials[start] = 0.0
+                stack = [start]
+                while stack:
+                    node = stack.pop()
+                    for neighbor, delta in adjacency[node]:
+                        expected = potentials[node] + delta
+                        if neighbor not in potentials:
+                            potentials[neighbor] = expected
+                            stack.append(neighbor)
+                        elif abs(potentials[neighbor] - expected) > 0.25:
+                            raise ValueError("inconsistent DD ambiguity graph")
+            common_deltas = [
+                potential - self._potentials[(satellite, wavelength)]
+                for satellite, potential in potentials.items()
+                if (satellite, wavelength) in self._potentials
+                and int(epoch) - self._last_seen[(satellite, wavelength)]
+                <= self.max_gap_epochs
+            ]
+            gauge_delta = float(np.median(common_deltas)) if common_deltas else 0.0
+            for satellite, potential in potentials.items():
+                current[(satellite, wavelength)] = float(potential - gauge_delta)
+
+        slipped: list[SatelliteArcKey] = []
+        for key, potential in current.items():
+            previous = self._potentials.get(key)
+            last_seen = self._last_seen.get(key)
+            generation = self._generations.get(key, 0)
+            gap_reset = (
+                last_seen is not None
+                and int(epoch) - int(last_seen) > self.max_gap_epochs
+            )
+            slip_reset = (
+                previous is not None
+                and not gap_reset
+                and abs(float(potential) - float(previous))
+                > self.slip_threshold_cycles
+            )
+            if gap_reset or slip_reset:
+                generation += 1
+                slipped.append(key)
+            self._generations[key] = generation
+            self._potentials[key] = float(potential)
+            self._last_seen[key] = int(epoch)
+        return tuple(sorted(slipped))
+
+
+class RecoveryArcAssignmentBank:
+    """Bounded assignment bank keyed by pivot-free per-satellite arc IDs."""
+
+    def __init__(
+        self,
+        max_assignments: int,
+        max_age_epochs: int,
+        min_assignment_size: int,
+    ) -> None:
+        self.max_assignments = int(max_assignments)
+        self.max_age_epochs = int(max_age_epochs)
+        self.min_assignment_size = int(min_assignment_size)
+        if min(self.max_assignments, self.max_age_epochs, self.min_assignment_size) < 1:
+            raise ValueError("arc assignment bank size, age, and dimension must be positive")
+        self._entries: list[_ArcAssignmentBankEntry] = []
+
+    @staticmethod
+    def _satellite_potentials(
+        assignment: dict[VersionedAmbiguityKey, int],
+        arc_generations: dict[SatelliteArcKey, int],
+    ) -> tuple[ArcPotentialItem, ...] | None:
+        graphs: dict[tuple[str, int], dict[str, list[tuple[str, int]]]] = {}
+        for (raw_key, _generation), value in assignment.items():
+            ref, sat, wavelength = raw_key
+            group = (ref[:1], int(wavelength))
+            adjacency = graphs.setdefault(group, {})
+            adjacency.setdefault(ref, []).append((sat, int(value)))
+            adjacency.setdefault(sat, []).append((ref, -int(value)))
+        output: dict[VersionedSatelliteArcKey, int] = {}
+        for (_constellation, wavelength), adjacency in graphs.items():
+            potentials: dict[str, int] = {}
+            for start in adjacency:
+                if start in potentials:
+                    continue
+                potentials[start] = 0
+                stack = [start]
+                while stack:
+                    node = stack.pop()
+                    for neighbor, delta in adjacency[node]:
+                        expected = potentials[node] + delta
+                        if neighbor in potentials:
+                            if potentials[neighbor] != expected:
+                                return None
+                        else:
+                            potentials[neighbor] = expected
+                            stack.append(neighbor)
+            anchor = min(potentials)
+            offset = potentials[anchor]
+            for satellite, potential in potentials.items():
+                arc_key = (satellite, wavelength)
+                if arc_key not in arc_generations:
+                    return None
+                output[(arc_key, int(arc_generations[arc_key]))] = int(
+                    potential - offset
+                )
+        return tuple(sorted(output.items()))
+
+    def update(
+        self,
+        epoch: int,
+        assignments: Iterable[dict[VersionedAmbiguityKey, int]],
+        log_weights: Iterable[float],
+        arc_generations: dict[SatelliteArcKey, int],
+    ) -> None:
+        assignment_list = list(assignments)
+        weights = np.asarray(list(log_weights), dtype=np.float64).reshape(-1)
+        if len(assignment_list) != len(weights):
+            raise ValueError("arc assignments and log_weights must have equal length")
+        if not np.all(np.isfinite(weights)):
+            raise ValueError("arc assignment bank weights must be finite")
+        candidates: list[_ArcAssignmentBankEntry] = []
+        for assignment, weight in zip(assignment_list, weights):
+            if len(assignment) < self.min_assignment_size:
+                continue
+            potentials = self._satellite_potentials(assignment, arc_generations)
+            if potentials is not None:
+                candidates.append(
+                    _ArcAssignmentBankEntry(int(epoch), potentials, float(weight))
+                )
+        candidates.extend(
+            entry
+            for entry in self._entries
+            if int(epoch) - entry.epoch <= self.max_age_epochs
+        )
+        candidates.sort(key=lambda entry: (entry.log_weight, entry.epoch), reverse=True)
+        selected: dict[tuple[ArcPotentialItem, ...], _ArcAssignmentBankEntry] = {}
+        for entry in candidates:
+            selected.setdefault(entry.potentials, entry)
+            if len(selected) >= self.max_assignments:
+                break
+        self._entries = list(selected.values())
+
+    def compatible_assignments(
+        self,
+        active_versioned_keys: Iterable[VersionedAmbiguityKey],
+        observed_raw_keys: Iterable[RawAmbiguityKey],
+        arc_generations: dict[SatelliteArcKey, int],
+        *,
+        min_size: int | None = None,
+    ) -> tuple[dict[VersionedAmbiguityKey, int], ...]:
+        active_by_raw = {raw: generation for raw, generation in active_versioned_keys}
+        observed = tuple(raw for raw in observed_raw_keys if raw in active_by_raw)
+        minimum = self.min_assignment_size if min_size is None else int(min_size)
+        if minimum < 1:
+            raise ValueError("arc compatible assignment minimum must be positive")
+        outputs: dict[tuple[AssignmentItem, ...], dict[VersionedAmbiguityKey, int]] = {}
+        for entry in self._entries:
+            potentials = dict(entry.potentials)
+            projected: dict[VersionedAmbiguityKey, int] = {}
+            for raw_key in observed:
+                ref, sat, wavelength = raw_key
+                ref_arc = (ref, int(wavelength))
+                sat_arc = (sat, int(wavelength))
+                if ref_arc not in arc_generations or sat_arc not in arc_generations:
+                    continue
+                ref_key = (ref_arc, int(arc_generations[ref_arc]))
+                sat_key = (sat_arc, int(arc_generations[sat_arc]))
+                if ref_key in potentials and sat_key in potentials:
+                    projected[(raw_key, int(active_by_raw[raw_key]))] = int(
+                        potentials[sat_key] - potentials[ref_key]
+                    )
+            if len(projected) >= minimum:
+                canonical = tuple(sorted(projected.items()))
+                outputs.setdefault(canonical, projected)
+        return tuple(outputs.values())
 
 
 class RecoveryAssignmentBank:
