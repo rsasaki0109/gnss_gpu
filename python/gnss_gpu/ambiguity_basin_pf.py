@@ -247,6 +247,7 @@ class IntegerBasin:
     epoch_log_marginal: float = 0.0
     lineage: tuple[str, ...] = field(default_factory=tuple)
     birth_epoch: int = 0
+    proposal_sources: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def assignment_dict(self) -> dict[VersionedAmbiguityKey, int]:
@@ -292,6 +293,7 @@ class AmbiguityBasinParticleFilter:
         diversity_reserve_fraction: float = 0.0,
         diversity_radius_m: float = 1.0,
         dedup_position_radius_m: float = np.inf,
+        source_reserve_fraction: float = 0.0,
     ) -> None:
         self.max_basins = int(max_basins)
         self.fix_gamma_threshold = float(fix_gamma_threshold)
@@ -300,12 +302,15 @@ class AmbiguityBasinParticleFilter:
         self.diversity_reserve_fraction = float(diversity_reserve_fraction)
         self.diversity_radius_m = float(diversity_radius_m)
         self.dedup_position_radius_m = float(dedup_position_radius_m)
+        self.source_reserve_fraction = float(source_reserve_fraction)
         if not 0.0 <= self.diversity_reserve_fraction < 1.0:
             raise ValueError("diversity_reserve_fraction must be in [0, 1)")
         if not np.isfinite(self.diversity_radius_m) or self.diversity_radius_m <= 0.0:
             raise ValueError("diversity_radius_m must be finite and positive")
         if np.isnan(self.dedup_position_radius_m) or self.dedup_position_radius_m <= 0.0:
             raise ValueError("dedup_position_radius_m must be positive")
+        if not 0.0 <= self.source_reserve_fraction < 1.0:
+            raise ValueError("source_reserve_fraction must be in [0, 1)")
         self.basins: list[IntegerBasin] = []
         self.epoch = -1
         self._ids = count()
@@ -320,6 +325,7 @@ class AmbiguityBasinParticleFilter:
         prior_mass: float = 1.0,
         parent_id: str | None = None,
         candidate_log_weights: Iterable[float] | None = None,
+        candidate_source_ids: Iterable[str] | None = None,
     ) -> None:
         assignments_list = list(assignments)
         conditionals_list = list(conditionals)
@@ -327,6 +333,13 @@ class AmbiguityBasinParticleFilter:
             raise ValueError("assignments and conditionals must have equal length")
         if not assignments_list:
             return
+        source_ids = (
+            [str(value) for value in candidate_source_ids]
+            if candidate_source_ids is not None
+            else [""] * len(assignments_list)
+        )
+        if len(source_ids) != len(assignments_list):
+            raise ValueError("candidate_source_ids must match assignments")
         if float(prior_mass) <= 0.0 or float(prior_mass) > 1.0:
             raise ValueError("prior_mass must be positive")
         if candidate_log_weights is None:
@@ -344,8 +357,8 @@ class AmbiguityBasinParticleFilter:
             old_scale = max(1.0 - float(prior_mass), 1.0e-12)
             for basin in self.basins:
                 basin.log_weight += np.log(old_scale)
-        for assignment, conditional, log_candidate_mass in zip(
-            assignments_list, conditionals_list, candidate_log_mass
+        for assignment, conditional, log_candidate_mass, source_id in zip(
+            assignments_list, conditionals_list, candidate_log_mass, source_ids
         ):
             basin_id = f"b{next(self._ids)}"
             lineage = (parent_id, basin_id) if parent_id else (basin_id,)
@@ -357,6 +370,7 @@ class AmbiguityBasinParticleFilter:
                     log_weight=float(np.log(float(prior_mass)) + log_candidate_mass),
                     lineage=lineage,
                     birth_epoch=max(self.epoch, 0),
+                    proposal_sources=(source_id,) if source_id else (),
                 )
             )
         self._deduplicate()
@@ -616,6 +630,16 @@ class AmbiguityBasinParticleFilter:
                 representative.epoch_log_marginal = float(
                     sum(w * b.epoch_log_marginal for w, b in zip(weights, group))
                 )
+                representative.birth_epoch = max(b.birth_epoch for b in group)
+                representative.proposal_sources = tuple(
+                    sorted(
+                        {
+                            source
+                            for basin in group
+                            for source in basin.proposal_sources
+                        }
+                    )
+                )
                 merged.append(representative)
         self.basins = merged
 
@@ -624,31 +648,64 @@ class AmbiguityBasinParticleFilter:
             return
         self.basins.sort(key=lambda basin: basin.log_weight, reverse=True)
         if len(self.basins) > self.max_basins:
-            reserve = int(round(self.max_basins * self.diversity_reserve_fraction))
-            primary = max(self.max_basins - reserve, 1)
-            selected = list(self.basins[:primary])
-            selected_ids = {basin.basin_id for basin in selected}
-            selected_positions = np.asarray(
-                [basin.conditional.mean[:3] for basin in selected], dtype=np.float64
-            )
-            for basin in self.basins[primary:]:
-                if len(selected) >= self.max_basins:
-                    break
-                position = basin.conditional.mean[:3]
-                if np.all(
-                    np.linalg.norm(selected_positions - position[None, :], axis=1)
-                    >= self.diversity_radius_m
+            source_reserve = int(round(self.max_basins * self.source_reserve_fraction))
+            if source_reserve > 0:
+                primary = self.max_basins - source_reserve
+                selected = list(self.basins[:primary])
+                selected_ids = {basin.basin_id for basin in selected}
+                source_candidates: dict[str, list[IntegerBasin]] = {}
+                for basin in self.basins:
+                    if basin.birth_epoch == self.epoch:
+                        for source in basin.proposal_sources:
+                            source_candidates.setdefault(source, []).append(basin)
+                for depth in range(
+                    max((len(values) for values in source_candidates.values()), default=0)
                 ):
-                    selected.append(basin)
-                    selected_ids.add(basin.basin_id)
-                    selected_positions = np.vstack([selected_positions, position])
-            if len(selected) < self.max_basins:
-                selected.extend(
-                    basin
-                    for basin in self.basins[primary:]
-                    if basin.basin_id not in selected_ids
+                    for source in sorted(source_candidates):
+                        candidates = source_candidates[source]
+                        if depth >= len(candidates):
+                            continue
+                        basin = candidates[depth]
+                        if basin.basin_id not in selected_ids:
+                            selected.append(basin)
+                            selected_ids.add(basin.basin_id)
+                            if len(selected) >= self.max_basins:
+                                break
+                    if len(selected) >= self.max_basins:
+                        break
+                if len(selected) < self.max_basins:
+                    selected.extend(
+                        basin
+                        for basin in self.basins
+                        if basin.basin_id not in selected_ids
+                    )
+                self.basins = selected[: self.max_basins]
+            else:
+                reserve = int(round(self.max_basins * self.diversity_reserve_fraction))
+                primary = max(self.max_basins - reserve, 1)
+                selected = list(self.basins[:primary])
+                selected_ids = {basin.basin_id for basin in selected}
+                selected_positions = np.asarray(
+                    [basin.conditional.mean[:3] for basin in selected], dtype=np.float64
                 )
-            self.basins = selected[: self.max_basins]
+                for basin in self.basins[primary:]:
+                    if len(selected) >= self.max_basins:
+                        break
+                    position = basin.conditional.mean[:3]
+                    if np.all(
+                        np.linalg.norm(selected_positions - position[None, :], axis=1)
+                        >= self.diversity_radius_m
+                    ):
+                        selected.append(basin)
+                        selected_ids.add(basin.basin_id)
+                        selected_positions = np.vstack([selected_positions, position])
+                if len(selected) < self.max_basins:
+                    selected.extend(
+                        basin
+                        for basin in self.basins[primary:]
+                        if basin.basin_id not in selected_ids
+                    )
+                self.basins = selected[: self.max_basins]
         values = np.asarray([basin.log_weight for basin in self.basins], dtype=np.float64)
         normalizer = _logsumexp(values)
         for basin in self.basins:

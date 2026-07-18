@@ -88,6 +88,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--basin-diversity-reserve-fraction", type=float, default=0.0)
     parser.add_argument("--basin-diversity-radius-m", type=float, default=1.0)
     parser.add_argument("--basin-dedup-position-radius-m", type=float, default=float("inf"))
+    parser.add_argument("--basin-source-reserve-fraction", type=float, default=0.0)
     parser.add_argument("--birth-mass", type=float, default=0.01)
     parser.add_argument("--sigma-dd-pr-m", type=float, default=5.0)
     parser.add_argument(
@@ -256,6 +257,7 @@ def main(argv: list[str] | None = None) -> None:
         diversity_reserve_fraction=float(args.basin_diversity_reserve_fraction),
         diversity_radius_m=float(args.basin_diversity_radius_m),
         dedup_position_radius_m=float(args.basin_dedup_position_radius_m),
+        source_reserve_fraction=float(args.basin_source_reserve_fraction),
     )
     policy_config = TrustedFixPolicyConfig(
         gamma_threshold=float(args.fix_gamma),
@@ -598,8 +600,9 @@ def main(argv: list[str] | None = None) -> None:
             n_respawn_position_seeds = len(respawn_positions)
             assignments = []
             conditionals = []
+            respawn_source_ids: list[str] = []
             all_respawn_residuals: list[float] = []
-            for respawn_position in respawn_positions:
+            for position_index, respawn_position in enumerate(respawn_positions):
                 respawn_seed = ddpr_centered_ambiguity_seed(
                     dd_cp,
                     respawn_position,
@@ -644,6 +647,7 @@ def main(argv: list[str] | None = None) -> None:
                             accel_process_sigma_mps2=3.0,
                         )
                     )
+                    respawn_source_ids.append(f"{i}:{position_index}")
                 all_respawn_residuals.extend(
                     float(value) for value in np.asarray(seed_residuals).reshape(-1)
                 )
@@ -671,6 +675,7 @@ def main(argv: list[str] | None = None) -> None:
                             * np.asarray(all_respawn_residuals, dtype=np.float64)
                             if args.ddpr_respawn_use_lambda_prior else None
                         ),
+                        candidate_source_ids=respawn_source_ids,
                     )
                     n_respawn_candidates = len(assignments)
                     n_respawn_epochs += 1
@@ -1280,6 +1285,7 @@ def main(argv: list[str] | None = None) -> None:
             if np.isfinite(float(args.basin_dedup_position_radius_m))
             else None
         ),
+        "basin_source_reserve_fraction": float(args.basin_source_reserve_fraction),
         "fix_gamma_threshold": float(args.fix_gamma),
         "fix_min_streak": int(args.fix_streak),
         "fix_float_consistency_m": float(args.fix_consistency_m),

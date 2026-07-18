@@ -102,6 +102,24 @@ def test_duplicate_assignments_preserve_distant_position_modes_when_requested():
     assert np.isclose(sum(np.exp(basin.log_weight) for basin in pf.basins), 1.0)
 
 
+def test_source_reserve_keeps_current_proposal_groups_under_cap():
+    pf = AmbiguityBasinParticleFilter(max_basins=4, source_reserve_fraction=0.75)
+    pf.predict(0.0)
+    assignments = [{_versioned_key(f"G{i + 2:02d}"): i} for i in range(6)]
+    pf.spawn(
+        assignments,
+        [_conditional(float(i)) for i in range(6)],
+        candidate_log_weights=[6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
+        candidate_source_ids=["a", "a", "a", "a", "b", "b"],
+    )
+
+    retained_sources = {
+        source for basin in pf.basins for source in basin.proposal_sources
+    }
+    assert retained_sources == {"a", "b"}
+    assert len(pf.basins) == 4
+
+
 def test_release_removes_generation_and_deduplicates_result():
     key = _versioned_key()
     pf = AmbiguityBasinParticleFilter()

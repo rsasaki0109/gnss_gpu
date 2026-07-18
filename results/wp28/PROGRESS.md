@@ -97,3 +97,16 @@ neutral: live recall remains 134/200, supplied-then-absent remains 8/26, and
 the trajectory hash is unchanged. Cross-position Gaussian merging is therefore
 not the measured loss mechanism in this window. The option remains disabled by
 default; source-aware fixed-cap allocation is still the next diagnostic.
+
+### Source-aware cap check
+
+Each respawn position now carries a causal proposal-source identifier, and an
+opt-in cap policy can reserve slots round-robin across current sources. A 90%
+source reserve on the age-50 arm is again exactly neutral: 134/200 live epochs,
+8/26 supplied-then-absent anchors, and a trajectory hash identical to the
+ordinary cap. Source monopolization is not the measured retention failure.
+
+The next recovery source should replay compatible historical ambiguity
+assignments, not only historical positions. It must enforce ambiguity
+generation IDs and current active-key support, and remain diagnostic until the
+90% recall and 5 s survival gates pass.

@@ -68,3 +68,8 @@ A 1 m spatial deduplication radius was also tested and is trajectory-identical
 to unrestricted assignment deduplication, with the same 134/200 recall and
 8/26 supplied-then-absent anchors. This rejects cross-position moment merging
 as the active bottleneck for this arm.
+
+A 90% round-robin reserve across current position-proposal sources is also
+trajectory-identical and leaves every recall/pruning metric unchanged. The
+next implementation target is generation-aware replay of historical ambiguity
+assignments; neither spatial deduplication nor source quotas is promoted.
