@@ -8,6 +8,8 @@ from gnss_gpu.rtk_evidence import (
     TrustedFixPolicyConfig,
     TrustedFixPolicyInput,
     ambiguity_assignment_id,
+    ambiguity_assignment_from_json,
+    ambiguity_assignment_json,
     replay_fix_decisions,
 )
 
@@ -96,3 +98,4 @@ def test_assignment_identity_is_stable_and_generation_sensitive() -> None:
     assert ambiguity_assignment_id(assignment) == ambiguity_assignment_id(assignment)
     changed = (((("G01", "G02", 190293673), 5), 12),)
     assert ambiguity_assignment_id(assignment) != ambiguity_assignment_id(changed)
+    assert ambiguity_assignment_from_json(ambiguity_assignment_json(assignment)) == assignment

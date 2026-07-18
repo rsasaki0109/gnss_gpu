@@ -46,7 +46,13 @@ from gnss_gpu.rtk_evidence import (  # noqa: E402
     TrustedFixPolicyConfig,
     TrustedFixPolicyInput,
     ambiguity_assignment_id,
+    ambiguity_assignment_json,
     replay_fix_decisions,
+)
+from gnss_gpu.temporal_ambiguity import (  # noqa: E402
+    TemporalAmbiguityCandidate,
+    TemporalAmbiguityConfig,
+    TemporalAmbiguityFilter,
 )
 
 
@@ -97,6 +103,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--fix-min-dd-pairs", type=int, default=9)
     parser.add_argument("--fix-max-ddpr-age-epochs", type=int, default=4)
     parser.add_argument("--position-cluster-radius-m", type=float, default=0.5)
+    parser.add_argument("--enable-temporal-lineage", action="store_true")
+    parser.add_argument("--temporal-birth-mass", type=float, default=0.05)
+    parser.add_argument("--temporal-change-cost", type=float, default=2.0)
+    parser.add_argument("--temporal-incompatible-cost", type=float, default=12.0)
+    parser.add_argument("--temporal-death-cost", type=float, default=6.0)
+    parser.add_argument("--temporal-motion-sigma-m", type=float, default=3.0)
     parser.add_argument("--enable-ddpr-respawn", action="store_true")
     parser.add_argument("--ddpr-respawn-trigger-m", type=float, default=1.75)
     parser.add_argument("--ddpr-respawn-mass", type=float, default=0.05)
@@ -127,6 +139,12 @@ def main(argv: list[str] | None = None) -> None:
         type=Path,
         default=None,
         help="Optional observation evidence-provenance CSV",
+    )
+    parser.add_argument(
+        "--out-basin-trace",
+        type=Path,
+        default=None,
+        help="Optional truth-free per-basin trace for temporal replay",
     )
     args = parser.parse_args(argv)
 
@@ -188,6 +206,19 @@ def main(argv: list[str] | None = None) -> None:
     commit_policy = TrustedFixCommitPolicy(policy_config)
     evidence_ledger = EvidenceLedger()
     traces: list[RTKEpochTrace] = []
+    basin_trace_rows: list[dict[str, object]] = []
+    temporal_filter = (
+        TemporalAmbiguityFilter(
+            TemporalAmbiguityConfig(
+                birth_mass=float(args.temporal_birth_mass),
+                assignment_change_cost=float(args.temporal_change_cost),
+                incompatible_cost=float(args.temporal_incompatible_cost),
+                death_cost=float(args.temporal_death_cost),
+                motion_sigma_m=float(args.temporal_motion_sigma_m),
+            )
+        )
+        if args.enable_temporal_lineage else None
+    )
 
     times = np.asarray(data["times"], dtype=np.float64)
     respawn_subset_size = (
@@ -214,6 +245,9 @@ def main(argv: list[str] | None = None) -> None:
     n_consistency_reject = 0
     n_respawn_epochs = 0
     n_float_resets = 0
+    n_temporal_map_sub50 = 0
+    n_temporal_map_disagreement = 0
+    max_temporal_gamma = 0.0
     max_gamma = 0.0
     last_ddpr_epoch = -1_000_000
     last_ddpr_pairs = 0
@@ -222,11 +256,12 @@ def main(argv: list[str] | None = None) -> None:
     for i, tow in enumerate(times):
         evidence_start = len(evidence_ledger)
         observation_id = f"tow={float(tow):.3f}"
+        epoch_dt = 0.0
         if i > 0:
-            dt = max(float(times[i] - times[i - 1]), 1e-3)
-            float_kf.predict(dt)
-            basin_pf.predict(dt)
-            ddpr_guard.predict(dt)
+            epoch_dt = max(float(times[i] - times[i - 1]), 1e-3)
+            float_kf.predict(epoch_dt)
+            basin_pf.predict(epoch_dt)
+            ddpr_guard.predict(epoch_dt)
         velocity, doppler_rms = _doppler_velocity(data, i, float_kf.position_ecef)
         if velocity is not None:
             velocity_sigma = max(0.5, min(float(doppler_rms), 5.0))
@@ -481,6 +516,60 @@ def main(argv: list[str] | None = None) -> None:
             basin for basin in basin_pf.basins if basin.assignment == posterior.map_assignment
         ]
         map_basin = max(map_candidates, key=lambda basin: basin.log_weight) if map_candidates else None
+        if args.out_basin_trace is not None:
+            for basin in basin_pf.basins:
+                basin_trace_rows.append(
+                    {
+                        "epoch": i,
+                        "tow": float(tow),
+                        "basin_id": basin.basin_id,
+                        "assignment_id": ambiguity_assignment_id(basin.assignment),
+                        "assignment_json": ambiguity_assignment_json(basin.assignment),
+                        "epoch_log_likelihood": float(basin.epoch_log_marginal),
+                        "cumulative_log_marginal": float(basin.cumulative_log_marginal),
+                        "log_weight": float(basin.log_weight),
+                        "ecef_x": float(basin.conditional.mean[0]),
+                        "ecef_y": float(basin.conditional.mean[1]),
+                        "ecef_z": float(basin.conditional.mean[2]),
+                        "velocity_x": float(basin.conditional.mean[3]),
+                        "velocity_y": float(basin.conditional.mean[4]),
+                        "velocity_z": float(basin.conditional.mean[5]),
+                        "birth_epoch": int(basin.birth_epoch),
+                        "lineage": "|".join(basin.lineage),
+                    }
+                )
+        temporal_posterior = None
+        temporal_map_basin = None
+        if temporal_filter is not None:
+            temporal_candidates = [
+                TemporalAmbiguityCandidate(
+                    candidate_id=ambiguity_assignment_id(basin.assignment),
+                    assignment=basin.assignment,
+                    epoch_log_likelihood=float(basin.epoch_log_marginal),
+                    position_ecef=basin.conditional.mean[:3],
+                    velocity_ecef=basin.conditional.mean[3:6],
+                )
+                for basin in basin_pf.basins
+            ]
+            temporal_posterior = temporal_filter.step(
+                i, epoch_dt, temporal_candidates
+            )
+            temporal_map_basin = next(
+                (
+                    basin for basin in basin_pf.basins
+                    if ambiguity_assignment_id(basin.assignment)
+                    == temporal_posterior.map_candidate_id
+                ),
+                None,
+            )
+            max_temporal_gamma = max(
+                max_temporal_gamma, float(temporal_posterior.gamma)
+            )
+            n_temporal_map_disagreement += int(
+                temporal_map_basin is not None
+                and map_basin is not None
+                and temporal_map_basin.basin_id != map_basin.basin_id
+            )
         map_float_separation = (
             float(np.linalg.norm(map_basin.conditional.mean[:3] - float_kf.position_ecef))
             if map_basin is not None
@@ -534,6 +623,12 @@ def main(argv: list[str] | None = None) -> None:
             if map_basin is not None and ref is not None
             else float("nan")
         )
+        temporal_map_error = (
+            float(np.linalg.norm(temporal_map_basin.conditional.mean[:3] - ref))
+            if temporal_map_basin is not None and ref is not None
+            else float("nan")
+        )
+        n_temporal_map_sub50 += int(temporal_map_error < 0.5)
         cluster_error = (
             float(np.linalg.norm(position_cluster.mean_position_ecef - ref))
             if ref is not None and np.all(np.isfinite(position_cluster.mean_position_ecef))
@@ -590,6 +685,24 @@ def main(argv: list[str] | None = None) -> None:
                 "last_ddpr_nis": last_ddpr_nis,
                 "output_error_m": output_error,
                 "map_error_m": map_error,
+                "temporal_lineage_enabled": int(temporal_filter is not None),
+                "temporal_map_assignment_id": (
+                    "" if temporal_posterior is None
+                    else temporal_posterior.map_candidate_id
+                ),
+                "temporal_gamma": (
+                    0.0 if temporal_posterior is None
+                    else float(temporal_posterior.gamma)
+                ),
+                "temporal_ess": (
+                    0.0 if temporal_posterior is None
+                    else float(temporal_posterior.ess)
+                ),
+                "temporal_dwell_epochs": (
+                    0 if temporal_posterior is None
+                    else int(temporal_posterior.dwell_epochs)
+                ),
+                "temporal_map_error_m": temporal_map_error,
                 "position_cluster_error_m": cluster_error,
                 "position_cluster_gamma": float(position_cluster.gamma),
                 "position_cluster_spread_m": float(position_cluster.rms_spread_m),
@@ -671,6 +784,10 @@ def main(argv: list[str] | None = None) -> None:
         "ddpr_respawn_top_k": int(respawn_top_k),
         "ddpr_respawn_lambda_prior": bool(args.ddpr_respawn_use_lambda_prior),
         "ddpr_respawn_epochs": int(n_respawn_epochs),
+        "temporal_lineage_enabled": bool(args.enable_temporal_lineage),
+        "temporal_map_disagreement_epochs": int(n_temporal_map_disagreement),
+        "temporal_map_sub50cm_epochs": int(n_temporal_map_sub50),
+        "max_temporal_gamma": float(max_temporal_gamma),
         "float_ambiguity_resets": int(n_float_resets),
         "declared_fix_epochs": int(n_declared_fix),
         "gamma_fix_epochs": int(n_gamma_fix),
@@ -705,6 +822,12 @@ def main(argv: list[str] | None = None) -> None:
             writer = csv.DictWriter(fh, fieldnames=list(evidence_rows[0]))
             writer.writeheader()
             writer.writerows(evidence_rows)
+    if args.out_basin_trace is not None and basin_trace_rows:
+        args.out_basin_trace.parent.mkdir(parents=True, exist_ok=True)
+        with args.out_basin_trace.open("w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(basin_trace_rows[0]))
+            writer.writeheader()
+            writer.writerows(basin_trace_rows)
     args.out_summary.parent.mkdir(parents=True, exist_ok=True)
     args.out_summary.write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))

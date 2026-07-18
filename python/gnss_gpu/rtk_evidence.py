@@ -246,6 +246,32 @@ def replay_fix_decisions(
 def ambiguity_assignment_id(assignment: Iterable[object]) -> str:
     """Return a stable compact identity for a canonical versioned assignment."""
 
+    normalized = _normalized_assignment(assignment)
+    if not normalized:
+        return ""
+    payload = json.dumps(normalized, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("ascii")).hexdigest()[:16]
+
+
+def ambiguity_assignment_json(assignment: Iterable[object]) -> str:
+    """Serialize a canonical assignment without Python-specific repr syntax."""
+
+    return json.dumps(
+        _normalized_assignment(assignment), separators=(",", ":"), ensure_ascii=True
+    )
+
+
+def ambiguity_assignment_from_json(payload: str) -> tuple[object, ...]:
+    """Deserialize :func:`ambiguity_assignment_json` for temporal replay."""
+
+    values = json.loads(payload)
+    return tuple(
+        ((((str(ref_sat), str(sat), int(wavelength_nm)), int(generation))), int(integer))
+        for ref_sat, sat, wavelength_nm, generation, integer in values
+    )
+
+
+def _normalized_assignment(assignment: Iterable[object]) -> list[list[object]]:
     normalized: list[list[object]] = []
     for item in assignment:
         ((ref_sat, sat, wavelength_nm), generation), integer = item  # type: ignore[misc]
@@ -258,7 +284,4 @@ def ambiguity_assignment_id(assignment: Iterable[object]) -> str:
                 int(integer),
             ]
         )
-    if not normalized:
-        return ""
-    payload = json.dumps(normalized, separators=(",", ":"), ensure_ascii=True)
-    return hashlib.sha256(payload.encode("ascii")).hexdigest()[:16]
+    return normalized

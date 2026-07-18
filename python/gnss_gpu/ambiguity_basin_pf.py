@@ -244,6 +244,7 @@ class IntegerBasin:
     conditional: BasinKalmanState
     log_weight: float
     cumulative_log_marginal: float = 0.0
+    epoch_log_marginal: float = 0.0
     lineage: tuple[str, ...] = field(default_factory=tuple)
     birth_epoch: int = 0
 
@@ -352,6 +353,7 @@ class AmbiguityBasinParticleFilter:
     def predict(self, dt: float) -> None:
         self.epoch += 1
         for basin in self.basins:
+            basin.epoch_log_marginal = 0.0
             basin.conditional.predict(dt)
 
     def update_log_likelihoods(self, log_likelihood_by_id: Mapping[str, float]) -> None:
@@ -359,6 +361,7 @@ class AmbiguityBasinParticleFilter:
             increment = float(log_likelihood_by_id.get(basin.basin_id, 0.0))
             basin.log_weight += increment
             basin.cumulative_log_marginal += increment
+            basin.epoch_log_marginal += increment
         self._normalize_and_cap()
 
     def update_pseudorange(
@@ -373,6 +376,7 @@ class AmbiguityBasinParticleFilter:
             increments.append(float(increment))
             basin.log_weight += increment
             basin.cumulative_log_marginal += increment
+            basin.epoch_log_marginal += increment
         log_marginal = _logsumexp(prior + np.asarray(increments)) - _logsumexp(prior)
         n_basins = len(self.basins)
         self._normalize_and_cap()
@@ -390,6 +394,7 @@ class AmbiguityBasinParticleFilter:
             increments.append(float(increment))
             basin.log_weight += increment
             basin.cumulative_log_marginal += increment
+            basin.epoch_log_marginal += increment
         log_marginal = _logsumexp(prior + np.asarray(increments)) - _logsumexp(prior)
         n_basins = len(self.basins)
         self._normalize_and_cap()
@@ -417,6 +422,7 @@ class AmbiguityBasinParticleFilter:
             increments.append(float(increment))
             basin.log_weight += increment
             basin.cumulative_log_marginal += increment
+            basin.epoch_log_marginal += increment
             max_rows = max(max_rows, int(n_rows))
         log_marginal = _logsumexp(prior + np.asarray(increments)) - _logsumexp(prior)
         n_basins = len(self.basins)
@@ -572,6 +578,9 @@ class AmbiguityBasinParticleFilter:
             )
             representative.cumulative_log_marginal = float(
                 sum(w * b.cumulative_log_marginal for w, b in zip(weights, group))
+            )
+            representative.epoch_log_marginal = float(
+                sum(w * b.epoch_log_marginal for w, b in zip(weights, group))
             )
             merged.append(representative)
         self.basins = merged
