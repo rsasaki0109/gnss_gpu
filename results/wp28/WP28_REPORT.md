@@ -104,3 +104,8 @@ Shadow-only replay confirms the rejection without feedback confounding. It is
 correct on 11/39 eligible anchors, but recovers zero of the best arm's 14
 missing anchors; all 11 overlap already-supplied epochs. The shadow and control
 trajectories are bit-identical. No completion proposal receives PF mass.
+
+A 5 m covariance-axis shadow adds only one missing anchor and regresses to
+111/200 when inserted directly. Respawn-time max-cost satellite exclusion is
+fully neutral. These results reject broad position shells and single-satellite
+subset exclusion as solutions to the remaining reset-recovery gap.

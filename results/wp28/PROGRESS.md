@@ -177,3 +177,17 @@ correct proposal anchor in the control. Incremental recovery is **0/14 missing
 anchors**. The shadow trajectory is hash-identical to the best arm. Conditional
 completion is therefore fully rejected: it adds no recall where needed and its
 direct insertion creates harmful feedback.
+
+### Position-shell and satellite-subset audits
+
+A 5 m covariance-axis shell was evaluated shadow-only against the frozen best
+arm. It contains a correct candidate on 9/40 anchors but adds only one of the
+14 missing anchors (epoch 40); the other eight overlap existing supply. Direct
+insertion lowers live recall to 111/200, so the shell remains shadow-only.
+
+Applying WP27's instantaneous max incident-cost satellite exclusion before
+respawn subset selection is exactly neutral: all proposal, survival, live
+recall, and trajectory metrics match the 141/200 best arm. The excluded
+satellites (C19/E24/J03 across this window) do not control the selected
+low-variance ambiguity subset. Satellite exclusion is therefore useful for
+absolute selection but not this generation failure.

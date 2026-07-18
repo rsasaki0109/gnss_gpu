@@ -170,6 +170,10 @@ def main(argv: list[str] | None = None) -> None:
         choices=("axes", "cube26"),
         default="axes",
     )
+    parser.add_argument("--ddpr-respawn-shadow-seed-radii-m", default="")
+    parser.add_argument(
+        "--ddpr-respawn-exclude-max-cost-satellite", action="store_true"
+    )
     parser.add_argument("--ddpr-respawn-history-seeds", type=int, default=0)
     parser.add_argument("--ddpr-respawn-history-separation-m", type=float, default=1.0)
     parser.add_argument("--ddpr-respawn-history-max-age-epochs", type=int, default=25)
@@ -219,6 +223,13 @@ def main(argv: list[str] | None = None) -> None:
     )
     if any(not np.isfinite(value) or value <= 0.0 for value in respawn_seed_radii):
         parser.error("--ddpr-respawn-seed-radii-m values must be positive")
+    shadow_seed_radii = tuple(
+        float(value)
+        for value in str(args.ddpr_respawn_shadow_seed_radii_m).split(",")
+        if value.strip()
+    )
+    if any(not np.isfinite(value) or value <= 0.0 for value in shadow_seed_radii):
+        parser.error("--ddpr-respawn-shadow-seed-radii-m values must be positive")
 
     city, run = str(args.run).split("/", 1)
     run_dir = args.data_root / city / run
@@ -360,6 +371,8 @@ def main(argv: list[str] | None = None) -> None:
     n_respawn_epochs = 0
     n_completion_shadow_epochs = 0
     n_completion_shadow_correct = 0
+    n_position_shadow_epochs = 0
+    n_position_shadow_correct = 0
     n_float_resets = 0
     n_temporal_map_sub50 = 0
     n_temporal_map_disagreement = 0
@@ -558,6 +571,9 @@ def main(argv: list[str] | None = None) -> None:
         respawn_oracle_rank = -1
         completion_shadow_candidates = 0
         completion_shadow_oracle_min_error = float("nan")
+        position_shadow_candidates = 0
+        position_shadow_oracle_min_error = float("nan")
+        respawn_excluded_satellite = ""
         if dd_cp is not None and int(dd_cp.n_dd) >= int(args.subset_size):
             current_pairs = {
                 (str(ref), str(sat)) for ref, sat in zip(dd_cp.ref_sat_ids, dd_cp.sat_ids)
@@ -605,6 +621,19 @@ def main(argv: list[str] | None = None) -> None:
                     n_birth_epochs += 1
 
         if respawn_triggered and dd_cp is not None:
+            if args.ddpr_respawn_exclude_max_cost_satellite and dd_pr is not None:
+                respawn_satellite_cost = satellite_pair_costs(
+                    dd_pr,
+                    ddpr_guard.mean[:3],
+                    scale_m=float(args.integrity_scale_m),
+                )
+                respawn_excluded_satellite = max(
+                    zip(
+                        respawn_satellite_cost.satellite_ids,
+                        respawn_satellite_cost.mean_pair_costs,
+                    ),
+                    key=lambda item: item[1],
+                )[0]
             respawn_positions = covariance_axis_position_seeds(
                 ddpr_guard.mean[:3],
                 ddpr_guard.covariance[:3, :3],
@@ -627,6 +656,7 @@ def main(argv: list[str] | None = None) -> None:
             respawn_source_ids: list[str] = []
             all_respawn_residuals: list[float] = []
             completion_shadow_states: list[BasinKalmanState] = []
+            position_shadow_states: list[BasinKalmanState] = []
             if recovery_assignment_bank is not None:
                 assignment_seed = ddpr_centered_ambiguity_seed(
                     dd_cp,
@@ -638,7 +668,11 @@ def main(argv: list[str] | None = None) -> None:
                 if completion_top_k > 0:
                     partial_assignments = recovery_assignment_bank.compatible_assignments(
                         active_versioned,
-                        assignment_seed.keys,
+                        (
+                            key
+                            for key in assignment_seed.keys
+                            if respawn_excluded_satellite not in key[:2]
+                        ),
                         min_size=int(args.ddpr_respawn_assignment_completion_min_stable),
                     )
                     completed: dict[
@@ -667,7 +701,11 @@ def main(argv: list[str] | None = None) -> None:
                             (assignment, float("nan"))
                             for assignment in recovery_assignment_bank.compatible_assignments(
                                 active_versioned,
-                                assignment_seed.keys,
+                                (
+                                    key
+                                    for key in assignment_seed.keys
+                                    if respawn_excluded_satellite not in key[:2]
+                                ),
                             )
                         ]
                         for assignment, _distance in completion_proposals:
@@ -688,7 +726,11 @@ def main(argv: list[str] | None = None) -> None:
                         (assignment, float("nan"))
                         for assignment in recovery_assignment_bank.compatible_assignments(
                             active_versioned,
-                            assignment_seed.keys,
+                            (
+                                key
+                                for key in assignment_seed.keys
+                                if respawn_excluded_satellite not in key[:2]
+                            ),
                         )
                     ]
                 for assignment_index, (assignment, completion_distance) in enumerate(
@@ -729,6 +771,7 @@ def main(argv: list[str] | None = None) -> None:
                         j
                         for j, key in enumerate(respawn_seed.keys)
                         if key in generations
+                        and respawn_excluded_satellite not in key[:2]
                     ],
                     dtype=np.int64,
                 )
@@ -766,6 +809,48 @@ def main(argv: list[str] | None = None) -> None:
                 all_respawn_residuals.extend(
                     float(value) for value in np.asarray(seed_residuals).reshape(-1)
                 )
+            if shadow_seed_radii:
+                shadow_positions = covariance_axis_position_seeds(
+                    ddpr_guard.mean[:3],
+                    ddpr_guard.covariance[:3, :3],
+                    shadow_seed_radii,
+                    direction_mode=str(args.ddpr_respawn_seed_directions),
+                )[1:]
+                for shadow_position in shadow_positions:
+                    shadow_seed = ddpr_centered_ambiguity_seed(
+                        dd_cp,
+                        shadow_position,
+                        ddpr_guard.covariance[:3, :3],
+                        sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+                    )
+                    available = np.asarray(
+                        [
+                            j
+                            for j, key in enumerate(shadow_seed.keys)
+                            if key in generations
+                            and respawn_excluded_satellite not in key[:2]
+                        ],
+                        dtype=np.int64,
+                    )
+                    if available.size < respawn_subset_size:
+                        continue
+                    variances = np.diag(shadow_seed.qahat_cycles2)[available]
+                    selected = np.sort(
+                        available[np.argsort(variances)[:respawn_subset_size]]
+                    )
+                    shadow_keys = tuple(shadow_seed.keys[j] for j in selected)
+                    shadow_candidates, _ = integer_search(
+                        shadow_seed.ahat_cycles[selected],
+                        shadow_seed.qahat_cycles2[np.ix_(selected, selected)],
+                        n_candidates=respawn_top_k,
+                    )
+                    for candidate in shadow_candidates:
+                        position, covariance, _ = condition_respawn_position(
+                            shadow_seed, shadow_keys, candidate
+                        )
+                        position_shadow_states.append(
+                            BasinKalmanState.from_position(position, covariance)
+                        )
             if recovery_assignment_bank is not None:
                 fresh_assignments = assignments[n_replayed_assignments:]
                 fresh_residuals = all_respawn_residuals[n_replayed_assignments:]
@@ -801,6 +886,16 @@ def main(argv: list[str] | None = None) -> None:
                     n_completion_shadow_epochs += 1
                     n_completion_shadow_correct += int(
                         completion_shadow_oracle_min_error < 0.5
+                    )
+                if epoch_ref is not None and position_shadow_states:
+                    position_shadow_candidates = len(position_shadow_states)
+                    position_shadow_oracle_min_error = min(
+                        float(np.linalg.norm(state.mean[:3] - epoch_ref))
+                        for state in position_shadow_states
+                    )
+                    n_position_shadow_epochs += 1
+                    n_position_shadow_correct += int(
+                        position_shadow_oracle_min_error < 0.5
                     )
                 if assignments:
                     basin_pf.spawn(
@@ -1397,6 +1492,9 @@ def main(argv: list[str] | None = None) -> None:
                 "respawn_oracle_rank": int(respawn_oracle_rank),
                 "completion_shadow_candidates": completion_shadow_candidates,
                 "completion_shadow_oracle_min_error_m": completion_shadow_oracle_min_error,
+                "position_shadow_candidates": position_shadow_candidates,
+                "position_shadow_oracle_min_error_m": position_shadow_oracle_min_error,
+                "respawn_excluded_satellite": respawn_excluded_satellite,
                 "n_dd_pr": 0 if dd_pr is None else int(dd_pr.n_dd),
                 "n_dd_cp": 0 if dd_cp is None else int(dd_cp.n_dd),
             }
@@ -1440,6 +1538,10 @@ def main(argv: list[str] | None = None) -> None:
         "ddpr_respawn_lambda_prior": bool(args.ddpr_respawn_use_lambda_prior),
         "ddpr_respawn_seed_radii_m": list(respawn_seed_radii),
         "ddpr_respawn_seed_directions": str(args.ddpr_respawn_seed_directions),
+        "ddpr_respawn_shadow_seed_radii_m": list(shadow_seed_radii),
+        "ddpr_respawn_exclude_max_cost_satellite": bool(
+            args.ddpr_respawn_exclude_max_cost_satellite
+        ),
         "ddpr_respawn_history_seeds": int(args.ddpr_respawn_history_seeds),
         "ddpr_respawn_history_separation_m": float(
             args.ddpr_respawn_history_separation_m
@@ -1464,6 +1566,8 @@ def main(argv: list[str] | None = None) -> None:
         ),
         "completion_shadow_epochs": int(n_completion_shadow_epochs),
         "completion_shadow_correct_epochs": int(n_completion_shadow_correct),
+        "position_shadow_epochs": int(n_position_shadow_epochs),
+        "position_shadow_correct_epochs": int(n_position_shadow_correct),
         "ddpr_respawn_epochs": int(n_respawn_epochs),
         "temporal_lineage_enabled": bool(args.enable_temporal_lineage),
         "temporal_map_disagreement_epochs": int(n_temporal_map_disagreement),
