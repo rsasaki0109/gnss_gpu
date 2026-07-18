@@ -291,3 +291,16 @@ retains only 5/15 eligible correct shadow anchors in the first 80 epochs.
 WP28B's proposal-recall gate is complete. WP28C must avoid computing discarded
 LAMBDA completions, verify the 128-candidate arm end to end without shadow
 feedback, and measure wall-clock cost before any PF-mass promotion.
+
+The bounded full replay is now complete. Requesting only two LAMBDA completions
+per source, ranking before position conditioning, and applying a 128-candidate
+cap preserves the same **38/40 (95.0%)** union recall and all seven incremental
+anchors. Maximum arc supply is exactly 128, so it can replace the old 128 DD-key
+replay allocation without increasing the frozen 440-proposal envelope. The
+trajectory remains hash-identical (`C7B175...F001`).
+
+Compute is not yet promotable: the capped shadow replay takes about 194 seconds
+for this 200-epoch diagnostic on the current host. Candidate conditioning is
+bounded, but repeated per-history LAMBDA completion still dominates. WP28C must
+cache or batch completions and demonstrate an acceptable runtime before the arc
+source is connected to PF mass.

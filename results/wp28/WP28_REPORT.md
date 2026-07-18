@@ -157,3 +157,9 @@ rank within the first 108 by the same truth-free residual. A 128-candidate
 replacement allocation therefore preserves the shadow gate while matching the
 old assignment replay budget. Promotion is still withheld until completion is
 computed within that cap and a live PF arm proves survival and runtime gates.
+
+The full top-2/cap-128 replay confirms 38/40 union recall with exactly 128
+maximum arc candidates and a hash-identical trusted trajectory. Fixed candidate
+budget is therefore satisfied. Runtime is not: the 200-epoch shadow diagnostic
+takes about 194 seconds on the current host, so repeated LAMBDA completion must
+be cached or batched before live PF promotion.
