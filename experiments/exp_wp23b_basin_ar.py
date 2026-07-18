@@ -54,6 +54,10 @@ from gnss_gpu.rtk_evidence import (  # noqa: E402
     ambiguity_assignment_json,
     replay_fix_decisions,
 )
+from gnss_gpu.recovery_proposals import (  # noqa: E402
+    RecoveryPositionBank,
+    covariance_axis_position_seeds,
+)
 from gnss_gpu.temporal_ambiguity import (  # noqa: E402
     TemporalAmbiguityCandidate,
     TemporalAmbiguityConfig,
@@ -81,6 +85,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--subset-size", type=int, default=8)
     parser.add_argument("--top-k", type=int, default=12)
     parser.add_argument("--max-basins", type=int, default=128)
+    parser.add_argument("--basin-diversity-reserve-fraction", type=float, default=0.0)
+    parser.add_argument("--basin-diversity-radius-m", type=float, default=1.0)
     parser.add_argument("--birth-mass", type=float, default=0.01)
     parser.add_argument("--sigma-dd-pr-m", type=float, default=5.0)
     parser.add_argument(
@@ -150,6 +156,19 @@ def main(argv: list[str] | None = None) -> None:
         default=0,
         help="Respawn-only ambiguity dimension; <=0 uses --subset-size",
     )
+    parser.add_argument(
+        "--ddpr-respawn-seed-radii-m",
+        default="",
+        help="Comma-separated covariance-axis position seed radii; empty uses center only",
+    )
+    parser.add_argument(
+        "--ddpr-respawn-seed-directions",
+        choices=("axes", "cube26"),
+        default="axes",
+    )
+    parser.add_argument("--ddpr-respawn-history-seeds", type=int, default=0)
+    parser.add_argument("--ddpr-respawn-history-separation-m", type=float, default=1.0)
+    parser.add_argument("--ddpr-respawn-history-max-age-epochs", type=int, default=25)
     parser.add_argument("--out-diagnostics", type=Path, default=Path("results/wp23b/csv/basin_run2_epochs.csv"))
     parser.add_argument("--out-summary", type=Path, default=Path("results/wp23b/csv/basin_run2_summary.json"))
     parser.add_argument("--out-trajectory", type=Path, default=Path("results/wp23b/pos/basin_run2.csv"))
@@ -180,6 +199,13 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if not 0.0 <= float(args.integrity_satellite_cost_memory) < 1.0:
         parser.error("--integrity-satellite-cost-memory must be in [0, 1)")
+    respawn_seed_radii = tuple(
+        float(value)
+        for value in str(args.ddpr_respawn_seed_radii_m).split(",")
+        if value.strip()
+    )
+    if any(not np.isfinite(value) or value <= 0.0 for value in respawn_seed_radii):
+        parser.error("--ddpr-respawn-seed-radii-m values must be positive")
 
     city, run = str(args.run).split("/", 1)
     run_dir = args.data_root / city / run
@@ -226,6 +252,8 @@ def main(argv: list[str] | None = None) -> None:
         fix_gamma_threshold=float(args.fix_gamma),
         fix_min_streak=int(args.fix_streak),
         min_fixed_ambiguities=int(args.subset_size),
+        diversity_reserve_fraction=float(args.basin_diversity_reserve_fraction),
+        diversity_radius_m=float(args.basin_diversity_radius_m),
     )
     policy_config = TrustedFixPolicyConfig(
         gamma_threshold=float(args.fix_gamma),
@@ -273,6 +301,15 @@ def main(argv: list[str] | None = None) -> None:
     }
     previous_tdcp_measurements = None
     integrity_satellite_cost_state: dict[str, float] = {}
+    recovery_position_bank = (
+        RecoveryPositionBank(
+            max_seeds=int(args.ddpr_respawn_history_seeds),
+            separation_m=float(args.ddpr_respawn_history_separation_m),
+            max_age_epochs=int(args.ddpr_respawn_history_max_age_epochs),
+        )
+        if int(args.ddpr_respawn_history_seeds) > 0
+        else None
+    )
 
     times = np.asarray(data["times"], dtype=np.float64)
     respawn_subset_size = (
@@ -429,6 +466,18 @@ def main(argv: list[str] | None = None) -> None:
             )
 
         generations = float_kf.ambiguity_generations()
+        if recovery_position_bank is not None and basin_pf.basins:
+            recovery_position_bank.update(
+                i,
+                np.asarray(
+                    [basin.conditional.mean[:3] for basin in basin_pf.basins],
+                    dtype=np.float64,
+                ),
+                np.asarray(
+                    [basin.log_weight for basin in basin_pf.basins],
+                    dtype=np.float64,
+                ),
+            )
         active_versioned = {(key, generation) for key, generation in generations.items()}
         basin_pf.retain_compatible(active_versioned)
         if dd_pr is not None and basin_pf.basins:
@@ -477,6 +526,8 @@ def main(argv: list[str] | None = None) -> None:
 
         n_candidates = 0
         n_respawn_candidates = 0
+        n_respawn_position_seeds = 0
+        n_respawn_history_seeds = 0
         respawn_oracle_min_error = float("nan")
         respawn_oracle_rank = -1
         if dd_cp is not None and int(dd_cp.n_dd) >= int(args.subset_size):
@@ -526,30 +577,52 @@ def main(argv: list[str] | None = None) -> None:
                     n_birth_epochs += 1
 
         if respawn_triggered and dd_cp is not None:
-            respawn_seed = ddpr_centered_ambiguity_seed(
-                dd_cp,
+            respawn_positions = covariance_axis_position_seeds(
                 ddpr_guard.mean[:3],
                 ddpr_guard.covariance[:3, :3],
-                sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+                respawn_seed_radii,
+                direction_mode=str(args.ddpr_respawn_seed_directions),
             )
-            available = np.asarray(
-                [j for j, key in enumerate(respawn_seed.keys) if key in generations],
-                dtype=np.int64,
-            )
-            if available.size >= respawn_subset_size:
+            if recovery_position_bank is not None:
+                respawn_position_list = list(respawn_positions)
+                for history_position in recovery_position_bank.positions:
+                    if all(
+                        np.linalg.norm(history_position - existing) > 1.0e-3
+                        for existing in respawn_position_list
+                    ):
+                        respawn_position_list.append(history_position)
+                        n_respawn_history_seeds += 1
+                respawn_positions = tuple(respawn_position_list)
+            n_respawn_position_seeds = len(respawn_positions)
+            assignments = []
+            conditionals = []
+            all_respawn_residuals: list[float] = []
+            for respawn_position in respawn_positions:
+                respawn_seed = ddpr_centered_ambiguity_seed(
+                    dd_cp,
+                    respawn_position,
+                    ddpr_guard.covariance[:3, :3],
+                    sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+                )
+                available = np.asarray(
+                    [
+                        j
+                        for j, key in enumerate(respawn_seed.keys)
+                        if key in generations
+                    ],
+                    dtype=np.int64,
+                )
+                if available.size < respawn_subset_size:
+                    continue
                 variances = np.diag(respawn_seed.qahat_cycles2)[available]
-                selected = available[
-                    np.argsort(variances)[:respawn_subset_size]
-                ]
+                selected = available[np.argsort(variances)[:respawn_subset_size]]
                 selected = np.sort(selected)
                 respawn_keys = tuple(respawn_seed.keys[j] for j in selected)
-                candidates, respawn_residuals = integer_search(
+                candidates, seed_residuals = integer_search(
                     respawn_seed.ahat_cycles[selected],
                     respawn_seed.qahat_cycles2[np.ix_(selected, selected)],
                     n_candidates=respawn_top_k,
                 )
-                assignments = []
-                conditionals = []
                 for candidate in candidates:
                     position, covariance, _distance = condition_respawn_position(
                         respawn_seed, respawn_keys, candidate
@@ -569,6 +642,10 @@ def main(argv: list[str] | None = None) -> None:
                             accel_process_sigma_mps2=3.0,
                         )
                     )
+                all_respawn_residuals.extend(
+                    float(value) for value in np.asarray(seed_residuals).reshape(-1)
+                )
+            if conditionals:
                 # Diagnostic only: truth never changes candidates, weights,
                 # output selection, or the FIX gate.
                 epoch_ref = truth.get(round(float(tow), 1))
@@ -588,7 +665,8 @@ def main(argv: list[str] | None = None) -> None:
                         conditionals,
                         prior_mass=float(args.ddpr_respawn_mass),
                         candidate_log_weights=(
-                            -0.5 * np.asarray(respawn_residuals, dtype=np.float64)
+                            -0.5
+                            * np.asarray(all_respawn_residuals, dtype=np.float64)
                             if args.ddpr_respawn_use_lambda_prior else None
                         ),
                     )
@@ -1168,6 +1246,8 @@ def main(argv: list[str] | None = None) -> None:
                 "n_candidates_born": n_candidates,
                 "respawn_triggered": int(respawn_triggered),
                 "n_respawn_candidates_born": n_respawn_candidates,
+                "n_respawn_position_seeds": n_respawn_position_seeds,
+                "n_respawn_history_seeds": n_respawn_history_seeds,
                 "respawn_oracle_min_error_m": respawn_oracle_min_error,
                 "respawn_oracle_rank": int(respawn_oracle_rank),
                 "n_dd_pr": 0 if dd_pr is None else int(dd_pr.n_dd),
@@ -1189,6 +1269,10 @@ def main(argv: list[str] | None = None) -> None:
         "n_epochs": len(rows),
         "subset_size": int(args.subset_size),
         "top_k": int(args.top_k),
+        "basin_diversity_reserve_fraction": float(
+            args.basin_diversity_reserve_fraction
+        ),
+        "basin_diversity_radius_m": float(args.basin_diversity_radius_m),
         "fix_gamma_threshold": float(args.fix_gamma),
         "fix_min_streak": int(args.fix_streak),
         "fix_float_consistency_m": float(args.fix_consistency_m),
@@ -1201,6 +1285,15 @@ def main(argv: list[str] | None = None) -> None:
         "ddpr_respawn_subset_size": int(respawn_subset_size),
         "ddpr_respawn_top_k": int(respawn_top_k),
         "ddpr_respawn_lambda_prior": bool(args.ddpr_respawn_use_lambda_prior),
+        "ddpr_respawn_seed_radii_m": list(respawn_seed_radii),
+        "ddpr_respawn_seed_directions": str(args.ddpr_respawn_seed_directions),
+        "ddpr_respawn_history_seeds": int(args.ddpr_respawn_history_seeds),
+        "ddpr_respawn_history_separation_m": float(
+            args.ddpr_respawn_history_separation_m
+        ),
+        "ddpr_respawn_history_max_age_epochs": int(
+            args.ddpr_respawn_history_max_age_epochs
+        ),
         "ddpr_respawn_epochs": int(n_respawn_epochs),
         "temporal_lineage_enabled": bool(args.enable_temporal_lineage),
         "temporal_map_disagreement_epochs": int(n_temporal_map_disagreement),

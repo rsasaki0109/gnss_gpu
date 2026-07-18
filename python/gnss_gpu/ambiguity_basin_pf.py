@@ -289,11 +289,19 @@ class AmbiguityBasinParticleFilter:
         fix_gamma_threshold: float = 0.99,
         fix_min_streak: int = 3,
         min_fixed_ambiguities: int = 6,
+        diversity_reserve_fraction: float = 0.0,
+        diversity_radius_m: float = 1.0,
     ) -> None:
         self.max_basins = int(max_basins)
         self.fix_gamma_threshold = float(fix_gamma_threshold)
         self.fix_min_streak = int(fix_min_streak)
         self.min_fixed_ambiguities = int(min_fixed_ambiguities)
+        self.diversity_reserve_fraction = float(diversity_reserve_fraction)
+        self.diversity_radius_m = float(diversity_radius_m)
+        if not 0.0 <= self.diversity_reserve_fraction < 1.0:
+            raise ValueError("diversity_reserve_fraction must be in [0, 1)")
+        if not np.isfinite(self.diversity_radius_m) or self.diversity_radius_m <= 0.0:
+            raise ValueError("diversity_radius_m must be finite and positive")
         self.basins: list[IntegerBasin] = []
         self.epoch = -1
         self._ids = count()
@@ -590,7 +598,31 @@ class AmbiguityBasinParticleFilter:
             return
         self.basins.sort(key=lambda basin: basin.log_weight, reverse=True)
         if len(self.basins) > self.max_basins:
-            self.basins = self.basins[: self.max_basins]
+            reserve = int(round(self.max_basins * self.diversity_reserve_fraction))
+            primary = max(self.max_basins - reserve, 1)
+            selected = list(self.basins[:primary])
+            selected_ids = {basin.basin_id for basin in selected}
+            selected_positions = np.asarray(
+                [basin.conditional.mean[:3] for basin in selected], dtype=np.float64
+            )
+            for basin in self.basins[primary:]:
+                if len(selected) >= self.max_basins:
+                    break
+                position = basin.conditional.mean[:3]
+                if np.all(
+                    np.linalg.norm(selected_positions - position[None, :], axis=1)
+                    >= self.diversity_radius_m
+                ):
+                    selected.append(basin)
+                    selected_ids.add(basin.basin_id)
+                    selected_positions = np.vstack([selected_positions, position])
+            if len(selected) < self.max_basins:
+                selected.extend(
+                    basin
+                    for basin in self.basins[primary:]
+                    if basin.basin_id not in selected_ids
+                )
+            self.basins = selected[: self.max_basins]
         values = np.asarray([basin.log_weight for basin in self.basins], dtype=np.float64)
         normalizer = _logsumexp(values)
         for basin in self.basins:

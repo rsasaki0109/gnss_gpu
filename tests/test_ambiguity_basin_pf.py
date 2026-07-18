@@ -138,6 +138,22 @@ def test_respawn_preserves_parent_lineage_and_caps_population():
     assert np.isclose(sum(np.exp(b.log_weight) for b in pf.basins), 1.0)
 
 
+def test_diversity_reserve_keeps_spatially_distinct_lower_weight_basin():
+    pf = AmbiguityBasinParticleFilter(
+        max_basins=3,
+        diversity_reserve_fraction=1.0 / 3.0,
+        diversity_radius_m=1.0,
+    )
+    assignments = [{_versioned_key(f"G{i + 2:02d}"): i} for i in range(4)]
+    pf.spawn(
+        assignments,
+        [_conditional(value) for value in (0.0, 0.1, 0.2, 10.0)],
+        candidate_log_weights=(0.0, -1.0, -2.0, -3.0),
+    )
+    kept_x = sorted(float(basin.conditional.mean[0]) for basin in pf.basins)
+    assert kept_x == [0.0, 0.1, 10.0]
+
+
 def test_large_linear_update_matches_dense_kalman_and_marginal_likelihood():
     rng = np.random.default_rng(20260718)
     state = _conditional(0.3)
