@@ -11,6 +11,7 @@ from gnss_gpu.tdcp_velocity import (
     _one_row_per_satellite,
     estimate_velocity_from_tdcp,
     estimate_velocity_from_tdcp_with_metrics,
+    estimate_displacement_from_tdcp,
 )
 
 LAM = C_LIGHT / L1_FREQ
@@ -297,6 +298,52 @@ def test_estimate_velocity_from_tdcp_with_metrics():
     v2, rms2 = estimate_velocity_from_tdcp_with_metrics(rx, prev, cur, dt=-0.5)
     assert v2 is None
     assert np.isnan(rms2)
+
+
+def test_robust_tdcp_displacement_rejects_slip_and_returns_covariance():
+    rx = np.array([1.0e6, 2.0e6, 3.0e6])
+    dt = 0.2
+    displacement = np.array([1.2, -0.4, 0.1])
+    clock_delta = 0.3
+    offsets = [
+        (20, 0, 0),
+        (0, 21, 0),
+        (0, 0, 22),
+        (15, 15, 10),
+        (-18, 4, 12),
+        (8, -19, 11),
+        (-10, -12, 18),
+    ]
+    prev: list[_Meas] = []
+    cur: list[_Meas] = []
+    for index, offset in enumerate(offsets):
+        sat = rx + np.asarray(offset, dtype=np.float64) * 1.0e6
+        delta_cycles = (
+            float(_los(rx, sat) @ displacement) + clock_delta
+        ) / LAM
+        if index == 5:
+            delta_cycles += 8.0 / LAM
+        prev.append(_Meas(0, index + 1, sat, 1000.0 + index))
+        cur.append(_Meas(0, index + 1, sat, 1000.0 + index + delta_cycles))
+
+    estimate = estimate_displacement_from_tdcp(
+        rx,
+        prev,
+        cur,
+        dt,
+        min_sats=5,
+        max_postfit_rms_m=0.1,
+        receiver_motion_sign=1.0,
+        elevation_weight=False,
+        slip_residual_threshold_m=0.15,
+    )
+
+    assert estimate is not None
+    np.testing.assert_allclose(estimate.displacement_ecef_m, displacement, atol=1e-6)
+    assert estimate.n_input == 7
+    assert estimate.n_used == 6
+    assert estimate.n_rejected == 1
+    assert np.min(np.linalg.eigvalsh(estimate.covariance_m2)) > 0.0
 
 
 def test_tdcp_dt_nonpositive_returns_none():

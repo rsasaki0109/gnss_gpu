@@ -84,3 +84,23 @@ def test_empty_epoch_resets_active_lineage():
     assert empty.n_candidates == 0
     restarted = tracker.step(2, 1.0, [_candidate("a", _assignment("G02"), 0.0)])
     assert restarted.dwell_epochs == 1
+
+
+def test_external_displacement_selects_motion_consistent_successor():
+    tracker = TemporalAmbiguityFilter(
+        TemporalAmbiguityConfig(birth_mass=0.01, incompatible_cost=1.0)
+    )
+    shared = _assignment("G02")
+    tracker.step(0, 0.0, [_candidate("start", shared, 0.0)])
+    posterior = tracker.step(
+        1,
+        1.0,
+        [
+            _candidate("near", shared + _assignment("G03"), 0.0, position=1.0),
+            _candidate("far", shared + _assignment("G04"), 0.2, position=5.0),
+        ],
+        motion_mode="external",
+        external_displacement_ecef_m=np.array([1.0, 0.0, 0.0]),
+        external_covariance_m2=np.eye(3) * 0.1**2,
+    )
+    assert posterior.map_candidate_id == "near"

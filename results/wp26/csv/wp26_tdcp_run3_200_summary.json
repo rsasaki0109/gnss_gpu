@@ -1,0 +1,15 @@
+{
+  "run": "tokyo/run3",
+  "epochs": 200,
+  "intervals": 199,
+  "tdcp_used_intervals": 199,
+  "tdcp_use_rate_pct": 100.0,
+  "rejected_satellite_rows": 161,
+  "displacement_error_median_m": 0.002807922521963779,
+  "displacement_error_p90_m": 0.005643962999458631,
+  "displacement_error_rms_m": 0.004023900924563332,
+  "nis_median": 0.21319640227528885,
+  "nis_p90": 0.6798413876408713,
+  "postfit_rms_median_m": 0.0020156583189135362,
+  "truth_used_by_motion_stream": false
+}

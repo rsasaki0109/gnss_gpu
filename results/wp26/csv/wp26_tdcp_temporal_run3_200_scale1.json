@@ -1,0 +1,53 @@
+[
+  {
+    "birth_mass": 0.01,
+    "motion_sigma_m": 3.0,
+    "motion_mode": "external",
+    "external_covariance_scale": 1.0,
+    "epochs": 200,
+    "oracle_sub50cm_epochs": 165,
+    "single_sub50cm_epochs": 0,
+    "temporal_sub50cm_epochs": 0,
+    "temporal_oracle_selection_epochs": 0,
+    "temporal_better_epochs": 14,
+    "temporal_worse_epochs": 177,
+    "single_median_error_m": 1.5833571572368614,
+    "temporal_median_error_m": 4.947615254776533,
+    "gamma99_epochs": 11,
+    "gamma99_correct_epochs": 0
+  },
+  {
+    "birth_mass": 0.05,
+    "motion_sigma_m": 3.0,
+    "motion_mode": "external",
+    "external_covariance_scale": 1.0,
+    "epochs": 200,
+    "oracle_sub50cm_epochs": 165,
+    "single_sub50cm_epochs": 0,
+    "temporal_sub50cm_epochs": 0,
+    "temporal_oracle_selection_epochs": 0,
+    "temporal_better_epochs": 14,
+    "temporal_worse_epochs": 177,
+    "single_median_error_m": 1.5833571572368614,
+    "temporal_median_error_m": 4.947615254776533,
+    "gamma99_epochs": 9,
+    "gamma99_correct_epochs": 0
+  },
+  {
+    "birth_mass": 0.2,
+    "motion_sigma_m": 3.0,
+    "motion_mode": "external",
+    "external_covariance_scale": 1.0,
+    "epochs": 200,
+    "oracle_sub50cm_epochs": 165,
+    "single_sub50cm_epochs": 0,
+    "temporal_sub50cm_epochs": 0,
+    "temporal_oracle_selection_epochs": 0,
+    "temporal_better_epochs": 14,
+    "temporal_worse_epochs": 177,
+    "single_median_error_m": 1.5833571572368614,
+    "temporal_median_error_m": 4.940071795910709,
+    "gamma99_epochs": 9,
+    "gamma99_correct_epochs": 0
+  }
+]

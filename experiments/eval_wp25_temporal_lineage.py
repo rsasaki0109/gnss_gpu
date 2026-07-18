@@ -38,6 +38,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--data-root", type=Path, default=Path("datasets/PPC-Dataset-data"))
     parser.add_argument("--birth-masses", default="0.01,0.05,0.2")
     parser.add_argument("--motion-sigmas-m", default="1,3,10,100")
+    parser.add_argument(
+        "--motion-mode", choices=("candidate", "none", "external"), default="candidate"
+    )
+    parser.add_argument("--motion-trace", type=Path, default=None)
+    parser.add_argument("--external-cov-scale", type=float, default=1.0)
     parser.add_argument("--change-cost", type=float, default=2.0)
     parser.add_argument("--incompatible-cost", type=float, default=12.0)
     parser.add_argument("--death-cost", type=float, default=6.0)
@@ -54,6 +59,14 @@ def main(argv: list[str] | None = None) -> None:
     by_epoch: dict[int, list[dict[str, str]]] = {}
     for row in rows:
         by_epoch.setdefault(int(row["epoch"]), []).append(row)
+    motion_by_epoch: dict[int, dict[str, str]] = {}
+    if args.motion_trace is not None:
+        with args.motion_trace.open(newline="") as fh:
+            motion_by_epoch = {
+                int(row["epoch"]): row for row in csv.DictReader(fh)
+            }
+    if args.motion_mode == "external" and not motion_by_epoch:
+        raise ValueError("external motion mode requires --motion-trace")
     city, run = str(args.run).split("/", 1)
     truth = _reference_position_map(
         _load_full_reference(args.data_root / city / run / "reference.csv")
@@ -62,6 +75,7 @@ def main(argv: list[str] | None = None) -> None:
     summaries: list[dict[str, object]] = []
     for birth_mass in _float_grid(args.birth_masses):
         for motion_sigma in _float_grid(args.motion_sigmas_m):
+            covariance_scale = float(args.external_cov_scale)
             tracker = TemporalAmbiguityFilter(
                 TemporalAmbiguityConfig(
                     birth_mass=birth_mass,
@@ -90,8 +104,27 @@ def main(argv: list[str] | None = None) -> None:
                     )
                     for row in epoch_rows
                 ]
+                step_kwargs: dict[str, object] = {"motion_mode": args.motion_mode}
+                if args.motion_mode == "external":
+                    motion = motion_by_epoch.get(epoch)
+                    if motion is not None and motion["used"] == "1":
+                        step_kwargs["external_displacement_ecef_m"] = np.asarray(
+                            [motion["dx"], motion["dy"], motion["dz"]], dtype=float
+                        )
+                        step_kwargs["external_covariance_m2"] = covariance_scale * np.asarray(
+                            [
+                                [motion[f"cov_{r}{c}"] for c in range(3)]
+                                for r in range(3)
+                            ],
+                            dtype=float,
+                        )
+                    else:
+                        step_kwargs["motion_mode"] = "none"
                 posterior = tracker.step(
-                    epoch, 0.0 if previous_tow is None else max(tow - previous_tow, 0.0), candidates
+                    epoch,
+                    0.0 if previous_tow is None else max(tow - previous_tow, 0.0),
+                    candidates,
+                    **step_kwargs,
                 )
                 previous_tow = tow
                 ref = truth.get(round(tow, 1))
@@ -119,6 +152,8 @@ def main(argv: list[str] | None = None) -> None:
                 {
                     "birth_mass": birth_mass,
                     "motion_sigma_m": motion_sigma,
+                    "motion_mode": args.motion_mode,
+                    "external_covariance_scale": covariance_scale,
                     "epochs": int(te.size),
                     "oracle_sub50cm_epochs": int(oracle_available),
                     "single_sub50cm_epochs": int(np.sum(se < 0.5)),

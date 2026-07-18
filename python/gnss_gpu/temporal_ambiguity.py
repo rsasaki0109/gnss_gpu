@@ -119,6 +119,10 @@ class TemporalAmbiguityFilter:
         epoch: int,
         dt: float,
         candidates: Iterable[TemporalAmbiguityCandidate],
+        *,
+        motion_mode: str = "candidate",
+        external_displacement_ecef_m: np.ndarray | None = None,
+        external_covariance_m2: np.ndarray | None = None,
     ) -> TemporalAmbiguityPosterior:
         current = list(candidates)
         if not current:
@@ -134,6 +138,9 @@ class TemporalAmbiguityFilter:
             raise ValueError("temporal ambiguity epochs must be strictly increasing")
         if not math.isfinite(dt) or dt < 0.0:
             raise ValueError("dt must be finite and non-negative")
+        motion_mode = str(motion_mode).strip().lower()
+        if motion_mode not in {"candidate", "external", "none"}:
+            raise ValueError("motion_mode must be candidate, external, or none")
 
         observation = np.asarray(
             [candidate.epoch_log_likelihood for candidate in current], dtype=np.float64
@@ -149,7 +156,6 @@ class TemporalAmbiguityFilter:
             assignment_score = np.empty(
                 (len(previous), len(current)), dtype=np.float64
             )
-            motion_variance = self.config.motion_sigma_m**2
             for p_index, hypothesis in enumerate(previous):
                 old = self._candidates[hypothesis.candidate_id]
                 for c_index, candidate in enumerate(current):
@@ -166,17 +172,48 @@ class TemporalAmbiguityFilter:
                         if compatible else -self.config.incompatible_cost
                     )
             previous_position = np.asarray(
-                [
-                    self._candidates[item.candidate_id].position_ecef
-                    + self._candidates[item.candidate_id].velocity_ecef * float(dt)
-                    for item in previous
-                ]
+                [self._candidates[item.candidate_id].position_ecef for item in previous]
             )
             current_position = np.asarray(
                 [candidate.position_ecef for candidate in current]
             )
-            residual = current_position[None, :, :] - previous_position[:, None, :]
-            motion_score = -0.5 * np.sum(residual * residual, axis=2) / motion_variance
+            if motion_mode == "candidate":
+                predicted_position = previous_position + np.asarray(
+                    [
+                        self._candidates[item.candidate_id].velocity_ecef * float(dt)
+                        for item in previous
+                    ]
+                )
+                residual = current_position[None, :, :] - predicted_position[:, None, :]
+                motion_score = (
+                    -0.5 * np.sum(residual * residual, axis=2)
+                    / self.config.motion_sigma_m**2
+                )
+            elif motion_mode == "external":
+                if external_displacement_ecef_m is None or external_covariance_m2 is None:
+                    raise ValueError("external motion requires displacement and covariance")
+                displacement = np.asarray(
+                    external_displacement_ecef_m, dtype=np.float64
+                ).reshape(3)
+                covariance = np.asarray(
+                    external_covariance_m2, dtype=np.float64
+                ).reshape(3, 3)
+                if not np.all(np.isfinite(displacement)) or not np.all(np.isfinite(covariance)):
+                    raise ValueError("external motion must be finite")
+                covariance = 0.5 * (covariance + covariance.T)
+                minimum = float(np.min(np.linalg.eigvalsh(covariance)))
+                if minimum < 1.0e-8:
+                    covariance += np.eye(3) * (1.0e-8 - minimum)
+                precision = np.linalg.inv(covariance)
+                predicted_position = previous_position + displacement
+                residual = current_position[None, :, :] - predicted_position[:, None, :]
+                motion_score = -0.5 * np.einsum(
+                    "pci,ij,pcj->pc", residual, precision, residual
+                )
+            else:
+                motion_score = np.zeros(
+                    (len(previous), len(current)), dtype=np.float64
+                )
             transition = assignment_score + motion_score
             for p_index in range(len(previous)):
                 # Normalize with an explicit death/release state.  Without it,
