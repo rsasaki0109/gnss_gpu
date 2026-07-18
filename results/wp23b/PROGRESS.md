@@ -167,3 +167,19 @@ Artifacts: `csv/g5_tokyo_3run_summary.{csv,json}`,
 `csv/g5_min_dd_ablation.{csv,json}`, per-run `g5_trusted_*` diagnostics/scores,
 and `pos/g5_trusted/` trajectories. Full-run scaling and cluster-specific
 relinearization remain pending.
+
+### G5 scale-up performance preparation
+
+Two exact optimizations reduced the Tokyo 3-run/1200 wall time from 334.0 s to
+195.2 s (**41.6% reduction, 1.71x speedup**):
+
+1. DD batches with more than six rows now use the determinant lemma and
+   Woodbury/information-form update, factoring only the six-state precision
+   instead of a 20-30 row innovation covariance.
+2. DD carrier and DD pseudorange computers share an explicit parsed-RINEX
+   cache, avoiding duplicate base/rover observation parsing.
+
+Across all 3600 epochs, the optimized arm had zero FIX or gamma-FIX decision
+differences, maximum position delta 2.23e-8 m, and maximum gamma delta 5.01e-7.
+The related regression subset passed with **75 passed, 2 skipped**. Evidence:
+`csv/g5_optimization_benchmark.json`.

@@ -111,3 +111,23 @@ support floor, while independent DDPR consistency is the measured safety gain.
 The 3600-epoch final grid took 334 seconds, so full-run compute scaling remains
 an explicit open issue. After the G5 gate addition, the relevant regression
 subset passed with **73 passed, 2 skipped**.
+
+### Exact scale-up optimizations
+
+The basin KF now evaluates large DD batches in six-state information form via
+the matrix determinant lemma and Woodbury identity. This preserves the exact
+Gaussian posterior and marginal likelihood while avoiding 20-30 dimensional
+innovation factorizations. The carrier and pseudorange DD computers also share
+an explicit parsed-RINEX cache instead of parsing base and rover files twice.
+
+| Tokyo 3-run/1200 implementation | Wall time [s] |
+| --- | ---: |
+| dense basin KF, duplicate RINEX parsing | 334.0 |
+| information-form basin KF | 271.3 |
+| information-form + shared RINEX cache | **195.2** |
+
+The total reduction is **41.6% (1.71x speedup)**. Against the trusted baseline,
+all 3600 epochs have zero FIX-decision differences; maximum position delta is
+2.23e-8 m and maximum gamma delta is 5.01e-7. The expanded relevant regression
+subset passes with **75 passed, 2 skipped**. Detailed evidence is in
+`csv/g5_optimization_benchmark.json`.

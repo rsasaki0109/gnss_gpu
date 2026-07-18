@@ -33,6 +33,7 @@ from gnss_gpu.dd_carrier import DDCarrierComputer  # noqa: E402
 from gnss_gpu.dd_float_kf import DDFloatKalmanFilter  # noqa: E402
 from gnss_gpu.dd_pseudorange import DDPseudorangeComputer  # noqa: E402
 from gnss_gpu.io.ppc import PPCDatasetLoader  # noqa: E402
+from gnss_gpu.io.rinex_cache import RinexObservationCache  # noqa: E402
 from gnss_gpu.lambda_ambiguity import integer_search  # noqa: E402
 from gnss_gpu.rtk_fix_gate import trusted_fix_gate  # noqa: E402
 
@@ -92,17 +93,20 @@ def main(argv: list[str] | None = None) -> None:
     )
     wls_positions, _ = run_wls(_filter_data_by_systems(data, pr_systems))
     truth = _reference_position_map(_load_full_reference(run_dir / "reference.csv"))
+    observation_cache = RinexObservationCache()
     carrier = DDCarrierComputer(
         run_dir / "base.obs",
         rover_obs_path=run_dir / "rover.obs",
         base_position=np.asarray(data["base_ecef"], dtype=np.float64),
         allowed_systems=dd_systems,
+        observation_cache=observation_cache,
     )
     pseudorange = DDPseudorangeComputer(
         run_dir / "base.obs",
         rover_obs_path=run_dir / "rover.obs",
         base_position=np.asarray(data["base_ecef"], dtype=np.float64),
         allowed_systems=dd_systems,
+        observation_cache=observation_cache,
     )
     float_kf = DDFloatKalmanFilter(
         np.asarray(wls_positions[0, :3], dtype=np.float64),

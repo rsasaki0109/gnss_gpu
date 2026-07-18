@@ -35,6 +35,7 @@ from typing import Any, Sequence
 import numpy as np
 
 from gnss_gpu.io.rinex import read_rinex_obs
+from gnss_gpu.io.rinex_cache import RinexObservationCache
 
 C_LIGHT = 299792458.0
 GPS_L1_WAVELENGTH = C_LIGHT / 1575.42e6
@@ -363,12 +364,17 @@ class DDCarrierComputer:
         carrier_obs_code: str | None = None,
         allowed_systems: Sequence[str] = ("G", "E", "J", "C"),
         interpolate_base_epochs: bool = False,
+        observation_cache: RinexObservationCache | None = None,
     ):
         base_obs_path = Path(base_obs_path)
         if not base_obs_path.exists():
             raise FileNotFoundError(f"Base RINEX not found: {base_obs_path}")
 
-        self._obs = read_rinex_obs(base_obs_path)
+        self._obs = (
+            observation_cache.load(base_obs_path)
+            if observation_cache is not None
+            else read_rinex_obs(base_obs_path)
+        )
         self._carrier_code = carrier_obs_code
         self._allowed_systems = tuple(allowed_systems)
         self._interpolate_base_epochs = bool(interpolate_base_epochs)
@@ -408,7 +414,11 @@ class DDCarrierComputer:
             rover_obs_path = Path(rover_obs_path)
             if not rover_obs_path.exists():
                 raise FileNotFoundError(f"Rover RINEX not found: {rover_obs_path}")
-            rover_obs = read_rinex_obs(rover_obs_path)
+            rover_obs = (
+                observation_cache.load(rover_obs_path)
+                if observation_cache is not None
+                else read_rinex_obs(rover_obs_path)
+            )
             self._rover_by_tow = {}
             for ep in rover_obs.epochs:
                 tow_key = round(_datetime_to_tow(ep.time), 1)

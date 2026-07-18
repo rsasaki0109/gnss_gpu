@@ -147,6 +147,8 @@ class BasinKalmanState:
         variances = variances[valid]
         if innovation.size == 0:
             return 0.0
+        if innovation.size > self.mean.size:
+            return self._update_information(h, innovation, variances)
         rmat = np.diag(variances)
         innovation_cov = h @ self.covariance @ h.T + rmat
         innovation_cov = 0.5 * (innovation_cov + innovation_cov.T)
@@ -164,6 +166,67 @@ class BasinKalmanState:
         self.mean = self.mean + gain @ innovation
         ikh = np.eye(6) - gain @ h
         self.covariance = ikh @ prior_cov @ ikh.T + gain @ rmat @ gain.T
+        self._repair_covariance()
+        return float(log_likelihood)
+
+    def _update_information(
+        self,
+        design: np.ndarray,
+        innovation: np.ndarray,
+        variances: np.ndarray,
+    ) -> float:
+        """Exact KF update in six-state information space.
+
+        DD batches commonly have 20-30 rows.  The determinant lemma and
+        Woodbury identity avoid factoring that row-sized innovation matrix;
+        both the posterior and Gaussian marginal likelihood require only
+        six-dimensional Cholesky factors.
+        """
+
+        h = np.asarray(design, dtype=np.float64)
+        residual = np.asarray(innovation, dtype=np.float64)
+        variance = np.asarray(variances, dtype=np.float64)
+        try:
+            prior_chol = np.linalg.cholesky(self.covariance)
+            prior_precision = np.linalg.solve(
+                prior_chol.T,
+                np.linalg.solve(prior_chol, np.eye(self.mean.size)),
+            )
+            weighted_h = h / variance[:, None]
+            posterior_precision = prior_precision + h.T @ weighted_h
+            posterior_precision = 0.5 * (
+                posterior_precision + posterior_precision.T
+            )
+            posterior_chol = np.linalg.cholesky(posterior_precision)
+            information_residual = h.T @ (residual / variance)
+            correction = np.linalg.solve(
+                posterior_chol.T,
+                np.linalg.solve(posterior_chol, information_residual),
+            )
+            posterior_covariance = np.linalg.solve(
+                posterior_chol.T,
+                np.linalg.solve(posterior_chol, np.eye(self.mean.size)),
+            )
+        except np.linalg.LinAlgError as exc:
+            raise RuntimeError("basin KF information update is singular") from exc
+
+        log_det = (
+            float(np.sum(np.log(variance)))
+            + 2.0 * float(np.sum(np.log(np.diag(prior_chol))))
+            + 2.0 * float(np.sum(np.log(np.diag(posterior_chol))))
+        )
+        mahalanobis = float(
+            residual @ (residual / variance)
+            - information_residual @ correction
+        )
+        # Roundoff can make a theoretically non-negative quadratic form tiny
+        # and negative when the measurement batch is highly redundant.
+        mahalanobis = max(mahalanobis, 0.0)
+        log_likelihood = -0.5 * (
+            mahalanobis + log_det + residual.size * np.log(2.0 * np.pi)
+        )
+        self.mean = self.mean + correction
+        self.covariance = posterior_covariance
         self._repair_covariance()
         return float(log_likelihood)
 

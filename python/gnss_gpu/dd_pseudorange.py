@@ -28,6 +28,7 @@ from typing import Any, Sequence
 import numpy as np
 
 from gnss_gpu.io.rinex import read_rinex_obs
+from gnss_gpu.io.rinex_cache import RinexObservationCache
 
 _SYS_MAP = {0: "G", 1: "R", 2: "E", 3: "C", 4: "J"}
 _PSEUDORANGE_CODE_PREFERENCES = {
@@ -284,12 +285,17 @@ class DDPseudorangeComputer:
         allowed_systems: Sequence[str] = ("G", "E", "J", "C", "R"),
         interpolate_base_epochs: bool = False,
         base_epoch_tolerance_s: float = 0.25,
+        observation_cache: RinexObservationCache | None = None,
     ):
         base_obs_path = Path(base_obs_path)
         if not base_obs_path.exists():
             raise FileNotFoundError(f"Base RINEX not found: {base_obs_path}")
 
-        self._obs = read_rinex_obs(base_obs_path)
+        self._obs = (
+            observation_cache.load(base_obs_path)
+            if observation_cache is not None
+            else read_rinex_obs(base_obs_path)
+        )
         self._pseudorange_code = pseudorange_obs_code
         self._allowed_systems = tuple(allowed_systems)
         self._interpolate_base_epochs = bool(interpolate_base_epochs)
@@ -326,7 +332,11 @@ class DDPseudorangeComputer:
             rover_obs_path = Path(rover_obs_path)
             if not rover_obs_path.exists():
                 raise FileNotFoundError(f"Rover RINEX not found: {rover_obs_path}")
-            rover_obs = read_rinex_obs(rover_obs_path)
+            rover_obs = (
+                observation_cache.load(rover_obs_path)
+                if observation_cache is not None
+                else read_rinex_obs(rover_obs_path)
+            )
             self._rover_by_tow = {}
             for ep in rover_obs.epochs:
                 tow_key = round(_datetime_to_tow(ep.time), 1)

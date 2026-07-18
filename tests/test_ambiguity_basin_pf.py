@@ -136,3 +136,40 @@ def test_respawn_preserves_parent_lineage_and_caps_population():
     assert len(pf.basins) == 3
     assert any(parent in basin.lineage for basin in pf.basins)
     assert np.isclose(sum(np.exp(b.log_weight) for b in pf.basins), 1.0)
+
+
+def test_large_linear_update_matches_dense_kalman_and_marginal_likelihood():
+    rng = np.random.default_rng(20260718)
+    state = _conditional(0.3)
+    transform = rng.normal(size=(6, 6))
+    state.covariance = transform @ transform.T + np.eye(6) * 0.2
+    initial_mean = state.mean.copy()
+    initial_covariance = state.covariance.copy()
+    design = rng.normal(size=(31, 6))
+    residual = rng.normal(size=31)
+    variance = rng.uniform(0.02, 3.0, size=31)
+
+    innovation_covariance = design @ initial_covariance @ design.T + np.diag(variance)
+    chol = np.linalg.cholesky(innovation_covariance)
+    solved = np.linalg.solve(chol.T, np.linalg.solve(chol, residual))
+    gain = np.linalg.solve(
+        innovation_covariance, design @ initial_covariance
+    ).T
+    expected_mean = initial_mean + gain @ residual
+    ikh = np.eye(6) - gain @ design
+    expected_covariance = (
+        ikh @ initial_covariance @ ikh.T + gain @ np.diag(variance) @ gain.T
+    )
+    expected_log_likelihood = -0.5 * (
+        residual @ solved
+        + 2.0 * np.log(np.diag(chol)).sum()
+        + residual.size * np.log(2.0 * np.pi)
+    )
+
+    actual_log_likelihood = state.update_linear(design, residual, variance)
+
+    np.testing.assert_allclose(actual_log_likelihood, expected_log_likelihood, rtol=1e-10)
+    np.testing.assert_allclose(state.mean, expected_mean, rtol=1e-10, atol=1e-10)
+    np.testing.assert_allclose(
+        state.covariance, expected_covariance, rtol=1e-9, atol=1e-10
+    )
