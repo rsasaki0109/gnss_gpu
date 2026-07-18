@@ -282,7 +282,13 @@ def main(argv: list[str] | None = None) -> None:
     n_integrity_map_disagreement = 0
     n_integrity_anchor_epochs = 0
     n_integrity_tdcp_intervals = 0
+    n_basin_oracle_sub50 = 0
+    n_integrity_ball_gamma99 = 0
+    n_integrity_ball_gamma99_correct = 0
+    n_integrity_guard_pass = 0
+    n_integrity_guard_pass_correct = 0
     max_integrity_gamma = 0.0
+    max_integrity_ball_gamma = 0.0
     max_gamma = 0.0
     last_ddpr_epoch = -1_000_000
     last_ddpr_pairs = 0
@@ -630,6 +636,7 @@ def main(argv: list[str] | None = None) -> None:
         integrity_posterior = None
         integrity_map_basin = None
         integrity_result = None
+        integrity_position_ball = None
         if integrity_filter is not None and basin_pf.basins:
             integrity_scores = np.zeros(len(basin_pf.basins), dtype=np.float64)
             if dd_pr is not None:
@@ -685,6 +692,9 @@ def main(argv: list[str] | None = None) -> None:
                 epoch_dt,
                 integrity_candidates,
                 **integrity_motion,
+            )
+            integrity_position_ball = integrity_filter.map_position_ball(
+                float(args.position_cluster_radius_m)
             )
             integrity_map_basin = next(
                 (
@@ -748,6 +758,15 @@ def main(argv: list[str] | None = None) -> None:
             map_basin.conditional.mean[:3].copy() if fixed else float_kf.position_ecef
         )
         ref = truth.get(round(float(tow), 1))
+        basin_oracle_min_error = (
+            min(
+                float(np.linalg.norm(basin.conditional.mean[:3] - ref))
+                for basin in basin_pf.basins
+            )
+            if basin_pf.basins and ref is not None
+            else float("nan")
+        )
+        n_basin_oracle_sub50 += int(basin_oracle_min_error < 0.5)
         output_error = (
             float(np.linalg.norm(output_position - ref))
             if ref is not None and np.all(np.isfinite(ref))
@@ -770,6 +789,54 @@ def main(argv: list[str] | None = None) -> None:
             else float("nan")
         )
         n_integrity_map_sub50 += int(integrity_map_error < 0.5)
+        integrity_ball_error = (
+            float(np.linalg.norm(integrity_position_ball.mean_position_ecef - ref))
+            if integrity_position_ball is not None and ref is not None
+            else float("nan")
+        )
+        integrity_ball_gamma = (
+            0.0
+            if integrity_position_ball is None
+            else float(integrity_position_ball.probability)
+        )
+        max_integrity_ball_gamma = max(
+            max_integrity_ball_gamma, integrity_ball_gamma
+        )
+        n_integrity_ball_gamma99 += int(integrity_ball_gamma > 0.99)
+        n_integrity_ball_gamma99_correct += int(
+            integrity_ball_gamma > 0.99 and integrity_ball_error < 0.5
+        )
+        integrity_map_float_separation = (
+            float(
+                np.linalg.norm(
+                    integrity_map_basin.conditional.mean[:3]
+                    - float_kf.position_ecef
+                )
+            )
+            if integrity_map_basin is not None
+            else float("nan")
+        )
+        integrity_map_ddpr_separation = (
+            float(
+                np.linalg.norm(
+                    integrity_map_basin.conditional.mean[:3]
+                    - ddpr_guard.mean[:3]
+                )
+            )
+            if integrity_map_basin is not None
+            else float("nan")
+        )
+        integrity_guard_pass = bool(
+            integrity_map_basin is not None
+            and integrity_map_float_separation <= float(args.fix_consistency_m)
+            and integrity_map_ddpr_separation <= float(args.fix_ddpr_consistency_m)
+            and last_ddpr_pairs >= int(args.fix_min_dd_pairs)
+            and ddpr_age_epochs <= int(args.fix_max_ddpr_age_epochs)
+        )
+        n_integrity_guard_pass += int(integrity_guard_pass)
+        n_integrity_guard_pass_correct += int(
+            integrity_guard_pass and integrity_map_error < 0.5
+        )
         cluster_error = (
             float(np.linalg.norm(position_cluster.mean_position_ecef - ref))
             if ref is not None and np.all(np.isfinite(position_cluster.mean_position_ecef))
@@ -872,6 +939,40 @@ def main(argv: list[str] | None = None) -> None:
                     else int(integrity_posterior.dwell_epochs)
                 ),
                 "integrity_map_error_m": integrity_map_error,
+                "integrity_map_ecef_x": (
+                    float("nan")
+                    if integrity_map_basin is None
+                    else float(integrity_map_basin.conditional.mean[0])
+                ),
+                "integrity_map_ecef_y": (
+                    float("nan")
+                    if integrity_map_basin is None
+                    else float(integrity_map_basin.conditional.mean[1])
+                ),
+                "integrity_map_ecef_z": (
+                    float("nan")
+                    if integrity_map_basin is None
+                    else float(integrity_map_basin.conditional.mean[2])
+                ),
+                "integrity_map_float_separation_m": integrity_map_float_separation,
+                "integrity_map_ddpr_separation_m": integrity_map_ddpr_separation,
+                "integrity_guard_pass": int(integrity_guard_pass),
+                "integrity_position_ball_gamma": integrity_ball_gamma,
+                "integrity_position_ball_members": (
+                    0
+                    if integrity_position_ball is None
+                    else int(integrity_position_ball.n_members)
+                ),
+                "integrity_position_ball_spread_m": (
+                    float("nan")
+                    if integrity_position_ball is None
+                    else float(integrity_position_ball.rms_spread_m)
+                ),
+                "integrity_position_ball_error_m": integrity_ball_error,
+                "basin_oracle_min_error_m": basin_oracle_min_error,
+                "basin_oracle_sub50cm_available": int(
+                    basin_oracle_min_error < 0.5
+                ),
                 "position_cluster_error_m": cluster_error,
                 "position_cluster_gamma": float(position_cluster.gamma),
                 "position_cluster_spread_m": float(position_cluster.rms_spread_m),
@@ -965,7 +1066,21 @@ def main(argv: list[str] | None = None) -> None:
         "integrity_tdcp_intervals": int(n_integrity_tdcp_intervals),
         "integrity_map_disagreement_epochs": int(n_integrity_map_disagreement),
         "integrity_map_sub50cm_epochs": int(n_integrity_map_sub50),
+        "basin_oracle_sub50cm_epochs": int(n_basin_oracle_sub50),
+        "integrity_selection_given_oracle_pct": float(
+            100.0 * n_integrity_map_sub50 / max(n_basin_oracle_sub50, 1)
+        ),
         "max_integrity_gamma": float(max_integrity_gamma),
+        "max_integrity_position_ball_gamma": float(max_integrity_ball_gamma),
+        "integrity_position_ball_gamma99_epochs": int(n_integrity_ball_gamma99),
+        "integrity_position_ball_gamma99_correct_epochs": int(
+            n_integrity_ball_gamma99_correct
+        ),
+        "integrity_guard_pass_epochs": int(n_integrity_guard_pass),
+        "integrity_guard_pass_correct_epochs": int(n_integrity_guard_pass_correct),
+        "integrity_guard_pass_false_epochs": int(
+            n_integrity_guard_pass - n_integrity_guard_pass_correct
+        ),
         "float_ambiguity_resets": int(n_float_resets),
         "declared_fix_epochs": int(n_declared_fix),
         "gamma_fix_epochs": int(n_gamma_fix),

@@ -59,10 +59,35 @@ Tokyo run3/200 reproduced the offline result exactly:
 The online arm therefore passes causal integration and neutrality, but remains
 diagnostic-only. Its maximum gamma is only 0.0627 and is not a FIX confidence.
 
+## Frozen Tokyo three-run transfer
+
+The unchanged run3 policy was run on the first 200 epochs of all Tokyo runs:
+
+| Run | Oracle live | Selected sub-50 cm | Conditional selection | TDCP |
+| --- | ---: | ---: | ---: | ---: |
+| run1 | 200/200 | 33/200 | 16.5% | 197/199 |
+| run2 | 200/200 | 130/200 | 65.0% | 199/199 |
+| run3 | 165/200 | 91/200 | 55.2% | 199/199 |
+
+Candidate supply is complete on run1/run2, so run1's failure is selection, not
+respawn recall. The 0.5 m non-chaining ball does not manufacture confidence:
+maximum mass is 0.237/0.388/0.166 and no epoch exceeds 0.99.
+
+The existing trusted float/DDPR guard is not sufficient for integrity output.
+It admits 16/38 false candidates on run1, 10/137 on run2, and 5/5 on run3.
+A predeclared 315-cell gamma/dwell/guard audit finds 230 configurations with
+zero *observed* false rate, but every one has zero accepted correct epochs on at
+least one run. No configuration has a Wilson 95% false-rate upper bound below
+1% on every run. No policy is promoted.
+
+Calibration also varies materially: Brier/ECE are 0.167/0.148 (run1),
+0.427/0.491 (run2), and 0.412/0.432 (run3). A single scalar temperature or
+threshold cannot repair the measured run-dependent ranking failure.
+
 ## Next
 
-Run the frozen online policy on the predeclared run1/run2 development windows.
-Measure calibration, candidate availability, integrity selection, satellite
-support loss, and wrong-block persistence. Add per-satellite persistence states
-only if those failures show stable satellite-specific contamination; do not
-tune against validation output.
+Attribute anchor failures per satellite with leave-one-satellite-out
+multi-pivot replay. Measure whether a stable satellite subset or persistent
+innovation mode explains run1/run3 wrong blocks. Only then introduce causal
+`clean/biased/blocked/recovering` latent states; do not tune a production
+threshold against these windows.

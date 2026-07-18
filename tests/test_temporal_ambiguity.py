@@ -104,3 +104,29 @@ def test_external_displacement_selects_motion_consistent_successor():
         external_covariance_m2=np.eye(3) * 0.1**2,
     )
     assert posterior.map_candidate_id == "near"
+
+
+def test_map_position_ball_is_non_chaining_and_normalized():
+    tracker = TemporalAmbiguityFilter()
+    tracker.step(
+        0,
+        0.0,
+        [
+            _candidate("map", _assignment("G02"), 0.0, position=0.0),
+            _candidate("near", _assignment("G03"), -0.2, position=0.4),
+            _candidate("chain", _assignment("G04"), -0.4, position=0.8),
+        ],
+    )
+    ball = tracker.map_position_ball(0.5)
+    assert ball.map_candidate_id == "map"
+    assert ball.n_members == 2
+    assert 0.0 < ball.probability < 1.0
+    assert 0.0 < ball.mean_position_ecef[0] < 0.4
+    assert ball.rms_spread_m > 0.0
+
+
+def test_map_position_ball_handles_empty_filter():
+    ball = TemporalAmbiguityFilter().map_position_ball(0.5)
+    assert ball.probability == 0.0
+    assert ball.n_members == 0
+    assert np.isnan(ball.mean_position_ecef).all()

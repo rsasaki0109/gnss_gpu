@@ -43,3 +43,18 @@ robust DD pseudorange consensus over the live ambiguity basins.
 Online gate: Tokyo run3/200 must reproduce the offline 91/200 diagnostic result,
 accept 199 TDCP intervals and 40 DDPR anchors, pass the evidence audit, and have
 zero operational-field mismatch plus identical trajectory SHA-256.
+
+## Frozen three-run calibration audit
+
+Apply the run3-selected parameters unchanged to Tokyo run1/run2/run3 first 200
+epochs. Record live-basin oracle availability, non-chaining 0.5 m position-ball
+mass, Brier score, 10-bin ECE, existing float/DDPR guard distances, and Wilson
+95% false-rate upper bounds. The diagnostic grid is fixed to gamma
+`0/.05/.1/.15/.2/.25/.3`, dwell `1/3/5/10/20`, float guard `.25/.5/1 m`, and
+DDPR guard `.5/1/1.75 m`. This grid may reject promotion; it must not select a
+run-local production policy.
+
+Promotion gate: one common configuration must retain nonzero correct coverage
+on every run, observed false rate `<=1%`, and a Wilson 95% upper bound `<=1%`.
+Otherwise keep the arm diagnostic and proceed to satellite-specific failure
+attribution.

@@ -1,0 +1,120 @@
+{
+  "policy_promoted": false,
+  "grid": {
+    "gamma_thresholds": [
+      0.0,
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3
+    ],
+    "dwell_thresholds": [
+      1,
+      3,
+      5,
+      10,
+      20
+    ],
+    "float_guards_m": [
+      0.25,
+      0.5,
+      1.0
+    ],
+    "ddpr_guards_m": [
+      0.5,
+      1.0,
+      1.75
+    ],
+    "configurations": 315
+  },
+  "runs": {
+    "run1": {
+      "epochs": 200,
+      "oracle_sub50cm_epochs": 200,
+      "selected_sub50cm_epochs": 33,
+      "brier": 0.1667972284409538,
+      "ece_10bin": 0.14833126983460918
+    },
+    "run2": {
+      "epochs": 200,
+      "oracle_sub50cm_epochs": 200,
+      "selected_sub50cm_epochs": 130,
+      "brier": 0.42697345783973006,
+      "ece_10bin": 0.4914219798464989
+    },
+    "run3": {
+      "epochs": 200,
+      "oracle_sub50cm_epochs": 165,
+      "selected_sub50cm_epochs": 91,
+      "brier": 0.41160844578671757,
+      "ece_10bin": 0.4319783606158949
+    }
+  },
+  "observed_safe_configurations": 230,
+  "wilson95_safe_configurations": 0,
+  "best_unrestricted": {
+    "gamma_threshold": 0.0,
+    "dwell_threshold": 1,
+    "float_guard_m": 1.0,
+    "ddpr_guard_m": 1.0,
+    "runs": {
+      "run1": {
+        "accepted": 70,
+        "correct": 33,
+        "false": 37,
+        "false_pct": 52.857142857142854,
+        "false_wilson95_upper_pct": 64.09531680922807
+      },
+      "run2": {
+        "accepted": 169,
+        "correct": 130,
+        "false": 39,
+        "false_pct": 23.076923076923077,
+        "false_wilson95_upper_pct": 29.98505325177535
+      },
+      "run3": {
+        "accepted": 21,
+        "correct": 1,
+        "false": 20,
+        "false_pct": 95.23809523809524,
+        "false_wilson95_upper_pct": 99.15442305280766
+      }
+    },
+    "minimum_correct_epochs": 1,
+    "total_correct_epochs": 164
+  },
+  "best_observed_safe": {
+    "gamma_threshold": 0.1,
+    "dwell_threshold": 1,
+    "float_guard_m": 0.5,
+    "ddpr_guard_m": 1.0,
+    "runs": {
+      "run1": {
+        "accepted": 6,
+        "correct": 6,
+        "false": 0,
+        "false_pct": 0.0,
+        "false_wilson95_upper_pct": 39.03430336530645
+      },
+      "run2": {
+        "accepted": 115,
+        "correct": 115,
+        "false": 0,
+        "false_pct": 0.0,
+        "false_wilson95_upper_pct": 3.2325381011363024
+      },
+      "run3": {
+        "accepted": 0,
+        "correct": 0,
+        "false": 0,
+        "false_pct": 0.0,
+        "false_wilson95_upper_pct": 100.0
+      }
+    },
+    "minimum_correct_epochs": 0,
+    "total_correct_epochs": 121
+  },
+  "verdict": "no common safe coverage: observed-safe configurations accept zero correct epochs on at least one run; no configuration has a <=1% Wilson 95% false-rate upper bound on every run"
+}

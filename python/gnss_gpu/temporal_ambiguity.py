@@ -85,6 +85,15 @@ class TemporalAmbiguityPosterior:
 
 
 @dataclass(frozen=True)
+class TemporalPositionBall:
+    map_candidate_id: str
+    probability: float
+    mean_position_ecef: np.ndarray
+    rms_spread_m: float
+    n_members: int
+
+
+@dataclass(frozen=True)
 class _Frame:
     epoch: int
     hypotheses: tuple[TemporalAmbiguityHypothesis, ...]
@@ -300,6 +309,54 @@ class TemporalAmbiguityFilter:
             current = matches[0]
             path.append(current.candidate_id)
         return tuple(reversed(path))
+
+    def map_position_ball(self, radius_m: float) -> TemporalPositionBall:
+        """Aggregate posterior mass in a non-chaining ball around the MAP state."""
+
+        radius = float(radius_m)
+        if not math.isfinite(radius) or radius <= 0.0:
+            raise ValueError("radius_m must be finite and positive")
+        if not self._hypotheses:
+            return TemporalPositionBall(
+                "", 0.0, np.full(3, np.nan, dtype=np.float64), float("nan"), 0
+            )
+        map_hypothesis = max(
+            self._hypotheses, key=lambda hypothesis: hypothesis.log_probability
+        )
+        center = self._candidates[map_hypothesis.candidate_id].position_ecef
+        members = [
+            hypothesis
+            for hypothesis in self._hypotheses
+            if np.linalg.norm(
+                self._candidates[hypothesis.candidate_id].position_ecef - center
+            )
+            <= radius
+        ]
+        weights = np.exp(
+            np.asarray([item.log_probability for item in members], dtype=np.float64)
+        )
+        positions = np.asarray(
+            [self._candidates[item.candidate_id].position_ecef for item in members],
+            dtype=np.float64,
+        )
+        probability = float(np.sum(weights))
+        normalized = weights / probability
+        mean = np.sum(normalized[:, None] * positions, axis=0)
+        spread = float(
+            np.sqrt(
+                np.sum(
+                    normalized
+                    * np.sum((positions - mean[None, :]) ** 2, axis=1)
+                )
+            )
+        )
+        return TemporalPositionBall(
+            map_candidate_id=map_hypothesis.candidate_id,
+            probability=probability,
+            mean_position_ecef=mean,
+            rms_spread_m=spread,
+            n_members=len(members),
+        )
 
     def _trim_history(self) -> None:
         excess = len(self._history) - self.config.max_history_epochs

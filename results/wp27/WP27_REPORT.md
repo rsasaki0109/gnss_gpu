@@ -42,6 +42,15 @@ the evidence ledger has zero beta errors, and online/replay commit decisions
 match at every epoch. This proves integration neutrality, not production
 accuracy: the selected integrity candidate is still diagnostic-only.
 
+Frozen transfer exposes a major selection/calibration gap. Live sub-50 cm
+candidates exist on 200/200, 200/200, and 165/200 epochs for run1/2/3, while
+the unchanged integrity selector chooses 33, 130, and 91 respectively. A
+315-cell common gamma/dwell/guard audit yields no configuration with both
+nonzero correct acceptance on every run and the required Wilson safety bound.
+Even the existing trusted float/DDPR guard admits 31 false diagnostic
+candidates across the three windows. Therefore no integrity policy is promoted
+to output or FIX.
+
 Artifacts:
 
 - `csv/wp27_multipivot_run3_200_sweep.json`;
@@ -50,7 +59,10 @@ Artifacts:
 - `csv/wp27_integrity_tdcp_run3_200_best_selections.csv`;
 - `csv/wp27_online_integrity_run3_200_summary.json`;
 - `csv/wp27_online_run3_200_neutrality.json`;
-- `csv/wp27_online_integrity_run3_200_evidence.csv`.
+- `csv/wp27_online_integrity_run3_200_evidence.csv`;
+- `csv/wp27_online_integrity_run1_200_summary.json`;
+- `csv/wp27_online_integrity_run2_200_summary.json`;
+- `csv/wp27_online_calibration_3x200.json`.
 
 Reproduce the enabled run and neutrality audit:
 
