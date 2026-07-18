@@ -120,3 +120,7 @@ Cap 768 raises the diagnostic ceiling to 154/200 (77.0%) and p90 to 14 seconds,
 but remains below the 90% recall gate and is not a fixed-budget production
 candidate. Higher respawn mass, age-100 memory, and neighboring 10×28/16×20
 allocations regress. The trusted FIX path remains disconnected with zero FIX.
+
+Farthest-point history selection is strongly negative both unrestricted
+(15/200) and within a 10 m DDPR-guard radius (24/200). Weight-first history
+selection remains the only advancing policy.

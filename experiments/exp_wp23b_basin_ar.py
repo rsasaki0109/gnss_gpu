@@ -181,6 +181,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--ddpr-respawn-history-separation-m", type=float, default=1.0)
     parser.add_argument("--ddpr-respawn-history-max-age-epochs", type=int, default=25)
     parser.add_argument(
+        "--ddpr-respawn-history-selection",
+        choices=("weight", "farthest"),
+        default="weight",
+    )
+    parser.add_argument(
+        "--ddpr-respawn-history-max-guard-distance-m", type=float, default=float("inf")
+    )
+    parser.add_argument(
         "--ddpr-respawn-history-propagate-velocity", action="store_true"
     )
     parser.add_argument("--ddpr-respawn-history-propagate-tdcp", action="store_true")
@@ -339,6 +347,7 @@ def main(argv: list[str] | None = None) -> None:
             max_seeds=int(args.ddpr_respawn_history_seeds),
             separation_m=float(args.ddpr_respawn_history_separation_m),
             max_age_epochs=int(args.ddpr_respawn_history_max_age_epochs),
+            selection_mode=str(args.ddpr_respawn_history_selection),
         )
         if int(args.ddpr_respawn_history_seeds) > 0
         else None
@@ -542,6 +551,10 @@ def main(argv: list[str] | None = None) -> None:
                     if args.ddpr_respawn_history_propagate_tdcp
                     and integrity_tdcp is not None
                     else None
+                ),
+                reference_position_ecef=ddpr_guard.mean[:3],
+                max_reference_distance_m=float(
+                    args.ddpr_respawn_history_max_guard_distance_m
                 ),
             )
         active_versioned = {(key, generation) for key, generation in generations.items()}
@@ -1655,6 +1668,12 @@ def main(argv: list[str] | None = None) -> None:
         ),
         "ddpr_respawn_history_max_age_epochs": int(
             args.ddpr_respawn_history_max_age_epochs
+        ),
+        "ddpr_respawn_history_selection": str(args.ddpr_respawn_history_selection),
+        "ddpr_respawn_history_max_guard_distance_m": (
+            float(args.ddpr_respawn_history_max_guard_distance_m)
+            if np.isfinite(float(args.ddpr_respawn_history_max_guard_distance_m))
+            else None
         ),
         "ddpr_respawn_history_propagate_velocity": bool(
             args.ddpr_respawn_history_propagate_velocity

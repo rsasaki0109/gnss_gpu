@@ -227,3 +227,9 @@ span of 115 epochs, and p90 of 70 epochs, but still misses the 90% recall gate
 and increases compute/state. Raising respawn cohort mass from 0.05 to 0.20 does
 not help live recall at either cap. The cap-768 result is a retention ceiling,
 not a production promotion. Declared and false FIX remain zero in every arm.
+
+Farthest-point history selection is also rejected. Unbounded spatial coverage
+collapses live recall to 15/200; restricting candidates to 10 m from the DDPR
+guard still reaches only 24/200. Low-weight spatial extremes are not useful
+recovery modes. The frozen history selector remains weight-first with 1 m
+separation.

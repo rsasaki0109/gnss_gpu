@@ -178,14 +178,23 @@ def complete_versioned_assignment(
 class RecoveryPositionBank:
     """Short causal bank of spatially distinct motion-propagated basin positions."""
 
-    def __init__(self, max_seeds: int, separation_m: float, max_age_epochs: int) -> None:
+    def __init__(
+        self,
+        max_seeds: int,
+        separation_m: float,
+        max_age_epochs: int,
+        selection_mode: str = "weight",
+    ) -> None:
         self.max_seeds = int(max_seeds)
         self.separation_m = float(separation_m)
         self.max_age_epochs = int(max_age_epochs)
+        self.selection_mode = str(selection_mode)
         if self.max_seeds < 1 or self.max_age_epochs < 1:
             raise ValueError("bank size and age must be positive")
         if not np.isfinite(self.separation_m) or self.separation_m <= 0.0:
             raise ValueError("bank separation must be finite and positive")
+        if self.selection_mode not in {"weight", "farthest"}:
+            raise ValueError("bank selection mode must be weight or farthest")
         self._entries: list[_BankEntry] = []
 
     @property
@@ -201,6 +210,8 @@ class RecoveryPositionBank:
         velocities_ecef: np.ndarray | None = None,
         dt_seconds: float = 0.0,
         displacement_ecef_m: np.ndarray | None = None,
+        reference_position_ecef: np.ndarray | None = None,
+        max_reference_distance_m: float = np.inf,
     ) -> None:
         positions = np.asarray(positions_ecef, dtype=np.float64).reshape(-1, 3)
         weights = np.asarray(log_weights, dtype=np.float64).reshape(-1)
@@ -224,6 +235,15 @@ class RecoveryPositionBank:
         )
         if displacement is not None and not np.all(np.isfinite(displacement)):
             raise ValueError("bank displacement must be finite")
+        reference = (
+            None
+            if reference_position_ecef is None
+            else np.asarray(reference_position_ecef, dtype=np.float64).reshape(3)
+        )
+        if reference is not None and not np.all(np.isfinite(reference)):
+            raise ValueError("bank reference position must be finite")
+        if np.isnan(max_reference_distance_m) or max_reference_distance_m <= 0.0:
+            raise ValueError("bank reference distance must be positive")
         current = [
             _BankEntry(
                 int(epoch), position.copy(), velocity.copy(), float(weight)
@@ -246,17 +266,38 @@ class RecoveryPositionBank:
             if int(epoch) - entry.epoch <= self.max_age_epochs
         ]
         candidates = current + retained
+        if reference is not None and np.isfinite(max_reference_distance_m):
+            candidates = [
+                entry
+                for entry in candidates
+                if np.linalg.norm(entry.position_ecef - reference)
+                <= float(max_reference_distance_m)
+            ]
         candidates.sort(key=lambda entry: (entry.log_weight, entry.epoch), reverse=True)
         selected: list[_BankEntry] = []
-        for entry in candidates:
+        remaining = list(candidates)
+        while remaining and len(selected) < self.max_seeds:
+            if not selected or self.selection_mode == "weight":
+                entry = remaining.pop(0)
+            else:
+                distances = [
+                    min(
+                        np.linalg.norm(candidate.position_ecef - other.position_ecef)
+                        for other in selected
+                    )
+                    for candidate in remaining
+                ]
+                best_index = max(
+                    range(len(remaining)),
+                    key=lambda index: (distances[index], remaining[index].log_weight),
+                )
+                entry = remaining.pop(best_index)
             if all(
                 np.linalg.norm(entry.position_ecef - other.position_ecef)
                 >= self.separation_m
                 for other in selected
             ):
                 selected.append(entry)
-                if len(selected) >= self.max_seeds:
-                    break
         self._entries = selected
 
 

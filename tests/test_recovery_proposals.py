@@ -87,6 +87,34 @@ def test_recovery_position_bank_propagates_retained_tdcp_displacement():
     assert any(np.allclose(position, [0.5, 0.25, 0.0]) for position in bank.positions)
 
 
+def test_recovery_position_bank_farthest_mode_preserves_low_weight_spatial_mode():
+    bank = RecoveryPositionBank(
+        max_seeds=2,
+        separation_m=0.1,
+        max_age_epochs=5,
+        selection_mode="farthest",
+    )
+    bank.update(
+        0,
+        np.asarray([[0.0, 0.0, 0.0], [0.2, 0.0, 0.0], [5.0, 0.0, 0.0]]),
+        np.asarray([0.0, -0.1, -10.0]),
+    )
+    assert any(np.isclose(position[0], 5.0) for position in bank.positions)
+
+
+def test_recovery_position_bank_limits_reference_distance():
+    bank = RecoveryPositionBank(max_seeds=3, separation_m=0.1, max_age_epochs=5)
+    bank.update(
+        0,
+        np.asarray([[0.0, 0.0, 0.0], [20.0, 0.0, 0.0]]),
+        np.asarray([0.0, 1.0]),
+        reference_position_ecef=np.zeros(3),
+        max_reference_distance_m=10.0,
+    )
+    assert len(bank.positions) == 1
+    np.testing.assert_allclose(bank.positions[0], np.zeros(3))
+
+
 def test_assignment_bank_projects_only_exact_active_generations():
     bank = RecoveryAssignmentBank(
         max_assignments=4, max_age_epochs=10, min_assignment_size=8
