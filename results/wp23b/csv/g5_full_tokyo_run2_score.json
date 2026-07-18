@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run2",
+  "traj_path": "results\\wp23b\\pos\\g5_full\\g5_full_tokyo_run2.csv",
+  "format": "csv",
+  "n_scored": 9151,
+  "n_rover_epochs": 9151,
+  "coverage_pct": 100.0,
+  "n_fix": 14,
+  "all_rms_m": 10.91298083875206,
+  "fix_rms_m": 0.18062849585299057,
+  "fix_pct": 0.15298874439951918,
+  "lt50cm_pct": 1.6500928860233854,
+  "lt50cm_full_pct": 1.6500928860233854,
+  "ppc_official_pct": 0.3038264890947329,
+  "ppc_note": null
+}

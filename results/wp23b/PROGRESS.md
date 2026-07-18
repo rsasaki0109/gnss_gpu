@@ -17,7 +17,7 @@
 | G2 independent float seed | **pass, limited** | SPD 0 failures; partial top-16 oracle coverage 25.94% |
 | G3 basin RBPF core | **pass** | 5 focused basin tests; versioned slips, dedup, cumulative evidence |
 | G4 first PF-only FIX | **pass (run2/1200)** | gamma 0.995996; 14/14 correct declared FIX epochs |
-| G5 purity and scale-up | **partial pass** | Tokyo 3-run/1200: 24/24 correct FIX; full runs pending |
+| G5 purity and scale-up | **partial pass** | Tokyo full: 24/24 correct FIX, 0 false; coverage remains low |
 
 ## 2026-07-18 — G1 annealed SMC
 
@@ -183,3 +183,22 @@ Across all 3600 epochs, the optimized arm had zero FIX or gamma-FIX decision
 differences, maximum position delta 2.23e-8 m, and maximum gamma delta 5.01e-7.
 The related regression subset passed with **75 passed, 2 skipped**. Evidence:
 `csv/g5_optimization_benchmark.json`.
+
+### G5 Tokyo full-run result
+
+The optimized trusted arm completed all Tokyo runs in 1375.7 s (22.9 min):
+run1 11,924 epochs, run2 9,151, and run3 15,301. Safety generalized across
+the full sequences: run1 declared 10/10 correct fixes, run2 14/14, run3 none,
+for **24/24 correct and 0 false fixes**.
+
+Coverage did not scale with duration. Every declared fix was already present
+in the first 1200 epochs. Across the full runs, 1,616 gamma/streak-qualified
+epochs were observed, but 1,592 were rejected by the trusted gate. The main
+failure was MAP-to-Float inconsistency (578/371/616 rejected epochs for
+run1/run2/run3); DDPR support and freshness rejected zero epochs. This rules
+out `n_dd` availability as the current bottleneck and points to coherent
+shifted-basin relinearization/respawn as the next structural task.
+
+Full scores: AllRMS 26.648/10.913/8.497 m, FixRMS 0.211/0.181/n.a., and
+`<50cm_full%` 1.652/1.650/2.065 for run1/run2/run3. Evidence is in
+`csv/g5_full_tokyo_summary.{csv,json}` and `csv/g5_full_gate_audit.json`.

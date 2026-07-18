@@ -131,3 +131,26 @@ all 3600 epochs have zero FIX-decision differences; maximum position delta is
 2.23e-8 m and maximum gamma delta is 5.01e-7. The expanded relevant regression
 subset passes with **75 passed, 2 skipped**. Detailed evidence is in
 `csv/g5_optimization_benchmark.json`.
+
+### Tokyo full-run scale-up
+
+The optimized trusted arm completed the three Tokyo full sequences in
+1375.7 s (22.9 min).
+
+| Full run | Epochs | gamma-qualified | FIX/correct/false | FixRMS [m] | AllRMS [m] | `<50cm_full%` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Tokyo run1 | 11,924 | 592 | **10 / 10 / 0** | 0.211 | 26.648 | 1.652 |
+| Tokyo run2 | 9,151 | 398 | **14 / 14 / 0** | 0.181 | 10.913 | 1.650 |
+| Tokyo run3 | 15,301 | 626 | **0 / 0 / 0** | n/a | 8.497 | 2.065 |
+
+Safety passes across the full data: **24/24 declared fixes are correct and no
+false fix occurs**. Coverage is the measured negative. No additional fix was
+declared after the first 1200 epochs. Of 1,592 rejected gamma-qualified epochs,
+MAP-to-Float inconsistency accounts for 578/371/616 in run1/run2/run3, while
+DDPR support and freshness account for zero. Raising or lowering `n_dd` is
+therefore not the next lever; the evidence points to cluster-specific
+relinearization and DDPR-centered respawn for coherent shifted basins.
+
+Artifacts: `csv/g5_full_tokyo_summary.{csv,json}`,
+`csv/g5_full_gate_audit.json`, per-run full summaries/scores, and full
+trajectories under `pos/g5_full/`.
