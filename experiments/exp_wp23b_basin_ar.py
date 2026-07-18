@@ -57,6 +57,7 @@ from gnss_gpu.rtk_evidence import (  # noqa: E402
 from gnss_gpu.recovery_proposals import (  # noqa: E402
     RecoveryAssignmentBank,
     RecoveryPositionBank,
+    complete_versioned_assignment,
     covariance_axis_position_seeds,
 )
 from gnss_gpu.temporal_ambiguity import (  # noqa: E402
@@ -176,6 +177,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--ddpr-respawn-assignment-history-max-age-epochs", type=int, default=50
     )
+    parser.add_argument("--ddpr-respawn-assignment-completion-top-k", type=int, default=0)
+    parser.add_argument("--ddpr-respawn-assignment-completion-min-stable", type=int, default=4)
     parser.add_argument("--out-diagnostics", type=Path, default=Path("results/wp23b/csv/basin_run2_epochs.csv"))
     parser.add_argument("--out-summary", type=Path, default=Path("results/wp23b/csv/basin_run2_summary.json"))
     parser.add_argument("--out-trajectory", type=Path, default=Path("results/wp23b/pos/basin_run2.csv"))
@@ -623,11 +626,45 @@ def main(argv: list[str] | None = None) -> None:
                     ddpr_guard.covariance[:3, :3],
                     sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
                 )
-                replay_assignments = recovery_assignment_bank.compatible_assignments(
-                    active_versioned,
-                    assignment_seed.keys,
-                )
-                for assignment_index, assignment in enumerate(replay_assignments):
+                completion_top_k = int(args.ddpr_respawn_assignment_completion_top_k)
+                if completion_top_k > 0:
+                    partial_assignments = recovery_assignment_bank.compatible_assignments(
+                        active_versioned,
+                        assignment_seed.keys,
+                        min_size=int(args.ddpr_respawn_assignment_completion_min_stable),
+                    )
+                    completed: dict[
+                        tuple[tuple[tuple[tuple[str, str, int], int], int], ...],
+                        tuple[dict, float],
+                    ] = {}
+                    for partial_assignment in partial_assignments:
+                        for completed_assignment, distance in complete_versioned_assignment(
+                            assignment_seed.keys,
+                            generations,
+                            assignment_seed.ahat_cycles,
+                            assignment_seed.qahat_cycles2,
+                            partial_assignment,
+                            target_size=respawn_subset_size,
+                            n_candidates=completion_top_k,
+                        ):
+                            canonical = tuple(sorted(completed_assignment.items()))
+                            previous = completed.get(canonical)
+                            if previous is None or distance < previous[1]:
+                                completed[canonical] = (completed_assignment, distance)
+                    replay_proposals = sorted(
+                        completed.values(), key=lambda item: item[1]
+                    )
+                else:
+                    replay_proposals = [
+                        (assignment, float("nan"))
+                        for assignment in recovery_assignment_bank.compatible_assignments(
+                            active_versioned,
+                            assignment_seed.keys,
+                        )
+                    ]
+                for assignment_index, (assignment, completion_distance) in enumerate(
+                    replay_proposals
+                ):
                     replay_keys = tuple(key[0] for key in assignment)
                     replay_integers = np.asarray(
                         [assignment[key] for key in assignment], dtype=np.float64
@@ -635,6 +672,8 @@ def main(argv: list[str] | None = None) -> None:
                     position, covariance, distance = condition_respawn_position(
                         assignment_seed, replay_keys, replay_integers
                     )
+                    if np.isfinite(completion_distance):
+                        distance = completion_distance
                     assignments.append(assignment)
                     conditionals.append(
                         BasinKalmanState.from_position(
@@ -647,7 +686,7 @@ def main(argv: list[str] | None = None) -> None:
                     )
                     respawn_source_ids.append(f"{i}:assignment:{assignment_index}")
                     all_respawn_residuals.append(float(distance))
-                n_respawn_assignment_candidates = len(replay_assignments)
+                n_respawn_assignment_candidates = len(replay_proposals)
             n_replayed_assignments = len(assignments)
             for position_index, respawn_position in enumerate(respawn_positions):
                 respawn_seed = ddpr_centered_ambiguity_seed(
@@ -1368,6 +1407,12 @@ def main(argv: list[str] | None = None) -> None:
         ),
         "ddpr_respawn_assignment_history_max_age_epochs": int(
             args.ddpr_respawn_assignment_history_max_age_epochs
+        ),
+        "ddpr_respawn_assignment_completion_top_k": int(
+            args.ddpr_respawn_assignment_completion_top_k
+        ),
+        "ddpr_respawn_assignment_completion_min_stable": int(
+            args.ddpr_respawn_assignment_completion_min_stable
         ),
         "ddpr_respawn_epochs": int(n_respawn_epochs),
         "temporal_lineage_enabled": bool(args.enable_temporal_lineage),

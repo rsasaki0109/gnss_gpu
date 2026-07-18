@@ -4,6 +4,7 @@ import pytest
 from gnss_gpu.recovery_proposals import (
     RecoveryAssignmentBank,
     RecoveryPositionBank,
+    complete_versioned_assignment,
     covariance_axis_position_seeds,
 )
 
@@ -83,3 +84,24 @@ def test_assignment_bank_expires_and_deduplicates():
     compatible = bank.compatible_assignments(active, observed)
     assert len(compatible) == 1
     assert next(iter(compatible[0].values())) >= 5
+
+
+def test_assignment_completion_preserves_stable_and_fills_current_generation():
+    raw_keys = tuple(("G01", f"G{sat:02d}", 190293673) for sat in range(2, 12))
+    generations = {key: (1 if index >= 4 else 0) for index, key in enumerate(raw_keys)}
+    stable = {(raw_keys[index], 0): index + 10 for index in range(4)}
+    proposals = complete_versioned_assignment(
+        raw_keys,
+        generations,
+        np.arange(10, dtype=np.float64) + 10.2,
+        np.eye(10),
+        stable,
+        target_size=8,
+        n_candidates=2,
+    )
+    assert len(proposals) == 2
+    for assignment, distance in proposals:
+        assert len(assignment) == 8
+        assert all(assignment[key] == value for key, value in stable.items())
+        assert all(key[1] == generations[key[0]] for key in assignment)
+        assert np.isfinite(distance)

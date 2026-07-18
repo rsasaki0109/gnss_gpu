@@ -92,3 +92,10 @@ output or FIX. A wider 256-assignment bank and a deeper top-64/four-position
 allocation both regress. The next audit must explain the 14/40 DD anchors where
 no correct proposal is generated; retention is no longer the dominant failure
 for the best arm.
+
+The missing-anchor audit localizes failure to startup and a reset burst at
+epochs 25–45, followed by missing proposals through epoch 90. A generation-safe
+partial-assignment completion arm was tested and rejected: direct insertion
+reduces live recall to 32/200 and proposal recall to 9/40. Completion proposals
+must remain shadow-only until their independent oracle recall is established;
+they are not eligible for the recovery bank or trusted output.

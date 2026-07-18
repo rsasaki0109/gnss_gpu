@@ -153,3 +153,20 @@ arm produces a correct candidate on only 26/40 anchors, while losing only one
 of those after insertion. Next, audit the 14 missing anchors by ambiguity
 generation/reset state and per-source oracle rank before adding another
 proposal mechanism.
+
+### Reset audit and conditional-completion rejection
+
+The best arm's 14 missing proposal anchors are epochs 0, 5 and a contiguous
+recovery interval at 30/35/40/50–90. The latter follows resets at epochs 25,
+35, 40, and 45; reset age grows to 45 epochs before proposal recovery. This
+confirms that generation-change recovery, rather than steady-state depth, is
+the remaining supply bottleneck.
+
+An opt-in completion arm preserved four or more unchanged, generation-exact
+historical integers and searched top-4 values only for new/reset dimensions.
+Although it never copies an old integer across a generation boundary, direct
+insertion is strongly negative: proposal recall falls to 9/40 and live recall
+to 32/200 (16%). Wrong completion basins feed the position-history bank and
+degrade later proposals. Direct conditional completion is rejected. Any
+follow-up must first run as a shadow proposal source with no PF/history
+feedback, and earn a recall gain before receiving nonzero mass.

@@ -8,6 +8,8 @@ from typing import TypeAlias
 
 import numpy as np
 
+from gnss_gpu.lambda_ambiguity import integer_search
+
 
 RawAmbiguityKey: TypeAlias = tuple[str, str, int]
 VersionedAmbiguityKey: TypeAlias = tuple[RawAmbiguityKey, int]
@@ -81,9 +83,14 @@ class RecoveryAssignmentBank:
         self,
         active_versioned_keys: Iterable[VersionedAmbiguityKey],
         observed_raw_keys: Iterable[RawAmbiguityKey],
+        *,
+        min_size: int | None = None,
     ) -> tuple[dict[VersionedAmbiguityKey, int], ...]:
         active = set(active_versioned_keys)
         observed = set(observed_raw_keys)
+        minimum = self.min_assignment_size if min_size is None else int(min_size)
+        if minimum < 1:
+            raise ValueError("compatible assignment minimum must be positive")
         compatible: dict[tuple[AssignmentItem, ...], dict[VersionedAmbiguityKey, int]] = {}
         for entry in self._entries:
             projected = tuple(
@@ -91,9 +98,80 @@ class RecoveryAssignmentBank:
                 for item in entry.assignment
                 if item[0] in active and item[0][0] in observed
             )
-            if len(projected) >= self.min_assignment_size:
+            if len(projected) >= minimum:
                 compatible.setdefault(projected, dict(projected))
         return tuple(compatible.values())
+
+
+def complete_versioned_assignment(
+    raw_keys: tuple[RawAmbiguityKey, ...],
+    generations: dict[RawAmbiguityKey, int],
+    ahat_cycles: np.ndarray,
+    qahat_cycles2: np.ndarray,
+    stable_assignment: dict[VersionedAmbiguityKey, int],
+    *,
+    target_size: int,
+    n_candidates: int,
+) -> tuple[tuple[dict[VersionedAmbiguityKey, int], float], ...]:
+    """Complete unchanged historical integers with current-generation search."""
+
+    keys = tuple(raw_keys)
+    ahat = np.asarray(ahat_cycles, dtype=np.float64).reshape(-1)
+    covariance = np.asarray(qahat_cycles2, dtype=np.float64)
+    if ahat.size != len(keys) or covariance.shape != (len(keys), len(keys)):
+        raise ValueError("ambiguity seed dimensions do not match keys")
+    target = int(target_size)
+    if target < 1 or target > len(keys) or int(n_candidates) < 1:
+        raise ValueError("completion target and candidate count must be valid")
+    index = {key: position for position, key in enumerate(keys)}
+    stable = [
+        (versioned, int(value))
+        for versioned, value in stable_assignment.items()
+        if versioned[0] in index
+        and generations.get(versioned[0]) == versioned[1]
+    ]
+    stable.sort(key=lambda item: covariance[index[item[0][0]], index[item[0][0]]])
+    stable = stable[:target]
+    if not stable:
+        return ()
+    fixed_indices = np.asarray([index[item[0][0]] for item in stable], dtype=np.int64)
+    fixed_values = np.asarray([item[1] for item in stable], dtype=np.float64)
+    missing_count = target - len(stable)
+    available = [position for position in range(len(keys)) if position not in fixed_indices]
+    available.sort(key=lambda position: covariance[position, position])
+    missing_indices = np.asarray(available[:missing_count], dtype=np.int64)
+    if missing_indices.size != missing_count:
+        return ()
+    fixed_innovation = fixed_values - ahat[fixed_indices]
+    qff = covariance[np.ix_(fixed_indices, fixed_indices)]
+    try:
+        fixed_solved = np.linalg.solve(qff, fixed_innovation)
+    except np.linalg.LinAlgError:
+        return ()
+    fixed_distance = float(fixed_innovation @ fixed_solved)
+    if missing_count == 0:
+        return ((dict(stable), fixed_distance),)
+    qmf = covariance[np.ix_(missing_indices, fixed_indices)]
+    qfm = covariance[np.ix_(fixed_indices, missing_indices)]
+    qmm = covariance[np.ix_(missing_indices, missing_indices)]
+    conditional_mean = ahat[missing_indices] + qmf @ fixed_solved
+    try:
+        conditional_covariance = qmm - qmf @ np.linalg.solve(qff, qfm)
+        candidates, residuals = integer_search(
+            conditional_mean,
+            0.5 * (conditional_covariance + conditional_covariance.T),
+            n_candidates=int(n_candidates),
+        )
+    except (np.linalg.LinAlgError, RuntimeError, ValueError):
+        return ()
+    results = []
+    for candidate, residual in zip(candidates, residuals):
+        assignment = dict(stable)
+        for position, value in zip(missing_indices, candidate):
+            raw_key = keys[int(position)]
+            assignment[(raw_key, int(generations[raw_key]))] = int(value)
+        results.append((assignment, fixed_distance + float(residual)))
+    return tuple(results)
 
 
 class RecoveryPositionBank:
