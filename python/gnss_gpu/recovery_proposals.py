@@ -8,7 +8,12 @@ from typing import TypeAlias
 
 import numpy as np
 
-from gnss_gpu.lambda_ambiguity import integer_search
+from gnss_gpu.lambda_ambiguity import (
+    IntegerSearchWorkspace,
+    integer_search,
+    integer_search_prepared,
+    prepare_integer_search,
+)
 
 
 RawAmbiguityKey: TypeAlias = tuple[str, str, int]
@@ -423,6 +428,10 @@ def complete_versioned_assignment(
     *,
     target_size: int,
     n_candidates: int,
+    search_cache: dict[
+        tuple[tuple[int, ...], tuple[int, ...]], IntegerSearchWorkspace
+    ]
+    | None = None,
 ) -> tuple[tuple[dict[VersionedAmbiguityKey, int], float], ...]:
     """Complete unchanged historical integers with current-generation search."""
 
@@ -466,11 +475,22 @@ def complete_versioned_assignment(
     qfm = covariance[np.ix_(fixed_indices, missing_indices)]
     qmm = covariance[np.ix_(missing_indices, missing_indices)]
     conditional_mean = ahat[missing_indices] + qmf @ fixed_solved
+    cache_key = (
+        tuple(int(value) for value in fixed_indices),
+        tuple(int(value) for value in missing_indices),
+    )
     try:
-        conditional_covariance = qmm - qmf @ np.linalg.solve(qff, qfm)
-        candidates, residuals = integer_search(
+        workspace = None if search_cache is None else search_cache.get(cache_key)
+        if workspace is None:
+            conditional_covariance = qmm - qmf @ np.linalg.solve(qff, qfm)
+            workspace = prepare_integer_search(
+                0.5 * (conditional_covariance + conditional_covariance.T)
+            )
+            if search_cache is not None:
+                search_cache[cache_key] = workspace
+        candidates, residuals = integer_search_prepared(
             conditional_mean,
-            0.5 * (conditional_covariance + conditional_covariance.T),
+            workspace,
             n_candidates=int(n_candidates),
         )
     except (np.linalg.LinAlgError, RuntimeError, ValueError):

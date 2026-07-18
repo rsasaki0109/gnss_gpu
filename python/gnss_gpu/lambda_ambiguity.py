@@ -36,6 +36,15 @@ class LambdaSolution:
         return float(self.residuals[1] / self.residuals[0])
 
 
+@dataclass(frozen=True)
+class IntegerSearchWorkspace:
+    """Covariance-only factors reusable across integer searches."""
+
+    covariance: np.ndarray
+    information: np.ndarray
+    upper: np.ndarray
+
+
 def decorrelate_ambiguities(
     float_amb: np.ndarray,
     cov: np.ndarray,
@@ -80,17 +89,55 @@ def integer_search(
     """
 
     amb, q = _validate_ambiguity_problem(decorrelated_amb, tz_cov)
-    want = max(1, int(n_candidates))
-    if amb.size == 0:
-        return np.empty((0, 0), dtype=np.int64), np.empty(0, dtype=np.float64)
+    workspace = prepare_integer_search(q)
+    return integer_search_prepared(
+        amb,
+        workspace,
+        n_candidates=n_candidates,
+        max_expansions=max_expansions,
+        max_nodes=max_nodes,
+    )
 
+
+def prepare_integer_search(covariance: np.ndarray) -> IntegerSearchWorkspace:
+    """Prepare covariance factors shared by searches with different means."""
+
+    q = np.asarray(covariance, dtype=np.float64)
+    _amb, q = _validate_ambiguity_problem(np.zeros(q.shape[0]), q)
     information = np.linalg.inv(q)
     try:
         upper = np.linalg.cholesky(information).T
     except np.linalg.LinAlgError:
         jitter = max(1e-12, 1e-10 * float(np.trace(q)) / max(1, q.shape[0]))
-        information = np.linalg.inv(q + np.eye(q.shape[0], dtype=np.float64) * jitter)
+        q = q + np.eye(q.shape[0], dtype=np.float64) * jitter
+        information = np.linalg.inv(q)
         upper = np.linalg.cholesky(information).T
+    return IntegerSearchWorkspace(
+        covariance=q.copy(),
+        information=information,
+        upper=upper,
+    )
+
+
+def integer_search_prepared(
+    decorrelated_amb: np.ndarray,
+    workspace: IntegerSearchWorkspace,
+    n_candidates: int = 2,
+    *,
+    max_expansions: int = 16,
+    max_nodes: int = 250_000,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Search using covariance factors returned by :func:`prepare_integer_search`."""
+
+    amb = np.asarray(decorrelated_amb, dtype=np.float64).ravel()
+    if not np.all(np.isfinite(amb)) or amb.size != workspace.information.shape[0]:
+        raise ValueError("prepared ambiguity mean must be finite and match covariance")
+    want = max(1, int(n_candidates))
+    if amb.size == 0:
+        return np.empty((0, 0), dtype=np.int64), np.empty(0, dtype=np.float64)
+
+    information = workspace.information
+    upper = workspace.upper
 
     rounded = np.rint(amb).astype(np.int64)
     radius = max(_objective(rounded, amb, information), 1.0)

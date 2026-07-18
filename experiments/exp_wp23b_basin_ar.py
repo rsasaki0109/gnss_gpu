@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -202,6 +203,7 @@ def main(argv: list[str] | None = None) -> None:
         "--ddpr-respawn-assignment-pivot-rebase", action="store_true"
     )
     parser.add_argument("--ddpr-respawn-assignment-arc-shadow", action="store_true")
+    parser.add_argument("--ddpr-respawn-assignment-arc-promote", action="store_true")
     parser.add_argument(
         "--ddpr-respawn-assignment-arc-slip-threshold-cycles",
         type=float,
@@ -404,7 +406,10 @@ def main(argv: list[str] | None = None) -> None:
             ),
             max_gap_epochs=int(args.ddpr_respawn_assignment_arc_max_gap_epochs),
         )
-        if args.ddpr_respawn_assignment_arc_shadow
+        if (
+            args.ddpr_respawn_assignment_arc_shadow
+            or args.ddpr_respawn_assignment_arc_promote
+        )
         else None
     )
     recovery_arc_assignment_bank = (
@@ -413,7 +418,10 @@ def main(argv: list[str] | None = None) -> None:
             max_age_epochs=int(args.ddpr_respawn_assignment_history_max_age_epochs),
             min_assignment_size=int(respawn_subset_size),
         )
-        if args.ddpr_respawn_assignment_arc_shadow
+        if (
+            args.ddpr_respawn_assignment_arc_shadow
+            or args.ddpr_respawn_assignment_arc_promote
+        )
         and int(args.ddpr_respawn_assignment_history) > 0
         else None
     )
@@ -441,6 +449,9 @@ def main(argv: list[str] | None = None) -> None:
     n_arc_slips = 0
     n_arc_shadow_epochs = 0
     n_arc_shadow_correct = 0
+    total_arc_shadow_compute_seconds = 0.0
+    max_arc_shadow_compute_seconds = 0.0
+    n_stale_generation_holdover_basins = 0
     n_temporal_map_sub50 = 0
     n_temporal_map_disagreement = 0
     max_temporal_gamma = 0.0
@@ -650,6 +661,15 @@ def main(argv: list[str] | None = None) -> None:
             )
         active_versioned = {(key, generation) for key, generation in generations.items()}
         basin_pf.retain_compatible(active_versioned)
+        stale_generation_holdover_basins = sum(
+            any(key not in active_versioned for key, _value in basin.assignment)
+            for basin in basin_pf.basins
+        )
+        n_stale_generation_holdover_basins += stale_generation_holdover_basins
+        if stale_generation_holdover_basins:
+            raise RuntimeError(
+                "ambiguity basin survived an incompatible generation reset"
+            )
         if dd_pr is not None and basin_pf.basins:
             basin_pr_evidence = basin_pf.update_pseudorange(
                 dd_pr, sigma_pr_m=basin_ddpr_sigma
@@ -710,6 +730,8 @@ def main(argv: list[str] | None = None) -> None:
         arc_shadow_candidates = 0
         arc_shadow_oracle_min_error = float("nan")
         arc_shadow_oracle_rank = -1
+        arc_shadow_compute_seconds = 0.0
+        arc_completion_search_workspaces = 0
         respawn_excluded_satellite = ""
         if dd_cp is not None and int(dd_cp.n_dd) >= int(args.subset_size):
             current_pairs = {
@@ -796,6 +818,7 @@ def main(argv: list[str] | None = None) -> None:
             position_shadow_states: list[BasinKalmanState] = []
             subset_shadow_states: list[BasinKalmanState] = []
             arc_shadow_states: list[BasinKalmanState] = []
+            arc_ranked_proposals: list[tuple[dict, float]] = []
             if recovery_assignment_bank is not None:
                 assignment_seed = ddpr_centered_ambiguity_seed(
                     dd_cp,
@@ -812,6 +835,7 @@ def main(argv: list[str] | None = None) -> None:
                     recovery_arc_assignment_bank is not None
                     and satellite_arc_tracker is not None
                 ):
+                    arc_compute_start = time.perf_counter()
                     arc_completion_top_k = int(
                         args.ddpr_respawn_assignment_arc_completion_top_k
                     )
@@ -829,6 +853,7 @@ def main(argv: list[str] | None = None) -> None:
                         tuple[tuple[tuple[tuple[str, str, int], int], int], ...],
                         tuple[dict, float],
                     ] = {}
+                    arc_completion_search_cache = {}
                     for arc_assignment in arc_replays:
                         if (
                             arc_completion_top_k > 0
@@ -842,6 +867,7 @@ def main(argv: list[str] | None = None) -> None:
                                 arc_assignment,
                                 target_size=respawn_subset_size,
                                 n_candidates=arc_completion_top_k,
+                                search_cache=arc_completion_search_cache,
                             )
                             per_assignment_limit = int(
                                 args.ddpr_respawn_assignment_arc_completion_per_assignment
@@ -877,6 +903,7 @@ def main(argv: list[str] | None = None) -> None:
                     )
                     if arc_shadow_limit > 0:
                         ranked_arc_candidates = ranked_arc_candidates[:arc_shadow_limit]
+                    arc_ranked_proposals = list(ranked_arc_candidates)
                     for arc_assignment, _proposal_distance in ranked_arc_candidates:
                         arc_keys = tuple(key[0] for key in arc_assignment)
                         arc_integers = np.asarray(
@@ -889,6 +916,17 @@ def main(argv: list[str] | None = None) -> None:
                         arc_shadow_states.append(
                             BasinKalmanState.from_position(position, covariance)
                         )
+                    arc_completion_search_workspaces = len(
+                        arc_completion_search_cache
+                    )
+                    arc_shadow_compute_seconds = (
+                        time.perf_counter() - arc_compute_start
+                    )
+                    total_arc_shadow_compute_seconds += arc_shadow_compute_seconds
+                    max_arc_shadow_compute_seconds = max(
+                        max_arc_shadow_compute_seconds,
+                        arc_shadow_compute_seconds,
+                    )
 
                 def assignment_replays(
                     *, min_size: int | None = None
@@ -950,10 +988,13 @@ def main(argv: list[str] | None = None) -> None:
                     else:
                         replay_proposals = completion_proposals
                 else:
-                    replay_proposals = [
-                        (assignment, float("nan"))
-                        for assignment in assignment_replays()
-                    ]
+                    if args.ddpr_respawn_assignment_arc_promote:
+                        replay_proposals = arc_ranked_proposals
+                    else:
+                        replay_proposals = [
+                            (assignment, float("nan"))
+                            for assignment in assignment_replays()
+                        ]
                 for assignment_index, (assignment, completion_distance) in enumerate(
                     replay_proposals
                 ):
@@ -976,7 +1017,14 @@ def main(argv: list[str] | None = None) -> None:
                             accel_process_sigma_mps2=3.0,
                         )
                     )
-                    respawn_source_ids.append(f"{i}:assignment:{assignment_index}")
+                    assignment_source = (
+                        "arc_assignment"
+                        if args.ddpr_respawn_assignment_arc_promote
+                        else "assignment"
+                    )
+                    respawn_source_ids.append(
+                        f"{i}:{assignment_source}:{assignment_index}"
+                    )
                     all_respawn_residuals.append(float(distance))
                 n_respawn_assignment_candidates = len(replay_proposals)
             n_replayed_assignments = len(assignments)
@@ -1788,6 +1836,9 @@ def main(argv: list[str] | None = None) -> None:
                 "assignment_history_cleared": int(assignment_history_cleared),
                 "assignment_arc_slips": int(epoch_arc_slips),
                 "assignment_arc_slip_ids": epoch_arc_slip_ids,
+                "stale_generation_holdover_basins": int(
+                    stale_generation_holdover_basins
+                ),
                 "gamma": float(posterior.gamma),
                 "fix_streak": int(commit.fix_streak),
                 "map_assignment_id": assignment_id,
@@ -1811,6 +1862,8 @@ def main(argv: list[str] | None = None) -> None:
                 "arc_shadow_candidates": arc_shadow_candidates,
                 "arc_shadow_oracle_min_error_m": arc_shadow_oracle_min_error,
                 "arc_shadow_oracle_rank": int(arc_shadow_oracle_rank),
+                "arc_shadow_compute_seconds": arc_shadow_compute_seconds,
+                "arc_completion_search_workspaces": arc_completion_search_workspaces,
                 "respawn_excluded_satellite": respawn_excluded_satellite,
                 "n_dd_pr": 0 if dd_pr is None else int(dd_pr.n_dd),
                 "n_dd_cp": 0 if dd_cp is None else int(dd_cp.n_dd),
@@ -1902,6 +1955,9 @@ def main(argv: list[str] | None = None) -> None:
         "ddpr_respawn_assignment_arc_shadow": bool(
             args.ddpr_respawn_assignment_arc_shadow
         ),
+        "ddpr_respawn_assignment_arc_promote": bool(
+            args.ddpr_respawn_assignment_arc_promote
+        ),
         "ddpr_respawn_assignment_arc_slip_threshold_cycles": float(
             args.ddpr_respawn_assignment_arc_slip_threshold_cycles
         ),
@@ -1935,6 +1991,13 @@ def main(argv: list[str] | None = None) -> None:
         "subset_shadow_correct_epochs": int(n_subset_shadow_correct),
         "arc_shadow_epochs": int(n_arc_shadow_epochs),
         "arc_shadow_correct_epochs": int(n_arc_shadow_correct),
+        "arc_shadow_compute_seconds": float(total_arc_shadow_compute_seconds),
+        "arc_shadow_max_epoch_compute_seconds": float(
+            max_arc_shadow_compute_seconds
+        ),
+        "stale_generation_holdover_basins": int(
+            n_stale_generation_holdover_basins
+        ),
         "ddpr_respawn_epochs": int(n_respawn_epochs),
         "temporal_lineage_enabled": bool(args.enable_temporal_lineage),
         "temporal_map_disagreement_epochs": int(n_temporal_map_disagreement),

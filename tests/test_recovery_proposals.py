@@ -271,3 +271,32 @@ def test_assignment_completion_preserves_stable_and_fills_current_generation():
         assert all(assignment[key] == value for key, value in stable.items())
         assert all(key[1] == generations[key[0]] for key in assignment)
         assert np.isfinite(distance)
+
+
+def test_assignment_completion_reuses_search_workspace_for_same_dimensions():
+    raw_keys = tuple(("G01", f"G{sat:02d}", 190293673) for sat in range(2, 10))
+    generations = {key: 0 for key in raw_keys}
+    covariance = np.eye(8)
+    cache = {}
+    first = complete_versioned_assignment(
+        raw_keys,
+        generations,
+        np.arange(8, dtype=np.float64) + 10.2,
+        covariance,
+        {(raw_keys[index], 0): index + 10 for index in range(4)},
+        target_size=8,
+        n_candidates=2,
+        search_cache=cache,
+    )
+    second = complete_versioned_assignment(
+        raw_keys,
+        generations,
+        np.arange(8, dtype=np.float64) + 10.2,
+        covariance,
+        {(raw_keys[index], 0): index + 11 for index in range(4)},
+        target_size=8,
+        n_candidates=2,
+        search_cache=cache,
+    )
+    assert len(cache) == 1
+    assert len(first) == len(second) == 2

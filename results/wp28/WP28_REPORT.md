@@ -2,12 +2,13 @@
 
 ## Verdict
 
-**Proposal-supply direction passes; WP28 production gate remains open and
-unmet.** A bounded causal history bank raises Nagoya run3/200 live sub-50 cm
-candidate coverage from 13 to 129 epochs without altering output or FIX. This
-is a 9.9x coverage increase, but it remains below the predeclared 90% recall
-gate and the existing integrity selector chooses none of the recovered correct
-candidates.
+**WP28 recovery gate passes.** The final bounded satellite-arc live arm reaches
+186/200 (93.0%) live sub-50 cm coverage and 37/40 (92.5%) correct proposal
+anchors on Nagoya run3/200. Conditional live-span p90 is 85.5 epochs (17.1 s),
+stale-generation holdover is zero, and the 128-candidate arc allocation
+replaces the previous 128 DD-key replay allocation without increasing the
+frozen 440-proposal envelope. Trusted FIX remains disconnected with zero
+declared and false FIX; absolute selection is the next work package.
 
 ## Evidence
 
@@ -40,7 +41,10 @@ Primary artifacts:
 - `csv/wp28_history_hist32_s1_k16_run3_200_epochs.csv`;
 - `csv/wp28_history32_integrity_run3_200_epochs.csv`;
 - `csv/wp28_default_neutrality_run3_200_summary.json`;
-- `pos/wp28_default_neutrality_run3_200.csv`.
+- `pos/wp28_default_neutrality_run3_200.csv`;
+- `csv/wp28_arc_live_final_run3_200_epochs.csv`;
+- `csv/wp28_arc_live_final_run3_200_summary.json`;
+- `pos/wp28_arc_live_final_run3_200.csv`.
 
 ## Next gate
 
@@ -163,3 +167,19 @@ maximum arc candidates and a hash-identical trusted trajectory. Fixed candidate
 budget is therefore satisfied. Runtime is not: the 200-epoch shadow diagnostic
 takes about 194 seconds on the current host, so repeated LAMBDA completion must
 be cached or batched before live PF promotion.
+
+## Final live promotion
+
+The earlier 194-second wall-clock observation included the complete PF replay
+and was incorrectly attributed to arc completion. Direct instrumentation after
+prepared-search caching measures only 3.27 seconds of cumulative arc work
+across 200 epochs and a 0.179-second maximum recovery epoch.
+
+Replacing the old DD-key replay with the capped arc proposals raises live
+sub-50 cm coverage from 150/200 to **186/200 (93.0%)**. Proposal recall is
+37/40 (92.5%), the longest live span is 87 epochs, and live-span p90 is 85.5
+epochs (17.1 s). Stale-generation holdover, declared FIX, false FIX, and
+online/replay mismatches are all zero. WP28's recall, survival, fixed-budget,
+compute, and holdover gates pass. WP29 must transfer this identical truth-free
+configuration to Tokyo and solve absolute output selection without weakening
+the FIX policy.

@@ -304,3 +304,18 @@ for this 200-epoch diagnostic on the current host. Candidate conditioning is
 bounded, but repeated per-history LAMBDA completion still dominates. WP28C must
 cache or batch completions and demonstrate an acceptable runtime before the arc
 source is connected to PF mass.
+
+### Final bounded live arm
+
+The 194-second wall-clock observation above included the complete PF replay and
+was not an arc-compute measurement. Prepared-search caching plus direct timing
+shows 3.27 seconds of cumulative arc work across the final 200 epochs, peaking
+at 0.179 seconds on one recovery epoch.
+
+Promoting the capped arc proposals as a replacement for the old DD-key replay
+raises live sub-50 cm coverage from 150/200 to **186/200 (93.0%)**. Proposal
+recall is 37/40 (92.5%), the longest span is 87 epochs, and p90 is 85.5 epochs
+(17.1 s). Stale-generation holdover, declared FIX, false FIX, and commit replay
+mismatches are all zero. WP28's recall, survival, fixed-budget, compute, and
+holdover gates pass. The next increment is WP29 Tokyo transfer and absolute
+truth-free selection.
