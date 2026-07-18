@@ -29,6 +29,10 @@ from gnss_gpu.ambiguity_basin_pf import (  # noqa: E402
     AmbiguityBasinParticleFilter,
     BasinKalmanState,
 )
+from gnss_gpu.ambiguity_respawn import (  # noqa: E402
+    condition_respawn_position,
+    ddpr_centered_ambiguity_seed,
+)
 from gnss_gpu.dd_carrier import DDCarrierComputer  # noqa: E402
 from gnss_gpu.dd_float_kf import DDFloatKalmanFilter  # noqa: E402
 from gnss_gpu.dd_pseudorange import DDPseudorangeComputer  # noqa: E402
@@ -59,7 +63,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--max-basins", type=int, default=128)
     parser.add_argument("--birth-mass", type=float, default=0.01)
     parser.add_argument("--sigma-dd-pr-m", type=float, default=5.0)
+    parser.add_argument(
+        "--sigma-basin-dd-pr-m",
+        type=float,
+        default=0.0,
+        help="Basin-only DDPR sigma; <=0 uses --sigma-dd-pr-m",
+    )
     parser.add_argument("--sigma-float-cp-cycles", type=float, default=0.10)
+    parser.add_argument("--float-slip-threshold-cycles", type=float, default=2.0)
     parser.add_argument("--sigma-fixed-cp-cycles", type=float, default=0.20)
     parser.add_argument("--fix-gamma", type=float, default=0.99)
     parser.add_argument("--fix-streak", type=int, default=3)
@@ -77,6 +88,23 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--fix-min-dd-pairs", type=int, default=9)
     parser.add_argument("--fix-max-ddpr-age-epochs", type=int, default=4)
+    parser.add_argument("--position-cluster-radius-m", type=float, default=0.5)
+    parser.add_argument("--enable-ddpr-respawn", action="store_true")
+    parser.add_argument("--ddpr-respawn-trigger-m", type=float, default=1.75)
+    parser.add_argument("--ddpr-respawn-mass", type=float, default=0.05)
+    parser.add_argument("--ddpr-respawn-use-lambda-prior", action="store_true")
+    parser.add_argument(
+        "--ddpr-respawn-top-k",
+        type=int,
+        default=0,
+        help="Respawn-only candidate count; <=0 uses --top-k",
+    )
+    parser.add_argument(
+        "--ddpr-respawn-subset-size",
+        type=int,
+        default=0,
+        help="Respawn-only ambiguity dimension; <=0 uses --subset-size",
+    )
     parser.add_argument("--out-diagnostics", type=Path, default=Path("results/wp23b/csv/basin_run2_epochs.csv"))
     parser.add_argument("--out-summary", type=Path, default=Path("results/wp23b/csv/basin_run2_summary.json"))
     parser.add_argument("--out-trajectory", type=Path, default=Path("results/wp23b/pos/basin_run2.csv"))
@@ -130,6 +158,21 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     times = np.asarray(data["times"], dtype=np.float64)
+    respawn_subset_size = (
+        int(args.ddpr_respawn_subset_size)
+        if int(args.ddpr_respawn_subset_size) > 0
+        else int(args.subset_size)
+    )
+    respawn_top_k = (
+        int(args.ddpr_respawn_top_k)
+        if int(args.ddpr_respawn_top_k) > 0
+        else int(args.top_k)
+    )
+    basin_ddpr_sigma = (
+        float(args.sigma_basin_dd_pr_m)
+        if float(args.sigma_basin_dd_pr_m) > 0.0
+        else float(args.sigma_dd_pr_m)
+    )
     rows: list[dict[str, object]] = []
     n_birth_epochs = 0
     n_declared_fix = 0
@@ -137,6 +180,8 @@ def main(argv: list[str] | None = None) -> None:
     n_correct_fix = 0
     n_gamma_fix = 0
     n_consistency_reject = 0
+    n_respawn_epochs = 0
+    n_float_resets = 0
     max_gamma = 0.0
     last_ddpr_epoch = -1_000_000
     last_ddpr_pairs = 0
@@ -187,14 +232,15 @@ def main(argv: list[str] | None = None) -> None:
                 dd_cp,
                 dd_pseudorange_result=dd_pr,
                 sigma_cp_cycles=float(args.sigma_float_cp_cycles),
-                slip_threshold_cycles=2.0,
+                slip_threshold_cycles=float(args.float_slip_threshold_cycles),
             )
+            n_float_resets += int(cp_diag.ambiguities_reset)
 
         generations = float_kf.ambiguity_generations()
         active_versioned = {(key, generation) for key, generation in generations.items()}
         basin_pf.retain_compatible(active_versioned)
         if dd_pr is not None and basin_pf.basins:
-            basin_pf.update_pseudorange(dd_pr, sigma_pr_m=float(args.sigma_dd_pr_m))
+            basin_pf.update_pseudorange(dd_pr, sigma_pr_m=basin_ddpr_sigma)
         if dd_cp is not None and basin_pf.basins:
             basin_pf.update_fixed_carrier(
                 dd_cp,
@@ -202,7 +248,27 @@ def main(argv: list[str] | None = None) -> None:
                 sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
             )
 
+        pre_birth_map = (
+            max(basin_pf.basins, key=lambda basin: basin.log_weight)
+            if basin_pf.basins else None
+        )
+        respawn_triggered = bool(
+            args.enable_ddpr_respawn
+            and dd_cp is not None
+            and dd_pr is not None
+            and int(dd_pr.n_dd) >= int(args.fix_min_dd_pairs)
+            and (
+                pre_birth_map is None
+                or np.linalg.norm(
+                    pre_birth_map.conditional.mean[:3] - ddpr_guard.mean[:3]
+                ) > float(args.ddpr_respawn_trigger_m)
+            )
+        )
+
         n_candidates = 0
+        n_respawn_candidates = 0
+        respawn_oracle_min_error = float("nan")
+        respawn_oracle_rank = -1
         if dd_cp is not None and int(dd_cp.n_dd) >= int(args.subset_size):
             current_pairs = {
                 (str(ref), str(sat)) for ref, sat in zip(dd_cp.ref_sat_ids, dd_cp.sat_ids)
@@ -249,7 +315,80 @@ def main(argv: list[str] | None = None) -> None:
                     n_candidates = len(assignments)
                     n_birth_epochs += 1
 
+        if respawn_triggered and dd_cp is not None:
+            respawn_seed = ddpr_centered_ambiguity_seed(
+                dd_cp,
+                ddpr_guard.mean[:3],
+                ddpr_guard.covariance[:3, :3],
+                sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+            )
+            available = np.asarray(
+                [j for j, key in enumerate(respawn_seed.keys) if key in generations],
+                dtype=np.int64,
+            )
+            if available.size >= respawn_subset_size:
+                variances = np.diag(respawn_seed.qahat_cycles2)[available]
+                selected = available[
+                    np.argsort(variances)[:respawn_subset_size]
+                ]
+                selected = np.sort(selected)
+                respawn_keys = tuple(respawn_seed.keys[j] for j in selected)
+                candidates, respawn_residuals = integer_search(
+                    respawn_seed.ahat_cycles[selected],
+                    respawn_seed.qahat_cycles2[np.ix_(selected, selected)],
+                    n_candidates=respawn_top_k,
+                )
+                assignments = []
+                conditionals = []
+                for candidate in candidates:
+                    position, covariance, _distance = condition_respawn_position(
+                        respawn_seed, respawn_keys, candidate
+                    )
+                    assignments.append(
+                        {
+                            (key, generations[key]): int(value)
+                            for key, value in zip(respawn_keys, candidate)
+                        }
+                    )
+                    conditionals.append(
+                        BasinKalmanState.from_position(
+                            position,
+                            covariance,
+                            velocity_ecef=ddpr_guard.mean[3:6],
+                            velocity_sigma_mps=1.0,
+                            accel_process_sigma_mps2=3.0,
+                        )
+                    )
+                # Diagnostic only: truth never changes candidates, weights,
+                # output selection, or the FIX gate.
+                epoch_ref = truth.get(round(float(tow), 1))
+                if epoch_ref is not None and conditionals:
+                    candidate_errors = np.asarray(
+                        [
+                            float(np.linalg.norm(state.mean[:3] - epoch_ref))
+                            for state in conditionals
+                        ],
+                        dtype=np.float64,
+                    )
+                    respawn_oracle_rank = int(np.argmin(candidate_errors)) + 1
+                    respawn_oracle_min_error = float(np.min(candidate_errors))
+                if assignments:
+                    basin_pf.spawn(
+                        assignments,
+                        conditionals,
+                        prior_mass=float(args.ddpr_respawn_mass),
+                        candidate_log_weights=(
+                            -0.5 * np.asarray(respawn_residuals, dtype=np.float64)
+                            if args.ddpr_respawn_use_lambda_prior else None
+                        ),
+                    )
+                    n_respawn_candidates = len(assignments)
+                    n_respawn_epochs += 1
+
         posterior = basin_pf.posterior()
+        position_cluster = basin_pf.position_cluster_posterior(
+            radius_m=float(args.position_cluster_radius_m)
+        )
         max_gamma = max(max_gamma, float(posterior.gamma))
         map_candidates = [
             basin for basin in basin_pf.basins if basin.assignment == posterior.map_assignment
@@ -290,6 +429,16 @@ def main(argv: list[str] | None = None) -> None:
             if ref is not None and np.all(np.isfinite(ref))
             else float("nan")
         )
+        map_error = (
+            float(np.linalg.norm(map_basin.conditional.mean[:3] - ref))
+            if map_basin is not None and ref is not None
+            else float("nan")
+        )
+        cluster_error = (
+            float(np.linalg.norm(position_cluster.mean_position_ecef - ref))
+            if ref is not None and np.all(np.isfinite(position_cluster.mean_position_ecef))
+            else float("nan")
+        )
         if fixed:
             n_declared_fix += 1
             if output_error < 0.5:
@@ -320,6 +469,29 @@ def main(argv: list[str] | None = None) -> None:
                 "ddpr_age_epochs": int(ddpr_age_epochs),
                 "last_ddpr_nis": last_ddpr_nis,
                 "output_error_m": output_error,
+                "map_error_m": map_error,
+                "position_cluster_error_m": cluster_error,
+                "position_cluster_gamma": float(position_cluster.gamma),
+                "position_cluster_spread_m": float(position_cluster.rms_spread_m),
+                "position_cluster_members": int(position_cluster.n_members),
+                "position_cluster_float_separation_m": (
+                    float(
+                        np.linalg.norm(
+                            position_cluster.mean_position_ecef - float_kf.position_ecef
+                        )
+                    )
+                    if np.all(np.isfinite(position_cluster.mean_position_ecef))
+                    else float("nan")
+                ),
+                "position_cluster_ddpr_separation_m": (
+                    float(
+                        np.linalg.norm(
+                            position_cluster.mean_position_ecef - ddpr_guard.mean[:3]
+                        )
+                    )
+                    if np.all(np.isfinite(position_cluster.mean_position_ecef))
+                    else float("nan")
+                ),
                 "float_error_m": (
                     float(np.linalg.norm(float_kf.position_ecef - ref))
                     if ref is not None else float("nan")
@@ -333,12 +505,19 @@ def main(argv: list[str] | None = None) -> None:
                 "dd_cp_nis": (
                     float("nan") if cp_diag is None else cp_diag.normalized_innovation_sq
                 ),
+                "ambiguities_reset": (
+                    0 if cp_diag is None else int(cp_diag.ambiguities_reset)
+                ),
                 "gamma": float(posterior.gamma),
                 "fix_streak": int(posterior.fix_streak),
                 "n_basins": int(posterior.n_basins),
                 "basin_ess": float(posterior.ess),
                 "map_n_ambiguities": len(posterior.map_assignment),
                 "n_candidates_born": n_candidates,
+                "respawn_triggered": int(respawn_triggered),
+                "n_respawn_candidates_born": n_respawn_candidates,
+                "respawn_oracle_min_error_m": respawn_oracle_min_error,
+                "respawn_oracle_rank": int(respawn_oracle_rank),
                 "n_dd_pr": 0 if dd_pr is None else int(dd_pr.n_dd),
                 "n_dd_cp": 0 if dd_cp is None else int(dd_cp.n_dd),
             }
@@ -356,7 +535,14 @@ def main(argv: list[str] | None = None) -> None:
         "fix_ddpr_consistency_m": float(args.fix_ddpr_consistency_m),
         "fix_min_dd_pairs": int(args.fix_min_dd_pairs),
         "fix_max_ddpr_age_epochs": int(args.fix_max_ddpr_age_epochs),
+        "sigma_basin_dd_pr_m": float(basin_ddpr_sigma),
         "birth_epochs": int(n_birth_epochs),
+        "ddpr_respawn_enabled": bool(args.enable_ddpr_respawn),
+        "ddpr_respawn_subset_size": int(respawn_subset_size),
+        "ddpr_respawn_top_k": int(respawn_top_k),
+        "ddpr_respawn_lambda_prior": bool(args.ddpr_respawn_use_lambda_prior),
+        "ddpr_respawn_epochs": int(n_respawn_epochs),
+        "float_ambiguity_resets": int(n_float_resets),
         "declared_fix_epochs": int(n_declared_fix),
         "gamma_fix_epochs": int(n_gamma_fix),
         "consistency_reject_epochs": int(n_consistency_reject),

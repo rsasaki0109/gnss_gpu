@@ -173,3 +173,20 @@ def test_large_linear_update_matches_dense_kalman_and_marginal_likelihood():
     np.testing.assert_allclose(
         state.covariance, expected_covariance, rtol=1e-9, atol=1e-10
     )
+
+
+def test_position_cluster_aggregates_mass_across_assignments():
+    pf = AmbiguityBasinParticleFilter()
+    pf.spawn(
+        [{_versioned_key("G02"): 1}, {_versioned_key("G03"): 2}, {_versioned_key("G04"): 3}],
+        [_conditional(0.0), _conditional(0.2), _conditional(3.0)],
+        candidate_log_weights=[0.0, -0.2, -1.0],
+    )
+
+    cluster = pf.position_cluster_posterior(radius_m=0.5)
+
+    exact_gamma = pf.posterior().gamma
+    assert cluster.n_members == 2
+    assert cluster.gamma > exact_gamma
+    assert cluster.rms_spread_m < 0.2
+    assert 0.0 < cluster.mean_position_ecef[0] < 0.2

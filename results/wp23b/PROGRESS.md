@@ -202,3 +202,35 @@ shifted-basin relinearization/respawn as the next structural task.
 Full scores: AllRMS 26.648/10.913/8.497 m, FixRMS 0.211/0.181/n.a., and
 `<50cm_full%` 1.652/1.650/2.065 for run1/run2/run3. Evidence is in
 `csv/g5_full_tokyo_summary.{csv,json}` and `csv/g5_full_gate_audit.json`.
+
+### G5 DDPR-centered respawn / cluster relinearization
+
+Added an opt-in respawn arm which relinearizes DD carrier ambiguities at the
+carrier-independent DDPR guard position, conditions a separate navigation
+Gaussian per integer candidate, and triggers only when the current MAP basin
+is inconsistent with the guard. Production defaults remain unchanged.
+
+Tokyo run3 findings separate supply from selection:
+
+- top-12 with 8 or 12 ambiguities produced no sub-50 cm MAP;
+- top-64, 8 ambiguities produced a sub-50 cm oracle candidate in 26/40
+  respawn epochs (best 0.205 m), but none became MAP under the 5 m basin-DDPR
+  likelihood;
+- a basin-only DDPR sigma of 1.0 m safely produced 10 sub-50 cm MAP epochs and
+  a compact five-member position posterior ball at 0.29-0.30 m, but its mass
+  was only about 0.505, below the 0.99 FIX threshold;
+- forcing sigma to 0.5 m produced 48 sub-50 cm posterior-ball epochs above
+  0.99, but also declared two 0.626 m false fixes (100% false-fix rate).
+
+Single-link position clustering was explicitly rejected because chained
+basins overstated mass; the retained diagnostic uses non-chaining posterior
+balls around each representative. The measured verdict is **plumbing pass,
+production gate fail**: candidate supply and relinearization work, but DDPR
+must not be sharpened enough to manufacture confidence. Another independent
+evidence source or a robust temporal consensus model is required. Evidence:
+`csv/g5_respawn_ablation.{csv,json}`.
+
+Verification: the related regression subset passes with **78 passed, 2
+skipped**. A default-settings Tokyo run2/200 replay preserved all 14 correct
+fixes with zero fix-state mismatches; maximum position and gamma differences
+from the pre-respawn reference were 2.83e-8 m and 5.67e-8, respectively.

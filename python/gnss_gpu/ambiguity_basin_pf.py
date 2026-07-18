@@ -262,6 +262,15 @@ class BasinPosterior:
     fix_streak: int
 
 
+@dataclass(frozen=True)
+class PositionClusterPosterior:
+    mean_position_ecef: np.ndarray
+    gamma: float
+    rms_spread_m: float
+    n_members: int
+    representative_basin_id: str | None
+
+
 class AmbiguityBasinParticleFilter:
     """Discrete basin PF with Rao-Blackwellized navigation conditionals."""
 
@@ -454,6 +463,55 @@ class AmbiguityBasinParticleFilter:
         posterior = self.posterior()
         candidates = [b for b in self.basins if b.assignment == posterior.map_assignment]
         return max(candidates, key=lambda basin: basin.log_weight)
+
+    def position_cluster_posterior(
+        self, radius_m: float = 0.5
+    ) -> PositionClusterPosterior:
+        """Aggregate posterior mass over connected position-basin clusters."""
+
+        if not self.basins:
+            return PositionClusterPosterior(np.full(3, np.nan), 0.0, 0.0, 0, None)
+        if not np.isfinite(radius_m) or float(radius_m) <= 0.0:
+            raise ValueError("position cluster radius must be finite and positive")
+        self._normalize_and_cap()
+        positions = np.asarray([basin.conditional.mean[:3] for basin in self.basins])
+        weights = np.exp(np.asarray([basin.log_weight for basin in self.basins]))
+        # Use posterior balls, not single-link connected components.  Chained
+        # basins can otherwise aggregate mass across a diameter far larger
+        # than the requested RTK position radius.
+        neighborhoods = [
+            np.flatnonzero(
+                np.linalg.norm(positions - positions[center], axis=1)
+                <= float(radius_m)
+            ).tolist()
+            for center in range(len(self.basins))
+        ]
+        best_members = max(
+            neighborhoods, key=lambda members: float(weights[members].sum())
+        )
+        member_weights = weights[best_members]
+        gamma = float(member_weights.sum())
+        normalized = member_weights / gamma
+        member_positions = positions[best_members]
+        mean_position = np.sum(normalized[:, None] * member_positions, axis=0)
+        spread = float(
+            np.sqrt(
+                np.sum(
+                    normalized
+                    * np.sum((member_positions - mean_position) ** 2, axis=1)
+                )
+            )
+        )
+        representative_index = max(
+            best_members, key=lambda index: self.basins[index].log_weight
+        )
+        return PositionClusterPosterior(
+            mean_position_ecef=mean_position,
+            gamma=gamma,
+            rms_spread_m=spread,
+            n_members=len(best_members),
+            representative_basin_id=self.basins[representative_index].basin_id,
+        )
 
     def _deduplicate(self) -> None:
         grouped: dict[tuple[AssignmentItem, ...], list[IntegerBasin]] = {}

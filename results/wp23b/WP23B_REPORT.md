@@ -154,3 +154,31 @@ relinearization and DDPR-centered respawn for coherent shifted basins.
 Artifacts: `csv/g5_full_tokyo_summary.{csv,json}`,
 `csv/g5_full_gate_audit.json`, per-run full summaries/scores, and full
 trajectories under `pos/g5_full/`.
+
+### DDPR-centered respawn verdict
+
+An opt-in cluster-specific relinearization arm now creates ambiguity Gaussians
+at the DDPR-only guard position and respawns top-K integer basins when the
+existing MAP basin is shifted. On Tokyo run3, top-64 supplies a sub-50 cm
+candidate in 26 of 40 trigger epochs (best 0.205 m), proving that the candidate
+supply problem is solvable.
+
+Posterior selection remains the blocker. With basin DDPR sigma 1.0 m, ten MAP
+epochs reach <0.5 m and a compact five-basin posterior ball reaches 0.29-0.30 m,
+but its posterior mass is only about 0.505. Tightening DDPR sigma to 0.5 m
+creates 48 apparently confident sub-50 cm cluster epochs but also two declared
+false fixes at 0.626 m, for a 100% false-fix rate in that ablation. It is
+therefore rejected for production.
+
+The respawn feature stays disabled by default. This is an honest structural
+negative: relinearization and top-64 candidate supply work, while coherent
+multipath still prevents trustworthy posterior concentration. Non-chaining
+posterior balls are retained as diagnostics; single-link aggregation is not
+used because it can inflate gamma through spatial chains. Detailed results are
+in `csv/g5_respawn_ablation.{csv,json}`.
+
+The related regression subset passes with **78 passed, 2 skipped**. A
+default-settings Tokyo run2/200 replay retained all 14 correct fixes with zero
+fix-state mismatches; maximum position and gamma deltas versus the pre-respawn
+reference were 2.83e-8 m and 5.67e-8. Thus the disabled-by-default arm does not
+materially alter the trusted path.
