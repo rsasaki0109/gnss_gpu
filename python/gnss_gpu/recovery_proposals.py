@@ -47,6 +47,11 @@ class RecoveryAssignmentBank:
             raise ValueError("assignment bank size, age, and dimension must be positive")
         self._entries: list[_AssignmentBankEntry] = []
 
+    def clear(self) -> None:
+        """Discard every assignment at a detected ambiguity reset boundary."""
+
+        self._entries.clear()
+
     def update(
         self,
         epoch: int,
@@ -102,6 +107,82 @@ class RecoveryAssignmentBank:
             if len(projected) >= minimum:
                 compatible.setdefault(projected, dict(projected))
         return tuple(compatible.values())
+
+    def rebased_assignments(
+        self,
+        active_versioned_keys: Iterable[VersionedAmbiguityKey],
+        observed_raw_keys: Iterable[RawAmbiguityKey],
+        *,
+        min_size: int | None = None,
+    ) -> tuple[dict[VersionedAmbiguityKey, int], ...]:
+        """Re-express same-segment DD integers under the currently observed pivot."""
+
+        active_by_raw = {raw: generation for raw, generation in active_versioned_keys}
+        observed = tuple(
+            raw for raw in observed_raw_keys if raw in active_by_raw
+        )
+        minimum = self.min_assignment_size if min_size is None else int(min_size)
+        if minimum < 1:
+            raise ValueError("rebased assignment minimum must be positive")
+        outputs: dict[tuple[AssignmentItem, ...], dict[VersionedAmbiguityKey, int]] = {}
+        for entry in self._entries:
+            graphs: dict[
+                tuple[str, int], dict[str, list[tuple[str, int]]]
+            ] = {}
+            for (raw_key, _generation), value in entry.assignment:
+                ref, sat, wavelength = raw_key
+                group = (ref[:1], int(wavelength))
+                adjacency = graphs.setdefault(group, {})
+                adjacency.setdefault(ref, []).append((sat, int(value)))
+                adjacency.setdefault(sat, []).append((ref, -int(value)))
+            potentials_by_group: dict[
+                tuple[str, int], tuple[dict[str, int], dict[str, int]]
+            ] = {}
+            for group, adjacency in graphs.items():
+                potentials: dict[str, int] = {}
+                components: dict[str, int] = {}
+                component = 0
+                consistent = True
+                for start in adjacency:
+                    if start in potentials:
+                        continue
+                    potentials[start] = 0
+                    components[start] = component
+                    stack = [start]
+                    while stack and consistent:
+                        node = stack.pop()
+                        for neighbor, delta in adjacency[node]:
+                            expected = potentials[node] + delta
+                            if neighbor in potentials:
+                                if potentials[neighbor] != expected:
+                                    consistent = False
+                                    break
+                            else:
+                                potentials[neighbor] = expected
+                                components[neighbor] = component
+                                stack.append(neighbor)
+                    component += 1
+                if consistent:
+                    potentials_by_group[group] = (potentials, components)
+            projected: dict[VersionedAmbiguityKey, int] = {}
+            for raw_key in observed:
+                ref, sat, wavelength = raw_key
+                values = potentials_by_group.get((ref[:1], int(wavelength)))
+                if values is None:
+                    continue
+                potentials, components = values
+                if (
+                    ref in potentials
+                    and sat in potentials
+                    and components[ref] == components[sat]
+                ):
+                    projected[(raw_key, int(active_by_raw[raw_key]))] = int(
+                        potentials[sat] - potentials[ref]
+                    )
+            if len(projected) >= minimum:
+                canonical = tuple(sorted(projected.items()))
+                outputs.setdefault(canonical, projected)
+        return tuple(outputs.values())
 
 
 def complete_versioned_assignment(

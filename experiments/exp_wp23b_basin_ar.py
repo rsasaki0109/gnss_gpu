@@ -196,6 +196,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--ddpr-respawn-assignment-history-max-age-epochs", type=int, default=50
     )
+    parser.add_argument(
+        "--ddpr-respawn-assignment-pivot-rebase", action="store_true"
+    )
     parser.add_argument("--ddpr-respawn-assignment-completion-top-k", type=int, default=0)
     parser.add_argument("--ddpr-respawn-assignment-completion-min-stable", type=int, default=4)
     parser.add_argument(
@@ -392,6 +395,7 @@ def main(argv: list[str] | None = None) -> None:
     n_subset_shadow_epochs = 0
     n_subset_shadow_correct = 0
     n_float_resets = 0
+    n_assignment_history_clears = 0
     n_temporal_map_sub50 = 0
     n_temporal_map_disagreement = 0
     max_temporal_gamma = 0.0
@@ -522,6 +526,16 @@ def main(argv: list[str] | None = None) -> None:
             )
 
         generations = float_kf.ambiguity_generations()
+        assignment_history_cleared = False
+        if (
+            recovery_assignment_bank is not None
+            and args.ddpr_respawn_assignment_pivot_rebase
+            and cp_diag is not None
+            and int(cp_diag.ambiguities_reset) > 0
+        ):
+            recovery_assignment_bank.clear()
+            assignment_history_cleared = True
+            n_assignment_history_clears += 1
         if recovery_position_bank is not None and basin_pf.basins:
             recovery_position_bank.update(
                 i,
@@ -708,15 +722,30 @@ def main(argv: list[str] | None = None) -> None:
                     ddpr_guard.covariance[:3, :3],
                     sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
                 )
+                observed_assignment_keys = tuple(
+                    key
+                    for key in assignment_seed.keys
+                    if respawn_excluded_satellite not in key[:2]
+                )
+
+                def assignment_replays(
+                    *, min_size: int | None = None
+                ) -> tuple[dict, ...]:
+                    if args.ddpr_respawn_assignment_pivot_rebase:
+                        return recovery_assignment_bank.rebased_assignments(
+                            active_versioned,
+                            observed_assignment_keys,
+                            min_size=min_size,
+                        )
+                    return recovery_assignment_bank.compatible_assignments(
+                        active_versioned,
+                        observed_assignment_keys,
+                        min_size=min_size,
+                    )
+
                 completion_top_k = int(args.ddpr_respawn_assignment_completion_top_k)
                 if completion_top_k > 0:
-                    partial_assignments = recovery_assignment_bank.compatible_assignments(
-                        active_versioned,
-                        (
-                            key
-                            for key in assignment_seed.keys
-                            if respawn_excluded_satellite not in key[:2]
-                        ),
+                    partial_assignments = assignment_replays(
                         min_size=int(args.ddpr_respawn_assignment_completion_min_stable),
                     )
                     completed: dict[
@@ -743,14 +772,7 @@ def main(argv: list[str] | None = None) -> None:
                     if args.ddpr_respawn_assignment_completion_shadow_only:
                         replay_proposals = [
                             (assignment, float("nan"))
-                            for assignment in recovery_assignment_bank.compatible_assignments(
-                                active_versioned,
-                                (
-                                    key
-                                    for key in assignment_seed.keys
-                                    if respawn_excluded_satellite not in key[:2]
-                                ),
-                            )
+                            for assignment in assignment_replays()
                         ]
                         for assignment, _distance in completion_proposals:
                             shadow_keys = tuple(key[0] for key in assignment)
@@ -768,14 +790,7 @@ def main(argv: list[str] | None = None) -> None:
                 else:
                     replay_proposals = [
                         (assignment, float("nan"))
-                        for assignment in recovery_assignment_bank.compatible_assignments(
-                            active_versioned,
-                            (
-                                key
-                                for key in assignment_seed.keys
-                                if respawn_excluded_satellite not in key[:2]
-                            ),
-                        )
+                        for assignment in assignment_replays()
                     ]
                 for assignment_index, (assignment, completion_distance) in enumerate(
                     replay_proposals
@@ -1585,6 +1600,7 @@ def main(argv: list[str] | None = None) -> None:
                 "ambiguities_reset": (
                     0 if cp_diag is None else int(cp_diag.ambiguities_reset)
                 ),
+                "assignment_history_cleared": int(assignment_history_cleared),
                 "gamma": float(posterior.gamma),
                 "fix_streak": int(commit.fix_streak),
                 "map_assignment_id": assignment_id,
@@ -1686,6 +1702,12 @@ def main(argv: list[str] | None = None) -> None:
         ),
         "ddpr_respawn_assignment_history_max_age_epochs": int(
             args.ddpr_respawn_assignment_history_max_age_epochs
+        ),
+        "ddpr_respawn_assignment_pivot_rebase": bool(
+            args.ddpr_respawn_assignment_pivot_rebase
+        ),
+        "ddpr_respawn_assignment_history_clears": int(
+            n_assignment_history_clears
         ),
         "ddpr_respawn_assignment_completion_top_k": int(
             args.ddpr_respawn_assignment_completion_top_k

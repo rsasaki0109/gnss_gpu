@@ -144,6 +144,31 @@ def test_assignment_bank_expires_and_deduplicates():
     assert next(iter(compatible[0].values())) >= 5
 
 
+def test_assignment_bank_rebases_integer_differences_to_new_pivot():
+    wavelength = 190293673
+    old = {
+        (("G01", "G02", wavelength), 0): 5,
+        (("G01", "G03", wavelength), 0): 8,
+    }
+    current = {
+        (("G02", "G01", wavelength), 4),
+        (("G02", "G03", wavelength), 7),
+    }
+    bank = RecoveryAssignmentBank(
+        max_assignments=4, max_age_epochs=10, min_assignment_size=2
+    )
+    bank.update(0, [old], [0.0])
+    rebased = bank.rebased_assignments(current, [key[0] for key in current])
+    assert rebased == (
+        {
+            (("G02", "G01", wavelength), 4): -5,
+            (("G02", "G03", wavelength), 7): 3,
+        },
+    )
+    bank.clear()
+    assert bank.rebased_assignments(current, [key[0] for key in current]) == ()
+
+
 def test_assignment_completion_preserves_stable_and_fills_current_generation():
     raw_keys = tuple(("G01", f"G{sat:02d}", 190293673) for sat in range(2, 12))
     generations = {key: (1 if index >= 4 else 0) for index, key in enumerate(raw_keys)}

@@ -238,3 +238,25 @@ collapses live recall to 15/200; restricting candidates to 10 m from the DDPR
 guard still reaches only 24/200. Low-weight spatial extremes are not useful
 recovery modes. The frozen history selector remains weight-first with 1 m
 separation.
+
+### Pivot-invariant assignment replay audit
+
+The assignment bank can now reconstruct satellite integer potentials from old
+DD edges and express them under the currently observed pivot. The mode is
+opt-in and clears the bank whenever the float filter reports an ambiguity
+reset, so an integer is never deliberately carried across a detected slip
+generation.
+
+The mechanism restores proposal supply after a pivot transition: at epochs 50
+and 55 the compatible replay count rises from 4 and 5 to 128, and the epoch-55
+proposal oracle improves from 0.822 m to 0.547 m. It does not cross the 0.5 m
+gate. On the full Nagoya run3/200 replay, live recall, longest span, and p90 are
+unchanged at 150/200, 87 epochs, and 35.8 epochs, while correct proposal anchors
+regress from 31/40 to 29/40. The bank is cleared 11 times.
+
+This arm is rejected for production. `ambiguities_reset` identifies DD-track
+residual resets, not a per-satellite slip arc. Clearing the whole bank is safe
+but discards useful unaffected integer relations, including correct anchors at
+epochs 25 and 180. The next assignment design must use pivot-invariant
+per-satellite arc identities and invalidate only relations incident to a
+causally detected slipped satellite.

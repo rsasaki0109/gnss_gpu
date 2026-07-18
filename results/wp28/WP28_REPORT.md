@@ -128,3 +128,18 @@ best cap-512 recall, 150/200 (75.0%), at the cost of lower but still passing
 Farthest-point history selection is strongly negative both unrestricted
 (15/200) and within a 10 m DDPR-guard radius (24/200). Weight-first history
 selection remains the only advancing policy.
+
+An opt-in pivot-invariant replay was also audited. It rebuilds satellite
+integer potentials from historical DD assignments, rebases them to the current
+pivot, and clears all history at a reported ambiguity reset. Replay supply
+recovers to 128 candidates after the epoch-45 reset, but full-run live recall
+is unchanged at 150/200 and proposal recall regresses from 31/40 to 29/40.
+Whole-bank reset safety is too destructive: the float diagnostic does not
+provide the per-satellite slip identity needed for selective invalidation.
+This arm remains disconnected from production and FIX.
+
+The next WP28 increment is therefore a per-satellite ambiguity-arc ledger:
+store pivot-free integer potentials with causal arc identifiers, detect and
+invalidate only slipped satellite arcs, and materialize DD assignments only at
+proposal time. It must first exceed the frozen 31/40 anchor recall in shadow
+mode before it may receive PF mass.
