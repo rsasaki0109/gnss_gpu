@@ -39,7 +39,15 @@ from gnss_gpu.dd_pseudorange import DDPseudorangeComputer  # noqa: E402
 from gnss_gpu.io.ppc import PPCDatasetLoader  # noqa: E402
 from gnss_gpu.io.rinex_cache import RinexObservationCache  # noqa: E402
 from gnss_gpu.lambda_ambiguity import integer_search  # noqa: E402
-from gnss_gpu.rtk_fix_gate import trusted_fix_gate  # noqa: E402
+from gnss_gpu.rtk_evidence import (  # noqa: E402
+    EvidenceLedger,
+    RTKEpochTrace,
+    TrustedFixCommitPolicy,
+    TrustedFixPolicyConfig,
+    TrustedFixPolicyInput,
+    ambiguity_assignment_id,
+    replay_fix_decisions,
+)
 
 
 def _write_trajectory(path: Path, rows: list[dict[str, object]]) -> None:
@@ -108,6 +116,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--out-diagnostics", type=Path, default=Path("results/wp23b/csv/basin_run2_epochs.csv"))
     parser.add_argument("--out-summary", type=Path, default=Path("results/wp23b/csv/basin_run2_summary.json"))
     parser.add_argument("--out-trajectory", type=Path, default=Path("results/wp23b/pos/basin_run2.csv"))
+    parser.add_argument(
+        "--out-trace",
+        type=Path,
+        default=None,
+        help="Optional truth-free epoch trace for deterministic FIX replay",
+    )
+    parser.add_argument(
+        "--out-evidence",
+        type=Path,
+        default=None,
+        help="Optional observation evidence-provenance CSV",
+    )
     args = parser.parse_args(argv)
 
     city, run = str(args.run).split("/", 1)
@@ -156,6 +176,18 @@ def main(argv: list[str] | None = None) -> None:
         fix_min_streak=int(args.fix_streak),
         min_fixed_ambiguities=int(args.subset_size),
     )
+    policy_config = TrustedFixPolicyConfig(
+        gamma_threshold=float(args.fix_gamma),
+        min_streak=int(args.fix_streak),
+        min_ambiguities=int(args.subset_size),
+        max_float_separation_m=float(args.fix_consistency_m),
+        max_ddpr_separation_m=float(args.fix_ddpr_consistency_m),
+        min_ddpr_pairs=int(args.fix_min_dd_pairs),
+        max_ddpr_age_epochs=int(args.fix_max_ddpr_age_epochs),
+    )
+    commit_policy = TrustedFixCommitPolicy(policy_config)
+    evidence_ledger = EvidenceLedger()
+    traces: list[RTKEpochTrace] = []
 
     times = np.asarray(data["times"], dtype=np.float64)
     respawn_subset_size = (
@@ -188,6 +220,8 @@ def main(argv: list[str] | None = None) -> None:
     last_ddpr_nis = float("nan")
 
     for i, tow in enumerate(times):
+        evidence_start = len(evidence_ledger)
+        observation_id = f"tow={float(tow):.3f}"
         if i > 0:
             dt = max(float(times[i] - times[i - 1]), 1e-3)
             float_kf.predict(dt)
@@ -197,8 +231,28 @@ def main(argv: list[str] | None = None) -> None:
         if velocity is not None:
             velocity_sigma = max(0.5, min(float(doppler_rms), 5.0))
             float_kf.update_velocity(velocity, sigma_mps=velocity_sigma)
-            basin_pf.update_velocity(velocity, sigma_mps=velocity_sigma)
+            basin_velocity_evidence = (
+                basin_pf.update_velocity(velocity, sigma_mps=velocity_sigma)
+                if basin_pf.basins else None
+            )
             ddpr_guard.update_velocity(velocity, sigma_mps=velocity_sigma)
+            for target in ("float_kf", "ddpr_guard"):
+                evidence_ledger.record(
+                    epoch=i,
+                    target=target,
+                    source="doppler_velocity",
+                    observation_id=observation_id,
+                    n_rows=3,
+                )
+            if basin_velocity_evidence is not None:
+                evidence_ledger.record(
+                    epoch=i,
+                    target="basin_pf",
+                    source="doppler_velocity",
+                    observation_id=observation_id,
+                    n_rows=3,
+                    log_evidence=basin_velocity_evidence.log_marginal,
+                )
 
         measurements = _build_dd_measurements(
             np.asarray(data["sat_ecef"][i], dtype=np.float64),
@@ -227,6 +281,14 @@ def main(argv: list[str] | None = None) -> None:
             last_ddpr_epoch = i
             last_ddpr_pairs = int(dd_pr.n_dd)
             last_ddpr_nis = float(pr_diag.normalized_innovation_sq)
+            for target in ("float_kf", "ddpr_guard"):
+                evidence_ledger.record(
+                    epoch=i,
+                    target=target,
+                    source="dd_pseudorange",
+                    observation_id=observation_id,
+                    n_rows=int(dd_pr.n_dd),
+                )
         if dd_cp is not None and int(dd_cp.n_dd) >= 3:
             cp_diag = float_kf.update_carrier(
                 dd_cp,
@@ -235,17 +297,42 @@ def main(argv: list[str] | None = None) -> None:
                 slip_threshold_cycles=float(args.float_slip_threshold_cycles),
             )
             n_float_resets += int(cp_diag.ambiguities_reset)
+            evidence_ledger.record(
+                epoch=i,
+                target="float_kf",
+                source="dd_carrier",
+                observation_id=observation_id,
+                n_rows=int(dd_cp.n_dd),
+            )
 
         generations = float_kf.ambiguity_generations()
         active_versioned = {(key, generation) for key, generation in generations.items()}
         basin_pf.retain_compatible(active_versioned)
         if dd_pr is not None and basin_pf.basins:
-            basin_pf.update_pseudorange(dd_pr, sigma_pr_m=basin_ddpr_sigma)
+            basin_pr_evidence = basin_pf.update_pseudorange(
+                dd_pr, sigma_pr_m=basin_ddpr_sigma
+            )
+            evidence_ledger.record(
+                epoch=i,
+                target="basin_pf",
+                source="dd_pseudorange",
+                observation_id=observation_id,
+                n_rows=int(dd_pr.n_dd),
+                log_evidence=basin_pr_evidence.log_marginal,
+            )
         if dd_cp is not None and basin_pf.basins:
-            basin_pf.update_fixed_carrier(
+            basin_cp_evidence = basin_pf.update_fixed_carrier(
                 dd_cp,
                 generations,
                 sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+            )
+            evidence_ledger.record(
+                epoch=i,
+                target="basin_pf",
+                source="dd_carrier",
+                observation_id=observation_id,
+                n_rows=int(dd_cp.n_dd),
+                log_evidence=basin_cp_evidence.log_marginal,
             )
 
         pre_birth_map = (
@@ -405,19 +492,32 @@ def main(argv: list[str] | None = None) -> None:
             else float("nan")
         )
         ddpr_age_epochs = i - last_ddpr_epoch
-        gamma_fixed = bool(posterior.fixed and map_basin is not None)
-        gate = trusted_fix_gate(
+        assignment_id = (
+            ambiguity_assignment_id(posterior.map_assignment)
+            if map_basin is not None else ""
+        )
+        policy_input = TrustedFixPolicyInput(
+            epoch=i,
+            assignment_id=assignment_id,
+            gamma=float(posterior.gamma),
+            n_ambiguities=len(posterior.map_assignment),
             map_float_separation_m=map_float_separation,
             map_ddpr_separation_m=map_ddpr_separation,
             last_ddpr_pairs=last_ddpr_pairs,
             ddpr_age_epochs=ddpr_age_epochs,
-            max_float_separation_m=float(args.fix_consistency_m),
-            max_ddpr_separation_m=float(args.fix_ddpr_consistency_m),
-            min_ddpr_pairs=int(args.fix_min_dd_pairs),
-            max_ddpr_age_epochs=int(args.fix_max_ddpr_age_epochs),
         )
+        commit = commit_policy.evaluate(policy_input)
+        gamma_fixed = bool(
+            commit.gamma_eligible and commit.fix_streak >= int(args.fix_streak)
+        )
+        if gamma_fixed != bool(posterior.fixed and map_basin is not None):
+            raise RuntimeError(
+                f"legacy/replayable gamma FIX mismatch at epoch {i}: "
+                f"{posterior.fixed} != {gamma_fixed}"
+            )
+        gate = commit.gate
         consistency_pass = gate.passed
-        fixed = bool(gamma_fixed and consistency_pass)
+        fixed = commit.fixed
         n_gamma_fix += int(gamma_fixed)
         n_consistency_reject += int(gamma_fixed and not consistency_pass)
         output_position = (
@@ -445,6 +545,26 @@ def main(argv: list[str] | None = None) -> None:
                 n_correct_fix += 1
             else:
                 n_false_fix += 1
+        traces.append(
+            RTKEpochTrace(
+                epoch=i,
+                tow=float(tow),
+                assignment_id=assignment_id,
+                gamma=float(posterior.gamma),
+                n_ambiguities=len(posterior.map_assignment),
+                map_float_separation_m=map_float_separation,
+                map_ddpr_separation_m=map_ddpr_separation,
+                last_ddpr_pairs=int(last_ddpr_pairs),
+                ddpr_age_epochs=int(ddpr_age_epochs),
+                ecef_x=float(output_position[0]),
+                ecef_y=float(output_position[1]),
+                ecef_z=float(output_position[2]),
+                gamma_eligible=commit.gamma_eligible,
+                fix_streak=commit.fix_streak,
+                fixed=commit.fixed,
+                evidence_records=len(evidence_ledger) - evidence_start,
+            )
+        )
         rows.append(
             {
                 "epoch": i,
@@ -509,7 +629,8 @@ def main(argv: list[str] | None = None) -> None:
                     0 if cp_diag is None else int(cp_diag.ambiguities_reset)
                 ),
                 "gamma": float(posterior.gamma),
-                "fix_streak": int(posterior.fix_streak),
+                "fix_streak": int(commit.fix_streak),
+                "map_assignment_id": assignment_id,
                 "n_basins": int(posterior.n_basins),
                 "basin_ess": float(posterior.ess),
                 "map_n_ambiguities": len(posterior.map_assignment),
@@ -523,6 +644,14 @@ def main(argv: list[str] | None = None) -> None:
             }
         )
 
+    evidence_audit = evidence_ledger.audit()
+    replayed = replay_fix_decisions(traces, policy_config)
+    replay_mismatches = sum(
+        decision.fixed != trace.fixed or decision.fix_streak != trace.fix_streak
+        for decision, trace in zip(replayed, traces)
+    )
+    if replay_mismatches:
+        raise RuntimeError(f"online/replay FIX mismatch count: {replay_mismatches}")
     false_rate = 100.0 * n_false_fix / n_declared_fix if n_declared_fix else 0.0
     summary = {
         "run": str(args.run),
@@ -551,6 +680,10 @@ def main(argv: list[str] | None = None) -> None:
         "false_fix_pct": float(false_rate),
         "max_gamma": float(max_gamma),
         "sub50cm_all_epochs": int(sum(float(row["output_error_m"]) < 0.5 for row in rows)),
+        "evidence_records": int(evidence_audit.n_records),
+        "evidence_updates": int(evidence_audit.n_updates),
+        "evidence_beta_errors": int(evidence_audit.beta_error_count),
+        "commit_replay_mismatches": int(replay_mismatches),
     }
     args.out_diagnostics.parent.mkdir(parents=True, exist_ok=True)
     with args.out_diagnostics.open("w", newline="") as fh:
@@ -558,6 +691,20 @@ def main(argv: list[str] | None = None) -> None:
         writer.writeheader()
         writer.writerows(rows)
     _write_trajectory(args.out_trajectory, rows)
+    if args.out_trace is not None:
+        args.out_trace.parent.mkdir(parents=True, exist_ok=True)
+        with args.out_trace.open("w", newline="") as fh:
+            trace_rows = [trace.row() for trace in traces]
+            writer = csv.DictWriter(fh, fieldnames=list(trace_rows[0]))
+            writer.writeheader()
+            writer.writerows(trace_rows)
+    if args.out_evidence is not None:
+        args.out_evidence.parent.mkdir(parents=True, exist_ok=True)
+        with args.out_evidence.open("w", newline="") as fh:
+            evidence_rows = evidence_ledger.rows()
+            writer = csv.DictWriter(fh, fieldnames=list(evidence_rows[0]))
+            writer.writeheader()
+            writer.writerows(evidence_rows)
     args.out_summary.parent.mkdir(parents=True, exist_ok=True)
     args.out_summary.write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))

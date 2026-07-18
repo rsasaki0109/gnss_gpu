@@ -190,3 +190,23 @@ def test_position_cluster_aggregates_mass_across_assignments():
     assert cluster.gamma > exact_gamma
     assert cluster.rms_spread_m < 0.2
     assert 0.0 < cluster.mean_position_ecef[0] < 0.2
+
+
+def test_basin_update_reports_mixture_log_marginal():
+    pf = AmbiguityBasinParticleFilter(min_fixed_ambiguities=1)
+    pf.spawn(
+        [{_versioned_key(): 1}],
+        [_conditional()],
+    )
+
+    evidence = pf.update_velocity(np.zeros(3), sigma_mps=1.0)
+
+    assert evidence.n_basins == 1
+    assert evidence.n_rows == 3
+    assert np.isfinite(evidence.log_marginal)
+
+    empty = AmbiguityBasinParticleFilter()
+    no_op = empty.update_velocity(np.zeros(3), sigma_mps=1.0)
+    assert no_op.n_basins == 0
+    assert no_op.n_rows == 0
+    assert no_op.log_marginal == 0.0

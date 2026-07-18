@@ -271,6 +271,13 @@ class PositionClusterPosterior:
     representative_basin_id: str | None
 
 
+@dataclass(frozen=True)
+class BasinUpdateEvidence:
+    log_marginal: float
+    n_rows: int
+    n_basins: int
+
+
 class AmbiguityBasinParticleFilter:
     """Discrete basin PF with Rao-Blackwellized navigation conditionals."""
 
@@ -354,19 +361,39 @@ class AmbiguityBasinParticleFilter:
             basin.cumulative_log_marginal += increment
         self._normalize_and_cap()
 
-    def update_pseudorange(self, dd_result, sigma_pr_m: float = 5.0) -> None:
+    def update_pseudorange(
+        self, dd_result, sigma_pr_m: float = 5.0
+    ) -> BasinUpdateEvidence:
+        if not self.basins:
+            return BasinUpdateEvidence(0.0, 0, 0)
+        prior = np.asarray([basin.log_weight for basin in self.basins], dtype=np.float64)
+        increments: list[float] = []
         for basin in self.basins:
             increment = basin.conditional.update_pseudorange(dd_result, sigma_pr_m)
+            increments.append(float(increment))
             basin.log_weight += increment
             basin.cumulative_log_marginal += increment
+        log_marginal = _logsumexp(prior + np.asarray(increments)) - _logsumexp(prior)
+        n_basins = len(self.basins)
         self._normalize_and_cap()
+        return BasinUpdateEvidence(log_marginal, int(dd_result.n_dd), n_basins)
 
-    def update_velocity(self, velocity_ecef: np.ndarray, sigma_mps: float) -> None:
+    def update_velocity(
+        self, velocity_ecef: np.ndarray, sigma_mps: float
+    ) -> BasinUpdateEvidence:
+        if not self.basins:
+            return BasinUpdateEvidence(0.0, 0, 0)
+        prior = np.asarray([basin.log_weight for basin in self.basins], dtype=np.float64)
+        increments: list[float] = []
         for basin in self.basins:
             increment = basin.conditional.update_velocity(velocity_ecef, sigma_mps)
+            increments.append(float(increment))
             basin.log_weight += increment
             basin.cumulative_log_marginal += increment
+        log_marginal = _logsumexp(prior + np.asarray(increments)) - _logsumexp(prior)
+        n_basins = len(self.basins)
         self._normalize_and_cap()
+        return BasinUpdateEvidence(log_marginal, 3, n_basins)
 
     def update_fixed_carrier(
         self,
@@ -374,8 +401,12 @@ class AmbiguityBasinParticleFilter:
         generations: Mapping[AmbiguityKey, int],
         *,
         sigma_cp_cycles: float = 0.05,
-    ) -> int:
-        total_rows = 0
+    ) -> BasinUpdateEvidence:
+        if not self.basins:
+            return BasinUpdateEvidence(0.0, 0, 0)
+        prior = np.asarray([basin.log_weight for basin in self.basins], dtype=np.float64)
+        increments: list[float] = []
+        max_rows = 0
         for basin in self.basins:
             increment, n_rows = basin.conditional.update_fixed_carrier(
                 dd_result,
@@ -383,11 +414,14 @@ class AmbiguityBasinParticleFilter:
                 generations,
                 sigma_cp_cycles=sigma_cp_cycles,
             )
+            increments.append(float(increment))
             basin.log_weight += increment
             basin.cumulative_log_marginal += increment
-            total_rows += n_rows
+            max_rows = max(max_rows, int(n_rows))
+        log_marginal = _logsumexp(prior + np.asarray(increments)) - _logsumexp(prior)
+        n_basins = len(self.basins)
         self._normalize_and_cap()
-        return total_rows
+        return BasinUpdateEvidence(log_marginal, max_rows, n_basins)
 
     def release(self, keys: Iterable[VersionedAmbiguityKey]) -> None:
         remove = set(keys)
