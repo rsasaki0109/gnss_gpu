@@ -1,0 +1,68 @@
+{
+  "schema": "wp151_tokyo_stability_cppr_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "60B8DECB8D33E949A4F1FA9B30E9A3DCE6E687B3F3B4149D2AA3585B3015C647",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11440, 11495],
+    "selected_stride_phase": 3,
+    "prior_generation_assessment": "WP112 pre-fine-grid posterior failure (0/55 winner at 100% margin, best diagnostic 14/55); re-assessed with the 17-sample GSI cache, fixed fine grid, and frozen WP138 selector generation",
+    "gsi_compatible_samples": 4,
+    "gsi_inlier_samples": 2,
+    "gsi_inlier_spread_m": 0.05186328459531353,
+    "gsi_up_prior_center_m": 0.056685255175828786,
+    "initial_pool_useful_candidates": 0,
+    "oracle_ceiling_epochs_by_rank": {"rank0": 19, "rank1": 22, "rank2": 21},
+    "fine_grid_hypotheses": 56,
+    "fine_grid_strict_candidates": 34,
+    "diagnostic_useful_candidates": [
+      {"candidate_id": 21, "diagnostic_sub50cm_epochs": 8},
+      {"candidate_id": 28, "diagnostic_sub50cm_epochs": 20},
+      {"candidate_id": 34, "diagnostic_sub50cm_epochs": 11},
+      {"candidate_id": 35, "diagnostic_sub50cm_epochs": 17},
+      {"candidate_id": 42, "diagnostic_sub50cm_epochs": 2}
+    ],
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "selector": "wp138_stability_cppr_consensus_v1",
+    "selector_mode_count": 3,
+    "selector_winner_candidate_id": 35,
+    "selector_winner_stability_family_ranks": {"cross_refit_disagreement_m": 3, "block_spread_m": 1, "max_cross_basis_carrier_rms_cycles": 1, "cppr_rank_sum": 1},
+    "selector_winner_diagnostic_sub50cm_epochs": 17,
+    "runner_candidate_id": 19,
+    "runner_diagnostic_sub50cm_epochs": 0,
+    "runner_margin": 0.3333333333333333,
+    "family_rank_limit": 2,
+    "family_rank_pass": false,
+    "runner_margin_pass": true,
+    "accepted": false,
+    "reason": "stability_cppr_family_or_margin_gate_failed"
+  },
+  "decision": "do not rerun or substitute after the truth-free rejection; keep WP148 production unchanged; note the low 19-22/55 oracle ceiling makes this block a poor constant-offset target even on acceptance",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "6E2FFFE8DA17328DBF843CFE32F24D40799C45EBB54058B5D3F7950229E35D8E",
+    "rank0_phase3_development": "2C4F9DE9FED546257B6EE754869136191852A26C6433AC27DCD40A671D55954D",
+    "rank1_phase3_development": "DEA87D4A85C4D5A44A2508F31D47305D30E9A9A9E659740B52119DCB0D8F73B6",
+    "rank2_phase3_development": "7F8224A556E579FED5E6FDB1DFD106BDA4513EBD0A8F8C14BE5B6201EB2C93C1",
+    "fine_grid": "C5C6399A967159C733271967D0963A2E2BA349CC51FD11B9FD7624C55912A9F4",
+    "fine_grid_development": "C8BA2A88A6755347DC46E63D314ABB17C8ADC0D3DBA3D9679097A9B08188A443",
+    "truthfree_source": "53E08520D5B20634BA95AFCB4198DBAA9F5B108CC6D402CEDED94F619A73F2CB",
+    "truthfree_seed_pool": "462104BE3EBFBB6BCCF2717A9A206D49DB4029E5D3EBDF5DF4A6D8EB9C8F28AA",
+    "rank0_truthfree_refit": "ABF8440E66E69711B6228FB3F5AF3ABB1D5C0B220123664D517F3EA0EDEB5987",
+    "rank2_truthfree_refit": "BCC3697EB9608DF41F4275796CDAF716F1A44B7B4149A72BC81876E70BFB63C9",
+    "cross_basis_consensus": "D4B4D63E04576BD97EBE8535BE32A3F76C4C7A00B1CEC91AFE172365BCC99DD6",
+    "stability_cppr_selection": "E01EAE9820579D6AEEA1C1A136474A856CEBA4A8B0BDFA1EBC8EC7188B5BD58A"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

@@ -66,6 +66,15 @@ def test_max_n_reported():
     assert lambda_batch_max_n() >= 36  # covers every observed pipeline n
 
 
+def test_top24_candidate_count_for_wp29():
+    ahat, Q = _random_problem(8, 2029)
+    r = mlambda_batch([ahat], [Q], ncands=24, parmode=1)[0]
+    assert r.status == 0
+    assert r.afix.shape == (8, 24)
+    assert r.s.shape == (24,)
+    assert np.all(np.diff(r.s) >= 0.0)
+
+
 def test_identity_covariance_rounds_to_nearest():
     ahat = np.array([1.2, -3.4, 0.6, 7.9])
     Q = np.eye(4) * 0.01

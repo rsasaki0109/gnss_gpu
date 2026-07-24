@@ -1,0 +1,6 @@
+config,epochs,respawn_epochs,declared_fix,correct_fix,false_fix,max_gamma,respawn_oracle_sub50cm_epochs,map_sub50cm_epochs,cluster_sub50cm_epochs,cluster_gamma99_sub50cm_epochs
+respawn8_k12_pr5_1200,1200,124,0,0,0,0.9954709705592979,,0,,
+respawn12_k12_pr5_1200,1200,116,0,0,0,0.997016955027312,,0,,
+respawn8_k64_pr5_400,400,40,0,0,0,0.9798501321837317,26,0,,
+respawn8_k64_pr1_400,400,16,0,0,0,0.9972353621170146,3,10,5,0
+respawn8_k64_pr0.5_400,400,19,2,0,2,0.9970226142735112,3,137,137,48

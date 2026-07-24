@@ -1,0 +1,59 @@
+{
+  "schema": "wp33_pf_secondary_posterior_benchmark_v1",
+  "created_date": "2026-07-22",
+  "status": "locked_intermediate_not_target_complete",
+  "production_input_truth": false,
+  "runtime_fgo": false,
+  "full_epoch_denominator": true,
+  "declared_fix_false_rate_limit_pct": 1.0,
+  "common_gap_closure": {
+    "mode": "duration_weighted",
+    "duration_exponent": 2.0
+  },
+  "parent_checkpoint": {
+    "path": "internal_docs/wp32_pf_only_intermediate_benchmark_2026_07_22.json",
+    "sha256": "98A9D74A1ECECD668CB2878D6067F6F57738891D3795BD4A63F1B275F6DEB7D7"
+  },
+  "validation_manifest": {
+    "path": "internal_docs/wp32_secondary_posterior_validation_2026_07_22.json",
+    "sha256": "043FE6B820C0821A05B417DA4BBC6AE3870C095A78203B2CAFBB98E8FE8B8D13"
+  },
+  "nagoya_run1": {
+    "target_sub50cm_pct": 86.0,
+    "anchor_count": 8,
+    "n_epochs_full_denominator": 7583,
+    "sub50cm_full_epochs": 4118,
+    "sub50cm_full_pct": 54.305683766319405,
+    "delta_epochs_vs_wp32": 271,
+    "delta_percentage_points_vs_wp32": 3.573783463009407,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0,
+    "development_anchor_used": false,
+    "production_promoted": true,
+    "new_anchor": {
+      "segment": [805, 923],
+      "reason": "unique_secondary_topk_posterior",
+      "selected_candidate_ids": [37, 60, 65],
+      "support_secondary_median_m": [
+        0.40281064063310623,
+        0.40793636813759804,
+        0.4222482293844223
+      ],
+      "support_spread_m": 0.24811919576006333,
+      "selected_audit_error_m": 0.46465700806865545,
+      "path": "results/wp31/nagoya_run1_static_805_923_secondary_posterior_production.json",
+      "sha256": "1E778A9FCA4B937E8AB51F83F6A3A034088601AF7506D21009C2DC32FB245CAE"
+    },
+    "summary": {
+      "path": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_eightanchor_secondary_durationp2_full_summary.json",
+      "sha256": "10704FBF6338D4718002EA729760949A5B3EEB033B6CA555A2B55EDD111E6845"
+    }
+  },
+  "tokyo_run1_unchanged": {
+    "sub50cm_full_epochs": 3051,
+    "n_epochs_full_denominator": 11924,
+    "sub50cm_full_pct": 25.587051325058706
+  },
+  "goal_complete": false
+}

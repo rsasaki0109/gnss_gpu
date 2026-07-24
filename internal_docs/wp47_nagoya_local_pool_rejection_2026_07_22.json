@@ -1,0 +1,40 @@
+{
+  "schema": "wp47_nagoya_local_pool_rejection_lock_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "production_promoted": false,
+  "dataset": "nagoya_run1",
+  "segment": [1436, 1491],
+  "base_lambda_supply": {
+    "candidate_count": 13,
+    "wp42_winner_family_ranks": {"primary": 4, "secondary": 2, "tertiary": 3},
+    "family_rank_limit": 3,
+    "runner_margin": 0.5555555555555556,
+    "decision": "reject_primary_family_rank",
+    "candidate_artifact_sha256": "24699795658718BB8DC9E70D512789ECF1930D1D40D9DC5A671B7A1EF581A8D3",
+    "selector_artifact_sha256": "476CC3823DAE562F33BAE1DDAC9B26AF051CFBDB2A3116DBCA15E4A46D7A570D"
+  },
+  "osm_local_supply": {
+    "road_parent_count": 5,
+    "local_radius_m": 4.0,
+    "local_step_m": 1.0,
+    "local_height_offsets_m": [-2.0, -1.5, -1.0, -0.5, 0.0],
+    "candidate_count": 2025,
+    "global_runner_margin": 0.012326656394453005,
+    "max_parent_runner_margin": 0.07317073170731707,
+    "required_runner_margin": 0.2,
+    "global_winner_primary_rank": 1240,
+    "global_family_rank_limit": 405,
+    "decision": "reject_global_and_every_parent_rank_consensus",
+    "moving_source_artifact_sha256": "83CBAB8D032970B6489BB9EAB3686CF98C6A29A3BEB531A0DD33E5ED7D5DB29F",
+    "pool_artifact_sha256": "E58DBB91A0DB7319B29CB3F6484677F144D912092F71BB8200FF6198E93875E7",
+    "rank_artifact_sha256": "CF9356EBEF1B289A78FF632B5A3A265A25A31E127FA290E9D6C2F5829AEFDDFC"
+  },
+  "conclusion": "dense OSM local expansion increases unresolved mode density and is not a production candidate supplier",
+  "implementation_sha256": "FE97E57CE04EA746A6FF91E408C16E4C0D7507F976280777A52F7A0E191979C2",
+  "test_sha256": "B1DFD6E6D03025141649A7F7B2AD1E4D8AC1734052268EF1A0C8AD06FBC5729F",
+  "verification": {
+    "pytest": "49 passed (combined WP31/WP38/WP42/WP44/WP46/WP47 and gap/OSM regression set)",
+    "ruff": "all checks passed"
+  }
+}

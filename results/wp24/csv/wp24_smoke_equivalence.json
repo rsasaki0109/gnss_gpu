@@ -1,0 +1,11 @@
+{
+  "baseline_commit": "b3f1106",
+  "run": "tokyo/run2",
+  "epochs": 200,
+  "fix_mismatches": 0,
+  "gamma_fix_mismatches": 0,
+  "max_position_delta_m": 0.0,
+  "max_gamma_delta": 0.0,
+  "evidence_records": 793,
+  "basin_log_evidence_records": 273
+}

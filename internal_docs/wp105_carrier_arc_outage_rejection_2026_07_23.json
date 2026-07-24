@@ -1,0 +1,14 @@
+{
+  "schema": "wp105_carrier_arc_outage_rejection_lock_v1",
+  "date": "2026-07-23",
+  "dataset": "nagoya_run1",
+  "segment": [2695, 2750],
+  "production_input_truth": false,
+  "production_promoted": false,
+  "raw_carrier_rows_by_rank": [97, 97, 58],
+  "integer_arcs_by_rank": [2, 2, 2],
+  "strict_mode_counts_by_rank": [0, 0, 0],
+  "max_checked_pairs_by_rank": [3, 1, 2],
+  "oracle_solution_available_by_rank": [false, false, false],
+  "rejection_reason": "carrier_arc_outage_prevents_absolute_candidate_supply"
+}

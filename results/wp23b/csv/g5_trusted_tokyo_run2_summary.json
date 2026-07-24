@@ -1,0 +1,21 @@
+{
+  "run": "tokyo/run2",
+  "n_epochs": 1200,
+  "subset_size": 8,
+  "top_k": 12,
+  "fix_gamma_threshold": 0.99,
+  "fix_min_streak": 3,
+  "fix_float_consistency_m": 0.5,
+  "fix_ddpr_consistency_m": 1.75,
+  "fix_min_dd_pairs": 9,
+  "fix_max_ddpr_age_epochs": 4,
+  "birth_epochs": 238,
+  "declared_fix_epochs": 14,
+  "gamma_fix_epochs": 26,
+  "consistency_reject_epochs": 12,
+  "correct_fix_epochs": 14,
+  "false_fix_epochs": 0,
+  "false_fix_pct": 0.0,
+  "max_gamma": 0.9959958496266205,
+  "sub50cm_all_epochs": 151
+}

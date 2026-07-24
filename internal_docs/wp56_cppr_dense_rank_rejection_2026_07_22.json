@@ -1,0 +1,60 @@
+{
+  "schema": "wp56_cppr_dense_rank_rejection_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "dataset": "nagoya_run1",
+  "segment": [1381, 1436],
+  "frozen_config": {
+    "carrier_reference_rank": 1,
+    "lambda_candidates": 12,
+    "stride": 5,
+    "stride_phase": "auto",
+    "up_prior_sigma_m": 0.5,
+    "max_family_rank_fraction": 0.2,
+    "min_runner_margin": 0.2,
+    "min_checked_pairs": 40,
+    "bad_pair_threshold_m": 5.0,
+    "max_bad_pair_fraction": 0.05,
+    "max_block_spread_m": 0.5,
+    "tie_policy": "exact_metric_ties_share_dense_rank"
+  },
+  "selector_result": {
+    "accepted": false,
+    "reason": "cppr_rank_gate_failed",
+    "winner_candidate_id": 6,
+    "winner_family_ranks": [2, 1, 1],
+    "winner_rank_sum": 4,
+    "runner_rank_sum": 4,
+    "runner_margin": 0.0,
+    "absolute_gate_pass": true,
+    "failed_gate": "min_runner_margin"
+  },
+  "post_selection_audit": {
+    "winner_median_error_m": 0.6091583108729461,
+    "winner_sub50cm_epochs": 0,
+    "best_candidate_id": 12,
+    "best_candidate_median_error_m": 0.49082984634652066,
+    "best_candidate_sub50cm_epochs": 35,
+    "diagnosis": "candidate_supply_present_but_cppr_posterior_tied"
+  },
+  "production_promoted": false,
+  "production_unchanged": {
+    "nagoya_sub50cm_epochs": 4949,
+    "nagoya_sub50cm_pct": 65.26440722669128,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "artifacts_sha256": {
+    "gsi_cache": "7DAB95B79C1593B8E5EA650007699A2697D82B2D7A75BFFB72937420F923125B",
+    "development_source": "8984F2956F9BDE299FDB783A83BE25789E0246D53AEF742E4A89083316021500",
+    "truthfree_source": "3C57BF4B834F57167C02D59EF843635D2DABA80C522DEB827A23BE8CB37C9648",
+    "validation": "F823EE3F46CAAAECBF411F6BF0BBA0F8209D811D0F8DC17FE1E0A6BD622AA185",
+    "selector": "8F99D168F068A994D25E326A2F24CA87F05FB3573D6B423CB6CEECA666249074"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

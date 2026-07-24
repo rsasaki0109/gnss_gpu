@@ -1,0 +1,17 @@
+{
+  "city": "tokyo",
+  "run": "run3",
+  "traj_path": "C:\\Users\\rsasa\\Workspace\\old\\gnss_gpu\\results\\wp22b\\pos\\baseline_off\\tokyo_run3_RBPF-velKF+DD+gate.pos",
+  "format": "pos",
+  "n_scored": 1200,
+  "n_rover_epochs": 15301,
+  "coverage_pct": 7.842624665054571,
+  "n_fix": 1200,
+  "all_rms_m": 32.69242144038484,
+  "fix_rms_m": 32.69242144038484,
+  "fix_pct": 100.0,
+  "lt50cm_pct": 0.0,
+  "lt50cm_full_pct": 0.0,
+  "ppc_official_pct": 0.0,
+  "ppc_note": null
+}

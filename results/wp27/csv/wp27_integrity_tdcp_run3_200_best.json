@@ -1,0 +1,19 @@
+[
+  {
+    "mode": "integrity_only",
+    "birth_mass": 0.05,
+    "integrity_weight": 5.0,
+    "epochs": 200,
+    "dd_epochs": 40,
+    "oracle_sub50cm_epochs": 165,
+    "single_map_sub50cm_epochs": 0,
+    "temporal_sub50cm_epochs": 91,
+    "temporal_dd_epoch_sub50cm_epochs": 19,
+    "temporal_better_epochs": 180,
+    "temporal_worse_epochs": 20,
+    "single_median_error_m": 1.5833571572368614,
+    "temporal_median_error_m": 0.5486848761096734,
+    "gamma99_epochs": 0,
+    "gamma99_correct_epochs": 0
+  }
+]

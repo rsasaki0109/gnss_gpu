@@ -1,0 +1,85 @@
+{
+  "schema": "wp65_multibasis_standalone_rejection_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "dataset": "nagoya_run1",
+  "segment": [3721, 3776],
+  "frozen_config": {
+    "carrier_reference_ranks": [0, 1, 2],
+    "lambda_candidates": 12,
+    "stride": 5,
+    "stride_phase": "auto",
+    "up_prior_sigma_m": 0.5,
+    "cross_basis_agreement_m": 0.2
+  },
+  "truth_free_results": [
+    {
+      "carrier_reference_rank": 0,
+      "accepted": true,
+      "selected_candidate_id": 0,
+      "reason": "unique_cppr_rank_consensus",
+      "offset_ecef_m": [-0.011009597923690178, -0.04729983287591225, -0.12015923393819566],
+      "checked_pairs": 104,
+      "bad_pair_fraction": 0.0,
+      "block_spread_m": 0.03291851343416557,
+      "runner_margin": 1.0
+    },
+    {
+      "carrier_reference_rank": 1,
+      "accepted": true,
+      "selected_candidate_id": 0,
+      "reason": "unique_cppr_rank_consensus",
+      "offset_ecef_m": [-0.10220778224619377, 0.045015162876618386, 0.09372111111540798],
+      "checked_pairs": 106,
+      "bad_pair_fraction": 0.0,
+      "block_spread_m": 0.0326208499828869,
+      "runner_margin": 0.25
+    },
+    {
+      "carrier_reference_rank": 2,
+      "accepted": false,
+      "winner_candidate_id": 0,
+      "reason": "cppr_rank_gate_failed",
+      "failed_gate": "min_runner_margin",
+      "runner_margin": 0.0,
+      "offset_ecef_m": [-0.07602536119600466, -0.0395715293884308, 0.08215618989565111]
+    }
+  ],
+  "cross_basis_distances_m": {
+    "rank0_rank1": 0.25016788216067953,
+    "rank0_rank2": 0.2126459660321477,
+    "rank1_rank2": 0.08929823673069195
+  },
+  "post_selection_audit": [
+    {"carrier_reference_rank": 0, "winner_median_error_m": 1.111106826947488, "winner_sub50cm_epochs": 0},
+    {"carrier_reference_rank": 1, "winner_median_error_m": 1.185782961839224, "winner_sub50cm_epochs": 0},
+    {"carrier_reference_rank": 2, "winner_median_error_m": 1.101158072277031, "winner_sub50cm_epochs": 0}
+  ],
+  "verdict": "rejected_cppr_tie_and_no_accepted_cross_basis_pair",
+  "production_promoted": false,
+  "production_unchanged": {
+    "nagoya_sub50cm_epochs": 5061,
+    "nagoya_total_epochs": 7583,
+    "nagoya_sub50cm_pct": 66.74139522616379,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "artifacts_sha256": {
+    "gsi_cache": "819484A876A12DFD06D20AF4758167E24963500416B1CBE2D9AD0972B1FCE160",
+    "rank0_development": "483905593E466329265D917F7C7E865DE5DC0821D4ABFE07C19E38F13F5C9DE0",
+    "rank0_truthfree": "2C9FD6CB8EB8FD07CA0F3565FCC382EDB77DFDCD61A721DF44DE2C2473CBB3B2",
+    "rank0_selection": "E404CFC32D2A77BB910EB2CF70DA9A5A595E0EE6A93D88CEDD232C478FA66406",
+    "rank1_development": "B061E5AF3B2A575B183236B3939093824784BD9B589077D2A2FCDFF2E86987DE",
+    "rank1_truthfree": "B4C7ABB51B698FE269FA0DFEFF64AF5D25FD3B1B7A6569DC8D4EC8802BA40459",
+    "rank1_selection": "9D9E0A4EC52369B9E8595D7CDA1B6EA2094D24704232207E9E976261F5DBAED9",
+    "rank2_development": "B97440E225F2D6A315D66F4158F33CC2EBD71AC8F3E9FF17EF94A7B9606ED8F1",
+    "rank2_truthfree": "663A76B4F5C977B05F8B9F14D4682BFF60554C5AD391C3DC976B5E52CBD97787",
+    "rank2_selection": "358D82F8C743A5DF6A579FD49448FD3E58A39B9441082718CDFCCEEFAD29BC34"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

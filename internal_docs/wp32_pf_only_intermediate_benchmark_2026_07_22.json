@@ -1,0 +1,68 @@
+{
+  "schema": "wp32_pf_only_intermediate_benchmark_v1",
+  "created_date": "2026-07-22",
+  "status": "locked_intermediate_not_target_complete",
+  "production_input_truth": false,
+  "runtime_fgo": false,
+  "full_epoch_denominator": true,
+  "declared_fix_false_rate_limit_pct": 1.0,
+  "common_gap_closure": {
+    "mode": "duration_weighted",
+    "duration_exponent": 2.0
+  },
+  "m4_parent": {
+    "production_config": {
+      "path": "internal_docs/wp30_m4_production_config.json",
+      "sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486"
+    },
+    "tokyo_evidence_ledger": {
+      "path": "internal_docs/wp30_m4_tokyo_evidence_ledger.json",
+      "sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+    }
+  },
+  "runs": {
+    "tokyo_run1": {
+      "target_sub50cm_pct": 81.0,
+      "anchor_count": 10,
+      "n_epochs_full_denominator": 11924,
+      "sub50cm_full_epochs": 3051,
+      "sub50cm_full_pct": 25.587051325058706,
+      "declared_fix_epochs": 0,
+      "false_fix_epochs": 0,
+      "false_fix_pct": 0.0,
+      "summary": {
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_tenanchor_durationp2_full_summary.json",
+        "sha256": "25714B7D83E6DAD16CCD430058DBC39E6655B784F041C998790F4B376E48E248"
+      }
+    },
+    "nagoya_run1": {
+      "target_sub50cm_pct": 86.0,
+      "anchor_count": 7,
+      "n_epochs_full_denominator": 7583,
+      "sub50cm_full_epochs": 3847,
+      "sub50cm_full_pct": 50.73190030331,
+      "declared_fix_epochs": 0,
+      "false_fix_epochs": 0,
+      "false_fix_pct": 0.0,
+      "development_anchor_used": false,
+      "production_promoted": true,
+      "summary": {
+        "path": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_sevenanchor_durationp2_full_summary.json",
+        "sha256": "F72E5B966A4AD360123BDD3FD1EFCC0830787DC1A4B629308F843595F9EEEBF6"
+      },
+      "final_anchor_selector": {
+        "path": "results/wp31/nagoya_run1_static_7529_7583_multimode_ddpr_consensus.json",
+        "sha256": "BE8A05978B7047722BE55586910B76794369A546CA1A715B7BE6AEEB19A24511"
+      },
+      "absolute_ddpr_evidence": {
+        "path": "results/wp31/nagoya_run1_static_7529_7583_development_ddpr_integrity.json",
+        "sha256": "9E89A6D8F2B583A9171420AB34A114277A9DF159B796DAE7CE9921415CA0D6D1"
+      }
+    }
+  },
+  "next_gate": {
+    "priority": "nagoya_middle_anchor_supply",
+    "acceptance": "production truth-free selector, unchanged common closure, false FIX <= 1%, then cross-city evaluation",
+    "goal_complete": false
+  }
+}

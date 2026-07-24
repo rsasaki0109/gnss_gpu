@@ -121,3 +121,56 @@ def test_dd_position_update_moves_seed_toward_true_position() -> None:
 
     assert stats["accepted"] is True
     assert np.linalg.norm(updated - true) < np.linalg.norm(seed - true)
+
+
+def test_dd_position_update_fde_removes_best_single_row() -> None:
+    base = np.array([1.1e6, -4.8e6, 4.0e6], dtype=np.float64)
+    true = base + np.array([40.0, -25.0, 12.0], dtype=np.float64)
+    seed = true + np.array([8.0, -5.0, 3.0], dtype=np.float64)
+    directions = np.array(
+        [
+            [0.82, 0.25, 0.52],
+            [-0.32, 0.74, 0.59],
+            [0.18, -0.91, 0.37],
+            [-0.76, -0.20, 0.62],
+            [0.53, -0.38, 0.76],
+            [-0.45, 0.42, 0.79],
+        ],
+        dtype=np.float64,
+    )
+    directions /= np.linalg.norm(directions, axis=1)[:, None]
+    sat_ecef = true + directions * 20_200_000.0
+    base_ranges = np.linalg.norm(sat_ecef - base, axis=1)
+    rover_ranges = np.linalg.norm(sat_ecef - true, axis=1)
+    dd_obs = (rover_ranges[1:] - rover_ranges[0]) - (
+        base_ranges[1:] - base_ranges[0]
+    )
+    dd_obs[2] += 80.0
+    dd = DDPseudorangeResult(
+        dd_pseudorange_m=dd_obs,
+        sat_ecef_k=sat_ecef[1:],
+        sat_ecef_ref=np.repeat(sat_ecef[[0]], len(dd_obs), axis=0),
+        base_range_k=base_ranges[1:],
+        base_range_ref=np.repeat(base_ranges[0], len(dd_obs)),
+        dd_weights=np.ones(len(dd_obs)),
+        ref_sat_ids=tuple(["G01"] * len(dd_obs)),
+        n_dd=len(dd_obs),
+    )
+
+    updated, stats = dd_pseudorange_position_update(
+        seed,
+        dd,
+        DDWLSConfig(
+            prior_sigma_m=100.0,
+            dd_sigma_m=1.0,
+            max_shift_m=100.0,
+            max_iter=8,
+            fde_threshold_m=5.0,
+            max_fde_removals=1,
+        ),
+    )
+
+    assert stats["accepted"] is True
+    assert stats["n_rejected"] == 1
+    assert stats["final_rms_m"] < 0.1
+    assert np.linalg.norm(updated - true) < 0.2

@@ -1,0 +1,20 @@
+{
+  "schema": "wp131_pf_tokyo_cross_basis_cppr_benchmark_lock_v1",
+  "date": "2026-07-23",
+  "dataset": "tokyo_run1",
+  "segment": [11660, 11715],
+  "full_denominator_epochs": 11924,
+  "before_sub50cm_epochs": 3394,
+  "after_sub50cm_epochs": 3411,
+  "after_sub50cm_pct": 28.606172425360615,
+  "gained_epochs": 17,
+  "lost_epochs": 0,
+  "fix_epochs": 0,
+  "false_fix_epochs": 0,
+  "declared_false_fix_pct": 0.0,
+  "production_input_truth": false,
+  "runtime_fgo": false,
+  "production_shadow_byte_identical": true,
+  "benchmark_sha256": "2687CBD4E642A4D88F79B04B2C76A62BF0A39541FF39F1E1E70D5286AA8E4F43",
+  "trajectory_sha256": "25FB73F05445F6094281371C134368510ECC08F01CC110A22C668E2B9CE47192"
+}

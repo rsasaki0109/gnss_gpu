@@ -1,0 +1,27 @@
+{
+  "schema": "wp67_carrier_supply_rejection_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "dataset": "nagoya_run1",
+  "segment": [3556, 3611],
+  "results": [
+    {"rank": 0, "raw_carrier_rows": 103, "carrier_arc_splits": 77, "hypotheses": 0},
+    {"rank": 1, "raw_carrier_rows": 103, "carrier_arc_splits": 77, "hypotheses": 0},
+    {"rank": 2, "raw_carrier_rows": 82, "carrier_arc_splits": 55, "hypotheses": 0}
+  ],
+  "verdict": "rejected_no_integer_ambiguity_hypotheses",
+  "production_promoted": false,
+  "production_unchanged": {"nagoya_sub50cm_epochs": 5061, "nagoya_total_epochs": 7583, "nagoya_sub50cm_pct": 66.74139522616379, "fix_epochs": 0, "false_fix_epochs": 0},
+  "artifacts_sha256": {
+    "gsi_cache": "331697430B55A1FF1282D31543DE11B20F54CAD274A4DF05949C7DC71A91376A",
+    "rank0_development": "CCAD84A3D801B7E9285ABACA7C48420B0D9FB4D3F33DED62D56801ACE7217CEB",
+    "rank1_development": "186263AE7B49231C36167C6FB837ED6ECF2423F1FA118D7F8AC169995C08B6FB",
+    "rank2_development": "6E3176F8B33D3C6345DC54BC047E0D17035B980221F73B238242A298A18B6B82"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

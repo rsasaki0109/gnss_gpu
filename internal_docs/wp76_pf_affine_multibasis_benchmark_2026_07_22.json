@@ -1,0 +1,50 @@
+{
+  "schema": "wp76_pf_affine_multibasis_benchmark_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "full_epoch_denominator": true,
+  "production_promoted": true,
+  "nagoya_run1": {
+    "before_sub50cm_epochs": 5061,
+    "after_sub50cm_epochs": 5116,
+    "total_epochs": 7583,
+    "after_sub50cm_pct": 67.46670183304761,
+    "gained_epochs": 55,
+    "lost_epochs": 0,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "declared_false_fix_pct": 0.0
+  },
+  "tokyo_run1_unchanged": {
+    "sub50cm_epochs": 3265,
+    "total_epochs": 11924,
+    "sub50cm_pct": 27.381751090238176,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "remaining_to_goal": {
+    "tokyo_target_epochs": 9659,
+    "tokyo_missing_epochs": 6394,
+    "nagoya_target_epochs": 6522,
+    "nagoya_missing_epochs": 1406
+  },
+  "implementation_sha256": {
+    "moving_refiner": "01CC7974D0AB872B856999D905A99D2A96CC5584B70DEA415436D2D039E1150F",
+    "road_observability": "D47167EEF465A21FEFA60D5214A2032B3358CC659453C0183337D83BB0554B10",
+    "horizontal_grid": "9A5B3A1A5D88445F9C5F882D119EC8B94BDA874DD1E4915D8D2F6E1D2469BE8E",
+    "selector": "FBFD8E7C6F2E870827D0F0979BD4FC6398D6C8F3968491C46A8227AC89080460",
+    "promoter": "7D63A7233DFC92B80155A91ED172193DBD889E0C92A2028BB893E24CC5314F25",
+    "application": "7097A6DDA64F7A3BAE6D6937B98A673DB9318F808D9FCDF0EA0D9433ACD0081A"
+  },
+  "production_artifacts_sha256": {
+    "promotion": "325FE80C1A42914B32F11B75403ABF63072CCC48C29739827154BDFF96C77943",
+    "trajectory": "68E8FAE355FF2639D8069C7EC06FD3A4036D231383BBDA71F087313900054E43",
+    "benchmark": "04B6FFD5F9A20AE86C23EE81740B0012502CAF81E3907267621B1AD0A0F97662"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "schema": "wp42_moving_temporal_trifrequency_validation_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "fixed_gate": {
+    "rank_metric": "exact_pair_centered_temporal_median_abs_m",
+    "families": ["primary", "secondary", "tertiary"],
+    "stride_epochs": 5,
+    "stride_phase_mode": "auto_max_available_evidence_then_raw_carrier_then_ddpr",
+    "min_pair_epochs": 3,
+    "min_temporal_epochs_per_family": 10,
+    "min_temporal_pairs_per_family": 3,
+    "min_temporal_rows_per_family": 30,
+    "max_family_rank_fraction": 0.2,
+    "min_rank_sum_runner_margin": 0.2,
+    "min_integer_arcs": 4,
+    "min_carrier_rows": 24,
+    "max_carrier_rms_cycles": 0.5,
+    "max_block_spread_m": 0.5,
+    "promotion_max_offset_norm_m": 0.5
+  },
+  "positive": {
+    "dataset": "nagoya_run1",
+    "segment": [2327, 2382],
+    "artifact_sha256": "D8B797B8F601DCB6E382EAC7807D5A8BFDFB8335AA1427BB9466AC3A0CBB20CD",
+    "selected_candidate_id": 0,
+    "family_ranks": {"primary": 7, "secondary": 1, "tertiary": 6},
+    "rank_sum": 14,
+    "runner_rank_sum": 17,
+    "runner_margin": 0.21428571428571427,
+    "family_rank_limit": 8,
+    "audit_before_sub50cm_epochs": 27,
+    "audit_after_sub50cm_epochs": 43,
+    "audit_epochs": 55
+  },
+  "weak_supply_holdout": {
+    "dataset": "nagoya_run1",
+    "segment": [2382, 2437],
+    "artifact_sha256": "FAFEDC6DF6BE90E317D6DD14E7F1030E5C9F2BA22C6986F0478FA01950EDB857",
+    "selected_candidate_id": null,
+    "winner_supply_pass": false,
+    "reason": "all source candidates fail carrier arc/row or bootstrap spread supply"
+  },
+  "unsafe_holdout": {
+    "dataset": "tokyo_run1",
+    "segment": [3350, 3405],
+    "artifact_sha256": "9CE9361DA6134466E489326BB396F4D4352F97D91C6C0E8D32D4974C458FF0E4",
+    "selected_candidate_id": null,
+    "winner_family_ranks": {"primary": 1, "secondary": 12, "tertiary": 1},
+    "family_rank_limit": 5,
+    "runner_margin": 0.21428571428571427,
+    "best_candidate_audit_median_error_m": 6.707214611786716,
+    "reason": "secondary family rank blocks unsafe two-family agreement"
+  },
+  "additional_nagoya_supply_audit": [
+    {
+      "segment": [2786, 2841],
+      "candidate_artifact_sha256": "10C1F6E72951F24D059C9CCDF6C47B8C5D7526D47B69B8C7E67DE551DE6573D5",
+      "evidence_epochs": 0,
+      "decision": "reject_before_candidate_supply"
+    },
+    {
+      "segment": [3272, 3327],
+      "candidate_artifact_sha256": "34F1175951EBCD9BA364745271C09359A0BA8C8B72644BD6C3CCCF9E7F4614BA",
+      "selector_artifact_sha256": "55EB181641EA06C0433A7B96F1FEB41269F4234234038D5866845B643EB2DD3A",
+      "evidence_epochs": 11,
+      "selected_candidate_id": null,
+      "winner_family_ranks": {"primary": 11, "secondary": 6, "tertiary": 11},
+      "runner_margin": 0.14285714285714285,
+      "decision": "reject_family_rank_and_runner_margin"
+    },
+    {
+      "segment": [4274, 4329],
+      "candidate_artifact_sha256": "1CF5B7DAA3980119067643BCDC27EA4AE9EFC154D2B53E5158029F69462A3F2E",
+      "evidence_epochs": 0,
+      "decision": "reject_before_candidate_supply"
+    },
+    {
+      "segment": [5015, 5070],
+      "candidate_artifact_sha256": "AA74E01B6D880F4B74603BC6957455ED735A953C712BF235352C21D95CFFD202",
+      "selected_stride_phase": 2,
+      "evidence_epochs": 11,
+      "selected_candidate_id": null,
+      "winner_family_ranks": {"primary": 2, "secondary": 2, "tertiary": 5},
+      "family_rank_limit": 3,
+      "decision": "auto_phase_supersedes_start_phase_zero_evidence_then_reject_family_rank"
+    },
+    {
+      "segment": [5607, 5662],
+      "candidate_artifact_sha256": "4B29C432123CA060587C50E0C8CD04E0E5F11833FD90381D33DEDF06FD38D531",
+      "selector_artifact_sha256": "D995247230A03EC4520DBA0634FF2CA96471A97ADD84E88F7808F3306750CE1E",
+      "evidence_epochs": 11,
+      "selected_candidate_id": null,
+      "winner_family_ranks": {"primary": 2, "secondary": 2, "tertiary": 11},
+      "runner_margin": 0.06666666666666667,
+      "best_audit_candidate_family_ranks": {"primary": 12, "secondary": 1, "tertiary": 12},
+      "best_audit_candidate_sub50cm_epochs": 55,
+      "decision": "reject_family_rank_and_runner_margin_despite_positive_supply"
+    }
+  ],
+  "auto_phase_validation": {
+    "reason": "RINEX evidence is 1 Hz while the analysis stride is 5 epochs; block start must not choose the only sampled modulo phase",
+    "selection_order": ["evidence_epochs", "raw_carrier_rows", "ddpr_epochs", "lowest_phase"],
+    "nagoya_5015_5070": {
+      "old_start_phase": 0,
+      "old_evidence_epochs": 0,
+      "selected_phase": 2,
+      "selected_evidence_epochs": 11,
+      "decision": "measurement gate still rejects"
+    },
+    "nagoya_923_978": {
+      "selected_phase": 0,
+      "selected_evidence_epochs": 11,
+      "candidate_artifact_sha256": "02E3F5D104E8271943594AA9375C7990F42AC92C90E505C96E216B2A6B83A763",
+      "selector_artifact_sha256": "B6BC1EED07D2C75E3392D1E0D9B6718C1C62A59E784A874E3F93C53AC6942E28",
+      "decision": "WP42 rejects at 18.18 percent runner margin; no threshold relaxation"
+    }
+  },
+  "implementation_sha256": {
+    "experiments/refine_wp31_moving_block_ambiguity.py": "7393658779FAC6441B4D4C503C43924E9CF69661D2A61C9861E226F2FB809AB3",
+    "experiments/analyze_wp42_moving_temporal_trifrequency_ddpr.py": "04F14B41A26036CB75564933EFBFA9C918ED73B19E2740E61CD83F371E272D1B",
+    "experiments/promote_wp42_moving_temporal_trifrequency_ddpr.py": "A9CD8D8EE6BE87BF5658F567D150D8041E141F36A247D5D40D14CB64F7DDA7EE",
+    "experiments/apply_wp42_moving_block_offset.py": "F1AD048449516356D2BD0D9FFB7A248D1F898EACFD2533DC89CC309D630744D1"
+  },
+  "test_sha256": {
+    "tests/test_wp31_moving_block_ambiguity.py": "9CCAB76C0B6F0A9888A8021E28A10AE76526A07803210FACBCA230ACD09B0257",
+    "tests/test_wp42_moving_temporal_trifrequency_ddpr.py": "FFDF32801C168E7696EF9F3BF5E2C5E52A012477A602BBFC40C81EF098183A50",
+    "tests/test_wp42_moving_temporal_promotion.py": "55C9F4F5CBC0F0C418C28A02F8D4A3312AFA0CF4661B9E608101EBBAC8DD9887"
+  },
+  "verification": {
+    "pytest": "44 passed (combined WP31/WP38/WP42/WP44 and gap/OSM regression set)",
+    "ruff": "all checks passed"
+  }
+}

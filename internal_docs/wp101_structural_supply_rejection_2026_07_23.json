@@ -1,0 +1,12 @@
+{
+  "schema": "wp101_structural_supply_rejection_lock_v1",
+  "date": "2026-07-23",
+  "dataset": "nagoya_run1",
+  "segment": [4400, 4455],
+  "production_input_truth": false,
+  "production_promoted": false,
+  "raw_carrier_rows_by_rank": [149, 149, 130],
+  "strict_mode_counts_by_rank": [0, 0, 0],
+  "oracle_ceiling_by_rank": [3, 3, 3],
+  "rejection_reason": "no_absolute_modes_pass_frozen_cppr_and_stability_gates"
+}

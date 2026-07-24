@@ -1,0 +1,41 @@
+[
+  {
+    "run": "tokyo/run1",
+    "epochs": 11924,
+    "gamma_fixed": 592,
+    "declared_fix": 10,
+    "rejected": 582,
+    "float_consistency_fail": 578,
+    "ddpr_consistency_fail": 526,
+    "ddpr_support_fail": 0,
+    "ddpr_freshness_fail": 0,
+    "rejected_float_sub50cm": 0,
+    "rejected_float_sub1m": 7
+  },
+  {
+    "run": "tokyo/run2",
+    "epochs": 9151,
+    "gamma_fixed": 398,
+    "declared_fix": 14,
+    "rejected": 384,
+    "float_consistency_fail": 371,
+    "ddpr_consistency_fail": 328,
+    "ddpr_support_fail": 0,
+    "ddpr_freshness_fail": 0,
+    "rejected_float_sub50cm": 0,
+    "rejected_float_sub1m": 0
+  },
+  {
+    "run": "tokyo/run3",
+    "epochs": 15301,
+    "gamma_fixed": 626,
+    "declared_fix": 0,
+    "rejected": 626,
+    "float_consistency_fail": 616,
+    "ddpr_consistency_fail": 370,
+    "ddpr_support_fail": 0,
+    "ddpr_freshness_fail": 0,
+    "rejected_float_sub50cm": 16,
+    "rejected_float_sub1m": 36
+  }
+]

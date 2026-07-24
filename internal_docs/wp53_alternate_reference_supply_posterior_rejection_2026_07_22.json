@@ -1,0 +1,80 @@
+{
+  "schema": "wp53_alternate_reference_supply_posterior_rejection_lock_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "production_promoted": false,
+  "pf_only": true,
+  "runtime_fgo": false,
+  "dataset": "nagoya_run1",
+  "segment": [1436, 1656],
+  "candidate_supply": {
+    "reference_rank0": {
+      "arc_splits": 15,
+      "integer_arcs": 29,
+      "lambda_ratio": 1.0436811676255187,
+      "best_audit_median_error_m": 1.4963783031074822,
+      "best_audit_sub50cm_epochs": 0
+    },
+    "reference_rank1": {
+      "arc_splits": 17,
+      "integer_arcs": 29,
+      "lambda_ratio": 1.0094910516815545,
+      "supplied_candidate_id": 2,
+      "supplied_audit_median_error_m": 0.5202371376289112,
+      "supplied_audit_sub50cm_epochs": 91
+    },
+    "reference_rank2": {
+      "arc_splits": 17,
+      "integer_arcs": 28,
+      "lambda_ratio": 1.0122544317873772,
+      "best_audit_median_error_m": 1.460460957845755,
+      "best_audit_sub50cm_epochs": 0
+    }
+  },
+  "posterior_audits": {
+    "three_basis_consistency": {
+      "selected_candidate_id": 8,
+      "runner_margin": 0.21859542779636013,
+      "selected_audit_median_error_m": 5.396670268874345,
+      "selected_audit_sub50cm_epochs": 0,
+      "decision": "unsafe selector; reject"
+    },
+    "three_basis_carrier_rms_sum": {
+      "winner_candidate_id": 2,
+      "winner_sum_cycles": 0.5735573805380462,
+      "runner_candidate_id": 3,
+      "runner_sum_cycles": 0.5833905330299004,
+      "runner_margin_over_winner": 0.01714414777930308,
+      "required_runner_margin": 0.20,
+      "decision": "correct shadow winner but insufficient separation; reject"
+    }
+  },
+  "shadow_full_denominator_audit": {
+    "candidate_id": 2,
+    "profile_source": "rank1 seed refit under rank0 with linear bootstrap centers",
+    "before_sub50cm_epochs": 4856,
+    "after_sub50cm_epochs": 4940,
+    "after_sub50cm_pct": 65.14572069101938,
+    "gained_epochs": 84,
+    "lost_epochs": 0,
+    "production_effect": "none"
+  },
+  "decision": "candidate supply succeeds for the first time in the 1436-1656 outage, but no frozen truth-free posterior gate identifies it safely; preserve as shadow and do not promote",
+  "next": "add an independent candidate-identification observable or holdout-calibrated posterior before applying the 84-epoch shadow gain",
+  "artifacts_sha256": {
+    "dd_carrier_implementation": "07B4F2B0898DBD30ED600F0F9808CA613D089D5676618DE121E244580FDF5778",
+    "moving_block_implementation": "5AC88513CBB30BF350670173552FE6FA221EABD0CF1662FB93F5C0D98F1FE8C8",
+    "pool_builder": "4639FCCFACEAB9ECE2A588217363724BF550B176F5908F8BCA86C613194F6C54",
+    "consensus_selector": "3A00A369844A57F2EF20E21EF49476041891B7217EE754AA71A04E0A5B696FF5",
+    "rank1": "3D4B0044C0C0D609F86C35776C6CEFE0BEA9422EB5A2DB02783C3ED3B1D4E045",
+    "rank2": "F9C1FA3A4AE4F5262FA7622E1F00D3189FDF41CCE94FB0D8DCE83061DA82DA80",
+    "truthfree_pool": "79162ACE497008338EBB9F5E314C48FE4AF3710E9C1161537E9A26F2E09ADE52",
+    "cross_rank0": "94112C7EDEADF95D7FD8EDB9F5EEC2277D4DF9DF9DACD4E0835BEC882F2D64A0",
+    "cross_rank2": "4E9AEB722E21B36F280212686C9E2BFF763FFCA2FB2688C6FF2938D908CD7162",
+    "unsafe_selector_result": "4A7AB965873F2EA57134DD4444B99F3A79BA026C4A3A1D362074E38644E9C494"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

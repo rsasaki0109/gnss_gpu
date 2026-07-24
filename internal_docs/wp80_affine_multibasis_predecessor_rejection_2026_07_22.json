@@ -1,0 +1,55 @@
+{
+  "schema": "wp80_affine_multibasis_predecessor_rejection_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_promoted": false,
+  "target": {
+    "dataset": "nagoya_run1",
+    "segment": [3611, 3666],
+    "trajectory": "results/wp31/nagoya_run1_wp76_affine_multibasis_full_trajectory.csv",
+    "offset_model": "right_boundary_affine_zero",
+    "boundary_epoch": 3811,
+    "stride_phase": "auto",
+    "selected_stride_phase": 2,
+    "up_prior_sigma_m": 0.5,
+    "horizontal_grid": {"radius_m": 1.5, "step_m": 0.5, "seeds_per_basis": 49},
+    "carrier_reference_ranks": [0, 1, 2],
+    "basis_mode_counts": [21, 0, 0],
+    "cluster_count": 0,
+    "accepted": false,
+    "reason": "fewer_than_two_three_basis_clusters"
+  },
+  "frozen_gates": {
+    "min_checked_pairs": 40,
+    "max_bad_pair_fraction": 0.05,
+    "max_block_spread_m": 0.5,
+    "within_basis_dedup_m": 0.08,
+    "max_three_basis_cluster_diameter_m": 0.12,
+    "max_family_rank_fraction": 0.2,
+    "min_runner_margin": 0.2
+  },
+  "diagnostic_only_truth_audit": {
+    "best_grid_sub50cm_epochs_by_basis": [0, 0, 0],
+    "affine_oracle_sub50cm_epochs_by_basis": [16, 15, 15],
+    "selection_eligible": false
+  },
+  "artifacts_sha256": {
+    "rank0_affine_development": "B9CAA07A785F606A20548DCC4FE2B48388EAD7F07C088FF5F0080313DAFAFB8B",
+    "rank1_affine_development": "A50048038210CBF8D9F46F121EB96E513B164E12E00FCADA7BEC9DE023EE0E42",
+    "rank2_affine_development": "78CF800ECA22E343703F2E1B7B6EEB2F4D318A6030CAE9AF9FCB2F1DB8281FEC",
+    "rank0_grid": "30609B3CA708C451386DA1F273CBAAA8E9F4DBBD8029A574A2EEC7CE1D0BF3C9",
+    "rank1_grid": "68D9FC3C915B18B906F51D920E7DC602749C7E590D597CF87D53B416C9FC2D09",
+    "rank2_grid": "8E2B35A52080E8AD8A23DD60D25925DB97270E6D66BB503B5623B091F5515465",
+    "rank0_truthfree": "617953C06A26E86565DA253F6E85AD96FC5FF1EB5CFA8A6EA4A436195D253F72",
+    "rank1_truthfree": "A0454F89EB8078DEAF250C171E29AAE4825084E9432B0CDC86728D99DF59303A",
+    "rank2_truthfree": "187A306D64ECA50C3F1E7D4F2CB19501914203E19FF8694DE73363B0D0AAAED5",
+    "selection": "03908BDB35C1E43D2D2FBB157F98A143BF2ADA2791812DA9B589F627F82B0DAE",
+    "production_trajectory_unchanged": "68E8FAE355FF2639D8069C7EC06FD3A4036D231383BBDA71F087313900054E43"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

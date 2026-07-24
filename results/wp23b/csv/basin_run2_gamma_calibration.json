@@ -1,0 +1,34 @@
+[
+  {
+    "gamma_bin": "[0.00,0.50)",
+    "epochs": 672,
+    "sub50cm": 51,
+    "gamma_fixed": 0,
+    "declared_fix": 0,
+    "false_fix": 0
+  },
+  {
+    "gamma_bin": "[0.50,0.90)",
+    "epochs": 300,
+    "sub50cm": 27,
+    "gamma_fixed": 0,
+    "declared_fix": 0,
+    "false_fix": 0
+  },
+  {
+    "gamma_bin": "[0.90,0.99)",
+    "epochs": 176,
+    "sub50cm": 45,
+    "gamma_fixed": 0,
+    "declared_fix": 0,
+    "false_fix": 0
+  },
+  {
+    "gamma_bin": "[0.99,1.00)",
+    "epochs": 52,
+    "sub50cm": 28,
+    "gamma_fixed": 26,
+    "declared_fix": 14,
+    "false_fix": 0
+  }
+]

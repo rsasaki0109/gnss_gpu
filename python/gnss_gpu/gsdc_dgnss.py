@@ -26,6 +26,7 @@ from typing import Iterable, Sequence
 import numpy as np
 
 from gnss_gpu.dd_pseudorange import DDPseudorangeComputer, DDPseudorangeResult
+from gnss_gpu.dd_quality import dd_pseudorange_residuals_m
 
 GPS_WEEK_SECONDS = 604800.0
 DEFAULT_CORS_CACHE = Path("/tmp/gsdc_cors")
@@ -48,6 +49,8 @@ class DDWLSConfig:
     max_shift_m: float = 20.0
     max_iter: int = 4
     tol_m: float = 1.0e-3
+    fde_threshold_m: float = 0.0
+    max_fde_removals: int = 0
 
 
 AREA_CANDIDATES: dict[str, tuple[str, ...]] = {
@@ -426,45 +429,95 @@ def dd_pseudorange_position_update(
         "shift_m": 0.0,
         "initial_rms_m": float("inf"),
         "final_rms_m": float("inf"),
+        "n_rejected": 0,
     }
     if dd.n_dd < int(config.min_dd_pairs) or not np.all(np.isfinite(seed)):
         return seed.copy(), stats
 
-    pos = seed.copy()
-    for _iteration in range(int(config.max_iter)):
-        range_k = np.linalg.norm(dd.sat_ecef_k - pos, axis=1)
-        range_ref = np.linalg.norm(dd.sat_ecef_ref - pos, axis=1)
-        expected = range_k - range_ref - dd.base_range_k + dd.base_range_ref
-        residual = dd.dd_pseudorange_m - expected
+    def _fit(active: np.ndarray, initial: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+        pos = np.asarray(initial, dtype=np.float64).copy()
+        for _iteration in range(int(config.max_iter)):
+            range_k = np.linalg.norm(dd.sat_ecef_k[active] - pos, axis=1)
+            range_ref = np.linalg.norm(dd.sat_ecef_ref[active] - pos, axis=1)
+            expected = (
+                range_k
+                - range_ref
+                - dd.base_range_k[active]
+                + dd.base_range_ref[active]
+            )
+            residual = dd.dd_pseudorange_m[active] - expected
+            if not np.all(np.isfinite(residual)):
+                return None
+            unit_k = (dd.sat_ecef_k[active] - pos) / np.maximum(
+                range_k[:, None], 1.0
+            )
+            unit_ref = (dd.sat_ecef_ref[active] - pos) / np.maximum(
+                range_ref[:, None], 1.0
+            )
+            design = -unit_k + unit_ref
+            weights = np.clip(dd.dd_weights[active], 1.0e-6, None) / max(
+                config.dd_sigma_m, 1.0e-6
+            ) ** 2
+            lhs = design * np.sqrt(weights)[:, None]
+            rhs = residual * np.sqrt(weights)
+            if config.prior_sigma_m > 0.0:
+                prior_w = 1.0 / (config.prior_sigma_m * config.prior_sigma_m)
+                lhs = np.vstack([lhs, np.eye(3) * math.sqrt(prior_w)])
+                rhs = np.concatenate([rhs, (seed - pos) * math.sqrt(prior_w)])
+            try:
+                delta, *_ = np.linalg.lstsq(lhs, rhs, rcond=None)
+            except np.linalg.LinAlgError:
+                return None
+            if not np.all(np.isfinite(delta)):
+                return None
+            pos += delta
+            if float(np.linalg.norm(delta)) < float(config.tol_m):
+                break
+        range_k = np.linalg.norm(dd.sat_ecef_k[active] - pos, axis=1)
+        range_ref = np.linalg.norm(dd.sat_ecef_ref[active] - pos, axis=1)
+        residual = dd.dd_pseudorange_m[active] - (
+            range_k
+            - range_ref
+            - dd.base_range_k[active]
+            + dd.base_range_ref[active]
+        )
         if not np.all(np.isfinite(residual)):
-            return seed.copy(), stats
-        if math.isinf(float(stats["initial_rms_m"])):
-            stats["initial_rms_m"] = float(np.sqrt(np.mean(residual * residual)))
+            return None
+        return pos, residual
 
-        unit_k = (dd.sat_ecef_k - pos) / np.maximum(range_k[:, None], 1.0)
-        unit_ref = (dd.sat_ecef_ref - pos) / np.maximum(range_ref[:, None], 1.0)
-        design = -unit_k + unit_ref
-        weights = np.clip(dd.dd_weights, 1.0e-6, None) / max(config.dd_sigma_m, 1.0e-6) ** 2
-        lhs = design * np.sqrt(weights)[:, None]
-        rhs = residual * np.sqrt(weights)
-        if config.prior_sigma_m > 0.0:
-            prior_w = 1.0 / (config.prior_sigma_m * config.prior_sigma_m)
-            lhs = np.vstack([lhs, np.eye(3) * math.sqrt(prior_w)])
-            rhs = np.concatenate([rhs, (seed - pos) * math.sqrt(prior_w)])
-        try:
-            delta, *_ = np.linalg.lstsq(lhs, rhs, rcond=None)
-        except np.linalg.LinAlgError:
-            return seed.copy(), stats
-        if not np.all(np.isfinite(delta)):
-            return seed.copy(), stats
-        pos += delta
-        if float(np.linalg.norm(delta)) < float(config.tol_m):
+    active = np.arange(int(dd.n_dd), dtype=np.int64)
+    initial_residual = dd_pseudorange_residuals_m(dd, seed)
+    stats["initial_rms_m"] = float(
+        np.sqrt(np.mean(initial_residual * initial_residual))
+    )
+    fitted = _fit(active, seed)
+    if fitted is None:
+        return seed.copy(), stats
+    pos, residual = fitted
+
+    for _removal in range(max(0, int(config.max_fde_removals))):
+        if (
+            float(config.fde_threshold_m) <= 0.0
+            or active.size <= int(config.min_dd_pairs)
+            or float(np.max(np.abs(residual))) <= float(config.fde_threshold_m)
+        ):
             break
+        best: tuple[float, np.ndarray, np.ndarray, np.ndarray] | None = None
+        for excluded in range(active.size):
+            trial_active = np.delete(active, excluded)
+            trial = _fit(trial_active, pos)
+            if trial is None:
+                continue
+            trial_pos, trial_residual = trial
+            trial_rms = float(np.sqrt(np.mean(trial_residual * trial_residual)))
+            if best is None or trial_rms < best[0]:
+                best = (trial_rms, trial_active, trial_pos, trial_residual)
+        if best is None:
+            return seed.copy(), stats
+        _best_rms, active, pos, residual = best
+        stats["n_rejected"] = int(dd.n_dd - active.size)
 
     shift = float(np.linalg.norm(pos - seed))
-    range_k = np.linalg.norm(dd.sat_ecef_k - pos, axis=1)
-    range_ref = np.linalg.norm(dd.sat_ecef_ref - pos, axis=1)
-    residual = dd.dd_pseudorange_m - (range_k - range_ref - dd.base_range_k + dd.base_range_ref)
     stats["shift_m"] = shift
     stats["final_rms_m"] = float(np.sqrt(np.mean(residual * residual)))
     if shift <= float(config.max_shift_m):

@@ -28,6 +28,7 @@ from typing import Any, Sequence
 import numpy as np
 
 from gnss_gpu.io.rinex import read_rinex_obs
+from gnss_gpu.io.rinex_cache import RinexObservationCache
 
 _SYS_MAP = {0: "G", 1: "R", 2: "E", 3: "C", 4: "J"}
 _PSEUDORANGE_CODE_PREFERENCES = {
@@ -43,6 +44,20 @@ _PSEUDORANGE_CODE_FAMILIES = {
     "J": (("C1C", "C1X", "C1Z", "C1S", "C1L"),),
     "C": (("C2I", "C1I", "C1P", "C1D", "C1X"),),
     "R": (("C1C", "C1P"),),
+}
+_SECONDARY_PSEUDORANGE_CODE_FAMILIES = {
+    "G": (("C2W", "C2X", "C2L"),),
+    "E": (("C5Q", "C5X"), ("C7Q", "C7X")),
+    "J": (("C2L", "C2X"), ("C5Q", "C5X")),
+    "C": (("C7I",),),
+    "R": (("C2P", "C2C"),),
+}
+_TERTIARY_PSEUDORANGE_CODE_FAMILIES = {
+    "G": (("C5Q", "C5X"),),
+    "E": (("C7Q", "C7X"), ("C8Q", "C8X")),
+    "J": (("C5Q", "C5X"),),
+    "C": (("C6I",), ("C5P", "C5X")),
+    "R": (("C3Q",),),
 }
 
 
@@ -240,6 +255,41 @@ def _select_rover_base_obs_codes(
     return best[2], best[3], best[4]
 
 
+def _select_family_obs_codes(
+    sys_char: str,
+    system_sats: Sequence[str],
+    rover_obs: dict[str, dict[str, float]],
+    base_obs: dict[str, dict[str, float]],
+    families: dict[str, tuple[tuple[str, ...], ...]],
+) -> tuple[str | None, str | None, list[str]]:
+    """Select only within a requested signal family, with no primary fallback."""
+
+    best: tuple[int, int, str, str, list[str]] | None = None
+    for family in families.get(sys_char, ()):
+        for rover_rank, rover_code in enumerate(family):
+            for base_rank, base_code in enumerate(family):
+                sats = [
+                    sat_id
+                    for sat_id in system_sats
+                    if rover_code in rover_obs.get(sat_id, {})
+                    and base_code in base_obs.get(sat_id, {})
+                ]
+                if len(sats) < 2:
+                    continue
+                candidate = (
+                    len(sats),
+                    -(rover_rank + base_rank),
+                    rover_code,
+                    base_code,
+                    sats,
+                )
+                if best is None or candidate[:2] > best[:2]:
+                    best = candidate
+    if best is None:
+        return None, None, []
+    return best[2], best[3], best[4]
+
+
 def _pick_single_obs_value(
     sys_char: str,
     sat_obs: dict[str, float],
@@ -284,13 +334,24 @@ class DDPseudorangeComputer:
         allowed_systems: Sequence[str] = ("G", "E", "J", "C", "R"),
         interpolate_base_epochs: bool = False,
         base_epoch_tolerance_s: float = 0.25,
+        observation_cache: RinexObservationCache | None = None,
+        pseudorange_family: str = "primary",
     ):
         base_obs_path = Path(base_obs_path)
         if not base_obs_path.exists():
             raise FileNotFoundError(f"Base RINEX not found: {base_obs_path}")
 
-        self._obs = read_rinex_obs(base_obs_path)
+        self._obs = (
+            observation_cache.load(base_obs_path)
+            if observation_cache is not None
+            else read_rinex_obs(base_obs_path)
+        )
         self._pseudorange_code = pseudorange_obs_code
+        if pseudorange_family not in ("primary", "secondary", "tertiary"):
+            raise ValueError(
+                "pseudorange_family must be primary, secondary, or tertiary"
+            )
+        self._pseudorange_family = pseudorange_family
         self._allowed_systems = tuple(allowed_systems)
         self._interpolate_base_epochs = bool(interpolate_base_epochs)
         self._base_epoch_tolerance_s = max(float(base_epoch_tolerance_s), 0.0)
@@ -326,7 +387,11 @@ class DDPseudorangeComputer:
             rover_obs_path = Path(rover_obs_path)
             if not rover_obs_path.exists():
                 raise FileNotFoundError(f"Rover RINEX not found: {rover_obs_path}")
-            rover_obs = read_rinex_obs(rover_obs_path)
+            rover_obs = (
+                observation_cache.load(rover_obs_path)
+                if observation_cache is not None
+                else read_rinex_obs(rover_obs_path)
+            )
             self._rover_by_tow = {}
             for ep in rover_obs.epochs:
                 tow_key = round(_datetime_to_tow(ep.time), 1)
@@ -343,7 +408,7 @@ class DDPseudorangeComputer:
 
         print(
             f"  [DD] Loaded base station: {len(self._base_by_tow)} epochs with "
-            f"{self._pseudorange_code or 'system-preferred C1/E1/B1'} pseudorange"
+            f"{self._pseudorange_code or self._pseudorange_family + '-family'} pseudorange"
         )
 
     @property
@@ -473,13 +538,30 @@ class DDPseudorangeComputer:
                 if sat_id in rover_obs and sat_id in base_obs:
                     sats_by_system.setdefault(sat_id[0], []).append(sat_id)
             for sys_char, sys_sats in sats_by_system.items():
-                rover_code, base_code, selected_sats = _select_rover_base_obs_codes(
-                    sys_char,
-                    sys_sats,
-                    rover_obs,
-                    base_obs,
-                    self._pseudorange_code,
-                )
+                if self._pseudorange_family == "secondary":
+                    rover_code, base_code, selected_sats = _select_family_obs_codes(
+                        sys_char,
+                        sys_sats,
+                        rover_obs,
+                        base_obs,
+                        _SECONDARY_PSEUDORANGE_CODE_FAMILIES,
+                    )
+                elif self._pseudorange_family == "tertiary":
+                    rover_code, base_code, selected_sats = _select_family_obs_codes(
+                        sys_char,
+                        sys_sats,
+                        rover_obs,
+                        base_obs,
+                        _TERTIARY_PSEUDORANGE_CODE_FAMILIES,
+                    )
+                else:
+                    rover_code, base_code, selected_sats = _select_rover_base_obs_codes(
+                        sys_char,
+                        sys_sats,
+                        rover_obs,
+                        base_obs,
+                        self._pseudorange_code,
+                    )
                 if len(selected_sats) < 2:
                     continue
                 for sat_id in selected_sats:

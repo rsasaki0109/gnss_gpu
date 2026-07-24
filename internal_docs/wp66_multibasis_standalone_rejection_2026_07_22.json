@@ -1,0 +1,38 @@
+{
+  "schema": "wp66_multibasis_standalone_rejection_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "dataset": "nagoya_run1",
+  "segment": [3611, 3666],
+  "truth_free_results": [
+    {"rank": 0, "accepted": true, "winner": 0, "offset_ecef_m": [-0.012547942485352076, 0.033077042110629784, 0.09713351203215698], "checked_pairs": 40, "bad_pair_fraction": 0.05, "block_spread_m": 0.34458832665106215, "runner_margin": 0.5},
+    {"rank": 1, "accepted": false, "winner": 8, "reason": "cppr_rank_gate_failed", "block_spread_m": 5.918391441742537},
+    {"rank": 2, "accepted": false, "winner": 6, "reason": "cppr_rank_gate_failed", "checked_pairs": 39, "block_spread_m": 1.5910427002469845, "runner_margin": 0.0}
+  ],
+  "post_selection_audit": [
+    {"rank": 0, "winner_median_error_m": 1.8296467770744904, "winner_sub50cm_epochs": 0},
+    {"rank": 1, "winner_median_error_m": 3.70428907729768, "winner_sub50cm_epochs": 0},
+    {"rank": 2, "winner_median_error_m": 3.5853945999984576, "winner_sub50cm_epochs": 0}
+  ],
+  "verdict": "rejected_only_one_basis_accepted_and_zero_sub50cm",
+  "production_promoted": false,
+  "production_unchanged": {"nagoya_sub50cm_epochs": 5061, "nagoya_total_epochs": 7583, "nagoya_sub50cm_pct": 66.74139522616379, "fix_epochs": 0, "false_fix_epochs": 0},
+  "artifacts_sha256": {
+    "gsi_cache": "2BB2517393ED2D90EE448438DEC21D1E6155872A83486D437ACE42AC02EC4453",
+    "rank0_development": "95F896AA38A998C96404602FC60F53C3A43336B2E784BEDAEC73E817FB1D01ED",
+    "rank0_truthfree": "68313D12BC078B4B5E40A46DFC6E2263DF248F566E9272356EE025977E13527A",
+    "rank0_selection": "E72F33906EDC6C27CFE894B88677FC912CCA02C218C7D158B6312DB06D7D8281",
+    "rank1_development": "57735B4DE2E684B4038B0627CA0CBAEB148420930D6190F23A3F886FA252293F",
+    "rank1_truthfree": "88D95026B97BC07428B03B4CE6E534A458AC6471583DF8E4F67AD605E4D2F5EC",
+    "rank1_selection": "B316EE5B5620FF7B7255F9E6E04DFC1D830482A4E468EACCBC6B9ECC97F8F472",
+    "rank2_development": "3F3F93A50852DD557108E2E58BD9783DD07EBA0EA2A8607C31CFD8D58FB14A9D",
+    "rank2_truthfree": "87E9220708E33456D9D4A49A7B0E44E05E945AD9915AB72818D2A9DA3B02040E",
+    "rank2_selection": "4F4A22040482FA21088CD0E0E79868C82B57B4DD78A6B8BEE9E08DE260B05B01"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

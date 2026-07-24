@@ -36,6 +36,15 @@ class LambdaSolution:
         return float(self.residuals[1] / self.residuals[0])
 
 
+@dataclass(frozen=True)
+class IntegerSearchWorkspace:
+    """Covariance-only factors reusable across integer searches."""
+
+    covariance: np.ndarray
+    information: np.ndarray
+    upper: np.ndarray
+
+
 def decorrelate_ambiguities(
     float_amb: np.ndarray,
     cov: np.ndarray,
@@ -80,17 +89,108 @@ def integer_search(
     """
 
     amb, q = _validate_ambiguity_problem(decorrelated_amb, tz_cov)
-    want = max(1, int(n_candidates))
-    if amb.size == 0:
-        return np.empty((0, 0), dtype=np.int64), np.empty(0, dtype=np.float64)
+    workspace = prepare_integer_search(q)
+    return integer_search_prepared(
+        amb,
+        workspace,
+        n_candidates=n_candidates,
+        max_expansions=max_expansions,
+        max_nodes=max_nodes,
+    )
 
+
+def integer_search_batch(
+    ambiguity_problems: list[np.ndarray] | tuple[np.ndarray, ...],
+    covariance_problems: list[np.ndarray] | tuple[np.ndarray, ...],
+    n_candidates: int = 2,
+    *,
+    engine: str = "cpu",
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Solve independent ILS problems, optionally in one CUDA launch.
+
+    ``gpu-batch`` is deliberately strict: an unavailable CUDA extension,
+    unsupported problem, or kernel failure raises instead of silently changing
+    the locked production execution path.  The returned candidate orientation
+    and integer dtype match :func:`integer_search`.
+    """
+
+    if len(ambiguity_problems) != len(covariance_problems):
+        raise ValueError("ambiguity and covariance batches must have equal length")
+    if engine not in ("cpu", "gpu-batch"):
+        raise ValueError("engine must be 'cpu' or 'gpu-batch'")
+    if not ambiguity_problems:
+        return []
+    if engine == "cpu":
+        return [
+            integer_search(ahat, qahat, n_candidates=n_candidates)
+            for ahat, qahat in zip(ambiguity_problems, covariance_problems)
+        ]
+
+    from gnss_gpu.lambda_batch import (  # imported lazily for CPU-only installs
+        HAS_LAMBDA_BATCH,
+        mlambda_batch,
+    )
+
+    if not HAS_LAMBDA_BATCH:
+        raise RuntimeError("gpu-batch integer search requested but CUDA is unavailable")
+    results = mlambda_batch(
+        ambiguity_problems,
+        covariance_problems,
+        ncands=int(n_candidates),
+        parmode=1,
+    )
+    output: list[tuple[np.ndarray, np.ndarray]] = []
+    for index, result in enumerate(results):
+        if result.status != 0:
+            raise RuntimeError(
+                f"gpu-batch integer search problem {index} failed with status "
+                f"{result.status}"
+            )
+        candidates = np.rint(np.asarray(result.afix).T).astype(np.int64)
+        residuals = np.asarray(result.s, dtype=np.float64)
+        output.append((candidates, residuals))
+    return output
+
+
+def prepare_integer_search(covariance: np.ndarray) -> IntegerSearchWorkspace:
+    """Prepare covariance factors shared by searches with different means."""
+
+    q = np.asarray(covariance, dtype=np.float64)
+    _amb, q = _validate_ambiguity_problem(np.zeros(q.shape[0]), q)
     information = np.linalg.inv(q)
     try:
         upper = np.linalg.cholesky(information).T
     except np.linalg.LinAlgError:
         jitter = max(1e-12, 1e-10 * float(np.trace(q)) / max(1, q.shape[0]))
-        information = np.linalg.inv(q + np.eye(q.shape[0], dtype=np.float64) * jitter)
+        q = q + np.eye(q.shape[0], dtype=np.float64) * jitter
+        information = np.linalg.inv(q)
         upper = np.linalg.cholesky(information).T
+    return IntegerSearchWorkspace(
+        covariance=q.copy(),
+        information=information,
+        upper=upper,
+    )
+
+
+def integer_search_prepared(
+    decorrelated_amb: np.ndarray,
+    workspace: IntegerSearchWorkspace,
+    n_candidates: int = 2,
+    *,
+    max_expansions: int = 16,
+    max_nodes: int = 250_000,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Search using covariance factors returned by :func:`prepare_integer_search`."""
+
+    amb = np.asarray(decorrelated_amb, dtype=np.float64).ravel()
+    if not np.all(np.isfinite(amb)) or amb.size != workspace.information.shape[0]:
+        raise ValueError("prepared ambiguity mean must be finite and match covariance")
+    want = max(1, int(n_candidates))
+    if amb.size == 0:
+        return np.empty((0, 0), dtype=np.int64), np.empty(0, dtype=np.float64)
+
+    information = workspace.information
+    upper = workspace.upper
 
     rounded = np.rint(amb).astype(np.int64)
     radius = max(_objective(rounded, amb, information), 1.0)

@@ -1,0 +1,16 @@
+{
+  "schema": "wp98_partial_model_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "dataset": "nagoya_run1",
+  "segment": [5665, 5720],
+  "production_input_truth": false,
+  "production_promoted": false,
+  "oracle_ceiling_by_rank": [31, 31, 28],
+  "rank0_grid": {"strict_modes": 33, "best_supply_sub50cm_epochs": 0},
+  "posterior": {
+    "accepted": false,
+    "reason": "singlebasis_family_or_margin_gate_failed",
+    "runner_margin": 0.1111111111111111,
+    "selection_sha256": "4B0A0B7B10BF1B721A157386A7289A2B5CB4D6CB42A7B5C3ECA1D597F18CDD7A"
+  }
+}

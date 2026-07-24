@@ -1,0 +1,68 @@
+{
+  "schema": "wp150_tokyo_stability_cppr_promotion_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "truth_usage": "post_application_full_denominator_audit_only",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11550, 11605],
+    "selected_stride_phase": 3,
+    "prior_generation_assessment": "WP110 pre-fine-grid posterior failure (ranks 18/3/4, 8% margin); re-assessed with the 17-sample GSI cache and frozen WP138 selector generation",
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 17,
+    "gsi_inlier_spread_m": 0.15523058870137163,
+    "gsi_up_prior_center_m": -0.29757948019876324,
+    "fine_grid_used": false,
+    "selector": "wp138_stability_cppr_consensus_v1",
+    "selected_candidate_id": 2,
+    "selection_reason": "unique_cross_basis_stability_cppr_mode",
+    "stability_family_ranks": {"cross_refit_disagreement_m": 1, "block_spread_m": 1, "max_cross_basis_carrier_rms_cycles": 2, "cppr_rank_sum": 1},
+    "runner_margin": 0.8,
+    "post_freeze_audit": {
+      "selected_candidate_sub50cm_epochs": 55,
+      "selected_candidate_median_error_m": 0.402
+    }
+  },
+  "holdouts": {
+    "unsafe_tokyo_wp129": {"accepted": false, "reason": "stability_cppr_family_or_margin_gate_failed"},
+    "missing_evidence_nagoya_wp53": {"accepted": false, "reason": "stability_cppr_evidence_unavailable"}
+  },
+  "production_effect": {
+    "before_sub50cm_epochs": 3576,
+    "after_sub50cm_epochs": 3631,
+    "after_sub50cm_pct": 30.45119087554512,
+    "gained_epochs": 55,
+    "lost_epochs": 0,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "declared_false_fix_pct": 0.0,
+    "full_denominator_epochs": 11924
+  },
+  "production_artifacts": {
+    "input_trajectory_sha256": "60B8DECB8D33E949A4F1FA9B30E9A3DCE6E687B3F3B4149D2AA3585B3015C647",
+    "output_trajectory": "results/wp31/tokyo_run1_wp150_stability_cppr_full_trajectory.csv",
+    "output_trajectory_sha256": "F3B333C23E7228A120EA63534F76339A0123197175A58FFE88DDE259FF6A566C",
+    "benchmark": "results/wp31/tokyo_run1_wp150_stability_cppr_full_benchmark.json",
+    "benchmark_sha256": "105861B2BADE568CA5FC54B3452044540E769C3B8D311E14426073486F22B5B3",
+    "promotion": "results/wp31/tokyo_run1_wp150_stability_cppr_promotion_11550_11605.json",
+    "promotion_sha256": "80267D8A1708C45055F3474CFB633413632826F2F147F75334A67A4971099752"
+  },
+  "chain_artifacts_sha256": {
+    "gsi_height_cache": "7E12A4E0CF651F042047FD047DF527250C26C34AB4D5E022E083194925936293",
+    "rank0_phase3_development": "114EB96B0F01A8CC0B1791B12A7DF3737183E4B808EE3BD497EE2F2BDCFE38C6",
+    "rank1_phase3_development": "DED22316713866155AFA1DA38BB50BC0AF25E0920E54AB674A648F8DE9B15ABA",
+    "rank2_phase3_development": "67C2C2F4E5A6A091A39DECDF3EE4CFCAD25805D988879EEC09DA5F1A5E414C15",
+    "truthfree_source": "DE9D27169F06919C942283B851A01B4B4551F51F9845EB2049812889C3A11E6C",
+    "truthfree_seed_pool": "11EF9C438BF15489BA948BB2C7FD969EB05D6DF52435DEB7B227E85DD64F363E",
+    "rank0_truthfree_refit": "409ACCD89F7DF4007174757790016440EFCD21E9E19FE4A53891F70091E024DC",
+    "rank2_truthfree_refit": "2CB82304C2BF599291A986B9AE9D2E0DFD07A65F060EC0949FB10F9A1D4AF18C",
+    "cross_basis_consensus": "38EE54D8983BA7AC86C9599EC82E7624531168A305CB6C0DD691E0FB999A604F",
+    "stability_cppr_selection": "3703C9C653908762D8F4B3694D56A5592115E8B13A12456142134DD88324056A"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

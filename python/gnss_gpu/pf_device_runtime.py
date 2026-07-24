@@ -678,6 +678,17 @@ class ParticleFilterDeviceRuntime:
         else:
             self._pf_device_resample_systematic(self._state, self.seed)
 
+    def resample(self):
+        """Force one resampling step regardless of the current ESS.
+
+        Annealed SMC requires a new equally-weighted population between
+        likelihood-power increments, even when its ESS target differs from
+        the filter's ordinary ``ess_threshold``.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        self._resample()
+
     def resample_if_needed(self):
         """Resample when ESS falls below ``ess_threshold * n_particles``.
 
@@ -751,6 +762,43 @@ class ParticleFilterDeviceRuntime:
         if arr.shape != (self.n_particles, 16):
             raise ValueError(f"states shape {arr.shape} != ({self.n_particles}, 16)")
         self._pf_device_set_particle_states(self._state, np.ascontiguousarray(arr))
+
+    def set_velocity_covariance(self, cov_3x3):
+        """Overwrite every particle's velocity-KF covariance ``Sigma_v`` (WP21b).
+
+        Minimal Python-side setter built on the existing
+        ``get/set_particle_states`` + ``get/set_log_weights`` primitives --
+        no CUDA kernel changes. The native API has no dedicated "set just
+        Sigma_v" entry point, so this round-trips the full per-particle
+        state array, patches only the ``Sigma_v`` block (columns 7:16,
+        row-major 3x3), and restores the log-weights afterward (since
+        ``set_particle_states`` resets them to uniform), making the call
+        weight-neutral. The same covariance is broadcast to every particle:
+        callers such as an IMU-preintegration guide produce one covariance
+        estimate per epoch (not per particle).
+
+        Intended to be called just before ``predict(..., rbpf_velocity_kf=True)``
+        so the device predict's ``sigma_pos^2*I + dt^2*Sigma_v`` propagation
+        uses a freshly-modeled ``Sigma_v`` (e.g. from
+        ``imu_preintegration``'s covariance) instead of only the generic
+        isotropic ``velocity_process_noise`` growth term.
+
+        Parameters
+        ----------
+        cov_3x3 : array_like, shape (3, 3)
+            Velocity covariance [m^2/s^2] in the same ECEF frame the
+            particle velocities are expressed in. Must be finite.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        cov = np.asarray(cov_3x3, dtype=np.float64).reshape(3, 3)
+        if not np.all(np.isfinite(cov)):
+            raise ValueError("cov_3x3 must be finite")
+        log_weights = self.get_log_weights()
+        states = self.get_particle_states()
+        states[:, 7:16] = cov.reshape(9)[np.newaxis, :]
+        self.set_particle_states(states)
+        self.set_log_weights(log_weights)
 
     def get_log_weights(self):
         """Copy per-particle log-weights from GPU (synchronizes stream).

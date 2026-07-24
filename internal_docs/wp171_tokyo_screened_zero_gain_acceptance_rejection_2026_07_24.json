@@ -1,0 +1,83 @@
+{
+  "schema": "wp171_tokyo_screened_zero_gain_acceptance_rejection_lock_v1",
+  "date": "2026-07-24",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1320, 1375],
+    "selected_stride_phase": 0,
+    "novelty": "FIRST measured zero-gain false acceptance of the WP159 screened selector (the screened-regime analogue of WP156's WP138 false acceptance)",
+    "prior_generation_assessment": "WP121 structural DDPR rejection (floor 14.88 m, diagnostic ceiling 46); WP168 screened chain",
+    "ddpr_screen": {
+      "schema": "wp158_ddpr_satellite_screen_v1",
+      "edge_m": 5.0,
+      "frac_thresh": 0.2,
+      "evidence_epochs": 11,
+      "excluded_satellites": ["C11", "C21", "C34", "C40", "E05", "E34", "G09", "G13"]
+    },
+    "screened_refits": {
+      "rank0": {"min_ddpr_rms_m": 1.6, "selection_reason": "all_truth_free_gates_pass"},
+      "rank1": {"hypotheses": 3, "min_ddpr_rms_m": 1.572, "selection_reason": "all_truth_free_gates_pass"},
+      "rank2": {"min_ddpr_rms_m": 1.478, "selection_reason": "all_truth_free_gates_pass"}
+    },
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "cross_basis_consensus_runner_margin": 0.0381,
+    "selector": "wp159_screened_stability_consensus_v1",
+    "selector_accepted": true,
+    "selector_reason": "unique_cross_basis_stability_cppr_mode",
+    "selector_selected_candidate_id": 2,
+    "selector_mode_count": 3,
+    "selector_stability_family_ranks": {"block_spread_m": 1, "max_cross_basis_carrier_rms_cycles": 1, "cppr_rank_sum": 1},
+    "selector_runner_margin": 1.3333333333333333,
+    "promotion": {
+      "promoter": "promote_wp159_screened_stability_consensus.py",
+      "promoter_passed": true,
+      "holdout_a_unsafe_tokyo_wp129": {"accepted": false, "reason": "screen_evidence_required"},
+      "holdout_b_missing_evidence_nagoya_wp53": {"accepted": false, "reason": "screen_evidence_required"}
+    },
+    "application": {
+      "applied_to": "results/wp31/tokyo_run1_wp160_screened_stability_full_trajectory.csv",
+      "before_sub50cm_epochs": 3744,
+      "after_sub50cm_epochs": 3744,
+      "gained_epochs": 0,
+      "lost_epochs": 0,
+      "fix_epochs": 0,
+      "false_fix_epochs": 0,
+      "frozen_gate": "gained_epochs > 0 and lost_epochs == 0 required for production advance",
+      "production_advanced": false
+    },
+    "significance": "WP159 passed the 10-chain simulation matrix and the 10890-10945 screened zero-gain holdout, yet accepts a zero-gain candidate here with maximal confidence (stability ranks 1/1/1, margin 1.33): a lone dominant-but-wrong basin on a screened chain can be unopposed AND stable. The frozen application gate (gained>0) caught it and production was not advanced. The WP168 selection triple (source/cross-basis/selection) is a new mandatory unsafe-acceptance holdout for ANY WP159 successor selector, alongside WP129, Nagoya WP53, and WP156."
+  },
+  "decision": "production NOT advanced; WP160 remains production; the rejected application artifacts are retained as evidence; do not rerun or substitute; any successor selector must reject this block's stored WP168 chain (or its acceptance must be proven correct-gaining) in addition to the existing holdout battery",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "ddpr_screen": "5179CBD65F26DAFA42692DCA8F34EE19738E0BF09A776BB32BCE104DA866FD2C",
+    "gsi_height_cache_reused": "results/wp31/tokyo_run1_wp121_gsi_multisample17_height_cache_1320_1375.json",
+    "rank0_phase0_screened_development": "8B4750B1BF49155465AB17FD8AF6DE666AFADAC6C281CC84768F5A5D4C2FAC1C",
+    "rank1_phase0_screened_development": "B9BCED4CC84CBF20A85FCDDA357F95132E9EEF1133834A7CC602E66B97B7D456",
+    "rank2_phase0_screened_development": "0F4342F5BF7D3704DA7336BF00A35D3C7DFAE9C04377CDAF2E72AD09ACC356CE",
+    "truthfree_source": "9A28C48F029A9DD44FD630FB474CA91459F08C010E981389E6B06741906C2768",
+    "truthfree_seed_pool": "3CF35BBF217DCC681CBFE864382AF6182BF0692ADAE1BA5DB86B9A4AC4B3D58C",
+    "rank0_cross_development": "14B02C8C3C24D88CDD060BD4F534A5360CA2394B22A26745FB0CECED6D61E632",
+    "rank0_cross_truthfree": "A3F18D8F3980EEF9A34FED6BBAC81416C0D7972ED0BB0A20297156F1FCAE2A97",
+    "rank2_cross_development": "F12A7988D25B39C1E777901FB4DA8C5BA9603BBEA3EBF6AD4AF81CFFAC3357A0",
+    "rank2_cross_truthfree": "3E34C7D5C9746CCBC63D4DE6B8FE93B48F91FF1425E3ACD0D7A49172D8C63081",
+    "cross_basis_consensus": "DB16E3DC81F16C9DE1CF70DF27F998A58D595E76E4E9F32E190A463BA1BF878B",
+    "wp159_screened_selection": "EE7BC666F159CABB842897569A7A640D927B73AE611EF27CF8801A2CCD7B2AA2",
+    "rejected_promotion": "8C863FB1BA3780C4FB8036174CCDFCE2E14A423CD113B20106AB0295DFC0137A",
+    "rejected_application_trajectory": "7628B852C3F2C2DE666EE5404EE53C7B95DDF1D136D67733AB0A4CE0D90A5DA7",
+    "rejected_application_benchmark": "AA32FC1DA3FBCF88BB54D854729871E5AF0B83377BA7A92E6D2D64FED62C09FC"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

@@ -51,25 +51,6 @@ and the GSDC2023 Kaggle smartphone-decimeter challenge).
   same-input/same-metric comparison, and the [live snapshot](https://rsasaki0109.github.io/gnss_gpu/)
   is regenerated straight from the committed result CSVs.
 
-## Results at a glance
-
-| Method | Dataset | P50 | RMS 2D |
-|---|---|--:|--:|
-| **PF 100K (DD + smoother + stop-detect)** | UrbanNav Tokyo Odaiba | **1.36 m** | **4.11 m** |
-| RTKLIB demo5 | UrbanNav Tokyo Odaiba | 2.67 m | 13.08 m |
-| **PF + RobustClear-10K** (external mainline) | UrbanNav, 5 seq / 2 cities | — | **66.6 m** |
-| EKF baseline | UrbanNav, 5 seq / 2 cities | — | 93.25 m |
-
-<div align="center">
-<img src="docs/assets/figures/paper_urbannav_external.png" alt="UrbanNav external validation: PF vs EKF" width="420">
-<img src="docs/assets/figures/paper_particle_scaling.png" alt="Particle-count scaling: PF crosses EKF near 1K particles" width="420">
-</div>
-
-> The external-validation RMS is high in absolute terms because it averages the hardest
-> deep-urban sequences (including failure stretches). The point is the *relative* gap: the
-> GPU PF stack consistently wins against EKF and RTKLIB on the same epochs. Full tables,
-> figures, and limitations live on the [results snapshot](https://rsasaki0109.github.io/gnss_gpu/).
-
 ## RB-FGO-PF: integer ambiguity without premature collapse
 
 The milestone-2 estimator treats integer ambiguities as persistent discrete
@@ -110,6 +91,41 @@ preserved as a negative result and is **not** the shipped configuration. See the
 The README headline is not just a table: the sampled particle cloud is localized
 on the real street network, with the posterior contracting around the driven
 UrbanNav route while the full-view trail is drawn from the continuous trajectory.
+
+### Results at a glance
+
+| Method | Dataset | P50 | RMS 2D |
+|---|---|--:|--:|
+| **PF 100K (DD + smoother + stop-detect)** | UrbanNav Tokyo Odaiba | **1.36 m** | **4.11 m** |
+| RTKLIB demo5 | UrbanNav Tokyo Odaiba | 2.67 m | 13.08 m |
+| **PF + RobustClear-10K** (external mainline) | UrbanNav, 5 seq / 2 cities | — | **66.6 m** |
+| EKF baseline | UrbanNav, 5 seq / 2 cities | — | 93.25 m |
+
+### PF-only RTK stretch campaign
+
+The current development campaign keeps the full epoch denominator, uses no
+reference truth or runtime FGO, and requires declared false FIX at or below 1%.
+Latest `libgnss++` selected results are shown only as an external reference;
+every imported RTK idea must still pass the PF posterior and promotion gates.
+
+| Full-epoch matched 3D | PF-only locked current | latest libgnss++ reference | campaign target |
+|---|---:|---:|---:|
+| Tokyo run1 | **31.40%** (3,744 / 11,924) | 80.02% | 81.00% |
+| Nagoya run1 | **69.55%** (5,274 / 7,583) | 85.84% | 86.00% |
+
+<p align="center">
+  <img src="docs/assets/figures/pf_only_rtk_stretch.svg" alt="PF-only Tokyo and Nagoya RTK stretch progress, external libgnss++ reference, targets, and truth-free promotion gates" width="900">
+</p>
+
+<div align="center">
+<img src="docs/assets/figures/paper_urbannav_external.png" alt="UrbanNav external validation: PF vs EKF" width="420">
+<img src="docs/assets/figures/paper_particle_scaling.png" alt="Particle-count scaling: PF crosses EKF near 1K particles" width="420">
+</div>
+
+> The external-validation RMS is high in absolute terms because it averages the hardest
+> deep-urban sequences (including failure stretches). The point is the *relative* gap: the
+> GPU PF stack consistently wins against EKF and RTKLIB on the same epochs. Full tables,
+> figures, and limitations live on the [results snapshot](https://rsasaki0109.github.io/gnss_gpu/).
 
 <p align="center">
   <img

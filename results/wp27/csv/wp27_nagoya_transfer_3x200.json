@@ -1,0 +1,31 @@
+{
+  "policy": "instantaneous maximum guard-position incident pair-cost satellite exclusion",
+  "policy_changed_after_transfer": false,
+  "runs": {
+    "run1": {
+      "epochs": 200,
+      "oracle_sub50cm_epochs": 99,
+      "control_selected_sub50cm_epochs": 4,
+      "maxcost_selected_sub50cm_epochs": 6,
+      "gain_epochs": 2
+    },
+    "run2": {
+      "epochs": 200,
+      "oracle_sub50cm_epochs": 200,
+      "control_selected_sub50cm_epochs": 23,
+      "maxcost_selected_sub50cm_epochs": 31,
+      "gain_epochs": 8
+    },
+    "run3": {
+      "epochs": 200,
+      "oracle_sub50cm_epochs": 13,
+      "control_selected_sub50cm_epochs": 0,
+      "maxcost_selected_sub50cm_epochs": 0,
+      "gain_epochs": 0
+    }
+  },
+  "all_runs_non_degrading": true,
+  "selection_rule_transfer_pass": true,
+  "production_fix_gate_pass": false,
+  "next_bottleneck": "candidate supply and recovery, especially Nagoya run3"
+}

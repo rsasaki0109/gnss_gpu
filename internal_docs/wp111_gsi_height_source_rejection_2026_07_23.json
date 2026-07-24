@@ -1,0 +1,28 @@
+{
+  "schema": "wp111_tokyo_gsi_height_source_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1540, 1595],
+    "target_dem_source": "10m",
+    "calibration_dem_source": "1m（レーザ）",
+    "accepted": false,
+    "reason": "moving GSI height cache mixes unsupported height sources"
+  },
+  "production_effect": {
+    "candidate_fit_started": false,
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "0EA19EB7993A09A3BF5059EF2D599B6D82B63B1BD799B3BAF9947C27D1896396"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

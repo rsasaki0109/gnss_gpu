@@ -1,0 +1,64 @@
+{
+  "schema": "wp70_road_translation_observability_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "road_band_m": [0.21238646519190227, 5.10538739585983],
+  "grid": {"radius_m": 5.0, "step_m": 0.2, "cell_count": 2601},
+  "frozen_gates": {
+    "max_equivalent_cells": 25,
+    "max_equivalent_extent_m": 1.0,
+    "min_distinct_runner_margin": 0.2
+  },
+  "evaluations": [
+    {
+      "label": "nagoya_target",
+      "segment": [3666, 3721],
+      "accepted": false,
+      "equivalent_cells": 673,
+      "equivalent_extent_m": 10.000000000000009,
+      "runner_margin": 0.0
+    },
+    {
+      "label": "nagoya_development_transfer",
+      "segment": [3721, 3776],
+      "accepted": false,
+      "equivalent_cells": 2062,
+      "equivalent_extent_m": 10.000000000000009,
+      "runner_margin": 0.0
+    },
+    {
+      "label": "tokyo_unsafe_holdout",
+      "segment": [2464, 2519],
+      "accepted": false,
+      "equivalent_cells": 1559,
+      "equivalent_extent_m": 10.000000000000009,
+      "runner_margin": 0.0
+    }
+  ],
+  "verdict": "reject_road_band_as_common_translation_supplier",
+  "diagnosis": "calibrated road distance is a broad band and leaves hundreds to thousands of exactly tied translations, including along-road modes",
+  "production_promoted": false,
+  "production_unchanged": {
+    "tokyo_sub50cm_epochs": 3265,
+    "tokyo_total_epochs": 11924,
+    "tokyo_sub50cm_pct": 27.381751090238176,
+    "nagoya_sub50cm_epochs": 5061,
+    "nagoya_total_epochs": 7583,
+    "nagoya_sub50cm_pct": 66.74139522616379,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "artifacts_sha256": {
+    "analyzer": "D47167EEF465A21FEFA60D5214A2032B3358CC659453C0183337D83BB0554B10",
+    "tests": "B0D2F499DF9B793AFD2E4D5808281657CB2C704BA3B6183BF839D8987EB106E6",
+    "nagoya_target": "E7E61271C62C7895FDFF44E810F52D8E6530FD83E14A875E46E6B778796E45B3",
+    "nagoya_transfer": "99F6F097DDA3B48CAF7C4F8C0ED33BB2C2EADBEBB1459437A83C0E4548FD2059",
+    "tokyo_unsafe": "66051359B5DAF64404CAC94CC8E714E79C1F8FF92299E4AE5D55746260703D31"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

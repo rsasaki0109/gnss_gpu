@@ -1,0 +1,12 @@
+{
+  "schema": "wp91_global_evidence_supply_lock_v1",
+  "date": "2026-07-22",
+  "dataset": "nagoya_run1",
+  "production_input_truth": false,
+  "complete_blocks": 137,
+  "supply_pass_blocks": 135,
+  "selected_next_segment": [660, 715],
+  "selected_segment_carrier_rows": 318,
+  "selected_segment_ddpr_rows": 230,
+  "scan_sha256": "3E5E9ECB51569C9A65B5FF83544C8AD871D4CB58A9D18F0BA0FAFCEC25429906"
+}

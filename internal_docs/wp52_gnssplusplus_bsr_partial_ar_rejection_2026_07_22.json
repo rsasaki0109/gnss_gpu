@@ -1,0 +1,54 @@
+{
+  "schema": "wp52_gnssplusplus_bsr_partial_ar_rejection_lock_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "production_promoted": false,
+  "pf_only": true,
+  "runtime_fgo": false,
+  "upstream_reference": {
+    "repository": "https://github.com/rsasaki0109/gnssplusplus-library",
+    "branch": "develop",
+    "commit": "7085fb81379018e2211b03664634acf74962aeae",
+    "ported_idea": "BSR-guided covariance-axis partial AR decimation"
+  },
+  "dataset": "nagoya_run1",
+  "segment": [1436, 1656],
+  "float_integer_arcs": 29,
+  "full_ar": {
+    "lambda_candidates_requested": 12,
+    "lambda_ratio": 1.0436811676255187
+  },
+  "partial_ar": {
+    "worst_covariance_axes": 3,
+    "max_drop_steps": 6,
+    "candidates_per_subset": 2,
+    "retained_ambiguities_by_step": [28, 27, 26, 25, 24, 23],
+    "lambda_ratio_by_step": [
+      1.0207250176242042,
+      1.0442719997771859,
+      1.033317476962801,
+      1.033180498468982,
+      1.1072081079258722,
+      1.0648155938014596
+    ],
+    "unique_position_seeds_supplied_by_step": [0, 0, 0, 0, 0, 0]
+  },
+  "posterior": {
+    "fitted_hypotheses": 6,
+    "best_source": "WP51 FDE block seed",
+    "best_audit_median_error_m": 1.4963783031074822,
+    "best_audit_sub50cm_epochs": 0,
+    "selected_seed_id": null
+  },
+  "decision": "reject production promotion; BSR partial AR supplies no position mode distinct by 5cm from the existing full-AR pool",
+  "next": "change DD basis and arc/reference-satellite diversity before expanding candidate count or relaxing validation",
+  "artifacts_sha256": {
+    "implementation": "AB2A7231BA1FF2C5344C45A2A17AB6EDDA4ADF5DE1CF015142554FEEC55500AF",
+    "test": "48056B1D1FE30F13DA2A1702DC814EA488FF71192679D806B1D91F74559E9EF3",
+    "development_result": "00AF88FE1CBF989782C5E411BADA468B15EAE32904F70D8F8C77D9A8D9FCF7F4"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

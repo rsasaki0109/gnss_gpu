@@ -1,0 +1,23 @@
+{
+  "schema": "wp90_predecessor_outage_rejection_lock_v1",
+  "date": "2026-07-22",
+  "dataset": "nagoya_run1",
+  "segment": [3556, 3611],
+  "production_promoted": false,
+  "reason": "carrier_supply_below_frozen_absolute_gate_and_boundary_propagation_zero_gain",
+  "frozen_min_checked_pairs": 40,
+  "wp88_float_integer_arcs_by_rank": [0, 0, 1],
+  "wp89_min_arc_epochs": 2,
+  "wp89_max_checked_pairs_by_rank": [4, 2, 3],
+  "wp90_shadow": {
+    "gained_epochs": 0,
+    "lost_epochs": 0,
+    "segment_sub50cm_epochs": 0,
+    "benchmark_sha256": "949F9BB28BC0B45D34DC85695C4F451D7B35BEA5F32B19D9B98E06F528CB09F4",
+    "trajectory_sha256": "0DB211B5358DB52D426619116C242E2832CCA3716517704D510B20978F0B955C"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

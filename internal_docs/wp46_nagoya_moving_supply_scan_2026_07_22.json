@@ -1,0 +1,37 @@
+{
+  "schema": "wp46_nagoya_moving_supply_scan_lock_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "truth_usage": "none",
+  "dataset": "nagoya_run1",
+  "range": [1051, 1806],
+  "config": {
+    "block_epochs": 55,
+    "stride": 5,
+    "stride_phase_mode": "auto_max_available_evidence_then_raw_carrier_then_ddpr",
+    "min_evidence_epochs": 10,
+    "min_carrier_rows": 24,
+    "min_ddpr_rows": 40
+  },
+  "result": {
+    "complete_blocks": 13,
+    "supply_pass_blocks": 11,
+    "failed_complete_blocks": [
+      {"segment": [1051, 1106], "evidence_epochs": 7, "carrier_rows": 22},
+      {"segment": [1216, 1271], "evidence_epochs": 9, "carrier_rows": 55}
+    ],
+    "incomplete_tail": {"segment": [1766, 1806], "evidence_epochs": 8},
+    "strongest_carrier_supply": [
+      {"segment": [1601, 1656], "carrier_rows": 256},
+      {"segment": [1546, 1601], "carrier_rows": 254},
+      {"segment": [1436, 1491], "carrier_rows": 252}
+    ]
+  },
+  "artifact_sha256": "E94CF84178EB0916DD42A088D3A203F16BB85B3FF0564C5A5C3066D6899C33B9",
+  "implementation_sha256": "D00D070E92C9D7C5545395D099459B6877C1423A140414130ECE67D3771FE0C4",
+  "test_sha256": "E452768F2D6E2A8097B974B50C43E0F473AAE3068CDC3F3BDFBE5CA6808B9027",
+  "verification": {
+    "pytest": "49 passed (combined WP31/WP38/WP42/WP44/WP46/WP47 and gap/OSM regression set)",
+    "ruff": "all checks passed"
+  }
+}

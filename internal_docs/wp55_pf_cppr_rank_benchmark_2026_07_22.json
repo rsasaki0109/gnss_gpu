@@ -1,0 +1,42 @@
+{
+  "schema": "wp55_pf_cppr_rank_benchmark_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "truth_usage": "post_application_full_denominator_audit_only",
+  "full_denominator_epochs": 7583,
+  "baseline": {
+    "work_package": "WP45",
+    "sub50cm_epochs": 4856,
+    "sub50cm_pct": 64.037979691415
+  },
+  "result": {
+    "dataset": "nagoya_run1",
+    "sub50cm_epochs": 4949,
+    "sub50cm_pct": 65.26440722669128,
+    "gained_epochs": 93,
+    "lost_epochs": 0,
+    "net_gain_epochs": 93,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "declared_false_fix_pct": 0.0,
+    "target_sub50cm_epochs": 6522,
+    "remaining_epochs_to_target": 1573
+  },
+  "production_artifacts_sha256": {
+    "promotion": "33667D8DF9E6F7035A223584F46F1187C8D5E2813633880C40367E481B590B96",
+    "trajectory": "E16038F7DAEE73D30BD7E0B15B1378AAF370812E9E7CE5E8E403C42433FB2926",
+    "summary": "6DC1CDEAE3A7D9F3FBCB370F82F02231FEF12226EC0CF31438E2A5D3EF722BC1",
+    "promotion_builder": "4F786A0A57D8D82FD7471C4A24FC7B7C6ADD95FEE114C54A2F9636F003F9EFFA",
+    "trajectory_applier": "A4339E2657F03E9EB587F7A9795474F53CE27C976D348284CC179FED0D41B505"
+  },
+  "validation_lock": {
+    "path": "internal_docs/wp55_cppr_rank_validation_2026_07_22.json",
+    "sha256": "4D7ED7B78E78461BFC5CE5B6B78F48866CE9999936ECAC2FB92FA83A3C967E1E"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

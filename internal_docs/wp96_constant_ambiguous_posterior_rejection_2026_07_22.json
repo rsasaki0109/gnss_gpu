@@ -1,0 +1,22 @@
+{
+  "schema": "wp96_constant_ambiguous_posterior_rejection_lock_v1",
+  "date": "2026-07-22",
+  "dataset": "nagoya_run1",
+  "segment": [6765, 6820],
+  "production_input_truth": false,
+  "production_promoted": false,
+  "strict_mode_counts_by_rank": [56, 58, 56],
+  "best_supply_sub50cm_epochs_by_rank": [55, 55, 55],
+  "three_basis": {
+    "accepted": false,
+    "reason": "fewer_than_two_three_basis_clusters",
+    "cluster_count": 1,
+    "selection_sha256": "448D2934EFB2AA1C9E14053501E40704943D75A604EE2B9819486E5613FAC013"
+  },
+  "single_basis": [
+    {"rank": 0, "accepted": true, "runner_margin": 2.0, "selection_sha256": "86DDD2006D782BE81F97444816C13182A953A91C8E2B831BBF07DE8B5AAFF9BF"},
+    {"rank": 1, "accepted": true, "runner_margin": 0.25, "selection_sha256": "2CF8A06371DE6DD63AB29B9DC903CA61F95831B2E08AB6EB4FBB42D25A42C9BB"},
+    {"rank": 2, "accepted": false, "runner_margin": 0.0, "selection_sha256": "7AB82B60556104329BF26B025A487ED07873698A15CF8949779912D358638878"}
+  ],
+  "rejection_reason": "multiple_accepted_single_basis_profiles_without_multibasis_runner_margin"
+}

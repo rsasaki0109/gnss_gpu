@@ -1,0 +1,237 @@
+{
+  "run1": {
+    "anchor_epochs": 40,
+    "full_score_sub50cm_epochs": 16,
+    "wrong_anchor_epochs": 24,
+    "wrong_anchors_recoverable_by_one_exclusion": 13,
+    "max_guard_cost_policy_sub50cm_epochs": 24,
+    "max_guard_cost_policy_recovered_epochs": 8,
+    "max_guard_cost_policy_broken_epochs": 0,
+    "top_recovery_satellites": [
+      [
+        "G09",
+        6
+      ],
+      [
+        "C14",
+        6
+      ],
+      [
+        "C40",
+        5
+      ],
+      [
+        "C11",
+        3
+      ],
+      [
+        "E34",
+        3
+      ],
+      [
+        "C34",
+        3
+      ],
+      [
+        "C21",
+        2
+      ],
+      [
+        "C33",
+        2
+      ],
+      [
+        "E10",
+        2
+      ],
+      [
+        "G30",
+        2
+      ]
+    ],
+    "max_guard_cost_satellite_frequency": [
+      [
+        "G09",
+        19
+      ],
+      [
+        "C21",
+        6
+      ],
+      [
+        "C14",
+        5
+      ],
+      [
+        "C38",
+        5
+      ],
+      [
+        "G07",
+        4
+      ],
+      [
+        "C11",
+        1
+      ]
+    ]
+  },
+  "run2": {
+    "anchor_epochs": 40,
+    "full_score_sub50cm_epochs": 25,
+    "wrong_anchor_epochs": 15,
+    "wrong_anchors_recoverable_by_one_exclusion": 9,
+    "max_guard_cost_policy_sub50cm_epochs": 28,
+    "max_guard_cost_policy_recovered_epochs": 6,
+    "max_guard_cost_policy_broken_epochs": 3,
+    "top_recovery_satellites": [
+      [
+        "C22",
+        6
+      ],
+      [
+        "E36",
+        4
+      ],
+      [
+        "G11",
+        2
+      ],
+      [
+        "G20",
+        2
+      ],
+      [
+        "C38",
+        2
+      ],
+      [
+        "C13",
+        1
+      ],
+      [
+        "E10",
+        1
+      ],
+      [
+        "E11",
+        1
+      ],
+      [
+        "E12",
+        1
+      ],
+      [
+        "E19",
+        1
+      ]
+    ],
+    "max_guard_cost_satellite_frequency": [
+      [
+        "C22",
+        17
+      ],
+      [
+        "E36",
+        12
+      ],
+      [
+        "G04",
+        4
+      ],
+      [
+        "G20",
+        3
+      ],
+      [
+        "G03",
+        2
+      ],
+      [
+        "G22",
+        1
+      ],
+      [
+        "G12",
+        1
+      ]
+    ]
+  },
+  "run3": {
+    "anchor_epochs": 40,
+    "full_score_sub50cm_epochs": 19,
+    "wrong_anchor_epochs": 21,
+    "wrong_anchors_recoverable_by_one_exclusion": 13,
+    "max_guard_cost_policy_sub50cm_epochs": 25,
+    "max_guard_cost_policy_recovered_epochs": 11,
+    "max_guard_cost_policy_broken_epochs": 5,
+    "top_recovery_satellites": [
+      [
+        "C22",
+        13
+      ],
+      [
+        "C13",
+        7
+      ],
+      [
+        "C12",
+        4
+      ],
+      [
+        "C21",
+        3
+      ],
+      [
+        "C43",
+        3
+      ],
+      [
+        "C11",
+        2
+      ],
+      [
+        "C40",
+        2
+      ],
+      [
+        "E36",
+        2
+      ],
+      [
+        "C42",
+        1
+      ],
+      [
+        "C44",
+        1
+      ]
+    ],
+    "max_guard_cost_satellite_frequency": [
+      [
+        "C22",
+        10
+      ],
+      [
+        "E25",
+        9
+      ],
+      [
+        "C38",
+        9
+      ],
+      [
+        "C13",
+        9
+      ],
+      [
+        "C43",
+        2
+      ],
+      [
+        "C44",
+        1
+      ]
+    ]
+  }
+}

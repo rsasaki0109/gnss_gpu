@@ -1,0 +1,37 @@
+{
+  "schema": "wp50_nagoya_gsi_height_prior_rejection_lock_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "production_promoted": false,
+  "runtime_network_required": false,
+  "dataset": "nagoya_run1",
+  "segment": [1436, 1656],
+  "height_prior": {
+    "source": "cached GSI DEM plus geoid calibrated by two accepted anchors",
+    "dem_source": "5m（レーザ）",
+    "calibrated_antenna_height_m": 1.75224172258228,
+    "antenna_height_spread_m": 0.3249486409962188,
+    "up_prior_center_m": -1.7604810711860637,
+    "up_prior_sigma_m": 0.5
+  },
+  "lambda12": {
+    "best_audit_median_error_m": 3.434,
+    "best_audit_sub50cm_epochs": 0
+  },
+  "lambda128": {
+    "lambda_ratio": 1.0078650615844205,
+    "fitted_hypotheses": 29,
+    "best_audit_median_error_m": 3.3312386584492817,
+    "best_audit_sub50cm_epochs": 0
+  },
+  "decision": "reject production promotion; independent height centering improves the basin but does not supply a sub-50cm candidate",
+  "artifacts_sha256": {
+    "cache": "98015E88ED79871B4DFB2178D7146D4633AA84DB54D33D7068A60C6177ABF9D6",
+    "lambda12": "C74631BB6C744D0CDB091038DCC53E91BEFC3333C433CBE49E36E27348880663",
+    "lambda128": "BC36611D6D5E3E1A3ED58B1FDEB4C3539BEDD9F0CDBBE1EB9682E3EABAC1685A"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

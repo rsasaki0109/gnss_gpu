@@ -1,0 +1,67 @@
+[
+  {
+    "config": "respawn8_k12_pr5_1200",
+    "epochs": 1200,
+    "respawn_epochs": 124,
+    "declared_fix": 0,
+    "correct_fix": 0,
+    "false_fix": 0,
+    "max_gamma": 0.9954709705592979,
+    "respawn_oracle_sub50cm_epochs": null,
+    "map_sub50cm_epochs": 0,
+    "cluster_sub50cm_epochs": null,
+    "cluster_gamma99_sub50cm_epochs": null
+  },
+  {
+    "config": "respawn12_k12_pr5_1200",
+    "epochs": 1200,
+    "respawn_epochs": 116,
+    "declared_fix": 0,
+    "correct_fix": 0,
+    "false_fix": 0,
+    "max_gamma": 0.997016955027312,
+    "respawn_oracle_sub50cm_epochs": null,
+    "map_sub50cm_epochs": 0,
+    "cluster_sub50cm_epochs": null,
+    "cluster_gamma99_sub50cm_epochs": null
+  },
+  {
+    "config": "respawn8_k64_pr5_400",
+    "epochs": 400,
+    "respawn_epochs": 40,
+    "declared_fix": 0,
+    "correct_fix": 0,
+    "false_fix": 0,
+    "max_gamma": 0.9798501321837317,
+    "respawn_oracle_sub50cm_epochs": 26,
+    "map_sub50cm_epochs": 0,
+    "cluster_sub50cm_epochs": null,
+    "cluster_gamma99_sub50cm_epochs": null
+  },
+  {
+    "config": "respawn8_k64_pr1_400",
+    "epochs": 400,
+    "respawn_epochs": 16,
+    "declared_fix": 0,
+    "correct_fix": 0,
+    "false_fix": 0,
+    "max_gamma": 0.9972353621170146,
+    "respawn_oracle_sub50cm_epochs": 3,
+    "map_sub50cm_epochs": 10,
+    "cluster_sub50cm_epochs": 5,
+    "cluster_gamma99_sub50cm_epochs": 0
+  },
+  {
+    "config": "respawn8_k64_pr0.5_400",
+    "epochs": 400,
+    "respawn_epochs": 19,
+    "declared_fix": 2,
+    "correct_fix": 0,
+    "false_fix": 2,
+    "max_gamma": 0.9970226142735112,
+    "respawn_oracle_sub50cm_epochs": 3,
+    "map_sub50cm_epochs": 137,
+    "cluster_sub50cm_epochs": 137,
+    "cluster_gamma99_sub50cm_epochs": 48
+  }
+]

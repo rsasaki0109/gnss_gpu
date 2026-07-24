@@ -1,0 +1,64 @@
+{
+  "schema": "wp93_constant_singlebasis_validation_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "nagoya_run1",
+    "segment": [660, 715],
+    "profile_mode": "constant",
+    "carrier_reference_rank": 1,
+    "candidate_id": 50,
+    "family_ranks": {"road_band": 1, "carrier_rms": 1, "cppr": 1},
+    "runner_margin": 3.6666666666666665,
+    "accepted": true
+  },
+  "frozen_gates": {
+    "min_checked_pairs": 40,
+    "max_bad_pair_fraction": 0.05,
+    "max_block_spread_m": 0.5,
+    "within_basis_dedup_m": 0.08,
+    "max_family_rank_fraction": 0.2,
+    "min_runner_margin": 0.2
+  },
+  "three_basis_gate": {
+    "accepted": false,
+    "reason": "fewer_than_two_three_basis_clusters",
+    "cluster_count": 0,
+    "selection_sha256": "9AA986A98A4FADDBECA55AB67B633E3BE708B23CAFF83068DC2BA00BDC063041"
+  },
+  "holdouts": [
+    {"dataset": "nagoya_run1", "segment": [3721, 3776], "accepted": false, "reason": "singlebasis_family_or_margin_gate_failed"},
+    {"dataset": "tokyo_run1", "segment": [2464, 2519], "accepted": false, "reason": "fewer_than_two_absolute_single_basis_modes"}
+  ],
+  "post_selection_full_audit": {
+    "full_denominator_epochs": 7583,
+    "before_sub50cm_epochs": 5135,
+    "after_sub50cm_epochs": 5177,
+    "after_sub50cm_pct": 68.27113279704602,
+    "gained_epochs": 42,
+    "lost_epochs": 0,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "artifacts_sha256": {
+    "target_selection": "5D5A6D274047B28A957D73E4D9F6605EFE8E93F79EA9131829CAA586036BFD33",
+    "promotion": "ACCD5EACE26B67B71B752DACFE43A720B9F3E0C3164F080EF5A6287386B4E7DA",
+    "production_trajectory": "E2DDFBF23B9CC217504BACD6F9B6BFA58A1900E160189C9A97D9C6C6590CCA44",
+    "shadow_trajectory": "E2DDFBF23B9CC217504BACD6F9B6BFA58A1900E160189C9A97D9C6C6590CCA44",
+    "production_benchmark": "EB7BC1FE092E9AFBB2B35633929126F023B60A2252C8A50372BEDD9BAE442A80"
+  },
+  "implementation_sha256": {
+    "refiner": "945C7D5A2081301BE5085D9F23BCE427B1C2532B1C90E1E69548578FF780D9C3",
+    "grid_builder": "B6525C36D30D13C6A22854DC8184D5DBA0429E8EFFFBB57A047F452F93DC4817",
+    "multibasis_selector": "E28371D7DB905EED518DF8CD7F0E9827200D5470177CE25CD71AF710E62B211F",
+    "singlebasis_selector": "1A5527CD21B63EE550F680E7A3D987948F8888BD8428E9BADDF274260F18A579",
+    "promoter": "61386BEA7D8B9FDE08DDA6650FDD7FF838B7F8E44DC7D666F536EFD0B60CD03A",
+    "production_apply": "80E2AB414F844A0088611E52753C22DE1F1C1F31B43BBEAA6229C6FADE8C40BC"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

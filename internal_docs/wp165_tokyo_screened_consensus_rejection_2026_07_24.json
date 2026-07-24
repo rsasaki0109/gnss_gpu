@@ -1,0 +1,63 @@
+{
+  "schema": "wp165_tokyo_screened_consensus_rejection_lock_v1",
+  "date": "2026-07-24",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11275, 11330],
+    "selected_stride_phase": 3,
+    "novelty": "seventh block through the WP158 screen + WP159 chain; adjacent to the recovered WP160 block 11220-11275 and sharing much of its NLOS satellite set",
+    "prior_generation_assessment": "WP123 structural DDPR rejection (floor 19.6 m, diagnostic ceiling 55)",
+    "ddpr_screen": {
+      "schema": "wp158_ddpr_satellite_screen_v1",
+      "edge_m": 5.0,
+      "frac_thresh": 0.2,
+      "evidence_epochs": 11,
+      "excluded_satellites": ["C24", "C39", "C40", "C42", "E05", "G07", "G15", "G30"],
+      "outlier_fractions": {"C24": 0.818, "C39": 0.857, "C40": 0.6, "C42": 1.0, "E05": 0.2, "G07": 1.0, "G15": 1.0, "G30": 0.2}
+    },
+    "screened_refits": {
+      "rank0": {"selection_reason": "all_truth_free_gates_pass", "min_ddpr_rms_m": 1.0168},
+      "rank1": {"selection_reason": "all_truth_free_gates_pass", "min_ddpr_rms_m": 1.0168, "gate_passing_hypotheses": 2},
+      "rank2": {"selection_reason": "all_truth_free_gates_pass", "min_ddpr_rms_m": 1.017}
+    },
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "cross_basis_consensus_runner_margin": 0.0,
+    "cross_basis_consensus_detail": "the rank-1 pool yields only two seeds; one supply-passing candidate (id 1: three-basis agreement 0.0085-0.0143 m, consensus 0.0357 m, carrier 0.154 cycles, spread 0.0502 m — comfortably inside every absolute gate) has no second passer to establish the 0.2 minimum runner margin, so the gate fails closed at margin 0.0 (same shape as WP162)",
+    "selector": "wp159_screened_stability_consensus_v1",
+    "selector_accepted": false,
+    "selector_reason": "stability_cppr_evidence_unavailable",
+    "selector_base_reason": "fewer_than_two_cross_basis_cppr_modes",
+    "selector_mode_count": 1,
+    "significance": "kills the 'diagnostic ceiling 55 implies promotable' working model: both ceiling-55 roll-out blocks (WP165, WP166) fail honestly at consensus/margin stages; the screen produced the campaign's lowest screened floors (1.017 m) yet the pool collapsed to a single strong basin with no runner, and the frozen machinery correctly refuses to promote an unopposed candidate"
+  },
+  "decision": "no substitution and no rerun after the truth-free rejection; WP160 production unchanged; the strong lone candidate must never be promoted without a separately named and holdout-validated selector change",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "ddpr_screen": "5294C170AA2FF2B8E126C73E994EE01EC894F5C87F089182FBC044B4CDBFB9DA",
+    "gsi_height_cache_reused": "results/wp31/tokyo_run1_wp123_gsi_multisample17_height_cache_11275_11330.json",
+    "rank0_phase3_screened_development": "0495B0E207CAE56F7B306886843CD7F1A46BFC046ACA9A6E97A50B7D38C9D654",
+    "rank1_phase3_screened_development": "C9A592BCB90FF9B083DB1EED82772C8211A8127075410A96EC00AEFAB7603E72",
+    "rank2_phase3_screened_development": "0CE5BCC5FB76483D4ABB92222C2987DAB6CDFD557AAA4D7CF672D75F2CD8B6F7",
+    "truthfree_source": "E018D26808A97DD60C25B0250B43EF2FA7D3A87F77D8D27D9B0A34C20641F880",
+    "truthfree_seed_pool": "F245422CF4136CD1D9534F311BB0F8D3C0F00D76C13941D2D39694A86ECC73A4",
+    "rank0_cross_development": "6BDF1D7BEEB575F3F3C19C9374CB4ABA81469EDE02D29E6299E8F7CDDCBD20C3",
+    "rank0_cross_truthfree": "B20C9C6FDD6DAF2CBE72A1A40C5B95FBE0997C22C6FE4E1F2AED2C281364DB6F",
+    "rank2_cross_development": "5FCBC22CD66E5375FD431436B6FFB196D833596DCD0B397214E017FA61640E8D",
+    "rank2_cross_truthfree": "03616EE2EAD7F8FB1ADBFB91E4A9F8C93C2BD0272A1152D5707CC7E34C23A337",
+    "cross_basis_consensus": "A287244CDAB9BF00E3163D383BF039753428FC3B04C379482C5F625F6AB65EE2",
+    "wp159_screened_selection": "648C0CF336A1A66F63B99A7396CE40AF633088FEEF8EE612F3E5525F4F2633D2"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

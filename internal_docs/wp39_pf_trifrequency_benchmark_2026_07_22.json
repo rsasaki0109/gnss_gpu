@@ -1,0 +1,83 @@
+{
+  "schema": "wp39_pf_trifrequency_benchmark_v1",
+  "created_date": "2026-07-22",
+  "production_input_truth": false,
+  "runtime_fgo": false,
+  "full_epoch_denominator": true,
+  "declared_fix_false_rate_limit_pct": 1.0,
+  "m4_baseline": [
+    {"path": "internal_docs/wp30_m4_production_config.json", "sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486"},
+    {"path": "internal_docs/wp30_m4_tokyo_evidence_ledger.json", "sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"}
+  ],
+  "common_outage_policy": {
+    "validation_lock_path": "internal_docs/wp37_pf_fragmentation_gated_benchmark_2026_07_22.json",
+    "validation_lock_sha256": "49212B9447C9E73B766AB895A39477C45825D459565E4E9A4C43E76D524275E2",
+    "mode": "fragmentation_gated",
+    "dominant_filled_run_share_threshold": 0.5,
+    "duration_weighted_exponent": 2.0
+  },
+  "trifrequency_selector": {
+    "validation_lock_path": "internal_docs/wp38_trifrequency_ddpr_rank_validation_2026_07_22.json",
+    "validation_lock_sha256": "3F4C4C390A5E36E5725D13CA5E36B278F43027E802C3E814808249ACEED8C86E",
+    "selector_path": "experiments/select_wp38_trifrequency_ddpr_rank.py",
+    "selector_sha256": "599A501CAC77FD340F75AC238B7FE7ED1A80E5132CF703894854FE6D62E7A331",
+    "promotion_path": "experiments/promote_wp38_trifrequency_ddpr_rank.py",
+    "promotion_sha256": "3D9977C98486EA96C974F2FC213F0A924DF229691F208A506029F69B32653281",
+    "production_anchor_path": "results/wp31/nagoya_run1_static_6073_6539_trifrequency_rank_production.json",
+    "production_anchor_sha256": "4B25C59C4D6E2699862246378E6384E91AC96814980F50139648127F00B3180E",
+    "segment": [6073, 6539],
+    "selected_candidate_id": 59,
+    "family_ranks": {"primary": 2, "secondary": 3, "tertiary": 2},
+    "runner_margin": 0.8571428571428571,
+    "audit_error_m": 0.4732966004722137
+  },
+  "previous_nagoya": {
+    "summary_path": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_eightanchor_secondary_fragmentationgated_full_summary.json",
+    "summary_sha256": "D9F72D492C9950A7A0DAAC229604CF34F4BE5A0860D6A0FBAFDAFC479A177FDF",
+    "sub50cm_full_epochs": 4120,
+    "n_epochs_full_denominator": 7583,
+    "sub50cm_full_pct": 54.332058552024265
+  },
+  "current_nagoya": {
+    "summary_path": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_nineanchor_trifrequency_fragmentationgated_full_summary.json",
+    "summary_sha256": "3EC7D9B3EB3924E878039E576E81B1DBCFFCE3DE5C8A251AE2A8CAB80FE8F4F1",
+    "trajectory_path": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_nineanchor_trifrequency_fragmentationgated_full_trajectory.csv",
+    "trajectory_sha256": "F31BD5A2C0022A98CD0C6F748CBEE5CD5E267F902AA54E34DFBC3A2C3498124C",
+    "displacements_path": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_nineanchor_trifrequency_fragmentationgated_full_displacements.csv",
+    "displacements_sha256": "463D016551137F203B0CFDE7B1F27D95764314B22BE6C7F4C3637E9E6A7B0193",
+    "n_epochs_full_denominator": 7583,
+    "sub50cm_full_epochs": 4790,
+    "sub50cm_full_pct": 63.167611763154424,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0,
+    "development_anchor_used": false,
+    "production_promoted": true,
+    "production_anchor_count": 9
+  },
+  "nagoya_gain": {
+    "sub50cm_epochs": 670,
+    "sub50cm_percentage_points": 8.835553211130159,
+    "epochs_gained": 670,
+    "epochs_lost": 0,
+    "interval_deltas": [
+      {"range": [5287, 6072], "sub50cm_delta": 33},
+      {"range": [6073, 7528], "sub50cm_delta": 637}
+    ]
+  },
+  "tokyo_unchanged": {
+    "summary_path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_fragmentationgated_full_summary.json",
+    "summary_sha256": "D50118255E5FF2C68E7600B57A29AB7C195E2D32E727A9ABA79AC515B0218AE8",
+    "sub50cm_full_epochs": 3265,
+    "n_epochs_full_denominator": 11924,
+    "sub50cm_full_pct": 27.381751090238176,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "remaining_to_goal": {
+    "tokyo_target_epochs": 9659,
+    "tokyo_missing_epochs": 6394,
+    "nagoya_target_epochs": 6522,
+    "nagoya_missing_epochs": 1732
+  }
+}

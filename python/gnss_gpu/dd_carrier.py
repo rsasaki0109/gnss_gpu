@@ -35,6 +35,7 @@ from typing import Any, Sequence
 import numpy as np
 
 from gnss_gpu.io.rinex import read_rinex_obs
+from gnss_gpu.io.rinex_cache import RinexObservationCache
 
 C_LIGHT = 299792458.0
 GPS_L1_WAVELENGTH = C_LIGHT / 1575.42e6
@@ -363,12 +364,17 @@ class DDCarrierComputer:
         carrier_obs_code: str | None = None,
         allowed_systems: Sequence[str] = ("G", "E", "J", "C"),
         interpolate_base_epochs: bool = False,
+        observation_cache: RinexObservationCache | None = None,
     ):
         base_obs_path = Path(base_obs_path)
         if not base_obs_path.exists():
             raise FileNotFoundError(f"Base RINEX not found: {base_obs_path}")
 
-        self._obs = read_rinex_obs(base_obs_path)
+        self._obs = (
+            observation_cache.load(base_obs_path)
+            if observation_cache is not None
+            else read_rinex_obs(base_obs_path)
+        )
         self._carrier_code = carrier_obs_code
         self._allowed_systems = tuple(allowed_systems)
         self._interpolate_base_epochs = bool(interpolate_base_epochs)
@@ -408,7 +414,11 @@ class DDCarrierComputer:
             rover_obs_path = Path(rover_obs_path)
             if not rover_obs_path.exists():
                 raise FileNotFoundError(f"Rover RINEX not found: {rover_obs_path}")
-            rover_obs = read_rinex_obs(rover_obs_path)
+            rover_obs = (
+                observation_cache.load(rover_obs_path)
+                if observation_cache is not None
+                else read_rinex_obs(rover_obs_path)
+            )
             self._rover_by_tow = {}
             for ep in rover_obs.epochs:
                 tow_key = round(_datetime_to_tow(ep.time), 1)
@@ -647,6 +657,7 @@ class DDCarrierComputer:
         rover_position_approx: np.ndarray | None = None,
         min_common_sats: int = 2,
         carrier_families: Sequence[str] = ("L1_E1_B1", "L5_E5A_B2A"),
+        reference_rank: int = 0,
     ) -> DDResult | None:
         """Compute DD carrier observations across multiple frequency families.
 
@@ -658,6 +669,8 @@ class DDCarrierComputer:
 
         if self._rover_by_tow is None:
             return None
+        if int(reference_rank) < 0:
+            raise ValueError("reference_rank must be non-negative")
 
         tow_key = round(tow, 1)
         base_obs = self._base_by_tow.get(tow_key)
@@ -716,7 +729,13 @@ class DDCarrierComputer:
                 if len(selected_sats) < max(2, int(min_common_sats)):
                     continue
 
-                ref_sat = max(selected_sats, key=lambda s: rover_elev.get(s, 0.0))
+                ranked_references = sorted(
+                    selected_sats,
+                    key=lambda sat_id: (-rover_elev.get(sat_id, 0.0), sat_id),
+                )
+                if int(reference_rank) >= len(ranked_references):
+                    continue
+                ref_sat = ranked_references[int(reference_rank)]
                 non_ref = [s for s in selected_sats if s != ref_sat]
                 if not non_ref:
                     continue

@@ -1,0 +1,63 @@
+{
+  "schema": "wp51_gnssplusplus_ddpr_fde_rejection_lock_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "production_promoted": false,
+  "pf_only": true,
+  "runtime_fgo": false,
+  "upstream_reference": {
+    "repository": "https://github.com/rsasaki0109/gnssplusplus-library",
+    "branch": "develop",
+    "commit": "7085fb81379018e2211b03664634acf74962aeae",
+    "local_submodule_before": "ffa62b9be6764945957e6dae49158c0215613fcb",
+    "ported_idea": "DD pseudorange one-row exclusion FDE"
+  },
+  "dataset": "nagoya_run1",
+  "segment": [1436, 1656],
+  "evidence_epochs": 44,
+  "plain_ddpr": {
+    "accepted_epochs": 44,
+    "anchor_error_mean_m": 10.86640848044536,
+    "anchor_error_p50_m": 4.649639152800948,
+    "anchor_error_p90_m": 36.06230754150407,
+    "sub50cm_epochs": 1,
+    "within_5m_epochs": 24
+  },
+  "fde_ddpr": {
+    "threshold_m": 5.0,
+    "max_removals": 2,
+    "accepted_epochs": 44,
+    "epochs_with_removal": 40,
+    "pairs_removed": 65,
+    "anchor_error_mean_m": 1.8765610893791567,
+    "anchor_error_p50_m": 1.6532034118831607,
+    "anchor_error_p90_m": 3.246363194434955,
+    "sub50cm_epochs": 2,
+    "within_5m_epochs": 44
+  },
+  "block_proposal": {
+    "source": "median FDE anchor minus frozen WP45 trajectory",
+    "seed_offset_ecef_m": [-14.1033848, 5.67323494, -20.90591039],
+    "refined_offset_ecef_m": [-14.136601811648882, 5.713723379478232, -20.832467152334488],
+    "carrier_rms_cycles": 0.2221932607199288,
+    "ddpr_rms_m": 12.425333009784145,
+    "block_spread_m": 0.06919075421048944,
+    "audit_median_error_m": 1.4963783031074822,
+    "audit_sub50cm_epochs": 0
+  },
+  "decision": "retain FDE implementation as a default-off candidate supplier; reject this block proposal because it supplies zero sub-50cm epochs and fails the fixed DDPR RMS gate",
+  "next": "port covariance-aware partial AR subset generation before changing any promotion threshold",
+  "artifacts_sha256": {
+    "implementation": "4A3A44C4F67A3DAFA40A2D30F054ABC86560C89970836F34307D054E3FC22894",
+    "diagnostic_runner": "7C06168738C90BAB0E3E90FE27B090ACA8CA35B3CDB3529893584A942662AFDE",
+    "plain_csv": "C61181B9F5B3B89102276B979448F533101D458CD45CCE5D9CEEB2AFCC2AEEE8",
+    "fde_csv": "7EBEB35DEB8006DC4F5E1FA513CBC1BB3E5D61F26BCA5FA2751C36982F1DC93C",
+    "seed": "36982369265F3273C081617C6EDB4FDB1104F4E8F4D77FB51ECAB89B15C0F5C8",
+    "refinement": "45313D1471E04A43295821363A9D4D618A09EDBEA6CB822847CE0672703F1A6D",
+    "svg": "A8E8C4A7D285F45F14834936D6D262D6F48DF104D71B5451B938C4ECF195402C"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

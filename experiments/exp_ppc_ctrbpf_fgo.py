@@ -41,6 +41,7 @@ from exp_urbannav_baseline import run_wls  # noqa: E402
 from gnss_gpu.io.nav_rinex import read_gps_klobuchar_from_nav_header
 from gnss_gpu.io.ppc import PPCDatasetLoader
 from gnss_gpu.ppc_score import score_ppc2024
+from gnss_gpu.annealed_smc import annealed_smc_update
 from gnss_gpu.particle_modes import extract_particle_modes, select_particle_mode
 from gnss_gpu.particle_fixed_lag import FixedLagParticleSmoother, nearest_mode_mask
 from gnss_gpu.doppler_signals import (
@@ -200,6 +201,59 @@ class CTRBPFConfig:
     dd_sigma_cycles: float = 0.05
     dd_min_pairs: int = 4
     dd_min_pairs_update: int = 3
+    # WP23a: Suzuki-style (ICRA 2024, "Multiple Update Particle Filter",
+    # arXiv:2403.03394) multiple-update schedule. When enabled, this
+    # REPLACES the single-shot ``enable_dd_carrier_afv`` DD-carrier update
+    # (mutually exclusive at the call site -- see the DD block in
+    # ``_run_ctrbpf_on_segment``) with two sequential, independently
+    # ESS-tempered stages per epoch: (i) DD-pseudorange (absolute,
+    # position-only geometry, least sharp) -> temper to
+    # ``cp_mupf_pr_stage_target_ess_ratio`` -> resample-if-needed; (ii)
+    # DD-carrier AFV (fractional-cycle, sharpest) -> applied as a
+    # coarse-to-fine SIGMA SEQUENCE (each value -> temper to
+    # ``cp_mupf_cp_stage_target_ess_ratio`` -> resample-if-needed) rather
+    # than a single jump to the tight target sigma. The coarse-to-fine
+    # sequence idea is not new to this task: it is exactly the pattern
+    # already validated elsewhere in this codebase for the (different,
+    # GSDC2023/Trimble) PF-smoother track --
+    # ``gnss_gpu.dd_carrier_epoch_update.apply_carrier_epoch_update`` /
+    # ``gnss_gpu.pf_smoother_config.MupfConfig.sigma_cycles`` with a
+    # validated ``sigma_sequence_cycles=(2.0, 0.5, 0.05)`` default -- reused
+    # here rather than reinvented.
+    enable_cp_mupf: bool = False
+    # Starting sigmas: documented as inherited from tc_fgo/rbpf_fgo's own
+    # DD sigmas (``fgo_dd_pr_sigma_m=5.0``, ``fgo_dd_sigma_cycles=0.20``,
+    # see below) -- independently tunable copies, not aliases, so changing
+    # one does not silently perturb the (unrelated, FGO-postprocess-only)
+    # ``enable_fgo_lambda`` feature.
+    cp_mupf_dd_pr_sigma_m: float = 5.0
+    cp_mupf_pr_stage_target_ess_ratio: float = 0.10
+    cp_mupf_dd_cp_sigma_sequence_cycles: tuple[float, ...] = (2.0, 0.5, 0.05)
+    cp_mupf_cp_stage_target_ess_ratio: float = 0.10
+    cp_mupf_stage_max_iters: int = 20
+    cp_mupf_stage_max_tempering_steps: int = 64
+    cp_mupf_min_pairs: int = 3
+    # >1 splits the (post-slip-gate) DD-CP pairs round-robin into this many
+    # sequential sub-updates per sigma stage -- the spec's documented
+    # fallback "if a single CP update is still too sharp". Off (1) by
+    # default; the coarse-to-fine sigma sequence is tried first.
+    cp_mupf_cp_n_groups: int = 1
+    # WP23a item 3: cycle-slip proxy. No slip detector exists elsewhere in
+    # this codebase's DD machinery for the PPC/non-hybrid path (grepped
+    # dd_carrier.py and this file for "slip": none found). Gate CP usage on
+    # raw epoch-to-epoch DD-carrier-phase continuity per (ref_sat, sat)
+    # pair instead -- see ``_cp_slip_gate``.
+    cp_mupf_slip_gate_enabled: bool = True
+    cp_mupf_slip_max_delta_cycles: float = 2.0
+    cp_mupf_slip_max_dt_s: float = 2.0
+    # WP23a diagnostic (default off -- see ``_mupf_stage_update``'s
+    # docstring and WP23A_REPORT.md's root-cause section): resample-if-
+    # needed *before*, not just after, each MUPF stage's update, so a
+    # stage's own tempering guard always starts from a fresh (~ESS/N=1.0)
+    # baseline instead of inheriting an already-degenerate ESS/N from
+    # earlier untempered updates this same epoch (which otherwise causes
+    # ``_apply_pr_ess_guard`` to revert the stage entirely, alpha=0.0).
+    cp_mupf_resample_before_stage: bool = False
     dd_systems: tuple[str, ...] = ("G", "E", "J", "C")
     dd_base_interp: bool = False
     dd_min_elevation_deg: float = -90.0
@@ -461,6 +515,76 @@ class CTRBPFConfig:
     # also suppresses ins_tc PF position_update (PU), not just emit. Default
     # off so the existing emit-only gate behaviour is preserved.
     ins_tc_quality_gate_pu_skip: bool = False
+    # WP22a: WP21b IMU-preintegration predict-step guide
+    # (python/gnss_gpu/pf_imu_preint_adapter.py::ImuPreintPfGuide), wired as
+    # a standalone switch independent of imu_tc/ins_tc/hybrid-velocity-guide.
+    # Between consecutive rover epochs, the buffered 100 Hz PPC IMU segment
+    # is preintegrated and closed into (a) an ECEF velocity guide fed to
+    # ``pf.predict(velocity=..., rbpf_velocity_kf=True)`` in place of the
+    # baseline's guide-less RBPF-velKF predict, (b) a heading-uncertainty-
+    # aware ``sigma_pos`` (WP21b item 1: cross-track lever
+    # ``|displacement|*sigma_heading``, heading driven by
+    # ``gnss_gpu.imu.ComplementaryHeadingFilter`` corrected against this
+    # pipeline's own causal ``wls_positions``), and (c) the segment's
+    # accel/gyro-derived delta_v covariance fed into every particle's
+    # velocity-KF ``Sigma_v`` via ``pf.set_velocity_covariance`` (WP21b item
+    # 2). Falls back to the baseline no-guide predict for any epoch with an
+    # empty/degenerate IMU segment. Not combined with imu_tc/ins_tc in this
+    # ablation (both are alternative predict-step IMU integrations; running
+    # them together is untested).
+    enable_imu_preint: bool = False
+    imu_preint_sigma_accel_mps2_sqrthz: float = 0.05
+    imu_preint_sigma_gyro_radps_sqrthz: float = 0.005
+    imu_preint_sigma_pos_floor_m: float = 0.05
+    imu_preint_sigma_pos_scale: float = 1.0
+    imu_preint_velocity_blend_alpha: float = 0.3
+    imu_preint_sigma_spp_pos_m: float = 30.0
+    imu_preint_min_heading_fix_disp_m: float = 2.0
+    # WP22b item 2: adaptive likelihood tempering. A per-epoch temperature
+    # beta in (0,1] scales the *total* log-likelihood increment applied that
+    # epoch (across whichever of PR/GMM/Doppler-KF/DD-carrier updates ran)
+    # so that ESS/N after tempering hits ``epoch_tempering_target_ess_ratio``
+    # (bisection; see ``_apply_pr_ess_guard``, reused as-is since it is
+    # already a generic log-weight-delta tempering primitive, not PR-
+    # specific). Requires end-of-epoch deferred resampling so there is a
+    # single well-defined "this epoch's full log-likelihood delta" to temper
+    # (see ``_resample_deferred``). Trades statistical efficiency/bias for
+    # particle diversity -- tempering does not target the true posterior,
+    # only a flattened version of it; see the WP22b report for the caveat.
+    enable_epoch_tempering: bool = False
+    epoch_tempering_target_ess_ratio: float = 0.10
+    epoch_tempering_max_iters: int = 20
+    # WP22b item 3: C/N0- and elevation-driven per-satellite GMM mixture
+    # weight (w_los), replacing the fixed scalar ``pr_gmm_w_los`` when
+    # ``enable_pr_gmm`` is also set. ``pf_device_weight_gmm`` only accepts
+    # one scalar w_los per kernel call, so satellites are grouped into
+    # ``cn0_gmm_n_buckets`` bins by their computed w_los and one kernel call
+    # is issued per non-empty bucket (exact under the independent-
+    # observation PF model -- product of per-satellite mixture likelihoods
+    # -- up to w_los quantization within a bucket). See
+    # ``_cn0_elevation_w_los`` for the calibrated logistic mapping.
+    enable_cn0_gmm: bool = False
+    cn0_gmm_baseline_dbhz0: float = 30.0
+    cn0_gmm_baseline_dbhz90: float = 45.0
+    cn0_gmm_gap_mid_db: float = 14.0
+    cn0_gmm_logistic_scale_db: float = 4.0
+    cn0_gmm_w_los_min: float = 0.05
+    cn0_gmm_w_los_max: float = 0.97
+    cn0_gmm_n_buckets: int = 5
+    # WP22b item 4: particle-wise NLOS deweighting. The native undifferenced
+    # and DD-carrier-AFV weight kernels already gate each satellite's
+    # contribution per particle (each particle computes its own residual
+    # from its own hypothesized state, so the same scalar threshold rejects
+    # a different satellite subset per particle -- see
+    # ``pfd_weight_kernel``/``pfd_weight_dd_carrier_afv_kernel`` in
+    # ``pf_device.cu``). This was never wired into ``_build_pf`` before
+    # WP22b; enabling it requires no CUDA changes.
+    enable_particle_nlos: bool = False
+    particle_nlos_undiff_pr_threshold_m: float = 30.0
+    particle_nlos_dd_carrier_threshold_cycles: float = 0.5
+    particle_nlos_huber: bool = False
+    particle_nlos_huber_undiff_pr_k: float = 1.5
+    particle_nlos_huber_dd_carrier_k: float = 1.5
     systems: tuple[str, ...] = ("G", "R", "E", "C", "J")
     method_label: str = "PF-PR"
 
@@ -572,6 +696,30 @@ class _DDStats:
     epochs_attempted: int = 0
     epochs_applied: int = 0
     pairs_total: int = 0
+    # WP23a: Suzuki-style multiple-update (MUPF) DD-PR + DD-CP-AFV schedule
+    # diagnostics, populated only when ``config.enable_cp_mupf``.
+    mupf_pr_epochs_applied: int = 0
+    mupf_pr_pairs_total: int = 0
+    mupf_pr_resample_count: int = 0
+    mupf_pr_alpha_sum: float = 0.0
+    mupf_pr_post_ratio_sum: float = 0.0
+    mupf_pr_tempering_steps_total: int = 0
+    mupf_pr_log_evidence_sum: float = 0.0
+    mupf_cp_epochs_applied: int = 0
+    mupf_cp_pairs_total: int = 0
+    mupf_cp_resample_count: int = 0
+    mupf_cp_stage_calls: int = 0
+    mupf_cp_alpha_sum: float = 0.0
+    mupf_cp_post_ratio_sum: float = 0.0
+    mupf_cp_tempering_steps_total: int = 0
+    mupf_cp_log_evidence_sum: float = 0.0
+    mupf_cp_slips_flagged_total: int = 0
+    mupf_cp_slip_epochs: int = 0
+    # WP23a item 3: cloud-spread-vs-lambda/2 diagnostic, measured after the
+    # DD-PR stage (i.e. the cloud the sharp CP-AFV stage will actually see).
+    mupf_cloud_spread_sum_m: float = 0.0
+    mupf_cloud_spread_over_half_lambda_sum: float = 0.0
+    mupf_cloud_spread_epochs: int = 0
 
 
 @dataclass
@@ -583,6 +731,27 @@ class _PRObsStats:
     prefit_sats_kept: int = 0
     prefit_sats_dropped: int = 0
     epochs_skipped: int = 0
+    # WP22a: filter-health instrumentation (mean pre-resample ESS/N and the
+    # fraction of epochs that triggered a resample), populated by a
+    # zero-behavior-change monkeypatch around ``pf.resample_if_needed`` in
+    # ``_run_ctrbpf_on_segment`` -- see the "WP22a filter health" comment
+    # there. NaN/-1 when not collected (should not happen; collection is
+    # unconditional).
+    mean_ess_ratio: float = float("nan")
+    resample_rate: float = float("nan")
+    # WP22a: IMU-preintegration predict-step guide bookkeeping (only
+    # populated when ``config.enable_imu_preint``; zero/NaN otherwise).
+    imu_preint_predict_used: int = 0
+    imu_preint_fallback_used: int = 0
+    imu_preint_mean_sigma_pos_m: float = float("nan")
+    # WP22b item 2: mean bisected tempering alpha and mean post-tempering
+    # ESS/N across epochs where ``enable_epoch_tempering`` fired (NaN if it
+    # never fired / disabled).
+    epoch_tempering_epochs: int = 0
+    epoch_tempering_mean_alpha: float = float("nan")
+    epoch_tempering_mean_post_ratio: float = float("nan")
+    # WP22b item 3: mean per-satellite w_los across cn0-gmm epochs.
+    cn0_gmm_mean_w_los: float = float("nan")
 
 
 @dataclass
@@ -2579,6 +2748,119 @@ def _apply_slant_delay_to_pseudoranges(
     )
 
 
+def _cn0_elevation_w_los(
+    cn0_dbhz: np.ndarray,
+    elevation_deg: np.ndarray,
+    config: "CTRBPFConfig",
+) -> np.ndarray:
+    """Map measured C/N0 + elevation to a per-satellite GMM LOS weight.
+
+    WP22b item 3. Calibrated on the validated ray-traced-vs-measured C/N0
+    separation (``python/gnss_gpu/validation/cn0_validation.py``,
+    ``results/validation/`` -- commit "Add C/N0 validation against measured
+    UrbanNav signal strength"): predicted-NLOS satellites there read ~12-16
+    dB-Hz weaker than predicted-LOS satellites at the same elevation (mean
+    gap 16.5 dB-Hz Odaiba / 11.9 dB-Hz Shinjuku), and C/N0 alone separates
+    the two ray-traced classes at AUC 0.985 / 0.944 -- i.e. a fairly sharp,
+    near-monotonic classifier. This reproduces that shape as a simple
+    logistic on the C/N0 deficit below a clear-sky elevation baseline:
+
+        baseline(elev)  = cn0_gmm_baseline_dbhz0
+                           + (cn0_gmm_baseline_dbhz90 - cn0_gmm_baseline_dbhz0)
+                             * sin(elev)
+        deficit         = baseline(elev) - cn0
+        w_los           = sigmoid((cn0_gmm_gap_mid_db - deficit)
+                                   / cn0_gmm_logistic_scale_db)
+
+    A satellite whose deficit equals the validated mean NLOS gap
+    (``cn0_gmm_gap_mid_db``, default 14.0 = mean of the two site gaps) gets
+    w_los=0.5; weaker-than-that reads more NLOS-like (w_los -> min), at or
+    above the clear-sky baseline reads more LOS-like (w_los -> max). This is
+    NOT a re-fit of the UrbanNav elevation-binned regression on this
+    pipeline's own PPC tokyo dataset (different site/receiver/antenna); it
+    is a simple, documented, order-of-magnitude-consistent mapping, exactly
+    as the task spec allows ("simple logistic or lookup calibrated on the
+    validation data"). ``cn0_dbhz`` is this pipeline's own per-satellite
+    C/N0-like observation weight (``data['weights']``, the same quantity
+    ``_pr_likelihood_weights`` already treats as "PPC C/N0-like values"),
+    taken *before* any ``pr_weight_mode`` transform so it stays in raw
+    dB-Hz units regardless of that config's setting.
+    """
+    cn0 = np.asarray(cn0_dbhz, dtype=np.float64)
+    elev = np.clip(np.asarray(elevation_deg, dtype=np.float64), 0.0, 90.0)
+    baseline = (
+        float(config.cn0_gmm_baseline_dbhz0)
+        + (float(config.cn0_gmm_baseline_dbhz90) - float(config.cn0_gmm_baseline_dbhz0))
+        * np.sin(np.radians(elev))
+    )
+    deficit = baseline - cn0
+    scale = max(float(config.cn0_gmm_logistic_scale_db), 1.0e-6)
+    z = (float(config.cn0_gmm_gap_mid_db) - deficit) / scale
+    w_los = 1.0 / (1.0 + np.exp(-z))
+    lo = float(config.cn0_gmm_w_los_min)
+    hi = float(config.cn0_gmm_w_los_max)
+    return np.clip(w_los, lo, hi)
+
+
+def _pf_update_gmm_cn0(
+    pf,
+    sat_i: np.ndarray,
+    pr_i: np.ndarray,
+    w_i: np.ndarray,
+    w_los_per_sat: np.ndarray,
+    *,
+    sigma_pr: float,
+    mu_nlos: float,
+    sigma_nlos: float,
+    n_buckets: int,
+    resample: bool,
+) -> tuple[int, float]:
+    """Apply the GMM likelihood with a per-satellite w_los (WP22b item 3).
+
+    ``pf_device_weight_gmm`` only accepts one scalar w_los per kernel call
+    (see ``include/gnss_gpu/pf_device.h``). Per the task spec's preferred
+    approach ("first try per-satellite grouping... multiple kernel calls
+    over satellite subsets sharing parameters"), satellites are grouped
+    into ``n_buckets`` equal-width bins over ``[0, 1]`` by their computed
+    w_los and one ``pf.update_gmm`` call is issued per non-empty bucket
+    using that bucket's mean w_los. Under the PF's independent-observation
+    measurement model, the joint likelihood is the product of each
+    satellite's own two-component mixture likelihood, so this bucketing is
+    exact up to the w_los quantization within a bucket (bounded by
+    ``1/n_buckets``) -- not an approximation of the mixture model itself.
+
+    Returns ``(n_buckets_used, mean_w_los)``.
+    """
+    n_sat = int(len(pr_i))
+    if n_sat == 0:
+        if resample:
+            pf.resample_if_needed()
+        return 0, float("nan")
+    n_buckets = max(1, int(n_buckets))
+    w_los = np.clip(np.asarray(w_los_per_sat, dtype=np.float64), 0.0, 1.0)
+    edges = np.linspace(0.0, 1.0, n_buckets + 1)
+    idx = np.clip(np.digitize(w_los, edges[1:-1]), 0, n_buckets - 1)
+    used = 0
+    for b in range(n_buckets):
+        mask = idx == b
+        if not np.any(mask):
+            continue
+        used += 1
+        pf.update_gmm(
+            sat_i[mask],
+            pr_i[mask],
+            weights=w_i[mask],
+            sigma_pr=sigma_pr,
+            w_los=float(np.mean(w_los[mask])),
+            mu_nlos=mu_nlos,
+            sigma_nlos=sigma_nlos,
+            resample=False,
+        )
+    if resample:
+        pf.resample_if_needed()
+    return used, float(np.mean(w_los))
+
+
 def _scale_weights_per_system(weights: np.ndarray, system_ids: np.ndarray) -> np.ndarray:
     out = np.asarray(weights, dtype=np.float64).copy()
     sids = np.asarray(system_ids, dtype=np.int32)
@@ -2678,6 +2960,19 @@ def _build_pf(config: CTRBPFConfig):
         sigma_pr=config.sigma_pr,
         resampling=("systematic" if config.enable_pf_ffbsi_smoother else "megopolis"),
         seed=42,
+        # WP22b item 4: particle-wise NLOS deweighting. Off by default
+        # (matches every pre-WP22b variant's behavior exactly); only
+        # ``enable_particle_nlos`` variants opt in.
+        per_particle_nlos_gate=bool(config.enable_particle_nlos),
+        per_particle_nlos_undiff_pr_threshold_m=float(
+            config.particle_nlos_undiff_pr_threshold_m
+        ),
+        per_particle_nlos_dd_carrier_threshold_cycles=float(
+            config.particle_nlos_dd_carrier_threshold_cycles
+        ),
+        per_particle_huber=bool(config.particle_nlos_huber),
+        per_particle_huber_undiff_pr_k=float(config.particle_nlos_huber_undiff_pr_k),
+        per_particle_huber_dd_carrier_k=float(config.particle_nlos_huber_dd_carrier_k),
     )
     return pf
 
@@ -2744,6 +3039,124 @@ def _apply_pr_ess_guard(
     if np.isfinite(final_ratio):
         best_ratio = final_ratio
     return float(best_alpha), float(post_ratio), float(best_ratio)
+
+
+def _mupf_stage_update(
+    pf, apply_fn, *, target_ess_ratio: float, max_iters: int,
+    max_tempering_steps: int = 64, resample_before: bool = False,
+):
+    """WP23b: consume one staged likelihood completely via annealed SMC.
+
+    WP23a's one-shot guard could return alpha=0 when the entering ESS was
+    already low and otherwise retained only a fractional likelihood.  Basin
+    posterior mass requires cumulative marginal likelihood, so this primitive
+    advances beta all the way to one, resampling and re-evaluating ``apply_fn``
+    as needed.  It fails loudly instead of silently discarding information.
+    """
+    return annealed_smc_update(
+        pf,
+        apply_fn,
+        target_ess_ratio=float(target_ess_ratio),
+        max_bisection_iters=int(max_iters),
+        max_tempering_steps=int(max_tempering_steps),
+        resample_before=bool(resample_before),
+        resample_at_end=True,
+    )
+
+
+def _dd_result_slice(dd_result, idx: np.ndarray):
+    """Return a copy of a DD result (carrier or pseudorange) restricted to
+    pair indices ``idx`` (WP23a: cycle-slip gating / satellite-group split).
+    """
+    idx = np.asarray(idx, dtype=np.int64)
+    ref_sat_ids = tuple(dd_result.ref_sat_ids)
+    sat_ids = tuple(dd_result.sat_ids) if dd_result.sat_ids else ()
+    kwargs = dict(
+        sat_ecef_k=np.asarray(dd_result.sat_ecef_k)[idx],
+        sat_ecef_ref=np.asarray(dd_result.sat_ecef_ref)[idx],
+        base_range_k=np.asarray(dd_result.base_range_k)[idx],
+        base_range_ref=np.asarray(dd_result.base_range_ref)[idx],
+        dd_weights=np.asarray(dd_result.dd_weights)[idx],
+        ref_sat_ids=tuple(ref_sat_ids[j] for j in idx) if ref_sat_ids else (),
+        n_dd=int(idx.size),
+    )
+    if sat_ids:
+        kwargs["sat_ids"] = tuple(sat_ids[j] for j in idx)
+    if hasattr(dd_result, "dd_carrier_cycles"):
+        kwargs["dd_carrier_cycles"] = np.asarray(dd_result.dd_carrier_cycles)[idx]
+    if hasattr(dd_result, "wavelengths_m"):
+        kwargs["wavelengths_m"] = np.asarray(dd_result.wavelengths_m)[idx]
+    if hasattr(dd_result, "dd_pseudorange_m"):
+        kwargs["dd_pseudorange_m"] = np.asarray(dd_result.dd_pseudorange_m)[idx]
+    return replace(dd_result, **kwargs)
+
+
+def _cp_slip_gate(
+    dd_result,
+    history: dict[tuple[str, str], tuple[float, float]],
+    tow: float,
+    *,
+    max_delta_cycles: float,
+    max_dt_s: float,
+):
+    """WP23a item 3: epoch-to-epoch DD-carrier phase continuity gate.
+
+    No cycle-slip detector exists elsewhere in this codebase's DD machinery
+    for the PPC/non-hybrid path (``dd_carrier.py`` and this file have none).
+    This is a minimal proxy: a DD pair is dropped from this epoch's CP-AFV
+    update if its raw DD carrier phase [cycles] changed by more than
+    ``max_delta_cycles`` since the last epoch that pair was seen, within
+    ``max_dt_s`` seconds. ``history`` maps (ref_sat_id, sat_id) -> (tow,
+    dd_carrier_cycles) from the last epoch that pair was used, and is
+    mutated in place (updated for every pair seen this epoch, flagged or
+    not, so continuity resumes fresh after a flagged jump).
+    """
+    n = int(getattr(dd_result, "n_dd", 0))
+    if n == 0:
+        return dd_result, 0
+    ref_ids = dd_result.ref_sat_ids
+    sat_ids = dd_result.sat_ids if dd_result.sat_ids else tuple("" for _ in range(n))
+    cycles = np.asarray(dd_result.dd_carrier_cycles, dtype=np.float64)
+    keep = np.ones(n, dtype=bool)
+    n_flagged = 0
+    for j in range(n):
+        key = (
+            ref_ids[j] if j < len(ref_ids) else "",
+            sat_ids[j] if j < len(sat_ids) else "",
+        )
+        cyc = float(cycles[j])
+        prev = history.get(key)
+        if prev is not None:
+            prev_tow, prev_cyc = prev
+            dt = tow - prev_tow
+            if 0.0 < dt <= max_dt_s and abs(cyc - prev_cyc) > max_delta_cycles:
+                keep[j] = False
+                n_flagged += 1
+        history[key] = (tow, cyc)
+    if n_flagged == 0:
+        return dd_result, 0
+    idx = np.nonzero(keep)[0]
+    return _dd_result_slice(dd_result, idx), n_flagged
+
+
+def _dd_result_groups(dd_result, n_groups: int):
+    """WP23a item 2: round-robin split of DD-CP pairs into ``n_groups``
+    sequential sub-updates -- the spec's documented fallback "if a single
+    CP update is still too sharp". Round-robin (pair index j -> group
+    j % n_groups) spreads constellations roughly evenly across groups since
+    the DD pair ordering follows ``_build_dd_measurements``'s stable
+    per-epoch satellite order (not grouped by system).
+    """
+    n = int(getattr(dd_result, "n_dd", 0))
+    if int(n_groups) <= 1 or n == 0:
+        return [dd_result]
+    groups = []
+    for g in range(int(n_groups)):
+        idx = np.arange(g, n, int(n_groups))
+        if idx.size == 0:
+            continue
+        groups.append(_dd_result_slice(dd_result, idx))
+    return groups or [dd_result]
 
 
 def _capture_pf_internal_state(
@@ -3169,6 +3582,9 @@ def _resample_deferred(config: CTRBPFConfig) -> bool:
         bool(config.defer_epoch_resample)
         or bool(config.enable_reservoir_stein)
         or bool(config.enable_pf_ffbsi_smoother)
+        # WP22b item 2: epoch tempering needs one end-of-epoch log-weight
+        # snapshot to bisect against, so it forces deferred resampling.
+        or bool(config.enable_epoch_tempering)
     )
 
 
@@ -3386,11 +3802,18 @@ def _run_ctrbpf_on_segment(
     used_prns = data.get("used_prns") or [[] for _ in range(n_epochs)]
     times = np.asarray(data["times"], dtype=np.float64)
     pr_obs_stats = _PRObsStats()
+    _epoch_tempering_alphas: list[float] = []
+    _epoch_tempering_post_ratios: list[float] = []
+    _cn0_gmm_w_los_means: list[float] = []
     reservoir_stein_stats = _ReservoirSteinStats()
     dd_stats = _DDStats()
     gate_stats = _RBPFGateStats()
     hybrid_stats = _HybridStats()
     rtkdiag_pf_stats = _RTKDiagPFStats()
+    # WP23a: epoch-to-epoch DD-carrier phase continuity history for the
+    # cycle-slip proxy gate (see ``_cp_slip_gate``); one dict per run/
+    # variant invocation, keyed by (ref_sat_id, sat_id).
+    _cp_slip_history: dict[tuple[str, str], tuple[float, float]] = {}
     gate_active = config.enable_rbpf_velocity_kf and (
         config.rbpf_kf_gate_min_dd_pairs is not None
         or config.rbpf_kf_gate_min_ess_ratio is not None
@@ -3400,6 +3823,7 @@ def _run_ctrbpf_on_segment(
     )
     need_dd_compute = (
         config.enable_dd_carrier_afv
+        or config.enable_cp_mupf
         or (gate_active and config.rbpf_kf_gate_min_dd_pairs is not None)
         or config.enable_fgo_lambda
     )
@@ -3447,11 +3871,64 @@ def _run_ctrbpf_on_segment(
         raise ValueError("enable_imu_tc and enable_ins_tc are mutually exclusive")
     use_imu_tc = config.enable_imu_tc and imu is not None
     use_ins_tc = config.enable_ins_tc and imu is not None
-    imu_t = _build_imu_segment_index(imu) if (use_imu_tc or use_ins_tc) else None
+    use_imu_preint = config.enable_imu_preint and imu is not None
+    imu_t = (
+        _build_imu_segment_index(imu) if (use_imu_tc or use_ins_tc or use_imu_preint) else None
+    )
     if use_imu_tc and imu_t is None:
         use_imu_tc = False  # IMU file present but empty
     if use_ins_tc and imu_t is None:
         use_ins_tc = False
+    if use_imu_preint and imu_t is None:
+        use_imu_preint = False
+
+    # WP22a: WP21b IMU-preintegration predict-step guide state. Heading is
+    # tracked outside the particle state (gnss_gpu.imu.ComplementaryHeadingFilter),
+    # matching WP21/WP21b's design; the causal heading/velocity reference
+    # comes from this pipeline's own WLS point solutions (``wls_positions``),
+    # not a separately-run robust_spp (this ablation reuses whatever causal
+    # point-solve the DD-RBPF pipeline already computes upstream).
+    imu_preint_guide = None
+    imu_preint_heading_filter = None
+    imu_preint_accel = None
+    imu_preint_gyro_radps = None
+    imu_preint_dt = None
+    imu_preint_sigma_pos_used = np.zeros(n_epochs, dtype=np.float64)
+    imu_preint_predict_used = 0
+    imu_preint_fallback_used = 0
+    if use_imu_preint:
+        from gnss_gpu.imu import ComplementaryHeadingFilter as _ComplementaryHeadingFilter
+        from gnss_gpu.pf_imu_preint_adapter import ImuPreintPfGuide as _ImuPreintPfGuide
+        from gnss_gpu.pf_imu_preint_adapter import ecef_to_enu_rotation, ecef_to_lla_rad
+
+        _imu_dict_conv = {
+            "tow": np.asarray(imu["time"], dtype=np.float64),
+            "gyro": np.column_stack(
+                [imu["gyro_x"], imu["gyro_y"], imu["gyro_z"]]
+            ).astype(np.float64)
+            * (math.pi / 180.0),
+            "wheel_vel": np.full(imu_t.shape[0], np.nan, dtype=np.float64),
+        }
+        imu_preint_heading_filter = _ComplementaryHeadingFilter(_imu_dict_conv, alpha=0.05)
+        imu_preint_guide = _ImuPreintPfGuide(
+            imu_preint_heading_filter,
+            sigma_accel_mps2_sqrthz=float(config.imu_preint_sigma_accel_mps2_sqrthz),
+            sigma_gyro_radps_sqrthz=float(config.imu_preint_sigma_gyro_radps_sqrthz),
+            sigma_pos_floor=float(config.imu_preint_sigma_pos_floor_m),
+            sigma_pos_scale=float(config.imu_preint_sigma_pos_scale),
+            velocity_blend_alpha=float(config.imu_preint_velocity_blend_alpha),
+            use_heading_uncertainty=True,
+            sigma_spp_pos_m=float(config.imu_preint_sigma_spp_pos_m),
+            min_heading_fix_disp_m=float(config.imu_preint_min_heading_fix_disp_m),
+        )
+        imu_preint_accel = np.column_stack(
+            [imu["acc_x"], imu["acc_y"], imu["acc_z"]]
+        ).astype(np.float64)
+        imu_preint_gyro_radps = _imu_dict_conv["gyro"]
+        _dt_fwd = np.diff(imu_t)
+        imu_preint_dt = (
+            np.concatenate([_dt_fwd, _dt_fwd[-1:]]) if _dt_fwd.size else np.zeros(0)
+        )
     imu_tc_anchor: _IMUAnchor | None = None
     imu_tc_anchor_acc: np.ndarray | None = None
     imu_tc_anchor_gyro: np.ndarray | None = None
@@ -3591,6 +4068,38 @@ def _run_ctrbpf_on_segment(
         spread_cb=config.spread_cb_init,
         velocity_init_sigma=config.velocity_init_sigma if config.enable_rbpf_velocity_kf else 0.0,
     )
+
+    # WP22a filter health: wrap ``pf.resample_if_needed`` (called internally
+    # by ``pf.update``/``update_gmm``/etc. whenever they run with their
+    # default ``resample=True``, and explicitly at a couple of call sites
+    # below) to record the pre-resample ESS/N and whether a resample fired,
+    # attributed to the current epoch index. ``update(resample=True)`` is
+    # exactly ``_pf_device_weight(...)`` followed by ``resample_if_needed()``
+    # (see ``pf_device_runtime.py``), so this wrapper changes no behavior --
+    # it only observes the existing resample decision. Multiple
+    # ``resample_if_needed`` calls can occur within one epoch (PR + DD +
+    # Doppler + ESS-guard updates); the epoch's ESS/N is the minimum
+    # (worst/most-degenerate) observed pre-resample ratio, and the epoch
+    # counts as "resampled" if any call actually resampled.
+    pf_health_ess_ratio = np.full(n_epochs, np.nan, dtype=np.float64)
+    pf_health_resampled = np.zeros(n_epochs, dtype=bool)
+    _pf_health_epoch = [-1]
+    _orig_resample_if_needed = pf.resample_if_needed
+
+    def _wp22a_instrumented_resample_if_needed():
+        ess_ratio = float(pf.get_ess()) / max(int(config.n_particles), 1)
+        did = _orig_resample_if_needed()
+        idx_h = _pf_health_epoch[0]
+        if 0 <= idx_h < n_epochs:
+            prev = pf_health_ess_ratio[idx_h]
+            if not np.isfinite(prev) or ess_ratio < prev:
+                pf_health_ess_ratio[idx_h] = ess_ratio
+            if did:
+                pf_health_resampled[idx_h] = True
+        return did
+
+    pf.resample_if_needed = _wp22a_instrumented_resample_if_needed
+
     rtkdiag_last_good_pos: np.ndarray | None = None
     rtkdiag_last_good_t: float | None = None
     rtkdiag_last_fix4_pos: np.ndarray | None = None
@@ -3677,6 +4186,17 @@ def _run_ctrbpf_on_segment(
     t0 = time.perf_counter()
     _prev_ranker_label: str | None = None
     for i in range(n_epochs):
+        _pf_health_epoch[0] = i
+        # WP22b item 2: snapshot log-weights before this epoch's predict/
+        # update chain runs, so the end-of-epoch tempering step (below) can
+        # bisect a temperature beta on the *whole* epoch's log-likelihood
+        # increment (not just one sub-update). Only paid for when tempering
+        # is enabled (one extra D2H sync per epoch).
+        pre_epoch_log_weights = (
+            np.asarray(pf.get_log_weights(), dtype=np.float64)
+            if config.enable_epoch_tempering
+            else None
+        )
         t_now = float(times[i])
         t_key = round(t_now, 1)
         hp_prefetched = hybrid_pos.get(t_key) if use_hybrid else None
@@ -3866,6 +4386,56 @@ def _run_ctrbpf_on_segment(
                     pf_predict_done = True
                     ins_particle_imu_last_t = t_now
 
+        imu_preint_predict_done = False
+        if not pf_predict_done and use_imu_preint and i > 0 and imu_preint_guide is not None:
+            t_prev_imu = float(times[i - 1])
+            imu_preint_heading_filter.update_heading_gyro(t_prev_imu, t_now)
+            idx0 = int(np.searchsorted(imu_t, t_prev_imu, side="left"))
+            idx1 = int(np.searchsorted(imu_t, t_now, side="left"))
+            for k in range(idx0, idx1):
+                imu_preint_guide.add_sample(
+                    imu_preint_accel[k], imu_preint_gyro_radps[k], float(imu_preint_dt[k])
+                )
+            v_gnss_wls = None
+            spp_heading_wls = None
+            spp_disp_wls_m = None
+            wls_prev = np.asarray(wls_positions[i - 1, :3], dtype=np.float64)
+            wls_cur = np.asarray(wls_positions[i, :3], dtype=np.float64)
+            if np.all(np.isfinite(wls_prev)) and np.all(np.isfinite(wls_cur)) and dt > 0.0:
+                displacement_wls = wls_cur - wls_prev
+                spp_disp_wls_m = float(np.linalg.norm(displacement_wls))
+                v_gnss_wls = displacement_wls / dt
+                lat_wls, lon_wls = ecef_to_lla_rad(wls_cur)
+                v_enu_wls = ecef_to_enu_rotation(lat_wls, lon_wls) @ v_gnss_wls
+                speed_wls = math.hypot(float(v_enu_wls[0]), float(v_enu_wls[1]))
+                spp_heading_wls = (
+                    math.atan2(float(v_enu_wls[0]), float(v_enu_wls[1])) if speed_wls > 0.5 else None
+                )
+            p_i_imu = np.asarray(pf.estimate(), dtype=np.float64)[:3]
+            velocity_guide_imu, sigma_pos_eff_imu = imu_preint_guide.close_segment(
+                p_i_imu, dt, v_gnss_ecef=v_gnss_wls, spp_heading_rad=spp_heading_wls,
+                spp_displacement_m=spp_disp_wls_m,
+            )
+            if velocity_guide_imu is not None and np.all(np.isfinite(velocity_guide_imu)):
+                vel_cov_imu = imu_preint_guide.velocity_covariance_ecef
+                if vel_cov_imu is not None:
+                    pf.set_velocity_covariance(vel_cov_imu)
+                pf.predict(
+                    velocity=velocity_guide_imu,
+                    dt=dt,
+                    sigma_pos=sigma_pos_eff_imu,
+                    velocity_guide_alpha=1.0,
+                    rbpf_velocity_kf=True,
+                    velocity_process_noise=config.velocity_process_noise,
+                )
+                pf_predict_done = True
+                imu_preint_predict_done = True
+                imu_preint_sigma_pos_used[i] = sigma_pos_eff_imu
+                imu_preint_predict_used += 1
+            else:
+                imu_preint_fallback_used += 1
+            imu_preint_guide.reset_segment()
+
         v_guide = None
         v_guide_from_ins = False
         if (
@@ -3918,9 +4488,13 @@ def _run_ctrbpf_on_segment(
             )
         if pf_diag_row is not None:
             pf_diag_row["predict_source"] = (
-                "particle_imu"
-                if pf_predict_done
-                else ("ins_motion" if v_guide_from_ins else ("hybrid_velocity" if v_guide is not None else "process"))
+                "imu_preint"
+                if imu_preint_predict_done
+                else (
+                    "particle_imu"
+                    if pf_predict_done
+                    else ("ins_motion" if v_guide_from_ins else ("hybrid_velocity" if v_guide is not None else "process"))
+                )
             )
             _capture_pf_internal_state(
                 pf,
@@ -3933,6 +4507,11 @@ def _run_ctrbpf_on_segment(
         sat_i = np.asarray(sat_ecef[i], dtype=np.float64)
         pr_i = np.asarray(pseudoranges[i], dtype=np.float64)
         w_i = np.asarray(weights[i], dtype=np.float64)
+        # WP22b item 3: raw C/N0-like weight, tracked through the same masks
+        # as sat_i/pr_i/w_i but *not* run through `_pr_likelihood_weights`
+        # (which can rescale/clip w_i depending on `pr_weight_mode`) so the
+        # GMM w_los mapping always sees the actual measured C/N0 units.
+        cn0_i_full = np.asarray(weights[i], dtype=np.float64)
         prn_i_full = np.asarray(
             list(used_prns[i]) if i < len(used_prns) else [""] * len(w_i),
             dtype=object,
@@ -3948,6 +4527,7 @@ def _run_ctrbpf_on_segment(
             sat_i = sat_i[pr_sys_mask]
             pr_i = pr_i[pr_sys_mask]
             w_i = w_i[pr_sys_mask]
+            cn0_i_full = cn0_i_full[pr_sys_mask]
             prn_i_full = prn_i_full[pr_sys_mask]
             sids_i_full = sids_i_full[pr_sys_mask]
         if system_ids is not None:
@@ -3994,6 +4574,7 @@ def _run_ctrbpf_on_segment(
         sat_i = sat_i[finite]
         pr_i = pr_i[finite]
         w_i = w_i[finite]
+        cn0_i = cn0_i_full[finite]
         prn_i = prn_i_full[finite]
         sids_i = None if sids_i_full is None else np.asarray(sids_i_full)[finite]
         pr_sagnac_ref = np.asarray(pf.estimate(), dtype=np.float64)[:3]
@@ -4014,6 +4595,7 @@ def _run_ctrbpf_on_segment(
                 sat_i = sat_i[elev_mask]
                 pr_i = pr_i[elev_mask]
                 w_i = w_i[elev_mask]
+                cn0_i = cn0_i[elev_mask]
                 prn_i = prn_i[elev_mask]
                 if sids_i is not None:
                     sids_i = sids_i[elev_mask]
@@ -4097,6 +4679,7 @@ def _run_ctrbpf_on_segment(
                 sat_i = sat_i[gate_mask]
                 pr_i = pr_i[gate_mask]
                 w_i = w_i[gate_mask]
+                cn0_i = cn0_i[gate_mask]
                 prn_i = prn_i[gate_mask]
                 if sids_i is not None:
                     sids_i = sids_i[gate_mask]
@@ -4147,6 +4730,33 @@ def _run_ctrbpf_on_segment(
             pr_obs_stats.epochs_skipped += 1
             if pf_diag_row is not None:
                 pf_diag_row["pr_update_mode"] = "skipped_status"
+        elif use_pr_gmm_here and bool(config.enable_cn0_gmm):
+            elev_i_deg = np.degrees(
+                np.array(
+                    [_elevation_rad(pr_sagnac_ref, sat_row) for sat_row in sat_i],
+                    dtype=np.float64,
+                )
+            )
+            w_los_i = _cn0_elevation_w_los(cn0_i, elev_i_deg, config)
+            n_gmm_buckets, mean_w_los = _pf_update_gmm_cn0(
+                pf,
+                sat_i,
+                pr_i,
+                w_i,
+                w_los_i,
+                sigma_pr=float(config.sigma_pr),
+                mu_nlos=float(config.pr_gmm_mu_nlos_m),
+                sigma_nlos=float(config.pr_gmm_sigma_nlos_m),
+                n_buckets=int(config.cn0_gmm_n_buckets),
+                resample=(not defer_resample) and not pr_ess_guard_enabled,
+            )
+            pr_obs_stats.epochs_gmm += 1
+            if np.isfinite(mean_w_los):
+                _cn0_gmm_w_los_means.append(float(mean_w_los))
+            if pf_diag_row is not None:
+                pf_diag_row["pr_update_mode"] = "cn0_gmm"
+                pf_diag_row["cn0_gmm_buckets_used"] = int(n_gmm_buckets)
+                pf_diag_row["cn0_gmm_w_los_mean"] = float(mean_w_los)
         elif use_pr_gmm_here:
             pf.update_gmm(
                 sat_i,
@@ -4198,6 +4808,11 @@ def _run_ctrbpf_on_segment(
         # Phase 1+2: compute DD once (cached) so both the Doppler-KF gate and
         # the AFV update can read its pair count.
         dd_result = None
+        # WP23a: DD-pseudorange result captured for the MUPF stage (i) --
+        # reset every epoch (unlike the FGO/anchor-only ``dd_pr_result``
+        # local below, whose lifetime stays nested inside its own ``if``
+        # block and is never read outside it).
+        dd_pr_result_mupf = None
         if need_dd_compute and dd_computer is not None:
             rover_pos_now = np.asarray(pf.estimate(), dtype=np.float64)[:3]
             dd_select_pos = (
@@ -4253,7 +4868,9 @@ def _run_ctrbpf_on_segment(
                     # PF soft position update. DD carrier alone is relative;
                     # DD-PR supplies an absolute anchor when PR/WLS is biased.
                     if dd_pr_computer is not None and (
-                        config.enable_fgo_lambda or config.enable_dd_pr_ls_anchor
+                        config.enable_fgo_lambda
+                        or config.enable_dd_pr_ls_anchor
+                        or config.enable_cp_mupf
                     ):
                         try:
                             dd_pr_result = dd_pr_computer.compute_dd(
@@ -4298,6 +4915,11 @@ def _run_ctrbpf_on_segment(
                                 ),
                                 min_pairs=max(1, int(config.dd_pr_gate_min_pairs)),
                             )
+                        # WP23a: capture the fully-gated DD-PR result for the
+                        # MUPF stage (i) update below, regardless of which of
+                        # the FGO/anchor consumers further down also use it.
+                        if config.enable_cp_mupf:
+                            dd_pr_result_mupf = dd_pr_result
                         if (
                             dd_pr_result is not None
                             and int(getattr(dd_pr_result, "n_dd", 0)) > 0
@@ -4669,7 +5291,175 @@ def _run_ctrbpf_on_segment(
             )
 
         dd_carrier_update_applied = False
-        if config.enable_dd_carrier_afv and dd_computer is not None:
+        if config.enable_cp_mupf and dd_computer is not None:
+            # WP23a: Suzuki-style multiple-update (MUPF) schedule -- this
+            # REPLACES the single-shot ``enable_dd_carrier_afv`` block
+            # (mutually exclusive via elif below) with two independently
+            # tempered stages.
+            dd_stats.epochs_attempted += 1
+            any_stage_resampled = False
+
+            # Stage (i): DD pseudorange -- absolute, position-only
+            # geometry, least sharp of the two DD families (Suzuki 2024:
+            # apply least-to-most-sharp).
+            if (
+                dd_pr_result_mupf is not None
+                and int(getattr(dd_pr_result_mupf, "n_dd", 0)) >= int(config.cp_mupf_min_pairs)
+            ):
+                _pr_result_for_stage = dd_pr_result_mupf
+
+                def _pr_stage_apply():
+                    pf.update_dd_pseudorange(
+                        _pr_result_for_stage,
+                        sigma_pr=float(config.cp_mupf_dd_pr_sigma_m),
+                        resample=False,
+                    )
+
+                pr_temper = _mupf_stage_update(
+                    pf, _pr_stage_apply,
+                    target_ess_ratio=float(config.cp_mupf_pr_stage_target_ess_ratio),
+                    max_iters=int(config.cp_mupf_stage_max_iters),
+                    max_tempering_steps=int(config.cp_mupf_stage_max_tempering_steps),
+                    resample_before=bool(config.cp_mupf_resample_before_stage),
+                )
+                pr_alpha = float(pr_temper.beta_consumed)
+                pr_post_ratio = float(pr_temper.final_ess_ratio)
+                pr_resampled = bool(pr_temper.resample_count > 0)
+                any_stage_resampled = any_stage_resampled or pr_resampled
+                dd_stats.mupf_pr_epochs_applied += 1
+                dd_stats.mupf_pr_pairs_total += int(dd_pr_result_mupf.n_dd)
+                dd_stats.mupf_pr_resample_count += int(pr_resampled)
+                dd_stats.mupf_pr_alpha_sum += float(pr_alpha)
+                dd_stats.mupf_pr_post_ratio_sum += float(pr_post_ratio)
+                dd_stats.mupf_pr_tempering_steps_total += len(pr_temper.beta_increments)
+                dd_stats.mupf_pr_log_evidence_sum += float(pr_temper.log_evidence)
+                if pf_diag_row is not None:
+                    pf_diag_row["mupf_pr_alpha"] = float(pr_alpha)
+                    pf_diag_row["mupf_pr_post_ess_ratio"] = float(pr_post_ratio)
+                    pf_diag_row["mupf_pr_resampled"] = bool(pr_resampled)
+                    pf_diag_row["mupf_pr_tempering_steps"] = len(
+                        pr_temper.beta_increments
+                    )
+                    pf_diag_row["mupf_pr_log_evidence"] = float(
+                        pr_temper.log_evidence
+                    )
+
+            # WP23a item 3: cloud-spread-vs-lambda/2 diagnostic, measured on
+            # the post-PR-stage cloud -- exactly what the sharp CP-AFV
+            # stage below is about to see.
+            if dd_result is not None and int(getattr(dd_result, "n_dd", 0)) > 0:
+                spread_m = float(pf.get_position_spread())
+                half_lambda_m = float(np.median(dd_result.wavelengths_m)) / 2.0
+                dd_stats.mupf_cloud_spread_sum_m += spread_m
+                dd_stats.mupf_cloud_spread_epochs += 1
+                if half_lambda_m > 0.0:
+                    dd_stats.mupf_cloud_spread_over_half_lambda_sum += (
+                        spread_m / half_lambda_m
+                    )
+                if pf_diag_row is not None:
+                    pf_diag_row["mupf_pre_cp_spread_m"] = spread_m
+                    pf_diag_row["mupf_half_lambda_m"] = half_lambda_m
+
+            # Stage (ii): DD carrier AFV -- fractional-cycle, sharpest.
+            # Gated on epoch-to-epoch phase continuity (cycle-slip proxy;
+            # no slip detector exists elsewhere in the DD machinery), then
+            # applied as a coarse-to-fine sigma sequence (validated
+            # pattern reused from ``gnss_gpu.dd_carrier_epoch_update`` --
+            # see the ``enable_cp_mupf`` docstring in ``CTRBPFConfig``),
+            # each value independently ESS-tempered and resample-gated.
+            cp_dd_result = dd_result
+            n_slips = 0
+            if (
+                cp_dd_result is not None
+                and bool(config.cp_mupf_slip_gate_enabled)
+                and int(getattr(cp_dd_result, "n_dd", 0)) > 0
+            ):
+                cp_dd_result, n_slips = _cp_slip_gate(
+                    cp_dd_result,
+                    _cp_slip_history,
+                    float(times[i]),
+                    max_delta_cycles=float(config.cp_mupf_slip_max_delta_cycles),
+                    max_dt_s=float(config.cp_mupf_slip_max_dt_s),
+                )
+                dd_stats.mupf_cp_slips_flagged_total += n_slips
+                if n_slips > 0:
+                    dd_stats.mupf_cp_slip_epochs += 1
+
+            if (
+                cp_dd_result is not None
+                and int(getattr(cp_dd_result, "n_dd", 0)) >= int(config.cp_mupf_min_pairs)
+            ):
+                groups = _dd_result_groups(cp_dd_result, int(config.cp_mupf_cp_n_groups))
+                cp_alphas: list[float] = []
+                cp_post_ratios: list[float] = []
+                any_cp_resampled = False
+                cp_pairs_this_epoch = 0
+                for group in groups:
+                    if group is None or int(getattr(group, "n_dd", 0)) == 0:
+                        continue
+                    for sigma_c in config.cp_mupf_dd_cp_sigma_sequence_cycles:
+                        _group_for_stage = group
+                        _sigma_for_stage = float(sigma_c)
+
+                        def _cp_stage_apply():
+                            pf.update_dd_carrier_afv(
+                                _group_for_stage,
+                                sigma_cycles=_sigma_for_stage,
+                                resample=False,
+                            )
+
+                        cp_temper = _mupf_stage_update(
+                            pf, _cp_stage_apply,
+                            target_ess_ratio=float(
+                                config.cp_mupf_cp_stage_target_ess_ratio
+                            ),
+                            max_iters=int(config.cp_mupf_stage_max_iters),
+                            max_tempering_steps=int(
+                                config.cp_mupf_stage_max_tempering_steps
+                            ),
+                            resample_before=bool(config.cp_mupf_resample_before_stage),
+                        )
+                        cp_alpha = float(cp_temper.beta_consumed)
+                        cp_post_ratio = float(cp_temper.final_ess_ratio)
+                        cp_resampled = bool(cp_temper.resample_count > 0)
+                        cp_alphas.append(cp_alpha)
+                        cp_post_ratios.append(cp_post_ratio)
+                        any_cp_resampled = any_cp_resampled or cp_resampled
+                        dd_stats.mupf_cp_stage_calls += 1
+                        dd_stats.mupf_cp_tempering_steps_total += len(
+                            cp_temper.beta_increments
+                        )
+                        dd_stats.mupf_cp_log_evidence_sum += float(
+                            cp_temper.log_evidence
+                        )
+                    cp_pairs_this_epoch += int(group.n_dd)
+                if cp_alphas:
+                    any_stage_resampled = any_stage_resampled or any_cp_resampled
+                    dd_stats.mupf_cp_epochs_applied += 1
+                    dd_stats.mupf_cp_pairs_total += cp_pairs_this_epoch
+                    dd_stats.mupf_cp_resample_count += int(any_cp_resampled)
+                    dd_stats.mupf_cp_alpha_sum += float(np.mean(cp_alphas))
+                    dd_stats.mupf_cp_post_ratio_sum += float(np.mean(cp_post_ratios))
+                    dd_carrier_update_applied = True
+                    dd_stats.epochs_applied += 1
+                    dd_stats.pairs_total += cp_pairs_this_epoch
+                    if pf_diag_row is not None:
+                        pf_diag_row["mupf_cp_mean_alpha"] = float(np.mean(cp_alphas))
+                        pf_diag_row["mupf_cp_mean_post_ess_ratio"] = float(
+                            np.mean(cp_post_ratios)
+                        )
+                        pf_diag_row["mupf_cp_slips_flagged"] = int(n_slips)
+                        pf_diag_row["mupf_cp_n_groups_used"] = int(len(groups))
+
+            # A mid-epoch resample (either stage above) invalidates the
+            # particle-wise pre/post log-weight correspondence the
+            # epoch-blanket ``enable_epoch_tempering`` snapshot assumes
+            # (WP22b item 2). Re-anchor that snapshot here so a later
+            # blanket temper this same epoch (if any updates still follow)
+            # only covers what happens after this point.
+            if config.enable_epoch_tempering and any_stage_resampled:
+                pre_epoch_log_weights = np.asarray(pf.get_log_weights(), dtype=np.float64)
+        elif config.enable_dd_carrier_afv and dd_computer is not None:
             dd_stats.epochs_attempted += 1
             if (
                 dd_result is not None
@@ -5916,6 +6706,26 @@ def _run_ctrbpf_on_segment(
                 reference_ecef=ref_diag_epoch,
             )
 
+        # WP22b item 2: temper this epoch's total log-likelihood increment
+        # (predict does not change weights, so the delta since
+        # ``pre_epoch_log_weights`` is exactly this epoch's PR/GMM/Doppler-
+        # KF/DD-carrier/position-update contribution) *before* the estimate
+        # used for emission is computed, so the tempered weights actually
+        # affect this epoch's output -- not just the next epoch's resample.
+        if config.enable_epoch_tempering and pre_epoch_log_weights is not None:
+            temper_alpha, temper_pre_ratio, temper_post_ratio = _apply_pr_ess_guard(
+                pf,
+                pre_epoch_log_weights,
+                min_ratio=float(config.epoch_tempering_target_ess_ratio),
+                max_iters=int(config.epoch_tempering_max_iters),
+            )
+            _epoch_tempering_alphas.append(temper_alpha)
+            _epoch_tempering_post_ratios.append(temper_post_ratio)
+            if pf_diag_row is not None:
+                pf_diag_row["epoch_tempering_alpha"] = temper_alpha
+                pf_diag_row["epoch_tempering_pre_ratio"] = temper_pre_ratio
+                pf_diag_row["epoch_tempering_post_ratio"] = temper_post_ratio
+
         resampled_before_emit = False
         if config.enable_reservoir_stein:
             resampled_before_emit = _reservoir_stein_resample_if_needed(
@@ -6323,6 +7133,31 @@ def _run_ctrbpf_on_segment(
             np.linalg.norm(ins_ekf.b_g) * 180.0 / math.pi
         )
         ins_tc_stats.final_pos_sigma_m = float(ins_ekf.position_sigma_m())
+
+    # WP22a: finalize filter-health + IMU-preint summary stats (see the
+    # "WP22a filter health" block after ``pf.initialize`` above).
+    _finite_ess = pf_health_ess_ratio[np.isfinite(pf_health_ess_ratio)]
+    pr_obs_stats.mean_ess_ratio = (
+        float(np.mean(_finite_ess)) if _finite_ess.size > 0 else float("nan")
+    )
+    pr_obs_stats.resample_rate = float(np.mean(pf_health_resampled)) if n_epochs > 0 else float("nan")
+
+    # WP22b: finalize tempering / cn0-gmm summary stats.
+    pr_obs_stats.epoch_tempering_epochs = int(len(_epoch_tempering_alphas))
+    if _epoch_tempering_alphas:
+        pr_obs_stats.epoch_tempering_mean_alpha = float(np.mean(_epoch_tempering_alphas))
+        pr_obs_stats.epoch_tempering_mean_post_ratio = float(
+            np.mean(_epoch_tempering_post_ratios)
+        )
+    if _cn0_gmm_w_los_means:
+        pr_obs_stats.cn0_gmm_mean_w_los = float(np.mean(_cn0_gmm_w_los_means))
+    if use_imu_preint:
+        pr_obs_stats.imu_preint_predict_used = int(imu_preint_predict_used)
+        pr_obs_stats.imu_preint_fallback_used = int(imu_preint_fallback_used)
+        _used_sigma = imu_preint_sigma_pos_used[imu_preint_sigma_pos_used > 0.0]
+        pr_obs_stats.imu_preint_mean_sigma_pos_m = (
+            float(np.mean(_used_sigma)) if _used_sigma.size > 0 else float("nan")
+        )
 
     return (
         positions,
@@ -6803,6 +7638,20 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         dd_sigma_cycles=args.dd_sigma_cycles,
         dd_min_pairs=args.dd_min_pairs,
         dd_min_pairs_update=args.dd_min_pairs_update,
+        cp_mupf_dd_pr_sigma_m=args.cp_mupf_dd_pr_sigma_m,
+        cp_mupf_pr_stage_target_ess_ratio=args.cp_mupf_pr_stage_target_ess_ratio,
+        cp_mupf_dd_cp_sigma_sequence_cycles=tuple(
+            float(x) for x in args.cp_mupf_dd_cp_sigma_sequence_cycles.split(",") if x.strip()
+        ),
+        cp_mupf_cp_stage_target_ess_ratio=args.cp_mupf_cp_stage_target_ess_ratio,
+        cp_mupf_stage_max_iters=args.cp_mupf_stage_max_iters,
+        cp_mupf_stage_max_tempering_steps=args.cp_mupf_stage_max_tempering_steps,
+        cp_mupf_min_pairs=args.cp_mupf_min_pairs,
+        cp_mupf_cp_n_groups=args.cp_mupf_cp_n_groups,
+        cp_mupf_slip_gate_enabled=not args.disable_cp_mupf_slip_gate,
+        cp_mupf_slip_max_delta_cycles=args.cp_mupf_slip_max_delta_cycles,
+        cp_mupf_slip_max_dt_s=args.cp_mupf_slip_max_dt_s,
+        cp_mupf_resample_before_stage=bool(args.cp_mupf_resample_before_stage),
         dd_systems=dd_systems,
         dd_base_interp=bool(args.dd_base_interp),
         dd_min_elevation_deg=args.dd_min_elevation_deg,
@@ -6941,6 +7790,39 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
         ins_tc_quality_gate_window_epochs=int(args.ins_tc_quality_gate_window_epochs),
         ins_tc_quality_gate_max_fix_rate=float(args.ins_tc_quality_gate_max_fix_rate),
         ins_tc_quality_gate_pu_skip=bool(args.ins_tc_quality_gate_pu_skip),
+        # WP22a: applied uniformly via --imu {off,preint} to every variant
+        # selected by --methods (not gated by method-label string tokens,
+        # unlike imu_tc/ins_tc which are opt-in per method combo).
+        enable_imu_preint=(args.imu == "preint"),
+        imu_preint_sigma_accel_mps2_sqrthz=args.imu_preint_sigma_accel,
+        imu_preint_sigma_gyro_radps_sqrthz=args.imu_preint_sigma_gyro,
+        imu_preint_sigma_pos_floor_m=args.imu_preint_sigma_pos_floor,
+        imu_preint_sigma_pos_scale=args.imu_preint_sigma_pos_scale,
+        imu_preint_velocity_blend_alpha=args.imu_preint_velocity_blend_alpha,
+        imu_preint_sigma_spp_pos_m=args.imu_preint_sigma_spp_pos_m,
+        imu_preint_min_heading_fix_disp_m=args.imu_preint_min_heading_fix_disp_m,
+        # WP22b: applied uniformly to every selected variant, same pattern
+        # as --imu {off,preint} above, so the ablation grid (item 5) is a
+        # single command per {imu arm} x {tempering/GMM/NLOS toggle combo}
+        # rather than new method-label branches.
+        enable_epoch_tempering=bool(args.enable_epoch_tempering),
+        epoch_tempering_target_ess_ratio=args.epoch_tempering_target_ess_ratio,
+        epoch_tempering_max_iters=args.epoch_tempering_max_iters,
+        enable_cn0_gmm=bool(args.enable_cn0_gmm),
+        enable_pr_gmm=bool(args.enable_cn0_gmm),
+        cn0_gmm_baseline_dbhz0=args.cn0_gmm_baseline_dbhz0,
+        cn0_gmm_baseline_dbhz90=args.cn0_gmm_baseline_dbhz90,
+        cn0_gmm_gap_mid_db=args.cn0_gmm_gap_mid_db,
+        cn0_gmm_logistic_scale_db=args.cn0_gmm_logistic_scale_db,
+        cn0_gmm_w_los_min=args.cn0_gmm_w_los_min,
+        cn0_gmm_w_los_max=args.cn0_gmm_w_los_max,
+        cn0_gmm_n_buckets=int(args.cn0_gmm_n_buckets),
+        enable_particle_nlos=bool(args.enable_particle_nlos),
+        particle_nlos_undiff_pr_threshold_m=args.particle_nlos_undiff_pr_threshold_m,
+        particle_nlos_dd_carrier_threshold_cycles=args.particle_nlos_dd_carrier_threshold_cycles,
+        particle_nlos_huber=bool(args.particle_nlos_huber),
+        particle_nlos_huber_undiff_pr_k=args.particle_nlos_huber_undiff_pr_k,
+        particle_nlos_huber_dd_carrier_k=args.particle_nlos_huber_dd_carrier_k,
         # NOTE: rbpf_kf_gate_* defaults stay None in `base` so that bare
         # `rbpf` / `rbpf+dd` variants run without a gate (true baseline).
         # Only the `rbpf+dd+gate*` variants below opt in via `aaa_gate`.
@@ -7030,6 +7912,20 @@ def _config_variants(args: argparse.Namespace) -> list[CTRBPFConfig]:
             enable_rbpf_velocity_kf=True,
             enable_dd_carrier_afv=True,
             method_label="RBPF-velKF+DD+gate",
+        ))
+    # WP23a: Suzuki-style DD-PR + DD-CP-AFV multiple-update (MUPF) schedule
+    # on top of the WP22b winner (rbpf+dd+gate). ``enable_dd_carrier_afv``
+    # is explicitly turned off here -- ``enable_cp_mupf`` takes over the
+    # DD-carrier weighting (mutually exclusive at the call site) with the
+    # two-stage tempered schedule instead of the single-shot call.
+    if "rbpf+dd+cp+gate" in args.methods:
+        variant_kwargs = {**base, **aaa_gate}
+        variants.append(CTRBPFConfig(
+            **variant_kwargs,
+            enable_rbpf_velocity_kf=True,
+            enable_dd_carrier_afv=False,
+            enable_cp_mupf=True,
+            method_label="RBPF-velKF+DD+CP-MUPF+gate",
         ))
     if "rbpf+dd+gate+pu" in args.methods:
         variant_kwargs = {**base, **aaa_gate}
@@ -9524,7 +10420,7 @@ def main() -> None:
         default="pf,pf+pu,rbpf,rbpf+pu",
         help=(
             "Comma-separated subset of {pf, pf+pu, rbpf, rbpf+pu, pf+dd, "
-            "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+gate+pu, "
+            "rbpf+dd, rbpf+dd+pu, rbpf+dd+gate, rbpf+dd+ar+gate, rbpf+dd+cp+gate, rbpf+dd+gate+pu, "
             "rbpf+dd+pu+tdcp, rbpf+dd+gate+pu+tdcp, "
             "rbpf+dd+pu+bridge, rbpf+dd+gate+pu+bridge, "
             "rbpf+dd+dopq+pu, rbpf+dd+dopq+pu+bridge, "
@@ -9553,6 +10449,78 @@ def main() -> None:
                         help="Min common rover/base sats to attempt DD (default 4)")
     parser.add_argument("--dd-min-pairs-update", type=int, default=3,
                         help="Min DD pairs required to apply pf.update_dd_carrier_afv (default 3)")
+    parser.add_argument(
+        "--cp-mupf-dd-pr-sigma-m", type=float, default=5.0, dest="cp_mupf_dd_pr_sigma_m",
+        help=(
+            "WP23a MUPF stage (i): DD-pseudorange sigma [m] (default 5.0, "
+            "inherited from --fgo-dd-pr-sigma-m's tc_fgo/rbpf_fgo default)."
+        ),
+    )
+    parser.add_argument(
+        "--cp-mupf-pr-stage-target-ess-ratio", type=float, default=0.10,
+        dest="cp_mupf_pr_stage_target_ess_ratio",
+        help="WP23a MUPF stage (i) target post-tempering ESS/N (default 0.10).",
+    )
+    parser.add_argument(
+        "--cp-mupf-dd-cp-sigma-sequence-cycles", type=str, default="2.0,0.5,0.05",
+        dest="cp_mupf_dd_cp_sigma_sequence_cycles",
+        help=(
+            "WP23a MUPF stage (ii): comma-separated coarse-to-fine DD-carrier "
+            "AFV sigma sequence [cycles] (default 2.0,0.5,0.05 -- reused from "
+            "the validated gnss_gpu.pf_smoother_config.MupfConfig default)."
+        ),
+    )
+    parser.add_argument(
+        "--cp-mupf-cp-stage-target-ess-ratio", type=float, default=0.10,
+        dest="cp_mupf_cp_stage_target_ess_ratio",
+        help="WP23a MUPF stage (ii) target post-tempering ESS/N per sigma step (default 0.10).",
+    )
+    parser.add_argument(
+        "--cp-mupf-stage-max-iters", type=int, default=20, dest="cp_mupf_stage_max_iters",
+        help="MUPF per-stage annealing bisection iterations (default 20).",
+    )
+    parser.add_argument(
+        "--cp-mupf-stage-max-tempering-steps", type=int, default=64,
+        dest="cp_mupf_stage_max_tempering_steps",
+        help=(
+            "WP23b maximum annealed-SMC beta increments per staged likelihood "
+            "(default 64; exhausting the limit is a hard error)."
+        ),
+    )
+    parser.add_argument(
+        "--cp-mupf-min-pairs", type=int, default=3, dest="cp_mupf_min_pairs",
+        help="WP23a MUPF: min DD pairs required to attempt a given stage's update (default 3).",
+    )
+    parser.add_argument(
+        "--cp-mupf-cp-n-groups", type=int, default=1, dest="cp_mupf_cp_n_groups",
+        help=(
+            "WP23a MUPF stage (ii): split DD-CP pairs round-robin into this "
+            "many sequential sub-updates per sigma step (default 1 = off; "
+            "the spec's documented fallback if a single CP update is still "
+            "too sharp)."
+        ),
+    )
+    parser.add_argument(
+        "--disable-cp-mupf-slip-gate", action="store_true",
+        help="WP23a: disable the epoch-to-epoch DD-carrier phase continuity (cycle-slip proxy) gate.",
+    )
+    parser.add_argument(
+        "--cp-mupf-slip-max-delta-cycles", type=float, default=2.0,
+        dest="cp_mupf_slip_max_delta_cycles",
+        help="WP23a cycle-slip proxy: max tolerated |delta DD-carrier cycles| between consecutive epochs (default 2.0).",
+    )
+    parser.add_argument(
+        "--cp-mupf-slip-max-dt-s", type=float, default=2.0, dest="cp_mupf_slip_max_dt_s",
+        help="WP23a cycle-slip proxy: max epoch gap [s] over which continuity is checked (default 2.0).",
+    )
+    parser.add_argument(
+        "--cp-mupf-resample-before-stage", action="store_true",
+        help=(
+            "WP23a diagnostic: resample-if-needed before, not just after, "
+            "each MUPF stage's update (root-cause of the DD-PR stage's "
+            "measured alpha=0.0 inertness -- see WP23A_REPORT.md)."
+        ),
+    )
     parser.add_argument("--dd-systems", type=str, default="G,E,J,C",
                         help="Constellations used for DD (GLONASS skipped, default G,E,J,C)")
     parser.add_argument("--dd-base-interp", action="store_true",
@@ -9980,6 +10948,86 @@ def main() -> None:
                         help="Cap epochs per run (smoke / debug). None = full run.")
     parser.add_argument("--start-epoch", type=int, default=0)
     parser.add_argument(
+        "--imu", choices=("off", "preint"), default="off",
+        help=(
+            "WP22a ablation switch: 'off' (default) = baseline predict step "
+            "unchanged (no IMU guide, i.e. reproduces the pre-WP22a "
+            "RBPF-velKF+DD+gate+hybrid numbers). 'preint' = wire in the "
+            "WP21b IMU-preintegration predict-step guide "
+            "(ImuPreintPfGuide, heading-uncertainty sigma_pos + "
+            "set_velocity_covariance Sigma_v feeding) using the PPC 100 Hz "
+            "IMU, applied uniformly to every selected --methods variant."
+        ),
+    )
+    parser.add_argument("--imu-preint-sigma-accel", type=float, default=0.05,
+                        help="ImuPreintPfGuide sigma_accel_mps2_sqrthz (WP21b default).")
+    parser.add_argument("--imu-preint-sigma-gyro", type=float, default=0.005,
+                        help="ImuPreintPfGuide sigma_gyro_radps_sqrthz (WP21b default).")
+    parser.add_argument("--imu-preint-sigma-pos-floor", type=float, default=0.05,
+                        help="Small numerical-stability floor on sigma_pos (WP21b default, not a tuning knob).")
+    parser.add_argument("--imu-preint-sigma-pos-scale", type=float, default=1.0)
+    parser.add_argument("--imu-preint-velocity-blend-alpha", type=float, default=0.3)
+    parser.add_argument("--imu-preint-sigma-spp-pos-m", type=float, default=30.0,
+                        help="Documented raw-SPP horizontal sigma [m] used for the heading-uncertainty term.")
+    parser.add_argument("--imu-preint-min-heading-fix-disp-m", type=float, default=2.0)
+    parser.add_argument(
+        "--enable-epoch-tempering", action="store_true",
+        help=(
+            "WP22b item 2: adaptive likelihood tempering. Scales this "
+            "epoch's total log-likelihood increment by a bisected "
+            "temperature beta in (0,1] targeting "
+            "--epoch-tempering-target-ess-ratio ESS/N (default 0.10), "
+            "applied uniformly to every selected --methods variant. "
+            "Forces end-of-epoch deferred resampling internally."
+        ),
+    )
+    parser.add_argument("--epoch-tempering-target-ess-ratio", type=float, default=0.10,
+                        help="Target post-tempering ESS/N (default 0.10).")
+    parser.add_argument("--epoch-tempering-max-iters", type=int, default=20,
+                        help="Bisection iterations for the tempering solve (default 20).")
+    parser.add_argument(
+        "--enable-cn0-gmm", action="store_true",
+        help=(
+            "WP22b item 3: drive the PR-GMM LOS/NLOS mixture weight w_los "
+            "per satellite from measured C/N0 + elevation (see "
+            "_cn0_elevation_w_los), instead of the fixed --pr-gmm-w-los "
+            "scalar. Implies enable_pr_gmm=True. Applied uniformly to "
+            "every selected --methods variant."
+        ),
+    )
+    parser.add_argument("--cn0-gmm-baseline-dbhz0", type=float, default=30.0,
+                        help="Clear-sky C/N0 baseline at 0deg elevation [dB-Hz] (default 30).")
+    parser.add_argument("--cn0-gmm-baseline-dbhz90", type=float, default=45.0,
+                        help="Clear-sky C/N0 baseline at 90deg elevation [dB-Hz] (default 45).")
+    parser.add_argument("--cn0-gmm-gap-mid-db", type=float, default=14.0,
+                        help="C/N0 deficit [dB] below baseline at which w_los=0.5; default 14.0 is the "
+                             "mean of the two validated UrbanNav site gaps (16.5/11.9 dB).")
+    parser.add_argument("--cn0-gmm-logistic-scale-db", type=float, default=4.0,
+                        help="Logistic transition width [dB] (default 4.0, sharp -- matches the validated "
+                             "0.94-0.985 AUC separation).")
+    parser.add_argument("--cn0-gmm-w-los-min", type=float, default=0.05)
+    parser.add_argument("--cn0-gmm-w-los-max", type=float, default=0.97)
+    parser.add_argument("--cn0-gmm-n-buckets", type=int, default=5,
+                        help="Number of per-satellite w_los buckets (kernel calls) per epoch (default 5).")
+    parser.add_argument(
+        "--enable-particle-nlos", action="store_true",
+        help=(
+            "WP22b item 4: enable the native per-particle NLOS threshold "
+            "gate (undifferenced PR + DD-carrier-AFV kernels; each "
+            "particle computes its own residual from its own hypothesized "
+            "state, so the same scalar threshold rejects a different "
+            "satellite subset per particle). Applied uniformly to every "
+            "selected --methods variant. No CUDA changes -- this wires an "
+            "existing kernel feature that was never plumbed through this "
+            "runner's _build_pf before WP22b."
+        ),
+    )
+    parser.add_argument("--particle-nlos-undiff-pr-threshold-m", type=float, default=30.0)
+    parser.add_argument("--particle-nlos-dd-carrier-threshold-cycles", type=float, default=0.5)
+    parser.add_argument("--particle-nlos-huber", action="store_true")
+    parser.add_argument("--particle-nlos-huber-undiff-pr-k", type=float, default=1.5)
+    parser.add_argument("--particle-nlos-huber-dd-carrier-k", type=float, default=1.5)
+    parser.add_argument(
         "--runs",
         type=str,
         default="all",
@@ -10006,6 +11054,31 @@ def main() -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     args.pos_dir.mkdir(parents=True, exist_ok=True)
 
+    # WP23b is an independent float-KF + integer-basin RBPF, not a switch on
+    # the legacy diffuse position-particle loop.  Keep it as an explicit
+    # runner method while delegating to its compact, independently testable
+    # harness.  Mixed legacy/WP23b method invocations are rejected so output
+    # semantics and FIX status cannot be confused.
+    if "rbpf+dd+ar+gate" in args.methods:
+        if args.methods != ["rbpf+dd+ar+gate"]:
+            raise SystemExit("rbpf+dd+ar+gate must be run as the sole --methods value")
+        from exp_wp23b_basin_ar import main as run_basin_ar
+
+        csv_dir = _PROJECT_ROOT / "results" / "wp23b" / "csv"
+        for city, run in runs:
+            stem = f"{args.results_prefix}_{city}_{run}"
+            basin_args = [
+                "--run", f"{city}/{run}",
+                "--data-root", str(args.data_root),
+                "--out-diagnostics", str(csv_dir / f"{stem}_epochs.csv"),
+                "--out-summary", str(csv_dir / f"{stem}_summary.json"),
+                "--out-trajectory", str(args.pos_dir / f"{stem}.csv"),
+            ]
+            if args.max_epochs is not None:
+                basin_args.extend(["--max-epochs", str(args.max_epochs)])
+            run_basin_ar(basin_args)
+        return
+
     variants = _config_variants(args)
     rtkdiag_candidate_pos_dirs = (
         _parse_path_list(args.rtkdiag_candidate_pos_dirs)
@@ -10030,8 +11103,8 @@ def main() -> None:
         args.rtkdiag_candidate_block_labels_by_run
     )
 
-    any_dd = any(v.enable_dd_carrier_afv for v in variants)
-    any_dd_pr = any(v.enable_dd_pr_ls_anchor for v in variants)
+    any_dd = any(v.enable_dd_carrier_afv or v.enable_cp_mupf for v in variants)
+    any_dd_pr = any(v.enable_dd_pr_ls_anchor or v.enable_cp_mupf for v in variants)
     any_dd_for_gate = any(
         (v.enable_rbpf_velocity_kf and v.rbpf_kf_gate_min_dd_pairs is not None)
         for v in variants
@@ -10197,7 +11270,10 @@ def main() -> None:
             tuple[str, dict[float, np.ndarray], dict[float, dict[str, str]]]
         ] = []
         imu_run: dict[str, np.ndarray] | None = None
-        if any(v.enable_zupt or v.enable_imu_tc or v.enable_ins_tc for v in variants):
+        if any(
+            v.enable_zupt or v.enable_imu_tc or v.enable_ins_tc or v.enable_imu_preint
+            for v in variants
+        ):
             try:
                 imu_run = loader.load_imu()
             except FileNotFoundError as exc:
@@ -10596,14 +11672,23 @@ def main() -> None:
                     rtkdiag_candidate_emit_mode=str(args.rtkdiag_candidate_force_emit_mode),
                 )
             print(f"  [{variant.method_label}] running ...", flush=True)
-            need_dd_for_variant = variant.enable_dd_carrier_afv or variant.enable_dd_pr_ls_anchor or (
-                variant.enable_rbpf_velocity_kf
-                and variant.rbpf_kf_gate_min_dd_pairs is not None
+            need_dd_for_variant = (
+                variant.enable_dd_carrier_afv
+                or variant.enable_dd_pr_ls_anchor
+                or variant.enable_cp_mupf
+                or (
+                    variant.enable_rbpf_velocity_kf
+                    and variant.rbpf_kf_gate_min_dd_pairs is not None
+                )
             )
             dd_for_variant = dd_computer if need_dd_for_variant else None
             dd_pr_for_variant = (
                 dd_pr_computer
-                if (variant.enable_fgo_lambda or variant.enable_dd_pr_ls_anchor)
+                if (
+                    variant.enable_fgo_lambda
+                    or variant.enable_dd_pr_ls_anchor
+                    or variant.enable_cp_mupf
+                )
                 else None
             )
             hybrid_for_variant = hybrid_pos_run if variant.enable_hybrid_pu else None
@@ -10641,7 +11726,12 @@ def main() -> None:
             )
             imu_for_variant = (
                 imu_run
-                if (variant.enable_zupt or variant.enable_imu_tc or variant.enable_ins_tc)
+                if (
+                    variant.enable_zupt
+                    or variant.enable_imu_tc
+                    or variant.enable_ins_tc
+                    or variant.enable_imu_preint
+                )
                 else None
             )
             rtkdiag_candidates_for_variant = (
@@ -10827,15 +11917,47 @@ def main() -> None:
                 "pr_gmm": int(variant.enable_pr_gmm),
                 "pr_gmm_epochs": int(pr_obs_stats.epochs_gmm),
                 "pr_gaussian_epochs": int(pr_obs_stats.epochs_gaussian),
+                # WP22a: filter-health + IMU-preint ablation columns.
+                "mean_ess_ratio": float(pr_obs_stats.mean_ess_ratio),
+                "resample_rate": float(pr_obs_stats.resample_rate),
+                "imu_mode": ("preint" if variant.enable_imu_preint else "off"),
+                "imu_preint_predict_used": int(pr_obs_stats.imu_preint_predict_used),
+                "imu_preint_fallback_used": int(pr_obs_stats.imu_preint_fallback_used),
+                "imu_preint_mean_sigma_pos_m": float(pr_obs_stats.imu_preint_mean_sigma_pos_m),
                 "pr_gmm_w_los": float(variant.pr_gmm_w_los),
                 "pr_gmm_mu_nlos_m": float(variant.pr_gmm_mu_nlos_m),
                 "pr_gmm_sigma_nlos_m": float(variant.pr_gmm_sigma_nlos_m),
                 "pr_gmm_hybrid_loose_sigma_m": float(variant.pr_gmm_hybrid_loose_sigma_m),
                 "pr_gmm_clock_quantile": float(variant.pr_gmm_clock_quantile),
+                # WP22b ablation columns.
+                "epoch_tempering": int(variant.enable_epoch_tempering),
+                "epoch_tempering_target_ess_ratio": float(
+                    variant.epoch_tempering_target_ess_ratio
+                ),
+                "epoch_tempering_epochs": int(pr_obs_stats.epoch_tempering_epochs),
+                "epoch_tempering_mean_alpha": float(pr_obs_stats.epoch_tempering_mean_alpha),
+                "epoch_tempering_mean_post_ratio": float(
+                    pr_obs_stats.epoch_tempering_mean_post_ratio
+                ),
+                "cn0_gmm": int(variant.enable_cn0_gmm),
+                "cn0_gmm_mean_w_los": float(pr_obs_stats.cn0_gmm_mean_w_los),
+                "particle_nlos": int(variant.enable_particle_nlos),
+                "particle_nlos_undiff_pr_threshold_m": float(
+                    variant.particle_nlos_undiff_pr_threshold_m
+                ),
+                "particle_nlos_dd_carrier_threshold_cycles": float(
+                    variant.particle_nlos_dd_carrier_threshold_cycles
+                ),
                 "doppler_systems": ",".join(str(s) for s in variant.doppler_systems),
                 "doppler_prefit_gate_mps": float(variant.doppler_prefit_gate_mps),
                 "doppler_prefit_gate_min_sats": int(variant.doppler_prefit_gate_min_sats),
                 "dd_carrier_afv": int(variant.enable_dd_carrier_afv),
+                "cp_mupf": int(variant.enable_cp_mupf),
+                "cp_mupf_dd_pr_sigma_m": float(variant.cp_mupf_dd_pr_sigma_m),
+                "cp_mupf_dd_cp_sigma_sequence_cycles": ",".join(
+                    str(s) for s in variant.cp_mupf_dd_cp_sigma_sequence_cycles
+                ),
+                "cp_mupf_cp_n_groups": int(variant.cp_mupf_cp_n_groups),
                 "dd_min_elevation_deg": float(variant.dd_min_elevation_deg),
                 "dd_min_snr": float(variant.dd_min_snr),
                 "dd_keep_best": int(variant.dd_keep_best),
@@ -10896,6 +12018,69 @@ def main() -> None:
                 "dd_epochs_attempted": int(dd_stats.epochs_attempted),
                 "dd_epochs_applied": int(dd_stats.epochs_applied),
                 "dd_pairs_total": int(dd_stats.pairs_total),
+                # WP23a: MUPF per-stage diagnostics (0/NaN when enable_cp_mupf
+                # is off -- the single-shot dd_stats.* fields above already
+                # cover that case).
+                "mupf_pr_epochs_applied": int(dd_stats.mupf_pr_epochs_applied),
+                "mupf_pr_pairs_total": int(dd_stats.mupf_pr_pairs_total),
+                "mupf_pr_resample_rate": (
+                    float(dd_stats.mupf_pr_resample_count) / dd_stats.mupf_pr_epochs_applied
+                    if dd_stats.mupf_pr_epochs_applied else float("nan")
+                ),
+                "mupf_pr_mean_alpha": (
+                    dd_stats.mupf_pr_alpha_sum / dd_stats.mupf_pr_epochs_applied
+                    if dd_stats.mupf_pr_epochs_applied else float("nan")
+                ),
+                "mupf_pr_mean_post_ess_ratio": (
+                    dd_stats.mupf_pr_post_ratio_sum / dd_stats.mupf_pr_epochs_applied
+                    if dd_stats.mupf_pr_epochs_applied else float("nan")
+                ),
+                "mupf_pr_mean_tempering_steps": (
+                    dd_stats.mupf_pr_tempering_steps_total
+                    / dd_stats.mupf_pr_epochs_applied
+                    if dd_stats.mupf_pr_epochs_applied else float("nan")
+                ),
+                "mupf_pr_mean_log_evidence": (
+                    dd_stats.mupf_pr_log_evidence_sum
+                    / dd_stats.mupf_pr_epochs_applied
+                    if dd_stats.mupf_pr_epochs_applied else float("nan")
+                ),
+                "mupf_cp_epochs_applied": int(dd_stats.mupf_cp_epochs_applied),
+                "mupf_cp_pairs_total": int(dd_stats.mupf_cp_pairs_total),
+                "mupf_cp_stage_calls": int(dd_stats.mupf_cp_stage_calls),
+                "mupf_cp_resample_rate": (
+                    float(dd_stats.mupf_cp_resample_count) / dd_stats.mupf_cp_epochs_applied
+                    if dd_stats.mupf_cp_epochs_applied else float("nan")
+                ),
+                "mupf_cp_mean_alpha": (
+                    dd_stats.mupf_cp_alpha_sum / dd_stats.mupf_cp_epochs_applied
+                    if dd_stats.mupf_cp_epochs_applied else float("nan")
+                ),
+                "mupf_cp_mean_post_ess_ratio": (
+                    dd_stats.mupf_cp_post_ratio_sum / dd_stats.mupf_cp_epochs_applied
+                    if dd_stats.mupf_cp_epochs_applied else float("nan")
+                ),
+                "mupf_cp_mean_tempering_steps_per_call": (
+                    dd_stats.mupf_cp_tempering_steps_total
+                    / dd_stats.mupf_cp_stage_calls
+                    if dd_stats.mupf_cp_stage_calls else float("nan")
+                ),
+                "mupf_cp_mean_log_evidence_per_call": (
+                    dd_stats.mupf_cp_log_evidence_sum
+                    / dd_stats.mupf_cp_stage_calls
+                    if dd_stats.mupf_cp_stage_calls else float("nan")
+                ),
+                "mupf_cp_slips_flagged_total": int(dd_stats.mupf_cp_slips_flagged_total),
+                "mupf_cp_slip_epochs": int(dd_stats.mupf_cp_slip_epochs),
+                "mupf_cloud_spread_mean_m": (
+                    dd_stats.mupf_cloud_spread_sum_m / dd_stats.mupf_cloud_spread_epochs
+                    if dd_stats.mupf_cloud_spread_epochs else float("nan")
+                ),
+                "mupf_cloud_spread_over_half_lambda_mean": (
+                    dd_stats.mupf_cloud_spread_over_half_lambda_sum
+                    / dd_stats.mupf_cloud_spread_epochs
+                    if dd_stats.mupf_cloud_spread_epochs else float("nan")
+                ),
                 "rbpf_kf_gate_active": int(variant_gate_active),
                 "rbpf_kf_gate_min_dd_pairs": (
                     -1 if variant.rbpf_kf_gate_min_dd_pairs is None
@@ -11236,13 +12421,24 @@ def main() -> None:
                     100.0 * float(row["honest_pass_m"]) / run_total
                 )
             dd_msg = ""
-            if variant.enable_dd_carrier_afv:
+            if variant.enable_dd_carrier_afv or variant.enable_cp_mupf:
                 applied = dd_stats.epochs_applied
                 attempted = max(dd_stats.epochs_attempted, 1)
                 avg_pairs = dd_stats.pairs_total / max(applied, 1)
                 dd_msg = (
                     f", DD applied {applied}/{dd_stats.epochs_attempted} "
                     f"({100.0 * applied / attempted:.1f}%, avg pairs={avg_pairs:.1f})"
+                )
+            if variant.enable_cp_mupf:
+                mupf_cloud = (
+                    dd_stats.mupf_cloud_spread_over_half_lambda_sum
+                    / max(dd_stats.mupf_cloud_spread_epochs, 1)
+                )
+                dd_msg += (
+                    f", MUPF pr={dd_stats.mupf_pr_epochs_applied}/{dd_stats.epochs_attempted}"
+                    f" cp={dd_stats.mupf_cp_epochs_applied}/{dd_stats.epochs_attempted}"
+                    f" slips={dd_stats.mupf_cp_slips_flagged_total}"
+                    f" spread/halfLambda={mupf_cloud:.2f}"
                 )
             pr_msg = ""
             if variant.enable_pr_gmm:

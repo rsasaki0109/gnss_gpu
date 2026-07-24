@@ -1,0 +1,50 @@
+{
+  "schema": "wp139_tokyo_stability_cppr_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "9ABFD989B8CF9978E2A19D87644E898D521B411B9EBB04FAB073E6346AC335A8",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [4950, 5005],
+    "selected_stride_phase": 1,
+    "fine_grid_hypotheses": 61,
+    "fine_grid_strict_candidates": 59,
+    "diagnostic_useful_candidates": [
+      {"candidate_id": 25, "diagnostic_sub50cm_epochs": 55},
+      {"candidate_id": 32, "diagnostic_sub50cm_epochs": 46}
+    ],
+    "selector": "wp138_stability_cppr_consensus_v1",
+    "selector_winner_candidate_id": 55,
+    "selector_winner_stability_family_ranks": {"cross_refit_disagreement_m": 8, "block_spread_m": 2, "max_cross_basis_carrier_rms_cycles": 3, "cppr_rank_sum": 3},
+    "selector_winner_diagnostic_sub50cm_epochs": 0,
+    "runner_candidate_id": 24,
+    "runner_diagnostic_sub50cm_epochs": 0,
+    "runner_margin": 0.1875,
+    "minimum_runner_margin": 0.2,
+    "accepted": false,
+    "reason": "stability_cppr_family_or_margin_gate_failed"
+  },
+  "decision": "do not substitute diagnostic candidates after audit; keep WP138 production unchanged",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "04ECF68758F5A15A7E070B1910B16B3B60FE5C0D9C0DE945400CAC5C0888090B",
+    "fine_grid": "08C61DF818BB4D27B6F2638EF864E627AFFE6D187430948EE770A65EDAFBE312",
+    "fine_grid_development": "6A83CE0ADA7B85BF348A64836352BC9A5E1FC23163871CBBAD842600FFCFDC87",
+    "truthfree_source": "FBE17F36A224C412A37A20BC87E56EAA5F8223ABED94088D12A3C7DF29FAB146",
+    "truthfree_seed_pool": "3AF1D809501985896FAD185CAD860BB9C2D1B90E846D4B70660A8058C6EC38B1",
+    "rank0_truthfree_refit": "EC9C08A7EACF1A66CCA00105AA0774D8F2CF1C26999F2D1556934619C58676B1",
+    "rank2_truthfree_refit": "00B2EA5C52B811C35B6B197DB24092888BCD06EDB044A8A2A39988A1F501A0B1",
+    "cross_basis_consensus": "E900197D15E7659CC0FA8189C2CFB7537877CE311E62D49E79B260A4C7941165",
+    "stability_cppr_selection": "799B99CBBF91B4FB539C3057143EC5BB498C78053672F5424E3533C394D8BCE7"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

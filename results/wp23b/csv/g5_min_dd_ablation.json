@@ -1,0 +1,146 @@
+[
+  {
+    "min_dd_pairs": 0,
+    "run": "tokyo/run1",
+    "declared_fix_epochs": 10,
+    "correct_fix_epochs": 10,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 0,
+    "run": "tokyo/run2",
+    "declared_fix_epochs": 14,
+    "correct_fix_epochs": 14,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 0,
+    "run": "tokyo/run3",
+    "declared_fix_epochs": 0,
+    "correct_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 6,
+    "run": "tokyo/run1",
+    "declared_fix_epochs": 10,
+    "correct_fix_epochs": 10,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 6,
+    "run": "tokyo/run2",
+    "declared_fix_epochs": 14,
+    "correct_fix_epochs": 14,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 6,
+    "run": "tokyo/run3",
+    "declared_fix_epochs": 0,
+    "correct_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 9,
+    "run": "tokyo/run1",
+    "declared_fix_epochs": 10,
+    "correct_fix_epochs": 10,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 9,
+    "run": "tokyo/run2",
+    "declared_fix_epochs": 14,
+    "correct_fix_epochs": 14,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 9,
+    "run": "tokyo/run3",
+    "declared_fix_epochs": 0,
+    "correct_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 12,
+    "run": "tokyo/run1",
+    "declared_fix_epochs": 10,
+    "correct_fix_epochs": 10,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 12,
+    "run": "tokyo/run2",
+    "declared_fix_epochs": 14,
+    "correct_fix_epochs": 14,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 12,
+    "run": "tokyo/run3",
+    "declared_fix_epochs": 0,
+    "correct_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 18,
+    "run": "tokyo/run1",
+    "declared_fix_epochs": 10,
+    "correct_fix_epochs": 10,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 18,
+    "run": "tokyo/run2",
+    "declared_fix_epochs": 14,
+    "correct_fix_epochs": 14,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 18,
+    "run": "tokyo/run3",
+    "declared_fix_epochs": 0,
+    "correct_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 24,
+    "run": "tokyo/run1",
+    "declared_fix_epochs": 4,
+    "correct_fix_epochs": 4,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 24,
+    "run": "tokyo/run2",
+    "declared_fix_epochs": 14,
+    "correct_fix_epochs": 14,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  },
+  {
+    "min_dd_pairs": 24,
+    "run": "tokyo/run3",
+    "declared_fix_epochs": 0,
+    "correct_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0
+  }
+]

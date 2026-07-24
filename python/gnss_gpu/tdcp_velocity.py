@@ -11,6 +11,7 @@ wavelengths (not handled here).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Sequence
 
 import numpy as np
@@ -18,6 +19,16 @@ import numpy as np
 C_LIGHT = 299792458.0
 L1_FREQ = 1575.42e6
 L1_WAVELENGTH = C_LIGHT / L1_FREQ
+
+
+@dataclass(frozen=True)
+class TDCPDisplacementEstimate:
+    displacement_ecef_m: np.ndarray
+    covariance_m2: np.ndarray
+    postfit_rms_m: float
+    n_input: int
+    n_used: int
+    n_rejected: int
 
 
 def _meas_key(m: Any) -> tuple[int, int]:
@@ -68,7 +79,13 @@ def _solve_tdcp_wls(
     max_postfit_rms_m: float,
     elevation_weight: bool = False,
     el_sin_floor: float = 0.1,
-) -> tuple[np.ndarray, float] | None:
+    carrier_phase_sign: float = 1.0,
+    receiver_motion_sign: float = 1.0,
+    max_velocity_mps: float = 50.0,
+    robust_slip_rejection: bool = False,
+    slip_residual_threshold_m: float = 0.25,
+    max_slip_iterations: int = 3,
+) -> TDCPDisplacementEstimate | None:
     """Internal: return (velocity [m/s], unweighted postfit RMS [m]) or None."""
     if dt <= 0 or prev_measurements is None or len(prev_measurements) == 0:
         return None
@@ -106,7 +123,7 @@ def _solve_tdcp_wls(
             continue
         los = dx / rng
 
-        d_l_m = float(lc - lp) * float(wavelength)
+        d_l_m = float(carrier_phase_sign) * float(lc - lp) * float(wavelength)
         v_avg = 0.5 * (vp + vc)
         sat_range_change = float(np.dot(los, v_avg) * dt)
         drift_p = float(getattr(mp, "clock_drift"))
@@ -130,29 +147,77 @@ def _solve_tdcp_wls(
                 s = max(float(np.sin(el)), float(el_sin_floor))
                 w *= s * s
 
-        h_rows.append(np.concatenate([los, np.ones(1)]))
+        h_rows.append(
+            np.concatenate([float(receiver_motion_sign) * los, np.ones(1)])
+        )
         y_vals.append(corrected)
         w_vals.append(w)
 
     if len(h_rows) < min_sats:
         return None
 
-    H = np.stack(h_rows, axis=0)
-    y = np.asarray(y_vals, dtype=np.float64)
-    sw = np.sqrt(np.asarray(w_vals, dtype=np.float64))
-    Hw = H * sw[:, np.newaxis]
-    yw = y * sw
+    H_all = np.stack(h_rows, axis=0)
+    y_all = np.asarray(y_vals, dtype=np.float64)
+    weight_all = np.asarray(w_vals, dtype=np.float64)
+    active = np.arange(len(y_all), dtype=np.int64)
+    theta = np.zeros(4, dtype=np.float64)
+    residual = np.empty(0, dtype=np.float64)
+    for iteration in range(max(int(max_slip_iterations), 0) + 1):
+        H = H_all[active]
+        y = y_all[active]
+        sw = np.sqrt(weight_all[active])
+        try:
+            theta, _, rank, _ = np.linalg.lstsq(
+                H * sw[:, None], y * sw, rcond=None
+            )
+        except np.linalg.LinAlgError:
+            return None
+        if rank < 4:
+            return None
+        residual = H @ theta - y
+        if not robust_slip_rejection or iteration >= int(max_slip_iterations):
+            break
+        rms_now = float(np.sqrt(np.mean(residual**2)))
+        centered = residual - float(np.median(residual))
+        if (
+            rms_now <= float(max_postfit_rms_m)
+            and float(np.max(np.abs(centered))) <= float(slip_residual_threshold_m)
+        ):
+            break
+        if len(active) <= int(min_sats):
+            break
+        # A slipped row can have high leverage and spread its residual across
+        # clean rows, defeating a simple largest-residual rule.  Evaluate each
+        # leave-one-out subset and retain the removal with the smallest RMS.
+        best_active: np.ndarray | None = None
+        best_rms = rms_now
+        for remove_index in range(len(active)):
+            trial = np.delete(active, remove_index)
+            H_trial = H_all[trial]
+            y_trial = y_all[trial]
+            sw_trial = np.sqrt(weight_all[trial])
+            try:
+                theta_trial, _, rank_trial, _ = np.linalg.lstsq(
+                    H_trial * sw_trial[:, None], y_trial * sw_trial, rcond=None
+                )
+            except np.linalg.LinAlgError:
+                continue
+            if rank_trial < 4:
+                continue
+            trial_rms = float(
+                np.sqrt(np.mean((H_trial @ theta_trial - y_trial) ** 2))
+            )
+            if trial_rms < best_rms:
+                best_rms = trial_rms
+                best_active = trial
+        if best_active is None:
+            break
+        active = best_active
 
-    try:
-        theta, _, rank, _ = np.linalg.lstsq(Hw, yw, rcond=None)
-    except np.linalg.LinAlgError:
-        return None
-
-    if rank < 4:
-        return None
-
-    pred = H @ theta
-    rms_res = float(np.sqrt(np.mean((pred - y) ** 2)))
+    H = H_all[active]
+    y = y_all[active]
+    residual = H @ theta - y
+    rms_res = float(np.sqrt(np.mean(residual**2)))
     if not np.isfinite(rms_res) or rms_res > float(max_postfit_rms_m):
         return None
 
@@ -160,9 +225,26 @@ def _solve_tdcp_wls(
     if not np.all(np.isfinite(delta_rx)):
         return None
     vel = delta_rx / dt
-    if np.linalg.norm(vel) > 50.0:
+    if np.linalg.norm(vel) > float(max_velocity_mps):
         return None
-    return vel, rms_res
+    dof = max(len(active) - 4, 1)
+    residual_variance = max(float(residual @ residual) / dof, 0.01**2)
+    try:
+        covariance = residual_variance * np.linalg.inv(H.T @ H)[:3, :3]
+    except np.linalg.LinAlgError:
+        covariance = residual_variance * np.linalg.pinv(H.T @ H)[:3, :3]
+    covariance = 0.5 * (covariance + covariance.T)
+    minimum = float(np.min(np.linalg.eigvalsh(covariance)))
+    if minimum < 1.0e-8:
+        covariance += np.eye(3) * (1.0e-8 - minimum)
+    return TDCPDisplacementEstimate(
+        displacement_ecef_m=delta_rx,
+        covariance_m2=covariance,
+        postfit_rms_m=rms_res,
+        n_input=len(y_all),
+        n_used=len(active),
+        n_rejected=len(y_all) - len(active),
+    )
 
 
 def estimate_velocity_from_tdcp(
@@ -176,6 +258,9 @@ def estimate_velocity_from_tdcp(
     max_postfit_rms_m: float = 12.0,
     elevation_weight: bool = False,
     el_sin_floor: float = 0.1,
+    carrier_phase_sign: float = 1.0,
+    receiver_motion_sign: float = 1.0,
+    max_velocity_mps: float = 50.0,
 ) -> np.ndarray | None:
     """Estimate ECEF velocity from TDCP using satellite motion / clock corrections.
 
@@ -233,8 +318,11 @@ def estimate_velocity_from_tdcp(
         max_postfit_rms_m,
         elevation_weight,
         el_sin_floor,
+        carrier_phase_sign,
+        receiver_motion_sign,
+        max_velocity_mps,
     )
-    return None if r is None else r[0]
+    return None if r is None else r.displacement_ecef_m / float(dt)
 
 
 def estimate_velocity_from_tdcp_with_metrics(
@@ -248,6 +336,9 @@ def estimate_velocity_from_tdcp_with_metrics(
     max_postfit_rms_m: float = 12.0,
     elevation_weight: bool = False,
     el_sin_floor: float = 0.1,
+    carrier_phase_sign: float = 1.0,
+    receiver_motion_sign: float = 1.0,
+    max_velocity_mps: float = 50.0,
 ) -> tuple[np.ndarray | None, float]:
     """Same as ``estimate_velocity_from_tdcp`` but also returns postfit RMS (meters).
 
@@ -264,7 +355,48 @@ def estimate_velocity_from_tdcp_with_metrics(
         max_postfit_rms_m,
         elevation_weight,
         el_sin_floor,
+        carrier_phase_sign,
+        receiver_motion_sign,
+        max_velocity_mps,
     )
     if r is None:
         return None, float("nan")
-    return r[0], r[1]
+    return r.displacement_ecef_m / float(dt), r.postfit_rms_m
+
+
+def estimate_displacement_from_tdcp(
+    receiver_position: np.ndarray,
+    prev_measurements: Sequence[Any],
+    cur_measurements: Sequence[Any],
+    dt: float,
+    *,
+    wavelength: float = L1_WAVELENGTH,
+    min_sats: int = 5,
+    max_cycle_jump: float = 20000.0,
+    max_postfit_rms_m: float = 0.5,
+    elevation_weight: bool = True,
+    el_sin_floor: float = 0.1,
+    carrier_phase_sign: float = 1.0,
+    receiver_motion_sign: float = -1.0,
+    max_velocity_mps: float = 50.0,
+    slip_residual_threshold_m: float = 0.25,
+) -> TDCPDisplacementEstimate | None:
+    """Return a robust causal displacement and covariance for temporal fusion."""
+
+    return _solve_tdcp_wls(
+        receiver_position,
+        prev_measurements,
+        cur_measurements,
+        dt,
+        wavelength,
+        min_sats,
+        max_cycle_jump,
+        max_postfit_rms_m,
+        elevation_weight,
+        el_sin_floor,
+        carrier_phase_sign,
+        receiver_motion_sign,
+        max_velocity_mps,
+        True,
+        slip_residual_threshold_m,
+    )

@@ -1,0 +1,55 @@
+{
+  "schema": "wp82_fixed_boundary_affine_rejection_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_promoted": false,
+  "target": {
+    "dataset": "nagoya_run1",
+    "segment": [3611, 3666],
+    "offset_model": "right_boundary_affine_fixed",
+    "boundary_epoch": 3666,
+    "boundary_offset_ecef_m": [0.6301734876848633, -1.2529874002229286, 0.7122027150410961],
+    "boundary_profile_sha256": "325FE80C1A42914B32F11B75403ABF63072CCC48C29739827154BDFF96C77943",
+    "stride_phase": "auto",
+    "selected_stride_phase": 2,
+    "up_prior_sigma_m": 0.5,
+    "horizontal_grid": {"radius_m": 1.5, "step_m": 0.5, "seeds_per_basis": 49},
+    "basis_mode_counts_after_dedup": [6, 0, 0],
+    "cluster_count": 0,
+    "accepted": false,
+    "reason": "fewer_than_two_three_basis_clusters"
+  },
+  "diagnostic_only_truth_audit": {
+    "base_best_sub50cm_epochs_by_basis": [28, 24, 27],
+    "grid_best_sub50cm_epochs_by_basis": [36, 29, 36],
+    "affine_oracle_sub50cm_epochs_by_basis": [22, 30, 26],
+    "selection_eligible": false
+  },
+  "frozen_gates": {
+    "min_checked_pairs": 40,
+    "max_bad_pair_fraction": 0.05,
+    "max_block_spread_m": 0.5,
+    "within_basis_dedup_m": 0.08,
+    "max_three_basis_cluster_diameter_m": 0.12,
+    "max_family_rank_fraction": 0.2,
+    "min_runner_margin": 0.2
+  },
+  "artifacts_sha256": {
+    "rank0_truthfree": "1E869D6B9B027D49260BA136D9C4C0E5E9E296F9133268698356255193B64A2A",
+    "rank1_truthfree": "CA82268A1B5055C74E31BCF111E42DCC1C73F63C1AD9741533706419BDF88881",
+    "rank2_truthfree": "B463E08780CB1CC57969F1ED7CEFE27424DF3676C1ACFB9FA9835FEE9B24918B",
+    "selection": "3AD70103A43E0ADBF4B43732895983430EB6F28C396347D3D33E74D05B2D3A2B",
+    "production_trajectory_unchanged": "68E8FAE355FF2639D8069C7EC06FD3A4036D231383BBDA71F087313900054E43"
+  },
+  "implementation_sha256": {
+    "refiner": "9D7B6A675A4D0D9A1DF6AFB4726603DB07BBAC7937233922A11919A0551BB277",
+    "grid_builder": "238C5B276F0E22ED965BF5CE00FE9F486F1505490C5DBB829F7899BB617786BC",
+    "selector": "AEECAEF295AF6270956D6C8CCDDB2070C29DF15F1F929A76BE73B822ACCD9F50"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

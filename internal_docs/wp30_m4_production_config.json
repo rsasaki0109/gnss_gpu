@@ -1,0 +1,50 @@
+{
+  "pf_only": true,
+  "runtime_fgo": false,
+  "full_denominator_epochs": 1200,
+  "false_fix_max_pct": 1.0,
+  "gpu_scale": {
+    "report_path": "results/wp29/WP29_GPU_SCALE_REPORT.json",
+    "lambda_engine": "gpu-batch",
+    "runtime_mode": "fast",
+    "min_total_epochs_per_second": 5.0,
+    "position_tolerance_m": 1e-07,
+    "max_steady_memory_growth_mib": 4.0
+  },
+  "selector": {
+    "transition_sigma_m": 0.5,
+    "transition_loss": "cauchy",
+    "emission_weight": 0.01,
+    "current_seed_consensus_bonus": 10.0,
+    "current_seed_consensus_min_support": 2,
+    "external_seed_bonus": 500.0,
+    "external_seed_max_age_epochs": 5,
+    "anchor_stride_epochs": 5,
+    "path_mode": "auto",
+    "tdcp_fallback": "doppler-calibrated-auto",
+    "apply_static_anchor_offset_auto": true
+  },
+  "stage_order": [
+    "moving_offset",
+    "route_template_bridge",
+    "carrier_runner_block",
+    "post_jump_route_bridge"
+  ],
+  "stages": {
+    "moving_offset": {},
+    "route_template_bridge": {
+      "max_endpoint_distance_m": 1.5,
+      "max_arc_relative_error": 0.02
+    },
+    "carrier_runner_block": {
+      "start_epoch": 600,
+      "anchor_stride": 5,
+      "min_block_anchors": 5,
+      "min_carrier_rows": 8
+    },
+    "post_jump_route_bridge": {
+      "jump_residual_m": 2.0,
+      "min_tail_anchors": 10
+    }
+  }
+}

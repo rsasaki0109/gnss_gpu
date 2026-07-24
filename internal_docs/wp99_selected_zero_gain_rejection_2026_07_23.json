@@ -1,0 +1,17 @@
+{
+  "schema": "wp99_selected_zero_gain_rejection_lock_v1",
+  "date": "2026-07-23",
+  "dataset": "nagoya_run1",
+  "segment": [5830, 5885],
+  "production_input_truth": false,
+  "production_promoted": false,
+  "grid_supply": [
+    {"rank": 0, "strict_modes": 55, "best_supply_sub50cm_epochs": 55},
+    {"rank": 2, "strict_modes": 39, "best_supply_sub50cm_epochs": 55}
+  ],
+  "posterior": [
+    {"rank": 0, "accepted": true, "runner_margin": 0.5882352941176471, "selected_sub50cm_epochs": 0, "selection_sha256": "56B7B5D6065FBDEB0FD2DBE70A4E031ED529D0F0F2F187E488C2BB61676E6DD2"},
+    {"rank": 2, "accepted": false, "runner_margin": 0.05263157894736842, "selected_sub50cm_epochs": 0, "selection_sha256": "D52F084DE232C6A2A28EAC89686D8B71058DD3326E248E510E914B18ED943B87"}
+  ],
+  "rejection_reason": "truthfree_selected_profile_has_zero_measurable_gain"
+}

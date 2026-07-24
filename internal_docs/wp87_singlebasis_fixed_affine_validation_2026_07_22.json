@@ -1,0 +1,83 @@
+{
+  "schema": "wp87_singlebasis_fixed_affine_validation_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "nagoya_run1",
+    "segment": [3611, 3666],
+    "offset_model": "right_boundary_affine_fixed",
+    "boundary_epoch": 3666,
+    "boundary_profile_sha256": "325FE80C1A42914B32F11B75403ABF63072CCC48C29739827154BDFF96C77943",
+    "carrier_families": ["L1_E1_B1", "L5_E5A_B2A"],
+    "carrier_reference_rank": 0,
+    "absolute_mode_count": 6,
+    "selected_candidate_id": 58,
+    "selected_offset_ecef_m": [0.22137210097128476, -0.6114563355758758, 0.036591496789066376],
+    "family_ranks": {"road_band": 1, "carrier_rms": 1, "cppr": 1},
+    "winner_rank_sum": 3,
+    "runner_rank_sum": 7,
+    "runner_margin": 1.3333333333333333,
+    "accepted": true
+  },
+  "frozen_gates": {
+    "min_checked_pairs": 40,
+    "max_bad_pair_fraction": 0.05,
+    "max_block_spread_m": 0.5,
+    "within_basis_dedup_m": 0.08,
+    "max_family_rank_fraction": 0.2,
+    "min_runner_margin": 0.2
+  },
+  "holdouts": [
+    {
+      "dataset": "nagoya_run1",
+      "segment": [3721, 3776],
+      "accepted": false,
+      "mode_count": 54,
+      "reason": "singlebasis_family_or_margin_gate_failed",
+      "runner_margin": 0.13333333333333333
+    },
+    {
+      "dataset": "tokyo_run1",
+      "segment": [2464, 2519],
+      "accepted": false,
+      "mode_count": 1,
+      "reason": "fewer_than_two_absolute_single_basis_modes"
+    }
+  ],
+  "post_selection_shadow_audit": {
+    "full_denominator_epochs": 7583,
+    "before_sub50cm_epochs": 5116,
+    "after_sub50cm_epochs": 5135,
+    "after_sub50cm_pct": 67.71726229724383,
+    "gained_epochs": 19,
+    "lost_epochs": 0,
+    "segment_sub50cm_epochs": 19,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "artifacts_sha256": {
+    "truthfree_candidates": "EDF03953E1FDDAC75995BBA0B7AF672C1FC009B8575E4DBDF2C7D55229950457",
+    "target_selection": "587BDA3DB801F9A0274AB3840B40AE3BF0EB9FAF6DFE01218CB15C91F0F64D03",
+    "nagoya_transfer": "2BD5DEDEB48C63B53AF3E40823BB63B8BC361D4F574E42F44690C4DB00B0C95A",
+    "tokyo_unsafe": "18F59AAB539B6FEB521F7852C9F8F103548CD7C1083CEE0CAF755D917EA6ABB9",
+    "promotion": "C59EC1E317A0608FDFC1DF93A9BAC79EB75D79DA366A2A8099657EAD28FBAC64",
+    "production_trajectory": "32297BB37CBABFF6EDC1B4B56776B32F69A12E15D5E8060FB4D7E34FA04FD973",
+    "production_benchmark": "DA2B46A2F7A8F967DDEFD1F81E8597CD73E0B2CDF631814324013A37F2CB6782",
+    "osm_cache": "92B2B5DFDCC619ADB06C5A0AE412F9CA8F196D2B74D7CC7ADA64F6618E9D9625"
+  },
+  "implementation_sha256": {
+    "refiner": "F114A99305860C9E951DC6BD5BF18378023CAE497DF66DA61FA96CF0111575F3",
+    "grid_builder": "238C5B276F0E22ED965BF5CE00FE9F486F1505490C5DBB829F7899BB617786BC",
+    "multibasis_selector": "AA54ABC1A1796C8E4E6B744AF877CE505041F5124CE44158EA12AFB0EBAF8934",
+    "singlebasis_selector": "866E42B718B21CFE0D791029F189BA04CD8A9B6CB711B1EF058880F047433FD0",
+    "promoter": "2421AA90D2765CB8BADA5883779E493D4CF2A5E5BC9EE2F6B5B330A8006A78D2",
+    "shadow_audit": "1AED1E5BF57A51A96E2145A459EA9950E3045223FE704861CBBBCAAA026D117A",
+    "production_apply": "BC7002E9CA163D40605DCA20A22B8B682483A35BB246C34C574B7F6C68759917"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

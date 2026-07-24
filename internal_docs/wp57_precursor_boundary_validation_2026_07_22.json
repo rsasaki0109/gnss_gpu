@@ -1,0 +1,65 @@
+{
+  "schema": "wp57_precursor_boundary_validation_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "scope": "one block directly before a >=220-epoch promoted CPPR profile",
+  "target": {
+    "dataset": "nagoya_run1",
+    "segment": [1381, 1436],
+    "right_anchor_segment": [1436, 1656],
+    "selected_candidate_id": 12,
+    "cppr_family_ranks": [1, 2, 1],
+    "cppr_rank_sum": 4,
+    "checked_pairs": 216,
+    "bad_pairs": 0,
+    "block_spread_m": 0.02895437339802281,
+    "boundary_distance_m": 0.13900902280483451,
+    "runner_boundary_distance_m": 0.5368974276815186,
+    "runner_margin": 2.8623207101837576,
+    "max_boundary_distance_m": 0.2,
+    "min_runner_margin": 0.2,
+    "accepted": true,
+    "post_selection_audit_best_candidate": true,
+    "post_selection_audit_common_offset_sub50cm_epochs": 35
+  },
+  "recursive_holdout": {
+    "dataset": "nagoya_run1",
+    "segment": [978, 1033],
+    "cppr_winner_rank_sum": 3,
+    "cppr_runner_rank_sum": 3,
+    "cppr_runner_margin": 0.0,
+    "cppr_accepted": false,
+    "boundary_anchor_segment": [923, 978],
+    "boundary_anchor_reason": "unique_anchor_boundary_identity_profile",
+    "boundary_accepted": false,
+    "failed_lineage_gate": "right anchor is not a promoted CP/PR profile",
+    "historical_post_decision_loss_epochs": 13
+  },
+  "lineage_gates": {
+    "right_anchor_reason": "unique_cppr_rank_consensus",
+    "min_right_anchor_epochs": 220,
+    "direct_left_adjacency": true,
+    "boundary_promotions_may_seed_another_boundary_promotion": false
+  },
+  "tests": {
+    "pytest": "37 passed",
+    "ruff": "all checks passed"
+  },
+  "artifacts_sha256": {
+    "target_candidate_source": "3C57BF4B834F57167C02D59EF843635D2DABA80C522DEB827A23BE8CB37C9648",
+    "target_cppr_validation": "F823EE3F46CAAAECBF411F6BF0BBA0F8209D811D0F8DC17FE1E0A6BD622AA185",
+    "right_anchor": "33667D8DF9E6F7035A223584F46F1187C8D5E2813633880C40367E481B590B96",
+    "boundary_validation": "077FEC79011691474520F8906D747958504020F51C2B31046E0E5F94C9627F5D",
+    "recursive_gsi_cache": "FCE9895850A0915D6417AFA9DCCA22EEE9BA8D5CDFEDEC2F6679DA48CA539880",
+    "recursive_development_source": "4565DF452D37E1DA2D5C15A3DDC0068A15D4C8827313242DD219806D1645E68C",
+    "recursive_truthfree_source": "D9866F2322A214296E6711A8F9A41560915B16DC449A212F66755277704F2E4C",
+    "recursive_cppr_validation": "5A33246C48BF5A48594EC5839EBD7902214E81434461FE2A6D0ABD5E4F3D63E4",
+    "boundary_selector": "97AA3CA799BAD0C49FB1F6BECBF6CC3DA6B86B38598431378D306B8A61DE7AC7"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

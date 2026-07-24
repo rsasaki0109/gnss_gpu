@@ -1,0 +1,60 @@
+{
+  "schema": "wp149_tokyo_stability_cppr_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "9ABFD989B8CF9978E2A19D87644E898D521B411B9EBB04FAB073E6346AC335A8",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [990, 1045],
+    "selected_stride_phase": 0,
+    "prior_generation_assessment": "WP109 pre-fine-grid posterior failure; re-assessed with current 17-sample GSI cache and WP138 selector generation",
+    "initial_pool_strict_candidates_by_rank": {"rank0": 7, "rank1": 6, "rank2": 6},
+    "diagnostic_useful_candidates": [
+      {"rank": 0, "candidate_id": 1, "diagnostic_sub50cm_epochs": 50},
+      {"rank": 1, "candidate_id": 3, "diagnostic_sub50cm_epochs": 53},
+      {"rank": 2, "candidate_id": 1, "diagnostic_sub50cm_epochs": 55},
+      {"rank": 2, "candidate_id": 2, "diagnostic_sub50cm_epochs": 55},
+      {"rank": 2, "candidate_id": 5, "diagnostic_sub50cm_epochs": 55}
+    ],
+    "fine_grid_used": false,
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "selector": "wp138_stability_cppr_consensus_v1",
+    "selector_mode_count": 3,
+    "selector_winner_candidate_id": 5,
+    "selector_winner_stability_family_ranks": {"cross_refit_disagreement_m": 1, "block_spread_m": 2, "max_cross_basis_carrier_rms_cycles": 1, "cppr_rank_sum": 2},
+    "selector_winner_diagnostic_sub50cm_epochs": 0,
+    "runner_candidate_id": 2,
+    "runner_diagnostic_sub50cm_epochs": 0,
+    "runner_margin": 0.16666666666666666,
+    "minimum_runner_margin": 0.2,
+    "family_rank_pass": true,
+    "runner_margin_pass": false,
+    "accepted": false,
+    "reason": "stability_cppr_family_or_margin_gate_failed"
+  },
+  "decision": "do not rerun with expanded supply after seeing the truth-free rejection; do not substitute diagnostic candidates after audit; keep WP138 production unchanged",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "7B6E17F34B9A85C08AE7DCDD9022DBB2540615E76683B43459B2E486C21EF2A6",
+    "rank0_phase0_development": "7263A8ABC4382F6521FA1A9728A88C75BBB3B2CFCD4CF2400AA0C21F130328CB",
+    "rank1_phase0_development": "B87D32182F66E3535E88FA412AE852DE7E60DC273E9D9000B95A4A5FA4E633A4",
+    "rank2_phase0_development": "D3BFA979B9A222921CB49BB78527B29CECAA3B0B9E7A8A4268C8835C32FD0937",
+    "truthfree_source": "CD9671260C510FA9C8BD630D40657952968980564C33CD9F56DBE9F6432130EA",
+    "truthfree_seed_pool": "451AD6D00F1C0F579AB029FE8405002DF3F439E7F5650B2BE88A49CB56AE24C4",
+    "rank0_truthfree_refit": "9CBC8A615F4F36B3E2E052D5A9841E225FBCF84CFABF968BEC211E0C117DFE24",
+    "rank2_truthfree_refit": "376094C99299745814B573376D79765FF3518E7B874682E8CAD6F72B496CF574",
+    "cross_basis_consensus": "61E688BEF8D306AAA548C44581ECDD5BB1CDC967FBCD67848512558851C21557",
+    "stability_cppr_selection": "099D8BDB5F46715C50C3B58A83C3BA826F0A1A88FB8A408D8E5A39513FA83867"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

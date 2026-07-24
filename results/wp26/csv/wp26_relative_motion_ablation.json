@@ -1,0 +1,31 @@
+{
+  "verdict": "TDCP primitive pass; absolute basin-selection gate fail",
+  "production_fix_enabled": false,
+  "tokyo_run3_200_tdcp": {
+    "used_intervals": 199,
+    "total_intervals": 199,
+    "use_rate_pct": 100.0,
+    "rejected_satellite_rows": 161,
+    "displacement_error_median_m": 0.002807922521963779,
+    "displacement_error_p90_m": 0.005643962999458631,
+    "displacement_error_rms_m": 0.004023900924563332,
+    "nis_median": 0.21319640227528885,
+    "postfit_rms_median_m": 0.0020156583189135362
+  },
+  "translation_invariance_audit": {
+    "adjacent_correct_candidate_pairs": 164,
+    "same_assignment_id_pairs": 163,
+    "correct_edge_tdcp_residual_lt5cm_pairs": 159,
+    "correct_edge_residual_median_m": 0.009760678938192721,
+    "correct_edge_residual_p90_m": 0.029478676604888968,
+    "wrong_edge_residual_median_m": 0.008772544151971895,
+    "wrong_edge_residual_p90_m": 0.028395354007730113
+  },
+  "external_tdcp_temporal_replay": {
+    "birth_masses": [0.01, 0.05, 0.2],
+    "oracle_sub50cm_epochs": 165,
+    "single_map_sub50cm_epochs": 0,
+    "tdcp_temporal_sub50cm_epochs": 0,
+    "gamma99_correct_epochs": 0
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "schema": "wp162_tokyo_screened_consensus_rejection_lock_v1",
+  "date": "2026-07-24",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [2530, 2585],
+    "selected_stride_phase": 0,
+    "novelty": "third block through the WP158 screen + WP159 screened-selector chain; highest recorded oracle ceiling (43/55) in the screened roll-out queue",
+    "prior_generation_assessment": "WP142 structural DDPR/spread rejection; truth-derived oracle ceiling recorded at that assessment was 43/55",
+    "ddpr_screen": {
+      "schema": "wp158_ddpr_satellite_screen_v1",
+      "edge_m": 5.0,
+      "frac_thresh": 0.2,
+      "evidence_epochs": 11,
+      "excluded_satellites": ["C11", "C21", "C34", "C40", "C43", "E05", "G07", "G09", "G13"],
+      "outlier_fractions_note": "all flagged satellites at outlier fraction 1.0 except C40 (0.9) and C43 (0.625)"
+    },
+    "screened_refits": {
+      "rank0": {"hypotheses": 10, "min_ddpr_rms_m": 1.532, "selection_reason": "all_truth_free_gates_pass"},
+      "rank1": {"hypotheses": 11, "min_ddpr_rms_m": 1.43, "selection_reason": "all_truth_free_gates_pass"},
+      "rank2": {"hypotheses": 11, "min_ddpr_rms_m": 1.469, "selection_reason": "all_truth_free_gates_pass"}
+    },
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "cross_basis_consensus_detail": "exactly one candidate (id 8: consensus 0.145 m, max carrier RMS 0.204 cycles, max block spread 0.482 m) passes supply_pass; every other candidate fails on block spread (up to 7.44 m); with a single qualifying candidate there is no runner to establish the 0.2 minimum margin, so the gate fails closed with margin 0.0",
+    "selector": "wp159_screened_stability_consensus_v1",
+    "selector_accepted": false,
+    "selector_reason": "stability_cppr_evidence_unavailable",
+    "selector_base_reason": "fewer_than_two_cross_basis_cppr_modes",
+    "selector_mode_count": 1,
+    "significance": "same fail-closed shape as WP161: the screen restores per-rank gate passage (floors 1.43-1.53 m from a WP142-era structural floor) but the cross-basis stage cannot certify a unique stable basin; notable that one candidate DOES pass every absolute supply gate here, so the block dies on the single-mode margin requirement rather than on evidence quality"
+  },
+  "decision": "no substitution and no rerun after the truth-free rejection; WP160 production unchanged; the single supply-passing candidate is recorded but must never be promoted without a separately named and holdout-validated selector change",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "ddpr_screen": "E0760BE5034D4A6F9E9324025FF6605FF15E6126FDF1ABCEC4AB5A8B0513DEC6",
+    "gsi_height_cache_reused": "results/wp31/tokyo_run1_wp142_gsi_multisample17_height_cache_2530_2585.json",
+    "rank0_phase0_screened_development": "63D97351F5DCBA0A3969241CA51837175A1A99383E71069DE7535D82AE649AC7",
+    "rank1_phase0_screened_development": "9081D9BB9417A4C6E52593AAFC10B00796C4E8F2EE7D7AB37791C8368ECA4918",
+    "rank2_phase0_screened_development": "47B568EAD9C15D0E8AA2A0256AFC2184B93A180231A9419E9A8A6611CC936857",
+    "truthfree_source": "5C8459470DAC8A44E8C92625B94E7E0029329D1448D99E7B627B260498802264",
+    "truthfree_seed_pool": "F4C9DD1F2FE3DE51939284D23FFB8755E2F6402B8A32DAC0371E3049FFF57BB4",
+    "rank0_cross_development": "BA16E946A0F5FF644CAD66E3EEA41BB52281C7F616CA2DED19048284422FCA11",
+    "rank0_cross_truthfree": "E4D5806294998CF495453978FCB1B59EBC48FE8CF22BA70104F3271B8119ABEF",
+    "rank2_cross_development": "8AF16D8A10597F4F332DC12D633EDCE07FEA7AB9D9E50827FD8A84CB92BF6E59",
+    "rank2_cross_truthfree": "4937A3CED9887F0C49790DAF5CDBE5CC0D1B221691B69262548458E96FD864B6",
+    "cross_basis_consensus": "F15FED6B59E388B798882E75B418DC22793B06BDA8935246B4C577E5A96B8751",
+    "wp159_screened_selection": "8204BA859ED86896892E6038CB513A4834DABBD4C45F851D992EDDBFFA30A338"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

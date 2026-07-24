@@ -1,0 +1,2 @@
+method,city,run,n_scored,n_rover_epochs,coverage_pct,all_rms_m,fix_rms_m,fix_pct,lt50cm_pct,lt50cm_full_pct,ppc_official_pct,traj_path
+g1_annealed_run2_score,tokyo,run2,1200,9151,13.113,10.741761,10.741761,100.000,0.500,0.066,0.564,results\wp23b\pos\g1_annealed_off\tokyo_run2_RBPF-velKF+DD+CP-MUPF+gate.pos

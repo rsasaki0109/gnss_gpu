@@ -1,0 +1,70 @@
+{
+  "schema": "wp157_tokyo_stability_cppr_promotion_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "truth_usage": "post_application_full_denominator_audit_only",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1155, 1210],
+    "selected_stride_phase": 0,
+    "prior_generation_assessment": "WP127 borderline DDPR floor 4.012 m (+0.012 m over gate, coarse grid only); under the 17-sample GSI cache generation the floor drops to 3.84-3.91 m and the block re-enters the gates",
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 17,
+    "gsi_inlier_spread_m": 0.09238059208392713,
+    "gsi_up_prior_center_m": -0.9362573139198105,
+    "fine_grid_used": false,
+    "selector": "wp138_stability_cppr_consensus_v1",
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "selected_candidate_id": 1,
+    "selection_reason": "unique_cross_basis_stability_cppr_mode",
+    "stability_family_ranks": {"cross_refit_disagreement_m": 2, "block_spread_m": 1, "max_cross_basis_carrier_rms_cycles": 1, "cppr_rank_sum": 1},
+    "runner_margin": 1.2,
+    "post_freeze_audit": {
+      "selected_candidate_sub50cm_epochs": 53,
+      "selected_candidate_median_error_m": 0.0732
+    }
+  },
+  "holdouts": {
+    "unsafe_tokyo_wp129": {"accepted": false, "reason": "stability_cppr_family_or_margin_gate_failed"},
+    "missing_evidence_nagoya_wp53": {"accepted": false, "reason": "stability_cppr_evidence_unavailable"}
+  },
+  "production_effect": {
+    "before_sub50cm_epochs": 3636,
+    "after_sub50cm_epochs": 3689,
+    "after_sub50cm_pct": 30.937604830593763,
+    "gained_epochs": 53,
+    "lost_epochs": 0,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "declared_false_fix_pct": 0.0,
+    "full_denominator_epochs": 11924
+  },
+  "production_artifacts": {
+    "input_trajectory_sha256": "3CB3BDEE3E4F5F74702F3E835533E124ACCDC059CD4A45D816F07F7EE0667284",
+    "output_trajectory": "results/wp31/tokyo_run1_wp157_stability_cppr_full_trajectory.csv",
+    "output_trajectory_sha256": "59E2D5B65555F0D9C82CFCF18C7328E06EB579216B055C4EA6F549BA62DE0FF4",
+    "benchmark": "results/wp31/tokyo_run1_wp157_stability_cppr_full_benchmark.json",
+    "benchmark_sha256": "9E4C38A162BE9C8155DA7D6646707FBAF157794515FAFB93C96CB77E2EFEA20A",
+    "promotion": "results/wp31/tokyo_run1_wp157_stability_cppr_promotion_1155_1210.json",
+    "promotion_sha256": "6C3F2131DBF2E925BD953048938E724B786D377AB31941716809C182BE25E1F7"
+  },
+  "chain_artifacts_sha256": {
+    "gsi_height_cache": "E2594FDC02AD444C1D5B7BA1A7224E97E7A325786FE71D1D380F368DC8311E2C",
+    "rank0_phase0_development": "0F6B92685BCCEC9A4A97B61E56A30BBE22C9876F93D24866F67E6D47D90F2D5C",
+    "rank1_phase0_development": "AF5E21E800BB3DDB840784D6089CA06A63E59E601C3448639463F90CD210D77A",
+    "rank2_phase0_development": "1B02628010FA86A2514B2C79497A54879E04E0ED6C30ABC77B0C3759227C33A2",
+    "truthfree_source": "22EF90786AAE45A16911E9A9FD8A13CF26399C7D62B5662A204FF32A224579FA",
+    "truthfree_seed_pool": "CE39991441FDFF75D686F822F1A3983BEAE01FD8EAA74A535365BA1225B5E569",
+    "rank0_truthfree_refit": "1B127017901D1A10EC9630D0E3BB3EC562EFC33E11B25D9856B77DD4D6AE58B1",
+    "rank2_truthfree_refit": "DEFBF282AEA1608174D915A831212E672E2C99AAFD5BCE8951BCF742C3D4F816",
+    "cross_basis_consensus": "BBE58BDF5201676AC1902118393F19405433742359D22C85BE5E92A342FF3BDA",
+    "stability_cppr_selection": "5C56EE0E06D147E78D939ACC03BD8658732289A5BE88BF84C0497024D28E3EC0"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

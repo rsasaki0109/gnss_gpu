@@ -1,0 +1,47 @@
+{
+  "wall_seconds": 1375.69,
+  "runs": [
+    {
+      "run": "tokyo/run1",
+      "epochs": 11924,
+      "gamma_fix_epochs": 592,
+      "declared_fix_epochs": 10,
+      "correct_fix_epochs": 10,
+      "false_fix_epochs": 0,
+      "false_fix_pct": 0.0,
+      "max_gamma": 0.9972644469015006,
+      "fix_rms_m": 0.21096331792899023,
+      "all_rms_m": 26.647668041526074,
+      "lt50cm_full_pct": 1.6515761234071094,
+      "ppc_official_pct": 0.9792847650869552
+    },
+    {
+      "run": "tokyo/run2",
+      "epochs": 9151,
+      "gamma_fix_epochs": 398,
+      "declared_fix_epochs": 14,
+      "correct_fix_epochs": 14,
+      "false_fix_epochs": 0,
+      "false_fix_pct": 0.0,
+      "max_gamma": 0.9972376944470513,
+      "fix_rms_m": 0.18062849585299057,
+      "all_rms_m": 10.91298083875206,
+      "lt50cm_full_pct": 1.6500928860233854,
+      "ppc_official_pct": 0.3038264890947329
+    },
+    {
+      "run": "tokyo/run3",
+      "epochs": 15301,
+      "gamma_fix_epochs": 626,
+      "declared_fix_epochs": 0,
+      "correct_fix_epochs": 0,
+      "false_fix_epochs": 0,
+      "false_fix_pct": 0.0,
+      "max_gamma": 0.997267658483526,
+      "fix_rms_m": null,
+      "all_rms_m": 8.497154480009364,
+      "lt50cm_full_pct": 2.0652244951310372,
+      "ppc_official_pct": 1.6934243694234237
+    }
+  ]
+}

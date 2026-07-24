@@ -1,0 +1,47 @@
+{
+  "schema": "wp62_pf_backward_outage_benchmark_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "truth_usage": "post_application_full_denominator_audit_only",
+  "full_denominator_epochs": 7583,
+  "baseline": {
+    "work_package": "WP55",
+    "sub50cm_epochs": 4949,
+    "sub50cm_pct": 65.26440722669128
+  },
+  "supersedes": {
+    "work_package": "WP60",
+    "sub50cm_epochs": 5026,
+    "sub50cm_pct": 66.27983647632864
+  },
+  "result": {
+    "dataset": "nagoya_run1",
+    "sub50cm_epochs": 5061,
+    "sub50cm_pct": 66.74139522616379,
+    "gained_epochs_vs_wp55": 112,
+    "gained_epochs_vs_wp60": 35,
+    "lost_epochs_vs_wp55": 0,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "declared_false_fix_pct": 0.0,
+    "target_sub50cm_epochs": 6522,
+    "remaining_epochs_to_target": 1461
+  },
+  "production_artifacts_sha256": {
+    "promotion": "F9397A0E3B91827B0856E108C7E0304F735D83A176FCF37A7A473ABD2B922519",
+    "trajectory": "AD2BBD4F656A056496EAC510E0C775A50A710AFF66BFCCA3B4C2C0B5EDB654D0",
+    "summary": "0A8CF11235E4FA6896D990D52B2B5ACA75ADE977CD0D83453B9D771A43DD753E",
+    "promotion_builder": "E0916289D70050F781B837BA83EB9C62472176A74AC4B898B2835B67B8622156",
+    "trajectory_applier": "433F1E17787F9DBE72F1E758A6C203CF6BD6D098CB9EEED89A34C58819660893"
+  },
+  "validation_lock": {
+    "path": "internal_docs/wp62_backward_outage_validation_2026_07_22.json",
+    "sha256": "EE7A9045E28154A57295BF8E6F2875AB7A526217C01BEFF81C8CD7DC274B187D"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

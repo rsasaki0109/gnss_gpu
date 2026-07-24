@@ -1,0 +1,87 @@
+{
+  "schema": "wp37_pf_fragmentation_gated_benchmark_v1",
+  "created_date": "2026-07-22",
+  "production_input_truth": false,
+  "runtime_fgo": false,
+  "full_epoch_denominator": true,
+  "common_smoother_policy": {
+    "motion_gap_endpoint_closure": true,
+    "mode": "fragmentation_gated",
+    "dominant_filled_run_share_threshold": 0.5,
+    "fragmented_effective_mode": "all_filled",
+    "dominant_effective_mode": "duration_weighted",
+    "duration_weighted_exponent": 2.0,
+    "runtime_inputs": [
+      "filled-run durations",
+      "anchor endpoint residual"
+    ],
+    "runtime_truth": false
+  },
+  "m4_baseline": [
+    {
+      "path": "internal_docs/wp30_m4_production_config.json",
+      "sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486"
+    },
+    {
+      "path": "internal_docs/wp30_m4_tokyo_evidence_ledger.json",
+      "sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+    }
+  ],
+  "anchor_validation_lock": {
+    "path": "internal_docs/wp34_relative_secondary_validation_2026_07_22.json",
+    "sha256": "D91EC1AF99A94450FA8D6CC5B5C44CAC7FC3B21D7B024B2375DA3B321B66BACA"
+  },
+  "implementation": {
+    "path": "experiments/build_wp31_tdcp_gyro_gap_fill.py",
+    "sha256": "5B5A3CDE99BA43841F394231A9C31E7899E63DE9780B416B8C6CF0909FFFECB3",
+    "test_path": "tests/test_wp31_tdcp_gyro_gap_fill.py",
+    "test_sha256": "A649D13A52872027E4012D4B98F310358268E7C191382FABB3615A03AE542588"
+  },
+  "tokyo": {
+    "summary_path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_fragmentationgated_full_summary.json",
+    "summary_sha256": "D50118255E5FF2C68E7600B57A29AB7C195E2D32E727A9ABA79AC515B0218AE8",
+    "trajectory_sha256": "25CFA89D9900879890A2F907B3A5961CA8D734B584518E57773AD682B12D030D",
+    "displacements_sha256": "DC34A31AF0F20BBFBFECF68C5421A854A5051264152F2870F6F56E86E946F8C7",
+    "n_epochs_full_denominator": 11924,
+    "sub50cm_full_epochs": 3265,
+    "sub50cm_full_pct": 27.381751090238176,
+    "delta_vs_p2_epochs": 81,
+    "delta_vs_p2_percentage_points": 0.679302247567929,
+    "all_filled_inter_anchor_gaps": 9,
+    "duration_weighted_inter_anchor_gaps": 0,
+    "maximum_dominant_filled_run_share": 0.444444477558128,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "development_anchor_used": false,
+    "production_promoted": true
+  },
+  "nagoya": {
+    "summary_path": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_eightanchor_secondary_fragmentationgated_full_summary.json",
+    "summary_sha256": "D9F72D492C9950A7A0DAAC229604CF34F4BE5A0860D6A0FBAFDAFC479A177FDF",
+    "trajectory_sha256": "E72AD5422E7D8F8BFE486C09E56CD41B9512197B674B1E897418FA326A8E6305",
+    "displacements_sha256": "E564E495C562F53604877207A78150E53ECE5AF369F1B5FBC56CEA1FB778EC35",
+    "n_epochs_full_denominator": 7583,
+    "sub50cm_full_epochs": 4120,
+    "sub50cm_full_pct": 54.332058552024265,
+    "delta_vs_p2_epochs": 2,
+    "delta_vs_p2_percentage_points": 0.026374785704865,
+    "all_filled_inter_anchor_gaps": 2,
+    "duration_weighted_inter_anchor_gaps": 5,
+    "rejected_allfilled_loss_epochs_avoided": 153,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "development_anchor_used": false,
+    "production_promoted": true
+  },
+  "gate_audit": {
+    "unsafe_nagoya_allfilled_deltas": [-1, -62, -29, -61],
+    "unsafe_nagoya_dominant_shares": [
+      0.788918235449182,
+      0.852579905531698,
+      0.598240445085659,
+      0.913432851552592
+    ],
+    "unsafe_selected_by_allfilled": 0,
+    "threshold_interpretation": "all-filled is used only when no single filled outage owns a majority of filled duration"
+  }
+}

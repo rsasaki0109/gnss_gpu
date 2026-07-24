@@ -4,7 +4,51 @@ from __future__ import annotations
 
 import numpy as np
 
-from gnss_gpu.dd_pseudorange import DDPseudorangeComputer
+from gnss_gpu.dd_pseudorange import (
+    DDPseudorangeComputer,
+    _TERTIARY_PSEUDORANGE_CODE_FAMILIES,
+    _select_family_obs_codes,
+)
+
+
+def test_select_family_obs_codes_has_no_primary_fallback():
+    families = {"G": (("C2W", "C2X", "C2L"),)}
+    sats = ["G01", "G02", "G03"]
+    rover = {
+        "G01": {"C1C": 1.0, "C2W": 2.0},
+        "G02": {"C1C": 1.0, "C2W": 2.0},
+        "G03": {"C1C": 1.0},
+    }
+    base = {
+        "G01": {"C1C": 1.0, "C2X": 2.0},
+        "G02": {"C1C": 1.0, "C2X": 2.0},
+        "G03": {"C1C": 1.0},
+    }
+    rover_code, base_code, selected = _select_family_obs_codes(
+        "G", sats, rover, base, families
+    )
+    assert (rover_code, base_code) == ("C2W", "C2X")
+    assert selected == ["G01", "G02"]
+    assert _select_family_obs_codes("E", sats, rover, base, families) == (
+        None,
+        None,
+        [],
+    )
+
+
+def test_tertiary_family_has_no_l1_or_l2_fallback():
+    sats = ["G01", "G02"]
+    c5_rover = {sat: {"C2W": 2.0, "C5Q": 5.0} for sat in sats}
+    c5_base = {sat: {"C2W": 2.0, "C5Q": 5.0} for sat in sats}
+
+    assert _select_family_obs_codes(
+        "G", sats, c5_rover, c5_base, _TERTIARY_PSEUDORANGE_CODE_FAMILIES
+    ) == ("C5Q", "C5Q", sats)
+
+    l2_only = {sat: {"C2W": 2.0} for sat in sats}
+    assert _select_family_obs_codes(
+        "G", sats, l2_only, l2_only, _TERTIARY_PSEUDORANGE_CODE_FAMILIES
+    ) == (None, None, [])
 
 
 class _Meas:

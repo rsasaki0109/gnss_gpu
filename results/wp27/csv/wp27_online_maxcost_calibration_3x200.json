@@ -1,0 +1,121 @@
+{
+  "policy_promoted": false,
+  "grid": {
+    "gamma_thresholds": [
+      0.0,
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3
+    ],
+    "dwell_thresholds": [
+      1,
+      3,
+      5,
+      10,
+      20
+    ],
+    "float_guards_m": [
+      0.25,
+      0.5,
+      1.0
+    ],
+    "ddpr_guards_m": [
+      0.5,
+      1.0,
+      1.75
+    ],
+    "configurations": 315
+  },
+  "runs": {
+    "run1": {
+      "epochs": 200,
+      "oracle_sub50cm_epochs": 200,
+      "selected_sub50cm_epochs": 107,
+      "brier": 0.4438945784876864,
+      "ece_10bin": 0.460988662397732
+    },
+    "run2": {
+      "epochs": 200,
+      "oracle_sub50cm_epochs": 200,
+      "selected_sub50cm_epochs": 138,
+      "brier": 0.43759850938888173,
+      "ece_10bin": 0.5135047707337524
+    },
+    "run3": {
+      "epochs": 200,
+      "oracle_sub50cm_epochs": 165,
+      "selected_sub50cm_epochs": 97,
+      "brier": 0.41769760463825206,
+      "ece_10bin": 0.43754557300547137
+    }
+  },
+  "observed_safe_configurations": 239,
+  "observed_safe_with_common_coverage": 1,
+  "wilson95_safe_configurations": 0,
+  "best_unrestricted": {
+    "gamma_threshold": 0.0,
+    "dwell_threshold": 1,
+    "float_guard_m": 1.0,
+    "ddpr_guard_m": 1.75,
+    "runs": {
+      "run1": {
+        "accepted": 139,
+        "correct": 107,
+        "false": 32,
+        "false_pct": 23.02158273381295,
+        "false_wilson95_upper_pct": 30.688848645145782
+      },
+      "run2": {
+        "accepted": 189,
+        "correct": 138,
+        "false": 51,
+        "false_pct": 26.984126984126984,
+        "false_wilson95_upper_pct": 33.72434501696257
+      },
+      "run3": {
+        "accepted": 66,
+        "correct": 6,
+        "false": 60,
+        "false_pct": 90.9090909090909,
+        "false_wilson95_upper_pct": 95.76676014086021
+      }
+    },
+    "minimum_correct_epochs": 6,
+    "total_correct_epochs": 251
+  },
+  "best_observed_safe": {
+    "gamma_threshold": 0.0,
+    "dwell_threshold": 20,
+    "float_guard_m": 1.0,
+    "ddpr_guard_m": 0.5,
+    "runs": {
+      "run1": {
+        "accepted": 21,
+        "correct": 21,
+        "false": 0,
+        "false_pct": 0.0,
+        "false_wilson95_upper_pct": 15.464382326420195
+      },
+      "run2": {
+        "accepted": 66,
+        "correct": 66,
+        "false": 0,
+        "false_pct": 0.0,
+        "false_wilson95_upper_pct": 5.500446725160935
+      },
+      "run3": {
+        "accepted": 1,
+        "correct": 1,
+        "false": 0,
+        "false_pct": 0.0,
+        "false_wilson95_upper_pct": 79.34567085261071
+      }
+    },
+    "minimum_correct_epochs": 1,
+    "total_correct_epochs": 88
+  },
+  "verdict": "common zero-observed-false coverage exists, but statistical support is insufficient: no configuration has a <=1% Wilson 95% false-rate upper bound on every run"
+}

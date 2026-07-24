@@ -1,0 +1,33 @@
+{
+  "dense_uncached_wall_seconds": 334.0,
+  "information_uncached_wall_seconds": 271.295,
+  "information_cached_wall_seconds": 195.216,
+  "total_speedup_ratio": 1.7109253339890171,
+  "total_wall_reduction_pct": 41.552095808383235,
+  "runs": [
+    {
+      "run": "tokyo/run1",
+      "epochs": 1200,
+      "max_position_delta_m": 1.3544261057161713e-08,
+      "max_gamma_delta": 2.7055731210978706e-07,
+      "fix_mismatches": 0,
+      "gamma_fixed_mismatches": 0
+    },
+    {
+      "run": "tokyo/run2",
+      "epochs": 1200,
+      "max_position_delta_m": 2.2293458140615046e-08,
+      "max_gamma_delta": 1.8296557380281797e-07,
+      "fix_mismatches": 0,
+      "gamma_fixed_mismatches": 0
+    },
+    {
+      "run": "tokyo/run3",
+      "epochs": 1200,
+      "max_position_delta_m": 0.0,
+      "max_gamma_delta": 5.001247650460172e-07,
+      "fix_mismatches": 0,
+      "gamma_fixed_mismatches": 0
+    }
+  ]
+}

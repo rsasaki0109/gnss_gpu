@@ -1,0 +1,50 @@
+{
+  "schema": "wp133_tokyo_cppr_anchor_validation_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1650, 1705],
+    "carrier_reference_rank": 2,
+    "candidate_id": 10,
+    "family_ranks": {"cross_consensus": 3, "carrier_rms": 3, "cppr": 1},
+    "runner_margin": 0.42857142857142855,
+    "minimum_runner_margin": 0.2,
+    "other_family_rank_limit": 4,
+    "accepted": true
+  },
+  "holdouts": [
+    {"dataset": "tokyo_run1", "segment": [5225, 5280], "accepted": false, "reason": "cppr_anchor_family_or_margin_gate_failed", "winner_cppr_rank": 7},
+    {"dataset": "nagoya_run1", "segment": [1436, 1656], "accepted": false, "reason": "cppr_anchor_evidence_unavailable"}
+  ],
+  "post_selection_full_audit": {
+    "full_denominator_epochs": 11924,
+    "before_sub50cm_epochs": 3411,
+    "after_sub50cm_epochs": 3466,
+    "after_sub50cm_pct": 29.06742703790674,
+    "gained_epochs": 55,
+    "lost_epochs": 0,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "declared_false_fix_pct": 0.0
+  },
+  "artifacts_sha256": {
+    "selector_implementation": "21B0C9254462C6CE51B83B5B2244588235635594E63A517C21A05173BBA87963",
+    "promoter_implementation": "D531ECE47A830678267AC16A9460A7CC704C2E107424E0030820BCD753091627",
+    "target_selection": "97A5BD18AFB13DC7344134747F2F403DE9264A028FFC1F5F1040C46B50D316EC",
+    "tokyo_unsafe_holdout": "FDC66A20459F3774B67B70C06515CCEB7D526526101A8245B4ADF613CA92FC16",
+    "nagoya_missing_evidence_holdout": "326BA299CC12E42800A75B53C1EDEAF7D380D2509E20E85A222A65E196685582",
+    "promotion": "6B0BBC400305ADB008D09B868C78C1838BE6E497A253190B1B912FB110FB2359",
+    "production_trajectory": "C3B15A89D72894FD51626AC9504B95B7BE49118CAA477922757944E340ABD79F",
+    "shadow_trajectory": "C3B15A89D72894FD51626AC9504B95B7BE49118CAA477922757944E340ABD79F",
+    "production_benchmark": "82E09B5ADFA4E9553FB054A0570F15CD5CEAF055E5EFA63E704DD8480866904A",
+    "shadow_benchmark": "82E09B5ADFA4E9553FB054A0570F15CD5CEAF055E5EFA63E704DD8480866904A",
+    "campaign_figure": "59C4634BB77111F6C20BA383C15B266A3782C726E0EDD5ACD10687F4723DAFB3"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

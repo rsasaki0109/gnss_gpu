@@ -1,0 +1,65 @@
+{
+  "schema": "wp152_tokyo_stability_cppr_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "60B8DECB8D33E949A4F1FA9B30E9A3DCE6E687B3F3B4149D2AA3585B3015C647",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [935, 990],
+    "selected_stride_phase": 0,
+    "prior_generation_assessment": "WP115 pre-fine-grid posterior failure (ranks 1/5/8, 42.9% margin, 0/55 winner); re-assessed with the 17-sample GSI cache, fixed fine grid, and frozen WP138 selector generation; measurement and chain based on the WP148 trajectory whose target-segment rows equal the newest production",
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 17,
+    "gsi_inlier_spread_m": 0.26463005881905133,
+    "gsi_up_prior_center_m": -1.1009246948204918,
+    "initial_pool_useful_candidates_by_rank": {"rank0": "1 of 2 (55/55)", "rank1": "0 of 3", "rank2": "0 of 6"},
+    "fine_grid_hypotheses": 52,
+    "fine_grid_strict_candidates": 52,
+    "diagnostic_useful_candidates": [
+      {"candidate_id": 13, "diagnostic_sub50cm_epochs": 28},
+      {"candidate_id": 19, "diagnostic_sub50cm_epochs": 55},
+      {"candidate_id": 20, "diagnostic_sub50cm_epochs": 55},
+      {"candidate_id": 26, "diagnostic_sub50cm_epochs": 3}
+    ],
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "cross_basis_consensus_runner_margin": 0.07200985878735772,
+    "selector": "wp138_stability_cppr_consensus_v1",
+    "selector_mode_count": 29,
+    "selector_winner_candidate_id": 41,
+    "selector_winner_stability_family_ranks": {"cross_refit_disagreement_m": 5, "block_spread_m": 4, "max_cross_basis_carrier_rms_cycles": 11, "cppr_rank_sum": 8},
+    "selector_winner_diagnostic_sub50cm_epochs": 0,
+    "runner_candidate_id": 3,
+    "runner_diagnostic_sub50cm_epochs": 0,
+    "runner_margin": 0.07142857142857142,
+    "minimum_runner_margin": 0.2,
+    "family_rank_limit": 12,
+    "family_rank_pass": true,
+    "runner_margin_pass": false,
+    "accepted": false,
+    "reason": "stability_cppr_family_or_margin_gate_failed"
+  },
+  "decision": "do not rerun or substitute after the truth-free rejection; keep WP150 production unchanged",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "8EEEB54226F14A532839CAAA30E2D124AD2AF8F85C729FBB05A20ECD888850F6",
+    "fine_grid": "6C1335200524E895FABC34FD382C36E17FCED609F58FB9C64909505B53572463",
+    "fine_grid_development": "6DBE8C12BE4DD31974A207B745A6A56562F3358A475FC19DCFC7888C45C7355B",
+    "truthfree_source": "46A6CF8F8BAFB2A594551ADBA124AF4D764E7219FC329AE17C9577A15F3BEB39",
+    "truthfree_seed_pool": "BE476F7B19D14B54D8880AD392C2292D89DAC334449253373EB7D43DD5A64922",
+    "rank0_truthfree_refit": "69653A1E44A721E941928BFD38A5BFD19CABE986049178B25A0CD8B77033368A",
+    "rank2_truthfree_refit": "1BBB11CD7717A4C64C032BBB1D0EAABF2CC36541AB228BA66E29C5C2DA441939",
+    "cross_basis_consensus": "58629BE189B51875D9145660D7C13E632E2D716B423EF68BEA3F335B0B817CF6",
+    "stability_cppr_selection": "0C5750B891206B1D4EB0036608E386C821F8F0503AF34E9779954431BA4EAE35"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

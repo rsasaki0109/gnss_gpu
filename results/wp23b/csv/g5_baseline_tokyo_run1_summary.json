@@ -1,0 +1,15 @@
+{
+  "run": "tokyo/run1",
+  "n_epochs": 1200,
+  "subset_size": 8,
+  "top_k": 12,
+  "birth_epochs": 233,
+  "declared_fix_epochs": 14,
+  "gamma_fix_epochs": 79,
+  "consistency_reject_epochs": 65,
+  "correct_fix_epochs": 10,
+  "false_fix_epochs": 4,
+  "false_fix_pct": 28.571428571428573,
+  "max_gamma": 0.9970356459601885,
+  "sub50cm_all_epochs": 197
+}

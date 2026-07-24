@@ -1,0 +1,13 @@
+{
+  "schema": "wp106_tokyo_global_evidence_supply_lock_v1",
+  "date": "2026-07-23",
+  "dataset": "tokyo_run1",
+  "production_input_truth": false,
+  "complete_blocks": 216,
+  "supply_pass_blocks": 214,
+  "post_scan_all_bad_blocks": 150,
+  "selected_next_segment": [11495, 11550],
+  "selected_segment_carrier_rows": 431,
+  "selected_segment_ddpr_rows": 286,
+  "scan_sha256": "1AC7F43C4E63828BF8B8E7FA4C500C20065344B11947491D40861C3783CB204E"
+}

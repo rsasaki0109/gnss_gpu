@@ -1,0 +1,63 @@
+{
+  "schema": "wp169_tokyo_screened_consensus_rejection_lock_v1",
+  "date": "2026-07-24",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [4895, 4950],
+    "selected_stride_phase": 1,
+    "novelty": "tenth block through the WP158 screen + WP159 chain; completes the WP121-126-era floor re-assessment",
+    "prior_generation_assessment": "WP124 DDPR gate rejection (floor 6.46 m, diagnostic ceiling 39, GSI inliers 11/17)",
+    "ddpr_screen": {
+      "schema": "wp158_ddpr_satellite_screen_v1",
+      "edge_m": 5.0,
+      "frac_thresh": 0.2,
+      "evidence_epochs": 11,
+      "excluded_satellites": ["C11", "C38", "C42", "C43", "E04", "E11", "E36", "G06", "G13", "G15", "G20", "G29", "G30"],
+      "outlier_fractions_note": "13 satellites flagged, 10 at outlier fraction 1.0; near-universal contamination similar to the neighbouring WP164 block 4785-4840"
+    },
+    "screened_refits": {
+      "rank0": {"min_ddpr_rms_m": 0.969, "selection_reason": "all_truth_free_gates_pass"},
+      "rank1": {"min_ddpr_rms_m": 0.836, "selection_reason": "all_truth_free_gates_pass"},
+      "rank2": {"min_ddpr_rms_m": 1.012, "selection_reason": "all_truth_free_gates_pass"}
+    },
+    "cross_basis_consensus_candidate_id": 2,
+    "cross_basis_consensus_reason": "unique_three_reference_basis_consensus",
+    "cross_basis_consensus_runner_margin": 0.587,
+    "cross_basis_consensus_detail": "two of thirteen candidates pass supply (ids 2 and 12); id 2 wins at consensus 0.1044 m vs 0.2528 m",
+    "selector": "wp159_screened_stability_consensus_v1",
+    "selector_accepted": false,
+    "selector_reason": "stability_cppr_evidence_unavailable",
+    "selector_base_reason": "fewer_than_two_cross_basis_cppr_modes",
+    "selector_mode_count": 0,
+    "significance": "WP53 accepts but WP159 fails closed at mode_count 0 — the CPPR mode construction finds no qualifying modes at all despite a clean WP53 winner; under the frozen conjunction discipline the block is rejected, consistent with its 39 ceiling and 11/17 GSI inliers"
+  },
+  "decision": "no substitution and no rerun after the truth-free rejection; WP160 production unchanged",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "ddpr_screen": "E5303FB54CA17966CEF982F590F3DB046D2EE964A50875C27E328D7701D83D63",
+    "gsi_height_cache_reused": "results/wp31/tokyo_run1_wp124_gsi_multisample17_height_cache_4895_4950.json",
+    "rank0_phase1_screened_development": "B3892FF2345AD47767BB7A8B921EDF9E827428EA9090FA81BD2FCC2B57D486CD",
+    "rank1_phase1_screened_development": "B65CDDA013136644AEB487730B45FB007D71AE23EBB398723016D28F0BDF8B5A",
+    "rank2_phase1_screened_development": "A419B27B4FAE95A3B8417FB7EAF2301AB826D0157CF5C74AD9A91F8DE039A169",
+    "truthfree_source": "7DE55B5B2B744775155688E446CD5DDB7C12F8E1D248A9DC3022D2B2E321D934",
+    "truthfree_seed_pool": "95064877E7A1494AFC500AB333C9120520F23A2B96ABBEAD0EC6005EBE668E08",
+    "rank0_cross_development": "127FFC5041AB8708686CC00569E7EA70A6A99D55D078F8AF0C662D7AAE3A8A4E",
+    "rank0_cross_truthfree": "E53AB8B95E585BD55FF05E97DFC63341BE7D19E2510ADA75A80B68AD83E8AFDD",
+    "rank2_cross_development": "0C37AD0210321E286BA6C9E1C8F16393DD3E3057C558613AB3A28D82203DA3E3",
+    "rank2_cross_truthfree": "1B3151B9383006B0024944C5148735F897D85EE4A39B57E842AD8A09BA05B0E0",
+    "cross_basis_consensus": "900B3148AEE97C098E2246A86B137771752A1D0F0053A54CA3FFA98CA2E5DF1B",
+    "wp159_screened_selection": "9596A9CE3D3B2D33C9AB67059D84BF9F727602AFF79EDC63A930246A2DA47CA1"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

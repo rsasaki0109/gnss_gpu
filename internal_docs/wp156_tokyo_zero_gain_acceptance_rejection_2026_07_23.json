@@ -1,0 +1,74 @@
+{
+  "schema": "wp156_tokyo_zero_gain_acceptance_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "truth_usage": "post_application_full_denominator_audit_only",
+  "production_baseline_trajectory_sha256": "59E2D5B65555F0D9C82CFCF18C7328E06EB579216B055C4EA6F549BA62DE0FF4",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [10890, 10945],
+    "selected_stride_phase": 3,
+    "prior_generation_assessment": "WP114 borderline DDPR floor 4.032 m (+0.032 m over gate, coarse grid only); under the 17-sample GSI cache generation the floor drops to 3.66-3.69 m and the block re-enters the gates",
+    "gsi_compatible_samples": 2,
+    "gsi_inlier_samples": 2,
+    "gsi_inlier_spread_m": 0.22608052817582802,
+    "gsi_up_prior_center_m": -7.593007801631842,
+    "initial_pool_useful_candidates": 0,
+    "oracle_ceiling_epochs_by_rank": {"rank0": 24, "rank1": 32, "rank2": 36},
+    "fine_grid_hypotheses": 52,
+    "fine_grid_strict_candidates": 1,
+    "diagnostic_useful_candidates": [],
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "cross_basis_consensus_runner_margin": 0.152661294894066,
+    "selector": "wp138_stability_cppr_consensus_v1",
+    "selector_mode_count": 18,
+    "selector_accepted": true,
+    "selector_winner_candidate_id": 18,
+    "selector_winner_stability_family_ranks": {"cross_refit_disagreement_m": 2, "block_spread_m": 1, "max_cross_basis_carrier_rms_cycles": 6, "cppr_rank_sum": 8},
+    "selector_runner_candidate_id": 11,
+    "selector_runner_margin": 0.23529411764705882,
+    "post_freeze_audit": {
+      "selected_candidate_sub50cm_epochs": 0,
+      "selected_candidate_median_error_m": 5.7459
+    },
+    "application_result": {
+      "input_trajectory_sha256": "59E2D5B65555F0D9C82CFCF18C7328E06EB579216B055C4EA6F549BA62DE0FF4",
+      "gained_epochs": 0,
+      "lost_epochs": 0,
+      "minimum_gained_epochs": 1,
+      "promotion_requirement_met": false
+    },
+    "accepted": false,
+    "reason": "truth-free selector accepted a zero-gain candidate; the frozen application requirement (gained epochs > 0) fails, so production is not advanced. First measured fine-grid-era false acceptance of the WP138 selector; recorded as a new unsafe-acceptance holdout candidate alongside WP129"
+  },
+  "decision": "do not advance production; retain the rejected application artifacts as evidence; treat this block's selection artifacts as a candidate holdout for any future separately named selector",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "4BB342673FE2C20A0FE0FCF05658812E93F5CE30F75E11C5ABEE631342EA2A40",
+    "rank0_phase3_development": "4ECB2303D92311C956504FD8461F26B67D9B74A208E49B5B70B70F104848FB5C",
+    "rank1_phase3_development": "92204BBB736D20CA038FF13FDE999D324C2D8C313B8BD55234F4C1E18DAA386C",
+    "rank2_phase3_development": "75A5383D799F1FD4AB827AA909B00B260C2D1E00BD2DA66EFA1DFDBDD6AE1CF7",
+    "fine_grid": "32C9758FA57EF3121FAB8DEE321A6E4E0746621B8422D86611388995D43E020B",
+    "fine_grid_development": "AF87C9C7A64B7D865397A752BA8AA3E38663F4C212E750AD24664118E3DC6C04",
+    "truthfree_source": "991E8549BAEF999DF2BB6BC50E9FA6398EB59E5FCB20BEE5EFFC1213F55FF35A",
+    "truthfree_seed_pool": "8A2CB2AEFA73EBBB95F6400B08A350C3629B0AB5F66AA846DAB35A69ABD040AC",
+    "rank0_truthfree_refit": "E454F8C47B7FC0834F8373028C02A00E5DCA4B134826EEFD3C2A221A65CE692F",
+    "rank2_truthfree_refit": "CEBD30C33CDE746AD2A40F3A15961F206BE406A71740DE49E7D5529B01452B5A",
+    "cross_basis_consensus": "94C33F6A75BDE55BC250FEE47CCDC29F655CF13CDDBBD2CA808E3B9382742E57",
+    "stability_cppr_selection": "6FE513758E788E6055F7A52537E8BE89650AC4324D1E44599419A04810C44659",
+    "promotion": "0A3637F56EA1D419D317FF611B09C3EACDFB0D13DC0A6BD43635E4C8769D78F6",
+    "rejected_application_benchmark": "35D9DBBA6C2681880357E0C521265157F4AD0223D4D53198FE8F3A8380DE9861",
+    "rejected_application_trajectory": "79EDA170705D9E60E771F981469902023DD82B7F78E9D3879C48F3550C24FACB"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

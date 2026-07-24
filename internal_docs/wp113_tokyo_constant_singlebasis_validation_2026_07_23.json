@@ -1,0 +1,64 @@
+{
+  "schema": "wp113_tokyo_constant_singlebasis_validation_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11385, 11440],
+    "carrier_reference_rank": 1,
+    "candidate_id": 1,
+    "absolute_mode_count": 3,
+    "family_ranks": {"road_band": 1, "carrier_rms": 1, "cppr": 1},
+    "runner_margin": 1.3333333333333333,
+    "diagnostic_best_sub50cm_epochs": 16,
+    "truth_seeded_diagnostic_ceiling_epochs": 16,
+    "accepted": true
+  },
+  "gsi_height_gate": {
+    "sample_count": 17,
+    "compatible_samples": 15,
+    "consensus_method": "fixed_epoch_source_matched_densest_bounded_cluster",
+    "inlier_samples": 8,
+    "inlier_epochs": [11392, 11385, 11395, 11388, 11398, 11402, 11405, 11409],
+    "inlier_spread_m": 0.48595937559456104,
+    "max_inlier_spread_m": 0.5,
+    "up_prior_center_m": -2.917677615407108
+  },
+  "frozen_gates": {
+    "min_checked_pairs": 40,
+    "max_bad_pair_fraction": 0.05,
+    "max_block_spread_m": 0.5,
+    "within_basis_dedup_m": 0.08,
+    "max_family_rank_fraction": 0.2,
+    "min_runner_margin": 0.2
+  },
+  "holdouts": [
+    {"dataset": "nagoya_run1", "segment": [3721, 3776], "accepted": false},
+    {"dataset": "tokyo_run1", "segment": [2464, 2519], "accepted": false}
+  ],
+  "post_selection_full_audit": {
+    "full_denominator_epochs": 11924,
+    "before_sub50cm_epochs": 3268,
+    "after_sub50cm_epochs": 3284,
+    "after_sub50cm_pct": 27.541093592754105,
+    "gained_epochs": 16,
+    "lost_epochs": 0,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "005891EDCB13EAF93F1E39A238EA0587906B3694AA3C6DF04AC7753558C11898",
+    "target_selection": "C54867CFB37DFB3C1A0A46068ED187180AEAB2622F3C7A3CA66129D25C3B35B9",
+    "promotion": "1B7973BA52F42DB404CCF81FE7601F11823BCDB478B62EA27150C6EB90A32149",
+    "production_trajectory": "667B3E0626BCF26C6F858473ADA4950101A9A80D8647152FB5A4B3F5B08959AA",
+    "shadow_trajectory": "667B3E0626BCF26C6F858473ADA4950101A9A80D8647152FB5A4B3F5B08959AA",
+    "production_benchmark": "39637EF719F7557ED78F93522CC7753BFA846323A65D650266FB523663DCDD01",
+    "shadow_benchmark": "39637EF719F7557ED78F93522CC7753BFA846323A65D650266FB523663DCDD01"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

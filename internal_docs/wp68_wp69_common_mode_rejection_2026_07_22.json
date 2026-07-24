@@ -1,0 +1,66 @@
+{
+  "schema": "wp68_wp69_common_mode_rejection_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "upstream_reference": {
+    "repository": "https://github.com/rsasaki0109/gnssplusplus-library",
+    "branch": "develop",
+    "commit": "7085fb81379018e2211b03664634acf74962aeae",
+    "ported_idea": "one-row-exclusion DD pseudorange FDE"
+  },
+  "dataset": "nagoya_run1",
+  "segment": [3666, 3721],
+  "wp68_static_pair_bias": {
+    "anchor_segment": [1807, 2327],
+    "calibration_updates": 44,
+    "exact_pair_biases_learned": 19,
+    "max_age_epochs": 5000,
+    "winner_candidate_id": 0,
+    "winner_bad_pair_fraction": 0.1953125,
+    "winner_p95_abs_innovation_m": 86.00486873994741,
+    "winner_median_error_m": 1.0253317557785384,
+    "winner_sub50cm_epochs": 0,
+    "verdict": "rejected_nonstationary_exact_pair_bias"
+  },
+  "wp69_local_fde": {
+    "explicit_seed_trajectory": "wp62 production trajectory",
+    "evidence_epochs": 11,
+    "accepted_fde_epochs": 11,
+    "seed_audit_mean_error_m": 1.05,
+    "anchor_audit_mean_error_m": 2.94,
+    "anchor_audit_p50_error_m": 3.67,
+    "audit_improved_epochs": 2,
+    "fde_seed_offset_ecef_m": [-0.9469829313457012, 1.3726640697568655, 3.0809168801642954],
+    "refined_offset_ecef_m": [-1.0062131057565573, 1.3973753667141569, 3.031486190473479],
+    "refined_median_error_m": 3.564634161135552,
+    "refined_sub50cm_epochs": 0,
+    "selector_reason": "cppr_rank_gate_failed",
+    "selector_runner_margin": 0.0,
+    "verdict": "rejected_fde_worsens_common_mode_and_cppr_ties"
+  },
+  "diagnostic_runner_change": {
+    "flag": "--trajectory-csv",
+    "default_behavior_changed": false,
+    "tests": "16 passed",
+    "ruff": "clean"
+  },
+  "production_promoted": false,
+  "production_unchanged": {"nagoya_sub50cm_epochs": 5061, "nagoya_total_epochs": 7583, "nagoya_sub50cm_pct": 66.74139522616379, "fix_epochs": 0, "false_fix_epochs": 0},
+  "artifacts_sha256": {
+    "diagnostic_runner": "384DB2914FE405CE32E5B5866502E003F7CC41B5C96876916620AEC8BBF7F3D2",
+    "wp68_development": "B24E912E86F6B4B0F1314A66330EDFDAB5497408F12EC2E05BA300DC7C481FA3",
+    "wp68_truthfree": "6641D68A429CBBD7FAD10513DA7399C1BFEB0F6F207A47723ACE5AE16E0CF94A",
+    "wp68_selection": "630389E595CA39A5EC4A9737B1E64270AF31CE2323926F834016F7275ED82237",
+    "wp69_fde_csv": "CBC5341DBAC62FB6328E683CBEBD32BE34D51312B96C191B0357B622416E415D",
+    "wp69_seed": "1F5DC236A7ACBE010F3CC3C952858AB5E538461D3C354CEA5678E52E5A034160",
+    "wp69_development": "07DB827F93D1555A6E84C083F6BA3B5364D1D8D8521F54E22016D930DCD346A9",
+    "wp69_truthfree": "83C357D49FCDA6AACFFA1EBC1BB55DE6067678E8E7C30EEA77849835B77D1F0D",
+    "wp69_selection": "F6F9F67BA02CD4B3C5BCF7C9E0909D26925EB3680B27A895FC6E2C8D9D1A3F2D"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}
