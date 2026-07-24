@@ -1,0 +1,72 @@
+{
+  "schema": "wp128_tokyo_block_spread_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "D993007AC92C3454A54415CBEDF6502330A549492617349C08846C0FA1260859",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1595, 1650],
+    "gsi_total_samples": 17,
+    "gsi_compatible_samples": 7,
+    "gsi_inlier_samples": 4,
+    "gsi_dem_source": "1m（レーザ）",
+    "gsi_inlier_spread_m": 0.1045111094981479,
+    "gsi_up_prior_center_m": -1.4411130660779747,
+    "maximum_ddpr_rms_gate_m": 4.0,
+    "maximum_block_spread_gate_m": 0.5,
+    "carrier_reference_results": [
+      {
+        "rank": 0,
+        "carrier_rows": 291,
+        "carrier_arcs": 99,
+        "hypothesis_count": 10,
+        "strict_candidate_count": 0,
+        "minimum_ddpr_rms_m": 3.262474371327552,
+        "minimum_block_spread_m": 1.4869414292537013,
+        "truth_seeded_diagnostic_ceiling_epochs": 36,
+        "truth_seeded_block_spread_m": 4.2928391537472805
+      },
+      {
+        "rank": 1,
+        "carrier_rows": 291,
+        "carrier_arcs": 108,
+        "hypothesis_count": 13,
+        "strict_candidate_count": 0,
+        "minimum_ddpr_rms_m": 3.381829353473959,
+        "minimum_block_spread_m": 1.4569217361133886,
+        "truth_seeded_diagnostic_ceiling_epochs": 36,
+        "truth_seeded_block_spread_m": 5.19123288999392
+      },
+      {
+        "rank": 2,
+        "carrier_rows": 273,
+        "carrier_arcs": 101,
+        "hypothesis_count": 11,
+        "strict_candidate_count": 0,
+        "minimum_ddpr_rms_m": 3.3064482906788486,
+        "minimum_block_spread_m": 2.571823504036394,
+        "truth_seeded_diagnostic_ceiling_epochs": 25,
+        "truth_seeded_block_spread_m": 5.112943548314546
+      }
+    ],
+    "accepted": false,
+    "reason": "all carrier references violate the frozen block-spread gate despite DDPR floors below 4.0 m"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "0A2EACDF02B7C9D31EAF8CE88656A4C87B35509FA3EF6BD9F895E79051075D75",
+    "rank0_development": "DF4CD5A0B9C9D67968F6C4B58A9F439AA31A7A86CB12A4AC373BE40AFDC46AC7",
+    "rank1_development": "10A4C8873F8A33D8A597E7FCB19BB7786CE2A2C1862A6D8C64407D8AFA94B034",
+    "rank2_development": "078CD6667E0AEF19C691F4BBCB7ADE6B9D63EF4CDFBDEAE6172D34294E186B5F"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

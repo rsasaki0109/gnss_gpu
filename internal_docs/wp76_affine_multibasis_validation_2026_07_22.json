@@ -1,0 +1,70 @@
+{
+  "schema": "wp76_affine_multibasis_validation_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "nagoya_run1",
+    "segment": [3666, 3721],
+    "offset_model": "right_boundary_affine_zero",
+    "boundary_epoch": 3811,
+    "boundary_anchor_reason": "height_temporal_road_consensus",
+    "horizontal_grid": {"radius_m": 1.5, "step_m": 0.5, "seeds_per_basis": 49},
+    "carrier_reference_ranks": [0, 1, 2],
+    "cluster_count": 10,
+    "selected_member_candidate_ids": [27, 27, 27],
+    "cluster_diameter_m": 0.07198275473869903,
+    "family_ranks": {"road_band": 1, "carrier_rms": 2},
+    "family_rank_limit": 2,
+    "runner_margin": 0.3333333333333333,
+    "selected_offset_ecef_m": [0.6301734876848633, -1.2529874002229286, 0.7122027150410961]
+  },
+  "frozen_gates": {
+    "min_checked_pairs": 40,
+    "max_bad_pair_fraction": 0.05,
+    "max_block_spread_m": 0.5,
+    "within_basis_dedup_m": 0.08,
+    "max_three_basis_cluster_diameter_m": 0.12,
+    "max_family_rank_fraction": 0.2,
+    "min_runner_margin": 0.2
+  },
+  "holdouts": [
+    {
+      "dataset": "nagoya_run1",
+      "segment": [3721, 3776],
+      "accepted": false,
+      "cluster_count": 1,
+      "reason": "fewer_than_two_three_basis_clusters"
+    },
+    {
+      "dataset": "tokyo_run1",
+      "segment": [2464, 2519],
+      "accepted": false,
+      "cluster_count": 0,
+      "reason": "fewer_than_two_three_basis_clusters"
+    }
+  ],
+  "post_selection_shadow_audit": {
+    "full_denominator_epochs": 7583,
+    "before_sub50cm_epochs": 5061,
+    "after_sub50cm_epochs": 5116,
+    "gained_epochs": 55,
+    "lost_epochs": 0,
+    "segment_sub50cm_epochs": 55
+  },
+  "artifacts_sha256": {
+    "rank0_truthfree": "0B9D8FF33AC4CED2DDB39815FD2FF1630F23F9D9665A504E329B15C0E510DEE8",
+    "rank1_truthfree": "4C552DC94B3C874FA28A52DF2F1314AFF55C4949E0B1BC99B61808217994711B",
+    "rank2_truthfree": "0339F68EAA0CA1D3367CB7F6C5C50EBE4AE0D4EDB3857182C432DD1A8751BB26",
+    "target_selection": "D3A8F2C779967A820F70D442D92102378E970FF34D3B7FB65C476BA7C6368EB7",
+    "nagoya_transfer": "5485C7BBC580832CFC6CE1C4633E578A37F0BECF25DC46BC8D6375A05AA5B968",
+    "tokyo_unsafe": "86BECD2DFB777A05542592F532CD0DC314E2A27E64950B8F596269A27B668B47",
+    "osm_cache": "92B2B5DFDCC619ADB06C5A0AE412F9CA8F196D2B74D7CC7ADA64F6618E9D9625",
+    "gsi_cache": "54E77F1CFA4D52A708C29387B2ABA9427F11B33C91016535B3E2E574BC7BD48F"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

@@ -98,6 +98,7 @@ class WidelaneDDStats:
     residual_abs_median_cycles: float | None = None
     residual_abs_max_cycles: float | None = None
     std_median_cycles: float | None = None
+    fixed_dd_ambiguities: tuple[tuple[str, str, int], ...] = ()
     reason: str = "no_candidates"
 
 
@@ -396,6 +397,7 @@ class WidelaneDDPseudorangeComputer:
         fix_ratios: list[float] = []
         fix_residual_abs_cycles: list[float] = []
         fix_std_cycles: list[float] = []
+        fixed_dd_ambiguities: list[tuple[str, str, int]] = []
 
         for sys_char, sys_sats in sorted(sats_by_system.items()):
             if len(sys_sats) < 2:
@@ -439,6 +441,9 @@ class WidelaneDDPseudorangeComputer:
                 dd_pr_m = dd_phase_m - float(fix.integer) * LAMBDA_WL
                 if not np.isfinite(dd_pr_m):
                     continue
+                fixed_dd_ambiguities.append(
+                    (ref_sat, sat_id, int(fix.integer))
+                )
 
                 elev_k = float(getattr(row, "elevation", 0.3))
                 meas_weight = float(np.sqrt(max(row_weight, 1.0e-12) * max(ref_weight, 1.0e-12)))
@@ -460,6 +465,7 @@ class WidelaneDDPseudorangeComputer:
             fix_ratios=fix_ratios,
             fix_residual_abs_cycles=fix_residual_abs_cycles,
             fix_std_cycles=fix_std_cycles,
+            fixed_dd_ambiguities=fixed_dd_ambiguities,
         )
         min_rate = self._min_fix_rate if min_fix_rate is None else float(min_fix_rate)
         if n_candidate_pairs == 0:
@@ -487,6 +493,7 @@ class WidelaneDDPseudorangeComputer:
             dd_weights=np.asarray(dd_weight_list, dtype=np.float64),
             ref_sat_ids=tuple(ref_sat_ids),
             n_dd=n_dd,
+            sat_ids=tuple(sat_id for _ref_sat, sat_id, _integer in fixed_dd_ambiguities),
         )
         return result, WidelaneDDStats(
             **stats_kwargs,
@@ -552,6 +559,7 @@ def _widelane_stats_kwargs(
     fix_ratios: Sequence[float],
     fix_residual_abs_cycles: Sequence[float],
     fix_std_cycles: Sequence[float],
+    fixed_dd_ambiguities: Sequence[tuple[str, str, int]],
 ) -> dict[str, object]:
     ratios = np.asarray(fix_ratios, dtype=np.float64)
     residuals = np.asarray(fix_residual_abs_cycles, dtype=np.float64)
@@ -565,6 +573,7 @@ def _widelane_stats_kwargs(
         "residual_abs_median_cycles": _finite_stat(residuals, np.median),
         "residual_abs_max_cycles": _finite_stat(residuals, np.max),
         "std_median_cycles": _finite_stat(stds, np.median),
+        "fixed_dd_ambiguities": tuple(fixed_dd_ambiguities),
     }
 
 

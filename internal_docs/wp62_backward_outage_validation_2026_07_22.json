@@ -1,0 +1,62 @@
+{
+  "schema": "wp62_backward_outage_validation_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "predecessor_segment": [1271, 1326],
+  "recomputed_base_path_segment": [1326, 1436],
+  "candidate_supply": {
+    "plain_rank0_best_median_error_m": 2.2464676471258036,
+    "plain_rank1_best_median_error_m": 2.4956245852000905,
+    "plain_rank2_best_median_error_m": 2.2822097786777467,
+    "plain_best_sub50cm_epochs": 0,
+    "fde_accepted_anchor_epochs": 8,
+    "fde_anchor_p50_error_m": 6.56,
+    "fde_best_sub50cm_epochs": 0,
+    "osm_best_sub50cm_epochs": 0,
+    "decision": "reject direct candidate output; use only observed outage shape"
+  },
+  "outage_shape_gate": {
+    "min_basis_support": 2,
+    "passing_reference_ranks": [1, 2],
+    "rank1_tail_spread_m": 0.029580442298401517,
+    "rank1_leading_divergence_m": 7.022832684259006,
+    "rank2_tail_spread_m": 0.053691525657113506,
+    "rank2_leading_divergence_m": 7.879663599013948,
+    "max_tail_spread_m": 0.2,
+    "min_leading_divergence_m": 1.0,
+    "cppr_checked_pairs_pass": true,
+    "cppr_bad_pair_fraction_pass": true,
+    "cppr_family_rank_pass": true,
+    "cppr_runner_margin_pass": true
+  },
+  "propagation": {
+    "mode": "one_55_epoch_block_constant_from_freshly_recomputed_base_path",
+    "stored_wp60_is_recomputed_from_all_original_inputs": true,
+    "may_seed_another_outage_or_path_promotion": false,
+    "selected": true
+  },
+  "tests": {
+    "pytest": "41 passed",
+    "ruff": "all checks passed"
+  },
+  "artifacts_sha256": {
+    "gsi_cache": "AA7D77DBC2BAD0210EC1E2DCDAEA61549BE6547ACBE9800C8F7CAD13BD41561B",
+    "fde_csv": "6ABC932A0F52E53B9443BC13B2EA2B03D11A3EA8B9242059E909E2815B7B70F3",
+    "fde_seed": "9DA7B3AEF4F0719A19BC2C0536639E1E1236850A3EE2170139A461B3DB249805",
+    "rank0_truthfree_source": "26F244E685F29B8D2B4BC66E0B8A14B72D37C385D8A677D1AAD576EE80E8B93A",
+    "rank1_truthfree_source": "936F5916894817F05885A4B3EA75EF9B3910D18279AACE0BB0CFAB9B1182F125",
+    "rank2_truthfree_source": "A3EE5599C7C02257D035BB6F0503A2236CEF735A43C9C781FA0F34603E865C5C",
+    "rank0_cppr": "31B86A725024C983C8A46BFD9FE2C6256BB1BFBB2545D5FF24C171316D7DA48C",
+    "rank1_cppr": "4B108BFE93512991F33542B14B2578F583D4634FE26C26C5D2F03A195DD82C5B",
+    "rank2_cppr": "D953A2F019AAA39B58EF459F5BD1EF53EC7D36BF95EB698DEBC599D2FBE46C99",
+    "validation": "AA3BE71C12F1E0A19ED8DD7EFAD4CB2A0BCA8BB26D38CAD894661CAF0D487FEB",
+    "fde_seed_builder": "EEC6A0868520B1F0C62C373403E43C53DF5DD576E8ABF81C40E2A4F06FDC7B7E",
+    "selector": "B9E6C989FE705B51B22D93BE60E026C95D2255571A8518BF3BC854B024241336"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

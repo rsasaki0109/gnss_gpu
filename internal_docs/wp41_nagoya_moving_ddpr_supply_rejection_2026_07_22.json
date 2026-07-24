@@ -1,0 +1,60 @@
+{
+  "schema": "wp41_nagoya_moving_ddpr_supply_rejection_v1",
+  "date": "2026-07-22",
+  "status": "rejected_without_production_change",
+  "production_input_truth": false,
+  "segment": [2327, 2382],
+  "evidence_epochs": 11,
+  "raw_carrier_rows": 188,
+  "fixed_gate": {
+    "min_integer_arcs": 4,
+    "min_carrier_rows": 24,
+    "min_ddpr_rows": 40,
+    "max_carrier_rms_cycles": 0.5,
+    "max_ddpr_rms_m": 4.0,
+    "max_block_spread_m": 0.5
+  },
+  "trials": [
+    {
+      "mode": "uncalibrated_ddpr",
+      "artifact_sha256": "745CFFEBB9EC6A30D1F469635F632A5B32EE1A1274E0925F044108ADF53DBA8E",
+      "selected_seed_id": null,
+      "best_hypothesis_ddpr_rms_m": 59.92266934144513,
+      "truth_seeded_ceiling_ddpr_rms_m": 82.73133084601618,
+      "truth_seeded_ceiling_audit_median_error_m": 0.144342555500922
+    },
+    {
+      "mode": "static_anchor_satellite_bias",
+      "artifact_sha256": "50B72DAF2AA1D982DD878FB31BBDB3001268BED52F076F2A02BF02DA7C75077A",
+      "selected_seed_id": null,
+      "calibration_updates": 20,
+      "best_hypothesis_ddpr_rms_m": 19.80172479844812,
+      "truth_seeded_ceiling_ddpr_rms_m": 20.675267298382305,
+      "truth_seeded_ceiling_audit_median_error_m": 0.0995955806017054
+    },
+    {
+      "mode": "static_anchor_exact_pair_median_bias",
+      "artifact_sha256": "849D3CFF34E712B9F89FE3A429371D623A1DE26466C1B69F81A4D1F9BE88FB33",
+      "selected_seed_id": null,
+      "calibration_updates": 20,
+      "exact_pair_biases_learned": 18,
+      "best_hypothesis_ddpr_rms_m": 21.805328912636178,
+      "truth_seeded_ceiling_ddpr_rms_m": 23.05563944641104,
+      "truth_seeded_ceiling_audit_median_error_m": 0.10403873396790751
+    }
+  ],
+  "diagnosis": "Carrier RMS and bootstrap spread pass for all supplied hypotheses, but no DDPR variant reaches the fixed 4 m gate, including the non-eligible truth-seeded ceiling. Static-to-moving code bias transfer is invalid in this block.",
+  "implementation_sha256": "42F5A7874F337CFEDA888EB63DB6FC6EF4D8FA055C4C7E0EBEF154371C46BB11",
+  "test_sha256": "EB619126345CAA7A8AE65C0F6E85A4A875783EFB994AB594381C04E3FF7B0B04",
+  "verification": {
+    "pytest": "11 passed",
+    "ruff": "all checks passed"
+  },
+  "production_result": {
+    "unchanged_wp39_sub50cm_epochs": 4790,
+    "full_denominator_epochs": 7583,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "next": "Evaluate block-internal temporal DDPR with pair biases eliminated as nuisance parameters, and require cross-block holdout separation before any promotion."
+}

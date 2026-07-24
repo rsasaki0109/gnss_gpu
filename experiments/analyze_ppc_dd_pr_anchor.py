@@ -65,6 +65,27 @@ def _error_m(pos: np.ndarray | None, ref: np.ndarray | None) -> float:
     return float(np.linalg.norm(np.asarray(pos, dtype=np.float64)[:3] - np.asarray(ref, dtype=np.float64)[:3]))
 
 
+def _load_trajectory_csv(path: Path) -> dict[float, np.ndarray]:
+    """Load an explicit truth-free trajectory seed keyed by rounded TOW."""
+
+    with path.open(newline="", encoding="utf-8-sig") as fh:
+        rows = list(csv.DictReader(fh))
+    required = {"tow", "ecef_x", "ecef_y", "ecef_z"}
+    if not rows or not required.issubset(rows[0]):
+        raise ValueError("trajectory CSV lacks tow/ecef_x/ecef_y/ecef_z columns")
+    result: dict[float, np.ndarray] = {}
+    for row in rows:
+        position = np.asarray(
+            [float(row["ecef_x"]), float(row["ecef_y"]), float(row["ecef_z"])],
+            dtype=np.float64,
+        )
+        if _finite_pos(position):
+            result[round(float(row["tow"]), 1)] = position
+    if not result:
+        raise ValueError("trajectory CSV has no finite ECEF positions")
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Diagnose PPC DD-PR LS anchors per epoch")
     parser.add_argument("--data-root", type=Path, default=_DEFAULT_DATA_ROOT)
@@ -76,6 +97,12 @@ def main() -> None:
     parser.add_argument("--dd-systems", type=str, default="G,E,J,C")
     parser.add_argument("--hybrid-pos-dir", type=Path, default=_DEFAULT_RESULTS / "libgnss_rtk_pos_v5")
     parser.add_argument("--hybrid-pos-suffix", type=str, default="_full.pos")
+    parser.add_argument(
+        "--trajectory-csv",
+        type=Path,
+        default=None,
+        help="explicit truth-free tow/ecef trajectory seed; overrides hybrid .pos",
+    )
     parser.add_argument("--dd-base-interp", action="store_true")
     parser.add_argument("--dd-min-elevation-deg", type=float, default=-90.0)
     parser.add_argument("--dd-min-snr", type=float, default=0.0)
@@ -88,6 +115,8 @@ def main() -> None:
     parser.add_argument("--ls-prior-sigma-m", type=float, default=100.0)
     parser.add_argument("--ls-max-shift-m", type=float, default=100.0)
     parser.add_argument("--ls-max-postfit-rms-m", type=float, default=5.0)
+    parser.add_argument("--ls-fde-threshold-m", type=float, default=0.0)
+    parser.add_argument("--ls-max-fde-removals", type=int, default=0)
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args()
 
@@ -107,7 +136,11 @@ def main() -> None:
 
     hybrid_path = args.hybrid_pos_dir / f"{city}_{run}{args.hybrid_pos_suffix}"
     hybrid_pos: dict[float, np.ndarray] = {}
-    if hybrid_path.is_file():
+    external_seed_source = "hybrid"
+    if args.trajectory_csv is not None:
+        hybrid_pos = _load_trajectory_csv(args.trajectory_csv)
+        external_seed_source = "trajectory_csv"
+    elif hybrid_path.is_file():
         hybrid_pos, _hybrid_status = _load_hybrid_pos_file(hybrid_path)
 
     wls_data = _filter_data_by_systems(data, _parse_systems(args.pr_systems))
@@ -136,7 +169,7 @@ def main() -> None:
         seed = np.asarray(wls_positions[i], dtype=np.float64)[:3]
         hp = hybrid_pos.get(t_key)
         if _finite_pos(hp):
-            seed_source = "hybrid"
+            seed_source = external_seed_source
             seed = np.asarray(hp, dtype=np.float64)[:3]
 
         row: dict[str, object] = {
@@ -144,6 +177,9 @@ def main() -> None:
             "tow": f"{float(tow):.1f}",
             "seed_source": seed_source,
             "seed_error_m": _error_m(seed, ref),
+            "seed_x_m": float(seed[0]),
+            "seed_y_m": float(seed[1]),
+            "seed_z_m": float(seed[2]),
             "status": "init",
             "raw_pairs": 0,
             "kept_pairs": 0,
@@ -152,8 +188,12 @@ def main() -> None:
             "gate_max_abs_residual_m": float("nan"),
             "initial_rms_m": float("nan"),
             "final_rms_m": float("nan"),
+            "fde_rejected_pairs": 0,
             "shift_m": float("nan"),
             "anchor_error_m": float("nan"),
+            "anchor_x_m": float("nan"),
+            "anchor_y_m": float("nan"),
+            "anchor_z_m": float("nan"),
             "improved": 0,
             "pass_05m": 0,
             "pass_5m": 0,
@@ -233,6 +273,8 @@ def main() -> None:
                 prior_sigma_m=float(args.ls_prior_sigma_m),
                 max_shift_m=float(args.ls_max_shift_m),
                 max_iter=8,
+                fde_threshold_m=float(args.ls_fde_threshold_m),
+                max_fde_removals=int(args.ls_max_fde_removals),
             ),
         )
         final_rms = float(diag.get("final_rms_m", float("inf")))
@@ -240,8 +282,12 @@ def main() -> None:
         row["status"] = "accepted" if accepted else "solve_reject"
         row["initial_rms_m"] = float(diag.get("initial_rms_m", float("nan")))
         row["final_rms_m"] = final_rms
+        row["fde_rejected_pairs"] = int(diag.get("n_rejected", 0))
         row["shift_m"] = float(diag.get("shift_m", float("nan")))
         row["anchor_error_m"] = _error_m(anchor, ref)
+        row["anchor_x_m"] = float(anchor[0])
+        row["anchor_y_m"] = float(anchor[1])
+        row["anchor_z_m"] = float(anchor[2])
         seed_err = float(row["seed_error_m"])
         anchor_err = float(row["anchor_error_m"])
         if math.isfinite(seed_err) and math.isfinite(anchor_err):
@@ -255,7 +301,7 @@ def main() -> None:
         row["ref_sat_ids"] = ";".join(ref_sat_ids)
         rows.append(row)
 
-    fieldnames = list(rows[0].keys()) if rows else []
+    fieldnames = list(dict.fromkeys(key for row in rows for key in row))
     with out_path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()

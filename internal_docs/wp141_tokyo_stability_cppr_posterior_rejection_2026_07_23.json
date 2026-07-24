@@ -1,0 +1,62 @@
+{
+  "schema": "wp141_tokyo_stability_cppr_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "9ABFD989B8CF9978E2A19D87644E898D521B411B9EBB04FAB073E6346AC335A8",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [5115, 5170],
+    "selected_stride_phase": 1,
+    "initial_pool_strict_candidates_by_rank": {"rank0": 2, "rank1": 3, "rank2": 5},
+    "initial_pool_useful_candidates": 0,
+    "fine_grid_hypotheses": 53,
+    "fine_grid_strict_candidates": 52,
+    "diagnostic_useful_candidates": [
+      {"candidate_id": 15, "diagnostic_sub50cm_epochs": 9},
+      {"candidate_id": 16, "diagnostic_sub50cm_epochs": 32},
+      {"candidate_id": 22, "diagnostic_sub50cm_epochs": 55},
+      {"candidate_id": 23, "diagnostic_sub50cm_epochs": 55},
+      {"candidate_id": 29, "diagnostic_sub50cm_epochs": 23},
+      {"candidate_id": 30, "diagnostic_sub50cm_epochs": 23}
+    ],
+    "cross_basis_consensus_candidate_id": 26,
+    "cross_basis_consensus_runner_margin": 0.3557,
+    "selector": "wp138_stability_cppr_consensus_v1",
+    "selector_winner_candidate_id": 45,
+    "selector_winner_stability_family_ranks": {"cross_refit_disagreement_m": 1, "block_spread_m": 1, "max_cross_basis_carrier_rms_cycles": 6, "cppr_rank_sum": 7},
+    "selector_winner_diagnostic_sub50cm_epochs": 0,
+    "runner_candidate_id": 51,
+    "runner_diagnostic_sub50cm_epochs": 0,
+    "runner_margin": 0.13333333333333333,
+    "minimum_runner_margin": 0.2,
+    "family_rank_pass": true,
+    "accepted": false,
+    "reason": "stability_cppr_family_or_margin_gate_failed"
+  },
+  "decision": "do not substitute diagnostic candidates after audit; keep WP138 production unchanged",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "7D7625E041041F28D485497E60B915ED5FED193824C1827E50424AA416C703E7",
+    "rank0_phase1_development": "38E05AA66119D408865A35464C45ECA8F21DF17D5A41265729AB4D4ACAE976EF",
+    "rank1_phase1_development": "BF9F10D84F49A6E07C5657218EE4399F6C883AA4B7CF54B652D44F9912D0F4DB",
+    "rank2_phase1_development": "BFE463DFCABA7636CCD77924634018F78518FE5DDAE369F85F794211915BCB88",
+    "fine_grid": "1C6E3E878395BA6539B889788890539FA96799562A2A97D8315D4281F98367CD",
+    "fine_grid_development": "7D317AA7884B24C8CA7FBFAF8000CB3F9316A9F9E09F7F97830FEDC531A970DA",
+    "truthfree_source": "31667969192164A08F7BB00F1FFA4541E41671C3858BEB66A0FE0D8E9E79F0D3",
+    "truthfree_seed_pool": "3B6226AD60F2C77042C1541304EE855E02062083573E257B8DD205CCBBAFB55F",
+    "rank0_truthfree_refit": "43787188781F310AE67AC41D0E888583C5704E27256934F96EA8A1B29BB64B5B",
+    "rank2_truthfree_refit": "64EE13A1F2B74D1082D44BCF4A623E14C93143DD962A9EAC46A9B78AD453F0FF",
+    "cross_basis_consensus": "490FD9B89BEF92299DFD9B75F2F0C369BB620EDC00CA8DB1718E944D9DD7371F",
+    "stability_cppr_selection": "941A62F27FD79D965797D4C5A83E0D78E607203227405BEC15DE30038B54B766"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

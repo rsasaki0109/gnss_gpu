@@ -1,0 +1,101 @@
+{
+  "schema": "wp40_nagoya_motion_outage_rejection_v1",
+  "date": "2026-07-22",
+  "status": "rejected_without_production_change",
+  "production_input_truth": false,
+  "baseline": {
+    "wp39_summary": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_nineanchor_trifrequency_fragmentationgated_full_summary.json",
+    "wp39_summary_sha256": "3EC7D9B3EB3924E878039E576E81B1DBCFFCE3DE5C8A251AE2A8CAB80FE8F4F1",
+    "sub50cm_epochs": 4790,
+    "full_denominator_epochs": 7583,
+    "sub50cm_pct": 63.167611763154424,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "fixed_osm_gate": {
+    "particles": 4096,
+    "preclosure_endpoint_error_max_m": 25.0,
+    "road_distance_p95_max_m": 5.10538739585983,
+    "route_length_scale_min": 0.8,
+    "route_length_scale_max": 1.2,
+    "terminal_distinct_runner_required": true,
+    "terminal_score_gap_min": 2.0
+  },
+  "osm_trials": [
+    {
+      "segment": [922, 1807],
+      "mode": "reliable_tdcp",
+      "summary_sha256": "018FAE23175DF49769F0336468BBCA07E5F625B8DA662977D6611B742525669C",
+      "production_selected": false,
+      "failed_gates": ["terminal_distinct_runner", "preclosure_endpoint_error", "road_distance_p95"],
+      "audit_sub50cm_epochs": 27,
+      "audit_epochs": 885
+    },
+    {
+      "segment": [922, 1807],
+      "mode": "all_steps",
+      "summary_sha256": "661B909344E6BC6D81826273920FC5C9683B52D88C60AD9C9AEB15048EB69BBB",
+      "production_selected": false,
+      "failed_gates": ["preclosure_endpoint_error", "road_distance_p95"],
+      "audit_sub50cm_epochs": 7,
+      "audit_epochs": 885
+    },
+    {
+      "segment": [2326, 2841],
+      "mode": "all_steps",
+      "summary_sha256": "22448188CCFF8ABCF272C93D0A9A1B8415580188ACEC45DB3CF9FA5EBACEB253",
+      "production_selected": false,
+      "terminal_score_gap": 0.024120852848736607,
+      "failed_gates": ["terminal_score_gap"],
+      "audit_sub50cm_epochs": 37,
+      "audit_epochs": 516
+    },
+    {
+      "segment": [2326, 2841],
+      "mode": "reliable_tdcp",
+      "summary_sha256": "77419F73A802E1C7B12DF0C5B1A4C3A0E999AD849CB865AF1CB164C28515C8EC",
+      "production_selected": false,
+      "terminal_score_gap": 0.01646821347946429,
+      "failed_gates": ["terminal_score_gap"],
+      "audit_sub50cm_epochs": 66,
+      "audit_epochs": 516
+    },
+    {
+      "segment": [3271, 3811],
+      "mode": "all_steps",
+      "summary_sha256": "5DC46C21140E57B8474ABCB485447F928639F8BF01FE37248E3942CE830385C2",
+      "production_selected": false,
+      "terminal_score_gap": 0.14451395405850176,
+      "failed_gates": ["terminal_score_gap"],
+      "audit_sub50cm_epochs": 12,
+      "audit_epochs": 540
+    },
+    {
+      "segment": [3271, 3811],
+      "mode": "reliable_tdcp",
+      "summary_sha256": "F85C74E8E0CF404540E398DD5B05330E7B7CDD3B0B4DF5D5BB32C8731A03EE64",
+      "production_selected": false,
+      "terminal_score_gap": 0.01958571467761819,
+      "road_distance_p95_m": 5.663165792418818,
+      "failed_gates": ["terminal_score_gap", "road_distance_p95"],
+      "audit_sub50cm_epochs": 40,
+      "audit_epochs": 540
+    }
+  ],
+  "osm_cache_sha256": {
+    "922_1807": "302CBAB2977A7F25597DE0563EC73AA9C65BF0BC012ED9AC614DFF501E586EA1",
+    "2326_2841": "B8D7CA148626DD3C1948C9494D480292F5272702306767A4822A0444D204B65C",
+    "3271_3811": "92B2B5DFDCC619ADB06C5A0AE412F9CA8F196D2B74D7CC7ADA64F6618E9D9625"
+  },
+  "implementation_sha256": {
+    "experiments/build_wp31_tdcp_gyro_gap_fill.py": "3D869BA990E6E4EC4B21A8AEFA7BA97CBD5F97F11F9D65FABCC12FE0BF4B9519",
+    "experiments/build_wp31_osm_particle_route_bridge.py": "0CAA126176B52C679E8DCC1D465F6FDE31F2428A1EE8F345A36B2C6247C07779",
+    "tests/test_wp31_tdcp_gyro_gap_fill.py": "418F388963C511777E14907AAC01A25A9E28D44C948A713ECE33479493CA2661",
+    "tests/test_wp31_osm_particle_route_bridge.py": "91F179378E2D2916DA3E1142EBA229DEB6FDE2BAAB0236A87B5460853B755D8E"
+  },
+  "verification": {
+    "pytest": "21 passed",
+    "ruff": "all checks passed"
+  },
+  "decision": "Keep WP39 production unchanged. Duration weighting, relaxed long-gyro routing, and OSM-only particle bridges do not provide a safe or material gain. Move to truth-free moving carrier/DD posterior supply."
+}

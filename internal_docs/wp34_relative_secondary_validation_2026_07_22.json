@@ -1,0 +1,111 @@
+{
+  "schema": "wp34_relative_secondary_validation_v1",
+  "created_date": "2026-07-22",
+  "production_approved": true,
+  "production_input_truth": false,
+  "selection_config": {
+    "top_k": 3,
+    "min_evidence_epochs": 10,
+    "min_relative_margin": 0.075,
+    "max_primary_spread_m": 0.5,
+    "max_audit_error_m": 0.5
+  },
+  "m4_baseline": [
+    {
+      "path": "internal_docs/wp30_m4_production_config.json",
+      "sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486"
+    },
+    {
+      "path": "internal_docs/wp30_m4_tokyo_evidence_ledger.json",
+      "sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+    }
+  ],
+  "development": {
+    "path": "results/wp31/tokyo_run1_static_6945_7076_relative_secondary_parent_development.json",
+    "sha256": "F73BAD3DE9195349EB87FA5DE3BB46DF9249A923FB1E8D420F7DA486187CF4D3",
+    "audit_path": "results/wp31/tokyo_run1_static_6945_7076_relative_secondary_parent_development_audit.json",
+    "audit_sha256": "58FA8BE8DD865DE799BAB2498F9CE7C321B5B7538AA4A83590C7719AD3E9CF02",
+    "required_reason": "unique_relative_secondary_parent_primary_compact",
+    "candidate_inputs": [
+      {
+        "path": "results/wp31/tokyo_run1_static_6945_7076_secondary_rank1_resample.json",
+        "sha256": "50238356221D8E56B6FD0BB826E7E7054B7A794956CB83CE4DD460B4D8D92439"
+      },
+      {
+        "path": "results/wp31/tokyo_run1_static_6945_7076_secondary_rank2_resample.json",
+        "sha256": "72B85CDB79416B1095A8CE90A34BD2D0B1329CD93063BEEBED7C66DC1CCE1BAB"
+      },
+      {
+        "path": "results/wp31/tokyo_run1_static_6945_7076_secondary_rank3_resample.json",
+        "sha256": "5E404EFB36B99CD7E471C0CB2B24149FBFF5A971CB4B6F000E0A409940A0B717"
+      }
+    ],
+    "secondary_inputs": [
+      {
+        "path": "results/wp31/tokyo_run1_static_6945_7076_secondary_rank1_resample_secondary_ddpr.json",
+        "sha256": "92080E5B2EE83C5F26D5B199CA1EDCF10DEE72132B5595CC41F1AC68B6A7F3FB"
+      },
+      {
+        "path": "results/wp31/tokyo_run1_static_6945_7076_secondary_rank2_resample_secondary_ddpr.json",
+        "sha256": "0BAB097E56375BB2BC978B44211458882A56A50FE432B8A3034C593747083473"
+      },
+      {
+        "path": "results/wp31/tokyo_run1_static_6945_7076_secondary_rank3_resample_secondary_ddpr.json",
+        "sha256": "71153AC5EDECACFB6D57B7A6607853263F7D76FBC5DEA998F5448BD4E122FC27"
+      }
+    ]
+  },
+  "positive_holdouts": [
+    {
+      "segment": [9883, 10248],
+      "direction_count": 64,
+      "candidate_path": "results/wp31/tokyo_run1_static_gsiheight_horizontal64_shell_9883_10248.json",
+      "candidate_sha256": "97213A68367CC6C9C1C284CFF42FF763D8BF3921C08AA4B7A7197C8329F33243",
+      "selection_path": "results/wp31/tokyo_run1_static_gsi_osm_temporal_direction_9883_10248.json",
+      "selection_sha256": "F386F5AEDB7C77AF14F978C345F93F685D47C337DF5D66C0B1543C8C8337E461",
+      "audit_path": "results/wp31/tokyo_run1_static_gsiheight_horizontal64_shell_9883_10248_audit.json",
+      "audit_sha256": "9112EE8621BDE984EFCCAFFC2569655F05F937E60BB8839C750168F229E50DED",
+      "secondary_path": "results/wp31/tokyo_run1_static_gsiheight_horizontal64_shell_9883_10248_secondary_ddpr_positive_holdout.json",
+      "secondary_sha256": "B22DC2DF377D6AB2E5E2DF926009B12140233F662A20D619C0F3847DD9CCA390",
+      "expected_winner_ids": [4, 68, 132]
+    },
+    {
+      "segment": [5866, 6021],
+      "direction_count": 32,
+      "candidate_path": "results/wp31/tokyo_run1_static_gsiheight_horizontal32_shell_5866_6021.json",
+      "candidate_sha256": "CB0618D701CAB15BB68BD965EFC4A7147C6B6F7A3DC42C8EAA6CE8C3DCE183E9",
+      "selection_path": "results/wp31/tokyo_run1_static_gsi_osm_temporal_direction_5866_6021.json",
+      "selection_sha256": "012E972E6FF958B90E7F61AB7B5445EB8DB1BE6BDA873BFA732747A75A4735CB",
+      "audit_path": "results/wp31/tokyo_run1_static_gsiheight_horizontal32_shell_5866_6021_audit.json",
+      "audit_sha256": "C156DBA2499EFA78BE26660EA08C2D82C7F41BE5B9A2A416EFD196ABE54B543C",
+      "secondary_path": "results/wp31/tokyo_run1_static_gsiheight_horizontal32_shell_5866_6021_secondary_ddpr_positive_holdout.json",
+      "secondary_sha256": "776352CF6AC5B7F6B5D2B5A0046A70BF83C7806BA12A6DEE7EF57601C60C85AE",
+      "expected_winner_ids": [15, 47, 79]
+    }
+  ],
+  "relative_negative_holdout": {
+    "segment": [6865, 6912],
+    "direction_count": 64,
+    "candidate_path": "results/wp31/tokyo_run1_static_gsiheight_horizontal64_shell_6865_6912.json",
+    "candidate_sha256": "EA2BCC679B234A7086CF3466DAE1B2E0F2789B233CA6318FDDCE8E74DC06AA0D",
+    "selection_path": "results/wp31/tokyo_run1_static_gsi_osm_temporal_direction_6865_6912.json",
+    "selection_sha256": "515AB6BA5980FAA75D94A56BC92EF6547DBD8725E8E460471C8408AA52D29B88",
+    "audit_path": "results/wp31/tokyo_run1_static_gsiheight_horizontal64_shell_6865_6912_audit.json",
+    "audit_sha256": "389A05B364AD6D79542C34E58DD707A92CF8DE599EFEB32702BE27AA13731CEE",
+    "secondary_path": "results/wp31/tokyo_run1_static_gsiheight_horizontal64_shell_6865_6912_secondary_ddpr_holdout.json",
+    "secondary_sha256": "12842639CDAE998424DC19340514F670113CCD2142F4AD2BB9B6EC667C46083A",
+    "required_selection_reason": "temporal_direction_not_stable"
+  },
+  "proposal_negative_holdouts": [
+    {
+      "path": "results/wp31/nagoya_run1_static_1508_multimode_cluster_holdout.json",
+      "sha256": "B466A23E4DA2FF78A790C33C0E93062CA5D5CEC78C5F00CD75ABCBCE023E9EFB",
+      "required_reason": "no_eligible_multimode_cluster"
+    },
+    {
+      "path": "results/wp31/tokyo_run1_static_1_61_multimode_cluster_holdout.json",
+      "sha256": "1245F74FF0E1A8801625DAEBAADC0717F0CF2544A39B8ADDC0A7A2F75C9FC444",
+      "required_reason": "no_eligible_multimode_cluster"
+    }
+  ]
+}

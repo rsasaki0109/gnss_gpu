@@ -1,0 +1,38 @@
+{
+  "schema": "wp127_tokyo_ddpr_nearmiss_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "D993007AC92C3454A54415CBEDF6502330A549492617349C08846C0FA1260859",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1155, 1210],
+    "carrier_reference_rank": 0,
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 17,
+    "gsi_inlier_spread_m": 0.09238059208392713,
+    "gsi_up_prior_center_m": -0.9362573139198105,
+    "grid_seed_count": 49,
+    "hypothesis_count": 55,
+    "strict_candidate_count": 0,
+    "minimum_ddpr_rms_m": 4.012024117234364,
+    "maximum_ddpr_rms_gate_m": 4.0,
+    "truth_seeded_diagnostic_ceiling_epochs": 53,
+    "accepted": false,
+    "reason": "seed grid does not lower the invariant DDPR RMS floor below the frozen gate"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "957CB1601C20A1EEF1CDC412CF4C0CE853091041260F8969028CF8259FB82DA1",
+    "development": "828E77AF8A14C718C9AED75727186CB3BED46373D813352EF5B3B21BEC1B043E"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

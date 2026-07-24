@@ -1,0 +1,55 @@
+{
+  "schema": "wp112_tokyo_multisample_gsi_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11440, 11495],
+    "carrier_reference_rank": 0,
+    "gsi_sampling": {
+      "method": "fixed_evenly_spaced_trajectory_epochs",
+      "sample_count": 17,
+      "calibration_source": "1m（レーザ）",
+      "compatible_samples": 4,
+      "consensus_method": "fixed_epoch_source_matched_densest_bounded_cluster",
+      "inlier_epochs": [11491, 11494],
+      "inlier_spread_m": 0.05186328459531353,
+      "max_inlier_spread_m": 0.5,
+      "up_prior_center_m": 0.056685255175828786
+    },
+    "grid_seed_count": 49,
+    "hypothesis_count": 59,
+    "strict_candidate_count": 39,
+    "absolute_mode_count": 39,
+    "winner_candidate_id": 55,
+    "winner_family_ranks": {"road_band": 1, "carrier_rms": 1, "cppr": 4},
+    "runner_margin": 1.0,
+    "winner_audit_sub50cm_epochs": 0,
+    "diagnostic_best_sub50cm_epochs": 14,
+    "truth_seeded_diagnostic_ceiling_epochs": 22,
+    "posterior_accepted": true,
+    "production_accepted": false,
+    "reason": "frozen truth-free posterior selects a zero-gain basin; diagnostic candidate substitution forbidden"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "implementation_sha256": {
+    "acquire_wp50_gsi_moving_height_cache.py": "7368DFBB8A5AB60BF1BDE82E7FCED2E7E6C2BC3E5C124A698CE172535DC36FBA",
+    "refine_wp31_moving_block_ambiguity.py": "E1F75FB793BB01569BA0B3C2EB795827ED583ED1407E29321DC103046C3008E7"
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "43C22E2D72EBF16BF471AD0798FB3BBE4B2BDA71E1AE5979DD5AC7DEAF1FA35D",
+    "development": "6081FE540E2370267C39239AC59252EDA3B881E461017A615CEC05E02E71E134",
+    "truthfree": "25C5D648E512BA91137D3553C1AC3302859B466F1223B21FB81A8A40BE024D39",
+    "selection": "08AEAA19CBEF493E906CFFECEEADBADC8DD7E47E3FF3678964AEB261C2B1BD4D"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

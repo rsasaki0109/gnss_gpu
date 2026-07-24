@@ -1,0 +1,38 @@
+{
+  "schema": "wp109_tokyo_constant_singlebasis_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [990, 1045],
+    "carrier_reference_rank": 2,
+    "grid_seed_count": 49,
+    "hypothesis_count": 54,
+    "strict_candidate_count": 54,
+    "absolute_mode_count": 44,
+    "winner_candidate_id": 52,
+    "winner_family_ranks": {"road_band": 1, "carrier_rms": 2, "cppr": 2},
+    "runner_margin": 0.6,
+    "winner_audit_sub50cm_epochs": 0,
+    "diagnostic_best_sub50cm_epochs": 55,
+    "posterior_accepted": true,
+    "production_accepted": false,
+    "reason": "frozen truth-free posterior selects a zero-gain basin; diagnostic candidate substitution forbidden"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "development": "D061B4B83AA956339F23662B4FF41B75187B73DCE94F0A6A9208A6EFF54F7A92",
+    "truthfree": "7EA6376EF15886AA2C671270D9256C1AFBEE47A95ACF2414D8336835E8A3E22F",
+    "selection": "C6191FE407AA594250471C79B0A6B2B0C6CEB86709D593B1F9250F6FC51A68F9"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

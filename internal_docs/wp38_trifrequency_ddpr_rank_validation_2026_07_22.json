@@ -1,0 +1,68 @@
+{
+  "schema": "wp38_trifrequency_ddpr_rank_validation_v1",
+  "created_date": "2026-07-22",
+  "production_approved": true,
+  "production_input_truth": false,
+  "selection_config": {
+    "min_evidence_epochs": 10,
+    "max_family_rank_fraction": 0.2,
+    "min_runner_margin": 0.2,
+    "max_audit_error_m": 0.5
+  },
+  "m4_baseline": [
+    {"path": "internal_docs/wp30_m4_production_config.json", "sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486"},
+    {"path": "internal_docs/wp30_m4_tokyo_evidence_ledger.json", "sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"}
+  ],
+  "cases": [
+    {
+      "name": "nagoya_6073_target",
+      "role": "target",
+      "expected_winner_id": 59,
+      "candidate_source": {"path": "results/wp31/nagoya_run1_static_motion_shell1235_6073_6539.json", "sha256": "D69CD457B72CCD67A4501DF2E52C02C582ACF0C5814C60A225FAD774C38B560C"},
+      "primary": {"path": "results/wp31/nagoya_run1_static_motion_shell1235_6073_6539_primary_ddpr.json", "sha256": "DAAEACEC50E8B70CC5095AD0481846E1C3891599220FACD6F4C4DCE98A4421AD"},
+      "secondary": {"path": "results/wp31/nagoya_run1_static_motion_shell1235_6073_6539_secondary_ddpr.json", "sha256": "92BA1D372FFB49355BB3DD908D51B3D6C851DE8E67B77485A1F98D0112D7434A"},
+      "tertiary": {"path": "results/wp31/nagoya_run1_static_motion_shell1235_6073_6539_tertiary_ddpr.json", "sha256": "D1BEA250F995A2E1503317F5C1CACCFE43C321B2BD9492AA4EB21E1082F5CAE3"},
+      "selection": {"path": "results/wp31/nagoya_run1_static_motion_shell1235_6073_6539_trifrequency_rank_development.json", "sha256": "954A321D04B60D8C7236888AE513A30220983F297BE6389FBD66C8C1AD970D51"}
+    },
+    {
+      "name": "nagoya_3811_positive",
+      "role": "positive",
+      "expected_winner_id": 75,
+      "candidate_source": {"path": "results/wp31/nagoya_run1_static_3811_resample_parent0_holdout.json", "sha256": "917F0A95457D534158224262D0C047046D367C287D0A9E11B699C9016FA741D1"},
+      "primary": {"path": "results/wp31/nagoya_run1_static_3811_resample_parent0_primary_ddpr_holdout.json", "sha256": "F75F9B4011075DA9D693EBCD388B8B810ADFE012588094C1161BF8DB6C63A0B1"},
+      "secondary": {"path": "results/wp31/nagoya_run1_static_3811_resample_parent0_secondary_ddpr_holdout.json", "sha256": "F83FF1B78626EFEE70BF2121C0DD1E44468AC7EEBAEA3B4519A4C5710E14490C"},
+      "tertiary": {"path": "results/wp31/nagoya_run1_static_3811_resample_parent0_tertiary_ddpr_holdout.json", "sha256": "A2D5BBBB39EBC8CB3931FB34FDC80E7355D00CDA9227004C9139C8C90EA94E91"},
+      "selection": {"path": "results/wp31/nagoya_run1_static_3811_trifrequency_rank_positive_holdout.json", "sha256": "97BE229AA87F54C52DFF6C97A69FACBA82ED16ECC6105AC8B2C60DF9FACAD98E"}
+    },
+    {
+      "name": "nagoya_7529_positive",
+      "role": "positive",
+      "expected_winner_id": 31,
+      "candidate_source": {"path": "results/wp31/nagoya_run1_static_7529_7583_development.json", "sha256": "2798359D37F0BA0F41EADE272EA0ADF050B83D4CCBD59D5A95535D50871776A3"},
+      "primary": {"path": "results/wp31/nagoya_run1_static_7529_7583_development_ddpr_integrity.json", "sha256": "9E89A6D8F2B583A9171420AB34A114277A9DF159B796DAE7CE9921415CA0D6D1"},
+      "secondary": {"path": "results/wp31/nagoya_run1_static_7529_7583_secondary_ddpr_holdout.json", "sha256": "265A1D7A8B4E8324596A60FE3D14F5DD33AD7EBE971F8A0F00E7D7A7D729D888"},
+      "tertiary": {"path": "results/wp31/nagoya_run1_static_7529_7583_tertiary_ddpr_holdout.json", "sha256": "E44E33FF5F02E9D1DC3A722C8708814B6900E104F0D46C8CC95E149404AFE003"},
+      "selection": {"path": "results/wp31/nagoya_run1_static_7529_trifrequency_rank_positive_holdout.json", "sha256": "DD0DA15849AD912465018080F3B89D80F808386EEAFD61A74FBA58E88EBF62B6"}
+    },
+    {
+      "name": "nagoya_805_negative",
+      "role": "negative",
+      "expected_winner_id": 8,
+      "candidate_source": {"path": "results/wp31/nagoya_run1_static_motion_shell1235_805_923.json", "sha256": "22370381DBB4F2E0F53FAC25237F44B0D18430395078CB64FA08CD705573E672"},
+      "primary": {"path": "results/wp31/nagoya_run1_static_motion_shell1235_805_923_ddpr_integrity.json", "sha256": "884CF1D0EC44B734729AB491E3193E525CC603F7B8D295A1030D6F19FD2F0D1E"},
+      "secondary": {"path": "results/wp31/nagoya_run1_static_motion_shell1235_805_923_secondary_ddpr_holdout.json", "sha256": "913B0B8DD062802E3DBE392BF8DB31106F8A4F657D1CD550F46F8D386C422303"},
+      "tertiary": {"path": "results/wp31/nagoya_run1_static_motion_shell1235_805_923_tertiary_ddpr_holdout.json", "sha256": "828BED2798B70C6396090188176E36703335158B802F15F0D7DD789E5932DC2F"},
+      "selection": {"path": "results/wp31/nagoya_run1_static_805_trifrequency_rank_negative_holdout.json", "sha256": "51D4DF7D50AD4D04BD679CC5BF070E7D6A5FBED72C16E1BD91F32ECEEE9AFD5D"}
+    },
+    {
+      "name": "nagoya_4792_negative",
+      "role": "negative",
+      "expected_winner_id": 47,
+      "candidate_source": {"path": "results/wp31/nagoya_run1_static_4792_resample_parent0_holdout.json", "sha256": "C0485D4A3539EE9D8B3CD2581A87CD3A221B03BFA6159213E623EC05F2838C2D"},
+      "primary": {"path": "results/wp31/nagoya_run1_static_4792_resample_parent0_primary_ddpr_holdout.json", "sha256": "C5B9F1B0BF6F86794E6ADA2AB6F512B27D8C563D3E785D9244C29941C604705F"},
+      "secondary": {"path": "results/wp31/nagoya_run1_static_4792_resample_parent0_secondary_ddpr_holdout.json", "sha256": "9FA11DA341867411CF34C27C032E8F213BCC688F8348D9B5B53B270931EB3E91"},
+      "tertiary": {"path": "results/wp31/nagoya_run1_static_4792_resample_parent0_tertiary_ddpr_holdout.json", "sha256": "D7FBDBD866BDA637AF41850ADD856DC29631389D761BB705560830FB06DBD1A0"},
+      "selection": {"path": "results/wp31/nagoya_run1_static_4792_trifrequency_rank_negative_holdout.json", "sha256": "7F52319301E9EDE895AF8CCF48704FBEAD56E15935BECE99D9F69342C849974B"}
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "schema": "wp138_tokyo_stability_cppr_validation_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [5005, 5060],
+    "selected_stride_phase": 1,
+    "candidate_id": 26,
+    "stability_family_ranks": {"cross_refit_disagreement_m": 6, "block_spread_m": 3, "max_cross_basis_carrier_rms_cycles": 10, "cppr_rank_sum": 3},
+    "runner_margin": 0.36363636363636365,
+    "minimum_runner_margin": 0.2,
+    "family_rank_limit": 11,
+    "accepted": true
+  },
+  "holdouts": [
+    {"dataset": "tokyo_run1", "segment": [5225, 5280], "accepted": false, "reason": "stability_cppr_family_or_margin_gate_failed", "runner_margin": 0.0},
+    {"dataset": "nagoya_run1", "segment": [1436, 1656], "accepted": false, "reason": "stability_cppr_evidence_unavailable"}
+  ],
+  "post_selection_full_audit": {
+    "full_denominator_epochs": 11924,
+    "before_sub50cm_epochs": 3466,
+    "after_sub50cm_epochs": 3521,
+    "after_sub50cm_pct": 29.52868165045287,
+    "gained_epochs": 55,
+    "lost_epochs": 0,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "declared_false_fix_pct": 0.0
+  },
+  "artifacts_sha256": {
+    "selector_implementation": "5CDC7CA4A28B71F9CC5CD23E12A2B567D5064BD19D2B84F4C8B4DF7B116E9B7D",
+    "promoter_implementation": "E6D0A719383B8BFBFE0B8E7C34036565B63FE71D9FF5E494453509464ABF7CC0",
+    "fine_grid": "AEC3296C04CA96514920134CEA59A008788FD29B5EBBF6109BC8A63CBE26948B",
+    "truthfree_source": "215186035621DA11F438A475FAD53C994665D0A699B670D9A3A22185D683ADB9",
+    "cross_basis_consensus": "95322295315121E67D8364894AF8DC970F4C644DE947F35BFEF863A9FE285B7D",
+    "target_selection": "5D792668FF0273CC790F65440C2E24138E39EA67161D134E985DBA6ABC750227",
+    "tokyo_unsafe_holdout": "21FFD4BC46F950137A60B7B0BFB252EEE24D302DBFB50E3F3897B3EAE2011130",
+    "nagoya_missing_evidence_holdout": "3FF5F2BE69879397353BF78920B7BFA14BCE80AF8969F6E26225C247E77C9BF7",
+    "promotion": "7A4B06B5B605263DEEB17288AD28D0D19502E4311E5CB5D609002B62C238A754",
+    "production_trajectory": "9ABFD989B8CF9978E2A19D87644E898D521B411B9EBB04FAB073E6346AC335A8",
+    "shadow_trajectory": "9ABFD989B8CF9978E2A19D87644E898D521B411B9EBB04FAB073E6346AC335A8",
+    "production_benchmark": "2EF62C743794F673ACAD4AC8A6C8717F055B0AB0B42FDDC8932DFE197EE4BDFD",
+    "shadow_benchmark": "2EF62C743794F673ACAD4AC8A6C8717F055B0AB0B42FDDC8932DFE197EE4BDFD",
+    "campaign_figure": "81AD4FEA9B075A17EFDEA8547DA5D3422DE5C7B0284F7612132FDA25C0121A4E"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

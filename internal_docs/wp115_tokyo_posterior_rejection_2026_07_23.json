@@ -1,0 +1,43 @@
+{
+  "schema": "wp115_tokyo_constant_singlebasis_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "667B3E0626BCF26C6F858473ADA4950101A9A80D8647152FB5A4B3F5B08959AA",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [935, 990],
+    "carrier_reference_rank": 0,
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 17,
+    "gsi_inlier_spread_m": 0.26463005881905133,
+    "gsi_up_prior_center_m": -1.1009246948204918,
+    "grid_seed_count": 49,
+    "hypothesis_count": 54,
+    "absolute_mode_count": 50,
+    "winner_candidate_id": 32,
+    "winner_family_ranks": {"road_band": 1, "carrier_rms": 5, "cppr": 8},
+    "runner_margin": 0.42857142857142855,
+    "winner_audit_sub50cm_epochs": 0,
+    "diagnostic_best_sub50cm_epochs": 55,
+    "posterior_accepted": true,
+    "production_accepted": false,
+    "reason": "frozen truth-free posterior selects a zero-gain basin; diagnostic candidate substitution forbidden"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "5D1518D4342B83DD2BD5258716162A9231993A039A8E7E5B5172294FC3F1EA64",
+    "development": "D77A99A764FBC8185766A31EA6E5FAE11AC04B8024B170FBF78164BA348EC368",
+    "truthfree": "29D9CC3689669291C60733951D3836912D87E445130B120F6549EEDCBC6A44C0",
+    "selection": "30554CCB1A15C5D6EB2E026CBBA74C4EFABB74F823F23084FB8A3C2FC41F708F"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

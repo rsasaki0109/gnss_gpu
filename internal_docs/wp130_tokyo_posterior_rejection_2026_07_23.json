@@ -1,0 +1,54 @@
+{
+  "schema": "wp130_tokyo_constant_singlebasis_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "D993007AC92C3454A54415CBEDF6502330A549492617349C08846C0FA1260859",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11660, 11715],
+    "carrier_reference_rank": 1,
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 17,
+    "gsi_inlier_spread_m": 0.362165942843248,
+    "gsi_up_prior_center_m": -0.5398306165404705,
+    "initial_basis_strict_candidate_counts": {"rank0": 3, "rank1": 4, "rank2": 5},
+    "initial_max_candidate_audit_sub50cm_epochs": 0,
+    "grid_seed_count": 49,
+    "grid_hypothesis_count": 59,
+    "grid_strict_candidate_count": 16,
+    "diagnostic_best_sub50cm_epochs": 17,
+    "diagnostic_best_candidate_id": 24,
+    "diagnostic_best_ddpr_rms_m": 3.9957172528905995,
+    "diagnostic_best_block_spread_m": 0.20163115756359531,
+    "winner_candidate_id": 11,
+    "winner_family_ranks": {"road_band": 11, "carrier_rms": 4, "cppr": 21},
+    "family_rank_limit": 9,
+    "runner_margin": 0.0,
+    "minimum_runner_margin": 0.2,
+    "winner_audit_sub50cm_epochs": 0,
+    "posterior_accepted": false,
+    "production_accepted": false,
+    "reason": "grid supplies a 17-epoch basin but the frozen truth-free selector chooses a zero-gain mode and fails both family-rank and runner-margin gates"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "89761CF3283F7A096E6AC8C146517854116950ACA8257A14CFD23D7078AB2926",
+    "rank0_development": "57324113E6B9585B29B3AFECC8F02E6662E2265E345D175E4211B9C8738096F4",
+    "rank1_development": "11EA7ABC413CE117DCC6EA22CDB2FD5CD9EB048BD733C0CDC4307FBA18EFE9DA",
+    "rank2_development": "13CDCCF12E7255DD9357182CFDD17AC18EA4F85CE93D8B28B04F453A9B9080A9",
+    "grid_seeds": "45BD66FF7F68739C584FE4E187436AAC9872B31003F532A120B677A1E8B6845F",
+    "grid_development": "DA08325CE3618200822F37CD0B33E6455E2541AD54C292737D5C4488766C0110",
+    "grid_truthfree": "66F730869DBE26A7865DA6055624E96A14EC0E4C2B9EE10E34FFF8E785D24F4F",
+    "grid_selection": "C10D38D05CEBB3E65C87F5A92F0A311D03F0C720769CBFF49CE8C717D3C5075B"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

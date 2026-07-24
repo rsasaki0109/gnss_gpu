@@ -18,7 +18,7 @@ namespace gnss_gpu {
 namespace {
 
 constexpr int MAX_N = 64;
-constexpr int MAX_CANDS = 16;  // WP17: 8 -> 16 (RB-FGO-PF top-K uses 12)
+constexpr int MAX_CANDS = 32;  // WP29: production multi-seed RBPF uses top-24
 constexpr int LOOPMAX = 10000;  // cssrlib mlambda.py LOOPMAX (RTKLIB)
 
 // Per-problem double workspace layout (all row-major, lda = n unless

@@ -1,0 +1,49 @@
+{
+  "schema": "wp45_pf_anchor_boundary_benchmark_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "full_denominator_epochs": 7583,
+  "baseline": {
+    "work_package": "WP43",
+    "sub50cm_epochs": 4814,
+    "sub50cm_pct": 63.484109191612816
+  },
+  "result": {
+    "dataset": "nagoya_run1",
+    "sub50cm_epochs": 4856,
+    "sub50cm_pct": 64.037979691415,
+    "gained_epochs": 42,
+    "lost_epochs": 0,
+    "net_gain_epochs": 42,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "declared_false_fix_pct": 0.0,
+    "target_sub50cm_epochs": 6522,
+    "remaining_epochs_to_target": 1666
+  },
+  "remaining_false_runs_ge_20_epochs": [
+    [611, 725, 114],
+    [1051, 1806, 755],
+    [2381, 2769, 388],
+    [3336, 3794, 458],
+    [4381, 4731, 350],
+    [5125, 5244, 119],
+    [5662, 6034, 372],
+    [6710, 6845, 135]
+  ],
+  "production_artifacts_sha256": {
+    "promotion": "4D53C67435D0D50B6D09C930E374CB7212AF75625194A31A46E4130406745C17",
+    "trajectory": "B1967EB1C4F4CB5B86988442EB4B2B5F0C6F1C13FCEE16B1A12DD6420E9AB5BE",
+    "summary": "3B3533E94AEAC5A9D68D8BA53F1B080E11554D8B3A0F85F8A8421C21209CD0BB"
+  },
+  "validation_lock": {
+    "path": "internal_docs/wp44_anchor_boundary_identity_validation_2026_07_22.json",
+    "sha256": "27B3CB075304C7B8A3563237BF91298DFA6BCA5BD32E657BBFE6722D7A5F5FD8"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

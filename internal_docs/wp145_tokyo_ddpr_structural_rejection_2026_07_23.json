@@ -1,0 +1,40 @@
+{
+  "schema": "wp145_tokyo_ddpr_structural_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "9ABFD989B8CF9978E2A19D87644E898D521B411B9EBB04FAB073E6346AC335A8",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11165, 11220],
+    "selected_stride_phase": 3,
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 9,
+    "gsi_inlier_spread_m": 0.4522235280051916,
+    "gsi_up_prior_center_m": -3.3577788855947546,
+    "carrier_reference_results": [
+      {"rank": 0, "carrier_rows": 263, "strict_candidates": 0, "minimum_ddpr_rms_m": 16.88290462286394, "diagnostic_ddpr_rms_m": 18.12958627218573, "diagnostic_ceiling_epochs": 31},
+      {"rank": 1, "carrier_rows": 263, "strict_candidates": 0, "minimum_ddpr_rms_m": 16.846491423628386, "diagnostic_ddpr_rms_m": 18.122345836023623, "diagnostic_ceiling_epochs": 31},
+      {"rank": 2, "carrier_rows": 246, "strict_candidates": 0, "minimum_ddpr_rms_m": 17.06775806394625, "diagnostic_ddpr_rms_m": 18.113979354688514, "diagnostic_ceiling_epochs": 31}
+    ],
+    "maximum_ddpr_rms_gate_m": 4.0,
+    "accepted": false,
+    "reason": "all carrier references and truth-only diagnostics fail the frozen DDPR RMS gate by a structural margin"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "C24269E4FB8E84E935CD709C9B4EFE467A83908AF4AE189FEEF93C920FFF35EA",
+    "rank0_phase3_development": "D50FF2E209E8ACFBCAFC7F1B76BB1022809AD97321C44D6FD6022B87432C3E5B",
+    "rank1_phase3_development": "12E66D34904ADD896679B064B2DE1845ADB5941A724D336FFE94E9396E453BF6",
+    "rank2_phase3_development": "FCCD429871CB2D6F581C202C11F54E71969C54DD284B7374D75E2A915D73E0FF"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

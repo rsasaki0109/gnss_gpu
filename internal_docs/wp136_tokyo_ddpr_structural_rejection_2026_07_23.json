@@ -1,0 +1,44 @@
+{
+  "schema": "wp136_tokyo_ddpr_structural_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "C3B15A89D72894FD51626AC9504B95B7BE49118CAA477922757944E340ABD79F",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11330, 11385],
+    "selected_stride_phase": 3,
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 17,
+    "gsi_inlier_spread_m": 0.38037663417905776,
+    "gsi_up_prior_center_m": -2.9251953574560616,
+    "carrier_reference_results": [
+      {"rank": 0, "carrier_rows": 275, "strict_candidates": 0, "minimum_ddpr_rms_m": 16.406662466757517, "diagnostic_ddpr_rms_m": 17.627632493336023, "diagnostic_ceiling_epochs": 53},
+      {"rank": 1, "carrier_rows": 275, "strict_candidates": 0, "minimum_ddpr_rms_m": 16.49030866303563, "diagnostic_ddpr_rms_m": 17.622115383104784, "diagnostic_ceiling_epochs": 53},
+      {"rank": 2, "carrier_rows": 247, "strict_candidates": 0, "minimum_ddpr_rms_m": 16.312727330565135, "diagnostic_ddpr_rms_m": 17.624455698234037, "diagnostic_ceiling_epochs": 53}
+    ],
+    "maximum_ddpr_rms_gate_m": 4.0,
+    "accepted": false,
+    "reason": "all carrier references and truth-only diagnostics fail the frozen DDPR RMS gate by a structural margin"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "661D574A3154A7DCDEB2CEE7C29B82811CD6EB159B18A2125A7C62D60BD532C4",
+    "rank0_phase3_development": "3028A0A26B9F2F1908E7A23B9782256B4C78A5A1EE71524AE3972B33D736674D",
+    "rank1_phase3_development": "A829F870F379FDDDB696D9334334D55F8A2F41FDB6F8BB2FBCEE937BB862C445",
+    "rank2_phase3_development": "E02B4FA686508555B15C7385CCACBAB67D82DDA7DA28C05321C52901C38D3451"
+  },
+  "excluded_diagnostic_artifacts": {
+    "reason": "stride phase 0 had zero observations and does not match the global supply scan's selected phase 3",
+    "artifacts_used_for_decision": false
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

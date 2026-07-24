@@ -1,0 +1,68 @@
+{
+  "schema": "wp158_tokyo_stability_cppr_posterior_rejection_lock_v1",
+  "date": "2026-07-24",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "59E2D5B65555F0D9C82CFCF18C7328E06EB579216B055C4EA6F549BA62DE0FF4",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11220, 11275],
+    "selected_stride_phase": 3,
+    "novelty": "first chain run with the truth-free WP158 DDPR satellite screen (triple-difference mutual-consistency clustering, edge 5.0 m, frac 0.2); excluded satellites C24,C26,C39,C40,C42,G06,G07,G13,G15 drop the block's DDPR floor from 16.6-17.9 m to 1.52-1.62 m and re-enter the frozen gates",
+    "prior_generation_assessment": "WP140 structural DDPR rejection (floor 16.641-16.703 m) — root-caused 2026-07-24 to seven NLOS satellites, not structure",
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 17,
+    "gsi_inlier_spread_m": 0.11860161684452919,
+    "gsi_up_prior_center_m": -2.879617261642963,
+    "initial_pool_useful_candidates": [
+      {"rank": 0, "candidate_id": 11, "diagnostic_sub50cm_epochs": 2},
+      {"rank": 1, "candidate_id": 1, "diagnostic_sub50cm_epochs": 55},
+      {"rank": 2, "candidate_id": 1, "diagnostic_sub50cm_epochs": 3},
+      {"rank": 2, "candidate_id": 6, "diagnostic_sub50cm_epochs": 55}
+    ],
+    "fine_grid_used": false,
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "cross_basis_consensus_runner_margin": 0.03097,
+    "selector": "wp138_stability_cppr_consensus_v1",
+    "selector_mode_count": 10,
+    "selector_winner_candidate_id": 1,
+    "selector_winner_stability_family_ranks": {"cross_refit_disagreement_m": 10, "block_spread_m": 3, "max_cross_basis_carrier_rms_cycles": 1, "cppr_rank_sum": 1},
+    "selector_winner_diagnostic_sub50cm_epochs": 55,
+    "selector_winner_diagnostic_median_error_m": 0.103,
+    "runner_candidate_id": 5,
+    "runner_diagnostic_sub50cm_epochs": 0,
+    "runner_margin": 0.1333,
+    "minimum_runner_margin": 0.2,
+    "family_rank_limit": 4,
+    "family_rank_pass": false,
+    "runner_margin_pass": false,
+    "accepted": false,
+    "reason": "stability_cppr_family_or_margin_gate_failed",
+    "significance": "first time the frozen truth-free ranking placed the correct 55/55 basin first (carrier and CPPR families rank it 1/1 after the DDPR screen); rejection came solely from the cross-refit-disagreement family rank and the runner margin, confirming that basis-swap stability is the remaining anti-correlated family for correct basins"
+  },
+  "decision": "do not substitute or rerun after the truth-free rejection; keep WP157 production unchanged; any successor selector must be separately named and holdout-validated (WP129 unsafe, Nagoya WP53 abstain, WP156 zero-gain acceptance) before touching this block again",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "ddpr_screen": "2963987E7F55017F2CF2597D44A93E6CCB40CEB0EF178CB8EFDD8A598EEE0F65",
+    "gsi_height_cache": "B2CC46E8ECEE66E0CA0281F7CDDD6F25776D7E23905E3F35A142D0422B135C25",
+    "rank0_phase3_screened_development": "42A02F8CEDF4A2963EDEE89A052C63F55FD78303C16B0131D1CC0EE0C567B814",
+    "rank1_phase3_screened_development": "8DF44A4A1E23FB029ED31855EF59FBD8B71D3D6D0E6623F8D1AF50551697010C",
+    "rank2_phase3_screened_development": "AFA07503ECF80FF949A231FD920C5707577A23996F3820ABAC51949F1DEFC330",
+    "truthfree_source": "CAD27E411CF986D99DF628A7E4F9396274937241C8E862A9C57F92ABF17DA4AC",
+    "truthfree_seed_pool": "75E4ED673BFCF6BFCA68526B2760E516D44DD536CCC7C6556DACA37978D85053",
+    "rank0_truthfree_refit": "621CD239A10B82361ADA195EBD421168E823A52732D1054AB951E291C4B517DE",
+    "rank2_truthfree_refit": "0D8656EB4E68FA55D86E4ED1C0839BAEBF1552CAF6BA40244832C157C35F78B2",
+    "cross_basis_consensus": "FC3BDDFCA8FF4820C6504585A23DE8D492F2EF067484BD34FD508EBEB5315D63",
+    "stability_cppr_selection": "3157755A15D8C9167724FEF7FB2F586592EE6D5D6A9B6F5EDC34323C2E3C9BD5"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

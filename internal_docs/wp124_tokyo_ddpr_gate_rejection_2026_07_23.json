@@ -1,0 +1,39 @@
+{
+  "schema": "wp124_tokyo_ddpr_gate_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "D993007AC92C3454A54415CBEDF6502330A549492617349C08846C0FA1260859",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [4895, 4950],
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 11,
+    "gsi_inlier_spread_m": 0.48567930124254133,
+    "gsi_up_prior_center_m": 4.256799981612701,
+    "carrier_reference_results": [
+      {"rank": 0, "strict_candidates": 0, "minimum_ddpr_rms_m": 6.4595052126471915, "diagnostic_ceiling_epochs": 39},
+      {"rank": 1, "strict_candidates": 0, "minimum_ddpr_rms_m": 6.457495884526516, "diagnostic_ceiling_epochs": 39},
+      {"rank": 2, "strict_candidates": 0, "minimum_ddpr_rms_m": 6.495225268403423, "diagnostic_ceiling_epochs": 39}
+    ],
+    "maximum_ddpr_rms_gate_m": 4.0,
+    "accepted": false,
+    "reason": "all carrier references fail the frozen DDPR RMS gate"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "E2625F5D8ADC2480FFD0BA042FF3D3921E523BE73EC79BDA8BB0E0C5BF794262",
+    "rank0_development": "F38358450B5697321E38DECF93DEC20B6702ED249ACE69C13893E753CB98B7BC",
+    "rank1_development": "159E92E10704AAA1B7636C02F2A4B73A82A0A7B0C1BDF5643F1B33B59B9AAB76",
+    "rank2_development": "6E5DF1490F20154F31F184F0F72404B13A6A6C56D3806C834D036341506E2FBE"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

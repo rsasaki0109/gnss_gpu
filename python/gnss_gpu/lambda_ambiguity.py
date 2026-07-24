@@ -99,6 +99,59 @@ def integer_search(
     )
 
 
+def integer_search_batch(
+    ambiguity_problems: list[np.ndarray] | tuple[np.ndarray, ...],
+    covariance_problems: list[np.ndarray] | tuple[np.ndarray, ...],
+    n_candidates: int = 2,
+    *,
+    engine: str = "cpu",
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Solve independent ILS problems, optionally in one CUDA launch.
+
+    ``gpu-batch`` is deliberately strict: an unavailable CUDA extension,
+    unsupported problem, or kernel failure raises instead of silently changing
+    the locked production execution path.  The returned candidate orientation
+    and integer dtype match :func:`integer_search`.
+    """
+
+    if len(ambiguity_problems) != len(covariance_problems):
+        raise ValueError("ambiguity and covariance batches must have equal length")
+    if engine not in ("cpu", "gpu-batch"):
+        raise ValueError("engine must be 'cpu' or 'gpu-batch'")
+    if not ambiguity_problems:
+        return []
+    if engine == "cpu":
+        return [
+            integer_search(ahat, qahat, n_candidates=n_candidates)
+            for ahat, qahat in zip(ambiguity_problems, covariance_problems)
+        ]
+
+    from gnss_gpu.lambda_batch import (  # imported lazily for CPU-only installs
+        HAS_LAMBDA_BATCH,
+        mlambda_batch,
+    )
+
+    if not HAS_LAMBDA_BATCH:
+        raise RuntimeError("gpu-batch integer search requested but CUDA is unavailable")
+    results = mlambda_batch(
+        ambiguity_problems,
+        covariance_problems,
+        ncands=int(n_candidates),
+        parmode=1,
+    )
+    output: list[tuple[np.ndarray, np.ndarray]] = []
+    for index, result in enumerate(results):
+        if result.status != 0:
+            raise RuntimeError(
+                f"gpu-batch integer search problem {index} failed with status "
+                f"{result.status}"
+            )
+        candidates = np.rint(np.asarray(result.afix).T).astype(np.int64)
+        residuals = np.asarray(result.s, dtype=np.float64)
+        output.append((candidates, residuals))
+    return output
+
+
 def prepare_integer_search(covariance: np.ndarray) -> IntegerSearchWorkspace:
     """Prepare covariance factors shared by searches with different means."""
 

@@ -1,0 +1,58 @@
+{
+  "runs": {
+    "tokyo_run1": {
+      "data_dir": "datasets/PPC-Dataset-data/tokyo/run1",
+      "target_pct": 56.7,
+      "base_summary_path": "results/wp29/csv/wp30_common_auto_tokyo_run1_base_summary.json",
+      "base_trajectory_path": "results/wp29/csv/wp30_common_auto_tokyo_run1_base_trajectory.csv",
+      "stages": {
+        "moving_offset": {
+          "candidates_path": "results/wp29/csv/wp29_moving_offset_tokyo_run1_tail.json",
+          "selection_path": "results/wp29/csv/wp29_moving_offset_widelane_tokyo_run1_tail.json"
+        },
+        "route_template_bridge": null,
+        "carrier_runner_block": null,
+        "post_jump_route_bridge": null
+      }
+    },
+    "tokyo_run2": {
+      "data_dir": "datasets/PPC-Dataset-data/tokyo/run2",
+      "target_pct": 69.9,
+      "base_summary_path": "results/wp29/csv/wp30_common_auto_tokyo_run2_base_summary.json",
+      "base_trajectory_path": "results/wp29/csv/wp30_common_auto_tokyo_run2_base_trajectory.csv",
+      "stages": {
+        "moving_offset": {
+          "candidates_path": "results/wp29/csv/wp29_moving_offset_tokyo_run2_251_584.json",
+          "selection_path": "results/wp29/csv/wp29_moving_offset_widelane_tokyo_run2_251_584.json"
+        },
+        "route_template_bridge": {
+          "template_trajectory_path": "results/wp29/csv/wp30_common_auto_tokyo_run3_full_trajectory.csv",
+          "start": 262,
+          "end": 485
+        },
+        "carrier_runner_block": {
+          "candidate_audit_path": "results/wp29/csv/wp30_common_auto_tokyo_run2_candidates.csv",
+          "absolute_evidence_path": "results/wp29/csv/wp29_imu_piecewise_absolute_evidence_tokyo_run2_600_1109.csv"
+        },
+        "post_jump_route_bridge": {
+          "alternate_route_path": "results/wp29/csv/wp29_imu_heading_route_seed_late_tokyo_run2.csv",
+          "candidate_audit_path": "results/wp29/csv/wp30_common_auto_tokyo_run2_candidates.csv",
+          "route_summary_path": "results/wp29/csv/wp29_imu_heading_route_seed_late_tokyo_run2_summary.json",
+          "late_anchor_result_path": "results/wp29/csv/wp29_static_grid_fusion_tokyo_run2_late.json"
+        }
+      }
+    },
+    "tokyo_run3": {
+      "data_dir": "datasets/PPC-Dataset-data/tokyo/run3",
+      "target_pct": 67.9,
+      "base_summary_path": "results/wp29/csv/wp30_common_auto_tokyo_run3_full_summary.json",
+      "base_trajectory_path": "results/wp29/csv/wp30_common_auto_tokyo_run3_full_trajectory.csv",
+      "stages": {
+        "moving_offset": null,
+        "route_template_bridge": null,
+        "carrier_runner_block": null,
+        "post_jump_route_bridge": null
+      }
+    }
+  }
+}

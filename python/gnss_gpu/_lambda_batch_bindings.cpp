@@ -48,8 +48,8 @@ PYBIND11_MODULE(_gnss_gpu_lambda_batch, m) {
     if (bq.ndim != 1 || bq.size != qtot) {
       throw std::runtime_error("Q_flat size must equal sum(n*n)");
     }
-    if (ncands < 1 || ncands > 16) {
-      throw std::runtime_error("ncands must be in [1, 16]");
+    if (ncands < 1 || ncands > 32) {
+      throw std::runtime_error("ncands must be in [1, 32]");
     }
     if (parmode != 1 && parmode != 2) {
       throw std::runtime_error("parmode must be 1 or 2");

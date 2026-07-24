@@ -1,0 +1,68 @@
+{
+  "schema": "wp166_tokyo_screened_posterior_rejection_lock_v1",
+  "date": "2026-07-24",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1430, 1485],
+    "selected_stride_phase": 0,
+    "novelty": "sixth block through the WP158 screen + WP159 chain; first screened roll-out block to clear the WP53 cross-basis consensus and reach the WP159 posterior stage",
+    "prior_generation_assessment": "WP122 DDPR gate rejection (floor 4.79 m, diagnostic ceiling 55) — the shallowest floor and highest ceiling in the WP121-126 group",
+    "ddpr_screen": {
+      "schema": "wp158_ddpr_satellite_screen_v1",
+      "edge_m": 5.0,
+      "frac_thresh": 0.2,
+      "evidence_epochs": 11,
+      "excluded_satellites": ["C21", "C34", "C40", "G09"],
+      "outlier_fractions": {"C21": 1.0, "C34": 0.667, "C40": 0.4, "G09": 0.857}
+    },
+    "screened_refits": {
+      "rank0": {"hypotheses": 9, "min_ddpr_rms_m": 1.577, "selection_reason": "all_truth_free_gates_pass"},
+      "rank1": {"hypotheses": 11, "min_ddpr_rms_m": 1.78, "selection_reason": "all_truth_free_gates_pass"},
+      "rank2": {"hypotheses": 8, "min_ddpr_rms_m": 1.912, "selection_reason": "all_truth_free_gates_pass"}
+    },
+    "cross_basis_consensus_candidate_id": 1,
+    "cross_basis_consensus_reason": "unique_three_reference_basis_consensus",
+    "cross_basis_consensus_runner_margin": 0.3247,
+    "cross_basis_consensus_detail": "winner consensus 0.1059 m, max carrier RMS 0.2028 cycles, max block spread 0.0951 m, supply_pass true",
+    "selector": "wp159_screened_stability_consensus_v1",
+    "selector_accepted": false,
+    "selector_reason": "stability_cppr_family_or_margin_gate_failed",
+    "selector_base_reason": "unique_cross_basis_cppr_mode",
+    "selector_mode_count": 8,
+    "selector_winner_candidate_id": 10,
+    "selector_runner_candidate_id": 1,
+    "selector_family_rank_pass": true,
+    "selector_runner_margin": 0.1667,
+    "selector_minimum_runner_margin": 0.2,
+    "significance": "the deepest screened roll-out chain yet: every refit and cross refit passes all gates, WP53 accepts, and WP159 dies on the single runner-margin check (0.1667 vs 0.2) with family ranks passing; also the first screened case where the WP159 top-ranked candidate (10) differs from the WP53 consensus pick (1)"
+  },
+  "decision": "no substitution and no rerun after the truth-free rejection; WP160 production unchanged; the audit fields were NOT consulted and must not be consulted to second-guess the margin gate; any margin change is a selector change requiring a new name and full holdout validation",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "ddpr_screen": "64CBBE7E9762549CAD3FEF5CE65FD64FDED0D6C18F8AE46719A8AD12DC25BF61",
+    "gsi_height_cache_reused": "results/wp31/tokyo_run1_wp122_gsi_multisample17_height_cache_1430_1485.json",
+    "rank0_phase0_screened_development": "32E94AA09C60F18C167151FC5B45BBB812B23997CA8F33FBB6C32C4ED91326CA",
+    "rank1_phase0_screened_development": "0DD3DE18596DCF98DDBEF1F1BAA011916F2FA0778E322FAE434A8A0CD0B3E029",
+    "rank2_phase0_screened_development": "2D05D903C3F05DDFF519D50378A881ED27CC8CD14F6535B64ABCE4E65A278A5C",
+    "truthfree_source": "F155DCECB3A6D41E592DBEE0C14B797A7B15E35890F6D546F2F3AF4E8093F005",
+    "truthfree_seed_pool": "68C3349A8E3D8BB41C839A437708CA35028A1EC7723353DB29A39BEDF765F10D",
+    "rank0_cross_development": "AB8163777EA9A49E52252E449B9EDBB287889FC03A030907C864B4940D682FA6",
+    "rank0_cross_truthfree": "67FED204FE7E50A5DDB19E85A953D93BF64688D74B4310F7E2CDAE64143BE2DB",
+    "rank2_cross_development": "372D591BA5DD5209CCA933174D650E8D810EB6ACFAFFF3ACE6767543E0FEB894",
+    "rank2_cross_truthfree": "4CC1E03636EAFAB06DADFBF5F84D3242C207A2E60D55FCF8DEA1C708B2BABAF2",
+    "cross_basis_consensus": "A5B02D7D15D4C65DDB66C081DDE7C860BFA736D4FEB635C2F136F4A1219F8D3A",
+    "wp159_screened_selection": "94AA2994B89F65CB241E4B3DE77B8498083A6BF5CC4F123B4CD3A84B5EA7A412"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

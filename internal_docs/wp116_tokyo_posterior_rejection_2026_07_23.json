@@ -1,0 +1,43 @@
+{
+  "schema": "wp116_tokyo_constant_singlebasis_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "667B3E0626BCF26C6F858473ADA4950101A9A80D8647152FB5A4B3F5B08959AA",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11605, 11660],
+    "carrier_reference_rank": 0,
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 17,
+    "gsi_inlier_spread_m": 0.12329715933054786,
+    "gsi_up_prior_center_m": -0.39618068762645464,
+    "grid_seed_count": 49,
+    "hypothesis_count": 57,
+    "absolute_mode_count": 57,
+    "winner_candidate_id": 54,
+    "winner_family_ranks": {"road_band": 17, "carrier_rms": 7, "cppr": 6},
+    "runner_margin": 0.06666666666666667,
+    "winner_audit_sub50cm_epochs": 0,
+    "diagnostic_best_sub50cm_epochs": 55,
+    "posterior_accepted": false,
+    "production_accepted": false,
+    "reason": "frozen family-rank and runner-margin gates fail; diagnostic candidate substitution forbidden"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "D41433A6B48C75D693676716ECF3F8EB6D7501C54318738EC32AFA89C49E3E58",
+    "development": "035F99D23B8EA5C1F4A3F6D2DAC5F96EC5866D644C4D599A6427FD5E9C0C346A",
+    "truthfree": "013E34B8B5AFAE600A2A0D2E8FB9079BCEA4D2C860B656BA0DE9897721BB1AF5",
+    "selection": "984D806C86EB1710FC23DFAA8197A60B0EA8037389C9AD0310FCC622D0CD2384"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "schema": "wp163_tokyo_screened_refit_rejection_lock_v1",
+  "date": "2026-07-24",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [7095, 7150],
+    "selected_stride_phase": 1,
+    "novelty": "fourth block through the WP158 screen + WP159 chain; first screened block to fail at the REFIT stage rather than the consensus stage",
+    "prior_generation_assessment": "WP147 structural DDPR/spread rejection; truth-derived constant-model oracle bound recorded at the Track A probe was 29/55 (affine 35/55)",
+    "ddpr_screen": {
+      "schema": "wp158_ddpr_satellite_screen_v1",
+      "edge_m": 5.0,
+      "frac_thresh": 0.2,
+      "evidence_epochs": 11,
+      "excluded_satellites": ["C28", "C33", "E05", "G05", "G15"],
+      "outlier_fractions": {"C28": 0.4, "C33": 0.667, "E05": 1.0, "G05": 0.429, "G15": 1.0}
+    },
+    "screened_refits": {
+      "rank0": {"hypotheses": 11, "min_ddpr_rms_m": 1.379, "selection_reason": "no_hypothesis_passed_truth_free_gates"},
+      "rank1": {"hypotheses": 12, "min_ddpr_rms_m": 1.274, "selection_reason": "no_hypothesis_passed_truth_free_gates"},
+      "rank2": {"hypotheses": 13, "min_ddpr_rms_m": 1.335, "selection_reason": "no_hypothesis_passed_truth_free_gates"}
+    },
+    "failure_stage": "screened_refit_truth_free_gates",
+    "failure_detail": "every hypothesis at every reference rank fails the max_block_spread_m 0.5 gate with spreads of roughly 1.07-7.91 m, while most hypotheses individually satisfy the arc, row, carrier-RMS, and DDPR-RMS gates; the screen lowers the DDPR floor to 1.27-1.38 m but the per-sub-block solutions do not agree on a constant offset",
+    "chain_truncated_after": "step 2 (no sanitize, pool, cross refits, or selectors were run)",
+    "significance": "consistent with the block's low 29/55 constant-model oracle bound and the Track A affine probe: the residual limitation is offset-model shape / intra-block drift, not DDPR evidence quality"
+  },
+  "decision": "no substitution and no rerun after the truth-free rejection; WP160 production unchanged; the block returns to the structural inventory pending any future user-approved offset-model extension",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "ddpr_screen": "B420B730AACD534F1DFEA99088F588309EA152A57750C8B0E4A694E97E0E717B",
+    "gsi_height_cache_reused": "results/wp31/tokyo_run1_wp147_gsi_multisample17_height_cache_7095_7150.json",
+    "rank0_phase1_screened_development": "777CE468BEE36BA87DE4784FA850B093202150B343114BB77A29EC8FEA4FE427",
+    "rank1_phase1_screened_development": "83BF9A3521B3D1FF0CB4932FF5F9C9FDCB81E560545591EE48F57D631E6DB53F",
+    "rank2_phase1_screened_development": "A1C787CC1B9E5F644F76A03D3A208237B5E198CD978EE499B07732CACAF6039D"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

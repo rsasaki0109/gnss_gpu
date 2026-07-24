@@ -1,0 +1,50 @@
+{
+  "schema": "wp131_tokyo_cross_basis_cppr_validation_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11660, 11715],
+    "carrier_reference_rank": 1,
+    "candidate_id": 24,
+    "family_ranks": {"cross_consensus": 2, "carrier_rms": 3, "cppr": 1},
+    "runner_margin": 2.0,
+    "minimum_runner_margin": 0.2,
+    "family_rank_limit": 4,
+    "cross_refit_disagreement_m": 0.07247426870325796,
+    "maximum_cross_refit_disagreement_m": 0.1,
+    "accepted": true
+  },
+  "holdouts": [
+    {"dataset": "nagoya_run1", "segment": [1436, 1656], "accepted": false, "reason": "cppr_evidence_unavailable"},
+    {"dataset": "tokyo_run1", "segment": [5225, 5280], "accepted": false, "reason": "cross_basis_cppr_family_or_margin_gate_failed"}
+  ],
+  "post_selection_full_audit": {
+    "full_denominator_epochs": 11924,
+    "before_sub50cm_epochs": 3394,
+    "after_sub50cm_epochs": 3411,
+    "after_sub50cm_pct": 28.606172425360615,
+    "gained_epochs": 17,
+    "lost_epochs": 0,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "declared_false_fix_pct": 0.0
+  },
+  "artifacts_sha256": {
+    "selector_implementation": "3B0583226B3980CF909BB92600D03F4B2637B2AAB5F8173AC8113C8ABE941913",
+    "cross_basis_consensus": "13F1D003CC87FB8D335A248ABCC88C7BFEF2E5C52675AB3AC72DA81BAD8552E3",
+    "target_selection": "DFEFC6DF4C20626E43FF5FD89419E92908F2A174F47EA6A1D7DD249DFD30C70D",
+    "promotion": "91CB37BEE84E9E86EF08874320CA5B795670160470B8636F4BEBF8D76E047BC3",
+    "production_trajectory": "25FB73F05445F6094281371C134368510ECC08F01CC110A22C668E2B9CE47192",
+    "shadow_trajectory": "25FB73F05445F6094281371C134368510ECC08F01CC110A22C668E2B9CE47192",
+    "production_benchmark": "2687CBD4E642A4D88F79B04B2C76A62BF0A39541FF39F1E1E70D5286AA8E4F43",
+    "shadow_benchmark": "2687CBD4E642A4D88F79B04B2C76A62BF0A39541FF39F1E1E70D5286AA8E4F43",
+    "campaign_figure": "6069003CF7D2F187F234D22F0B8E2BEEB2995DD598FED6D617F662B5CDF2F6A5"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

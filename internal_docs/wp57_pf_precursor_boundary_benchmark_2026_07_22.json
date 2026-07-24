@@ -1,0 +1,42 @@
+{
+  "schema": "wp57_pf_precursor_boundary_benchmark_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "truth_usage": "post_application_full_denominator_audit_only",
+  "full_denominator_epochs": 7583,
+  "baseline": {
+    "work_package": "WP55",
+    "sub50cm_epochs": 4949,
+    "sub50cm_pct": 65.26440722669128
+  },
+  "result": {
+    "dataset": "nagoya_run1",
+    "sub50cm_epochs": 4985,
+    "sub50cm_pct": 65.73915336937888,
+    "gained_epochs": 36,
+    "lost_epochs": 0,
+    "net_gain_epochs": 36,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "declared_false_fix_pct": 0.0,
+    "target_sub50cm_epochs": 6522,
+    "remaining_epochs_to_target": 1537
+  },
+  "production_artifacts_sha256": {
+    "promotion": "4B49A26B91D972B005D52571661B60057D7E548166C812BF95D8EDD3ECD40EEA",
+    "trajectory": "040B771455ACF6007C3EE4F0C98094D9C9DA72BF58073D4F91EE88A19779BF7F",
+    "summary": "A7E6EE6561B98A18EC1518A47ABE2C57AE0E137A4D7C84AF1C509AA212E34DD6",
+    "promotion_builder": "BDE319939D2C89BCD01CC2E88CD7AB28EE94400DD436F346FE817309C806DFA2",
+    "trajectory_applier": "83167FDBC65129D8D6CF1EB0A14CCFCA498AD14572AF85B4BA749B4F70C40E72"
+  },
+  "validation_lock": {
+    "path": "internal_docs/wp57_precursor_boundary_validation_2026_07_22.json",
+    "sha256": "A1E545160A2798C6E0E966E45DFC4E28C351C11622D2B8D51E27E66E18D4066C"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

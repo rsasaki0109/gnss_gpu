@@ -85,3 +85,24 @@ def test_compute_dd_families_rejects_unknown_family():
             _measurements(),
             carrier_families=("NOPE",),
         )
+
+
+def test_compute_dd_families_can_use_second_highest_reference():
+    result = _computer_with_obs().compute_dd_families(
+        10.0,
+        _measurements(),
+        min_common_sats=2,
+        carrier_families=("L1_E1_B1",),
+        reference_rank=1,
+    )
+
+    assert result is not None
+    assert result.ref_sat_ids == ("G02@L1_E1_B1", "G02@L1_E1_B1")
+    assert set(result.sat_ids) == {"G01@L1_E1_B1", "G03@L1_E1_B1"}
+
+
+def test_compute_dd_families_rejects_negative_reference_rank():
+    with pytest.raises(ValueError, match="reference_rank must be non-negative"):
+        _computer_with_obs().compute_dd_families(
+            10.0, _measurements(), reference_rank=-1
+        )

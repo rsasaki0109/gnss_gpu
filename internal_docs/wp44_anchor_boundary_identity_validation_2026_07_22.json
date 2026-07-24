@@ -1,0 +1,89 @@
+{
+  "schema": "wp44_anchor_boundary_identity_validation_lock_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "scope": "one 55-epoch block directly after a truth-free accepted static anchor; recursive chaining is forbidden",
+  "fixed_gate": {
+    "block_epochs": 55,
+    "stride_phase_mode": "auto_max_available_evidence_then_raw_carrier_then_ddpr",
+    "min_evidence_epochs": 10,
+    "identity_seed_ecef_m": [0.0, 0.0, 0.0],
+    "min_integer_arcs": 4,
+    "min_carrier_rows": 24,
+    "min_ddpr_rows": 40,
+    "max_carrier_rms_cycles": 0.5,
+    "max_common_offset_norm_m": 0.2,
+    "max_profile_offset_norm_m": 0.2,
+    "max_block_spread_m": 0.2,
+    "min_runner_offset_norm_m": 1.0
+  },
+  "positive": {
+    "dataset": "nagoya_run1",
+    "anchor_segment": [805, 923],
+    "segment": [923, 978],
+    "selected_stride_phase": 0,
+    "evidence_epochs": 11,
+    "common_offset_norm_m": 0.16164416455491695,
+    "max_profile_offset_norm_m": 0.16174124077726465,
+    "block_spread_m": 0.011938680587216024,
+    "runner_min_offset_norm_m": 1.8874701596852506,
+    "audit_before_sub50cm_epochs": 13,
+    "audit_after_sub50cm_epochs": 55,
+    "audit_gained_epochs": 42,
+    "audit_lost_epochs": 0,
+    "candidate_artifact_sha256": "02E3F5D104E8271943594AA9375C7990F42AC92C90E505C96E216B2A6B83A763",
+    "promotion_artifact_sha256": "4D53C67435D0D50B6D09C930E374CB7212AF75625194A31A46E4130406745C17"
+  },
+  "unsafe_holdout": {
+    "dataset": "tokyo_run1",
+    "anchor_segment": [2354, 2464],
+    "segment": [2464, 2519],
+    "common_offset_norm_m": 0.08797260805513796,
+    "max_profile_offset_norm_m": 0.25688750021951184,
+    "block_spread_m": 0.2322002195870506,
+    "audit_sub50cm_epochs": 18,
+    "failed_gates": ["profile_offset_norm", "block_spread"],
+    "candidate_artifact_sha256": "F955E8292B727206809C2EFB803BA7E64A709AF9C930429857E330F01F48F6A3",
+    "selector_artifact_sha256": "0CDFD5B9DDF482804E4DD924851AE3BA8617CBA9475CC9B8379A6B9FAAF96E68"
+  },
+  "recursive_chain_rejection": {
+    "dataset": "nagoya_run1",
+    "segment": [978, 1033],
+    "status": "development_only_not_eligible_for_wp44",
+    "reason": "the predecessor is a moving WP44 block, not an accepted static anchor",
+    "would_pass_local_numeric_gates": true,
+    "common_offset_norm_m": 0.0375937,
+    "max_profile_offset_norm_m": 0.0635656,
+    "block_spread_m": 0.0469310,
+    "runner_min_offset_norm_m": 1.2470,
+    "post_decision_audit_before_sub50cm_epochs": 49,
+    "post_decision_audit_after_sub50cm_epochs": 36,
+    "post_decision_audit_gained_epochs": 0,
+    "post_decision_audit_lost_epochs": 13,
+    "candidate_artifact_sha256": "216C2684F1B3C61CDDF66A9BA2ADDBD7925E8C850254FEE9D5DC84F3FE6B8D6D",
+    "decision": "keep direct-static-anchor-only scope; do not chain"
+  },
+  "additional_negative": {
+    "dataset": "nagoya_run1",
+    "segment": [5662, 5717],
+    "max_profile_offset_norm_m": 12.015,
+    "block_spread_m": 11.968,
+    "audit_sub50cm_epochs": 0,
+    "candidate_artifact_sha256": "31E161F9DCB711179C75A06CB33B2BDB17C2EB39FA9D6AF4988F8E9F5E6EBD7E",
+    "decision": "reject_profile_and_spread"
+  },
+  "implementation_sha256": {
+    "experiments/refine_wp31_moving_block_ambiguity.py": "7393658779FAC6441B4D4C503C43924E9CF69661D2A61C9861E226F2FB809AB3",
+    "experiments/select_wp44_anchor_boundary_identity_profile.py": "E205D5B7D7EB09424014C43E94788AB29A72639D83674E886F2EF1A28690A8AE",
+    "experiments/apply_wp42_moving_block_offset.py": "F1AD048449516356D2BD0D9FFB7A248D1F898EACFD2533DC89CC309D630744D1"
+  },
+  "test_sha256": {
+    "tests/test_wp31_moving_block_ambiguity.py": "9CCAB76C0B6F0A9888A8021E28A10AE76526A07803210FACBCA230ACD09B0257",
+    "tests/test_wp44_anchor_boundary_identity_profile.py": "66D8717F7992DE4417A77013F2601A66105DC67A9D30F1E3301A8308D527ED7C",
+    "tests/test_wp42_moving_temporal_promotion.py": "55C9F4F5CBC0F0C418C28A02F8D4A3312AFA0CF4661B9E608101EBBAC8DD9887"
+  },
+  "verification": {
+    "pytest": "44 passed (combined WP31/WP38/WP42/WP44 and gap/OSM regression set)",
+    "ruff": "all checks passed"
+  }
+}

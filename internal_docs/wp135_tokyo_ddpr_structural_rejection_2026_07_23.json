@@ -1,0 +1,39 @@
+{
+  "schema": "wp135_tokyo_ddpr_structural_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "C3B15A89D72894FD51626AC9504B95B7BE49118CAA477922757944E340ABD79F",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1210, 1265],
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 17,
+    "gsi_inlier_spread_m": 0.12293830872773981,
+    "gsi_up_prior_center_m": -0.9031879883341531,
+    "carrier_reference_results": [
+      {"rank": 0, "strict_candidates": 0, "minimum_ddpr_rms_m": 9.998410578726292, "diagnostic_ddpr_rms_m": 10.854681471785733, "diagnostic_ceiling_epochs": 54},
+      {"rank": 1, "strict_candidates": 0, "minimum_ddpr_rms_m": 9.949236066871265, "diagnostic_ddpr_rms_m": 10.851344157650127, "diagnostic_ceiling_epochs": 54},
+      {"rank": 2, "strict_candidates": 0, "minimum_ddpr_rms_m": 10.001769379520287, "diagnostic_ddpr_rms_m": 10.857336768767745, "diagnostic_ceiling_epochs": 52}
+    ],
+    "maximum_ddpr_rms_gate_m": 4.0,
+    "accepted": false,
+    "reason": "all carrier references and truth-only diagnostics fail the frozen DDPR RMS gate by a structural margin"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "462158075BB93E63DBF15A4F945481187578B7380A2910339830988A97C1E7CD",
+    "rank0_development": "C0356AA5691356BC6D6318A9A849EA536412E165618AC2E5A1E2F15C3ED54323",
+    "rank1_development": "5BCC768CE9B4EA2F75F17575EA41A966172CA8AE596CA2B091717A960D607BA1",
+    "rank2_development": "54DC05C675FE3E04F5D371D12E5EC4E7B08998A5389E178931C3918C2022CDBD"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

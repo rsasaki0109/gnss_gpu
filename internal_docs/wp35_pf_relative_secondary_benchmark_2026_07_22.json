@@ -1,0 +1,69 @@
+{
+  "schema": "wp35_pf_relative_secondary_benchmark_v1",
+  "created_date": "2026-07-22",
+  "production_input_truth": false,
+  "runtime_fgo": false,
+  "full_epoch_denominator": true,
+  "smoother_config": {
+    "motion_gap_endpoint_closure": true,
+    "motion_gap_closure_mode": "duration_weighted",
+    "motion_gap_duration_exponent": 2.0
+  },
+  "m4_baseline": [
+    {
+      "path": "internal_docs/wp30_m4_production_config.json",
+      "sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486"
+    },
+    {
+      "path": "internal_docs/wp30_m4_tokyo_evidence_ledger.json",
+      "sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+    }
+  ],
+  "validation_lock": {
+    "path": "internal_docs/wp34_relative_secondary_validation_2026_07_22.json",
+    "sha256": "D91EC1AF99A94450FA8D6CC5B5C44CAC7FC3B21D7B024B2375DA3B321B66BACA"
+  },
+  "new_anchor": {
+    "path": "results/wp31/tokyo_run1_static_6945_7076_relative_secondary_parent_production.json",
+    "sha256": "9BD1442E7B3DDD459FCC5A56F5B312C891840C16DF9BA4568379D1E11BF8455E",
+    "segment": [6945, 7076],
+    "reason": "unique_relative_secondary_parent_primary_compact",
+    "production_promoted": true,
+    "audit_error_m": 0.43182923480550206
+  },
+  "previous_tokyo": {
+    "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_tenanchor_durationp2_full_summary.json",
+    "sha256": "25714B7D83E6DAD16CCD430058DBC39E6655B784F041C998790F4B376E48E248",
+    "sub50cm_full_epochs": 3051,
+    "n_epochs_full_denominator": 11924,
+    "sub50cm_full_pct": 25.587051325058706
+  },
+  "current_tokyo": {
+    "summary_path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_durationp2_full_summary.json",
+    "summary_sha256": "FD5D198F8CBC8ECE9EB6679C75935413A320D09829C3BD94DE518983F3D3D013",
+    "trajectory_path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_durationp2_full_trajectory.csv",
+    "trajectory_sha256": "C44788033F3FA60D5C9B7FC4580979C055AF3C6BAF8CC4D14CA940B46CC8B001",
+    "displacements_path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_durationp2_full_displacements.csv",
+    "displacements_sha256": "9932C028ABE270B563E525051F00C85A71EF6A397D6DB3A1C4DD75BF3EF7510B",
+    "n_epochs_full_denominator": 11924,
+    "sub50cm_full_epochs": 3184,
+    "sub50cm_full_pct": 26.702448842670247,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0,
+    "development_anchor_used": false,
+    "production_promoted": true
+  },
+  "gain": {
+    "sub50cm_epochs": 133,
+    "sub50cm_percentage_points": 1.115397517611541
+  },
+  "nagoya_unchanged": {
+    "path": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_eightanchor_secondary_durationp2_full_summary.json",
+    "sub50cm_full_epochs": 4118,
+    "n_epochs_full_denominator": 7583,
+    "sub50cm_full_pct": 54.3056837663194,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0
+  }
+}

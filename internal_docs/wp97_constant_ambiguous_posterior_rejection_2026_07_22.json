@@ -1,0 +1,24 @@
+{
+  "schema": "wp97_constant_ambiguous_posterior_rejection_lock_v1",
+  "date": "2026-07-22",
+  "dataset": "nagoya_run1",
+  "segment": [5775, 5830],
+  "production_input_truth": false,
+  "production_promoted": false,
+  "strict_mode_counts_by_rank": [59, 56, 60],
+  "best_supply_sub50cm_epochs_by_rank": [0, 55, 55],
+  "three_basis": {
+    "accepted": false,
+    "reason": "affine_multibasis_cluster_gate_failed",
+    "cluster_count": 3,
+    "runner_margin": 0.0,
+    "family_rank_pass": false,
+    "selection_sha256": "829059FC822D9EBDFA6D25077A0C84A5D1D684D07A41E0F5F101DBBBE2234B37"
+  },
+  "single_basis": [
+    {"rank": 0, "accepted": true, "runner_margin": 0.3333333333333333, "selection_sha256": "593A748A4ECAE40EE1536F2EC5E6A25AF844BC98EA39E2F15683177F3C6F7B61"},
+    {"rank": 1, "accepted": false, "runner_margin": 0.3, "selection_sha256": "04D522AE4ECD89D9E551A8D8D88E93A0491020FB6776693BC72CF22D0B2B297C"},
+    {"rank": 2, "accepted": true, "runner_margin": 0.45454545454545453, "selection_sha256": "7C0A18AE9C4E002A910A1396BE94694A8038A11E31A58A10127999D9B97874FB"}
+  ],
+  "rejection_reason": "multibasis_tie_and_nonunique_single_basis_acceptance"
+}

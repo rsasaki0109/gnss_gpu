@@ -1,0 +1,63 @@
+{
+  "schema": "wp167_tokyo_screened_consensus_rejection_lock_v1",
+  "date": "2026-07-24",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1375, 1430],
+    "selected_stride_phase": 0,
+    "novelty": "eighth block through the WP158 screen + WP159 chain",
+    "prior_generation_assessment": "WP126 structural DDPR rejection (floor 7.36 m, diagnostic ceiling 52, GSI 15/15 inliers)",
+    "ddpr_screen": {
+      "schema": "wp158_ddpr_satellite_screen_v1",
+      "edge_m": 5.0,
+      "frac_thresh": 0.2,
+      "evidence_epochs": 11,
+      "excluded_satellites": ["C21", "C34", "C40", "G06", "G07", "G09", "G13", "G30"],
+      "outlier_fractions": {"C21": 0.667, "C34": 0.667, "C40": 0.5, "G06": 0.545, "G07": 0.3, "G09": 1.0, "G13": 1.0, "G30": 0.545}
+    },
+    "screened_refits": {
+      "rank0": {"hypotheses": 4, "min_ddpr_rms_m": 1.0835, "selection_reason": "all_truth_free_gates_pass"},
+      "rank1": {"hypotheses": 4, "min_ddpr_rms_m": 1.0513, "selection_reason": "all_truth_free_gates_pass"},
+      "rank2": {"hypotheses": 2, "min_ddpr_rms_m": 1.1568, "selection_reason": "all_truth_free_gates_pass"}
+    },
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "cross_basis_consensus_runner_margin": 0.006021,
+    "cross_basis_consensus_detail": "two of four candidates pass supply_pass (ids 1 and 2) but are separated by a 0.6% margin against the frozen 20% requirement — two nearly indistinguishable basins rather than one unopposed one",
+    "selector": "wp159_screened_stability_consensus_v1",
+    "selector_accepted": false,
+    "selector_reason": "stability_cppr_evidence_unavailable",
+    "selector_base_reason": "fewer_than_two_cross_basis_cppr_modes",
+    "selector_mode_count": 1,
+    "significance": "a third distinct consensus-stage failure shape: WP161 traded disagreement against spread, WP162/WP165 had one unopposed basin, WP167 has two basins too close to separate (margin 0.006); the frozen machinery correctly refuses to pick between statistical twins"
+  },
+  "decision": "no substitution and no rerun after the truth-free rejection; WP160 production unchanged",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "ddpr_screen": "2A3336EDECB45B96C4626A146B075DAE51EAE16A07C4BCC9EB46FF8187962728",
+    "gsi_height_cache_reused": "results/wp31/tokyo_run1_wp126_gsi_multisample17_height_cache_1375_1430.json",
+    "rank0_phase0_screened_development": "6623C9263C4FF3FE79BB668C4CDDA679B22B55C2EF787BC6D5556A440ED969E1",
+    "rank1_phase0_screened_development": "F0EFD7561421B2FBD3C1FC4C96328F9D5CC4294B7E6AB19C024A75C6A5577444",
+    "rank2_phase0_screened_development": "BF6F4108929932BC97BA8DA6E5C3655DF65A78F638B6FCBE88ECC06DFBF2C5E5",
+    "truthfree_source": "4A749BB32EF3590DA10B3F0C967E6B2AFAF3C96FB4C9D9E5ECCF270C8336FD69",
+    "truthfree_seed_pool": "94B09865DDE2FDBCBC46B22CE7017EC14E979FD61A64500F8DC59BB83AB5B3FE",
+    "rank0_cross_development": "60932D69876513F0409465497C8B668AD2E00772DBABC82B1D0C1B0E7B81F53C",
+    "rank0_cross_truthfree": "AC6792CD9F8D504841A3CC2BC35E36E57F60BD6DC2C27822D88FEBD969C59A96",
+    "rank2_cross_development": "526CC26EEAD952A0B6D906771AE33C61B5441FA61C6B3D33CC22033C9FCD6367",
+    "rank2_cross_truthfree": "34418458C294DCF1F223C71275C5AE7B71371EB3679C4CBEAC45353EC14BC145",
+    "cross_basis_consensus": "7BB365CE4935280CAC82E4188A37726EC1B23D10752D395EBDCE442C9AAFA252",
+    "wp159_screened_selection": "3D109F9DB7C088E34DE8086BEF72E93A4C530167104535B4FA2A9974839EAF91"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

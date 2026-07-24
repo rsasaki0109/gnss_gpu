@@ -1,0 +1,41 @@
+{
+  "schema": "wp147_tokyo_ddpr_structural_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "9ABFD989B8CF9978E2A19D87644E898D521B411B9EBB04FAB073E6346AC335A8",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [7095, 7150],
+    "selected_stride_phase": 1,
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 14,
+    "gsi_inlier_spread_m": 0.4645131925836097,
+    "gsi_up_prior_center_m": 0.8437599700152845,
+    "carrier_reference_results": [
+      {"rank": 0, "carrier_rows": 266, "strict_candidates": 0, "minimum_ddpr_rms_m": 27.12866059872114, "minimum_block_spread_m": 4.070032161012676, "diagnostic_ddpr_rms_m": 31.142802378856672, "diagnostic_block_spread_m": 5.069750123335503, "diagnostic_ceiling_epochs": 11},
+      {"rank": 1, "carrier_rows": 266, "strict_candidates": 0, "minimum_ddpr_rms_m": 27.210801450497055, "minimum_block_spread_m": 4.014777637025538, "diagnostic_ddpr_rms_m": 31.15168072677504, "diagnostic_block_spread_m": 6.01065396080566, "diagnostic_ceiling_epochs": 11},
+      {"rank": 2, "carrier_rows": 244, "strict_candidates": 0, "minimum_ddpr_rms_m": 27.19202761836585, "minimum_block_spread_m": 3.9651901501693856, "diagnostic_ddpr_rms_m": 31.141727193872153, "diagnostic_block_spread_m": 6.0507143227712845, "diagnostic_ceiling_epochs": 11}
+    ],
+    "maximum_ddpr_rms_gate_m": 4.0,
+    "maximum_block_spread_gate_m": 0.5,
+    "accepted": false,
+    "reason": "all carrier references fail both the frozen DDPR RMS gate and the frozen block-spread gate by structural margins, and the truth-seeded oracle diagnostic recovers only 11 of 55 epochs"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "3959AB97FB56B24A23CEB073D83E3C63EF942DEA07CAF35EFE8CC6C360675A4A",
+    "rank0_phase1_development": "EE5EF5733F8D9DD1250A288FC9EA303FA1D5B7C873020F0FDE0595168F14D167",
+    "rank1_phase1_development": "A80B192AB5094F94BD4B10F54C0F201D20A114BF59F7994E3FAE2964D942B9F1",
+    "rank2_phase1_development": "8D3CE83A19330E04A327DD22D5EE6BFF6CF88A67A15831F15BD8F8F9D0C7C90D"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

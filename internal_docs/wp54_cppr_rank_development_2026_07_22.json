@@ -1,0 +1,58 @@
+{
+  "schema": "wp54_cppr_rank_development_lock_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "production_promoted": false,
+  "pf_only": true,
+  "runtime_fgo": false,
+  "dataset": "nagoya_run1",
+  "segment": [1436, 1656],
+  "observable": "rebased DDPR minus fixed DD carrier range",
+  "selector": {
+    "metrics": ["median_abs_innovation_m", "p95_abs_innovation_m", "bad_pairs"],
+    "bad_pair_threshold_m": 5.0,
+    "max_family_rank_fraction": 0.2,
+    "min_runner_margin": 0.2,
+    "selected_candidate_id": 2,
+    "family_ranks": {
+      "median_abs_innovation_m": 1,
+      "p95_abs_innovation_m": 1,
+      "bad_pairs": 2
+    },
+    "rank_sum": 4,
+    "runner_rank_sum": 8,
+    "runner_margin": 1.0,
+    "family_rank_limit": 2
+  },
+  "winner_truth_free_metrics": {
+    "checked_pairs": 935,
+    "median_abs_innovation_m": 0.47490011106128804,
+    "p95_abs_innovation_m": 3.9940061187311553,
+    "bad_pairs": 37,
+    "carrier_rms_cycles": 0.18797161196664924,
+    "block_spread_m": 0.1138059508325519
+  },
+  "post_selection_audit": {
+    "candidate_median_error_m": 0.5202371376289112,
+    "candidate_sub50cm_epochs": 91,
+    "full_before_sub50cm_epochs": 4856,
+    "full_shadow_after_sub50cm_epochs": 4949,
+    "full_shadow_after_sub50cm_pct": 65.26440722669128,
+    "full_shadow_gained_epochs": 93,
+    "full_shadow_lost_epochs": 0
+  },
+  "decision": "development selector passes and identifies the useful alternate-reference basin; keep shadow-only until the identical selector fails closed on predeclared unsafe holdouts",
+  "next": "run the same reference-rank and CP/PR rank selector on unsafe Tokyo and non-target Nagoya holdouts before production promotion",
+  "artifacts_sha256": {
+    "moving_block_implementation": "8AEF96984F5EE0EE9FA90DAC61B75C61DC55917ACEACB8BC7B77030A1F982291",
+    "selector_implementation": "D2046E6B7E18E81A102C882F34BCE0021393CF5F8461529FCB5FD359E45184E7",
+    "moving_block_test": "E19A7034DB6D628552945A9439E5A84EA0CF127F1BB6C934A03AC49B2D41B629",
+    "selector_test": "48CDBEED4638604FF00437B4071968AE65285156DE33B8000A03F75194ABC96B",
+    "development_candidates": "5E88A16F7B6A57B9FA3B13C6CC5D9E67A20990DB66EDCC96F8D04FADFF4B69D1",
+    "validation": "5C18B395A692E1530C2BC70269DB39DA3B3D165C4CB154EB3D5A0D17319BFBE5"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

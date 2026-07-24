@@ -1,0 +1,35 @@
+{
+  "schema": "wp155_tokyo_gsi_source_incompatibility_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "3CB3BDEE3E4F5F74702F3E835533E124ACCDC059CD4A45D816F07F7EE0667284",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1540, 1595],
+    "selected_stride_phase": 0,
+    "prior_generation_assessment": "WP111 single-median GSI source mismatch fail-closed; re-attempted with the 17-sample multi-source cache generation",
+    "gsi_cache_target_samples": 17,
+    "gsi_cache_target_dem_sources": {"10m": 17},
+    "gsi_calibration_dem_source": "1m laser",
+    "compatible_samples": 0,
+    "minimum_compatible_samples": 2,
+    "refit_error": "ValueError: moving GSI height cache has fewer than two compatible samples",
+    "accepted": false,
+    "reason": "all 17 fixed target samples resolve to the 10 m DEM while the accepted-anchor calibration is 1 m laser; the source-compatibility gate fails closed regardless of sample count, so this is a permanent GSI 1 m laser coverage gap, not a pipeline-generation defect"
+  },
+  "decision": "do not weaken the DEM source-compatibility gate; no carrier refits were run; keep WP153 production unchanged",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "05C2BBA2CF6B2185F8F3DAD4412562D4CFB93B20B023E52DC520202A67BE0A50"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

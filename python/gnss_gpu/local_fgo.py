@@ -79,6 +79,8 @@ class DDPseudorangeEpoch:
     base_range_k: np.ndarray
     base_range_ref: np.ndarray
     weights: np.ndarray | None = None
+    sat_ids: tuple[str, ...] | None = None
+    ref_sat_ids: tuple[str, ...] | None = None
 
     @classmethod
     def from_result(cls, result: Any) -> "DDPseudorangeEpoch":
@@ -89,6 +91,8 @@ class DDPseudorangeEpoch:
             base_range_k=np.asarray(result.base_range_k, dtype=np.float64),
             base_range_ref=np.asarray(result.base_range_ref, dtype=np.float64),
             weights=np.asarray(result.dd_weights, dtype=np.float64),
+            sat_ids=_tuple_or_none(getattr(result, "sat_ids", None), int(result.n_dd)),
+            ref_sat_ids=_tuple_or_none(getattr(result, "ref_sat_ids", None), int(result.n_dd)),
         )
 
     @property

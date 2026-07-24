@@ -1,0 +1,39 @@
+{
+  "schema": "wp134_tokyo_ddpr_structural_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "C3B15A89D72894FD51626AC9504B95B7BE49118CAA477922757944E340ABD79F",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1485, 1540],
+    "gsi_compatible_samples": 15,
+    "gsi_inlier_samples": 14,
+    "gsi_inlier_spread_m": 0.3094889458999006,
+    "gsi_up_prior_center_m": -1.031952921022473,
+    "carrier_reference_results": [
+      {"rank": 0, "strict_candidates": 0, "minimum_ddpr_rms_m": 6.750372835914011, "diagnostic_ddpr_rms_m": 7.831246485045693, "diagnostic_ceiling_epochs": 55},
+      {"rank": 1, "strict_candidates": 0, "minimum_ddpr_rms_m": 6.8210181123605, "diagnostic_ddpr_rms_m": 7.823262642220114, "diagnostic_ceiling_epochs": 55},
+      {"rank": 2, "strict_candidates": 0, "minimum_ddpr_rms_m": 6.740243057461026, "diagnostic_ddpr_rms_m": 7.8279580234862784, "diagnostic_ceiling_epochs": 55}
+    ],
+    "maximum_ddpr_rms_gate_m": 4.0,
+    "accepted": false,
+    "reason": "all carrier references and truth-only diagnostics fail the frozen DDPR RMS gate by a structural margin"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "9CEB34E114D6A544F5BF2423B37DB3A55C6621F081F196034AAAB2C542D9ED83",
+    "rank0_development": "82A015B6ACC915BD6446B9B5458791B9CCF7F66C8984A168E7ED125A792645CF",
+    "rank1_development": "2B50DE2F1E44DC95A86F6EA81B15F52E1D3A140D40F882C46F5224FB671B1621",
+    "rank2_development": "0FCC0ADE332EF860AB3F9CA000358044B3C19BF063D7D89F086F7CDCCE76E5BA"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

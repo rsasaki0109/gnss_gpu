@@ -1,0 +1,70 @@
+{
+  "schema": "wp170_tokyo_screened_posterior_rejection_lock_v1",
+  "date": "2026-07-24",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1265, 1320],
+    "selected_stride_phase": 0,
+    "novelty": "ninth block through the WP158 screen + WP159 chain; lowest diagnostic ceiling (32) in the roll-out queue",
+    "prior_generation_assessment": "WP125 structural DDPR rejection (floor 11.47 m, diagnostic ceiling 32)",
+    "ddpr_screen": {
+      "schema": "wp158_ddpr_satellite_screen_v1",
+      "edge_m": 5.0,
+      "frac_thresh": 0.2,
+      "evidence_epochs": 11,
+      "excluded_satellites": ["C11", "C34", "C40", "E04", "E05", "E34", "G09", "G13"],
+      "outlier_fractions": {"C11": 1.0, "C34": 1.0, "C40": 1.0, "E04": 0.286, "E05": 1.0, "E34": 0.636, "G09": 0.25, "G13": 1.0}
+    },
+    "screened_refits": {
+      "rank0": {"hypotheses": 5, "min_ddpr_rms_m": 0.871, "selection_reason": "all_truth_free_gates_pass"},
+      "rank1": {"hypotheses": 6, "min_ddpr_rms_m": 1.062, "selection_reason": "all_truth_free_gates_pass"},
+      "rank2": {"hypotheses": 7, "min_ddpr_rms_m": 1.002, "selection_reason": "all_truth_free_gates_pass"}
+    },
+    "cross_basis_consensus_candidate_id": null,
+    "cross_basis_consensus_reason": "cross_basis_consensus_gate_failed",
+    "cross_basis_consensus_runner_margin": 0.0076,
+    "cross_basis_consensus_detail": "three of six candidates pass supply (ids 0, 4, 5); winner id 4 (consensus 0.2137 m) leads runner id 5 (0.2264 m) by 0.76% against the frozen 20% requirement",
+    "selector": "wp159_screened_stability_consensus_v1",
+    "selector_accepted": false,
+    "selector_reason": "stability_cppr_family_or_margin_gate_failed",
+    "selector_base_reason": "cross_basis_cppr_family_or_margin_gate_failed",
+    "selector_mode_count": 3,
+    "selector_winner_candidate_id": 0,
+    "selector_winner_family_ranks": {"block_spread_m_family_note": "reported by chain agent as cross_consensus 2, carrier_rms 1, cppr 3"},
+    "selector_family_rank_pass": false,
+    "selector_family_rank_limit": 2,
+    "selector_runner_margin": 0.2,
+    "selector_runner_margin_pass": true,
+    "significance": "first screened roll-out chain to reach the WP159 ranking stage with multiple modes (3); it dies on the family-rank check (winner carries a rank-3 family against a limit of 2) with the margin check passing exactly at threshold; both consensus stages therefore reject independently, consistent with the block's lowest-in-queue ceiling of 32",
+    "screened_floor_note": "0.871 m minimum screened DDPR RMS, the campaign's lowest to date, from an 11.47 m unscreened floor"
+  },
+  "decision": "no substitution and no rerun after the truth-free rejection; WP160 production unchanged",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "ddpr_screen": "05FA46BA1DCBC4A24AF3A43254DC6887200442E855C88E80BE3DFC3346179F63",
+    "gsi_height_cache_reused": "results/wp31/tokyo_run1_wp125_gsi_multisample17_height_cache_1265_1320.json",
+    "rank0_phase0_screened_development": "DC18B818E020B40F299D1D3B755469CE59BD3CB7D4A517B4C161B14B37207092",
+    "rank1_phase0_screened_development": "945624A37038AC11DD371F7A5D8BCB6A5DAD123BAB0481722A5A0144B3E95540",
+    "rank2_phase0_screened_development": "6D0A50AF2B8F2058DA80175E11BDAFB39E1737B067650B7889A972A2ECAA3814",
+    "truthfree_source": "479D96896920DE8425668927089DA908637E6F5BDA6C979BC7DC1F5D3773D7EE",
+    "truthfree_seed_pool": "90F3B4E7F587B5DBE9112BEA20F1EE33FAE4FC1C822C7BC7AAF94E347AB3D7C9",
+    "rank0_cross_development": "CE9E41230D5A199E9E1391B359BABEFC6FC2E563A19FACCC2C15222EC1B2C35B",
+    "rank0_cross_truthfree": "A2C0A708879E89753CC08C4C6280D0E46353823F3DE741D5773936831453681B",
+    "rank2_cross_development": "0C540CD34382D2A26ADD8C0F281B9CE985C430C04D438B9109B8AFA29728A5E0",
+    "rank2_cross_truthfree": "C760C0443D5223475946AECEE2BEA4042340F0931A5E988B0200E2D7260A4FC2",
+    "cross_basis_consensus": "EA2932E157B67059376E8E7ABFE9CE52E8BDFE2A3702B6AB645FEBB52994F6CC",
+    "wp159_screened_selection": "B6A4348F3AAF68CB7578F0A84433B58BF0ECFE4C5AD13C8E24784AA7AEAD55E7"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

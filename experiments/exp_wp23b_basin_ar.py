@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -41,10 +43,12 @@ from gnss_gpu.dd_integrity import (  # noqa: E402
     multipivot_ddpr_scores,
     satellite_pair_costs,
 )
+from gnss_gpu.gsdc_dgnss import DDWLSConfig, dd_pseudorange_position_update  # noqa: E402
 from gnss_gpu.dd_pseudorange import DDPseudorangeComputer  # noqa: E402
+from gnss_gpu.dd_quality import _subset_dd_result, gate_dd_pseudorange  # noqa: E402
 from gnss_gpu.io.ppc import PPCDatasetLoader  # noqa: E402
 from gnss_gpu.io.rinex_cache import RinexObservationCache  # noqa: E402
-from gnss_gpu.lambda_ambiguity import integer_search  # noqa: E402
+from gnss_gpu.lambda_ambiguity import integer_search, integer_search_batch  # noqa: E402
 from gnss_gpu.rtk_evidence import (  # noqa: E402
     EvidenceLedger,
     RTKEpochTrace,
@@ -69,6 +73,48 @@ from gnss_gpu.temporal_ambiguity import (  # noqa: E402
     TemporalAmbiguityFilter,
 )
 from gnss_gpu.tdcp_velocity import estimate_displacement_from_tdcp  # noqa: E402
+from gnss_gpu.widelane import (  # noqa: E402
+    WidelaneDDPseudorangeComputer,
+    WidelaneDDStats,
+)
+
+_BASIN_TRACE_FIELDS = (
+    "epoch",
+    "tow",
+    "basin_id",
+    "assignment_id",
+    "assignment_json",
+    "epoch_log_likelihood",
+    "cumulative_log_marginal",
+    "log_weight",
+    "ecef_x",
+    "ecef_y",
+    "ecef_z",
+    "velocity_x",
+    "velocity_y",
+    "velocity_z",
+    "birth_epoch",
+    "lineage",
+    "proposal_sources",
+)
+
+
+class _StreamingCsvRows:
+    """Bounded-memory CSV sink retaining the historical append call site."""
+
+    def __init__(self, path: Path, fieldnames: tuple[str, ...]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._fh = path.open("w", newline="")
+        self._writer = csv.DictWriter(self._fh, fieldnames=fieldnames)
+        self._writer.writeheader()
+        self.count = 0
+
+    def append(self, row: dict[str, object]) -> None:
+        self._writer.writerow(row)
+        self.count += 1
+
+    def close(self) -> None:
+        self._fh.close()
 
 
 def _write_trajectory(path: Path, rows: list[dict[str, object]]) -> None:
@@ -80,20 +126,187 @@ def _write_trajectory(path: Path, rows: list[dict[str, object]]) -> None:
         writer.writerows({key: row[key] for key in fields} for row in rows)
 
 
+def _load_diverse_position_seeds(
+    path: Path,
+    *,
+    separation_m: float,
+    max_positions: int,
+) -> dict[int, tuple[np.ndarray, ...]]:
+    """Load posterior-ranked, position-diverse seeds from a shadow PF trace."""
+
+    rows_by_epoch: dict[int, list[tuple[float, np.ndarray]]] = {}
+    with path.open(newline="") as fh:
+        for row in csv.DictReader(fh):
+            position = np.asarray(
+                [row["ecef_x"], row["ecef_y"], row["ecef_z"]],
+                dtype=np.float64,
+            )
+            if not np.all(np.isfinite(position)):
+                continue
+            rows_by_epoch.setdefault(int(row["epoch"]), []).append(
+                (float(row["log_weight"]), position)
+            )
+
+    result: dict[int, tuple[np.ndarray, ...]] = {}
+    for epoch, ranked_rows in rows_by_epoch.items():
+        selected: list[np.ndarray] = []
+        for _log_weight, position in sorted(ranked_rows, key=lambda item: -item[0]):
+            if all(
+                np.linalg.norm(position - existing) > float(separation_m)
+                for existing in selected
+            ):
+                selected.append(position)
+            if len(selected) >= int(max_positions):
+                break
+        if selected:
+            result[epoch] = tuple(selected)
+    return result
+
+
+def _append_distinct_position_seed(
+    seeds: tuple[np.ndarray, ...],
+    candidate: np.ndarray,
+    *,
+    separation_m: float = 1.0e-3,
+) -> tuple[tuple[np.ndarray, ...], int]:
+    """Append a finite seed once and return its stable source index."""
+
+    existing = tuple(np.asarray(seed, dtype=np.float64).reshape(3) for seed in seeds)
+    value = np.asarray(candidate, dtype=np.float64).reshape(3)
+    if not np.all(np.isfinite(value)):
+        raise ValueError("position seed must be finite")
+    for index, seed in enumerate(existing):
+        if np.linalg.norm(value - seed) <= float(separation_m):
+            return existing, int(index)
+    return existing + (value.copy(),), len(existing)
+
+
+def _widelane_integer_residual(
+    assignment: tuple,
+    fixed_dd_ambiguities: tuple[tuple[str, str, int], ...],
+) -> tuple[int, float]:
+    family_integers: dict[tuple[str, str, str], int] = {}
+    for versioned_key, integer in assignment:
+        ambiguity_key, _generation = versioned_key
+        ref_sat, sat_id, _wavelength_nm = ambiguity_key
+        if "@" not in ref_sat or "@" not in sat_id:
+            continue
+        ref_base, ref_family = ref_sat.split("@", 1)
+        sat_base, sat_family = sat_id.split("@", 1)
+        if ref_family != sat_family:
+            continue
+        family_integers[(ref_base, sat_base, ref_family)] = int(integer)
+
+    residuals: list[int] = []
+    for ref_sat, sat_id, wide_integer in fixed_dd_ambiguities:
+        l1_key = (ref_sat, sat_id, "L1_E1_B1")
+        l2_key = (ref_sat, sat_id, "L2_E5B_B2")
+        if l1_key in family_integers and l2_key in family_integers:
+            residuals.append(
+                family_integers[l1_key]
+                - family_integers[l2_key]
+                - int(wide_integer)
+            )
+    if not residuals:
+        return 0, float("nan")
+    values = np.asarray(residuals, dtype=np.float64)
+    return len(residuals), float(values @ values)
+
+
+def _select_ambiguity_indices(
+    keys: tuple,
+    covariance: np.ndarray,
+    available: np.ndarray,
+    subset_size: int,
+    *,
+    prefer_multifrequency_pairs: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    available_arr = np.asarray(available, dtype=np.int64)
+    variances = np.diag(np.asarray(covariance, dtype=np.float64))[available_arr]
+    variance_ranked = available_arr[np.argsort(variances)]
+    if not prefer_multifrequency_pairs:
+        selected = np.sort(variance_ranked[: int(subset_size)])
+        return selected, variance_ranked
+
+    available_set = set(int(index) for index in available_arr)
+    grouped: dict[tuple[str, str], dict[str, int]] = {}
+    for index, key in enumerate(keys):
+        if index not in available_set:
+            continue
+        ref_sat, sat_id, _wavelength_nm = key
+        if "@" not in ref_sat or "@" not in sat_id:
+            continue
+        ref_base, ref_family = ref_sat.split("@", 1)
+        sat_base, sat_family = sat_id.split("@", 1)
+        if ref_family != sat_family:
+            continue
+        grouped.setdefault((ref_base, sat_base), {})[ref_family] = index
+
+    diagonal = np.diag(np.asarray(covariance, dtype=np.float64))
+    pairs: list[tuple[float, int, int]] = []
+    for families in grouped.values():
+        if "L1_E1_B1" in families and "L2_E5B_B2" in families:
+            l1_index = families["L1_E1_B1"]
+            l2_index = families["L2_E5B_B2"]
+            pairs.append(
+                (
+                    float(diagonal[l1_index] + diagonal[l2_index]),
+                    l1_index,
+                    l2_index,
+                )
+            )
+    selected_order: list[int] = []
+    for _pair_variance, l1_index, l2_index in sorted(pairs):
+        if len(selected_order) + 2 > int(subset_size):
+            break
+        selected_order.extend((l1_index, l2_index))
+    selected_set = set(selected_order)
+    selected_order.extend(
+        int(index)
+        for index in variance_ranked
+        if int(index) not in selected_set
+    )
+    ranked = np.asarray(selected_order, dtype=np.int64)
+    return np.sort(ranked[: int(subset_size)]), ranked
+
+
 def main(argv: list[str] | None = None) -> None:
+    runtime_start = time.perf_counter()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", default="tokyo/run2")
     parser.add_argument("--max-epochs", type=int, default=1200)
     parser.add_argument("--data-root", type=Path, default=Path("datasets/PPC-Dataset-data"))
     parser.add_argument("--dd-systems", default="G,E,J,C")
+    parser.add_argument(
+        "--dd-carrier-families",
+        default="",
+        help=(
+            "Comma-separated carrier families for multi-frequency DD carrier "
+            "evidence; empty preserves the historical single-frequency path"
+        ),
+    )
     parser.add_argument("--pr-systems", default="G,E,J")
     parser.add_argument("--subset-size", type=int, default=8)
     parser.add_argument("--top-k", type=int, default=12)
+    parser.add_argument(
+        "--lambda-engine",
+        choices=("cpu", "gpu-batch"),
+        default="cpu",
+        help="ILS engine for genuinely batched multi-position respawn proposals",
+    )
+    parser.add_argument(
+        "--runtime-mode",
+        choices=("audit", "fast"),
+        default="audit",
+        help="fast omits large per-basin/integrity audit traces but preserves estimates",
+    )
     parser.add_argument("--max-basins", type=int, default=128)
     parser.add_argument("--basin-diversity-reserve-fraction", type=float, default=0.0)
     parser.add_argument("--basin-diversity-radius-m", type=float, default=1.0)
     parser.add_argument("--basin-dedup-position-radius-m", type=float, default=float("inf"))
     parser.add_argument("--basin-source-reserve-fraction", type=float, default=0.0)
+    parser.add_argument("--basin-protected-source-token", default="")
+    parser.add_argument("--basin-protected-source-fraction", type=float, default=0.0)
     parser.add_argument("--birth-mass", type=float, default=0.01)
     parser.add_argument("--sigma-dd-pr-m", type=float, default=5.0)
     parser.add_argument(
@@ -105,6 +318,17 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--sigma-float-cp-cycles", type=float, default=0.10)
     parser.add_argument("--float-slip-threshold-cycles", type=float, default=2.0)
     parser.add_argument("--sigma-fixed-cp-cycles", type=float, default=0.20)
+    parser.add_argument("--enable-widelane-basin-evidence", action="store_true")
+    parser.add_argument("--widelane-min-epochs", type=int, default=5)
+    parser.add_argument("--widelane-max-std-cycles", type=float, default=0.75)
+    parser.add_argument("--widelane-ratio-threshold", type=float, default=3.0)
+    parser.add_argument("--widelane-min-fix-rate", type=float, default=0.3)
+    parser.add_argument("--widelane-basin-sigma-m", type=float, default=1.0)
+    parser.add_argument("--enable-widelane-integer-score", action="store_true")
+    parser.add_argument("--widelane-integer-min-pairs", type=int, default=1)
+    parser.add_argument("--widelane-integer-mismatch-penalty", type=float, default=10.0)
+    parser.add_argument("--widelane-integer-missing-penalty", type=float, default=10.0)
+    parser.add_argument("--prefer-paired-multifrequency-subset", action="store_true")
     parser.add_argument("--fix-gamma", type=float, default=0.99)
     parser.add_argument("--fix-streak", type=int, default=3)
     parser.add_argument(
@@ -174,6 +398,58 @@ def main(argv: list[str] | None = None) -> None:
         default="axes",
     )
     parser.add_argument("--ddpr-respawn-shadow-seed-radii-m", default="")
+    parser.add_argument("--ddpr-respawn-snapshot-seed-shadow-only", action="store_true")
+    parser.add_argument("--ddpr-respawn-snapshot-seed-promote", action="store_true")
+    parser.add_argument("--ddpr-respawn-snapshot-loo-shadow-only", action="store_true")
+    parser.add_argument(
+        "--ddpr-snapshot-pair-exclusion-position-shadow-only", action="store_true"
+    )
+    parser.add_argument("--ddpr-respawn-wls-seed-shadow-only", action="store_true")
+    parser.add_argument(
+        "--ddpr-respawn-trusted-fix-anchor-shadow-only", action="store_true"
+    )
+    parser.add_argument(
+        "--trusted-fix-anchor-snapshot-reset-rms-m", type=float, default=0.0
+    )
+    parser.add_argument(
+        "--trusted-fix-anchor-motion-fallback",
+        choices=(
+            "doppler",
+            "doppler-calibrated",
+            "imu-preint",
+            "last-tdcp",
+            "hold",
+        ),
+        default="doppler",
+    )
+    parser.add_argument(
+        "--trusted-fix-anchor-doppler-bias-window", type=int, default=25
+    )
+    parser.add_argument("--trusted-fix-anchor-shadow-radii-m", default="")
+    parser.add_argument("--trusted-fix-anchor-float-line-radii-m", default="")
+    parser.add_argument("--trusted-fix-anchor-float-line-promote", action="store_true")
+    parser.add_argument("--external-position-seeds-csv", type=Path)
+    parser.add_argument("--external-position-seed-separation-m", type=float, default=0.5)
+    parser.add_argument("--external-position-seed-max", type=int, default=64)
+    parser.add_argument("--external-position-seed-top-k", type=int, default=2)
+    parser.add_argument(
+        "--external-position-seed-mode",
+        choices=("lambda", "rounded-direct"),
+        default="lambda",
+    )
+    parser.add_argument("--external-position-seeds-promote", action="store_true")
+    parser.add_argument(
+        "--trusted-fix-anchor-imu-velocity-blend-alpha", type=float, default=0.3
+    )
+    parser.add_argument("--trusted-anchor-refinement-seeds", type=int, default=0)
+    parser.add_argument("--trusted-anchor-refinement-top-k", type=int, default=24)
+    parser.add_argument("--trusted-anchor-shadow-subset-size", type=int, default=0)
+    parser.add_argument("--ddpr-respawn-snapshot-shadow-radii-m", default="")
+    parser.add_argument("--ddpr-respawn-snapshot-extrapolation-scales", default="")
+    parser.add_argument("--ddpr-respawn-snapshot-shadow-top-k", type=int, default=0)
+    parser.add_argument("--ddpr-snapshot-prior-sigma-m", type=float, default=0.0)
+    parser.add_argument("--ddpr-snapshot-max-shift-m", type=float, default=200.0)
+    parser.add_argument("--ddpr-snapshot-pair-residual-max-m", type=float, default=0.0)
     parser.add_argument(
         "--ddpr-respawn-exclude-max-cost-satellite", action="store_true"
     )
@@ -256,6 +532,22 @@ def main(argv: list[str] | None = None) -> None:
         help="Optional truth-joined leave-one-satellite-out DDPR diagnostics",
     )
     args = parser.parse_args(argv)
+    if args.runtime_mode == "fast" and (
+        args.out_basin_trace is not None
+        or args.out_integrity_satellite_diagnostics is not None
+    ):
+        parser.error(
+            "--runtime-mode fast cannot retain per-basin or integrity audit traces"
+        )
+    if args.lambda_engine == "gpu-batch":
+        # Warm up CUDA outside the measured epoch loop and fail closed before
+        # loading the full dataset if the locked engine is unavailable.
+        integer_search_batch(
+            [np.zeros(8, dtype=np.float64)],
+            [np.eye(8, dtype=np.float64)],
+            n_candidates=24,
+            engine="gpu-batch",
+        )
     if not 0.0 <= float(args.integrity_satellite_cost_memory) < 1.0:
         parser.error("--integrity-satellite-cost-memory must be in [0, 1)")
     respawn_seed_radii = tuple(
@@ -272,12 +564,82 @@ def main(argv: list[str] | None = None) -> None:
     )
     if any(not np.isfinite(value) or value <= 0.0 for value in shadow_seed_radii):
         parser.error("--ddpr-respawn-shadow-seed-radii-m values must be positive")
+    snapshot_shadow_radii = tuple(
+        float(value)
+        for value in str(args.ddpr_respawn_snapshot_shadow_radii_m).split(",")
+        if value.strip()
+    )
+    if any(not np.isfinite(value) or value <= 0.0 for value in snapshot_shadow_radii):
+        parser.error("--ddpr-respawn-snapshot-shadow-radii-m values must be positive")
+    snapshot_extrapolation_scales = tuple(
+        float(value)
+        for value in str(args.ddpr_respawn_snapshot_extrapolation_scales).split(",")
+        if value.strip()
+    )
+    if any(
+        not np.isfinite(value) or value <= 0.0
+        for value in snapshot_extrapolation_scales
+    ):
+        parser.error(
+            "--ddpr-respawn-snapshot-extrapolation-scales values must be positive"
+        )
+    trusted_anchor_shadow_radii = tuple(
+        float(value)
+        for value in str(args.trusted_fix_anchor_shadow_radii_m).split(",")
+        if value.strip()
+    )
+    if any(
+        not np.isfinite(value) or value <= 0.0
+        for value in trusted_anchor_shadow_radii
+    ):
+        parser.error("--trusted-fix-anchor-shadow-radii-m values must be positive")
+    trusted_anchor_float_line_radii = tuple(
+        float(value)
+        for value in str(args.trusted_fix_anchor_float_line_radii_m).split(",")
+        if value.strip()
+    )
+    if any(
+        not np.isfinite(value) or value <= 0.0
+        for value in trusted_anchor_float_line_radii
+    ):
+        parser.error(
+            "--trusted-fix-anchor-float-line-radii-m values must be positive"
+        )
+    if float(args.external_position_seed_separation_m) < 0.0:
+        parser.error("--external-position-seed-separation-m must be non-negative")
+    if int(args.external_position_seed_max) <= 0:
+        parser.error("--external-position-seed-max must be positive")
+    if int(args.external_position_seed_top_k) <= 0:
+        parser.error("--external-position-seed-top-k must be positive")
+    if float(args.widelane_basin_sigma_m) <= 0.0:
+        parser.error("--widelane-basin-sigma-m must be positive")
+    if int(args.widelane_integer_min_pairs) <= 0:
+        parser.error("--widelane-integer-min-pairs must be positive")
+    if float(args.widelane_integer_mismatch_penalty) < 0.0:
+        parser.error("--widelane-integer-mismatch-penalty must be non-negative")
+    if float(args.widelane_integer_missing_penalty) < 0.0:
+        parser.error("--widelane-integer-missing-penalty must be non-negative")
+    external_position_seeds = (
+        _load_diverse_position_seeds(
+            args.external_position_seeds_csv,
+            separation_m=float(args.external_position_seed_separation_m),
+            max_positions=int(args.external_position_seed_max),
+        )
+        if args.external_position_seeds_csv is not None
+        else {}
+    )
 
     city, run = str(args.run).split("/", 1)
     run_dir = args.data_root / city / run
     dd_systems = tuple(x.strip() for x in str(args.dd_systems).split(",") if x.strip())
+    dd_carrier_families = tuple(
+        x.strip()
+        for x in str(args.dd_carrier_families).split(",")
+        if x.strip()
+    )
     pr_systems = tuple(x.strip() for x in str(args.pr_systems).split(",") if x.strip())
-    data = PPCDatasetLoader(run_dir).load_experiment_data(
+    ppc_loader = PPCDatasetLoader(run_dir)
+    data = ppc_loader.load_experiment_data(
         max_epochs=int(args.max_epochs),
         include_sat_velocity=True,
         systems=("G", "R", "E", "C", "J"),
@@ -298,6 +660,25 @@ def main(argv: list[str] | None = None) -> None:
         base_position=np.asarray(data["base_ecef"], dtype=np.float64),
         allowed_systems=dd_systems,
         observation_cache=observation_cache,
+    )
+    widelane = (
+        WidelaneDDPseudorangeComputer(
+            run_dir / "base.obs",
+            run_dir / "rover.obs",
+            base_position=np.asarray(data["base_ecef"], dtype=np.float64),
+            allowed_systems=tuple(
+                system for system in dd_systems if system in ("G", "J")
+            ),
+            min_epochs=int(args.widelane_min_epochs),
+            max_std_cycles=float(args.widelane_max_std_cycles),
+            ratio_threshold=float(args.widelane_ratio_threshold),
+            min_fix_rate=float(args.widelane_min_fix_rate),
+        )
+        if (
+            args.enable_widelane_basin_evidence
+            or args.enable_widelane_integer_score
+        )
+        else None
     )
     float_kf = DDFloatKalmanFilter(
         np.asarray(wls_positions[0, :3], dtype=np.float64),
@@ -322,6 +703,8 @@ def main(argv: list[str] | None = None) -> None:
         diversity_radius_m=float(args.basin_diversity_radius_m),
         dedup_position_radius_m=float(args.basin_dedup_position_radius_m),
         source_reserve_fraction=float(args.basin_source_reserve_fraction),
+        protected_source_token=str(args.basin_protected_source_token),
+        protected_source_fraction=float(args.basin_protected_source_fraction),
     )
     policy_config = TrustedFixPolicyConfig(
         gamma_threshold=float(args.fix_gamma),
@@ -335,7 +718,11 @@ def main(argv: list[str] | None = None) -> None:
     commit_policy = TrustedFixCommitPolicy(policy_config)
     evidence_ledger = EvidenceLedger()
     traces: list[RTKEpochTrace] = []
-    basin_trace_rows: list[dict[str, object]] = []
+    basin_trace_rows = (
+        _StreamingCsvRows(args.out_basin_trace, _BASIN_TRACE_FIELDS)
+        if args.out_basin_trace is not None
+        else None
+    )
     integrity_satellite_rows: list[dict[str, object]] = []
     temporal_filter = (
         TemporalAmbiguityFilter(
@@ -380,6 +767,53 @@ def main(argv: list[str] | None = None) -> None:
         else None
     )
     times = np.asarray(data["times"], dtype=np.float64)
+    trusted_anchor_imu_guide = None
+    trusted_anchor_imu_heading_filter = None
+    trusted_anchor_imu_times = None
+    trusted_anchor_imu_accel = None
+    trusted_anchor_imu_gyro = None
+    trusted_anchor_imu_dt = None
+    trusted_anchor_ecef_to_lla_rad = None
+    trusted_anchor_ecef_to_enu_rotation = None
+    if args.trusted_fix_anchor_motion_fallback == "imu-preint":
+        from gnss_gpu.imu import ComplementaryHeadingFilter
+        from gnss_gpu.pf_imu_preint_adapter import (
+            ImuPreintPfGuide,
+            ecef_to_enu_rotation,
+            ecef_to_lla_rad,
+        )
+
+        imu_data = ppc_loader.load_imu()
+        trusted_anchor_imu_times = np.asarray(imu_data["time"], dtype=np.float64)
+        trusted_anchor_imu_accel = np.column_stack(
+            [imu_data["acc_x"], imu_data["acc_y"], imu_data["acc_z"]]
+        ).astype(np.float64)
+        trusted_anchor_imu_gyro = np.column_stack(
+            [imu_data["gyro_x"], imu_data["gyro_y"], imu_data["gyro_z"]]
+        ).astype(np.float64) * (math.pi / 180.0)
+        imu_dt_forward = np.diff(trusted_anchor_imu_times)
+        trusted_anchor_imu_dt = (
+            np.concatenate([imu_dt_forward, imu_dt_forward[-1:]])
+            if imu_dt_forward.size
+            else np.zeros(0, dtype=np.float64)
+        )
+        trusted_anchor_imu_heading_filter = ComplementaryHeadingFilter(
+            {
+                "tow": trusted_anchor_imu_times,
+                "gyro": trusted_anchor_imu_gyro,
+                "wheel_vel": np.full(trusted_anchor_imu_times.size, np.nan),
+            },
+            alpha=0.05,
+        )
+        trusted_anchor_imu_guide = ImuPreintPfGuide(
+            trusted_anchor_imu_heading_filter,
+            velocity_blend_alpha=float(
+                args.trusted_fix_anchor_imu_velocity_blend_alpha
+            ),
+            use_heading_uncertainty=True,
+        )
+        trusted_anchor_ecef_to_lla_rad = ecef_to_lla_rad
+        trusted_anchor_ecef_to_enu_rotation = ecef_to_enu_rotation
     respawn_subset_size = (
         int(args.ddpr_respawn_subset_size)
         if int(args.ddpr_respawn_subset_size) > 0
@@ -389,6 +823,11 @@ def main(argv: list[str] | None = None) -> None:
         int(args.ddpr_respawn_top_k)
         if int(args.ddpr_respawn_top_k) > 0
         else int(args.top_k)
+    )
+    trusted_anchor_shadow_subset_size = (
+        int(args.trusted_anchor_shadow_subset_size)
+        if int(args.trusted_anchor_shadow_subset_size) > 0
+        else respawn_subset_size
     )
     recovery_assignment_bank = (
         RecoveryAssignmentBank(
@@ -442,6 +881,15 @@ def main(argv: list[str] | None = None) -> None:
     n_completion_shadow_correct = 0
     n_position_shadow_epochs = 0
     n_position_shadow_correct = 0
+    n_snapshot_loo_shadow_epochs = 0
+    n_snapshot_loo_shadow_correct = 0
+    n_trusted_anchor_shadow_epochs = 0
+    n_trusted_anchor_shadow_correct = 0
+    n_external_position_shadow_epochs = 0
+    n_external_position_shadow_correct = 0
+    n_trusted_anchor_snapshot_resets = 0
+    n_trusted_refinement_shadow_epochs = 0
+    n_trusted_refinement_shadow_correct = 0
     n_subset_shadow_epochs = 0
     n_subset_shadow_correct = 0
     n_float_resets = 0
@@ -459,6 +907,8 @@ def main(argv: list[str] | None = None) -> None:
     n_integrity_map_disagreement = 0
     n_integrity_anchor_epochs = 0
     n_integrity_tdcp_intervals = 0
+    n_widelane_evidence_epochs = 0
+    n_widelane_integer_score_epochs = 0
     n_integrity_satellite_exclusions = 0
     n_basin_oracle_sub50 = 0
     n_integrity_ball_gamma99 = 0
@@ -472,12 +922,32 @@ def main(argv: list[str] | None = None) -> None:
     last_ddpr_pairs = 0
     last_ddpr_nis = float("nan")
     arc_reference_position = None
+    trusted_fix_anchor_position = None
+    trusted_fix_anchor_age_epochs = 0
+    trusted_fix_anchor_last_tdcp_velocity = None
+    trusted_fix_anchor_doppler_bias_samples: list[np.ndarray] = []
+    previous_scoring_ref = None
 
+    epoch_compute_seconds: list[float] = []
+    lambda_batch_calls = 0
+    lambda_batch_problems = 0
+    lambda_batch_compute_seconds = 0.0
+    rss_samples: list[int] = []
+    try:
+        import psutil
+
+        runtime_process = psutil.Process()
+    except ImportError:
+        runtime_process = None
+
+    epoch_loop_start = time.perf_counter()
     for i, tow in enumerate(times):
+        epoch_compute_start = time.perf_counter()
         evidence_start = len(evidence_ledger)
         observation_id = f"tow={float(tow):.3f}"
         epoch_dt = 0.0
         integrity_tdcp = None
+        trusted_anchor_imu_displacement = None
         current_tdcp_measurements = None
         if i > 0:
             epoch_dt = max(float(times[i] - times[i - 1]), 1e-3)
@@ -488,6 +958,7 @@ def main(argv: list[str] | None = None) -> None:
             integrity_filter is not None
             or args.ddpr_respawn_history_propagate_tdcp
             or satellite_arc_tracker is not None
+            or args.ddpr_respawn_trusted_fix_anchor_shadow_only
         ):
             current_tdcp_measurements = [
                 measurement
@@ -534,6 +1005,108 @@ def main(argv: list[str] | None = None) -> None:
                     n_rows=3,
                     log_evidence=basin_velocity_evidence.log_marginal,
                 )
+        if trusted_anchor_imu_guide is not None and i > 0:
+            trusted_anchor_imu_heading_filter.update_heading_gyro(
+                float(times[i - 1]), float(tow)
+            )
+            imu_start = int(
+                np.searchsorted(
+                    trusted_anchor_imu_times, float(times[i - 1]), side="left"
+                )
+            )
+            imu_stop = int(
+                np.searchsorted(trusted_anchor_imu_times, float(tow), side="left")
+            )
+            for imu_index in range(imu_start, imu_stop):
+                trusted_anchor_imu_guide.add_sample(
+                    trusted_anchor_imu_accel[imu_index],
+                    trusted_anchor_imu_gyro[imu_index],
+                    float(trusted_anchor_imu_dt[imu_index]),
+                )
+            imu_heading = None
+            if velocity is not None:
+                imu_lat, imu_lon = trusted_anchor_ecef_to_lla_rad(
+                    float_kf.position_ecef
+                )
+                imu_velocity_enu = trusted_anchor_ecef_to_enu_rotation(
+                    imu_lat, imu_lon
+                ) @ velocity
+                if math.hypot(
+                    float(imu_velocity_enu[0]), float(imu_velocity_enu[1])
+                ) > 0.5:
+                    imu_heading = math.atan2(
+                        float(imu_velocity_enu[0]), float(imu_velocity_enu[1])
+                    )
+            imu_velocity_guide, _imu_sigma = trusted_anchor_imu_guide.close_segment(
+                float_kf.position_ecef,
+                epoch_dt,
+                v_gnss_ecef=velocity,
+                spp_heading_rad=imu_heading,
+                spp_displacement_m=(
+                    None
+                    if velocity is None
+                    else float(np.linalg.norm(velocity * epoch_dt))
+                ),
+            )
+            trusted_anchor_imu_guide.reset_segment()
+            if imu_velocity_guide is not None:
+                trusted_anchor_imu_displacement = imu_velocity_guide * epoch_dt
+        if integrity_tdcp is not None and epoch_dt > 0.0:
+            trusted_fix_anchor_last_tdcp_velocity = (
+                integrity_tdcp.displacement_ecef_m / epoch_dt
+            )
+            if velocity is not None:
+                trusted_fix_anchor_doppler_bias_samples.append(
+                    velocity - trusted_fix_anchor_last_tdcp_velocity
+                )
+                bias_window = max(
+                    1, int(args.trusted_fix_anchor_doppler_bias_window)
+                )
+                trusted_fix_anchor_doppler_bias_samples = (
+                    trusted_fix_anchor_doppler_bias_samples[-bias_window:]
+                )
+        if trusted_fix_anchor_position is not None and i > 0:
+            if integrity_tdcp is not None:
+                trusted_fix_anchor_position = (
+                    trusted_fix_anchor_position
+                    + integrity_tdcp.displacement_ecef_m
+                )
+            elif (
+                args.trusted_fix_anchor_motion_fallback == "last-tdcp"
+                and trusted_fix_anchor_last_tdcp_velocity is not None
+            ):
+                trusted_fix_anchor_position = (
+                    trusted_fix_anchor_position
+                    + trusted_fix_anchor_last_tdcp_velocity * epoch_dt
+                )
+            elif (
+                args.trusted_fix_anchor_motion_fallback == "imu-preint"
+                and trusted_anchor_imu_displacement is not None
+            ):
+                trusted_fix_anchor_position = (
+                    trusted_fix_anchor_position
+                    + trusted_anchor_imu_displacement
+                )
+            elif (
+                args.trusted_fix_anchor_motion_fallback == "doppler-calibrated"
+                and velocity is not None
+                and trusted_fix_anchor_doppler_bias_samples
+            ):
+                doppler_bias = np.median(
+                    np.asarray(trusted_fix_anchor_doppler_bias_samples), axis=0
+                )
+                trusted_fix_anchor_position = (
+                    trusted_fix_anchor_position
+                    + (velocity - doppler_bias) * epoch_dt
+                )
+            elif (
+                args.trusted_fix_anchor_motion_fallback == "doppler"
+                and velocity is not None
+            ):
+                trusted_fix_anchor_position = (
+                    trusted_fix_anchor_position + velocity * epoch_dt
+                )
+            trusted_fix_anchor_age_epochs += 1
 
         measurements = _build_dd_measurements(
             np.asarray(data["sat_ecef"][i], dtype=np.float64),
@@ -549,11 +1122,38 @@ def main(argv: list[str] | None = None) -> None:
         dd_pr = pseudorange.compute_dd(
             float(tow), measurements, rover_position_approx=float_kf.position_ecef, min_common_sats=4
         )
-        dd_cp = carrier.compute_dd(
-            float(tow), measurements, rover_position_approx=float_kf.position_ecef, min_common_sats=4
-        )
+        if dd_carrier_families:
+            dd_cp = carrier.compute_dd_families(
+                float(tow),
+                measurements,
+                rover_position_approx=float_kf.position_ecef,
+                min_common_sats=4,
+                carrier_families=dd_carrier_families,
+            )
+        else:
+            dd_cp = carrier.compute_dd(
+                float(tow),
+                measurements,
+                rover_position_approx=float_kf.position_ecef,
+                min_common_sats=4,
+            )
+        wl_dd_pr = None
+        wl_stats = WidelaneDDStats(reason="disabled")
+        if widelane is not None:
+            wl_dd_pr, wl_stats = widelane.compute_dd(
+                float(tow),
+                measurements,
+                rover_position_approx=float_kf.position_ecef,
+                min_common_sats=4,
+                rover_weights=np.asarray(data["weights"][i], dtype=np.float64),
+            )
+            n_widelane_evidence_epochs += int(wl_dd_pr is not None)
         pr_diag = None
         cp_diag = None
+        ddpr_snapshot_position = None
+        ddpr_snapshot_diagnostics = None
+        ddpr_snapshot_loo_positions: list[np.ndarray] = []
+        ddpr_snapshot_pair_exclusion_positions: list[np.ndarray] = []
         if dd_pr is not None and int(dd_pr.n_dd) >= 3:
             pr_diag = float_kf.update_pseudorange(
                 dd_pr, sigma_pr_m=float(args.sigma_dd_pr_m)
@@ -570,6 +1170,93 @@ def main(argv: list[str] | None = None) -> None:
                     observation_id=observation_id,
                     n_rows=int(dd_pr.n_dd),
                 )
+            if (
+                args.ddpr_respawn_snapshot_seed_shadow_only
+                or args.ddpr_respawn_snapshot_seed_promote
+            ):
+                snapshot_dd_pr = dd_pr
+                if float(args.ddpr_snapshot_pair_residual_max_m) > 0.0:
+                    snapshot_dd_pr, _snapshot_gate = gate_dd_pseudorange(
+                        dd_pr,
+                        np.asarray(wls_positions[i, :3], dtype=np.float64),
+                        pair_residual_max_m=float(
+                            args.ddpr_snapshot_pair_residual_max_m
+                        ),
+                        min_pairs=3,
+                    )
+                if snapshot_dd_pr is not None:
+                    ddpr_snapshot_position, ddpr_snapshot_diagnostics = (
+                        dd_pseudorange_position_update(
+                            np.asarray(wls_positions[i, :3], dtype=np.float64),
+                            snapshot_dd_pr,
+                            DDWLSConfig(
+                                min_dd_pairs=3,
+                                dd_sigma_m=float(args.sigma_dd_pr_m),
+                                prior_sigma_m=float(args.ddpr_snapshot_prior_sigma_m),
+                                max_shift_m=float(args.ddpr_snapshot_max_shift_m),
+                                max_iter=8,
+                            ),
+                        )
+                    )
+                    if (
+                        trusted_fix_anchor_position is not None
+                        and float(args.trusted_fix_anchor_snapshot_reset_rms_m) > 0.0
+                        and bool(ddpr_snapshot_diagnostics.get("accepted", False))
+                        and float(ddpr_snapshot_diagnostics["final_rms_m"])
+                        <= float(args.trusted_fix_anchor_snapshot_reset_rms_m)
+                    ):
+                        trusted_fix_anchor_position = ddpr_snapshot_position.copy()
+                        trusted_fix_anchor_age_epochs = 0
+                        n_trusted_anchor_snapshot_resets += 1
+                if args.ddpr_respawn_snapshot_loo_shadow_only:
+                    for excluded_satellite in sorted(set(dd_pr.sat_ids)):
+                        loo_mask = np.asarray(
+                            [
+                                str(satellite) != excluded_satellite
+                                for satellite in dd_pr.sat_ids
+                            ],
+                            dtype=bool,
+                        )
+                        if int(np.count_nonzero(loo_mask)) < 3:
+                            continue
+                        loo_dd_pr = _subset_dd_result(dd_pr, loo_mask)
+                        loo_position, loo_diagnostics = dd_pseudorange_position_update(
+                            np.asarray(wls_positions[i, :3], dtype=np.float64),
+                            loo_dd_pr,
+                            DDWLSConfig(
+                                min_dd_pairs=3,
+                                dd_sigma_m=float(args.sigma_dd_pr_m),
+                                prior_sigma_m=float(args.ddpr_snapshot_prior_sigma_m),
+                                max_shift_m=float(args.ddpr_snapshot_max_shift_m),
+                                max_iter=8,
+                            ),
+                        )
+                        if bool(loo_diagnostics.get("accepted", False)):
+                            ddpr_snapshot_loo_positions.append(loo_position)
+                if args.ddpr_snapshot_pair_exclusion_position_shadow_only:
+                    nonpivot_satellites = sorted(set(dd_pr.sat_ids))
+                    for excluded_pair in itertools.combinations(nonpivot_satellites, 2):
+                        excluded = set(excluded_pair)
+                        pair_mask = np.asarray(
+                            [str(satellite) not in excluded for satellite in dd_pr.sat_ids],
+                            dtype=bool,
+                        )
+                        if int(np.count_nonzero(pair_mask)) < 3:
+                            continue
+                        pair_dd_pr = _subset_dd_result(dd_pr, pair_mask)
+                        pair_position, pair_diagnostics = dd_pseudorange_position_update(
+                            np.asarray(wls_positions[i, :3], dtype=np.float64),
+                            pair_dd_pr,
+                            DDWLSConfig(
+                                min_dd_pairs=3,
+                                dd_sigma_m=float(args.sigma_dd_pr_m),
+                                prior_sigma_m=float(args.ddpr_snapshot_prior_sigma_m),
+                                max_shift_m=float(args.ddpr_snapshot_max_shift_m),
+                                max_iter=8,
+                            ),
+                        )
+                        if bool(pair_diagnostics.get("accepted", False)):
+                            ddpr_snapshot_pair_exclusion_positions.append(pair_position)
         if dd_cp is not None and int(dd_cp.n_dd) >= 3:
             cp_diag = float_kf.update_carrier(
                 dd_cp,
@@ -682,6 +1369,19 @@ def main(argv: list[str] | None = None) -> None:
                 n_rows=int(dd_pr.n_dd),
                 log_evidence=basin_pr_evidence.log_marginal,
             )
+        if wl_dd_pr is not None and basin_pf.basins:
+            widelane_evidence = basin_pf.update_pseudorange(
+                wl_dd_pr,
+                sigma_pr_m=float(args.widelane_basin_sigma_m),
+            )
+            evidence_ledger.record(
+                epoch=i,
+                target="basin_pf",
+                source="widelane_dd_pseudorange",
+                observation_id=observation_id,
+                n_rows=int(wl_dd_pr.n_dd),
+                log_evidence=widelane_evidence.log_marginal,
+            )
         if dd_cp is not None and basin_pf.basins:
             basin_cp_evidence = basin_pf.update_fixed_carrier(
                 dd_cp,
@@ -725,6 +1425,15 @@ def main(argv: list[str] | None = None) -> None:
         completion_shadow_oracle_min_error = float("nan")
         position_shadow_candidates = 0
         position_shadow_oracle_min_error = float("nan")
+        snapshot_loo_shadow_candidates = 0
+        snapshot_loo_shadow_oracle_min_error = float("nan")
+        trusted_anchor_shadow_candidates = 0
+        trusted_anchor_shadow_oracle_min_error = float("nan")
+        trusted_anchor_shadow_states: list[BasinKalmanState] = []
+        external_position_shadow_candidates = 0
+        external_position_shadow_oracle_min_error = float("nan")
+        trusted_refinement_shadow_candidates = 0
+        trusted_refinement_shadow_oracle_min_error = float("nan")
         subset_shadow_candidates = 0
         subset_shadow_oracle_min_error = float("nan")
         arc_shadow_candidates = 0
@@ -742,8 +1451,15 @@ def main(argv: list[str] | None = None) -> None:
             )
             seed = float_kf.ambiguity_seed(current_keys)
             if len(seed.keys) >= int(args.subset_size):
-                order = np.argsort(np.diag(seed.qahat_cycles2))[: int(args.subset_size)]
-                order = np.sort(order)
+                order, _ranked = _select_ambiguity_indices(
+                    seed.keys,
+                    seed.qahat_cycles2,
+                    np.arange(len(seed.keys), dtype=np.int64),
+                    int(args.subset_size),
+                    prefer_multifrequency_pairs=bool(
+                        args.prefer_paired_multifrequency_subset
+                    ),
+                )
                 keys = tuple(seed.keys[j] for j in order)
                 ahat = seed.ahat_cycles[order]
                 qahat = seed.qahat_cycles2[np.ix_(order, order)]
@@ -799,6 +1515,18 @@ def main(argv: list[str] | None = None) -> None:
                 respawn_seed_radii,
                 direction_mode=str(args.ddpr_respawn_seed_directions),
             )
+            snapshot_promoted_position_index: int | None = None
+            if (
+                args.ddpr_respawn_snapshot_seed_promote
+                and ddpr_snapshot_position is not None
+                and ddpr_snapshot_diagnostics is not None
+                and bool(ddpr_snapshot_diagnostics.get("accepted", False))
+            ):
+                respawn_positions, snapshot_promoted_position_index = (
+                    _append_distinct_position_seed(
+                        respawn_positions, ddpr_snapshot_position
+                    )
+                )
             if recovery_position_bank is not None:
                 respawn_position_list = list(respawn_positions)
                 for history_position in recovery_position_bank.positions:
@@ -816,6 +1544,7 @@ def main(argv: list[str] | None = None) -> None:
             all_respawn_residuals: list[float] = []
             completion_shadow_states: list[BasinKalmanState] = []
             position_shadow_states: list[BasinKalmanState] = []
+            snapshot_loo_shadow_states: list[BasinKalmanState] = []
             subset_shadow_states: list[BasinKalmanState] = []
             arc_shadow_states: list[BasinKalmanState] = []
             arc_ranked_proposals: list[tuple[dict, float]] = []
@@ -1028,6 +1757,7 @@ def main(argv: list[str] | None = None) -> None:
                     all_respawn_residuals.append(float(distance))
                 n_respawn_assignment_candidates = len(replay_proposals)
             n_replayed_assignments = len(assignments)
+            prepared_respawns = []
             for position_index, respawn_position in enumerate(respawn_positions):
                 respawn_seed = ddpr_centered_ambiguity_seed(
                     dd_cp,
@@ -1046,16 +1776,42 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 if available.size < respawn_subset_size:
                     continue
-                variances = np.diag(respawn_seed.qahat_cycles2)[available]
-                ranked = available[np.argsort(variances)]
-                selected = ranked[:respawn_subset_size]
-                selected = np.sort(selected)
-                respawn_keys = tuple(respawn_seed.keys[j] for j in selected)
-                candidates, seed_residuals = integer_search(
-                    respawn_seed.ahat_cycles[selected],
-                    respawn_seed.qahat_cycles2[np.ix_(selected, selected)],
-                    n_candidates=respawn_top_k,
+                selected, ranked = _select_ambiguity_indices(
+                    respawn_seed.keys,
+                    respawn_seed.qahat_cycles2,
+                    available,
+                    respawn_subset_size,
+                    prefer_multifrequency_pairs=bool(
+                        args.prefer_paired_multifrequency_subset
+                    ),
                 )
+                respawn_keys = tuple(respawn_seed.keys[j] for j in selected)
+                prepared_respawns.append(
+                    (
+                        position_index,
+                        respawn_seed,
+                        selected,
+                        ranked,
+                        respawn_keys,
+                        respawn_seed.ahat_cycles[selected],
+                        respawn_seed.qahat_cycles2[np.ix_(selected, selected)],
+                    )
+                )
+            batch_compute_start = time.perf_counter()
+            batch_results = integer_search_batch(
+                [spec[5] for spec in prepared_respawns],
+                [spec[6] for spec in prepared_respawns],
+                n_candidates=respawn_top_k,
+                engine=str(args.lambda_engine),
+            )
+            if prepared_respawns:
+                lambda_batch_calls += 1
+                lambda_batch_problems += len(prepared_respawns)
+                lambda_batch_compute_seconds += time.perf_counter() - batch_compute_start
+            for spec, (candidates, seed_residuals) in zip(
+                prepared_respawns, batch_results
+            ):
+                position_index, respawn_seed, selected, ranked, respawn_keys = spec[:5]
                 for candidate in candidates:
                     position, covariance, _distance = condition_respawn_position(
                         respawn_seed, respawn_keys, candidate
@@ -1075,7 +1831,11 @@ def main(argv: list[str] | None = None) -> None:
                             accel_process_sigma_mps2=3.0,
                         )
                     )
-                    respawn_source_ids.append(f"{i}:{position_index}")
+                    respawn_source_ids.append(
+                        f"{i}:snapshot:{position_index}"
+                        if position_index == snapshot_promoted_position_index
+                        else f"{i}:{position_index}"
+                    )
                 all_respawn_residuals.extend(
                     float(value) for value in np.asarray(seed_residuals).reshape(-1)
                 )
@@ -1133,14 +1893,95 @@ def main(argv: list[str] | None = None) -> None:
                         subset_shadow_states.append(
                             BasinKalmanState.from_position(position, covariance)
                         )
+            shadow_position_specs: list[tuple[np.ndarray, int, bool]] = []
             if shadow_seed_radii:
-                shadow_positions = covariance_axis_position_seeds(
-                    ddpr_guard.mean[:3],
-                    ddpr_guard.covariance[:3, :3],
-                    shadow_seed_radii,
-                    direction_mode=str(args.ddpr_respawn_seed_directions),
-                )[1:]
-                for shadow_position in shadow_positions:
+                shadow_position_specs.extend(
+                    (position, respawn_top_k, False)
+                    for position in covariance_axis_position_seeds(
+                            ddpr_guard.mean[:3],
+                            ddpr_guard.covariance[:3, :3],
+                            shadow_seed_radii,
+                            direction_mode=str(args.ddpr_respawn_seed_directions),
+                        )[1:]
+                )
+            snapshot_shadow_top_k = (
+                int(args.ddpr_respawn_snapshot_shadow_top_k)
+                if int(args.ddpr_respawn_snapshot_shadow_top_k) > 0
+                else respawn_top_k
+            )
+            if (
+                ddpr_snapshot_position is not None
+                and ddpr_snapshot_diagnostics is not None
+                and bool(ddpr_snapshot_diagnostics.get("accepted", False))
+            ):
+                shadow_position_specs.append(
+                    (ddpr_snapshot_position, snapshot_shadow_top_k, False)
+                )
+                if snapshot_shadow_radii:
+                    shadow_position_specs.extend(
+                        (position, snapshot_shadow_top_k, False)
+                        for position in covariance_axis_position_seeds(
+                                ddpr_snapshot_position,
+                                ddpr_guard.covariance[:3, :3],
+                                snapshot_shadow_radii,
+                                direction_mode=str(args.ddpr_respawn_seed_directions),
+                            )[1:]
+                    )
+                snapshot_step = ddpr_snapshot_position - np.asarray(
+                    wls_positions[i, :3], dtype=np.float64
+                )
+                shadow_position_specs.extend(
+                    (
+                        ddpr_snapshot_position + scale * snapshot_step,
+                        snapshot_shadow_top_k,
+                        False,
+                    )
+                    for scale in snapshot_extrapolation_scales
+                )
+            shadow_position_specs.extend(
+                (position, snapshot_shadow_top_k, True)
+                for position in ddpr_snapshot_loo_positions
+            )
+            trusted_anchor_shadow_positions: list[np.ndarray] = []
+            if (
+                trusted_fix_anchor_position is not None
+                and not args.trusted_fix_anchor_float_line_promote
+            ):
+                trusted_anchor_shadow_positions.extend(
+                    covariance_axis_position_seeds(
+                        trusted_fix_anchor_position,
+                        ddpr_guard.covariance[:3, :3],
+                        trusted_anchor_shadow_radii,
+                        direction_mode=str(args.ddpr_respawn_seed_directions),
+                    )
+                )
+                float_line = float_kf.position_ecef - trusted_fix_anchor_position
+                float_line_norm = float(np.linalg.norm(float_line))
+                if float_line_norm > 1.0e-6:
+                    float_line_direction = float_line / float_line_norm
+                    for radius in trusted_anchor_float_line_radii:
+                        trusted_anchor_shadow_positions.extend(
+                            [
+                                trusted_fix_anchor_position
+                                + radius * float_line_direction,
+                                trusted_fix_anchor_position
+                                - radius * float_line_direction,
+                            ]
+                        )
+                shadow_position_specs.extend(
+                    (position, snapshot_shadow_top_k, False)
+                    for position in trusted_anchor_shadow_positions
+                )
+            if args.ddpr_respawn_wls_seed_shadow_only:
+                shadow_position_specs.append(
+                    (
+                        np.asarray(wls_positions[i, :3], dtype=np.float64),
+                        snapshot_shadow_top_k,
+                        False,
+                    )
+                )
+            if shadow_position_specs:
+                for shadow_position, shadow_top_k, is_snapshot_loo in shadow_position_specs:
                     shadow_seed = ddpr_centered_ambiguity_seed(
                         dd_cp,
                         shadow_position,
@@ -1158,23 +1999,36 @@ def main(argv: list[str] | None = None) -> None:
                     )
                     if available.size < respawn_subset_size:
                         continue
-                    variances = np.diag(shadow_seed.qahat_cycles2)[available]
-                    selected = np.sort(
-                        available[np.argsort(variances)[:respawn_subset_size]]
+                    selected, _ranked = _select_ambiguity_indices(
+                        shadow_seed.keys,
+                        shadow_seed.qahat_cycles2,
+                        available,
+                        respawn_subset_size,
+                        prefer_multifrequency_pairs=bool(
+                            args.prefer_paired_multifrequency_subset
+                        ),
                     )
                     shadow_keys = tuple(shadow_seed.keys[j] for j in selected)
                     shadow_candidates, _ = integer_search(
                         shadow_seed.ahat_cycles[selected],
                         shadow_seed.qahat_cycles2[np.ix_(selected, selected)],
-                        n_candidates=respawn_top_k,
+                        n_candidates=shadow_top_k,
                     )
                     for candidate in shadow_candidates:
                         position, covariance, _ = condition_respawn_position(
                             shadow_seed, shadow_keys, candidate
                         )
-                        position_shadow_states.append(
-                            BasinKalmanState.from_position(position, covariance)
-                        )
+                        shadow_state = BasinKalmanState.from_position(position, covariance)
+                        position_shadow_states.append(shadow_state)
+                        if is_snapshot_loo:
+                            snapshot_loo_shadow_states.append(shadow_state)
+                        if (
+                            any(
+                                shadow_position is trusted_position
+                                for trusted_position in trusted_anchor_shadow_positions
+                            )
+                        ):
+                            trusted_anchor_shadow_states.append(shadow_state)
             if recovery_assignment_bank is not None:
                 fresh_assignments = assignments[n_replayed_assignments:]
                 fresh_residuals = all_respawn_residuals[n_replayed_assignments:]
@@ -1231,6 +2085,26 @@ def main(argv: list[str] | None = None) -> None:
                     n_position_shadow_correct += int(
                         position_shadow_oracle_min_error < 0.5
                     )
+                if epoch_ref is not None and snapshot_loo_shadow_states:
+                    snapshot_loo_shadow_candidates = len(snapshot_loo_shadow_states)
+                    snapshot_loo_shadow_oracle_min_error = min(
+                        float(np.linalg.norm(state.mean[:3] - epoch_ref))
+                        for state in snapshot_loo_shadow_states
+                    )
+                    n_snapshot_loo_shadow_epochs += 1
+                    n_snapshot_loo_shadow_correct += int(
+                        snapshot_loo_shadow_oracle_min_error < 0.5
+                    )
+                if epoch_ref is not None and trusted_anchor_shadow_states:
+                    trusted_anchor_shadow_candidates = len(trusted_anchor_shadow_states)
+                    trusted_anchor_shadow_oracle_min_error = min(
+                        float(np.linalg.norm(state.mean[:3] - epoch_ref))
+                        for state in trusted_anchor_shadow_states
+                    )
+                    n_trusted_anchor_shadow_epochs += 1
+                    n_trusted_anchor_shadow_correct += int(
+                        trusted_anchor_shadow_oracle_min_error < 0.5
+                    )
                 if epoch_ref is not None and subset_shadow_states:
                     subset_shadow_candidates = len(subset_shadow_states)
                     subset_shadow_oracle_min_error = min(
@@ -1269,16 +2143,397 @@ def main(argv: list[str] | None = None) -> None:
                     n_respawn_candidates = len(assignments)
                     n_respawn_epochs += 1
 
-        posterior = basin_pf.posterior()
+        if (
+            (not respawn_triggered or args.trusted_fix_anchor_float_line_promote)
+            and args.ddpr_respawn_trusted_fix_anchor_shadow_only
+            and trusted_fix_anchor_position is not None
+            and dd_cp is not None
+            and dd_pr is not None
+            and int(dd_pr.n_dd) >= int(args.fix_min_dd_pairs)
+        ):
+            trusted_shadow_assignments: list[dict] = []
+            trusted_shadow_residuals: list[float] = []
+            trusted_shadow_source_ids: list[str] = []
+            shadow_top_k = (
+                int(args.ddpr_respawn_snapshot_shadow_top_k)
+                if int(args.ddpr_respawn_snapshot_shadow_top_k) > 0
+                else respawn_top_k
+            )
+            all_epoch_shadow_positions = list(
+                covariance_axis_position_seeds(
+                    trusted_fix_anchor_position,
+                    ddpr_guard.covariance[:3, :3],
+                    trusted_anchor_shadow_radii,
+                    direction_mode=str(args.ddpr_respawn_seed_directions),
+                )
+            )
+            float_line = float_kf.position_ecef - trusted_fix_anchor_position
+            float_line_norm = float(np.linalg.norm(float_line))
+            if float_line_norm > 1.0e-6:
+                float_line_direction = float_line / float_line_norm
+                for radius in trusted_anchor_float_line_radii:
+                    all_epoch_shadow_positions.extend(
+                        [
+                            trusted_fix_anchor_position
+                            + radius * float_line_direction,
+                            trusted_fix_anchor_position
+                            - radius * float_line_direction,
+                        ]
+                    )
+            for shadow_position_index, shadow_position in enumerate(
+                all_epoch_shadow_positions
+            ):
+                shadow_seed = ddpr_centered_ambiguity_seed(
+                    dd_cp,
+                    shadow_position,
+                    ddpr_guard.covariance[:3, :3],
+                    sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+                )
+                available = np.asarray(
+                    [
+                        index
+                        for index, key in enumerate(shadow_seed.keys)
+                        if key in generations
+                    ],
+                    dtype=np.int64,
+                )
+                if available.size < respawn_subset_size:
+                    continue
+                selected, _ranked = _select_ambiguity_indices(
+                    shadow_seed.keys,
+                    shadow_seed.qahat_cycles2,
+                    available,
+                    respawn_subset_size,
+                    prefer_multifrequency_pairs=bool(
+                        args.prefer_paired_multifrequency_subset
+                    ),
+                )
+                shadow_keys = tuple(shadow_seed.keys[index] for index in selected)
+                shadow_candidates, shadow_residuals = integer_search(
+                    shadow_seed.ahat_cycles[selected],
+                    shadow_seed.qahat_cycles2[np.ix_(selected, selected)],
+                    n_candidates=shadow_top_k,
+                )
+                for candidate_index, (candidate, residual) in enumerate(
+                    zip(shadow_candidates, shadow_residuals)
+                ):
+                    position, covariance, _ = condition_respawn_position(
+                        shadow_seed, shadow_keys, candidate
+                    )
+                    trusted_anchor_shadow_states.append(
+                        BasinKalmanState.from_position(position, covariance)
+                    )
+                    trusted_shadow_assignments.append(
+                        {
+                            (key, generations[key]): int(value)
+                            for key, value in zip(shadow_keys, candidate)
+                        }
+                    )
+                    trusted_shadow_residuals.append(float(residual))
+                    trusted_shadow_source_ids.append(
+                        f"{i}:trusted_float_line:{shadow_position_index}:{candidate_index}"
+                    )
+            epoch_ref = truth.get(round(float(tow), 1))
+            if epoch_ref is not None and trusted_anchor_shadow_states:
+                trusted_anchor_shadow_candidates = len(trusted_anchor_shadow_states)
+                trusted_anchor_shadow_oracle_min_error = min(
+                    float(np.linalg.norm(state.mean[:3] - epoch_ref))
+                    for state in trusted_anchor_shadow_states
+                )
+                n_trusted_anchor_shadow_epochs += 1
+                n_trusted_anchor_shadow_correct += int(
+                    trusted_anchor_shadow_oracle_min_error < 0.5
+                )
+            if (
+                args.trusted_fix_anchor_float_line_promote
+                and trusted_shadow_assignments
+            ):
+                basin_pf.spawn(
+                    trusted_shadow_assignments,
+                    trusted_anchor_shadow_states,
+                    prior_mass=float(args.ddpr_respawn_mass),
+                    candidate_log_weights=(
+                        -0.5 * np.asarray(trusted_shadow_residuals, dtype=np.float64)
+                        if args.ddpr_respawn_use_lambda_prior
+                        else None
+                    ),
+                    candidate_source_ids=trusted_shadow_source_ids,
+                )
+
+        if (
+            i in external_position_seeds
+            and dd_cp is not None
+            and dd_pr is not None
+            and int(dd_pr.n_dd) >= int(args.fix_min_dd_pairs)
+        ):
+            external_assignments: list[dict] = []
+            external_states: list[BasinKalmanState] = []
+            external_residuals: list[float] = []
+            external_source_ids: list[str] = []
+            for position_index, seed_position in enumerate(
+                external_position_seeds[i]
+            ):
+                external_seed = ddpr_centered_ambiguity_seed(
+                    dd_cp,
+                    seed_position,
+                    ddpr_guard.covariance[:3, :3],
+                    sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+                )
+                available = np.asarray(
+                    [
+                        index
+                        for index, key in enumerate(external_seed.keys)
+                        if key in generations
+                    ],
+                    dtype=np.int64,
+                )
+                if available.size < respawn_subset_size:
+                    continue
+                selected, _ranked = _select_ambiguity_indices(
+                    external_seed.keys,
+                    external_seed.qahat_cycles2,
+                    available,
+                    respawn_subset_size,
+                    prefer_multifrequency_pairs=bool(
+                        args.prefer_paired_multifrequency_subset
+                    ),
+                )
+                keys = tuple(external_seed.keys[index] for index in selected)
+                if args.external_position_seed_mode == "rounded-direct":
+                    rounded = np.rint(external_seed.ahat_cycles[selected])
+                    selected_variances = np.diag(
+                        external_seed.qahat_cycles2
+                    )[selected]
+                    normalized = (
+                        rounded - external_seed.ahat_cycles[selected]
+                    ) / np.sqrt(
+                        np.maximum(selected_variances, 1.0e-12)
+                    )
+                    candidates = np.asarray([rounded], dtype=np.float64)
+                    residuals = np.asarray(
+                        [float(normalized @ normalized)], dtype=np.float64
+                    )
+                else:
+                    candidates, residuals = integer_search(
+                        external_seed.ahat_cycles[selected],
+                        external_seed.qahat_cycles2[np.ix_(selected, selected)],
+                        n_candidates=int(args.external_position_seed_top_k),
+                    )
+                for candidate_index, (candidate, residual) in enumerate(
+                    zip(candidates, residuals)
+                ):
+                    if args.external_position_seed_mode == "rounded-direct":
+                        position = np.asarray(seed_position, dtype=np.float64)
+                        covariance = external_seed.position_covariance
+                    else:
+                        position, covariance, _distance = condition_respawn_position(
+                            external_seed, keys, candidate
+                        )
+                    external_assignments.append(
+                        {
+                            (key, generations[key]): int(value)
+                            for key, value in zip(keys, candidate)
+                        }
+                    )
+                    external_states.append(
+                        BasinKalmanState.from_position(
+                            position,
+                            covariance,
+                            velocity_ecef=ddpr_guard.mean[3:6],
+                            velocity_sigma_mps=1.0,
+                            accel_process_sigma_mps2=3.0,
+                        )
+                    )
+                    external_residuals.append(float(residual))
+                    external_source_ids.append(
+                        f"{i}:external_position:{position_index}:{candidate_index}"
+                    )
+            epoch_ref = truth.get(round(float(tow), 1))
+            if epoch_ref is not None and external_states:
+                external_position_shadow_candidates = len(external_states)
+                external_position_shadow_oracle_min_error = min(
+                    float(np.linalg.norm(state.mean[:3] - epoch_ref))
+                    for state in external_states
+                )
+                n_external_position_shadow_epochs += 1
+                n_external_position_shadow_correct += int(
+                    external_position_shadow_oracle_min_error < 0.5
+                )
+            if args.external_position_seeds_promote and external_assignments:
+                basin_pf.spawn(
+                    external_assignments,
+                    external_states,
+                    prior_mass=float(args.ddpr_respawn_mass),
+                    candidate_log_weights=(
+                        -0.5 * np.asarray(external_residuals, dtype=np.float64)
+                        if args.ddpr_respawn_use_lambda_prior
+                        else None
+                    ),
+                    candidate_source_ids=external_source_ids,
+                )
+
+        if (
+            int(args.trusted_anchor_refinement_seeds) > 0
+            and args.ddpr_respawn_trusted_fix_anchor_shadow_only
+            and trusted_fix_anchor_position is not None
+            and dd_cp is not None
+            and dd_pr is not None
+            and int(dd_pr.n_dd) >= int(args.fix_min_dd_pairs)
+        ):
+            refinement_seed = ddpr_centered_ambiguity_seed(
+                dd_cp,
+                trusted_fix_anchor_position,
+                ddpr_guard.covariance[:3, :3],
+                sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+            )
+            refinement_available = np.asarray(
+                [
+                    index
+                    for index, key in enumerate(refinement_seed.keys)
+                    if key in generations
+                ],
+                dtype=np.int64,
+            )
+            if refinement_available.size >= trusted_anchor_shadow_subset_size:
+                refinement_variances = np.diag(
+                    refinement_seed.qahat_cycles2
+                )[refinement_available]
+                refinement_selected = np.sort(
+                    refinement_available[
+                        np.argsort(refinement_variances)[
+                            :trusted_anchor_shadow_subset_size
+                        ]
+                    ]
+                )
+                refinement_keys = tuple(
+                    refinement_seed.keys[index] for index in refinement_selected
+                )
+                initial_candidates, _ = integer_search(
+                    refinement_seed.ahat_cycles[refinement_selected],
+                    refinement_seed.qahat_cycles2[
+                        np.ix_(refinement_selected, refinement_selected)
+                    ],
+                    n_candidates=int(args.trusted_anchor_refinement_seeds),
+                )
+                refinement_states: list[BasinKalmanState] = []
+                for initial_candidate in initial_candidates:
+                    refined_seed_position, _covariance, _ = condition_respawn_position(
+                        refinement_seed, refinement_keys, initial_candidate
+                    )
+                    refined_seed = ddpr_centered_ambiguity_seed(
+                        dd_cp,
+                        refined_seed_position,
+                        ddpr_guard.covariance[:3, :3],
+                        sigma_cp_cycles=float(args.sigma_fixed_cp_cycles),
+                    )
+                    refined_available = np.asarray(
+                        [
+                            index
+                            for index, key in enumerate(refined_seed.keys)
+                            if key in generations
+                        ],
+                        dtype=np.int64,
+                    )
+                    if refined_available.size < trusted_anchor_shadow_subset_size:
+                        continue
+                    refined_variances = np.diag(
+                        refined_seed.qahat_cycles2
+                    )[refined_available]
+                    refined_selected = np.sort(
+                        refined_available[
+                            np.argsort(refined_variances)[
+                                :trusted_anchor_shadow_subset_size
+                            ]
+                        ]
+                    )
+                    refined_keys = tuple(
+                        refined_seed.keys[index] for index in refined_selected
+                    )
+                    refined_candidates, _ = integer_search(
+                        refined_seed.ahat_cycles[refined_selected],
+                        refined_seed.qahat_cycles2[
+                            np.ix_(refined_selected, refined_selected)
+                        ],
+                        n_candidates=int(args.trusted_anchor_refinement_top_k),
+                    )
+                    for refined_candidate in refined_candidates:
+                        position, covariance, _ = condition_respawn_position(
+                            refined_seed, refined_keys, refined_candidate
+                        )
+                        refinement_states.append(
+                            BasinKalmanState.from_position(position, covariance)
+                        )
+                epoch_ref = truth.get(round(float(tow), 1))
+                if epoch_ref is not None and refinement_states:
+                    trusted_refinement_shadow_candidates = len(refinement_states)
+                    trusted_refinement_shadow_oracle_min_error = min(
+                        float(np.linalg.norm(state.mean[:3] - epoch_ref))
+                        for state in refinement_states
+                    )
+                    n_trusted_refinement_shadow_epochs += 1
+                    n_trusted_refinement_shadow_correct += int(
+                        trusted_refinement_shadow_oracle_min_error < 0.5
+                    )
+
+        if (
+            args.enable_widelane_integer_score
+            and wl_stats.fixed_dd_ambiguities
+            and basin_pf.basins
+        ):
+            score_by_id: dict[str, float] = {}
+            min_pairs = int(args.widelane_integer_min_pairs)
+            for basin in basin_pf.basins:
+                n_pairs, squared_residual = _widelane_integer_residual(
+                    basin.assignment,
+                    wl_stats.fixed_dd_ambiguities,
+                )
+                if n_pairs >= min_pairs:
+                    score_by_id[basin.basin_id] = -float(
+                        args.widelane_integer_mismatch_penalty
+                    ) * squared_residual
+                else:
+                    score_by_id[basin.basin_id] = -float(
+                        args.widelane_integer_missing_penalty
+                    )
+            basin_pf.update_log_likelihoods(score_by_id)
+            n_widelane_integer_score_epochs += 1
+            evidence_ledger.record(
+                epoch=i,
+                target="basin_pf",
+                source="widelane_integer_consistency",
+                observation_id=observation_id,
+                n_rows=len(wl_stats.fixed_dd_ambiguities),
+            )
+
+        primary_source_token = (
+            str(args.basin_protected_source_token)
+            if float(args.basin_protected_source_fraction) > 0.0
+            else ""
+        )
+        posterior = (
+            basin_pf.posterior_excluding_source_only(primary_source_token)
+            if primary_source_token
+            else basin_pf.posterior()
+        )
         position_cluster = basin_pf.position_cluster_posterior(
             radius_m=float(args.position_cluster_radius_m)
         )
         max_gamma = max(max_gamma, float(posterior.gamma))
         map_candidates = [
-            basin for basin in basin_pf.basins if basin.assignment == posterior.map_assignment
+            basin
+            for basin in basin_pf.basins
+            if basin.assignment == posterior.map_assignment
+            and not (
+                primary_source_token
+                and basin.proposal_sources
+                and all(
+                    primary_source_token in source
+                    for source in basin.proposal_sources
+                )
+            )
         ]
         map_basin = max(map_candidates, key=lambda basin: basin.log_weight) if map_candidates else None
-        if args.out_basin_trace is not None:
+        if basin_trace_rows is not None:
             for basin in basin_pf.basins:
                 basin_trace_rows.append(
                     {
@@ -1298,6 +2553,7 @@ def main(argv: list[str] | None = None) -> None:
                         "velocity_z": float(basin.conditional.mean[5]),
                         "birth_epoch": int(basin.birth_epoch),
                         "lineage": "|".join(basin.lineage),
+                        "proposal_sources": "|".join(basin.proposal_sources),
                     }
                 )
         temporal_posterior = None
@@ -1593,6 +2849,63 @@ def main(argv: list[str] | None = None) -> None:
             if ref is not None and np.all(np.isfinite(ref))
             else float("nan")
         )
+        ddpr_snapshot_error = (
+            float(np.linalg.norm(ddpr_snapshot_position - ref))
+            if ddpr_snapshot_position is not None and ref is not None
+            else float("nan")
+        )
+        ddpr_snapshot_pair_exclusion_oracle_error = (
+            min(
+                float(np.linalg.norm(position - ref))
+                for position in ddpr_snapshot_pair_exclusion_positions
+            )
+            if ddpr_snapshot_pair_exclusion_positions and ref is not None
+            else float("nan")
+        )
+        trusted_fix_anchor_error = (
+            float(np.linalg.norm(trusted_fix_anchor_position - ref))
+            if trusted_fix_anchor_position is not None and ref is not None
+            else float("nan")
+        )
+        truth_displacement = (
+            ref - previous_scoring_ref
+            if ref is not None and previous_scoring_ref is not None
+            else None
+        )
+        tdcp_truth_displacement_error = (
+            float(
+                np.linalg.norm(
+                    integrity_tdcp.displacement_ecef_m - truth_displacement
+                )
+            )
+            if integrity_tdcp is not None and truth_displacement is not None
+            else float("nan")
+        )
+        doppler_truth_displacement_error = (
+            float(np.linalg.norm(velocity * epoch_dt - truth_displacement))
+            if velocity is not None and truth_displacement is not None
+            else float("nan")
+        )
+        imu_truth_displacement_error = (
+            float(
+                np.linalg.norm(
+                    trusted_anchor_imu_displacement - truth_displacement
+                )
+            )
+            if trusted_anchor_imu_displacement is not None
+            and truth_displacement is not None
+            else float("nan")
+        )
+        trusted_fix_anchor_age_for_row = (
+            int(trusted_fix_anchor_age_epochs)
+            if trusted_fix_anchor_position is not None
+            else -1
+        )
+        wls_error = (
+            float(np.linalg.norm(np.asarray(wls_positions[i, :3]) - ref))
+            if ref is not None
+            else float("nan")
+        )
         map_error = (
             float(np.linalg.norm(map_basin.conditional.mean[:3] - ref))
             if map_basin is not None and ref is not None
@@ -1669,6 +2982,9 @@ def main(argv: list[str] | None = None) -> None:
                 n_correct_fix += 1
             else:
                 n_false_fix += 1
+            if args.ddpr_respawn_trusted_fix_anchor_shadow_only:
+                trusted_fix_anchor_position = output_position.copy()
+                trusted_fix_anchor_age_epochs = 0
         traces.append(
             RTKEpochTrace(
                 epoch=i,
@@ -1830,6 +3146,71 @@ def main(argv: list[str] | None = None) -> None:
                 "dd_cp_nis": (
                     float("nan") if cp_diag is None else cp_diag.normalized_innovation_sq
                 ),
+                "ddpr_snapshot_error_m": ddpr_snapshot_error,
+                "wls_error_m": wls_error,
+                "ddpr_snapshot_accepted": int(
+                    ddpr_snapshot_diagnostics is not None
+                    and bool(ddpr_snapshot_diagnostics.get("accepted", False))
+                ),
+                "ddpr_snapshot_initial_rms_m": (
+                    float("nan")
+                    if ddpr_snapshot_diagnostics is None
+                    else float(ddpr_snapshot_diagnostics["initial_rms_m"])
+                ),
+                "ddpr_snapshot_final_rms_m": (
+                    float("nan")
+                    if ddpr_snapshot_diagnostics is None
+                    else float(ddpr_snapshot_diagnostics["final_rms_m"])
+                ),
+                "ddpr_snapshot_shift_m": (
+                    float("nan")
+                    if ddpr_snapshot_diagnostics is None
+                    else float(ddpr_snapshot_diagnostics["shift_m"])
+                ),
+                "tdcp_truth_displacement_error_m": tdcp_truth_displacement_error,
+                "doppler_truth_displacement_error_m": doppler_truth_displacement_error,
+                "imu_truth_displacement_error_m": imu_truth_displacement_error,
+                "ddpr_snapshot_pair_exclusion_positions": len(
+                    ddpr_snapshot_pair_exclusion_positions
+                ),
+                "ddpr_snapshot_pair_exclusion_oracle_error_m": (
+                    ddpr_snapshot_pair_exclusion_oracle_error
+                ),
+                "trusted_fix_anchor_error_m": trusted_fix_anchor_error,
+                "trusted_fix_anchor_age_epochs": trusted_fix_anchor_age_for_row,
+                "trusted_fix_anchor_ecef_x": (
+                    float("nan")
+                    if trusted_fix_anchor_position is None
+                    else float(trusted_fix_anchor_position[0])
+                ),
+                "trusted_fix_anchor_ecef_y": (
+                    float("nan")
+                    if trusted_fix_anchor_position is None
+                    else float(trusted_fix_anchor_position[1])
+                ),
+                "trusted_fix_anchor_ecef_z": (
+                    float("nan")
+                    if trusted_fix_anchor_position is None
+                    else float(trusted_fix_anchor_position[2])
+                ),
+                "ddpr_snapshot_ecef_x": (
+                    float("nan")
+                    if ddpr_snapshot_position is None
+                    else float(ddpr_snapshot_position[0])
+                ),
+                "ddpr_snapshot_ecef_y": (
+                    float("nan")
+                    if ddpr_snapshot_position is None
+                    else float(ddpr_snapshot_position[1])
+                ),
+                "ddpr_snapshot_ecef_z": (
+                    float("nan")
+                    if ddpr_snapshot_position is None
+                    else float(ddpr_snapshot_position[2])
+                ),
+                "ddpr_guard_ecef_x": float(ddpr_guard.mean[0]),
+                "ddpr_guard_ecef_y": float(ddpr_guard.mean[1]),
+                "ddpr_guard_ecef_z": float(ddpr_guard.mean[2]),
                 "ambiguities_reset": (
                     0 if cp_diag is None else int(cp_diag.ambiguities_reset)
                 ),
@@ -1857,6 +3238,14 @@ def main(argv: list[str] | None = None) -> None:
                 "completion_shadow_oracle_min_error_m": completion_shadow_oracle_min_error,
                 "position_shadow_candidates": position_shadow_candidates,
                 "position_shadow_oracle_min_error_m": position_shadow_oracle_min_error,
+                "snapshot_loo_shadow_candidates": snapshot_loo_shadow_candidates,
+                "snapshot_loo_shadow_oracle_min_error_m": snapshot_loo_shadow_oracle_min_error,
+                "trusted_anchor_shadow_candidates": trusted_anchor_shadow_candidates,
+                "trusted_anchor_shadow_oracle_min_error_m": trusted_anchor_shadow_oracle_min_error,
+                "external_position_shadow_candidates": external_position_shadow_candidates,
+                "external_position_shadow_oracle_min_error_m": external_position_shadow_oracle_min_error,
+                "trusted_refinement_shadow_candidates": trusted_refinement_shadow_candidates,
+                "trusted_refinement_shadow_oracle_min_error_m": trusted_refinement_shadow_oracle_min_error,
                 "subset_shadow_candidates": subset_shadow_candidates,
                 "subset_shadow_oracle_min_error_m": subset_shadow_oracle_min_error,
                 "arc_shadow_candidates": arc_shadow_candidates,
@@ -1865,10 +3254,20 @@ def main(argv: list[str] | None = None) -> None:
                 "arc_shadow_compute_seconds": arc_shadow_compute_seconds,
                 "arc_completion_search_workspaces": arc_completion_search_workspaces,
                 "respawn_excluded_satellite": respawn_excluded_satellite,
+                "widelane_candidate_pairs": int(wl_stats.n_candidate_pairs),
+                "widelane_fixed_pairs": int(wl_stats.n_fixed_pairs),
+                "widelane_dd_pairs": int(wl_stats.n_dd),
+                "widelane_fix_rate": float(wl_stats.fix_rate),
+                "widelane_reason": str(wl_stats.reason),
                 "n_dd_pr": 0 if dd_pr is None else int(dd_pr.n_dd),
                 "n_dd_cp": 0 if dd_cp is None else int(dd_cp.n_dd),
             }
         )
+
+        previous_scoring_ref = None if ref is None else ref.copy()
+        epoch_compute_seconds.append(time.perf_counter() - epoch_compute_start)
+        if runtime_process is not None:
+            rss_samples.append(int(runtime_process.memory_info().rss))
 
     evidence_audit = evidence_ledger.audit()
     replayed = replay_fix_decisions(traces, policy_config)
@@ -1879,11 +3278,54 @@ def main(argv: list[str] | None = None) -> None:
     if replay_mismatches:
         raise RuntimeError(f"online/replay FIX mismatch count: {replay_mismatches}")
     false_rate = 100.0 * n_false_fix / n_declared_fix if n_declared_fix else 0.0
+    runtime_epoch_loop_seconds = time.perf_counter() - epoch_loop_start
+    runtime_total_seconds = time.perf_counter() - runtime_start
+    runtime_epochs_per_second = (
+        len(rows) / runtime_epoch_loop_seconds
+        if runtime_epoch_loop_seconds > 0 else 0.0
+    )
     summary = {
         "run": str(args.run),
         "n_epochs": len(rows),
         "subset_size": int(args.subset_size),
         "top_k": int(args.top_k),
+        "lambda_engine": str(args.lambda_engine),
+        "runtime_mode": str(args.runtime_mode),
+        "lambda_batch_calls": int(lambda_batch_calls),
+        "lambda_batch_problems": int(lambda_batch_problems),
+        "lambda_batch_compute_seconds": float(lambda_batch_compute_seconds),
+        "runtime_seconds": float(runtime_epoch_loop_seconds),
+        "runtime_total_seconds": float(runtime_total_seconds),
+        "runtime_epochs_per_second": float(runtime_epochs_per_second),
+        "runtime_total_epochs_per_second": (
+            float(len(rows) / runtime_total_seconds)
+            if runtime_total_seconds > 0 else 0.0
+        ),
+        "epoch_compute_p99_seconds": (
+            float(np.percentile(epoch_compute_seconds, 99.0))
+            if epoch_compute_seconds else 0.0
+        ),
+        "rss_start_bytes": int(rss_samples[0]) if rss_samples else None,
+        "rss_end_bytes": int(rss_samples[-1]) if rss_samples else None,
+        "rss_peak_bytes": int(max(rss_samples)) if rss_samples else None,
+        "rss_growth_bytes": (
+            int(rss_samples[-1] - rss_samples[0]) if rss_samples else None
+        ),
+        "rss_last_quarter_growth_bytes": (
+            int(rss_samples[-1] - rss_samples[(3 * len(rss_samples)) // 4])
+            if rss_samples else None
+        ),
+        "rss_second_half_slope_bytes_per_epoch": (
+            float(
+                np.polyfit(
+                    np.arange(len(rss_samples) // 2, len(rss_samples)),
+                    np.asarray(rss_samples[len(rss_samples) // 2 :], dtype=np.float64),
+                    1,
+                )[0]
+            )
+            if len(rss_samples) >= 4 else None
+        ),
+        "dd_carrier_families": list(dd_carrier_families),
         "basin_diversity_reserve_fraction": float(
             args.basin_diversity_reserve_fraction
         ),
@@ -1894,6 +3336,10 @@ def main(argv: list[str] | None = None) -> None:
             else None
         ),
         "basin_source_reserve_fraction": float(args.basin_source_reserve_fraction),
+        "basin_protected_source_token": str(args.basin_protected_source_token),
+        "basin_protected_source_fraction": float(
+            args.basin_protected_source_fraction
+        ),
         "fix_gamma_threshold": float(args.fix_gamma),
         "fix_min_streak": int(args.fix_streak),
         "fix_float_consistency_m": float(args.fix_consistency_m),
@@ -1901,6 +3347,29 @@ def main(argv: list[str] | None = None) -> None:
         "fix_min_dd_pairs": int(args.fix_min_dd_pairs),
         "fix_max_ddpr_age_epochs": int(args.fix_max_ddpr_age_epochs),
         "sigma_basin_dd_pr_m": float(basin_ddpr_sigma),
+        "widelane_basin_evidence_enabled": bool(
+            args.enable_widelane_basin_evidence
+        ),
+        "widelane_min_epochs": int(args.widelane_min_epochs),
+        "widelane_max_std_cycles": float(args.widelane_max_std_cycles),
+        "widelane_ratio_threshold": float(args.widelane_ratio_threshold),
+        "widelane_min_fix_rate": float(args.widelane_min_fix_rate),
+        "widelane_basin_sigma_m": float(args.widelane_basin_sigma_m),
+        "widelane_evidence_epochs": int(n_widelane_evidence_epochs),
+        "widelane_integer_score_enabled": bool(
+            args.enable_widelane_integer_score
+        ),
+        "widelane_integer_min_pairs": int(args.widelane_integer_min_pairs),
+        "widelane_integer_mismatch_penalty": float(
+            args.widelane_integer_mismatch_penalty
+        ),
+        "widelane_integer_missing_penalty": float(
+            args.widelane_integer_missing_penalty
+        ),
+        "widelane_integer_score_epochs": int(n_widelane_integer_score_epochs),
+        "prefer_paired_multifrequency_subset": bool(
+            args.prefer_paired_multifrequency_subset
+        ),
         "birth_epochs": int(n_birth_epochs),
         "ddpr_respawn_enabled": bool(args.enable_ddpr_respawn),
         "ddpr_respawn_subset_size": int(respawn_subset_size),
@@ -1909,6 +3378,87 @@ def main(argv: list[str] | None = None) -> None:
         "ddpr_respawn_seed_radii_m": list(respawn_seed_radii),
         "ddpr_respawn_seed_directions": str(args.ddpr_respawn_seed_directions),
         "ddpr_respawn_shadow_seed_radii_m": list(shadow_seed_radii),
+        "ddpr_respawn_snapshot_seed_shadow_only": bool(
+            args.ddpr_respawn_snapshot_seed_shadow_only
+        ),
+        "ddpr_respawn_snapshot_seed_promote": bool(
+            args.ddpr_respawn_snapshot_seed_promote
+        ),
+        "ddpr_respawn_snapshot_loo_shadow_only": bool(
+            args.ddpr_respawn_snapshot_loo_shadow_only
+        ),
+        "ddpr_snapshot_pair_exclusion_position_shadow_only": bool(
+            args.ddpr_snapshot_pair_exclusion_position_shadow_only
+        ),
+        "ddpr_respawn_wls_seed_shadow_only": bool(
+            args.ddpr_respawn_wls_seed_shadow_only
+        ),
+        "ddpr_respawn_trusted_fix_anchor_shadow_only": bool(
+            args.ddpr_respawn_trusted_fix_anchor_shadow_only
+        ),
+        "trusted_fix_anchor_snapshot_reset_rms_m": float(
+            args.trusted_fix_anchor_snapshot_reset_rms_m
+        ),
+        "trusted_fix_anchor_motion_fallback": str(
+            args.trusted_fix_anchor_motion_fallback
+        ),
+        "trusted_fix_anchor_doppler_bias_window": int(
+            args.trusted_fix_anchor_doppler_bias_window
+        ),
+        "trusted_fix_anchor_shadow_radii_m": list(trusted_anchor_shadow_radii),
+        "trusted_fix_anchor_float_line_radii_m": list(
+            trusted_anchor_float_line_radii
+        ),
+        "trusted_fix_anchor_float_line_promote": bool(
+            args.trusted_fix_anchor_float_line_promote
+        ),
+        "external_position_seeds_csv": (
+            None
+            if args.external_position_seeds_csv is None
+            else str(args.external_position_seeds_csv)
+        ),
+        "external_position_seed_separation_m": float(
+            args.external_position_seed_separation_m
+        ),
+        "external_position_seed_max": int(args.external_position_seed_max),
+        "external_position_seed_top_k": int(args.external_position_seed_top_k),
+        "external_position_seed_mode": str(args.external_position_seed_mode),
+        "external_position_seeds_promote": bool(
+            args.external_position_seeds_promote
+        ),
+        "trusted_fix_anchor_imu_velocity_blend_alpha": float(
+            args.trusted_fix_anchor_imu_velocity_blend_alpha
+        ),
+        "trusted_anchor_refinement_seeds": int(
+            args.trusted_anchor_refinement_seeds
+        ),
+        "trusted_anchor_refinement_top_k": int(
+            args.trusted_anchor_refinement_top_k
+        ),
+        "trusted_anchor_shadow_subset_size": int(
+            trusted_anchor_shadow_subset_size
+        ),
+        "trusted_refinement_shadow_epochs": int(
+            n_trusted_refinement_shadow_epochs
+        ),
+        "trusted_refinement_shadow_correct_epochs": int(
+            n_trusted_refinement_shadow_correct
+        ),
+        "trusted_fix_anchor_snapshot_resets": int(
+            n_trusted_anchor_snapshot_resets
+        ),
+        "ddpr_respawn_snapshot_shadow_radii_m": list(snapshot_shadow_radii),
+        "ddpr_respawn_snapshot_extrapolation_scales": list(
+            snapshot_extrapolation_scales
+        ),
+        "ddpr_respawn_snapshot_shadow_top_k": int(
+            args.ddpr_respawn_snapshot_shadow_top_k
+        ),
+        "ddpr_snapshot_prior_sigma_m": float(args.ddpr_snapshot_prior_sigma_m),
+        "ddpr_snapshot_max_shift_m": float(args.ddpr_snapshot_max_shift_m),
+        "ddpr_snapshot_pair_residual_max_m": float(
+            args.ddpr_snapshot_pair_residual_max_m
+        ),
         "ddpr_respawn_exclude_max_cost_satellite": bool(
             args.ddpr_respawn_exclude_max_cost_satellite
         ),
@@ -1987,6 +3537,16 @@ def main(argv: list[str] | None = None) -> None:
         "completion_shadow_correct_epochs": int(n_completion_shadow_correct),
         "position_shadow_epochs": int(n_position_shadow_epochs),
         "position_shadow_correct_epochs": int(n_position_shadow_correct),
+        "snapshot_loo_shadow_epochs": int(n_snapshot_loo_shadow_epochs),
+        "snapshot_loo_shadow_correct_epochs": int(n_snapshot_loo_shadow_correct),
+        "trusted_anchor_shadow_epochs": int(n_trusted_anchor_shadow_epochs),
+        "trusted_anchor_shadow_correct_epochs": int(
+            n_trusted_anchor_shadow_correct
+        ),
+        "external_position_shadow_epochs": int(n_external_position_shadow_epochs),
+        "external_position_shadow_correct_epochs": int(
+            n_external_position_shadow_correct
+        ),
         "subset_shadow_epochs": int(n_subset_shadow_epochs),
         "subset_shadow_correct_epochs": int(n_subset_shadow_correct),
         "arc_shadow_epochs": int(n_arc_shadow_epochs),
@@ -2067,12 +3627,8 @@ def main(argv: list[str] | None = None) -> None:
             writer = csv.DictWriter(fh, fieldnames=list(evidence_rows[0]))
             writer.writeheader()
             writer.writerows(evidence_rows)
-    if args.out_basin_trace is not None and basin_trace_rows:
-        args.out_basin_trace.parent.mkdir(parents=True, exist_ok=True)
-        with args.out_basin_trace.open("w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(basin_trace_rows[0]))
-            writer.writeheader()
-            writer.writerows(basin_trace_rows)
+    if basin_trace_rows is not None:
+        basin_trace_rows.close()
     if (
         args.out_integrity_satellite_diagnostics is not None
         and integrity_satellite_rows
@@ -2086,6 +3642,15 @@ def main(argv: list[str] | None = None) -> None:
             )
             writer.writeheader()
             writer.writerows(integrity_satellite_rows)
+    # Refresh total wall time after all requested output serialization.  This
+    # is the honest end-to-end throughput denominator; epoch-loop throughput
+    # remains separately reported above.
+    runtime_total_seconds = time.perf_counter() - runtime_start
+    summary["runtime_total_seconds"] = float(runtime_total_seconds)
+    summary["runtime_total_epochs_per_second"] = (
+        float(len(rows) / runtime_total_seconds)
+        if runtime_total_seconds > 0 else 0.0
+    )
     args.out_summary.parent.mkdir(parents=True, exist_ok=True)
     args.out_summary.write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))

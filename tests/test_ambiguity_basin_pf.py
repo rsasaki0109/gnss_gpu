@@ -120,6 +120,65 @@ def test_source_reserve_keeps_current_proposal_groups_under_cap():
     assert len(pf.basins) == 4
 
 
+def test_protected_source_reserve_partitions_cap_between_branches():
+    pf = AmbiguityBasinParticleFilter(
+        max_basins=4,
+        protected_source_token="external_position",
+        protected_source_fraction=0.5,
+    )
+    assignments = [{_versioned_key(f"G{i + 2:02d}"): i} for i in range(6)]
+    pf.spawn(
+        assignments,
+        [_conditional(float(i)) for i in range(6)],
+        candidate_log_weights=[6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
+        candidate_source_ids=[
+            "primary",
+            "primary",
+            "primary",
+            "primary",
+            "0:external_position:0:0",
+            "0:external_position:1:0",
+        ],
+    )
+
+    retained_sources = [
+        source for basin in pf.basins for source in basin.proposal_sources
+    ]
+    assert retained_sources.count("primary") == 2
+    assert sum("external_position" in source for source in retained_sources) == 2
+
+
+def test_primary_posterior_excludes_external_only_branch_mass():
+    primary_assignment = {_versioned_key("G02"): 1}
+    pf = AmbiguityBasinParticleFilter(
+        max_basins=4,
+        min_fixed_ambiguities=1,
+        protected_source_token="external_position",
+        protected_source_fraction=0.5,
+    )
+    pf.spawn(
+        [
+            primary_assignment,
+            primary_assignment,
+            {_versioned_key("G03"): 2},
+            {_versioned_key("G04"): 3},
+        ],
+        [_conditional(float(i)) for i in range(4)],
+        candidate_source_ids=[
+            "primary",
+            "primary",
+            "0:external_position:0:0",
+            "0:external_position:1:0",
+        ],
+    )
+
+    posterior = pf.posterior_excluding_source_only("external_position")
+
+    assert posterior.map_assignment == tuple(sorted(primary_assignment.items()))
+    assert posterior.n_basins == 1
+    assert np.isclose(posterior.gamma, 1.0)
+
+
 def test_release_removes_generation_and_deduplicates_result():
     key = _versioned_key()
     pf = AmbiguityBasinParticleFilter()

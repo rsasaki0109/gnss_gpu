@@ -1,0 +1,85 @@
+{
+  "schema": "wp129_tokyo_constant_singlebasis_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "D993007AC92C3454A54415CBEDF6502330A549492617349C08846C0FA1260859",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [5225, 5280],
+    "gsi_compatible_samples": 17,
+    "gsi_inlier_samples": 13,
+    "gsi_inlier_spread_m": 0.49595098566113904,
+    "gsi_up_prior_center_m": 4.19616062763258,
+    "initial_basis_results": [
+      {
+        "rank": 0,
+        "hypothesis_count": 10,
+        "strict_candidate_count": 9,
+        "posterior_accepted": false,
+        "winner_candidate_id": 8,
+        "winner_family_ranks": {"road_band": 3, "carrier_rms": 1, "cppr": 1},
+        "runner_margin": 0.6,
+        "winner_audit_sub50cm_epochs": 0
+      },
+      {
+        "rank": 1,
+        "hypothesis_count": 10,
+        "strict_candidate_count": 9,
+        "posterior_accepted": true,
+        "winner_candidate_id": 4,
+        "winner_family_ranks": {"road_band": 2, "carrier_rms": 2, "cppr": 2},
+        "runner_margin": 0.3333333333333333,
+        "winner_audit_sub50cm_epochs": 0
+      },
+      {
+        "rank": 2,
+        "hypothesis_count": 6,
+        "strict_candidate_count": 5,
+        "posterior_accepted": false,
+        "winner_candidate_id": 1,
+        "winner_family_ranks": {"road_band": 2, "carrier_rms": 2, "cppr": 1},
+        "runner_margin": 0.4,
+        "winner_audit_sub50cm_epochs": 0
+      }
+    ],
+    "grid_refinement": {
+      "carrier_reference_rank": 1,
+      "grid_seed_count": 49,
+      "hypothesis_count": 59,
+      "absolute_mode_count": 53,
+      "diagnostic_best_sub50cm_epochs": 50,
+      "truth_seeded_diagnostic_ceiling_epochs": 49,
+      "winner_candidate_id": 53,
+      "winner_family_ranks": {"road_band": 17, "carrier_rms": 2, "cppr": 13},
+      "family_rank_limit": 11,
+      "runner_margin": 0.0625,
+      "minimum_runner_margin": 0.2,
+      "winner_audit_sub50cm_epochs": 0,
+      "posterior_accepted": false
+    },
+    "production_accepted": false,
+    "reason": "grid supplies a high-gain basin but the frozen truth-free posterior neither selects nor confidently separates it; post-audit substitution is forbidden"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "DC1E5656BF2A4A434B172D803DA805E9577ADDB52AF62EEC7698902F65A5E57C",
+    "rank0_development": "DD6DB63B38C7D315F7F4474496E2AE18C1F122210219A144389AFAC45505E592",
+    "rank1_development": "4D863BAA1A6C742329B4EA6AF23ED0C3028A066828D34F91248694CD58E92922",
+    "rank2_development": "909E1A7B2A0CB3614C7E1EC26BCB42019255D6BF618E7E0348A8F2A9BA231CB1",
+    "initial_rank1_selection": "34C1FB02E69801F58D5819C150B658DB3CC6218A3FEC43F62E8251FC3229A058",
+    "grid_seeds": "697949F527A3F8FEF04DC43E83A5DB394C6EAE93A7D88E594F0B772E7F76349B",
+    "grid_development": "623BDB19898DE93C427DA4FD8EFA51DC7E9AB4BEBEA837E8C95B3B816E85D614",
+    "grid_truthfree": "817C2A0C1928F838D957E1F407A6057AD678D3480B61D7BC303706FDA1ABE6B0",
+    "grid_selection": "14DAFFED6DFCFAD73051FD28814E6DF98A3862D27999C327B41739499B7BEB30"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

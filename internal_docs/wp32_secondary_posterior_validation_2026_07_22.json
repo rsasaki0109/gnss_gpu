@@ -1,0 +1,57 @@
+{
+  "schema": "wp32_secondary_posterior_validation_v1",
+  "created_date": "2026-07-22",
+  "production_approved": true,
+  "production_input_truth": false,
+  "selection_config": {
+    "proposal_min_members": 3,
+    "proposal_min_score": 0.4,
+    "proposal_max_parents": 3,
+    "resample_radii_m": [0.2, 0.4],
+    "resample_directions": "cube26",
+    "compact_ball_radius_m": 0.5,
+    "compact_min_members": 3,
+    "compact_max_spread_m": 0.5,
+    "compact_rank_temperature": 10.0,
+    "compact_min_score": 0.5,
+    "secondary_min_evidence_epochs": 10,
+    "secondary_top_k": 3,
+    "secondary_max_median_m": 0.5,
+    "secondary_max_support_spread_m": 0.5
+  },
+  "development": {
+    "path": "results/wp31/nagoya_run1_static_805_923_unique_secondary_posterior_development.json",
+    "sha256": "8BB1B780ECD96DD4DF19860AEDE765B46546331F7918A768B29E9A7FCFA00A93",
+    "required_reason": "unique_secondary_topk_posterior_development",
+    "max_audit_error_m": 0.5
+  },
+  "positive_holdout": {
+    "path": "results/wp31/nagoya_run1_static_7529_7583_secondary_top3_positive_holdout.json",
+    "sha256": "CD570CDCA668453713B1F8B0935C8134B8958491E876A1CCB1A04728A5918A52",
+    "required_reason": "multimode_ddpr_consensus",
+    "required_support_members": 3,
+    "max_audit_error_m": 0.5
+  },
+  "late_negative_holdouts": [
+    {
+      "path": "results/wp31/nagoya_run1_static_3811_unique_secondary_posterior_holdout.json",
+      "sha256": "B988EAD7D26DB251B648E1FA92201DF7287554A3B76F56F81D00DA6EAD6E9646",
+      "required_reason": "no_secondary_posterior"
+    },
+    {
+      "path": "results/wp31/nagoya_run1_static_4792_unique_secondary_posterior_holdout.json",
+      "sha256": "E7FD073E8FD8DAF8D80B81F8257227F34AFAF50AAA31A8D62F2E5BEE88A5C74C",
+      "required_reason": "no_secondary_posterior"
+    }
+  ],
+  "early_negative_holdouts": [
+    {
+      "path": "results/wp31/nagoya_run1_static_1508_multimode_cluster_holdout.json",
+      "sha256": "B466A23E4DA2FF78A790C33C0E93062CA5D5CEC78C5F00CD75ABCBCE023E9EFB"
+    },
+    {
+      "path": "results/wp31/tokyo_run1_static_1_61_multimode_cluster_holdout.json",
+      "sha256": "1245F74FF0E1A8801625DAEBAADC0717F0CF2544A39B8ADDC0A7A2F75C9FC444"
+    }
+  ]
+}

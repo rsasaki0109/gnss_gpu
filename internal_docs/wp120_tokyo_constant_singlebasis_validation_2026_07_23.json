@@ -1,0 +1,56 @@
+{
+  "schema": "wp120_tokyo_constant_singlebasis_validation_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [1045, 1100],
+    "carrier_reference_rank": 1,
+    "basis_selection_reason": "maximum truth-free CP/PR checked-pair supply among accepted bases",
+    "checked_pairs": 217,
+    "candidate_id": 1,
+    "absolute_mode_count": 2,
+    "family_ranks": {"road_band": 1, "carrier_rms": 1, "cppr": 1},
+    "runner_margin": 1.0,
+    "diagnostic_best_sub50cm_epochs": 55,
+    "truth_seeded_diagnostic_ceiling_epochs": 55,
+    "accepted": true
+  },
+  "gsi_height_gate": {
+    "sample_count": 17,
+    "compatible_samples": 17,
+    "inlier_samples": 17,
+    "inlier_spread_m": 0.16136058389245989,
+    "max_inlier_spread_m": 0.5,
+    "up_prior_center_m": -1.027929693780095
+  },
+  "holdouts": [
+    {"dataset": "nagoya_run1", "segment": [3721, 3776], "accepted": false},
+    {"dataset": "tokyo_run1", "segment": [2464, 2519], "accepted": false}
+  ],
+  "post_selection_full_audit": {
+    "full_denominator_epochs": 11924,
+    "before_sub50cm_epochs": 3339,
+    "after_sub50cm_epochs": 3394,
+    "after_sub50cm_pct": 28.46360281784636,
+    "gained_epochs": 55,
+    "lost_epochs": 0,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "62F65CBAFF925B8FFFA900B5936D8607BBF2DF769EF07728D597B057057BB5CC",
+    "target_selection": "60689056E458C2003EA4A13760FB151B0F37B490728E16B1488F25830FD24528",
+    "promotion": "44CEFD7426B898EBF3EC8B7F8CA2B72CAAD6DAF0F24702A8A29F9A0F45386328",
+    "production_trajectory": "D993007AC92C3454A54415CBEDF6502330A549492617349C08846C0FA1260859",
+    "shadow_trajectory": "D993007AC92C3454A54415CBEDF6502330A549492617349C08846C0FA1260859",
+    "production_benchmark": "523A0F6A48DF2DDB49466B1835B1E435A0C1934A52AF3604933FCFF950696C5F",
+    "shadow_benchmark": "523A0F6A48DF2DDB49466B1835B1E435A0C1934A52AF3604933FCFF950696C5F"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

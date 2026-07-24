@@ -1,0 +1,41 @@
+{
+  "schema": "wp48_nagoya_long_window_reverse_rejection_lock_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "production_promoted": false,
+  "dataset": "nagoya_run1",
+  "long_window": {
+    "segment": [1436, 1656],
+    "epochs": 220,
+    "evidence_epochs": 44,
+    "carrier_rows": 1011,
+    "candidate_count": 3,
+    "winner_family_ranks": {"primary": 1, "secondary": 3, "tertiary": 1},
+    "family_rank_limit": 1,
+    "runner_margin": 0.2,
+    "decision": "reject_secondary_family_rank",
+    "candidate_artifact_sha256": "14FB92946584B0E74CEF3698619EEFBBFEB88A019BE5A81FB61DA541BDE0A14C",
+    "selector_artifact_sha256": "E7B00E31BFDF2ED92D4968DCC0D335E0F95942D6612D4BE1089DC41868D1E28E"
+  },
+  "reverse_right_anchor": {
+    "target_epoch": 1436,
+    "anchor_epoch": 1807,
+    "anchor_candidate_id": 49,
+    "anchor_reason": "clear_widelane",
+    "tdcp_intervals": 345,
+    "doppler_intervals": 26,
+    "zero_intervals": 0,
+    "late_bias_doppler_target_error_m": 20.968993620281903,
+    "late_bias_doppler_median_error_m": 20.984427213633662,
+    "late_bias_doppler_sub50cm_epochs": 1,
+    "decision": "reject_direct_output_and_candidate_supply",
+    "summary_artifact_sha256": "0C5D42EE629DD327AD6F0212C7A30FFE658DADA600B6785F719EF03B1A068489",
+    "trajectory_artifact_sha256": "CC9CFB46A682F78638361B7BDEC5CFA21BB6FC2141EAE6C2F172112B97D69E7A"
+  },
+  "conclusion": "neither a four-block temporal baseline nor reverse TDCP from the accepted right anchor supplies the missing integer mode",
+  "reverse_implementation_sha256": "49116492BF786C136AF9328F4ECD52D0D5CC0921196594EB977CD0E67BC52571",
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

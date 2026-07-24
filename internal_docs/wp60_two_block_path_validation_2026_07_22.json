@@ -1,0 +1,79 @@
+{
+  "schema": "wp60_two_block_path_validation_lock_v1",
+  "date": "2026-07-22",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "negative_controls": [
+    {
+      "work_package": "WP58",
+      "segment": [1271, 1436],
+      "model": "single_165_epoch_ambiguity_state",
+      "candidate_count": 4,
+      "best_audit_median_error_m": 3.7606509750925365,
+      "best_audit_sub50cm_epochs": 0,
+      "cppr_absolute_gate_pass": false,
+      "failed_gate": "max_bad_pair_fraction",
+      "production_promoted": false
+    },
+    {
+      "work_package": "WP59",
+      "segment": [1326, 1436],
+      "model": "single_110_epoch_ambiguity_state",
+      "best_audit_median_error_m": 1.0806894455778298,
+      "best_audit_sub50cm_epochs": 0,
+      "production_promoted": false
+    }
+  ],
+  "left_block": {
+    "segment": [1326, 1381],
+    "rank0_selected_candidate_id": 4,
+    "rank1_selected_candidate_id": 3,
+    "rank2_selected_candidate_id": 4,
+    "rank0_rank1_offset_distance_m": 0.021962051835023692,
+    "rank0_rank2_offset_distance_m": 1.0405519884397536,
+    "rank1_rank2_offset_distance_m": 1.037941518722537,
+    "selected_basis_support": 2,
+    "max_cross_basis_distance_gate_m": 0.2,
+    "consensus_method": "coordinatewise_median_profile"
+  },
+  "right_block": {
+    "segment": [1381, 1436],
+    "selected_candidate_id": 12,
+    "selection_source": "WP57 long CPPR precursor boundary"
+  },
+  "global_path": {
+    "segment": [1326, 1436],
+    "interface_distance_m": 0.12404044192955367,
+    "runner_interface_distance_m": 0.6642581917603395,
+    "interface_runner_margin": 4.355174340136517,
+    "max_interface_distance_gate_m": 0.2,
+    "min_interface_runner_margin": 0.2,
+    "accepted": true,
+    "may_seed_another_path_promotion": false
+  },
+  "tests": {
+    "pytest": "39 passed",
+    "ruff": "all checks passed"
+  },
+  "artifacts_sha256": {
+    "wp58_gsi_cache": "CD567FE1698954FFEDCB2BB5E42DB893CA31F91B76D440D92DE7CEA7786EADD5",
+    "wp58_development_source": "69F7397F8CF527664032BE5D91B76E3B41C6FEDBBC6C70C3B5C7D9C6CAF3FC90",
+    "wp58_truthfree_source": "59684C5C1419C58DC891E36CE86F4BF7CE8A1BC8DE920450E157381F59FA923B",
+    "wp58_cppr_validation": "C9F776EE59851D3628D015545F808492BD0EB1D7868425C2217F0FA388AF45F6",
+    "wp59_development_source": "CD64DD087CE716FB311FC5EC9C41158D114786652CE27224BDC6C529405C6F9F",
+    "left_gsi_cache": "C47FA0F5704B208ECFA8CA0624FEB237E9B7ADAE3F2A96FBF1A2A8F8326A9957",
+    "left_rank0_source": "65E1C2E49469C6A6855C287EA34EF672EDBE73C6572ED42BD18A5EF698FF0874",
+    "left_rank1_source": "650B9471AF9244AB93666184AE71338D58FC29B65C60BD3BABD9665044954881",
+    "left_rank2_source": "C766C949402A8CC1035CF6AD75F1BF839EA6247FD97A01B15C476D2EC7786F24",
+    "left_rank0_cppr": "BEA3B05B0319F42F5257187EE580CE3BC48197C598F5DEB525118BAAC86A0438",
+    "left_rank1_cppr": "C1DF3160C44B8FA8CAB84B983399E388CA773E3A7F2EADB45BBE62678D5F51F2",
+    "left_rank2_cppr": "9506405A76F23CCD3E47CF74D5F731742A071025123CF4A7A1FCDE12529932D4",
+    "path_validation": "9D2C0E4AC5E87C29AC07E26EF31C10164F4E745FA2B41D366D8A02E277430C57",
+    "path_selector": "FEEFC41555B6E1428AB612B863A3255EBCC5E1D9476D034C337159B6F793D7AB"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "wp100_pf_constant_singlebasis_benchmark_lock_v1",
+  "date": "2026-07-23",
+  "dataset": "nagoya_run1",
+  "full_denominator_epochs": 7583,
+  "before_sub50cm_epochs": 5219,
+  "after_sub50cm_epochs": 5274,
+  "after_sub50cm_pct": 69.55030990373203,
+  "gained_epochs": 55,
+  "lost_epochs": 0,
+  "fix_epochs": 0,
+  "false_fix_epochs": 0,
+  "declared_false_fix_pct": 0.0,
+  "goal_sub50cm_epochs": 6522,
+  "remaining_sub50cm_epochs": 1248,
+  "production_trajectory_sha256": "CB4F56596C817A22C1D6103222B68D3C9EB75F0FB79BBCC28E6FD541210CC9E8",
+  "production_promotion_sha256": "2C5F64546DE899D8E4CF57BC113535C388AB0AE13C903EF5AA6234F2988639C7",
+  "production_benchmark_sha256": "3FB9924C50487F8939BA883545A6F6CA8A5F116C5AB95147AEEF2E15A1594BA8"
+}

@@ -1,0 +1,54 @@
+{
+  "schema": "wp118_tokyo_posterior_nearmiss_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "667B3E0626BCF26C6F858473ADA4950101A9A80D8647152FB5A4B3F5B08959AA",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [10945, 11000],
+    "gsi_compatible_samples": 10,
+    "gsi_inlier_samples": 6,
+    "gsi_inlier_spread_m": 0.39608167876750144,
+    "gsi_up_prior_center_m": -2.0176823913298563,
+    "rank0": {
+      "grid_seed_count": 49,
+      "absolute_mode_count": 48,
+      "winner_candidate_id": 23,
+      "winner_family_ranks": {"road_band": 1, "carrier_rms": 11, "cppr": 1},
+      "runner_margin": 0.15384615384615385,
+      "winner_audit_sub50cm_epochs": 12,
+      "posterior_accepted": false,
+      "reason": "carrier family rank and runner margin narrowly fail frozen gates"
+    },
+    "rank1": {
+      "grid_seed_count": 49,
+      "absolute_mode_count": 53,
+      "winner_candidate_id": 15,
+      "winner_family_ranks": {"road_band": 1, "carrier_rms": 3, "cppr": 9},
+      "runner_margin": 0.3076923076923077,
+      "winner_audit_sub50cm_epochs": 0,
+      "diagnostic_best_sub50cm_epochs": 17,
+      "posterior_accepted": true,
+      "reason": "accepted frozen posterior selects a zero-gain basin"
+    },
+    "production_accepted": false
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "gsi_height_cache": "77D6E2744F3EA492E0D330AAC85AFD6403D886B4AFE718BFC54C24D5FA94F368",
+    "rank0_development": "8E8D8AECEBE1CBD931EAA789849EAE6EA516B41EFD927A97F4D2EB1F8FC095E3",
+    "rank0_selection": "B82B0439514F083A9713985CFCCB617E4E341D49791EC9CE864AC542A2718516",
+    "rank1_development": "6367419FE409BDE1320C124388B3F2F4A887F109EBE390517077E6779587D45A",
+    "rank1_selection": "5EB8C09BD8FA6A18D9E5F76161A42C547F976D80F3298CF95F418A4A271126BE"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "schema": "wp49_nagoya_lambda_up_prior_sensitivity_lock_v1",
+  "date": "2026-07-22",
+  "production_input_truth": false,
+  "production_promoted": false,
+  "dataset": "nagoya_run1",
+  "segment": [1436, 1656],
+  "baseline": {
+    "lambda_candidates": 12,
+    "up_prior_sigma_m": 2.0,
+    "fitted_hypotheses": 3,
+    "best_audit_median_error_m": 7.36478744104576,
+    "best_audit_sub50cm_epochs": 0
+  },
+  "lambda128": {
+    "lambda_candidates": 128,
+    "lambda_ratio": 1.0012016130168795,
+    "fitted_hypotheses": 25,
+    "best_audit_median_error_m": 7.448313336142706,
+    "best_audit_sub50cm_epochs": 0,
+    "artifact_sha256": "39E236834F09502D821C1F0A9C5079030018E6E320E7FF844BDDB084E54BE3C0"
+  },
+  "up_prior_sigma20": {
+    "lambda_candidates": 12,
+    "up_prior_sigma_m": 20.0,
+    "fitted_hypotheses": 3,
+    "best_audit_median_error_m": 11.327121581072312,
+    "best_audit_sub50cm_epochs": 0,
+    "artifact_sha256": "B2600BCF92349BC386A85F3391C1E4EA459C44D4159F2FBBAD13BD85FFEC6E64"
+  },
+  "up_prior_sigma0p5": {
+    "lambda_candidates": 12,
+    "up_prior_sigma_m": 0.5,
+    "fitted_hypotheses": 6,
+    "best_audit_median_error_m": 4.623627654207645,
+    "best_audit_sub50cm_epochs": 0,
+    "float_minus_oracle_enu_m": [-1.20710457, 4.50333667, 2.23753728],
+    "artifact_sha256": "A812130614925A8CFC24B0C595A95C4A2DEF5AB5A34FB09AD6ED9919DBC42451"
+  },
+  "decision": "reject candidate-count and zero-centered up-sigma tuning; next supplier must center height from an independent truth-free observable"
+}

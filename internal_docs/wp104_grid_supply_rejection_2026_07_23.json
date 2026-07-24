@@ -1,0 +1,13 @@
+{
+  "schema": "wp104_grid_supply_rejection_lock_v1",
+  "date": "2026-07-23",
+  "dataset": "nagoya_run1",
+  "segment": [1705, 1760],
+  "production_input_truth": false,
+  "production_promoted": false,
+  "initial_strict_mode_counts_by_rank": [0, 0, 0],
+  "max_checked_pairs_by_rank": [64, 60, 33],
+  "oracle_ceiling_by_rank": [28, 28, 28],
+  "rank0_grid": {"hypotheses": 62, "strict_modes": 0, "best_supply_sub50cm_epochs": 0},
+  "rejection_reason": "horizontal_grid_supplies_no_absolute_mode_passing_frozen_gates"
+}

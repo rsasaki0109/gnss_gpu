@@ -1,0 +1,49 @@
+{
+  "schema": "wp164_tokyo_screened_refit_rejection_lock_v1",
+  "date": "2026-07-24",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "production_baseline_trajectory_sha256": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [4785, 4840],
+    "selected_stride_phase": 1,
+    "novelty": "fifth block through the WP158 screen + WP159 chain; the campaign's worst unscreened DDPR floor (~45 m, WP144)",
+    "prior_generation_assessment": "WP144 structural DDPR rejection (45 m floor); truth-derived constant-model oracle bound at the Track A probe was 30/55 (affine 37/55)",
+    "ddpr_screen": {
+      "schema": "wp158_ddpr_satellite_screen_v1",
+      "edge_m": 5.0,
+      "frac_thresh": 0.2,
+      "evidence_epochs": 11,
+      "excluded_satellites": ["C11", "C28", "C34", "C38", "C42", "C43", "E10", "E11", "E36", "G06", "G13", "G15", "G20", "G29", "G30"],
+      "outlier_fractions_note": "13 of 15 flagged at outlier fraction 1.0 (G13 0.545, G29 0.75); median residuals 10-179 m; near-universal constellation contamination including Galileo, unlike every earlier screened block"
+    },
+    "screened_refits": {
+      "rank0": {"hypotheses": 6, "min_ddpr_rms_m": 5.328, "min_block_spread_m": 0.038, "selection_reason": "no_hypothesis_passed_truth_free_gates"},
+      "rank1": {"hypotheses": 6, "min_ddpr_rms_m": 5.439, "min_block_spread_m": 5.17e-11, "selection_reason": "no_hypothesis_passed_truth_free_gates"},
+      "rank2": {"hypotheses": 8, "min_ddpr_rms_m": 5.421, "min_block_spread_m": 0.0399, "selection_reason": "no_hypothesis_passed_truth_free_gates"}
+    },
+    "failure_stage": "screened_refit_truth_free_gates",
+    "failure_detail": "every hypothesis at every rank fails ONLY the max_ddpr_rms_m 4.0 gate (best screened floors 5.33-5.44 m from an unscreened ~45 m); arcs, rows, carrier RMS, and block spread (<=0.14 m) all pass, so the failure is a pure residual floor, the inverse of WP163's spread-only failure",
+    "chain_truncated_after": "step 2 (no sanitize, pool, cross refits, or selectors were run)",
+    "significance": "with 15 of the visible satellites flagged the surviving evidence is thin and still biased; the screen shrinks the floor by an order of magnitude but cannot reach the frozen 4.0 m gate, consistent with the block's 30/55 constant-model bound"
+  },
+  "decision": "no substitution and no rerun after the truth-free rejection; WP160 production unchanged; block returns to the structural inventory",
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "ddpr_screen": "D8BDA441980BE4A8AB60577548CAC1B617DA2A5B0FD19E1B0A4719D449A1A3EA",
+    "gsi_height_cache_reused": "results/wp31/tokyo_run1_wp144_gsi_multisample17_height_cache_4785_4840.json",
+    "rank0_phase1_screened_development": "BCA585A9FC1FE87C0C66DB181E793917976D1C587BEC18D9A1528A346BBB1DA3",
+    "rank1_phase1_screened_development": "00247CAA0A1BE1FD60F1638A5F1542D9775274C49EC550785FBCE292148C1F0B",
+    "rank2_phase1_screened_development": "9E2249AAA3A399FF469611D536AD2AD16FEDBE90BF57BE18B3D3A0EC05464EED"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

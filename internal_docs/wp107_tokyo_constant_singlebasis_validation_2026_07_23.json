@@ -1,0 +1,49 @@
+{
+  "schema": "wp107_tokyo_constant_singlebasis_validation_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11495, 11550],
+    "carrier_reference_rank": 2,
+    "candidate_id": 51,
+    "absolute_mode_count": 57,
+    "family_ranks": {"road_band": 1, "carrier_rms": 3, "cppr": 2},
+    "runner_margin": 2.3333333333333335,
+    "accepted": true
+  },
+  "frozen_gates": {
+    "min_checked_pairs": 40,
+    "max_bad_pair_fraction": 0.05,
+    "max_block_spread_m": 0.5,
+    "within_basis_dedup_m": 0.08,
+    "max_family_rank_fraction": 0.2,
+    "min_runner_margin": 0.2
+  },
+  "holdouts": [
+    {"dataset": "nagoya_run1", "segment": [3721, 3776], "accepted": false},
+    {"dataset": "tokyo_run1", "segment": [2464, 2519], "accepted": false}
+  ],
+  "post_selection_full_audit": {
+    "full_denominator_epochs": 11924,
+    "before_sub50cm_epochs": 3265,
+    "after_sub50cm_epochs": 3268,
+    "gained_epochs": 3,
+    "lost_epochs": 0,
+    "fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "artifacts_sha256": {
+    "target_selection": "84DD123331D6D1BD6E8BB49FBAE475335962A5E6DCF6F38B05095CBF82DF3E3A",
+    "promotion": "E2D10F893A7A5FB11A454B12E93854D129181999881BBF779CA08A4EAEA6CB5D",
+    "production_trajectory": "4105937484F56BCDEC89477959C4C6B5EDD6F01E13F6EB25047DA3B715C48564",
+    "shadow_trajectory": "4105937484F56BCDEC89477959C4C6B5EDD6F01E13F6EB25047DA3B715C48564",
+    "production_benchmark": "5378E74A0EC711E3D008FA364B5CEE44D4285A96CCC20D55D87A4DA577DD7097"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}

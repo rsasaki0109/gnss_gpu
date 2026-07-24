@@ -1,0 +1,100 @@
+{
+  "schema": "wp36_pf_allfilled_benchmark_v1",
+  "created_date": "2026-07-22",
+  "production_input_truth": false,
+  "runtime_fgo": false,
+  "full_epoch_denominator": true,
+  "smoother_config": {
+    "motion_gap_endpoint_closure": true,
+    "motion_gap_closure_mode": "all_filled",
+    "motion_gap_duration_exponent": null
+  },
+  "m4_baseline": [
+    {
+      "path": "internal_docs/wp30_m4_production_config.json",
+      "sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486"
+    },
+    {
+      "path": "internal_docs/wp30_m4_tokyo_evidence_ledger.json",
+      "sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+    }
+  ],
+  "anchor_validation_lock": {
+    "path": "internal_docs/wp34_relative_secondary_validation_2026_07_22.json",
+    "sha256": "D91EC1AF99A94450FA8D6CC5B5C44CAC7FC3B21D7B024B2375DA3B321B66BACA"
+  },
+  "previous_tokyo": {
+    "summary_path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_durationp2_full_summary.json",
+    "summary_sha256": "FD5D198F8CBC8ECE9EB6679C75935413A320D09829C3BD94DE518983F3D3D013",
+    "trajectory_sha256": "C44788033F3FA60D5C9B7FC4580979C055AF3C6BAF8CC4D14CA940B46CC8B001",
+    "displacements_sha256": "9932C028ABE270B563E525051F00C85A71EF6A397D6DB3A1C4DD75BF3EF7510B",
+    "sub50cm_full_epochs": 3184,
+    "n_epochs_full_denominator": 11924,
+    "sub50cm_full_pct": 26.702448842670247
+  },
+  "current_tokyo": {
+    "summary_path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_allfilled_full_summary.json",
+    "summary_sha256": "D584D55965CE84061CBB4DE2346946081E18B95B423FA6740B5F6B5B4CE33D34",
+    "trajectory_path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_allfilled_full_trajectory.csv",
+    "trajectory_sha256": "25CFA89D9900879890A2F907B3A5961CA8D734B584518E57773AD682B12D030D",
+    "displacements_path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_allfilled_full_displacements.csv",
+    "displacements_sha256": "DC34A31AF0F20BBFBFECF68C5421A854A5051264152F2870F6F56E86E946F8C7",
+    "n_epochs_full_denominator": 11924,
+    "sub50cm_full_epochs": 3265,
+    "sub50cm_full_pct": 27.381751090238176,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0,
+    "false_fix_pct": 0.0,
+    "development_anchor_used": false,
+    "production_promoted": true,
+    "tdcp_reliable_intervals": 8635,
+    "gyro_gap_fill_intervals": 3288,
+    "unbounded_fallback_intervals": 0,
+    "production_anchor_count": 11,
+    "motion_gap_closure_count": 9
+  },
+  "gain": {
+    "sub50cm_epochs": 81,
+    "sub50cm_percentage_points": 0.679302247567929,
+    "epochs_gained": 88,
+    "epochs_lost": 7
+  },
+  "anchor_start_interval_deltas": [
+    {"range": [0, 603], "sub50cm_delta": 12},
+    {"range": [604, 1866], "sub50cm_delta": 1},
+    {"range": [1867, 2353], "sub50cm_delta": 64},
+    {"range": [2354, 5865], "sub50cm_delta": 8},
+    {"range": [5866, 6944], "sub50cm_delta": -1},
+    {"range": [6945, 7561], "sub50cm_delta": 0},
+    {"range": [7562, 7917], "sub50cm_delta": 0},
+    {"range": [7918, 9217], "sub50cm_delta": -1},
+    {"range": [9218, 9882], "sub50cm_delta": 0},
+    {"range": [9883, 11843], "sub50cm_delta": -2},
+    {"range": [11844, 11923], "sub50cm_delta": 0}
+  ],
+  "nagoya_p2_baseline": {
+    "path": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_eightanchor_secondary_durationp2_full_summary.json",
+    "sha256": "10704FBF6338D4718002EA729760949A5B3EEB033B6CA555A2B55EDD111E6845",
+    "sub50cm_full_epochs": 4118,
+    "n_epochs_full_denominator": 7583,
+    "sub50cm_full_pct": 54.3056837663194,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "nagoya_allfilled_rejection": {
+    "summary_path": "results/wp31/nagoya_run1_tdcp_gyro_gapfill_eightanchor_secondary_allfilled_full_summary.json",
+    "summary_sha256": "7F15C15ED9F82B1B4CE95CE9C71E7BC6A229E2C523379D108174B19EB5FD1CF2",
+    "trajectory_sha256": "AA6F2798052C339E774912E1A467338CAE7D4D92FC04AB3B6A9BEC37B8620F38",
+    "displacements_sha256": "84E1CD60782DD10B603318D54CD412CB9D8ECF574F2A67C6EDE7C333F0A1FC17",
+    "sub50cm_full_epochs": 3967,
+    "n_epochs_full_denominator": 7583,
+    "sub50cm_full_pct": 52.314387445602,
+    "delta_vs_p2_epochs": -151,
+    "declared_fix_epochs": 0,
+    "false_fix_epochs": 0
+  },
+  "common_policy_status": {
+    "all_filled": "rejected",
+    "reason": "improves Tokyo but loses 151 Nagoya epochs under identical production inputs"
+  }
+}

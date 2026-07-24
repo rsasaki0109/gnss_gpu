@@ -1,0 +1,36 @@
+{
+  "schema": "wp110_tokyo_constant_singlebasis_posterior_rejection_lock_v1",
+  "date": "2026-07-23",
+  "pf_only": true,
+  "runtime_fgo": false,
+  "production_input_truth": false,
+  "target": {
+    "dataset": "tokyo_run1",
+    "segment": [11550, 11605],
+    "carrier_reference_rank": 1,
+    "grid_seed_count": 49,
+    "hypothesis_count": 54,
+    "absolute_mode_count": 52,
+    "winner_candidate_id": 50,
+    "winner_family_ranks": {"road_band": 18, "carrier_rms": 3, "cppr": 4},
+    "runner_margin": 0.08,
+    "winner_audit_sub50cm_epochs": 0,
+    "diagnostic_best_sub50cm_epochs": 55,
+    "accepted": false,
+    "reason": "frozen family-rank and runner-margin gates fail; diagnostic candidate substitution forbidden"
+  },
+  "production_effect": {
+    "trajectory_changed": false,
+    "fix_changed": false,
+    "false_fix_changed": false
+  },
+  "artifacts_sha256": {
+    "development": "A3D441338B0878B122BD58EFEB8CA8E40D5DD800631A883D42A6A3B472CA2C73",
+    "truthfree": "C420060238F4DCB4A56F409AF175AA3EF64F359AABEAAF221E4EBC038592F03B",
+    "selection": "EBFB4B8E62B8696EC19C7AC7D284F6C332C1CA81F7452BCF59959B816D77FE1C"
+  },
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+  }
+}
