@@ -1,0 +1,168 @@
+{
+  "schema": "gnss_gpu_cross_domain_validation_input_v1",
+  "campaigns": [
+    {
+      "id": "urban_positioning_safe_adaptive",
+      "primary_metric": "rms_2d_m",
+      "safety_metric": "catastrophic_rate_pct",
+      "device_out_required": true,
+      "model_selection_scope": "development_only",
+      "city_or_device_overrides": {},
+      "config": {
+        "candidate": "PF+SafeAdaptiveGuide-10K",
+        "particle_count": 10000,
+        "policy": {
+          "multi_constellation": "EKF safe fallback",
+          "single_constellation": "PF+EKFGuide-10K"
+        },
+        "production_input_truth": false,
+        "seed": 0
+      },
+      "config_sha256": "090F0AEC088F3E733D8286B7A49E091911415229841186A7DA83767835835077",
+      "provenance": [
+        {
+          "path": "experiments/results/phase5_safe_cross_domain_tokyo_3k_runs.csv",
+          "sha256": "CFBC34DF7030249F3E92F93AAC75D51373016B8524E8438773E5DBA0F090EEEC"
+        },
+        {
+          "path": "experiments/results/urbannav_fixed_eval_hk20190428_gc_adaptive_summary.csv",
+          "sha256": "C789D946D5B7DD2E4AA87D108A910DA302609195DFA5642220B699648D7CBF27"
+        }
+      ],
+      "records": [
+        {
+          "record_id": "tokyo_odaiba_trimble_3k",
+          "city": "tokyo",
+          "site": "odaiba",
+          "date": "2020-12-17",
+          "receiver": "trimble",
+          "epochs": 3000,
+          "baseline": 16.025352,
+          "candidate": 16.025352,
+          "baseline_safety": 0.0,
+          "candidate_safety": 0.0
+        },
+        {
+          "record_id": "tokyo_shinjuku_trimble_3k",
+          "city": "tokyo",
+          "site": "shinjuku",
+          "date": "2020-12-17",
+          "receiver": "trimble",
+          "epochs": 3000,
+          "baseline": 10.016165,
+          "candidate": 10.016165,
+          "baseline_safety": 0.0,
+          "candidate_safety": 0.0
+        },
+        {
+          "record_id": "hong_kong_20190428_ublox",
+          "city": "hong-kong",
+          "site": "hk-20190428",
+          "date": "2019-04-28",
+          "receiver": "ublox",
+          "epochs": 468,
+          "baseline": 69.493649,
+          "candidate": 66.848918,
+          "baseline_safety": 0.0,
+          "candidate_safety": 0.0
+        }
+      ]
+    },
+    {
+      "id": "ppc_post_solver_qa_loro",
+      "primary_metric": "route_absolute_error_pp",
+      "safety_metric": "route_absolute_error_pp",
+      "device_out_required": false,
+      "model_selection_scope": "development_only",
+      "city_or_device_overrides": {},
+      "config": {
+        "baseline": "GradientBoostingRegressor deployable features",
+        "candidate": "GradientBoostingRegressor curated solver-state six",
+        "hyperparameters": "sklearn defaults",
+        "split": "leave-one-route-out",
+        "production_input_truth": false
+      },
+      "config_sha256": "B7924F08C5ACCE5A9D8BF01EC1823697357EE7ED5E02A0004C4E676209E0CD3A",
+      "provenance": [
+        {
+          "path": "internal_docs/product_deliverable/D034_PATH1_LORO_RESULTS.md",
+          "sha256": "84B8E38A33CC2B43377CC1D68318965056219CDA40D0D8394566A37D87A1EBB1"
+        }
+      ],
+      "records": [
+        {
+          "record_id": "nagoya_run1",
+          "city": "nagoya",
+          "site": "run1",
+          "date": "2024-08-03",
+          "receiver": "septentrio-mosaic-x5",
+          "epochs": 26,
+          "baseline": 33.4,
+          "candidate": 0.4,
+          "baseline_safety": 33.4,
+          "candidate_safety": 0.4
+        },
+        {
+          "record_id": "nagoya_run2",
+          "city": "nagoya",
+          "site": "run2",
+          "date": "2024-07-20",
+          "receiver": "septentrio-mosaic-x5",
+          "epochs": 32,
+          "baseline": 3.3,
+          "candidate": 1.0,
+          "baseline_safety": 3.3,
+          "candidate_safety": 1.0
+        },
+        {
+          "record_id": "nagoya_run3",
+          "city": "nagoya",
+          "site": "run3",
+          "date": "2024-08-03",
+          "receiver": "septentrio-mosaic-x5",
+          "epochs": 18,
+          "baseline": 8.1,
+          "candidate": 1.4,
+          "baseline_safety": 8.1,
+          "candidate_safety": 1.4
+        },
+        {
+          "record_id": "tokyo_run1",
+          "city": "tokyo",
+          "site": "run1",
+          "date": "2024-07-23",
+          "receiver": "septentrio-mosaic-x5",
+          "epochs": 39,
+          "baseline": 9.7,
+          "candidate": 0.8,
+          "baseline_safety": 9.7,
+          "candidate_safety": 0.8
+        },
+        {
+          "record_id": "tokyo_run2",
+          "city": "tokyo",
+          "site": "run2",
+          "date": "2024-07-23",
+          "receiver": "septentrio-mosaic-x5",
+          "epochs": 31,
+          "baseline": 11.5,
+          "candidate": 3.4,
+          "baseline_safety": 11.5,
+          "candidate_safety": 3.4
+        },
+        {
+          "record_id": "tokyo_run3",
+          "city": "tokyo",
+          "site": "run3",
+          "date": "2024-07-23",
+          "receiver": "septentrio-mosaic-x5",
+          "epochs": 51,
+          "baseline": 8.4,
+          "candidate": 1.6,
+          "baseline_safety": 8.4,
+          "candidate_safety": 1.6
+        }
+      ]
+    }
+  ]
+}

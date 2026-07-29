@@ -1,3 +1,5 @@
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import sys
@@ -15,6 +17,7 @@ from exp_urbannav_pf3d import (
     _select_pf_epoch_measurements,
     _should_rescue_pf_epoch,
 )
+from exp_urbannav_fixed_eval import _safe_adaptive_policy
 from gnss_gpu.multi_gnss import SYSTEM_GALILEO, SYSTEM_GPS
 from gnss_gpu.multi_gnss_quality import MultiGNSSQualityVetoConfig
 
@@ -171,3 +174,8 @@ def test_select_guide_velocity_respects_init_only_and_fallback_modes():
         )
         is None
     )
+
+
+def test_safe_adaptive_policy_uses_signal_diversity_not_city() -> None:
+    assert _safe_adaptive_policy(("G",)) == "guided_pf"
+    assert _safe_adaptive_policy(("G", "E", "J")) == "ekf_fallback"
