@@ -1,0 +1,91 @@
+{
+  "schema": "gnss_gpu_phase2_structural_audit_v1",
+  "production_input_truth": false,
+  "wp163": {
+    "recovered_reference_ranks": 2,
+    "minimum_required_recovered_ranks": 2,
+    "ranks": [
+      {
+        "path": "results/wp31/tokyo_run1_wp163_ref_rank0_phase1_screened_7095_7150_development.json",
+        "sha256": "777CE468BEE36BA87DE4784FA850B093202150B343114BB77A29EC8FEA4FE427",
+        "recovered_hypotheses": 2,
+        "recovered_seed_ids": [7, 9],
+        "best_affine_block_rms_m": 0.37441685190713636,
+        "best_ddpr_rms_m": 1.3794542976933664
+      },
+      {
+        "path": "results/wp31/tokyo_run1_wp163_ref_rank1_phase1_screened_7095_7150_development.json",
+        "sha256": "83BF9A3521B3D1FF0CB4932FF5F9C9FDCB81E560545591EE48F57D631E6DB53F",
+        "recovered_hypotheses": 1,
+        "recovered_seed_ids": [3],
+        "best_affine_block_rms_m": 0.351776737103823,
+        "best_ddpr_rms_m": 1.2737406211026563
+      },
+      {
+        "path": "results/wp31/tokyo_run1_wp163_ref_rank2_phase1_screened_7095_7150_development.json",
+        "sha256": "A1C787CC1B9E5F644F76A03D3A208237B5E198CD978EE499B07732CACAF6039D",
+        "recovered_hypotheses": 0,
+        "recovered_seed_ids": [],
+        "best_affine_block_rms_m": 0.5634680171454953,
+        "best_ddpr_rms_m": 1.3348011764385024
+      }
+    ],
+    "screen_v2": {
+      "path": "results/wp31/tokyo_run1_wp163_ddpr_screen_7095_7150.json",
+      "sha256": "B420B730AACD534F1DFEA99088F588309EA152A57750C8B0E4A694E97E0E717B",
+      "hard_excluded_satellites": ["C33", "E05"],
+      "retained_sparse_satellite": {
+        "sat": "G15",
+        "epochs_present": 1,
+        "legacy_outlier_fraction": 1.0,
+        "quality_weight": 0.37824928575000033
+      }
+    }
+  },
+  "wp164": {
+    "false_passing_hypotheses": 0,
+    "ranks": [
+      {
+        "path": "results/wp31/tokyo_run1_wp164_ref_rank0_phase1_screened_4785_4840_development.json",
+        "sha256": "BCA585A9FC1FE87C0C66DB181E793917976D1C587BEC18D9A1528A346BBB1DA3",
+        "recovered_hypotheses": 0,
+        "recovered_seed_ids": [],
+        "best_affine_block_rms_m": 0.021086380537971683,
+        "best_ddpr_rms_m": 5.327534774150302
+      },
+      {
+        "path": "results/wp31/tokyo_run1_wp164_ref_rank1_phase1_screened_4785_4840_development.json",
+        "sha256": "00247CAA0A1BE1FD60F1638A5F1542D9775274C49EC550785FBCE292148C1F0B",
+        "recovered_hypotheses": 0,
+        "recovered_seed_ids": [],
+        "best_affine_block_rms_m": 2.9371607572178234e-11,
+        "best_ddpr_rms_m": 5.439238433258214
+      },
+      {
+        "path": "results/wp31/tokyo_run1_wp164_ref_rank2_phase1_screened_4785_4840_development.json",
+        "sha256": "9E2249AAA3A399FF469611D536AD2AD16FEDBE90BF57BE18B3D3A0EC05464EED",
+        "recovered_hypotheses": 0,
+        "recovered_seed_ids": [],
+        "best_affine_block_rms_m": 0.014121943350717531,
+        "best_ddpr_rms_m": 5.420858963172472
+      }
+    ],
+    "screen_v2": {
+      "path": "results/wp31/tokyo_run1_wp164_ddpr_screen_4785_4840.json",
+      "sha256": "D8BDA441980BE4A8AB60577548CAC1B617DA2A5B0FD19E1B0A4719D449A1A3EA",
+      "hard_excluded_satellite_count": 14,
+      "interpretation": "near-universal contamination remains fail-closed; affine shape cannot bypass the unchanged 4.0 m DDPR gate"
+    }
+  },
+  "m4": {
+    "internal_docs/wp30_m4_production_config.json": {
+      "expected_sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+      "actual_sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486"
+    },
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": {
+      "expected_sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C",
+      "actual_sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+    }
+  },
+  "passed": true
+}
