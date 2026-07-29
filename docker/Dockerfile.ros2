@@ -19,6 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /opt/gnss_gpu_ws/src/gnss_gpu
 COPY ros2/gnss_gpu_ros ros2/gnss_gpu_ros
+COPY internal_docs/phase6_ros2_replay_input_2026_07_29.json \
+     internal_docs/phase6_ros2_replay_result_2026_07_29.json \
+     internal_docs/
 WORKDIR /opt/gnss_gpu_ws
 RUN . /opt/ros/jazzy/setup.sh \
     && colcon build --packages-select gnss_gpu_ros \
