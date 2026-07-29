@@ -31,6 +31,8 @@ def _candidate() -> dict:
         "max_contiguous_failure_s": 3.0,
         "latency_p50_ms": 50.0,
         "latency_p95_ms": 80.0,
+        "normal_latency_max_ms": 90.0,
+        "search_latency_max_ms": 800.0,
         "peak_gpu_memory_mb": 1024.0,
     }
 

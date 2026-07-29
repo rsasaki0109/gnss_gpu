@@ -45,6 +45,9 @@ dev = [
     "pytest>=7.0",
     "pytest-cov",
 ]
+realtime = [
+    "numba>=0.59",
+]
 all = [
     "gnss-gpu[viz,dev]",
 ]
