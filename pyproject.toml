@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "gnss-gpu"
-version = "0.2.0"
+version = "0.3.0"
 description = "GPU-accelerated GNSS signal processing with CUDA"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -28,7 +28,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
-    "gtsam>=4.3a0",
     "numpy>=1.21",
 ]
 
@@ -48,14 +47,33 @@ dev = [
 realtime = [
     "numba>=0.59",
 ]
+fgo = [
+    "gtsam>=4.2",
+]
 all = [
-    "gnss-gpu[viz,dev]",
+    "gnss-gpu[viz,dev,realtime,fgo]",
 ]
 
 [tool.scikit-build]
 wheel.packages = ["python/gnss_gpu"]
 cmake.build-type = "Release"
 build.verbose = true
+sdist.exclude = [
+    ".claude/**",
+    ".pytest_cache/**",
+    ".ruff_cache/**",
+    "build/**",
+    "cache/**",
+    "data/**",
+    "datasets/**",
+    "dist/**",
+    "docs/assets/media/**",
+    "experiments/results/**",
+    "output/**",
+    "node_modules/**",
+    "results/**",
+    "third_party/**",
+]
 
 [tool.scikit-build.cmake.define]
 CMAKE_CUDA_ARCHITECTURES = "native"

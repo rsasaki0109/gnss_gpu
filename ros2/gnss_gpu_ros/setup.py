@@ -4,7 +4,7 @@ package_name = "gnss_gpu_ros"
 
 setup(
     name=package_name,
-    version="0.2.0",
+    version="0.3.0",
     packages=find_packages(exclude=["test"]),
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),

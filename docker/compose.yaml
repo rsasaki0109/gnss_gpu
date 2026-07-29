@@ -1,0 +1,13 @@
+services:
+  cuda:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cuda
+      args:
+        CUDA_ARCHITECTURES: "75;80;86;89"
+    gpus: all
+  ros2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ros2
+    network_mode: host

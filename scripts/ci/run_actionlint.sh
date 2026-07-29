@@ -16,12 +16,24 @@ else
   trap 'rm -rf "$TMP_DIR"' EXIT
 
   cd "$TMP_DIR"
-  gh release download \
-    -R rhysd/actionlint \
-    --pattern 'actionlint_*_linux_amd64.tar.gz' \
-    --clobber
-  tar -xzf actionlint_*_linux_amd64.tar.gz
-  ACTIONLINT_BIN="$TMP_DIR/actionlint"
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      gh release download \
+        -R rhysd/actionlint \
+        --pattern 'actionlint_*_windows_amd64.zip' \
+        --clobber
+      unzip -q actionlint_*_windows_amd64.zip
+      ACTIONLINT_BIN="$TMP_DIR/actionlint.exe"
+      ;;
+    *)
+      gh release download \
+        -R rhysd/actionlint \
+        --pattern 'actionlint_*_linux_amd64.tar.gz' \
+        --clobber
+      tar -xzf actionlint_*_linux_amd64.tar.gz
+      ACTIONLINT_BIN="$TMP_DIR/actionlint"
+      ;;
+  esac
   cd "$ROOT_DIR"
 fi
 
