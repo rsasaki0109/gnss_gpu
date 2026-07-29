@@ -25,6 +25,11 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest().upper()
 
 
+def _canonical_text_sha256(path: Path) -> str:
+    payload = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(payload).hexdigest().upper()
+
+
 def _tow_key(value: str | float) -> float:
     return round(float(value), 3)
 
@@ -237,6 +242,10 @@ def main() -> int:
     _write_trajectory(args.output_trajectory, rows)
     summary["output_trajectory"] = args.output_trajectory.as_posix()
     summary["output_trajectory_sha256"] = _sha256(args.output_trajectory)
+    summary["output_trajectory_canonical_sha256"] = _canonical_text_sha256(
+        args.output_trajectory
+    )
+    summary["output_trajectory_hash_normalization"] = "CRLF/LF normalized to LF"
     args.output_summary.parent.mkdir(parents=True, exist_ok=True)
     args.output_summary.write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",

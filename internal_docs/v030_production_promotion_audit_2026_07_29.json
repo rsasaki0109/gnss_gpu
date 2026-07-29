@@ -292,14 +292,14 @@
             "path": "evidence/internal_docs/wp172_nagoya_development_2026_07_29.json"
           },
           {
-            "actual_sha256": "77FFCD0502A9B16D2142B31521EA631CFAD5F019E82F19AC481857B6DD31B778",
-            "expected_sha256": "77FFCD0502A9B16D2142B31521EA631CFAD5F019E82F19AC481857B6DD31B778",
+            "actual_sha256": "9C0ACC045EBC216E637174C396846F6E56130A6A5D8DEC442D8D9A60693884BA",
+            "expected_sha256": "9C0ACC045EBC216E637174C396846F6E56130A6A5D8DEC442D8D9A60693884BA",
             "passed": true,
             "path": "evidence/internal_docs/wp172_runtime_benchmark_2026_07_29.json"
           },
           {
-            "actual_sha256": "2A1671EEC2E0D1C713D5872E2A9ADD042A0FCEE66924DD89E842B7811BD4F301",
-            "expected_sha256": "2A1671EEC2E0D1C713D5872E2A9ADD042A0FCEE66924DD89E842B7811BD4F301",
+            "actual_sha256": "25EB8F584CF081A2EA9DC6C377D367E595485F80151723CFEADAE458F6EB2B43",
+            "expected_sha256": "25EB8F584CF081A2EA9DC6C377D367E595485F80151723CFEADAE458F6EB2B43",
             "passed": true,
             "path": "evidence/internal_docs/wp172_tokyo_final_holdout_2026_07_29.json"
           },

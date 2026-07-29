@@ -55,11 +55,15 @@ def test_locked_tokyo_trajectory_matches_promotion_summary() -> None:
         ).read_text(encoding="utf-8")
     )
     trajectory = REPO_ROOT / summary["output_trajectory"]
-    digest = hashlib.sha256(trajectory.read_bytes()).hexdigest().upper()
+    canonical = trajectory.read_bytes().replace(b"\r\n", b"\n")
+    digest = hashlib.sha256(canonical).hexdigest().upper()
     with trajectory.open(newline="", encoding="utf-8") as stream:
         rows = list(csv.DictReader(stream))
 
-    assert digest == summary["output_trajectory_sha256"]
+    assert digest == summary["output_trajectory_canonical_sha256"]
+    assert summary["output_trajectory_hash_normalization"] == (
+        "CRLF/LF normalized to LF"
+    )
     assert len(rows) == summary["full_denominator_epochs"] == 11_924
     assert sum(int(row["sub50cm"]) for row in rows) == 5_546
     assert sum(int(row["fix"]) for row in rows) == 0

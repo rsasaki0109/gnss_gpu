@@ -43,6 +43,8 @@
     }
   },
   "output_trajectory": "data/tokyo_run1_wp172_pf_seeded_rtk_consensus_trajectory.csv",
+  "output_trajectory_canonical_sha256": "1D502E6D6C0766B0BC77D8FF9391FD5A35E49E3193F4A5AB5FBC622222E862EB",
+  "output_trajectory_hash_normalization": "CRLF/LF normalized to LF",
   "output_trajectory_sha256": "804DEDEFAC9181E3B766DD8FC578A221AA5A7B6D55D0611A41121FEC66650243",
   "pf_only": true,
   "production_input_truth": false,
