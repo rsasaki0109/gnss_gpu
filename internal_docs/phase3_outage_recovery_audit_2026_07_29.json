@@ -1,0 +1,20 @@
+{
+  "schema": "gnss_gpu_phase3_outage_recovery_audit_v1",
+  "production_input_truth": false,
+  "outage_fix_suppressed": true,
+  "retained_hypotheses": 2,
+  "recovery_epochs": 3,
+  "legacy_greedy_error_m": 10.0,
+  "multihypothesis_error_m": 0.0,
+  "m4": {
+    "internal_docs/wp30_m4_production_config.json": {
+      "expected_sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+      "actual_sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486"
+    },
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": {
+      "expected_sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C",
+      "actual_sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+    }
+  },
+  "passed": true
+}
