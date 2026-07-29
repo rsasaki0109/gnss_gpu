@@ -6,6 +6,7 @@ pseudorange-based positioning with 1M+ particles on GPU.
 
 import numpy as np
 
+from gnss_gpu.backends import backend_unavailable, is_missing_optional_module
 from gnss_gpu.input_validation import (
     as_position_ecef,
     as_sat_ecef_matrix,
@@ -57,16 +58,21 @@ class ParticleFilter:
         self.resampling = resampling
         self.seed = seed
 
-        from gnss_gpu._gnss_gpu_pf import (
-            pf_initialize as _pf_initialize,
-            pf_predict as _pf_predict,
-            pf_weight as _pf_weight,
-            pf_compute_ess as _pf_compute_ess,
-            pf_resample_systematic as _pf_resample_systematic,
-            pf_resample_megopolis as _pf_resample_megopolis,
-            pf_estimate as _pf_estimate,
-            pf_get_particles as _pf_get_particles,
-        )
+        try:
+            from gnss_gpu._gnss_gpu_pf import (
+                pf_initialize as _pf_initialize,
+                pf_predict as _pf_predict,
+                pf_weight as _pf_weight,
+                pf_compute_ess as _pf_compute_ess,
+                pf_resample_systematic as _pf_resample_systematic,
+                pf_resample_megopolis as _pf_resample_megopolis,
+                pf_estimate as _pf_estimate,
+                pf_get_particles as _pf_get_particles,
+            )
+        except ImportError as exc:
+            if not is_missing_optional_module(exc, "gnss_gpu._gnss_gpu_pf"):
+                raise
+            backend_unavailable("ParticleFilter", "gnss_gpu._gnss_gpu_pf")
         self._pf_initialize = _pf_initialize
         self._pf_predict = _pf_predict
         self._pf_weight = _pf_weight

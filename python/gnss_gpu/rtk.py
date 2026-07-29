@@ -2,6 +2,10 @@
 
 import numpy as np
 
+from gnss_gpu.backends import (
+    NativeBackendUnavailableError,
+    is_missing_optional_module,
+)
 from gnss_gpu.input_validation import (
     as_base_ecef,
     finite_float,
@@ -11,8 +15,11 @@ from gnss_gpu.input_validation import (
 try:
     from gnss_gpu._gnss_gpu_rtk import rtk_float, rtk_float_batch, lambda_integer
     HAS_RTK = True
-except ImportError:
+except ImportError as exc:
+    if not is_missing_optional_module(exc, "gnss_gpu._gnss_gpu_rtk"):
+        raise
     HAS_RTK = False
+    rtk_float = rtk_float_batch = lambda_integer = None
 
 
 def _positive_int(name, value):
@@ -92,7 +99,11 @@ class RTKSolver:
         self.max_iter = _positive_int("max_iter", max_iter)
         self.tol = positive_float("tol", tol)
         if not HAS_RTK:
-            raise RuntimeError("RTK CUDA module not available. Build with CUDA support.")
+            raise NativeBackendUnavailableError(
+                "RTKSolver requires optional native module "
+                "'gnss_gpu._gnss_gpu_rtk'. Build the CUDA/C++ extensions "
+                "as described in README.md."
+            )
 
     def solve_float(self, rover_pr, base_pr, rover_carrier, base_carrier, sat_ecef):
         """Float RTK solution.

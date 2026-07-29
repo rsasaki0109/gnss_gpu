@@ -14,6 +14,8 @@ CUDA signal generation into a single pipeline:
 
 import math
 
+import warnings
+
 import numpy as np
 
 from gnss_gpu.signal_sim import SignalSimulator
@@ -211,7 +213,12 @@ class UrbanSignalSimulator:
             from utd_edge_features import extract_diffraction_edges
             self._diffraction_edges_cache = extract_diffraction_edges(
                 tris, **self.diffraction_edge_kwargs)
-        except Exception:
+        except Exception as exc:
+            warnings.warn(
+                f"diffraction-edge extraction unavailable: {exc}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
             self._diffraction_edges_cache = None
         return self._diffraction_edges_cache
 

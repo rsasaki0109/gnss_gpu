@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from gnss_gpu.backends import backend_unavailable, is_missing_optional_module
 from gnss_gpu.input_validation import finite_float, positive_float
 
 
@@ -19,35 +20,40 @@ def _positive_int(name, value):
 
 def load_pf_device_bindings() -> SimpleNamespace:
     """Import CUDA pf_device entrypoints once per process."""
-    from gnss_gpu._gnss_gpu_pf_device import (
-        pf_device_create,
-        pf_device_destroy,
-        pf_device_initialize,
-        pf_device_predict,
-        pf_device_weight,
-        pf_device_weight_dd_pseudorange,
-        pf_device_weight_gmm,
-        pf_device_weight_carrier_afv,
-        pf_device_weight_dd_carrier_afv,
-        pf_device_weight_dd_joint,
-        pf_device_weight_doppler,
-        pf_device_doppler_kf_update,
-        pf_device_position_update,
-        pf_device_shift_clock_bias,
-        pf_device_shift_position,
-        pf_device_ess,
-        pf_device_position_spread,
-        pf_device_resample_systematic,
-        pf_device_resample_megopolis,
-        pf_device_estimate,
-        pf_device_get_particles,
-        pf_device_get_particle_states,
-        pf_device_set_particle_states,
-        pf_device_get_log_weights,
-        pf_device_set_log_weights,
-        pf_device_get_resample_ancestors,
-        pf_device_sync,
-    )
+    try:
+        from gnss_gpu._gnss_gpu_pf_device import (
+            pf_device_create,
+            pf_device_destroy,
+            pf_device_initialize,
+            pf_device_predict,
+            pf_device_weight,
+            pf_device_weight_dd_pseudorange,
+            pf_device_weight_gmm,
+            pf_device_weight_carrier_afv,
+            pf_device_weight_dd_carrier_afv,
+            pf_device_weight_dd_joint,
+            pf_device_weight_doppler,
+            pf_device_doppler_kf_update,
+            pf_device_position_update,
+            pf_device_shift_clock_bias,
+            pf_device_shift_position,
+            pf_device_ess,
+            pf_device_position_spread,
+            pf_device_resample_systematic,
+            pf_device_resample_megopolis,
+            pf_device_estimate,
+            pf_device_get_particles,
+            pf_device_get_particle_states,
+            pf_device_set_particle_states,
+            pf_device_get_log_weights,
+            pf_device_set_log_weights,
+            pf_device_get_resample_ancestors,
+            pf_device_sync,
+        )
+    except ImportError as exc:
+        if not is_missing_optional_module(exc, "gnss_gpu._gnss_gpu_pf_device"):
+            raise
+        backend_unavailable("ParticleFilterDevice", "gnss_gpu._gnss_gpu_pf_device")
 
     return SimpleNamespace(
         pf_device_create=pf_device_create,

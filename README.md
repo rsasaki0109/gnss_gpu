@@ -355,6 +355,13 @@ Browse [`examples/`](examples/) for runnable demos (acquisition, full pipeline,
 interference, urban PLATEAU, real-data replay, visualization). The GPU-accelerated demos
 import native modules, so build the kernels first.
 
+The top-level positioning names remain defined on CPU-only installations.
+Calling a native-only operation raises
+`gnss_gpu.NativeBackendUnavailableError` with the missing module and build
+guidance. An installed extension that is broken (for example because a
+dependent CUDA DLL is missing) is reported as its original import error rather
+than being hidden as a normal CPU-only installation.
+
 ### Building the CUDA/C++ kernels
 
 The native kernels back the signal-sim, particle-filter, ray-tracing, and multi-GNSS

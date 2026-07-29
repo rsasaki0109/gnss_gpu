@@ -17,7 +17,8 @@ def generate_launch_description() -> LaunchDescription:
                         "kalman_sigma_a": 1.0,
                         "kalman_sigma_z": 1.0,
                         "use_hampel": True,
-                        "use_kalman": True,
+                "use_kalman": True,
+                "max_gap_s": 30.0,
                         "path_frame_id": "map",
                     }
                 ],

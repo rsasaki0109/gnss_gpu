@@ -117,6 +117,13 @@ class TestCvKalman1D:
         kf.update(11.0, 2.0)
         assert kf.update(5.0, 100.0) == 100.0  # time went backwards: reset
 
+    def test_explicit_reset_discards_velocity_history(self):
+        kf = CvKalman1D()
+        kf.update(10.0, 1.0)
+        kf.update(11.0, 20.0)
+        kf.reset()
+        assert kf.update(12.0, -5.0) == -5.0
+
     def test_invalid_args(self):
         with pytest.raises(ValueError):
             CvKalman1D(sigma_a=0.0)
@@ -172,3 +179,77 @@ class TestNavSatTrajectoryFilter:
         lat_out, lon_out, _, _, _ = f.update(0.0, lat, lon)
         assert lat_out == pytest.approx(lat, abs=1e-12)
         assert lon_out == pytest.approx(lon, abs=1e-12)
+
+    def test_rejects_missing_or_invalid_fix_fields(self):
+        f = NavSatTrajectoryFilter()
+        with pytest.raises(ValueError, match="finite"):
+            f.update(0.0, float("nan"), self.LON0)
+        with pytest.raises(ValueError, match="latitude"):
+            f.update(0.0, 91.0, self.LON0)
+        with pytest.raises(ValueError, match="longitude"):
+            f.update(0.0, self.LAT0, 181.0)
+
+    def test_long_missing_interval_resets_motion_state_but_keeps_frame(self):
+        f = NavSatTrajectoryFilter(max_gap_s=5.0)
+        _, r_p = _radii_at(self.LAT0)
+        f.update(0.0, self.LAT0, self.LON0)
+        f.update(1.0, self.LAT0, self.LON0 + math.degrees(5.0 / r_p))
+        result = f.update(
+            20.0, self.LAT0, self.LON0 + math.degrees(100.0 / r_p)
+        )
+        assert result[2] == pytest.approx(100.0)
+
+    def test_out_of_order_bag_timestamp_is_deterministic(self):
+        f = NavSatTrajectoryFilter(use_hampel=False)
+        samples = [
+            (10.0, self.LAT0, self.LON0),
+            (11.0, self.LAT0, self.LON0 + 0.00001),
+            (9.0, self.LAT0, self.LON0 + 0.00002),
+        ]
+        outputs = [f.update(*sample) for sample in samples]
+        # CvKalman1D deliberately reinitializes on a backward timestamp.
+        assert outputs[-1][1] == pytest.approx(samples[-1][2], abs=1e-12)
+
+    def test_clock_epoch_offset_does_not_change_replay(self):
+        fixes = [
+            (self.LAT0, self.LON0 + k * 0.00001)
+            for k in range(20)
+        ]
+
+        def replay(epoch_offset):
+            stream_filter = NavSatTrajectoryFilter()
+            return np.asarray(
+                [
+                    stream_filter.update(epoch_offset + k, lat, lon)[:4]
+                    for k, (lat, lon) in enumerate(fixes)
+                ]
+            )
+
+        assert np.allclose(replay(0.0), replay(1_700_000_000.0), atol=1e-9)
+
+    def test_restart_establishes_fresh_local_frame(self):
+        first_process = NavSatTrajectoryFilter()
+        first_process.update(0.0, self.LAT0, self.LON0)
+        first_process.update(1.0, self.LAT0, self.LON0 + 0.001)
+
+        restarted = NavSatTrajectoryFilter()
+        _, _, east, north, _ = restarted.update(
+            2.0, self.LAT0 + 0.001, self.LON0 + 0.001
+        )
+        assert east == pytest.approx(0.0)
+        assert north == pytest.approx(0.0)
+
+    def test_bag_replay_same_input_same_output(self):
+        samples = [
+            (float(k), self.LAT0, self.LON0 + k * 0.00001)
+            for k in range(20)
+            if k not in {7, 8, 9}  # model dropped messages in a rosbag
+        ]
+
+        def replay():
+            stream_filter = NavSatTrajectoryFilter(max_gap_s=2.0)
+            return np.asarray(
+                [stream_filter.update(*sample)[:4] for sample in samples]
+            )
+
+        assert np.array_equal(replay(), replay())

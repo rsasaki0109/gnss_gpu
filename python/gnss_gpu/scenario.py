@@ -566,6 +566,7 @@ def _multipath_for_epoch(
     rx_ecef: np.ndarray,
     sat_ecef: np.ndarray,
     is_los: np.ndarray,
+    warn_once,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Per-satellite (multipath_excess_m, attenuation_db)."""
     n = sat_ecef.shape[0]
@@ -584,7 +585,8 @@ def _multipath_for_epoch(
             paths = refl_model.compute_reflection_paths(
                 rx_ecef, sat_ecef[los_idx], max_paths=config.max_reflection_paths
             )
-        except Exception:
+        except Exception as exc:
+            warn_once(f"reflection-path evaluation unavailable ({exc})")
             paths = None
         if paths is not None:
             for k, sat_i in enumerate(los_idx):
@@ -613,7 +615,8 @@ def _multipath_for_epoch(
                     rx_ecef, sat_ecef[nlos_idx], edges,
                     max_paths=config.max_diffraction_paths,
                 )
-        except Exception:
+        except Exception as exc:
+            warn_once(f"diffraction-path evaluation unavailable ({exc})")
             dpaths = None
         if dpaths is not None:
             for k, sat_i in enumerate(nlos_idx):
@@ -629,7 +632,8 @@ def _multipath_for_epoch(
             paths = refl_model.compute_reflection_paths(
                 rx_ecef, sat_ecef[remaining], max_paths=config.max_reflection_paths
             )
-        except Exception:
+        except Exception as exc:
+            warn_once(f"NLOS reflection-path evaluation unavailable ({exc})")
             paths = None
         if paths is not None:
             for k, sat_i in enumerate(remaining):
@@ -729,7 +733,7 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
                 is_los = np.ones(sat_id.size, dtype=bool)
 
         multipath_excess_m, atten_db = _multipath_for_epoch(
-            config, building_model, edges, rx_ecef, sat_ecef_m, is_los
+            config, building_model, edges, rx_ecef, sat_ecef_m, is_los, warn_once
         )
 
         sigma = _pr_noise_sigma_m(

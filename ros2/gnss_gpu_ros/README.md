@@ -61,6 +61,7 @@ ros2 run gnss_gpu_ros robust_navsat_filter --ros-args -r fix:=/your_gnss_driver/
 | `kalman_sigma_z` | 1.0 | measurement noise [m] |
 | `use_hampel` | true | enable the spike gate |
 | `use_kalman` | true | enable the Kalman stage |
+| `max_gap_s` | 30.0 | reset motion/filter history after a longer fix outage while preserving the local map anchor |
 | `path_frame_id` | `map` | frame for `path_filtered` |
 | `path_max_poses` | 2000 | ring-buffer cap for the path |
 
@@ -71,7 +72,9 @@ aggressive driving. The defaults (1.0/1.0) were the sweet spot.
 ## Tests
 
 The filter math is plain NumPy (`gnss_gpu_ros/filters.py`) and unit-tested
-without ROS:
+without ROS. Tests cover deterministic bag-style replay, timestamp offsets and
+out-of-order samples, missing/invalid fixes, long outages, and node restart
+state:
 
 ```bash
 cd ros2/gnss_gpu_ros && PYTHONPATH=. python3 -m pytest test/ -q
