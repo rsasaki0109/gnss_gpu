@@ -1,0 +1,304 @@
+{
+  "audit_truth_usage": "post_hoc_inventory_only",
+  "conclusion": {
+    "archived_native_candidates_reach_target": false,
+    "external_candidate_is_production_eligible": false,
+    "required_next_mechanism": "new_pf_native_absolute_position_supply_and_truth_free_selection"
+  },
+  "external_research_diagnostic": {
+    "candidate_sub50cm_epochs": 5896,
+    "declared_false_fix_percent": 16.019118100524206,
+    "declared_fix_epochs": 6486,
+    "false_fix_epochs": 1039,
+    "matched_epochs": 11878,
+    "oracle_gain_over_production": 3402,
+    "path": "results/wp14/tokyo_run1_fgo_gtsam.csv",
+    "production_eligible": false,
+    "prohibition_reason": "immutable_m4_requires_pf_only_and_runtime_fgo_false",
+    "replacement_loss": 1250,
+    "sha256": "E662880467F0C59DB2276F3FB1EF463C298DFB2D5A3AF3D21DB64790F2B6ABEC",
+    "source_class": "research_diagnostic_runtime_fgo",
+    "truth_usage": "post_hoc_supply_diagnosis_only"
+  },
+  "native_archive": {
+    "candidate_count": 44,
+    "candidates": [
+      {
+        "oracle_gain_over_production": 57,
+        "path": "results/wp31/tokyo_run1_l1_smoother_unanchored_full_trajectory.csv",
+        "replacement_loss": 3236,
+        "sha256": "14ADB483938E382F952012257A8030EBF1C509EF4037D9257DA044E1450152CC"
+      },
+      {
+        "oracle_gain_over_production": 37,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_tenanchor_routebridge_full_trajectory.csv",
+        "replacement_loss": 1331,
+        "sha256": "8017A2DFC9C6494AE449176209CD3148DCC8A066C0F00C201AB138AF2C1A8B8F"
+      },
+      {
+        "oracle_gain_over_production": 35,
+        "path": "results/wp31/tokyo_run1_assignment_maxmarginal_full_trajectory.csv",
+        "replacement_loss": 3232,
+        "sha256": "EBFF827AEC05811EB2EC24EE8C8077881698A507797487D239B772A6B2D5528C"
+      },
+      {
+        "oracle_gain_over_production": 33,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_threeanchor_full_trajectory.csv",
+        "replacement_loss": 2499,
+        "sha256": "2DF43F9DE40FC902259979266F15DEB9C78DCEB829F1DBEE23C6BBDAC24236F7"
+      },
+      {
+        "oracle_gain_over_production": 23,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_nineanchor_allintervals_full_trajectory.csv",
+        "replacement_loss": 1394,
+        "sha256": "5A88CA1F3EB4504706EA0B1D522D33D5A4FAB43349D577823319E01F731B177C"
+      },
+      {
+        "oracle_gain_over_production": 9,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_tenanchor_durationp2_full_trajectory.csv",
+        "replacement_loss": 702,
+        "sha256": "C005707EB40EFBA509C3C5D8CF0A37445C7F64D4DB8BF7D8F2B694C7FCA5887A"
+      },
+      {
+        "oracle_gain_over_production": 8,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_tenanchor_allfilled_full_trajectory.csv",
+        "replacement_loss": 614,
+        "sha256": "44F85C8FC518AD04B08664BFB7B5101BC67DEC5AD819DBADB4EA781C2ABC7B37"
+      },
+      {
+        "oracle_gain_over_production": 7,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_durationp2_full_trajectory.csv",
+        "replacement_loss": 567,
+        "sha256": "C44788033F3FA60D5C9B7FC4580979C055AF3C6BAF8CC4D14CA940B46CC8B001"
+      },
+      {
+        "oracle_gain_over_production": 6,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_nineanchor_durationp2_full_trajectory.csv",
+        "replacement_loss": 912,
+        "sha256": "80D0CBE39D96765E542947BAF88C27551255FA4D991F8FD167E0479FB4A8B817"
+      },
+      {
+        "oracle_gain_over_production": 5,
+        "path": "results/wp31/tokyo_run1_osm_particle_multigap_carrier_blocks_full_trajectory.csv",
+        "replacement_loss": 742,
+        "sha256": "A4A51BBDBDC903B924027BE301A50FD612C766CE1FF4B1016C14D7AA3A23A2DE"
+      },
+      {
+        "oracle_gain_over_production": 5,
+        "path": "results/wp31/tokyo_run1_osm_particle_multigap_carrier_ddpr_blocks_full_trajectory.csv",
+        "replacement_loss": 742,
+        "sha256": "A4A51BBDBDC903B924027BE301A50FD612C766CE1FF4B1016C14D7AA3A23A2DE"
+      },
+      {
+        "oracle_gain_over_production": 5,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_nineanchor_durationp3_full_trajectory.csv",
+        "replacement_loss": 927,
+        "sha256": "AEE622A47CAC13F41735415F2B2F5CFEF9FD764DAE9F45216573915610B9A63B"
+      },
+      {
+        "oracle_gain_over_production": 5,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_nineanchor_durationp4_full_trajectory.csv",
+        "replacement_loss": 945,
+        "sha256": "4BB72CA7C17296D00DF51AAC445D8EBA3D8583A822CF9D8AC62B14DD73DC0632"
+      },
+      {
+        "oracle_gain_over_production": 5,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_tenanchor_full_trajectory.csv",
+        "replacement_loss": 742,
+        "sha256": "4625B021B5541CC3316DCDE2EB0999396632208B38A02FEA5FE4A0F2BF633093"
+      },
+      {
+        "oracle_gain_over_production": 4,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_nineanchor_full_trajectory.csv",
+        "replacement_loss": 950,
+        "sha256": "E856BDD67336B0078FC0C0A8684B0A4410313132F6B757989426BA328010A6A6"
+      },
+      {
+        "oracle_gain_over_production": 4,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_twoanchor_full_trajectory.csv",
+        "replacement_loss": 2975,
+        "sha256": "747CC49BEB1D9DC1C9926B4A5639D891341B769815880E73AE0046EF5D68B8D8"
+      },
+      {
+        "oracle_gain_over_production": 3,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_eightanchor_full_trajectory.csv",
+        "replacement_loss": 1392,
+        "sha256": "263936C04129016E16647498EE952EB0CD8234319CD4126C019360E31B0D0787"
+      },
+      {
+        "oracle_gain_over_production": 3,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_sevenanchor_full_trajectory.csv",
+        "replacement_loss": 1781,
+        "sha256": "CD77E74468947045FE5A9A3985123FE56F5FFCE97C30D5A6185352EA1F17520B"
+      },
+      {
+        "oracle_gain_over_production": 1,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_fouranchor_full_trajectory.csv",
+        "replacement_loss": 2421,
+        "sha256": "A5876E560CF25BE0C3E052CA4B186BE40AB88836AC9BAEDA33EACCBA86670483"
+      },
+      {
+        "oracle_gain_over_production": 1,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_oneanchor_full_trajectory.csv",
+        "replacement_loss": 3505,
+        "sha256": "297F3DD58B0BB2E8C7ABA53EF5CB36682BF5178512B5830FE2E5D8B9D01293C8"
+      },
+      {
+        "oracle_gain_over_production": 1,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_sixanchor_full_trajectory.csv",
+        "replacement_loss": 1975,
+        "sha256": "0E097771BBB3A5C52C8108B3CEAF4E159989E4E25CDC31E175F472D852FE11D6"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_allfilled_full_trajectory.csv",
+        "replacement_loss": 479,
+        "sha256": "25CFA89D9900879890A2F907B3A5961CA8D734B584518E57773AD682B12D030D"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_elevenanchor_relative_secondary_fragmentationgated_full_trajectory.csv",
+        "replacement_loss": 479,
+        "sha256": "25CFA89D9900879890A2F907B3A5961CA8D734B584518E57773AD682B12D030D"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_nineanchor_allfilled_full_trajectory.csv",
+        "replacement_loss": 833,
+        "sha256": "D62056D67A5DABB77441AC4C9C56DE0205E465E9DB205E90959AB064B147C289"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_tdcp_gyro_gapfill_sixanchor_allfilled_full_trajectory.csv",
+        "replacement_loss": 1862,
+        "sha256": "D24EB0C1518FD8CAF25C2FDA22387F5E5F9983F95FF104B452ABABF7820B71A4"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp107_constant_singlebasis_full_trajectory.csv",
+        "replacement_loss": 476,
+        "sha256": "4105937484F56BCDEC89477959C4C6B5EDD6F01E13F6EB25047DA3B715C48564"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp107_constant_singlebasis_shadow_full_trajectory.csv",
+        "replacement_loss": 476,
+        "sha256": "4105937484F56BCDEC89477959C4C6B5EDD6F01E13F6EB25047DA3B715C48564"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp113_constant_singlebasis_full_trajectory.csv",
+        "replacement_loss": 460,
+        "sha256": "667B3E0626BCF26C6F858473ADA4950101A9A80D8647152FB5A4B3F5B08959AA"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp113_constant_singlebasis_shadow_full_trajectory.csv",
+        "replacement_loss": 460,
+        "sha256": "667B3E0626BCF26C6F858473ADA4950101A9A80D8647152FB5A4B3F5B08959AA"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp119_constant_singlebasis_full_trajectory.csv",
+        "replacement_loss": 405,
+        "sha256": "7744A0E53BA2D37E59A7B58BAB077758EE30B4B9EBBFFF5FEDD7ECB106F7FB32"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp119_constant_singlebasis_shadow_full_trajectory.csv",
+        "replacement_loss": 405,
+        "sha256": "7744A0E53BA2D37E59A7B58BAB077758EE30B4B9EBBFFF5FEDD7ECB106F7FB32"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp120_constant_singlebasis_full_trajectory.csv",
+        "replacement_loss": 350,
+        "sha256": "D993007AC92C3454A54415CBEDF6502330A549492617349C08846C0FA1260859"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp120_constant_singlebasis_shadow_full_trajectory.csv",
+        "replacement_loss": 350,
+        "sha256": "D993007AC92C3454A54415CBEDF6502330A549492617349C08846C0FA1260859"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp131_cross_basis_cppr_full_trajectory.csv",
+        "replacement_loss": 333,
+        "sha256": "25FB73F05445F6094281371C134368510ECC08F01CC110A22C668E2B9CE47192"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp131_cross_basis_cppr_shadow_full_trajectory.csv",
+        "replacement_loss": 333,
+        "sha256": "25FB73F05445F6094281371C134368510ECC08F01CC110A22C668E2B9CE47192"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp133_cppr_anchor_full_trajectory.csv",
+        "replacement_loss": 278,
+        "sha256": "C3B15A89D72894FD51626AC9504B95B7BE49118CAA477922757944E340ABD79F"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp133_cppr_anchor_shadow_full_trajectory.csv",
+        "replacement_loss": 278,
+        "sha256": "C3B15A89D72894FD51626AC9504B95B7BE49118CAA477922757944E340ABD79F"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp138_stability_cppr_full_trajectory.csv",
+        "replacement_loss": 223,
+        "sha256": "9ABFD989B8CF9978E2A19D87644E898D521B411B9EBB04FAB073E6346AC335A8"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp138_stability_cppr_shadow_full_trajectory.csv",
+        "replacement_loss": 223,
+        "sha256": "9ABFD989B8CF9978E2A19D87644E898D521B411B9EBB04FAB073E6346AC335A8"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp148_stability_cppr_full_trajectory.csv",
+        "replacement_loss": 168,
+        "sha256": "60B8DECB8D33E949A4F1FA9B30E9A3DCE6E687B3F3B4149D2AA3585B3015C647"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp150_stability_cppr_full_trajectory.csv",
+        "replacement_loss": 113,
+        "sha256": "F3B333C23E7228A120EA63534F76339A0123197175A58FFE88DDE259FF6A566C"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp153_stability_cppr_full_trajectory.csv",
+        "replacement_loss": 108,
+        "sha256": "3CB3BDEE3E4F5F74702F3E835533E124ACCDC059CD4A45D816F07F7EE0667284"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp157_stability_cppr_full_trajectory.csv",
+        "replacement_loss": 55,
+        "sha256": "59E2D5B65555F0D9C82CFCF18C7328E06EB579216B055C4EA6F549BA62DE0FF4"
+      },
+      {
+        "oracle_gain_over_production": 0,
+        "path": "results/wp31/tokyo_run1_wp171_screened_stability_full_trajectory.csv",
+        "replacement_loss": 0,
+        "sha256": "7628B852C3F2C2DE666EE5404EE53C7B95DDF1D136D67733AB0A4CE0D90A5DA7"
+      }
+    ],
+    "denominator_epochs": 11924,
+    "novel_epochs_needed_beyond_archive": 1495,
+    "oracle_union_sub50cm_epochs": 3871,
+    "oracle_union_sub50cm_percent": 32.46393827574639,
+    "production_path": "results/wp31/tokyo_run1_wp160_screened_stability_full_trajectory.csv",
+    "production_sha256": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+    "production_sub50cm_epochs": 3744,
+    "production_sub50cm_percent": 31.398859443139887,
+    "target_sub50cm_epochs": 5366,
+    "target_sub50cm_percent": 45.0
+  },
+  "production_selection_truth": false,
+  "schema": "gnss_gpu_tokyo_candidate_supply_audit_v1"
+}

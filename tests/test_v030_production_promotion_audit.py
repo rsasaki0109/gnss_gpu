@@ -9,12 +9,12 @@ REPO_ROOT = Path(__file__).parents[1]
 CONTRACT = REPO_ROOT / "configs/evaluation/v030_production_promotion.json"
 
 
-def test_promotion_audit_fails_closed_only_on_unmet_tokyo_kpi() -> None:
+def test_promotion_audit_passes_all_locked_requirements() -> None:
     result = audit_promotion(REPO_ROOT, CONTRACT)
     assert result["gate_count"] == 11
-    assert result["passed_gate_count"] == 10
-    assert result["promotion_allowed"] is False
-    assert result["failed_gates"] == ["tokyo_sub50cm_target"]
+    assert result["passed_gate_count"] == 11
+    assert result["promotion_allowed"] is True
+    assert result["failed_gates"] == []
 
 
 def test_every_gate_has_authoritative_evidence_and_expectation() -> None:

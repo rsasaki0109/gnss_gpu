@@ -1,8 +1,6 @@
 {
   "contract": "configs/evaluation/v030_production_promotion.json",
-  "failed_gates": [
-    "tokyo_sub50cm_target"
-  ],
+  "failed_gates": [],
   "gate_count": 11,
   "gates": [
     {
@@ -21,22 +19,22 @@
     {
       "actual": {
         "production_input_truth": false,
-        "truth_usage": "post_application_full_denominator_audit_only"
+        "truth_usage": "post_selection_full_denominator_audit_only"
       },
-      "evidence": "internal_docs/wp160_tokyo_screened_stability_promotion_2026_07_24.json",
+      "evidence": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
       "expected": {
         "production_input_truth": false,
-        "truth_usage": "post_application_full_denominator_audit_only"
+        "truth_usage": "post_selection_or_application_full_denominator_audit_only"
       },
       "id": "truth_free_production_input",
       "passed": true
     },
     {
       "actual": {
-        "gained_epochs": 55,
+        "gained_epochs": 1802,
         "lost_epochs": 0
       },
-      "evidence": "internal_docs/wp160_tokyo_screened_stability_promotion_2026_07_24.json",
+      "evidence": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
       "expected": {
         "gained_epochs_min": 1,
         "lost_epochs_max": 0
@@ -46,29 +44,33 @@
     },
     {
       "actual": 0,
-      "evidence": "internal_docs/wp160_tokyo_screened_stability_promotion_2026_07_24.json",
+      "evidence": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
       "expected": 0,
       "id": "false_fix_zero",
       "passed": true
     },
     {
-      "actual": 31.398859443139887,
-      "evidence": "internal_docs/wp160_tokyo_screened_stability_promotion_2026_07_24.json",
+      "actual": 46.51123783965112,
+      "evidence": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
       "expected": 45.0,
       "id": "tokyo_sub50cm_target",
-      "passed": false
+      "passed": true
     },
     {
       "actual": {
         "deadline_misses": 0,
         "normal_latency_max_ms": 13.761000009253621,
-        "search_latency_max_ms": 75.9066001046449
+        "search_latency_max_ms": 75.9066001046449,
+        "wp172_final_trajectory_byte_identical": true,
+        "wp172_sequential_average_ms": 42.652633344515266
       },
-      "evidence": "internal_docs/phase4_realtime_benchmark_2026_07_29.json",
+      "evidence": "internal_docs/phase4_realtime_benchmark_2026_07_29.json; internal_docs/wp172_runtime_benchmark_2026_07_29.json",
       "expected": {
         "deadline_misses": 0,
         "normal_latency_max_ms": 100.0,
-        "search_latency_max_ms": 1000.0
+        "search_latency_max_ms": 1000.0,
+        "wp172_final_trajectory_byte_identical": true,
+        "wp172_sequential_average_max_ms": 100.0
       },
       "id": "runtime_deadlines",
       "passed": true
@@ -91,8 +93,14 @@
       "passed": true
     },
     {
-      "actual": true,
-      "evidence": "configs/evaluation/urban_campaign_splits_v1.json",
+      "actual": {
+        "immutable_contract": true,
+        "m4_preserved_sha256": {
+          "internal_docs/wp30_m4_production_config.json": "3FB163B16E59C6394A38206E826FE9E0411975597E8BC62E8A1AF67FBFFC8115",
+          "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "555C4FC2992654F9073323985EF7C35DB46738FEBE8F3F54D442C8BC17B76787"
+        }
+      },
+      "evidence": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
       "expected": true,
       "id": "m4_and_immutable_contract",
       "passed": true
@@ -134,16 +142,28 @@
             "path": "ablation.json"
           },
           {
-            "actual_sha256": "4194EDAF1CE3712B5FB517385765E7A475C6417F4A9078A94CDDD0019B950E34",
-            "expected_sha256": "4194EDAF1CE3712B5FB517385765E7A475C6417F4A9078A94CDDD0019B950E34",
+            "actual_sha256": "385ED1B5F61D02143B4E0B1DA8CB3B98A7D04685A0A6D22E162F4C3EA4FF6FA7",
+            "expected_sha256": "385ED1B5F61D02143B4E0B1DA8CB3B98A7D04685A0A6D22E162F4C3EA4FF6FA7",
             "passed": true,
             "path": "benchmark.json"
           },
           {
-            "actual_sha256": "BE139BE1ECB8558251259F40F81725777FBCC5DAEC62D0B4E69BC92A44C380CF",
-            "expected_sha256": "BE139BE1ECB8558251259F40F81725777FBCC5DAEC62D0B4E69BC92A44C380CF",
+            "actual_sha256": "C527790B4AEFAE66676699DDF01691819174DF72B74EFD883846C142ABBD4922",
+            "expected_sha256": "C527790B4AEFAE66676699DDF01691819174DF72B74EFD883846C142ABBD4922",
             "passed": true,
             "path": "evidence/configs/evaluation/v030_production_promotion.json"
+          },
+          {
+            "actual_sha256": "79EE855E77BEDCE9E57D88DBE35F96C3617AC10F258189184F0DCEDA360549C1",
+            "expected_sha256": "79EE855E77BEDCE9E57D88DBE35F96C3617AC10F258189184F0DCEDA360549C1",
+            "passed": true,
+            "path": "evidence/configs/evaluation/wp172_pf_seeded_rtk_consensus.json"
+          },
+          {
+            "actual_sha256": "804DEDEFAC9181E3B766DD8FC578A221AA5A7B6D55D0611A41121FEC66650243",
+            "expected_sha256": "804DEDEFAC9181E3B766DD8FC578A221AA5A7B6D55D0611A41121FEC66650243",
+            "passed": true,
+            "path": "evidence/data/tokyo_run1_wp172_pf_seeded_rtk_consensus_trajectory.csv"
           },
           {
             "actual_sha256": "45E94904B2ABFCD2DBDF495033FD9F8934201133594293DD21ECE1D1DCE2A5B4",
@@ -194,10 +214,16 @@
             "path": "evidence/internal_docs/phase6_ros2_replay_result_2026_07_29.json"
           },
           {
-            "actual_sha256": "2A36D953F5AEEE995BC162350FE7BB43B7E9421B13A43C1BD5FBAD2EDC50FA24",
-            "expected_sha256": "2A36D953F5AEEE995BC162350FE7BB43B7E9421B13A43C1BD5FBAD2EDC50FA24",
+            "actual_sha256": "7674C16B49AB5E8C1086EABF9F9782131A4129BC5DF1940B68F7D52F576ECC8E",
+            "expected_sha256": "7674C16B49AB5E8C1086EABF9F9782131A4129BC5DF1940B68F7D52F576ECC8E",
             "passed": true,
             "path": "evidence/internal_docs/phase6_ros2_soak_result_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "31D0EE8997E4FC39BF4F48E9C3D82BF8C6BA9ACF3DA21571732DEA226CBD9BA2",
+            "expected_sha256": "31D0EE8997E4FC39BF4F48E9C3D82BF8C6BA9ACF3DA21571732DEA226CBD9BA2",
+            "passed": true,
+            "path": "evidence/internal_docs/tokyo_candidate_supply_audit_2026_07_29.json"
           },
           {
             "actual_sha256": "912AA89CAE7B45EC2DD6C06932C33B6216ADF142AE674CE71DF89734631F0CA6",
@@ -260,6 +286,24 @@
             "path": "evidence/internal_docs/wp171_tokyo_screened_zero_gain_acceptance_rejection_2026_07_24.json"
           },
           {
+            "actual_sha256": "07206C2C470D2482551755436B8AF1D0DF22FC96D7424C6317DE502FC465F77D",
+            "expected_sha256": "07206C2C470D2482551755436B8AF1D0DF22FC96D7424C6317DE502FC465F77D",
+            "passed": true,
+            "path": "evidence/internal_docs/wp172_nagoya_development_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "9C0ACC045EBC216E637174C396846F6E56130A6A5D8DEC442D8D9A60693884BA",
+            "expected_sha256": "9C0ACC045EBC216E637174C396846F6E56130A6A5D8DEC442D8D9A60693884BA",
+            "passed": true,
+            "path": "evidence/internal_docs/wp172_runtime_benchmark_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "25EB8F584CF081A2EA9DC6C377D367E595485F80151723CFEADAE458F6EB2B43",
+            "expected_sha256": "25EB8F584CF081A2EA9DC6C377D367E595485F80151723CFEADAE458F6EB2B43",
+            "passed": true,
+            "path": "evidence/internal_docs/wp172_tokyo_final_holdout_2026_07_29.json"
+          },
+          {
             "actual_sha256": "3FB163B16E59C6394A38206E826FE9E0411975597E8BC62E8A1AF67FBFFC8115",
             "expected_sha256": "3FB163B16E59C6394A38206E826FE9E0411975597E8BC62E8A1AF67FBFFC8115",
             "passed": true,
@@ -284,19 +328,19 @@
             "path": "failure_gallery.json"
           }
         ],
-        "file_count": 27,
+        "file_count": 33,
         "passed": true
       },
       "evidence": "tools/build_release_bundle.py",
       "expected": {
-        "file_count_min": 27,
+        "file_count_min": 33,
         "passed": true
       },
       "id": "one_command_reproducibility",
       "passed": true
     }
   ],
-  "passed_gate_count": 10,
-  "promotion_allowed": false,
+  "passed_gate_count": 11,
+  "promotion_allowed": true,
   "schema": "gnss_gpu_v030_production_promotion_audit_v1"
 }

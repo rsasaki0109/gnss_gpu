@@ -1,0 +1,25 @@
+{
+  "schema": "gnss_gpu_wp172_pf_seeded_rtk_consensus_contract_v1",
+  "frozen_from": "nagoya_run1_development",
+  "production_input_truth": false,
+  "runtime_fgo": false,
+  "pf_only": true,
+  "candidate_gate": {
+    "required_seeded_status": 4,
+    "max_independent_position_disagreement_m": 1.0,
+    "max_prefit_residual_rms_m": 4.0
+  },
+  "output_policy": {
+    "fallback": "retain_production_epoch",
+    "declare_fix": false
+  },
+  "holdout_policy": {
+    "tokyo_truth_usage": "post_freeze_full_denominator_audit_only",
+    "mandatory_negative_holdout_disposition": "source_class_mismatch",
+    "reason": "WP172 requires an independently agreeing PF-seeded RTK candidate; CPPR unsafe triples do not satisfy the input contract"
+  },
+  "m4_expected_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "3FB163B16E59C6394A38206E826FE9E0411975597E8BC62E8A1AF67FBFFC8115",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "555C4FC2992654F9073323985EF7C35DB46738FEBE8F3F54D442C8BC17B76787"
+  }
+}

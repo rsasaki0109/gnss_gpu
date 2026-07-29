@@ -21,10 +21,16 @@ def test_release_bundle_builds_and_verifies(tmp_path: Path) -> None:
     result = verify_bundle(output)
     assert manifest["version"] == VERSION == "0.3.0"
     assert result["passed"] is True
-    assert result["file_count"] >= 27
+    assert result["file_count"] >= 33
     benchmark = json.loads((output / "benchmark.json").read_text(encoding="utf-8"))
     assert benchmark["runtime"]["normal_latency_max_ms"] <= 100.0
     assert benchmark["runtime"]["search_latency_max_ms"] <= 1_000.0
+    assert (
+        benchmark["runtime"]["wp172_candidate_supply"][
+            "conservative_sequential_average_ms_per_epoch"
+        ]
+        <= 100.0
+    )
     assert benchmark["cross_domain"]["coverage"]["cities"] == [
         "hong-kong",
         "nagoya",

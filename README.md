@@ -115,10 +115,14 @@ reference truth or runtime FGO, and requires declared false FIX at or below 1%.
 Latest `libgnss++` selected results are shown only as an external reference;
 every imported RTK idea must still pass the PF posterior and promotion gates.
 
-| Full-epoch matched 3D | PF-only locked current | latest libgnss++ reference | campaign target |
+| Full-epoch matched 3D | PF-only locked current | latest libgnss++ reference | v0.3 promotion floor |
 |---|---:|---:|---:|
-| Tokyo run1 | **31.40%** (3,744 / 11,924) | 80.02% | 81.00% |
-| Nagoya run1 | **69.55%** (5,274 / 7,583) | 85.84% | 86.00% |
+| Tokyo run1 | **46.51%** (5,546 / 11,924) | 80.02% | 45.00% |
+| Nagoya run1 | **75.37%** (5,715 / 7,583) | 85.84% | 69.55% non-degradation |
+
+The full WP172 dual-RTK candidate supply is measured at a conservative
+42.653 ms/epoch when executed sequentially (21.826 ms/epoch concurrently),
+under the 100 ms production budget. FIX declarations remain suppressed.
 
 <p align="center">
   <img src="docs/assets/figures/pf_only_rtk_stretch.svg" alt="PF-only Tokyo and Nagoya RTK stretch progress, external libgnss++ reference, targets, and truth-free promotion gates" width="900">
