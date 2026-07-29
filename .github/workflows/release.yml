@@ -90,6 +90,12 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v4
         with:
+          name: source-and-reproducibility
+          path: release-assets
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: cuda-wheel
           path: release-assets
           merge-multiple: true
       - run: gh release create "${GITHUB_REF_NAME}" release-assets/* --verify-tag --title "gnss_gpu ${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES_v0.3.0.md
