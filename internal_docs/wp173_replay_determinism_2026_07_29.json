@@ -1,0 +1,16 @@
+{
+  "schema": "gnss_gpu_wp173_replay_determinism_v1",
+  "date": "2026-07-29",
+  "locked_independent_rtk_sha256": "80C96053401946A07F98B81E03A9761BB3B327F9963AA46B39D85A54FAC35753",
+  "replayed_independent_rtk_sha256": "11AF9EE7513D2C501B1CCD5C848464052E9209ACA52C7A7DB188DA0143DBCA10",
+  "independent_rtk_is_byte_identical": false,
+  "locked_fix_epochs": 1296,
+  "replayed_fix_epochs": 1296,
+  "locked_false_fix_epochs": 0,
+  "replayed_false_fix_epochs": 0,
+  "hash_normalization": "CRLF/LF normalized to LF",
+  "locked_output_canonical_sha256": "372B5D2DC2327BBE7BDF39ADEE9BB944B900B06D4C9EF23A0158122FC0B27E17",
+  "replayed_output_canonical_sha256": "372B5D2DC2327BBE7BDF39ADEE9BB944B900B06D4C9EF23A0158122FC0B27E17",
+  "output_is_canonically_identical": true,
+  "passed": true
+}

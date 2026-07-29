@@ -1,0 +1,30 @@
+{
+  "schema": "gnss_gpu_wp173_lambda_fix_declaration_contract_v1",
+  "frozen_from": "nagoya_run1_development",
+  "upstream_contract": "configs/evaluation/wp172_pf_seeded_rtk_consensus.json",
+  "production_input_truth": false,
+  "runtime_fgo": false,
+  "pf_only": true,
+  "integer_ambiguity_method": {
+    "implementation": "libgnss++ MLAMBDA",
+    "candidate_requirement": "upstream WP172 PF-seeded RTK consensus",
+    "minimum_lambda_ratio": 3.0,
+    "minimum_satellites": 6,
+    "minimum_contiguous_epochs": 5,
+    "maximum_epoch_gap_s": 0.21
+  },
+  "output_policy": {
+    "declare_fix_after_complete_streak": true,
+    "single_epoch_fix_allowed": false,
+    "fallback": "retain_wp172_position_and_declare_float"
+  },
+  "holdout_policy": {
+    "tokyo_truth_usage": "post_freeze_full_denominator_audit_only",
+    "mandatory_negative_holdout_disposition": "no_wp172_consensus_input",
+    "reason": "WP173 cannot declare FIX without a complete PF-seeded and independently agreeing LAMBDA candidate streak"
+  },
+  "m4_expected_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "3FB163B16E59C6394A38206E826FE9E0411975597E8BC62E8A1AF67FBFFC8115",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "555C4FC2992654F9073323985EF7C35DB46738FEBE8F3F54D442C8BC17B76787"
+  }
+}

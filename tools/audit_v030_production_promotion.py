@@ -64,12 +64,14 @@ def audit_promotion(repo_root: Path, contract_path: Path) -> dict[str, Any]:
     tokyo = evidence["tokyo_production"]
     runtime = evidence["runtime"]
     wp172_runtime = evidence["wp172_runtime"]
+    wp173_replay = evidence["wp173_replay"]
     cross_domain = evidence["cross_domain"]
     soak = evidence["ros2_soak"]
     replay_input = evidence["ros2_replay_input"]
     replay_result = evidence["ros2_replay_result"]
 
     production = tokyo.get("production_effect", tokyo)
+    production_contract = _read_json(repo_root / tokyo["contract"])
     truth_usage = tokyo.get("truth_usage")
     after_sub50cm_percent = production.get(
         "after_sub50cm_pct", production.get("after_sub50cm_percent")
@@ -154,6 +156,44 @@ def audit_promotion(repo_root: Path, contract_path: Path) -> dict[str, Any]:
             expected=targets["false_fix_epochs_max"],
         ),
         _gate(
+            "lambda_fix_coverage",
+            production["fix_percent"] >= targets["tokyo_lambda_fix_full_pct_min"]
+            and tokyo.get("integer_ambiguity_method", {}).get("implementation")
+            == "libgnss++ MLAMBDA"
+            and all(
+                item.get("accepted") is False and item.get("fix_epochs") == 0
+                for item in tokyo["mandatory_negative_holdouts"].values()
+            )
+            and wp173_replay.get("passed") is True
+            and wp173_replay.get("output_is_canonically_identical") is True
+            and wp173_replay.get("replayed_output_canonical_sha256")
+            == tokyo.get("output_trajectory_canonical_sha256"),
+            evidence=(
+                f"{evidence_paths['tokyo_production']}; "
+                f"{evidence_paths['wp173_replay']}"
+            ),
+            actual={
+                "method": tokyo.get("integer_ambiguity_method", {}).get(
+                    "implementation"
+                ),
+                "fix_epochs": production["fix_epochs"],
+                "fix_percent": production["fix_percent"],
+                "negative_holdout_fix_epochs": {
+                    name: item.get("fix_epochs")
+                    for name, item in tokyo["mandatory_negative_holdouts"].items()
+                },
+                "replay_canonically_identical": wp173_replay.get(
+                    "output_is_canonically_identical"
+                ),
+            },
+            expected={
+                "method": "libgnss++ MLAMBDA",
+                "fix_percent_min": targets["tokyo_lambda_fix_full_pct_min"],
+                "negative_holdout_fix_epochs": 0,
+                "replay_canonically_identical": True,
+            },
+        ),
+        _gate(
             "tokyo_sub50cm_target",
             after_sub50cm_percent >= targets["tokyo_sub50cm_full_pct_min"],
             evidence=evidence_paths["tokyo_production"],
@@ -215,9 +255,7 @@ def audit_promotion(repo_root: Path, contract_path: Path) -> dict[str, Any]:
             "m4_and_immutable_contract",
             immutable.get("passed") is True
             and tokyo.get("m4_preserved_sha256")
-            == _read_json(
-                repo_root / "configs/evaluation/wp172_pf_seeded_rtk_consensus.json"
-            ).get("m4_expected_sha256"),
+            == production_contract.get("m4_expected_sha256"),
             evidence=evidence_paths["tokyo_production"],
             actual={
                 "immutable_contract": immutable.get("passed"),
@@ -247,10 +285,10 @@ def audit_promotion(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         _gate(
             "one_command_reproducibility",
             bundle_verification["passed"] is True
-            and bundle_verification["file_count"] >= 33,
+            and bundle_verification["file_count"] >= 38,
             evidence="tools/build_release_bundle.py",
             actual=bundle_verification,
-            expected={"passed": True, "file_count_min": 33},
+            expected={"passed": True, "file_count_min": 38},
         ),
     ]
     failed = [gate["id"] for gate in gates if not gate["passed"]]

@@ -60,12 +60,12 @@
 
     <rect x="630" y="324" width="282" height="82" rx="9" fill="#161b22" stroke="#30363d"/>
     <text x="647" y="349" fill="#d29922" font-size="13" font-weight="700">3 · Promotion gates</text>
-    <text x="647" y="371" fill="#c9d1d9" font-size="12">candidate margin · stability · residuals</text>
-    <text x="647" y="390" fill="#c9d1d9" font-size="12">declared false FIX ≤ 1%</text>
+    <text x="647" y="371" fill="#c9d1d9" font-size="12">MLAMBDA ratio ≥ 3 · 5-epoch continuity</text>
+    <text x="647" y="390" fill="#c9d1d9" font-size="12">WP172 consensus · declared false FIX = 0</text>
 
     <rect x="630" y="432" width="282" height="78" rx="9" fill="#0f2d1d" stroke="#238636"/>
     <text x="647" y="457" fill="#3fb950" font-size="13" font-weight="700">Locked current integrity</text>
-    <text x="647" y="480" fill="#c9d1d9" font-size="12">Nagoya: 5,715 / 7,583 · gain 441 / loss 0</text>
-    <text x="647" y="499" fill="#c9d1d9" font-size="12">Tokyo: 5,546 / 11,924 · false FIX 0</text>
+    <text x="647" y="480" fill="#c9d1d9" font-size="12">Nagoya: FIX 18.07% · false FIX 0</text>
+    <text x="647" y="499" fill="#c9d1d9" font-size="12">Tokyo: FIX 10.87% · false FIX 0</text>
   </g>
 </svg>

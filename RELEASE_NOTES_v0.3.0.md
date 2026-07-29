@@ -37,18 +37,22 @@ python tools/build_release_bundle.py --verify dist/reproducibility
   3 receivers. Epoch-weighted RMS changes from 17.107 m to 16.916 m, with
   Tokyo non-degradation and a Hong Kong gain.
 - The deterministic ROS replay contains 10 events and one controlled restart.
-- The PF-only WP172 production trajectory reaches 5,546/11,924 Tokyo epochs
-  below 50 cm (46.5112%), with 1,802 gained, zero lost, and zero false FIX.
-- The fail-closed production audit passes all 11 gates.
+- The PF-only WP173 production trajectory retains 5,546/11,924 Tokyo epochs
+  below 50 cm (46.5112%) and declares 1,296 guarded MLAMBDA FIX epochs
+  (10.8688%), with 1,802 gained, zero lost, and zero false FIX.
+- Nagoya development declares 1,370/7,583 guarded FIX epochs (18.0667%) with
+  zero false FIX.
+- The fail-closed production audit passes all 12 gates.
 
 ## Important limits
 
-The 45% Tokyo sub-50 cm promotion floor is met, but WP172 deliberately
-suppresses FIX declarations; it does not claim RTK FIX coverage. The locked
-Tokyo rerun is an operational promotion audit rather than a virgin scientific
-holdout because earlier campaign diagnostics had inspected Tokyo run1. The
-numerical consensus/residual gates were frozen and checked on Nagoya. The
-locked Phase 3 outage audit is synthetic, Hong Kong is reproduced from a
-tracked summary because raw data is absent, and the Windows memory figure is a
-conservative capacity estimate. Promotion remains fail closed for future
-changes.
+The 45% Tokyo sub-50 cm promotion floor and 10% guarded FIX floor are met.
+WP173 does not treat every internal LAMBDA solution as a declared FIX: it
+requires the complete WP172 consensus plus ratio, satellite-count, and
+five-epoch continuity gates. The locked Tokyo rerun is an operational
+promotion audit rather than a virgin scientific holdout because earlier
+campaign diagnostics had inspected Tokyo run1. The numerical gates were
+frozen and checked on Nagoya. The locked Phase 3 outage audit is synthetic,
+Hong Kong is reproduced from a tracked summary because raw data is absent,
+and the Windows memory figure is a conservative capacity estimate. Promotion
+remains fail closed for future changes.

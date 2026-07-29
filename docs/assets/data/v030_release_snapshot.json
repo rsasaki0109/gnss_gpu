@@ -29,9 +29,9 @@
       "tokyo/shinjuku"
     ]
   },
-  "headline": "46.51% Tokyo sub-50 cm, truth-free safety gates, real-time CUDA, ROS 2 lifecycle",
+  "headline": "46.51% Tokyo sub-50 cm, 10.87% guarded LAMBDA FIX, false-FIX zero",
   "limitations": [
-    "Tokyo sub-50 cm is 46.5112% (5,546/11,924); FIX declarations remain suppressed to preserve false-FIX zero.",
+    "Tokyo sub-50 cm is 46.5112% (5,546/11,924); guarded LAMBDA declares FIX on 1,296 epochs (10.8688%) with false-FIX zero.",
     "Tokyo run1 was inspected by earlier campaign diagnostics; WP172 is an operational audit, not a virgin scientific holdout.",
     "The Phase 3 outage audit is synthetic; city-scale evidence is reported separately.",
     "Hong Kong is locked from a tracked summary because raw data is not bundled.",
@@ -134,9 +134,11 @@
     "failed_gates": [],
     "false_fix": 0,
     "gained_epochs": 1802,
-    "gate_count": 11,
+    "gate_count": 12,
+    "lambda_fix_epochs": 1296,
+    "lambda_fix_percent": 10.868835961086884,
     "lost_epochs": 0,
-    "passed_gates": 11,
+    "passed_gates": 12,
     "tokyo_epoch_margin": 180,
     "tokyo_required_epochs": 5366,
     "tokyo_sub50cm_epochs": 5546,

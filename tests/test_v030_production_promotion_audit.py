@@ -11,8 +11,8 @@ CONTRACT = REPO_ROOT / "configs/evaluation/v030_production_promotion.json"
 
 def test_promotion_audit_passes_all_locked_requirements() -> None:
     result = audit_promotion(REPO_ROOT, CONTRACT)
-    assert result["gate_count"] == 11
-    assert result["passed_gate_count"] == 11
+    assert result["gate_count"] == 12
+    assert result["passed_gate_count"] == 12
     assert result["promotion_allowed"] is True
     assert result["failed_gates"] == []
 

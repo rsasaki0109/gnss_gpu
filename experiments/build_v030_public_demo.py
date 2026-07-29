@@ -30,14 +30,16 @@ def build_snapshot(repo_root: Path) -> dict[str, Any]:
     promotion = _read(
         repo_root / "internal_docs/v030_production_promotion_audit_2026_07_29.json"
     )
-    tokyo = _read(repo_root / "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json")
+    tokyo = _read(
+        repo_root / "internal_docs/wp173_tokyo_operational_audit_2026_07_29.json"
+    )
     promotion_gates = {gate["id"]: gate for gate in promotion["gates"]}
     tokyo_gate = promotion_gates["tokyo_sub50cm_target"]
     gain_gate = promotion_gates["full_denominator_gain_without_loss"]
     return {
         "schema": "gnss_gpu_v030_public_snapshot_v1",
         "version": "0.3.0",
-        "headline": "46.51% Tokyo sub-50 cm, truth-free safety gates, real-time CUDA, ROS 2 lifecycle",
+        "headline": "46.51% Tokyo sub-50 cm, 10.87% guarded LAMBDA FIX, false-FIX zero",
         "phases": [
             {"id": 0, "name": "Evaluation contract", "status": "complete"},
             {
@@ -126,6 +128,8 @@ def build_snapshot(repo_root: Path) -> dict[str, Any]:
             "tokyo_epoch_margin": tokyo["after_sub50cm_epochs"] - 5366,
             **gain_gate["actual"],
             "false_fix": promotion_gates["false_fix_zero"]["actual"],
+            "lambda_fix_epochs": tokyo["fix_epochs"],
+            "lambda_fix_percent": tokyo["fix_percent"],
         },
         "soak": {
             "passed": soak["passed"],
@@ -139,8 +143,8 @@ def build_snapshot(repo_root: Path) -> dict[str, Any]:
         },
         "limitations": [
             (
-                "Tokyo sub-50 cm is 46.5112% (5,546/11,924); FIX declarations "
-                "remain suppressed to preserve false-FIX zero."
+                "Tokyo sub-50 cm is 46.5112% (5,546/11,924); guarded LAMBDA "
+                "declares FIX on 1,296 epochs (10.8688%) with false-FIX zero."
             ),
             (
                 "Tokyo run1 was inspected by earlier campaign diagnostics; "
@@ -218,6 +222,7 @@ fetch("assets/data/v030_release_snapshot.json").then(r => r.json()).then(d => {
     [d.promotion.passed_gates+"/"+d.promotion.gate_count,"promotion gates pass"],
     [d.promotion.tokyo_sub50cm_percent.toFixed(2)+"% / "+d.promotion.tokyo_target_percent.toFixed(0)+"%","Tokyo sub-50 cm"],
     [d.promotion.gained_epochs+" / "+d.promotion.lost_epochs,"gained / lost epochs"],
+    [d.promotion.lambda_fix_percent.toFixed(2)+"%","guarded LAMBDA FIX"],
     [d.promotion.false_fix,"false FIX"],
     [(d.soak.simulated_duration_s/3600).toFixed(0)+" h","ROS 2 continuity soak"],
     [d.soak.final_mode,"final navigation mode"]

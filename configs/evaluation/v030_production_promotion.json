@@ -2,6 +2,7 @@
   "schema": "gnss_gpu_v030_production_promotion_contract_v1",
   "targets": {
     "tokyo_sub50cm_full_pct_min": 45.0,
+    "tokyo_lambda_fix_full_pct_min": 10.0,
     "false_fix_epochs_max": 0,
     "lost_epochs_max": 0,
     "gained_epochs_min": 1,
@@ -13,9 +14,10 @@
   },
   "evidence": {
     "negative_holdouts": "internal_docs/phase1_holdout_detector_audit_2026_07_29.json",
-    "tokyo_production": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
+    "tokyo_production": "internal_docs/wp173_tokyo_operational_audit_2026_07_29.json",
     "runtime": "internal_docs/phase4_realtime_benchmark_2026_07_29.json",
     "wp172_runtime": "internal_docs/wp172_runtime_benchmark_2026_07_29.json",
+    "wp173_replay": "internal_docs/wp173_replay_determinism_2026_07_29.json",
     "cross_domain": "internal_docs/phase5_cross_domain_result_2026_07_29.json",
     "ros2_replay_input": "internal_docs/phase6_ros2_replay_input_2026_07_29.json",
     "ros2_replay_result": "internal_docs/phase6_ros2_replay_result_2026_07_29.json",

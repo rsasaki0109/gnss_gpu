@@ -21,7 +21,8 @@ budgets, cross-domain validation, and a ROS 2 lifecycle safety boundary.
 | Campaign coverage | 3 cities; 9 sites/routes; 5 dates; 3 receivers |
 | ROS replay | 10 events; 1 restart; canonical event hash locked |
 | ROS continuity | 2 simulated hours; 439,187 events; 1 watchdog trip; final normal |
-| Production promotion | 11/11 gates pass; Tokyo 46.5112% exceeds 45% |
+| Guarded MLAMBDA FIX | Tokyo 10.8688%; Nagoya 18.0667%; false-FIX 0 |
+| Production promotion | 12/12 gates pass; Tokyo 46.5112% exceeds 45% |
 
 The cross-domain result preserves Tokyo and improves the tracked Hong Kong
 campaign. Every release claim is derived from locked, hash-checked evidence
@@ -40,9 +41,17 @@ then accepts positions only when an independent RTK trajectory agrees within
 1 m and the prefit residual RMS is at most 4 m. The gate was frozen on Nagoya
 run1, where it gains 441 epochs with zero loss, before the Tokyo final audit.
 Tokyo gains 1,802 epochs with zero loss and reaches 5,546/11,924 sub-50 cm
-epochs (46.5112%). All FIX declarations remain suppressed, so false FIX is
-zero. The selector is PF-only, uses no runtime FGO, and does not load reference
-truth until the post-selection full-denominator audit.
+epochs (46.5112%). The selector is PF-only, uses no runtime FGO, and does not
+load reference truth until the post-selection full-denominator audit.
+
+WP173 promotes the existing libgnss++ MLAMBDA result to a declared FIX only
+when the complete WP172 consensus gate passes, the LAMBDA ratio is at least
+3.0, at least six satellites participate, and eligibility remains contiguous
+for five epochs. These standard ratio/hold conditions were frozen on Nagoya:
+1,370/7,583 epochs (18.0667%) are declared FIX with zero false FIX. Applied
+unchanged to Tokyo, 1,296/11,924 epochs (10.8688%) are declared FIX with zero
+false FIX. A failed ratio, satellite count, continuity check, or missing
+candidate immediately falls back to FLOAT.
 
 The two RTK candidate paths were replayed over all 11,924 Tokyo epochs on an
 i7-9750H. Their conservative sequential sum is 42.653 ms/epoch, below the
@@ -76,8 +85,9 @@ and timestamps are deterministic.
 
 ## Limitations
 
-- Tokyo clears the 45% promotion floor, but declares no FIX states; accuracy
-  gains are reported as guarded float positions rather than RTK FIX coverage.
+- Tokyo clears the 45% positioning and 10% guarded FIX promotion floors, but
+  most epochs intentionally remain FLOAT; the result does not claim broad RTK
+  FIX availability.
 - Tokyo run1 is not a virgin scientific holdout: earlier campaign diagnostics
   had already inspected it. WP172's numerical 1 m/4 m gates were inherited from
   physical safety limits, frozen and checked on Nagoya before the locked Tokyo
