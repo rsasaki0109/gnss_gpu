@@ -67,6 +67,7 @@ docs/assets/data/
 !docs/assets/data/
 !docs/assets/data/plateau_nlos_demo_suite_summary.csv
 !docs/assets/data/plateau_nlos_demo_suite_summary.md
+!docs/assets/data/v030_release_snapshot.json
 docs/assets/gpu_stress_lab_snapshot.js
 docs/assets/gpu_stress_lab_snapshot.json
 docs/assets/gpu_gnss_stress_lab.html

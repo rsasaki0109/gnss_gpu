@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>gnss_gpu v0.3 — release audit</title>
+  <link rel="stylesheet" href="site.css">
+  <style>
+    :root { color-scheme: dark; --ink:#eaf4ff; --muted:#9db0c7; --panel:#101a29;
+      --line:#263b55; --cyan:#47d7ff; --green:#57e39b; --amber:#ffcb6b; }
+    html { overflow-anchor:none; }
+    body { margin:0; background:#07101b; color:var(--ink); font:16px/1.55 system-ui,sans-serif; }
+    main { width:min(1120px,calc(100% - 32px)); margin:auto; padding:48px 0 80px; }
+    a { color:var(--cyan); } .eyebrow { color:var(--cyan); letter-spacing:.14em; text-transform:uppercase; }
+    h1 { font-size:clamp(2.4rem,7vw,5.6rem); line-height:.95; margin:.2em 0; }
+    .lede { max-width:780px; color:var(--muted); font-size:1.2rem; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin:32px 0; }
+    .card,.phase,.event,.limit { background:var(--panel); border:1px solid var(--line);
+      border-radius:14px; padding:18px; }
+    .metric { color:var(--green); font-size:1.8rem; font-weight:750; }
+    .label,.detail { color:var(--muted); } .phases { display:grid; gap:10px; }
+    .phase { display:grid; grid-template-columns:48px 1fr auto; align-items:center; gap:12px; }
+    .phase b:first-child { color:var(--cyan); font-size:1.3rem; }
+    .status { color:var(--green); } .timeline { display:flex; gap:8px; overflow:auto; padding-bottom:8px; }
+    .event { min-width:140px; } .event.safe_fallback { border-color:var(--amber); }
+    code { overflow-wrap:anywhere; } ul { padding-left:22px; }
+    footer { color:var(--muted); margin-top:48px; }
+  </style>
+</head>
+<body><main>
+  <p class="eyebrow">Audited release · v<span id="version"></span></p>
+  <h1>Urban navigation,<br>safely bounded.</h1>
+  <p class="lede" id="headline"></p>
+  <p><a href="./">← Main results</a> · <a href="https://github.com/rsasaki0109/gnss_gpu/releases/tag/v0.3.0">Release assets</a></p>
+  <section class="grid" id="metrics"></section>
+  <h2>Phase 0 → 7</h2><section class="phases" id="phases"></section>
+  <h2>Deterministic anomaly replay</h2>
+  <p class="detail">Recorded arrival order; integrity faults latch safe fallback until a valid newer event or restart.</p>
+  <section class="timeline" id="timeline"></section>
+  <p>Replay SHA-256: <code id="replay-hash"></code></p>
+  <h2>Mandatory negative controls</h2><section class="grid" id="holdouts"></section>
+  <h2>Limits, not footnotes</h2><ul id="limits"></ul>
+  <footer>Generated from checked-in Phase 1–6 JSON artifacts. No live telemetry and no post-load metric rewriting.</footer>
+</main>
+<script>
+fetch("assets/data/v030_release_snapshot.json").then(r => r.json()).then(d => {
+  document.getElementById("version").textContent=d.version;
+  document.getElementById("headline").textContent=d.headline;
+  const metricRows=[
+    [d.runtime.normal_latency_max_ms.toFixed(2)+" ms","normal max latency"],
+    [d.runtime.search_latency_max_ms.toFixed(2)+" ms","search max latency"],
+    [d.coverage.cities.length,"cities"],
+    [d.coverage.receivers.length,"receiver families"],
+    [d.positioning.baseline.toFixed(3)+" → "+d.positioning.candidate.toFixed(3)+" m","weighted positioning RMS"],
+    [d.runtime.deadline_misses,"deadline misses"]
+  ];
+  metricRows.forEach(([v,l])=>metricsEl.insertAdjacentHTML("beforeend",`<article class="card"><div class="metric">${v}</div><div class="label">${l}</div></article>`));
+  const phasesEl=document.getElementById("phases");
+  d.phases.forEach(p=>phasesEl.insertAdjacentHTML("beforeend",`<article class="phase"><b>${p.id}</b><div><b>${p.name}</b><div class="detail">${p.metric||""}</div></div><span class="status">${p.status}</span></article>`));
+  const timelineEl=document.getElementById("timeline");
+  d.replay.timeline.forEach(e=>timelineEl.insertAdjacentHTML("beforeend",`<article class="event ${e.mode}"><b>#${e.index} ${e.sensor}</b><div>${e.disposition}</div><small>${e.mode}</small></article>`));
+  document.getElementById("replay-hash").textContent=d.replay.sha256;
+  const holdoutsEl=document.getElementById("holdouts");
+  d.negative_controls.forEach(h=>holdoutsEl.insertAdjacentHTML("beforeend",`<article class="card"><b>${h.holdout_id}</b><div class="metric">REJECT</div><div class="detail">${h.reason}</div></article>`));
+  const limitsEl=document.getElementById("limits");
+  d.limitations.forEach(x=>limitsEl.insertAdjacentHTML("beforeend",`<li class="limit">${x}</li>`));
+}).catch(e=>document.body.textContent="Snapshot load failed: "+e);
+const metricsEl=document.getElementById("metrics");
+</script></body></html>

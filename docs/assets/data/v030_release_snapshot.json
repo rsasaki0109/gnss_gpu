@@ -1,0 +1,219 @@
+{
+  "coverage": {
+    "cities": [
+      "hong-kong",
+      "nagoya",
+      "tokyo"
+    ],
+    "dates": [
+      "2019-04-28",
+      "2020-12-17",
+      "2024-07-20",
+      "2024-07-23",
+      "2024-08-03"
+    ],
+    "receivers": [
+      "septentrio-mosaic-x5",
+      "trimble",
+      "ublox"
+    ],
+    "sites": [
+      "hong-kong/hk-20190428",
+      "nagoya/run1",
+      "nagoya/run2",
+      "nagoya/run3",
+      "tokyo/odaiba",
+      "tokyo/run1",
+      "tokyo/run2",
+      "tokyo/run3",
+      "tokyo/shinjuku"
+    ]
+  },
+  "headline": "Truth-free safety gates, real-time CUDA, cross-domain validation, ROS 2 lifecycle",
+  "limitations": [
+    "Tokyo sub-50 cm 45% remains a program target, not a demonstrated v0.3 result.",
+    "The Phase 3 outage audit is synthetic; city-scale evidence is reported separately.",
+    "Hong Kong is locked from a tracked summary because raw data is not bundled.",
+    "Windows GPU memory is a conservative capacity estimate, not nvidia-smi peak usage."
+  ],
+  "negative_controls": [
+    {
+      "accepted": false,
+      "holdout_id": "nagoya_wp53",
+      "reason": "insufficient_independent_families",
+      "unsafe_reasons": [
+        "insufficient_independent_families",
+        "insufficient_independent_groups",
+        "weak_basin_support",
+        "unopposed_basin"
+      ]
+    },
+    {
+      "accepted": false,
+      "holdout_id": "tokyo_wp129",
+      "reason": "ambiguous_basin_identity",
+      "unsafe_reasons": [
+        "ambiguous_basin_identity"
+      ]
+    },
+    {
+      "accepted": false,
+      "holdout_id": "tokyo_wp156",
+      "reason": "insufficient_independent_families",
+      "unsafe_reasons": [
+        "insufficient_independent_families",
+        "unopposed_basin"
+      ]
+    },
+    {
+      "accepted": false,
+      "holdout_id": "tokyo_wp168",
+      "reason": "insufficient_independent_families",
+      "unsafe_reasons": [
+        "insufficient_independent_families",
+        "unopposed_basin"
+      ]
+    }
+  ],
+  "phases": [
+    {
+      "id": 0,
+      "name": "Evaluation contract",
+      "status": "complete"
+    },
+    {
+      "id": 1,
+      "metric": "4/4 negative controls rejected",
+      "name": "Truth-free Evidence API",
+      "status": "complete"
+    },
+    {
+      "id": 2,
+      "metric": "2/3 ranks recovered; 0 false passes",
+      "name": "Affine DDPR + arc screen",
+      "status": "complete"
+    },
+    {
+      "id": 3,
+      "metric": "3 evidence epochs",
+      "name": "Multi-hypothesis outage recovery",
+      "status": "complete"
+    },
+    {
+      "id": 4,
+      "metric": "13.76 ms normal / 75.91 ms search",
+      "name": "Persistent real-time GPU",
+      "status": "complete"
+    },
+    {
+      "id": 5,
+      "metric": "3 cities / 3 receivers",
+      "name": "Cross-domain validation",
+      "status": "complete"
+    },
+    {
+      "id": 6,
+      "metric": "10-event deterministic replay",
+      "name": "ROS 2 lifecycle safety",
+      "status": "complete"
+    },
+    {
+      "id": 7,
+      "name": "v0.3 release",
+      "status": "complete"
+    }
+  ],
+  "positioning": {
+    "baseline": 17.106923118738404,
+    "candidate": 16.915560393320966,
+    "epochs": 6468
+  },
+  "replay": {
+    "dispositions": {
+      "accepted": 6,
+      "conflicting_duplicate": 1,
+      "duplicate": 1,
+      "future_skew": 1,
+      "out_of_order": 1
+    },
+    "event_count": 10,
+    "restart_count": 1,
+    "sha256": "A003EE14D05547F4020EDD2E18916AEA132142AE6F1CB72686AE9030A0C66BBA",
+    "timeline": [
+      {
+        "disposition": "accepted",
+        "index": 0,
+        "mode": "safe_fallback",
+        "sensor": "imu"
+      },
+      {
+        "disposition": "accepted",
+        "index": 1,
+        "mode": "safe_fallback",
+        "sensor": "map"
+      },
+      {
+        "disposition": "accepted",
+        "index": 2,
+        "mode": "normal",
+        "sensor": "gnss"
+      },
+      {
+        "disposition": "duplicate",
+        "index": 3,
+        "mode": "normal",
+        "sensor": "gnss"
+      },
+      {
+        "disposition": "conflicting_duplicate",
+        "index": 4,
+        "mode": "safe_fallback",
+        "sensor": "gnss"
+      },
+      {
+        "disposition": "out_of_order",
+        "index": 5,
+        "mode": "safe_fallback",
+        "sensor": "gnss"
+      },
+      {
+        "disposition": "future_skew",
+        "index": 6,
+        "mode": "safe_fallback",
+        "sensor": "imu"
+      },
+      {
+        "disposition": "accepted",
+        "index": 7,
+        "mode": "safe_fallback",
+        "sensor": "imu"
+      },
+      {
+        "disposition": "accepted",
+        "index": 8,
+        "mode": "safe_fallback",
+        "sensor": "map"
+      },
+      {
+        "disposition": "accepted",
+        "index": 9,
+        "mode": "normal",
+        "sensor": "gnss"
+      }
+    ]
+  },
+  "runtime": {
+    "deadline_misses": 0,
+    "gpu": "NVIDIA GeForce GTX 1660 Ti",
+    "latency_p50_ms": 13.66179995238781,
+    "latency_p95_ms": 75.82583510084078,
+    "normal_latency_max_ms": 13.761000009253621,
+    "passed": true,
+    "peak_gpu_memory_mb": 152.587890625,
+    "reasons": [],
+    "sample_count": 30,
+    "search_latency_max_ms": 75.9066001046449
+  },
+  "schema": "gnss_gpu_v030_public_snapshot_v1",
+  "version": "0.3.0"
+}

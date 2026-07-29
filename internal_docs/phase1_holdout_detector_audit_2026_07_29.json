@@ -1,0 +1,46 @@
+{
+  "minimum_required_rejections": 2,
+  "passed": true,
+  "production_input_truth": false,
+  "rejected_holdouts": 4,
+  "results": [
+    {
+      "accepted": false,
+      "holdout_id": "nagoya_wp53",
+      "reason": "insufficient_independent_families",
+      "unsafe_reasons": [
+        "insufficient_independent_families",
+        "insufficient_independent_groups",
+        "weak_basin_support",
+        "unopposed_basin"
+      ]
+    },
+    {
+      "accepted": false,
+      "holdout_id": "tokyo_wp129",
+      "reason": "ambiguous_basin_identity",
+      "unsafe_reasons": [
+        "ambiguous_basin_identity"
+      ]
+    },
+    {
+      "accepted": false,
+      "holdout_id": "tokyo_wp156",
+      "reason": "insufficient_independent_families",
+      "unsafe_reasons": [
+        "insufficient_independent_families",
+        "unopposed_basin"
+      ]
+    },
+    {
+      "accepted": false,
+      "holdout_id": "tokyo_wp168",
+      "reason": "insufficient_independent_families",
+      "unsafe_reasons": [
+        "insufficient_independent_families",
+        "unopposed_basin"
+      ]
+    }
+  ],
+  "schema": "gnss_gpu_phase1_holdout_detector_audit_v1"
+}

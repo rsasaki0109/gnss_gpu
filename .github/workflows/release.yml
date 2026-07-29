@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/gnss_gpu
+
+jobs:
+  source-and-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip build numpy pytest
+      - run: python -m build --sdist
+      - run: python tools/build_release_bundle.py --output dist/reproducibility --archive dist/gnss_gpu-v0.3.0-reproducibility.zip
+      - run: python tools/build_release_bundle.py --verify dist/reproducibility
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-and-reproducibility
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+
+  cuda-wheel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container: nvidia/cuda:12.4.1-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v6
+      - run: apt-get update && apt-get install -y python3 python3-dev python3-pip ninja-build
+      - run: python3 -m pip install --upgrade pip build cmake scikit-build-core pybind11 numpy
+      - run: python3 -m build --wheel --no-isolation --outdir dist -Ccmake.define.CMAKE_CUDA_ARCHITECTURES="75;80;86;89"
+      - run: python3 -m pip install --no-deps --target /tmp/wheel-test dist/gnss_gpu-0.3.0-*.whl
+      - run: PYTHONPATH=/tmp/wheel-test python3 -c "import gnss_gpu; assert gnss_gpu.__version__ == '0.3.0'"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cuda-wheel
+          path: dist/*.whl
+
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        include:
+          - suffix: cuda
+            dockerfile: docker/Dockerfile.cuda
+          - suffix: ros2
+            dockerfile: docker/Dockerfile.ros2
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.suffix }}:${{ github.ref_name }}
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.suffix }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  github-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [source-and-bundle, cuda-wheel, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - run: gh release create "${GITHUB_REF_NAME}" release-assets/* --verify-tag --title "gnss_gpu ${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES_v0.3.0.md
+        env:
+          GH_TOKEN: ${{ github.token }}

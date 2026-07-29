@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1.7
+ARG CUDA_VERSION=12.4.1
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04 AS builder
+
+ARG CUDA_ARCHITECTURES=75;80;86;89
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-dev python3-pip ninja-build git \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY . .
+RUN python3 -m pip install --upgrade pip \
+    && python3 -m pip install build cmake scikit-build-core pybind11 numpy \
+    && python3 -m build --wheel --no-isolation --outdir /wheelhouse \
+       -Ccmake.define.CMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}"
+
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONUNBUFFERED=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /wheelhouse /wheelhouse
+RUN python3 -m pip install --no-cache-dir /wheelhouse/gnss_gpu-0.3.0-*.whl \
+    && python3 -c "import gnss_gpu; assert gnss_gpu.__version__ == '0.3.0'"
+ENTRYPOINT ["python3"]
+CMD ["-c", "import gnss_gpu; print('gnss_gpu', gnss_gpu.__version__)"]

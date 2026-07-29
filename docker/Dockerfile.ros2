@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1.7
+FROM ros:jazzy-ros-base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3-colcon-common-extensions \
+      python3-numpy \
+      python3-pytest \
+      ros-jazzy-diagnostic-msgs \
+      ros-jazzy-geometry-msgs \
+      ros-jazzy-launch-testing \
+      ros-jazzy-lifecycle-msgs \
+      ros-jazzy-nav-msgs \
+      ros-jazzy-rcl-interfaces \
+      ros-jazzy-sensor-msgs \
+      ros-jazzy-std-msgs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/gnss_gpu_ws/src/gnss_gpu
+COPY ros2/gnss_gpu_ros ros2/gnss_gpu_ros
+WORKDIR /opt/gnss_gpu_ws
+RUN . /opt/ros/jazzy/setup.sh \
+    && colcon build --packages-select gnss_gpu_ros \
+    && PYTHONPATH=src/gnss_gpu/ros2/gnss_gpu_ros \
+       python3 -m pytest src/gnss_gpu/ros2/gnss_gpu_ros/test -q
+
+COPY docker/ros_entrypoint.sh /ros_entrypoint.sh
+RUN chmod 755 /ros_entrypoint.sh
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["ros2", "launch", "gnss_gpu_ros", "integrated_navigation_lifecycle.launch.py"]
