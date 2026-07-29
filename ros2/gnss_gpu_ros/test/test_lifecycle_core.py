@@ -141,6 +141,19 @@ def test_watchdog_detects_missing_and_stale_streams() -> None:
     assert stale.counters["watchdog_trips"] == 1
 
 
+def test_stale_transition_during_other_sensor_ingest_is_counted_once() -> None:
+    core = activated(gnss_timeout_s=1.0, imu_timeout_s=0.5, map_timeout_s=5.0)
+    prime_required_inputs(core, 1.0)
+    core.ingest(event("gnss", 1.0, latitude=35.0, longitude=139.0))
+    assert core.watchdog(1.1).navigation_mode == NavigationMode.NORMAL
+    core.ingest(event("imu", 2.1, ax=0.0))
+    first = core.watchdog(2.1)
+    second = core.watchdog(2.2)
+    assert first.navigation_mode == NavigationMode.SAFE_FALLBACK
+    assert first.counters["watchdog_trips"] == 1
+    assert second.counters["watchdog_trips"] == 1
+
+
 def test_optional_imu_and_map_allow_gnss_only_operation() -> None:
     core = activated(require_imu=False, require_map=False)
     result = core.ingest(event("gnss", 1.0, latitude=35.0, longitude=139.0))

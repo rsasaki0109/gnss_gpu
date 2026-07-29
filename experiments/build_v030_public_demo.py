@@ -23,6 +23,13 @@ def build_snapshot(repo_root: Path) -> dict[str, Any]:
     phase4 = _read(repo_root / "internal_docs/phase4_realtime_benchmark_2026_07_29.json")
     phase5 = _read(repo_root / "internal_docs/phase5_cross_domain_result_2026_07_29.json")
     phase6 = _read(repo_root / "internal_docs/phase6_ros2_replay_result_2026_07_29.json")
+    soak = _read(repo_root / "internal_docs/phase6_ros2_soak_result_2026_07_29.json")
+    promotion = _read(
+        repo_root / "internal_docs/v030_production_promotion_audit_2026_07_29.json"
+    )
+    promotion_gates = {gate["id"]: gate for gate in promotion["gates"]}
+    tokyo_gate = promotion_gates["tokyo_sub50cm_target"]
+    gain_gate = promotion_gates["full_denominator_gain_without_loss"]
     return {
         "schema": "gnss_gpu_v030_public_snapshot_v1",
         "version": "0.3.0",
@@ -72,7 +79,10 @@ def build_snapshot(repo_root: Path) -> dict[str, Any]:
                 "id": 6,
                 "name": "ROS 2 lifecycle safety",
                 "status": "complete",
-                "metric": f"{phase6['event_count']}-event deterministic replay",
+                "metric": (
+                    f"{phase6['event_count']}-event replay + "
+                    f"{soak['simulated_duration_s'] / 3600:.0f} h soak"
+                ),
             },
             {"id": 7, "name": "v0.3 release", "status": "complete"},
         ],
@@ -98,8 +108,35 @@ def build_snapshot(repo_root: Path) -> dict[str, Any]:
             ],
         },
         "negative_controls": phase1["results"],
+        "promotion": {
+            "allowed": promotion["promotion_allowed"],
+            "passed_gates": promotion["passed_gate_count"],
+            "gate_count": promotion["gate_count"],
+            "failed_gates": promotion["failed_gates"],
+            "tokyo_sub50cm_percent": tokyo_gate["actual"],
+            "tokyo_target_percent": tokyo_gate["expected"],
+            "tokyo_sub50cm_epochs": 3744,
+            "tokyo_total_epochs": 11924,
+            "tokyo_required_epochs": 5366,
+            "tokyo_epoch_gap": 1622,
+            **gain_gate["actual"],
+            "false_fix": promotion_gates["false_fix_zero"]["actual"],
+        },
+        "soak": {
+            "passed": soak["passed"],
+            "simulated_duration_s": soak["simulated_duration_s"],
+            "ticks": soak["ticks"],
+            "accepted_events": soak["dispositions"]["accepted"],
+            "watchdog_trips": soak["final"]["counters"]["watchdog_trips"],
+            "normal_recoveries": soak["normal_recoveries"],
+            "final_mode": soak["final"]["navigation_mode"],
+            "sha256": soak["state_digest_sha256"],
+        },
         "limitations": [
-            "Tokyo sub-50 cm 45% remains a program target, not a demonstrated v0.3 result.",
+            (
+                "Tokyo sub-50 cm is 31.3989% (3,744/11,924), below the "
+                "45% promotion target by 1,622 epochs."
+            ),
             "The Phase 3 outage audit is synthetic; city-scale evidence is reported separately.",
             "Hong Kong is locked from a tracked summary because raw data is not bundled.",
             "Windows GPU memory is a conservative capacity estimate, not nvidia-smi peak usage.",
@@ -143,6 +180,8 @@ def _html() -> str:
   <p class="lede" id="headline"></p>
   <p><a href="./">← Main results</a> · <a href="https://github.com/rsasaki0109/gnss_gpu/releases/tag/v0.3.0">Release assets</a></p>
   <section class="grid" id="metrics"></section>
+  <h2>Production promotion</h2>
+  <section class="grid" id="promotion"></section>
   <h2>Phase 0 → 7</h2><section class="phases" id="phases"></section>
   <h2>Deterministic anomaly replay</h2>
   <p class="detail">Recorded arrival order; integrity faults latch safe fallback until a valid newer event or restart.</p>
@@ -150,7 +189,7 @@ def _html() -> str:
   <p>Replay SHA-256: <code id="replay-hash"></code></p>
   <h2>Mandatory negative controls</h2><section class="grid" id="holdouts"></section>
   <h2>Limits, not footnotes</h2><ul id="limits"></ul>
-  <footer>Generated from checked-in Phase 1–6 JSON artifacts. No live telemetry and no post-load metric rewriting.</footer>
+  <footer>Generated from checked-in Phase 1–6 and fail-closed promotion artifacts. No live telemetry and no post-load metric rewriting.</footer>
 </main>
 <script>
 fetch("assets/data/v030_release_snapshot.json").then(r => r.json()).then(d => {
@@ -165,6 +204,16 @@ fetch("assets/data/v030_release_snapshot.json").then(r => r.json()).then(d => {
     [d.runtime.deadline_misses,"deadline misses"]
   ];
   metricRows.forEach(([v,l])=>metricsEl.insertAdjacentHTML("beforeend",`<article class="card"><div class="metric">${v}</div><div class="label">${l}</div></article>`));
+  const promotionEl=document.getElementById("promotion");
+  const promotionRows=[
+    [d.promotion.passed_gates+"/"+d.promotion.gate_count,"promotion gates pass"],
+    [d.promotion.tokyo_sub50cm_percent.toFixed(2)+"% / "+d.promotion.tokyo_target_percent.toFixed(0)+"%","Tokyo sub-50 cm"],
+    [d.promotion.gained_epochs+" / "+d.promotion.lost_epochs,"gained / lost epochs"],
+    [d.promotion.false_fix,"false FIX"],
+    [(d.soak.simulated_duration_s/3600).toFixed(0)+" h","ROS 2 continuity soak"],
+    [d.soak.final_mode,"final navigation mode"]
+  ];
+  promotionRows.forEach(([v,l])=>promotionEl.insertAdjacentHTML("beforeend",`<article class="card"><div class="metric">${v}</div><div class="label">${l}</div></article>`));
   const phasesEl=document.getElementById("phases");
   d.phases.forEach(p=>phasesEl.insertAdjacentHTML("beforeend",`<article class="phase"><b>${p.id}</b><div><b>${p.name}</b><div class="detail">${p.metric||""}</div></div><span class="status">${p.status}</span></article>`));
   const timelineEl=document.getElementById("timeline");

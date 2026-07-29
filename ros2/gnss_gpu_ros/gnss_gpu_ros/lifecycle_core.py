@@ -398,6 +398,7 @@ class NavigationLifecycleCore:
         return reasons
 
     def _update_mode(self, now_s: float) -> None:
+        before = self.mode
         missing = self._missing_reasons(now_s)
         if missing:
             self.mode = NavigationMode.SAFE_FALLBACK
@@ -405,6 +406,11 @@ class NavigationLifecycleCore:
         else:
             self.mode = NavigationMode.NORMAL
             self.reason = "all_required_inputs_fresh"
+        if (
+            before != NavigationMode.SAFE_FALLBACK
+            and self.mode == NavigationMode.SAFE_FALLBACK
+        ):
+            self._counters["watchdog_trips"] += 1
 
     def _navigation_output(self, now_s: float) -> Mapping[str, Any]:
         self._update_mode(now_s)
@@ -422,10 +428,7 @@ class NavigationLifecycleCore:
     def watchdog(self, now_s: float) -> DiagnosticSnapshot:
         if self.state != LifecycleState.ACTIVE:
             return self.diagnostic(now_s)
-        before = self.mode
         self._update_mode(now_s)
-        if before != NavigationMode.SAFE_FALLBACK and self.mode == NavigationMode.SAFE_FALLBACK:
-            self._counters["watchdog_trips"] += 1
         return self.diagnostic(now_s)
 
     def diagnostic(self, now_s: float) -> DiagnosticSnapshot:

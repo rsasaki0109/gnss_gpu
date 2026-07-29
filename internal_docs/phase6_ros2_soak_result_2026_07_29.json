@@ -1,0 +1,68 @@
+{
+  "checks": {
+    "bounded_core_state": true,
+    "completed_duration": true,
+    "faults_injected_once": true,
+    "final_state_normal": true,
+    "outage_watchdog_tripped": true,
+    "recovered_after_faults": true,
+    "restarted_once": true
+  },
+  "dispositions": {
+    "accepted": 439183,
+    "conflicting_duplicate": 1,
+    "duplicate": 1,
+    "future_skew": 1,
+    "inactive": 0,
+    "invalid": 0,
+    "out_of_order": 1
+  },
+  "fault_schedule": {
+    "conflicting_duplicate": 30000,
+    "duplicate": 22500,
+    "future_skew": 36000,
+    "gnss_outage": [
+      90000,
+      90100
+    ],
+    "out_of_order": 45000,
+    "restart": 180000
+  },
+  "final": {
+    "counters": {
+      "accepted": 439183,
+      "conflicting_duplicate": 1,
+      "duplicate": 1,
+      "future_skew": 1,
+      "inactive": 0,
+      "invalid": 0,
+      "out_of_order": 1,
+      "restarts": 1,
+      "watchdog_trips": 1
+    },
+    "lifecycle_state": "active",
+    "navigation_mode": "normal",
+    "reason": "all_required_inputs_fresh"
+  },
+  "measurement": {
+    "peak_traced_memory_mib": 0.1090078353881836,
+    "wall_time_s": 91.74594799987972
+  },
+  "mode_samples": {
+    "degraded": 0,
+    "normal": 359936,
+    "safe_fallback": 65
+  },
+  "normal_recoveries": 5,
+  "passed": true,
+  "schema": "gnss_gpu_ros_soak_audit_v1",
+  "sensor_rates_hz": {
+    "gnss": 10.0,
+    "imu": 50.0,
+    "map": 1.0
+  },
+  "simulated_duration_s": 7200.0,
+  "state_digest_sha256": "60DF9A9864099E741AFDC637BFEEF53C3DA59EFA2BF87D398477B135CB6895FD",
+  "tick_s": 0.02,
+  "ticks": 360000
+}
