@@ -82,6 +82,38 @@ class BasinKalmanState:
         self.covariance = transition @ self.covariance @ transition.T + process
         self._repair_covariance()
 
+    def predict_inertial(
+        self,
+        dt: float,
+        *,
+        cv_position_correction_ecef_m: np.ndarray,
+        delta_velocity_ecef_mps: np.ndarray,
+        process_covariance: np.ndarray,
+    ) -> None:
+        """Predict with a preintegrated-IMU correction and full 6x6 covariance.
+
+        ``cv_position_correction_ecef_m`` is the displacement in excess of
+        the constant-velocity transition already represented by ``F``.
+        """
+
+        dt = float(dt)
+        if not np.isfinite(dt) or dt <= 0:
+            raise ValueError("inertial prediction dt must be finite and positive")
+        correction = np.r_[
+            np.asarray(cv_position_correction_ecef_m, dtype=np.float64).reshape(3),
+            np.asarray(delta_velocity_ecef_mps, dtype=np.float64).reshape(3),
+        ]
+        process = np.asarray(process_covariance, dtype=np.float64).reshape(6, 6)
+        if not np.all(np.isfinite(correction)) or not np.all(np.isfinite(process)):
+            raise ValueError("inertial correction and covariance must be finite")
+        if float(np.min(np.linalg.eigvalsh(0.5 * (process + process.T)))) < -1.0e-10:
+            raise ValueError("inertial process covariance must be positive semidefinite")
+        transition = np.eye(6, dtype=np.float64)
+        transition[:3, 3:6] = np.eye(3) * dt
+        self.mean = transition @ self.mean + correction
+        self.covariance = transition @ self.covariance @ transition.T + process
+        self._repair_covariance()
+
     def update_velocity(self, velocity_ecef: np.ndarray, sigma_mps: float) -> float:
         design = np.zeros((3, 6), dtype=np.float64)
         design[:, 3:6] = np.eye(3)
@@ -390,6 +422,32 @@ class AmbiguityBasinParticleFilter:
             basin.epoch_log_marginal = 0.0
             basin.conditional.predict(dt)
 
+    def predict_inertial(
+        self,
+        dt: float,
+        *,
+        cv_position_correction_ecef_m: np.ndarray,
+        delta_velocity_ecef_mps: np.ndarray,
+        process_covariance: np.ndarray,
+    ) -> None:
+        """Apply one shared IMU preintegration to every navigation conditional."""
+
+        self.epoch += 1
+        for basin in self.basins:
+            basin.epoch_log_marginal = 0.0
+            basin.conditional.predict_inertial(
+                dt,
+                cv_position_correction_ecef_m=cv_position_correction_ecef_m,
+                delta_velocity_ecef_mps=delta_velocity_ecef_mps,
+                process_covariance=process_covariance,
+            )
+
+    def invalidate_fix(self) -> None:
+        """Clear temporal FIX state after outage, reset, or unsafe evidence."""
+
+        self._last_map = None
+        self._fix_streak = 0
+
     def update_log_likelihoods(self, log_likelihood_by_id: Mapping[str, float]) -> None:
         for basin in self.basins:
             increment = float(log_likelihood_by_id.get(basin.basin_id, 0.0))
@@ -543,6 +601,22 @@ class AmbiguityBasinParticleFilter:
         self._normalize_and_cap()
         return self._posterior_from_basins(self.basins, update_fix_state=True)
 
+    def posterior_snapshot(self) -> BasinPosterior:
+        """Read the posterior without advancing the temporal FIX streak."""
+
+        if not self.basins:
+            return BasinPosterior((), 0.0, 0.0, 0, False, 0)
+        self._normalize_and_cap()
+        value = self._posterior_from_basins(self.basins, update_fix_state=False)
+        return BasinPosterior(
+            map_assignment=value.map_assignment,
+            gamma=value.gamma,
+            ess=value.ess,
+            n_basins=value.n_basins,
+            fixed=value.fixed,
+            fix_streak=self._fix_streak,
+        )
+
     def posterior_excluding_source_only(self, source_token: str) -> BasinPosterior:
         """Posterior view that excludes basins supported only by one branch."""
 
@@ -563,7 +637,7 @@ class AmbiguityBasinParticleFilter:
     def map_basin(self) -> IntegerBasin | None:
         if not self.basins:
             return None
-        posterior = self.posterior()
+        posterior = self.posterior_snapshot()
         candidates = [b for b in self.basins if b.assignment == posterior.map_assignment]
         return max(candidates, key=lambda basin: basin.log_weight)
 
