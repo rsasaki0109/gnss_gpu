@@ -33,6 +33,8 @@
   <p class="lede" id="headline"></p>
   <p><a href="./">← Main results</a> · <a href="https://github.com/rsasaki0109/gnss_gpu/releases/tag/v0.3.0">Release assets</a></p>
   <section class="grid" id="metrics"></section>
+  <h2>Production promotion</h2>
+  <section class="grid" id="promotion"></section>
   <h2>Phase 0 → 7</h2><section class="phases" id="phases"></section>
   <h2>Deterministic anomaly replay</h2>
   <p class="detail">Recorded arrival order; integrity faults latch safe fallback until a valid newer event or restart.</p>
@@ -40,7 +42,7 @@
   <p>Replay SHA-256: <code id="replay-hash"></code></p>
   <h2>Mandatory negative controls</h2><section class="grid" id="holdouts"></section>
   <h2>Limits, not footnotes</h2><ul id="limits"></ul>
-  <footer>Generated from checked-in Phase 1–6 JSON artifacts. No live telemetry and no post-load metric rewriting.</footer>
+  <footer>Generated from checked-in Phase 1–6 and fail-closed promotion artifacts. No live telemetry and no post-load metric rewriting.</footer>
 </main>
 <script>
 fetch("assets/data/v030_release_snapshot.json").then(r => r.json()).then(d => {
@@ -55,6 +57,16 @@ fetch("assets/data/v030_release_snapshot.json").then(r => r.json()).then(d => {
     [d.runtime.deadline_misses,"deadline misses"]
   ];
   metricRows.forEach(([v,l])=>metricsEl.insertAdjacentHTML("beforeend",`<article class="card"><div class="metric">${v}</div><div class="label">${l}</div></article>`));
+  const promotionEl=document.getElementById("promotion");
+  const promotionRows=[
+    [d.promotion.passed_gates+"/"+d.promotion.gate_count,"promotion gates pass"],
+    [d.promotion.tokyo_sub50cm_percent.toFixed(2)+"% / "+d.promotion.tokyo_target_percent.toFixed(0)+"%","Tokyo sub-50 cm"],
+    [d.promotion.gained_epochs+" / "+d.promotion.lost_epochs,"gained / lost epochs"],
+    [d.promotion.false_fix,"false FIX"],
+    [(d.soak.simulated_duration_s/3600).toFixed(0)+" h","ROS 2 continuity soak"],
+    [d.soak.final_mode,"final navigation mode"]
+  ];
+  promotionRows.forEach(([v,l])=>promotionEl.insertAdjacentHTML("beforeend",`<article class="card"><div class="metric">${v}</div><div class="label">${l}</div></article>`));
   const phasesEl=document.getElementById("phases");
   d.phases.forEach(p=>phasesEl.insertAdjacentHTML("beforeend",`<article class="phase"><b>${p.id}</b><div><b>${p.name}</b><div class="detail">${p.metric||""}</div></div><span class="status">${p.status}</span></article>`));
   const timelineEl=document.getElementById("timeline");

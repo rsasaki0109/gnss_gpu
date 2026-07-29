@@ -1,0 +1,302 @@
+{
+  "contract": "configs/evaluation/v030_production_promotion.json",
+  "failed_gates": [
+    "tokyo_sub50cm_target"
+  ],
+  "gate_count": 11,
+  "gates": [
+    {
+      "actual": {
+        "accepted": 0,
+        "rejected": 4
+      },
+      "evidence": "internal_docs/phase1_holdout_detector_audit_2026_07_29.json",
+      "expected": {
+        "accepted": 0,
+        "rejected_min": 4
+      },
+      "id": "mandatory_negative_holdouts",
+      "passed": true
+    },
+    {
+      "actual": {
+        "production_input_truth": false,
+        "truth_usage": "post_application_full_denominator_audit_only"
+      },
+      "evidence": "internal_docs/wp160_tokyo_screened_stability_promotion_2026_07_24.json",
+      "expected": {
+        "production_input_truth": false,
+        "truth_usage": "post_application_full_denominator_audit_only"
+      },
+      "id": "truth_free_production_input",
+      "passed": true
+    },
+    {
+      "actual": {
+        "gained_epochs": 55,
+        "lost_epochs": 0
+      },
+      "evidence": "internal_docs/wp160_tokyo_screened_stability_promotion_2026_07_24.json",
+      "expected": {
+        "gained_epochs_min": 1,
+        "lost_epochs_max": 0
+      },
+      "id": "full_denominator_gain_without_loss",
+      "passed": true
+    },
+    {
+      "actual": 0,
+      "evidence": "internal_docs/wp160_tokyo_screened_stability_promotion_2026_07_24.json",
+      "expected": 0,
+      "id": "false_fix_zero",
+      "passed": true
+    },
+    {
+      "actual": 31.398859443139887,
+      "evidence": "internal_docs/wp160_tokyo_screened_stability_promotion_2026_07_24.json",
+      "expected": 45.0,
+      "id": "tokyo_sub50cm_target",
+      "passed": false
+    },
+    {
+      "actual": {
+        "deadline_misses": 0,
+        "normal_latency_max_ms": 13.761000009253621,
+        "search_latency_max_ms": 75.9066001046449
+      },
+      "evidence": "internal_docs/phase4_realtime_benchmark_2026_07_29.json",
+      "expected": {
+        "deadline_misses": 0,
+        "normal_latency_max_ms": 100.0,
+        "search_latency_max_ms": 1000.0
+      },
+      "id": "runtime_deadlines",
+      "passed": true
+    },
+    {
+      "actual": {
+        "campaigns": 2,
+        "cities": [
+          "hong-kong",
+          "nagoya",
+          "tokyo"
+        ]
+      },
+      "evidence": "internal_docs/phase5_cross_domain_result_2026_07_29.json",
+      "expected": {
+        "all_campaigns_pass": true,
+        "minimum_cities": 3
+      },
+      "id": "multi_city_non_degradation",
+      "passed": true
+    },
+    {
+      "actual": true,
+      "evidence": "configs/evaluation/urban_campaign_splits_v1.json",
+      "expected": true,
+      "id": "m4_and_immutable_contract",
+      "passed": true
+    },
+    {
+      "actual": "A003EE14D05547F4020EDD2E18916AEA132142AE6F1CB72686AE9030A0C66BBA",
+      "evidence": "internal_docs/phase6_ros2_replay_result_2026_07_29.json",
+      "expected": "A003EE14D05547F4020EDD2E18916AEA132142AE6F1CB72686AE9030A0C66BBA",
+      "id": "deterministic_ros2_replay",
+      "passed": true
+    },
+    {
+      "actual": {
+        "deterministic": true,
+        "passed": true,
+        "simulated_duration_s": 7200.0
+      },
+      "evidence": "internal_docs/phase6_ros2_soak_result_2026_07_29.json",
+      "expected": {
+        "passed": true,
+        "simulated_duration_s_min": 7200.0
+      },
+      "id": "ros2_continuity_soak",
+      "passed": true
+    },
+    {
+      "actual": {
+        "checks": [
+          {
+            "actual_sha256": "321E93F0A06F1D2E66316D7E36B7E5FDBAD95FD4677BF8DCCFF4FAA922264F96",
+            "expected_sha256": "321E93F0A06F1D2E66316D7E36B7E5FDBAD95FD4677BF8DCCFF4FAA922264F96",
+            "passed": true,
+            "path": "TECHNICAL_REPORT.md"
+          },
+          {
+            "actual_sha256": "3E3A836A5BCB23CEC19A00D8351943DA4FA19A2AA3089ABB5D044A649DDF7FA7",
+            "expected_sha256": "3E3A836A5BCB23CEC19A00D8351943DA4FA19A2AA3089ABB5D044A649DDF7FA7",
+            "passed": true,
+            "path": "ablation.json"
+          },
+          {
+            "actual_sha256": "4194EDAF1CE3712B5FB517385765E7A475C6417F4A9078A94CDDD0019B950E34",
+            "expected_sha256": "4194EDAF1CE3712B5FB517385765E7A475C6417F4A9078A94CDDD0019B950E34",
+            "passed": true,
+            "path": "benchmark.json"
+          },
+          {
+            "actual_sha256": "BE139BE1ECB8558251259F40F81725777FBCC5DAEC62D0B4E69BC92A44C380CF",
+            "expected_sha256": "BE139BE1ECB8558251259F40F81725777FBCC5DAEC62D0B4E69BC92A44C380CF",
+            "passed": true,
+            "path": "evidence/configs/evaluation/v030_production_promotion.json"
+          },
+          {
+            "actual_sha256": "45E94904B2ABFCD2DBDF495033FD9F8934201133594293DD21ECE1D1DCE2A5B4",
+            "expected_sha256": "45E94904B2ABFCD2DBDF495033FD9F8934201133594293DD21ECE1D1DCE2A5B4",
+            "passed": true,
+            "path": "evidence/internal_docs/phase1_holdout_detector_audit_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "3F65D8A0908CBC3B0AFBF20BE0C4B09764D8E030A48A8B238991DB075C6D2284",
+            "expected_sha256": "3F65D8A0908CBC3B0AFBF20BE0C4B09764D8E030A48A8B238991DB075C6D2284",
+            "passed": true,
+            "path": "evidence/internal_docs/phase2_structural_audit_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "53113C020A5FC3BF58E0C2FC73CE32D04E97004DFE078ECC245A6363A90007BF",
+            "expected_sha256": "53113C020A5FC3BF58E0C2FC73CE32D04E97004DFE078ECC245A6363A90007BF",
+            "passed": true,
+            "path": "evidence/internal_docs/phase3_outage_recovery_audit_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "366D4D961B50B9FB77002692A001F816ACC1D44D25FF0697A37741F043F6B2E8",
+            "expected_sha256": "366D4D961B50B9FB77002692A001F816ACC1D44D25FF0697A37741F043F6B2E8",
+            "passed": true,
+            "path": "evidence/internal_docs/phase4_realtime_benchmark_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "AFEA31BB8AA41E52147DE570BE28A9A6A8D19E981D8554335BC183FBE1DE509D",
+            "expected_sha256": "AFEA31BB8AA41E52147DE570BE28A9A6A8D19E981D8554335BC183FBE1DE509D",
+            "passed": true,
+            "path": "evidence/internal_docs/phase5_cross_domain_input_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "827D1C35F3D8600D9FD6F37545724DDC71E9D6143050DF70314C70F855BB86A2",
+            "expected_sha256": "827D1C35F3D8600D9FD6F37545724DDC71E9D6143050DF70314C70F855BB86A2",
+            "passed": true,
+            "path": "evidence/internal_docs/phase5_cross_domain_result_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "0CF7B78F1A8EF80A973E5A54F223812681D98BB464385CBD97CC9C78E8359C81",
+            "expected_sha256": "0CF7B78F1A8EF80A973E5A54F223812681D98BB464385CBD97CC9C78E8359C81",
+            "passed": true,
+            "path": "evidence/internal_docs/phase6_ros2_replay_input_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "EEB093B5ADDFD5DF3D56D785CB6CEEACF94321C25CF559D949709632C11BEB81",
+            "expected_sha256": "EEB093B5ADDFD5DF3D56D785CB6CEEACF94321C25CF559D949709632C11BEB81",
+            "passed": true,
+            "path": "evidence/internal_docs/phase6_ros2_replay_result_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "2A36D953F5AEEE995BC162350FE7BB43B7E9421B13A43C1BD5FBAD2EDC50FA24",
+            "expected_sha256": "2A36D953F5AEEE995BC162350FE7BB43B7E9421B13A43C1BD5FBAD2EDC50FA24",
+            "passed": true,
+            "path": "evidence/internal_docs/phase6_ros2_soak_result_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "912AA89CAE7B45EC2DD6C06932C33B6216ADF142AE674CE71DF89734631F0CA6",
+            "expected_sha256": "912AA89CAE7B45EC2DD6C06932C33B6216ADF142AE674CE71DF89734631F0CA6",
+            "passed": true,
+            "path": "evidence/internal_docs/urban_navigation_phase0_evaluation_contract.md"
+          },
+          {
+            "actual_sha256": "41F7B2177B8358AC42C079B631F5FD0F52491BC74335671593746D964F87308A",
+            "expected_sha256": "41F7B2177B8358AC42C079B631F5FD0F52491BC74335671593746D964F87308A",
+            "passed": true,
+            "path": "evidence/internal_docs/urban_navigation_phase1_evidence_api.md"
+          },
+          {
+            "actual_sha256": "40AAC17DCDA3AA5F05E41E380F3DCA9125C6BC501A94612FB6AD10974253105D",
+            "expected_sha256": "40AAC17DCDA3AA5F05E41E380F3DCA9125C6BC501A94612FB6AD10974253105D",
+            "passed": true,
+            "path": "evidence/internal_docs/urban_navigation_phase2_ddpr_profiles.md"
+          },
+          {
+            "actual_sha256": "273583C12707F3AE70AE11171C8475A2DA6436BF69586051F24D7B17D65A6185",
+            "expected_sha256": "273583C12707F3AE70AE11171C8475A2DA6436BF69586051F24D7B17D65A6185",
+            "passed": true,
+            "path": "evidence/internal_docs/urban_navigation_phase3_multihypothesis.md"
+          },
+          {
+            "actual_sha256": "704C89B4B3B84B1AC408B873AA9829E13FE1EB47D058618DD2B9E51718D605EC",
+            "expected_sha256": "704C89B4B3B84B1AC408B873AA9829E13FE1EB47D058618DD2B9E51718D605EC",
+            "passed": true,
+            "path": "evidence/internal_docs/urban_navigation_phase4_realtime.md"
+          },
+          {
+            "actual_sha256": "7AF58094263510714243830B3C7B267384EB42B70641BBBBF481ABD116959761",
+            "expected_sha256": "7AF58094263510714243830B3C7B267384EB42B70641BBBBF481ABD116959761",
+            "passed": true,
+            "path": "evidence/internal_docs/urban_navigation_phase5_cross_domain.md"
+          },
+          {
+            "actual_sha256": "97F09188C5425B5294E0A5527146FB17504861E6D2D3195FAF4A44320BB76A89",
+            "expected_sha256": "97F09188C5425B5294E0A5527146FB17504861E6D2D3195FAF4A44320BB76A89",
+            "passed": true,
+            "path": "evidence/internal_docs/urban_navigation_phase6_ros2.md"
+          },
+          {
+            "actual_sha256": "5CE5522452CBB48EFF83B7B67554CC9547992438F9767061CE22534C0583F0A1",
+            "expected_sha256": "5CE5522452CBB48EFF83B7B67554CC9547992438F9767061CE22534C0583F0A1",
+            "passed": true,
+            "path": "evidence/internal_docs/wp129_tokyo_posterior_rejection_2026_07_23.json"
+          },
+          {
+            "actual_sha256": "0F693343C5419C3884912575A506FE67E54BA6EE34C1E47F9DF1EBCD91F49B3F",
+            "expected_sha256": "0F693343C5419C3884912575A506FE67E54BA6EE34C1E47F9DF1EBCD91F49B3F",
+            "passed": true,
+            "path": "evidence/internal_docs/wp156_tokyo_zero_gain_acceptance_rejection_2026_07_23.json"
+          },
+          {
+            "actual_sha256": "A9D097458CAF963334129C039F85A7D4EBF60E28388CE9927716553E0A74066F",
+            "expected_sha256": "A9D097458CAF963334129C039F85A7D4EBF60E28388CE9927716553E0A74066F",
+            "passed": true,
+            "path": "evidence/internal_docs/wp171_tokyo_screened_zero_gain_acceptance_rejection_2026_07_24.json"
+          },
+          {
+            "actual_sha256": "3FB163B16E59C6394A38206E826FE9E0411975597E8BC62E8A1AF67FBFFC8115",
+            "expected_sha256": "3FB163B16E59C6394A38206E826FE9E0411975597E8BC62E8A1AF67FBFFC8115",
+            "passed": true,
+            "path": "evidence/internal_docs/wp30_m4_production_config.json"
+          },
+          {
+            "actual_sha256": "555C4FC2992654F9073323985EF7C35DB46738FEBE8F3F54D442C8BC17B76787",
+            "expected_sha256": "555C4FC2992654F9073323985EF7C35DB46738FEBE8F3F54D442C8BC17B76787",
+            "passed": true,
+            "path": "evidence/internal_docs/wp30_m4_tokyo_evidence_ledger.json"
+          },
+          {
+            "actual_sha256": "86A4DBE1A03989CCF0B28A0883EC17D4DCB427D8E07C806B10AA4628F8289426",
+            "expected_sha256": "86A4DBE1A03989CCF0B28A0883EC17D4DCB427D8E07C806B10AA4628F8289426",
+            "passed": true,
+            "path": "evidence/internal_docs/wp53_alternate_reference_supply_posterior_rejection_2026_07_22.json"
+          },
+          {
+            "actual_sha256": "2600AE8B9BEBB46759CD0AB309F634EE77BCCD0B687CBEB7476E9B8FD6676982",
+            "expected_sha256": "2600AE8B9BEBB46759CD0AB309F634EE77BCCD0B687CBEB7476E9B8FD6676982",
+            "passed": true,
+            "path": "failure_gallery.json"
+          }
+        ],
+        "file_count": 27,
+        "passed": true
+      },
+      "evidence": "tools/build_release_bundle.py",
+      "expected": {
+        "file_count_min": 27,
+        "passed": true
+      },
+      "id": "one_command_reproducibility",
+      "passed": true
+    }
+  ],
+  "passed_gate_count": 10,
+  "promotion_allowed": false,
+  "schema": "gnss_gpu_v030_production_promotion_audit_v1"
+}

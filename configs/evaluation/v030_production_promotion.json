@@ -1,0 +1,22 @@
+{
+  "schema": "gnss_gpu_v030_production_promotion_contract_v1",
+  "targets": {
+    "tokyo_sub50cm_full_pct_min": 45.0,
+    "false_fix_epochs_max": 0,
+    "lost_epochs_max": 0,
+    "gained_epochs_min": 1,
+    "normal_latency_max_ms": 100.0,
+    "search_latency_max_ms": 1000.0,
+    "mandatory_negative_holdouts": 4,
+    "minimum_cities": 3
+  },
+  "evidence": {
+    "negative_holdouts": "internal_docs/phase1_holdout_detector_audit_2026_07_29.json",
+    "tokyo_production": "internal_docs/wp160_tokyo_screened_stability_promotion_2026_07_24.json",
+    "runtime": "internal_docs/phase4_realtime_benchmark_2026_07_29.json",
+    "cross_domain": "internal_docs/phase5_cross_domain_result_2026_07_29.json",
+    "ros2_replay_input": "internal_docs/phase6_ros2_replay_input_2026_07_29.json",
+    "ros2_replay_result": "internal_docs/phase6_ros2_replay_result_2026_07_29.json",
+    "ros2_soak": "internal_docs/phase6_ros2_soak_result_2026_07_29.json"
+  }
+}

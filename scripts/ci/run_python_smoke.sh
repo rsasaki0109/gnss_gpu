@@ -32,7 +32,9 @@ pytest -q \
   tests/test_multihypothesis_navigation.py \
   tests/test_realtime_runtime.py \
   tests/test_cross_domain_validation.py \
+  tests/test_phase6_ros2_soak.py \
   tests/test_release_bundle.py \
+  tests/test_v030_production_promotion_audit.py \
   tests/test_v030_public_demo.py \
   tests/test_result_artifact_policy.py \
   ros2/gnss_gpu_ros/test/test_filters.py \

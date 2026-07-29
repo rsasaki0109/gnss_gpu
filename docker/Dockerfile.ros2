@@ -26,7 +26,14 @@ WORKDIR /opt/gnss_gpu_ws
 RUN . /opt/ros/jazzy/setup.sh \
     && colcon build --packages-select gnss_gpu_ros \
     && PYTHONPATH=src/gnss_gpu/ros2/gnss_gpu_ros \
-       python3 -m pytest src/gnss_gpu/ros2/gnss_gpu_ros/test -q
+       python3 -m pytest src/gnss_gpu/ros2/gnss_gpu_ros/test -q \
+    && . install/setup.sh \
+    && if timeout --signal=INT 15s \
+         ros2 run gnss_gpu_ros integrated_navigation_lifecycle; then \
+         echo "lifecycle node exited before the continuity window" >&2; exit 1; \
+       else \
+         exit_code="$?"; test "${exit_code}" -eq 124; \
+       fi
 
 COPY docker/ros_entrypoint.sh /ros_entrypoint.sh
 RUN chmod 755 /ros_entrypoint.sh

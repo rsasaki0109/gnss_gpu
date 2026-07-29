@@ -42,6 +42,8 @@ CORE_EVIDENCE = (
     "internal_docs/urban_navigation_phase6_ros2.md",
     "internal_docs/phase6_ros2_replay_input_2026_07_29.json",
     "internal_docs/phase6_ros2_replay_result_2026_07_29.json",
+    "internal_docs/phase6_ros2_soak_result_2026_07_29.json",
+    "configs/evaluation/v030_production_promotion.json",
     "internal_docs/wp30_m4_production_config.json",
     "internal_docs/wp30_m4_tokyo_evidence_ledger.json",
 )
