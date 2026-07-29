@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import platform
 import subprocess
 import sys
@@ -340,6 +341,8 @@ def evaluate_campaign(payload: Mapping[str, Any], repo_root: Path) -> dict[str, 
         "max_contiguous_failure_s",
         "latency_p50_ms",
         "latency_p95_ms",
+        "normal_latency_max_ms",
+        "search_latency_max_ms",
         "peak_gpu_memory_mb",
     )
     missing_metrics = [name for name in required_metrics if candidate.get(name) is None]
@@ -348,6 +351,28 @@ def evaluate_campaign(payload: Mapping[str, Any], repo_root: Path) -> dict[str, 
             "kpi_completeness",
             not missing_metrics,
             "missing: " + ", ".join(missing_metrics) if missing_metrics else "all Phase 0 KPIs reported",
+        )
+    )
+    normal_latency = candidate.get("normal_latency_max_ms")
+    search_latency = candidate.get("search_latency_max_ms")
+    peak_memory = candidate.get("peak_gpu_memory_mb")
+    runtime_values = (normal_latency, search_latency, peak_memory)
+    runtime_pass = (
+        all(
+            isinstance(value, (int, float))
+            and math.isfinite(float(value))
+            and float(value) >= 0
+            for value in runtime_values
+        )
+        and normal_latency <= 100.0
+        and search_latency <= 1000.0
+        and peak_memory <= 4096.0
+    )
+    gates.append(
+        _gate(
+            "realtime_budget",
+            runtime_pass,
+            "normal<=100ms, search<=1000ms, peak GPU memory<=4096MB",
         )
     )
 

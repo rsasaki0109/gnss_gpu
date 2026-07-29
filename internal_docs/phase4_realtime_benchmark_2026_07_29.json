@@ -1,0 +1,40 @@
+{
+  "schema": "gnss_gpu_phase4_realtime_benchmark_v1",
+  "backend": "ParticleFilterDevice persistent CUDA stream",
+  "gpu": "NVIDIA GeForce GTX 1660 Ti",
+  "normal_particles": 100000,
+  "search_particles": 500000,
+  "iterations": 20,
+  "search_batches": {
+    "arc_screen": [16, 32],
+    "candidate_score": [256, 64],
+    "affine_refit": [256, 16, 3],
+    "backend": "Numba CUDA persistent workspace"
+  },
+  "memory_accounting": {
+    "normal": "capacity_estimate_320_bytes_per_particle",
+    "search": "capacity_estimate_320_bytes_per_particle"
+  },
+  "assessment": {
+    "passed": true,
+    "sample_count": 30,
+    "latency_p50_ms": 13.66179995238781,
+    "latency_p95_ms": 75.82583510084078,
+    "normal_latency_max_ms": 13.761000009253621,
+    "search_latency_max_ms": 75.9066001046449,
+    "peak_gpu_memory_mb": 152.587890625,
+    "deadline_misses": 0,
+    "reasons": []
+  },
+  "m4": {
+    "internal_docs/wp30_m4_production_config.json": {
+      "expected_sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486",
+      "actual_sha256": "66A5FF3F1919C4B0F9ED95A5EFA38865B518C9E03E6FD2652B7A0456A1F89486"
+    },
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": {
+      "expected_sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C",
+      "actual_sha256": "9D756F447304C30B73694225F1CEEA1A82DE864F8D968D449928662582DF098C"
+    }
+  },
+  "passed": true
+}
