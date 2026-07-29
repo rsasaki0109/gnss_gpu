@@ -85,4 +85,69 @@ cd ros2/gnss_gpu_ros && PYTHONPATH=. python3 -m pytest test/ -q
 - [GSDC2023 solution write-up](../../docs/gsdc2023_solution.md) — where these
   layers come from and what each was worth offline
 - [gnss_gpu](https://github.com/rsasaki0109/gnss_gpu) — the parent project:
-  GPU particle filters, ray-traced NLOS, robust SPP
+GPU particle filters, ray-traced NLOS, robust SPP
+
+## Integrated lifecycle navigation
+
+The Phase 6 executable adds a managed safety boundary around GNSS, IMU, and
+map inputs:
+
+```text
+fix ──────────┐
+imu/data ─────┼─▶ gnss_gpu_navigation ─▶ navigation/fix
+map_context ──┘                       └▶ navigation/diagnostics
+```
+
+Launch performs `configure` and then `activate` through ROS lifecycle
+transitions:
+
+```bash
+ros2 launch gnss_gpu_ros integrated_navigation_lifecycle.launch.py
+```
+
+The node starts in safe fallback until every required input is present and
+fresh. Fallback publishes the last accepted GNSS fix with diagonal covariance
+raised to `fallback_covariance_m2`; it never fabricates a new position.
+
+| Topic | Type | Direction |
+|---|---|---|
+| `fix` | `sensor_msgs/NavSatFix` | subscribe |
+| `imu/data` | `sensor_msgs/Imu` | subscribe |
+| `map_context` | `std_msgs/String` | subscribe; JSON object with non-empty `map_id` and `ready: true` |
+| `navigation/fix` | `sensor_msgs/NavSatFix` | lifecycle publish |
+| `navigation/diagnostics` | `diagnostic_msgs/DiagnosticArray` | lifecycle publish |
+
+Runtime parameters are validated during configuration. Changes are rejected
+while active, and unknown core parameters fail closed. Important defaults are:
+
+| Parameter | Default |
+|---|---:|
+| `gnss_timeout_s` | 1.5 |
+| `imu_timeout_s` | 0.25 |
+| `map_timeout_s` | 10.0 |
+| `maximum_future_skew_s` | 0.2 |
+| `require_imu`, `require_map` | true |
+| `reject_out_of_order` | true |
+| `fallback_covariance_m2` | 10000 |
+| `diagnostics_period_s` | 0.5 |
+
+Duplicate messages are idempotently ignored. Conflicting duplicates, invalid
+payloads, and future timestamp skew latch safe fallback until that sensor
+provides a valid newer event or the lifecycle is explicitly restarted.
+Out-of-order data is dropped without rewinding state. The watchdog reports
+missing/stale topics and every disposition counter.
+
+### Deterministic replay
+
+The ROS-free core uses recorded arrival order, so the same input produces the
+same canonical SHA-256 audit:
+
+```bash
+gnss_gpu_replay \
+  --input internal_docs/phase6_ros2_replay_input_2026_07_29.json \
+  --output /tmp/phase6_replay.json
+```
+
+The checked-in audit includes duplicate, conflicting duplicate, reverse-order,
+future-skew, missing-input, and restart behavior. Its result is recomputed
+exactly in the package tests.

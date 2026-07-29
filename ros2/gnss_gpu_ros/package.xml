@@ -16,9 +16,14 @@
   <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>lifecycle_msgs</depend>
   <depend>python3-numpy</depend>
 
   <test_depend>python3-pytest</test_depend>
+  <test_depend>launch_testing</test_depend>
 
   <export>
     <build_type>ament_python</build_type>
