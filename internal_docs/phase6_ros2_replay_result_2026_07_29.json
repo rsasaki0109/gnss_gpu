@@ -1,0 +1,384 @@
+{
+  "dispositions": {
+    "accepted": 6,
+    "conflicting_duplicate": 1,
+    "duplicate": 1,
+    "future_skew": 1,
+    "out_of_order": 1
+  },
+  "event_count": 10,
+  "input_id": "phase6_timestamp_watchdog_restart_audit",
+  "replay_sha256": "A003EE14D05547F4020EDD2E18916AEA132142AE6F1CB72686AE9030A0C66BBA",
+  "restart_count": 1,
+  "schema": "gnss_gpu_ros_replay_result_v1",
+  "steps": [
+    {
+      "arrival_s": 1.0,
+      "diagnostic": {
+        "counters": {
+          "accepted": 1,
+          "conflicting_duplicate": 0,
+          "duplicate": 0,
+          "future_skew": 0,
+          "inactive": 0,
+          "invalid": 0,
+          "out_of_order": 0,
+          "restarts": 0,
+          "watchdog_trips": 0
+        },
+        "last_safe_fix": null,
+        "lifecycle_state": "active",
+        "navigation_mode": "safe_fallback",
+        "now_s": 1.0,
+        "reason": "gnss_missing,map_missing",
+        "sensor_age_s": {
+          "gnss": null,
+          "imu": 0.0,
+          "map": null
+        }
+      },
+      "disposition": "accepted",
+      "event_index": 0,
+      "mode": "safe_fallback",
+      "output": null,
+      "reason": "gnss_missing,map_missing",
+      "sensor": "imu",
+      "stamp_s": 1.0
+    },
+    {
+      "arrival_s": 1.01,
+      "diagnostic": {
+        "counters": {
+          "accepted": 2,
+          "conflicting_duplicate": 0,
+          "duplicate": 0,
+          "future_skew": 0,
+          "inactive": 0,
+          "invalid": 0,
+          "out_of_order": 0,
+          "restarts": 0,
+          "watchdog_trips": 0
+        },
+        "last_safe_fix": null,
+        "lifecycle_state": "active",
+        "navigation_mode": "safe_fallback",
+        "now_s": 1.01,
+        "reason": "gnss_missing",
+        "sensor_age_s": {
+          "gnss": null,
+          "imu": 0.010000000000000009,
+          "map": 0.0
+        }
+      },
+      "disposition": "accepted",
+      "event_index": 1,
+      "mode": "safe_fallback",
+      "output": null,
+      "reason": "gnss_missing",
+      "sensor": "map",
+      "stamp_s": 1.01
+    },
+    {
+      "arrival_s": 1.02,
+      "diagnostic": {
+        "counters": {
+          "accepted": 3,
+          "conflicting_duplicate": 0,
+          "duplicate": 0,
+          "future_skew": 0,
+          "inactive": 0,
+          "invalid": 0,
+          "out_of_order": 0,
+          "restarts": 0,
+          "watchdog_trips": 0
+        },
+        "last_safe_fix": {
+          "altitude": 40.0,
+          "latitude": 35.68,
+          "longitude": 139.77
+        },
+        "lifecycle_state": "active",
+        "navigation_mode": "normal",
+        "now_s": 1.02,
+        "reason": "all_required_inputs_fresh",
+        "sensor_age_s": {
+          "gnss": 0.0,
+          "imu": 0.020000000000000018,
+          "map": 0.010000000000000009
+        }
+      },
+      "disposition": "accepted",
+      "event_index": 2,
+      "mode": "normal",
+      "output": {
+        "altitude": 40.0,
+        "covariance_floor_m2": 0.0,
+        "latitude": 35.68,
+        "longitude": 139.77,
+        "mode": "normal",
+        "reason": "all_required_inputs_fresh"
+      },
+      "reason": "all_required_inputs_fresh",
+      "sensor": "gnss",
+      "stamp_s": 1.02
+    },
+    {
+      "arrival_s": 1.03,
+      "diagnostic": {
+        "counters": {
+          "accepted": 3,
+          "conflicting_duplicate": 0,
+          "duplicate": 1,
+          "future_skew": 0,
+          "inactive": 0,
+          "invalid": 0,
+          "out_of_order": 0,
+          "restarts": 0,
+          "watchdog_trips": 0
+        },
+        "last_safe_fix": {
+          "altitude": 40.0,
+          "latitude": 35.68,
+          "longitude": 139.77
+        },
+        "lifecycle_state": "active",
+        "navigation_mode": "normal",
+        "now_s": 1.03,
+        "reason": "all_required_inputs_fresh",
+        "sensor_age_s": {
+          "gnss": 0.010000000000000009,
+          "imu": 0.030000000000000027,
+          "map": 0.020000000000000018
+        }
+      },
+      "disposition": "duplicate",
+      "event_index": 3,
+      "mode": "normal",
+      "output": null,
+      "reason": "duplicate_timestamp",
+      "sensor": "gnss",
+      "stamp_s": 1.02
+    },
+    {
+      "arrival_s": 1.04,
+      "diagnostic": {
+        "counters": {
+          "accepted": 3,
+          "conflicting_duplicate": 1,
+          "duplicate": 1,
+          "future_skew": 0,
+          "inactive": 0,
+          "invalid": 0,
+          "out_of_order": 0,
+          "restarts": 0,
+          "watchdog_trips": 0
+        },
+        "last_safe_fix": {
+          "altitude": 40.0,
+          "latitude": 35.68,
+          "longitude": 139.77
+        },
+        "lifecycle_state": "active",
+        "navigation_mode": "safe_fallback",
+        "now_s": 1.04,
+        "reason": "gnss_integrity:duplicate_timestamp",
+        "sensor_age_s": {
+          "gnss": 0.020000000000000018,
+          "imu": 0.040000000000000036,
+          "map": 0.030000000000000027
+        }
+      },
+      "disposition": "conflicting_duplicate",
+      "event_index": 4,
+      "mode": "safe_fallback",
+      "output": null,
+      "reason": "duplicate_timestamp",
+      "sensor": "gnss",
+      "stamp_s": 1.02
+    },
+    {
+      "arrival_s": 1.05,
+      "diagnostic": {
+        "counters": {
+          "accepted": 3,
+          "conflicting_duplicate": 1,
+          "duplicate": 1,
+          "future_skew": 0,
+          "inactive": 0,
+          "invalid": 0,
+          "out_of_order": 1,
+          "restarts": 0,
+          "watchdog_trips": 0
+        },
+        "last_safe_fix": {
+          "altitude": 40.0,
+          "latitude": 35.68,
+          "longitude": 139.77
+        },
+        "lifecycle_state": "active",
+        "navigation_mode": "safe_fallback",
+        "now_s": 1.05,
+        "reason": "gnss_integrity:timestamp_moved_backwards",
+        "sensor_age_s": {
+          "gnss": 0.030000000000000027,
+          "imu": 0.050000000000000044,
+          "map": 0.040000000000000036
+        }
+      },
+      "disposition": "out_of_order",
+      "event_index": 5,
+      "mode": "safe_fallback",
+      "output": null,
+      "reason": "timestamp_moved_backwards",
+      "sensor": "gnss",
+      "stamp_s": 0.9
+    },
+    {
+      "arrival_s": 1.1,
+      "diagnostic": {
+        "counters": {
+          "accepted": 3,
+          "conflicting_duplicate": 1,
+          "duplicate": 1,
+          "future_skew": 1,
+          "inactive": 0,
+          "invalid": 0,
+          "out_of_order": 1,
+          "restarts": 0,
+          "watchdog_trips": 0
+        },
+        "last_safe_fix": {
+          "altitude": 40.0,
+          "latitude": 35.68,
+          "longitude": 139.77
+        },
+        "lifecycle_state": "active",
+        "navigation_mode": "safe_fallback",
+        "now_s": 1.1,
+        "reason": "gnss_integrity:timestamp_moved_backwards,imu_integrity:timestamp_exceeds_future_skew",
+        "sensor_age_s": {
+          "gnss": 0.08000000000000007,
+          "imu": 0.10000000000000009,
+          "map": 0.09000000000000008
+        }
+      },
+      "disposition": "future_skew",
+      "event_index": 6,
+      "mode": "safe_fallback",
+      "output": null,
+      "reason": "timestamp_exceeds_future_skew",
+      "sensor": "imu",
+      "stamp_s": 2.0
+    },
+    {
+      "arrival_s": 4.0,
+      "diagnostic": {
+        "counters": {
+          "accepted": 4,
+          "conflicting_duplicate": 1,
+          "duplicate": 1,
+          "future_skew": 1,
+          "inactive": 0,
+          "invalid": 0,
+          "out_of_order": 1,
+          "restarts": 1,
+          "watchdog_trips": 0
+        },
+        "last_safe_fix": null,
+        "lifecycle_state": "active",
+        "navigation_mode": "safe_fallback",
+        "now_s": 4.0,
+        "reason": "gnss_missing,map_missing",
+        "sensor_age_s": {
+          "gnss": null,
+          "imu": 0.0,
+          "map": null
+        }
+      },
+      "disposition": "accepted",
+      "event_index": 7,
+      "mode": "safe_fallback",
+      "output": null,
+      "reason": "gnss_missing,map_missing",
+      "sensor": "imu",
+      "stamp_s": 4.0
+    },
+    {
+      "arrival_s": 4.01,
+      "diagnostic": {
+        "counters": {
+          "accepted": 5,
+          "conflicting_duplicate": 1,
+          "duplicate": 1,
+          "future_skew": 1,
+          "inactive": 0,
+          "invalid": 0,
+          "out_of_order": 1,
+          "restarts": 1,
+          "watchdog_trips": 0
+        },
+        "last_safe_fix": null,
+        "lifecycle_state": "active",
+        "navigation_mode": "safe_fallback",
+        "now_s": 4.01,
+        "reason": "gnss_missing",
+        "sensor_age_s": {
+          "gnss": null,
+          "imu": 0.009999999999999787,
+          "map": 0.0
+        }
+      },
+      "disposition": "accepted",
+      "event_index": 8,
+      "mode": "safe_fallback",
+      "output": null,
+      "reason": "gnss_missing",
+      "sensor": "map",
+      "stamp_s": 4.01
+    },
+    {
+      "arrival_s": 4.02,
+      "diagnostic": {
+        "counters": {
+          "accepted": 6,
+          "conflicting_duplicate": 1,
+          "duplicate": 1,
+          "future_skew": 1,
+          "inactive": 0,
+          "invalid": 0,
+          "out_of_order": 1,
+          "restarts": 1,
+          "watchdog_trips": 0
+        },
+        "last_safe_fix": {
+          "altitude": 40.0,
+          "latitude": 35.6801,
+          "longitude": 139.7701
+        },
+        "lifecycle_state": "active",
+        "navigation_mode": "normal",
+        "now_s": 4.02,
+        "reason": "all_required_inputs_fresh",
+        "sensor_age_s": {
+          "gnss": 0.0,
+          "imu": 0.019999999999999574,
+          "map": 0.009999999999999787
+        }
+      },
+      "disposition": "accepted",
+      "event_index": 9,
+      "mode": "normal",
+      "output": {
+        "altitude": 40.0,
+        "covariance_floor_m2": 0.0,
+        "latitude": 35.6801,
+        "longitude": 139.7701,
+        "mode": "normal",
+        "reason": "all_required_inputs_fresh"
+      },
+      "reason": "all_required_inputs_fresh",
+      "sensor": "gnss",
+      "stamp_s": 4.02
+    }
+  ]
+}

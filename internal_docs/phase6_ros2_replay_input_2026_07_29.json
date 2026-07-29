@@ -1,0 +1,116 @@
+{
+  "schema": "gnss_gpu_ros_replay_input_v1",
+  "id": "phase6_timestamp_watchdog_restart_audit",
+  "parameters": {
+    "gnss_timeout_s": 1.0,
+    "imu_timeout_s": 0.5,
+    "map_timeout_s": 2.0,
+    "maximum_future_skew_s": 0.1,
+    "require_imu": true,
+    "require_map": true,
+    "reject_out_of_order": true,
+    "fallback_covariance_m2": 10000.0,
+    "diagnostics_period_s": 0.5
+  },
+  "restart_before_indices": [
+    7
+  ],
+  "events": [
+    {
+      "sensor": "imu",
+      "stamp_s": 1.0,
+      "arrival_s": 1.0,
+      "payload": {
+        "ax": 0.0,
+        "ay": 0.0,
+        "az": 9.8
+      }
+    },
+    {
+      "sensor": "map",
+      "stamp_s": 1.01,
+      "arrival_s": 1.01,
+      "payload": {
+        "map_id": "tokyo-lod2",
+        "ready": true
+      }
+    },
+    {
+      "sensor": "gnss",
+      "stamp_s": 1.02,
+      "arrival_s": 1.02,
+      "payload": {
+        "latitude": 35.68,
+        "longitude": 139.77,
+        "altitude": 40.0
+      }
+    },
+    {
+      "sensor": "gnss",
+      "stamp_s": 1.02,
+      "arrival_s": 1.03,
+      "payload": {
+        "latitude": 35.68,
+        "longitude": 139.77,
+        "altitude": 40.0
+      }
+    },
+    {
+      "sensor": "gnss",
+      "stamp_s": 1.02,
+      "arrival_s": 1.04,
+      "payload": {
+        "latitude": 35.681,
+        "longitude": 139.77,
+        "altitude": 40.0
+      }
+    },
+    {
+      "sensor": "gnss",
+      "stamp_s": 0.9,
+      "arrival_s": 1.05,
+      "payload": {
+        "latitude": 35.67,
+        "longitude": 139.76,
+        "altitude": 40.0
+      }
+    },
+    {
+      "sensor": "imu",
+      "stamp_s": 2.0,
+      "arrival_s": 1.1,
+      "payload": {
+        "ax": 1.0
+      }
+    },
+    {
+      "sensor": "imu",
+      "stamp_s": 4.0,
+      "arrival_s": 4.0,
+      "payload": {
+        "ax": 0.0,
+        "ay": 0.0,
+        "az": 9.8
+      }
+    },
+    {
+      "sensor": "map",
+      "stamp_s": 4.01,
+      "arrival_s": 4.01,
+      "payload": {
+        "map_id": "tokyo-lod2",
+        "ready": true
+      }
+    },
+    {
+      "sensor": "gnss",
+      "stamp_s": 4.02,
+      "arrival_s": 4.02,
+      "payload": {
+        "latitude": 35.6801,
+        "longitude": 139.7701,
+        "altitude": 40.0
+      }
+    }
+  ]
+}

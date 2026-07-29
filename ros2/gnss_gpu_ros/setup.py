@@ -9,7 +9,13 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        ("share/" + package_name + "/launch", ["launch/robust_navsat_filter.launch.py"]),
+        (
+            "share/" + package_name + "/launch",
+            [
+                "launch/robust_navsat_filter.launch.py",
+                "launch/integrated_navigation_lifecycle.launch.py",
+            ],
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
@@ -24,6 +30,11 @@ setup(
     entry_points={
         "console_scripts": [
             "robust_navsat_filter = gnss_gpu_ros.robust_navsat_filter_node:main",
+            (
+                "integrated_navigation_lifecycle = "
+                "gnss_gpu_ros.integrated_navigation_lifecycle_node:main"
+            ),
+            "gnss_gpu_replay = gnss_gpu_ros.replay_contract:main",
         ],
     },
 )
