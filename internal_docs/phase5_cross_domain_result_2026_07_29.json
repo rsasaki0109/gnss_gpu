@@ -1,0 +1,462 @@
+{
+  "campaigns": [
+    {
+      "coverage": {
+        "cities": [
+          "hong-kong",
+          "tokyo"
+        ],
+        "dates": [
+          "2019-04-28",
+          "2020-12-17"
+        ],
+        "receivers": [
+          "trimble",
+          "ublox"
+        ],
+        "sites": [
+          "hong-kong/hk-20190428",
+          "tokyo/odaiba",
+          "tokyo/shinjuku"
+        ]
+      },
+      "device_out_verified": true,
+      "gates": [
+        {
+          "detail": "ok",
+          "name": "records_parse",
+          "passed": true
+        },
+        {
+          "detail": "record IDs must be unique",
+          "name": "unique_record_ids",
+          "passed": true
+        },
+        {
+          "detail": "metrics must be finite and epochs positive",
+          "name": "metrics_valid",
+          "passed": true
+        },
+        {
+          "detail": "candidate must be no worse on every held-out record",
+          "name": "primary_non_degraded",
+          "passed": true
+        },
+        {
+          "detail": "candidate must improve at least one held-out record",
+          "name": "primary_improved",
+          "passed": true
+        },
+        {
+          "detail": "candidate safety metric must be no worse on every held-out record",
+          "name": "safety_non_degraded",
+          "passed": true
+        },
+        {
+          "detail": "declared global config hash must match",
+          "name": "config_locked",
+          "passed": true
+        },
+        {
+          "detail": "selection must be development-only with no domain overrides",
+          "name": "no_city_or_device_tuning",
+          "passed": true
+        },
+        {
+          "detail": "leave-one-group-out folds must be complete",
+          "name": "fold_contract",
+          "passed": true
+        },
+        {
+          "detail": "all source artifacts must hash-match",
+          "name": "provenance",
+          "passed": true
+        }
+      ],
+      "id": "urban_positioning_safe_adaptive",
+      "leave_one_city_out": [
+        {
+          "held_out_group": "hong-kong",
+          "test_record_ids": [
+            "hong_kong_20190428_ublox"
+          ],
+          "training_record_ids": [
+            "tokyo_odaiba_trimble_3k",
+            "tokyo_shinjuku_trimble_3k"
+          ]
+        },
+        {
+          "held_out_group": "tokyo",
+          "test_record_ids": [
+            "tokyo_odaiba_trimble_3k",
+            "tokyo_shinjuku_trimble_3k"
+          ],
+          "training_record_ids": [
+            "hong_kong_20190428_ublox"
+          ]
+        }
+      ],
+      "leave_one_device_out": [
+        {
+          "held_out_group": "trimble",
+          "test_record_ids": [
+            "tokyo_odaiba_trimble_3k",
+            "tokyo_shinjuku_trimble_3k"
+          ],
+          "training_record_ids": [
+            "hong_kong_20190428_ublox"
+          ]
+        },
+        {
+          "held_out_group": "ublox",
+          "test_record_ids": [
+            "hong_kong_20190428_ublox"
+          ],
+          "training_record_ids": [
+            "tokyo_odaiba_trimble_3k",
+            "tokyo_shinjuku_trimble_3k"
+          ]
+        }
+      ],
+      "passed": true,
+      "primary_metric": "rms_2d_m",
+      "provenance": [
+        {
+          "actual_sha256": "CFBC34DF7030249F3E92F93AAC75D51373016B8524E8438773E5DBA0F090EEEC",
+          "expected_sha256": "CFBC34DF7030249F3E92F93AAC75D51373016B8524E8438773E5DBA0F090EEEC",
+          "passed": true,
+          "path": "experiments/results/phase5_safe_cross_domain_tokyo_3k_runs.csv"
+        },
+        {
+          "actual_sha256": "C789D946D5B7DD2E4AA87D108A910DA302609195DFA5642220B699648D7CBF27",
+          "expected_sha256": "C789D946D5B7DD2E4AA87D108A910DA302609195DFA5642220B699648D7CBF27",
+          "passed": true,
+          "path": "experiments/results/urbannav_fixed_eval_hk20190428_gc_adaptive_summary.csv"
+        }
+      ],
+      "records": [
+        {
+          "baseline": 16.025352,
+          "baseline_safety": 0.0,
+          "candidate": 16.025352,
+          "candidate_safety": 0.0,
+          "city": "tokyo",
+          "date": "2020-12-17",
+          "delta": 0.0,
+          "epochs": 3000,
+          "receiver": "trimble",
+          "record_id": "tokyo_odaiba_trimble_3k",
+          "safety_delta": 0.0,
+          "site": "odaiba"
+        },
+        {
+          "baseline": 10.016165,
+          "baseline_safety": 0.0,
+          "candidate": 10.016165,
+          "candidate_safety": 0.0,
+          "city": "tokyo",
+          "date": "2020-12-17",
+          "delta": 0.0,
+          "epochs": 3000,
+          "receiver": "trimble",
+          "record_id": "tokyo_shinjuku_trimble_3k",
+          "safety_delta": 0.0,
+          "site": "shinjuku"
+        },
+        {
+          "baseline": 69.493649,
+          "baseline_safety": 0.0,
+          "candidate": 66.848918,
+          "candidate_safety": 0.0,
+          "city": "hong-kong",
+          "date": "2019-04-28",
+          "delta": -2.6447310000000073,
+          "epochs": 468,
+          "receiver": "ublox",
+          "record_id": "hong_kong_20190428_ublox",
+          "safety_delta": 0.0,
+          "site": "hk-20190428"
+        }
+      ],
+      "safety_metric": "catastrophic_rate_pct",
+      "weighted": {
+        "baseline": 17.106923118738404,
+        "candidate": 16.915560393320966,
+        "epochs": 6468
+      }
+    },
+    {
+      "coverage": {
+        "cities": [
+          "nagoya",
+          "tokyo"
+        ],
+        "dates": [
+          "2024-07-20",
+          "2024-07-23",
+          "2024-08-03"
+        ],
+        "receivers": [
+          "septentrio-mosaic-x5"
+        ],
+        "sites": [
+          "nagoya/run1",
+          "nagoya/run2",
+          "nagoya/run3",
+          "tokyo/run1",
+          "tokyo/run2",
+          "tokyo/run3"
+        ]
+      },
+      "device_out_verified": false,
+      "gates": [
+        {
+          "detail": "ok",
+          "name": "records_parse",
+          "passed": true
+        },
+        {
+          "detail": "record IDs must be unique",
+          "name": "unique_record_ids",
+          "passed": true
+        },
+        {
+          "detail": "metrics must be finite and epochs positive",
+          "name": "metrics_valid",
+          "passed": true
+        },
+        {
+          "detail": "candidate must be no worse on every held-out record",
+          "name": "primary_non_degraded",
+          "passed": true
+        },
+        {
+          "detail": "candidate must improve at least one held-out record",
+          "name": "primary_improved",
+          "passed": true
+        },
+        {
+          "detail": "candidate safety metric must be no worse on every held-out record",
+          "name": "safety_non_degraded",
+          "passed": true
+        },
+        {
+          "detail": "declared global config hash must match",
+          "name": "config_locked",
+          "passed": true
+        },
+        {
+          "detail": "selection must be development-only with no domain overrides",
+          "name": "no_city_or_device_tuning",
+          "passed": true
+        },
+        {
+          "detail": "leave-one-group-out folds must be complete",
+          "name": "fold_contract",
+          "passed": true
+        },
+        {
+          "detail": "all source artifacts must hash-match",
+          "name": "provenance",
+          "passed": true
+        }
+      ],
+      "id": "ppc_post_solver_qa_loro",
+      "leave_one_city_out": [
+        {
+          "held_out_group": "nagoya",
+          "test_record_ids": [
+            "nagoya_run1",
+            "nagoya_run2",
+            "nagoya_run3"
+          ],
+          "training_record_ids": [
+            "tokyo_run1",
+            "tokyo_run2",
+            "tokyo_run3"
+          ]
+        },
+        {
+          "held_out_group": "tokyo",
+          "test_record_ids": [
+            "tokyo_run1",
+            "tokyo_run2",
+            "tokyo_run3"
+          ],
+          "training_record_ids": [
+            "nagoya_run1",
+            "nagoya_run2",
+            "nagoya_run3"
+          ]
+        }
+      ],
+      "leave_one_device_out": [],
+      "passed": true,
+      "primary_metric": "route_absolute_error_pp",
+      "provenance": [
+        {
+          "actual_sha256": "84B8E38A33CC2B43377CC1D68318965056219CDA40D0D8394566A37D87A1EBB1",
+          "expected_sha256": "84B8E38A33CC2B43377CC1D68318965056219CDA40D0D8394566A37D87A1EBB1",
+          "passed": true,
+          "path": "internal_docs/product_deliverable/D034_PATH1_LORO_RESULTS.md"
+        }
+      ],
+      "records": [
+        {
+          "baseline": 33.4,
+          "baseline_safety": 33.4,
+          "candidate": 0.4,
+          "candidate_safety": 0.4,
+          "city": "nagoya",
+          "date": "2024-08-03",
+          "delta": -33.0,
+          "epochs": 26,
+          "receiver": "septentrio-mosaic-x5",
+          "record_id": "nagoya_run1",
+          "safety_delta": -33.0,
+          "site": "run1"
+        },
+        {
+          "baseline": 3.3,
+          "baseline_safety": 3.3,
+          "candidate": 1.0,
+          "candidate_safety": 1.0,
+          "city": "nagoya",
+          "date": "2024-07-20",
+          "delta": -2.3,
+          "epochs": 32,
+          "receiver": "septentrio-mosaic-x5",
+          "record_id": "nagoya_run2",
+          "safety_delta": -2.3,
+          "site": "run2"
+        },
+        {
+          "baseline": 8.1,
+          "baseline_safety": 8.1,
+          "candidate": 1.4,
+          "candidate_safety": 1.4,
+          "city": "nagoya",
+          "date": "2024-08-03",
+          "delta": -6.699999999999999,
+          "epochs": 18,
+          "receiver": "septentrio-mosaic-x5",
+          "record_id": "nagoya_run3",
+          "safety_delta": -6.699999999999999,
+          "site": "run3"
+        },
+        {
+          "baseline": 9.7,
+          "baseline_safety": 9.7,
+          "candidate": 0.8,
+          "candidate_safety": 0.8,
+          "city": "tokyo",
+          "date": "2024-07-23",
+          "delta": -8.899999999999999,
+          "epochs": 39,
+          "receiver": "septentrio-mosaic-x5",
+          "record_id": "tokyo_run1",
+          "safety_delta": -8.899999999999999,
+          "site": "run1"
+        },
+        {
+          "baseline": 11.5,
+          "baseline_safety": 11.5,
+          "candidate": 3.4,
+          "candidate_safety": 3.4,
+          "city": "tokyo",
+          "date": "2024-07-23",
+          "delta": -8.1,
+          "epochs": 31,
+          "receiver": "septentrio-mosaic-x5",
+          "record_id": "tokyo_run2",
+          "safety_delta": -8.1,
+          "site": "run2"
+        },
+        {
+          "baseline": 8.4,
+          "baseline_safety": 8.4,
+          "candidate": 1.6,
+          "candidate_safety": 1.6,
+          "city": "tokyo",
+          "date": "2024-07-23",
+          "delta": -6.800000000000001,
+          "epochs": 51,
+          "receiver": "septentrio-mosaic-x5",
+          "record_id": "tokyo_run3",
+          "safety_delta": -6.800000000000001,
+          "site": "run3"
+        }
+      ],
+      "safety_metric": "route_absolute_error_pp",
+      "weighted": {
+        "baseline": 11.588832487309645,
+        "candidate": 1.450761421319797,
+        "epochs": 197
+      }
+    }
+  ],
+  "coverage": {
+    "cities": [
+      "hong-kong",
+      "nagoya",
+      "tokyo"
+    ],
+    "dates": [
+      "2019-04-28",
+      "2020-12-17",
+      "2024-07-20",
+      "2024-07-23",
+      "2024-08-03"
+    ],
+    "receivers": [
+      "septentrio-mosaic-x5",
+      "trimble",
+      "ublox"
+    ],
+    "sites": [
+      "hong-kong/hk-20190428",
+      "nagoya/run1",
+      "nagoya/run2",
+      "nagoya/run3",
+      "tokyo/odaiba",
+      "tokyo/run1",
+      "tokyo/run2",
+      "tokyo/run3",
+      "tokyo/shinjuku"
+    ]
+  },
+  "gates": [
+    {
+      "detail": "all pass",
+      "name": "all_campaigns_pass",
+      "passed": true
+    },
+    {
+      "detail": "observed 3",
+      "name": "at_least_three_cities",
+      "passed": true
+    },
+    {
+      "detail": "observed 9",
+      "name": "at_least_four_sites",
+      "passed": true
+    },
+    {
+      "detail": "observed 5",
+      "name": "multiple_dates",
+      "passed": true
+    },
+    {
+      "detail": "observed 3",
+      "name": "multiple_receivers",
+      "passed": true
+    },
+    {
+      "detail": "at least one campaign must contain two or more receiver holdouts",
+      "name": "device_out_campaign",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "schema": "gnss_gpu_cross_domain_validation_result_v1"
+}

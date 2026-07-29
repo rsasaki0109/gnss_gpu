@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Run a fixed UrbanNav evaluation table without retuning on UrbanNav itself."""
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ ALL_METHODS = (
     "PF+EKFGuideInit-10K",
     "PF+EKFGuideFallback-10K",
     "PF+AdaptiveGuide-10K",
+    "PF+SafeAdaptiveGuide-10K",
     "PF+EKFRescue-10K",
     "PF+RobustClear-10K",
     "PF+RobustClear+EKFGuide-10K",
@@ -67,6 +69,12 @@ def _method_slug(method: str) -> str:
     while "__" in slug:
         slug = slug.replace("__", "_")
     return slug.strip("_")
+
+
+def _safe_adaptive_policy(constellations: tuple[str, ...]) -> str:
+    """Choose from observable signal diversity, never from city identity."""
+
+    return "ekf_fallback" if len(constellations) > 1 else "guided_pf"
 
 
 def _metrics_row(run_name: str, method: str, metrics: dict, time_ms: float, backend: str) -> dict[str, object]:
@@ -201,6 +209,7 @@ def _evaluate_methods_for_run(
             "PF+EKFGuideInit-10K",
             "PF+EKFGuideFallback-10K",
             "PF+AdaptiveGuide-10K",
+            "PF+SafeAdaptiveGuide-10K",
             "PF+EKFRescue-10K",
             "PF+RobustClear-10K",
             "PF+RobustClear+EKFGuide-10K",
@@ -227,6 +236,7 @@ def _evaluate_methods_for_run(
             "PF+EKFGuideInit-10K",
             "PF+EKFGuideFallback-10K",
             "PF+AdaptiveGuide-10K",
+            "PF+SafeAdaptiveGuide-10K",
             "PF+EKFRescue-10K",
             "PF+RobustClear+EKFGuide-10K",
             "PF+RobustClear+EKFGuideInit-10K",
@@ -324,6 +334,28 @@ def _evaluate_methods_for_run(
             adaptive_pos,
             adaptive_ms,
             f"{adaptive_backend}+Adaptive",
+        )
+    if "PF+SafeAdaptiveGuide-10K" in methods:
+        if _safe_adaptive_policy(tuple(data.get("constellations", ()))) == "ekf_fallback":
+            safe_pos = np.asarray(rescue_reference_positions, dtype=np.float64).copy()
+            safe_ms = float(cached["EKF"][1])
+            safe_backend = "EKF+SafeMultiGNSSFallback"
+        else:
+            safe_pos, safe_ms, safe_backend = run_pf_standard(
+                data,
+                n_particles,
+                wls_pos,
+                sigma_pr=PF_SIGMA_LOS,
+                quality_veto_config=quality_veto_config,
+                guide_reference_positions=rescue_reference_positions,
+                guide_initial_from_reference=True,
+                guide_mode="always",
+            )
+            safe_backend = f"{safe_backend}+SafeSparseGuide"
+        cached["PF+SafeAdaptiveGuide-10K"] = (
+            safe_pos,
+            safe_ms,
+            safe_backend,
         )
     if "PF+EKFRescue-10K" in methods:
         pf_rescue_pos, pf_rescue_ms, pf_rescue_backend = run_pf_standard(

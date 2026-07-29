@@ -118,6 +118,18 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest().upper()
 
 
+def _sha256_repository_text(path: Path) -> str:
+    """Hash a text lock in its repository LF representation.
+
+    Git may materialize CRLF on Windows even when the immutable blob is LF.
+    These known JSON locks are text artifacts, so checkout line endings must
+    not turn an unchanged repository object into a false integrity failure.
+    """
+
+    content = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(content).hexdigest().upper()
+
+
 def _canonical_sha256(value: Any) -> str:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest().upper()
@@ -150,7 +162,7 @@ def verify_locked_contract(repo_root: Path) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     for spec in MANDATORY_NEGATIVE_HOLDOUTS:
         path = repo_root / spec.lock_path
-        actual_hash = sha256_file(path) if path.is_file() else None
+        actual_hash = _sha256_repository_text(path) if path.is_file() else None
         schema = None
         if path.is_file():
             payload = json.loads(path.read_text(encoding="utf-8"))
@@ -171,7 +183,7 @@ def verify_locked_contract(repo_root: Path) -> dict[str, Any]:
     m4_checks: list[dict[str, Any]] = []
     for relative, expected in M4_PRESERVED_SHA256.items():
         path = repo_root / relative
-        actual = sha256_file(path) if path.is_file() else None
+        actual = _sha256_repository_text(path) if path.is_file() else None
         m4_checks.append(
             {
                 "path": relative,
