@@ -13,7 +13,10 @@ import zipfile
 from pathlib import Path
 from typing import Any, Mapping
 
-from gnss_gpu.evaluation_contract import (
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "python"))
+
+from gnss_gpu.evaluation_contract import (  # noqa: E402
     MANDATORY_NEGATIVE_HOLDOUTS,
     verify_locked_contract,
 )
