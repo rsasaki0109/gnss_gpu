@@ -2,7 +2,7 @@
   <title id="title">PF-only RTK stretch campaign</title>
   <desc id="desc">Full-epoch three-dimensional under-50-centimeter accuracy for Tokyo run1 and Nagoya run1, comparing the current PF-only trajectory, an external latest libgnss++ selected reference, and the campaign target. The right panel shows the truth-free promotion pipeline and integrity requirements.</desc>
   <rect width="960" height="560" rx="16" fill="#0d1117"/>
-  <text x="46" y="47" fill="#f0f6fc" font-family="system-ui,sans-serif" font-size="25" font-weight="700">PF-only RTK stretch · Tokyo 81 / Nagoya 86</text>
+  <text x="46" y="47" fill="#f0f6fc" font-family="system-ui,sans-serif" font-size="25" font-weight="700">PF-only promotion · Tokyo 45% floor cleared</text>
   <text x="46" y="75" fill="#8b949e" font-family="system-ui,sans-serif" font-size="14">Matched 3D · full epoch denominator · truth-free runtime · no runtime FGO</text>
 
   <g font-family="system-ui,sans-serif">
@@ -19,19 +19,19 @@
     </g>
 
     <!-- Tokyo run1: scale 3 px per percentage point from y=430. -->
-    <rect x="112" y="336" width="42" height="94" rx="5" fill="#3fb950"/>
+    <rect x="112" y="290" width="42" height="140" rx="5" fill="#3fb950"/>
     <rect x="160" y="190" width="42" height="240" rx="5" fill="#58a6ff"/>
-    <rect x="208" y="187" width="42" height="243" rx="5" fill="#d29922"/>
+    <rect x="208" y="295" width="42" height="135" rx="5" fill="#d29922"/>
     <g fill="#f0f6fc" font-size="12" text-anchor="middle">
-      <text x="133" y="327">31.40</text><text x="181" y="182">80.02</text><text x="229" y="179">81.00</text>
+      <text x="133" y="282">46.51</text><text x="181" y="182">80.02</text><text x="229" y="287">45.00</text>
     </g>
 
     <!-- Nagoya run1. -->
-    <rect x="350" y="227" width="42" height="203" rx="5" fill="#3fb950"/>
+    <rect x="350" y="204" width="42" height="226" rx="5" fill="#3fb950"/>
     <rect x="398" y="172" width="42" height="258" rx="5" fill="#58a6ff"/>
-    <rect x="446" y="172" width="42" height="258" rx="5" fill="#d29922"/>
+    <rect x="446" y="221" width="42" height="209" rx="5" fill="#d29922"/>
     <g fill="#f0f6fc" font-size="12" text-anchor="middle">
-      <text x="371" y="207">69.55</text><text x="419" y="164">85.84</text><text x="467" y="164">86.00</text>
+      <text x="371" y="196">75.37</text><text x="419" y="164">85.84</text><text x="467" y="213">69.55</text>
     </g>
     <g fill="#c9d1d9" font-size="14" text-anchor="middle">
       <text x="181" y="457">Tokyo run1</text><text x="419" y="457">Nagoya run1</text>
@@ -39,7 +39,7 @@
     <g font-size="12">
       <rect x="76" y="490" width="14" height="14" rx="2" fill="#3fb950"/><text x="98" y="502" fill="#c9d1d9">PF-only locked current</text>
       <rect x="245" y="490" width="14" height="14" rx="2" fill="#58a6ff"/><text x="267" y="502" fill="#c9d1d9">latest libgnss++ selected (external)</text>
-      <rect x="483" y="490" width="14" height="14" rx="2" fill="#d29922"/><text x="505" y="502" fill="#c9d1d9">campaign target</text>
+      <rect x="483" y="490" width="14" height="14" rx="2" fill="#d29922"/><text x="505" y="502" fill="#c9d1d9">v0.3 promotion floor</text>
     </g>
     <text x="76" y="529" fill="#8b949e" font-size="11">External selected results are a reference, not a PF-only production result.</text>
 
@@ -65,7 +65,7 @@
 
     <rect x="630" y="432" width="282" height="78" rx="9" fill="#0f2d1d" stroke="#238636"/>
     <text x="647" y="457" fill="#3fb950" font-size="13" font-weight="700">Locked current integrity</text>
-    <text x="647" y="480" fill="#c9d1d9" font-size="12">Nagoya: 5,274 / 7,583 · FIX 0</text>
-    <text x="647" y="499" fill="#c9d1d9" font-size="12">Tokyo: 3,744 / 11,924 · M4 preserved</text>
+    <text x="647" y="480" fill="#c9d1d9" font-size="12">Nagoya: 5,715 / 7,583 · gain 441 / loss 0</text>
+    <text x="647" y="499" fill="#c9d1d9" font-size="12">Tokyo: 5,546 / 11,924 · false FIX 0</text>
   </g>
 </svg>

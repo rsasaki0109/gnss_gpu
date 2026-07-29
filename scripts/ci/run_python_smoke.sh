@@ -32,8 +32,11 @@ pytest -q \
   tests/test_multihypothesis_navigation.py \
   tests/test_realtime_runtime.py \
   tests/test_cross_domain_validation.py \
+  tests/test_export_pf_seed_pos.py \
   tests/test_phase6_ros2_soak.py \
   tests/test_release_bundle.py \
+  tests/test_tokyo_candidate_supply_audit.py \
+  tests/test_wp172_pf_seeded_rtk_consensus.py \
   tests/test_v030_production_promotion_audit.py \
   tests/test_v030_public_demo.py \
   tests/test_result_artifact_policy.py \

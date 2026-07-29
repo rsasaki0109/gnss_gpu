@@ -1,0 +1,47 @@
+{
+  "schema": "gnss_gpu_wp172_runtime_benchmark_v1",
+  "date": "2026-07-29",
+  "host": {
+    "environment": "WSL Ubuntu 18.04",
+    "cpu": "Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz",
+    "logical_cpus": 12
+  },
+  "workload": {
+    "dataset": "tokyo_run1",
+    "input_rate_hz": 5.0,
+    "full_denominator_epochs": 11924,
+    "candidate_paths": [
+      "independent_rtk",
+      "pf_seeded_demo5_rtk"
+    ],
+    "execution": "both paths launched concurrently; sequential sum retained as conservative deadline bound"
+  },
+  "measurement": {
+    "independent_elapsed_s": 248.34,
+    "independent_average_ms_per_epoch": 20.82690372358269,
+    "seeded_elapsed_s": 260.25,
+    "seeded_average_ms_per_epoch": 21.825729620932574,
+    "parallel_wall_bound_s": 260.25,
+    "parallel_average_ms_per_epoch": 21.825729620932574,
+    "conservative_sequential_elapsed_s": 508.59,
+    "conservative_sequential_average_ms_per_epoch": 42.652633344515266,
+    "conservative_realtime_factor": 4.689042254074992,
+    "normal_latency_budget_ms": 100.0
+  },
+  "reproducibility": {
+    "locked_seeded_rtk_sha256": "75704CEA3D76CC706CC07EACE02BFBE0F7ABC422C49A0C9F2B0FC21406DBBF09",
+    "replayed_seeded_rtk_sha256": "75704CEA3D76CC706CC07EACE02BFBE0F7ABC422C49A0C9F2B0FC21406DBBF09",
+    "locked_independent_rtk_sha256": "80C96053401946A07F98B81E03A9761BB3B327F9963AA46B39D85A54FAC35753",
+    "replayed_independent_rtk_sha256": "11AF9EE7513D2C501B1CCD5C848464052E9209ACA52C7A7DB188DA0143DBCA10",
+    "independent_rtk_is_byte_identical": false,
+    "independent_rtk_rows": 7397,
+    "locked_final_trajectory_sha256": "804DEDEFAC9181E3B766DD8FC578A221AA5A7B6D55D0611A41121FEC66650243",
+    "replayed_final_trajectory_sha256": "804DEDEFAC9181E3B766DD8FC578A221AA5A7B6D55D0611A41121FEC66650243",
+    "final_trajectory_is_byte_identical": true,
+    "replayed_after_sub50cm_epochs": 5546,
+    "replayed_gained_epochs": 1802,
+    "replayed_lost_epochs": 0,
+    "replayed_false_fix_epochs": 0
+  },
+  "passed": true
+}

@@ -19,13 +19,19 @@ def test_public_snapshot_matches_locked_release_evidence() -> None:
     assert generated == locked
     assert generated["version"] == "0.3.0"
     assert generated["runtime"]["deadline_misses"] == 0
+    assert (
+        generated["runtime"]["wp172_candidate_supply"][
+            "conservative_sequential_average_ms_per_epoch"
+        ]
+        <= 100.0
+    )
     assert generated["coverage"]["cities"] == ["hong-kong", "nagoya", "tokyo"]
     assert len(generated["negative_controls"]) == 4
     assert all(result["accepted"] is False for result in generated["negative_controls"])
-    assert generated["promotion"]["passed_gates"] == 10
+    assert generated["promotion"]["passed_gates"] == 11
     assert generated["promotion"]["gate_count"] == 11
-    assert generated["promotion"]["allowed"] is False
-    assert generated["promotion"]["tokyo_epoch_gap"] == 1622
+    assert generated["promotion"]["tokyo_epoch_margin"] == 180
+    assert generated["promotion"]["allowed"] is True
     assert generated["soak"]["simulated_duration_s"] == 7200.0
     assert generated["soak"]["final_mode"] == "normal"
 

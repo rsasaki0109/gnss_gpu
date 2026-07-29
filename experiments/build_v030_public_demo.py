@@ -21,19 +21,23 @@ def build_snapshot(repo_root: Path) -> dict[str, Any]:
     phase2 = _read(repo_root / "internal_docs/phase2_structural_audit_2026_07_29.json")
     phase3 = _read(repo_root / "internal_docs/phase3_outage_recovery_audit_2026_07_29.json")
     phase4 = _read(repo_root / "internal_docs/phase4_realtime_benchmark_2026_07_29.json")
+    wp172_runtime = _read(
+        repo_root / "internal_docs/wp172_runtime_benchmark_2026_07_29.json"
+    )
     phase5 = _read(repo_root / "internal_docs/phase5_cross_domain_result_2026_07_29.json")
     phase6 = _read(repo_root / "internal_docs/phase6_ros2_replay_result_2026_07_29.json")
     soak = _read(repo_root / "internal_docs/phase6_ros2_soak_result_2026_07_29.json")
     promotion = _read(
         repo_root / "internal_docs/v030_production_promotion_audit_2026_07_29.json"
     )
+    tokyo = _read(repo_root / "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json")
     promotion_gates = {gate["id"]: gate for gate in promotion["gates"]}
     tokyo_gate = promotion_gates["tokyo_sub50cm_target"]
     gain_gate = promotion_gates["full_denominator_gain_without_loss"]
     return {
         "schema": "gnss_gpu_v030_public_snapshot_v1",
         "version": "0.3.0",
-        "headline": "Truth-free safety gates, real-time CUDA, cross-domain validation, ROS 2 lifecycle",
+        "headline": "46.51% Tokyo sub-50 cm, truth-free safety gates, real-time CUDA, ROS 2 lifecycle",
         "phases": [
             {"id": 0, "name": "Evaluation contract", "status": "complete"},
             {
@@ -89,6 +93,7 @@ def build_snapshot(repo_root: Path) -> dict[str, Any]:
         "runtime": {
             "gpu": phase4["gpu"],
             **phase4["assessment"],
+            "wp172_candidate_supply": wp172_runtime["measurement"],
         },
         "coverage": phase5["coverage"],
         "positioning": phase5["campaigns"][0]["weighted"],
@@ -115,10 +120,10 @@ def build_snapshot(repo_root: Path) -> dict[str, Any]:
             "failed_gates": promotion["failed_gates"],
             "tokyo_sub50cm_percent": tokyo_gate["actual"],
             "tokyo_target_percent": tokyo_gate["expected"],
-            "tokyo_sub50cm_epochs": 3744,
-            "tokyo_total_epochs": 11924,
+            "tokyo_sub50cm_epochs": tokyo["after_sub50cm_epochs"],
+            "tokyo_total_epochs": tokyo["full_denominator_epochs"],
             "tokyo_required_epochs": 5366,
-            "tokyo_epoch_gap": 1622,
+            "tokyo_epoch_margin": tokyo["after_sub50cm_epochs"] - 5366,
             **gain_gate["actual"],
             "false_fix": promotion_gates["false_fix_zero"]["actual"],
         },
@@ -134,8 +139,12 @@ def build_snapshot(repo_root: Path) -> dict[str, Any]:
         },
         "limitations": [
             (
-                "Tokyo sub-50 cm is 31.3989% (3,744/11,924), below the "
-                "45% promotion target by 1,622 epochs."
+                "Tokyo sub-50 cm is 46.5112% (5,546/11,924); FIX declarations "
+                "remain suppressed to preserve false-FIX zero."
+            ),
+            (
+                "Tokyo run1 was inspected by earlier campaign diagnostics; "
+                "WP172 is an operational audit, not a virgin scientific holdout."
             ),
             "The Phase 3 outage audit is synthetic; city-scale evidence is reported separately.",
             "Hong Kong is locked from a tracked summary because raw data is not bundled.",

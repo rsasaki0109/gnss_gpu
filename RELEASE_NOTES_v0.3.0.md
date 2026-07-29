@@ -30,15 +30,25 @@ python tools/build_release_bundle.py --verify dist/reproducibility
   greedy comparator ends 10 m away.
 - GTX 1660 Ti maxima are 13.761 ms in normal mode and 75.907 ms in search mode,
   with no recorded deadline miss.
+- Full WP172 candidate supply replays at a conservative 42.653 ms/epoch when
+  its two RTK paths are summed sequentially (21.826 ms/epoch concurrently);
+  the guarded final trajectory is byte-identical.
 - The cross-domain campaign covers 3 cities, 9 sites/routes, 5 dates, and
   3 receivers. Epoch-weighted RMS changes from 17.107 m to 16.916 m, with
   Tokyo non-degradation and a Hong Kong gain.
 - The deterministic ROS replay contains 10 events and one controlled restart.
+- The PF-only WP172 production trajectory reaches 5,546/11,924 Tokyo epochs
+  below 50 cm (46.5112%), with 1,802 gained, zero lost, and zero false FIX.
+- The fail-closed production audit passes all 11 gates.
 
 ## Important limits
 
-This release does not claim the program's 45% Tokyo sub-50 cm target. The
-Phase 5 campaign validates RMS and non-degradation, not that target. The locked
-Phase 3 outage audit is synthetic, Hong Kong is reproduced from a tracked
-summary because raw data is absent, and the Windows memory figure is a
-conservative capacity estimate. Promotion remains fail closed.
+The 45% Tokyo sub-50 cm promotion floor is met, but WP172 deliberately
+suppresses FIX declarations; it does not claim RTK FIX coverage. The locked
+Tokyo rerun is an operational promotion audit rather than a virgin scientific
+holdout because earlier campaign diagnostics had inspected Tokyo run1. The
+numerical consensus/residual gates were frozen and checked on Nagoya. The
+locked Phase 3 outage audit is synthetic, Hong Kong is reproduced from a
+tracked summary because raw data is absent, and the Windows memory figure is a
+conservative capacity estimate. Promotion remains fail closed for future
+changes.

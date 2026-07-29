@@ -1,0 +1,54 @@
+{
+  "after_sub50cm_epochs": 5546,
+  "after_sub50cm_percent": 46.51123783965112,
+  "before_sub50cm_epochs": 3744,
+  "candidate_gate": {
+    "max_independent_position_disagreement_m": 1.0,
+    "max_prefit_residual_rms_m": 4.0,
+    "required_seeded_status": 4
+  },
+  "contract": "configs/evaluation/wp172_pf_seeded_rtk_consensus.json",
+  "false_fix_epochs": 0,
+  "fix_epochs": 0,
+  "full_denominator_epochs": 11924,
+  "gained_epochs": 1802,
+  "input_hashes": {
+    "contract": "79EE855E77BEDCE9E57D88DBE35F96C3617AC10F258189184F0DCEDA360549C1",
+    "independent_rtk": "80C96053401946A07F98B81E03A9761BB3B327F9963AA46B39D85A54FAC35753",
+    "production": "13A03483C56EC7E2D4472108DD630B70BBE69B77B3DC4E6132EEA7C45917C226",
+    "reference": "8E468A6A959CD47144F4AD1F1DC0129E7EE160011F4D236E4FFDB63B203373E9",
+    "seeded_rtk": "75704CEA3D76CC706CC07EACE02BFBE0F7ABC422C49A0C9F2B0FC21406DBBF09"
+  },
+  "lost_epochs": 0,
+  "m4_preserved_sha256": {
+    "internal_docs/wp30_m4_production_config.json": "3FB163B16E59C6394A38206E826FE9E0411975597E8BC62E8A1AF67FBFFC8115",
+    "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "555C4FC2992654F9073323985EF7C35DB46738FEBE8F3F54D442C8BC17B76787"
+  },
+  "mandatory_negative_holdouts": {
+    "nagoya_wp53": {
+      "accepted": false,
+      "reason": "source_class_mismatch"
+    },
+    "tokyo_wp129": {
+      "accepted": false,
+      "reason": "source_class_mismatch"
+    },
+    "tokyo_wp156": {
+      "accepted": false,
+      "reason": "source_class_mismatch"
+    },
+    "tokyo_wp168": {
+      "accepted": false,
+      "reason": "source_class_mismatch"
+    }
+  },
+  "output_trajectory": "data/tokyo_run1_wp172_pf_seeded_rtk_consensus_trajectory.csv",
+  "output_trajectory_sha256": "804DEDEFAC9181E3B766DD8FC578A221AA5A7B6D55D0611A41121FEC66650243",
+  "pf_only": true,
+  "production_input_truth": false,
+  "promotion_allowed": true,
+  "runtime_fgo": false,
+  "schema": "gnss_gpu_wp172_pf_seeded_rtk_consensus_result_v1",
+  "selected_epochs": 3298,
+  "truth_usage": "post_selection_full_denominator_audit_only"
+}

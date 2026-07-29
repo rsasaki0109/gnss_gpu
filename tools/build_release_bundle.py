@@ -44,6 +44,12 @@ CORE_EVIDENCE = (
     "internal_docs/phase6_ros2_replay_result_2026_07_29.json",
     "internal_docs/phase6_ros2_soak_result_2026_07_29.json",
     "configs/evaluation/v030_production_promotion.json",
+    "configs/evaluation/wp172_pf_seeded_rtk_consensus.json",
+    "internal_docs/tokyo_candidate_supply_audit_2026_07_29.json",
+    "internal_docs/wp172_nagoya_development_2026_07_29.json",
+    "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
+    "internal_docs/wp172_runtime_benchmark_2026_07_29.json",
+    "data/tokyo_run1_wp172_pf_seeded_rtk_consensus_trajectory.csv",
     "internal_docs/wp30_m4_production_config.json",
     "internal_docs/wp30_m4_tokyo_evidence_ledger.json",
 )
@@ -84,6 +90,7 @@ def _assert_passed(name: str, value: Mapping[str, Any]) -> None:
 
 def _benchmark(
     phase4: Mapping[str, Any],
+    wp172_runtime: Mapping[str, Any],
     phase5: Mapping[str, Any],
     phase6: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -94,6 +101,7 @@ def _benchmark(
             "normal_particles": phase4["normal_particles"],
             "search_particles": phase4["search_particles"],
             **phase4["assessment"],
+            "wp172_candidate_supply": wp172_runtime["measurement"],
         },
         "cross_domain": {
             "coverage": phase5["coverage"],
@@ -284,6 +292,9 @@ def build_bundle(repo_root: Path, output: Path) -> dict[str, Any]:
     phase5 = _read_json(
         repo_root, "internal_docs/phase5_cross_domain_result_2026_07_29.json"
     )
+    wp172_runtime = _read_json(
+        repo_root, "internal_docs/wp172_runtime_benchmark_2026_07_29.json"
+    )
     phase6 = _read_json(
         repo_root, "internal_docs/phase6_ros2_replay_result_2026_07_29.json"
     )
@@ -292,6 +303,7 @@ def build_bundle(repo_root: Path, output: Path) -> dict[str, Any]:
         ("phase2", phase2),
         ("phase3", phase3),
         ("phase4", phase4),
+        ("wp172_runtime", wp172_runtime),
         ("phase5", phase5),
     ):
         _assert_passed(name, artifact)
@@ -308,7 +320,10 @@ def build_bundle(repo_root: Path, output: Path) -> dict[str, Any]:
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
 
-    _write_json(output / "benchmark.json", _benchmark(phase4, phase5, phase6))
+    _write_json(
+        output / "benchmark.json",
+        _benchmark(phase4, wp172_runtime, phase5, phase6),
+    )
     _write_json(output / "ablation.json", _ablation(phase1, phase2, phase3, phase5))
     _write_json(output / "failure_gallery.json", _failure_gallery(repo_root))
     (output / "TECHNICAL_REPORT.md").write_text(

@@ -63,12 +63,17 @@ def audit_promotion(repo_root: Path, contract_path: Path) -> dict[str, Any]:
     holdouts = evidence["negative_holdouts"]
     tokyo = evidence["tokyo_production"]
     runtime = evidence["runtime"]
+    wp172_runtime = evidence["wp172_runtime"]
     cross_domain = evidence["cross_domain"]
     soak = evidence["ros2_soak"]
     replay_input = evidence["ros2_replay_input"]
     replay_result = evidence["ros2_replay_result"]
 
-    production = tokyo["production_effect"]
+    production = tokyo.get("production_effect", tokyo)
+    truth_usage = tokyo.get("truth_usage")
+    after_sub50cm_percent = production.get(
+        "after_sub50cm_pct", production.get("after_sub50cm_percent")
+    )
     runtime_assessment = runtime["assessment"]
     holdout_results = holdouts["results"]
     cities = sorted(
@@ -112,15 +117,19 @@ def audit_promotion(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         _gate(
             "truth_free_production_input",
             tokyo.get("production_input_truth") is False
-            and tokyo.get("truth_usage") == "post_application_full_denominator_audit_only",
+            and truth_usage
+            in {
+                "post_application_full_denominator_audit_only",
+                "post_selection_full_denominator_audit_only",
+            },
             evidence=evidence_paths["tokyo_production"],
             actual={
                 "production_input_truth": tokyo.get("production_input_truth"),
-                "truth_usage": tokyo.get("truth_usage"),
+                "truth_usage": truth_usage,
             },
             expected={
                 "production_input_truth": False,
-                "truth_usage": "post_application_full_denominator_audit_only",
+                "truth_usage": "post_selection_or_application_full_denominator_audit_only",
             },
         ),
         _gate(
@@ -146,29 +155,50 @@ def audit_promotion(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         ),
         _gate(
             "tokyo_sub50cm_target",
-            production["after_sub50cm_pct"]
-            >= targets["tokyo_sub50cm_full_pct_min"],
+            after_sub50cm_percent >= targets["tokyo_sub50cm_full_pct_min"],
             evidence=evidence_paths["tokyo_production"],
-            actual=production["after_sub50cm_pct"],
+            actual=after_sub50cm_percent,
             expected=targets["tokyo_sub50cm_full_pct_min"],
         ),
         _gate(
             "runtime_deadlines",
             runtime.get("passed") is True
+            and wp172_runtime.get("passed") is True
             and runtime_assessment["normal_latency_max_ms"]
             <= targets["normal_latency_max_ms"]
             and runtime_assessment["search_latency_max_ms"]
             <= targets["search_latency_max_ms"]
+            and wp172_runtime["measurement"][
+                "conservative_sequential_average_ms_per_epoch"
+            ]
+            <= targets["wp172_sequential_average_max_ms"]
+            and wp172_runtime["reproducibility"][
+                "final_trajectory_is_byte_identical"
+            ]
+            is True
             and runtime_assessment["deadline_misses"] == 0,
-            evidence=evidence_paths["runtime"],
+            evidence=(
+                f"{evidence_paths['runtime']}; "
+                f"{evidence_paths['wp172_runtime']}"
+            ),
             actual={
                 "normal_latency_max_ms": runtime_assessment["normal_latency_max_ms"],
                 "search_latency_max_ms": runtime_assessment["search_latency_max_ms"],
+                "wp172_sequential_average_ms": wp172_runtime["measurement"][
+                    "conservative_sequential_average_ms_per_epoch"
+                ],
+                "wp172_final_trajectory_byte_identical": wp172_runtime[
+                    "reproducibility"
+                ]["final_trajectory_is_byte_identical"],
                 "deadline_misses": runtime_assessment["deadline_misses"],
             },
             expected={
                 "normal_latency_max_ms": targets["normal_latency_max_ms"],
                 "search_latency_max_ms": targets["search_latency_max_ms"],
+                "wp172_sequential_average_max_ms": targets[
+                    "wp172_sequential_average_max_ms"
+                ],
+                "wp172_final_trajectory_byte_identical": True,
                 "deadline_misses": 0,
             },
         ),
@@ -183,9 +213,16 @@ def audit_promotion(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         ),
         _gate(
             "m4_and_immutable_contract",
-            immutable.get("passed") is True,
-            evidence="configs/evaluation/urban_campaign_splits_v1.json",
-            actual=immutable.get("passed"),
+            immutable.get("passed") is True
+            and tokyo.get("m4_preserved_sha256")
+            == _read_json(
+                repo_root / "configs/evaluation/wp172_pf_seeded_rtk_consensus.json"
+            ).get("m4_expected_sha256"),
+            evidence=evidence_paths["tokyo_production"],
+            actual={
+                "immutable_contract": immutable.get("passed"),
+                "m4_preserved_sha256": tokyo.get("m4_preserved_sha256"),
+            },
             expected=True,
         ),
         _gate(
@@ -210,10 +247,10 @@ def audit_promotion(repo_root: Path, contract_path: Path) -> dict[str, Any]:
         _gate(
             "one_command_reproducibility",
             bundle_verification["passed"] is True
-            and bundle_verification["file_count"] >= 27,
+            and bundle_verification["file_count"] >= 33,
             evidence="tools/build_release_bundle.py",
             actual=bundle_verification,
-            expected={"passed": True, "file_count_min": 27},
+            expected={"passed": True, "file_count_min": 33},
         ),
     ]
     failed = [gate["id"] for gate in gates if not gate["passed"]]
