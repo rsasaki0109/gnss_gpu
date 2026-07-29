@@ -1,0 +1,31 @@
+{
+  "schema": "gnss_gpu_urban_campaign_splits_v1",
+  "policy": {
+    "final_holdout_truth_access": "post_freeze_audit_only",
+    "promotion_requires_all_mandatory_negative_holdouts": true,
+    "promotion_requires_false_fix_epochs": 0,
+    "notes": "Dataset IDs are stable logical IDs. Paths are supplied by each run manifest and are not embedded here."
+  },
+  "campaigns": [
+    {
+      "campaign": "ppc",
+      "development": ["nagoya_run1"],
+      "validation": ["nagoya_run2"],
+      "final_holdout": ["nagoya_run3", "tokyo_run1"],
+      "caveat": "Tokyo PPC currently has one durable run, so it is final-holdout-only; its locked blocks must never be tuned on."
+    },
+    {
+      "campaign": "urbannav_external",
+      "development": ["tokyo_odaiba"],
+      "validation": ["tokyo_shinjuku"],
+      "final_holdout": ["hong_kong_2019_04_28"],
+      "caveat": "Hong Kong is a sparse-satellite negative external control, not a headline positive benchmark."
+    }
+  ],
+  "mandatory_negative_holdouts": [
+    "nagoya_wp53",
+    "tokyo_wp129",
+    "tokyo_wp156",
+    "tokyo_wp168"
+  ]
+}
