@@ -1,10 +1,17 @@
 # ruff: noqa: E402
 import os
 import sys
+import warnings
 
 from gnss_gpu._version import __version__
+from gnss_gpu.backends import (
+    NativeBackendUnavailableError,
+    is_missing_optional_module,
+    unavailable_function,
+)
 
 _DLL_DIR_HANDLES = []
+_DLL_DIR_ERRORS = []
 
 
 def _register_windows_dll_dirs():
@@ -27,8 +34,13 @@ def _register_windows_dll_dirs():
         seen.add(dll_dir)
         try:
             _DLL_DIR_HANDLES.append(os.add_dll_directory(dll_dir))
-        except OSError:
-            pass
+        except OSError as exc:
+            _DLL_DIR_ERRORS.append((dll_dir, exc))
+            warnings.warn(
+                f"could not register native-library directory {dll_dir!r}: {exc}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
 
 _register_windows_dll_dirs()
@@ -41,8 +53,16 @@ try:
         wls_position,
         wls_batch,
     )
-except ImportError:
-    pass
+    HAS_NATIVE_CORE = True
+except ImportError as exc:
+    if not is_missing_optional_module(exc, "gnss_gpu._gnss_gpu"):
+        raise
+    HAS_NATIVE_CORE = False
+    ecef_to_lla = unavailable_function("ecef_to_lla", "gnss_gpu._gnss_gpu")
+    lla_to_ecef = unavailable_function("lla_to_ecef", "gnss_gpu._gnss_gpu")
+    satellite_azel = unavailable_function("satellite_azel", "gnss_gpu._gnss_gpu")
+    wls_position = unavailable_function("wls_position", "gnss_gpu._gnss_gpu")
+    wls_batch = unavailable_function("wls_batch", "gnss_gpu._gnss_gpu")
 
 from gnss_gpu.io import read_rinex_obs, parse_nmea
 
@@ -105,6 +125,8 @@ from gnss_gpu.e2e_helpers import (
 
 __all__ = [
     "__version__",
+    "HAS_NATIVE_CORE",
+    "NativeBackendUnavailableError",
     # Core positioning
     "ecef_to_lla",
     "lla_to_ecef",

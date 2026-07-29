@@ -98,3 +98,11 @@ results/**/*.log
 results/**/*.txt
 results/**/*.npy
 results/**/*.npz
+
+# Local PF/RTK campaign workspaces. These directories contain regenerable
+# sweeps, caches, trajectories, and logs (about 4.5 GiB / 2,811 files as
+# classified on 2026-07-29). Durable conclusions and small regression locks
+# belong in internal_docs/ or docs/assets/, not in these workspaces.
+results/wp29/
+results/wp30/
+results/wp31/

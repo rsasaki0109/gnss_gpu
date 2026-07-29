@@ -28,6 +28,7 @@ class RobustNavSatFilter(Node):
         self.declare_parameter("kalman_sigma_z", 1.0)
         self.declare_parameter("use_hampel", True)
         self.declare_parameter("use_kalman", True)
+        self.declare_parameter("max_gap_s", 30.0)
         self.declare_parameter("path_frame_id", "map")
         self.declare_parameter("path_max_poses", 2000)
 
@@ -38,6 +39,7 @@ class RobustNavSatFilter(Node):
             kalman_sigma_z=float(self.get_parameter("kalman_sigma_z").value),
             use_hampel=bool(self.get_parameter("use_hampel").value),
             use_kalman=bool(self.get_parameter("use_kalman").value),
+            max_gap_s=float(self.get_parameter("max_gap_s").value),
         )
         self._path = Path()
         self._path.header.frame_id = str(self.get_parameter("path_frame_id").value)
@@ -63,9 +65,13 @@ class RobustNavSatFilter(Node):
                     "incoming NavSatFix has zero header.stamp; using receive time"
                 )
             t = self.get_clock().now().nanoseconds * 1e-9
-        lat, lon, east, north, outlier = self._filter.update(
-            t, msg.latitude, msg.longitude
-        )
+        try:
+            lat, lon, east, north, outlier = self._filter.update(
+                t, msg.latitude, msg.longitude
+            )
+        except ValueError as exc:
+            self.get_logger().warn(f"dropping invalid NavSatFix: {exc}")
+            return
         if outlier:
             self._n_outliers += 1
             self.get_logger().debug(

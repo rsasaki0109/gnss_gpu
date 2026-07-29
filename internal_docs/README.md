@@ -34,7 +34,9 @@ experiment note as current guidance.
 - Put the current state in `ppc_current_status.md`; keep `plan.md` as a
   chronological log.
 - If a result becomes a durable conclusion, summarize it in `decisions.md`.
-- If an artifact is generated, document the important output path in
-  [`../experiments/results/README.md`](../experiments/results/README.md).
+- Classify generated artifacts using
+  [`../results/ARTIFACT_POLICY.md`](../results/ARTIFACT_POLICY.md); keep
+  regenerable workspaces local and reference every durable artifact from the
+  relevant experiment note.
 - Avoid adding long raw command transcripts to top-level docs. Keep them in the
   relevant experiment note or in `plan.md`.

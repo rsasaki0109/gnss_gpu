@@ -42,13 +42,16 @@ def compute_sat_velocities(
     velocities : (K, 3) ndarray or None
         Satellite ECEF velocities [m/s].
     """
+    if not np.isfinite(dt) or dt <= 0.0:
+        raise ValueError("dt must be finite and positive")
     try:
         pos_before, _, used_before = ephemeris.compute(gps_time - dt, prn_list)
         pos_after, _, used_after = ephemeris.compute(gps_time + dt, prn_list)
+        del used_before, used_after
         if len(pos_before) != len(pos_after) or len(pos_before) == 0:
             return None
         return (pos_after - pos_before) / (2 * dt)
-    except Exception:
+    except (AttributeError, TypeError, ValueError, ArithmeticError):
         return None
 
 

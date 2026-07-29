@@ -13,6 +13,7 @@ pytest -q \
   tests/test_cycle_slip.py \
   tests/test_doppler.py \
   tests/test_ephemeris.py \
+  tests/test_exception_handling_policy.py \
   tests/test_fetch_plateau_subset.py \
   tests/test_fetch_urbannav_hk_subset.py \
   tests/test_fetch_urbannav_subset.py \
@@ -20,7 +21,10 @@ pytest -q \
   tests/test_lambda_ambiguity.py \
   tests/test_local_fgo.py \
   tests/test_nmea_writer.py \
+  tests/test_optional_backend_contract.py \
   tests/test_ppc.py \
+  tests/test_result_artifact_policy.py \
+  ros2/gnss_gpu_ros/test/test_filters.py \
   tests/test_run_demo.py \
   tests/test_sbas.py \
   tests/test_urbannav.py \

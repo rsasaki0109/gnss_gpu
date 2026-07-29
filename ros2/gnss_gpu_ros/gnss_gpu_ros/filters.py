@@ -68,6 +68,11 @@ class CausalHampel:
         self._buf: deque[float] = deque(maxlen=window)
         self._streak = 0
 
+    def reset(self) -> None:
+        """Discard streaming history after a restart or long data outage."""
+        self._buf.clear()
+        self._streak = 0
+
     def update(self, value: float) -> tuple[float, bool]:
         """Feed one value; return ``(filtered_value, was_outlier)``."""
         if len(self._buf) < self.min_samples:
@@ -104,6 +109,12 @@ class CvKalman1D:
         self._x: np.ndarray | None = None
         self._P: np.ndarray | None = None
         self._t: float | None = None
+
+    def reset(self) -> None:
+        """Discard the position, velocity, covariance, and timestamp state."""
+        self._x = None
+        self._P = None
+        self._t = None
 
     def update(self, t: float, z: float) -> float:
         """Feed one timestamped measurement; return the filtered position."""
@@ -156,9 +167,13 @@ class NavSatTrajectoryFilter:
         kalman_sigma_z: float = 1.0,
         use_hampel: bool = True,
         use_kalman: bool = True,
+        max_gap_s: float = 30.0,
     ) -> None:
+        if not math.isfinite(max_gap_s) or max_gap_s <= 0.0:
+            raise ValueError("max_gap_s must be finite and positive")
         self.use_hampel = use_hampel
         self.use_kalman = use_kalman
+        self.max_gap_s = float(max_gap_s)
         self._hampel_e = CausalHampel(hampel_window, hampel_k)
         self._hampel_n = CausalHampel(hampel_window, hampel_k)
         self._kf_e = CvKalman1D(kalman_sigma_a, kalman_sigma_z)
@@ -166,6 +181,24 @@ class NavSatTrajectoryFilter:
         self._anchor: tuple[float, float] | None = None
         self._r_m = 0.0
         self._r_p = 0.0
+        self._last_t: float | None = None
+
+    def reset(self, *, preserve_anchor: bool = False) -> None:
+        """Reset all streaming state.
+
+        ``preserve_anchor=True`` is used for an in-process GNSS outage so the
+        published local EN frame does not jump. A node restart uses the
+        default and establishes a fresh anchor from its first fix.
+        """
+        self._hampel_e.reset()
+        self._hampel_n.reset()
+        self._kf_e.reset()
+        self._kf_n.reset()
+        self._last_t = None
+        if not preserve_anchor:
+            self._anchor = None
+            self._r_m = 0.0
+            self._r_p = 0.0
 
     def _to_en(self, lat_deg: float, lon_deg: float) -> tuple[float, float]:
         lat0, lon0 = self._anchor  # type: ignore[misc]
@@ -189,6 +222,16 @@ class NavSatTrajectoryFilter:
         ``east``/``north`` are the filtered local-plane coordinates relative
         to the first fix (useful for Path/odometry-style consumers).
         """
+        if not all(math.isfinite(value) for value in (t, lat_deg, lon_deg)):
+            raise ValueError("timestamp, latitude, and longitude must be finite")
+        if not -90.0 <= lat_deg <= 90.0:
+            raise ValueError("latitude must be in [-90, 90]")
+        if not -180.0 <= lon_deg <= 180.0:
+            raise ValueError("longitude must be in [-180, 180]")
+        if self._last_t is not None and t - self._last_t > self.max_gap_s:
+            self.reset(preserve_anchor=True)
+        self._last_t = t
+
         if self._anchor is None:
             self._anchor = (lat_deg, lon_deg)
             self._r_m, self._r_p = _radii_at(lat_deg)
