@@ -28,10 +28,12 @@ def test_public_snapshot_matches_locked_release_evidence() -> None:
     assert generated["coverage"]["cities"] == ["hong-kong", "nagoya", "tokyo"]
     assert len(generated["negative_controls"]) == 4
     assert all(result["accepted"] is False for result in generated["negative_controls"])
-    assert generated["promotion"]["passed_gates"] == 11
-    assert generated["promotion"]["gate_count"] == 11
+    assert generated["promotion"]["passed_gates"] == 12
+    assert generated["promotion"]["gate_count"] == 12
     assert generated["promotion"]["tokyo_epoch_margin"] == 180
     assert generated["promotion"]["allowed"] is True
+    assert generated["promotion"]["lambda_fix_epochs"] == 1_296
+    assert generated["promotion"]["lambda_fix_percent"] > 10.0
     assert generated["soak"]["simulated_duration_s"] == 7200.0
     assert generated["soak"]["final_mode"] == "normal"
 

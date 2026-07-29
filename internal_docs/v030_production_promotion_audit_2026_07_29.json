@@ -1,7 +1,7 @@
 {
   "contract": "configs/evaluation/v030_production_promotion.json",
   "failed_gates": [],
-  "gate_count": 11,
+  "gate_count": 12,
   "gates": [
     {
       "actual": {
@@ -21,7 +21,7 @@
         "production_input_truth": false,
         "truth_usage": "post_selection_full_denominator_audit_only"
       },
-      "evidence": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
+      "evidence": "internal_docs/wp173_tokyo_operational_audit_2026_07_29.json",
       "expected": {
         "production_input_truth": false,
         "truth_usage": "post_selection_or_application_full_denominator_audit_only"
@@ -34,7 +34,7 @@
         "gained_epochs": 1802,
         "lost_epochs": 0
       },
-      "evidence": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
+      "evidence": "internal_docs/wp173_tokyo_operational_audit_2026_07_29.json",
       "expected": {
         "gained_epochs_min": 1,
         "lost_epochs_max": 0
@@ -44,14 +44,37 @@
     },
     {
       "actual": 0,
-      "evidence": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
+      "evidence": "internal_docs/wp173_tokyo_operational_audit_2026_07_29.json",
       "expected": 0,
       "id": "false_fix_zero",
       "passed": true
     },
     {
+      "actual": {
+        "fix_epochs": 1296,
+        "fix_percent": 10.868835961086884,
+        "method": "libgnss++ MLAMBDA",
+        "negative_holdout_fix_epochs": {
+          "nagoya_wp53": 0,
+          "tokyo_wp129": 0,
+          "tokyo_wp156": 0,
+          "tokyo_wp168": 0
+        },
+        "replay_canonically_identical": true
+      },
+      "evidence": "internal_docs/wp173_tokyo_operational_audit_2026_07_29.json; internal_docs/wp173_replay_determinism_2026_07_29.json",
+      "expected": {
+        "fix_percent_min": 10.0,
+        "method": "libgnss++ MLAMBDA",
+        "negative_holdout_fix_epochs": 0,
+        "replay_canonically_identical": true
+      },
+      "id": "lambda_fix_coverage",
+      "passed": true
+    },
+    {
       "actual": 46.51123783965112,
-      "evidence": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
+      "evidence": "internal_docs/wp173_tokyo_operational_audit_2026_07_29.json",
       "expected": 45.0,
       "id": "tokyo_sub50cm_target",
       "passed": true
@@ -100,7 +123,7 @@
           "internal_docs/wp30_m4_tokyo_evidence_ledger.json": "555C4FC2992654F9073323985EF7C35DB46738FEBE8F3F54D442C8BC17B76787"
         }
       },
-      "evidence": "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
+      "evidence": "internal_docs/wp173_tokyo_operational_audit_2026_07_29.json",
       "expected": true,
       "id": "m4_and_immutable_contract",
       "passed": true
@@ -130,8 +153,8 @@
       "actual": {
         "checks": [
           {
-            "actual_sha256": "321E93F0A06F1D2E66316D7E36B7E5FDBAD95FD4677BF8DCCFF4FAA922264F96",
-            "expected_sha256": "321E93F0A06F1D2E66316D7E36B7E5FDBAD95FD4677BF8DCCFF4FAA922264F96",
+            "actual_sha256": "97E0CC08A58B14115E6D22D94C90EADB607B8411A1D8DCFFDE990D1B68F3B1AE",
+            "expected_sha256": "97E0CC08A58B14115E6D22D94C90EADB607B8411A1D8DCFFDE990D1B68F3B1AE",
             "passed": true,
             "path": "TECHNICAL_REPORT.md"
           },
@@ -142,28 +165,40 @@
             "path": "ablation.json"
           },
           {
-            "actual_sha256": "385ED1B5F61D02143B4E0B1DA8CB3B98A7D04685A0A6D22E162F4C3EA4FF6FA7",
-            "expected_sha256": "385ED1B5F61D02143B4E0B1DA8CB3B98A7D04685A0A6D22E162F4C3EA4FF6FA7",
+            "actual_sha256": "13842D704576EC795AC739E123D5406B7B49FF328460709ED459F16C37A35E09",
+            "expected_sha256": "13842D704576EC795AC739E123D5406B7B49FF328460709ED459F16C37A35E09",
             "passed": true,
             "path": "benchmark.json"
           },
           {
-            "actual_sha256": "C527790B4AEFAE66676699DDF01691819174DF72B74EFD883846C142ABBD4922",
-            "expected_sha256": "C527790B4AEFAE66676699DDF01691819174DF72B74EFD883846C142ABBD4922",
+            "actual_sha256": "0545DB812099728C193EED9F9F7CED98A399B45AA3F8901A67856D9E6A4A5BD0",
+            "expected_sha256": "0545DB812099728C193EED9F9F7CED98A399B45AA3F8901A67856D9E6A4A5BD0",
             "passed": true,
             "path": "evidence/configs/evaluation/v030_production_promotion.json"
           },
           {
-            "actual_sha256": "79EE855E77BEDCE9E57D88DBE35F96C3617AC10F258189184F0DCEDA360549C1",
-            "expected_sha256": "79EE855E77BEDCE9E57D88DBE35F96C3617AC10F258189184F0DCEDA360549C1",
+            "actual_sha256": "F80E072F8CCBCD2D4087C7AC4BD5C9C9C0642FAC71F11895C9220FF25C29089E",
+            "expected_sha256": "F80E072F8CCBCD2D4087C7AC4BD5C9C9C0642FAC71F11895C9220FF25C29089E",
             "passed": true,
             "path": "evidence/configs/evaluation/wp172_pf_seeded_rtk_consensus.json"
+          },
+          {
+            "actual_sha256": "F452E7AD343DD1668F1B0DF86106E35281F7FE6080C46CDD085553215D0A27D1",
+            "expected_sha256": "F452E7AD343DD1668F1B0DF86106E35281F7FE6080C46CDD085553215D0A27D1",
+            "passed": true,
+            "path": "evidence/configs/evaluation/wp173_lambda_fix_declaration.json"
           },
           {
             "actual_sha256": "804DEDEFAC9181E3B766DD8FC578A221AA5A7B6D55D0611A41121FEC66650243",
             "expected_sha256": "804DEDEFAC9181E3B766DD8FC578A221AA5A7B6D55D0611A41121FEC66650243",
             "passed": true,
             "path": "evidence/data/tokyo_run1_wp172_pf_seeded_rtk_consensus_trajectory.csv"
+          },
+          {
+            "actual_sha256": "A8E56B9FE7DB0B3396739DE661C932F3027A24E2A87EFEDD473E549755007A2D",
+            "expected_sha256": "A8E56B9FE7DB0B3396739DE661C932F3027A24E2A87EFEDD473E549755007A2D",
+            "passed": true,
+            "path": "evidence/data/tokyo_run1_wp173_lambda_fix_trajectory.csv"
           },
           {
             "actual_sha256": "45E94904B2ABFCD2DBDF495033FD9F8934201133594293DD21ECE1D1DCE2A5B4",
@@ -220,8 +255,8 @@
             "path": "evidence/internal_docs/phase6_ros2_soak_result_2026_07_29.json"
           },
           {
-            "actual_sha256": "31D0EE8997E4FC39BF4F48E9C3D82BF8C6BA9ACF3DA21571732DEA226CBD9BA2",
-            "expected_sha256": "31D0EE8997E4FC39BF4F48E9C3D82BF8C6BA9ACF3DA21571732DEA226CBD9BA2",
+            "actual_sha256": "248374A699622FA70A53309CBD61FB9D010F1E525E8C0454B8599B4669DB16C0",
+            "expected_sha256": "248374A699622FA70A53309CBD61FB9D010F1E525E8C0454B8599B4669DB16C0",
             "passed": true,
             "path": "evidence/internal_docs/tokyo_candidate_supply_audit_2026_07_29.json"
           },
@@ -286,22 +321,40 @@
             "path": "evidence/internal_docs/wp171_tokyo_screened_zero_gain_acceptance_rejection_2026_07_24.json"
           },
           {
-            "actual_sha256": "07206C2C470D2482551755436B8AF1D0DF22FC96D7424C6317DE502FC465F77D",
-            "expected_sha256": "07206C2C470D2482551755436B8AF1D0DF22FC96D7424C6317DE502FC465F77D",
+            "actual_sha256": "ACE329984A3D50CE76D81ECF52C389B058022E528D1B49D5C06B86228EE791CB",
+            "expected_sha256": "ACE329984A3D50CE76D81ECF52C389B058022E528D1B49D5C06B86228EE791CB",
             "passed": true,
             "path": "evidence/internal_docs/wp172_nagoya_development_2026_07_29.json"
           },
           {
-            "actual_sha256": "9C0ACC045EBC216E637174C396846F6E56130A6A5D8DEC442D8D9A60693884BA",
-            "expected_sha256": "9C0ACC045EBC216E637174C396846F6E56130A6A5D8DEC442D8D9A60693884BA",
+            "actual_sha256": "05E74FD8F05540C6D6F89EE31421DCB7ECD28E810A69C1C1D2A1E68EFC2860D9",
+            "expected_sha256": "05E74FD8F05540C6D6F89EE31421DCB7ECD28E810A69C1C1D2A1E68EFC2860D9",
             "passed": true,
             "path": "evidence/internal_docs/wp172_runtime_benchmark_2026_07_29.json"
           },
           {
-            "actual_sha256": "25EB8F584CF081A2EA9DC6C377D367E595485F80151723CFEADAE458F6EB2B43",
-            "expected_sha256": "25EB8F584CF081A2EA9DC6C377D367E595485F80151723CFEADAE458F6EB2B43",
+            "actual_sha256": "D7B10A5AEAB324413E2C280C8D1A20D318D875EFCFCA52545D4E8CB267856915",
+            "expected_sha256": "D7B10A5AEAB324413E2C280C8D1A20D318D875EFCFCA52545D4E8CB267856915",
             "passed": true,
             "path": "evidence/internal_docs/wp172_tokyo_final_holdout_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "082562480C4F79BB22916A923E35B31FA29A8CE7F4EC638DCEA79188358A1282",
+            "expected_sha256": "082562480C4F79BB22916A923E35B31FA29A8CE7F4EC638DCEA79188358A1282",
+            "passed": true,
+            "path": "evidence/internal_docs/wp173_nagoya_development_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "94132278AA8FA35E108F6B87A17E270E3B6828445BC436245E200C8EA9BFBA16",
+            "expected_sha256": "94132278AA8FA35E108F6B87A17E270E3B6828445BC436245E200C8EA9BFBA16",
+            "passed": true,
+            "path": "evidence/internal_docs/wp173_replay_determinism_2026_07_29.json"
+          },
+          {
+            "actual_sha256": "F394F264D063045B9DC79C619EF047DDDA74E8A7368E3CB054E1EF294B0E8478",
+            "expected_sha256": "F394F264D063045B9DC79C619EF047DDDA74E8A7368E3CB054E1EF294B0E8478",
+            "passed": true,
+            "path": "evidence/internal_docs/wp173_tokyo_operational_audit_2026_07_29.json"
           },
           {
             "actual_sha256": "3FB163B16E59C6394A38206E826FE9E0411975597E8BC62E8A1AF67FBFFC8115",
@@ -328,19 +381,19 @@
             "path": "failure_gallery.json"
           }
         ],
-        "file_count": 33,
+        "file_count": 38,
         "passed": true
       },
       "evidence": "tools/build_release_bundle.py",
       "expected": {
-        "file_count_min": 33,
+        "file_count_min": 38,
         "passed": true
       },
       "id": "one_command_reproducibility",
       "passed": true
     }
   ],
-  "passed_gate_count": 11,
+  "passed_gate_count": 12,
   "promotion_allowed": true,
   "schema": "gnss_gpu_v030_production_promotion_audit_v1"
 }

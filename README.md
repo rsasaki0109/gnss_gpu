@@ -122,7 +122,11 @@ every imported RTK idea must still pass the PF posterior and promotion gates.
 
 The full WP172 dual-RTK candidate supply is measured at a conservative
 42.653 ms/epoch when executed sequentially (21.826 ms/epoch concurrently),
-under the 100 ms production budget. FIX declarations remain suppressed.
+under the 100 ms production budget. WP173 then declares FIX only after a
+standard MLAMBDA ratio of at least 3.0 survives five contiguous epochs with at
+least six satellites and the complete WP172 consensus gate. Tokyo declares
+1,296/11,924 FIX epochs (10.87%) and Nagoya declares 1,370/7,583 (18.07%),
+with zero audited false FIX in both runs.
 
 <p align="center">
   <img src="docs/assets/figures/pf_only_rtk_stretch.svg" alt="PF-only Tokyo and Nagoya RTK stretch progress, external libgnss++ reference, targets, and truth-free promotion gates" width="900">

@@ -37,6 +37,7 @@ pytest -q \
   tests/test_release_bundle.py \
   tests/test_tokyo_candidate_supply_audit.py \
   tests/test_wp172_pf_seeded_rtk_consensus.py \
+  tests/test_wp173_lambda_fix_declarations.py \
   tests/test_v030_production_promotion_audit.py \
   tests/test_v030_public_demo.py \
   tests/test_result_artifact_policy.py \

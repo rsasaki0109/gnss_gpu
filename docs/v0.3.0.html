@@ -62,6 +62,7 @@ fetch("assets/data/v030_release_snapshot.json").then(r => r.json()).then(d => {
     [d.promotion.passed_gates+"/"+d.promotion.gate_count,"promotion gates pass"],
     [d.promotion.tokyo_sub50cm_percent.toFixed(2)+"% / "+d.promotion.tokyo_target_percent.toFixed(0)+"%","Tokyo sub-50 cm"],
     [d.promotion.gained_epochs+" / "+d.promotion.lost_epochs,"gained / lost epochs"],
+    [d.promotion.lambda_fix_percent.toFixed(2)+"%","guarded LAMBDA FIX"],
     [d.promotion.false_fix,"false FIX"],
     [(d.soak.simulated_duration_s/3600).toFixed(0)+" h","ROS 2 continuity soak"],
     [d.soak.final_mode,"final navigation mode"]

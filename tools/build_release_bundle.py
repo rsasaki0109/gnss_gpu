@@ -50,6 +50,11 @@ CORE_EVIDENCE = (
     "internal_docs/wp172_tokyo_final_holdout_2026_07_29.json",
     "internal_docs/wp172_runtime_benchmark_2026_07_29.json",
     "data/tokyo_run1_wp172_pf_seeded_rtk_consensus_trajectory.csv",
+    "configs/evaluation/wp173_lambda_fix_declaration.json",
+    "internal_docs/wp173_nagoya_development_2026_07_29.json",
+    "internal_docs/wp173_tokyo_operational_audit_2026_07_29.json",
+    "internal_docs/wp173_replay_determinism_2026_07_29.json",
+    "data/tokyo_run1_wp173_lambda_fix_trajectory.csv",
     "internal_docs/wp30_m4_production_config.json",
     "internal_docs/wp30_m4_tokyo_evidence_ledger.json",
 )
@@ -91,6 +96,7 @@ def _assert_passed(name: str, value: Mapping[str, Any]) -> None:
 def _benchmark(
     phase4: Mapping[str, Any],
     wp172_runtime: Mapping[str, Any],
+    wp173: Mapping[str, Any],
     phase5: Mapping[str, Any],
     phase6: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -102,6 +108,12 @@ def _benchmark(
             "search_particles": phase4["search_particles"],
             **phase4["assessment"],
             "wp172_candidate_supply": wp172_runtime["measurement"],
+        },
+        "lambda_fix": {
+            "method": wp173["integer_ambiguity_method"]["implementation"],
+            "fix_epochs": wp173["fix_epochs"],
+            "fix_percent": wp173["fix_percent"],
+            "false_fix_epochs": wp173["false_fix_epochs"],
         },
         "cross_domain": {
             "coverage": phase5["coverage"],
@@ -201,6 +213,7 @@ def _report(
     phase2: Mapping[str, Any],
     phase3: Mapping[str, Any],
     phase4: Mapping[str, Any],
+    wp173: Mapping[str, Any],
     phase5: Mapping[str, Any],
     phase6: Mapping[str, Any],
 ) -> str:
@@ -227,6 +240,9 @@ validation, and a ROS 2 lifecycle safety boundary.
 - GTX 1660 Ti runtime: normal maximum {runtime["normal_latency_max_ms"]:.3f} ms,
   search maximum {runtime["search_latency_max_ms"]:.3f} ms, recorded capacity
   {runtime["peak_gpu_memory_mb"]:.3f} MiB.
+- Guarded LAMBDA FIX: {wp173["fix_epochs"]}/{wp173["full_denominator_epochs"]}
+  epochs ({wp173["fix_percent"]:.3f}%), with
+  {wp173["false_fix_epochs"]} false FIX.
 - Cross-domain positioning: epoch-weighted RMS {positioning["baseline"]:.3f} m to
   {positioning["candidate"]:.3f} m, with Tokyo non-degradation and Hong Kong gain.
 - Coverage: {len(phase5["coverage"]["cities"])} cities,
@@ -246,8 +262,8 @@ limits.
 
 ## Limitations
 
-- The final Tokyo sub-50 cm target of 45% is a program target, not demonstrated by
-  the Phase 5 UrbanNav RMS campaign; no release claim upgrades it to achieved.
+- Tokyo run1 was inspected during earlier development; WP173 is an operational
+  promotion audit rather than an unbiased virgin-holdout estimate.
 - Phase 3 city-scale accuracy is supported indirectly by later campaigns; its
   locked outage controller audit is synthetic.
 - Hong Kong is reproduced from a tracked result summary because raw data is not
@@ -295,6 +311,9 @@ def build_bundle(repo_root: Path, output: Path) -> dict[str, Any]:
     wp172_runtime = _read_json(
         repo_root, "internal_docs/wp172_runtime_benchmark_2026_07_29.json"
     )
+    wp173 = _read_json(
+        repo_root, "internal_docs/wp173_tokyo_operational_audit_2026_07_29.json"
+    )
     phase6 = _read_json(
         repo_root, "internal_docs/phase6_ros2_replay_result_2026_07_29.json"
     )
@@ -307,6 +326,8 @@ def build_bundle(repo_root: Path, output: Path) -> dict[str, Any]:
         ("phase5", phase5),
     ):
         _assert_passed(name, artifact)
+    if wp173.get("promotion_allowed") is not True:
+        raise ValueError("wp173 is not a passing locked artifact")
 
     _prepare_output(output)
     evidence_paths = list(CORE_EVIDENCE)
@@ -322,12 +343,12 @@ def build_bundle(repo_root: Path, output: Path) -> dict[str, Any]:
 
     _write_json(
         output / "benchmark.json",
-        _benchmark(phase4, wp172_runtime, phase5, phase6),
+        _benchmark(phase4, wp172_runtime, wp173, phase5, phase6),
     )
     _write_json(output / "ablation.json", _ablation(phase1, phase2, phase3, phase5))
     _write_json(output / "failure_gallery.json", _failure_gallery(repo_root))
     (output / "TECHNICAL_REPORT.md").write_text(
-        _report(phase1, phase2, phase3, phase4, phase5, phase6),
+        _report(phase1, phase2, phase3, phase4, wp173, phase5, phase6),
         encoding="utf-8",
         newline="\n",
     )
