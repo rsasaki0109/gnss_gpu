@@ -1,0 +1,142 @@
+{
+  "schema": "gnss_gpu_wp174_safe_union_contract_v1",
+  "mode": "shadow_only",
+  "promotion_allowed": false,
+  "runtime_fgo": false,
+  "truth_used_for_runtime_decisions": false,
+  "selection_status": "posthoc_exploratory_blocked_cv",
+  "promotion_blockers": [
+    "no untouched Tokyo route or independent domain remains",
+    "guarded-hold and 12-epoch temporal-arm parameters were explored against audit truth",
+    "natural union reacquisition p95 exceeds 10 seconds",
+    "raw RINEX safe-shadow fault matrix is incomplete and cycle-slip smoke still has 3 lost epochs",
+    "satellite-group PAR and full/satellite consensus both admit held-out false FIX",
+    "runtime state machine is default-off shadow telemetry and has no production FIX authority"
+  ],
+  "candidate_generation": {
+    "implementation": "libgnss++ MLAMBDA",
+    "top_k": 2,
+    "fixed_failure_rate": 0.001,
+    "runtime_fgo": false,
+    "satellite_group_par": {
+      "mode": "shadow_only_default_off",
+      "maximum_drop_steps": 8,
+      "covariance_scale": 16,
+      "promotion_allowed": false,
+      "blocked_cv_instantaneous_bad_epochs": {
+        "tokyo": 2,
+        "nagoya": 68
+      },
+      "consensus_blocked_cv": {
+        "accepted_good_epochs": 6084,
+        "accepted_bad_epochs": 19
+      }
+    }
+  },
+  "exploratory_state_machine": {
+    "policy_family": "triple",
+    "acquisition_streak_epochs": 2,
+    "maximum_epoch_gap_s": 0.21,
+    "maximum_acquisition_correction_jump_m": 0.03,
+    "maximum_hold_epochs": 100,
+    "maximum_hold_correction_jump_m": 0.06,
+    "maximum_hold_nis_per_observation": 50.0,
+    "minimum_hold_pairs": 4,
+    "quality_failure_action": "immediate_revoke",
+    "hold_without_finite_candidate_correction": false,
+    "temporal_arm": {
+      "acquisition_streak_epochs": 12,
+      "maximum_hold_epochs": 0,
+      "selection": "blocked-CV zero-training-error diagnostic",
+      "status": "diagnostic_only"
+    }
+  },
+  "runtime_shadow_state_machine": {
+    "integrated": true,
+    "default_enabled": false,
+    "changes_position_solution": false,
+    "covariance_scale": 16,
+    "minimum_pairs": 16,
+    "maximum_second_position_delta_m": 0.05,
+    "maximum_nis_per_observation": 3.0,
+    "maximum_prefit_residual_rms_m": 50.0,
+    "acquisition_streak_epochs": 12,
+    "maximum_epoch_gap_s": 0.21,
+    "maximum_acquisition_correction_jump_m": 0.03,
+    "maximum_hold_epochs": 100,
+    "maximum_hold_correction_jump_m": 0.06,
+    "maximum_hold_nis_per_observation": 50.0,
+    "maximum_hold_prefit_residual_rms_m": 50.0,
+    "minimum_hold_pairs": 16,
+    "quality_failure_action": "immediate_revoke",
+    "runtime_fgo": false
+  },
+  "formal_targets": {
+    "tokyo_fix_rate_pct": 35.0,
+    "nagoya_fix_rate_pct": 45.0,
+    "tokyo_sub50cm_rate_pct": 46.5112,
+    "observed_false_fix_epochs": 0,
+    "lost_epochs": 0,
+    "negative_control_fix_epochs": 0,
+    "reacquisition_p95_s": 10.0,
+    "runtime_p95_ms_per_epoch": 100.0
+  },
+  "exploratory_observed": {
+    "tokyo": {
+      "fix_rate_pct": 38.65313653136531,
+      "sub50cm_rate_pct": 55.37571284803757,
+      "false_fix_epochs": 0,
+      "lost_epochs": 0,
+      "reacquisition_p95_s": 30.099999999999966
+    },
+    "nagoya": {
+      "fix_rate_pct": 49.86153237504945,
+      "sub50cm_rate_pct": 77.26493472240539,
+      "false_fix_epochs": 0,
+      "lost_epochs": 0,
+      "reacquisition_p95_s": 73.82000000004189
+    },
+    "shadow_runtime_p95_ms": {
+      "tokyo": 8.413505599999995,
+      "nagoya": 6.9563644
+    },
+    "all_candidate_shadows_runtime_p95_ms": {
+      "tokyo": 13.260385,
+      "nagoya": 11.593434
+    },
+    "negative_control_fix_epochs": {
+      "tokyo": 0,
+      "nagoya": 0
+    },
+    "raw_cycle_slip_safe_shadow_1000_epoch_smoke": {
+      "domain": "tokyo",
+      "event_count": 2,
+      "declared_fix_epochs": 584,
+      "truth_labeled_fix_epochs": 584,
+      "false_fix_epochs": 0,
+      "lost_epochs": 3,
+      "reacquisition_p95_s": 4.900000085808278,
+      "shadow_runtime_p95_ms": 5.664331999999998,
+      "shadow_runtime_max_ms": 13.045583,
+      "position_sha256_on_and_off": "10975e8f6f3f48c65c03063060ac8a12fe3964dbb859a05f119f47d5c815a1c7"
+    },
+    "raw_fault_matrix_1000_epoch_prefix": {
+      "domains": [
+        "tokyo",
+        "nagoya"
+      ],
+      "faults": [
+        "outage",
+        "cycle_slip",
+        "satellite_loss",
+        "nlos"
+      ],
+      "events_per_case": 2,
+      "false_fix_epochs": 0,
+      "lost_epochs": 116,
+      "all_fixed_truth_coverage": true,
+      "all_reacquisition_p95_10s": false,
+      "promotion_ready": false
+    }
+  }
+}
