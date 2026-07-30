@@ -1,0 +1,29 @@
+{
+  "schema": "gnss_gpu_wp174_shadow_ar_diagnostics_contract_v1",
+  "upstream_contract": "configs/evaluation/wp172_pf_seeded_rtk_consensus.json",
+  "declaration_contract": "configs/evaluation/wp173_lambda_fix_declaration.json",
+  "production_input_truth": false,
+  "runtime_fgo": false,
+  "shadow_only": true,
+  "counterfactual_grid": {
+    "lambda_ratio_thresholds": [
+      2.0,
+      2.5,
+      3.0,
+      3.5,
+      4.0
+    ],
+    "minimum_contiguous_epochs": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  "output_policy": {
+    "modify_positions": false,
+    "modify_fix_declarations": false,
+    "truth_use": "post_selection_diagnostic_audit_only"
+  }
+}

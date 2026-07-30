@@ -1,0 +1,36 @@
+{
+  "schema": "gnss_gpu_wp174_ffrt_contract_v1",
+  "mode": "shadow_only",
+  "runtime_fgo": false,
+  "truth_used_for_selection": false,
+  "source": {
+    "title": "An Efficient Implementation of Fixed Failure-Rate Ratio Test for GNSS Ambiguity Resolution",
+    "doi": "10.3390/s16070945",
+    "supplementary_archive": "sensors-16-00945-s001.zip",
+    "coefficient_mu_sha256": "0C1535CD5AFC928E95F266951EE85120910A88F62B01409595E8668509DC46CC",
+    "coefficient_pfix_sha256": "59460014ADE7476413D0FA4F46B2E3CF67F4A9729DAE82742D54AAE1B1FF19B1"
+  },
+  "implemented_table": {
+    "tolerable_failure_rate": 0.001,
+    "minimum_ambiguity_dimension": 1,
+    "maximum_ambiguity_dimension": 66,
+    "unsupported_request": "fail_closed"
+  },
+  "statistic_conversion": {
+    "paper": "best_squared_residual / second_squared_residual < mu",
+    "gnssplusplus": "second_squared_residual / best_squared_residual >= 1 / mu"
+  },
+  "piecewise_policy": {
+    "failure_rate_proxy": "1 - bootstrapped_success_rate",
+    "strong_model": "mu = 1 when failure_rate_proxy <= 0.001",
+    "fitted_model": "mu = p1 * failure_rate_proxy^p2 + p3",
+    "weak_model": "mu = 0 and reject all when failure_rate_proxy >= 0.2"
+  },
+  "promotion_requirements": [
+    "float ambiguity normality assumption remains credible",
+    "covariance scale selected by blocked purged cross-validation",
+    "zero observed false shadow-candidate acceptance on required audits",
+    "same-binary shadow OFF/ON position output remains byte-identical",
+    "whole-pipeline runtime p95 <= 100 ms"
+  ]
+}

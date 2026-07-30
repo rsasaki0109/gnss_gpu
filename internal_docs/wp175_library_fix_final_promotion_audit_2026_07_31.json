@@ -1,0 +1,72 @@
+{
+  "schema": "gnss_gpu_wp175_final_library_fix_promotion_audit_v1",
+  "created_at": "2026-07-31T06:10:00+09:00",
+  "fix_kpi_definition": "gnssplusplus final .pos Status == 4",
+  "runtime_fgo": false,
+  "truth_usage": "post_selection_audit_only",
+  "configuration": {
+    "robust_front_end": "Student-t all measurements, degrees_of_freedom=1",
+    "disjoint_partition": "gj-erc ensemble",
+    "maximum_statistical_separation_m": 2.0,
+    "promoted_sources": [
+      "causal ambiguity arc consensus",
+      "satellite PAR consensus",
+      "SRC-PAR consensus"
+    ]
+  },
+  "formal_routes": {
+    "tokyo": {
+      "solution_epochs": 11928,
+      "library_fixed_epochs": 5974,
+      "library_fix_rate": 0.5008383635144199,
+      "formal_target": 0.5,
+      "formal_target_pass": true,
+      "observed_false_fixed_epochs": 0,
+      "lost_epochs": 0,
+      "runtime_p95_ms": 43.42158734999997,
+      "runtime_p95_100ms_pass": true,
+      "all_fixed_passed_integrity_gates": true
+    },
+    "nagoya": {
+      "solution_epochs": 7602,
+      "library_fixed_epochs": 5019,
+      "library_fix_rate": 0.6602209944751382,
+      "formal_target": 0.6,
+      "formal_target_pass": true,
+      "observed_false_fixed_epochs": 0,
+      "lost_epochs": 0,
+      "runtime_p95_ms": 32.604929,
+      "runtime_p95_100ms_pass": true,
+      "all_fixed_passed_integrity_gates": true
+    }
+  },
+  "fault_matrix": {
+    "events": 64,
+    "recovered_events": 64,
+    "observed_false_fixed_epochs": 0,
+    "lost_epochs": 0,
+    "maximum_complete_outage_reacquisition_p95_s": 2.200000045337947,
+    "maximum_expanded_fault_reacquisition_p95_s": 3.5100000142934724,
+    "maximum_runtime_p95_ms": 73.55899404999998,
+    "nlos_outage_negative_fix_epochs": 0,
+    "all_pass": true
+  },
+  "rebased_library_validation": {
+    "merge_commit": "81847eb288ecfaba4ea29e9d9c454ef9bd02423e",
+    "cpp_tests": {
+      "total": 844,
+      "passed": 779,
+      "skipped": 65,
+      "failed": 0
+    },
+    "tokyo_smoke": {
+      "epochs": 300,
+      "library_fixed_epochs": 280,
+      "library_fix_rate": 0.9333333333333333,
+      "observed_false_fixed_epochs": 0,
+      "lost_epochs": 0,
+      "all_fixed_passed_integrity_gates": true
+    }
+  },
+  "formal_promotion_pass": true
+}
