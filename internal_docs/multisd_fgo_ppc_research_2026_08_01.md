@@ -257,6 +257,54 @@ scientific columns were identical and only runtime differed. The scorer now
 accepts only scientifically identical duplicate rows and keeps the conservative
 maximum runtime; any conflicting duplicate remains fail-closed.
 
+### Bootstrap-success/ADOP gates and prefix-CV failure
+
+The existing FGO core already computed and enforced optional bootstrap success
+rate (BSR) and ADOP gates, but the PPC shadow CLI left both at zero and exposed
+only diagnostics. The PPC CLI and policy identity now expose default-off
+`--multisd-fgo-shadow-min-bsr` and `--multisd-fgo-shadow-max-adop` values.
+
+Three predeclared policies were compared on all six 300-epoch prefixes: BSR
+>=0.9999, ADOP <=0.10 cycles, and both. BSR-only was selected in all six global
+outer folds and produced 1,052 correct fixes with zero false fixes, versus
+1,047 for `q4`; worst-route p95 was 34.34 ms. ADOP-only and the combined gate
+produced 1,037 and 1,043 fixes and were rejected at this stage.
+
+The complete production routes contradicted the prefix selection:
+
+| City | BSR union correct | Total | Rate | False | p95 |
+|---|---:|---:|---:|---:|---:|
+| Tokyo | 6,172 | 11,928 | 51.7438% | 0 | 31.60 ms |
+| Nagoya | 5,283 | 7,602 | 69.4949% | 0 | 22.10 ms |
+
+BSR-only is therefore performance-useful but availability-rejected. More
+importantly, this is direct evidence that first-300-epoch route prefixes are
+not a sufficient blocked-CV surrogate. Subsequent policy selection must cover
+multiple continuous-time blocks and explicitly audit ambiguity-arc overlap;
+the full-route KPI remains evaluation-only.
+
+### Ambiguity-arc split audit
+
+`experiments/audit_ppc_ambiguity_arcs.py` now streams the six rover RINEX files
+and starts a new `(satellite, carrier signal)` ambiguity arc on an LLI event or
+a gap above 1.5 s. It assigns complete arcs to deterministic five-fold groups
+using SHA-256 of route/satellite/signal/arc-start; no reference truth is read.
+
+| Route | Epochs | Arcs | LLI-started | Longest arc epochs | Arcs crossing naive time boundaries |
+|---|---:|---:|---:|---:|---:|
+| Tokyo/run1 | 11,928 | 5,591 | 4,619 | 5,519 | 285 |
+| Tokyo/run2 | 9,151 | 5,020 | 4,044 | 3,822 | 350 |
+| Tokyo/run3 | 15,301 | 7,925 | 6,687 | 3,078 | 344 |
+| Nagoya/run1 | 7,602 | 3,970 | 3,450 | 3,326 | 328 |
+| Nagoya/run2 | 9,451 | 6,823 | 5,812 | 4,987 | 291 |
+| Nagoya/run3 | 5,201 | 4,718 | 3,917 | 4,702 | 250 |
+
+There are 34,047 arcs total. Route-namespaced leave-one-run-out overlap is zero
+for all 15 route pairs, but 250--350 arcs per route cross naive equal-time
+block boundaries. Therefore ordinary contiguous blocks leak ambiguity state.
+The generated arc folds are the required mask identity for the next solver
+replays; this audit alone is not claimed as a completed arc-held-out score.
+
 ## Next ranked experiments
 
 1. Run ambiguity-arc blocked nested CV over groups 1/4, fallback consensus

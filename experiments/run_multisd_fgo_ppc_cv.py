@@ -47,6 +47,8 @@ class Policy:
     fallback_max_seed_separation_m: float
     quality_ranked_par: bool = False
     interleave_constellation_par: bool = False
+    minimum_bootstrapped_success_rate: float = 0.0
+    maximum_adop_cycles: float = 0.0
 
 
 def _tow(value: str | float) -> float:
@@ -456,14 +458,15 @@ def nested_leave_one_run_out(
 
 def _parse_policy(raw: str) -> Policy:
     fields = raw.split(":")
-    if len(fields) not in (16, 17, 18):
+    if len(fields) not in (16, 17, 18, 20):
         raise argparse.ArgumentTypeError(
             "policy must be NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:"
             "MAX_SEED_M:HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
             "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1:CANDIDATE_RATIO:"
             "CANDIDATE_GROUPS:FALLBACK_CONSENSUS_GROUPS:"
             "FALLBACK_CONSENSUS_SEPARATION_M:FALLBACK_MAX_SEED_M:"
-            "QUALITY_RANKED_PAR_0_OR_1:INTERLEAVE_CONSTELLATION_PAR_0_OR_1"
+            "QUALITY_RANKED_PAR_0_OR_1:INTERLEAVE_CONSTELLATION_PAR_0_OR_1:"
+            "MIN_BSR:MAX_ADOP_CYCLES"
         )
     if fields[10] not in ("0", "1"):
         raise argparse.ArgumentTypeError(
@@ -473,7 +476,7 @@ def _parse_policy(raw: str) -> Policy:
         raise argparse.ArgumentTypeError(
             "QUALITY_RANKED_PAR_0_OR_1 must be 0 or 1"
         )
-    if len(fields) == 18 and fields[17] not in ("0", "1"):
+    if len(fields) >= 18 and fields[17] not in ("0", "1"):
         raise argparse.ArgumentTypeError(
             "INTERLEAVE_CONSTELLATION_PAR_0_OR_1 must be 0 or 1"
         )
@@ -492,7 +495,9 @@ def _parse_policy(raw: str) -> Policy:
         float(fields[14]),
         float(fields[15]),
         bool(int(fields[16])) if len(fields) >= 17 else False,
-        bool(int(fields[17])) if len(fields) == 18 else False,
+        bool(int(fields[17])) if len(fields) >= 18 else False,
+        float(fields[18]) if len(fields) == 20 else 0.0,
+        float(fields[19]) if len(fields) == 20 else 0.0,
     )
     if (
         policy.window < 2
@@ -519,6 +524,10 @@ def _parse_policy(raw: str) -> Policy:
         )
         or not math.isfinite(policy.fallback_max_seed_separation_m)
         or policy.fallback_max_seed_separation_m < 0.0
+        or not math.isfinite(policy.minimum_bootstrapped_success_rate)
+        or not 0.0 <= policy.minimum_bootstrapped_success_rate <= 1.0
+        or not math.isfinite(policy.maximum_adop_cycles)
+        or policy.maximum_adop_cycles < 0.0
     ):
         raise argparse.ArgumentTypeError(f"invalid policy: {raw}")
     return policy
@@ -585,6 +594,10 @@ def _run_one(
             str(policy.fallback_consensus_separation_m),
             "--multisd-fgo-shadow-fallback-max-seed-separation",
             str(policy.fallback_max_seed_separation_m),
+            "--multisd-fgo-shadow-min-bsr",
+            str(policy.minimum_bootstrapped_success_rate),
+            "--multisd-fgo-shadow-max-adop",
+            str(policy.maximum_adop_cycles),
         )
     )
     if analyze_only:
@@ -641,7 +654,8 @@ def main() -> int:
             "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1:CANDIDATE_RATIO:"
             "CANDIDATE_GROUPS:FALLBACK_CONSENSUS_GROUPS:"
             "FALLBACK_CONSENSUS_SEPARATION_M:FALLBACK_MAX_SEED_M:"
-            "QUALITY_RANKED_PAR_0_OR_1:INTERLEAVE_CONSTELLATION_PAR_0_OR_1"
+            "QUALITY_RANKED_PAR_0_OR_1:INTERLEAVE_CONSTELLATION_PAR_0_OR_1:"
+            "MIN_BSR:MAX_ADOP_CYCLES"
         ),
     )
     parser.add_argument("--max-epochs", type=int, default=0)

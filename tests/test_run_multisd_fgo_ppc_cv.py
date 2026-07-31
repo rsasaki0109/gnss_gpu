@@ -35,6 +35,14 @@ def test_parse_policy_keeps_constellation_par_explicit() -> None:
     )
     assert interleaved_policy.quality_ranked_par
     assert interleaved_policy.interleave_constellation_par
+    success_policy = _parse_policy(
+        "qs:10:10:2:4:0.5:3:0.75:6:4:1:1.1:8:2:0.1:0.25:1:0:"
+        "0.9999:0.1"
+    )
+    assert success_policy.minimum_bootstrapped_success_rate == pytest.approx(
+        0.9999
+    )
+    assert success_policy.maximum_adop_cycles == pytest.approx(0.1)
 
     with pytest.raises(argparse.ArgumentTypeError, match="must be 0 or 1"):
         _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:2:1.5:1:1:0:0")
@@ -42,6 +50,10 @@ def test_parse_policy_keeps_constellation_par_explicit() -> None:
         _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:1:1.5:1:1:0:0:2")
     with pytest.raises(argparse.ArgumentTypeError, match="INTERLEAVE"):
         _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:1:1.5:1:1:0:0:1:2")
+    with pytest.raises(argparse.ArgumentTypeError, match="invalid policy"):
+        _parse_policy(
+            "p:10:10:2:4:0.5:3:0.75:6:4:1:1.5:1:1:0:0:1:0:1.1:0.1"
+        )
 
 
 def _write_inputs(tmp_path: Path, errors: list[float]) -> tuple[Path, Path, Path]:
