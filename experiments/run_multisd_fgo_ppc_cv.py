@@ -1,0 +1,434 @@
+#!/usr/bin/env python3
+"""Run and score GNSS-only MultiSD FGO policies on the six PPC routes.
+
+The solver subprocess receives rover/base/navigation RINEX only. Reference CSV
+is opened only after the subprocess exits and is used exclusively for scoring.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+from dataclasses import asdict, dataclass
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import subprocess
+import sys
+from typing import Iterable
+
+
+ROUTES = tuple(
+    (city, f"run{run}")
+    for city in ("tokyo", "nagoya")
+    for run in range(1, 4)
+)
+
+
+@dataclass(frozen=True)
+class Policy:
+    name: str
+    window: int
+    minimum_epochs: int
+    holdout_offset: int
+    top_k: int
+    maximum_seed_separation_m: float
+
+
+def _tow(value: str | float) -> float:
+    return round(float(value), 3)
+
+
+def _quantile(values: Iterable[float], probability: float) -> float | None:
+    ordered = sorted(value for value in values if math.isfinite(value))
+    if not ordered:
+        return None
+    if len(ordered) == 1:
+        return ordered[0]
+    position = probability * (len(ordered) - 1)
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    fraction = position - lower
+    return ordered[lower] * (1.0 - fraction) + ordered[upper] * fraction
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def read_reference(path: Path) -> dict[float, tuple[float, float, float]]:
+    with path.open(encoding="utf-8-sig", newline="") as stream:
+        rows = csv.DictReader(stream, skipinitialspace=True)
+        return {
+            _tow(row["GPS TOW (s)"]): tuple(
+                float(row[f"ECEF {axis} (m)"]) for axis in "XYZ"
+            )
+            for row in rows
+        }
+
+
+def read_solution_tows(path: Path) -> list[float]:
+    output: list[float] = []
+    with path.open(encoding="utf-8") as stream:
+        for line in stream:
+            if not line.strip() or line.startswith("%"):
+                continue
+            fields = line.split()
+            if len(fields) < 9:
+                raise ValueError(f"malformed POS row in {path}")
+            output.append(_tow(fields[1]))
+    return output
+
+
+def read_shadow(path: Path) -> dict[float, dict[str, str]]:
+    with path.open(encoding="utf-8", newline="") as stream:
+        return {
+            _tow(row["tow"]): row
+            for row in csv.DictReader(stream)
+        }
+
+
+def _score_tows(
+    tows: list[float],
+    shadow: dict[float, dict[str, str]],
+    truth: dict[float, tuple[float, float, float]],
+) -> dict[str, object]:
+    fixed_errors: list[float] = []
+    missing_truth_fixed = 0
+    runtimes: list[float] = []
+    for tow in tows:
+        row = shadow.get(tow)
+        if row is None:
+            continue
+        try:
+            runtime = float(row["runtime_ms"])
+        except (KeyError, TypeError, ValueError):
+            runtime = math.nan
+        if math.isfinite(runtime):
+            runtimes.append(runtime)
+        if row.get("shadow_fixed") != "1":
+            continue
+        reference = truth.get(tow)
+        if reference is None:
+            missing_truth_fixed += 1
+            continue
+        try:
+            estimate = tuple(float(row[axis]) for axis in "xyz")
+        except (KeyError, TypeError, ValueError):
+            missing_truth_fixed += 1
+            continue
+        if not all(math.isfinite(value) for value in estimate):
+            missing_truth_fixed += 1
+            continue
+        fixed_errors.append(math.dist(estimate, reference))
+
+    correct = sum(error < 0.5 for error in fixed_errors)
+    false = sum(error >= 0.5 for error in fixed_errors) + missing_truth_fixed
+    above_1m = sum(error > 1.0 for error in fixed_errors) + missing_truth_fixed
+    fixed = len(fixed_errors) + missing_truth_fixed
+    epochs = len(tows)
+    return {
+        "epochs": epochs,
+        "evaluated_epochs": sum(tow in shadow for tow in tows),
+        "fixed_epochs": fixed,
+        "correct_fixed_epochs": correct,
+        "false_fixed_epochs": false,
+        "false_fixed_above_1m_epochs": above_1m,
+        "missing_truth_fixed_epochs": missing_truth_fixed,
+        "correct_fix_rate": correct / epochs if epochs else 0.0,
+        "false_per_fixed": false / fixed if fixed else 0.0,
+        "fixed_error_p95_m": _quantile(fixed_errors, 0.95),
+        "fixed_error_max_m": max(fixed_errors) if fixed_errors else None,
+        "runtime_p95_ms": _quantile(runtimes, 0.95),
+        "runtime_max_ms": max(runtimes) if runtimes else None,
+    }
+
+
+def score_artifact(
+    city: str,
+    run: str,
+    policy: Policy,
+    pos_path: Path,
+    shadow_path: Path,
+    reference_path: Path,
+    *,
+    block_count: int = 5,
+) -> dict[str, object]:
+    tows = read_solution_tows(pos_path)
+    shadow = read_shadow(shadow_path)
+    truth = read_reference(reference_path)
+    route = _score_tows(tows, shadow, truth)
+    blocks = []
+    for index in range(block_count):
+        start = index * len(tows) // block_count
+        stop = (index + 1) * len(tows) // block_count
+        metrics = _score_tows(tows[start:stop], shadow, truth)
+        blocks.append({"block": index, **metrics})
+    return {
+        "city": city,
+        "run": run,
+        "policy": asdict(policy),
+        "truth_usage": "post_solver_scoring_only",
+        "pos_sha256": _sha256(pos_path),
+        "shadow_sha256": _sha256(shadow_path),
+        "route": route,
+        "contiguous_time_blocks": blocks,
+    }
+
+
+def _aggregate(scores: list[dict[str, object]]) -> dict[str, object]:
+    routes = [score["route"] for score in scores]
+    epochs = sum(int(route["epochs"]) for route in routes)  # type: ignore[index]
+    fixed = sum(int(route["fixed_epochs"]) for route in routes)  # type: ignore[index]
+    correct = sum(
+        int(route["correct_fixed_epochs"]) for route in routes  # type: ignore[index]
+    )
+    false = sum(
+        int(route["false_fixed_epochs"]) for route in routes  # type: ignore[index]
+    )
+    above_1m = sum(
+        int(route["false_fixed_above_1m_epochs"])  # type: ignore[index]
+        for route in routes
+    )
+    return {
+        "epochs": epochs,
+        "fixed_epochs": fixed,
+        "correct_fixed_epochs": correct,
+        "false_fixed_epochs": false,
+        "false_fixed_above_1m_epochs": above_1m,
+        "correct_fix_rate": correct / epochs if epochs else 0.0,
+        "false_per_fixed": false / fixed if fixed else 0.0,
+    }
+
+
+def nested_leave_one_run_out(
+    scores: list[dict[str, object]],
+) -> dict[str, object]:
+    policies = sorted(
+        {str(score["policy"]["name"]) for score in scores}  # type: ignore[index]
+    )
+    by_key = {
+        (
+            str(score["city"]),
+            str(score["run"]),
+            str(score["policy"]["name"]),  # type: ignore[index]
+        ): score
+        for score in scores
+    }
+    folds = []
+    selected_holdouts = []
+    for holdout_city, holdout_run in ROUTES:
+        ranked = []
+        for policy in policies:
+            training = [
+                by_key[(city, run, policy)]
+                for city, run in ROUTES
+                if (city, run) != (holdout_city, holdout_run)
+                and (city, run, policy) in by_key
+            ]
+            if len(training) != len(ROUTES) - 1:
+                continue
+            aggregate = _aggregate(training)
+            city_rates = []
+            for city in ("tokyo", "nagoya"):
+                city_scores = [s for s in training if s["city"] == city]
+                city_rates.append(float(_aggregate(city_scores)["correct_fix_rate"]))
+            block_false = max(
+                int(block["false_fixed_epochs"])
+                for score in training
+                for block in score["contiguous_time_blocks"]  # type: ignore[index]
+            )
+            ranked.append(
+                (
+                    int(aggregate["false_fixed_above_1m_epochs"]) != 0,
+                    int(aggregate["false_fixed_epochs"]) != 0,
+                    block_false != 0,
+                    float(aggregate["false_per_fixed"]),
+                    -min(city_rates),
+                    -float(aggregate["correct_fix_rate"]),
+                    policy,
+                    aggregate,
+                )
+            )
+        if not ranked:
+            continue
+        selected = min(ranked)
+        policy = selected[-2]
+        holdout = by_key[(holdout_city, holdout_run, policy)]
+        selected_holdouts.append(holdout)
+        folds.append(
+            {
+                "holdout_city": holdout_city,
+                "holdout_run": holdout_run,
+                "selected_policy": policy,
+                "training": selected[-1],
+                "holdout": holdout["route"],
+            }
+        )
+    city_aggregates = {
+        city: _aggregate([score for score in selected_holdouts if score["city"] == city])
+        for city in ("tokyo", "nagoya")
+    }
+    return {
+        "selection": (
+            "outer leave-one-run-out; training policies ranked by zero >1m "
+            "false, zero false, zero contiguous-block false, false/FIX, "
+            "worst-city correct FIX, then aggregate correct FIX"
+        ),
+        "folds": folds,
+        "aggregate": _aggregate(selected_holdouts),
+        "cities": city_aggregates,
+        "complete": len(folds) == len(ROUTES),
+    }
+
+
+def _parse_policy(raw: str) -> Policy:
+    fields = raw.split(":")
+    if len(fields) != 6:
+        raise argparse.ArgumentTypeError(
+            "policy must be NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:MAX_SEED_M"
+        )
+    policy = Policy(
+        fields[0],
+        *(int(value) for value in fields[1:5]),
+        float(fields[5]),
+    )
+    if (
+        policy.window < 2
+        or policy.minimum_epochs < 2
+        or policy.minimum_epochs > policy.window
+        or policy.holdout_offset < 0
+        or not 2 <= policy.top_k <= 32
+        or not math.isfinite(policy.maximum_seed_separation_m)
+        or policy.maximum_seed_separation_m < 0.0
+    ):
+        raise argparse.ArgumentTypeError(f"invalid policy: {raw}")
+    return policy
+
+
+def _run_one(
+    binary: Path,
+    data_root: Path,
+    output_dir: Path,
+    city: str,
+    run: str,
+    policy: Policy,
+    max_epochs: int,
+    cuda_mode: str,
+    resume: bool,
+) -> tuple[Path, Path, list[str]]:
+    route_dir = data_root / city / run
+    stem = f"{city}_{run}_{policy.name}"
+    pos_path = output_dir / f"{stem}.pos"
+    shadow_path = output_dir / f"{stem}.shadow.csv"
+    command = [
+        str(binary),
+        "--rover", str(route_dir / "rover.obs"),
+        "--base", str(route_dir / "base.obs"),
+        "--nav", str(route_dir / "base.nav"),
+        "--preset", "low-cost",
+        "--no-kml",
+        "--out", str(pos_path),
+        "--multisd-fgo-shadow-csv", str(shadow_path),
+        "--multisd-fgo-shadow-window", str(policy.window),
+        "--multisd-fgo-shadow-min-epochs", str(policy.minimum_epochs),
+        "--multisd-fgo-shadow-holdout-offset", str(policy.holdout_offset),
+        "--multisd-fgo-shadow-top-k", str(policy.top_k),
+        "--multisd-fgo-shadow-max-seed-separation",
+        str(policy.maximum_seed_separation_m),
+    ]
+    if max_epochs > 0:
+        command.extend(("--max-epochs", str(max_epochs)))
+    if not (resume and pos_path.is_file() and shadow_path.is_file()):
+        environment = os.environ.copy()
+        environment["GNSSPP_FGO_CUDA_SOLVER"] = cuda_mode
+        subprocess.run(command, check=True, env=environment)
+    return pos_path, shadow_path, command
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--data-root", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--policy",
+        action="append",
+        type=_parse_policy,
+        default=[],
+        help="NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:MAX_SEED_M",
+    )
+    parser.add_argument("--max-epochs", type=int, default=0)
+    parser.add_argument("--cuda-mode", choices=("off", "auto", "on"), default="off")
+    parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--route",
+        action="append",
+        choices=tuple(f"{city}/{run}" for city, run in ROUTES),
+    )
+    args = parser.parse_args()
+    policies = args.policy or [
+        Policy("locked_w10_o2_k4_s05", 10, 10, 2, 4, 0.5)
+    ]
+    routes = (
+        [tuple(route.split("/", 1)) for route in args.route]
+        if args.route
+        else list(ROUTES)
+    )
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    scores = []
+    commands = []
+    for policy in policies:
+        for city, run in routes:
+            pos, shadow, command = _run_one(
+                args.binary.resolve(),
+                args.data_root.resolve(),
+                args.output_dir.resolve(),
+                city,
+                run,
+                policy,
+                args.max_epochs,
+                args.cuda_mode,
+                args.resume,
+            )
+            commands.append(command)
+            scores.append(
+                score_artifact(
+                    city,
+                    run,
+                    policy,
+                    pos,
+                    shadow,
+                    args.data_root / city / run / "reference.csv",
+                )
+            )
+    payload = {
+        "schema": "gnss_gpu_multisd_fgo_ppc_nested_cv_v1",
+        "estimator_inputs": "PPC rover.obs, base.obs, base.nav only",
+        "excluded_estimator_inputs": ["imu", "lidar", "camera", "reference"],
+        "truth_usage": "reference.csv opened only by post-subprocess scorer",
+        "cuda_mode": args.cuda_mode,
+        "max_epochs": args.max_epochs,
+        "commands": commands,
+        "scores": scores,
+        "nested_leave_one_run_out": nested_leave_one_run_out(scores),
+    }
+    output_path = args.output_dir / "audit.json"
+    output_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    print(json.dumps(payload["nested_leave_one_run_out"], indent=2))
+    print(f"audit: {output_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
