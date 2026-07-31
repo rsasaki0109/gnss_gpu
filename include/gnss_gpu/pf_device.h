@@ -30,6 +30,9 @@ struct PFDeviceState {
     double* d_partial_a;  // grid * 4 for estimate, grid for ESS
     double* d_partial_b;  // grid for sum_w / sum_w2
     double* d_partial_c;  // grid for max_lw
+    // Final device-side reduction output. Keeping the second reduction stage
+    // on the GPU avoids copying O(grid_size) partials to the host.
+    double* d_reduction_result;  // 6 doubles
 
     // For systematic resampling
     double* d_weights_norm;  // [N] normalized weights

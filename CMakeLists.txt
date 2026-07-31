@@ -20,7 +20,7 @@ add_library(gnss_gpu_core
   src/positioning/multi_gnss.cu
 )
 target_include_directories(gnss_gpu_core PUBLIC include)
-target_link_libraries(gnss_gpu_core CUDA::cudart)
+target_link_libraries(gnss_gpu_core CUDA::cudart CUDA::cusolver)
 
 # --- Ray tracing module ---
 add_library(gnss_gpu_raytrace

@@ -1,5 +1,6 @@
 #include "gnss_gpu/fgo.h"
 #include "gnss_gpu/cuda_check.h"
+#include <cusolverDn.h>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -186,6 +187,123 @@ void cholesky_solve_lower(int n, const double* L, const double* b, double* x) {
     x[i] = sum / L[(size_t)i * n + i];
   }
 }
+
+// Optional dense GPU solve for the current compatibility path. Factor
+// assembly and all model semantics stay unchanged; only H * delta = rhs is
+// offloaded. The workspace is retained for every LM trial/iteration in one
+// solve call. Enable with GNSS_GPU_FGO_GPU_SOLVER=1, or use "auto" to offload
+// only matrices large enough to amortize transfers. The CPU implementation
+// remains the default and is also the fail-safe fallback.
+class GpuDenseCholeskyWorkspace {
+ public:
+  GpuDenseCholeskyWorkspace() {
+    const char* value = std::getenv("GNSS_GPU_FGO_GPU_SOLVER");
+    auto_mode_ = value != nullptr &&
+                 (std::strcmp(value, "auto") == 0 ||
+                  std::strcmp(value, "AUTO") == 0);
+    enabled_ = value != nullptr &&
+               (std::strcmp(value, "1") == 0 ||
+                std::strcmp(value, "true") == 0 ||
+                std::strcmp(value, "TRUE") == 0 ||
+                auto_mode_);
+  }
+
+  ~GpuDenseCholeskyWorkspace() {
+    if (d_matrix_) cudaFree(d_matrix_);
+    if (d_rhs_) cudaFree(d_rhs_);
+    if (d_work_) cudaFree(d_work_);
+    if (d_info_) cudaFree(d_info_);
+    if (handle_) cusolverDnDestroy(handle_);
+  }
+
+  bool solve(int n, const double* matrix, const double* rhs, double* solution) {
+    constexpr int kAutoMinimumState = 512;
+    if (!enabled_ || n <= 0 || (auto_mode_ && n < kAutoMinimumState)) return false;
+    if (!ensure_capacity(n)) return false;
+
+    const size_t matrix_bytes = (size_t)n * n * sizeof(double);
+    const size_t rhs_bytes = (size_t)n * sizeof(double);
+    if (cudaMemcpy(d_matrix_, matrix, matrix_bytes, cudaMemcpyHostToDevice) != cudaSuccess ||
+        cudaMemcpy(d_rhs_, rhs, rhs_bytes, cudaMemcpyHostToDevice) != cudaSuccess) {
+      return false;
+    }
+
+    if (cusolverDnDpotrf(handle_, CUBLAS_FILL_MODE_LOWER, n, d_matrix_, n,
+                         d_work_, work_elements_, d_info_) != CUSOLVER_STATUS_SUCCESS) {
+      return false;
+    }
+    int info = -1;
+    if (cudaMemcpy(&info, d_info_, sizeof(int), cudaMemcpyDeviceToHost) != cudaSuccess ||
+        info != 0) {
+      return false;
+    }
+    if (cusolverDnDpotrs(handle_, CUBLAS_FILL_MODE_LOWER, n, 1, d_matrix_, n,
+                         d_rhs_, n, d_info_) != CUSOLVER_STATUS_SUCCESS) {
+      return false;
+    }
+
+    info = -1;
+    if (cudaMemcpy(&info, d_info_, sizeof(int), cudaMemcpyDeviceToHost) != cudaSuccess ||
+        info != 0) {
+      return false;
+    }
+    return cudaMemcpy(solution, d_rhs_, rhs_bytes, cudaMemcpyDeviceToHost) == cudaSuccess;
+  }
+
+ private:
+  bool ensure_capacity(int n) {
+    if (capacity_ == n && handle_ && d_matrix_ && d_rhs_ && d_work_ && d_info_) {
+      return true;
+    }
+    if (d_matrix_) cudaFree(d_matrix_);
+    if (d_rhs_) cudaFree(d_rhs_);
+    if (d_work_) cudaFree(d_work_);
+    if (d_info_) cudaFree(d_info_);
+    d_matrix_ = nullptr;
+    d_rhs_ = nullptr;
+    d_work_ = nullptr;
+    d_info_ = nullptr;
+    capacity_ = 0;
+
+    if (!handle_ && cusolverDnCreate(&handle_) != CUSOLVER_STATUS_SUCCESS) return false;
+
+    const size_t matrix_bytes = (size_t)n * n * sizeof(double);
+    const size_t rhs_bytes = (size_t)n * sizeof(double);
+    size_t free_bytes = 0;
+    size_t total_bytes = 0;
+    if (cudaMemGetInfo(&free_bytes, &total_bytes) != cudaSuccess ||
+        matrix_bytes + rhs_bytes > free_bytes / 2) {
+      return false;
+    }
+    if (cudaMalloc(&d_matrix_, matrix_bytes) != cudaSuccess ||
+        cudaMalloc(&d_rhs_, rhs_bytes) != cudaSuccess ||
+        cudaMalloc(&d_info_, sizeof(int)) != cudaSuccess) {
+      return false;
+    }
+
+    int work_elements = 0;
+    if (cusolverDnDpotrf_bufferSize(
+            handle_, CUBLAS_FILL_MODE_LOWER, n, d_matrix_, n,
+            &work_elements) != CUSOLVER_STATUS_SUCCESS ||
+        work_elements <= 0 ||
+        cudaMalloc(&d_work_, (size_t)work_elements * sizeof(double)) != cudaSuccess) {
+      return false;
+    }
+    work_elements_ = work_elements;
+    capacity_ = n;
+    return true;
+  }
+
+  bool enabled_ = false;
+  bool auto_mode_ = false;
+  int capacity_ = 0;
+  int work_elements_ = 0;
+  cusolverDnHandle_t handle_ = nullptr;
+  double* d_matrix_ = nullptr;
+  double* d_rhs_ = nullptr;
+  double* d_work_ = nullptr;
+  int* d_info_ = nullptr;
+};
 
 double pr_cost_host(
     int n_epoch, int n_sat, int nc, int ss,
@@ -593,6 +711,7 @@ int fgo_gnss_lm(const double* sat_ecef,
   int total_iters = 0;
   bool ok = false;
   const int block = 256;
+  GpuDenseCholeskyWorkspace gpu_solver;
 
   for (int it = 0; it < max_iter; it++) {
     effective_pr_weights_huber_host(
@@ -626,10 +745,12 @@ int fgo_gnss_lm(const double* sat_ecef,
 
     std::memcpy(h_work, h_H, sz_H);
     for (int i = 0; i < n_state; i++) h_work[(size_t)i * n_state + i] += kDiagJitter;
-    if (!cholesky_decompose_inplace(n_state, h_work)) {
-      break;
+    if (!gpu_solver.solve(n_state, h_work, h_g, h_delta)) {
+      if (!cholesky_decompose_inplace(n_state, h_work)) {
+        break;
+      }
+      cholesky_solve_lower(n_state, h_work, h_g, h_delta);
     }
-    cholesky_solve_lower(n_state, h_work, h_g, h_delta);
 
     double step_norm = 0.0;
     for (int i = 0; i < n_state; i++) step_norm += h_delta[i] * h_delta[i];
@@ -3964,6 +4085,7 @@ int fgo_gnss_lm_vd(const double* sat_ecef,
 
   int total_iters = 0;
   bool ok = false;
+  GpuDenseCholeskyWorkspace gpu_solver;
   const bool use_lm =
       std::isfinite(lm_damping) && lm_damping > 0.0;
   double lm_lambda = use_lm ? lm_damping : 0.0;
@@ -4264,10 +4386,12 @@ int fgo_gnss_lm_vd(const double* sat_ecef,
         solve_rhs = h_rhs;
       }
 
-      if (!cholesky_decompose_inplace(n_state, solve_matrix)) {
-        return false;
+      if (!gpu_solver.solve(n_state, solve_matrix, solve_rhs, h_delta)) {
+        if (!cholesky_decompose_inplace(n_state, solve_matrix)) {
+          return false;
+        }
+        cholesky_solve_lower(n_state, solve_matrix, solve_rhs, h_delta);
       }
-      cholesky_solve_lower(n_state, solve_matrix, solve_rhs, h_delta);
       if (hard_constraints_active) {
         for (int i = 0; i < n_state; i++) {
           if (hard_representative[(size_t)i]) continue;
