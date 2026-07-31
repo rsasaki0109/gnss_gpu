@@ -437,6 +437,24 @@ solver experiment was reverted with zero tracked gnssplusplus diff. The next
 implementation must batch/shared-factorize hypothesis RHS solves or separate
 CPU/CUDA work; spawning a second outer CPU task is not an accepted speedup.
 
+The successful implementation boundary is process isolation, not nested
+in-process scheduling. `experiments/run_multisd_fgo_dual_holdout.py` launches
+holdout-four and holdout-three solvers concurrently, with each child retaining
+its proven internal top-K scheduling, then opens truth only after both children
+exit and applies the same 0.1 m fail-closed union. A Tokyo run1 300-epoch replay
+completed in 17.31 s (57.7 ms/epoch route throughput); its paired critical-path
+p95 was 48.89 ms and maximum 74.81 ms. Baseline priority added seven correct
+fixes with zero false and zero conflicts on that prefix.
+
+The previously worst Tokyo NLOS replay was then repeated for 1,000 injected
+epochs. Concurrent wall time was 52.6 s, paired critical-path p95 was 69.25 ms,
+and the union contained 630 correct fixes, zero false fixes, zero >1 m fixes,
+and zero partition conflicts. This closes the dual-runtime blocker without
+altering either candidate graph or weakening the independent validator. The
+runner records both exact child commands, process-isolation status, artifacts,
+hashes, wall time, scientific audit, and the explicit exclusion of IMU, LiDAR,
+camera, and reference truth from estimator inputs.
+
 ### Common-normal CUDA multi-RHS top-K evaluation
 
 The next implementation uses the existing cuSOLVER `potrf`/multi-column
@@ -472,18 +490,15 @@ policy.
 
 ## Next ranked experiments
 
-1. Run the holdout-three/four FGO partitions concurrently (shared input
-   preparation, independent candidate graphs) and require the same 0.1 m
-   fail-closed union; verify Tokyo NLOS wall p95 <=100 ms.
-2. Audit dual-frequency WL/NL candidates as an additional source only where
+1. Audit dual-frequency WL/NL candidates as an additional source only where
    they use observations disjoint from each selected holdout partition; the
    existing L1/L5 source alone supplied no Nagoya prefix candidates.
-3. Use the already-recorded bootstrap success rate and ADOP to order whole PAR
+2. Use the already-recorded bootstrap success rate and ADOP to order whole PAR
    subsets, rather than adding more route-fitted scalar thresholds.
-4. Calibrate an FFRT/IA lookup or Monte-Carlo boundary per ambiguity dimension
+3. Calibrate an FFRT/IA lookup or Monte-Carlo boundary per ambiguity dimension
    and covariance-quality band, while retaining disjoint validation as final
    publication authority.
-5. Exercise the implemented multi-RHS CUDA path on state sizes above the 2,048
+4. Exercise the implemented multi-RHS CUDA path on state sizes above the 2,048
    auto threshold and batch the two independent holdout partitions without
    weakening their fail-closed union; repeat parity and p95 <=100 ms gates.
 
