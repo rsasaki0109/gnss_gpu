@@ -1,0 +1,281 @@
+{
+  "aggregate": {
+    "correct_fix_rate": 0.5628776241679467,
+    "correct_fixed_epochs": 10993,
+    "epochs": 19530,
+    "false_fixed_epochs": 0,
+    "false_per_fixed": 0.0,
+    "fixed_epochs": 10993,
+    "fixed_rate": 0.5628776241679467
+  },
+  "correct_fix_definition": "Status == 4 and 3D error < 0.5 m",
+  "fix_definition": "gnssplusplus final .pos Status == 4",
+  "input_hashes": {
+    "nagoya/run1": {
+      "integrity_sha256": "caeace0aac2a2eb714a14bb82ef1a6be353d866dd8db27089014482ed3b56d28",
+      "positions_sha256": "8052071fd29739ab515aa054c69677e1cc72d3963e965a5c03eb1cbf7649bbe2",
+      "reference_sha256": "804f7b1d6845c2c5c717fe7868b7637a4a40bfb2e4a9f6811042b18d5ef00e0d"
+    },
+    "tokyo/run1": {
+      "integrity_sha256": "9f0b43e395ecabc8c8449ad35332c0eac33e5b372e0b389bacdce3c8994f2095",
+      "positions_sha256": "f2930fef8c1199ec451b7a93a8f96dc81fd644172706c64cf4549c565aa340ce",
+      "reference_sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+    }
+  },
+  "minimum_pairs": 12,
+  "routes": {
+    "nagoya/run1": {
+      "candidate_sources": {
+        "causal_arc": {
+          "ffrt_passed_epochs": 6362,
+          "nonfixed_candidate_oracle_correct_epochs": 1250,
+          "nonfixed_candidate_oracle_wrong_epochs": 99,
+          "nonfixed_ffrt_passed_epochs": 1349,
+          "nonfixed_pair_count_p50": 9.0
+        },
+        "l1_l2_wlnl": {
+          "ffrt_passed_epochs": 27,
+          "nonfixed_candidate_oracle_correct_epochs": 4,
+          "nonfixed_candidate_oracle_wrong_epochs": 0,
+          "nonfixed_ffrt_passed_epochs": 4,
+          "nonfixed_pair_count_p50": 4.5
+        },
+        "l1_l5_wlnl": {
+          "ffrt_passed_epochs": 205,
+          "nonfixed_candidate_oracle_correct_epochs": 1,
+          "nonfixed_candidate_oracle_wrong_epochs": 0,
+          "nonfixed_ffrt_passed_epochs": 1,
+          "nonfixed_pair_count_p50": 4.0
+        },
+        "l2_l5_wlnl": {
+          "ffrt_passed_epochs": 0,
+          "nonfixed_candidate_oracle_correct_epochs": 0,
+          "nonfixed_candidate_oracle_wrong_epochs": 0,
+          "nonfixed_ffrt_passed_epochs": 0,
+          "nonfixed_pair_count_p50": null
+        },
+        "primary": {
+          "ffrt_passed_epochs": 6694,
+          "nonfixed_candidate_oracle_correct_epochs": 0,
+          "nonfixed_candidate_oracle_wrong_epochs": 0,
+          "nonfixed_ffrt_passed_epochs": 1675,
+          "nonfixed_pair_count_p50": 11.0
+        },
+        "satellite_par": {
+          "ffrt_passed_epochs": 6577,
+          "nonfixed_candidate_oracle_correct_epochs": 1438,
+          "nonfixed_candidate_oracle_wrong_epochs": 120,
+          "nonfixed_ffrt_passed_epochs": 1558,
+          "nonfixed_pair_count_p50": 10.0
+        },
+        "source_par": {
+          "ffrt_passed_epochs": 6673,
+          "nonfixed_candidate_oracle_correct_epochs": 1552,
+          "nonfixed_candidate_oracle_wrong_epochs": 102,
+          "nonfixed_ffrt_passed_epochs": 1654,
+          "nonfixed_pair_count_p50": 11.0
+        }
+      },
+      "causal_arc": {
+        "epochs_with_ready_pairs": 7078,
+        "reset_events": 39.0,
+        "subset_ffrt_passed_epochs": 6362
+      },
+      "contiguous_time_blocks": {
+        "0": {
+          "correct_fix_rate": 0.7822368421052631,
+          "correct_fixed_epochs": 1189,
+          "end_tow": 550693.6,
+          "epochs": 1520,
+          "false_fixed_epochs": 0,
+          "fixed_epochs": 1189,
+          "start_tow": 550380.0
+        },
+        "1": {
+          "correct_fix_rate": 0.45921052631578946,
+          "correct_fixed_epochs": 698,
+          "end_tow": 550997.6,
+          "epochs": 1520,
+          "false_fixed_epochs": 0,
+          "fixed_epochs": 698,
+          "start_tow": 550693.8
+        },
+        "2": {
+          "correct_fix_rate": 0.5115055884286653,
+          "correct_fixed_epochs": 778,
+          "end_tow": 551301.8,
+          "epochs": 1521,
+          "false_fixed_epochs": 0,
+          "fixed_epochs": 778,
+          "start_tow": 550997.8
+        },
+        "3": {
+          "correct_fix_rate": 0.6493421052631579,
+          "correct_fixed_epochs": 987,
+          "end_tow": 551605.8,
+          "epochs": 1520,
+          "false_fixed_epochs": 0,
+          "fixed_epochs": 987,
+          "start_tow": 551302.0
+        },
+        "4": {
+          "correct_fix_rate": 0.8987508218277449,
+          "correct_fixed_epochs": 1367,
+          "end_tow": 551910.0,
+          "epochs": 1521,
+          "false_fixed_epochs": 0,
+          "fixed_epochs": 1367,
+          "start_tow": 551606.0
+        }
+      },
+      "correct_fix_rate": 0.6602209944751382,
+      "correct_fixed_epochs": 5019,
+      "epochs": 7602,
+      "false_fixed_above_1m_epochs": 0,
+      "false_fixed_epochs": 0,
+      "false_per_fixed": 0.0,
+      "fixed_epochs": 5019,
+      "fixed_error_p95_m": 0.20166454689733557,
+      "fixed_rate": 0.6602209944751382,
+      "nonfixed_primary_blockers": {
+        "disjoint_hard_separation_rejected": 668,
+        "disjoint_partition_ffrt_unavailable": 86,
+        "primary_ffrt_rejected": 21,
+        "primary_pairs_below_minimum": 1787,
+        "quality_gate_rejected": 21
+      },
+      "route": "nagoya/run1",
+      "runtime_max_ms": 269.128327,
+      "runtime_p50_ms": 15.087945999999999,
+      "runtime_p95_ms": 32.604929
+    },
+    "tokyo/run1": {
+      "candidate_sources": {
+        "causal_arc": {
+          "ffrt_passed_epochs": 8989,
+          "nonfixed_candidate_oracle_correct_epochs": 2639,
+          "nonfixed_candidate_oracle_wrong_epochs": 402,
+          "nonfixed_ffrt_passed_epochs": 3041,
+          "nonfixed_pair_count_p50": 10.0
+        },
+        "l1_l2_wlnl": {
+          "ffrt_passed_epochs": 285,
+          "nonfixed_candidate_oracle_correct_epochs": 54,
+          "nonfixed_candidate_oracle_wrong_epochs": 24,
+          "nonfixed_ffrt_passed_epochs": 78,
+          "nonfixed_pair_count_p50": 5.0
+        },
+        "l1_l5_wlnl": {
+          "ffrt_passed_epochs": 760,
+          "nonfixed_candidate_oracle_correct_epochs": 37,
+          "nonfixed_candidate_oracle_wrong_epochs": 3,
+          "nonfixed_ffrt_passed_epochs": 40,
+          "nonfixed_pair_count_p50": 4.0
+        },
+        "l2_l5_wlnl": {
+          "ffrt_passed_epochs": 0,
+          "nonfixed_candidate_oracle_correct_epochs": 0,
+          "nonfixed_candidate_oracle_wrong_epochs": 0,
+          "nonfixed_ffrt_passed_epochs": 0,
+          "nonfixed_pair_count_p50": null
+        },
+        "primary": {
+          "ffrt_passed_epochs": 9764,
+          "nonfixed_candidate_oracle_correct_epochs": 0,
+          "nonfixed_candidate_oracle_wrong_epochs": 0,
+          "nonfixed_ffrt_passed_epochs": 3790,
+          "nonfixed_pair_count_p50": 12.0
+        },
+        "satellite_par": {
+          "ffrt_passed_epochs": 9485,
+          "nonfixed_candidate_oracle_correct_epochs": 2838,
+          "nonfixed_candidate_oracle_wrong_epochs": 673,
+          "nonfixed_ffrt_passed_epochs": 3511,
+          "nonfixed_pair_count_p50": 11.0
+        },
+        "source_par": {
+          "ffrt_passed_epochs": 10043,
+          "nonfixed_candidate_oracle_correct_epochs": 3348,
+          "nonfixed_candidate_oracle_wrong_epochs": 721,
+          "nonfixed_ffrt_passed_epochs": 4069,
+          "nonfixed_pair_count_p50": 12.0
+        }
+      },
+      "causal_arc": {
+        "epochs_with_ready_pairs": 10988,
+        "reset_events": 49.0,
+        "subset_ffrt_passed_epochs": 8989
+      },
+      "contiguous_time_blocks": {
+        "0": {
+          "correct_fix_rate": 0.820125786163522,
+          "correct_fixed_epochs": 1956,
+          "end_tow": 187946.8,
+          "epochs": 2385,
+          "false_fixed_epochs": 0,
+          "fixed_epochs": 1956,
+          "start_tow": 187470.0
+        },
+        "1": {
+          "correct_fix_rate": 0.11693210393964795,
+          "correct_fixed_epochs": 279,
+          "end_tow": 188424.8,
+          "epochs": 2386,
+          "false_fixed_epochs": 0,
+          "fixed_epochs": 279,
+          "start_tow": 187947.0
+        },
+        "2": {
+          "correct_fix_rate": 0.780293501048218,
+          "correct_fixed_epochs": 1861,
+          "end_tow": 188901.8,
+          "epochs": 2385,
+          "false_fixed_epochs": 0,
+          "fixed_epochs": 1861,
+          "start_tow": 188425.0
+        },
+        "3": {
+          "correct_fix_rate": 0.3985750209555742,
+          "correct_fixed_epochs": 951,
+          "end_tow": 189382.8,
+          "epochs": 2386,
+          "false_fixed_epochs": 0,
+          "fixed_epochs": 951,
+          "start_tow": 188902.0
+        },
+        "4": {
+          "correct_fix_rate": 0.38851634534786256,
+          "correct_fixed_epochs": 927,
+          "end_tow": 189860.0,
+          "epochs": 2386,
+          "false_fixed_epochs": 0,
+          "fixed_epochs": 927,
+          "start_tow": 189383.0
+        }
+      },
+      "correct_fix_rate": 0.5008383635144199,
+      "correct_fixed_epochs": 5974,
+      "epochs": 11928,
+      "false_fixed_above_1m_epochs": 0,
+      "false_fixed_epochs": 0,
+      "false_per_fixed": 0.0,
+      "fixed_epochs": 5974,
+      "fixed_error_p95_m": 0.09651887650423965,
+      "fixed_rate": 0.5008383635144199,
+      "nonfixed_primary_blockers": {
+        "disjoint_hard_separation_rejected": 1638,
+        "disjoint_partition_ffrt_unavailable": 249,
+        "primary_ffrt_rejected": 538,
+        "primary_pairs_below_minimum": 3348,
+        "quality_gate_rejected": 181
+      },
+      "route": "tokyo/run1",
+      "runtime_max_ms": 318.534947,
+      "runtime_p50_ms": 13.264934,
+      "runtime_p95_ms": 43.42158734999997
+    }
+  },
+  "schema": "gnss_gpu_fix_rate_canonical_audit_v1",
+  "selection_truth_usage": "none",
+  "truth_usage": "post-decision audit and candidate oracle only"
+}
