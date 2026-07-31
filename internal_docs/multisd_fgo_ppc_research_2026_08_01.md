@@ -437,6 +437,39 @@ solver experiment was reverted with zero tracked gnssplusplus diff. The next
 implementation must batch/shared-factorize hypothesis RHS solves or separate
 CPU/CUDA work; spawning a second outer CPU task is not an accepted speedup.
 
+### Common-normal CUDA multi-RHS top-K evaluation
+
+The next implementation uses the existing cuSOLVER `potrf`/multi-column
+`potrs` backend rather than adding another GPU framework. Within one PAR group,
+top-K hypotheses constrain the same ambiguity/reference columns, so their first
+Gauss--Newton normal matrix is common and only the right-hand sides differ.
+The CUDA path now submits those RHS columns together, uses each solved column
+as the corresponding hypothesis's first iteration, and runs one fewer ordinary
+iteration. A pattern mismatch, non-finite result, or CUDA failure falls back to
+the unchanged per-hypothesis optimizer. The independent holdout validator is
+still the only FIX publication authority. CSV/JSON diagnostics expose batch
+attempts, successes, and RHS columns.
+
+On the six 300-epoch `qf` replay, explicit CUDA executed 2,750 successful
+hypothesis batches containing 9,300 RHS columns. It retained exactly the same
+1,047 accepted FIX epochs as the CPU artifact, with zero false and zero >1 m
+fixes; accepted ECEF coordinates differed by at most 10 micrometres. A Tokyo
+run1 A/B also reduced CUDA solve calls from 8,865 to 8,575 and measured wall
+sum from 41.96 s to 20.32 s in the same loaded-session comparison. These
+figures establish that the multi-RHS branch is real and scientifically
+equivalent, not that forced GPU is universally faster.
+
+The GTX 1660 Ti forced-CUDA route p95 values were 135.29, 109.12, 79.39,
+60.60, 78.30, and 82.42 ms. Small PPC windows have about 105 states, so PCIe
+and launch overhead still dominate on the first two Tokyo routes. Production
+therefore retains the pre-existing heterogeneous `auto` threshold: state sizes
+below 2,048 use Eigen/CPU, while genuinely large dense problems use CUDA. The
+same CUDA-enabled binary in `auto` mode produced route p95 values 39.63, 38.07,
+31.43, 28.36, 25.34, and 29.69 ms (maximum epoch 65.14 ms), again with
+1,047/1,047 correct and no false fixes. Forced CUDA remains available for
+large-problem and parity audits; it is not the PPC small-window production
+policy.
+
 ## Next ranked experiments
 
 1. Run the holdout-three/four FGO partitions concurrently (shared input
@@ -450,8 +483,9 @@ CPU/CUDA work; spawning a second outer CPU task is not an accepted speedup.
 4. Calibrate an FFRT/IA lookup or Monte-Carlo boundary per ambiguity dimension
    and covariance-quality band, while retaining disjoint validation as final
    publication authority.
-5. Implement batched GPU RHS solves for top-K/group evaluation, then repeat
-   CPU/CUDA parity and p95 <=100 ms gates.
+5. Exercise the implemented multi-RHS CUDA path on state sizes above the 2,048
+   auto threshold and batch the two independent holdout partitions without
+   weakening their fail-closed union; repeat parity and p95 <=100 ms gates.
 
 Failure to reach 70%/80% is reported as a measured candidate/oracle boundary;
 it does not authorize relaxing the false-fix integrity limits.
