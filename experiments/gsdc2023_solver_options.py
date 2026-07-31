@@ -38,6 +38,7 @@ class FgoRunOptions:
     tol: float
     fgo_line_search: bool
     fgo_lm_damping: float
+    fgo_gpu_solver: str
     chunk_epochs: int
     use_vd: bool
     graph_relative_height: bool
@@ -85,6 +86,7 @@ class FgoRunOptions:
             tol=float(config.fgo_tol if tol is None else tol),
             fgo_line_search=bool(getattr(config, "fgo_line_search", True)),
             fgo_lm_damping=float(getattr(config, "fgo_lm_damping", 0.0)),
+            fgo_gpu_solver=str(getattr(config, "fgo_gpu_solver", "off")),
             chunk_epochs=config.chunk_epochs,
             use_vd=config.use_vd,
             graph_relative_height=config.graph_relative_height,
@@ -132,6 +134,7 @@ class FgoRunOptions:
             "tol": self.tol,
             "fgo_line_search": self.fgo_line_search,
             "fgo_lm_damping": self.fgo_lm_damping,
+            "fgo_gpu_solver": self.fgo_gpu_solver,
             "chunk_epochs": self.chunk_epochs,
             "use_vd": self.use_vd,
             "graph_relative_height": self.graph_relative_height,

@@ -270,6 +270,7 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         motion_sigma_m=args.motion_sigma_m,
         factor_dt_max_s=args.factor_dt_max_s,
         fgo_iters=args.fgo_iters,
+        fgo_gpu_solver=getattr(args, "fgo_gpu_solver", "off"),
         weight_mode=getattr(args, "weight_mode", "sin2el"),
         fgo_weight_mode=(
             None
@@ -597,6 +598,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--motion-sigma-m", type=float, default=0.2)
     parser.add_argument("--factor-dt-max-s", type=float, default=FACTOR_DT_MAX_S)
     parser.add_argument("--fgo-iters", type=int, default=8)
+    parser.add_argument(
+        "--fgo-gpu-solver",
+        choices=("off", "auto", "on"),
+        default="off",
+        help="cuSOLVER dense FGO solve; auto enables it only for state size >=512",
+    )
     parser.add_argument(
         "--fgo-extra-constellations",
         action=argparse.BooleanOptionalAction,

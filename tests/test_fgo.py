@@ -387,6 +387,47 @@ def test_fgo_first_step_matches_reference(
     np.testing.assert_allclose(delta_ext, delta_ref, rtol=1e-9, atol=1e-7)
 
 
+def test_fgo_cusolver_path_matches_cpu(monkeypatch: pytest.MonkeyPatch):
+    """The opt-in cuSOLVER path changes execution only, not the GN step."""
+    rng = np.random.Generator(np.random.PCG64(20260731))
+    sat, pr, w, initial, _ = _rand_problem(rng, 24, 10, 1, None)
+    cpu_state = initial.copy()
+    gpu_state = initial.copy()
+
+    monkeypatch.setenv("GNSS_GPU_FGO_GPU_SOLVER", "0")
+    cpu_iters, cpu_mse = fgo_gnss_lm(
+        sat,
+        pr,
+        w,
+        cpu_state,
+        0.8,
+        1,
+        0.0,
+        0.0,
+        0,
+        None,
+        1,
+    )
+    monkeypatch.setenv("GNSS_GPU_FGO_GPU_SOLVER", "1")
+    gpu_iters, gpu_mse = fgo_gnss_lm(
+        sat,
+        pr,
+        w,
+        gpu_state,
+        0.8,
+        1,
+        0.0,
+        0.0,
+        0,
+        None,
+        1,
+    )
+
+    assert gpu_iters == cpu_iters == 1
+    assert gpu_mse == pytest.approx(cpu_mse, rel=1e-12, abs=1e-12)
+    np.testing.assert_allclose(gpu_state, cpu_state, rtol=1e-10, atol=1e-7)
+
+
 def test_fgo_zero_residual_stationary():
     rng = np.random.Generator(np.random.PCG64(7))
     n_epoch, n_sat, nc = 4, 6, 1

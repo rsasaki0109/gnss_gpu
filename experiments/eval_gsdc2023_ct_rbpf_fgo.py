@@ -135,6 +135,7 @@ def build_config(args: argparse.Namespace) -> BridgeConfig:
         motion_sigma_m=args.motion_sigma_m,
         factor_dt_max_s=args.factor_dt_max_s,
         fgo_iters=args.fgo_iters,
+        fgo_gpu_solver=args.fgo_gpu_solver,
         position_source=args.position_source,
         chunk_epochs=args.chunk_epochs,
         gated_baseline_threshold=args.gated_threshold,
@@ -200,6 +201,7 @@ def main() -> None:
     parser.add_argument("--ct-rbpf-motion-sigma-m", type=parse_float_list, default=[DEFAULT_CT_RBPF_MOTION_SIGMA_M])
     parser.add_argument("--factor-dt-max-s", type=float, default=FACTOR_DT_MAX_S)
     parser.add_argument("--fgo-iters", type=int, default=8)
+    parser.add_argument("--fgo-gpu-solver", choices=("off", "auto", "on"), default="auto")
     parser.add_argument("--position-source", choices=("auto", "gated"), default="gated")
     parser.add_argument("--chunk-epochs", type=int, default=200)
     parser.add_argument("--gated-threshold", type=float, default=GATED_BASELINE_THRESHOLD_DEFAULT)

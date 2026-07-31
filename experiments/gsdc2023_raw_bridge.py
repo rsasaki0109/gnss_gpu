@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import warnings
 from collections.abc import Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace as _replace_dataclass
 from pathlib import Path
 
@@ -404,6 +405,25 @@ from experiments.gsdc2023_output import (
     score_from_metrics,
     validate_position_source,
 )
+
+
+@contextmanager
+def _fgo_gpu_solver_scope(mode: str):
+    """Temporarily select the native dense solver without leaking process state."""
+
+    normalized = str(mode).strip().lower()
+    values = {"off": "0", "auto": "auto", "on": "1"}
+    if normalized not in values:
+        raise ValueError("fgo_gpu_solver must be one of: off, auto, on")
+    previous = os.environ.get("GNSS_GPU_FGO_GPU_SOLVER")
+    os.environ["GNSS_GPU_FGO_GPU_SOLVER"] = values[normalized]
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("GNSS_GPU_FGO_GPU_SOLVER", None)
+        else:
+            os.environ["GNSS_GPU_FGO_GPU_SOLVER"] = previous
 
 
 def resolve_gsdc2023_data_root() -> Path:
@@ -2672,6 +2692,7 @@ def run_fgo_chunked(
     use_vd: bool,
     fgo_line_search: bool = True,
     fgo_lm_damping: float = 0.0,
+    fgo_gpu_solver: str = "off",
     stop_attitude_sigma_rad: float = 0.0,
     stop_velocity_huber_k: float = 0.0,
     stop_position_huber_k: float = 0.0,
@@ -3248,43 +3269,44 @@ def run_fgo_chunked(
                             imu_gyro_bias_between_weights if use_imu_gyro_bias_state else None
                         ),
                         )
-                    if str(fgo_robust_kernel).lower() == "cauchy":
-                        iters, _mse_unused, _diag = fgo_gnss_lm_vd_cauchy(
-                            sat_ecef_for_solver,
-                            pseudorange_for_solver,
-                            fgo_weights_for_solver,
-                            seg_state_for_solver,
-                            cauchy_c_m=float(fgo_cauchy_c_m),
-                            max_outer_iters=int(fgo_cauchy_outer_iters),
-                            huber_k_warmstart=float(fgo_huber_k_pr),
-                            **vd_kwargs,
-                        )
-                    elif (
-                        fgo_two_stage_residual_resolve
-                        and pr_linearization_ref_ecef is not None
-                        and pr_linearization_los_ecef is not None
-                    ):
-                        iters, _ = two_stage_residual_resolve_vd(
-                            fgo_gnss_lm_vd,
-                            sat_ecef_for_solver,
-                            pseudorange_for_solver,
-                            fgo_weights_for_solver,
-                            seg_state_for_solver,
-                            threshold_l1_m=fgo_two_stage_residual_threshold_l1_m,
-                            threshold_l5_m=fgo_two_stage_residual_threshold_l5_m,
-                            min_keep=fgo_two_stage_residual_min_keep,
-                            guard=fgo_two_stage_residual_guard,
-                            divergence_p95_m=fgo_two_stage_divergence_p95_m,
-                            vd_kwargs=vd_kwargs,
-                        )
-                    else:
-                        iters, _ = fgo_gnss_lm_vd(
-                            sat_ecef_for_solver,
-                            pseudorange_for_solver,
-                            fgo_weights_for_solver,
-                            seg_state_for_solver,
-                            **vd_kwargs,
-                        )
+                    with _fgo_gpu_solver_scope(fgo_gpu_solver):
+                        if str(fgo_robust_kernel).lower() == "cauchy":
+                            iters, _mse_unused, _diag = fgo_gnss_lm_vd_cauchy(
+                                sat_ecef_for_solver,
+                                pseudorange_for_solver,
+                                fgo_weights_for_solver,
+                                seg_state_for_solver,
+                                cauchy_c_m=float(fgo_cauchy_c_m),
+                                max_outer_iters=int(fgo_cauchy_outer_iters),
+                                huber_k_warmstart=float(fgo_huber_k_pr),
+                                **vd_kwargs,
+                            )
+                        elif (
+                            fgo_two_stage_residual_resolve
+                            and pr_linearization_ref_ecef is not None
+                            and pr_linearization_los_ecef is not None
+                        ):
+                            iters, _ = two_stage_residual_resolve_vd(
+                                fgo_gnss_lm_vd,
+                                sat_ecef_for_solver,
+                                pseudorange_for_solver,
+                                fgo_weights_for_solver,
+                                seg_state_for_solver,
+                                threshold_l1_m=fgo_two_stage_residual_threshold_l1_m,
+                                threshold_l5_m=fgo_two_stage_residual_threshold_l5_m,
+                                min_keep=fgo_two_stage_residual_min_keep,
+                                guard=fgo_two_stage_residual_guard,
+                                divergence_p95_m=fgo_two_stage_divergence_p95_m,
+                                vd_kwargs=vd_kwargs,
+                            )
+                        else:
+                            iters, _ = fgo_gnss_lm_vd(
+                                sat_ecef_for_solver,
+                                pseudorange_for_solver,
+                                fgo_weights_for_solver,
+                                seg_state_for_solver,
+                                **vd_kwargs,
+                            )
                 except RuntimeError as exc:
                     iters = -1
                     fallback_reason = f"{type(exc).__name__}: {exc}"
@@ -3347,18 +3369,19 @@ def run_fgo_chunked(
                         if batch.weights_fgo is not None
                         else batch.weights[seg_start:seg_end]
                     )
-                    iters, _ = fgo_gnss_lm(
-                        batch.sat_ecef[seg_start:seg_end],
-                        batch.pseudorange[seg_start:seg_end],
-                        fgo_weights,
-                        seg_state,
-                        sys_kind=(batch.sys_kind[seg_start:seg_end] if batch.sys_kind is not None else None),
-                        n_clock=batch.n_clock,
-                        motion_sigma_m=motion_sigma_m,
-                        max_iter=fgo_iters,
-                        tol=tol,
-                        tdcp_huber_k=float(fgo_huber_k_tdcp),
-                    )
+                    with _fgo_gpu_solver_scope(fgo_gpu_solver):
+                        iters, _ = fgo_gnss_lm(
+                            batch.sat_ecef[seg_start:seg_end],
+                            batch.pseudorange[seg_start:seg_end],
+                            fgo_weights,
+                            seg_state,
+                            sys_kind=(batch.sys_kind[seg_start:seg_end] if batch.sys_kind is not None else None),
+                            n_clock=batch.n_clock,
+                            motion_sigma_m=motion_sigma_m,
+                            max_iter=fgo_iters,
+                            tol=tol,
+                            tdcp_huber_k=float(fgo_huber_k_tdcp),
+                        )
                 except RuntimeError as exc:
                     iters = -1
                     fallback_reason = f"{type(exc).__name__}: {exc}"

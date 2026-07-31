@@ -1171,6 +1171,154 @@ __global__ void pfd_position_spread_kernel(const double* px, const double* py,
     }
 }
 
+__global__ void pfd_finalize_ess_kernel(const double* partial_sum_w,
+                                        const double* partial_sum_w2,
+                                        const double* partial_max_lw,
+                                        double* result, int n_partial) {
+    extern __shared__ double sdata[];
+    double* s_max = sdata;
+    double* s_sum = sdata + blockDim.x;
+    double* s_sum2 = sdata + 2 * blockDim.x;
+    const int tid = threadIdx.x;
+
+    double local_max = -INFINITY;
+    for (int i = tid; i < n_partial; i += blockDim.x) {
+        local_max = fmax(local_max, partial_max_lw[i]);
+    }
+    s_max[tid] = local_max;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) s_max[tid] = fmax(s_max[tid], s_max[tid + s]);
+        __syncthreads();
+    }
+    const double global_max = s_max[0];
+
+    double local_sum = 0.0;
+    double local_sum2 = 0.0;
+    for (int i = tid; i < n_partial; i += blockDim.x) {
+        const double correction = exp(partial_max_lw[i] - global_max);
+        local_sum += partial_sum_w[i] * correction;
+        local_sum2 += partial_sum_w2[i] * correction * correction;
+    }
+    s_sum[tid] = local_sum;
+    s_sum2[tid] = local_sum2;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            s_sum[tid] += s_sum[tid + s];
+            s_sum2[tid] += s_sum2[tid + s];
+        }
+        __syncthreads();
+    }
+    if (tid == 0) {
+        result[0] = (s_sum[0] * s_sum[0]) / s_sum2[0];
+    }
+}
+
+__global__ void pfd_finalize_spread_kernel(const double* partial_sum_wd2,
+                                           const double* partial_sum_w,
+                                           const double* partial_max_lw,
+                                           double* result, int n_partial) {
+    extern __shared__ double sdata[];
+    double* s_max = sdata;
+    double* s_wd2 = sdata + blockDim.x;
+    double* s_sum = sdata + 2 * blockDim.x;
+    const int tid = threadIdx.x;
+
+    double local_max = -INFINITY;
+    for (int i = tid; i < n_partial; i += blockDim.x) {
+        local_max = fmax(local_max, partial_max_lw[i]);
+    }
+    s_max[tid] = local_max;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) s_max[tid] = fmax(s_max[tid], s_max[tid + s]);
+        __syncthreads();
+    }
+    const double global_max = s_max[0];
+
+    double local_wd2 = 0.0;
+    double local_sum = 0.0;
+    for (int i = tid; i < n_partial; i += blockDim.x) {
+        const double correction = exp(partial_max_lw[i] - global_max);
+        local_wd2 += partial_sum_wd2[i] * correction;
+        local_sum += partial_sum_w[i] * correction;
+    }
+    s_wd2[tid] = local_wd2;
+    s_sum[tid] = local_sum;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            s_wd2[tid] += s_wd2[tid + s];
+            s_sum[tid] += s_sum[tid + s];
+        }
+        __syncthreads();
+    }
+    if (tid == 0) {
+        result[0] = (s_sum[0] > 0.0 && isfinite(s_wd2[0]))
+                        ? sqrt(fmax(s_wd2[0] / s_sum[0], 0.0))
+                        : 0.0;
+    }
+}
+
+__global__ void pfd_finalize_estimate_kernel(const double* partial_results,
+                                             const double* partial_sum_w,
+                                             const double* partial_max_lw,
+                                             double* result, int n_partial) {
+    extern __shared__ double sdata[];
+    double* s_max = sdata;
+    double* s_x = sdata + blockDim.x;
+    double* s_y = sdata + 2 * blockDim.x;
+    double* s_z = sdata + 3 * blockDim.x;
+    double* s_cb = sdata + 4 * blockDim.x;
+    double* s_w = sdata + 5 * blockDim.x;
+    const int tid = threadIdx.x;
+
+    double local_max = -INFINITY;
+    for (int i = tid; i < n_partial; i += blockDim.x) {
+        local_max = fmax(local_max, partial_max_lw[i]);
+    }
+    s_max[tid] = local_max;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) s_max[tid] = fmax(s_max[tid], s_max[tid + s]);
+        __syncthreads();
+    }
+    const double global_max = s_max[0];
+
+    double x = 0.0, y = 0.0, z = 0.0, cb = 0.0, w = 0.0;
+    for (int i = tid; i < n_partial; i += blockDim.x) {
+        const double correction = exp(partial_max_lw[i] - global_max);
+        x += partial_results[i * 4 + 0] * correction;
+        y += partial_results[i * 4 + 1] * correction;
+        z += partial_results[i * 4 + 2] * correction;
+        cb += partial_results[i * 4 + 3] * correction;
+        w += partial_sum_w[i] * correction;
+    }
+    s_x[tid] = x;
+    s_y[tid] = y;
+    s_z[tid] = z;
+    s_cb[tid] = cb;
+    s_w[tid] = w;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            s_x[tid] += s_x[tid + s];
+            s_y[tid] += s_y[tid + s];
+            s_z[tid] += s_z[tid + s];
+            s_cb[tid] += s_cb[tid + s];
+            s_w[tid] += s_w[tid + s];
+        }
+        __syncthreads();
+    }
+    if (tid == 0) {
+        result[0] = s_x[0] / s_w[0];
+        result[1] = s_y[0] / s_w[0];
+        result[2] = s_z[0] / s_w[0];
+        result[3] = s_cb[0] / s_w[0];
+    }
+}
+
 // --- Get particles kernel ---
 __global__ void pfd_get_particles_kernel(const double* px, const double* py,
                                          const double* pz, const double* pcb,
@@ -1244,10 +1392,10 @@ __global__ void pfd_find_max_kernel(const double* log_weights, double* block_max
 }
 
 __global__ void pfd_exp_shift_kernel(const double* log_weights, double* weights,
-                                     double max_lw, int N) {
+                                     const double* max_lw, int N) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= N) return;
-    weights[tid] = exp(log_weights[tid] - max_lw);
+    weights[tid] = exp(log_weights[tid] - max_lw[0]);
 }
 
 __global__ void pfd_sum_reduce_kernel(const double* data, double* block_sums, int N) {
@@ -1266,10 +1414,42 @@ __global__ void pfd_sum_reduce_kernel(const double* data, double* block_sums, in
 }
 
 __global__ void pfd_normalize_kernel(const double* log_weights, double* weights,
-                                     double max_lw, double sum_w, int N) {
+                                     const double* max_lw, const double* sum_w, int N) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= N) return;
-    weights[tid] = exp(log_weights[tid] - max_lw) / sum_w;
+    weights[tid] = exp(log_weights[tid] - max_lw[0]) / sum_w[0];
+}
+
+__global__ void pfd_finalize_max_kernel(const double* partial, double* result,
+                                        int n_partial) {
+    extern __shared__ double sdata[];
+    const int tid = threadIdx.x;
+    double value = -INFINITY;
+    for (int i = tid; i < n_partial; i += blockDim.x) {
+        value = fmax(value, partial[i]);
+    }
+    sdata[tid] = value;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) sdata[tid] = fmax(sdata[tid], sdata[tid + s]);
+        __syncthreads();
+    }
+    if (tid == 0) result[0] = sdata[0];
+}
+
+__global__ void pfd_finalize_sum_kernel(const double* partial, double* result,
+                                        int n_partial) {
+    extern __shared__ double sdata[];
+    const int tid = threadIdx.x;
+    double value = 0.0;
+    for (int i = tid; i < n_partial; i += blockDim.x) value += partial[i];
+    sdata[tid] = value;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+    if (tid == 0) result[0] = sdata[0];
 }
 
 __global__ void pfd_systematic_resample_kernel(const double* cdf,
@@ -1434,6 +1614,7 @@ PFDeviceState* pf_device_create(int n_particles) {
     CUDA_CHECK(cudaMalloc(&state->d_partial_a, grid * 4 * sizeof(double)));
     CUDA_CHECK(cudaMalloc(&state->d_partial_b, grid * sizeof(double)));
     CUDA_CHECK(cudaMalloc(&state->d_partial_c, grid * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&state->d_reduction_result, 6 * sizeof(double)));
 
     // Systematic resampling buffers
     CUDA_CHECK(cudaMalloc(&state->d_weights_norm, sz));
@@ -1495,6 +1676,7 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     cudaFree(state->d_partial_a);
     cudaFree(state->d_partial_b);
     cudaFree(state->d_partial_c);
+    cudaFree(state->d_reduction_result);
     cudaFree(state->d_weights_norm);
     cudaFree(state->d_cdf);
     cudaFree(state->d_resample_ancestor);
@@ -1538,6 +1720,7 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     state->d_weights_norm = nullptr;
     state->d_cdf = nullptr;
     state->d_resample_ancestor = nullptr;
+    state->d_reduction_result = nullptr;
     state->d_vel = nullptr;
     state->d_sat_ecef = nullptr;
     state->d_pseudoranges = nullptr;
@@ -1855,29 +2038,16 @@ double pf_device_ess(const PFDeviceState* state) {
         N);
     CUDA_CHECK_LAST();
 
+    pfd_finalize_ess_kernel<<<1, BLOCK_SIZE, 3 * BLOCK_SIZE * sizeof(double),
+                              state->stream>>>(
+        state->d_partial_a, state->d_partial_b, state->d_partial_c,
+        state->d_reduction_result, grid);
+    CUDA_CHECK_LAST();
+    CUDA_CHECK(cudaMemcpyAsync(
+        state->h_result_pinned, state->d_reduction_result, sizeof(double),
+        cudaMemcpyDeviceToHost, state->stream));
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
-
-    double* h_sum_w = state->h_reduction_pinned + 0;
-    double* h_sum_w2 = state->h_reduction_pinned + grid;
-    double* h_max_lw = state->h_reduction_pinned + 2 * grid;
-    CUDA_CHECK(cudaMemcpy(h_sum_w, state->d_partial_a, grid * sizeof(double), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(h_sum_w2, state->d_partial_b, grid * sizeof(double), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(h_max_lw, state->d_partial_c, grid * sizeof(double), cudaMemcpyDeviceToHost));
-
-    double global_max = h_max_lw[0];
-    for (int i = 1; i < grid; i++) {
-        global_max = std::max(global_max, h_max_lw[i]);
-    }
-
-    double total_w = 0.0, total_w2 = 0.0;
-    for (int i = 0; i < grid; i++) {
-        double correction = exp(h_max_lw[i] - global_max);
-        total_w += h_sum_w[i] * correction;
-        total_w2 += h_sum_w2[i] * correction * correction;
-    }
-
-    double ess = (total_w * total_w) / total_w2;
-    return ess;
+    return state->h_result_pinned[0];
 }
 
 double pf_device_position_spread(
@@ -1897,32 +2067,16 @@ double pf_device_position_spread(
         N);
     CUDA_CHECK_LAST();
 
+    pfd_finalize_spread_kernel<<<1, BLOCK_SIZE, 3 * BLOCK_SIZE * sizeof(double),
+                                 state->stream>>>(
+        state->d_partial_a, state->d_partial_b, state->d_partial_c,
+        state->d_reduction_result, grid);
+    CUDA_CHECK_LAST();
+    CUDA_CHECK(cudaMemcpyAsync(
+        state->h_result_pinned, state->d_reduction_result, sizeof(double),
+        cudaMemcpyDeviceToHost, state->stream));
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
-
-    double* h_sum_wd2 = state->h_reduction_pinned + 0;
-    double* h_sum_w = state->h_reduction_pinned + grid;
-    double* h_max_lw = state->h_reduction_pinned + 2 * grid;
-    CUDA_CHECK(cudaMemcpy(h_sum_wd2, state->d_partial_a, grid * sizeof(double), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(h_sum_w, state->d_partial_b, grid * sizeof(double), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(h_max_lw, state->d_partial_c, grid * sizeof(double), cudaMemcpyDeviceToHost));
-
-    double global_max = h_max_lw[0];
-    for (int i = 1; i < grid; i++) {
-        global_max = std::max(global_max, h_max_lw[i]);
-    }
-
-    double total_wd2 = 0.0;
-    double total_w = 0.0;
-    for (int i = 0; i < grid; i++) {
-        double correction = exp(h_max_lw[i] - global_max);
-        total_wd2 += h_sum_wd2[i] * correction;
-        total_w += h_sum_w[i] * correction;
-    }
-
-    if (!(total_w > 0.0) || !std::isfinite(total_wd2)) {
-        return 0.0;
-    }
-    return sqrt(std::max(total_wd2 / total_w, 0.0));
+    return state->h_result_pinned[0];
 }
 
 // ============================================================
@@ -1938,29 +2092,27 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
         state->d_log_weights, state->d_partial_c, N);
     CUDA_CHECK_LAST();
 
-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
-    double* h_block_max = state->h_reduction_pinned + 0;
-    CUDA_CHECK(cudaMemcpy(h_block_max, state->d_partial_c, grid * sizeof(double), cudaMemcpyDeviceToHost));
-    double max_lw = h_block_max[0];
-    for (int i = 1; i < grid; i++) max_lw = std::max(max_lw, h_block_max[i]);
+    pfd_finalize_max_kernel<<<1, BLOCK_SIZE, BLOCK_SIZE * sizeof(double),
+                              state->stream>>>(
+        state->d_partial_c, state->d_reduction_result, grid);
 
     // Step 2: exp(lw - max) into weights_norm
     pfd_exp_shift_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
-        state->d_log_weights, state->d_weights_norm, max_lw, N);
+        state->d_log_weights, state->d_weights_norm,
+        state->d_reduction_result, N);
 
     // Step 3: Compute sum of weights
     pfd_sum_reduce_kernel<<<grid, BLOCK_SIZE, BLOCK_SIZE * sizeof(double), state->stream>>>(
         state->d_weights_norm, state->d_partial_b, N);
 
-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
-    double* h_block_sums = state->h_reduction_pinned + grid;
-    CUDA_CHECK(cudaMemcpy(h_block_sums, state->d_partial_b, grid * sizeof(double), cudaMemcpyDeviceToHost));
-    double sum_w = 0;
-    for (int i = 0; i < grid; i++) sum_w += h_block_sums[i];
+    pfd_finalize_sum_kernel<<<1, BLOCK_SIZE, BLOCK_SIZE * sizeof(double),
+                              state->stream>>>(
+        state->d_partial_b, state->d_reduction_result + 1, grid);
 
     // Step 4: Normalize weights
     pfd_normalize_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
-        state->d_log_weights, state->d_weights_norm, max_lw, sum_w, N);
+        state->d_log_weights, state->d_weights_norm,
+        state->d_reduction_result, state->d_reduction_result + 1, N);
 
     // Step 5: Inclusive scan (CDF) using thrust on the custom stream
     thrust::device_ptr<double> w_ptr(state->d_weights_norm);
@@ -2056,35 +2208,16 @@ void pf_device_estimate(const PFDeviceState* state, double* result) {
         N);
     CUDA_CHECK_LAST();
 
-    // Synchronize stream before reading results back
+    pfd_finalize_estimate_kernel<<<1, BLOCK_SIZE, 6 * BLOCK_SIZE * sizeof(double),
+                                   state->stream>>>(
+        state->d_partial_a, state->d_partial_b, state->d_partial_c,
+        state->d_reduction_result, grid);
+    CUDA_CHECK_LAST();
+    CUDA_CHECK(cudaMemcpyAsync(
+        state->h_result_pinned, state->d_reduction_result, 4 * sizeof(double),
+        cudaMemcpyDeviceToHost, state->stream));
     CUDA_CHECK(cudaStreamSynchronize(state->stream));
-
-    double* h_partial = state->h_reduction_pinned + 0;
-    double* h_sum_w = state->h_reduction_pinned + 4 * grid;
-    double* h_max_lw = state->h_reduction_pinned + 5 * grid;
-    CUDA_CHECK(cudaMemcpy(h_partial, state->d_partial_a, grid * 4 * sizeof(double), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(h_sum_w, state->d_partial_b, grid * sizeof(double), cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(h_max_lw, state->d_partial_c, grid * sizeof(double), cudaMemcpyDeviceToHost));
-
-    double global_max = h_max_lw[0];
-    for (int i = 1; i < grid; i++) {
-        global_max = std::max(global_max, h_max_lw[i]);
-    }
-
-    double wx = 0, wy = 0, wz = 0, wcb = 0, sw = 0;
-    for (int i = 0; i < grid; i++) {
-        double correction = exp(h_max_lw[i] - global_max);
-        wx += h_partial[i * 4 + 0] * correction;
-        wy += h_partial[i * 4 + 1] * correction;
-        wz += h_partial[i * 4 + 2] * correction;
-        wcb += h_partial[i * 4 + 3] * correction;
-        sw += h_sum_w[i] * correction;
-    }
-
-    result[0] = wx / sw;
-    result[1] = wy / sw;
-    result[2] = wz / sw;
-    result[3] = wcb / sw;
+    std::memcpy(result, state->h_result_pinned, 4 * sizeof(double));
 }
 
 // ============================================================

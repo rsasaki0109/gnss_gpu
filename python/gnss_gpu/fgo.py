@@ -3,6 +3,10 @@
 References *PseudorangeFactor_XC* / multi-clock patterns from `gtsam_gnss`
 (Taro Suzuki et al.). See ``fgo_gnss_lm`` parameters for ``n_clock`` and
 ``sys_kind``.
+
+Set ``GNSS_GPU_FGO_GPU_SOLVER=1`` to use cuSOLVER dense Cholesky, or ``auto``
+to use it only for state size >= 512. The default compatibility route and any
+GPU allocation/solver failure use the existing CPU Cholesky implementation.
 """
 
 from __future__ import annotations

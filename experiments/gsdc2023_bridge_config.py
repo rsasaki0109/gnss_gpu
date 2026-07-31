@@ -127,6 +127,10 @@ class BridgeConfig:
     fgo_tol: float = 1e-7
     fgo_line_search: bool = True
     fgo_lm_damping: float = 0.0
+    # Dense normal-equation solve backend: off preserves the historical CPU
+    # route, auto uses cuSOLVER for state size >=512, on always tries cuSOLVER.
+    # Every GPU failure falls back to CPU inside the native solver.
+    fgo_gpu_solver: str = "off"
     signal_type: str = "GPS_L1_CA"
     constellation_type: int = 1
     weight_mode: str = "sin2el"
