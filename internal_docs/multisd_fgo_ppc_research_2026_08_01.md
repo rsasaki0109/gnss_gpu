@@ -305,6 +305,16 @@ block boundaries. Therefore ordinary contiguous blocks leak ambiguity state.
 The generated arc folds are the required mask identity for the next solver
 replays; this audit alone is not claimed as a completed arc-held-out score.
 
+`experiments/mask_ppc_ambiguity_arc_fold.py` connects that identity to solver
+input by blanking only the carrier fields of non-selected complete arcs. Code,
+Doppler, SNR, epoch structure, base observations, and navigation remain
+unchanged. A five-fold keep-only Tokyo/run1 prefix retained 153,798 of 808,380
+carrier fields and correctly failed closed with zero shadow fixes; it is too
+sparse for policy comparison. A predeclared two-fold split retained
+401,434 fields and produced 190/300 correct `q4` shadow fixes, zero false,
+zero >1 m, and 16.93 ms p95. Therefore the executable arc-held-out matrix will
+use two fully disjoint folds rather than weakening the six-ambiguity minimum.
+
 ## Next ranked experiments
 
 1. Run ambiguity-arc blocked nested CV over groups 1/4, fallback consensus
