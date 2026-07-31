@@ -35,6 +35,10 @@ class Policy:
     holdout_offset: int
     top_k: int
     maximum_seed_separation_m: float
+    validation_history_epochs: int
+    minimum_carrier_fraction: float
+    minimum_fixed_ambiguities: int
+    holdout_satellites: int
 
 
 def _tow(value: str | float) -> float:
@@ -74,7 +78,11 @@ def read_reference(path: Path) -> dict[float, tuple[float, float, float]]:
 
 
 def read_solution_tows(path: Path) -> list[float]:
-    output: list[float] = []
+    return list(read_solutions(path))
+
+
+def read_solutions(path: Path) -> dict[float, dict[str, float | int]]:
+    output: dict[float, dict[str, float | int]] = {}
     with path.open(encoding="utf-8") as stream:
         for line in stream:
             if not line.strip() or line.startswith("%"):
@@ -82,16 +90,49 @@ def read_solution_tows(path: Path) -> list[float]:
             fields = line.split()
             if len(fields) < 9:
                 raise ValueError(f"malformed POS row in {path}")
-            output.append(_tow(fields[1]))
+            tow = _tow(fields[1])
+            output[tow] = {
+                "x": float(fields[2]),
+                "y": float(fields[3]),
+                "z": float(fields[4]),
+                "status": int(fields[8]),
+            }
     return output
 
 
 def read_shadow(path: Path) -> dict[float, dict[str, str]]:
     with path.open(encoding="utf-8", newline="") as stream:
-        return {
-            _tow(row["tow"]): row
-            for row in csv.DictReader(stream)
-        }
+        output: dict[float, dict[str, str]] = {}
+        for line_number, row in enumerate(csv.DictReader(stream), start=2):
+            if row.get(None) or not row.get("tow") or not row.get("epoch_index"):
+                raise ValueError(
+                    f"malformed shadow row {line_number} in {path}"
+                )
+            tow = _tow(row["tow"])
+            if tow in output:
+                raise ValueError(f"duplicate shadow TOW {tow} in {path}")
+            output[tow] = row
+        return output
+
+
+def artifacts_complete(
+    pos_path: Path,
+    shadow_path: Path,
+    max_epochs: int,
+) -> bool:
+    try:
+        if not read_solution_tows(pos_path):
+            return False
+        shadow = read_shadow(shadow_path)
+        if not shadow:
+            return False
+        if max_epochs > 0:
+            last_epoch = max(int(row["epoch_index"]) for row in shadow.values())
+            if last_epoch != max_epochs - 1:
+                return False
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
 
 
 def _score_tows(
@@ -150,6 +191,57 @@ def _score_tows(
     }
 
 
+def _score_solution_authority(
+    tows: list[float],
+    solutions: dict[float, dict[str, float | int]],
+    shadow: dict[float, dict[str, str]],
+    truth: dict[float, tuple[float, float, float]],
+    *,
+    include_shadow_rescue: bool,
+) -> dict[str, object]:
+    errors: list[float] = []
+    missing_truth_fixed = 0
+    shadow_rescues = 0
+    for tow in tows:
+        solution = solutions[tow]
+        estimate: tuple[float, float, float] | None = None
+        if int(solution["status"]) == 4:
+            estimate = tuple(float(solution[axis]) for axis in "xyz")
+        elif include_shadow_rescue:
+            row = shadow.get(tow)
+            if row is not None and row.get("shadow_fixed") == "1":
+                try:
+                    estimate = tuple(float(row[axis]) for axis in "xyz")
+                except (KeyError, TypeError, ValueError):
+                    estimate = None
+                shadow_rescues += 1
+        if estimate is None:
+            continue
+        reference = truth.get(tow)
+        if reference is None or not all(math.isfinite(value) for value in estimate):
+            missing_truth_fixed += 1
+            continue
+        errors.append(math.dist(estimate, reference))
+    correct = sum(error < 0.5 for error in errors)
+    false = sum(error >= 0.5 for error in errors) + missing_truth_fixed
+    above_1m = sum(error > 1.0 for error in errors) + missing_truth_fixed
+    fixed = len(errors) + missing_truth_fixed
+    epochs = len(tows)
+    return {
+        "epochs": epochs,
+        "fixed_epochs": fixed,
+        "correct_fixed_epochs": correct,
+        "false_fixed_epochs": false,
+        "false_fixed_above_1m_epochs": above_1m,
+        "missing_truth_fixed_epochs": missing_truth_fixed,
+        "shadow_rescue_epochs": shadow_rescues,
+        "correct_fix_rate": correct / epochs if epochs else 0.0,
+        "false_per_fixed": false / fixed if fixed else 0.0,
+        "fixed_error_p95_m": _quantile(errors, 0.95),
+        "fixed_error_max_m": max(errors) if errors else None,
+    }
+
+
 def score_artifact(
     city: str,
     run: str,
@@ -160,16 +252,37 @@ def score_artifact(
     *,
     block_count: int = 5,
 ) -> dict[str, object]:
-    tows = read_solution_tows(pos_path)
+    solutions = read_solutions(pos_path)
+    tows = list(solutions)
     shadow = read_shadow(shadow_path)
     truth = read_reference(reference_path)
     route = _score_tows(tows, shadow, truth)
+    baseline = _score_solution_authority(
+        tows, solutions, shadow, truth, include_shadow_rescue=False
+    )
+    baseline_priority_union = _score_solution_authority(
+        tows, solutions, shadow, truth, include_shadow_rescue=True
+    )
     blocks = []
     for index in range(block_count):
         start = index * len(tows) // block_count
         stop = (index + 1) * len(tows) // block_count
-        metrics = _score_tows(tows[start:stop], shadow, truth)
-        blocks.append({"block": index, **metrics})
+        block_tows = tows[start:stop]
+        metrics = _score_tows(block_tows, shadow, truth)
+        union_metrics = _score_solution_authority(
+            block_tows,
+            solutions,
+            shadow,
+            truth,
+            include_shadow_rescue=True,
+        )
+        blocks.append(
+            {
+                "block": index,
+                **metrics,
+                "baseline_priority_union": union_metrics,
+            }
+        )
     return {
         "city": city,
         "run": run,
@@ -178,12 +291,18 @@ def score_artifact(
         "pos_sha256": _sha256(pos_path),
         "shadow_sha256": _sha256(shadow_path),
         "route": route,
+        "baseline": baseline,
+        # Diagnostic only: baseline Status 4 has precedence, so this union is
+        # not an integrity-safe authority when the baseline itself false-fixes.
+        "baseline_priority_union": baseline_priority_union,
         "contiguous_time_blocks": blocks,
     }
 
 
-def _aggregate(scores: list[dict[str, object]]) -> dict[str, object]:
-    routes = [score["route"] for score in scores]
+def _aggregate(
+    scores: list[dict[str, object]], route_key: str = "route"
+) -> dict[str, object]:
+    routes = [score[route_key] for score in scores]
     epochs = sum(int(route["epochs"]) for route in routes)  # type: ignore[index]
     fixed = sum(int(route["fixed_epochs"]) for route in routes)  # type: ignore[index]
     correct = sum(
@@ -290,14 +409,20 @@ def nested_leave_one_run_out(
 
 def _parse_policy(raw: str) -> Policy:
     fields = raw.split(":")
-    if len(fields) != 6:
+    if len(fields) != 10:
         raise argparse.ArgumentTypeError(
-            "policy must be NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:MAX_SEED_M"
+            "policy must be NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:"
+            "MAX_SEED_M:HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
+            "HOLDOUT_SATELLITES"
         )
     policy = Policy(
         fields[0],
         *(int(value) for value in fields[1:5]),
         float(fields[5]),
+        int(fields[6]),
+        float(fields[7]),
+        int(fields[8]),
+        int(fields[9]),
     )
     if (
         policy.window < 2
@@ -307,6 +432,11 @@ def _parse_policy(raw: str) -> Policy:
         or not 2 <= policy.top_k <= 32
         or not math.isfinite(policy.maximum_seed_separation_m)
         or policy.maximum_seed_separation_m < 0.0
+        or policy.validation_history_epochs < 1
+        or not math.isfinite(policy.minimum_carrier_fraction)
+        or not 0.0 < policy.minimum_carrier_fraction <= 1.0
+        or not 2 <= policy.minimum_fixed_ambiguities <= 16
+        or not 2 <= policy.holdout_satellites <= 16
     ):
         raise argparse.ArgumentTypeError(f"invalid policy: {raw}")
     return policy
@@ -322,11 +452,13 @@ def _run_one(
     max_epochs: int,
     cuda_mode: str,
     resume: bool,
+    analyze_only: bool,
 ) -> tuple[Path, Path, list[str]]:
     route_dir = data_root / city / run
     stem = f"{city}_{run}_{policy.name}"
     pos_path = output_dir / f"{stem}.pos"
     shadow_path = output_dir / f"{stem}.shadow.csv"
+    metadata_path = output_dir / f"{stem}.run.json"
     command = [
         str(binary),
         "--rover", str(route_dir / "rover.obs"),
@@ -342,13 +474,52 @@ def _run_one(
         "--multisd-fgo-shadow-top-k", str(policy.top_k),
         "--multisd-fgo-shadow-max-seed-separation",
         str(policy.maximum_seed_separation_m),
+        "--multisd-fgo-shadow-validation-history",
+        str(policy.validation_history_epochs),
+        "--multisd-fgo-shadow-min-carrier-fraction",
+        str(policy.minimum_carrier_fraction),
+        "--multisd-fgo-shadow-min-fixed-ambiguities",
+        str(policy.minimum_fixed_ambiguities),
+        "--multisd-fgo-shadow-holdout-satellites",
+        str(policy.holdout_satellites),
     ]
     if max_epochs > 0:
         command.extend(("--max-epochs", str(max_epochs)))
-    if not (resume and pos_path.is_file() and shadow_path.is_file()):
+    if analyze_only:
+        if not artifacts_complete(pos_path, shadow_path, max_epochs):
+            raise ValueError(
+                f"cannot analyze incomplete artifact pair: {pos_path}, {shadow_path}"
+            )
+        return pos_path, shadow_path, command
+    expected_metadata = {
+        "command": command,
+        "binary_sha256": _sha256(binary),
+    }
+    metadata_matches = False
+    if metadata_path.is_file():
+        try:
+            metadata_matches = (
+                json.loads(metadata_path.read_text(encoding="utf-8"))
+                == expected_metadata
+            )
+        except (OSError, json.JSONDecodeError):
+            metadata_matches = False
+    complete = (
+        resume
+        and pos_path.is_file()
+        and shadow_path.is_file()
+        and artifacts_complete(pos_path, shadow_path, max_epochs)
+        and metadata_matches
+    )
+    if not complete:
         environment = os.environ.copy()
         environment["GNSSPP_FGO_CUDA_SOLVER"] = cuda_mode
         subprocess.run(command, check=True, env=environment)
+        metadata_path.write_text(
+            json.dumps(expected_metadata, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
     return pos_path, shadow_path, command
 
 
@@ -362,11 +533,20 @@ def main() -> int:
         action="append",
         type=_parse_policy,
         default=[],
-        help="NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:MAX_SEED_M",
+        help=(
+            "NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:MAX_SEED_M:"
+            "HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
+            "HOLDOUT_SATELLITES"
+        ),
     )
     parser.add_argument("--max-epochs", type=int, default=0)
     parser.add_argument("--cuda-mode", choices=("off", "auto", "on"), default="off")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--analyze-only",
+        action="store_true",
+        help="score existing complete artifacts without running or sidecar checks",
+    )
     parser.add_argument(
         "--route",
         action="append",
@@ -374,7 +554,10 @@ def main() -> int:
     )
     args = parser.parse_args()
     policies = args.policy or [
-        Policy("locked_w10_o2_k4_s05", 10, 10, 2, 4, 0.5)
+        Policy(
+            "locked_w10_o2_k4_s05_h3_f075_m6",
+            10, 10, 2, 4, 0.5, 3, 0.75, 6, 4,
+        )
     ]
     routes = (
         [tuple(route.split("/", 1)) for route in args.route]
@@ -396,6 +579,7 @@ def main() -> int:
                 args.max_epochs,
                 args.cuda_mode,
                 args.resume,
+                args.analyze_only,
             )
             commands.append(command)
             scores.append(

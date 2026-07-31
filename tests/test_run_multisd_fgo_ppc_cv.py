@@ -5,6 +5,7 @@ import pytest
 
 from experiments.run_multisd_fgo_ppc_cv import (
     Policy,
+    artifacts_complete,
     nested_leave_one_run_out,
     score_artifact,
 )
@@ -32,12 +33,21 @@ def _write_inputs(tmp_path: Path, errors: list[float]) -> tuple[Path, Path, Path
     with shadow.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(
             stream,
-            fieldnames=("tow", "shadow_fixed", "x", "y", "z", "runtime_ms"),
+            fieldnames=(
+                "epoch_index",
+                "tow",
+                "shadow_fixed",
+                "x",
+                "y",
+                "z",
+                "runtime_ms",
+            ),
         )
         writer.writeheader()
         for index, error in enumerate(errors):
             writer.writerow(
                 {
+                    "epoch_index": index,
                     "tow": 100.0 + index,
                     "shadow_fixed": "1",
                     "x": error,
@@ -54,7 +64,7 @@ def test_score_artifact_counts_warmup_correct_false_and_blocks(tmp_path: Path) -
     score = score_artifact(
         "tokyo",
         "run1",
-        Policy("test", 2, 2, 0, 4, 0.5),
+        Policy("test", 2, 2, 0, 4, 0.5, 1, 1.0, 4, 4),
         pos,
         shadow,
         reference,
@@ -66,7 +76,21 @@ def test_score_artifact_counts_warmup_correct_false_and_blocks(tmp_path: Path) -
     assert score["route"]["false_fixed_epochs"] == 2
     assert score["route"]["false_fixed_above_1m_epochs"] == 1
     assert score["route"]["false_per_fixed"] == pytest.approx(0.5)
+    assert score["baseline"]["fixed_epochs"] == 0
+    assert score["baseline_priority_union"]["correct_fixed_epochs"] == 2
+    assert score["baseline_priority_union"]["false_fixed_epochs"] == 2
+    assert score["baseline_priority_union"]["shadow_rescue_epochs"] == 4
     assert len(score["contiguous_time_blocks"]) == 2
+
+
+def test_artifacts_complete_rejects_trailing_corrupt_shadow_row(tmp_path: Path) -> None:
+    pos, shadow, _ = _write_inputs(tmp_path, [0.1, 0.2])
+    assert artifacts_complete(pos, shadow, 0)
+
+    with shadow.open("a", encoding="utf-8") as stream:
+        stream.write("75574\n")
+
+    assert not artifacts_complete(pos, shadow, 0)
 
 
 def _synthetic_score(city: str, run: str, policy: str, correct: int, false: int):
@@ -84,7 +108,10 @@ def _synthetic_score(city: str, run: str, policy: str, correct: int, false: int)
         "run": run,
         "policy": {"name": policy},
         "route": route,
-        "contiguous_time_blocks": [{"false_fixed_epochs": false}],
+        "baseline_priority_union": route,
+        "contiguous_time_blocks": [
+            {"false_fixed_epochs": false, "baseline_priority_union": route}
+        ],
     }
 
 
