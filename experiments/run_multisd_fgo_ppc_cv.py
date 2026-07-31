@@ -45,6 +45,8 @@ class Policy:
     fallback_consensus_groups: int
     fallback_consensus_separation_m: float
     fallback_max_seed_separation_m: float
+    quality_ranked_par: bool = False
+    interleave_constellation_par: bool = False
 
 
 def _tow(value: str | float) -> float:
@@ -107,6 +109,12 @@ def read_solutions(path: Path) -> dict[float, dict[str, float | int]]:
 
 
 def read_shadow(path: Path) -> dict[float, dict[str, str]]:
+    runtime_fields = {
+        "build_runtime_ms",
+        "optimize_wall_ms",
+        "optimizer_cpu_ms",
+        "runtime_ms",
+    }
     with path.open(encoding="utf-8", newline="") as stream:
         output: dict[float, dict[str, str]] = {}
         for line_number, row in enumerate(csv.DictReader(stream), start=2):
@@ -116,7 +124,25 @@ def read_shadow(path: Path) -> dict[float, dict[str, str]]:
                 )
             tow = _tow(row["tow"])
             if tow in output:
-                raise ValueError(f"duplicate shadow TOW {tow} in {path}")
+                previous = output[tow]
+                scientific_fields = set(row) - runtime_fields
+                if any(previous.get(key) != row.get(key) for key in scientific_fields):
+                    raise ValueError(
+                        f"conflicting duplicate shadow TOW {tow} in {path}"
+                    )
+                # A killed parent process can leave its solver child finishing
+                # the same final rows as a resumed run. Accept only an exact
+                # scientific duplicate and retain the conservative runtime.
+                for key in runtime_fields & set(row):
+                    try:
+                        previous[key] = str(
+                            max(float(previous[key]), float(row[key]))
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        raise ValueError(
+                            f"invalid duplicate runtime at TOW {tow} in {path}"
+                        ) from None
+                continue
             output[tow] = row
         return output
 
@@ -334,6 +360,8 @@ def _aggregate(
 
 def nested_leave_one_run_out(
     scores: list[dict[str, object]],
+    *,
+    stratify_city: bool = False,
 ) -> dict[str, object]:
     policies = sorted(
         {str(score["policy"]["name"]) for score in scores}  # type: ignore[index]
@@ -349,21 +377,33 @@ def nested_leave_one_run_out(
     folds = []
     selected_holdouts = []
     for holdout_city, holdout_run in ROUTES:
+        training_routes = [
+            (city, run)
+            for city, run in ROUTES
+            if (city, run) != (holdout_city, holdout_run)
+            and (not stratify_city or city == holdout_city)
+        ]
         ranked = []
         for policy in policies:
+            if (holdout_city, holdout_run, policy) not in by_key:
+                continue
             training = [
                 by_key[(city, run, policy)]
-                for city, run in ROUTES
-                if (city, run) != (holdout_city, holdout_run)
-                and (city, run, policy) in by_key
+                for city, run in training_routes
+                if (city, run, policy) in by_key
             ]
-            if len(training) != len(ROUTES) - 1:
+            if len(training) != len(training_routes):
                 continue
             aggregate = _aggregate(training)
-            city_rates = []
-            for city in ("tokyo", "nagoya"):
-                city_scores = [s for s in training if s["city"] == city]
-                city_rates.append(float(_aggregate(city_scores)["correct_fix_rate"]))
+            training_cities = sorted({str(score["city"]) for score in training})
+            city_rates = [
+                float(
+                    _aggregate(
+                        [score for score in training if score["city"] == city]
+                    )["correct_fix_rate"]
+                )
+                for city in training_cities
+            ]
             block_false = max(
                 int(block["false_fixed_epochs"])
                 for score in training
@@ -402,6 +442,7 @@ def nested_leave_one_run_out(
     }
     return {
         "selection": (
+            ("city-stratified " if stratify_city else "") +
             "outer leave-one-run-out; training policies ranked by zero >1m "
             "false, zero false, zero contiguous-block false, false/FIX, "
             "worst-city correct FIX, then aggregate correct FIX"
@@ -415,17 +456,26 @@ def nested_leave_one_run_out(
 
 def _parse_policy(raw: str) -> Policy:
     fields = raw.split(":")
-    if len(fields) != 16:
+    if len(fields) not in (16, 17, 18):
         raise argparse.ArgumentTypeError(
             "policy must be NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:"
             "MAX_SEED_M:HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
             "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1:CANDIDATE_RATIO:"
             "CANDIDATE_GROUPS:FALLBACK_CONSENSUS_GROUPS:"
-            "FALLBACK_CONSENSUS_SEPARATION_M:FALLBACK_MAX_SEED_M"
+            "FALLBACK_CONSENSUS_SEPARATION_M:FALLBACK_MAX_SEED_M:"
+            "QUALITY_RANKED_PAR_0_OR_1:INTERLEAVE_CONSTELLATION_PAR_0_OR_1"
         )
     if fields[10] not in ("0", "1"):
         raise argparse.ArgumentTypeError(
             "CONSTELLATION_PAR_0_OR_1 must be 0 or 1"
+        )
+    if len(fields) >= 17 and fields[16] not in ("0", "1"):
+        raise argparse.ArgumentTypeError(
+            "QUALITY_RANKED_PAR_0_OR_1 must be 0 or 1"
+        )
+    if len(fields) == 18 and fields[17] not in ("0", "1"):
+        raise argparse.ArgumentTypeError(
+            "INTERLEAVE_CONSTELLATION_PAR_0_OR_1 must be 0 or 1"
         )
     policy = Policy(
         fields[0],
@@ -441,6 +491,8 @@ def _parse_policy(raw: str) -> Policy:
         int(fields[13]),
         float(fields[14]),
         float(fields[15]),
+        bool(int(fields[16])) if len(fields) >= 17 else False,
+        bool(int(fields[17])) if len(fields) == 18 else False,
     )
     if (
         policy.window < 2
@@ -517,6 +569,10 @@ def _run_one(
         command.extend(("--max-epochs", str(max_epochs)))
     if policy.constellation_ranked_par:
         command.append("--multisd-fgo-shadow-constellation-par")
+    if policy.quality_ranked_par:
+        command.append("--multisd-fgo-shadow-quality-ranked-par")
+    if policy.interleave_constellation_par:
+        command.append("--multisd-fgo-shadow-interleave-constellation-par")
     command.extend(
         (
             "--multisd-fgo-shadow-candidate-ratio",
@@ -584,7 +640,8 @@ def main() -> int:
             "HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
             "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1:CANDIDATE_RATIO:"
             "CANDIDATE_GROUPS:FALLBACK_CONSENSUS_GROUPS:"
-            "FALLBACK_CONSENSUS_SEPARATION_M:FALLBACK_MAX_SEED_M"
+            "FALLBACK_CONSENSUS_SEPARATION_M:FALLBACK_MAX_SEED_M:"
+            "QUALITY_RANKED_PAR_0_OR_1:INTERLEAVE_CONSTELLATION_PAR_0_OR_1"
         ),
     )
     parser.add_argument("--max-epochs", type=int, default=0)
@@ -651,6 +708,9 @@ def main() -> int:
         "commands": commands,
         "scores": scores,
         "nested_leave_one_run_out": nested_leave_one_run_out(scores),
+        "nested_city_leave_one_run_out": nested_leave_one_run_out(
+            scores, stratify_city=True
+        ),
     }
     output_path = args.output_dir / "audit.json"
     output_path.write_text(

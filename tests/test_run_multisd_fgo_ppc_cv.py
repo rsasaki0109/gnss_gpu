@@ -9,6 +9,7 @@ from experiments.run_multisd_fgo_ppc_cv import (
     _parse_policy,
     artifacts_complete,
     nested_leave_one_run_out,
+    read_shadow,
     score_artifact,
 )
 
@@ -23,9 +24,24 @@ def test_parse_policy_keeps_constellation_par_explicit() -> None:
     assert policy.fallback_consensus_groups == 2
     assert policy.fallback_consensus_separation_m == pytest.approx(0.1)
     assert policy.fallback_max_seed_separation_m == pytest.approx(0.25)
+    assert not policy.quality_ranked_par
+
+    quality_policy = _parse_policy(
+        "q:10:10:2:4:0.5:3:0.75:6:4:1:1.1:8:2:0.1:0.25:1"
+    )
+    assert quality_policy.quality_ranked_par
+    interleaved_policy = _parse_policy(
+        "qi:10:10:2:4:0.5:3:0.75:6:4:1:1.1:8:2:0.1:0.25:1:1"
+    )
+    assert interleaved_policy.quality_ranked_par
+    assert interleaved_policy.interleave_constellation_par
 
     with pytest.raises(argparse.ArgumentTypeError, match="must be 0 or 1"):
         _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:2:1.5:1:1:0:0")
+    with pytest.raises(argparse.ArgumentTypeError, match="QUALITY_RANKED"):
+        _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:1:1.5:1:1:0:0:2")
+    with pytest.raises(argparse.ArgumentTypeError, match="INTERLEAVE"):
+        _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:1:1.5:1:1:0:0:1:2")
 
 
 def _write_inputs(tmp_path: Path, errors: list[float]) -> tuple[Path, Path, Path]:
@@ -113,6 +129,24 @@ def test_artifacts_complete_rejects_trailing_corrupt_shadow_row(tmp_path: Path) 
     assert not artifacts_complete(pos, shadow, 0)
 
 
+def test_read_shadow_accepts_only_scientifically_identical_duplicate(
+    tmp_path: Path,
+) -> None:
+    _, shadow, _ = _write_inputs(tmp_path, [0.1])
+    lines = shadow.read_text(encoding="utf-8").splitlines()
+    duplicate = lines[1].rsplit(",", 1)[0] + ",99.0"
+    shadow.write_text("\n".join((*lines, duplicate)) + "\n", encoding="utf-8")
+
+    assert read_shadow(shadow)[100.0]["runtime_ms"] == "99.0"
+
+    conflicting = duplicate.replace(",1,0.1,", ",0,0.1,")
+    shadow.write_text(
+        "\n".join((*lines, conflicting)) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="conflicting duplicate"):
+        read_shadow(shadow)
+
+
 def _synthetic_score(city: str, run: str, policy: str, correct: int, false: int):
     route = {
         "epochs": 10,
@@ -148,3 +182,33 @@ def test_nested_cv_prefers_zero_false_policy_before_higher_availability() -> Non
     assert len(audit["folds"]) == 6
     assert all(fold["selected_policy"] == "safe" for fold in audit["folds"])
     assert audit["aggregate"]["false_fixed_epochs"] == 0
+
+
+def test_city_stratified_nested_cv_learns_city_specific_policy() -> None:
+    scores = []
+    for run in ("run1", "run2", "run3"):
+        scores.append(_synthetic_score("tokyo", run, "tokyo_policy", 9, 0))
+        scores.append(_synthetic_score("tokyo", run, "nagoya_policy", 2, 0))
+        scores.append(_synthetic_score("nagoya", run, "tokyo_policy", 1, 0))
+        scores.append(_synthetic_score("nagoya", run, "nagoya_policy", 8, 0))
+
+    audit = nested_leave_one_run_out(scores, stratify_city=True)
+
+    assert audit["complete"] is True
+    assert all(
+        fold["selected_policy"] == f"{fold['holdout_city']}_policy"
+        for fold in audit["folds"]
+    )
+    assert audit["aggregate"]["correct_fixed_epochs"] == 51
+
+
+def test_nested_cv_handles_intentionally_partial_route_matrix() -> None:
+    scores = [
+        _synthetic_score("tokyo", "run1", "p", 7, 0),
+        _synthetic_score("tokyo", "run2", "p", 8, 0),
+    ]
+
+    audit = nested_leave_one_run_out(scores, stratify_city=True)
+
+    assert audit["complete"] is False
+    assert audit["folds"] == []

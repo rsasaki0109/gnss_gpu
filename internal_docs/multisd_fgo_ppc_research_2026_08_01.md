@@ -184,16 +184,71 @@ one-group policy. This validates the small PPC-prefix gain without using the
 complete-route KPI for selection. It does not yet constitute an independent
 external-data generalization claim.
 
+### PPC quality-ranked PAR and city-stratified outer CV
+
+The literature-motivated quality experiment adds a default-off candidate order
+using only quantities already present in the causal PPC graph: ambiguity
+marginal variance, distance to the nearest integer, and the windowed RMS of the
+DD carrier residual normalized by its factor sigma. Each term is mapped to a
+bounded unitless interval before summation. SNR was deliberately not fabricated
+because it is not retained in the current FGO carrier factor.
+
+Across six 300-epoch routes, quality-ranked `q4` produced 1,047 correct shadow
+fixes versus 1,020 for `g4`, with zero false and zero >1 m false fixes. The gain
+was heterogeneous: Tokyo improved by 55 fixes while Nagoya lost 28. A
+city-stratified outer leave-one-run-out audit selected `q4` in all three Tokyo
+folds; the selected holdouts reached 623/900 (69.22%) for Tokyo and 423/898
+(47.10%) for Nagoya, with zero false fixes. This stratification uses only the
+known city label and the other two runs of that city; truth remains
+post-subprocess scoring-only.
+
+On the production Tokyo run, `q4` increased the production-priority union from
+6,161 to 6,193 correct fixes:
+
+| City | Policy | Union correct | Total | Rate | False | >1 m | p95 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Tokyo | `q4` | 6,193 | 11,928 | 51.9199% | 0 | 0 | 63.16 ms |
+| Nagoya | `g4` | 5,305 | 7,602 | 69.7843% | 0 | 0 | 47.70 ms |
+
+Thus residual-aware ordering is a safe measured Tokyo gain (+32 production
+rescues over `g4`) but remains far below the 70% stretch target. It remains
+default-off pending the same raw-RINEX fault matrix already passed by `g4`.
+
+### Constellation-pool interleave
+
+The validator group collector previously exhausted successively smaller
+prefixes of the first constellation pool before visiting another pool. A
+default-off interleave now visits every unique constellation pool at the same
+subset depth before shrinking again. On six 300-epoch routes, the combined
+quality/interleave policy produced 1,048 correct fixes, zero false fixes, and
+zero >1 m false fixes. It also cut worst-route p95 to about 22 ms by reaching
+four diverse groups with fewer failed LAMBDA attempts.
+
+The production run showed that speed did not translate to higher availability:
+
+| City | Union correct | Total | Rate | False | >1 m | p95 |
+|---|---:|---:|---:|---:|---:|---:|
+| Tokyo | 6,186 | 11,928 | 51.8612% | 0 | 0 | 34.90 ms |
+| Nagoya | 5,304 | 7,602 | 69.7711% | 0 | 0 | 36.13 ms |
+
+Interleave is therefore rejected as the FIX-rate policy, but retained as a
+default-off performance primitive for future batched CPU/GPU evaluation.
+
+The full Tokyo run also exposed a harness-resume edge case: after a parent
+timeout, its solver child overlapped a resumed process for 37 final rows. The
+scientific columns were identical and only runtime differed. The scorer now
+accepts only scientifically identical duplicate rows and keeps the conservative
+maximum runtime; any conflicting duplicate remains fail-closed.
+
 ## Next ranked experiments
 
 1. Run ambiguity-arc blocked nested CV over groups 1/4, fallback consensus
    disabled/enabled, and conservative fallback aperture candidates; the full
    route remains evaluation-only.
-2. Interleave constellation pools at equal subset depth so the group budget
-   covers satellite/source diversity rather than only successively smaller
-   prefixes of the first pool.
-3. Add a success-rate/ADOP score and same-observation carrier-residual quality
-   score to subset ordering; tune only inside nested blocked CV.
+2. Repeat the raw-RINEX outage/cycle-slip/satellite-loss/NLOS matrix for `q4`
+   before any promotion beyond shadow use.
+3. Use the already-recorded bootstrap success rate and ADOP to order whole PAR
+   subsets, rather than adding more route-fitted scalar thresholds.
 4. Calibrate an FFRT/IA lookup or Monte-Carlo boundary per ambiguity dimension
    and covariance-quality band, while retaining disjoint validation as final
    publication authority.
