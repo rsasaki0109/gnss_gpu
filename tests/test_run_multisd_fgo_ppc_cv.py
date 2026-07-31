@@ -14,11 +14,13 @@ from experiments.run_multisd_fgo_ppc_cv import (
 
 
 def test_parse_policy_keeps_constellation_par_explicit() -> None:
-    policy = _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:1")
+    policy = _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:1:1.1:8")
     assert policy.constellation_ranked_par
+    assert policy.candidate_ratio == pytest.approx(1.1)
+    assert policy.candidate_groups == 8
 
     with pytest.raises(argparse.ArgumentTypeError, match="must be 0 or 1"):
-        _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:2")
+        _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:2:1.5:1")
 
 
 def _write_inputs(tmp_path: Path, errors: list[float]) -> tuple[Path, Path, Path]:
@@ -74,7 +76,7 @@ def test_score_artifact_counts_warmup_correct_false_and_blocks(tmp_path: Path) -
     score = score_artifact(
         "tokyo",
         "run1",
-        Policy("test", 2, 2, 0, 4, 0.5, 1, 1.0, 4, 4, False),
+        Policy("test", 2, 2, 0, 4, 0.5, 1, 1.0, 4, 4, False, 1.5, 1),
         pos,
         shadow,
         reference,

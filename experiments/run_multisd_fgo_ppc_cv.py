@@ -40,6 +40,8 @@ class Policy:
     minimum_fixed_ambiguities: int
     holdout_satellites: int
     constellation_ranked_par: bool
+    candidate_ratio: float
+    candidate_groups: int
 
 
 def _tow(value: str | float) -> float:
@@ -410,11 +412,12 @@ def nested_leave_one_run_out(
 
 def _parse_policy(raw: str) -> Policy:
     fields = raw.split(":")
-    if len(fields) != 11:
+    if len(fields) != 13:
         raise argparse.ArgumentTypeError(
             "policy must be NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:"
             "MAX_SEED_M:HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
-            "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1"
+            "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1:CANDIDATE_RATIO:"
+            "CANDIDATE_GROUPS"
         )
     if fields[10] not in ("0", "1"):
         raise argparse.ArgumentTypeError(
@@ -429,6 +432,8 @@ def _parse_policy(raw: str) -> Policy:
         int(fields[8]),
         int(fields[9]),
         bool(int(fields[10])),
+        float(fields[11]),
+        int(fields[12]),
     )
     if (
         policy.window < 2
@@ -443,6 +448,9 @@ def _parse_policy(raw: str) -> Policy:
         or not 0.0 < policy.minimum_carrier_fraction <= 1.0
         or not 2 <= policy.minimum_fixed_ambiguities <= 16
         or not 2 <= policy.holdout_satellites <= 16
+        or not math.isfinite(policy.candidate_ratio)
+        or policy.candidate_ratio < 1.0
+        or not 1 <= policy.candidate_groups <= 32
     ):
         raise argparse.ArgumentTypeError(f"invalid policy: {raw}")
     return policy
@@ -493,6 +501,14 @@ def _run_one(
         command.extend(("--max-epochs", str(max_epochs)))
     if policy.constellation_ranked_par:
         command.append("--multisd-fgo-shadow-constellation-par")
+    command.extend(
+        (
+            "--multisd-fgo-shadow-candidate-ratio",
+            str(policy.candidate_ratio),
+            "--multisd-fgo-shadow-candidate-groups",
+            str(policy.candidate_groups),
+        )
+    )
     if analyze_only:
         if not artifacts_complete(pos_path, shadow_path, max_epochs):
             raise ValueError(
@@ -544,7 +560,8 @@ def main() -> int:
         help=(
             "NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:MAX_SEED_M:"
             "HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
-            "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1"
+            "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1:CANDIDATE_RATIO:"
+            "CANDIDATE_GROUPS"
         ),
     )
     parser.add_argument("--max-epochs", type=int, default=0)
@@ -564,7 +581,7 @@ def main() -> int:
     policies = args.policy or [
         Policy(
             "locked_w10_o2_k4_s05_h3_f075_m6",
-            10, 10, 2, 4, 0.5, 3, 0.75, 6, 4, False,
+            10, 10, 2, 4, 0.5, 3, 0.75, 6, 4, False, 1.5, 1,
         )
     ]
     routes = (
