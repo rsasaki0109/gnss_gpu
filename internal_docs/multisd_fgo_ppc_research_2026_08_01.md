@@ -315,6 +315,48 @@ sparse for policy comparison. A predeclared two-fold split retained
 zero >1 m, and 16.93 ms p95. Therefore the executable arc-held-out matrix will
 use two fully disjoint folds rather than weakening the six-ambiguity minimum.
 
+The complete 6-route x 2-fold x 300-epoch replay then compared `g4` and `q4`.
+Both produced 820 correct fixes, but `q4` emitted one 0.654 m false fix at
+Nagoya/run2 fold 1 (TOW 555777.6). The candidate came from fallback rank 6 and
+had BSR 0.9844, ADOP 0.199 cycles, and maximum integer distance 0.441 cycles.
+`q4` is therefore rejected despite its clean full-route and fault results.
+
+A follow-up `qf` policy leaves the first `q4` candidate group unchanged but
+requires BSR >=0.9999 for later validator groups. This removes the arc-held-out
+false candidate without applying the availability-reducing gate to first-group
+fixes:
+
+| Policy | Arc-held-out correct | False | >1 m | Worst p95 |
+|---|---:|---:|---:|---:|
+| `g4` | 820 | 0 | 0 | 54.34 ms |
+| `q4` | 820 | 1 | 0 | 25.15 ms |
+| `qf` | 820 | 0 | 0 | 26.69 ms |
+
+On the production routes, `qf` retains almost all of the Tokyo quality gain
+and the full safe Nagoya result:
+
+| City | Production baseline | `qf` union | Rate | False | >1 m | p95 |
+|---|---:|---:|---:|---:|---:|---:|
+| Tokyo | 5,984 | 6,191/11,928 | 51.9031% | 0 | 0 | 31.31 ms |
+| Nagoya | 5,047 | 5,305/7,602 | 69.7843% | 0 | 0 | 25.23 ms |
+
+The frozen eight-case fault replay also passes for `qf`:
+
+| City | Fault | Correct FIX | False | >1 m | p95 ms |
+|---|---|---:|---:|---:|---:|
+| Tokyo | outage | 403 | 0 | 0 | 35.84 |
+| Tokyo | cycle slip | 451 | 0 | 0 | 38.35 |
+| Tokyo | satellite loss | 385 | 0 | 0 | 41.65 |
+| Tokyo | NLOS | 389 | 0 | 0 | 83.54 |
+| Nagoya | outage | 529 | 0 | 0 | 26.66 |
+| Nagoya | cycle slip | 655 | 0 | 0 | 25.90 |
+| Nagoya | satellite loss | 554 | 0 | 0 | 26.34 |
+| Nagoya | NLOS | 507 | 0 | 0 | 41.96 |
+
+All 3,873 fault-replay fixes are correct. `qf` is the highest measured
+non-regressing candidate at this point. It remains a default-off shadow policy:
+51.90%/69.78% is still far below the 70%/80% stretch objective.
+
 ## Next ranked experiments
 
 1. Run ambiguity-arc blocked nested CV over groups 1/4, fallback consensus

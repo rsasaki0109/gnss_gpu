@@ -43,6 +43,14 @@ def test_parse_policy_keeps_constellation_par_explicit() -> None:
         0.9999
     )
     assert success_policy.maximum_adop_cycles == pytest.approx(0.1)
+    fallback_success_policy = _parse_policy(
+        "qf:10:10:2:4:0.5:3:0.75:6:4:1:1.1:8:2:0.1:0.25:1:0:"
+        "0:0:0.9999"
+    )
+    assert (
+        fallback_success_policy.fallback_minimum_bootstrapped_success_rate
+        == pytest.approx(0.9999)
+    )
 
     with pytest.raises(argparse.ArgumentTypeError, match="must be 0 or 1"):
         _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:2:1.5:1:1:0:0")

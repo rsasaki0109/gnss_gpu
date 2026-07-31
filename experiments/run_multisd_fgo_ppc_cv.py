@@ -49,6 +49,7 @@ class Policy:
     interleave_constellation_par: bool = False
     minimum_bootstrapped_success_rate: float = 0.0
     maximum_adop_cycles: float = 0.0
+    fallback_minimum_bootstrapped_success_rate: float = 0.0
 
 
 def _tow(value: str | float) -> float:
@@ -458,7 +459,7 @@ def nested_leave_one_run_out(
 
 def _parse_policy(raw: str) -> Policy:
     fields = raw.split(":")
-    if len(fields) not in (16, 17, 18, 20):
+    if len(fields) not in (16, 17, 18, 20, 21):
         raise argparse.ArgumentTypeError(
             "policy must be NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:"
             "MAX_SEED_M:HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
@@ -466,7 +467,7 @@ def _parse_policy(raw: str) -> Policy:
             "CANDIDATE_GROUPS:FALLBACK_CONSENSUS_GROUPS:"
             "FALLBACK_CONSENSUS_SEPARATION_M:FALLBACK_MAX_SEED_M:"
             "QUALITY_RANKED_PAR_0_OR_1:INTERLEAVE_CONSTELLATION_PAR_0_OR_1:"
-            "MIN_BSR:MAX_ADOP_CYCLES"
+            "MIN_BSR:MAX_ADOP_CYCLES:FALLBACK_MIN_BSR"
         )
     if fields[10] not in ("0", "1"):
         raise argparse.ArgumentTypeError(
@@ -496,8 +497,9 @@ def _parse_policy(raw: str) -> Policy:
         float(fields[15]),
         bool(int(fields[16])) if len(fields) >= 17 else False,
         bool(int(fields[17])) if len(fields) >= 18 else False,
-        float(fields[18]) if len(fields) == 20 else 0.0,
-        float(fields[19]) if len(fields) == 20 else 0.0,
+        float(fields[18]) if len(fields) >= 20 else 0.0,
+        float(fields[19]) if len(fields) >= 20 else 0.0,
+        float(fields[20]) if len(fields) == 21 else 0.0,
     )
     if (
         policy.window < 2
@@ -528,6 +530,10 @@ def _parse_policy(raw: str) -> Policy:
         or not 0.0 <= policy.minimum_bootstrapped_success_rate <= 1.0
         or not math.isfinite(policy.maximum_adop_cycles)
         or policy.maximum_adop_cycles < 0.0
+        or not math.isfinite(
+            policy.fallback_minimum_bootstrapped_success_rate
+        )
+        or not 0.0 <= policy.fallback_minimum_bootstrapped_success_rate <= 1.0
     ):
         raise argparse.ArgumentTypeError(f"invalid policy: {raw}")
     return policy
@@ -598,6 +604,8 @@ def _run_one(
             str(policy.minimum_bootstrapped_success_rate),
             "--multisd-fgo-shadow-max-adop",
             str(policy.maximum_adop_cycles),
+            "--multisd-fgo-shadow-fallback-min-bsr",
+            str(policy.fallback_minimum_bootstrapped_success_rate),
         )
     )
     if analyze_only:
@@ -655,7 +663,7 @@ def main() -> int:
             "CANDIDATE_GROUPS:FALLBACK_CONSENSUS_GROUPS:"
             "FALLBACK_CONSENSUS_SEPARATION_M:FALLBACK_MAX_SEED_M:"
             "QUALITY_RANKED_PAR_0_OR_1:INTERLEAVE_CONSTELLATION_PAR_0_OR_1:"
-            "MIN_BSR:MAX_ADOP_CYCLES"
+            "MIN_BSR:MAX_ADOP_CYCLES:FALLBACK_MIN_BSR"
         ),
     )
     parser.add_argument("--max-epochs", type=int, default=0)
