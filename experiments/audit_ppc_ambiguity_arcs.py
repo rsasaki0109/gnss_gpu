@@ -49,8 +49,8 @@ def _tow(header: str) -> float:
     )
 
 
-def _fold(arc_id: str, fold_count: int) -> int:
-    digest = hashlib.sha256(arc_id.encode("utf-8")).digest()
+def _fold(arc_id: str, fold_count: int, salt: str = "") -> int:
+    digest = hashlib.sha256(f"{salt}:{arc_id}".encode("utf-8")).digest()
     return int.from_bytes(digest[:8], "big") % fold_count
 
 
@@ -60,6 +60,7 @@ def audit_rinex_arcs(
     *,
     maximum_gap_s: float = 1.5,
     fold_count: int = 5,
+    fold_salt: str = "",
 ) -> dict[str, object]:
     if maximum_gap_s <= 0.0 or fold_count < 2:
         raise ValueError("maximum_gap_s must be positive and fold_count >= 2")
@@ -138,7 +139,7 @@ def audit_rinex_arcs(
                                 tow,
                                 1,
                                 lli not in ("", "0"),
-                                _fold(arc_id, fold_count),
+                                _fold(arc_id, fold_count, fold_salt),
                             )
                         )
                         active[key] = (len(arcs) - 1, tow)
@@ -187,6 +188,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--maximum-gap", type=float, default=1.5)
+    parser.add_argument("--salt", default="")
     args = parser.parse_args()
 
     routes = [
@@ -195,6 +197,7 @@ def main() -> int:
             f"{city}/{run}",
             maximum_gap_s=args.maximum_gap,
             fold_count=args.folds,
+            fold_salt=args.salt,
         )
         for city, run in ROUTES
     ]
@@ -207,7 +210,8 @@ def main() -> int:
     payload = {
         "schema": "gnss_gpu_ppc_ambiguity_arc_audit_v1",
         "inputs": "PPC rover RINEX carrier phase and LLI only",
-        "fold_assignment": "sha256(route,satellite,signal,arc-start) modulo folds",
+        "fold_assignment": "sha256(salt,route,satellite,signal,arc-start) modulo folds",
+        "fold_salt": args.salt,
         "route_namespaced_leave_one_run_out_overlap": overlap,
         "routes": routes,
     }

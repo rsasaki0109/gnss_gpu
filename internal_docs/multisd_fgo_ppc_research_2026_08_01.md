@@ -332,6 +332,14 @@ fixes:
 | `q4` | 820 | 1 | 0 | 25.15 ms |
 | `qf` | 820 | 0 | 0 | 26.69 ms |
 
+Because the `qf` fallback threshold was designed after seeing the first split's
+`q4` failure, it was not considered independently validated on that split. The
+arc assignment therefore gained an explicit hash salt, and a predeclared fresh
+`outer-v2` two-fold matrix was rerun after freezing `qf`. On that independent
+split, both `g4` and `qf` produced 463 correct fixes, zero false, and zero >1 m;
+`qf` worst-route p95 was 19.30 ms. The two independent arc assignments thus
+show no `qf` availability regression or false fix relative to `g4`.
+
 On the production routes, `qf` retains almost all of the Tokyo quality gain
 and the full safe Nagoya result:
 

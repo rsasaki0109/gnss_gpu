@@ -25,6 +25,7 @@ def write_arc_fold_mask(
     fold_count: int = 5,
     maximum_gap_s: float = 1.5,
     keep_selected: bool = True,
+    fold_salt: str = "",
 ) -> dict[str, object]:
     if not 0 <= selected_fold < fold_count:
         raise ValueError("selected_fold must be in [0, fold_count)")
@@ -105,7 +106,7 @@ def write_arc_fold_mask(
                             f"{route}:{satellite}:{observation_type}:"
                             f"{tow:.3f}:{sequence}"
                         )
-                        fold = _fold(arc_id, fold_count)
+                        fold = _fold(arc_id, fold_count, fold_salt)
                     else:
                         arc_id, _, fold = prior
                     active[key] = (arc_id, tow, fold)
@@ -129,6 +130,7 @@ def write_arc_fold_mask(
         "fold_count": fold_count,
         "selected_fold": selected_fold,
         "mode": "keep" if keep_selected else "drop",
+        "fold_salt": fold_salt,
         "epochs": epoch_count,
         "ambiguity_arcs": len(arc_ids),
         "kept_carrier_fields": kept_fields,
@@ -145,6 +147,7 @@ def main() -> int:
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--maximum-gap", type=float, default=1.5)
     parser.add_argument("--mode", choices=("keep", "drop"), default="keep")
+    parser.add_argument("--salt", default="")
     parser.add_argument("--manifest", type=Path)
     args = parser.parse_args()
     result = write_arc_fold_mask(
@@ -155,6 +158,7 @@ def main() -> int:
         fold_count=args.folds,
         maximum_gap_s=args.maximum_gap,
         keep_selected=args.mode == "keep",
+        fold_salt=args.salt,
     )
     result["output_sha256"] = hashlib.sha256(
         args.output.read_bytes()

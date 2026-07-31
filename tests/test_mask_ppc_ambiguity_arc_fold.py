@@ -44,3 +44,31 @@ def test_mask_keeps_complete_arc_and_preserves_code(tmp_path: Path) -> None:
     assert "100000.000" not in text
     assert text.count("20000000.000") == 2
     assert manifest["masked_carrier_fields"] == 2
+
+
+def test_mask_uses_explicit_fold_salt(tmp_path: Path) -> None:
+    source = tmp_path / "source.obs"
+    output = tmp_path / "fold.obs"
+    source.write_text(
+        "     3.04           OBSERVATION DATA    M                   RINEX VERSION / TYPE\n"
+        "G    2 C1C L1C                                          SYS / # / OBS TYPES\n"
+        "                                                            END OF HEADER\n"
+        "> 2024 10 19 00 00 00.0000000  0  1\n"
+        f"G01{_field(20_000_000.0)}{_field(100_000.0)}\n",
+        encoding="ascii",
+    )
+    arc_id = "tokyo/test:G01:L1C:518400.000:0"
+    salt = "outer-v2"
+    selected = _fold(arc_id, 2, salt)
+
+    manifest = write_arc_fold_mask(
+        source,
+        output,
+        "tokyo/test",
+        selected,
+        fold_count=2,
+        fold_salt=salt,
+    )
+
+    assert manifest["fold_salt"] == salt
+    assert manifest["kept_carrier_fields"] == 1
