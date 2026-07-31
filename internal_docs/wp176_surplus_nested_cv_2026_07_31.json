@@ -1,0 +1,139 @@
+{
+  "aggregate_holdout_correct": 672,
+  "aggregate_holdout_wrong": 0,
+  "aggregate_holdout_wrong_rate": 0.0,
+  "folds": [
+    {
+      "block": 0,
+      "city": "tokyo",
+      "holdout_correct": 30,
+      "holdout_wrong": 0,
+      "policy": {
+        "maximum_distance_cycles": 0.1,
+        "minimum_ratio": 1.4,
+        "minimum_subset_pairs": 8
+      },
+      "training_correct": 642,
+      "training_wrong": 0
+    },
+    {
+      "block": 1,
+      "city": "tokyo",
+      "holdout_correct": 78,
+      "holdout_wrong": 0,
+      "policy": {
+        "maximum_distance_cycles": 0.1,
+        "minimum_ratio": 1.4,
+        "minimum_subset_pairs": 8
+      },
+      "training_correct": 594,
+      "training_wrong": 0
+    },
+    {
+      "block": 2,
+      "city": "tokyo",
+      "holdout_correct": 52,
+      "holdout_wrong": 0,
+      "policy": {
+        "maximum_distance_cycles": 0.1,
+        "minimum_ratio": 1.4,
+        "minimum_subset_pairs": 8
+      },
+      "training_correct": 620,
+      "training_wrong": 0
+    },
+    {
+      "block": 3,
+      "city": "tokyo",
+      "holdout_correct": 62,
+      "holdout_wrong": 0,
+      "policy": {
+        "maximum_distance_cycles": 0.1,
+        "minimum_ratio": 1.4,
+        "minimum_subset_pairs": 8
+      },
+      "training_correct": 610,
+      "training_wrong": 0
+    },
+    {
+      "block": 4,
+      "city": "tokyo",
+      "holdout_correct": 195,
+      "holdout_wrong": 0,
+      "policy": {
+        "maximum_distance_cycles": 0.1,
+        "minimum_ratio": 1.4,
+        "minimum_subset_pairs": 8
+      },
+      "training_correct": 477,
+      "training_wrong": 0
+    },
+    {
+      "block": 0,
+      "city": "nagoya",
+      "holdout_correct": 12,
+      "holdout_wrong": 0,
+      "policy": {
+        "maximum_distance_cycles": 0.1,
+        "minimum_ratio": 1.4,
+        "minimum_subset_pairs": 8
+      },
+      "training_correct": 660,
+      "training_wrong": 0
+    },
+    {
+      "block": 1,
+      "city": "nagoya",
+      "holdout_correct": 41,
+      "holdout_wrong": 0,
+      "policy": {
+        "maximum_distance_cycles": 0.1,
+        "minimum_ratio": 1.4,
+        "minimum_subset_pairs": 8
+      },
+      "training_correct": 631,
+      "training_wrong": 0
+    },
+    {
+      "block": 2,
+      "city": "nagoya",
+      "holdout_correct": 49,
+      "holdout_wrong": 0,
+      "policy": {
+        "maximum_distance_cycles": 0.1,
+        "minimum_ratio": 1.4,
+        "minimum_subset_pairs": 8
+      },
+      "training_correct": 623,
+      "training_wrong": 0
+    },
+    {
+      "block": 3,
+      "city": "nagoya",
+      "holdout_correct": 51,
+      "holdout_wrong": 0,
+      "policy": {
+        "maximum_distance_cycles": 0.1,
+        "minimum_ratio": 1.4,
+        "minimum_subset_pairs": 8
+      },
+      "training_correct": 621,
+      "training_wrong": 0
+    },
+    {
+      "block": 4,
+      "city": "nagoya",
+      "holdout_correct": 102,
+      "holdout_wrong": 0,
+      "policy": {
+        "maximum_distance_cycles": 0.1,
+        "minimum_ratio": 1.4,
+        "minimum_subset_pairs": 8
+      },
+      "training_correct": 570,
+      "training_wrong": 0
+    }
+  ],
+  "schema": "gnss_gpu_wp176_surplus_nested_cv_v1",
+  "truth_usage": "training folds select policy; disjoint time block is holdout"
+}

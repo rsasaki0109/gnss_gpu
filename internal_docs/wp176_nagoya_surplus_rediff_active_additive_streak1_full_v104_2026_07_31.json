@@ -1,0 +1,80 @@
+{
+  "active": {
+    "epochs": 7602,
+    "false_fixed_epochs": 0,
+    "fix_rate": 0.6937647987371744,
+    "fixed_epochs": 5274,
+    "fixed_error_p95_m": 0.20068646343887184,
+    "over_1m_false_fixed_epochs": 0
+  },
+  "active_runtime_p95_100ms_pass": true,
+  "active_runtime_p95_ms": 46.717729999999996,
+  "city": "nagoya",
+  "contiguous_time_blocks": [
+    {
+      "block": 0,
+      "strict_candidates": 203,
+      "strict_correct_candidates": 203,
+      "strict_wrong_candidates": 0
+    },
+    {
+      "block": 1,
+      "strict_candidates": 147,
+      "strict_correct_candidates": 147,
+      "strict_wrong_candidates": 0
+    },
+    {
+      "block": 2,
+      "strict_candidates": 170,
+      "strict_correct_candidates": 170,
+      "strict_wrong_candidates": 0
+    },
+    {
+      "block": 3,
+      "strict_candidates": 358,
+      "strict_correct_candidates": 358,
+      "strict_wrong_candidates": 0
+    },
+    {
+      "block": 4,
+      "strict_candidates": 486,
+      "strict_correct_candidates": 486,
+      "strict_wrong_candidates": 0
+    }
+  ],
+  "fix_rate_delta": 0.03328071560115764,
+  "fixed_epoch_delta": 253,
+  "input_hashes": {
+    "active_integrity": "ca6f43dceedd7ac1cc97676abf8a75f522b16beddb8f6351618e733afd597f92",
+    "active_positions": "2b15ddd5204afed46b94df34f6c8e766c5b9eabdc3db907e651488d96ba57b71",
+    "monitor_integrity": "041ae3634e8a5a95a100fb5f7063f9056a5fa52e9e3a5947859b2b468ee44998",
+    "monitor_positions": "f02d289e1909f2870ab12e0309b9fd070741948b5f2097a083cc6399fcaf7b94",
+    "reference": "804f7b1d6845c2c5c717fe7868b7637a4a40bfb2e4a9f6811042b18d5ef00e0d"
+  },
+  "monitor": {
+    "epochs": 7602,
+    "false_fixed_epochs": 0,
+    "fix_rate": 0.6604840831360168,
+    "fixed_epochs": 5021,
+    "fixed_error_p95_m": 0.20160930299761853,
+    "over_1m_false_fixed_epochs": 0
+  },
+  "satellite_par_promoted_epochs": 285,
+  "schema": "gnss_gpu_wp176_satellite_par_surplus_validation_v1",
+  "selection_policy": {
+    "acquisition_streak_epochs": 1,
+    "maximum_integer_distance_cycles": 0.1,
+    "maximum_nis_per_observation": 3.0,
+    "maximum_prefit_residual_rms_m": 50.0,
+    "minimum_fixed_subset_pairs": 8,
+    "minimum_ratio": 1.4
+  },
+  "strict_candidates": 1364,
+  "strict_correct_candidates": 1364,
+  "strict_over_1m_wrong_candidates": 0,
+  "strict_wrong_candidates": 0,
+  "surplus_evaluated_candidates": 4024,
+  "surplus_passing_candidates": 2245,
+  "surplus_passing_wrong_candidates": 5,
+  "truth_usage": "post_selection_audit_only"
+}
