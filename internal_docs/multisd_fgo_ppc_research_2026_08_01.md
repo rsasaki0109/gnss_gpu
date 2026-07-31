@@ -211,8 +211,25 @@ On the production Tokyo run, `q4` increased the production-priority union from
 | Nagoya | `g4` | 5,305 | 7,602 | 69.7843% | 0 | 0 | 47.70 ms |
 
 Thus residual-aware ordering is a safe measured Tokyo gain (+32 production
-rescues over `g4`) but remains far below the 70% stretch target. It remains
-default-off pending the same raw-RINEX fault matrix already passed by `g4`.
+rescues over `g4`) but remains far below the 70% stretch target.
+
+The same fixed raw-RINEX fault inputs were then replayed with `q4`:
+
+| City | Fault | Correct FIX | False | >1 m | p95 ms |
+|---|---|---:|---:|---:|---:|
+| Tokyo | outage | 403 | 0 | 0 | 48.33 |
+| Tokyo | cycle slip | 451 | 0 | 0 | 46.26 |
+| Tokyo | satellite loss | 385 | 0 | 0 | 43.72 |
+| Tokyo | NLOS | 389 | 0 | 0 | 65.20 |
+| Nagoya | outage | 533 | 0 | 0 | 24.38 |
+| Nagoya | cycle slip | 662 | 0 | 0 | 25.43 |
+| Nagoya | satellite loss | 561 | 0 | 0 | 22.11 |
+| Nagoya | NLOS | 513 | 0 | 0 | 53.85 |
+
+All 3,897 shadow fixes were correct, with zero >1 m errors and every case p95
+below 100 ms. The inputs were the already frozen injected rover RINEX files;
+no truth or additional sensor was used by the solver. `q4` passes this fault
+gate but remains default-off until ambiguity-arc blocked CV is complete.
 
 ### Constellation-pool interleave
 
