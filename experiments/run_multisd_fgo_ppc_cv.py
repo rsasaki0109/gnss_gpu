@@ -42,6 +42,9 @@ class Policy:
     constellation_ranked_par: bool
     candidate_ratio: float
     candidate_groups: int
+    fallback_consensus_groups: int
+    fallback_consensus_separation_m: float
+    fallback_max_seed_separation_m: float
 
 
 def _tow(value: str | float) -> float:
@@ -412,12 +415,13 @@ def nested_leave_one_run_out(
 
 def _parse_policy(raw: str) -> Policy:
     fields = raw.split(":")
-    if len(fields) != 13:
+    if len(fields) != 16:
         raise argparse.ArgumentTypeError(
             "policy must be NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:"
             "MAX_SEED_M:HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
             "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1:CANDIDATE_RATIO:"
-            "CANDIDATE_GROUPS"
+            "CANDIDATE_GROUPS:FALLBACK_CONSENSUS_GROUPS:"
+            "FALLBACK_CONSENSUS_SEPARATION_M:FALLBACK_MAX_SEED_M"
         )
     if fields[10] not in ("0", "1"):
         raise argparse.ArgumentTypeError(
@@ -434,6 +438,9 @@ def _parse_policy(raw: str) -> Policy:
         bool(int(fields[10])),
         float(fields[11]),
         int(fields[12]),
+        int(fields[13]),
+        float(fields[14]),
+        float(fields[15]),
     )
     if (
         policy.window < 2
@@ -451,6 +458,15 @@ def _parse_policy(raw: str) -> Policy:
         or not math.isfinite(policy.candidate_ratio)
         or policy.candidate_ratio < 1.0
         or not 1 <= policy.candidate_groups <= 32
+        or not 1 <= policy.fallback_consensus_groups <= 32
+        or not math.isfinite(policy.fallback_consensus_separation_m)
+        or policy.fallback_consensus_separation_m < 0.0
+        or (
+            policy.fallback_consensus_groups > 1
+            and policy.fallback_consensus_separation_m <= 0.0
+        )
+        or not math.isfinite(policy.fallback_max_seed_separation_m)
+        or policy.fallback_max_seed_separation_m < 0.0
     ):
         raise argparse.ArgumentTypeError(f"invalid policy: {raw}")
     return policy
@@ -507,6 +523,12 @@ def _run_one(
             str(policy.candidate_ratio),
             "--multisd-fgo-shadow-candidate-groups",
             str(policy.candidate_groups),
+            "--multisd-fgo-shadow-fallback-consensus-groups",
+            str(policy.fallback_consensus_groups),
+            "--multisd-fgo-shadow-fallback-consensus-separation",
+            str(policy.fallback_consensus_separation_m),
+            "--multisd-fgo-shadow-fallback-max-seed-separation",
+            str(policy.fallback_max_seed_separation_m),
         )
     )
     if analyze_only:
@@ -561,7 +583,8 @@ def main() -> int:
             "NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:MAX_SEED_M:"
             "HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
             "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1:CANDIDATE_RATIO:"
-            "CANDIDATE_GROUPS"
+            "CANDIDATE_GROUPS:FALLBACK_CONSENSUS_GROUPS:"
+            "FALLBACK_CONSENSUS_SEPARATION_M:FALLBACK_MAX_SEED_M"
         ),
     )
     parser.add_argument("--max-epochs", type=int, default=0)
@@ -581,7 +604,8 @@ def main() -> int:
     policies = args.policy or [
         Policy(
             "locked_w10_o2_k4_s05_h3_f075_m6",
-            10, 10, 2, 4, 0.5, 3, 0.75, 6, 4, False, 1.5, 1,
+            10, 10, 2, 4, 0.5, 3, 0.75, 6, 4, False,
+            1.5, 1, 1, 0.0, 0.0,
         )
     ]
     routes = (

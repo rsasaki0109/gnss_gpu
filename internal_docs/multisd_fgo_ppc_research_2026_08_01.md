@@ -111,21 +111,94 @@ observed on the final route and must be treated only as candidates for blocked
 nested CV. The next implementation should prefer cross-subset consensus or an
 FFRT-calibrated fallback aperture over a route-fitted scalar cutoff.
 
+### Cross-subset consensus and fallback aperture
+
+A second default-off experiment requires later PAR groups to be corroborated
+by multiple subset solutions whose latest positions agree pairwise. The first
+group retains its original unique-top-K decision. With eight candidate groups,
+two-group consensus, and 0.1 m maximum pairwise separation, the complete Tokyo
+route still produced two >1 m false fixes: the same wrong basin was supported
+by two or three subsets. Both had large separation from the independent GNSS
+seed (0.391 m and 0.485 m).
+
+The follow-up adds a fallback-only seed aperture. It does not tighten or alter
+the first candidate group. A four-group budget, two-group/0.1 m consensus, and
+0.25 m fallback seed aperture is the best safe latency-bounded candidate so
+far:
+
+| City | Production baseline correct | Union correct | Rate | False | p95 |
+|---|---:|---:|---:|---:|---:|
+| Tokyo | 5,984 | 6,161 | 51.6516% | 0 | 55.13 ms |
+| Nagoya | 5,047 | 5,305 | 69.7843% | 0 | 47.70 ms |
+
+Relative to the safe one-group/candidate-ratio-1.0 experiment, this adds ten
+Tokyo and one Nagoya production-FLOAT rescues. This is a small, safe diagnostic
+gain, not the 70%/80% target and not a production promotion. The 0.25 m value
+must still survive blocked policy selection because it was motivated after the
+complete-route failure analysis.
+
+Eight groups had the same safe Nagoya union only after the fallback aperture,
+but its full-route CPU p95 was 142.94 ms. Reducing the budget to four retained
+all 258 Nagoya rescues and reduced p95 to 47.70 ms.
+
+### CUDA parity and performance result
+
+The CUDA Release build and explicit CUDA MultiSD smoke passed. Across all six
+300-epoch routes, CPU and CUDA had identical FIX epoch sets and zero ECEF
+coordinate difference for common fixes. CUDA reported 77,647/77,647 successful
+solves and zero fallback. Nevertheless, the current fine-grained serial GPU
+path is slower: route p95 ranged from 84.88 to 407.76 ms, versus 31.41 to
+85.05 ms for the CPU eight-group policy. GPU is therefore parity-qualified but
+performance-rejected. A future GPU change must batch candidate/group RHS solves
+instead of launching each small dense optimization separately.
+
+### Raw-RINEX fault matrix
+
+The four-group candidate was replayed for 1000-epoch prefixes after deterministic
+GNSS rover-RINEX injection. Injection used production FIX anchors, never truth.
+Tokyo outage/NLOS used four events because eight events could not satisfy the
+anchor-spacing constraint; all other cases used eight.
+
+| City | Fault | Events | Correct FIX | False | >1 m | p95 ms |
+|---|---|---:|---:|---:|---:|---:|
+| Tokyo | outage | 4 | 332 | 0 | 0 | 63.12 |
+| Tokyo | cycle slip | 8 | 360 | 0 | 0 | 65.62 |
+| Tokyo | satellite loss | 8 | 324 | 0 | 0 | 61.10 |
+| Tokyo | NLOS | 4 | 315 | 0 | 0 | 97.30 |
+| Nagoya | outage | 8 | 523 | 0 | 0 | 37.46 |
+| Nagoya | cycle slip | 8 | 651 | 0 | 0 | 49.39 |
+| Nagoya | satellite loss | 8 | 553 | 0 | 0 | 39.13 |
+| Nagoya | NLOS | 8 | 505 | 0 | 0 | 95.05 |
+
+The matrix contains 5,785 correct fixes, zero false fixes, zero >1 m false
+fixes, and all case-level p95 values below 100 ms.
+
+### Two-policy outer CV
+
+The six 300-epoch routes were rerun together with two policies: the safe
+one-group candidate-ratio-1.0 baseline and the four-group consensus/aperture
+candidate. Outer leave-one-run-out selection chose the four-group policy in
+all six folds. Its selected holdout aggregate was 1,020/1,798 correct fixes,
+zero false fixes, and zero >1 m false fixes, versus 1,009 correct fixes for the
+one-group policy. This validates the small PPC-prefix gain without using the
+complete-route KPI for selection. It does not yet constitute an independent
+external-data generalization claim.
+
 ## Next ranked experiments
 
-1. Validator-aware groups=8 versus groups=1 on all six 300-epoch routes.
-2. If safe, run both complete production routes and measure union FIX, false
-   FIX, >1 m errors, candidate-group depth, and p95/max latency.
-3. Interleave constellation pools at equal subset depth so the group budget
+1. Run ambiguity-arc blocked nested CV over groups 1/4, fallback consensus
+   disabled/enabled, and conservative fallback aperture candidates; the full
+   route remains evaluation-only.
+2. Interleave constellation pools at equal subset depth so the group budget
    covers satellite/source diversity rather than only successively smaller
    prefixes of the first pool.
-4. Add a success-rate/ADOP score and same-observation carrier-residual quality
+3. Add a success-rate/ADOP score and same-observation carrier-residual quality
    score to subset ordering; tune only inside nested blocked CV.
-5. Calibrate an FFRT/IA lookup or Monte-Carlo boundary per ambiguity dimension
+4. Calibrate an FFRT/IA lookup or Monte-Carlo boundary per ambiguity dimension
    and covariance-quality band, while retaining disjoint validation as final
    publication authority.
-6. Run ambiguity-arc blocked nested CV plus NLOS, outage, cycle-slip, and
-   satellite-loss injection, then CPU/CUDA parity and p95 <=100 ms gates.
+5. Implement batched GPU RHS solves for top-K/group evaluation, then repeat
+   CPU/CUDA parity and p95 <=100 ms gates.
 
 Failure to reach 70%/80% is reported as a measured candidate/oracle boundary;
 it does not authorize relaxing the false-fix integrity limits.
