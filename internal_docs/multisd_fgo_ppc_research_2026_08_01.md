@@ -365,13 +365,86 @@ All 3,873 fault-replay fixes are correct. `qf` is the highest measured
 non-regressing candidate at this point. It remains a default-off shadow policy:
 51.90%/69.78% is still far below the 70%/80% stretch objective.
 
+### Fixed-lag window ablation
+
+Longer fixed-lag windows were tested as a predeclared candidate-supply probe,
+without changing the frozen `qf` quality ranking or fallback BSR gate. The same
+six 300-epoch route prefixes were replayed with minimum epochs held at 10, so
+the comparison isolates windows 10, 15, and 25 rather than adding a longer
+warm-up. Reference truth remained post-solver scoring only.
+
+| Window policy | Correct FIX | False | >1 m | Tokyo correct | Nagoya correct | Worst route p95 |
+|---|---:|---:|---:|---:|---:|---:|
+| `qf10` | 1,047 | 0 | 0 | 623 | 424 | 60.54 ms |
+| `qf15` | 1,036 | 0 | 0 | 623 | 413 | 113.11 ms |
+| `qf25` | 1,032 | 0 | 0 | 614 | 418 | 189.05 ms |
+
+Nested leave-one-run-out selection chose `qf10` for every outer fold. The
+longer windows therefore reduce candidate supply and exceed the 100 ms budget;
+they are rejected without a full-route promotion run. This closes fixed-lag
+length as the immediate stretch lever. Further availability work must create
+new ambiguity hypotheses or new independent validation evidence, not retain
+the same state longer.
+
+The next predeclared ablation lowered the minimum PAR dimension from six to
+five and four while retaining `qf10`, four holdout satellites, quality-ranked
+groups, and the fallback-only BSR >=0.9999 gate. All three policies produced
+exactly 1,047 correct fixes (Tokyo 623, Nagoya 424), zero false fixes, and zero
+>1 m fixes on the same six-route probe. Their worst route p95 values were
+35.14, 35.04, and 33.86 ms for dimensions six, five, and four. Therefore every
+accepted subset was already at least six-dimensional: lowering the PAR floor
+creates no additional hypotheses and is rejected as an availability lever.
+
+### Dual holdout-partition union
+
+Reducing the validator holdout from four satellites to three was previously
+unsafe before quality ranking and the fallback BSR gate. With frozen `qf`, the
+six-route 300-epoch replay produced 997 correct fixes and zero false fixes for
+the three-satellite partition, versus 1,047/0 for the four-satellite partition.
+Although the smaller holdout is worse alone, their fail-closed union accepts a
+single-partition result or two results agreeing within 0.1 m. It produced 683
+Tokyo and 523 Nagoya correct fixes, zero false, zero >1 m, and no conflicts.
+
+A new `outer-v3-holdout` salted two-fold ambiguity-arc replay then produced
+452 correct fixes for holdout four, 474 for holdout three, and 481 for their
+union. All had zero false and zero >1 m fixes; the union added 29 correct fixes
+without a position conflict. Sparse arc folds supplied candidates only on two
+Tokyo fold/routes in this salt, so this is independent safety evidence rather
+than a Nagoya availability claim.
+
+On the full production routes, baseline-priority dual holdout improves the
+highest safe result again:
+
+| City | Baseline | Dual union | Rate | Delta vs `qf` | False | >1 m | Conflicts rejected | Sequential p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Tokyo | 5,984 | 6,237/11,928 | 52.2887% | +46 | 0 | 0 | 1 | 58.08 ms |
+| Nagoya | 5,047 | 5,344/7,602 | 70.2973% | +39 | 0 | 0 | 0 | 47.15 ms |
+
+The same union passed all eight frozen raw-RINEX fault replays with 4,547
+correct fixes, zero false, and zero >1 m; two Nagoya partition conflicts were
+rejected. Seven sequential p95 values are below 100 ms. Tokyo NLOS is 145.84
+ms sequential, while the measured per-epoch parallel lower-bound p95 is 84.90
+ms because each individual partition remains below budget. Parallel partition
+execution is therefore required before this default-off candidate can satisfy
+the runtime gate. `experiments/audit_multisd_fgo_dual_holdout.py` records the
+fail-closed union, runtimes, truth-use boundary, and artifact hashes.
+
+A direct two-`FGOProcessor` CPU experiment was performance-rejected. Leaving
+each partition's internal top-K `std::async` enabled caused nested
+oversubscription; disabling it made the repeated fixed-hypothesis
+reoptimizations serial and a 300-epoch Tokyo probe exceeded six minutes. The
+solver experiment was reverted with zero tracked gnssplusplus diff. The next
+implementation must batch/shared-factorize hypothesis RHS solves or separate
+CPU/CUDA work; spawning a second outer CPU task is not an accepted speedup.
+
 ## Next ranked experiments
 
-1. Run ambiguity-arc blocked nested CV over groups 1/4, fallback consensus
-   disabled/enabled, and conservative fallback aperture candidates; the full
-   route remains evaluation-only.
-2. Repeat the raw-RINEX outage/cycle-slip/satellite-loss/NLOS matrix for `q4`
-   before any promotion beyond shadow use.
+1. Run the holdout-three/four FGO partitions concurrently (shared input
+   preparation, independent candidate graphs) and require the same 0.1 m
+   fail-closed union; verify Tokyo NLOS wall p95 <=100 ms.
+2. Audit dual-frequency WL/NL candidates as an additional source only where
+   they use observations disjoint from each selected holdout partition; the
+   existing L1/L5 source alone supplied no Nagoya prefix candidates.
 3. Use the already-recorded bootstrap success rate and ADOP to order whole PAR
    subsets, rather than adding more route-fitted scalar thresholds.
 4. Calibrate an FFRT/IA lookup or Monte-Carlo boundary per ambiguity dimension
