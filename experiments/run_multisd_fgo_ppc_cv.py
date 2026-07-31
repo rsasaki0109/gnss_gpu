@@ -39,6 +39,7 @@ class Policy:
     minimum_carrier_fraction: float
     minimum_fixed_ambiguities: int
     holdout_satellites: int
+    constellation_ranked_par: bool
 
 
 def _tow(value: str | float) -> float:
@@ -409,11 +410,15 @@ def nested_leave_one_run_out(
 
 def _parse_policy(raw: str) -> Policy:
     fields = raw.split(":")
-    if len(fields) != 10:
+    if len(fields) != 11:
         raise argparse.ArgumentTypeError(
             "policy must be NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:"
             "MAX_SEED_M:HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
-            "HOLDOUT_SATELLITES"
+            "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1"
+        )
+    if fields[10] not in ("0", "1"):
+        raise argparse.ArgumentTypeError(
+            "CONSTELLATION_PAR_0_OR_1 must be 0 or 1"
         )
     policy = Policy(
         fields[0],
@@ -423,6 +428,7 @@ def _parse_policy(raw: str) -> Policy:
         float(fields[7]),
         int(fields[8]),
         int(fields[9]),
+        bool(int(fields[10])),
     )
     if (
         policy.window < 2
@@ -485,6 +491,8 @@ def _run_one(
     ]
     if max_epochs > 0:
         command.extend(("--max-epochs", str(max_epochs)))
+    if policy.constellation_ranked_par:
+        command.append("--multisd-fgo-shadow-constellation-par")
     if analyze_only:
         if not artifacts_complete(pos_path, shadow_path, max_epochs):
             raise ValueError(
@@ -536,7 +544,7 @@ def main() -> int:
         help=(
             "NAME:WINDOW:MIN_EPOCHS:HOLDOUT_OFFSET:TOP_K:MAX_SEED_M:"
             "HISTORY:MIN_CARRIER_FRACTION:MIN_FIXED_AMBIGUITIES:"
-            "HOLDOUT_SATELLITES"
+            "HOLDOUT_SATELLITES:CONSTELLATION_PAR_0_OR_1"
         ),
     )
     parser.add_argument("--max-epochs", type=int, default=0)
@@ -556,7 +564,7 @@ def main() -> int:
     policies = args.policy or [
         Policy(
             "locked_w10_o2_k4_s05_h3_f075_m6",
-            10, 10, 2, 4, 0.5, 3, 0.75, 6, 4,
+            10, 10, 2, 4, 0.5, 3, 0.75, 6, 4, False,
         )
     ]
     routes = (

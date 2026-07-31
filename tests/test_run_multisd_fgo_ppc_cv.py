@@ -1,14 +1,24 @@
 import csv
+import argparse
 from pathlib import Path
 
 import pytest
 
 from experiments.run_multisd_fgo_ppc_cv import (
     Policy,
+    _parse_policy,
     artifacts_complete,
     nested_leave_one_run_out,
     score_artifact,
 )
+
+
+def test_parse_policy_keeps_constellation_par_explicit() -> None:
+    policy = _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:1")
+    assert policy.constellation_ranked_par
+
+    with pytest.raises(argparse.ArgumentTypeError, match="must be 0 or 1"):
+        _parse_policy("p:10:10:2:4:0.5:3:0.75:6:4:2")
 
 
 def _write_inputs(tmp_path: Path, errors: list[float]) -> tuple[Path, Path, Path]:
@@ -64,7 +74,7 @@ def test_score_artifact_counts_warmup_correct_false_and_blocks(tmp_path: Path) -
     score = score_artifact(
         "tokyo",
         "run1",
-        Policy("test", 2, 2, 0, 4, 0.5, 1, 1.0, 4, 4),
+        Policy("test", 2, 2, 0, 4, 0.5, 1, 1.0, 4, 4, False),
         pos,
         shadow,
         reference,
