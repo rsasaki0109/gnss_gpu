@@ -550,6 +550,16 @@ def _run_one(
     cuda_mode: str,
     resume: bool,
     analyze_only: bool,
+    tdcp_slip_repair: bool = False,
+    tdcp_slip_repair_max_cycles: int = 32,
+    tdcp_slip_repair_tolerance_cycles: float = 0.20,
+    wcmc: bool = False,
+    wcmc_warmup_epochs: int = 5,
+    wcmc_baseline_alpha: float = 0.05,
+    wcmc_min_correction_m: float = 0.5,
+    wcmc_max_correction_m: float = 10.0,
+    fallback_integer_aperture: bool = False,
+    fallback_ia_covariance_scale: float = 16.0,
 ) -> tuple[Path, Path, list[str]]:
     route_dir = data_root / city / run
     stem = f"{city}_{run}_{policy.name}"
@@ -608,6 +618,38 @@ def _run_one(
             str(policy.fallback_minimum_bootstrapped_success_rate),
         )
     )
+    if tdcp_slip_repair:
+        command.extend(
+            (
+                "--multisd-fgo-shadow-tdcp-slip-repair",
+                "--multisd-fgo-shadow-tdcp-slip-repair-max-cycles",
+                str(tdcp_slip_repair_max_cycles),
+                "--multisd-fgo-shadow-tdcp-slip-repair-tolerance",
+                str(tdcp_slip_repair_tolerance_cycles),
+            )
+        )
+    if wcmc:
+        command.extend(
+            (
+                "--multisd-fgo-shadow-wcmc",
+                "--multisd-fgo-shadow-wcmc-warmup",
+                str(wcmc_warmup_epochs),
+                "--multisd-fgo-shadow-wcmc-alpha",
+                str(wcmc_baseline_alpha),
+                "--multisd-fgo-shadow-wcmc-min-correction",
+                str(wcmc_min_correction_m),
+                "--multisd-fgo-shadow-wcmc-max-correction",
+                str(wcmc_max_correction_m),
+            )
+        )
+    if fallback_integer_aperture:
+        command.extend(
+            (
+                "--multisd-fgo-shadow-fallback-integer-aperture",
+                "--multisd-fgo-shadow-fallback-ia-covariance-scale",
+                str(fallback_ia_covariance_scale),
+            )
+        )
     if analyze_only:
         if not artifacts_complete(pos_path, shadow_path, max_epochs):
             raise ValueError(
@@ -670,6 +712,24 @@ def main() -> int:
     parser.add_argument("--cuda-mode", choices=("off", "auto", "on"), default="off")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument(
+        "--tdcp-slip-repair",
+        action="store_true",
+        help="enable fail-closed Doppler-conditioned integer SD-TDCP slip repair",
+    )
+    parser.add_argument("--tdcp-slip-repair-max-cycles", type=int, default=32)
+    parser.add_argument(
+        "--tdcp-slip-repair-tolerance-cycles", type=float, default=0.20
+    )
+    parser.add_argument("--wcmc", action="store_true")
+    parser.add_argument("--wcmc-warmup-epochs", type=int, default=5)
+    parser.add_argument("--wcmc-baseline-alpha", type=float, default=0.05)
+    parser.add_argument("--wcmc-min-correction-m", type=float, default=0.5)
+    parser.add_argument("--wcmc-max-correction-m", type=float, default=10.0)
+    parser.add_argument("--fallback-integer-aperture", action="store_true")
+    parser.add_argument(
+        "--fallback-ia-covariance-scale", type=float, default=16.0
+    )
+    parser.add_argument(
         "--analyze-only",
         action="store_true",
         help="score existing complete artifacts without running or sidecar checks",
@@ -680,6 +740,32 @@ def main() -> int:
         choices=tuple(f"{city}/{run}" for city, run in ROUTES),
     )
     args = parser.parse_args()
+    if not 1 <= args.tdcp_slip_repair_max_cycles <= 10000:
+        parser.error("--tdcp-slip-repair-max-cycles must be in [1, 10000]")
+    if not math.isfinite(args.tdcp_slip_repair_tolerance_cycles) or not (
+        0.0 < args.tdcp_slip_repair_tolerance_cycles <= 0.5
+    ):
+        parser.error(
+            "--tdcp-slip-repair-tolerance-cycles must be in (0, 0.5]"
+        )
+    if args.wcmc_warmup_epochs < 1:
+        parser.error("--wcmc-warmup-epochs must be >= 1")
+    if not math.isfinite(args.wcmc_baseline_alpha) or not (
+        0.0 <= args.wcmc_baseline_alpha <= 1.0
+    ):
+        parser.error("--wcmc-baseline-alpha must be in [0, 1]")
+    if not math.isfinite(args.wcmc_max_correction_m) or not (
+        args.wcmc_max_correction_m > 0.0
+    ):
+        parser.error("--wcmc-max-correction-m must be > 0")
+    if not math.isfinite(args.wcmc_min_correction_m) or not (
+        0.0 <= args.wcmc_min_correction_m <= args.wcmc_max_correction_m
+    ):
+        parser.error("--wcmc-min-correction-m must be in [0, max]")
+    if not math.isfinite(args.fallback_ia_covariance_scale) or not (
+        args.fallback_ia_covariance_scale > 0.0
+    ):
+        parser.error("--fallback-ia-covariance-scale must be > 0")
     policies = args.policy or [
         Policy(
             "locked_w10_o2_k4_s05_h3_f075_m6",
@@ -708,6 +794,16 @@ def main() -> int:
                 args.cuda_mode,
                 args.resume,
                 args.analyze_only,
+                args.tdcp_slip_repair,
+                args.tdcp_slip_repair_max_cycles,
+                args.tdcp_slip_repair_tolerance_cycles,
+                args.wcmc,
+                args.wcmc_warmup_epochs,
+                args.wcmc_baseline_alpha,
+                args.wcmc_min_correction_m,
+                args.wcmc_max_correction_m,
+                args.fallback_integer_aperture,
+                args.fallback_ia_covariance_scale,
             )
             commands.append(command)
             scores.append(
@@ -727,6 +823,23 @@ def main() -> int:
         "truth_usage": "reference.csv opened only by post-subprocess scorer",
         "cuda_mode": args.cuda_mode,
         "max_epochs": args.max_epochs,
+        "tdcp_slip_repair": {
+            "enabled": args.tdcp_slip_repair,
+            "maximum_cycles": args.tdcp_slip_repair_max_cycles,
+            "tolerance_cycles": args.tdcp_slip_repair_tolerance_cycles,
+        },
+        "wcmc": {
+            "enabled": args.wcmc,
+            "warmup_epochs": args.wcmc_warmup_epochs,
+            "baseline_alpha": args.wcmc_baseline_alpha,
+            "minimum_correction_m": args.wcmc_min_correction_m,
+            "maximum_correction_m": args.wcmc_max_correction_m,
+        },
+        "fallback_integer_aperture": {
+            "enabled": args.fallback_integer_aperture,
+            "covariance_scale": args.fallback_ia_covariance_scale,
+            "tolerable_failure_rate": 0.001,
+        },
         "commands": commands,
         "scores": scores,
         "nested_leave_one_run_out": nested_leave_one_run_out(scores),
