@@ -455,6 +455,35 @@ runner records both exact child commands, process-isolation status, artifacts,
 hashes, wall time, scientific audit, and the explicit exclusion of IMU, LiDAR,
 camera, and reference truth from estimator inputs.
 
+### GNSS-only L1/L5 WL/NL supply closure
+
+The existing RTK shadow already implements Melbourne--Wübbena L1/L5 wide-lane
+resolution, a narrow-lane LAMBDA stage, scale-16 FFRT at both stages, causal
+ambiguity-arc smoothing, and best-candidate ECEF telemetry. It was therefore
+audited rather than reimplemented. The exact solver configuration explicitly
+used `--enable-l5 --lambda-l1-l5-wlnl-shadow
+--lambda-l1-l5-wlnl-causal-arcs --debug-epoch-log`; omitting either
+`--enable-l5` or the debug-epoch logger is not a valid supply audit. No IMU,
+LiDAR, camera, map, or reference input was passed to the solver.
+
+Across the complete city routes, both WL and NL FFRT stages passed for 746
+Tokyo epochs and 445 Nagoya epochs. Post-solver truth audit found 710/746 and
+422/445 candidates below 0.5 m, respectively. Thus FFRT alone still has 36
+Tokyo and 23 Nagoya false candidates (one Tokyo candidate above 1 m) and cannot
+be a FIX authority. Relative to the safe dual holdout union, only 80 Tokyo and
+8 Nagoya candidates occur on previously unaccepted epochs. Even a truth oracle
+retains only 51 and 5 of those. The unattainable oracle ceilings are therefore
+6,288/11,928 = 52.72% for Tokyo and 5,349/7,602 = 70.36% for Nagoya, still
+2,062 and 733 correct epochs short of the 70%/80% targets.
+
+Every finite WL/NL position was already in the two-stage FFRT-passed set, so
+relaxing only an FFRT scalar cannot expose a hidden larger position-candidate
+pool in this implementation. L1/L5 WL/NL is closed as the next stretch lever:
+it is unsafe without independent validation and insufficient even under a
+perfect oracle. The result does not rule out a genuinely new measurement/code
+hygiene model, but it forbids claiming that threshold tuning of the present
+candidate family can reach the target.
+
 ### Common-normal CUDA multi-RHS top-K evaluation
 
 The next implementation uses the existing cuSOLVER `potrf`/multi-column
@@ -490,15 +519,12 @@ policy.
 
 ## Next ranked experiments
 
-1. Audit dual-frequency WL/NL candidates as an additional source only where
-   they use observations disjoint from each selected holdout partition; the
-   existing L1/L5 source alone supplied no Nagoya prefix candidates.
-2. Use the already-recorded bootstrap success rate and ADOP to order whole PAR
+1. Use the already-recorded bootstrap success rate and ADOP to order whole PAR
    subsets, rather than adding more route-fitted scalar thresholds.
-3. Calibrate an FFRT/IA lookup or Monte-Carlo boundary per ambiguity dimension
+2. Calibrate an FFRT/IA lookup or Monte-Carlo boundary per ambiguity dimension
    and covariance-quality band, while retaining disjoint validation as final
    publication authority.
-4. Exercise the implemented multi-RHS CUDA path on state sizes above the 2,048
+3. Exercise the implemented multi-RHS CUDA path on state sizes above the 2,048
    auto threshold and batch the two independent holdout partitions without
    weakening their fail-closed union; repeat parity and p95 <=100 ms gates.
 
