@@ -30,6 +30,13 @@ CONFIG_KEYS = (
     "native_imu_enabled",
     "native_imu_aperture_m",
     "native_imu_fix_min_streak",
+    "candidate_groups",
+    "fallback_consensus_groups",
+    "fallback_consensus_separation_m",
+    "fallback_max_seed_separation_m",
+    "constellation_par",
+    "interleave_constellation_par",
+    "quality_ranked_par",
 )
 
 
@@ -112,10 +119,7 @@ def aggregate_summaries(paths: list[Path]) -> dict[str, Any]:
             "complete_six_route_set": True,
             "zero_false_fix": totals["false_fix"] == 0,
             "zero_false_fix_above_1m": totals["false_fix_above_1m"] == 0,
-            "passed": (
-                totals["false_fix"] == 0
-                and totals["false_fix_above_1m"] == 0
-            ),
+            "passed": (totals["false_fix"] == 0 and totals["false_fix_above_1m"] == 0),
         },
         "inputs": [
             {"path": str(path.resolve()), "sha256": _sha256(path)} for path in paths

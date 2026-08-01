@@ -59,6 +59,17 @@ artifacts have not been reproduced for run2/run3 under one recorded command.
 The implementation and next ablations are documented in
 `docs/ppc_pf_fgo_research_plan.md`.
 
+The later frozen candidate-supply policy ranks partial-ambiguity candidates by
+measurement quality before native LAMBDA enumeration. In a full-length,
+truth-free six-route replay with the same top-K 8, two-epoch streak, one-epoch
+gap tolerance, and native fixed-lag IMU FGO, correct safe FIX increased from
+7,475/48,778 (15.325%) to 8,626/48,778 (17.684%). False FIX and false FIX above
+1 m both remained zero. All six route audits and the aggregate integrity gate
+passed. This is a 1,151-epoch (+15.4% relative) safe-FIX availability gain; it
+does not by itself replace the 58.509% official trajectory-score result above.
+The detailed ablation, per-route counts, CUDA timing, and artifact hash are in
+`docs/ppc_candidate_supply_ablation.md`.
+
 The native shipping result by itself scored 46.331% and emitted 4,629 wrong
 FIX epochs, including 1,608 above 1 m. It is therefore rejected as FIX
 authority. Separating its position trajectory from FIX authority removes all
