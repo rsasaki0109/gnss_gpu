@@ -40,9 +40,11 @@ pytest -q \
   tests/test_audit_ppc_imu_fgo_health.py \
   tests/test_basin_fgo_bridge.py \
   tests/test_basin_fgo_promotion.py \
+  tests/test_basin_ffbsi.py \
   tests/test_basin_imu_bridge.py \
   tests/test_build_ppc_imu_pf_fgo_evidence.py \
   tests/test_compose_ppc_safe_trajectory.py \
+  tests/test_compose_ppc_safe_basin_union.py \
   tests/test_compose_ppc_imu_safe_output.py \
   tests/test_evaluate_ppc_official_score.py \
   tests/test_evaluate_ppc_official_suite.py \
@@ -54,6 +56,7 @@ pytest -q \
   tests/test_ppc_score.py \
   tests/test_run_ppc_basin_fgo_six_route.py \
   tests/test_run_ppc_basin_fgo_tracker.py \
+  tests/test_audit_ppc_safe_basin_union_cv.py \
   tests/test_export_pf_seed_pos.py \
   tests/test_phase6_ros2_soak.py \
   tests/test_release_bundle.py \

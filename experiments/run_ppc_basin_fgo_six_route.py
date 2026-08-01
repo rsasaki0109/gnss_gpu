@@ -41,6 +41,40 @@ def _quantile(values: Iterable[float], probability: float) -> float | None:
     return ordered[lower] * (1.0 - fraction) + ordered[upper] * fraction
 
 
+def _write_pre_run_manifest(
+    path: Path,
+    *,
+    binary: Path,
+    route_dir: Path,
+    command: list[str],
+    native_imu: bool,
+) -> None:
+    """Freeze estimator provenance before the process can create artifacts."""
+
+    input_names = ["rover.obs", "base.obs", "base.nav"]
+    if native_imu:
+        input_names.append("imu.csv")
+    inputs = {name: route_dir / name for name in input_names}
+    missing = [str(value) for value in inputs.values() if not value.is_file()]
+    if missing:
+        raise FileNotFoundError(f"missing estimator input(s): {', '.join(missing)}")
+    payload = {
+        "schema": "gnss_gpu_ppc_basin_fgo_pre_run_manifest_v1",
+        "production_input_truth": False,
+        "reference_in_command": any("reference" in value.lower() for value in command),
+        "command": command,
+        "binary": {"path": str(binary), "sha256": _sha256(binary)},
+        "inputs": {
+            name: {"path": str(value), "sha256": _sha256(value)}
+            for name, value in inputs.items()
+        },
+    }
+    if payload["reference_in_command"]:
+        raise ValueError("estimator command must not contain a reference path")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def _solver_command(
     binary: Path,
     route_dir: Path,
@@ -202,6 +236,14 @@ def main(argv: list[str] | None = None) -> int:
             binary, route_dir, output_dir, stem, args.max_epochs, args.top_k,
             args.native_imu, args.skip_epochs,
         )
+        pre_run_manifest = output_dir / f"{stem}.run_manifest.json"
+        _write_pre_run_manifest(
+            pre_run_manifest,
+            binary=binary,
+            route_dir=route_dir,
+            command=solver_command,
+            native_imu=args.native_imu,
+        )
         solver_complete = all(
             artifacts[name].is_file() and artifacts[name].stat().st_size > 0
             for name in ("pos", "shadow", "basins")
@@ -271,6 +313,10 @@ def main(argv: list[str] | None = None) -> int:
                 },
                 "artifact_sha256": {
                     name: _sha256(path) for name, path in artifacts.items()
+                },
+                "pre_run_manifest": {
+                    "path": str(pre_run_manifest),
+                    "sha256": _sha256(pre_run_manifest),
                 },
             }
         )

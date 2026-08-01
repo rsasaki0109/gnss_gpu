@@ -51,6 +51,14 @@ must not be represented as a deployable selector or sealed score. The honest
 production-safe result remains 58.509% until one truth-free policy passes
 route-blocked validation.
 
+The later run1 safe-union diagnostic raises Tokyo FIX availability to
+6,488/11,928 (54.393%) and Nagoya to 5,277/7,602 (69.416%), with zero false
+FIX in both cities. Its official trajectory scores are 65.477% and 62.029%,
+respectively. This is not yet a six-route promotion: matching active/monitor
+artifacts have not been reproduced for run2/run3 under one recorded command.
+The implementation and next ablations are documented in
+`docs/ppc_pf_fgo_research_plan.md`.
+
 The native shipping result by itself scored 46.331% and emitted 4,629 wrong
 FIX epochs, including 1,608 above 1 m. It is therefore rejected as FIX
 authority. Separating its position trajectory from FIX authority removes all
