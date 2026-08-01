@@ -94,21 +94,25 @@ def score_ppc2024(
         if segment_distances_m is None
         else _as_segment_distances("segment_distances_m", segment_distances_m, errors.size)
     )
-    finite = np.isfinite(errors) & np.isfinite(distances)
-    pass_mask = finite & (errors <= float(threshold_m))
+    # The reference trajectory defines the official denominator.  A solver
+    # must not improve its score by omitting difficult epochs (represented by
+    # NaN/Inf estimates), so estimate validity is used only by the pass mask.
+    valid_distance = np.isfinite(distances)
+    finite_error = np.isfinite(errors)
+    pass_mask = valid_distance & finite_error & (errors <= float(threshold_m))
 
-    total_distance = float(np.sum(distances[finite]))
+    total_distance = float(np.sum(distances[valid_distance]))
     fallback_epoch_weighted = total_distance <= 0.0
     if fallback_epoch_weighted:
-        weights = finite.astype(np.float64)
+        weights = valid_distance.astype(np.float64)
         total_weight = float(np.sum(weights))
     else:
-        weights = np.where(finite, distances, 0.0)
+        weights = np.where(valid_distance, distances, 0.0)
         total_weight = total_distance
 
     pass_distance = float(np.sum(weights[pass_mask]))
     score_pct = 100.0 * pass_distance / total_weight if total_weight > 0.0 else 0.0
-    epoch_total = int(np.sum(np.isfinite(errors)))
+    epoch_total = int(np.sum(valid_distance))
     epoch_pass_pct = 100.0 * float(np.sum(pass_mask)) / epoch_total if epoch_total else 0.0
 
     return PPCScore(

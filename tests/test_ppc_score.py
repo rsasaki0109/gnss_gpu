@@ -80,6 +80,23 @@ def test_ppc_score_accepts_external_distance_weights():
     assert score.score_pct == pytest.approx(100.0 * 10.0 / 11.0)
 
 
+def test_ppc_score_counts_missing_estimate_as_failure_without_shrinking_denominator():
+    reference = np.array(
+        [[0.0, 0.0, 0.0], [3.0, 0.0, 0.0], [7.0, 0.0, 0.0]],
+        dtype=np.float64,
+    )
+    estimated = reference.copy()
+    estimated[2] = np.nan
+
+    score = score_ppc2024(estimated, reference)
+
+    assert score.pass_mask.tolist() == [True, True, False]
+    assert score.pass_distance_m == pytest.approx(3.0)
+    assert score.total_distance_m == pytest.approx(7.0)
+    assert score.score_pct == pytest.approx(100.0 * 3.0 / 7.0)
+    assert score.epoch_pass_pct == pytest.approx(100.0 * 2.0 / 3.0)
+
+
 def test_ppc_score_dict_is_csv_ready():
     reference = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float64)
     estimated = reference.copy()
