@@ -1,0 +1,507 @@
+{
+  "schema": "gnss_gpu_ppc_imu_pf_fgo_promotion_evidence_v1",
+  "truth_contract": {
+    "production_input_truth": false,
+    "truth_usage": "post_estimator_scoring_only"
+  },
+  "candidate": {
+    "native_imu_fgo": true,
+    "native_imu_aperture_m": 0.3,
+    "native_imu_fix_min_streak": 2,
+    "default_enabled": false,
+    "gpu_policy": "auto; forced CUDA is parity-safe but slower at this state size"
+  },
+  "routes": {
+    "nagoya_run1": {
+      "route": "nagoya_run1",
+      "denominator_epochs": 6748,
+      "gnss_only_correct_fix": 739,
+      "imu_correct_fix": 898,
+      "correct_fix_delta": 159,
+      "imu_false_fix": 0,
+      "imu_false_fix_above_1m": 0,
+      "paired": {
+        "both_fixed": 739,
+        "imu_only_fixed": 159,
+        "gnss_only_fixed": 0
+      },
+      "baseline_priority_union": {
+        "gnss_only_correct_fix": 4479,
+        "imu_correct_fix": 4493,
+        "correct_fix_delta": 14,
+        "inherited_baseline_false_fix": 621,
+        "inherited_baseline_false_fix_above_1m": 120,
+        "imu_rescue_false_fix": 0,
+        "imu_rescue_false_fix_above_1m": 0
+      },
+      "recovery_fail_closed": {
+        "recovery_rows": 82,
+        "pf_available_rows": 0,
+        "fixed_rows": 0,
+        "passed": true
+      },
+      "authoritative_safe_output": {
+        "fix_authority": "imu_pf_fgo_tracker_only",
+        "legacy_fixed_status_inherited": false,
+        "fixed": 898,
+        "correct_fix": 898,
+        "false_fix": 0,
+        "false_fix_above_1m": 0,
+        "passed": true
+      },
+      "runtime": {
+        "imu_fgo_p95_ms": 116.46862,
+        "budget_ms": 200.0,
+        "passed": true
+      },
+      "config_ok": true,
+      "passed": true,
+      "artifacts": {
+        "gnss_audit": "daef588dfb9ab0562c03de6b6f87cdb63eb6bee70836d0c281efea3c44a3f7bd",
+        "imu_audit": "91c70ba291c3ed3db9b2dc5a0cfd7d29ba846e1e46798b177a1b09816c6932ca",
+        "gnss_summary": "d5afa6a52a642477b5ad16a28be01b9437b4d4162ba73dd164be3fbdb59449c0",
+        "imu_summary": "f270c2e0cd82f2d6e019600c719b84b0acf9790b004a2d4f88cb3b26b9c49c5f",
+        "gnss_tracker": "9bdb25477b58bedf6d81e2bd53382e1132572089a1aac176cb881a01a7faa3d7",
+        "imu_tracker": "3650afce54999bd20b2ee1e2b89c2d0ea2eddd64cd54c139bb72ba745a0bd31c",
+        "shadow": "1e70f214e3f778e99c9b1069d3fd9693091763bfc873b8598072e3f96d92dddb",
+        "safe_output": "d698d926fee55b229c3e6f67058dd0dfcca224cb951e10b4b70f6f61b1053c4b",
+        "safe_output_summary": "e9ef63df69ac628adb67be41951969435ccf8ef25fd8c0e954f232fcb009b599",
+        "safe_output_audit": "d2c494b464b11887546bff4cdc22aec0dfc295c7fe21eb84bb11c79d43f089f2"
+      }
+    },
+    "nagoya_run2": {
+      "route": "nagoya_run2",
+      "denominator_epochs": 6763,
+      "gnss_only_correct_fix": 656,
+      "imu_correct_fix": 942,
+      "correct_fix_delta": 286,
+      "imu_false_fix": 0,
+      "imu_false_fix_above_1m": 0,
+      "paired": {
+        "both_fixed": 656,
+        "imu_only_fixed": 286,
+        "gnss_only_fixed": 0
+      },
+      "baseline_priority_union": {
+        "gnss_only_correct_fix": 4512,
+        "imu_correct_fix": 4596,
+        "correct_fix_delta": 84,
+        "inherited_baseline_false_fix": 62,
+        "inherited_baseline_false_fix_above_1m": 44,
+        "imu_rescue_false_fix": 0,
+        "imu_rescue_false_fix_above_1m": 0
+      },
+      "recovery_fail_closed": {
+        "recovery_rows": 252,
+        "pf_available_rows": 0,
+        "fixed_rows": 0,
+        "passed": true
+      },
+      "authoritative_safe_output": {
+        "fix_authority": "imu_pf_fgo_tracker_only",
+        "legacy_fixed_status_inherited": false,
+        "fixed": 942,
+        "correct_fix": 942,
+        "false_fix": 0,
+        "false_fix_above_1m": 0,
+        "passed": true
+      },
+      "runtime": {
+        "imu_fgo_p95_ms": 116.24067,
+        "budget_ms": 200.0,
+        "passed": true
+      },
+      "config_ok": true,
+      "passed": true,
+      "artifacts": {
+        "gnss_audit": "47536f4ac7083c1c9319e5a77e530f40737597f4f18695c3a88efed2402c9e14",
+        "imu_audit": "e798dfb16ca903fa819ac5b9a35b5cb1c38dd48a5845adc00f588b52fad6bdde",
+        "gnss_summary": "8a8286d5318fb9899433088d045439f68a7a88b5f66b6a84ac16f2d7b72d40b1",
+        "imu_summary": "212b949c322dfd1e12b1233df54e3066bef3f600609b268eed2a7dbcf2c9fb31",
+        "gnss_tracker": "e47dd26c661e1ee8796c3db7b4f0f3b89735bfb8ca7a2cac11cb4364a12e87de",
+        "imu_tracker": "50bb08152e4779494719c4f2d6debdc7ca2021273128a3cd2e71f414359eee34",
+        "shadow": "4b42b2f3d32e4a72ed67eb47dfabec7278225fd2cf9f8674ebb1b148299c0bee",
+        "safe_output": "49d3f9e22def713be0431eb777bb61fd0a20b44db7504fdb196c6ba11f328e43",
+        "safe_output_summary": "7729df69722d67537f07449cd947032ef812e2b4b4ad268e4cc909eeea13e7bd",
+        "safe_output_audit": "ab0c0fe403b67b8a5ff61493717db0c8a32ac628e1beacdbfbca7c650c2e1dea"
+      }
+    },
+    "nagoya_run3": {
+      "route": "nagoya_run3",
+      "denominator_epochs": 3275,
+      "gnss_only_correct_fix": 145,
+      "imu_correct_fix": 178,
+      "correct_fix_delta": 33,
+      "imu_false_fix": 0,
+      "imu_false_fix_above_1m": 0,
+      "paired": {
+        "both_fixed": 145,
+        "imu_only_fixed": 33,
+        "gnss_only_fixed": 0
+      },
+      "baseline_priority_union": {
+        "gnss_only_correct_fix": 2038,
+        "imu_correct_fix": 2041,
+        "correct_fix_delta": 3,
+        "inherited_baseline_false_fix": 217,
+        "inherited_baseline_false_fix_above_1m": 163,
+        "imu_rescue_false_fix": 0,
+        "imu_rescue_false_fix_above_1m": 0
+      },
+      "recovery_fail_closed": {
+        "recovery_rows": 3,
+        "pf_available_rows": 0,
+        "fixed_rows": 0,
+        "passed": true
+      },
+      "authoritative_safe_output": {
+        "fix_authority": "imu_pf_fgo_tracker_only",
+        "legacy_fixed_status_inherited": false,
+        "fixed": 178,
+        "correct_fix": 178,
+        "false_fix": 0,
+        "false_fix_above_1m": 0,
+        "passed": true
+      },
+      "runtime": {
+        "imu_fgo_p95_ms": 110.55053999999998,
+        "budget_ms": 200.0,
+        "passed": true
+      },
+      "config_ok": true,
+      "passed": true,
+      "artifacts": {
+        "gnss_audit": "357dd43af2091a8c31fcc703c9cfbda1e12d7db054ce141545dc2bf230f7bd9a",
+        "imu_audit": "19b5fccbaa8f9c4c8108904d7eb6b0fadc263d14b7d6f49bc2dd0967555e5881",
+        "gnss_summary": "1b454c212ab471827b35f64371e4d58d28a4fd0ad20cc1c3e942279e3155a219",
+        "imu_summary": "faa2b90325c1f41fc4784e104cdf2ea3bab49e011668a69d6ee143c50990d311",
+        "gnss_tracker": "0aa6101b9f6d859047bda8b7c544d08e311d38fac9e3d8934a0c58a3e85a820a",
+        "imu_tracker": "2f8344739281518ad7525e3bf9713a78f0aa628a295f09e24b48fd06c630b71c",
+        "shadow": "ff8e2a9a33f353c5ba58fa3591ee54c141f6bc6edb94a9b7fcee2581956fc7c7",
+        "safe_output": "d3c88507bed83d25c6ca05bd0e1c379e42480c2b59cb5b7bd2dc2767de549289",
+        "safe_output_summary": "d15df0cd48cf601cf64ed1fa462a59b1cec6bb6d54f25d4c0161a07d3e50cf85",
+        "safe_output_audit": "9593d9cfb62199dd14825e354ceaf301e114956eeaadaf49b5c4ee9b0f676351"
+      }
+    },
+    "tokyo_run1": {
+      "route": "tokyo_run1",
+      "denominator_epochs": 10070,
+      "gnss_only_correct_fix": 548,
+      "imu_correct_fix": 764,
+      "correct_fix_delta": 216,
+      "imu_false_fix": 0,
+      "imu_false_fix_above_1m": 0,
+      "paired": {
+        "both_fixed": 548,
+        "imu_only_fixed": 216,
+        "gnss_only_fixed": 0
+      },
+      "baseline_priority_union": {
+        "gnss_only_correct_fix": 7743,
+        "imu_correct_fix": 7748,
+        "correct_fix_delta": 5,
+        "inherited_baseline_false_fix": 494,
+        "inherited_baseline_false_fix_above_1m": 364,
+        "imu_rescue_false_fix": 0,
+        "imu_rescue_false_fix_above_1m": 0
+      },
+      "recovery_fail_closed": {
+        "recovery_rows": 83,
+        "pf_available_rows": 0,
+        "fixed_rows": 0,
+        "passed": true
+      },
+      "authoritative_safe_output": {
+        "fix_authority": "imu_pf_fgo_tracker_only",
+        "legacy_fixed_status_inherited": false,
+        "fixed": 764,
+        "correct_fix": 764,
+        "false_fix": 0,
+        "false_fix_above_1m": 0,
+        "passed": true
+      },
+      "runtime": {
+        "imu_fgo_p95_ms": 118.4552,
+        "budget_ms": 200.0,
+        "passed": true
+      },
+      "config_ok": true,
+      "passed": true,
+      "artifacts": {
+        "gnss_audit": "092adc975e543abbbb8cd40dfe0859f01f88552164b69da3aacf65600fc767ef",
+        "imu_audit": "1feec43e2d1791d79c01ccc35e4c577984180b56265dfb40c3405bf2db650b81",
+        "gnss_summary": "00578a6d3acd9d78195e49c393a285e2475344f1ebbd895f4d44186c28528402",
+        "imu_summary": "9571f41a7768b1f5de9475295ed8963ac8ed2eba75b68131a9c967ca3dfdd016",
+        "gnss_tracker": "494a5961dfe7eb6f728e046a6117a840c669092a23a872db1e3721faa9d54bd1",
+        "imu_tracker": "db4e967eb8399985185cbb07fc8dbe01b2193e50c0df67c73bd837392fe34cad",
+        "shadow": "a97280b2111cf0db7e9c02bd05ceac455178cd87cca7ac4f9ccabda766c34229",
+        "safe_output": "8e2cb3e435405a280d0205e326bda63516eff5b3c613f5baee859d84627ecc5e",
+        "safe_output_summary": "e562121ea91fa55e66476dc41762bf982c90b9651e74795c9e8dee0803de79dd",
+        "safe_output_audit": "1e36e94a8a089a9ef5db53ab9a75a97bfe64ce9513fec41833500801632e5f12"
+      }
+    },
+    "tokyo_run2": {
+      "route": "tokyo_run2",
+      "denominator_epochs": 8383,
+      "gnss_only_correct_fix": 980,
+      "imu_correct_fix": 1289,
+      "correct_fix_delta": 309,
+      "imu_false_fix": 0,
+      "imu_false_fix_above_1m": 0,
+      "paired": {
+        "both_fixed": 980,
+        "imu_only_fixed": 309,
+        "gnss_only_fixed": 0
+      },
+      "baseline_priority_union": {
+        "gnss_only_correct_fix": 7112,
+        "imu_correct_fix": 7132,
+        "correct_fix_delta": 20,
+        "inherited_baseline_false_fix": 76,
+        "inherited_baseline_false_fix_above_1m": 58,
+        "imu_rescue_false_fix": 0,
+        "imu_rescue_false_fix_above_1m": 0
+      },
+      "recovery_fail_closed": {
+        "recovery_rows": 3,
+        "pf_available_rows": 0,
+        "fixed_rows": 0,
+        "passed": true
+      },
+      "authoritative_safe_output": {
+        "fix_authority": "imu_pf_fgo_tracker_only",
+        "legacy_fixed_status_inherited": false,
+        "fixed": 1289,
+        "correct_fix": 1289,
+        "false_fix": 0,
+        "false_fix_above_1m": 0,
+        "passed": true
+      },
+      "runtime": {
+        "imu_fgo_p95_ms": 135.50442,
+        "budget_ms": 200.0,
+        "passed": true
+      },
+      "config_ok": true,
+      "passed": true,
+      "artifacts": {
+        "gnss_audit": "f947c4dc86b06cbe2f37fb5901e916f067b99ff6507774874bec5e1670797151",
+        "imu_audit": "440d2f3f98c9b103369a6ce67a432c08cbfedf62425495a8af3c611734b9bf4d",
+        "gnss_summary": "ca6e80016532f6734b0d97e669cf569b2d0d1a1f4efff9c8a9d2fd50f00769ba",
+        "imu_summary": "eb1fbdc9e3af0bf62d9f0f4254131a6a9847831236b9b81b4a00919c1da96775",
+        "gnss_tracker": "5f9a38c1f35ae835ef9ab15d941472f686c6effdb189a9bdf92d121ddd0a27b9",
+        "imu_tracker": "aba2a03c70c800446d5c472f0086c9512a0f360209a4f95683b859bb0981bc50",
+        "shadow": "f4c891baf2d7d7b1a5a43238a4f3c5360c59a2412b1a96d9202959f9bae2686e",
+        "safe_output": "4c5b7a1e0832b604e3236713aa025b17e6892c575201af0a9b827f0aae3d264b",
+        "safe_output_summary": "b4d3d961b01fc7760f915e09f55f2c631977a2a85af9eb3758ab38709001f394",
+        "safe_output_audit": "0319537e2e4b4377e2cb0ea407c970822dc09405ba476af23dfda7a91f4f68ca"
+      }
+    },
+    "tokyo_run3": {
+      "route": "tokyo_run3",
+      "denominator_epochs": 13539,
+      "gnss_only_correct_fix": 2446,
+      "imu_correct_fix": 3689,
+      "correct_fix_delta": 1243,
+      "imu_false_fix": 0,
+      "imu_false_fix_above_1m": 0,
+      "paired": {
+        "both_fixed": 2446,
+        "imu_only_fixed": 1243,
+        "gnss_only_fixed": 0
+      },
+      "baseline_priority_union": {
+        "gnss_only_correct_fix": 11034,
+        "imu_correct_fix": 11148,
+        "correct_fix_delta": 114,
+        "inherited_baseline_false_fix": 58,
+        "inherited_baseline_false_fix_above_1m": 24,
+        "imu_rescue_false_fix": 0,
+        "imu_rescue_false_fix_above_1m": 0
+      },
+      "recovery_fail_closed": {
+        "recovery_rows": 39,
+        "pf_available_rows": 0,
+        "fixed_rows": 0,
+        "passed": true
+      },
+      "authoritative_safe_output": {
+        "fix_authority": "imu_pf_fgo_tracker_only",
+        "legacy_fixed_status_inherited": false,
+        "fixed": 3689,
+        "correct_fix": 3689,
+        "false_fix": 0,
+        "false_fix_above_1m": 0,
+        "passed": true
+      },
+      "runtime": {
+        "imu_fgo_p95_ms": 132.90386499999997,
+        "budget_ms": 200.0,
+        "passed": true
+      },
+      "config_ok": true,
+      "passed": true,
+      "artifacts": {
+        "gnss_audit": "36289607409af83e7561f353c36f72f304ba7c199dbde144137e32dfdccd85eb",
+        "imu_audit": "d81daf0d27df342d9561ceea480b5a0a4b63c1e1e490640f4cd8fc46480b2beb",
+        "gnss_summary": "764adf464fc6b6f5386e89fbdb0dcacf1f95728b5508673b8bb5c250857a0434",
+        "imu_summary": "5527b7c5a2dc9c7e9979ce5a48026e2fd19eeaf44591cc82341aa7b5fa824d99",
+        "gnss_tracker": "9dea1bef347deec48b26d912a036e22dee9c1d6daf16a17095fcede1703d3fbf",
+        "imu_tracker": "4160a70a42ebbd812a0756a1deb54599dc2e9ee42276f9309e817c49f21f4bc2",
+        "shadow": "84fc00e11e35873975ca28ad71ebcd89f18f6a45c46238de5a2f537d2d238940",
+        "safe_output": "11e3973793dbe0bcef2f0139cd52d3e782d52b7cdc5203d99d4ad0311020c5eb",
+        "safe_output_summary": "ff96d90f771f8914620eec2f8bc900c46a62f9785d9b2bf8326d551076d03f7c",
+        "safe_output_audit": "29cfdaba29225b9b51a6423848198fac06ad1b710d849146152f7febbc7e0785"
+      }
+    }
+  },
+  "totals": {
+    "denominator_epochs": 48778,
+    "gnss_only_correct_fix": 5514,
+    "imu_correct_fix": 7760,
+    "imu_false_fix": 0,
+    "imu_false_fix_above_1m": 0,
+    "imu_only_fixed": 2246,
+    "gnss_only_fixed": 0,
+    "union_correct_delta": 240,
+    "inherited_union_false_fix": 1528,
+    "inherited_union_false_fix_above_1m": 773,
+    "correct_fix_delta": 2246,
+    "gnss_only_fix_rate": 0.11304276518102423,
+    "imu_fix_rate": 0.15908811349378818,
+    "relative_correct_fix_gain": 0.40732680449764236
+  },
+  "statistics": {
+    "improved_routes": 6,
+    "route_sign_test_one_sided_p": 0.015625,
+    "paired_epoch_exact_log10_p_upper_bound": -676.1133702613017,
+    "note": "route sign test is the conservative unit; epoch decisions are correlated"
+  },
+  "blocked_holdouts": {
+    "nagoya_holdout": {
+      "gnss_only_correct_fix": 41,
+      "imu_correct_fix": 50,
+      "correct_fix_delta": 9,
+      "false_fix": 0,
+      "false_fix_above_1m": 0,
+      "passed": true,
+      "artifacts": {
+        "gnss_audit_sha256": "da276c89e44d2b0ea9d1d01b588f980959eed1724f22f4d6319d0ecf2907bf30",
+        "imu_audit_sha256": "7839f61570c0fdb8a47d6ae5a9752eb3cfb1a92757d88dc276e4e8bea9f2cc35"
+      }
+    },
+    "tokyo_holdout": {
+      "gnss_only_correct_fix": 3,
+      "imu_correct_fix": 6,
+      "correct_fix_delta": 3,
+      "false_fix": 0,
+      "false_fix_above_1m": 0,
+      "passed": true,
+      "artifacts": {
+        "gnss_audit_sha256": "3b0262214b54e96174b79c8f56c7d674bed3abd5bf99f0a25399b957125b77c3",
+        "imu_audit_sha256": "33a82565950fb73af326f1e06ed590b806d25386ad66846730469785c6af5f4a"
+      }
+    }
+  },
+  "fault_audits": [
+    {
+      "name": "fault.audit",
+      "fixed": 27,
+      "correct_fix": 27,
+      "false_fix": 0,
+      "false_fix_above_1m": 0,
+      "passed": true,
+      "sha256": "0c50a95942d0e622de886aa002a737ae1cec74d728e77d85974f6861c013cbac"
+    },
+    {
+      "name": "fault.audit",
+      "fixed": 26,
+      "correct_fix": 26,
+      "false_fix": 0,
+      "false_fix_above_1m": 0,
+      "passed": true,
+      "sha256": "1ed8215b55957db8ee8f0f9bcd8439833402fef25a97990ad8b25b43b53e655b"
+    },
+    {
+      "name": "fault.audit",
+      "fixed": 27,
+      "correct_fix": 27,
+      "false_fix": 0,
+      "false_fix_above_1m": 0,
+      "passed": true,
+      "sha256": "6727d20341c2a0c1ae11f0b829539c92f1e794b77208f2dbd8c8752d1ab53560"
+    },
+    {
+      "name": "fault.audit",
+      "fixed": 27,
+      "correct_fix": 27,
+      "false_fix": 0,
+      "false_fix_above_1m": 0,
+      "passed": true,
+      "sha256": "2394616b04499186e43fb7307cf8ac77514633c30b1bfc2910c0d4c32e2d6b5c"
+    },
+    {
+      "name": "gnss_outage.audit",
+      "fixed": 26,
+      "correct_fix": 26,
+      "false_fix": 0,
+      "false_fix_above_1m": 0,
+      "passed": true,
+      "sha256": "d7553ca125927e81aabdeac178d905741406ffb82b3bb64a5b1eb8b5ac35e07d"
+    },
+    {
+      "name": "gnss_imu_outage.audit",
+      "fixed": 26,
+      "correct_fix": 26,
+      "false_fix": 0,
+      "false_fix_above_1m": 0,
+      "passed": true,
+      "sha256": "f0f49a5603852471a39dfaa65e552aefd15fcf40114ee76deebc00c366dce21b"
+    }
+  ],
+  "cpu_gpu_parity": {
+    "schema": "gnss_gpu_ppc_basin_fgo_cpu_gpu_parity_v1",
+    "acceptance_identity": true,
+    "integer_identity": true,
+    "maximum_ecef_difference_m": 1.4141914040508198e-05,
+    "maximum_incremental_log_likelihood_difference": 3.197817042099871e-05,
+    "threshold_m": 0.001,
+    "passed": true,
+    "runtime": {
+      "cpu_p95_ms": 12.822849999999999,
+      "gpu_p95_ms": 61.6703,
+      "gpu_to_cpu_p95_ratio": 4.809406645168586,
+      "gpu_selected_epochs": 291,
+      "gpu_batch_successes": 196,
+      "gpu_faster": false
+    },
+    "artifacts": {
+      "cpu_shadow_sha256": "32d4d0e9e43d9b85dcaa50aa02a2a7b0b5bf7282018b6b2bf7576be03f7ac367",
+      "gpu_shadow_sha256": "98979c32e4d3fe954fd44a7337cd2d24a6899b0457408fc13a9f7073ae5c5834",
+      "cpu_basin_sha256": "ee979c94e90761b264e391c1ae294bfaf13d4d6a9e6d2379748dd8f15d69be06",
+      "gpu_basin_sha256": "1ed3db444209e9164ea3421aa673d4ba84434b1e1ddcb9f2bcf1dff46fb0b367"
+    }
+  },
+  "health_monitor": {
+    "truth_usage": "none",
+    "telemetry_only": true,
+    "sha256": "1349d9db2827dcf9b953d7d98fbae2787487357197db4fe5247e8d909d1329fb"
+  },
+  "gates": {
+    "six_route": true,
+    "blocked_holdouts": true,
+    "faults": true,
+    "cpu_gpu_parity": true,
+    "meaningful_gain": true,
+    "false_fix_zero": true,
+    "false_fix_above_1m_zero": true
+  },
+  "component_promotion_ready": true,
+  "default_candidate_ready": true,
+  "default_promotion_ready": true,
+  "default_enable_policy": "ready candidate, intentionally disabled until an explicit release change; use authoritative safe output, never baseline-priority union",
+  "artifacts": {
+    "parity_sha256": "a1d82c2427b51ce3fdad705adf0b4bcee55a5c55547a57b7d43f7748423d6b8a",
+    "health_sha256": "1349d9db2827dcf9b953d7d98fbae2787487357197db4fe5247e8d909d1329fb"
+  }
+}

@@ -18,6 +18,7 @@ from gnss_gpu.dd_float_kf import AmbiguityKey, _dd_geometry_and_design, _pair_ke
 
 VersionedAmbiguityKey = tuple[AmbiguityKey, int]
 AssignmentItem = tuple[VersionedAmbiguityKey, int]
+MeasurementModeItem = tuple[str, str]
 
 
 def _logsumexp(values: np.ndarray) -> float:
@@ -31,6 +32,35 @@ def _canonical_assignment(
 ) -> tuple[AssignmentItem, ...]:
     items = assignment.items() if isinstance(assignment, Mapping) else assignment
     return tuple(sorted(((key, int(value)) for key, value in items), key=lambda x: x[0]))
+
+
+def _assignments_compatible(
+    lhs: tuple[AssignmentItem, ...],
+    rhs: tuple[AssignmentItem, ...],
+    *,
+    minimum_common: int,
+) -> bool:
+    """Return true when a satellite-set change preserves a fixed integer mode."""
+
+    left = dict(lhs)
+    right = dict(rhs)
+    common = set(left) & set(right)
+    return len(common) >= int(minimum_common) and all(
+        left[key] == right[key] for key in common
+    )
+
+
+def _canonical_measurement_modes(
+    modes: Mapping[str, str] | Iterable[MeasurementModeItem],
+) -> tuple[MeasurementModeItem, ...]:
+    items = modes.items() if isinstance(modes, Mapping) else modes
+    canonical = tuple(sorted((str(key), str(value).lower()) for key, value in items))
+    allowed = {"los", "nlos", "excluded"}
+    if any(not key or value not in allowed for key, value in canonical):
+        raise ValueError("measurement modes require a key and los/nlos/excluded value")
+    if len({key for key, _value in canonical}) != len(canonical):
+        raise ValueError("measurement mode keys must be unique")
+    return canonical
 
 
 @dataclass
@@ -280,6 +310,9 @@ class IntegerBasin:
     lineage: tuple[str, ...] = field(default_factory=tuple)
     birth_epoch: int = 0
     proposal_sources: tuple[str, ...] = field(default_factory=tuple)
+    measurement_modes: tuple[MeasurementModeItem, ...] = field(default_factory=tuple)
+    parent_basin_id: str | None = None
+    resample_epoch: int | None = None
 
     @property
     def assignment_dict(self) -> dict[VersionedAmbiguityKey, int]:
@@ -312,6 +345,16 @@ class BasinUpdateEvidence:
     n_basins: int
 
 
+@dataclass(frozen=True)
+class BasinResamplingResult:
+    triggered: bool
+    ess_before: float
+    particle_count: int
+    protected_count: int
+    ancestor_ids: tuple[str, ...]
+    offspring_ids: tuple[str, ...]
+
+
 class AmbiguityBasinParticleFilter:
     """Discrete basin PF with Rao-Blackwellized navigation conditionals."""
 
@@ -328,6 +371,7 @@ class AmbiguityBasinParticleFilter:
         source_reserve_fraction: float = 0.0,
         protected_source_token: str = "",
         protected_source_fraction: float = 0.0,
+        genealogy_lag_epochs: int = 64,
     ) -> None:
         self.max_basins = int(max_basins)
         self.fix_gamma_threshold = float(fix_gamma_threshold)
@@ -339,6 +383,7 @@ class AmbiguityBasinParticleFilter:
         self.source_reserve_fraction = float(source_reserve_fraction)
         self.protected_source_token = str(protected_source_token)
         self.protected_source_fraction = float(protected_source_fraction)
+        self.genealogy_lag_epochs = int(genealogy_lag_epochs)
         if not 0.0 <= self.diversity_reserve_fraction < 1.0:
             raise ValueError("diversity_reserve_fraction must be in [0, 1)")
         if not np.isfinite(self.diversity_radius_m) or self.diversity_radius_m <= 0.0:
@@ -351,6 +396,8 @@ class AmbiguityBasinParticleFilter:
             raise ValueError("protected_source_fraction must be in [0, 1)")
         if self.protected_source_fraction > 0.0 and not self.protected_source_token:
             raise ValueError("protected_source_token is required for a protected reserve")
+        if self.genealogy_lag_epochs < 1:
+            raise ValueError("genealogy_lag_epochs must be positive")
         self.basins: list[IntegerBasin] = []
         self.epoch = -1
         self._ids = count()
@@ -366,6 +413,10 @@ class AmbiguityBasinParticleFilter:
         parent_id: str | None = None,
         candidate_log_weights: Iterable[float] | None = None,
         candidate_source_ids: Iterable[str] | None = None,
+        measurement_modes: Iterable[
+            Mapping[str, str] | Iterable[MeasurementModeItem]
+        ]
+        | None = None,
     ) -> None:
         assignments_list = list(assignments)
         conditionals_list = list(conditionals)
@@ -380,6 +431,13 @@ class AmbiguityBasinParticleFilter:
         )
         if len(source_ids) != len(assignments_list):
             raise ValueError("candidate_source_ids must match assignments")
+        mode_items = (
+            [_canonical_measurement_modes(value) for value in measurement_modes]
+            if measurement_modes is not None
+            else [()] * len(assignments_list)
+        )
+        if len(mode_items) != len(assignments_list):
+            raise ValueError("measurement_modes must match assignments")
         if float(prior_mass) <= 0.0 or float(prior_mass) > 1.0:
             raise ValueError("prior_mass must be positive")
         if candidate_log_weights is None:
@@ -397,8 +455,12 @@ class AmbiguityBasinParticleFilter:
             old_scale = max(1.0 - float(prior_mass), 1.0e-12)
             for basin in self.basins:
                 basin.log_weight += np.log(old_scale)
-        for assignment, conditional, log_candidate_mass, source_id in zip(
-            assignments_list, conditionals_list, candidate_log_mass, source_ids
+        for assignment, conditional, log_candidate_mass, source_id, modes in zip(
+            assignments_list,
+            conditionals_list,
+            candidate_log_mass,
+            source_ids,
+            mode_items,
         ):
             basin_id = f"b{next(self._ids)}"
             lineage = (parent_id, basin_id) if parent_id else (basin_id,)
@@ -411,8 +473,185 @@ class AmbiguityBasinParticleFilter:
                     lineage=lineage,
                     birth_epoch=max(self.epoch, 0),
                     proposal_sources=(source_id,) if source_id else (),
+                    measurement_modes=modes,
+                    parent_basin_id=parent_id,
                 )
             )
+        self._deduplicate()
+        self._normalize_and_cap()
+
+    def resample_if_needed(
+        self,
+        *,
+        ess_ratio_threshold: float = 0.5,
+        minimum_survival_mass: float = 0.01,
+        seed: int = 0,
+    ) -> BasinResamplingResult:
+        """Systematically resample while retaining material discrete modes.
+
+        One representative of every distinct ambiguity/measurement-mode state
+        above ``minimum_survival_mass`` is inserted before the systematic draw.
+        This prevents a low-count but material basin from disappearing solely
+        due to resampling variance.  The returned parent/child ids are the
+        fixed-lag genealogy contract used by a later FFBSi bridge.
+        """
+
+        if not 0.0 < float(ess_ratio_threshold) <= 1.0:
+            raise ValueError("ess_ratio_threshold must be in (0, 1]")
+        if not 0.0 <= float(minimum_survival_mass) <= 1.0:
+            raise ValueError("minimum_survival_mass must be in [0, 1]")
+        self._normalize_and_cap()
+        count_basins = len(self.basins)
+        if count_basins == 0:
+            return BasinResamplingResult(False, 0.0, 0, 0, (), ())
+        weights = np.exp(np.asarray([basin.log_weight for basin in self.basins]))
+        ess = float(1.0 / np.sum(np.square(weights)))
+        ancestor_ids = tuple(basin.basin_id for basin in self.basins)
+        if ess / count_basins >= float(ess_ratio_threshold):
+            return BasinResamplingResult(
+                False, ess, count_basins, 0, ancestor_ids, ancestor_ids
+            )
+
+        discrete_groups: dict[
+            tuple[tuple[AssignmentItem, ...], tuple[MeasurementModeItem, ...]], list[int]
+        ] = {}
+        for index, basin in enumerate(self.basins):
+            discrete_groups.setdefault(
+                (basin.assignment, basin.measurement_modes), []
+            ).append(index)
+        protected: list[int] = []
+        for indices in discrete_groups.values():
+            mass = float(np.sum(weights[indices]))
+            if mass >= float(minimum_survival_mass):
+                protected.append(max(indices, key=lambda index: weights[index]))
+        protected.sort(key=lambda index: weights[index], reverse=True)
+        protected = protected[:count_basins]
+
+        draw_count = count_basins - len(protected)
+        sampled: list[int] = []
+        if draw_count:
+            rng = np.random.default_rng(int(seed))
+            offset = float(rng.random()) / draw_count
+            targets = offset + np.arange(draw_count, dtype=np.float64) / draw_count
+            cdf = np.cumsum(weights)
+            sampled = np.minimum(
+                np.searchsorted(cdf, targets, side="right"), count_basins - 1
+            ).tolist()
+        selected = protected + sampled
+        offspring: list[IntegerBasin] = []
+        for parent_index in selected:
+            parent = self.basins[parent_index]
+            basin_id = f"b{next(self._ids)}"
+            lineage = (*parent.lineage, basin_id)[-self.genealogy_lag_epochs :]
+            offspring.append(
+                IntegerBasin(
+                    basin_id=basin_id,
+                    assignment=parent.assignment,
+                    conditional=parent.conditional.clone(),
+                    log_weight=-float(np.log(count_basins)),
+                    cumulative_log_marginal=parent.cumulative_log_marginal,
+                    epoch_log_marginal=parent.epoch_log_marginal,
+                    lineage=lineage,
+                    birth_epoch=parent.birth_epoch,
+                    proposal_sources=parent.proposal_sources,
+                    measurement_modes=parent.measurement_modes,
+                    parent_basin_id=parent.basin_id,
+                    resample_epoch=self.epoch,
+                )
+            )
+        self.basins = offspring
+        return BasinResamplingResult(
+            True,
+            ess,
+            count_basins,
+            len(protected),
+            tuple(self.basins[index].parent_basin_id or "" for index in range(count_basins)),
+            tuple(basin.basin_id for basin in self.basins),
+        )
+
+    def replace_with_transitions(
+        self,
+        assignments: Iterable[Mapping[VersionedAmbiguityKey, int]],
+        conditionals: Iterable[BasinKalmanState],
+        log_weights: Iterable[float],
+        parent_ids: Iterable[str | None],
+        *,
+        candidate_source_ids: Iterable[str] | None = None,
+        measurement_modes: Iterable[
+            Mapping[str, str] | Iterable[MeasurementModeItem]
+        ]
+        | None = None,
+    ) -> None:
+        """Atomically replace the live set with explicit transition children."""
+
+        assignments_list = list(assignments)
+        conditionals_list = list(conditionals)
+        weights_list = [float(value) for value in log_weights]
+        parents_list = list(parent_ids)
+        size = len(assignments_list)
+        if not (
+            len(conditionals_list) == size
+            and len(weights_list) == size
+            and len(parents_list) == size
+        ):
+            raise ValueError("transition fields must have equal length")
+        if not assignments_list:
+            self.basins = []
+            self.invalidate_fix()
+            return
+        if not np.all(np.isfinite(weights_list)):
+            raise ValueError("transition log weights must be finite")
+        source_ids = (
+            [str(value) for value in candidate_source_ids]
+            if candidate_source_ids is not None
+            else [""] * size
+        )
+        if len(source_ids) != size:
+            raise ValueError("candidate_source_ids must match transitions")
+        modes = (
+            [_canonical_measurement_modes(value) for value in measurement_modes]
+            if measurement_modes is not None
+            else [()] * size
+        )
+        if len(modes) != size:
+            raise ValueError("measurement_modes must match transitions")
+
+        parents = {basin.basin_id: basin for basin in self.basins}
+        children: list[IntegerBasin] = []
+        for assignment, conditional, log_weight, parent_id, source_id, mode in zip(
+            assignments_list,
+            conditionals_list,
+            weights_list,
+            parents_list,
+            source_ids,
+            modes,
+        ):
+            parent = parents.get(parent_id) if parent_id is not None else None
+            if parent_id is not None and parent is None:
+                raise ValueError(f"unknown transition parent: {parent_id}")
+            basin_id = f"b{next(self._ids)}"
+            lineage = (
+                (*parent.lineage, basin_id)[-self.genealogy_lag_epochs :]
+                if parent is not None
+                else (basin_id,)
+            )
+            children.append(
+                IntegerBasin(
+                    basin_id=basin_id,
+                    assignment=_canonical_assignment(assignment),
+                    conditional=conditional.clone(),
+                    log_weight=log_weight,
+                    cumulative_log_marginal=(
+                        parent.cumulative_log_marginal if parent is not None else 0.0
+                    ),
+                    lineage=lineage,
+                    birth_epoch=max(self.epoch, 0),
+                    proposal_sources=(source_id,) if source_id else (),
+                    measurement_modes=mode,
+                    parent_basin_id=parent_id,
+                )
+            )
+        self.basins = children
         self._deduplicate()
         self._normalize_and_cap()
 
@@ -573,7 +812,12 @@ class AmbiguityBasinParticleFilter:
         if update_fix_state:
             if (
                 eligible
-                and map_assignment == self._last_map
+                and self._last_map is not None
+                and _assignments_compatible(
+                    map_assignment,
+                    self._last_map,
+                    minimum_common=self.min_fixed_ambiguities,
+                )
                 and gamma > self.fix_gamma_threshold
             ):
                 self._fix_streak += 1
@@ -691,11 +935,16 @@ class AmbiguityBasinParticleFilter:
         )
 
     def _deduplicate(self) -> None:
-        grouped: dict[tuple[AssignmentItem, ...], list[IntegerBasin]] = {}
+        grouped: dict[
+            tuple[tuple[AssignmentItem, ...], tuple[MeasurementModeItem, ...]],
+            list[IntegerBasin],
+        ] = {}
         for basin in self.basins:
-            grouped.setdefault(basin.assignment, []).append(basin)
+            grouped.setdefault(
+                (basin.assignment, basin.measurement_modes), []
+            ).append(basin)
         merged: list[IntegerBasin] = []
-        for assignment, assignment_group in grouped.items():
+        for (assignment, measurement_modes), assignment_group in grouped.items():
             remaining = sorted(
                 assignment_group, key=lambda basin: basin.log_weight, reverse=True
             )
@@ -729,6 +978,7 @@ class AmbiguityBasinParticleFilter:
                     )
                 representative = max(group, key=lambda basin: basin.log_weight)
                 representative.assignment = assignment
+                representative.measurement_modes = measurement_modes
                 representative.log_weight = float(total_log_weight)
                 representative.conditional = BasinKalmanState(
                     mean,

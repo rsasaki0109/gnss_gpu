@@ -40,6 +40,21 @@ jobs:
       # migration is handled as a dedicated change.
       - run: python -m pip install --upgrade pip "ruff==0.15.7"
       - run: python -m ruff check python/ --ignore=E501,F401
+      - name: Lint PPC IMU PF/FGO promotion path
+        run: >-
+          python -m ruff check
+          experiments/audit_ppc_basin_fgo_candidate_supply.py
+          experiments/audit_ppc_basin_fgo_cpu_gpu_parity.py
+          experiments/audit_ppc_basin_fgo_tracker.py
+          experiments/audit_ppc_imu_contract.py
+          experiments/audit_ppc_imu_fgo_health.py
+          experiments/build_ppc_imu_pf_fgo_evidence.py
+          experiments/compose_ppc_imu_safe_output.py
+          experiments/inject_ppc_basin_fault.py
+          experiments/inject_ppc_imu_fault.py
+          experiments/run_ppc_basin_fgo_six_route.py
+          experiments/run_ppc_basin_fgo_tracker.py
+          tests/test_build_ppc_imu_pf_fgo_evidence.py
 
   repo-hygiene:
     # Guards cross-platform path safety: long sweep filenames under
@@ -71,7 +86,7 @@ jobs:
           python-version: "3.12"
           cache: "pip"
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install numpy pytest matplotlib requests
+      - run: python -m pip install numpy pandas pytest matplotlib requests
       - run: bash scripts/ci/run_python_smoke.sh
 
   test-wrapper-smoke:

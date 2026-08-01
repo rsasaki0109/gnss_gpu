@@ -32,6 +32,23 @@ pytest -q \
   tests/test_multihypothesis_navigation.py \
   tests/test_realtime_runtime.py \
   tests/test_cross_domain_validation.py \
+  tests/test_ambiguity_basin_pf.py \
+  tests/test_audit_ppc_basin_fgo_candidate_supply.py \
+  tests/test_audit_ppc_basin_fgo_cpu_gpu_parity.py \
+  tests/test_audit_ppc_basin_fgo_tracker.py \
+  tests/test_audit_ppc_imu_contract.py \
+  tests/test_audit_ppc_imu_fgo_health.py \
+  tests/test_basin_fgo_bridge.py \
+  tests/test_basin_fgo_promotion.py \
+  tests/test_basin_imu_bridge.py \
+  tests/test_build_ppc_imu_pf_fgo_evidence.py \
+  tests/test_compose_ppc_imu_safe_output.py \
+  tests/test_inject_ppc_basin_fault.py \
+  tests/test_inject_ppc_imu_fault.py \
+  tests/test_pf_imu_preint_adapter.py \
+  tests/test_ppc_imu_adapter.py \
+  tests/test_run_ppc_basin_fgo_six_route.py \
+  tests/test_run_ppc_basin_fgo_tracker.py \
   tests/test_export_pf_seed_pos.py \
   tests/test_phase6_ros2_soak.py \
   tests/test_release_bundle.py \

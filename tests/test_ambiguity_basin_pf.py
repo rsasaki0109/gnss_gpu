@@ -79,6 +79,42 @@ def test_cumulative_likelihood_concentrates_gamma_and_requires_streak():
     assert dict(states[2].map_assignment) == correct
 
 
+def test_fix_streak_survives_compatible_satellite_set_churn():
+    shared = {_versioned_key(f"G{sat:02d}"): sat for sat in range(2, 8)}
+    first = {**shared, _versioned_key("G08"): 8}
+    second = {**shared, _versioned_key("G09"): 9}
+    pf = AmbiguityBasinParticleFilter(
+        fix_gamma_threshold=0.99,
+        fix_min_streak=2,
+        min_fixed_ambiguities=6,
+    )
+    pf.spawn([first], [_conditional()])
+    assert pf.posterior().fix_streak == 1
+    parent = pf.basins[0].basin_id
+    pf.replace_with_transitions([second], [_conditional()], [0.0], [parent])
+    posterior = pf.posterior()
+    assert posterior.fix_streak == 2
+    assert posterior.fixed
+
+
+def test_fix_streak_resets_on_common_integer_conflict_or_arc_change():
+    first = {
+        _versioned_key(f"G{sat:02d}"): sat for sat in range(2, 8)
+    }
+    conflict = dict(first)
+    conflict[_versioned_key("G02")] += 1
+    pf = AmbiguityBasinParticleFilter(
+        fix_gamma_threshold=0.99,
+        fix_min_streak=2,
+        min_fixed_ambiguities=6,
+    )
+    pf.spawn([first], [_conditional()])
+    assert pf.posterior().fix_streak == 1
+    parent = pf.basins[0].basin_id
+    pf.replace_with_transitions([conflict], [_conditional()], [0.0], [parent])
+    assert pf.posterior().fix_streak == 1
+
+
 def test_duplicate_assignments_merge_mass_and_conditionals():
     assignment = {_versioned_key(): 7}
     pf = AmbiguityBasinParticleFilter()
@@ -315,3 +351,75 @@ def test_basin_update_reports_mixture_log_marginal():
     assert no_op.n_basins == 0
     assert no_op.n_rows == 0
     assert no_op.log_marginal == 0.0
+
+
+def test_measurement_modes_are_distinct_discrete_basins() -> None:
+    pf = AmbiguityBasinParticleFilter(dedup_position_radius_m=1.0)
+    state = _conditional(0.0)
+    pf.spawn(
+        [{}, {}],
+        [state, state],
+        measurement_modes=[{"G01:L1": "los"}, {"G01:L1": "nlos"}],
+    )
+    assert len(pf.basins) == 2
+    assert {basin.measurement_modes for basin in pf.basins} == {
+        (("G01:L1", "los"),),
+        (("G01:L1", "nlos"),),
+    }
+
+
+def test_systematic_resampling_is_deterministic_and_records_genealogy() -> None:
+    pf = AmbiguityBasinParticleFilter(
+        dedup_position_radius_m=0.1,
+        genealogy_lag_epochs=3,
+    )
+    pf.spawn(
+        [{}, {}],
+        [_conditional(0.0), _conditional(5.0)],
+        measurement_modes=[{"G01:L1": "los"}, {"G01:L1": "nlos"}],
+    )
+    pf.basins[0].log_weight = np.log(0.99)
+    pf.basins[1].log_weight = np.log(0.01)
+    parent_ids = {basin.basin_id for basin in pf.basins}
+    result = pf.resample_if_needed(
+        ess_ratio_threshold=0.9,
+        minimum_survival_mass=0.005,
+        seed=7,
+    )
+    assert result.triggered
+    assert result.particle_count == 2
+    assert result.protected_count == 2
+    assert set(result.ancestor_ids) == parent_ids
+    assert all(basin.parent_basin_id in parent_ids for basin in pf.basins)
+    assert all(basin.resample_epoch == pf.epoch for basin in pf.basins)
+    np.testing.assert_allclose(
+        [np.exp(basin.log_weight) for basin in pf.basins], [0.5, 0.5]
+    )
+
+
+def test_resampling_does_not_run_above_ess_threshold() -> None:
+    pf = AmbiguityBasinParticleFilter(dedup_position_radius_m=0.1)
+    pf.spawn([{}, {}], [_conditional(0.0), _conditional(5.0)])
+    ids = tuple(basin.basin_id for basin in pf.basins)
+    result = pf.resample_if_needed(ess_ratio_threshold=0.4, seed=9)
+    assert not result.triggered
+    assert result.ancestor_ids == ids
+    assert result.offspring_ids == ids
+
+
+def test_explicit_transitions_preserve_parent_genealogy() -> None:
+    pf = AmbiguityBasinParticleFilter(dedup_position_radius_m=0.1)
+    pf.spawn([{}], [_conditional(0.0)])
+    parent_id = pf.basins[0].basin_id
+    pf.replace_with_transitions(
+        [{_versioned_key(): 7}],
+        [_conditional(1.0)],
+        [-2.0],
+        [parent_id],
+        candidate_source_ids=["native_fgo:g0:r0"],
+    )
+    assert len(pf.basins) == 1
+    child = pf.basins[0]
+    assert child.parent_basin_id == parent_id
+    assert child.lineage[-2:] == (parent_id, child.basin_id)
+    assert child.assignment_dict == {_versioned_key(): 7}
