@@ -23,7 +23,7 @@ def test_summarize_slices_scope_and_parses_tight_diagnostics(tmp_path: Path) -> 
         "% header\n2200 1.00 1.0 0.0 0.0\n2200 2.00 3.0 0.0 0.0\n",
         encoding="utf-8",
     )
-    log = """Tight DD/IMU epochs: 2 (accepted=1, innovation_rejected=1)
+    log = """Tight DD/IMU epochs: 2 (accepted=1, innovation_rejected=1, heading_deferred=3)
 Tight DD rows: 18
 Partial-AR epochs/fixed ambiguities: 1/4
 Innovation-gated soft resets: 1
@@ -39,6 +39,7 @@ Innovation-gated soft resets: 1
     assert summary["tight_dd_epochs"] == 2
     assert summary["tight_dd_accepted"] == 1
     assert summary["tight_dd_rejected"] == 1
+    assert summary["tight_dd_heading_deferred"] == 3
     assert summary["tight_dd_rows"] == 18
     assert summary["partial_ar_epochs"] == 1
     assert summary["fixed_ambiguities"] == 4
@@ -50,6 +51,7 @@ Innovation-gated soft resets: 1
     assert sliced["coverage"] == 1.0
     assert sliced["tight_dd_epochs"] is None
     assert sliced["tight_dd_accepted"] is None
+    assert sliced["tight_dd_heading_deferred"] is None
     assert sliced["partial_ar_epochs"] is None
 
     baseline = dict(

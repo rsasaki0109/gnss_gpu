@@ -530,3 +530,73 @@ policy.
 
 Failure to reach 70%/80% is reported as a measured candidate/oracle boundary;
 it does not authorize relaxing the false-fix integrity limits.
+
+## Post-ceiling GNSS experiments
+
+Three additional paper/OSS-derived mechanisms were implemented behind exact
+default-off flags and tested on the same six 300-epoch PPC routes.
+
+* A Doppler-conditioned integer cycle-slip repair follows the cycle-slip
+  amount-state idea in Suzuki's
+  [GNSS Odometry](https://arxiv.org/abs/2312.02424). It uses trapezoidal
+  single-difference Doppler to predict SD-TDCP, rounds only a bounded integer
+  cycle amount, and fails closed when Doppler, wavelength, reference identity,
+  or the integer tolerance is unavailable. Hidden-slip inference was rejected
+  after gross over-detection (12,782 repairs and a Tokyo correct-FIX regression
+  from 163 to 114); the retained implementation is LLI-triggered only. The PPC
+  prefix contained no eligible LLI event, so this is a tested fault-recovery
+  primitive, not an availability gain.
+* Window carrier-minus-code conditioning follows the WCP formulation in
+  [Bai et al.](https://arxiv.org/abs/2109.00683) and the later FGO-WCMC NLOS
+  approach ([Measurement 2026 DOI](https://doi.org/10.1016/j.measurement.2026.121826)).
+  The implementation learns a causal per-satellite code-bias baseline after a
+  warm-up, gates correction magnitude, and changes DD code only; carrier and
+  ambiguity arcs are invariant. Applying it without the paper's upstream
+  multi-epoch/LightGBM NLOS classifier was not robust: the 0.5 m-gated replay
+  produced 1,039 correct versus baseline 1,047 (zero false in both). It remains
+  opt-in and is not promoted.
+* Fallback-only Integer Aperture uses the existing LAMBDA conditional
+  variances and the published Hou FFRT table at Pf=0.001. Scale 16 made 39,022
+  attempts and accepted none. Scale 1 made 5,317 attempts and passed 4,899 but
+  produced exactly the same 1,047 final accepted epochs as the frozen quality
+  fallback. It adds no independent candidate supply and is not promoted.
+
+The safe full-route dual-holdout result therefore remains the production
+candidate: Tokyo 6,237/11,928 (52.2887%) and Nagoya 5,344/7,602 (70.2973%),
+with zero false and zero >1 m FIXes. These negative results are important:
+they prevent relabeling threshold relaxation or unconditional code smoothing
+as a paper-backed improvement.
+
+## Phase B: PPC IMU fusion and tight-DD safety
+
+The native fusion stack was audited rather than duplicated. It already owns a
+15-state error-state filter, static gravity/roll-pitch alignment, online accel
+and gyro biases with random-walk covariance, 100 Hz mechanization and
+preintegration, ECEF/ENU transforms, IMU-to-antenna lever-arm position and
+angular-rate velocity compensation, Doppler velocity updates, ZUPT/NHC, and a
+bounded trusted-reanchor outage path. LiDAR and camera remain excluded. IMU is
+never allowed to publish FIX by itself; integer validation remains GNSS-only.
+
+The initial tight-DD/IMU smoke exposed a missing observability gate. On
+Nagoya run1's 100-epoch development span, 90 low-NIS DD updates were committed
+before heading convergence and changed p95 from 0.382 m to 1.409 m, with zero
+0.5 m passes. `processTightlyCoupledDD()` now fails closed until
+`isHeadingConverged()`, reports `heading_deferred`, and has a synthetic state-
+invariance test. The identical replay deferred all 90 updates, restored the
+honest score to 100%, and produced p95 0.377 m. The guard is an API invariant,
+so callers cannot accidentally bypass it.
+
+Across all six blocked spans, heading-converged tight-DD was mixed: Tokyo
+run2 improved honest score 63.26% to 70.97%, but Tokyo run3 regressed 86.60%
+to 76.96%, and DD innovation NIS did not separate those cases. It therefore
+remains an explicit research ablation. The production Phase-B policy is the
+ordinary GNSS/IMU loose filter plus safe preintegration/continuity; tight-DD
+does not become a default FIX or position authority.
+
+The paper-derived constant GNSS/IMU time-offset scorer was also exercised on
+two independent PPC routes. Nagoya run2 selected -0.04 s from 178 correction
+epochs (J=0.000349 m^2), while Tokyo run2 selected +0.06 s from 364 correction
+epochs (J=0.005546 m^2). Their 0.10 s disagreement exceeds the predeclared two
+fine-step agreement rule, and the Nagoya objective was nearly flat around
+zero. A global route-fitted offset is therefore rejected; the exact no-op
+0.0 s default is retained.

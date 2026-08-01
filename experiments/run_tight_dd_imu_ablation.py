@@ -146,7 +146,8 @@ def _summarize(
         ),
     }
     tight_match = re.search(
-        r"^Tight DD/IMU epochs:\s*\d+\s*\(accepted=(\d+),\s*innovation_rejected=(\d+)\)",
+        r"^Tight DD/IMU epochs:\s*\d+\s*\(accepted=(\d+),\s*innovation_rejected=(\d+)"
+        r"(?:,\s*heading_deferred=(\d+))?\)",
         log,
         flags=re.MULTILINE,
     )
@@ -161,6 +162,11 @@ def _summarize(
     result["tight_dd_rejected"] = (
         int(tight_match.group(2)) if include_diagnostics and tight_match else None
     )
+    result["tight_dd_heading_deferred"] = (
+        int(tight_match.group(3))
+        if include_diagnostics and tight_match and tight_match.group(3) is not None
+        else None
+    )
     result["partial_ar_epochs"] = (
         int(par_match.group(1)) if include_diagnostics and par_match else None
     )
@@ -170,6 +176,9 @@ def _summarize(
     if include_diagnostics:
         result["tight_dd_accepted"] = result["tight_dd_accepted"] or 0
         result["tight_dd_rejected"] = result["tight_dd_rejected"] or 0
+        result["tight_dd_heading_deferred"] = (
+            result["tight_dd_heading_deferred"] or 0
+        )
         result["partial_ar_epochs"] = result["partial_ar_epochs"] or 0
         result["fixed_ambiguities"] = result["fixed_ambiguities"] or 0
     if errors.size:
@@ -255,6 +264,7 @@ def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
         "tight_dd_epochs",
         "tight_dd_accepted",
         "tight_dd_rejected",
+        "tight_dd_heading_deferred",
         "tight_dd_rows",
         "carrier_to_code_fallbacks",
         "partial_ar_epochs",
