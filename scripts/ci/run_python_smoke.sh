@@ -42,11 +42,16 @@ pytest -q \
   tests/test_basin_fgo_promotion.py \
   tests/test_basin_imu_bridge.py \
   tests/test_build_ppc_imu_pf_fgo_evidence.py \
+  tests/test_compose_ppc_safe_trajectory.py \
   tests/test_compose_ppc_imu_safe_output.py \
+  tests/test_evaluate_ppc_official_score.py \
+  tests/test_evaluate_ppc_official_suite.py \
   tests/test_inject_ppc_basin_fault.py \
   tests/test_inject_ppc_imu_fault.py \
+  tests/test_inventory_ppc_pos_candidates.py \
   tests/test_pf_imu_preint_adapter.py \
   tests/test_ppc_imu_adapter.py \
+  tests/test_ppc_score.py \
   tests/test_run_ppc_basin_fgo_six_route.py \
   tests/test_run_ppc_basin_fgo_tracker.py \
   tests/test_export_pf_seed_pos.py \
