@@ -7,6 +7,17 @@ from experiments.run_ppc_basin_fgo_six_route import (
 )
 
 
+def test_tracker_policy_is_explicit_in_runner_source() -> None:
+    source = Path("experiments/run_ppc_basin_fgo_six_route.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"--fix-min-streak", str(args.fix_min_streak)' in source
+    assert (
+        '"--validation-gap-tolerance", str(args.validation_gap_tolerance)'
+        in source
+    )
+
+
 def test_solver_command_excludes_reference_and_emits_basin_stream(tmp_path: Path) -> None:
     route = tmp_path / "tokyo" / "run1"
     command, artifacts = _solver_command(

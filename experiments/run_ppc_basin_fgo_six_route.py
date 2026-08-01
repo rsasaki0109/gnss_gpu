@@ -177,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-epochs", type=int, default=300)
     parser.add_argument("--skip-epochs", type=int, default=0)
     parser.add_argument("--top-k", type=int, default=4)
+    parser.add_argument("--fix-min-streak", type=int, default=3)
+    parser.add_argument("--validation-gap-tolerance", type=int, default=0)
     parser.add_argument("--cuda-mode", choices=("off", "auto", "on"), default="off")
     parser.add_argument("--route", action="append")
     parser.add_argument("--resume", action="store_true")
@@ -199,6 +201,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not 2 <= args.top_k <= 32:
         parser.error("--top-k must be in [2, 32]")
+    if args.fix_min_streak < 2:
+        parser.error("--fix-min-streak must be at least two")
+    if args.validation_gap_tolerance < 0:
+        parser.error("--validation-gap-tolerance must be non-negative")
     if args.skip_epochs < 0:
         parser.error("--skip-epochs must be non-negative")
     binary = args.binary.resolve()
@@ -257,6 +263,8 @@ def main(argv: list[str] | None = None) -> int:
             "--basin-jsonl", str(artifacts["basins"]),
             "--output", str(artifacts["tracker"]),
             "--summary", str(artifacts["tracker_summary"]),
+            "--fix-min-streak", str(args.fix_min_streak),
+            "--validation-gap-tolerance", str(args.validation_gap_tolerance),
         ]
         if args.imu:
             tracker_command.extend(("--imu-csv", str(route_dir / "imu.csv")))
@@ -327,6 +335,8 @@ def main(argv: list[str] | None = None) -> int:
         "max_epochs": args.max_epochs,
         "skip_epochs": args.skip_epochs,
         "top_k": args.top_k,
+        "fix_min_streak": args.fix_min_streak,
+        "validation_gap_tolerance_epochs": args.validation_gap_tolerance,
         "cuda_mode": args.cuda_mode,
         "production_input_truth": False,
         "imu_enabled": args.imu,
