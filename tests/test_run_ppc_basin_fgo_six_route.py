@@ -15,6 +15,9 @@ def test_tracker_policy_is_explicit_in_runner_source() -> None:
     assert "str(args.fix_min_streak)" in source
     assert '"--validation-gap-tolerance",' in source
     assert "str(args.validation_gap_tolerance)" in source
+    assert '"--disjoint-holdout-consensus"' in source
+    assert "str(args.disjoint_holdout_margin)" in source
+    assert '"--disjoint-holdout-min-carrier-fraction"' in source
 
 
 def test_solver_command_excludes_reference_and_emits_basin_stream(

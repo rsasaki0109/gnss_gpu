@@ -84,6 +84,14 @@ FIX epochs, including 1,608 above 1 m. It is therefore rejected as FIX
 authority. Separating its position trajectory from FIX authority removes all
 wrong FIXes but does not recover the score regression on five routes.
 
+The subsequent disjoint carrier-holdout consensus raises safe-FIX authority
+again, from 9,964 to 10,794 correct epochs (22.129%, +830), with zero false FIX
+and zero false FIX above 1 m on all six routes. The frozen 0.02 partition margin
+and 75% detailed carrier pass-consistency guard also pass eight GNSS/IMU fault
+audits. This remains an authority-only improvement: it does not alter the
+position trajectory and therefore does not revise the official 58.509% score.
+It is public-route evidence, not a blind SOTA result.
+
 ## PF/FGO and GPU gates
 
 The tested PF/FGO path covers multiple ambiguity basins, conditioned FGO

@@ -37,6 +37,11 @@ CONFIG_KEYS = (
     "constellation_par",
     "interleave_constellation_par",
     "quality_ranked_par",
+    "disjoint_holdout_consensus",
+    "disjoint_holdout_margin",
+    "disjoint_holdout_min_satellites",
+    "disjoint_holdout_residual_clip",
+    "disjoint_holdout_min_carrier_fraction",
 )
 
 

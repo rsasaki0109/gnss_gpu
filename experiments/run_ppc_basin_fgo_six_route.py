@@ -221,6 +221,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--constellation-par", action="store_true")
     parser.add_argument("--interleave-constellation-par", action="store_true")
     parser.add_argument("--quality-ranked-par", action="store_true")
+    parser.add_argument("--disjoint-holdout-consensus", action="store_true")
+    parser.add_argument("--disjoint-holdout-margin", type=float, default=0.02)
+    parser.add_argument("--disjoint-holdout-min-satellites", type=int, default=2)
+    parser.add_argument("--disjoint-holdout-residual-clip", type=float, default=3.0)
+    parser.add_argument(
+        "--disjoint-holdout-min-carrier-fraction", type=float, default=0.75
+    )
     parser.add_argument("--cuda-mode", choices=("off", "auto", "on"), default="off")
     parser.add_argument("--route", action="append")
     parser.add_argument("--resume", action="store_true")
@@ -265,6 +272,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--fallback-max-seed-separation must be non-negative")
     if args.interleave_constellation_par and not args.constellation_par:
         parser.error("--interleave-constellation-par requires --constellation-par")
+    if args.disjoint_holdout_margin < 0.0:
+        parser.error("--disjoint-holdout-margin must be non-negative")
+    if args.disjoint_holdout_min_satellites < 1:
+        parser.error("--disjoint-holdout-min-satellites must be positive")
+    if args.disjoint_holdout_residual_clip <= 0.0:
+        parser.error("--disjoint-holdout-residual-clip must be positive")
+    if not 0.0 < args.disjoint_holdout_min_carrier_fraction <= 1.0:
+        parser.error("--disjoint-holdout-min-carrier-fraction must be in (0, 1]")
     if args.skip_epochs < 0:
         parser.error("--skip-epochs must be non-negative")
     binary = args.binary.resolve()
@@ -362,6 +377,20 @@ def main(argv: list[str] | None = None) -> int:
                     str(args.native_imu_fix_min_streak),
                 )
             )
+        if args.disjoint_holdout_consensus:
+            tracker_command.extend(
+                (
+                    "--disjoint-holdout-consensus",
+                    "--disjoint-holdout-margin",
+                    str(args.disjoint_holdout_margin),
+                    "--disjoint-holdout-min-satellites",
+                    str(args.disjoint_holdout_min_satellites),
+                    "--disjoint-holdout-residual-clip",
+                    str(args.disjoint_holdout_residual_clip),
+                    "--disjoint-holdout-min-carrier-fraction",
+                    str(args.disjoint_holdout_min_carrier_fraction),
+                )
+            )
         subprocess.run(tracker_command, check=True)
 
         # Only this final subprocess receives a reference path. Both estimator
@@ -433,6 +462,13 @@ def main(argv: list[str] | None = None) -> int:
         "constellation_par": args.constellation_par,
         "interleave_constellation_par": args.interleave_constellation_par,
         "quality_ranked_par": args.quality_ranked_par,
+        "disjoint_holdout_consensus": args.disjoint_holdout_consensus,
+        "disjoint_holdout_margin": args.disjoint_holdout_margin,
+        "disjoint_holdout_min_satellites": (args.disjoint_holdout_min_satellites),
+        "disjoint_holdout_residual_clip": args.disjoint_holdout_residual_clip,
+        "disjoint_holdout_min_carrier_fraction": (
+            args.disjoint_holdout_min_carrier_fraction
+        ),
         "cuda_mode": args.cuda_mode,
         "production_input_truth": False,
         "imu_enabled": args.imu,

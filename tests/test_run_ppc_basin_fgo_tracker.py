@@ -46,6 +46,27 @@ def _row(epoch: int, rank: int, fixed: int, evidence: float, passed: bool) -> di
     }
 
 
+def _with_carrier_partition_costs(
+    row: dict, left_cost: float, right_cost: float
+) -> dict:
+    residuals = []
+    for index, satellite in enumerate(("G20", "G21", "G22", "G23")):
+        normalized = left_cost if index % 2 == 0 else right_cost
+        residuals.append(
+            {
+                "epoch_index": row["epoch_index"],
+                "satellite": satellite,
+                "reference_satellite": "G01",
+                "signal": 0,
+                "kind": "carrier",
+                "normalized_residual": normalized,
+                "pass": True,
+            }
+        )
+    row["validation_residuals"] = residuals
+    return row
+
+
 def test_tracker_requires_posterior_streak_and_unique_independent_pass() -> None:
     rows = {
         epoch: [
@@ -75,6 +96,57 @@ def test_tracker_abstains_when_two_holdout_hypotheses_pass() -> None:
     output = track_basin_rows(rows, likelihood_temperature=1.0)
     assert all(row["shadow_fixed"] == 0 for row in output)
     assert all(row["unique_holdout_pass"] == 0 for row in output)
+
+
+def test_disjoint_holdout_consensus_selects_only_shared_partition_winner() -> None:
+    rows = {
+        epoch: [
+            _with_carrier_partition_costs(_row(epoch, 0, 8, 0.0, True), 0.1, 0.1),
+            _with_carrier_partition_costs(_row(epoch, 1, 9, -20.0, True), 0.5, 0.5),
+        ]
+        for epoch in range(3)
+    }
+    output = track_basin_rows(
+        rows,
+        likelihood_temperature=1.0,
+        fix_gamma_threshold=0.99,
+        fix_min_streak=2,
+        disjoint_holdout_consensus=True,
+        disjoint_holdout_margin=0.02,
+    )
+    assert [row["disjoint_holdout_selected"] for row in output] == [1, 1, 1]
+    assert [row["selected_rank"] for row in output] == [0, 0, 0]
+    assert [row["shadow_fixed"] for row in output] == [0, 1, 1]
+    assert all(row["unique_holdout_pass"] == 0 for row in output)
+
+
+def test_disjoint_holdout_consensus_abstains_on_partition_disagreement() -> None:
+    rows = {
+        epoch: [
+            _with_carrier_partition_costs(_row(epoch, 0, 8, 0.0, True), 0.1, 0.5),
+            _with_carrier_partition_costs(_row(epoch, 1, 9, -20.0, True), 0.5, 0.1),
+        ]
+        for epoch in range(3)
+    }
+    output = track_basin_rows(rows, disjoint_holdout_consensus=True)
+    assert all(row["disjoint_holdout_selected"] == 0 for row in output)
+    assert all(row["shadow_fixed"] == 0 for row in output)
+
+
+def test_disjoint_holdout_consensus_abstains_on_inconsistent_carrier_pass() -> None:
+    rows = {
+        epoch: [
+            _with_carrier_partition_costs(_row(epoch, 0, 8, 0.0, True), 0.1, 0.1),
+            _with_carrier_partition_costs(_row(epoch, 1, 9, -20.0, True), 0.5, 0.5),
+        ]
+        for epoch in range(3)
+    }
+    for epoch_rows in rows.values():
+        for residual in epoch_rows[0]["validation_residuals"][2:]:
+            residual["pass"] = False
+    output = track_basin_rows(rows, disjoint_holdout_consensus=True)
+    assert all(row["disjoint_holdout_selected"] == 0 for row in output)
+    assert all(row["shadow_fixed"] == 0 for row in output)
 
 
 def test_tracker_treats_missing_evaluated_group_as_fail_closed_gap() -> None:
@@ -290,6 +362,7 @@ def test_pf_feedback_contains_only_fixed_selected_holdout_mode(tmp_path) -> None
             "shadow_fixed": 1,
             "selected_rank": 0,
             "unique_holdout_pass": 1,
+            "disjoint_holdout_selected": 0,
             "imu_aperture_selected": 0,
             "imu_accelerated_fix": 0,
         },
@@ -306,15 +379,12 @@ def test_pf_feedback_contains_only_fixed_selected_holdout_mode(tmp_path) -> None
     with path.open(encoding="utf-8", newline="") as stream:
         rows = list(csv.DictReader(stream))
     assert {row["selected_native_holdout_pass"] for row in rows} == {"1"}
-    assert {row["schema"] for row in rows} == {
-        "gnss_gpu_pf_fgo_feedback_v1"
-    }
+    assert {row["disjoint_holdout_selected"] for row in rows} == {"0"}
+    assert {row["schema"] for row in rows} == {"gnss_gpu_pf_fgo_feedback_v1"}
 
 
 def test_tracker_emits_delayed_ffbsi_without_changing_current_fix() -> None:
-    rows = {
-        epoch: [_row(epoch, 0, 8, 0.0, True)] for epoch in range(4)
-    }
+    rows = {epoch: [_row(epoch, 0, 8, 0.0, True)] for epoch in range(4)}
     output = track_basin_rows(
         rows,
         fix_min_streak=2,
