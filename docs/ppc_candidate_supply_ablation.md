@@ -170,6 +170,44 @@ promotion changes safe integer authority only. It does not change the position
 stream consumed by the official trajectory scorer and therefore makes no new
 official-score or blind-SOTA claim.
 
+## Causal IMU motion consensus
+
+The next frozen policy uses only earlier safe FIX epochs as IMU/GNSS offset
+anchors. Anchors within the previous 10 seconds are sampled at least 0.4
+seconds apart and divided into alternating temporal partitions. Each partition
+needs three anchors and predicts the current GNSS/IMU offset by its component
+median. Both partitions must select the same ambiguity basin, with maximum
+motion residual 0.75 m and minimum winner margin 0.02 m. The candidate carrier
+detail pass fraction must be at least 75%; malformed or contradictory evidence
+abstains.
+
+Thresholds were selected using run1/run2 only. Their full-length safe FIX count
+rose from 5,471 to 5,668 (+197), with zero false FIX. The settings were then
+frozen before opening run3 scores. Held run3 rose from 5,323 to 5,363 (+40),
+also with zero false FIX. The unified deterministic replay produced:
+
+| Route | Disjoint baseline | Motion consensus | Delta | False / >1 m |
+|---|---:|---:|---:|---:|
+| Tokyo run1 | 1,216 | 1,257 | +41 | 0 / 0 |
+| Tokyo run2 | 1,883 | 1,907 | +24 | 0 / 0 |
+| Tokyo run3 | 5,114 | 5,154 | +40 | 0 / 0 |
+| Nagoya run1 | 1,062 | 1,160 | +98 | 0 / 0 |
+| Nagoya run2 | 1,310 | 1,344 | +34 | 0 / 0 |
+| Nagoya run3 | 209 | 209 | 0 | 0 / 0 |
+| **All routes** | **10,794** | **11,031** | **+237** | **0 / 0** |
+
+Safe-FIX availability is therefore 22.615% of 48,778 epochs. All eight frozen
+GNSS/IMU fault injections remain at zero false FIX; motion consensus abstains
+in every fault case. A repeated full replay matches every decision and output
+field except runtime telemetry.
+
+Composing the new authority with the existing primary FLOAT trajectory leaves
+the official forward-only score exactly unchanged at 58.521912%. The added
+FIX positions replace epochs whose primary positions already passed the 0.5 m
+threshold. This improvement is useful integrity metadata, but does not advance
+the 70% trajectory target. Evidence is recorded in
+`internal_docs/ppc_causal_imu_motion_consensus_evidence_2026_08_02.json`.
+
 ## CUDA plus native IMU FGO check
 
 The combined GTSAM+CUDA binary was also tested on the same Nagoya run3 slice.

@@ -42,6 +42,13 @@ class NativeImuFgoState:
     velocity_ecef_mps: np.ndarray
 
 
+@dataclass(frozen=True)
+class CausalImuOffsetAnchor:
+    tow_s: float
+    fixed_position_ecef_m: np.ndarray
+    imu_position_ecef_m: np.ndarray
+
+
 def _native_imu_fgo_state(native_rows: list[dict]) -> NativeImuFgoState | None:
     """Parse one causal native IMU-FGO proposal without treating it as evidence."""
 
@@ -142,6 +149,7 @@ def write_validated_pf_feedback(
         "fixed_cycles",
         "unique_holdout_pass",
         "disjoint_holdout_selected",
+        "causal_imu_motion_selected",
         "imu_aperture_selected",
         "imu_accelerated_fix",
         "selected_native_holdout_pass",
@@ -183,6 +191,9 @@ def write_validated_pf_feedback(
                     "unique_holdout_pass": int(tracker.get("unique_holdout_pass", 0)),
                     "disjoint_holdout_selected": int(
                         tracker.get("disjoint_holdout_selected", 0)
+                    ),
+                    "causal_imu_motion_selected": int(
+                        tracker.get("causal_imu_motion_selected", 0)
                     ),
                     "imu_aperture_selected": int(
                         tracker.get("imu_aperture_selected", 0)
@@ -315,6 +326,130 @@ def _disjoint_carrier_holdout_winner(
     return winners[0], minimum_margin
 
 
+def _carrier_details_consistent(
+    native_rows: list[dict],
+    candidates: list[NativeFGOHypothesisCandidate],
+    *,
+    group_index: int,
+    minimum_pass_fraction: float,
+) -> bool:
+    """Require top-level passes to agree with detailed carrier decisions."""
+
+    rows_by_rank = {
+        int(row.get("rank", -1)): row
+        for row in native_rows
+        if row.get("group_index") == int(group_index)
+        and row.get("evaluated") is True
+        and row.get("pass") is True
+    }
+    for candidate in candidates:
+        row = rows_by_rank.get(int(candidate.rank))
+        residuals = row.get("validation_residuals") if row is not None else None
+        if not isinstance(residuals, list):
+            return False
+        carrier_rows = [
+            residual
+            for residual in residuals
+            if isinstance(residual, dict) and residual.get("kind") == "carrier"
+        ]
+        if not carrier_rows or (
+            sum(residual.get("pass") is True for residual in carrier_rows)
+            / len(carrier_rows)
+            < float(minimum_pass_fraction)
+        ):
+            return False
+    return True
+
+
+def _causal_imu_motion_consensus_winner(
+    native_rows: list[dict],
+    candidates: list[NativeFGOHypothesisCandidate],
+    anchors: list[CausalImuOffsetAnchor],
+    *,
+    tow_s: float,
+    imu_position_ecef_m: np.ndarray,
+    group_index: int,
+    window_s: float,
+    minimum_anchor_spacing_s: float,
+    minimum_anchors_per_partition: int,
+    maximum_residual_m: float,
+    minimum_margin_m: float,
+    minimum_carrier_pass_fraction: float,
+) -> tuple[NativeFGOHypothesisCandidate | None, float, float, int]:
+    """Select only when two causal anchor partitions prefer the same basin."""
+
+    if len(candidates) < 2 or not _carrier_details_consistent(
+        native_rows,
+        candidates,
+        group_index=int(group_index),
+        minimum_pass_fraction=float(minimum_carrier_pass_fraction),
+    ):
+        return None, float("nan"), float("nan"), 0
+    selected_anchors: list[CausalImuOffsetAnchor] = []
+    for anchor in reversed(anchors):
+        age_s = float(tow_s) - float(anchor.tow_s)
+        if age_s < 0.0:
+            return None, float("nan"), float("nan"), 0
+        if age_s > float(window_s):
+            break
+        if not selected_anchors or selected_anchors[-1].tow_s - anchor.tow_s >= float(
+            minimum_anchor_spacing_s
+        ):
+            selected_anchors.append(anchor)
+    partitions = (selected_anchors[::2], selected_anchors[1::2])
+    if any(
+        len(partition) < int(minimum_anchors_per_partition) for partition in partitions
+    ):
+        return None, float("nan"), float("nan"), len(selected_anchors)
+
+    current_imu = np.asarray(imu_position_ecef_m, dtype=np.float64).reshape(3)
+    winners: list[NativeFGOHypothesisCandidate] = []
+    winner_residuals: list[float] = []
+    margins: list[float] = []
+    for partition in partitions:
+        offsets = np.asarray(
+            [
+                anchor.fixed_position_ecef_m - anchor.imu_position_ecef_m
+                for anchor in partition
+            ],
+            dtype=np.float64,
+        )
+        if (
+            offsets.ndim != 2
+            or offsets.shape[1] != 3
+            or not np.all(np.isfinite(offsets))
+        ):
+            return None, float("nan"), float("nan"), len(selected_anchors)
+        predicted_offset = np.median(offsets, axis=0)
+        scores = sorted(
+            (
+                float(
+                    np.linalg.norm(
+                        candidate.position_ecef_m - current_imu - predicted_offset
+                    )
+                ),
+                int(candidate.rank),
+                candidate,
+            )
+            for candidate in candidates
+        )
+        if not all(np.isfinite(score[0]) for score in scores):
+            return None, float("nan"), float("nan"), len(selected_anchors)
+        winners.append(scores[0][2])
+        winner_residuals.append(scores[0][0])
+        margins.append(scores[1][0] - scores[0][0])
+
+    maximum_winner_residual = max(winner_residuals)
+    minimum_margin = min(margins)
+    if (
+        winners[0].rank != winners[1].rank
+        or maximum_winner_residual > float(maximum_residual_m)
+        or minimum_margin < float(minimum_margin_m)
+    ):
+        return None, maximum_winner_residual, minimum_margin, len(selected_anchors)
+    return winners[0], maximum_winner_residual, minimum_margin, len(selected_anchors)
+
+
 def track_basin_rows(
     rows_by_epoch: dict[int, list[dict]],
     *,
@@ -337,6 +472,13 @@ def track_basin_rows(
     disjoint_holdout_min_satellites: int = 2,
     disjoint_holdout_residual_clip: float = 3.0,
     disjoint_holdout_min_carrier_fraction: float = 0.75,
+    causal_imu_motion_consensus: bool = False,
+    causal_imu_motion_window_s: float = 10.0,
+    causal_imu_motion_anchor_spacing_s: float = 0.4,
+    causal_imu_motion_min_anchors_per_partition: int = 3,
+    causal_imu_motion_gate_m: float = 0.75,
+    causal_imu_motion_margin_m: float = 0.02,
+    causal_imu_motion_min_carrier_fraction: float = 0.75,
     ffbsi_lag_epochs: int = 0,
     ffbsi_backward_samples: int = 128,
     ffbsi_seed: int = 0,
@@ -361,6 +503,18 @@ def track_basin_rows(
         raise ValueError("disjoint_holdout_residual_clip must be positive")
     if not 0.0 < disjoint_holdout_min_carrier_fraction <= 1.0:
         raise ValueError("disjoint_holdout_min_carrier_fraction must be in (0, 1]")
+    if causal_imu_motion_window_s <= 0.0:
+        raise ValueError("causal_imu_motion_window_s must be positive")
+    if causal_imu_motion_anchor_spacing_s <= 0.0:
+        raise ValueError("causal_imu_motion_anchor_spacing_s must be positive")
+    if causal_imu_motion_min_anchors_per_partition < 1:
+        raise ValueError("causal_imu_motion_min_anchors_per_partition must be positive")
+    if causal_imu_motion_gate_m <= 0.0:
+        raise ValueError("causal_imu_motion_gate_m must be positive")
+    if causal_imu_motion_margin_m < 0.0:
+        raise ValueError("causal_imu_motion_margin_m must be non-negative")
+    if not 0.0 < causal_imu_motion_min_carrier_fraction <= 1.0:
+        raise ValueError("causal_imu_motion_min_carrier_fraction must be in (0, 1]")
 
     particle_filter = AmbiguityBasinParticleFilter(
         max_basins=int(max_basins),
@@ -382,6 +536,7 @@ def track_basin_rows(
     fallback_velocity = np.zeros(3, dtype=np.float64)
     previous_position: np.ndarray | None = None
     previous_native_imu: NativeImuFgoState | None = None
+    causal_imu_anchors: list[CausalImuOffsetAnchor] = []
     smoother = (
         FixedLagBasinFFBSi(ffbsi_lag_epochs, ffbsi_backward_samples)
         if ffbsi_lag_epochs > 0
@@ -514,6 +669,41 @@ def track_basin_rows(
                 ] - ranked[0][0] >= float(native_imu_aperture_margin_m):
                     passing = [ranked[0][1]]
                     imu_aperture_selected = True
+            causal_imu_motion_selected = False
+            causal_imu_motion_residual_m = float("nan")
+            causal_imu_motion_margin = float("nan")
+            causal_imu_motion_anchor_count = 0
+            if (
+                causal_imu_motion_consensus
+                and len(passing) > 1
+                and native_imu_state is not None
+            ):
+                (
+                    winner,
+                    causal_imu_motion_residual_m,
+                    causal_imu_motion_margin,
+                    causal_imu_motion_anchor_count,
+                ) = _causal_imu_motion_consensus_winner(
+                    native_rows,
+                    strict_passing,
+                    causal_imu_anchors,
+                    tow_s=tow,
+                    imu_position_ecef_m=native_imu_state.position_ecef_m,
+                    group_index=int(group_index),
+                    window_s=float(causal_imu_motion_window_s),
+                    minimum_anchor_spacing_s=float(causal_imu_motion_anchor_spacing_s),
+                    minimum_anchors_per_partition=int(
+                        causal_imu_motion_min_anchors_per_partition
+                    ),
+                    maximum_residual_m=float(causal_imu_motion_gate_m),
+                    minimum_margin_m=float(causal_imu_motion_margin_m),
+                    minimum_carrier_pass_fraction=float(
+                        causal_imu_motion_min_carrier_fraction
+                    ),
+                )
+                if winner is not None:
+                    passing = [winner]
+                    causal_imu_motion_selected = True
             if len(passing) == 1:
                 passing_assignment = dict(passing[0].assignment)
                 if _assignments_compatible(validated_assignment, passing_assignment):
@@ -580,6 +770,10 @@ def track_basin_rows(
             imu_aperture_selected = False
             disjoint_holdout_selected = False
             disjoint_holdout_cost_margin = float("nan")
+            causal_imu_motion_selected = False
+            causal_imu_motion_residual_m = float("nan")
+            causal_imu_motion_margin = float("nan")
+            causal_imu_motion_anchor_count = 0
             validation_gap_epochs += 1
             if validation_gap_epochs > int(validation_gap_tolerance_epochs):
                 validated_assignment = None
@@ -618,6 +812,7 @@ def track_basin_rows(
                 unique_holdout_pass
                 or imu_aperture_selected
                 or disjoint_holdout_selected
+                or causal_imu_motion_selected
             )
             and posterior.gamma >= float(fix_gamma_threshold)
             and validated_fix_streak >= int(native_imu_fix_min_streak)
@@ -629,6 +824,7 @@ def track_basin_rows(
                     unique_holdout_pass
                     or imu_aperture_selected
                     or disjoint_holdout_selected
+                    or causal_imu_motion_selected
                 )
                 and bool(
                     unique_validation_pass
@@ -646,6 +842,7 @@ def track_basin_rows(
                         unique_holdout_pass
                         or imu_aperture_selected
                         or disjoint_holdout_selected
+                        or causal_imu_motion_selected
                     )
                 )
                 or imu_accelerated_fix
@@ -661,6 +858,18 @@ def track_basin_rows(
             fallback_velocity = (position - previous_position) / dt
         if np.all(np.isfinite(position)):
             previous_position = position
+        if fixed and native_imu_state is not None and np.all(np.isfinite(position)):
+            causal_imu_anchors.append(
+                CausalImuOffsetAnchor(
+                    tow_s=tow,
+                    fixed_position_ecef_m=position.copy(),
+                    imu_position_ecef_m=native_imu_state.position_ecef_m.copy(),
+                )
+            )
+            minimum_tow = tow - float(causal_imu_motion_window_s)
+            causal_imu_anchors = [
+                anchor for anchor in causal_imu_anchors if anchor.tow_s >= minimum_tow
+            ]
         previous_tow = tow
         smoothed = None
         if smoother is not None:
@@ -685,6 +894,10 @@ def track_basin_rows(
             "imu_aperture_selected": int(imu_aperture_selected),
             "disjoint_holdout_selected": int(disjoint_holdout_selected),
             "disjoint_holdout_cost_margin": disjoint_holdout_cost_margin,
+            "causal_imu_motion_selected": int(causal_imu_motion_selected),
+            "causal_imu_motion_residual_m": causal_imu_motion_residual_m,
+            "causal_imu_motion_margin_m": causal_imu_motion_margin,
+            "causal_imu_motion_anchor_count": causal_imu_motion_anchor_count,
             "strict_passing_candidates": len(strict_passing),
             "native_validation_streak": native_validation_streak,
             "native_validation_motion_residual_m": (
@@ -782,6 +995,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--disjoint-holdout-min-carrier-fraction", type=float, default=0.75
     )
+    parser.add_argument("--causal-imu-motion-consensus", action="store_true")
+    parser.add_argument("--causal-imu-motion-window", type=float, default=10.0)
+    parser.add_argument("--causal-imu-motion-anchor-spacing", type=float, default=0.4)
+    parser.add_argument(
+        "--causal-imu-motion-min-anchors-per-partition", type=int, default=3
+    )
+    parser.add_argument("--causal-imu-motion-gate", type=float, default=0.75)
+    parser.add_argument("--causal-imu-motion-margin", type=float, default=0.02)
+    parser.add_argument(
+        "--causal-imu-motion-min-carrier-fraction", type=float, default=0.75
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--summary", type=Path, required=True)
     parser.add_argument(
@@ -840,6 +1064,17 @@ def main(argv: list[str] | None = None) -> int:
         disjoint_holdout_min_carrier_fraction=(
             args.disjoint_holdout_min_carrier_fraction
         ),
+        causal_imu_motion_consensus=args.causal_imu_motion_consensus,
+        causal_imu_motion_window_s=args.causal_imu_motion_window,
+        causal_imu_motion_anchor_spacing_s=args.causal_imu_motion_anchor_spacing,
+        causal_imu_motion_min_anchors_per_partition=(
+            args.causal_imu_motion_min_anchors_per_partition
+        ),
+        causal_imu_motion_gate_m=args.causal_imu_motion_gate,
+        causal_imu_motion_margin_m=args.causal_imu_motion_margin,
+        causal_imu_motion_min_carrier_fraction=(
+            args.causal_imu_motion_min_carrier_fraction
+        ),
         ffbsi_lag_epochs=args.ffbsi_lag,
         ffbsi_backward_samples=args.ffbsi_samples,
         ffbsi_seed=args.ffbsi_seed,
@@ -893,6 +1128,19 @@ def main(argv: list[str] | None = None) -> int:
             "disjoint_holdout_min_carrier_fraction": (
                 args.disjoint_holdout_min_carrier_fraction
             ),
+            "causal_imu_motion_consensus": args.causal_imu_motion_consensus,
+            "causal_imu_motion_window_s": args.causal_imu_motion_window,
+            "causal_imu_motion_anchor_spacing_s": (
+                args.causal_imu_motion_anchor_spacing
+            ),
+            "causal_imu_motion_min_anchors_per_partition": (
+                args.causal_imu_motion_min_anchors_per_partition
+            ),
+            "causal_imu_motion_gate_m": args.causal_imu_motion_gate,
+            "causal_imu_motion_margin_m": args.causal_imu_motion_margin,
+            "causal_imu_motion_min_carrier_fraction": (
+                args.causal_imu_motion_min_carrier_fraction
+            ),
             "ffbsi_lag_epochs": args.ffbsi_lag,
             "ffbsi_backward_samples": args.ffbsi_samples,
             "ffbsi_seed": args.ffbsi_seed,
@@ -914,6 +1162,9 @@ def main(argv: list[str] | None = None) -> int:
         ),
         "disjoint_holdout_selected_epochs": sum(
             int(row.get("disjoint_holdout_selected", 0)) for row in rows
+        ),
+        "causal_imu_motion_selected_epochs": sum(
+            int(row.get("causal_imu_motion_selected", 0)) for row in rows
         ),
         "ffbsi_output_epochs": sum(int(row.get("ffbsi_valid", 0)) for row in rows),
         "setup_runtime_ms": setup_ms,

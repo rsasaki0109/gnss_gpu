@@ -42,6 +42,13 @@ CONFIG_KEYS = (
     "disjoint_holdout_min_satellites",
     "disjoint_holdout_residual_clip",
     "disjoint_holdout_min_carrier_fraction",
+    "causal_imu_motion_consensus",
+    "causal_imu_motion_window_s",
+    "causal_imu_motion_anchor_spacing_s",
+    "causal_imu_motion_min_anchors_per_partition",
+    "causal_imu_motion_gate_m",
+    "causal_imu_motion_margin_m",
+    "causal_imu_motion_min_carrier_fraction",
 )
 
 

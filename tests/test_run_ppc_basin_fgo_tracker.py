@@ -67,6 +67,16 @@ def _with_carrier_partition_costs(
     return row
 
 
+def _with_native_imu(row: dict, y_m: float) -> dict:
+    row["imu_fgo"] = {
+        "available": True,
+        "converged": True,
+        "position_ecef": [6_378_137.0, y_m, 0.0],
+        "velocity_nav_mps": [1.0, 0.0, 0.0],
+    }
+    return row
+
+
 def test_tracker_requires_posterior_streak_and_unique_independent_pass() -> None:
     rows = {
         epoch: [
@@ -353,6 +363,67 @@ def test_native_imu_motion_can_accelerate_but_not_bypass_gnss_streak() -> None:
     assert [row["shadow_fixed"] for row in output] == [0, 1]
 
 
+def test_causal_imu_motion_consensus_uses_only_prior_fixed_anchors() -> None:
+    rows = {}
+    for epoch in range(9):
+        preferred = _with_native_imu(_row(epoch, 0, 8, 0.0, True), float(epoch))
+        preferred["position_ecef"] = [6_378_137.0, float(epoch), 0.0]
+        rows[epoch] = [preferred]
+    preferred = _with_carrier_partition_costs(
+        _with_native_imu(_row(9, 0, 8, 0.0, True), 9.0), 0.1, 0.1
+    )
+    alternate = _with_carrier_partition_costs(
+        _with_native_imu(_row(9, 1, 9, -0.1, True), 9.0), 0.2, 0.2
+    )
+    preferred["position_ecef"] = [6_378_137.0, 9.0, 0.0]
+    alternate["position_ecef"] = [6_378_137.0, 9.25, 0.0]
+    rows[9] = [preferred, alternate]
+
+    output = track_basin_rows(
+        rows,
+        fix_min_streak=2,
+        native_imu_fgo=True,
+        causal_imu_motion_consensus=True,
+        disjoint_holdout_min_carrier_fraction=0.1,
+        causal_imu_motion_min_carrier_fraction=0.75,
+    )
+    assert output[9]["strict_passing_candidates"] == 2
+    assert output[9]["causal_imu_motion_anchor_count"] >= 6
+    assert output[9]["causal_imu_motion_selected"] == 1
+    assert output[9]["selected_rank"] == 0
+    assert output[9]["shadow_fixed"] == 1
+
+
+def test_causal_imu_motion_consensus_rejects_inconsistent_carrier_details() -> None:
+    rows = {}
+    for epoch in range(9):
+        preferred = _with_native_imu(_row(epoch, 0, 8, 0.0, True), float(epoch))
+        preferred["position_ecef"] = [6_378_137.0, float(epoch), 0.0]
+        rows[epoch] = [preferred]
+    preferred = _with_carrier_partition_costs(
+        _with_native_imu(_row(9, 0, 8, 0.0, True), 9.0), 0.1, 0.1
+    )
+    alternate = _with_carrier_partition_costs(
+        _with_native_imu(_row(9, 1, 9, -0.1, True), 9.0), 0.2, 0.2
+    )
+    preferred["position_ecef"] = [6_378_137.0, 9.0, 0.0]
+    alternate["position_ecef"] = [6_378_137.0, 9.25, 0.0]
+    for residual in preferred["validation_residuals"][2:]:
+        residual["pass"] = False
+    rows[9] = [preferred, alternate]
+
+    output = track_basin_rows(
+        rows,
+        fix_min_streak=2,
+        native_imu_fgo=True,
+        causal_imu_motion_consensus=True,
+        disjoint_holdout_min_carrier_fraction=0.1,
+        causal_imu_motion_min_carrier_fraction=0.75,
+    )
+    assert output[9]["causal_imu_motion_selected"] == 0
+    assert output[9]["shadow_fixed"] == 0
+
+
 def test_pf_feedback_contains_only_fixed_selected_holdout_mode(tmp_path) -> None:
     native = _row(3, 0, 8, 0.0, True)
     native["gps_week"] = 2325
@@ -363,6 +434,7 @@ def test_pf_feedback_contains_only_fixed_selected_holdout_mode(tmp_path) -> None
             "selected_rank": 0,
             "unique_holdout_pass": 1,
             "disjoint_holdout_selected": 0,
+            "causal_imu_motion_selected": 0,
             "imu_aperture_selected": 0,
             "imu_accelerated_fix": 0,
         },
@@ -380,6 +452,7 @@ def test_pf_feedback_contains_only_fixed_selected_holdout_mode(tmp_path) -> None
         rows = list(csv.DictReader(stream))
     assert {row["selected_native_holdout_pass"] for row in rows} == {"1"}
     assert {row["disjoint_holdout_selected"] for row in rows} == {"0"}
+    assert {row["causal_imu_motion_selected"] for row in rows} == {"0"}
     assert {row["schema"] for row in rows} == {"gnss_gpu_pf_fgo_feedback_v1"}
 
 

@@ -112,6 +112,22 @@ persistent ambiguity evidence across DD-reference changes, selected on run1/2
 and evaluated once on run3 before another full replay. Candidate count or FIX
 gates must not be relaxed without route-blocked and fault-injection evidence.
 
+The causal IMU motion-consensus milestone is now complete. A two-partition
+median offset predictor, using only prior safe FIX anchors, raises authority to
+11,031/48,778 (22.615%) with zero false FIX. Development run1/run2 gained 197
+epochs; the frozen run3 evaluation gained 40. Eight fault cases remained
+fail-closed, and a repeated full replay was decision-identical. The 25% target
+is now 1,164 epochs away, while the 15,069-epoch candidate oracle leaves 4,038
+epochs of theoretical headroom.
+
+The official trajectory score remains 58.521912% before and after the motion
+consensus because all 237 newly authoritative positions replace primary FLOAT
+epochs already inside 0.5 m. The next milestone must therefore prioritize the
+FLOAT trajectory rather than only integer labels: a truth-free causal selector
+between the existing primary, native FGO, and PF conditional positions, using
+innovation/health features frozen on run1 and evaluated on run2/run3. Persistent
+ambiguity evidence across DD-reference changes remains the next FIX-side track.
+
 ## Primary references
 
 - T. Suzuki, *Open-Source Factor Graph Optimization Package for GNSS: Examples
