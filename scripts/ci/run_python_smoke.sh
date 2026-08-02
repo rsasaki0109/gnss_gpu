@@ -36,6 +36,7 @@ pytest -q \
   tests/test_audit_ppc_basin_fgo_candidate_supply.py \
   tests/test_audit_ppc_basin_fgo_cpu_gpu_parity.py \
   tests/test_audit_ppc_basin_fgo_tracker.py \
+  tests/test_audit_ppc_causal_float_selector.py \
   tests/test_audit_ppc_imu_contract.py \
   tests/test_audit_ppc_imu_fgo_health.py \
   tests/test_basin_fgo_bridge.py \
@@ -46,6 +47,7 @@ pytest -q \
   tests/test_compose_ppc_safe_trajectory.py \
   tests/test_compose_ppc_safe_basin_union.py \
   tests/test_compose_ppc_imu_safe_output.py \
+  tests/test_compose_ppc_causal_float_selector.py \
   tests/test_evaluate_ppc_official_score.py \
   tests/test_evaluate_ppc_official_suite.py \
   tests/test_inject_ppc_basin_fault.py \
@@ -54,8 +56,10 @@ pytest -q \
   tests/test_pf_imu_preint_adapter.py \
   tests/test_ppc_imu_adapter.py \
   tests/test_ppc_score.py \
+  tests/test_ppc_causal_float_selector_evidence.py \
   tests/test_run_ppc_basin_fgo_six_route.py \
   tests/test_run_ppc_basin_fgo_tracker.py \
+  tests/test_run_ppc_float_candidates.py \
   tests/test_audit_ppc_safe_basin_union_cv.py \
   tests/test_export_pf_seed_pos.py \
   tests/test_phase6_ros2_soak.py \

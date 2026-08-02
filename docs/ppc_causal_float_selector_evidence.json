@@ -1,0 +1,104 @@
+{
+  "schema": "gnss_gpu_ppc_causal_float_selector_evidence_v1",
+  "truth_contract": {
+    "production_input_truth": false,
+    "truth_usage": "post_estimator_scoring_only",
+    "forward_only": true
+  },
+  "split_contract": {
+    "development": "run1",
+    "validation": "run2",
+    "sealed_evaluation": "run3",
+    "retuned_after_validation": false,
+    "retuned_after_sealed_evaluation": false
+  },
+  "policy": {
+    "health_window_epochs": 500,
+    "health_fixed_fraction": 0.9,
+    "maximum_gap_s": 1.0,
+    "fix_authority": "safe_input_only",
+    "candidate_fixed_status_inherited": false
+  },
+  "release_binary_sha256": "b1d7c0172401063a6b6e0a3b40bb782485771beb3e9715aca1cce1decce5796e",
+  "aggregate": {
+    "baseline_score_pct": 58.52191168230843,
+    "selected_score_pct": 59.22203998490041,
+    "delta_pct_points": 0.700128302591985,
+    "passing_distance_gain_m": 389.675790055146,
+    "fixed_epochs": 11031,
+    "false_fix_epochs": 0,
+    "false_fix_above_1m_epochs": 0,
+    "safety_gate_passed": true,
+    "gap_to_70_pct_points": 10.7779600150996,
+    "gap_to_78_7_pct_points": 19.4779600150996,
+    "gap_to_80_pct_points": 20.7779600150996
+  },
+  "routes": {
+    "tokyo_run1": {
+      "baseline_score_pct": 65.24816306093214,
+      "selected_score_pct": 67.44831628791975,
+      "delta_pct_points": 2.2001532269876094,
+      "candidate_pos_sha256": "2c73911f86fb40a935ace73be3d61e7bdf9299571240acdabbe64c018d22007c",
+      "selected_sha256": "746a202fee49965e5279dacc10a32a9dd88fe8d22e5852c39deff766108f06fd",
+      "runtime_p50_ms": 9.99335,
+      "runtime_p95_ms": 31.701245,
+      "runtime_max_ms": 93.435,
+      "runtime_under_100ms_pct": 100.0
+    },
+    "tokyo_run2": {
+      "baseline_score_pct": 81.16916851809188,
+      "selected_score_pct": 81.18331533461583,
+      "delta_pct_points": 0.014146816523947336,
+      "candidate_pos_sha256": "fd3e716983d7af9c0ef0ff48c83971bdb58b5f18ffe831ab52b33ae8d83d93ba",
+      "selected_sha256": "16ccf0d476c252ab119a426f3f831d486de868e8426b8e5bd79863e4a133dcbb",
+      "runtime_p50_ms": 14.4679,
+      "runtime_p95_ms": 47.84365,
+      "runtime_max_ms": 130.575,
+      "runtime_under_100ms_pct": 99.82515572068627
+    },
+    "tokyo_run3": {
+      "baseline_score_pct": 78.28203403025918,
+      "selected_score_pct": 78.91177832869897,
+      "delta_pct_points": 0.629744298439789,
+      "candidate_pos_sha256": "9908ff7989f110c6fe26d06ca9cf97e2b1efe9ac691836d5b36c4e5a528f12d6",
+      "selected_sha256": "95081ab3adcc9de8863b9e50dd313711da866903a338b00153522148afa92f8f",
+      "runtime_p50_ms": 24.9006,
+      "runtime_p95_ms": 50.3052,
+      "runtime_max_ms": 118.6555,
+      "runtime_under_100ms_pct": 99.98039343833737
+    },
+    "nagoya_run1": {
+      "baseline_score_pct": 51.45336205379888,
+      "selected_score_pct": 52.6396906444049,
+      "delta_pct_points": 1.1863285906060241,
+      "candidate_pos_sha256": "22621f1ccde5a894de8614761aeb46457dd2ab5932b348ac9521befe18dde7ad",
+      "selected_sha256": "05c6682e42b25fee22b65852d7142fbb3e6cbf260ffeed43dedd74d332a5d74b",
+      "runtime_p50_ms": 13.6422,
+      "runtime_p95_ms": 28.37428,
+      "runtime_max_ms": 84.9851,
+      "runtime_under_100ms_pct": 100.0
+    },
+    "nagoya_run2": {
+      "baseline_score_pct": 28.946182878332685,
+      "selected_score_pct": 28.964624527303194,
+      "delta_pct_points": 0.018441648970508595,
+      "candidate_pos_sha256": "1f9b9147e5a707449eaa4770d24f92cf361c89c129b69ba96b5a75385daa608d",
+      "selected_sha256": "cb94074947abd7dbfd1c268b80bcbf0923b3e22134a4fdc9a98a67ad66c366b5",
+      "runtime_p50_ms": 13.5644,
+      "runtime_p95_ms": 32.5742,
+      "runtime_max_ms": 91.4885,
+      "runtime_under_100ms_pct": 100.0
+    },
+    "nagoya_run3": {
+      "baseline_score_pct": 46.032559552435785,
+      "selected_score_pct": 46.18451478645983,
+      "delta_pct_points": 0.15195523402404376,
+      "candidate_pos_sha256": "2ad1a0dffc4a0d8e022f4e93937b7118af59be4273aa31a9e5df88eadbc213b7",
+      "selected_sha256": "1b0d63c8bd428808d2897e063a429025aa95e27fa0695f213981d080d6080b31",
+      "runtime_p50_ms": 12.3339,
+      "runtime_p95_ms": 40.4998,
+      "runtime_max_ms": 96.2944,
+      "runtime_under_100ms_pct": 100.0
+    }
+  }
+}
