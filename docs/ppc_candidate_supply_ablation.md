@@ -135,6 +135,41 @@ This is the promoted safe-FIX availability policy for the available PPC data.
 It is not a blind score or a SOTA claim: the workspace contains no sealed route,
 and safe-FIX availability is not the official trajectory-distance score.
 
+## Disjoint carrier holdout consensus
+
+A later promotion resolves a subset of epochs where multiple native candidates
+pass the original holdout. Carrier residuals common to every candidate are
+split deterministically into alternating, non-overlapping satellite sets. A
+candidate is accepted only when both partitions select the same winner with a
+minimum mean clipped-squared-residual margin of 0.02. Each partition needs at
+least two satellites. Candidate top-level pass state must also agree with at
+least 75% of its detailed carrier pass flags; otherwise the whole consensus
+abstains.
+
+| Route | IMU + gap2 baseline | Disjoint consensus | Delta | False / >1 m |
+|---|---:|---:|---:|---:|
+| Tokyo run1 | 1,081 | 1,216 | +135 | 0 / 0 |
+| Tokyo run2 | 1,691 | 1,883 | +192 | 0 / 0 |
+| Tokyo run3 | 4,744 | 5,114 | +370 | 0 / 0 |
+| Nagoya run1 | 1,014 | 1,062 | +48 | 0 / 0 |
+| Nagoya run2 | 1,228 | 1,310 | +82 | 0 / 0 |
+| Nagoya run3 | 206 | 209 | +3 | 0 / 0 |
+| **All routes** | **9,964** | **10,794** | **+830** | **0 / 0** |
+
+The resulting safe-FIX availability is 22.129% of 48,778 epochs. A 300-epoch
+six-route replay produced 838/1,798 correct FIX with zero false FIX. The same
+frozen policy was then tested against outage, ambiguous holdout, cycle slip,
+NLOS, IMU bias jump, dropout, time offset, and vibration injections; every
+audit reported zero false FIX and zero false FIX above 1 m. The detailed-pass
+consistency guard is necessary: without it the ambiguous-holdout injection
+produced one 2.154 m false FIX.
+
+Machine-readable evidence is in
+`internal_docs/ppc_disjoint_holdout_consensus_evidence_2026_08_02.json`. This
+promotion changes safe integer authority only. It does not change the position
+stream consumed by the official trajectory scorer and therefore makes no new
+official-score or blind-SOTA claim.
+
 ## CUDA plus native IMU FGO check
 
 The combined GTSAM+CUDA binary was also tested on the same Nagoya run3 slice.

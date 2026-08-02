@@ -98,14 +98,19 @@ FIX above 1 m. All six routes improve over the original 7,475 result, and eight
 deterministic GNSS/IMU fault audits pass. This closes the current composition
 milestone but not the stretch goal.
 
-The next pre-registered milestone is 25% safe-FIX availability (at least
-12,195 correct epochs) with both false counters still zero. The quality-ranked
-candidate oracle contains 15,069 correct-candidate epochs, leaving theoretical
-headroom, but only 9,964 are safely promoted. Work should therefore target
-truth-free disambiguation when multiple candidates pass: two disjoint satellite
-holdouts, IMU motion-consensus likelihood, and persistent ambiguity evidence
-across DD-reference changes. Candidate count or FIX gates must not be relaxed
-without route-blocked and fault-injection evidence.
+The first of those milestones is now implemented: deterministic disjoint
+carrier partitions with a 0.02 dual-winner margin and a 75% detailed carrier
+pass-consistency guard raise safe-FIX availability to 10,794/48,778 (22.129%)
+with both false counters zero. All six routes improve, and eight GNSS/IMU fault
+audits remain fail-closed. The 25% milestone (at least 12,195 correct epochs)
+therefore remains 1,401 epochs away. The quality-ranked candidate oracle
+contains 15,069 correct-candidate epochs, leaving 4,275 epochs of theoretical
+headroom above current authority.
+
+The next work should target causal IMU motion-consensus likelihood and
+persistent ambiguity evidence across DD-reference changes, selected on run1/2
+and evaluated once on run3 before another full replay. Candidate count or FIX
+gates must not be relaxed without route-blocked and fault-injection evidence.
 
 ## Primary references
 

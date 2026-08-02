@@ -1,0 +1,72 @@
+{
+  "schema": "gnss_gpu_ppc_disjoint_holdout_consensus_evidence_v1",
+  "date": "2026-08-02",
+  "production_input_truth": false,
+  "truth_usage": "separate_post_estimator_audit_subprocess_only",
+  "policy": {
+    "top_k": 8,
+    "quality_ranked_par": true,
+    "fix_gamma": 0.99,
+    "fix_min_streak": 2,
+    "validation_gap_tolerance_epochs": 2,
+    "native_imu_fgo": true,
+    "native_imu_aperture_m": 0.3,
+    "native_imu_aperture_margin_m": 0.05,
+    "native_imu_fix_min_streak": 2,
+    "disjoint_holdout_margin": 0.02,
+    "disjoint_holdout_min_satellites_per_partition": 2,
+    "disjoint_holdout_residual_clip": 3.0,
+    "disjoint_holdout_min_carrier_pass_fraction": 0.75
+  },
+  "selection": {
+    "development_routes": ["tokyo/run1", "tokyo/run2", "nagoya/run1", "nagoya/run2"],
+    "held_route_blocks": ["tokyo/run3", "nagoya/run3"],
+    "frozen_margin": 0.02,
+    "unguarded_ambiguous_holdout_false_fix_above_1m": 1,
+    "guarded_ambiguous_holdout_false_fix_above_1m": 0
+  },
+  "full_six_route": {
+    "artifact_directory": "Testing/basin_fgo_quality_imu_gap2_disjoint_guarded_full_v8",
+    "total_epochs": 48778,
+    "fixed": 10794,
+    "correct_fix": 10794,
+    "false_fix": 0,
+    "false_fix_above_1m": 0,
+    "safe_fix_rate": 0.22128828570257085,
+    "previous_correct_fix": 9964,
+    "correct_fix_delta": 830,
+    "routes": {
+      "tokyo/run1": {"epochs": 10070, "correct_fix": 1216, "false_fix": 0, "false_fix_above_1m": 0},
+      "tokyo/run2": {"epochs": 8383, "correct_fix": 1883, "false_fix": 0, "false_fix_above_1m": 0},
+      "tokyo/run3": {"epochs": 13539, "correct_fix": 5114, "false_fix": 0, "false_fix_above_1m": 0},
+      "nagoya/run1": {"epochs": 6748, "correct_fix": 1062, "false_fix": 0, "false_fix_above_1m": 0},
+      "nagoya/run2": {"epochs": 6763, "correct_fix": 1310, "false_fix": 0, "false_fix_above_1m": 0},
+      "nagoya/run3": {"epochs": 3275, "correct_fix": 209, "false_fix": 0, "false_fix_above_1m": 0}
+    }
+  },
+  "six_route_300_epoch": {
+    "artifact_directory": "Testing/basin_fgo_quality_imu_gap2_disjoint_guarded_e300",
+    "total_epochs": 1798,
+    "correct_fix": 838,
+    "false_fix": 0,
+    "false_fix_above_1m": 0
+  },
+  "fault_matrix_300_epoch": {
+    "artifact_directory": "Testing/basin_fgo_quality_imu_gap2_disjoint_guarded_faults_e300",
+    "gnss_outage": {"correct_fix": 21, "false_fix": 0, "false_fix_above_1m": 0},
+    "gnss_ambiguous_holdout": {"correct_fix": 21, "false_fix": 0, "false_fix_above_1m": 0},
+    "gnss_cycle_slip": {"correct_fix": 21, "false_fix": 0, "false_fix_above_1m": 0},
+    "gnss_nlos": {"correct_fix": 21, "false_fix": 0, "false_fix_above_1m": 0},
+    "imu_bias_jump": {"correct_fix": 28, "false_fix": 0, "false_fix_above_1m": 0},
+    "imu_dropout": {"correct_fix": 28, "false_fix": 0, "false_fix_above_1m": 0},
+    "imu_time_offset": {"correct_fix": 28, "false_fix": 0, "false_fix_above_1m": 0},
+    "imu_vibration": {"correct_fix": 28, "false_fix": 0, "false_fix_above_1m": 0}
+  },
+  "claims": {
+    "official_trajectory_score_changed": false,
+    "blind_sota_claim": false,
+    "next_safe_fix_target": 0.25,
+    "epochs_required_for_next_target": 12195,
+    "remaining_correct_fix_epochs": 1401
+  }
+}

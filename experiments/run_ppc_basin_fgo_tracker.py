@@ -26,6 +26,7 @@ from gnss_gpu.basin_imu_bridge import (  # noqa: E402
 )
 from gnss_gpu.basin_ffbsi import FixedLagBasinFFBSi  # noqa: E402
 from gnss_gpu.basin_fgo_bridge import (  # noqa: E402
+    NativeFGOHypothesisCandidate,
     parse_native_fgo_hypotheses,
     transition_native_fgo_candidates,
 )
@@ -140,6 +141,7 @@ def write_validated_pf_feedback(
         "wavelength_m",
         "fixed_cycles",
         "unique_holdout_pass",
+        "disjoint_holdout_selected",
         "imu_aperture_selected",
         "imu_accelerated_fix",
         "selected_native_holdout_pass",
@@ -175,20 +177,17 @@ def write_validated_pf_feedback(
                     "reference_satellite": str(fixed["reference_satellite"]),
                     "signal": int(fixed["signal"]),
                     "segment_index": int(fixed["segment_index"]),
-                    "reference_segment_index": int(
-                        fixed["reference_segment_index"]
-                    ),
+                    "reference_segment_index": int(fixed["reference_segment_index"]),
                     "wavelength_m": float(fixed["wavelength_m"]),
                     "fixed_cycles": int(fixed["fixed_cycles"]),
-                    "unique_holdout_pass": int(
-                        tracker.get("unique_holdout_pass", 0)
+                    "unique_holdout_pass": int(tracker.get("unique_holdout_pass", 0)),
+                    "disjoint_holdout_selected": int(
+                        tracker.get("disjoint_holdout_selected", 0)
                     ),
                     "imu_aperture_selected": int(
                         tracker.get("imu_aperture_selected", 0)
                     ),
-                    "imu_accelerated_fix": int(
-                        tracker.get("imu_accelerated_fix", 0)
-                    ),
+                    "imu_accelerated_fix": int(tracker.get("imu_accelerated_fix", 0)),
                     "selected_native_holdout_pass": 1,
                     "schema": "gnss_gpu_pf_fgo_feedback_v1",
                 }
@@ -209,7 +208,111 @@ def _assignments_compatible(
     if left is None:
         return False
     common = set(left).intersection(right)
-    return len(common) >= minimum_common and all(left[key] == right[key] for key in common)
+    return len(common) >= minimum_common and all(
+        left[key] == right[key] for key in common
+    )
+
+
+def _disjoint_carrier_holdout_winner(
+    native_rows: list[dict],
+    candidates: list[NativeFGOHypothesisCandidate],
+    *,
+    group_index: int,
+    minimum_satellites_per_partition: int,
+    minimum_cost_margin: float,
+    residual_clip: float,
+    minimum_carrier_pass_fraction: float,
+) -> tuple[NativeFGOHypothesisCandidate | None, float]:
+    """Select only when two disjoint carrier partitions prefer the same basin."""
+
+    if len(candidates) < 2:
+        return None, float("nan")
+    rows_by_rank = {
+        int(row.get("rank", -1)): row
+        for row in native_rows
+        if row.get("group_index") == int(group_index)
+        and row.get("evaluated") is True
+        and row.get("pass") is True
+    }
+    candidate_rows = []
+    key_sets: list[set[tuple[str, str, int]]] = []
+    for candidate in candidates:
+        row = rows_by_rank.get(int(candidate.rank))
+        if row is None:
+            return None, float("nan")
+        residuals = row.get("validation_residuals")
+        if not isinstance(residuals, list):
+            return None, float("nan")
+        keys: set[tuple[str, str, int]] = set()
+        for residual in residuals:
+            if not isinstance(residual, dict) or residual.get("kind") != "carrier":
+                continue
+            try:
+                key = (
+                    str(residual["satellite"]),
+                    str(residual["reference_satellite"]),
+                    int(residual["signal"]),
+                )
+                normalized = abs(float(residual["normalized_residual"]))
+            except (KeyError, TypeError, ValueError):
+                return None, float("nan")
+            if not key[0] or not key[1] or not np.isfinite(normalized):
+                return None, float("nan")
+            keys.add(key)
+        carrier_rows = [
+            residual
+            for residual in residuals
+            if isinstance(residual, dict) and residual.get("kind") == "carrier"
+        ]
+        if not carrier_rows or (
+            sum(residual.get("pass") is True for residual in carrier_rows)
+            / len(carrier_rows)
+            < float(minimum_carrier_pass_fraction)
+        ):
+            # A top-level pass inconsistent with its carrier details is
+            # faulted evidence. Abort consensus instead of dropping one row.
+            return None, float("nan")
+        candidate_rows.append((candidate, residuals))
+        key_sets.append(keys)
+    common_keys = sorted(set.intersection(*key_sets)) if key_sets else []
+    partitions = (set(common_keys[::2]), set(common_keys[1::2]))
+    if any(
+        len(partition) < int(minimum_satellites_per_partition)
+        for partition in partitions
+    ):
+        return None, float("nan")
+
+    winners: list[NativeFGOHypothesisCandidate] = []
+    margins: list[float] = []
+    for partition in partitions:
+        scores = []
+        for candidate, residuals in candidate_rows:
+            values = []
+            for residual in residuals:
+                if not isinstance(residual, dict) or residual.get("kind") != "carrier":
+                    continue
+                key = (
+                    str(residual.get("satellite", "")),
+                    str(residual.get("reference_satellite", "")),
+                    int(residual.get("signal", -1)),
+                )
+                if key in partition:
+                    value = abs(float(residual.get("normalized_residual", np.nan)))
+                    if not np.isfinite(value):
+                        return None, float("nan")
+                    values.append(min(value, float(residual_clip)) ** 2)
+            if not values:
+                return None, float("nan")
+            scores.append((float(np.mean(values)), int(candidate.rank), candidate))
+        scores.sort(key=lambda item: (item[0], item[1]))
+        winners.append(scores[0][2])
+        margins.append(scores[1][0] - scores[0][0])
+    minimum_margin = min(margins)
+    if winners[0].rank != winners[1].rank or minimum_margin < float(
+        minimum_cost_margin
+    ):
+        return None, minimum_margin
+    return winners[0], minimum_margin
 
 
 def track_basin_rows(
@@ -229,6 +332,11 @@ def track_basin_rows(
     native_imu_aperture_margin_m: float = 0.05,
     native_imu_fix_min_streak: int = 0,
     native_imu_motion_gate_m: float = 0.30,
+    disjoint_holdout_consensus: bool = False,
+    disjoint_holdout_margin: float = 0.02,
+    disjoint_holdout_min_satellites: int = 2,
+    disjoint_holdout_residual_clip: float = 3.0,
+    disjoint_holdout_min_carrier_fraction: float = 0.75,
     ffbsi_lag_epochs: int = 0,
     ffbsi_backward_samples: int = 128,
     ffbsi_seed: int = 0,
@@ -245,6 +353,14 @@ def track_basin_rows(
         raise ValueError("native_imu_fix_min_streak must be 0 or at least 2")
     if native_imu_motion_gate_m <= 0.0:
         raise ValueError("native_imu_motion_gate_m must be positive")
+    if disjoint_holdout_margin < 0.0:
+        raise ValueError("disjoint_holdout_margin must be non-negative")
+    if disjoint_holdout_min_satellites < 1:
+        raise ValueError("disjoint_holdout_min_satellites must be positive")
+    if disjoint_holdout_residual_clip <= 0.0:
+        raise ValueError("disjoint_holdout_residual_clip must be positive")
+    if not 0.0 < disjoint_holdout_min_carrier_fraction <= 1.0:
+        raise ValueError("disjoint_holdout_min_carrier_fraction must be in (0, 1]")
 
     particle_filter = AmbiguityBasinParticleFilter(
         max_basins=int(max_basins),
@@ -300,8 +416,7 @@ def track_basin_rows(
                 particle_filter.predict_inertial(
                     dt,
                     cv_position_correction_ecef_m=(
-                        displacement
-                        - previous_native_imu.velocity_ecef_mps * dt
+                        displacement - previous_native_imu.velocity_ecef_mps * dt
                     ),
                     delta_velocity_ecef_mps=(
                         native_imu_state.velocity_ecef_mps
@@ -325,16 +440,13 @@ def track_basin_rows(
                     cv_position_correction_ecef_m=(
                         imu_prediction.cv_position_correction_ecef_m
                     ),
-                    delta_velocity_ecef_mps=(
-                        imu_prediction.delta_velocity_ecef_mps
-                    ),
+                    delta_velocity_ecef_mps=(imu_prediction.delta_velocity_ecef_mps),
                     process_covariance=imu_prediction.process_covariance,
                 )
             else:
                 particle_filter.predict(dt)
         has_evaluated_group = any(
-            row.get("group_index") == int(group_index)
-            and row.get("evaluated") is True
+            row.get("group_index") == int(group_index) and row.get("evaluated") is True
             for row in native_rows
         )
         if has_evaluated_group:
@@ -348,9 +460,7 @@ def track_basin_rows(
                 candidates = tuple(
                     replace(
                         candidate,
-                        velocity_ecef_mps=(
-                            native_imu_state.velocity_ecef_mps.copy()
-                        ),
+                        velocity_ecef_mps=(native_imu_state.velocity_ecef_mps.copy()),
                     )
                     for candidate in candidates
                 )
@@ -358,9 +468,28 @@ def track_basin_rows(
                 candidate for candidate in candidates if candidate.validation_pass
             ]
             passing = strict_passing
+            disjoint_holdout_selected = False
+            disjoint_holdout_cost_margin = float("nan")
+            if disjoint_holdout_consensus and len(passing) > 1:
+                winner, disjoint_holdout_cost_margin = _disjoint_carrier_holdout_winner(
+                    native_rows,
+                    passing,
+                    group_index=int(group_index),
+                    minimum_satellites_per_partition=int(
+                        disjoint_holdout_min_satellites
+                    ),
+                    minimum_cost_margin=float(disjoint_holdout_margin),
+                    residual_clip=float(disjoint_holdout_residual_clip),
+                    minimum_carrier_pass_fraction=float(
+                        disjoint_holdout_min_carrier_fraction
+                    ),
+                )
+                if winner is not None:
+                    passing = [winner]
+                    disjoint_holdout_selected = True
             imu_aperture_selected = False
             if (
-                len(strict_passing) > 1
+                len(passing) > 1
                 and native_imu_state is not None
                 and native_imu_aperture_m > 0.0
                 and validated_position_ecef is not None
@@ -374,27 +503,20 @@ def track_basin_rows(
                 ranked = sorted(
                     (
                         float(
-                            np.linalg.norm(
-                                candidate.position_ecef_m
-                                - inertial_target
-                            )
+                            np.linalg.norm(candidate.position_ecef_m - inertial_target)
                         ),
                         candidate,
                     )
                     for candidate in strict_passing
                 )
-                if (
-                    ranked[0][0] <= float(native_imu_aperture_m)
-                    and ranked[1][0] - ranked[0][0]
-                    >= float(native_imu_aperture_margin_m)
-                ):
+                if ranked[0][0] <= float(native_imu_aperture_m) and ranked[1][
+                    0
+                ] - ranked[0][0] >= float(native_imu_aperture_margin_m):
                     passing = [ranked[0][1]]
                     imu_aperture_selected = True
             if len(passing) == 1:
                 passing_assignment = dict(passing[0].assignment)
-                if _assignments_compatible(
-                    validated_assignment, passing_assignment
-                ):
+                if _assignments_compatible(validated_assignment, passing_assignment):
                     validated_fix_streak += 1
                 else:
                     validated_fix_streak = 1
@@ -409,9 +531,7 @@ def track_basin_rows(
                         - validated_imu_position_ecef
                     )
                     native_validation_motion_residual_m = float(
-                        np.linalg.norm(
-                            passing[0].position_ecef_m - predicted
-                        )
+                        np.linalg.norm(passing[0].position_ecef_m - predicted)
                     )
                     native_validation_streak = (
                         native_validation_streak + 1
@@ -420,9 +540,7 @@ def track_basin_rows(
                         else 1
                     )
                 else:
-                    native_validation_streak = (
-                        1 if native_imu_state is not None else 0
-                    )
+                    native_validation_streak = 1 if native_imu_state is not None else 0
                 validated_assignment = passing_assignment
                 validated_position_ecef = passing[0].position_ecef_m.copy()
                 validated_imu_position_ecef = (
@@ -440,9 +558,7 @@ def track_basin_rows(
                     validated_fix_streak = 0
                     native_validation_streak = 0
             transition_candidates = (
-                passing
-                if validation_conditioning and len(passing) == 1
-                else candidates
+                passing if validation_conditioning and len(passing) == 1 else candidates
             )
             transition = transition_native_fgo_candidates(
                 particle_filter,
@@ -462,6 +578,8 @@ def track_basin_rows(
             strict_passing = []
             passing = []
             imu_aperture_selected = False
+            disjoint_holdout_selected = False
+            disjoint_holdout_cost_margin = float("nan")
             validation_gap_epochs += 1
             if validation_gap_epochs > int(validation_gap_tolerance_epochs):
                 validated_assignment = None
@@ -479,9 +597,7 @@ def track_basin_rows(
             and selected_assignment is not None
             and dict(passing[0].assignment) == selected_assignment
         )
-        unique_holdout_pass = (
-            len(strict_passing) == 1 and unique_validation_pass
-        )
+        unique_holdout_pass = len(strict_passing) == 1 and unique_validation_pass
         selected_candidate = (
             passing[0]
             if unique_validation_pass
@@ -498,26 +614,42 @@ def track_basin_rows(
         imu_accelerated_fix = bool(
             native_imu_fix_min_streak >= 2
             and unique_validation_pass
-            and (unique_holdout_pass or imu_aperture_selected)
+            and (
+                unique_holdout_pass
+                or imu_aperture_selected
+                or disjoint_holdout_selected
+            )
             and posterior.gamma >= float(fix_gamma_threshold)
             and validated_fix_streak >= int(native_imu_fix_min_streak)
             and native_validation_streak >= int(native_imu_fix_min_streak)
         )
         if int(validation_gap_tolerance_epochs) > 0:
-            fixed = bool(
-                unique_holdout_pass
-                or imu_aperture_selected
-            ) and bool(
-                unique_validation_pass
-                and posterior.gamma >= float(fix_gamma_threshold)
-                and validated_fix_streak >= int(fix_min_streak)
-            ) or imu_accelerated_fix
+            fixed = (
+                bool(
+                    unique_holdout_pass
+                    or imu_aperture_selected
+                    or disjoint_holdout_selected
+                )
+                and bool(
+                    unique_validation_pass
+                    and posterior.gamma >= float(fix_gamma_threshold)
+                    and validated_fix_streak >= int(fix_min_streak)
+                )
+                or imu_accelerated_fix
+            )
         else:
-            fixed = bool(
-                posterior.fixed
-                and unique_validation_pass
-                and (unique_holdout_pass or imu_aperture_selected)
-            ) or imu_accelerated_fix
+            fixed = (
+                bool(
+                    posterior.fixed
+                    and unique_validation_pass
+                    and (
+                        unique_holdout_pass
+                        or imu_aperture_selected
+                        or disjoint_holdout_selected
+                    )
+                )
+                or imu_accelerated_fix
+            )
         position = (
             passing[0].position_ecef_m.copy()
             if fixed
@@ -535,78 +667,72 @@ def track_basin_rows(
             smoother.capture(particle_filter, tow)
             smoothed = smoother.estimate(seed=int(ffbsi_seed) + int(epoch_index))
         row = {
-                "epoch_index": epoch_index,
-                "tow": tow,
-                "shadow_fixed": int(fixed),
-                "x": float(position[0]),
-                "y": float(position[1]),
-                "z": float(position[2]),
-                "posterior_gamma": posterior.gamma,
-                "posterior_ess": posterior.ess,
-                "basins": posterior.n_basins,
-                "fix_streak": posterior.fix_streak,
-                "validated_fix_streak": validated_fix_streak,
-                "validation_gap_epochs": validation_gap_epochs,
-                "selected_rank": selected_rank,
-                "unique_holdout_pass": int(unique_holdout_pass),
-                "unique_validation_pass": int(unique_validation_pass),
-                "imu_aperture_selected": int(imu_aperture_selected),
-                "strict_passing_candidates": len(strict_passing),
-                "native_validation_streak": native_validation_streak,
-                "native_validation_motion_residual_m": (
-                    native_validation_motion_residual_m
-                ),
-                "imu_accelerated_fix": int(imu_accelerated_fix),
-                "candidate_count": len(candidates),
-                "transition_branches": (
-                    transition.parent_child_branches if transition else 0
-                ),
-                "minimum_conflicts": transition.minimum_conflicts if transition else 0,
-                "maximum_conflicts": transition.maximum_conflicts if transition else 0,
-                "imu_used": int(
-                    imu_prediction is not None or native_imu_motion_used
-                ),
-                "imu_source": (
-                    "native_fgo" if native_imu_motion_used
-                    else "legacy_bridge" if imu_prediction is not None
-                    else "none"
-                ),
-                "native_imu_fgo_available": int(native_imu_state is not None),
-                "native_imu_motion_used": int(native_imu_motion_used),
-                "imu_samples": (
-                    imu_prediction.sample_count if imu_prediction is not None else 0
-                ),
-                "imu_covered_duration_s": (
-                    imu_prediction.covered_duration_s
-                    if imu_prediction is not None
-                    else 0.0
-                ),
-                "imu_position_correction_m": (
-                    float(
-                        np.linalg.norm(
-                            imu_prediction.cv_position_correction_ecef_m
-                        )
-                    )
-                    if imu_prediction is not None
-                    else 0.0
-                ),
-                "imu_delta_velocity_mps": (
-                    float(np.linalg.norm(imu_prediction.delta_velocity_ecef_mps))
-                    if imu_prediction is not None
-                    else 0.0
-                ),
-                "ffbsi_valid": int(smoothed is not None),
-                "ffbsi_tow": smoothed.target_tow_s if smoothed else np.nan,
-                "ffbsi_x": smoothed.position_ecef_m[0] if smoothed else np.nan,
-                "ffbsi_y": smoothed.position_ecef_m[1] if smoothed else np.nan,
-                "ffbsi_z": smoothed.position_ecef_m[2] if smoothed else np.nan,
-                "ffbsi_assignment_probability": (
-                    smoothed.assignment_probability if smoothed else 0.0
-                ),
-                "ffbsi_effective_samples": (
-                    smoothed.effective_samples if smoothed else 0
-                ),
-            }
+            "epoch_index": epoch_index,
+            "tow": tow,
+            "shadow_fixed": int(fixed),
+            "x": float(position[0]),
+            "y": float(position[1]),
+            "z": float(position[2]),
+            "posterior_gamma": posterior.gamma,
+            "posterior_ess": posterior.ess,
+            "basins": posterior.n_basins,
+            "fix_streak": posterior.fix_streak,
+            "validated_fix_streak": validated_fix_streak,
+            "validation_gap_epochs": validation_gap_epochs,
+            "selected_rank": selected_rank,
+            "unique_holdout_pass": int(unique_holdout_pass),
+            "unique_validation_pass": int(unique_validation_pass),
+            "imu_aperture_selected": int(imu_aperture_selected),
+            "disjoint_holdout_selected": int(disjoint_holdout_selected),
+            "disjoint_holdout_cost_margin": disjoint_holdout_cost_margin,
+            "strict_passing_candidates": len(strict_passing),
+            "native_validation_streak": native_validation_streak,
+            "native_validation_motion_residual_m": (
+                native_validation_motion_residual_m
+            ),
+            "imu_accelerated_fix": int(imu_accelerated_fix),
+            "candidate_count": len(candidates),
+            "transition_branches": (
+                transition.parent_child_branches if transition else 0
+            ),
+            "minimum_conflicts": transition.minimum_conflicts if transition else 0,
+            "maximum_conflicts": transition.maximum_conflicts if transition else 0,
+            "imu_used": int(imu_prediction is not None or native_imu_motion_used),
+            "imu_source": (
+                "native_fgo"
+                if native_imu_motion_used
+                else "legacy_bridge"
+                if imu_prediction is not None
+                else "none"
+            ),
+            "native_imu_fgo_available": int(native_imu_state is not None),
+            "native_imu_motion_used": int(native_imu_motion_used),
+            "imu_samples": (
+                imu_prediction.sample_count if imu_prediction is not None else 0
+            ),
+            "imu_covered_duration_s": (
+                imu_prediction.covered_duration_s if imu_prediction is not None else 0.0
+            ),
+            "imu_position_correction_m": (
+                float(np.linalg.norm(imu_prediction.cv_position_correction_ecef_m))
+                if imu_prediction is not None
+                else 0.0
+            ),
+            "imu_delta_velocity_mps": (
+                float(np.linalg.norm(imu_prediction.delta_velocity_ecef_mps))
+                if imu_prediction is not None
+                else 0.0
+            ),
+            "ffbsi_valid": int(smoothed is not None),
+            "ffbsi_tow": smoothed.target_tow_s if smoothed else np.nan,
+            "ffbsi_x": smoothed.position_ecef_m[0] if smoothed else np.nan,
+            "ffbsi_y": smoothed.position_ecef_m[1] if smoothed else np.nan,
+            "ffbsi_z": smoothed.position_ecef_m[2] if smoothed else np.nan,
+            "ffbsi_assignment_probability": (
+                smoothed.assignment_probability if smoothed else 0.0
+            ),
+            "ffbsi_effective_samples": (smoothed.effective_samples if smoothed else 0),
+        }
         row["epoch_runtime_ms"] = (time.perf_counter() - epoch_started) * 1000.0
         output.append(row)
         previous_native_imu = native_imu_state
@@ -648,6 +774,13 @@ def main(argv: list[str] | None = None) -> int:
         default=0.30,
         metavar="M",
         help="maximum candidate-vs-relative-IMU displacement residual for accelerated FIX",
+    )
+    parser.add_argument("--disjoint-holdout-consensus", action="store_true")
+    parser.add_argument("--disjoint-holdout-margin", type=float, default=0.02)
+    parser.add_argument("--disjoint-holdout-min-satellites", type=int, default=2)
+    parser.add_argument("--disjoint-holdout-residual-clip", type=float, default=3.0)
+    parser.add_argument(
+        "--disjoint-holdout-min-carrier-fraction", type=float, default=0.75
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--summary", type=Path, required=True)
@@ -700,6 +833,13 @@ def main(argv: list[str] | None = None) -> int:
         native_imu_aperture_margin_m=args.native_imu_aperture_margin,
         native_imu_fix_min_streak=args.native_imu_fix_min_streak,
         native_imu_motion_gate_m=args.native_imu_motion_gate,
+        disjoint_holdout_consensus=args.disjoint_holdout_consensus,
+        disjoint_holdout_margin=args.disjoint_holdout_margin,
+        disjoint_holdout_min_satellites=args.disjoint_holdout_min_satellites,
+        disjoint_holdout_residual_clip=args.disjoint_holdout_residual_clip,
+        disjoint_holdout_min_carrier_fraction=(
+            args.disjoint_holdout_min_carrier_fraction
+        ),
         ffbsi_lag_epochs=args.ffbsi_lag,
         ffbsi_backward_samples=args.ffbsi_samples,
         ffbsi_seed=args.ffbsi_seed,
@@ -707,9 +847,7 @@ def main(argv: list[str] | None = None) -> int:
     tracking_ms = (time.perf_counter() - tracking_started) * 1000.0
     args.output.parent.mkdir(parents=True, exist_ok=True)
     fields = (
-        list(rows[0])
-        if rows
-        else ["epoch_index", "tow", "shadow_fixed", "x", "y", "z"]
+        list(rows[0]) if rows else ["epoch_index", "tow", "shadow_fixed", "x", "y", "z"]
     )
     with args.output.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
@@ -748,6 +886,13 @@ def main(argv: list[str] | None = None) -> int:
             "native_imu_aperture_margin_m": args.native_imu_aperture_margin,
             "native_imu_fix_min_streak": args.native_imu_fix_min_streak,
             "native_imu_motion_gate_m": args.native_imu_motion_gate,
+            "disjoint_holdout_consensus": args.disjoint_holdout_consensus,
+            "disjoint_holdout_margin": args.disjoint_holdout_margin,
+            "disjoint_holdout_min_satellites": (args.disjoint_holdout_min_satellites),
+            "disjoint_holdout_residual_clip": (args.disjoint_holdout_residual_clip),
+            "disjoint_holdout_min_carrier_fraction": (
+                args.disjoint_holdout_min_carrier_fraction
+            ),
             "ffbsi_lag_epochs": args.ffbsi_lag,
             "ffbsi_backward_samples": args.ffbsi_samples,
             "ffbsi_seed": args.ffbsi_seed,
@@ -767,12 +912,13 @@ def main(argv: list[str] | None = None) -> int:
         "native_imu_accelerated_fix_epochs": sum(
             int(row.get("imu_accelerated_fix", 0)) for row in rows
         ),
+        "disjoint_holdout_selected_epochs": sum(
+            int(row.get("disjoint_holdout_selected", 0)) for row in rows
+        ),
         "ffbsi_output_epochs": sum(int(row.get("ffbsi_valid", 0)) for row in rows),
         "setup_runtime_ms": setup_ms,
         "tracking_runtime_ms": tracking_ms,
-        "tracking_runtime_per_epoch_ms": (
-            tracking_ms / len(rows) if rows else 0.0
-        ),
+        "tracking_runtime_per_epoch_ms": (tracking_ms / len(rows) if rows else 0.0),
         "tracking_runtime_p95_ms": (
             float(np.quantile([row["epoch_runtime_ms"] for row in rows], 0.95))
             if rows
@@ -786,9 +932,7 @@ def main(argv: list[str] | None = None) -> int:
         "output_sha256": _sha256(args.output),
         "pf_feedback_rows": feedback_rows,
         "pf_feedback_sha256": (
-            _sha256(args.pf_feedback_csv)
-            if args.pf_feedback_csv is not None
-            else None
+            _sha256(args.pf_feedback_csv) if args.pf_feedback_csv is not None else None
         ),
         "imu_input_sha256": _sha256(args.imu_csv) if args.imu_csv else None,
     }
