@@ -128,6 +128,18 @@ between the existing primary, native FGO, and PF conditional positions, using
 innovation/health features frozen on run1 and evaluated on run2/run3. Persistent
 ambiguity evidence across DD-reference changes remains the next FIX-side track.
 
+That FLOAT milestone is now complete. A 500-epoch causal health window uses the
+`gnss_fuse` candidate only when its native fixed fraction is at least 90%, or
+when the current candidate itself is fixed; candidate status is always emitted
+as FLOAT and the safe IMU PF/FGO tracker remains the sole FIX authority. The
+policy was selected on run1, validated without retuning on run2, and evaluated
+once on run3. All six route scores improved, including both sealed routes. The
+official mean rises to 59.222040% (+0.700128 points, +389.68 m passing
+distance), with the same 11,031 safe FIX epochs and zero false FIX. Release
+replay was position-hash identical on every route and had 28.37--50.31 ms p95
+candidate runtime. The 70% target remains 10.777960 points away; details and
+the reproducible truth boundary are in `docs/ppc_causal_float_selector.md`.
+
 ## Primary references
 
 - T. Suzuki, *Open-Source Factor Graph Optimization Package for GNSS: Examples
