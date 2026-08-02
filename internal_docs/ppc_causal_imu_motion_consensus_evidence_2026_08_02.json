@@ -1,0 +1,74 @@
+{
+  "schema": "gnss_gpu_ppc_causal_imu_motion_consensus_evidence_v1",
+  "date": "2026-08-02",
+  "production_input_truth": false,
+  "truth_usage": "separate_post_estimator_audit_subprocess_only",
+  "policy": {
+    "history": "prior_safe_fix_only",
+    "window_s": 10.0,
+    "minimum_anchor_spacing_s": 0.4,
+    "partitions": "alternating_temporal_anchors",
+    "minimum_anchors_per_partition": 3,
+    "offset_estimator": "component_median",
+    "maximum_winner_residual_m": 0.75,
+    "minimum_winner_margin_m": 0.02,
+    "minimum_carrier_pass_fraction": 0.75,
+    "requires_both_partition_winners_equal": true
+  },
+  "route_blocked_selection": {
+    "development_routes": ["tokyo/run1", "tokyo/run2", "nagoya/run1", "nagoya/run2"],
+    "development_previous_correct_fix": 5471,
+    "development_promoted_correct_fix": 5668,
+    "development_delta": 197,
+    "development_false_fix": 0,
+    "held_routes_opened_after_freeze": ["tokyo/run3", "nagoya/run3"],
+    "held_previous_correct_fix": 5323,
+    "held_promoted_correct_fix": 5363,
+    "held_delta": 40,
+    "held_false_fix": 0
+  },
+  "full_six_route": {
+    "artifact_directory": "Testing/basin_fgo_quality_imu_gap2_disjoint_motion_full_v10",
+    "total_epochs": 48778,
+    "correct_fix": 11031,
+    "false_fix": 0,
+    "false_fix_above_1m": 0,
+    "safe_fix_rate": 0.22614703349870844,
+    "previous_correct_fix": 10794,
+    "correct_fix_delta": 237,
+    "causal_motion_selected_epochs": 288,
+    "decision_determinism_mismatches": 0,
+    "routes": {
+      "tokyo/run1": {"correct_fix": 1257, "delta": 41, "false_fix": 0},
+      "tokyo/run2": {"correct_fix": 1907, "delta": 24, "false_fix": 0},
+      "tokyo/run3": {"correct_fix": 5154, "delta": 40, "false_fix": 0},
+      "nagoya/run1": {"correct_fix": 1160, "delta": 98, "false_fix": 0},
+      "nagoya/run2": {"correct_fix": 1344, "delta": 34, "false_fix": 0},
+      "nagoya/run3": {"correct_fix": 209, "delta": 0, "false_fix": 0}
+    }
+  },
+  "fault_matrix": {
+    "artifact_directory": "Testing/basin_fgo_quality_imu_gap2_disjoint_motion_faults_e300_v10",
+    "cases": ["gnss_outage", "gnss_ambiguous_holdout", "gnss_cycle_slip", "gnss_nlos", "imu_bias_jump", "imu_dropout", "imu_time_offset", "imu_vibration"],
+    "false_fix_each": 0,
+    "false_fix_above_1m_each": 0,
+    "causal_motion_selected_each": 0
+  },
+  "official_score": {
+    "metric": "forward_only_distance_weighted_3d_error_lte_0.5m",
+    "before_motion_pct": 58.52191168230843,
+    "after_motion_pct": 58.52191168230843,
+    "motion_delta_percentage_points": 0.0,
+    "safety_gate_passed": true
+  },
+  "remaining": {
+    "next_safe_fix_target": 0.25,
+    "epochs_required": 12195,
+    "remaining_correct_fix_epochs": 1164,
+    "candidate_oracle_correct_epochs": 15069,
+    "oracle_headroom_epochs": 4038,
+    "first_official_score_target_pct": 70.0,
+    "official_score_gap_percentage_points": 11.47808831769157,
+    "blind_sota_claim": false
+  }
+}

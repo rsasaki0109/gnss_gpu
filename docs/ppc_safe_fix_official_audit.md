@@ -92,6 +92,14 @@ audits. This remains an authority-only improvement: it does not alter the
 position trajectory and therefore does not revise the official 58.509% score.
 It is public-route evidence, not a blind SOTA result.
 
+Causal IMU motion consensus further raises safe-FIX authority to 11,031/48,778
+(22.615%, +237) with zero false FIX and zero false FIX above 1 m. Its settings
+were selected on run1/run2 and frozen before the single run3 evaluation; all
+eight GNSS/IMU fault audits also pass. Recomposition proves that the official
+score is identical before and after this step at 58.521912%. The extra FIX
+epochs were already correct primary FLOAT epochs, so this is an integrity-label
+improvement rather than a trajectory-accuracy improvement.
+
 ## PF/FGO and GPU gates
 
 The tested PF/FGO path covers multiple ambiguity basins, conditioned FGO

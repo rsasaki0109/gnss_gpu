@@ -18,6 +18,9 @@ def test_tracker_policy_is_explicit_in_runner_source() -> None:
     assert '"--disjoint-holdout-consensus"' in source
     assert "str(args.disjoint_holdout_margin)" in source
     assert '"--disjoint-holdout-min-carrier-fraction"' in source
+    assert '"--causal-imu-motion-consensus"' in source
+    assert "str(args.causal_imu_motion_gate)" in source
+    assert '"--causal-imu-motion-min-carrier-fraction"' in source
 
 
 def test_solver_command_excludes_reference_and_emits_basin_stream(

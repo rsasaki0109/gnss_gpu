@@ -228,6 +228,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--disjoint-holdout-min-carrier-fraction", type=float, default=0.75
     )
+    parser.add_argument("--causal-imu-motion-consensus", action="store_true")
+    parser.add_argument("--causal-imu-motion-window", type=float, default=10.0)
+    parser.add_argument("--causal-imu-motion-anchor-spacing", type=float, default=0.4)
+    parser.add_argument(
+        "--causal-imu-motion-min-anchors-per-partition", type=int, default=3
+    )
+    parser.add_argument("--causal-imu-motion-gate", type=float, default=0.75)
+    parser.add_argument("--causal-imu-motion-margin", type=float, default=0.02)
+    parser.add_argument(
+        "--causal-imu-motion-min-carrier-fraction", type=float, default=0.75
+    )
     parser.add_argument("--cuda-mode", choices=("off", "auto", "on"), default="off")
     parser.add_argument("--route", action="append")
     parser.add_argument("--resume", action="store_true")
@@ -280,6 +291,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--disjoint-holdout-residual-clip must be positive")
     if not 0.0 < args.disjoint_holdout_min_carrier_fraction <= 1.0:
         parser.error("--disjoint-holdout-min-carrier-fraction must be in (0, 1]")
+    if args.causal_imu_motion_window <= 0.0:
+        parser.error("--causal-imu-motion-window must be positive")
+    if args.causal_imu_motion_anchor_spacing <= 0.0:
+        parser.error("--causal-imu-motion-anchor-spacing must be positive")
+    if args.causal_imu_motion_min_anchors_per_partition < 1:
+        parser.error("--causal-imu-motion-min-anchors-per-partition must be positive")
+    if args.causal_imu_motion_gate <= 0.0:
+        parser.error("--causal-imu-motion-gate must be positive")
+    if args.causal_imu_motion_margin < 0.0:
+        parser.error("--causal-imu-motion-margin must be non-negative")
+    if not 0.0 < args.causal_imu_motion_min_carrier_fraction <= 1.0:
+        parser.error("--causal-imu-motion-min-carrier-fraction must be in (0, 1]")
+    if args.causal_imu_motion_consensus and not args.native_imu:
+        parser.error("--causal-imu-motion-consensus requires --native-imu")
     if args.skip_epochs < 0:
         parser.error("--skip-epochs must be non-negative")
     binary = args.binary.resolve()
@@ -391,6 +416,24 @@ def main(argv: list[str] | None = None) -> int:
                     str(args.disjoint_holdout_min_carrier_fraction),
                 )
             )
+        if args.causal_imu_motion_consensus:
+            tracker_command.extend(
+                (
+                    "--causal-imu-motion-consensus",
+                    "--causal-imu-motion-window",
+                    str(args.causal_imu_motion_window),
+                    "--causal-imu-motion-anchor-spacing",
+                    str(args.causal_imu_motion_anchor_spacing),
+                    "--causal-imu-motion-min-anchors-per-partition",
+                    str(args.causal_imu_motion_min_anchors_per_partition),
+                    "--causal-imu-motion-gate",
+                    str(args.causal_imu_motion_gate),
+                    "--causal-imu-motion-margin",
+                    str(args.causal_imu_motion_margin),
+                    "--causal-imu-motion-min-carrier-fraction",
+                    str(args.causal_imu_motion_min_carrier_fraction),
+                )
+            )
         subprocess.run(tracker_command, check=True)
 
         # Only this final subprocess receives a reference path. Both estimator
@@ -468,6 +511,17 @@ def main(argv: list[str] | None = None) -> int:
         "disjoint_holdout_residual_clip": args.disjoint_holdout_residual_clip,
         "disjoint_holdout_min_carrier_fraction": (
             args.disjoint_holdout_min_carrier_fraction
+        ),
+        "causal_imu_motion_consensus": args.causal_imu_motion_consensus,
+        "causal_imu_motion_window_s": args.causal_imu_motion_window,
+        "causal_imu_motion_anchor_spacing_s": args.causal_imu_motion_anchor_spacing,
+        "causal_imu_motion_min_anchors_per_partition": (
+            args.causal_imu_motion_min_anchors_per_partition
+        ),
+        "causal_imu_motion_gate_m": args.causal_imu_motion_gate,
+        "causal_imu_motion_margin_m": args.causal_imu_motion_margin,
+        "causal_imu_motion_min_carrier_fraction": (
+            args.causal_imu_motion_min_carrier_fraction
         ),
         "cuda_mode": args.cuda_mode,
         "production_input_truth": False,
