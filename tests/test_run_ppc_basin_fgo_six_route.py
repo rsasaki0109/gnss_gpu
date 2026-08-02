@@ -11,14 +11,15 @@ def test_tracker_policy_is_explicit_in_runner_source() -> None:
     source = Path("experiments/run_ppc_basin_fgo_six_route.py").read_text(
         encoding="utf-8"
     )
-    assert '"--fix-min-streak", str(args.fix_min_streak)' in source
-    assert (
-        '"--validation-gap-tolerance", str(args.validation_gap_tolerance)'
-        in source
-    )
+    assert '"--fix-min-streak",' in source
+    assert "str(args.fix_min_streak)" in source
+    assert '"--validation-gap-tolerance",' in source
+    assert "str(args.validation_gap_tolerance)" in source
 
 
-def test_solver_command_excludes_reference_and_emits_basin_stream(tmp_path: Path) -> None:
+def test_solver_command_excludes_reference_and_emits_basin_stream(
+    tmp_path: Path,
+) -> None:
     route = tmp_path / "tokyo" / "run1"
     command, artifacts = _solver_command(
         tmp_path / "gnss_solve", route, tmp_path / "out", "route", 300
@@ -29,6 +30,33 @@ def test_solver_command_excludes_reference_and_emits_basin_stream(tmp_path: Path
     assert command[command.index("--multisd-fgo-shadow-top-k") + 1] == "4"
     assert command[command.index("--max-epochs") + 1] == "300"
     assert artifacts["basins"].name == "route.basins.jsonl"
+
+
+def test_solver_command_records_candidate_supply_policy(tmp_path: Path) -> None:
+    route = tmp_path / "nagoya" / "run3"
+    command, _ = _solver_command(
+        tmp_path / "gnss_solve",
+        route,
+        tmp_path / "out",
+        "candidate",
+        300,
+        16,
+        candidate_groups=4,
+        fallback_consensus_groups=2,
+        fallback_consensus_separation_m=0.1,
+        fallback_max_seed_separation_m=0.3,
+        constellation_par=True,
+        interleave_constellation_par=True,
+        quality_ranked_par=True,
+    )
+    joined = " ".join(command)
+    assert "--multisd-fgo-shadow-candidate-groups 4" in joined
+    assert "--multisd-fgo-shadow-fallback-consensus-groups 2" in joined
+    assert "--multisd-fgo-shadow-fallback-consensus-separation 0.1" in joined
+    assert "--multisd-fgo-shadow-fallback-max-seed-separation 0.3" in joined
+    assert "--multisd-fgo-shadow-constellation-par" in command
+    assert "--multisd-fgo-shadow-interleave-constellation-par" in command
+    assert "--multisd-fgo-shadow-quality-ranked-par" in command
 
 
 def test_solver_command_adds_audited_native_imu_contract(tmp_path: Path) -> None:
