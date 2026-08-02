@@ -8,8 +8,10 @@ tracker commands.
 ## Decision
 
 Use native quality-ranked partial ambiguity resolution (`--quality-ranked-par`)
-with top-K 8. Keep the existing independent GNSS holdout validation, two-epoch
-FIX streak, one-epoch validation-gap tolerance, and native fixed-lag IMU FGO.
+with top-K 8. Combine it with the previously validated native fixed-lag IMU
+aperture (0.30 m, 0.05 m winner margin), two-epoch IMU-consistent acquisition,
+and a two-epoch validation-gap tolerance. Independent GNSS holdout validation
+and the 0.99 PF posterior gate remain mandatory.
 
 The policy is uniform across all six routes. We do not choose a policy per
 route after looking at reference errors.
@@ -95,6 +97,43 @@ Artifacts:
 - `Testing/basin_fgo_quality_full_parallel_v5_aggregate.json`
 - aggregate SHA-256:
   `64f0f4e58faad0d1fb0f1bff130abd9592ecbe08521a6f4f6e2278815ae1e5ad`
+
+## Integrated IMU continuity promotion
+
+The quality-ranked basin stream was then consumed by the already implemented
+native IMU aperture and accelerated-acquisition gates. A 300-epoch six-route
+check increased correct FIX from 662 to 698 with zero false FIX. Increasing
+the validation-gap tolerance from one to two epochs was selected on run1/run2
+(426 to 456 correct FIX) and then confirmed on the untouched run3 blocks (272
+to 279), again with zero false FIX.
+
+The frozen combined policy produced the following full-length result:
+
+| Route | Quality-ranked only | Combined safe policy | Delta | False / >1 m |
+|---|---:|---:|---:|---:|
+| Tokyo run1 | 897 | 1,081 | +184 | 0 / 0 |
+| Tokyo run2 | 1,535 | 1,691 | +156 | 0 / 0 |
+| Tokyo run3 | 4,088 | 4,744 | +656 | 0 / 0 |
+| Nagoya run1 | 926 | 1,014 | +88 | 0 / 0 |
+| Nagoya run2 | 988 | 1,228 | +240 | 0 / 0 |
+| Nagoya run3 | 192 | 206 | +14 | 0 / 0 |
+| **All routes** | **8,626** | **9,964** | **+1,338** | **0 / 0** |
+
+The final rate is 20.427% of the 48,778-epoch official denominator. Relative
+to the original uniform 7,475-FIX policy, this is +2,489 correct FIX epochs
+(+33.3% relative), with every route improving and both integrity counters
+remaining zero.
+
+Four GNSS fault injections (outage, ambiguous holdout, cycle slip, and NLOS)
+and four IMU fault injections (bias jump, dropout, time offset, and vibration)
+were rerun with the combined policy. All eight audits passed with zero false
+FIX and zero false FIX above 1 m. The GNSS fault interval itself emitted no
+FIX. Machine-readable counts, settings, and artifact hashes are recorded in
+`internal_docs/ppc_quality_imu_gap2_promotion_evidence_2026_08_02.json`.
+
+This is the promoted safe-FIX availability policy for the available PPC data.
+It is not a blind score or a SOTA claim: the workspace contains no sealed route,
+and safe-FIX availability is not the official trajectory-distance score.
 
 ## CUDA plus native IMU FGO check
 

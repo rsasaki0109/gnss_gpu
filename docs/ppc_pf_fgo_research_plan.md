@@ -83,6 +83,30 @@ The 70%, 78.7%, and 80% goals remain unproven on a six-route safe union. The
 dataset has no unused sealed route, so these public-route results establish
 neither a blind private score nor world SOTA.
 
+## Promoted candidate supply plus IMU continuity (2026-08-02)
+
+Quality-ranked PAR raised the uniform full-six result to 8,626/48,778. The
+previously validated native IMU aperture was then composed with that stream.
+A two-epoch validation-gap tolerance was selected using run1/run2 only and
+confirmed on the untouched run3 blocks before the full replay. The frozen
+policy is top-K 8 quality-ranked PAR, native IMU aperture 0.30 m with a 0.05 m
+winner margin, FIX/IMU streak 2, gap tolerance 2, posterior gamma 0.99, and CPU
+solver mode.
+
+It produces 9,964/48,778 correct FIX (20.427%), zero false FIX, and zero false
+FIX above 1 m. All six routes improve over the original 7,475 result, and eight
+deterministic GNSS/IMU fault audits pass. This closes the current composition
+milestone but not the stretch goal.
+
+The next pre-registered milestone is 25% safe-FIX availability (at least
+12,195 correct epochs) with both false counters still zero. The quality-ranked
+candidate oracle contains 15,069 correct-candidate epochs, leaving theoretical
+headroom, but only 9,964 are safely promoted. Work should therefore target
+truth-free disambiguation when multiple candidates pass: two disjoint satellite
+holdouts, IMU motion-consensus likelihood, and persistent ambiguity evidence
+across DD-reference changes. Candidate count or FIX gates must not be relaxed
+without route-blocked and fault-injection evidence.
+
 ## Primary references
 
 - T. Suzuki, *Open-Source Factor Graph Optimization Package for GNSS: Examples
