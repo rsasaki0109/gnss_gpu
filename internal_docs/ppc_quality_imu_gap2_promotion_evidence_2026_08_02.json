@@ -1,0 +1,81 @@
+{
+  "schema": "gnss_gpu_ppc_quality_imu_gap2_promotion_evidence_v1",
+  "truth_contract": {
+    "production_input_truth": false,
+    "truth_usage": "post_estimator_scoring_only"
+  },
+  "policy": {
+    "top_k": 8,
+    "quality_ranked_par": true,
+    "fix_gamma": 0.99,
+    "fix_min_streak": 2,
+    "validation_gap_tolerance_epochs": 2,
+    "native_imu_fgo": true,
+    "native_imu_aperture_m": 0.3,
+    "native_imu_aperture_margin_m": 0.05,
+    "native_imu_fix_min_streak": 2,
+    "native_imu_motion_gate_m": 0.3,
+    "cuda_mode": "off"
+  },
+  "route_blocked_selection": {
+    "development_routes": [
+      "tokyo/run1",
+      "tokyo/run2",
+      "nagoya/run1",
+      "nagoya/run2"
+    ],
+    "development_gap1_correct_fix": 426,
+    "development_gap2_correct_fix": 456,
+    "validation_routes": ["tokyo/run3", "nagoya/run3"],
+    "validation_gap1_correct_fix": 272,
+    "validation_gap2_correct_fix": 279,
+    "false_fix": 0,
+    "false_fix_above_1m": 0,
+    "passed": true
+  },
+  "routes": {
+    "nagoya/run1": {"total_epochs": 6748, "correct_fix": 1014, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "32e3aa2eb755b250a9c3b4f5532aebdec7a94f05457df1be4fdc3b985309ab86", "tracker_summary_sha256": "529496766cdaf09c0dd0e79da606debf8658ed361681214acebb42af49ceb75d"},
+    "nagoya/run2": {"total_epochs": 6763, "correct_fix": 1228, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "65f06d1745bf6307a52eff6a8f30d0183cc854f9da47d72c6415e942c42a9f67", "tracker_summary_sha256": "9a73e4cb104fd8b325046376ea715ce9cb31508a1430af32ebd292e58eda23e3"},
+    "nagoya/run3": {"total_epochs": 3275, "correct_fix": 206, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "1ef7c27a656ed1419eee05dff8fbd88aa5512e60f0d2eb30be52229048570e82", "tracker_summary_sha256": "6e01c4669e2448249a43a1789ca8e17d33a484246395d8a4fc808a8279022f17"},
+    "tokyo/run1": {"total_epochs": 10070, "correct_fix": 1081, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "5d65e6528fb9e9dcce5e87381346d062df750499416617be0753f5639511ccb9", "tracker_summary_sha256": "43dba9a89a1673f1e134e45e74f1e3fe7f1a88bd99733545a269b95373cbe6e0"},
+    "tokyo/run2": {"total_epochs": 8383, "correct_fix": 1691, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "056419d189376a19221f87dd10eb82026202cffd4cfaaea1e5f14bdbe9431d71", "tracker_summary_sha256": "b443f9a92928aa32d30497675e021e31666e7f0bcb4805be3e3b10cab2661810"},
+    "tokyo/run3": {"total_epochs": 13539, "correct_fix": 4744, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "e6ebfb8219edc2f8f76ea9f6260b66850af9b7a1938d9d99f08d2533298a6c68", "tracker_summary_sha256": "9483a43f550c8b0f8ce9538ef1d236fd38358082345499a1e040458810710553"}
+  },
+  "totals": {
+    "total_epochs": 48778,
+    "fixed": 9964,
+    "correct_fix": 9964,
+    "false_fix": 0,
+    "false_fix_above_1m": 0,
+    "correct_fix_rate_full_denominator": 0.204272417893313,
+    "delta_vs_original_uniform": 2489,
+    "relative_gain_vs_original_uniform": 0.33297658862876255,
+    "delta_vs_quality_ranked_only": 1338
+  },
+  "fault_audits": {
+    "gnss_ambiguous_holdout": {"correct_fix": 18, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "c20279fb8de4a8386125157b611ccb62c92e6ecc171c1ac65e191932de741ef3"},
+    "gnss_cycle_slip": {"correct_fix": 18, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "cf5fbd550286d73c743c693bf288dff50875756daf1d22301a6d1328a7bd1ed9"},
+    "gnss_nlos": {"correct_fix": 18, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "0bb8e695651e4db9f31306cc419c50074dabce022b64128cd4908275746d7f3a"},
+    "gnss_outage": {"correct_fix": 18, "false_fix": 0, "false_fix_above_1m": 0, "fixed_inside_fault_interval": 0, "audit_sha256": "8a8d20f780f316ab0d7542abd9466d1ceabec2b689a6a604958ab54368ebb06c"},
+    "imu_bias_jump": {"correct_fix": 25, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "8e70d496f4c5271a61ccfd12390b128fe62677f1a9a7db7e21f94ebe9ae879d8"},
+    "imu_dropout": {"correct_fix": 25, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "dfedc9b6552790ced0355d4e499c41fc766788b2e0fc3fb83c7575f5dd6ba63f"},
+    "imu_time_offset": {"correct_fix": 25, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "2c115d9e65b65cfa804ac6a75a40156df8712f9fa7de03fa644f1d156915a330"},
+    "imu_vibration": {"correct_fix": 25, "false_fix": 0, "false_fix_above_1m": 0, "audit_sha256": "cc68a2fb666576ab84b3439e5ecb0f20eed3e666b48012bda1b17d5b7741df93"}
+  },
+  "inputs": {
+    "quality_ranked_aggregate_sha256": "64f0f4e58faad0d1fb0f1bff130abd9592ecbe08521a6f4f6e2278815ae1e5ad",
+    "full_tracker_directory": "Testing/basin_fgo_quality_imu_gap2_full_v7",
+    "fault_directory": "Testing/basin_fgo_quality_imu_gap2_faults_e300"
+  },
+  "gates": {
+    "six_route_complete": true,
+    "route_blocked_validation": true,
+    "all_routes_improved_vs_original": true,
+    "fault_matrix": true,
+    "zero_false_fix": true,
+    "zero_false_fix_above_1m": true
+  },
+  "promotion_ready": true,
+  "sota_claim": false,
+  "limitation": "Available PPC routes are public development evidence; no unused sealed route exists, and safe-FIX availability is not the official trajectory-distance score."
+}

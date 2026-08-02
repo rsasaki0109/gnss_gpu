@@ -70,6 +70,15 @@ does not by itself replace the 58.509% official trajectory-score result above.
 The detailed ablation, per-route counts, CUDA timing, and artifact hash are in
 `docs/ppc_candidate_supply_ablation.md`.
 
+Combining that candidate stream with the independently validated native IMU
+aperture and a route-blocked two-epoch gap policy raises the final safe-FIX
+authority to 9,964/48,778 (20.427%). This is +2,489 correct epochs (+33.3%
+relative) over the original 7,475 result and improves all six routes. False FIX
+and false FIX above 1 m remain zero. Eight deterministic GNSS/IMU fault audits
+also remain fail-closed. This combined result supersedes 8,626 as the safe-FIX
+availability result, but it still does not replace or imply the official
+trajectory score.
+
 The native shipping result by itself scored 46.331% and emitted 4,629 wrong
 FIX epochs, including 1,608 above 1 m. It is therefore rejected as FIX
 authority. Separating its position trajectory from FIX authority removes all
