@@ -19,11 +19,63 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping, Sequence
 
-
 RUN_MANIFEST_SCHEMA = "gnss_gpu_run_manifest_v1"
 RUN_MANIFEST_SCHEMA_VERSION = 1
 RUN_COMPARISON_SCHEMA = "gnss_gpu_run_comparison_v1"
 DEFAULT_PLATEAU_GML = Path("data") / "sample_plateau.gml"
+
+
+class UrbanNavRunError(RuntimeError):
+    """User-facing UrbanNav error without importing the optional data module.
+
+    ``urbannav_cli`` pulls in NumPy and the package I/O stack.  The historical
+    source-checkout entry point (``python python/gnss_gpu/cli.py doctor``) must
+    remain usable before those runtime dependencies are installed, so the
+    UrbanNav implementation is loaded only when one of its commands is used.
+    The implementation's error also derives from :class:`RuntimeError`, which
+    keeps this compatibility alias suitable for the CLI's error handling.
+    """
+
+
+def _load_urbannav_cli():
+    """Load the optional UrbanNav command implementation on demand.
+
+    Keeping this import behind a command boundary is important for a fresh
+    checkout: ``doctor``, ``build`` and ``--help`` intentionally use only the
+    standard library.  A source checkout can opt into the data commands with
+    ``PYTHONPATH=python python -m gnss_gpu.cli ...`` after installing runtime
+    dependencies.
+    """
+
+    try:
+        return importlib.import_module("gnss_gpu.urbannav_cli")
+    except (ImportError, OSError) as exc:
+        missing = getattr(exc, "name", None)
+        detail = f" (missing {missing})" if missing else ""
+        raise RuntimeError(
+            "UrbanNav data commands require the installed gnss_gpu package and "
+            f"runtime dependencies{detail}. From a source checkout, install the "
+            "package and run `PYTHONPATH=python python -m gnss_gpu.cli data inspect PATH` "
+            "or use the installed `gnss-gpu` command."
+        ) from exc
+
+
+def inspect_input(path: str | Path):
+    """Compatibility wrapper that lazily dispatches to UrbanNav inspection."""
+
+    return _load_urbannav_cli().inspect_input(path)
+
+
+def format_inspection(result: object) -> str:
+    """Compatibility wrapper that lazily formats an UrbanNav inspection."""
+
+    return _load_urbannav_cli().format_inspection(result)
+
+
+def run_urbannav_pf(*args: object, **kwargs: object):
+    """Compatibility wrapper that lazily dispatches the UrbanNav PF run."""
+
+    return _load_urbannav_cli().run_urbannav_pf(*args, **kwargs)
 
 
 class ManifestError(ValueError):
@@ -1083,6 +1135,29 @@ def _cmd_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_data_inspect(args: argparse.Namespace) -> int:
+    try:
+        result = inspect_input(args.input)
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"Data inspect error: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        try:
+            output = Path(args.json).expanduser().resolve()
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(
+                json.dumps(result.as_dict(), indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            print(f"Data inspect error: could not write {args.json}: {exc}", file=sys.stderr)
+            return 2
+    print(format_inspection(result))
+    if args.json:
+        print(f"Report:    {Path(args.json).expanduser().resolve()}")
+    return 0 if result.ready else 1
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     root = _repo_root()
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -1122,6 +1197,53 @@ def _cmd_run(args: argparse.Namespace) -> int:
             "pf_particles": getattr(args, "pf_particles", 3000),
             "allow_cpu_fallback": bool(getattr(args, "allow_cpu_fallback", False)),
         }
+    elif args.preset == "urbannav-pf":
+        input_path = getattr(args, "input", None)
+        if input_path is None:
+            print(
+                "UrbanNav PF preset requires --input PATH. "
+                "Run gnss-gpu data inspect PATH first.",
+                file=sys.stderr,
+            )
+            return 2
+        raw_systems = getattr(args, "systems", "G")
+        systems = tuple(
+            part.strip().upper()
+            for part in str(raw_systems).split(",")
+            if part.strip()
+        )
+        if not systems:
+            print("UrbanNav GPU preset requires at least one GNSS system in --systems.", file=sys.stderr)
+            return 2
+        try:
+            result = run_urbannav_pf(
+                input_path,
+                output_dir,
+                particles=getattr(args, "particles", 10000),
+                max_epochs=getattr(args, "max_epochs", 300),
+                start_epoch=getattr(args, "start_epoch", 0),
+                systems=systems,
+                rover_source=getattr(args, "urban_rover", "ublox"),
+                seed=getattr(args, "seed", 42),
+                no_plots=bool(getattr(args, "no_plots", False)),
+            )
+        except UrbanNavRunError as exc:
+            print(f"UrbanNav GPU preset failed: {exc}", file=sys.stderr)
+            print(
+                "No CPU fallback was used. Run gnss-gpu data inspect PATH, "
+                "then gnss-gpu doctor if the CUDA runtime is unavailable.",
+                file=sys.stderr,
+            )
+            return 1
+        input_paths.extend(Path(path) for path in result.get("input_paths", ()))
+        raw_artifacts = result.get("artifact_paths")
+        if isinstance(raw_artifacts, Mapping):
+            artifact_paths = {
+                str(key): Path(str(value))
+                for key, value in raw_artifacts.items()
+            }
+        parameters = dict(result.get("parameters", {}))
+        parameters.setdefault("preset", args.preset)
     else:
         print(f"Unknown preset: {args.preset}", file=sys.stderr)
         return 2
@@ -1133,6 +1255,27 @@ def _cmd_run(args: argparse.Namespace) -> int:
         command.extend(["--gml", str(gml_path), "--pf-particles", str(getattr(args, "pf_particles", 3000))])
         if getattr(args, "allow_cpu_fallback", False):
             command.append("--allow-cpu-fallback")
+    elif args.preset == "urbannav-pf":
+        command.extend(
+            [
+                "--input",
+                str(args.input),
+                "--particles",
+                str(getattr(args, "particles", 10000)),
+                "--max-epochs",
+                str(getattr(args, "max_epochs", 300)),
+                "--start-epoch",
+                str(getattr(args, "start_epoch", 0)),
+                "--systems",
+                str(getattr(args, "systems", "G")),
+                "--urban-rover",
+                str(getattr(args, "urban_rover", "ublox")),
+                "--seed",
+                str(getattr(args, "seed", 42)),
+            ]
+        )
+        if getattr(args, "no_plots", False):
+            command.append("--no-plots")
     manifest = build_run_manifest(
         preset=args.preset,
         result=result,
@@ -1152,7 +1295,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(f"Runtime:     {result['elapsed_ms']:.2f} ms")
         print(f"Manifest:    {manifest_path}")
         print("Next:        gnss-gpu run --preset plateau-nlos")
-    else:
+    elif args.preset == "plateau-nlos":
         suite = result.get("suite", {})
         print("PLATEAU NLOS GPU demo suite: PASS")
         print(f"Backend:     {result.get('backend', 'CUDA')}")
@@ -1171,6 +1314,23 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(f"Runtime:     {float(result.get('elapsed_ms', elapsed_ms)):.2f} ms")
         print(f"Manifest:    {manifest_path}")
         print("Next:        gnss-gpu run --preset plateau-nlos --output-dir runs/plateau-nlos-candidate")
+    elif args.preset == "urbannav-pf":
+        metrics = result.get("metrics", {}) if isinstance(result, Mapping) else {}
+        print("UrbanNav GPU particle-filter run: PASS")
+        print(f"Backend:     {result.get('backend', 'CUDA')}")
+        print(f"Dataset:     {result.get('dataset_name', 'unknown')}")
+        print(f"Epochs:      {result.get('n_epochs', 0)}")
+        if isinstance(metrics, Mapping):
+            if metrics.get("pf_rms_2d_m") is not None:
+                print(f"PF RMS 2D:   {float(metrics['pf_rms_2d_m']):.3f} m")
+            if metrics.get("wls_rms_2d_m") is not None:
+                print(f"WLS RMS 2D:  {float(metrics['wls_rms_2d_m']):.3f} m")
+        print(f"Runtime:     {float(result.get('elapsed_ms', elapsed_ms)):.2f} ms")
+        print(f"Manifest:    {manifest_path}")
+        print(
+            "Next:        gnss-gpu run --preset urbannav-pf --input "
+            f"{args.input} --output-dir runs/urbannav-pf-candidate"
+        )
     return 0
 
 
@@ -1231,6 +1391,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gnss-gpu", description="GPU-first setup and demo runner for gnss_gpu")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    data = subparsers.add_parser("data", help="inspect local GNSS/UrbanNav inputs")
+    data_subparsers = data.add_subparsers(dest="data_command", required=True)
+    inspect = data_subparsers.add_parser(
+        "inspect",
+        help="detect a local RINEX/UrbanNav/PPC bundle and validate its data contract",
+    )
+    inspect.add_argument("input", type=Path, help="run directory, dataset root, or RINEX file")
+    inspect.add_argument("--json", metavar="PATH", help="also write a machine-readable inspection report")
+    inspect.set_defaults(handler=_cmd_data_inspect)
+
     doctor = subparsers.add_parser("doctor", help="diagnose the NVIDIA/CUDA build and runtime environment")
     doctor.add_argument("--skip-runtime", action="store_true", help="check imports without launching a CUDA kernel")
     doctor.add_argument("--json", metavar="PATH", help="also write a machine-readable diagnostic report")
@@ -1247,9 +1417,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--preset",
         default="signal-acquisition",
-        choices=("signal-acquisition", "plateau-nlos"),
+        choices=("signal-acquisition", "plateau-nlos", "urbannav-pf"),
     )
     run.add_argument("--output-dir", type=Path, help="directory for manifest.json (default: runs/<UTC timestamp>)")
+    run.add_argument(
+        "--input",
+        type=Path,
+        help="UrbanNav/PPC run directory or dataset root for the urbannav-pf preset",
+    )
     run.add_argument(
         "--gml",
         type=Path,
@@ -1265,6 +1440,49 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-cpu-fallback",
         action="store_true",
         help="allow CPU triangle ray-cast for plateau-nlos smoke tests",
+    )
+    run.add_argument(
+        "--particles",
+        "--urbannav-particles",
+        dest="particles",
+        type=int,
+        default=10000,
+        help="particle count for the urbannav-pf preset (default: 10000)",
+    )
+    run.add_argument(
+        "--max-epochs",
+        type=int,
+        default=300,
+        help="maximum usable epochs for the urbannav-pf preset (default: 300)",
+    )
+    run.add_argument(
+        "--start-epoch",
+        type=int,
+        default=0,
+        help="skip this many usable epochs before the urbannav-pf run",
+    )
+    run.add_argument(
+        "--systems",
+        type=str,
+        default="G",
+        help="comma-separated GNSS systems for urbannav-pf, e.g. G or G,E,J",
+    )
+    run.add_argument(
+        "--urban-rover",
+        type=str,
+        default="ublox",
+        help="UrbanNav rover source: ublox or trimble (default: ublox)",
+    )
+    run.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="reproducible PF seed for urbannav-pf (default: 42)",
+    )
+    run.add_argument(
+        "--no-plots",
+        action="store_true",
+        help="write a placeholder visualization instead of the error timeline",
     )
     run.set_defaults(handler=_cmd_run)
 

@@ -300,6 +300,43 @@ input hashes or backends are reported as warnings. A missing CityGML file or
 CUDA BVH gives a concrete repair hint. `--allow-cpu-fallback` is available only
 for a CPU smoke test and is not the GPU benchmark path.
 
+### GPU experiment loop: local UrbanNav/PPC data
+
+The local-data path never downloads a dataset implicitly. Inspect a downloaded
+UrbanNav Tokyo/Hong Kong subset, a PPC run, or a directory containing the
+supported RINEX bundle before starting the GPU PF:
+
+```bash
+gnss-gpu data inspect data/urbannav/Tokyo/Odaiba
+gnss-gpu run --preset urbannav-pf --input data/urbannav/Tokyo/Odaiba
+```
+
+On Windows PowerShell, use the same commands with `python`/`gnss-gpu`; paths
+containing spaces should be quoted. The current run contract is a rover RINEX
+observation, a base RINEX observation, a broadcast navigation file, and a
+`reference.csv` containing time plus ECEF `x/y/z` or latitude/longitude.
+`imu.csv` is optional for this undifferenced PF onboarding run. `data inspect`
+reports the detected format, files, observation codes, navigation messages,
+reference fields, missing items, and the expected `urbannav-pf` command.
+
+If the files are not already present, inspect only prints repair guidance. For
+the checked-in Tokyo fetch helper, run it explicitly:
+
+```bash
+python experiments/fetch_urbannav_subset.py --run Odaiba --output-dir data/urbannav/Tokyo
+```
+
+The PF preset requires the CUDA particle-filter and WLS extensions; it fails
+closed with a `doctor`/`build` hint and never silently switches to a CPU
+implementation. Each run writes `manifest.json`, a trajectory CSV, a JSON and
+Markdown summary, and a dependency-free SVG error timeline under the requested
+output directory. These artifacts are hashed in the common v1 manifest and can
+be compared with:
+
+```bash
+gnss-gpu compare runs/urbannav-pf-baseline runs/urbannav-pf-candidate
+```
+
 ### Browser/CPU reference
 
 **Zero install:** run the urban-canyon demo — with sky plot and trajectory
