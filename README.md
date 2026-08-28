@@ -242,6 +242,36 @@ from CityGML parsing to the CUDA kernels.
 
 ## Quick start
 
+### GPU-first start
+
+The supported first-run path assumes an NVIDIA GPU, a current driver, and a CUDA
+Toolkit with `nvcc`. From a fresh checkout:
+
+```bash
+git clone --recurse-submodules https://github.com/rsasaki0109/gnss_gpu.git
+cd gnss_gpu
+python3 -m venv .venv
+# Linux/macOS: source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+python3 -m pip install --upgrade pip
+python3 python/gnss_gpu/cli.py doctor
+python3 python/gnss_gpu/cli.py build
+gnss-gpu doctor
+gnss-gpu run --preset signal-acquisition
+```
+
+`doctor` checks the NVIDIA driver, GPU, CUDA compiler, CMake, native bindings,
+and a real signal-simulation → acquisition CUDA round-trip. A checkout without
+built bindings reports `READY TO BUILD`; a working installation reports
+`READY TO RUN`. The demo writes a reproducibility manifest under `runs/`.
+
+On Windows, use `python` in place of `python3` in a Developer PowerShell for Visual Studio.
+Use `gnss-gpu doctor --json doctor.json` when attaching environment details to
+an issue. Advanced users can target a specific CUDA architecture with
+`gnss-gpu build --architecture 89`.
+
+### Browser/CPU reference
+
 **Zero install:** run the urban-canyon demo — with sky plot and trajectory
 figures — straight in your browser:
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb)
@@ -382,17 +412,21 @@ than being hidden as a normal CPU-only installation.
 The native kernels back the signal-sim, particle-filter, ray-tracing, and multi-GNSS
 solver paths:
 
+The recommended build installs every native module into the active Python
+environment; no manual `.so`/`.pyd` copy is needed:
+
 ```bash
-mkdir -p build && cd build
-cmake .. -DCMAKE_CUDA_ARCHITECTURES=native
-make -j"$(nproc)"
-# then copy the generated .so files into python/gnss_gpu/
+python3 python/gnss_gpu/cli.py build
+gnss-gpu doctor
 ```
+
+To inspect the generated build command without changing the environment, use
+`python3 python/gnss_gpu/cli.py build --dry-run`.
 
 Once built, try a demo, e.g. signal simulation → acquisition round-trip:
 
 ```bash
-PYTHONPATH=python python3 examples/demo_signal_sim.py
+gnss-gpu run --preset signal-acquisition
 ```
 
 ## ROS 2 node
