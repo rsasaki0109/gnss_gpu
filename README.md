@@ -270,6 +270,36 @@ Use `gnss-gpu doctor --json doctor.json` when attaching environment details to
 an issue. Advanced users can target a specific CUDA architecture with
 `gnss-gpu build --architecture 89`.
 
+### GPU experiment loop: PLATEAU NLOS
+
+After the signal-acquisition smoke test, run the reproducible PLATEAU CityGML
+mask/replay suite. It uses the CUDA BVH ray tracer and reuses the checked-in
+SPP, particle-filter, and local-FGO replay consumers:
+
+```bash
+gnss-gpu run --preset plateau-nlos
+```
+
+The default input is `data/sample_plateau.gml`. Each run writes a timestamped
+directory under `runs/` containing the mask, per-estimator summaries, a suite
+CSV/JSON/Markdown report, and `manifest.json`. The manifest has the common v1
+schema (`schema`, `version`, `git_sha`, `backend`, `gpu`, `input_hashes`,
+`parameters`, `metrics`, and hashed `artifacts`) so runs can be compared safely.
+The run ends by printing the next suggested command; for an explicit second
+configuration use, for example:
+
+```bash
+gnss-gpu run --preset plateau-nlos --output-dir runs/plateau-nlos-candidate
+gnss-gpu compare runs/20260828T000000Z runs/plateau-nlos-candidate
+```
+
+`compare` prints precision/runtime deltas and writes `comparison.md` beside the
+candidate run. Use `--json PATH` for machine-readable output. Baseline and
+candidate must use compatible run-manifest schemas and the same preset; differing
+input hashes or backends are reported as warnings. A missing CityGML file or
+CUDA BVH gives a concrete repair hint. `--allow-cpu-fallback` is available only
+for a CPU smoke test and is not the GPU benchmark path.
+
 ### Browser/CPU reference
 
 **Zero install:** run the urban-canyon demo — with sky plot and trajectory

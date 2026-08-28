@@ -49,6 +49,7 @@ def run_suite(
     suite_md: Path = DEFAULT_SUITE_MD,
     suite_csv: Path = DEFAULT_SUITE_CSV,
     pf_particles: int = 3000,
+    gml_path: Path | None = None,
 ) -> dict[str, object]:
     exporter = _load_module(
         "export_plateau_nlos_demo_mask",
@@ -71,10 +72,27 @@ def run_suite(
         PROJECT_ROOT / "experiments" / "summarize_plateau_nlos_replays.py",
     )
 
-    mask_summary = exporter.export_mask_csv(mask_csv, summary_json=mask_summary_json)
-    spp_summary = spp.replay_spp(mask_csv, summary_json=spp_summary_json)
-    pf_summary = pf.replay_pf(mask_csv, summary_json=pf_summary_json, n_particles=pf_particles)
-    fgo_summary = fgo.replay_fgo(mask_csv, summary_json=fgo_summary_json)
+    mask_summary = exporter.export_mask_csv(
+        mask_csv,
+        summary_json=mask_summary_json,
+        gml_path=gml_path,
+    )
+    spp_summary = spp.replay_spp(
+        mask_csv,
+        summary_json=spp_summary_json,
+        gml_path=gml_path,
+    )
+    pf_summary = pf.replay_pf(
+        mask_csv,
+        summary_json=pf_summary_json,
+        gml_path=gml_path,
+        n_particles=pf_particles,
+    )
+    fgo_summary = fgo.replay_fgo(
+        mask_csv,
+        summary_json=fgo_summary_json,
+        gml_path=gml_path,
+    )
     suite_summary = summarizer.build_suite_summary(
         mask_summary_json=mask_summary_json,
         spp_summary_json=spp_summary_json,
@@ -108,6 +126,7 @@ def main() -> dict[str, object]:
     parser.add_argument("--suite-md", type=Path, default=DEFAULT_SUITE_MD)
     parser.add_argument("--suite-csv", type=Path, default=DEFAULT_SUITE_CSV)
     parser.add_argument("--pf-particles", type=int, default=3000)
+    parser.add_argument("--gml", type=Path, default=None)
     args = parser.parse_args()
     if args.pf_particles <= 0:
         parser.error("--pf-particles must be positive")
@@ -122,6 +141,7 @@ def main() -> dict[str, object]:
         suite_md=args.suite_md,
         suite_csv=args.suite_csv,
         pf_particles=args.pf_particles,
+        gml_path=args.gml,
     )
     suite = result["suite"]
     print("PLATEAU NLOS demo suite complete")
