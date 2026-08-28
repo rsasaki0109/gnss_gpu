@@ -31,6 +31,9 @@ dependencies = [
     "numpy>=1.21",
 ]
 
+[project.scripts]
+gnss-gpu = "gnss_gpu.cli:main"
+
 [project.optional-dependencies]
 viz = [
     "matplotlib>=3.5",
