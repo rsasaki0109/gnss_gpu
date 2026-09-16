@@ -121,6 +121,32 @@ def _safe_platform_component(getter: object, fallback: str = "unknown") -> str:
     return text or fallback
 
 
+def _safe_windows_release(fallback: str = "unknown") -> str:
+    """Return the Windows build label without allowing probe failures out.
+
+    ``sys.getwindowsversion`` is diagnostic only, so a broken provider must
+    never prevent a run manifest from being written.
+    """
+
+    get_windows_version = getattr(sys, "getwindowsversion", None)
+    if not callable(get_windows_version):
+        return fallback
+    try:
+        version = get_windows_version()
+        release = ".".join(
+            str(part)
+            for part in (
+                getattr(version, "major", ""),
+                getattr(version, "minor", ""),
+                getattr(version, "build", ""),
+            )
+            if str(part) != ""
+        )
+    except BaseException:
+        return fallback
+    return release or fallback
+
+
 def _safe_platform_info() -> str:
     """Build a stable human-readable platform label without Windows WMI.
 
@@ -130,22 +156,7 @@ def _safe_platform_info() -> str:
     """
 
     if os.name == "nt" or sys.platform.startswith("win"):
-        release = "unknown"
-        get_windows_version = getattr(sys, "getwindowsversion", None)
-        if callable(get_windows_version):
-            try:
-                version = get_windows_version()
-                release = ".".join(
-                    str(part)
-                    for part in (
-                        getattr(version, "major", ""),
-                        getattr(version, "minor", ""),
-                        getattr(version, "build", ""),
-                    )
-                    if str(part) != ""
-                ) or release
-            except BaseException:
-                pass
+        release = _safe_windows_release()
         machine = (
             os.environ.get("PROCESSOR_ARCHITEW6432")
             or os.environ.get("PROCESSOR_ARCHITECTURE")
