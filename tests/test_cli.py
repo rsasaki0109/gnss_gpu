@@ -1,10 +1,33 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 from gnss_gpu import cli
+
+
+def test_source_cli_doctor_works_without_installed_package():
+    """The documented pre-build doctor path must not import UrbanNav eagerly."""
+
+    project_root = Path(__file__).resolve().parents[1]
+    script = project_root / "python" / "gnss_gpu" / "cli.py"
+    result = subprocess.run(
+        [sys.executable, "-S", str(script), "doctor", "--skip-runtime"],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    # ``-S`` removes site-packages (including NumPy and gnss_gpu), so the
+    # native binding checks are expected to fail.  The CLI itself must still
+    # render diagnostics instead of raising during module import.
+    assert result.returncode == 1
+    assert "gnss_gpu GPU doctor" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
 
 
 def test_readiness_distinguishes_build_and_runtime_states():
