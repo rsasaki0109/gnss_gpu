@@ -148,6 +148,17 @@ def _make_configs(bias_values):
             "clear_nlos_prob": 0.0,
         },
         {
+            "name": "3dma elev soft",
+            "kind": "bvh",
+            "sigma_los": 2.0,
+            "sigma_nlos": 10.0,
+            "nlos_bias": 18.0,
+            "nlos_bias_slope": 1.25,
+            "nlos_bias_elev_ref_deg": 35.0,
+            "blocked_nlos_prob": 0.5,
+            "clear_nlos_prob": 0.0,
+        },
+        {
             "name": "3dma soft bias=0",
             "kind": "bvh",
             "sigma_los": 2.0,
@@ -192,6 +203,8 @@ def _build_filter(config, scene, bvh, n_particles: int, seed: int):
             nlos_bias=config["nlos_bias"],
             blocked_nlos_prob=config.get("blocked_nlos_prob", 1.0),
             clear_nlos_prob=config.get("clear_nlos_prob", 0.0),
+            nlos_bias_slope=config.get("nlos_bias_slope", 0.0),
+            nlos_bias_elev_ref_deg=config.get("nlos_bias_elev_ref_deg", 35.0),
             **common,
         )
     else:

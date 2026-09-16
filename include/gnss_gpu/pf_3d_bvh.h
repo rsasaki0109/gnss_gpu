@@ -30,6 +30,11 @@ namespace gnss_gpu {
 ///                          when the residual itself is positive)
 /// @param blocked_nlos_prob P(NLOS | ray blocked), 0..1
 /// @param clear_nlos_prob   P(NLOS | ray clear), 0..1
+/// @param nlos_bias_slope   extra NLOS bias per degree below
+///                          @p nlos_bias_elev_ref_deg; 0 disables the term
+/// @param nlos_bias_elev_ref_deg  elevation [deg] above which no slope term is
+///                          added. Elevation is taken above the geocentric
+///                          horizon at each particle.
 void pf_weight_3d_bvh(
     const double* px, const double* py, const double* pz, const double* pcb,
     const double* sat_ecef, const double* pseudoranges,
@@ -42,6 +47,8 @@ void pf_weight_3d_bvh(
     double sigma_pr_nlos,
     double nlos_bias,
     double blocked_nlos_prob,
-    double clear_nlos_prob);
+    double clear_nlos_prob,
+    double nlos_bias_slope,
+    double nlos_bias_elev_ref_deg);
 
 }  // namespace gnss_gpu

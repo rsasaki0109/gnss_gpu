@@ -147,7 +147,9 @@ PYBIND11_MODULE(_gnss_gpu_pf3d_bvh, m) {
        double sigma_pr_los, double sigma_pr_nlos,
        double nlos_bias,
        double blocked_nlos_prob,
-       double clear_nlos_prob) {
+       double clear_nlos_prob,
+       double nlos_bias_slope,
+       double nlos_bias_elev_ref_deg) {
 
       validate_n_particles(n_particles);
       validate_n_sat(n_sat);
@@ -176,6 +178,8 @@ PYBIND11_MODULE(_gnss_gpu_pf3d_bvh, m) {
       validate_finite(nlos_bias, "nlos_bias");
       validate_finite(blocked_nlos_prob, "blocked_nlos_prob");
       validate_finite(clear_nlos_prob, "clear_nlos_prob");
+      validate_finite(nlos_bias_slope, "nlos_bias_slope");
+      validate_finite(nlos_bias_elev_ref_deg, "nlos_bias_elev_ref_deg");
 
       int n_nodes = static_cast<int>(bnodes.shape[0]);
 
@@ -207,7 +211,8 @@ PYBIND11_MODULE(_gnss_gpu_pf3d_bvh, m) {
           static_cast<double*>(log_weights.request().ptr),
           n_particles, n_sat,
           sigma_pr_los, sigma_pr_nlos, nlos_bias,
-          blocked_nlos_prob, clear_nlos_prob);
+          blocked_nlos_prob, clear_nlos_prob,
+          nlos_bias_slope, nlos_bias_elev_ref_deg);
     },
     "Compute 3D-aware pseudorange likelihood weights using BVH-accelerated ray tracing",
     py::arg("px"), py::arg("py"), py::arg("pz"), py::arg("pcb"),
@@ -219,5 +224,7 @@ PYBIND11_MODULE(_gnss_gpu_pf3d_bvh, m) {
     py::arg("sigma_pr_los"), py::arg("sigma_pr_nlos"),
     py::arg("nlos_bias"),
     py::arg("blocked_nlos_prob") = 1.0,
-    py::arg("clear_nlos_prob") = 0.0);
+    py::arg("clear_nlos_prob") = 0.0,
+    py::arg("nlos_bias_slope") = 0.0,
+    py::arg("nlos_bias_elev_ref_deg") = 35.0);
 }

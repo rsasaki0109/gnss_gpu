@@ -45,21 +45,32 @@ class ParticleFilter3DBVH(ParticleFilter3D):
     sigma_los : float
         Observation sigma for LOS satellites [m] (tight, e.g., 3.0).
     sigma_nlos : float
-        Observation sigma for NLOS satellites [m] (loose, e.g., 30.0).
+        Observation sigma for NLOS satellites [m]. The urban-canyon default is
+        tighter (10.0) than a diffuse prior because the per-particle ray trace
+        already constrains the raw bias.
     nlos_bias : float
-        Expected positive pseudorange bias for NLOS satellites [m]. The bias is
-        only applied when the residual itself is positive.
+        Base positive pseudorange bias for NLOS satellites [m] at or above
+        ``nlos_bias_elev_ref_deg``. The bias is only applied when the residual
+        itself is positive.
     blocked_nlos_prob : float
-        Prior probability of NLOS when the ray tracer says blocked.
+        Prior probability of NLOS when the ray tracer says blocked. This is a
+        soft (mixture) classification by default: a hard 1.0 collapses the
+        posterior onto the unimodal NLOS branch and makes the filter drift.
     clear_nlos_prob : float
         Prior probability of NLOS when the ray tracer says clear.
+    nlos_bias_slope : float
+        Additional NLOS bias [m/deg] for each degree of elevation below
+        ``nlos_bias_elev_ref_deg``. Set to 0 to disable the elevation term.
+    nlos_bias_elev_ref_deg : float
+        Elevation [deg] above which the slope term is not applied.
     **kwargs
         Additional keyword arguments forwarded to ``ParticleFilter.__init__``.
     """
 
-    def __init__(self, bvh, sigma_los=3.0, sigma_nlos=30.0,
-                 nlos_bias=20.0, blocked_nlos_prob=1.0,
-                 clear_nlos_prob=0.0, **kwargs):
+    def __init__(self, bvh, sigma_los=3.0, sigma_nlos=10.0,
+                 nlos_bias=18.0, blocked_nlos_prob=0.5,
+                 clear_nlos_prob=0.0, nlos_bias_slope=1.25,
+                 nlos_bias_elev_ref_deg=35.0, **kwargs):
         # Bypass ParticleFilter3D.__init__ which requires a BuildingModel.
         # Instead call the grandparent (ParticleFilter) directly, then
         # set up the BVH-specific attributes.
@@ -75,6 +86,9 @@ class ParticleFilter3DBVH(ParticleFilter3D):
         self.nlos_bias = finite_float("nlos_bias", nlos_bias)
         self.blocked_nlos_prob = finite_float("blocked_nlos_prob", blocked_nlos_prob)
         self.clear_nlos_prob = finite_float("clear_nlos_prob", clear_nlos_prob)
+        self.nlos_bias_slope = finite_float("nlos_bias_slope", nlos_bias_slope)
+        self.nlos_bias_elev_ref_deg = finite_float(
+            "nlos_bias_elev_ref_deg", nlos_bias_elev_ref_deg)
 
         from gnss_gpu._gnss_gpu_pf3d_bvh import pf_weight_3d_bvh as _pf_weight_3d_bvh
         self._pf_weight_3d_bvh = _pf_weight_3d_bvh
@@ -125,7 +139,9 @@ class ParticleFilter3DBVH(ParticleFilter3D):
             float(self.sigma_los), float(self.sigma_nlos),
             float(self.nlos_bias),
             float(self.blocked_nlos_prob),
-            float(self.clear_nlos_prob))
+            float(self.clear_nlos_prob),
+            float(self.nlos_bias_slope),
+            float(self.nlos_bias_elev_ref_deg))
 
         # Adaptive resampling based on ESS
         ess = self.get_ess()

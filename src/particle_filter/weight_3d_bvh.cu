@@ -138,7 +138,8 @@ __global__ void weight_3d_bvh_kernel(
     double* __restrict__ log_weights,
     int N, int n_sat,
     double sigma_los, double sigma_nlos, double nlos_bias,
-    double blocked_nlos_prob, double clear_nlos_prob) {
+    double blocked_nlos_prob, double clear_nlos_prob,
+    double nlos_bias_slope, double nlos_bias_elev_ref_deg) {
 
   // Shared memory for satellite data (invariant across the block)
   __shared__ double s_sat[MAX_SATS_BVH * 3];
@@ -164,6 +165,17 @@ __global__ void weight_3d_bvh_kernel(
 
   double inv_sigma_los2  = 1.0 / (sigma_los  * sigma_los);
   double inv_sigma_nlos2 = 1.0 / (sigma_nlos * sigma_nlos);
+
+  // Geocentric up at the particle for the elevation-dependent NLOS bias.
+  const double RAD2DEG = 57.29577951308232;
+  double up[3] = {0.0, 0.0, 1.0};
+  double r2 = x * x + y * y + z * z;
+  if (r2 > 0.0) {
+    double rinv = 1.0 / sqrt(r2);
+    up[0] = x * rinv;
+    up[1] = y * rinv;
+    up[2] = z * rinv;
+  }
 
   double log_w = 0.0;
 
@@ -196,13 +208,26 @@ __global__ void weight_3d_bvh_kernel(
     bool is_nlos = (n_nodes > 0) &&
                    bvh_is_blocked(origin, dir, dir_inv, dist, bvh, sorted_tris);
 
+    // Elevation-dependent NLOS bias: base bias plus a low-elevation penalty.
+    double sat_bias = nlos_bias;
+    if (nlos_bias_slope != 0.0) {
+      double sin_el = dir[0] * up[0] + dir[1] * up[1] + dir[2] * up[2];
+      if (sin_el > 1.0) sin_el = 1.0;
+      if (sin_el < -1.0) sin_el = -1.0;
+      double el_deg = asin(sin_el) * RAD2DEG;
+      double deficit = nlos_bias_elev_ref_deg - el_deg;
+      if (deficit > 0.0) {
+        sat_bias += nlos_bias_slope * deficit;
+      }
+    }
+
     // Compute likelihood contribution
     double residual = obs_pr - pred_pr;
     double los_loglik = -0.5 * s_ws[s] * residual * residual * inv_sigma_los2;
 
     double residual_nlos = residual;
     if (residual_nlos > 0.0) {
-      residual_nlos -= nlos_bias;
+      residual_nlos -= sat_bias;
     }
     double nlos_loglik =
         -0.5 * s_ws[s] * residual_nlos * residual_nlos * inv_sigma_nlos2;
@@ -231,7 +256,8 @@ void pf_weight_3d_bvh(
     double* log_weights,
     int n_particles, int n_sat,
     double sigma_pr_los, double sigma_pr_nlos, double nlos_bias,
-    double blocked_nlos_prob, double clear_nlos_prob) {
+    double blocked_nlos_prob, double clear_nlos_prob,
+    double nlos_bias_slope, double nlos_bias_elev_ref_deg) {
 
   const size_t sz      = (size_t)n_particles * sizeof(double);
   const size_t sz_sat  = (size_t)n_sat * 3 * sizeof(double);
@@ -280,7 +306,8 @@ void pf_weight_3d_bvh(
       d_lw,
       n_particles, n_sat,
       sigma_pr_los, sigma_pr_nlos, nlos_bias,
-      blocked_nlos_prob, clear_nlos_prob);
+      blocked_nlos_prob, clear_nlos_prob,
+      nlos_bias_slope, nlos_bias_elev_ref_deg);
 
   CUDA_CHECK_LAST();
   CUDA_CHECK(cudaDeviceSynchronize());

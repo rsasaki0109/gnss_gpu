@@ -464,6 +464,74 @@ class TestParticleFilter3DBVH:
         assert pos_error < 30.0, f"Position error {pos_error:.1f} m too large"
 
 
+class TestElevationNLOSBias:
+    """Elevation-dependent NLOS bias term in the BVH weight kernel."""
+
+    def _run(self, px, py, pz, pcb, sat, pr, ws, bvh,
+             sigma_los, sigma_nlos, nlos_bias, slope, elev_ref,
+             blocked=1.0, clear=0.0):
+        n = len(px)
+        n_sat = len(pr)
+        log_w = np.zeros(n, dtype=np.float64)
+        pf_weight_3d_bvh(
+            px, py, pz, pcb,
+            np.asarray(sat, dtype=np.float64).ravel(), pr, ws,
+            bvh._nodes_flat, bvh._sorted_tris, log_w, n, n_sat,
+            sigma_los, sigma_nlos, nlos_bias, blocked, clear, slope, elev_ref)
+        return log_w
+
+    def _scene(self):
+        building = _make_box_building()
+        bvh = BVHAccelerator.from_building_model(building)
+        n = 8
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+        sat = np.array([200.0, 0.0, 25.0], dtype=np.float64)
+        return bvh, px, py, pz, pcb, sat
+
+    def test_low_elevation_bias_zeroes_residual(self):
+        """Bias predicted by the elevation model should give log_w == 0."""
+        bvh, px, py, pz, pcb, sat = self._scene()
+        dist = float(np.linalg.norm(sat))
+        cb = 100.0
+        elev_deg = float(np.degrees(np.arcsin(sat[2] / dist)))
+        base, slope, ref = 18.0, 1.25, 35.0
+        bias = base + slope * max(0.0, ref - elev_deg)
+        pr = np.array([dist + cb + bias], dtype=np.float64)
+
+        log_w = self._run(px, py, pz, pcb, sat, pr, np.ones(1), bvh,
+                          3.0, 30.0, base, slope, ref)
+        assert np.allclose(log_w, 0.0, atol=1e-9), log_w
+
+    def test_slope_relaxes_low_elevation_penalty(self):
+        """With the same observation, slope>0 must penalize no more than slope=0."""
+        bvh, px, py, pz, pcb, sat = self._scene()
+        dist = float(np.linalg.norm(sat))
+        cb = 100.0
+        elev_deg = float(np.degrees(np.arcsin(sat[2] / dist)))
+        base, slope, ref = 18.0, 1.25, 35.0
+        bias = base + slope * max(0.0, ref - elev_deg)
+        pr = np.array([dist + cb + bias], dtype=np.float64)
+
+        log_w_flat = self._run(px, py, pz, pcb, sat, pr, np.ones(1), bvh,
+                               3.0, 30.0, base, 0.0, ref)
+        log_w_slope = self._run(px, py, pz, pcb, sat, pr, np.ones(1), bvh,
+                                3.0, 30.0, base, slope, ref)
+        assert np.all(log_w_flat < 0.0)
+        assert np.all(log_w_slope > log_w_flat)
+
+    def test_wrapper_stores_elevation_params(self):
+        bvh = BVHAccelerator.from_building_model(_make_box_building())
+        pf = ParticleFilter3DBVH(
+            bvh=bvh, n_particles=100,
+            nlos_bias=17.0, nlos_bias_slope=0.9, nlos_bias_elev_ref_deg=40.0)
+        assert pf.nlos_bias == 17.0
+        assert pf.nlos_bias_slope == 0.9
+        assert pf.nlos_bias_elev_ref_deg == 40.0
+
+
 class TestPF3DBVHValidation:
     def test_wrapper_update_rejects_empty_satellites(self):
         building = _make_box_building()
