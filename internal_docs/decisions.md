@@ -719,6 +719,37 @@
 - `path1_role_note` 列で各 row に "post-demo5 QA tool であって pre-demo5 estimator ではない" という caveat を埋め込み、tautology を忘れさせない。
 - `--path1-prediction-csv` を opt-in にすることで、real-time / online 用途の deployed flow は contract 変更なしで運用できる。
 
+## D-037: per-particle 3DMA NLOS measurement likelihood は mainline に採用しない
+
+決定: 不採用。陰影判定を各粒子で行う per-particle 3DMA 測定尤度は mainline lever から外し、elevation バイアス・仰角条件付き prior・重裾尤度は **opt-in capability** としてのみ保持する（既定は従来挙動）。ray tracing は feature / coverage / scenario（NLOS 率、C/N0 予測、DOP 地図）用途に限定する。
+
+背景:
+- GPU ビルド後、合成 PLATEAU シーンでは per-particle BVH 3DMA は oracle 相当（P50 0.59 m / RMS 0.70 m、hard 既定は P50 20 m）だった。
+- ただしその合成観測は同じ elevation バイアス式で生成しており循環的。実データで検証したところ転移しなかった。
+
+確認（実 UrbanNav Odaiba + PLATEAU 382,724 tri、G-only、300 epoch）:
+| PF3D-BVH 設定 | RMS 2D |
+|---|---|
+| all-LOS (`blocked_nlos_prob=0`、素の PF と厳密一致) | **37.63 m** |
+| soft+elev（Step 1） | 81.1 m |
+| empirical（仰角 prior + Laplace） | 80.4 m |
+| 対称 down-weight（バイアス無し） | 83.2 m |
+| hard（旧既定） | 85.3 m |
+
+- NLOS 枝をどう構成しても ~80–85 m に悪化。モデル再校正では直らない。
+- 診断 `experiments/diag_nlos_label_and_bias.py`: レイラベル自体は健全（ray-LOS 92.3% clean、ray-NLOS 78.4% が excess≥5 m、低仰角 median 21.8 m / p90 149 m、高仰角 median 0 m で 89.4% が near-zero）。つまりラベル不良ではなくモデル/構造の問題。
+- 根因: per-particle で遮蔽を判定すると「影に入る粒子ほど寛容な NLOS 枝で測定を説明できる」ため、粒子が geometry を gaming して影側へ収束する。`blocked_nlos_prob=0` が素の PF と厳密一致することがこれを裏付ける。
+- 推定位置で 1 回だけレイ判定し全粒子へ共通適用する方式は既存 per-epoch mask（`nlos_pf_measurement_wiring.md`、PPC で Δ=0）と等価で、既に閉じている。
+
+実装:
+- `pf_weight_3d_bvh` に elevation 依存バイアス、仰角条件付き blocking prior、一般化ガウス（`nlos_beta=1` で Laplace）を追加。すべて opt-in、既定は従来挙動。
+- `ParticleFilter3DBVH` の既定は本変更前の値に戻す（`sigma_nlos=30`, `nlos_bias=20`, `blocked_nlos_prob=1.0`, slope 0, `prob_high=-1`, `beta=2`）。
+- 診断ツール: `experiments/diag_pf_3dma_likelihood.py`, `experiments/diag_nlos_label_and_bias.py`（真値ラベル検証・バイアス分布は再利用可能）。
+
+理由: ラベルが健全でも per-particle 測定尤度は構造的に有害であり、CPU/PPC 側の既往の負の結果（D-033、`nlos_pf_measurement_wiring.md`）と整合する。単一 pilot の合成成功で既定を昇格させない（開発ポリシー）。
+
+未決定: この負の結果を踏まえた pivot 先（OSS/ベンチマーク公開、学習誤差モデル、GSDC/PPC の伸びしろ）。
+
 ## 現在の未決定事項
 
 - `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか

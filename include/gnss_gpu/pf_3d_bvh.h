@@ -35,6 +35,13 @@ namespace gnss_gpu {
 /// @param nlos_bias_elev_ref_deg  elevation [deg] above which no slope term is
 ///                          added. Elevation is taken above the geocentric
 ///                          horizon at each particle.
+/// @param nlos_prob_high_elev  P(NLOS | ray blocked) reached at high elevation
+///                          when elevation modulation is enabled (>= 0). Pass a
+///                          negative value to disable the modulation and use
+///                          @p blocked_nlos_prob everywhere.
+/// @param nlos_beta         generalized-Gaussian shape exponent for the NLOS
+///                          likelihood: 2 = Gaussian (default), 1 = Laplace
+///                          (heavy-tailed).
 void pf_weight_3d_bvh(
     const double* px, const double* py, const double* pz, const double* pcb,
     const double* sat_ecef, const double* pseudoranges,
@@ -49,6 +56,8 @@ void pf_weight_3d_bvh(
     double blocked_nlos_prob,
     double clear_nlos_prob,
     double nlos_bias_slope,
-    double nlos_bias_elev_ref_deg);
+    double nlos_bias_elev_ref_deg,
+    double nlos_prob_high_elev,
+    double nlos_beta);
 
 }  // namespace gnss_gpu

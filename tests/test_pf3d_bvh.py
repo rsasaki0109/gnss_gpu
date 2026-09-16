@@ -522,6 +522,61 @@ class TestElevationNLOSBias:
         assert np.all(log_w_flat < 0.0)
         assert np.all(log_w_slope > log_w_flat)
 
+    def test_laplace_less_tail_penalty_than_gaussian(self):
+        """beta=1 (Laplace) must penalize a large NLOS residual less than beta=2."""
+        bvh, px, py, pz, pcb, sat = self._scene()
+        dist = float(np.linalg.norm(sat))
+        cb = 100.0
+        pr = np.array([dist + cb + 60.0], dtype=np.float64)  # large excess
+        base = 0.0
+
+        def run(beta):
+            log_w = np.zeros(len(px), dtype=np.float64)
+            pf_weight_3d_bvh(
+                px, py, pz, pcb, np.asarray(sat).ravel(), pr, np.ones(1),
+                bvh._nodes_flat, bvh._sorted_tris, log_w, len(px), 1,
+                3.0, 30.0, base, 1.0, 0.0, 0.0, 35.0, -1.0, beta)
+            return log_w
+
+        assert np.all(run(1.0) > run(2.0))
+
+    def test_high_elevation_blocked_treated_closer_to_los(self):
+        """Elevation modulation must treat a high-elevation blocked ray closer to LOS."""
+        box = BuildingModel.create_box([100.0, 0.0, 100.0], 40.0, 40.0, 40.0)
+        bvh = BVHAccelerator.from_building_model(box)
+        n = 4
+        px = np.zeros(n, dtype=np.float64)
+        py = np.zeros(n, dtype=np.float64)
+        pz = np.zeros(n, dtype=np.float64)
+        pcb = np.full(n, 100.0, dtype=np.float64)
+        sat = np.array([1000.0, 0.0, 1000.0], dtype=np.float64)  # ~45 deg
+        dist = float(np.linalg.norm(sat))
+        pr = np.array([dist + 100.0 + 40.0], dtype=np.float64)
+        assert not bvh.check_los(np.zeros(3), sat.reshape(1, 3))[0]
+
+        def run(prob_high):
+            log_w = np.zeros(n, dtype=np.float64)
+            pf_weight_3d_bvh(
+                px, py, pz, pcb, sat, pr, np.ones(1),
+                bvh._nodes_flat, bvh._sorted_tris, log_w, n, 1,
+                3.0, 30.0, 0.0, 1.0, 0.0, 0.0, 35.0, prob_high, 2.0)
+            return log_w
+
+        # Lower high-elevation NLOS prior pushes the likelihood toward the
+        # tight LOS branch, i.e. a larger penalty for the biased measurement.
+        assert np.all(run(0.1) < run(-1.0))
+
+    def test_wrapper_stores_empirical_params(self):
+        bvh = BVHAccelerator.from_building_model(_make_box_building())
+        pf = ParticleFilter3DBVH(
+            bvh=bvh, n_particles=100,
+            sigma_nlos=25.0, nlos_bias=0.0, blocked_nlos_prob=0.95,
+            nlos_bias_slope=1.0, nlos_bias_elev_ref_deg=30.0,
+            nlos_prob_high_elev=0.1, nlos_beta=1.0)
+        assert pf.nlos_prob_high_elev == 0.1
+        assert pf.nlos_beta == 1.0
+        assert pf.nlos_bias == 0.0
+
     def test_wrapper_stores_elevation_params(self):
         bvh = BVHAccelerator.from_building_model(_make_box_building())
         pf = ParticleFilter3DBVH(

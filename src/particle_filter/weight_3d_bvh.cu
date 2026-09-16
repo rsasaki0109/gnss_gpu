@@ -139,7 +139,8 @@ __global__ void weight_3d_bvh_kernel(
     int N, int n_sat,
     double sigma_los, double sigma_nlos, double nlos_bias,
     double blocked_nlos_prob, double clear_nlos_prob,
-    double nlos_bias_slope, double nlos_bias_elev_ref_deg) {
+    double nlos_bias_slope, double nlos_bias_elev_ref_deg,
+    double nlos_prob_high_elev, double nlos_beta) {
 
   // Shared memory for satellite data (invariant across the block)
   __shared__ double s_sat[MAX_SATS_BVH * 3];
@@ -208,13 +209,15 @@ __global__ void weight_3d_bvh_kernel(
     bool is_nlos = (n_nodes > 0) &&
                    bvh_is_blocked(origin, dir, dir_inv, dist, bvh, sorted_tris);
 
-    // Elevation-dependent NLOS bias: base bias plus a low-elevation penalty.
+    // Elevation above the geocentric horizon at the particle.
+    double sin_el = dir[0] * up[0] + dir[1] * up[1] + dir[2] * up[2];
+    if (sin_el > 1.0) sin_el = 1.0;
+    if (sin_el < -1.0) sin_el = -1.0;
+    double el_deg = asin(sin_el) * RAD2DEG;
+
+    // Elevation-dependent NLOS bias: base bias plus a low-elevation ramp.
     double sat_bias = nlos_bias;
     if (nlos_bias_slope != 0.0) {
-      double sin_el = dir[0] * up[0] + dir[1] * up[1] + dir[2] * up[2];
-      if (sin_el > 1.0) sin_el = 1.0;
-      if (sin_el < -1.0) sin_el = -1.0;
-      double el_deg = asin(sin_el) * RAD2DEG;
       double deficit = nlos_bias_elev_ref_deg - el_deg;
       if (deficit > 0.0) {
         sat_bias += nlos_bias_slope * deficit;
@@ -229,15 +232,30 @@ __global__ void weight_3d_bvh_kernel(
     if (residual_nlos > 0.0) {
       residual_nlos -= sat_bias;
     }
-    double nlos_loglik =
-        -0.5 * s_ws[s] * residual_nlos * residual_nlos * inv_sigma_nlos2;
+    double nlos_loglik;
+    if (nlos_beta == 2.0) {
+      nlos_loglik =
+          -0.5 * s_ws[s] * residual_nlos * residual_nlos * inv_sigma_nlos2;
+    } else {
+      double ar = fabs(residual_nlos) / sigma_nlos;
+      nlos_loglik = -0.5 * s_ws[s] * pow(ar, nlos_beta);
+    }
 
     if (is_nlos) {
-      log_w += mixed_log_likelihood(
-          los_loglik, nlos_loglik, blocked_nlos_prob);
+      // Elevation-conditioned prior: ray blocking at high elevation is mostly
+      // diffraction / mesh error and should be treated close to LOS.
+      double p_blocked = blocked_nlos_prob;
+      if (nlos_prob_high_elev >= 0.0) {
+        double ref = (nlos_bias_elev_ref_deg > 1e-6) ? nlos_bias_elev_ref_deg : 35.0;
+        double mid = 0.8 * ref;
+        double scale = 0.08 * ref;
+        double t = 1.0 / (1.0 + exp((el_deg - mid) / scale));
+        p_blocked =
+            nlos_prob_high_elev + (blocked_nlos_prob - nlos_prob_high_elev) * t;
+      }
+      log_w += mixed_log_likelihood(los_loglik, nlos_loglik, p_blocked);
     } else {
-      log_w += mixed_log_likelihood(
-          los_loglik, nlos_loglik, clear_nlos_prob);
+      log_w += mixed_log_likelihood(los_loglik, nlos_loglik, clear_nlos_prob);
     }
   }
 
@@ -257,7 +275,8 @@ void pf_weight_3d_bvh(
     int n_particles, int n_sat,
     double sigma_pr_los, double sigma_pr_nlos, double nlos_bias,
     double blocked_nlos_prob, double clear_nlos_prob,
-    double nlos_bias_slope, double nlos_bias_elev_ref_deg) {
+    double nlos_bias_slope, double nlos_bias_elev_ref_deg,
+    double nlos_prob_high_elev, double nlos_beta) {
 
   const size_t sz      = (size_t)n_particles * sizeof(double);
   const size_t sz_sat  = (size_t)n_sat * 3 * sizeof(double);
@@ -307,7 +326,8 @@ void pf_weight_3d_bvh(
       n_particles, n_sat,
       sigma_pr_los, sigma_pr_nlos, nlos_bias,
       blocked_nlos_prob, clear_nlos_prob,
-      nlos_bias_slope, nlos_bias_elev_ref_deg);
+      nlos_bias_slope, nlos_bias_elev_ref_deg,
+      nlos_prob_high_elev, nlos_beta);
 
   CUDA_CHECK_LAST();
   CUDA_CHECK(cudaDeviceSynchronize());

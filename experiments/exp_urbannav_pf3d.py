@@ -63,10 +63,12 @@ N_PARTICLES_PF3D = 100_000
 PF_SIGMA_POS = 2.0
 PF_SIGMA_CB = 300.0
 PF_SIGMA_LOS = 3.0
-PF_SIGMA_NLOS = 10.0
-PF_NLOS_BIAS = 18.0
-PF_NLOS_BIAS_SLOPE = 1.25
+PF_SIGMA_NLOS = 30.0
+PF_NLOS_BIAS = 20.0
+PF_NLOS_BIAS_SLOPE = 0.0
 PF_NLOS_BIAS_ELEV_REF = 35.0
+PF_NLOS_PROB_HIGH_ELEV = -1.0
+PF_NLOS_BETA = 2.0
 PF_RESCUE_DISTANCE_M = 80.0
 PF_RESCUE_SPREAD_POS = 30.0
 PF_RESCUE_SPREAD_CB = 200.0
@@ -589,6 +591,8 @@ def _build_pf3d_variant(
     clear_nlos_prob: float,
     nlos_bias_slope: float = 0.0,
     nlos_bias_elev_ref_deg: float = 35.0,
+    nlos_prob_high_elev: float = -1.0,
+    nlos_beta: float = 2.0,
 ):
     if variant == "pf3d":
         from gnss_gpu.particle_filter_3d import ParticleFilter3D
@@ -622,6 +626,8 @@ def _build_pf3d_variant(
             clear_nlos_prob=clear_nlos_prob,
             nlos_bias_slope=nlos_bias_slope,
             nlos_bias_elev_ref_deg=nlos_bias_elev_ref_deg,
+            nlos_prob_high_elev=nlos_prob_high_elev,
+            nlos_beta=nlos_beta,
             n_particles=n_particles,
             sigma_pos=PF_SIGMA_POS,
             sigma_cb=PF_SIGMA_CB,
@@ -643,10 +649,12 @@ def run_pf3d_variant(
     sigma_los: float = PF_SIGMA_LOS,
     sigma_nlos: float = PF_SIGMA_NLOS,
     nlos_bias: float = PF_NLOS_BIAS,
-    blocked_nlos_prob: float = 0.5,
+    blocked_nlos_prob: float = 1.0,
     clear_nlos_prob: float = 0.0,
     nlos_bias_slope: float = PF_NLOS_BIAS_SLOPE,
     nlos_bias_elev_ref_deg: float = PF_NLOS_BIAS_ELEV_REF,
+    nlos_prob_high_elev: float = PF_NLOS_PROB_HIGH_ELEV,
+    nlos_beta: float = PF_NLOS_BETA,
     quality_veto_config: MultiGNSSQualityVetoConfig | None = None,
     guide_reference_positions: np.ndarray | None = None,
     guide_initial_from_reference: bool = False,
@@ -724,6 +732,8 @@ def run_pf3d_variant(
             clear_nlos_prob=clear_nlos_prob,
             nlos_bias_slope=nlos_bias_slope,
             nlos_bias_elev_ref_deg=nlos_bias_elev_ref_deg,
+            nlos_prob_high_elev=nlos_prob_high_elev,
+            nlos_beta=nlos_beta,
         )
         pf.initialize(
             init_position,
@@ -940,8 +950,9 @@ def main():
     parser.add_argument(
         "--blocked-nlos-prob",
         type=float,
-        default=0.5,
-        help="P(NLOS | ray blocked) for PF3D variants (default: 0.5, soft)",
+        default=1.0,
+        help="P(NLOS | ray blocked) at low elevation for PF3D variants "
+        "(default: 1.0)",
     )
     parser.add_argument(
         "--clear-nlos-prob",
@@ -960,8 +971,22 @@ def main():
         "--nlos-bias-elev-ref",
         type=float,
         default=PF_NLOS_BIAS_ELEV_REF,
-        help="Elevation above which the slope term is off (default: "
-        f"{PF_NLOS_BIAS_ELEV_REF})",
+        help="Elevation anchoring the NLOS bias ramp and blocking prior "
+        f"(default: {PF_NLOS_BIAS_ELEV_REF})",
+    )
+    parser.add_argument(
+        "--nlos-prob-high-elev",
+        type=float,
+        default=PF_NLOS_PROB_HIGH_ELEV,
+        help="P(NLOS | ray blocked) at high elevation; negative disables "
+        f"modulation (default: {PF_NLOS_PROB_HIGH_ELEV})",
+    )
+    parser.add_argument(
+        "--nlos-beta",
+        type=float,
+        default=PF_NLOS_BETA,
+        help="Generalized-Gaussian exponent for the NLOS likelihood: "
+        f"2=Gaussian, 1=Laplace (default: {PF_NLOS_BETA})",
     )
     parser.add_argument(
         "--disable-synthetic-model",
@@ -1105,6 +1130,8 @@ def main():
             clear_nlos_prob=args.clear_nlos_prob,
             nlos_bias_slope=args.nlos_bias_slope,
             nlos_bias_elev_ref_deg=args.nlos_bias_elev_ref,
+            nlos_prob_high_elev=args.nlos_prob_high_elev,
+            nlos_beta=args.nlos_beta,
         )
         pf3d_metrics = _augment_tail_metrics(compute_metrics(pf3d_pos, ground_truth), times)
         pf3d_metrics["time_ms"] = pf3d_ms
@@ -1138,6 +1165,8 @@ def main():
             clear_nlos_prob=args.clear_nlos_prob,
             nlos_bias_slope=args.nlos_bias_slope,
             nlos_bias_elev_ref_deg=args.nlos_bias_elev_ref,
+            nlos_prob_high_elev=args.nlos_prob_high_elev,
+            nlos_beta=args.nlos_beta,
         )
         pf3d_bvh_metrics = _augment_tail_metrics(compute_metrics(pf3d_bvh_pos, ground_truth), times)
         pf3d_bvh_metrics["time_ms"] = pf3d_bvh_ms
