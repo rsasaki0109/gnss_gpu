@@ -244,8 +244,7 @@ from CityGML parsing to the CUDA kernels.
 
 ### GPU-first start
 
-The supported first-run path assumes an NVIDIA GPU, a current driver, and a CUDA
-Toolkit with `nvcc`. From a fresh checkout:
+Assumes an NVIDIA GPU, a current driver, and a CUDA Toolkit with `nvcc`.
 
 ```bash
 git clone --recurse-submodules https://github.com/rsasaki0109/gnss_gpu.git
@@ -260,95 +259,45 @@ gnss-gpu doctor
 gnss-gpu run --preset signal-acquisition
 ```
 
-`doctor` checks the NVIDIA driver, GPU, CUDA compiler, CMake, native bindings,
-and a real signal-simulation → acquisition CUDA round-trip. A checkout without
-built bindings reports `READY TO BUILD`; a working installation reports
-`READY TO RUN`. The demo writes a reproducibility manifest under `runs/`.
+`doctor` checks the driver, GPU, CUDA compiler, CMake, native bindings, and a
+signal-simulation → acquisition CUDA round-trip (`READY TO BUILD` without
+bindings, `READY TO RUN` with). On Windows use `python` in a Developer
+PowerShell; target an architecture with `gnss-gpu build --architecture 89`.
 
-On Windows, use `python` in place of `python3` in a Developer PowerShell for Visual Studio.
-Use `gnss-gpu doctor --json doctor.json` when attaching environment details to
-an issue. Advanced users can target a specific CUDA architecture with
-`gnss-gpu build --architecture 89`.
-
-### GPU experiment loop: PLATEAU NLOS
-
-After the signal-acquisition smoke test, run the reproducible PLATEAU CityGML
-mask/replay suite. It uses the CUDA BVH ray tracer and reuses the checked-in
-SPP, particle-filter, and local-FGO replay consumers:
+### GPU experiment loop
 
 ```bash
-gnss-gpu run --preset plateau-nlos
-```
-
-The default input is `data/sample_plateau.gml`. Each run writes a timestamped
-directory under `runs/` containing the mask, per-estimator summaries, a suite
-CSV/JSON/Markdown report, and `manifest.json`. The manifest has the common v1
-schema (`schema`, `version`, `git_sha`, `backend`, `gpu`, `input_hashes`,
-`parameters`, `metrics`, and hashed `artifacts`) so runs can be compared safely.
-The run ends by printing the next suggested command; for an explicit second
-configuration use, for example:
-
-```bash
-gnss-gpu run --preset plateau-nlos --output-dir runs/plateau-nlos-candidate
-gnss-gpu compare runs/20260828T000000Z runs/plateau-nlos-candidate
-```
-
-`compare` prints precision/runtime deltas and writes `comparison.md` beside the
-candidate run. Use `--json PATH` for machine-readable output. Baseline and
-candidate must use compatible run-manifest schemas and the same preset; differing
-input hashes or backends are reported as warnings. A missing CityGML file or
-CUDA BVH gives a concrete repair hint. `--allow-cpu-fallback` is available only
-for a CPU smoke test and is not the GPU benchmark path.
-
-### GPU experiment loop: local UrbanNav/PPC data
-
-The local-data path never downloads a dataset implicitly. Inspect a downloaded
-UrbanNav Tokyo/Hong Kong subset, a PPC run, or a directory containing the
-supported RINEX bundle before starting the GPU PF:
-
-```bash
+gnss-gpu run --preset plateau-nlos                                  # PLATEAU mask/replay suite
 gnss-gpu data inspect data/urbannav/Tokyo/Odaiba
 gnss-gpu run --preset urbannav-pf --input data/urbannav/Tokyo/Odaiba
+gnss-gpu compare runs/urbannav-pf-baseline runs/urbannav-pf-candidate
 ```
 
-On Windows PowerShell, use the same commands with `python`/`gnss-gpu`; paths
-containing spaces should be quoted. The current run contract is a rover RINEX
-observation, a base RINEX observation, a broadcast navigation file, and a
-`reference.csv` containing time plus ECEF `x/y/z` or latitude/longitude.
-`imu.csv` is optional for this undifferenced PF onboarding run. `data inspect`
-reports the detected format, files, observation codes, navigation messages,
-reference fields, missing items, and the expected `urbannav-pf` command.
+Both presets write a timestamped `runs/` directory with a common v1
+`manifest.json` (`schema`, `version`, `git_sha`, `backend`, `gpu`,
+`input_hashes`, `parameters`, `metrics`, hashed `artifacts`), per-estimator
+summaries, and reports. `compare` prints precision/runtime deltas and writes
+`comparison.md`; use `--json PATH` for machine-readable output.
 
-If the files are not already present, inspect only prints repair guidance. For
-the checked-in Tokyo fetch helper, run it explicitly:
+The local-data path never downloads anything: it expects rover/base RINEX OBS, a
+broadcast navigation file, and `reference.csv` (optional `imu.csv`). Fetch the
+Tokyo subset explicitly with:
 
 ```bash
 python experiments/fetch_urbannav_subset.py --run Odaiba --output-dir data/urbannav/Tokyo
 ```
 
-The PF preset requires the CUDA particle-filter and WLS extensions; it fails
-closed with a `doctor`/`build` hint and never silently switches to a CPU
-implementation. Each run writes `manifest.json`, a trajectory CSV, a JSON and
-Markdown summary, and a dependency-free SVG error timeline under the requested
-output directory. These artifacts are hashed in the common v1 manifest and can
-be compared with:
-
-```bash
-gnss-gpu compare runs/urbannav-pf-baseline runs/urbannav-pf-candidate
-```
+`--allow-cpu-fallback` is CPU smoke-test only and is not the GPU benchmark path.
 
 ### Browser/CPU reference
 
-**Zero install:** run the urban-canyon demo — with sky plot and trajectory
-figures — straight in your browser:
+**Zero install:**
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb)
-
-Or locally:
+— or locally:
 
 ```bash
 git clone --recurse-submodules https://github.com/rsasaki0109/gnss_gpu.git
 cd gnss_gpu
-
 python3 -m venv .venv && source .venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
@@ -357,9 +306,7 @@ python3 -m pip install pytest pandas scipy requests matplotlib plotly
 
 ### Run the demo (no GPU, no data, ~1 second)
 
-The fastest way to see what this repo is about. It simulates a car driving through
-an urban canyon where buildings block some satellites (NLOS multipath), then solves
-each epoch with plain least squares vs. the package's robust SPP solver:
+Urban-canyon NLOS simulation solving each epoch with naive WLS vs. robust SPP:
 
 ```bash
 PYTHONPATH=python python3 examples/demo_urban_canyon_sim.py
@@ -379,8 +326,6 @@ particle-filter stack scales up to beat RTKLIB demo5 on real UrbanNav data.
 
 ### Use the robust SPP solver from Python
 
-For library code, the same CPU-only solver is available from the package top level:
-
 ```python
 import numpy as np
 from gnss_gpu import robust_spp
@@ -391,32 +336,22 @@ weights = np.ones(len(pseudoranges))
 coarse_ecef = np.asarray(...)    # shape: (3,), metres
 
 position_ecef = robust_spp(
-    sat_ecef,
-    pseudoranges,
-    weights=weights,
-    init_pos=coarse_ecef,
-    weight_func="cauchy",
-    threshold=15.0,
+    sat_ecef, pseudoranges, weights=weights,
+    init_pos=coarse_ecef, weight_func="cauchy", threshold=15.0,
 )
-if position_ecef is None:
-    raise RuntimeError("SPP failed; check satellite count and geometry")
 ```
 
 Bad input shapes, non-finite values, negative weights, and invalid solver options
-raise `ValueError` with messages that name the offending argument.
-
-For a measurement-level NLOS simulator with explicit ray-cast building blockage,
-C/N0 attenuation, excess delay, and a geometry-aware SPP comparison:
+raise `ValueError`. For a measurement-level NLOS simulator with ray-cast
+blockage, C/N0 attenuation, excess delay, and geometry-aware SPP comparison:
 
 ```bash
 PYTHONPATH=python python3 examples/demo_nlos_simulation.py
-PYTHONPATH=python python3 examples/demo_plateau_nlos_simulation.py
-PYTHONPATH=python python3 examples/demo_plateau_nlos_visualization.py
 PYTHONPATH=python:. python3 experiments/run_plateau_nlos_demo_suite.py
 ```
 
-The suite command exports the mask, replays SPP/PF/FGO, and writes combined
-JSON/Markdown/CSV summaries. The individual replay commands are:
+The suite exports the mask, replays SPP/PF/FGO, and writes combined
+JSON/Markdown/CSV summaries; the mask CSV contract is `tow,epoch_idx,prn,is_los`.
 
 | Replay consumer | Baseline RMS | Mask-soft RMS | RMS gain |
 |---|---:|---:|---:|
@@ -424,77 +359,19 @@ JSON/Markdown/CSV summaries. The individual replay commands are:
 | PF | 11.18 m | 1.40 m | 87.4% |
 | local-FGO | 8.10 m | 0.38 m | 95.4% |
 
-```bash
-PYTHONPATH=python:. python3 experiments/export_plateau_nlos_demo_mask.py \
-  --out-csv experiments/results/plateau_nlos_demo_mask.csv \
-  --summary-json experiments/results/plateau_nlos_demo_mask_summary.json
-PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_spp.py \
-  --mask-csv experiments/results/plateau_nlos_demo_mask.csv \
-  --summary-json experiments/results/plateau_nlos_demo_spp_replay_summary.json
-PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_pf.py \
-  --mask-csv experiments/results/plateau_nlos_demo_mask.csv \
-  --summary-json experiments/results/plateau_nlos_demo_pf_replay_summary.json
-PYTHONPATH=python:. python3 experiments/replay_plateau_nlos_demo_fgo.py \
-  --mask-csv experiments/results/plateau_nlos_demo_mask.csv \
-  --summary-json experiments/results/plateau_nlos_demo_fgo_replay_summary.json
-```
-
-The PLATEAU visualization is also checked into the Pages assets at
-[`docs/assets/media/demos/plateau_nlos_visualization.html`](docs/assets/media/demos/plateau_nlos_visualization.html).
-The exported mask CSV uses the existing experiment contract
-`tow,epoch_idx,prn,is_los`; the SPP, particle-filter, and local-FGO replays
-consume only that mask path and show mask-soft downstream estimators recovering
-the simulated NLOS error.
-
-### Smoke test
-
-CPU-only wrapper tests validate input shapes and error messages without a GPU rebuild:
+### Tests and kernels
 
 ```bash
-PYTHONPATH=python pytest tests/test_*_wrapper.py -q
-```
-
-### Run the test suite
-
-The pure-Python helpers and experiment logic run without a GPU; tests that exercise
-the native CUDA kernels are skipped or fail until you build them (see below):
-
-```bash
-PYTHONPATH=python python3 -m pytest tests/ -q
-```
-
-Browse [`examples/`](examples/) for runnable demos (acquisition, full pipeline,
-interference, urban PLATEAU, real-data replay, visualization). The GPU-accelerated demos
-import native modules, so build the kernels first.
-
-The top-level positioning names remain defined on CPU-only installations.
-Calling a native-only operation raises
-`gnss_gpu.NativeBackendUnavailableError` with the missing module and build
-guidance. An installed extension that is broken (for example because a
-dependent CUDA DLL is missing) is reported as its original import error rather
-than being hidden as a normal CPU-only installation.
-
-### Building the CUDA/C++ kernels
-
-The native kernels back the signal-sim, particle-filter, ray-tracing, and multi-GNSS
-solver paths:
-
-The recommended build installs every native module into the active Python
-environment; no manual `.so`/`.pyd` copy is needed:
-
-```bash
-python3 python/gnss_gpu/cli.py build
+PYTHONPATH=python pytest tests/test_*_wrapper.py -q   # CPU-only smoke test
+PYTHONPATH=python python3 -m pytest tests/ -q         # full suite (CUDA tests skipped)
+python3 python/gnss_gpu/cli.py build                  # build native kernels
 gnss-gpu doctor
 ```
 
-To inspect the generated build command without changing the environment, use
-`python3 python/gnss_gpu/cli.py build --dry-run`.
-
-Once built, try a demo, e.g. signal simulation → acquisition round-trip:
-
-```bash
-gnss-gpu run --preset signal-acquisition
-```
+GPU demos in [`examples/`](examples/) import native modules and need a prior
+build. On CPU-only installs, native-only calls raise
+`gnss_gpu.NativeBackendUnavailableError`; broken extensions report their
+original import error. Use `build --dry-run` to inspect the build command.
 
 ## ROS 2 node
 
