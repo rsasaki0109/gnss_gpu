@@ -92,6 +92,7 @@ experiments/results/pf_smoother_eval.csv.bak
 
 # inuex35 benchmark campaign: local-only bulk artifacts
 data/urbannav/
+data/plateau/
 third_party/eigen/
 third_party/eigen_install/
 results/**/*.pos

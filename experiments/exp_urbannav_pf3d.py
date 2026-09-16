@@ -266,7 +266,12 @@ def _guide_backend_suffix(
     return f"+Guide[{guide_mode}]"
 
 
-def load_plateau_model(model_dir: Path, zone: int) -> object | None:
+def load_plateau_model(
+    model_dir: Path,
+    zone: int,
+    geoid_correction: object = "egm96",
+    include_bridges: bool = False,
+) -> object | None:
     """Try to load one PLATEAU CityGML model from *model_dir*."""
     gml_files = list(model_dir.glob("**/*.gml")) + list(model_dir.glob("**/*.xml"))
     if not gml_files:
@@ -276,7 +281,12 @@ def load_plateau_model(model_dir: Path, zone: int) -> object | None:
     try:
         from gnss_gpu.io.plateau import load_plateau
 
-        model = load_plateau(model_dir, zone=zone)
+        model = load_plateau(
+            model_dir,
+            zone=zone,
+            geoid_correction=geoid_correction,
+            include_bridges=include_bridges,
+        )
         print(f"    PLATEAU model loaded: {model.triangles.shape[0]} triangles")
         return model
     except Exception as e:
@@ -856,6 +866,18 @@ def main():
         help="Japanese plane rectangular zone for PLATEAU CityGML (default: 9)",
     )
     parser.add_argument(
+        "--plateau-geoid",
+        type=str,
+        default="egm96",
+        help='Geoid correction for PLATEAU: "egm96", a constant N in metres, '
+        "or \"none\" (default: egm96)",
+    )
+    parser.add_argument(
+        "--plateau-bridges",
+        action="store_true",
+        help="Also load udx/brid bridge GML files",
+    )
+    parser.add_argument(
         "--n-epochs",
         type=int,
         default=300,
@@ -1002,7 +1024,20 @@ def main():
     building_source = "none"
 
     if args.model_dir is not None and args.model_dir.exists():
-        building_model = load_plateau_model(args.model_dir, zone=args.plateau_zone)
+        geoid: object = args.plateau_geoid
+        if args.plateau_geoid.lower() == "none":
+            geoid = None
+        else:
+            try:
+                geoid = float(args.plateau_geoid)
+            except ValueError:
+                geoid = args.plateau_geoid
+        building_model = load_plateau_model(
+            args.model_dir,
+            zone=args.plateau_zone,
+            geoid_correction=geoid,
+            include_bridges=args.plateau_bridges,
+        )
         if building_model is not None:
             building_source = f"PLATEAU:{args.model_dir}"
 
