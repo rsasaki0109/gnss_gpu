@@ -12,13 +12,10 @@
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb)
 
 <p align="center">
-  <img
-    src="docs/assets/media/site/site_teaser.gif"
-    alt="gnss_gpu structural-method audit and urban GNSS positioning results"
-    width="960"
-    height="540"
-  >
+  <img src="docs/assets/media/particles/particle_viz_odaiba.gif" alt="GPU particle-filter localization on OpenStreetMap in Odaiba" width="49%">
+  <img src="docs/assets/media/los-nlos/los_nlos_deckgl.gif" alt="GPU urban GNSS signal simulation: ray-traced LOS/NLOS over PLATEAU buildings in Shinjuku" width="49%">
 </p>
+<p align="center"><sub>Left: GPU particle filter tracking a real UrbanNav Odaiba drive. Right: ray-traced LOS/NLOS signal simulation over PLATEAU 3D buildings.</sub></p>
 
 [**v0.3 release audit**](https://rsasaki0109.github.io/gnss_gpu/v0.3.0.html) · [Live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) · [Technical report](docs/technical_report_v0.3.0.md) · [Benchmarks](benchmarks/RESULTS.md) · [Examples](examples/) · [Input shapes](docs/common_input_shapes.md) · [GSDC2023 solution](docs/gsdc2023_solution.md) · [Experiment log](docs/experiments.md) · [Decisions](docs/decisions.md) · [How it's built](internal_docs/plan.md)
 
@@ -137,24 +134,25 @@ with zero audited false FIX in both runs.
 <img src="docs/assets/figures/paper_particle_scaling.png" alt="Particle-count scaling: PF crosses EKF near 1K particles" width="420">
 </div>
 
+<p align="center">
+  <img
+    src="docs/assets/media/site/site_teaser.gif"
+    alt="gnss_gpu structural-method audit and urban GNSS positioning results"
+    width="960"
+    height="540"
+  >
+</p>
+
 > The external-validation RMS is high in absolute terms because it averages the hardest
 > deep-urban sequences (including failure stretches). The point is the *relative* gap: the
 > GPU PF stack consistently wins against EKF and RTKLIB on the same epochs. Full tables,
 > figures, and limitations live on the [results snapshot](https://rsasaki0109.github.io/gnss_gpu/).
 
 <p align="center">
-  <img
-    src="docs/assets/media/particles/particle_viz_odaiba.gif"
-    alt="GPU particle-filter localization on OpenStreetMap in Odaiba"
-    width="960"
-  >
-</p>
-
-<p align="center">
   <a href="docs/assets/media/particles/particle_viz_odaiba.mp4">Open the Odaiba particle-cloud video</a>
 </p>
 
-For the zero-data terminal demo behind this visual:
+For the zero-data terminal demo behind the particle-filter GIF at the top:
 
 ```bash
 PYTHONPATH=python:. python3 examples/demo_pf_localization_improvement.py
@@ -169,14 +167,6 @@ Beyond *rejecting* blocked satellites, the package models **why** an urban pseud
 biased — knife-edge (ITU-R P.526) and **UTD** (Kouyoumjian–Pathak) diffraction plus
 specular reflection over **PLATEAU** 3D building meshes — and scores the physics against
 real **UrbanNav** residuals.
-
-<p align="center">
-  <img
-    src="docs/assets/media/los-nlos/los_nlos_deckgl.gif"
-    alt="Deck.gl LOS/NLOS sweep over an UrbanNav route with PLATEAU building geometry"
-    width="960"
-  >
-</p>
 
 <p align="center">
   <a href="docs/assets/media/los-nlos/los_nlos_deckgl.html">Open the full LOS/NLOS deck.gl sweep</a>
