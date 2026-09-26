@@ -56,7 +56,7 @@
 | GNSS-only MultiSD-FGO、PPC safe/causal pipeline | 8/1–8/2, #156–#166 | 採用（FIX authority は safe IMU PF/FGO tracker のみ） | `multisd_fgo_ppc_research_2026_08_01.md`, `docs/ppc_pf_fgo_research_plan.md` |
 | GPU onboarding CLI / run compare | 8/28, #167–#168 | 採用 | README |
 | UrbanNav data loop / PLATEAU / PF3D-BVH NLOS | 9/16, #169 + direct commits | per-particle 3DMA 不採用（D-037）、opt-in のみ残す | `decisions.md` D-037 |
-| Repo hygiene（本更新） | 9/26 | 進行中 | このファイル, `results/ARTIFACT_POLICY.md`, `experiments/archive/README.md` |
+| Repo hygiene（artifact policy 強制、experiments 108 本 archive、`gnss_gpu.metrics` 抽出） | 9/26 | 完了（branch `agent/repo-hygiene-docs`） | このファイル, `results/ARTIFACT_POLICY.md`, `experiments/archive/README.md` |
 
 ---
 
