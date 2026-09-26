@@ -748,12 +748,32 @@
 
 理由: ラベルが健全でも per-particle 測定尤度は構造的に有害であり、CPU/PPC 側の既往の負の結果（D-033、`nlos_pf_measurement_wiring.md`）と整合する。単一 pilot の合成成功で既定を昇格させない（開発ポリシー）。
 
-未決定: この負の結果を踏まえた pivot 先（OSS/ベンチマーク公開、学習誤差モデル、GSDC/PPC の伸びしろ）。
+未決定: この負の結果を踏まえた pivot 先（OSS/ベンチマーク公開、学習誤差モデル、GSDC/PPC の伸びしろ）。候補の整理は末尾「現在の未決定事項」を参照。
 
 ## 現在の未決定事項
 
-- `always_robust` と `entry_veto_negative_exit_rescue_branch_aware_hysteresis_quality_veto_regime_gate` を main paper でどう位置づけるか
-- strategy 差分が出る epoch をどの figure で見せるか
-- `blocked score` は完全に不要か、それとも veto 付きなら使えるか
-- readability/extensibility proxy をどこまで信頼するか
-- Path 2 (more PPC data) / Path 3 (architectural pivot) の優先度
+棚卸し: 2026-09-26。旧リストの各項目を「解決済み / 休眠 / 未決定」に分類した。解決済み・休眠の項目は、再開条件が満たされるまで議論しない。
+
+### 未決定（active）
+
+| 項目 | 現状 | 判断材料 / 次の一手 |
+|---|---|---|
+| D-037 後の pivot 先 | 粒子ごとの 3DMA 尤度は否定済み（D-033, D-037）。ray tracing は feature / coverage 用途に限定 | 候補: (a) 推定位置の近傍で集約した遮蔽確率を全粒子共通の重みにする、(b) レイラベル（`diag_nlos_label_and_bias.py`）を教師データにした学習誤差モデル、(c) 3D マップを PPC ranker の特徴量 / RTK の除外衛星候補として使う、(d) UrbanNav+PLATEAU+GPU BVH パイプラインをベンチマークとして公開。最小コストの試験は (c) の特徴量 1 列追加 |
+
+### 解決済み（closed）
+
+| 旧項目 | 結論 | 根拠 |
+|---|---|---|
+| `blocked score` は完全に不要か、veto 付きなら使えるか | 尤度・切替の駆動には使わない。遮蔽情報は feature（ranker 特徴量、coverage、シナリオ）用途に限定 | D-011（blocked-switch は holdout を超えない）、D-033・D-037（粒子ごとの遮蔽判定は構造的に有害）、`nlos_pf_measurement_wiring.md`（epoch 共通 mask は PPC で Δ=0） |
+| Path 3（architectural pivot / sequence-latent model）の優先度 | D-034 文脈の Path 3 は kill criteria 到達で終了 | `product_deliverable/D034_PATH3_PREGATE_NULL.md`, `D034_PATH3_HMM_NULL.md`（2026-05-01、全 HMM variant が deployed run-MAE 1.79 pp に負け） |
+
+### 休眠（dormant: paper track 再開時に再評価）
+
+paper track（D-019, D-024, `paper_draft_2026-04-01.md`）は 2026-04 以降止まっている。以下は paper 再開時まで凍結する。
+
+| 旧項目 | 暫定の扱い | 再開条件 |
+|---|---|---|
+| `always_robust` と `entry_veto_..._regime_gate` を main paper でどう位置づけるか | D-019 のとおり: safe baseline = `always_robust`、exploratory best = `entry_veto_...` | paper 本文の執筆を再開したとき |
+| strategy 差分が出る epoch をどの figure で見せるか | `build_paper_assets.py` の固定 3 図（D-024）を維持 | 同上 |
+| readability/extensibility proxy をどこまで信頼するか | 補助指標扱い（`experiments.md` の proxy 定義）。採用判断の根拠にはしない | 同上 |
+| Path 2（PPC データの追加）の優先度 | 追加データの取得計画はなし。既存 6 route で LORO / disjoint holdout を継続 | 新しい PPC 相当のデータセットが入手可能になったとき |
