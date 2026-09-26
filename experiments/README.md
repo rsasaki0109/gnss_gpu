@@ -4,6 +4,13 @@ This directory is intentionally large. It contains active experiment runners,
 old sweeps, analysis scripts, artifact builders, and one-off probes. Do not
 treat every script here as a stable API.
 
+## Layout
+
+Top-level scripts contain the referenced experiment runners and helpers.
+[`archive/`](archive/) holds unreferenced historical scripts; these are
+unmaintained and are not covered by CI. Shared generic numerical metrics live
+in `python/gnss_gpu/metrics.py` and remain available through `evaluate.py`.
+
 ## Naming Conventions
 
 - `exp_*.py`: experiment runners that execute a solver/evaluation pipeline.
