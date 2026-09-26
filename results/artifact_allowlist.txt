@@ -1,0 +1,23 @@
+# Exceptions to ARTIFACT_POLICY.md: one repo-relative fnmatch glob per line.
+# Add a comment explaining the dependency or retention reason for each entry.
+
+# experiments/audit_improvement_1_7_artifacts.py loads these via results / name
+# (including dynamically assembled recurrence prefixes) in audit().
+experiments/results/improvement_1_7_phase71_decisions.csv
+experiments/results/pf_ffbsi_full6_p2k_lag10_paths8_runs.csv
+experiments/results/rbpf_doppler_gej_full6_p2k_runs.csv
+experiments/results/rbpf_doppler_gejcr_full6_p2k_runs.csv
+experiments/results/tcfgo_structural_full_runs_summary.csv
+experiments/results/tcfgo_structural_blocked_spans_summary.csv
+experiments/results/candidate_3dma_recurrence_full_runs_summary.csv
+experiments/results/candidate_3dma_recurrence_raw_full_runs_summary.csv
+experiments/results/candidate_3dma_recurrence_blocked_spans_summary.csv
+experiments/results/candidate_3dma_recurrence_raw_blocked_spans_summary.csv
+
+# experiments/build_githubio_summary.py reads these through RESULTS_DIR.
+experiments/results/odaiba_pf_smoother_freeze.json
+experiments/results/freeze_validation_summary.json
+
+# experiments/build_paper_assets.py::_collect_urbannav_epoch_rows loads this
+# filename family via a constructed glob when the combined CSV is absent.
+experiments/results/urbannav_fixed_eval_external_gej_trimble_qualityveto_epochs__*__*_epochs.csv
