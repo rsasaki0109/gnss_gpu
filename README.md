@@ -149,10 +149,18 @@ with zero audited false FIX in both runs.
 > figures, and limitations live on the [results snapshot](https://rsasaki0109.github.io/gnss_gpu/).
 
 <p align="center">
+  <img
+    src="docs/assets/media/particles/particle_viz_odaiba.gif"
+    alt="GPU particle-filter localization on OpenStreetMap in Odaiba"
+    width="960"
+  >
+</p>
+
+<p align="center">
   <a href="docs/assets/media/particles/particle_viz_odaiba.mp4">Open the Odaiba particle-cloud video</a>
 </p>
 
-For the zero-data terminal demo behind the particle-filter GIF at the top:
+For the zero-data terminal demo behind this visual:
 
 ```bash
 PYTHONPATH=python:. python3 examples/demo_pf_localization_improvement.py
@@ -167,6 +175,14 @@ Beyond *rejecting* blocked satellites, the package models **why** an urban pseud
 biased — knife-edge (ITU-R P.526) and **UTD** (Kouyoumjian–Pathak) diffraction plus
 specular reflection over **PLATEAU** 3D building meshes — and scores the physics against
 real **UrbanNav** residuals.
+
+<p align="center">
+  <img
+    src="docs/assets/media/los-nlos/los_nlos_deckgl.gif"
+    alt="Deck.gl LOS/NLOS sweep over an UrbanNav route with PLATEAU building geometry"
+    width="960"
+  >
+</p>
 
 <p align="center">
   <a href="docs/assets/media/los-nlos/los_nlos_deckgl.html">Open the full LOS/NLOS deck.gl sweep</a>
