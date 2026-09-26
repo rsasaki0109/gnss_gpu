@@ -98,6 +98,8 @@ third_party/eigen_install/
 results/**/*.pos
 results/**/*.log
 results/**/*.txt
+# Retention exceptions for ARTIFACT_POLICY.md must be versioned.
+!results/artifact_allowlist.txt
 results/**/*.npy
 results/**/*.npz
 
@@ -105,6 +107,12 @@ results/**/*.npz
 # sweeps, caches, trajectories, and logs (about 4.5 GiB / 2,811 files as
 # classified on 2026-07-29). Durable conclusions and small regression locks
 # belong in internal_docs/ or docs/assets/, not in these workspaces.
+# Unreferenced workspaces untracked on 2026-09-26 (results/ARTIFACT_POLICY.md).
+results/wp25/
+results/wp26/
+results/wp27/
+results/wp28/
+experiments/results/*.m
 results/wp29/
 results/wp30/
 results/wp31/

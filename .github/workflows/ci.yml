@@ -40,6 +40,7 @@ jobs:
       # migration is handled as a dedicated change.
       - run: python -m pip install --upgrade pip "ruff==0.15.7"
       - run: python -m ruff check python/ --ignore=E501,F401
+      - run: python scripts/ci/check_artifact_policy.py
       - name: Lint PPC IMU PF/FGO promotion path
         run: >-
           python -m ruff check

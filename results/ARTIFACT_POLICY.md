@@ -47,3 +47,27 @@ Before retaining a result, answer all of the following:
 4. Can a smaller summary or regression fixture prove the same claim?
 
 If any answer is missing, keep the artifact local.
+
+## Enforcement
+
+`python scripts/ci/check_artifact_policy.py` checks Git-tracked files under
+`results/` and `experiments/results/` (excluding this policy and the allowlist).
+The Ubuntu lint CI job runs it and fails if any artifact is unreferenced.
+Use `--list-unreferenced` for one offending path per line.
+
+References come from other tracked UTF-8 text files up to 2 MiB; binaries and
+both result trees are excluded. An artifact is retained by an exact path
+substring, or an ancestor path strictly below a result root followed by `/`,
+a quote, whitespace, `)`, a backtick, or end of line. A whole-word workspace
+name in a `.py`, `.sh`, or `.yml` file containing `results` also counts, as does
+a case-sensitive glob in `results/artifact_allowlist.txt`.
+
+To keep a new artifact, reference it from a public or internal document, or
+add an allowlist entry with a comment explaining its dependency or retention
+reason. Stage the reference document along with the artifact before checking.
+
+The 2026-09-26 audit untracked 314 files with `git rm --cached` (working-tree
+copies kept, now ignored): `results/wp25` (8), `results/wp26` (6),
+`results/wp27` (84), `results/wp28` (193), `experiments/results/libgnss_viz`
+(18), and five files directly under `experiments/results/`. Another 22 files
+remain via justified allowlist entries for audit and website consumers.
