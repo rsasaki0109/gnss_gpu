@@ -74,7 +74,7 @@
 
 ### エンジニアリング / docs
 
-6. **`experiments/exp_ppc_ctrbpf_fgo.py`（12,680 行、experiments 内 fan-in 65）の分割**。まず import graph を取って、score path を変えずに I/O・config・scoring を切り出す。validation wave と同じく「数値挙動を変えない」commit に限定する。
+6. **`experiments/exp_ppc_ctrbpf_fgo.py` の分割**（2026-10-03 第 1 段完了: 12,680 → 8,859 行）。I/O・CLI パース（`ppc_ctrbpf_io.py`）、`CTRBPFConfig` / `_config_variants`（`ppc_ctrbpf_config.py`）、RTK diag の gate / sort / run-index policy（`ppc_ctrbpf_rtkdiag.py`）を AST 同一のまま移動し、元モジュールから全名 re-export。残り: `_run_ctrbpf_on_segment`（3,427 行）と `main`（2,422 行）の内部分割、import 元 50 ファイルを新モジュール直参照へ移すか。引き続き「数値挙動を変えない」commit に限定する。
 7. `experiments/gsdc2023_*` cluster（`gsdc2023_raw_bridge.py` 4,419 行ほか、tests から多数 import）を `experiments/gsdc2023/` package にまとめるか判断する。D-001 に従い `python/gnss_gpu/` には入れない。
 8. §2 の残りの不整合: `benchmarks/RESULTS.md` の再計測と README 表記の統一。
 9. ~~`CONTRIBUTING.md` の lint 指示を CI に合わせる / decisions.md 2 本の関係を明記~~（2026-10-02 完了）。repo 全体の ruff（`ruff check .` で 554 件）を CI 対象に広げるかは未決定。
