@@ -50,3 +50,6 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q \
   tests/test_pf3d_bvh_short_segment.py \
   tests/test_multipath.py \
   tests/test_city_model_validator.py
+
+# Exercise the PPC CT-RBPF segment runner end to end on synthetic data.
+PYTHONPATH=python python3 experiments/fingerprint_ctrbpf_segment.py --methods pf,pf+pu,rbpf+pu,pf+hybrid --epochs 20 > /dev/null
