@@ -1,1 +1,8 @@
 experiments/scripts_run_phase71_osmroad_production.sh text eol=lf
+
+# Data artifacts are SHA-256 locked byte-for-byte by tests and audit scripts.
+# Never convert their line endings (core.autocrlf on Windows would break the
+# hashes); this is a no-op on LF checkouts.
+*.json -text
+*.csv -text
+*.pos -text

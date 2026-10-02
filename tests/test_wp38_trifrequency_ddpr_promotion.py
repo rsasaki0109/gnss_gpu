@@ -10,8 +10,16 @@ from experiments.run_wp29_tdcp_anchor_smoother import _load_static_position_over
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = ROOT / "internal_docs/wp38_trifrequency_ddpr_rank_validation_2026_07_22.json"
+# The validation cases live in results/wp31/, a gitignored local workspace
+# (results/ARTIFACT_POLICY.md); only the lock and the M4 baseline are tracked.
+_WP31_RESULTS = ROOT / "results/wp31"
+requires_wp31_results = pytest.mark.skipif(
+    not _WP31_RESULTS.is_dir(),
+    reason="results/wp31/ local workspace not present",
+)
 
 
+@requires_wp31_results
 def test_locked_wp38_validation_promotes_target():
     promoted = validate_and_promote(ROOT, LOCK)
 
@@ -22,6 +30,7 @@ def test_locked_wp38_validation_promotes_target():
     assert sum(report["selected"] for report in promoted["validation_reports"]) == 3
 
 
+@requires_wp31_results
 def test_wp38_promotion_rejects_changed_lock_hash(tmp_path: Path):
     lock = json.loads(LOCK.read_text(encoding="utf-8"))
     lock["cases"][0]["primary"]["sha256"] = "0" * 64

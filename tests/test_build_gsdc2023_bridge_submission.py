@@ -76,7 +76,7 @@ def _args(**overrides: object) -> SimpleNamespace:
 def test_bridge_trip_id_accepts_sample_or_test_trip_id() -> None:
     assert bridge_trip_id("course/phone") == "test/course/phone"
     assert bridge_trip_id("test/course/phone") == "test/course/phone"
-    assert str(bridge_output_dir(Path("/tmp/bridge"), "test/course/phone")).endswith("bridge/course/phone")
+    assert bridge_output_dir(Path("/tmp/bridge"), "test/course/phone").as_posix().endswith("bridge/course/phone")
     assert phone_from_sample_trip_id("test/course/pixel5") == "pixel5"
 
 

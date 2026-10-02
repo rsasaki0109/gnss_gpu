@@ -13,11 +13,13 @@ CA_CHIP_LENGTH = SPEED_OF_LIGHT / CA_CHIP_RATE  # ~293.05 m
 def _try_import():
     """Try to import the multipath module; skip tests if CUDA bindings unavailable."""
     try:
-        from gnss_gpu.multipath import MultipathSimulator
-        # Quick check that bindings are actually loadable
-        return MultipathSimulator
+        from gnss_gpu import multipath
     except (ImportError, RuntimeError):
         pytest.skip("Multipath CUDA bindings not available")
+    # The wrapper imports without the native module and fails only on use.
+    if multipath._simulate is None or multipath._apply_error is None:
+        pytest.skip("Multipath CUDA bindings not available")
+    return multipath.MultipathSimulator
 
 
 class TestSingleReflector:

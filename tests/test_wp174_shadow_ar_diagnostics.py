@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from experiments.analyze_wp174_shadow_ar import analyze, trace_declaration_gate
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# Locally generated RTK supply; dist/ is not tracked.
+_TOKYO_SUPPLY_POS = REPO_ROOT / "dist/tokyo-supply/wp160_seeded_demo5.pos"
 
 
 def _candidate(*, ratio: float = 3.0, satellites: int = 8) -> dict[str, float | int]:
@@ -73,11 +77,14 @@ def test_empty_trace_is_fail_closed() -> None:
     )
 
 
+@pytest.mark.skipif(
+    not _TOKYO_SUPPLY_POS.exists(), reason="dist/tokyo-supply/ RTK supply not present"
+)
 def test_locked_tokyo_shadow_audit_reproduces_wp173_without_mutation() -> None:
     rows, summary = analyze(
         REPO_ROOT
         / "data/tokyo_run1_wp172_pf_seeded_rtk_consensus_trajectory.csv",
-        REPO_ROOT / "dist/tokyo-supply/wp160_seeded_demo5.pos",
+        _TOKYO_SUPPLY_POS,
         REPO_ROOT
         / "experiments/results/libgnss_rtk_pos_v5/tokyo_run1_full.pos",
         REPO_ROOT / "configs/evaluation/wp174_shadow_ar_diagnostics.json",

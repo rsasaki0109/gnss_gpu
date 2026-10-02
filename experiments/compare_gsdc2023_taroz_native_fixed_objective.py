@@ -210,11 +210,13 @@ def taroz_graph_cost_for_native_state(
 ) -> float:
     export_dir = Path(export_dir)
     state_frame = state_to_taroz_graph_state_frame(template, state, n_clock=n_clock)
-    with tempfile.NamedTemporaryFile(suffix=".csv") as handle:
-        state_frame.to_csv(handle.name, index=False)
+    # A directory, not NamedTemporaryFile: Windows cannot reopen an open temp file.
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        state_csv = Path(tmp_dir) / "state.csv"
+        state_frame.to_csv(state_csv, index=False)
         cost_frame = taroz_gtsam_gnss_graph_cost_frame(
             _resolve_factor_csv(export_dir, factor_csv),
-            Path(handle.name),
+            state_csv,
             n_clock=n_clock,
             pr_huber_k=pr_huber_k,
             doppler_huber_k=doppler_huber_k,
