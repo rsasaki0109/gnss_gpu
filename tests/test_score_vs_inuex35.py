@@ -211,3 +211,20 @@ def test_lt50cm_full_denominator_uses_rover_epoch_count(tmp_path: Path) -> None:
     assert result.n_rover_epochs == 11928
     assert result.lt50cm_pct == pytest.approx(50.0)
     assert result.lt50cm_full_pct == pytest.approx(100.0 * 2 / 11928)
+
+
+def test_nagoya_denominator_falls_back_to_reference_length(tmp_path: Path) -> None:
+    reference = _make_reference()
+    traj_path = tmp_path / "gap.pos"
+    _write_pos(traj_path)
+    epochs = load_pos_trajectory(traj_path)
+    result = score_trajectory(
+        epochs,
+        reference,
+        city="nagoya",
+        run="run1",
+        traj_path=traj_path,
+        fmt="pos",
+    )
+    assert result.n_rover_epochs == len(reference)
+    assert result.lt50cm_full_pct == pytest.approx(100.0 * 2 / len(reference))
