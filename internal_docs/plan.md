@@ -36,7 +36,7 @@
 既知の不整合（2026-10-02 棚卸し）:
 - 解消: Nagoya PF-only `<50cm` の 69.55% は WP100（7/23）の旧値で、WP172/173（7/29）で 5,715/7,583 = 75.37% に更新済み（`wp172_nagoya_development_2026_07_29.json`）。README が正、`HANDOFF_CLAUDE_PF_ONLY_2026_07_23B.md` に superseded 注記を追加。69.55% は non-degradation floor。
 - 一部解消: PPC 分母の 11,928 は inuex35 README の rover epoch 数を `experiments/score_vs_inuex35.py` に hard-code したもの（Tokyo run1 の inuex35 比較で使用）。PF-only の 11,924 / 7,583 は PF replay の full denominator。4 epoch / 19 epoch 差の原因はデータ未所持のため未確認。2 つの contract の epoch 数を混ぜて比較しないこと。
-- 未解消（バグ疑い）: `score_vs_inuex35.py` の `_ROVER_EPOCH_COUNTS` は Nagoya run1/2/3 に Tokyo の値（11928 / 9151 / 15301）をコピーしている。Nagoya library の分母は 7,602。score path の変更になるので別 PR で直す。
+- 解消（2026-10-02）: `score_vs_inuex35.py` の `_ROVER_EPOCH_COUNTS` が Nagoya run1/2/3 に Tokyo の値（11928 / 9151 / 15301）をコピーしていた。inuex35 README は Tokyo のみなので Nagoya 行を削除し、reference 長に fallback させた。commit 済みの Nagoya 結果でこの値を使ったものは無い。
 - 旧版 plan の GSDC 3.993/4.821 は古い bridge 提出の値。現行 best は上表。
 - `internal_docs/ppc_current_status.md` は旧 ranker contract の文書として stale 注記を追加（本文は未更新）。
 - 未解消: `benchmarks/RESULTS.md`（2026-04-01、「generic GPU」）と README の「consumer Ada GPU で 81 ms」の表記揺れ。GPU 型番は 2ca3623 で意図的に削除済み。再計測を伴うので別作業。
@@ -76,7 +76,7 @@
 
 6. **`experiments/exp_ppc_ctrbpf_fgo.py`（12,680 行、experiments 内 fan-in 65）の分割**。まず import graph を取って、score path を変えずに I/O・config・scoring を切り出す。validation wave と同じく「数値挙動を変えない」commit に限定する。
 7. `experiments/gsdc2023_*` cluster（`gsdc2023_raw_bridge.py` 4,419 行ほか、tests から多数 import）を `experiments/gsdc2023/` package にまとめるか判断する。D-001 に従い `python/gnss_gpu/` には入れない。
-8. §2 の残りの不整合: `score_vs_inuex35.py` の Nagoya 分母バグ修正（score path 変更として単独 PR）、`benchmarks/RESULTS.md` の再計測と README 表記の統一。
+8. §2 の残りの不整合: `benchmarks/RESULTS.md` の再計測と README 表記の統一。
 9. ~~`CONTRIBUTING.md` の lint 指示を CI に合わせる / decisions.md 2 本の関係を明記~~（2026-10-02 完了）。repo 全体の ruff（`ruff check .` で 554 件）を CI 対象に広げるかは未決定。
 10. CI: coverage（`pytest --cov`）と pyright basic を段階的に導入。self-hosted CUDA workflow に PF3D-BVH の短区間回帰を追加。
 

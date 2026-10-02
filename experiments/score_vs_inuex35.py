@@ -23,13 +23,11 @@ _DATA_ROOT = Path("datasets/PPC-Dataset-data")
 _TOW_TOLERANCE_S = 0.05
 
 # Rover-epoch denominators from inuex35 README (full-run coverage baseline).
+# The README only reports Tokyo; other runs fall back to the reference length.
 _ROVER_EPOCH_COUNTS: dict[tuple[str, str], int] = {
     ("tokyo", "run1"): 11928,
     ("tokyo", "run2"): 9151,
     ("tokyo", "run3"): 15301,
-    ("nagoya", "run1"): 11928,
-    ("nagoya", "run2"): 9151,
-    ("nagoya", "run3"): 15301,
 }
 
 
