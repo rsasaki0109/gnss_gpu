@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import fields
+from typing import Any
 
 from gnss_gpu.pf_smoother_config import PfSmootherConfig
 
@@ -42,7 +43,7 @@ def namespace_to_run_kwargs(
     *,
     position_update_sigma: float | None,
     use_smoother: bool,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     run_kwargs = {
         field.name: getattr(args, _CONFIG_ARG_ALIASES.get(field.name, field.name))
         for field in fields(PfSmootherConfig)

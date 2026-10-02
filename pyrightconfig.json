@@ -40,7 +40,6 @@
     "python/gnss_gpu/particle_modes.py",
     "python/gnss_gpu/pf_device_runtime.py",
     "python/gnss_gpu/pf_device_smoother.py",
-    "python/gnss_gpu/pf_smoother_cli_config.py",
     "python/gnss_gpu/pf_smoother_cli_presets.py",
     "python/gnss_gpu/pf_smoother_common.py",
     "python/gnss_gpu/pf_smoother_dataset.py",
