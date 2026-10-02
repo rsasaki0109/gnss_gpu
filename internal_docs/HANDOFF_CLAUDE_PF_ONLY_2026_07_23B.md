@@ -1,5 +1,12 @@
 # HANDOFF → Claude: PF-only RTK stretch campaign — 2026-07-23 (session B)
 
+> **Superseded figures (2026-10-02 note).** The Nagoya production state below
+> (WP100, 5,274/7,583 = 69.55%) was superseded on 2026-07-29 by WP172/WP173
+> (5,715/7,583 = 75.37%, `wp172_nagoya_development_2026_07_29.json`,
+> `wp173_nagoya_development_2026_07_29.json`). Tokyo moved to 46.51%
+> (5,546/11,924). The README table is current; 69.55% is now the
+> non-degradation floor, not the current value.
+
 Supersedes the immediate-action sections of
 `internal_docs/HANDOFF_CLAUDE_PF_ONLY_2026_07_23.md`. All invariants from that
 document remain in force unchanged (PF-only, no runtime FGO, truth-free

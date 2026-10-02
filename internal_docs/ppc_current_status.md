@@ -1,5 +1,13 @@
 # PPC Current Status
 
+> **Stale (2026-10-02 note).** This page describes the retired ranker /
+> scorer contract (Phase71, 86.205492%). That number is not comparable with the
+> current honest scorer (missing epochs stay in the denominator, #159), whose
+> canonical value is 59.222040% (`docs/ppc_causal_float_selector.md`). For
+> current PPC numbers use [`plan.md`](plan.md) §2. The `plan.md` link below
+> now points at the handoff entry point; the chronological log it refers to is
+> [`archive/plan_history_2026-04_to_2026-07.md`](archive/plan_history_2026-04_to_2026-07.md).
+
 Last updated: 2026-05-19.
 
 This is the short current-state document for PPC work. The long chronological

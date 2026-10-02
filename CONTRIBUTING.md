@@ -22,7 +22,7 @@ No GPU is required for most Python work:
 python3 -m venv .venv && source .venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
-python3 -m pip install pytest ruff pandas scipy requests matplotlib plotly
+python3 -m pip install pytest "ruff==0.15.7" pandas scipy requests matplotlib plotly
 ```
 
 Run the pure-Python smoke demo and the tests before you start:
@@ -47,7 +47,22 @@ make -j"$(nproc)"
 - **Tests**: add or update tests under `tests/` and run
   `PYTHONPATH=python python3 -m pytest tests/ -q`. Tests that need the native
   kernels may be skipped locally; that's fine.
-- **Lint**: run `ruff check .` (CI runs the same).
+- **Lint**: run the same checks as the CI `lint` and `repo-hygiene` jobs
+  (`.github/workflows/ci.yml`). CI pins `ruff==0.15.7` and lints only
+  `python/` plus an explicit list of PPC promotion-path files; a bare
+  `ruff check .` reports hundreds of pre-existing findings under
+  `experiments/` and `tests/` that CI does not gate on.
+
+  ```bash
+  python -m pip install "ruff==0.15.7"
+  python -m ruff check python/ --ignore=E501,F401
+  python scripts/ci/check_artifact_policy.py
+  python tools/lint_repo_paths.py --max-path 180 --max-name 128
+  python tools/lint_commit_messages.py --base origin/main
+  ```
+
+  If you touch a file in the PPC promotion-path list in `ci.yml`, also run
+  `python -m ruff check <that file>` without the ignores.
 - **Keep PRs focused**: one logical change per PR. Don't bundle unrelated edits.
 - **Match the surrounding style**: comment density, naming, and idioms.
 
