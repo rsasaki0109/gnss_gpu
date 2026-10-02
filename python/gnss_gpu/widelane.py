@@ -560,7 +560,7 @@ def _widelane_stats_kwargs(
     fix_residual_abs_cycles: Sequence[float],
     fix_std_cycles: Sequence[float],
     fixed_dd_ambiguities: Sequence[tuple[str, str, int]],
-) -> dict[str, object]:
+) -> dict[str, Any]:
     ratios = np.asarray(fix_ratios, dtype=np.float64)
     residuals = np.asarray(fix_residual_abs_cycles, dtype=np.float64)
     stds = np.asarray(fix_std_cycles, dtype=np.float64)

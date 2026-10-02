@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 
 import numpy as np
 
@@ -568,6 +568,9 @@ class DDCarrierComputer:
                 )
                 if len(selected_sats) < 2:
                     continue
+                # Both codes are set whenever any satellite was selected.
+                rover_code = cast(str, rover_code)
+                base_code = cast(str, base_code)
                 for sat_id in selected_sats:
                     rover_cp[sat_id] = float(rover_obs[sat_id][rover_code])
                     base_cp[sat_id] = float(base_obs[sat_id][base_code])
@@ -728,6 +731,9 @@ class DDCarrierComputer:
                 )
                 if len(selected_sats) < max(2, int(min_common_sats)):
                     continue
+                # Both codes are set whenever any satellite was selected.
+                rover_code = cast(str, rover_code)
+                base_code = cast(str, base_code)
 
                 ranked_references = sorted(
                     selected_sats,

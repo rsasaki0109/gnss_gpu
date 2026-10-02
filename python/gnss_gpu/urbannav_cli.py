@@ -24,7 +24,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence, cast
 
 import numpy as np
 
@@ -595,10 +595,11 @@ def inspect_input(path: str | Path) -> InputInspection:
     # Optional IMU is useful to the research smoother but is not required by
     # the current undifferenced PF path.  Report it explicitly rather than
     # treating its absence as a broken input.
-    if files.get("imu") is None:
+    imu_path = files.get("imu")
+    if imu_path is None:
         warnings.append("imu.csv not present (optional for urbannav-pf)")
     else:
-        metadata["imu"] = {"size_bytes": files["imu"].stat().st_size}
+        metadata["imu"] = {"size_bytes": imu_path.stat().st_size}
 
     if candidates and len(candidates) > 1:
         warnings.append("multiple UrbanNav run directories found; pass one run directory explicitly")
@@ -906,7 +907,8 @@ def run_urbannav_pf(
     inspection = inspect_input(input_path)
     run_dir, format_name = _resolve_ready_run(inspection)
     loader_cls = loader_factory or (PPCDatasetLoader if format_name == "ppc" else UrbanNavLoader)
-    loader = loader_cls(run_dir)
+    # Only the UrbanNav loader branch below passes rover_source.
+    loader: Any = loader_cls(run_dir)
     try:
         if format_name == "ppc":
             data = loader.load_experiment_data(
@@ -933,8 +935,8 @@ def run_urbannav_pf(
     times = np.asarray(data.get("times", []), dtype=np.float64)
     truth = np.asarray(data.get("ground_truth", []), dtype=np.float64).reshape(-1, 3)
     sat_ecef = data.get("sat_ecef")
-    pseudoranges = data.get("pseudoranges")
-    weights = data.get("weights")
+    pseudoranges: Any = data.get("pseudoranges")
+    weights: Any = data.get("weights")
     if len(truth) != n_epochs or not isinstance(sat_ecef, Sequence):
         raise UrbanNavRunError("loader returned an incomplete experiment data contract")
 
@@ -949,7 +951,7 @@ def run_urbannav_pf(
     wls_positions = np.zeros((n_epochs, 4), dtype=np.float64)
     for index in range(n_epochs):
         wls_positions[index] = _finite_wls_solution(
-            wls_solver,
+            cast(Callable[..., Any], wls_solver),  # resolved by the import above
             sat_ecef[index],
             pseudoranges[index],
             weights[index],

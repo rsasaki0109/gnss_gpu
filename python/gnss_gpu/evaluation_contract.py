@@ -316,7 +316,7 @@ def evaluate_campaign(payload: Mapping[str, Any], repo_root: Path) -> dict[str, 
     ]
 
     for spec in MANDATORY_NEGATIVE_HOLDOUTS:
-        result = holdouts.get(spec.holdout_id)
+        result: Any = holdouts.get(spec.holdout_id)
         complete = isinstance(result, Mapping) and result.get("evidence_complete") is True
         safe = (
             complete
@@ -365,9 +365,10 @@ def evaluate_campaign(payload: Mapping[str, Any], repo_root: Path) -> dict[str, 
             "missing: " + ", ".join(missing_metrics) if missing_metrics else "all Phase 0 KPIs reported",
         )
     )
-    normal_latency = candidate.get("normal_latency_max_ms")
-    search_latency = candidate.get("search_latency_max_ms")
-    peak_memory = candidate.get("peak_gpu_memory_mb")
+    # Validated as finite numbers by the all(...) check before the comparisons.
+    normal_latency: Any = candidate.get("normal_latency_max_ms")
+    search_latency: Any = candidate.get("search_latency_max_ms")
+    peak_memory: Any = candidate.get("peak_gpu_memory_mb")
     runtime_values = (normal_latency, search_latency, peak_memory)
     runtime_pass = (
         all(

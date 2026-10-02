@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import product
+from typing import Any
 
 import numpy as np
 
@@ -188,7 +189,7 @@ def extract_particle_modes(
     for cell_id in core_ids:
         component_cells.setdefault(find(int(cell_id)), []).append(int(cell_id))
 
-    components: list[dict[str, object]] = []
+    components: list[dict[str, Any]] = []
     for ids in component_cells.values():
         ids_arr = np.asarray(ids, dtype=np.int64)
         point_mask = np.isin(inverse, ids_arr)

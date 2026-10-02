@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Union
+from typing import Any, Union, cast
 
 import numpy as np
 
@@ -188,12 +188,12 @@ def _ray_segment_closest(rx, direction, edge_start, edge_end):
 def _edge_size(edges) -> int:
     size = getattr(edges, "size", None)
     if size is not None:
-        return int(size() if callable(size) else size)
+        return int(cast(Any, size() if callable(size) else size))
 
     start = np.asarray(getattr(edges, "start"), dtype=float)
     if start.size == 0:
         return 0
-    return int(start.reshape((-1, 3)).shape[0])
+    return int(start.reshape(-1, 3).shape[0])
 
 
 def _validate_diffraction_options(
@@ -281,8 +281,8 @@ def compute_diffraction_paths(
     if edge_count == 0 or max_paths <= 0:
         return [[] for _ in range(n_sat)]
 
-    start = np.asarray(edges.start, dtype=float).reshape((-1, 3))
-    end = np.asarray(edges.end, dtype=float).reshape((-1, 3))
+    start = np.asarray(edges.start, dtype=float).reshape(-1, 3)
+    end = np.asarray(edges.end, dtype=float).reshape(-1, 3)
     face_a_attr = getattr(edges, "face_dir_a", None)
     face_b_attr = getattr(edges, "face_dir_b", None)
     use_sign = (lit_shadow or require_shadow) and face_a_attr is not None
@@ -294,7 +294,7 @@ def compute_diffraction_paths(
     if midpoint_attr is None:
         midpoint = 0.5 * (start + end)
     else:
-        midpoint = np.asarray(midpoint_attr, dtype=float).reshape((-1, 3))
+        midpoint = np.asarray(midpoint_attr, dtype=float).reshape(-1, 3)
 
     edge_count = min(edge_count, start.shape[0], end.shape[0], midpoint.shape[0])
     start = start[:edge_count]
@@ -343,7 +343,7 @@ def compute_diffraction_paths(
                 fb = None if face_b is None else face_b[edge_id]
                 sign = edge_lit_shadow_sign(
                     rx, sat, point, start[edge_id], end[edge_id],
-                    face_a[edge_id], fb)
+                    cast(np.ndarray, face_a)[edge_id], fb)  # face_a is set when use_sign
                 if require_shadow and sign < 0.0:
                     continue  # lit edge: not the silhouette that shadows this sat
                 v *= sign

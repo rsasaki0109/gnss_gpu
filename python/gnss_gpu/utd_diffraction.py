@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from typing import Any, cast
 
 import numpy as np
 
@@ -188,7 +189,7 @@ def _edge_count(edges, start: np.ndarray, end: np.ndarray) -> int:
     if size_attr is not None:
         try:
             size_value = size_attr() if callable(size_attr) else size_attr
-            count = min(count, max(0, int(size_value)))
+            count = min(count, max(0, int(cast(Any, size_value))))
         except (TypeError, ValueError):
             pass
     return count

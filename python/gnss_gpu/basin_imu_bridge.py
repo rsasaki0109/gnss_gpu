@@ -51,8 +51,8 @@ def load_ppc_imu_csv(path: Path) -> PPCImuSamples:
     """Load the PPC IMU CSV without opening any reference trajectory."""
 
     times: list[float] = []
-    acceleration: list[tuple[float, float, float]] = []
-    gyro: list[tuple[float, float, float]] = []
+    acceleration: list[tuple[float, ...]] = []
+    gyro: list[tuple[float, ...]] = []
     with Path(path).open(encoding="utf-8-sig", newline="") as stream:
         rows = csv.DictReader(stream, skipinitialspace=True)
         for row in rows:

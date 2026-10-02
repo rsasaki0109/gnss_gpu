@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 
@@ -73,7 +74,7 @@ _DIAGNOSTIC_CSV_COLUMNS = [
 def _zero_diagnostics(prns, code_phase_lags, n_iter, gain_schedule="constant"):
     prn_arr = np.asarray(list(prns), dtype=np.int32).ravel()
     n_ch = int(prn_arr.size)
-    diag = {
+    diag: dict[str, Any] = {
         key: np.zeros(n_ch, dtype=np.float64)
         for key in _DIAGNOSTIC_ARRAY_KEYS
     }
@@ -159,7 +160,8 @@ def refine_acquisition_code_lag_dll(
     Returns the refined lag in sample units, or the input lag if bindings
     are unavailable or the prompt correlation is near zero.
     """
-    out = refine_acquisition_code_lags_dll_batch(
+    # Without return_lock_metrics the batch helper returns only the lag array.
+    out = cast(np.ndarray, refine_acquisition_code_lags_dll_batch(
         signal_i,
         [prn],
         [code_phase_lag],
@@ -171,7 +173,7 @@ def refine_acquisition_code_lag_dll(
         pll_gain=pll_gain,
         correlator_spacing=correlator_spacing,
         gain_schedule=gain_schedule,
-    )
+    ))
     return float(out[0]) if out.size else float(code_phase_lag)
 
 
@@ -431,7 +433,7 @@ def refine_acquisition_code_lags_diagnostic_batch(
                     ch_list[k].carrier_phase += 1.0
 
     corr_f = _batch_correlate(sig, ch_list, n_ch, n_samples, cfg).reshape(n_ch, 6)
-    diag = {
+    diag: dict[str, Any] = {
         key: np.empty(n_ch, dtype=np.float64)
         for key in _DIAGNOSTIC_ARRAY_KEYS
     }

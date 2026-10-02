@@ -4,6 +4,8 @@ Inspired by MegaParticles (Koide et al., ICRA 2024) but applied to GNSS
 pseudorange-based positioning with 1M+ particles on GPU.
 """
 
+from typing import cast
+
 import numpy as np
 
 from gnss_gpu.backends import backend_unavailable, is_missing_optional_module
@@ -202,8 +204,8 @@ class ParticleFilter:
                 self._px, self._py, self._pz, self._pcb,
                 self._log_weights, self.n_particles, self.seed)
 
-        # After resampling, reset to uniform weights
-        self._log_weights[:] = 0.0
+        # After resampling, reset to uniform weights (allocated by initialize())
+        cast(np.ndarray, self._log_weights)[:] = 0.0
 
     def estimate(self):
         """Compute weighted mean position.

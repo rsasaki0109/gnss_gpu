@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import Any, Iterable, cast
 
 from gnss_gpu.pf_smoother_forward_context import PfSmootherForwardPassContext
 from gnss_gpu.pf_smoother_forward_epoch import process_pf_smoother_forward_epoch
@@ -10,7 +11,9 @@ from gnss_gpu.pf_smoother_forward_epoch import process_pf_smoother_forward_epoch
 
 def run_pf_smoother_forward_pass(context: PfSmootherForwardPassContext) -> float:
     t0 = time.perf_counter()
-    for sol_epoch, measurements in context.dataset.epochs:
+    # RunDataset.epochs holds the (sol_epoch, measurements) pairs from libgnsspp.
+    epochs = cast("Iterable[tuple[Any, list[Any]]]", context.dataset.epochs)
+    for sol_epoch, measurements in epochs:
         if not sol_epoch.is_valid() or len(measurements) < 4:
             continue
         if context.history.reached_limit(

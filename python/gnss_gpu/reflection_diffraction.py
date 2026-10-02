@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, cast
 
 import numpy as np
 
@@ -42,7 +43,7 @@ def _as_satellites(sat_ecef) -> np.ndarray:
 def _edge_size(edges) -> int:
     size = getattr(edges, "size", None)
     if callable(size):
-        return int(size())
+        return int(cast(Any, size()))
     if size is not None:
         return int(size)
     return int(np.asarray(edges.start).shape[0])
@@ -343,7 +344,10 @@ def compute_reflection_diffraction_paths(
     if tris.shape[0] == 0:
         return [[] for _ in range(sats.shape[0])]
 
-    edge_start, edge_end, edge_midpoint, n_edge = _coerce_edges(edges)
+    # edges is not None here, so _coerce_edges returns arrays.
+    edge_start, edge_end, edge_midpoint, n_edge = cast(
+        "tuple[np.ndarray, np.ndarray, np.ndarray, int]", _coerce_edges(edges)
+    )
     if n_edge == 0:
         return [[] for _ in range(sats.shape[0])]
 

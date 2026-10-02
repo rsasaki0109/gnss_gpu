@@ -4,6 +4,8 @@ Provides tropospheric (Saastamoinen) and ionospheric (Klobuchar) delay
 correction, with GPU-accelerated batch processing.
 """
 
+from typing import cast
+
 import numpy as np
 
 try:
@@ -62,7 +64,8 @@ def _rx_lla_array(name, rx_lla):
 def _sat_angles(name, label, values, single_epoch, n_epoch):
     values = _array(f"{name}: {label}", values)
     if single_epoch and values.ndim == 0:
-        values = values.reshape(1)
+        # Keep the generic ndarray type so the 2-D branch can index shape[1].
+        values = cast(np.ndarray, values.reshape(1))
 
     if single_epoch:
         if values.ndim != 1:
@@ -145,8 +148,10 @@ def _iono_klobuchar_cpu(alpha, beta, lat, lon, az, el, gps_time):
     x = 2.0 * PI * (t - 50400.0) / PER
 
     if np.isscalar(x):
-        if abs(x) < 1.57:
-            Tiono = F * (5.0e-9 + AMP * (1.0 - x**2 / 2.0 + x**4 / 24.0))
+        # np.isscalar's TypeGuard widens x to generic | str | bytes; it is a float here.
+        x_scalar = cast(float, x)
+        if abs(x_scalar) < 1.57:
+            Tiono = F * (5.0e-9 + AMP * (1.0 - x_scalar**2 / 2.0 + x_scalar**4 / 24.0))
         else:
             Tiono = F * 5.0e-9
     else:

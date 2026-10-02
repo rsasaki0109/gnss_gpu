@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 import math
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 
 import numpy as np
 
@@ -966,7 +966,10 @@ def build_ambiguity_layout(
             else:
                 n0 = float(dd[row])
             amb_idx = len(initial)
-            bank_est = ambiguity_bank.get(pair_key) if use_bank else None
+            # use_bank implies ambiguity_bank is not None.
+            bank_est = (
+                cast(TcAmbiguityBank, ambiguity_bank).get(pair_key) if use_bank else None
+            )
             if bank_est is not None:
                 n0 = float(bank_est.value)
                 cross_window_priors[amb_idx] = (

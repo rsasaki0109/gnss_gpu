@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -10,6 +11,12 @@ from gnss_gpu.pf_device_config import clone_pf_device_init_kwargs
 
 
 class ParticleFilterDeviceSmootherMixin:
+    if TYPE_CHECKING:
+        # Provided by ParticleFilterDeviceRuntime in ParticleFilterDevice.
+        sigma_pr: float
+
+        def estimate(self) -> np.ndarray: ...
+
     def enable_smoothing(self):
         """Enable epoch storage for offline forward-backward smoothing.
 

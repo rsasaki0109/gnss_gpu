@@ -15,7 +15,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, cast
 
 import numpy as np
 
@@ -479,7 +479,10 @@ class UrbanNavLoader:
             return None
         if systems is None:
             return read_nav_rinex(path)
-        return read_nav_rinex_multi(path, systems=systems)
+        return cast(
+            "dict[int | str, list[NavMessage]]",
+            read_nav_rinex_multi(path, systems=systems),
+        )
 
     def load_experiment_data(
         self,
@@ -602,10 +605,14 @@ class UrbanNavLoader:
             if len(sat_id_list) < 4:
                 continue
 
-            sat_ecef, sat_clk, used_sat_ids = eph.compute(
-                tow,
-                sat_id_list,
-                obs_codes=obs_code_list,
+            # Ephemeris echoes back the string satellite IDs it was given.
+            sat_ecef, sat_clk, used_sat_ids = cast(
+                "tuple[np.ndarray, np.ndarray, list[str]]",
+                eph.compute(
+                    tow,
+                    cast("list[int | str]", sat_id_list),
+                    obs_codes=obs_code_list,
+                ),
             )
             if len(used_sat_ids) < 4:
                 continue
