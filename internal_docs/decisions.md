@@ -754,6 +754,17 @@
 
 未決定: この負の結果を踏まえた pivot 先（OSS/ベンチマーク公開、学習誤差モデル、GSDC/PPC の伸びしろ）。候補の整理は末尾「現在の未決定事項」を参照。
 
+## D-038: `experiments/gsdc2023_*` 共有モジュールは今はパッケージ化しない
+
+決定: 保留（現状維持）。40 個の共有モジュール（`experiments/gsdc2023_*.py`、計 19,737 行）を `experiments/gsdc2023/` パッケージへ移す作業は行わない。D-001 に従い `python/gnss_gpu/` にも入れない。
+
+判断材料（2026-10-03 計測）:
+- 参照: tests / experiments から 335 import 文（ほぼ全て `experiments.gsdc2023_xxx` 形式）、107 本の `*_gsdc2023_*` スクリプト。
+- tests は `import experiments.gsdc2023_raw_bridge as raw_bridge` 等のモジュールオブジェクトへ `monkeypatch.setattr` を 17 か所行っている。旧パスに re-export shim を置いて移動すると、patch は shim の属性だけを書き換え実装側に効かず、テストが無言で空振りし得る。安全に移すには 335 import の一括書き換えが必要。
+- GSDC トラックは 2026-06 中旬以降ほぼ休眠（最終の機能 commit は 2026-07-02 の DD-carrier gate、best は v13 public 3.224 / private 3.783 m のまま）。移動の便益（発見性）に対し、churn と blame 断絶のコストが勝つ。
+
+再開条件: GSDC トラックを再開するとき、または gsdc2023 モジュールを experiments 外（ライブラリ・別ツール）から使う必要が出たとき。その場合は shim ではなく import の一括書き換え＋ monkeypatch 対象の確認を 1 PR で行う。
+
 ## 現在の未決定事項
 
 棚卸し: 2026-09-26。旧リストの各項目を「解決済み / 休眠 / 未決定」に分類した。解決済み・休眠の項目は、再開条件が満たされるまで議論しない。
