@@ -1,5 +1,9 @@
 # 意思決定ログ
 
+> これは研究用の完全な意思決定ログ。README からリンクしているのは公開向けの要約
+> [`docs/decisions.md`](../docs/decisions.md)（README の公開 contract に関わる判断のみ）。
+> 両ファイルの D 番号は独立しており一致しない。他文書の素の D 番号（D-037 など）はこのファイルを指す。
+
 ## D-001: observation policy を core に入れない
 
 状態: 採用

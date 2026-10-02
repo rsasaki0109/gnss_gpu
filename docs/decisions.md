@@ -1,5 +1,12 @@
 # Decision Log
 
+> Two decision logs exist. This file is the short, public, README-facing log.
+> The full research log (D-001 … D-037 with negative results and the open
+> question list) is [`internal_docs/decisions.md`](../internal_docs/decisions.md).
+> The two files number their entries independently: `D-001` here is not
+> `D-001` there. Other docs that cite a bare D-number (e.g. D-037) mean the
+> internal log.
+
 This file records current README-facing design decisions. Exploratory PPC and
 GSDC chronology remains under `internal_docs/`.
 
