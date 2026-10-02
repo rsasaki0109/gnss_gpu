@@ -1,0 +1,45 @@
+name: Full Test Suite
+
+# The PR-gating CI jobs run curated smoke subsets only. This workflow runs the
+# whole tests/ tree on a CPU runner so failures outside those subsets surface
+# within a day instead of accumulating (46 had built up unnoticed by
+# 2026-10-02). Environment-dependent tests skip with a reason; known drift is
+# strict xfail, so any failure here is a regression.
+
+on:
+  schedule:
+    - cron: "0 18 * * *"  # 03:00 JST
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/full-suite.yml
+      - scripts/ci/requirements-full-suite.txt
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-suite-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  pytest-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scripts/ci/requirements-full-suite.txt
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r scripts/ci/requirements-full-suite.txt
+      - name: Run full pytest suite
+        env:
+          PYTHONPATH: "python:."
+        run: python -m pytest tests -q -rfE --durations=25
