@@ -43,7 +43,7 @@ def _csv_header_and_row_count(path: Path) -> tuple[list[str], int]:
 
 def _trip_from_writer_path(export_dir: Path, path: Path) -> str:
     relative = path.relative_to(export_dir)
-    return str(relative.parent)
+    return relative.parent.as_posix()
 
 
 def build_writer_regression_manifest(export_dir: Path) -> dict[str, Any]:

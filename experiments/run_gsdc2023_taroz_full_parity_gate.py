@@ -44,7 +44,7 @@ DEFAULT_OUTPUT_JSON = Path("experiments/results/taroz_imu_state_parity_summary_2
 
 
 def default_summary_specs() -> list[str]:
-    return [f"{label}={path}" for label, path in DEFAULT_SUMMARIES]
+    return [f"{label}={path.as_posix()}" for label, path in DEFAULT_SUMMARIES]
 
 
 def run_gate(

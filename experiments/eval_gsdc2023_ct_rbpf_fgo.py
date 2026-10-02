@@ -38,7 +38,7 @@ def discover_train_trips(data_root: Path) -> list[str]:
         if not phone_dir.is_dir():
             continue
         if (phone_dir / "device_gnss.csv").exists() and (phone_dir / "ground_truth.csv").exists():
-            trips.append(str(phone_dir.relative_to(data_root)))
+            trips.append(phone_dir.relative_to(data_root).as_posix())
     return trips
 
 

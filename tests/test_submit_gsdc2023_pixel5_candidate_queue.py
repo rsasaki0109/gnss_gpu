@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from pathlib import Path
+import shlex
 import subprocess
+import sys
 
 import pytest
 
 from experiments.submit_gsdc2023_pixel5_candidate_queue import (
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_TAG,
     PENDING_QUEUE,
     assert_matlab_equivalence_gate,
     assert_matlab_final_reproduction_gate,
@@ -126,14 +131,33 @@ def test_kaggle_submit_command() -> None:
     ]
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _dry_run_candidates_present(group: str) -> bool:
+    # Candidate CSVs live under gitignored experiments/results/*/ workspaces.
+    return all(
+        (ROOT / candidate_submission_path(item.candidate, DEFAULT_OUTPUT_DIR, DEFAULT_TAG)).is_file()
+        for item in selected_queue({group})
+    )
+
+
+@pytest.mark.skipif(
+    not _dry_run_candidates_present("mtv_sjc_trip_ablation"),
+    reason="local GSDC2023 candidate CSVs not present",
+)
 def test_dry_run_shell_quotes_submission_message() -> None:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "python"), str(ROOT)])
     completed = subprocess.run(
         [
-            "python3",
+            sys.executable,
             "experiments/submit_gsdc2023_pixel5_candidate_queue.py",
             "--group",
             "mtv_sjc_trip_ablation",
         ],
+        cwd=ROOT,
+        env=env,
         check=True,
         text=True,
         capture_output=True,
@@ -1128,10 +1152,10 @@ def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
 
     doc = doc_path.read_text(encoding="utf-8")
     assert "--prepare-ready-report" in doc
-    assert f"--build-summary {tmp_path / 'build_summary.json'}" in doc
+    assert f"--build-summary {shlex.quote(str(tmp_path / 'build_summary.json'))}" in doc
     assert "--previous-tag old" in doc
-    assert f"--matlab-equivalence-summary {tmp_path / 'matlab_summary.json'}" in doc
-    assert f"--matlab-final-reproduction-summary {tmp_path / 'matlab_final_reproduction_summary.json'}" in doc
+    assert f"--matlab-equivalence-summary {shlex.quote(str(tmp_path / 'matlab_summary.json'))}" in doc
+    assert f"--matlab-final-reproduction-summary {shlex.quote(str(tmp_path / 'matlab_final_reproduction_summary.json'))}" in doc
     assert "--require-matlab-equivalence" in doc
     assert "--require-matlab-final-reproduction" in doc
     assert "--cached-summary" in doc
@@ -1143,7 +1167,7 @@ def test_write_submit_readiness_doc_uses_report_values(tmp_path) -> None:
     assert "--require-csv-writer-exports" in doc
     assert "## Duplicate SHA Guard" in doc
     assert "--fail-on-duplicate-sha" in doc
-    assert f"--duplicate-sha-root {tmp_path}" in doc
+    assert f"--duplicate-sha-root {shlex.quote(str(tmp_path))}" in doc
     assert "MATLAB equivalence: `matlab_equivalent`" in doc
     assert "## Validate MATLAB Final Reproduction" in doc
     assert "reproduce_gsdc2023_matlab_reference_final.py" in doc

@@ -21,6 +21,24 @@ from gnss_gpu.io.citygml import (
 from gnss_gpu.io.plateau import PlateauLoader, load_plateau
 from gnss_gpu.raytrace import BuildingModel
 
+
+def _egm96_available() -> bool:
+    try:
+        from gnss_gpu.io.plateau import _make_egm96_lookup
+
+        _make_egm96_lookup()
+    except (ImportError, RuntimeError):  # pyproj.exceptions.ProjError is a RuntimeError
+        return False
+    return True
+
+
+# PlateauLoader defaults to geoid_correction="egm96", which needs pyproj plus
+# the egm96_15.gtx grid; not every pyproj install ships it.
+requires_egm96 = pytest.mark.skipif(
+    not _egm96_available(),
+    reason="default geoid_correction='egm96' needs pyproj with the egm96_15.gtx grid",
+)
+
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
@@ -324,6 +342,7 @@ class TestBridgeLoaderIntegration:
         os.rename(citygml_file, renamed)
         return directory
 
+    @requires_egm96
     def test_directory_loader_skips_bridges_by_default(
         self, citygml_file, bridge_citygml_file
     ):
@@ -335,6 +354,7 @@ class TestBridgeLoaderIntegration:
         bridges_only = load_plateau(bridge_citygml_file, zone=9)
         assert bridges_only.triangles.shape[0] >= 2
 
+    @requires_egm96
     def test_include_bridges_alias_matches_kinds(
         self, citygml_file, bridge_citygml_file
     ):
@@ -343,11 +363,13 @@ class TestBridgeLoaderIntegration:
         via_alias = load_plateau(directory, zone=9, include_bridges=True)
         assert via_kinds.triangles.shape == via_alias.triangles.shape
 
+    @requires_egm96
     def test_unsupported_kind_in_loader_raises(self, citygml_file, bridge_citygml_file):
         directory = self._stage(citygml_file, bridge_citygml_file)
         with pytest.raises(ValueError):
             load_plateau(directory, zone=9, kinds=("bldg", "tran"))
 
+    @requires_egm96
     def test_include_bridges_false_with_brid_in_kinds_warns(
         self, citygml_file, bridge_citygml_file
     ):
@@ -370,6 +392,7 @@ class TestBridgeLoaderIntegration:
 
 class TestCoordinateConversion:
 
+    @requires_egm96
     def test_gauss_kruger_roundtrip_origin(self):
         """At the zone origin, y=0 and x=0 should map back to the origin."""
         loader = PlateauLoader(zone=9)
@@ -379,6 +402,7 @@ class TestCoordinateConversion:
         assert abs(np.degrees(lat) - 36.0) < 1e-8
         assert abs(np.degrees(lon) - 139.83333) < 1e-4
 
+    @requires_egm96
     def test_tokyo_station_approximate(self):
         """Verify that coordinates near Tokyo Station produce sensible ECEF.
 
@@ -403,6 +427,7 @@ class TestCoordinateConversion:
         assert abs(lat_deg - 35.68) < 0.05, f"lat={lat_deg}"
         assert abs(lon_deg - 139.77) < 0.05, f"lon={lon_deg}"
 
+    @requires_egm96
     def test_lla_to_ecef_known_point(self):
         """Check ECEF conversion for a known point.
 
@@ -571,6 +596,7 @@ class TestTriangulation:
 
 class TestPlateauLoader:
 
+    @requires_egm96
     def test_load_inline_citygml(self, citygml_file):
         """Load minimal CityGML and produce a BuildingModel."""
         loader = PlateauLoader(zone=9)
@@ -579,6 +605,7 @@ class TestPlateauLoader:
         # 2 polygons, each a quad => 2 * 2 = 4 triangles
         assert model.triangles.shape == (4, 3, 3)
 
+    @requires_egm96
     def test_load_geographic_citygml(self, geographic_citygml_file):
         """Geographic lat/lon PLATEAU exports should map near Tokyo Station."""
         loader = PlateauLoader(zone=9)
@@ -590,6 +617,7 @@ class TestPlateauLoader:
         first_vertex = model.triangles[0, 0]
         assert np.linalg.norm(first_vertex - expected) < 5.0
 
+    @requires_egm96
     def test_load_sample_plateau_file(self, sample_gml_path):
         """Load the shipped sample PLATEAU GML file."""
         if not os.path.exists(sample_gml_path):
@@ -601,6 +629,7 @@ class TestPlateauLoader:
         assert model.triangles.shape[0] == 36
         assert model.triangles.shape[1:] == (3, 3)
 
+    @requires_egm96
     def test_load_directory(self, tmp_path):
         """Load from a directory containing one GML file."""
         gml = tmp_path / "building.gml"
@@ -611,22 +640,26 @@ class TestPlateauLoader:
         assert isinstance(model, BuildingModel)
         assert model.triangles.shape[0] > 0
 
+    @requires_egm96
     def test_load_directory_no_files(self, tmp_path):
         loader = PlateauLoader(zone=9)
         with pytest.raises(FileNotFoundError):
             loader.load_directory(tmp_path)
 
+    @requires_egm96
     def test_convenience_function_file(self, citygml_file):
         model = load_plateau(citygml_file, zone=9)
         assert isinstance(model, BuildingModel)
         assert model.triangles.shape[0] > 0
 
+    @requires_egm96
     def test_convenience_function_directory(self, tmp_path):
         gml = tmp_path / "a.gml"
         gml.write_text(MINIMAL_CITYGML, encoding="utf-8")
         model = load_plateau(tmp_path, zone=9)
         assert isinstance(model, BuildingModel)
 
+    @requires_egm96
     def test_ecef_output_reasonable(self, sample_gml_path):
         """ECEF coordinates near Tokyo should have magnitude ~6.37e6 m."""
         if not os.path.exists(sample_gml_path):

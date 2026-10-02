@@ -31,11 +31,13 @@ def _generate_satellites(n_sat=4):
     ], dtype=np.float64)[:n_sat]
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_pf_device_init_rejects_invalid_particle_count():
     with pytest.raises(ValueError, match="n_particles must be >= 1"):
         ParticleFilterDevice(n_particles=0)
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_pf_device_init_rejects_nonpositive_sigmas():
     with pytest.raises(ValueError, match="sigma_pos must be positive"):
         ParticleFilterDevice(n_particles=100, sigma_pos=0.0)
@@ -43,6 +45,7 @@ def test_pf_device_init_rejects_nonpositive_sigmas():
         ParticleFilterDevice(n_particles=100, sigma_cb=np.inf)
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_pf_device_initialize_rejects_invalid_position_before_native_call():
     pf = ParticleFilterDevice(n_particles=100)
 
@@ -54,6 +57,7 @@ def test_pf_device_initialize_rejects_invalid_position_before_native_call():
         pf.initialize([0.0, 0.0, 0.0], spread_pos=0.0)
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_pf_device_predict_rejects_invalid_dt_before_native_call():
     pf = ParticleFilterDevice(n_particles=100)
     pf.initialize(np.array([1.0, 2.0, 3.0]))
@@ -64,6 +68,7 @@ def test_pf_device_predict_rejects_invalid_dt_before_native_call():
         pf.predict(dt=np.nan)
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_pf_device_update_rejects_invalid_inputs_before_native_call():
     pf = ParticleFilterDevice(n_particles=100)
     pf.initialize(np.array([1.0, 2.0, 3.0]))
@@ -194,6 +199,7 @@ def test_pf_device_joint_dd_update_matches_sequential_updates(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_set_velocity_covariance_rejects_before_initialize():
     pf = ParticleFilterDevice(n_particles=64)
     with pytest.raises(RuntimeError, match="not initialized"):

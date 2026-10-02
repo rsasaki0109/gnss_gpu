@@ -60,7 +60,7 @@ def _csv_header_and_row_count(path: Path) -> tuple[list[str], int]:
 
 def _trip_from_writer_path(export_dir: Path, path: Path) -> str:
     relative = path.relative_to(export_dir)
-    parent = str(relative.parent)
+    parent = relative.parent.as_posix()
     return "." if parent == "." else parent
 
 

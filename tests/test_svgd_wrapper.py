@@ -6,6 +6,16 @@ import pytest
 from gnss_fixtures import generate_satellites
 from gnss_gpu.svgd import SVGDParticleFilter
 
+try:
+    import gnss_gpu._gnss_gpu_pf  # noqa: F401
+    import gnss_gpu._gnss_gpu_svgd  # noqa: F401
+    HAS_GPU = True
+except ImportError:
+    HAS_GPU = False
+
+# SVGDParticleFilter.__init__ imports the native modules before validating.
+pytestmark = pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+
 
 def test_svgd_init_rejects_invalid_config():
     with pytest.raises(ValueError, match="n_particles must be positive"):
