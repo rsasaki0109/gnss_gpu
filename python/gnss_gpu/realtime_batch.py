@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
+# numba's CUDA API (JIT intrinsics, kernel[grid, block] launches, dtype
+# arguments) is not expressible to pyright, so treat the module as Any.
+cuda: Any
 try:
     from numba import cuda
 except ImportError:  # pragma: no cover - exercised on minimal installs

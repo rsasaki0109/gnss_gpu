@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import numpy as np
 
 from gnss_gpu.pf_smoother_common import finite_float as _finite_float
@@ -27,7 +29,7 @@ def _diagnostic_int_at_most(row: dict[str, object], key: str, max_value: int) ->
     if value is None:
         return False
     try:
-        return int(value) <= int(max_value)
+        return int(cast(Any, value)) <= int(max_value)
     except (TypeError, ValueError):
         return False
 
@@ -76,13 +78,13 @@ def _apply_smoother_tail_guard(
             dd_cp_kept = row.get("dd_cp_kept_pairs")
             conds.append(
                 dd_cp_kept is not None
-                and int(dd_cp_kept) <= int(dd_carrier_max_pairs)
+                and int(cast(int, dd_cp_kept)) <= int(dd_carrier_max_pairs)
             )
         if dd_pseudorange_max_pairs is not None:
             dd_pr_kept = row.get("dd_pr_kept_pairs")
             conds.append(
                 dd_pr_kept is not None
-                and int(dd_pr_kept) <= int(dd_pseudorange_max_pairs)
+                and int(cast(int, dd_pr_kept)) <= int(dd_pseudorange_max_pairs)
             )
         if min_shift_m is not None:
             conds.append(float(shift_m[i]) >= float(min_shift_m))

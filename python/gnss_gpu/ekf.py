@@ -16,6 +16,8 @@ into a single class is deferred: behaviour parity is tested via ``tests/test_ekf
 and ``tests/test_ekf_wrapper.py``, not by merging implementations.
 """
 
+from typing import Any
+
 import numpy as np
 
 from gnss_gpu.input_validation import (
@@ -90,7 +92,9 @@ class EKFPositioner:
                 'sigma_pr': sigma_pr,
             }
         self.sigma_pr = sigma_pr
-        self.state = None
+        # _NativeState or _PureState once initialize() runs; the backend is
+        # chosen at runtime, so the attribute is typed loosely.
+        self.state: Any = None
         self.initialized = False
 
     def initialize(self, position_ecef, clock_bias=0.0,

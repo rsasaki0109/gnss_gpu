@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
@@ -76,9 +77,11 @@ def compute_dd_carrier_observation(
             low_ess_max_spread_m=config.gate_low_ess_max_spread_m,
             low_ess_require_no_dd_pr=config.gate_low_ess_require_no_dd_pr,
         )
+        # The epoch gate state always provides a PF estimate when DD carrier
+        # is enabled, which is the only way ``result`` is non-None here.
         result, gate_stats = gate_dd_carrier(
             result,
-            pf_estimate,
+            cast(np.ndarray, pf_estimate),
             pair_afv_max_cycles=config.gate_afv_cycles,
             adaptive_pair_floor_cycles=config.gate_adaptive_floor_cycles,
             adaptive_pair_mad_mult=config.gate_adaptive_mad_mult,

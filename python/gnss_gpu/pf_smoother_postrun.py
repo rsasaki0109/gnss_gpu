@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -179,6 +179,7 @@ def _apply_smoother_postprocesses(
         n_wl_forward_guard_applied = 0
     result["n_widelane_forward_guard_applied"] = int(n_wl_forward_guard_applied)
 
+    stop_segment_info: dict[str, Any]
     if smoother_config.stop_segment_constant:
         smoothed_aligned, stop_segment_info = _apply_stop_segment_constant_position(
             smoothed_aligned,
@@ -203,6 +204,7 @@ def _apply_smoother_postprocesses(
         stop_segment_info.get("epochs_applied", 0)
     )
 
+    static_info: dict[str, Any]
     if getattr(smoother_config, "stop_segment_static_gnss", False):
         aligned_dd_carrier = [buffers.stored_dd_carrier[i] for i in buffers.aligned_indices]
         aligned_dd_pr = [buffers.stored_dd_pseudorange[i] for i in buffers.aligned_indices]
@@ -299,7 +301,7 @@ def _apply_optional_local_fgo(
 
 
 def _print_local_fgo_info(
-    fgo_info: dict[str, object],
+    fgo_info: dict[str, Any],
     print_func: Callable[[str], None],
 ) -> None:
     if not fgo_info.get("applied"):
@@ -318,8 +320,8 @@ def _print_local_fgo_info(
     if stage1:
         if stage1.get("applied"):
             stage_text = (
-                f" stage1={float(stage1.get('initial_error')):.2f}"
-                f"->{float(stage1.get('final_error')):.2f}"
+                f" stage1={float(cast(float, stage1.get('initial_error'))):.2f}"
+                f"->{float(cast(float, stage1.get('final_error'))):.2f}"
             )
         else:
             stage_text = f" stage1_skipped={stage1.get('reason')}"
@@ -330,8 +332,8 @@ def _print_local_fgo_info(
         f"motion={fgo_info.get('motion_source')}"
         f"/tdcp={fgo_info.get('motion_tdcp_selected_edges', 0)} "
         f"factors={fgo_info.get('factor_counts')} "
-        f"error={float(fgo_info.get('initial_error')):.2f}"
-        f"->{float(fgo_info.get('final_error')):.2f}"
+        f"error={float(cast(float, fgo_info.get('initial_error'))):.2f}"
+        f"->{float(cast(float, fgo_info.get('final_error'))):.2f}"
         f"{stage_text}"
         f"{lambda_text}"
     )

@@ -8,8 +8,10 @@ import numpy as np
 
 @dataclass(frozen=True)
 class ResidualSample:
-    epoch: int
-    prn: str
+    # recorder.py stores epoch indices and sat-id strings; real_residuals.py
+    # stores epoch times and integer PRNs.
+    epoch: int | float
+    prn: str | int
     residual_m: float
     elevation_rad: float
     azimuth_rad: float

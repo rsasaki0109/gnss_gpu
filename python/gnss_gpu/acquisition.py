@@ -60,7 +60,7 @@ def _as_prn_array(prn_list):
 class Acquisition:
     """Parallel code-phase / Doppler search for GPS C/A signals."""
 
-    def __init__(self, sampling_freq, intermediate_freq=0,
+    def __init__(self, sampling_freq, intermediate_freq: float = 0,
                  doppler_range=5000, doppler_step=500, threshold=2.5):
         self.sampling_freq = positive_float("sampling_freq", sampling_freq)
         self.intermediate_freq = finite_float("intermediate_freq", intermediate_freq)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 from numbers import Real
-from typing import Iterable
+from typing import Iterable, cast
 
 import numpy as np
 
@@ -18,7 +18,8 @@ from gnss_gpu.validation.residuals import ResidualSample
 
 def prn_to_int(prn) -> int:
     if isinstance(prn, Real) and not isinstance(prn, bool):
-        return int(prn)
+        # The numbers.Real stub has no __int__, but every concrete Real does.
+        return int(cast(float, prn))
 
     if isinstance(prn, str):
         # First run of digits anywhere; handles "G01", "E12", "G 5" (RINEX

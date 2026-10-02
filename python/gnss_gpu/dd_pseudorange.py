@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 
 import numpy as np
 
@@ -564,9 +564,11 @@ class DDPseudorangeComputer:
                     )
                 if len(selected_sats) < 2:
                     continue
+                # The selectors only return None codes together with an empty
+                # satellite list, so both codes are set here.
                 for sat_id in selected_sats:
-                    rover_pr[sat_id] = float(rover_obs[sat_id][rover_code])
-                    base_pr[sat_id] = float(base_obs[sat_id][base_code])
+                    rover_pr[sat_id] = float(rover_obs[sat_id][cast(str, rover_code)])
+                    base_pr[sat_id] = float(base_obs[sat_id][cast(str, base_code)])
         else:
             for sat_id, sat_obs in base_obs.items():
                 pr = _pick_single_obs_value(sat_id[0], sat_obs, self._pseudorange_code)

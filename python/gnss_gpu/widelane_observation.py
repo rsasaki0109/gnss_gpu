@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
@@ -91,7 +92,7 @@ def compute_widelane_observation(
         max_pair_residual_m=config.gate_max_pair_residual_m,
         min_pairs=min_pairs,
     )
-    gate_pair_rejected = int(gate_info.get("pair_rejected") or 0)
+    gate_pair_rejected = int(cast(int, gate_info.get("pair_rejected") or 0))
     if gated_result is None or int(getattr(gated_result, "n_dd", 0)) < int(min_pairs):
         return WidelaneObservationDecision(
             dd_pseudorange_result=None,
