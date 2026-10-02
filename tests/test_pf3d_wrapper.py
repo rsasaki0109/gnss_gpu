@@ -6,6 +6,16 @@ import pytest
 from gnss_gpu.particle_filter_3d import ParticleFilter3D
 from gnss_gpu.raytrace import BuildingModel
 
+try:
+    import gnss_gpu._gnss_gpu_pf  # noqa: F401
+    import gnss_gpu._gnss_gpu_pf3d  # noqa: F401
+    HAS_GPU = True
+except ImportError:
+    HAS_GPU = False
+
+# ParticleFilter3D.__init__ creates the native particle filter.
+pytestmark = pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+
 
 def _make_box_building():
     return BuildingModel.create_box(

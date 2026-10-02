@@ -128,7 +128,7 @@ def test_platform_metadata_falls_back_without_wmi_or_platform_probe(monkeypatch)
     monkeypatch.setattr(cli.platform, "machine", fail_probe)
     monkeypatch.delenv("PROCESSOR_ARCHITEW6432", raising=False)
     monkeypatch.delenv("PROCESSOR_ARCHITECTURE", raising=False)
-    monkeypatch.setattr(cli.sys, "getwindowsversion", fail_probe)
+    monkeypatch.setattr(cli.sys, "getwindowsversion", fail_probe, raising=False)
     assert cli._safe_platform_info() == "Windows-unknown-unknown"
     manifest = cli.build_run_manifest(
         preset="signal-acquisition",

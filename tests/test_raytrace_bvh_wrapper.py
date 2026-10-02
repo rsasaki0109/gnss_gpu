@@ -6,6 +6,17 @@ import pytest
 from gnss_gpu.bvh import BVHAccelerator
 from gnss_gpu.raytrace import BuildingModel
 
+try:
+    import gnss_gpu._raytrace  # noqa: F401
+    HAS_RAYTRACE_GPU = True
+except ImportError:
+    HAS_RAYTRACE_GPU = False
+try:
+    import gnss_gpu._bvh  # noqa: F401
+    HAS_BVH_GPU = True
+except ImportError:
+    HAS_BVH_GPU = False
+
 
 def test_building_model_rejects_invalid_triangles():
     with pytest.raises(ValueError, match="triangles must have shape"):
@@ -14,6 +25,7 @@ def test_building_model_rejects_invalid_triangles():
         BuildingModel(np.array([[[0, 0, 0], [1, 0, 0], [np.nan, 1, 0]]]))
 
 
+@pytest.mark.skipif(not HAS_RAYTRACE_GPU, reason="CUDA module not available")
 def test_building_model_rejects_invalid_los_inputs():
     model = BuildingModel.create_box(center=[0, 0, 5], width=10, depth=10, height=10)
     sat = np.array([[0.0, 0.0, 2.0e7]], dtype=np.float64)
@@ -44,6 +56,7 @@ def test_building_model_allows_empty_mesh_for_open_sky():
     assert bool(is_los[0])
 
 
+@pytest.mark.skipif(not HAS_BVH_GPU, reason="CUDA module not available")
 def test_bvh_check_los_rejects_invalid_inputs():
     bvh = BVHAccelerator.from_building_model(
         BuildingModel.create_box(center=[100, 0, 25], width=20, depth=20, height=50)
@@ -58,6 +71,7 @@ def test_bvh_check_los_rejects_invalid_inputs():
         bvh.check_los([np.inf, 0, 0], sat)
 
 
+@pytest.mark.skipif(not HAS_BVH_GPU, reason="CUDA module not available")
 def test_bvh_batch_rejects_empty_epoch():
     bvh = BVHAccelerator.from_building_model(
         BuildingModel.create_box(center=[100, 0, 25], width=20, depth=20, height=50)

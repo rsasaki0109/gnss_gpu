@@ -12,6 +12,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 import numpy as np
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +66,7 @@ def test_build_full_argv_includes_wp6_winner_base_before_candidate_args() -> Non
     assert argv[-2:] == ["--nlos-weight-mode", "two-tier"]
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="WSL path mapping runs on a Windows host")
 def test_build_full_argv_inserts_nlos_weights_before_candidate_args() -> None:
     argv = build_full_argv(
         gnss_solve_path=Path("C:/gnss/gnss_solve"),

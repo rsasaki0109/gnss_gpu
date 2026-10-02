@@ -1455,6 +1455,8 @@ def test_run_wls_relabels_dual_frequency_clock_kinds_above_solver_range(monkeypa
 
 
 def test_run_wls_falls_back_when_active_kinds_exceed_solver_capacity(monkeypatch):
+    # The fallback path is the native WLS solver.
+    pytest.importorskip("gnss_gpu._gnss_gpu", reason="CUDA module not available")
     class ExplodingSolver:
         def __init__(self, systems, max_iter, tol):
             raise AssertionError("MultiGNSSSolver must not be constructed")

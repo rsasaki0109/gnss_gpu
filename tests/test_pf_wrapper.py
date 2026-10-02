@@ -6,6 +6,12 @@ import pytest
 from gnss_fixtures import generate_satellites
 from gnss_gpu.particle_filter import ParticleFilter
 
+try:
+    import gnss_gpu._gnss_gpu_pf  # noqa: F401
+    HAS_GPU = True
+except ImportError:
+    HAS_GPU = False
+
 
 def test_pf_init_rejects_invalid_config_before_native_call():
     with pytest.raises(ValueError, match="n_particles must be a positive integer"):
@@ -22,6 +28,7 @@ def test_pf_init_rejects_invalid_config_before_native_call():
         ParticleFilter(resampling="invalid")
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_pf_initialize_rejects_invalid_position_before_native_call():
     pf = ParticleFilter(n_particles=100)
 
@@ -33,6 +40,7 @@ def test_pf_initialize_rejects_invalid_position_before_native_call():
         pf.initialize([0.0, np.nan, 0.0])
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_pf_initialize_rejects_invalid_spread_before_native_call():
     pf = ParticleFilter(n_particles=100)
     pos = np.array([1.0, 2.0, 3.0])
@@ -43,6 +51,7 @@ def test_pf_initialize_rejects_invalid_spread_before_native_call():
         pf.initialize(pos, spread_cb=np.inf)
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_pf_predict_rejects_invalid_dt_before_native_call():
     pf = ParticleFilter(n_particles=100)
     pf.initialize(np.array([1.0, 2.0, 3.0]))
@@ -53,6 +62,7 @@ def test_pf_predict_rejects_invalid_dt_before_native_call():
         pf.predict(dt=np.nan)
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_pf_predict_rejects_invalid_velocity_before_native_call():
     pf = ParticleFilter(n_particles=100)
     pf.initialize(np.array([1.0, 2.0, 3.0]))
@@ -63,6 +73,7 @@ def test_pf_predict_rejects_invalid_velocity_before_native_call():
         pf.predict(velocity=[1.0, np.nan, 3.0])
 
 
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
 def test_pf_update_rejects_invalid_inputs_before_native_call():
     pf = ParticleFilter(n_particles=100)
     pf.initialize(np.array([1.0, 2.0, 3.0]))
