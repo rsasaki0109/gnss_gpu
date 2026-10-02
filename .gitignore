@@ -116,3 +116,8 @@ experiments/results/*.m
 results/wp29/
 results/wp30/
 results/wp31/
+
+# pytest-cov output
+.coverage
+.coverage.*
+coverage.xml

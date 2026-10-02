@@ -42,4 +42,23 @@ jobs:
       - name: Run full pytest suite
         env:
           PYTHONPATH: "python:."
-        run: python -m pytest tests -q -rfE --durations=25
+        run: >-
+          python -m pytest tests -q -rfE --durations=25
+          --cov=gnss_gpu --cov-report=xml:coverage.xml --cov-report=term
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [ -f coverage.xml ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          root = ET.parse("coverage.xml").getroot()
+          print(f"**gnss_gpu line coverage: {100 * float(root.get('line-rate')):.1f}%** "
+                f"({root.get('lines-covered')}/{root.get('lines-valid')} lines)")
+          PY
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
