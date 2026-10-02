@@ -78,7 +78,7 @@
 7. `experiments/gsdc2023_*` cluster（`gsdc2023_raw_bridge.py` 4,419 行ほか、tests から多数 import）を `experiments/gsdc2023/` package にまとめるか判断する。D-001 に従い `python/gnss_gpu/` には入れない。
 8. §2 の残りの不整合: `benchmarks/RESULTS.md` の再計測と README 表記の統一。
 9. ~~`CONTRIBUTING.md` の lint 指示を CI に合わせる / decisions.md 2 本の関係を明記~~（2026-10-02 完了）。repo 全体の ruff（`ruff check .` で 554 件）を CI 対象に広げるかは未決定。
-10. CI: coverage（`pytest --cov`）と pyright basic を段階的に導入。self-hosted CUDA workflow に PF3D-BVH の短区間回帰を追加。
+10. CI: ~~coverage と pyright basic~~（2026-10-03 導入: full-suite に `--cov=gnss_gpu`（job summary + `coverage-xml` artifact）、PR gate の `typecheck` job で pyright basic を ratchet 方式で強制。`pyrightconfig.json` の exclude 71 ファイル（694 件）が負債、減らす一方）。残り: self-hosted CUDA workflow に PF3D-BVH の短区間回帰を追加。
 11. `tests/test_gsdc2023_gnss_log_reader.py` の bridge Doppler 2 件（strict xfail）。2026-05-07/08 の residual diagnostics 変更以降、fixture の期待値と実装の Doppler residual が一致しない（例: 期待 0.5、実際 -200.5）。実装の符号・clock drift 規約を確認して期待値を導出し直すか、実装側の回帰として直す。
 12. ~~full suite を CI で回す~~（2026-10-03 完了: `.github/workflows/full-suite.yml`、毎日 03:00 JST + `workflow_dispatch`、ubuntu-latest / ネイティブ拡張なし。依存は `scripts/ci/requirements-full-suite.txt` に固定）。PR gate にはしていない。
 

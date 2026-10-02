@@ -63,6 +63,10 @@ make -j"$(nproc)"
 
   If you touch a file in the PPC promotion-path list in `ci.yml`, also run
   `python -m ruff check <that file>` without the ignores.
+- **Type check**: CI runs `python -m pyright` (pinned `pyright==1.1.414`,
+  basic mode, config in `pyrightconfig.json`). Files listed under `exclude`
+  are pre-existing debt: when you clean one, remove it from the list; never
+  add a file to it.
 - **Keep PRs focused**: one logical change per PR. Don't bundle unrelated edits.
 - **Match the surrounding style**: comment density, naming, and idioms.
 
