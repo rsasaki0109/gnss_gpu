@@ -75,7 +75,7 @@
 ### エンジニアリング / docs
 
 6. **`experiments/exp_ppc_ctrbpf_fgo.py` の分割**（2026-10-03 第 1–2 段完了: 12,680 → 8,066 行）。I/O・CLI パース（`ppc_ctrbpf_io.py`）、`CTRBPFConfig` / `_config_variants`（`ppc_ctrbpf_config.py`）、RTK diag の gate / sort / run-index policy（`ppc_ctrbpf_rtkdiag.py`）を AST 同一のまま移動し、元モジュールから全名 re-export。第 2 段で `main` 冒頭の argparse 定義 797 行を `ppc_ctrbpf_cli._build_arg_parser()` へ移動（`--help` とデフォルト値が完全一致）。残り: `_run_ctrbpf_on_segment`（3,427 行）と `main` の run ループ（約 1,400 行、多数のローカルを共有）の内部分割、import 元 50 ファイルを新モジュール直参照へ移すか。引き続き「数値挙動を変えない」commit に限定する。
-7. `experiments/gsdc2023_*` cluster（`gsdc2023_raw_bridge.py` 4,419 行ほか、tests から多数 import）を `experiments/gsdc2023/` package にまとめるか判断する。D-001 に従い `python/gnss_gpu/` には入れない。
+7. ~~`experiments/gsdc2023_*` を package にまとめるか~~（2026-10-03 判断: 今は移さない。`decisions.md` D-038。335 import と 17 か所の module monkeypatch のため shim 移動は危険、GSDC 休眠中で便益が薄い）
 8. §2 の残りの不整合: `benchmarks/RESULTS.md` の再計測と README 表記の統一。
 9. ~~`CONTRIBUTING.md` の lint 指示を CI に合わせる / decisions.md 2 本の関係を明記~~（2026-10-02 完了）。repo 全体の ruff（`ruff check .` で 554 件）を CI 対象に広げるかは未決定。
 10. CI: ~~coverage と pyright basic~~（2026-10-03 導入: full-suite に `--cov=gnss_gpu`（job summary + `coverage-xml` artifact）、PR gate の `typecheck` job で pyright basic を ratchet 方式で強制。`pyrightconfig.json` の exclude 71 ファイル（694 件）が負債、減らす一方）。self-hosted CUDA workflow は 2026-10-03 からネイティブ依存の test 一式と PF3D-BVH 短区間回帰（`tests/test_pf3d_bvh_short_segment.py`）を実行。合成 street canyon では完全な地図でも PF3D-BVH（2D RMS 10.6 m）が 3D 非考慮 PF（7.5 m）より悪い（未調整パラメータ、D-037 と同傾向）。
