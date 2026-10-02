@@ -34,4 +34,19 @@ assert results[0]["acquired"], results
 print("CUDA runtime roundtrip passed")
 PY
 
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q tests/test_signal_sim.py
+# Suites that need the compiled extensions. They skip on the CPU-only
+# runners (full-suite.yml), so this workflow is where they actually run.
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q \
+  tests/test_signal_sim.py \
+  tests/test_raytrace.py \
+  tests/test_bvh.py \
+  tests/test_raytrace_bvh_wrapper.py \
+  tests/test_pf_wrapper.py \
+  tests/test_pf_device_wrapper.py \
+  tests/test_svgd_wrapper.py \
+  tests/test_pf3d.py \
+  tests/test_pf3d_wrapper.py \
+  tests/test_pf3d_bvh.py \
+  tests/test_pf3d_bvh_short_segment.py \
+  tests/test_multipath.py \
+  tests/test_city_model_validator.py
