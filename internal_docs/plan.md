@@ -80,7 +80,7 @@
 9. ~~`CONTRIBUTING.md` の lint 指示を CI に合わせる / decisions.md 2 本の関係を明記~~（2026-10-02 完了）。repo 全体の ruff（`ruff check .` で 554 件）を CI 対象に広げるかは未決定。
 10. CI: coverage（`pytest --cov`）と pyright basic を段階的に導入。self-hosted CUDA workflow に PF3D-BVH の短区間回帰を追加。
 11. `tests/test_gsdc2023_gnss_log_reader.py` の bridge Doppler 2 件（strict xfail）。2026-05-07/08 の residual diagnostics 変更以降、fixture の期待値と実装の Doppler residual が一致しない（例: 期待 0.5、実際 -200.5）。実装の符号・clock drift 規約を確認して期待値を導出し直すか、実装側の回帰として直す。
-12. full suite は CI で回っていない（smoke のみ）。今回の 46 件の fail は 5 月から気づかれずに溜まっていた。Linux runner で full suite を nightly / `workflow_dispatch` で回すのを検討する。
+12. ~~full suite を CI で回す~~（2026-10-03 完了: `.github/workflows/full-suite.yml`、毎日 03:00 JST + `workflow_dispatch`、ubuntu-latest / ネイティブ拡張なし。依存は `scripts/ci/requirements-full-suite.txt` に固定）。PR gate にはしていない。
 
 ---
 

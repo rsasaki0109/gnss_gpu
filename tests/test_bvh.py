@@ -267,6 +267,9 @@ try:
 except ImportError:
     HAS_BVH_GPU = False
 
+# Every test in this module builds or inspects the native BVH.
+pytestmark = pytest.mark.skipif(not HAS_BVH_GPU, reason="CUDA module not available")
+
 
 def _box_triangles():
     return BuildingModel.create_box(

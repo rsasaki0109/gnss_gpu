@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -128,15 +129,18 @@ def test_platform_metadata_falls_back_without_wmi_or_platform_probe(monkeypatch)
     monkeypatch.setattr(cli.platform, "machine", fail_probe)
     monkeypatch.delenv("PROCESSOR_ARCHITEW6432", raising=False)
     monkeypatch.delenv("PROCESSOR_ARCHITECTURE", raising=False)
-    monkeypatch.setattr(cli.sys, "getwindowsversion", fail_probe)
-    assert cli._safe_platform_info() == "Windows-unknown-unknown"
+    monkeypatch.setattr(cli.sys, "getwindowsversion", fail_probe, raising=False)
+    # Windows reads the runtime/env APIs; other systems the platform getters.
+    is_windows = os.name == "nt" or sys.platform.startswith("win")
+    expected = "Windows-unknown-unknown" if is_windows else "unknown-unknown-unknown"
+    assert cli._safe_platform_info() == expected
     manifest = cli.build_run_manifest(
         preset="signal-acquisition",
         result={"backend": "CUDA", "elapsed_ms": 1.0, "acquired": True},
         parameters={"preset": "signal-acquisition"},
         repo_root=Path.cwd(),
     )
-    assert manifest["platform"] == "Windows-unknown-unknown"
+    assert manifest["platform"] == expected
 
     # The Windows branch must not call platform.platform()/machine(), which
     # may reach WMI on affected Python/Windows combinations.

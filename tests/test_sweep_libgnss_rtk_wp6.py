@@ -12,6 +12,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 for _p in (_PROJECT_ROOT / "experiments",):
     if str(_p) not in sys.path:
@@ -27,16 +29,19 @@ from sweep_libgnss_rtk_wp6 import (  # noqa: E402
 )
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="WSL path mapping runs on a Windows host")
 def test_to_wsl_path_maps_drive_letter() -> None:
     result = to_wsl_path(Path("C:/Users/rsasa/foo/bar.pos"))
     assert result == "/mnt/c/Users/rsasa/foo/bar.pos"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="WSL path mapping runs on a Windows host")
 def test_to_wsl_path_lowercases_drive() -> None:
     result = to_wsl_path(Path("E:/datasets/PPC-Dataset-data/tokyo/run1"))
     assert result.startswith("/mnt/e/")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="WSL path mapping runs on a Windows host")
 def test_build_gnss_solve_argv_basic_shape() -> None:
     argv = build_gnss_solve_argv(
         gnss_solve_path=Path("C:/gnss/gnss_solve"),

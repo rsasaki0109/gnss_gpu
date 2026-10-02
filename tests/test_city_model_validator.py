@@ -67,6 +67,7 @@ class TestValidateEpoch:
 
     def test_all_consistent(self):
         """All LOS satellites with strong signal."""
+        pytest.importorskip("gnss_gpu._raytrace", reason="CUDA module not available")
         from gnss_gpu.raytrace import BuildingModel
 
         # No buildings -> all LOS

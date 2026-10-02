@@ -5,6 +5,12 @@ import os
 
 from gnss_gpu.raytrace import BuildingModel
 
+try:
+    from gnss_gpu._raytrace import raytrace_los_check as _native_los_check
+    HAS_RAYTRACE_GPU = True
+except ImportError:
+    HAS_RAYTRACE_GPU = False
+
 
 class TestBuildingModel:
     """Tests for ray tracing NLOS detection."""
@@ -23,6 +29,7 @@ class TestBuildingModel:
         """Test box creation produces 12 triangles."""
         assert self.building.triangles.shape == (12, 3, 3)
 
+    @pytest.mark.skipif(not HAS_RAYTRACE_GPU, reason="CUDA module not available")
     def test_los_clear_sky(self):
         """Satellite above with no building obstruction should be LOS."""
         # Satellite straight up (z-axis), no building in the way
@@ -30,6 +37,7 @@ class TestBuildingModel:
         is_los = self.building.check_los(self.rx_ecef, sat_ecef)
         assert is_los[0]
 
+    @pytest.mark.skipif(not HAS_RAYTRACE_GPU, reason="CUDA module not available")
     def test_los_blocked(self):
         """Satellite behind building should be NLOS."""
         # Satellite directly behind the building along x-axis
@@ -38,6 +46,7 @@ class TestBuildingModel:
         is_los = self.building.check_los(self.rx_ecef, sat_ecef)
         assert not is_los[0]
 
+    @pytest.mark.skipif(not HAS_RAYTRACE_GPU, reason="CUDA module not available")
     def test_los_mixed(self):
         """Test batch with both LOS and NLOS satellites."""
         # Use separate single-element calls to avoid batch-specific GPU issues
@@ -48,6 +57,7 @@ class TestBuildingModel:
         assert is_los_clear[0]
         assert not is_los_blocked[0]
 
+    @pytest.mark.skipif(not HAS_RAYTRACE_GPU, reason="CUDA module not available")
     def test_multipath_excess_delay(self):
         """Verify multipath excess delay is positive for reflected paths."""
         # Satellite to the side, building wall can reflect
@@ -67,6 +77,7 @@ class TestBuildingModel:
             # Reflection point should not be at origin
             assert np.linalg.norm(refl_points[0]) > 0.0
 
+    @pytest.mark.skipif(not HAS_RAYTRACE_GPU, reason="CUDA module not available")
     def test_multipath_no_reflection_clear_sky(self):
         """Satellite straight up should have zero or no excess delay."""
         sat_ecef = np.array([[0.0, 0.0, 20000000.0]], dtype=np.float64)
@@ -119,13 +130,6 @@ f 4 8 5 1
         """Test that invalid triangle shapes raise ValueError."""
         with pytest.raises(ValueError):
             BuildingModel(np.zeros((10, 2, 3)))
-
-
-try:
-    from gnss_gpu._raytrace import raytrace_los_check as _native_los_check
-    HAS_RAYTRACE_GPU = True
-except ImportError:
-    HAS_RAYTRACE_GPU = False
 
 
 def _tiny_mesh():
