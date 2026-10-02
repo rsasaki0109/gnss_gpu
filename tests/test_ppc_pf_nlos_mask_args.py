@@ -14,13 +14,17 @@ EXP_PPC = REPO_ROOT / "experiments" / "exp_ppc_ctrbpf_fgo.py"
 
 
 def test_exp_ppc_declares_pf_nlos_cli_flags():
-    text = EXP_PPC.read_text(encoding="utf-8")
-    assert "--pf-nlos-mask-path" in text
-    assert "--pf-nlos-k-weak" in text
-    assert "--pf-nlos-k-strong" in text
-    assert "--pf-nlos-strong-mask-path" in text
-    assert "--pf-nlos-preset" in text
-    assert "pf_nlos_mask_tables=pf_nlos_tables_run" in text
+    from ppc_ctrbpf_cli import _build_arg_parser
+
+    options = {opt for action in _build_arg_parser()._actions for opt in action.option_strings}
+    assert {
+        "--pf-nlos-mask-path",
+        "--pf-nlos-k-weak",
+        "--pf-nlos-k-strong",
+        "--pf-nlos-strong-mask-path",
+        "--pf-nlos-preset",
+    } <= options
+    assert "pf_nlos_mask_tables=pf_nlos_tables_run" in EXP_PPC.read_text(encoding="utf-8")
 
 
 def test_pf_nlos_mask_downweights_before_update_contract(tmp_path: Path):

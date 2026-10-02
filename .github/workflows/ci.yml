@@ -74,6 +74,23 @@ jobs:
           tests/test_ppc_causal_float_selector_evidence.py
           tests/test_basin_ffbsi.py
 
+  typecheck:
+    # Ratchet: pyright basic must stay clean on python/gnss_gpu except the
+    # files listed in pyrightconfig.json "exclude" (pre-existing debt). Remove
+    # a file from that list once it is clean; never add new ones.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scripts/ci/requirements-full-suite.txt
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r scripts/ci/requirements-full-suite.txt "pyright==1.1.414"
+      - run: python -m pyright
+
   repo-hygiene:
     # Guards cross-platform path safety: long sweep filenames under
     # experiments/results once hit 266 chars and broke clones/reset on Windows
