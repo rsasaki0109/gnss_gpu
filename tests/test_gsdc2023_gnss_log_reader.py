@@ -730,14 +730,6 @@ def test_compare_residual_values_respects_settings_epoch_window(tmp_path, monkey
     assert summary["total_bridge_only"] == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Bridge Doppler residuals drifted from this fixture after the 2026-05-07/08 "
-        "residual-diagnostics changes (e.g. 4e8aaf5, f1de207); expected values not "
-        "re-derived yet (internal_docs/plan.md §4)"
-    ),
-)
 def test_residual_value_bridge_respects_settings_epoch_window(tmp_path, monkeypatch):
     trip_dir = tmp_path / "train" / "course" / "phone"
     trip_dir.mkdir(parents=True)
@@ -785,13 +777,14 @@ def test_residual_value_bridge_respects_settings_epoch_window(tmp_path, monkeypa
         pseudorange=np.zeros((1, 4), dtype=np.float64),
         sat_ecef=sat_ecef,
         sat_vel=sat_vel,
-        doppler=-raw_pseudorange_rate,
+        # The raw bridge stores +PseudorangeRateMetersPerSecond since 4f7fc65.
+        doppler=raw_pseudorange_rate,
         doppler_weights=np.ones((1, 4), dtype=np.float64),
         kaggle_wls=rx,
         slot_keys=tuple((1, svid, "GPS_L1_CA") for svid in range(1, 5)),
         sys_kind=None,
         n_clock=1,
-        clock_drift_mps=np.array([-common], dtype=np.float64),
+        clock_drift_mps=np.array([common], dtype=np.float64),
     )
 
     build_calls = []
@@ -803,6 +796,7 @@ def test_residual_value_bridge_respects_settings_epoch_window(tmp_path, monkeypa
                 kwargs["start_epoch"],
                 kwargs["max_epochs"],
                 kwargs["apply_observation_mask"],
+                kwargs["use_tdcp"],
             )
         )
         if kwargs["start_epoch"] == 1:
@@ -830,17 +824,11 @@ def test_residual_value_bridge_respects_settings_epoch_window(tmp_path, monkeypa
     assert set(frame["field"]) == {"D"}
     assert set(frame["epoch_index"]) == {2}
     np.testing.assert_allclose(frame.sort_values("svid")["bridge_residual"], residual[0])
-    assert build_calls == [(1, 1, True), (0, 3, True)]
+    # Main window, the TDCP-enabled L-factor batch (b0607ef), then the
+    # one-epoch-padded context window used for velocity / clock drift.
+    assert build_calls == [(1, 1, True, False), (1, 1, True, True), (0, 3, True, False)]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Bridge Doppler residuals drifted from this fixture after the 2026-05-07/08 "
-        "residual-diagnostics changes (e.g. 4e8aaf5, f1de207); expected values not "
-        "re-derived yet (internal_docs/plan.md §4)"
-    ),
-)
 def test_residual_value_bridge_doppler_uses_matlab_resd_convention(tmp_path, monkeypatch):
     sat_ecef = np.array(
         [
@@ -879,13 +867,14 @@ def test_residual_value_bridge_doppler_uses_matlab_resd_convention(tmp_path, mon
         sat_ecef=sat_ecef,
         sat_vel=sat_vel,
         sat_clock_drift_mps=sat_clock_drift,
-        doppler=-raw_pseudorange_rate,
+        # The raw bridge stores +PseudorangeRateMetersPerSecond since 4f7fc65.
+        doppler=raw_pseudorange_rate,
         doppler_weights=np.ones((1, 4), dtype=np.float64),
         kaggle_wls=rx,
         slot_keys=tuple((1, svid, "GPS_L1_CA") for svid in range(1, 5)),
         sys_kind=None,
         n_clock=1,
-        clock_drift_mps=np.array([-matlab_common], dtype=np.float64),
+        clock_drift_mps=np.array([matlab_common], dtype=np.float64),
     )
 
     monkeypatch.setattr(residual_values, "_build_trip_arrays", lambda *args, **kwargs: batch)
