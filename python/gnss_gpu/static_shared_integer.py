@@ -136,8 +136,10 @@ def _build_arcs(
         previous_raw: float | None = None
         for row in pair_rows:
             raw, _jac = _raw_ambiguity(position, row)
+            # previous_raw is always set together with previous_epoch.
             split = (
                 previous_epoch is not None
+                and previous_raw is not None
                 and (
                     row.epoch - previous_epoch > int(cfg.max_epoch_gap)
                     or abs(raw - float(previous_raw)) > float(cfg.slip_threshold_cycles)

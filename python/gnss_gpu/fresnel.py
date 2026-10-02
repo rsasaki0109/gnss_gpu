@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 
@@ -33,7 +34,7 @@ def _clip_incidence_angle(incidence_angle_rad):
     return np.clip(angle, 0.0, 0.5 * math.pi)
 
 
-def _maybe_scalar(value):
+def _maybe_scalar(value) -> Any:
     arr = np.asarray(value)
     if arr.ndim == 0:
         return arr.item()
@@ -51,7 +52,8 @@ def complex_permittivity(material, freq_hz=GPS_L1_FREQ) -> complex:
         eps_r, sigma = material
     else:
         try:
-            return complex(material)
+            # Deliberate probe of arbitrary input; TypeError is handled below.
+            return complex(material)  # pyright: ignore[reportArgumentType, reportCallIssue]
         except (TypeError, ValueError) as exc:
             raise TypeError(
                 "material must be a material name, an (eps_r, sigma) tuple, or complex"

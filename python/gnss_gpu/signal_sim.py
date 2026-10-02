@@ -99,8 +99,8 @@ def _validate_channels(channels):
 class SignalSimulator:
     """CUDA-accelerated GNSS IQ signal generator."""
 
-    def __init__(self, sampling_freq=2.6e6, intermediate_freq=0,
-                 noise_floor_db=-20, noise_seed=None):
+    def __init__(self, sampling_freq=2.6e6, intermediate_freq: float = 0,
+                 noise_floor_db: float = -20, noise_seed=None):
         _validate_signal_sim_config(
             sampling_freq, intermediate_freq, noise_floor_db, noise_seed,
         )

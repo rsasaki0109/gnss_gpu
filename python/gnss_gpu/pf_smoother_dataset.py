@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -26,8 +26,11 @@ def load_pf_smoother_dataset(
     if preprocess_spp_file_func is None or solve_spp_file_func is None:
         from libgnsspp import preprocess_spp_file, solve_spp_file
 
-        preprocess_spp_file_func = preprocess_spp_file
-        solve_spp_file_func = solve_spp_file
+        # libgnsspp is a native module without type stubs.
+        preprocess_spp_file_func = cast(
+            "Callable[[str, str], Iterable[tuple[Any, Any]]]", preprocess_spp_file
+        )
+        solve_spp_file_func = cast("Callable[[str, str], Any]", solve_spp_file)
 
     obs_path = str(run_dir / f"rover_{rover_source}.obs")
     nav_path = str(run_dir / "base.nav")

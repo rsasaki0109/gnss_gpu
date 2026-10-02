@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from itertools import count
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, cast
 
 import numpy as np
 
@@ -30,7 +30,11 @@ def _logsumexp(values: np.ndarray) -> float:
 def _canonical_assignment(
     assignment: Mapping[VersionedAmbiguityKey, int] | Iterable[AssignmentItem],
 ) -> tuple[AssignmentItem, ...]:
-    items = assignment.items() if isinstance(assignment, Mapping) else assignment
+    # isinstance() narrowing of the Mapping/Iterable union confuses pyright.
+    items = cast(
+        "Iterable[AssignmentItem]",
+        assignment.items() if isinstance(assignment, Mapping) else assignment,
+    )
     return tuple(sorted(((key, int(value)) for key, value in items), key=lambda x: x[0]))
 
 
@@ -969,7 +973,11 @@ class AmbiguityBasinParticleFilter:
                 log_weights = np.asarray([basin.log_weight for basin in group])
                 total_log_weight = _logsumexp(log_weights)
                 weights = np.exp(log_weights - total_log_weight)
-                mean = sum(w * basin.conditional.mean for w, basin in zip(weights, group))
+                # sum() starts from int 0, but the result is always an ndarray here.
+                mean = cast(
+                    np.ndarray,
+                    sum(w * basin.conditional.mean for w, basin in zip(weights, group)),
+                )
                 covariance = np.zeros((6, 6), dtype=np.float64)
                 for weight, basin in zip(weights, group):
                     delta = basin.conditional.mean - mean

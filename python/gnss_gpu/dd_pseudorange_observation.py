@@ -78,7 +78,9 @@ def compute_dd_pseudorange_observation(
             raw_median, raw_max = _dd_pr_abs_residual_summary(result, pf_estimate)
         result, gate_stats = gate_dd_pseudorange(
             result,
-            pf_estimate,
+            # Callers supply a PF estimate whenever a DD result exists; a None
+            # here would still fail inside gate_dd_pseudorange as before.
+            pf_estimate,  # pyright: ignore[reportArgumentType]
             pair_residual_max_m=config.gate_residual_m,
             adaptive_pair_floor_m=config.gate_adaptive_floor_m,
             adaptive_pair_mad_mult=config.gate_adaptive_mad_mult,

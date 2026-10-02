@@ -36,11 +36,11 @@ import glob as _glob
 import os
 import warnings
 from pathlib import Path
-from typing import Callable, Iterable, Optional, Union
+from typing import Callable, Iterable, Literal, Optional, Union, cast, overload
 
 import numpy as np
 
-from gnss_gpu.io.citygml import SUPPORTED_KINDS, parse_citygml
+from gnss_gpu.io.citygml import SUPPORTED_KINDS, CityGmlKind, parse_citygml
 from gnss_gpu.raytrace import BuildingModel
 from gnss_gpu.surface_materials import classify_surface_materials
 
@@ -291,7 +291,8 @@ class PlateauLoader:
         BuildingModel, or (BuildingModel, np.ndarray) when
         ``return_materials=True``.
         """
-        features = parse_citygml(filepath, kind=kind)
+        # parse_citygml validates ``kind`` at runtime.
+        features = parse_citygml(filepath, kind=cast(CityGmlKind, kind))
         if return_materials:
             triangles, surface_kinds = self._buildings_to_triangles(
                 features, collect_kinds=True
@@ -356,7 +357,7 @@ class PlateauLoader:
             kind = _infer_kind_from_filename(f.name) or "bldg"
             if kind not in active_kinds:
                 continue
-            features = parse_citygml(f, kind=kind)
+            features = parse_citygml(f, kind=cast(CityGmlKind, kind))
             if return_materials:
                 tri, tri_kinds = self._buildings_to_triangles(
                     features, collect_kinds=True
@@ -366,7 +367,8 @@ class PlateauLoader:
             if tri.size > 0:
                 all_triangles.append(tri)
                 if return_materials:
-                    all_kinds.append(tri_kinds)
+                    # all_kinds is a list whenever return_materials is set.
+                    cast(list, all_kinds).append(tri_kinds)
 
         if not all_triangles:
             raise ValueError("No building geometry found in the provided files")
@@ -387,6 +389,16 @@ class PlateauLoader:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @overload
+    def _buildings_to_triangles(
+        self, buildings, *, collect_kinds: Literal[False] = ...
+    ) -> np.ndarray: ...
+
+    @overload
+    def _buildings_to_triangles(
+        self, buildings, *, collect_kinds: Literal[True]
+    ) -> tuple[np.ndarray, np.ndarray]: ...
 
     def _buildings_to_triangles(self, buildings, *, collect_kinds: bool = False):
         """Convert parsed buildings to an ``(N, 3, 3)`` ECEF triangle array.
@@ -423,7 +435,8 @@ class PlateauLoader:
                             if poly_idx < len(kinds_list)
                             else "unknown"
                         )
-                        all_kinds.extend([kind] * tris.shape[0])
+                        # all_kinds is a list whenever collect_kinds is set.
+                        cast(list, all_kinds).extend([kind] * tris.shape[0])
 
         if not all_tris:
             empty = np.empty((0, 3, 3), dtype=np.float64)
@@ -695,6 +708,42 @@ class PlateauLoader:
     def _geodetic_degrees_to_ecef(self, lat_deg, lon_deg, alt):
         """Convert geodetic degrees to ECEF."""
         return self._lla_to_ecef(np.radians(lat_deg), np.radians(lon_deg), alt)
+
+
+@overload
+def load_plateau(
+    filepath_or_dir,
+    zone: int = ...,
+    *,
+    kinds: Iterable[str] = ...,
+    include_bridges: Optional[bool] = ...,
+    geoid_correction: GeoidCorrection = ...,
+    return_materials: Literal[False] = ...,
+) -> BuildingModel: ...
+
+
+@overload
+def load_plateau(
+    filepath_or_dir,
+    zone: int = ...,
+    *,
+    kinds: Iterable[str] = ...,
+    include_bridges: Optional[bool] = ...,
+    geoid_correction: GeoidCorrection = ...,
+    return_materials: Literal[True],
+) -> tuple[BuildingModel, np.ndarray]: ...
+
+
+@overload
+def load_plateau(
+    filepath_or_dir,
+    zone: int = ...,
+    *,
+    kinds: Iterable[str] = ...,
+    include_bridges: Optional[bool] = ...,
+    geoid_correction: GeoidCorrection = ...,
+    return_materials: bool = ...,
+) -> Union[BuildingModel, tuple[BuildingModel, np.ndarray]]: ...
 
 
 def load_plateau(

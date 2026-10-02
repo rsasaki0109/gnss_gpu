@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from gnss_gpu.evaluation_contract import verify_reproducibility_manifest
 
@@ -187,7 +187,7 @@ def evaluate_basin_fgo_promotion(
             "cpu_gpu_parity",
             parity.get("acceptance_identity") is True
             and _finite_nonnegative(max_delta)
-            and float(max_delta) <= 1.0e-5,
+            and float(cast(float, max_delta)) <= 1.0e-5,
             "acceptance must be identical and ECEF difference <=10 micrometres",
         )
     )
@@ -211,7 +211,7 @@ def evaluate_basin_fgo_promotion(
         "candidate_id": candidate.get("id"),
         "promoted": all(gate["passed"] for gate in gates),
         "stretch_achieved": all(
-            rates[city] is not None and rates[city] >= STRETCH_TARGETS[city]
+            rates[city] is not None and cast(float, rates[city]) >= STRETCH_TARGETS[city]
             for city in STRETCH_TARGETS
         ),
         "rates": rates,

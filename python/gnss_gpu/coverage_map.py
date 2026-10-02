@@ -39,7 +39,7 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence, cast
 
 import numpy as np
 
@@ -52,6 +52,9 @@ from gnss_gpu.scenario import (
     _normalize_constellations,
     _resolve_epoch_times,
 )
+
+if TYPE_CHECKING:
+    from gnss_gpu.scenario import ScenarioConfig
 
 _WGS84_A = 6378137.0
 _WGS84_F = 1.0 / 298.257223563
@@ -344,7 +347,10 @@ def run_coverage_map(config: CoverageMapConfig) -> CoverageMapResult:
             warned.add(msg)
             warnings.warn(msg, UserWarning, stacklevel=3)
 
-    epoch_times = _resolve_epoch_times(config)
+    # CoverageMapConfig duck-types the ScenarioConfig fields that the shared
+    # scenario helpers read (time window, nav/PLATEAU inputs).
+    scenario_config = cast("ScenarioConfig", config)
+    epoch_times = _resolve_epoch_times(scenario_config)
     n_epochs = len(epoch_times)
 
     n_east = max(1, int(round(config.extent_east_m / config.cell_size_m)))
@@ -378,7 +384,7 @@ def run_coverage_map(config: CoverageMapConfig) -> CoverageMapResult:
     eph = Ephemeris(nav_messages)
     available_prns = eph.available_prns
 
-    building_model = _load_building_model(config, warn_once)
+    building_model = _load_building_model(scenario_config, warn_once)
     if config.plateau_dir is not None and building_model is None:
         warn_once(
             "no PLATEAU mesh available; treating all cells as open-sky LOS "
@@ -526,7 +532,8 @@ def to_png(result: CoverageMapResult, path, metric: str = "expected_hpe_m") -> N
         values,
         origin="lower",
         cmap=cmap,
-        extent=[float(lon.min()), float(lon.max()), float(lat.min()), float(lat.max())],
+        # matplotlib accepts any 4-sequence; its stub only declares a tuple.
+        extent=[float(lon.min()), float(lon.max()), float(lat.min()), float(lat.max())],  # pyright: ignore[reportArgumentType]
         aspect="auto",
     )
     fig.colorbar(im, ax=ax, label=label)

@@ -34,8 +34,8 @@ def append_forward_alignment(
     collect_epoch_diagnostics: bool,
     epoch_state: EpochForwardState,
     rbpf_velocity_kf: bool,
-    gate_ess_ratio: float,
-    gate_spread_m: float,
+    gate_ess_ratio: float | None,
+    gate_spread_m: float | None,
     carrier_anchor_sigma_m: float,
     max_time_delta_s: float = 0.05,
 ) -> ForwardAlignmentResult:

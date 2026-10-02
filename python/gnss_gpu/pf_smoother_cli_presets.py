@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-CLI_PRESETS: dict[str, dict[str, object]] = {
+from typing import Any
+
+CLI_PRESETS: dict[str, dict[str, Any]] = {
     "odaiba_reference": {
         "description": "Smoother-first Odaiba reference: IMU stop-detect plus 0.18-cycle DD floor.",
         "argv": [

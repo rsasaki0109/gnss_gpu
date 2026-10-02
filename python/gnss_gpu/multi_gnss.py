@@ -38,7 +38,8 @@ def _validate_solver_config(systems, max_iter, tol):
     elif isinstance(systems, Integral) and not isinstance(systems, (bool, np.bool_)):
         systems = [systems]
     else:
-        systems = list(systems)
+        # Arbitrary caller input; a non-iterable (e.g. a bool) raises TypeError here.
+        systems = list(systems)  # pyright: ignore[reportArgumentType]
 
     if not systems:
         raise RuntimeError("MultiGNSSSolver: systems must contain at least one system")
