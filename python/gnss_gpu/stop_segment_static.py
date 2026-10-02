@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Any, Sequence, cast
 
 import numpy as np
 
@@ -54,7 +54,7 @@ def apply_static_stop_segment_gnss(
     cfg = StaticStopSegmentConfig() if config is None else config
     corrected = np.asarray(smoothed_aligned, dtype=np.float64).copy()
     ranges = _stop_segment_ranges(stop_flags, min_epochs=cfg.min_epochs)
-    info: dict[str, object] = {
+    info: dict[str, Any] = {
         "segments": int(len(ranges)),
         "segments_applied": 0,
         "epochs_applied": 0,
@@ -245,7 +245,8 @@ def _linearize_static_system(
     _accumulate_undiff_pr(hessian, gradient, state, x, undiff_pseudorange, cfg)
     _accumulate_dd_pr(hessian, gradient, state, x, dd_pseudorange, cfg)
     _accumulate_dd_cp(hessian, gradient, state, x, dd_carrier, cfg)
-    return hessian, gradient, state.cost, state.n, state.counts
+    # _Accumulator.__post_init__ always fills counts.
+    return hessian, gradient, state.cost, state.n, cast(dict[str, int], state.counts)
 
 
 def _evaluate_static_cost(

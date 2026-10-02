@@ -1,6 +1,8 @@
 """ROS2 launch file for the GNSS GPU positioning node."""
 
-from launch import LaunchDescription
+# Without ROS 2 installed, pyright resolves ``launch`` to this namespace
+# directory, which has no LaunchDescription; the real package provides it.
+from launch import LaunchDescription  # pyright: ignore[reportAttributeAccessIssue]
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node

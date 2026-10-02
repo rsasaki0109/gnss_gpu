@@ -1,6 +1,11 @@
 """Matplotlib-based visualization tools for gnss_gpu."""
 
+from typing import TYPE_CHECKING, cast
+
 import numpy as np
+
+if TYPE_CHECKING:
+    from matplotlib.projections.polar import PolarAxes
 
 try:
     import matplotlib.pyplot as plt
@@ -91,7 +96,7 @@ def plot_particles(particles, true_pos=None, estimate=None,
     sc = ax.scatter(particles[:, 0], particles[:, 1], **scatter_kwargs)
     if c is not None:
         cb = fig.colorbar(sc, ax=ax, pad=0.02)
-        cb.set_label(clabel)
+        cb.set_label(cast(str, clabel))  # clabel is set whenever c is
 
     if true_pos is not None:
         true_pos = np.asarray(true_pos)
@@ -142,8 +147,9 @@ def plot_skyplot(az_deg, el_deg, prn_list=None, is_los=None,
 
     fig, ax = _ensure_ax(ax, polar=True)
 
-    ax.set_theta_zero_location("N")
-    ax.set_theta_direction(-1)
+    polar_ax = cast("PolarAxes", ax)
+    polar_ax.set_theta_zero_location("N")
+    polar_ax.set_theta_direction(-1)
     ax.set_ylim(0, 90)
     ax.set_yticks([0, 15, 30, 45, 60, 75, 90])
     ax.set_yticklabels(["90", "75", "60", "45", "30", "15", "0"])
@@ -379,7 +385,7 @@ def plot_positioning_error(times, errors, labels=None,
         std_val = np.std(err)
         p95 = np.percentile(err, 95)
         stat_text = f"{name}: mean={mean_val:.2f}, std={std_val:.2f}, 95%={p95:.2f}"
-        ax.axhline(mean_val, color=c, linestyle=":", alpha=0.5)
+        ax.axhline(cast(float, mean_val), color=c, linestyle=":", alpha=0.5)
         ax.text(0.02, 0.98 - i * 0.06, stat_text, transform=ax.transAxes,
                 fontsize=7, va="top", color=c)
 

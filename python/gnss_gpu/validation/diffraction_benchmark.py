@@ -130,7 +130,7 @@ def benchmark_models(real_values, sim_by_model: dict) -> dict:
 
     def _best(metric):
         valid = {k: v[metric] for k, v in per_model.items() if np.isfinite(v[metric])}
-        return min(valid, key=valid.get) if valid else None
+        return min(valid, key=valid.__getitem__) if valid else None
 
     return {
         "n_real": int(real.size),

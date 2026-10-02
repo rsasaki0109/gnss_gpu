@@ -547,7 +547,9 @@ class Ephemeris:
         for i, prn in enumerate(prn_list):
             obs_code = None if obs_codes is None else obs_codes[i]
             nav = self.select_ephemeris(prn, gps_time, obs_code)
-            if not is_broadcast_usable(nav):
+            # is_broadcast_usable(None) is False; the explicit None check only
+            # lets the type checker narrow ``nav``.
+            if nav is None or not is_broadcast_usable(nav):
                 continue
             try:
                 pos, clk = self._compute_single_cpu(nav, gps_time, obs_code)

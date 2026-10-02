@@ -17,7 +17,8 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Mapping, Sequence
+from types import ModuleType
+from typing import Any, Mapping, Sequence, cast
 
 RUN_MANIFEST_SCHEMA = "gnss_gpu_run_manifest_v1"
 RUN_MANIFEST_SCHEMA_VERSION = 1
@@ -466,13 +467,15 @@ def _validate_plateau_gml(gml_path: Path) -> Path:
     return path
 
 
-def _load_experiment_module(name: str, path: Path) -> object:
+def _load_experiment_module(name: str, path: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise PlateauPresetError(f"could not load PLATEAU suite module: {path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    # typeshed's Loader stub does not expose exec_module to pyright; the file
+    # loader returned by spec_from_file_location always provides it.
+    spec.loader.exec_module(module)  # pyright: ignore[reportAttributeAccessIssue]
     return module
 
 
@@ -833,13 +836,13 @@ def compare_manifests(
             "path": baseline.get("_manifest_path"),
             "preset": baseline_preset,
             "backend": baseline.get("backend"),
-            "git_sha": baseline.get("git_sha", baseline.get("git", {}).get("sha") if isinstance(baseline.get("git"), Mapping) else None),
+            "git_sha": baseline.get("git_sha", cast(Mapping[str, object], baseline.get("git", {})).get("sha") if isinstance(baseline.get("git"), Mapping) else None),
         },
         "candidate": {
             "path": candidate.get("_manifest_path"),
             "preset": candidate_preset,
             "backend": candidate.get("backend"),
-            "git_sha": candidate.get("git_sha", candidate.get("git", {}).get("sha") if isinstance(candidate.get("git"), Mapping) else None),
+            "git_sha": candidate.get("git_sha", cast(Mapping[str, object], candidate.get("git", {})).get("sha") if isinstance(candidate.get("git"), Mapping) else None),
         },
         "input_hashes_match": baseline.get("input_hashes", {}) == candidate.get("input_hashes", {}),
         "warnings": warnings,
@@ -1177,6 +1180,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     started = time.perf_counter()
     input_paths: list[Path] = []
     artifact_paths: dict[str, Path] = {}
+    result: dict[str, Any]
     if args.preset == "signal-acquisition":
         try:
             result = _gpu_roundtrip()

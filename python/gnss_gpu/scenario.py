@@ -36,7 +36,7 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence, cast
 
 import numpy as np
 
@@ -50,6 +50,11 @@ from gnss_gpu.io.nav_rinex import (
     read_nav_rinex_multi,
 )
 from gnss_gpu.validation.real_residuals import elevation_azimuth
+
+if TYPE_CHECKING:
+    from gnss_gpu.io.nav_rinex import NavMessage
+    from gnss_gpu.io.plateau import GeoidCorrection
+    from gnss_gpu.raytrace import BuildingModel
 
 C_LIGHT = 299_792_458.0
 # GPS L1 C/A wavelength -- used for every constellation's Doppler conversion.
@@ -149,7 +154,7 @@ class ScenarioConfig:
     constellations: Sequence[str] = field(default_factory=lambda: ["G"])
     plateau_dir: str | None = None
     plateau_zone: int = 9
-    plateau_geoid_correction: object = "egm96"
+    plateau_geoid_correction: GeoidCorrection = "egm96"
 
     # --- Modeling knobs -----------------------------------------------------
     elevation_mask_deg: float = 10.0
@@ -332,7 +337,7 @@ class ScenarioResult:
 
         codes = ("C1C", "D1C", "S1C")
         systems = sorted({ep.sat_id[i][0] for ep in self.epochs for i in range(ep.n_sat)})
-        obs_types = {sys: list(codes) for sys in systems}
+        obs_types: dict[str, list[str]] = {sys: list(codes) for sys in systems}
 
         rinex_epochs = [
             _RinexEpochRecord(
@@ -380,7 +385,9 @@ def _resolve_epoch_times(config: ScenarioConfig) -> list[datetime]:
         end = _parse_time(config.end_time)
         n = int(round((end - start).total_seconds() / step)) + 1
     else:
-        n = int(round(float(config.duration_s) / step)) + 1
+        # __post_init__ requires duration_s when neither epoch_times nor
+        # end_time is given.
+        n = int(round(float(cast(float, config.duration_s)) / step)) + 1
     n = max(n, 0)
     return [start + timedelta(seconds=i * step) for i in range(n)]
 
@@ -432,17 +439,18 @@ def _resolve_receiver_lla(
 # ---------------------------------------------------------------------------
 
 
-def _load_building_model(config: ScenarioConfig, warn_once):
+def _load_building_model(config: ScenarioConfig, warn_once) -> BuildingModel | None:
     if config.plateau_dir is None:
         return None
     from gnss_gpu.io.plateau import load_plateau
 
+    # return_materials is left False, so load_plateau returns a bare model.
     try:
-        return load_plateau(
+        return cast("BuildingModel", load_plateau(
             config.plateau_dir,
             zone=config.plateau_zone,
             geoid_correction=config.plateau_geoid_correction,
-        )
+        ))
     except Exception as exc:
         # Covers both "pyproj not installed" (ImportError) and "pyproj
         # installed but missing the egm96_15.gtx grid data" (raised deeper
@@ -454,7 +462,10 @@ def _load_building_model(config: ScenarioConfig, warn_once):
             f"({exc}); falling back to a constant +36.7 m Tokyo-area offset"
         )
         try:
-            return load_plateau(config.plateau_dir, zone=config.plateau_zone, geoid_correction=36.7)
+            return cast(
+                "BuildingModel",
+                load_plateau(config.plateau_dir, zone=config.plateau_zone, geoid_correction=36.7),
+            )
         except Exception as exc2:
             warn_once(f"failed to load PLATEAU mesh from {config.plateau_dir}: {exc2}")
             return None
@@ -669,8 +680,12 @@ def run_scenario(config: ScenarioConfig) -> ScenarioResult:
     epoch_times = _resolve_epoch_times(config)
     rx_lla_deg = _resolve_receiver_lla(config, epoch_times)
 
-    nav_messages = read_nav_rinex_multi(config.nav_file, systems=config.constellations)
-    eph = Ephemeris(nav_messages)
+    # __post_init__ normalizes constellations to a tuple; Ephemeris accepts
+    # both PRN-keyed and sat-id-keyed message dicts.
+    nav_messages = read_nav_rinex_multi(
+        config.nav_file, systems=cast("tuple[str, ...]", config.constellations)
+    )
+    eph = Ephemeris(cast("dict[int | str, list[NavMessage]]", nav_messages))
 
     alpha, beta = read_gps_klobuchar_from_nav_header(config.nav_file)
     atmo = AtmosphereCorrection(iono_alpha=alpha, iono_beta=beta)

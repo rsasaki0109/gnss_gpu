@@ -78,9 +78,10 @@
 7. ~~`experiments/gsdc2023_*` を package にまとめるか~~（2026-10-03 判断: 今は移さない。`decisions.md` D-038。335 import と 17 か所の module monkeypatch のため shim 移動は危険、GSDC 休眠中で便益が薄い）
 8. §2 の残りの不整合: `benchmarks/RESULTS.md` の再計測と README 表記の統一。
 9. ~~`CONTRIBUTING.md` の lint 指示を CI に合わせる / decisions.md 2 本の関係を明記~~（2026-10-02 完了）。repo 全体の ruff（`ruff check .` で 554 件）を CI 対象に広げるかは未決定。
-10. CI: ~~coverage と pyright basic~~（2026-10-03 導入: full-suite に `--cov=gnss_gpu`（job summary + `coverage-xml` artifact）、PR gate の `typecheck` job で pyright basic を ratchet 方式で強制。`pyrightconfig.json` の exclude 71 ファイル（694 件）が負債、減らす一方）。self-hosted CUDA workflow は 2026-10-03 からネイティブ依存の test 一式と PF3D-BVH 短区間回帰（`tests/test_pf3d_bvh_short_segment.py`）を実行。合成 street canyon では完全な地図でも PF3D-BVH（2D RMS 10.6 m）が 3D 非考慮 PF（7.5 m）より悪い（未調整パラメータ、D-037 と同傾向）。
+10. CI: ~~coverage と pyright basic~~（2026-10-03 導入: full-suite に `--cov=gnss_gpu`（job summary + `coverage-xml` artifact）、PR gate の `typecheck` job で pyright basic を ratchet 方式で強制。負債 71 ファイルは 2026-10-03 に全て解消し exclude は空、`extraPaths: ["python"]` で installed copy ではなく repo source を解決）。self-hosted CUDA workflow は 2026-10-03 からネイティブ依存の test 一式と PF3D-BVH 短区間回帰（`tests/test_pf3d_bvh_short_segment.py`）を実行。合成 street canyon では完全な地図でも PF3D-BVH（2D RMS 10.6 m）が 3D 非考慮 PF（7.5 m）より悪い（未調整パラメータ、D-037 と同傾向）。
 11. ~~GSDC bridge Doppler 2 件の strict xfail~~（2026-10-03 解消）。実装は正しく fixture が古かった: `4f7fc65`（6/6）で raw bridge が `doppler=+PseudorangeRate`・`clock_drift_mps` も正符号に変わったのに fixture が旧符号のまま、かつ `b0607ef`（5/8）で L-factor 用の `_build_trip_arrays(use_tdcp=True)` 呼び出しが増えていた。
 12. ~~full suite を CI で回す~~（2026-10-03 完了: `.github/workflows/full-suite.yml`、毎日 03:00 JST + `workflow_dispatch`、ubuntu-latest / ネイティブ拡張なし。依存は `scripts/ci/requirements-full-suite.txt` に固定）。PR gate にはしていない。
+13. `tests/test_cuda_streams.py` の 11 件が `_gnss_gpu_pf_device` をビルドすると fail する（main でも同じ）。test は決定的初期化のため `spread_pos=0.0` を渡すが、validation wave で `spread_pos` は正値必須になった。どこでも pf_device が無く誰も実行していなかった。0 を許す（検証を `>= 0` に）か test を直すかを決める。決まったら self-hosted CUDA の test 一覧に `test_cuda_streams.py` を追加する。
 
 ---
 

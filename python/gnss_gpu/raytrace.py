@@ -267,7 +267,8 @@ class BuildingModel:
             return False
 
         def _append_ground_reflection(paths, sat_pos, direct_len):
-            if ground_point is None:
+            # ground_point and ground_normal are always set (or unset) together.
+            if ground_point is None or ground_normal is None:
                 return
 
             rx_side = float(np.dot(rx - ground_point, ground_normal))

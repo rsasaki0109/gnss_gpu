@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -99,7 +99,10 @@ def build_smoother_epoch_store_inputs(
             float(carrier_afv_wavelength_m) if carrier_afv is not None else None
         ),
         doppler_update=doppler_update,
-        doppler_sigma_mps=float(doppler_sigma_mps) if doppler_update is not None else None,
+        # The Doppler sigma is stored alongside every accepted Doppler update.
+        doppler_sigma_mps=(
+            float(cast(float, doppler_sigma_mps)) if doppler_update is not None else None
+        ),
         doppler_velocity_update_gain=(
             float(doppler_velocity_update_gain) if doppler_update is not None else None
         ),

@@ -7,7 +7,7 @@ import statistics
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Mapping, Sequence, cast
 
 import numpy as np
 
@@ -200,9 +200,13 @@ def fit_offset_profile(
     profile = OffsetProfile(
         mode=mode,
         knot_epochs=tuple(float(value) for value in knots),
-        knot_offsets_ecef_m=tuple(
-            tuple(float(value) for value in row)
-            for row in coefficients
+        # Each coefficient row is an (x, y, z) ECEF offset.
+        knot_offsets_ecef_m=cast(
+            "tuple[tuple[float, float, float], ...]",
+            tuple(
+                tuple(float(value) for value in row)
+                for row in coefficients
+            ),
         ),
     )
     return OffsetFit(

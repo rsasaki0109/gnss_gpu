@@ -364,7 +364,13 @@ class UrbanSignalSimulator:
                     diffraction_paths[sat_idx] = [] if dpaths is None else list(dpaths)
 
         # --- Second-order (double-bounce) reflection paths ---
-        if use_double_reflection_paths and len(vis_idx) > 0:
+        # use_*_paths already imply building_model is not None; the repeated
+        # check below only lets the type checker see it.
+        if (
+            use_double_reflection_paths
+            and self.building_model is not None
+            and len(vis_idx) > 0
+        ):
             tris = np.asarray(self.building_model.triangles, dtype=np.float64)
             if tris.size > 0:
                 dbl_per_vis = compute_double_reflection_paths(
@@ -375,7 +381,11 @@ class UrbanSignalSimulator:
 
         # --- Reflection+diffraction composite paths (rx->reflect->diffract->sat
         #     and rx->diffract->reflect->sat) ---
-        if use_reflection_diffraction_paths and len(vis_idx) > 0:
+        if (
+            use_reflection_diffraction_paths
+            and self.building_model is not None
+            and len(vis_idx) > 0
+        ):
             tris = np.asarray(self.building_model.triangles, dtype=np.float64)
             edges = self._get_diffraction_edges()
             if tris.size > 0 and edges is not None and int(getattr(edges, "size", 0) or 0) > 0:

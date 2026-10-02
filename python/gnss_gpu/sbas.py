@@ -512,7 +512,9 @@ def _bilinear_interpolate(grid: list[IonoGridPoint],
     # Build lookup
     grid_map = {(g.lat_deg, g.lon_deg): g.vertical_delay for g in grid}
 
-    if (lat_lo is not None and lon_lo is not None and
+    # *_hi is always set together with *_lo; the extra checks only help typing.
+    if (lat_lo is not None and lat_hi is not None and
+            lon_lo is not None and lon_hi is not None and
             (lat_lo, lon_lo) in grid_map and (lat_lo, lon_hi) in grid_map and
             (lat_hi, lon_lo) in grid_map and (lat_hi, lon_hi) in grid_map):
         # Standard bilinear interpolation

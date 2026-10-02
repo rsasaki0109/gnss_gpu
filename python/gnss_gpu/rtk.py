@@ -1,5 +1,7 @@
 """RTK carrier phase positioning module."""
 
+from typing import Any
+
 import numpy as np
 
 from gnss_gpu.backends import (
@@ -12,6 +14,11 @@ from gnss_gpu.input_validation import (
     positive_float,
 )
 
+# Native bindings, or None when the extension is absent; RTKSolver.__init__
+# raises before any of them is called in that case.
+rtk_float: Any
+rtk_float_batch: Any
+lambda_integer: Any
 try:
     from gnss_gpu._gnss_gpu_rtk import rtk_float, rtk_float_batch, lambda_integer
     HAS_RTK = True

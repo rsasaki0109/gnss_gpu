@@ -377,7 +377,8 @@ def iter_gsdc_rover_epochs(
         "WlsPositionYEcefMeters",
         "WlsPositionZEcefMeters",
     ]
-    df = pd.read_csv(gnss_csv, usecols=usecols, low_memory=False)
+    # pandas' SequenceNotStr protocol rejects typeshed's list.index() signature.
+    df = pd.read_csv(gnss_csv, usecols=usecols, low_memory=False)  # pyright: ignore[reportCallIssue, reportArgumentType]
     df = df[df["SignalType"].isin(set(signal_types))].copy()
     critical = [
         "RawPseudorangeMeters",

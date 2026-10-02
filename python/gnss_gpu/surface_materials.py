@@ -32,7 +32,7 @@ else (including the entire mesh when no tags/features are supplied).
 
 from __future__ import annotations
 
-from typing import Iterable, Mapping, Optional, Sequence
+from typing import Iterable, Mapping, Optional, Sequence, Union
 
 import numpy as np
 
@@ -213,7 +213,7 @@ def classify_surface_materials(
     features: Optional[Iterable] = None,
     mapping: Optional[Mapping[str, str]] = None,
     *,
-    surface_kinds: Optional[Sequence[str]] = None,
+    surface_kinds: Optional[Union[Sequence[str], np.ndarray]] = None,
     up=None,
     ground_height_tol_m: float = 0.5,
 ) -> np.ndarray:
@@ -236,7 +236,7 @@ def classify_surface_materials(
         Overrides for the category -> material-name mapping. Merged over
         :data:`DEFAULT_SURFACE_MATERIALS`; every material name must exist in
         :data:`gnss_gpu.fresnel.MATERIALS`.
-    surface_kinds : sequence of str, optional
+    surface_kinds : sequence of str or object ndarray, optional
         Per-triangle CityGML-tag category, already aligned 1:1 with
         ``triangles`` (typically produced by
         :meth:`gnss_gpu.io.plateau.PlateauLoader.load_citygml` /

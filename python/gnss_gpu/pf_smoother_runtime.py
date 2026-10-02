@@ -6,7 +6,7 @@ import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -18,6 +18,9 @@ from gnss_gpu.pf_smoother_config import (
     ParticleFilterRuntimeConfig,
     RobustMeasurementConfig,
 )
+
+if TYPE_CHECKING:
+    from gnss_gpu.carrier_rescue import CarrierBiasState
 
 
 @dataclass(frozen=True)
@@ -37,7 +40,7 @@ class ObservationComputers:
     dd_pr_computer: object | None = None
     wl_computer: object | None = None
     dd_computer: object | None = None
-    carrier_bias_tracker: dict[tuple[int, int], object] = field(default_factory=dict)
+    carrier_bias_tracker: dict[tuple[int, int], CarrierBiasState] = field(default_factory=dict)
 
 
 @dataclass

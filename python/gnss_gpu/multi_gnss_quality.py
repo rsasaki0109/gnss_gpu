@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
@@ -168,7 +169,7 @@ def select_multi_gnss_solution(
     reference_solution = np.asarray(reference_solution, dtype=np.float64)
     if use_multi:
         clock_bias_m = float(
-            multi_biases.get(int(config.reference_system), reference_solution[3])
+            multi_biases.get(int(config.reference_system), cast(float, reference_solution[3]))
         )
         position = np.asarray(multi_position, dtype=np.float64)
     else:

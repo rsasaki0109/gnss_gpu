@@ -15,11 +15,15 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
 from gnss_gpu.io.nav_rinex import _datetime_to_gps_seconds_of_week, read_nav_rinex_multi
 from gnss_gpu.io.rinex import read_rinex_obs
+
+if TYPE_CHECKING:
+    from gnss_gpu.io.nav_rinex import NavMessage
 
 
 C_LIGHT = 299_792_458.0
@@ -328,7 +332,7 @@ class PPCDatasetLoader:
         rover_obs = read_rinex_obs(self.data_dir / "rover.obs")
         base_obs = read_rinex_obs(self.data_dir / "base.obs")
         nav_messages = read_nav_rinex_multi(self.data_dir / "base.nav", systems=systems)
-        eph = Ephemeris(nav_messages)
+        eph = Ephemeris(cast("dict[int | str, list[NavMessage]]", nav_messages))
 
         gt_times, gt_ecef = self.load_ground_truth()
         if len(gt_times) == 0:
@@ -388,10 +392,14 @@ class PPCDatasetLoader:
             if len(sat_id_list) < 4:
                 continue
 
-            sat_ecef, sat_clk, used_sat_ids = eph.compute(
-                tow,
-                sat_id_list,
-                obs_codes=pseudorange_codes,
+            # Ephemeris echoes back the string satellite IDs it was given.
+            sat_ecef, sat_clk, used_sat_ids = cast(
+                "tuple[np.ndarray, np.ndarray, list[str]]",
+                eph.compute(
+                    tow,
+                    cast("list[int | str]", sat_id_list),
+                    obs_codes=pseudorange_codes,
+                ),
             )
             if len(used_sat_ids) < 4:
                 continue

@@ -27,7 +27,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence, cast
 
 import numpy as np
 
@@ -74,7 +74,7 @@ def _is_blank(value: object) -> bool:
     if value is None:
         return True
     try:
-        return bool(math.isnan(float(value)))
+        return bool(math.isnan(float(cast(Any, value))))
     except (TypeError, ValueError):
         return False
 
@@ -83,7 +83,7 @@ def _fmt_value(value: object) -> str:
     """Format one observation value as RINEX3 14.3f, or 14 blanks."""
     if _is_blank(value):
         return " " * 14
-    return f"{float(value):14.3f}"
+    return f"{float(cast(Any, value)):14.3f}"
 
 
 def _hline(body: str, label: str) -> str:

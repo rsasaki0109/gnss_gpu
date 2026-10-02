@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 import numpy as np
 
 from gnss_gpu.input_validation import (
@@ -34,6 +37,60 @@ class ParticleFilterDeviceRuntime:
     seed : int
         Random seed for reproducibility.
     """
+
+    # Attributes assigned dynamically by ``init_pf_device_config`` (config
+    # values, the opaque native state handle and the attached native hooks).
+    # Annotation-only declarations so static type checkers can see them.
+    n_particles: int
+    sigma_pos: float
+    sigma_cb: float
+    sigma_pr: float
+    nu: float
+    resampling: str
+    ess_threshold: float
+    seed: int
+    per_particle_nlos_gate: bool
+    per_particle_nlos_dd_pr_threshold_m: float
+    per_particle_nlos_dd_carrier_threshold_cycles: float
+    per_particle_nlos_undiff_pr_threshold_m: float
+    per_particle_huber: bool
+    per_particle_huber_dd_pr_k: float
+    per_particle_huber_dd_carrier_k: float
+    per_particle_huber_undiff_pr_k: float
+    sigma_vel: float
+    velocity_guide_alpha: float
+    rbpf_velocity_kf: bool
+    velocity_process_noise: float
+    _state: Any
+    _initialized: bool
+    _step: int
+    _pf_device_create: Callable[..., Any]
+    _pf_device_destroy: Callable[..., Any]
+    _pf_device_initialize: Callable[..., Any]
+    _pf_device_predict: Callable[..., Any]
+    _pf_device_weight: Callable[..., Any]
+    _pf_device_weight_dd_pseudorange: Callable[..., Any]
+    _pf_device_weight_gmm: Callable[..., Any]
+    _pf_device_weight_carrier_afv: Callable[..., Any]
+    _pf_device_weight_dd_carrier_afv: Callable[..., Any]
+    _pf_device_weight_dd_joint: Callable[..., Any]
+    _pf_device_weight_doppler: Callable[..., Any]
+    _pf_device_doppler_kf_update: Callable[..., Any]
+    _pf_device_position_update: Callable[..., Any]
+    _pf_device_shift_clock_bias: Callable[..., Any]
+    _pf_device_shift_position: Callable[..., Any]
+    _pf_device_ess: Callable[..., Any]
+    _pf_device_position_spread: Callable[..., Any]
+    _pf_device_resample_systematic: Callable[..., Any]
+    _pf_device_resample_megopolis: Callable[..., Any]
+    _pf_device_estimate: Callable[..., Any]
+    _pf_device_get_particles: Callable[..., Any]
+    _pf_device_get_particle_states: Callable[..., Any]
+    _pf_device_set_particle_states: Callable[..., Any]
+    _pf_device_get_log_weights: Callable[..., Any]
+    _pf_device_set_log_weights: Callable[..., Any]
+    _pf_device_get_resample_ancestors: Callable[..., Any]
+    _pf_device_sync: Callable[..., Any]
 
     def __init__(self, n_particles=1_000_000, sigma_pos=1.0, sigma_cb=300.0,
                  sigma_pr=5.0, nu=0.0, resampling="megopolis", ess_threshold=0.5,

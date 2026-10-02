@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 import numpy as np
 
@@ -70,7 +70,8 @@ def apply_widelane_dd_pseudorange_update(
             epoch_state.dd_pr_input_pairs = int(
                 getattr(wl_decision.dd_pseudorange_result, "n_dd", 0)
             )
-            epoch_state.dd_pr_sigma_epoch = float(wl_decision.dd_sigma_m)
+            # dd_sigma_m is always set on a used wide-lane decision.
+            epoch_state.dd_pr_sigma_epoch = float(cast(float, wl_decision.dd_sigma_m))
             epoch_state.used_widelane_epoch = True
             stats.n_wl_used += 1
         elif wl_decision.skipped:

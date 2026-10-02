@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import math
 from pathlib import Path
+from typing import Any, cast
 
 from gnss_gpu.pf_smoother_common import finite_float as _finite_float
 
@@ -190,7 +191,7 @@ def _epoch_widelane_diagnostics(
             _finite_float(getattr(wl_stats, "std_median_cycles")) if wl_stats is not None else None
         ),
         "widelane_gate_reason": wl_gate_info.get("reason"),
-        "widelane_gate_pair_rejected": int(wl_gate_info.get("pair_rejected") or 0),
+        "widelane_gate_pair_rejected": int(cast(int, wl_gate_info.get("pair_rejected") or 0)),
         "widelane_raw_abs_res_median_m": _finite_float(
             wl_gate_info.get("raw_abs_res_median_m")
         ),
@@ -381,13 +382,17 @@ def _write_epoch_diagnostics(rows: list[dict[str, object]], output_path: Path) -
         writer.writerows(rows)
 
 
-def _print_top_epoch_diagnostics(rows: list[dict[str, object]], top_k: int) -> None:
+def _print_top_epoch_diagnostics(rows: list[dict[str, Any]], top_k: int) -> None:
     if top_k <= 0 or not rows:
         return
     sort_key = "smoothed_error_2d" if any(_finite_float(r.get("smoothed_error_2d")) is not None for r in rows) else "forward_error_2d"
     ranked = sorted(
         rows,
-        key=lambda row: _finite_float(row.get(sort_key)) if _finite_float(row.get(sort_key)) is not None else -1.0,
+        # The conditional already maps None to -1.0; cast so the key type is float.
+        key=lambda row: cast(
+            float,
+            _finite_float(row.get(sort_key)) if _finite_float(row.get(sort_key)) is not None else -1.0,
+        ),
         reverse=True,
     )
     n_show = min(int(top_k), len(ranked))

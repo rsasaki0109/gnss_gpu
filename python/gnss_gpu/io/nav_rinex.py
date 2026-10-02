@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -136,7 +137,7 @@ def read_gps_klobuchar_from_nav_header(filepath: str | Path) -> tuple[list[float
 
 def read_nav_rinex(
     filepath: str | Path,
-    systems: tuple[str, ...] = ("G",),
+    systems: Iterable[str] = ("G",),
     key_by_sat_id: bool = False,
 ) -> dict[int | str, list[NavMessage]]:
     """Parse RINEX 2/3 navigation file.
@@ -211,8 +212,8 @@ def read_nav_rinex(
 
 def read_nav_rinex_multi(
     filepath: str | Path,
-    systems: tuple[str, ...] = ("G", "E", "J"),
-) -> dict[str, list[NavMessage]]:
+    systems: Iterable[str] = ("G", "E", "J"),
+) -> dict[int | str, list[NavMessage]]:
     """Parse a mixed RINEX 3 navigation file keyed by sat-id strings."""
     return read_nav_rinex(filepath, systems=systems, key_by_sat_id=True)
 

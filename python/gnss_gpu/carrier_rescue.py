@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 import numpy as np
 
@@ -30,9 +31,9 @@ class CarrierBiasState:
 
 @dataclass
 class CarrierAnchorAttempt:
-    update: dict[str, object] | None = None
+    update: dict[str, Any] | None = None
     stats: dict[str, float | int | None] | None = None
-    rows_used: dict[tuple[int, int], dict[str, object]] = field(default_factory=dict)
+    rows_used: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
     state: np.ndarray | None = None
     used: bool = False
     propagated_rows: int = 0
@@ -40,7 +41,7 @@ class CarrierAnchorAttempt:
 
 @dataclass
 class CarrierFallbackAttempt:
-    afv: dict[str, object] | None = None
+    afv: dict[str, Any] | None = None
     tracked_stats: dict[str, float | int | None] | None = None
     sigma_cycles: float | None = None
     sigma_scale: float = 1.0
@@ -62,7 +63,7 @@ def _collect_undiff_carrier_afv_inputs(
 ):
     """Collect one carrier-phase row per satellite for undifferenced AFV."""
 
-    by_key: dict[tuple[int, int], tuple[int, object]] = {}
+    by_key: dict[tuple[int, int], tuple[int, Any]] = {}
     for idx, m in enumerate(measurements):
         key = (int(getattr(m, "system_id", 0)), int(getattr(m, "prn", 0)))
         prev = by_key.get(key)
@@ -111,7 +112,7 @@ def _collect_undiff_carrier_afv_inputs(
 def _tracked_carrier_row_support(
     tracker: dict[tuple[int, int], CarrierBiasState],
     key: tuple[int, int],
-    row: dict[str, object],
+    row: dict[str, Any],
     receiver_state: np.ndarray,
     tow: float,
     *,
@@ -188,7 +189,7 @@ def _tracked_carrier_row_support(
 
 def _collect_tracked_undiff_carrier_afv_inputs(
     tracker: dict[tuple[int, int], CarrierBiasState],
-    carrier_rows: dict[tuple[int, int], dict[str, object]],
+    carrier_rows: dict[tuple[int, int], dict[str, Any]],
     receiver_state: np.ndarray,
     tow: float,
     *,
@@ -196,7 +197,7 @@ def _collect_tracked_undiff_carrier_afv_inputs(
     max_continuity_residual_m: float,
     min_stable_epochs: int,
     min_sats: int,
-) -> tuple[dict[str, np.ndarray] | None, dict[str, float | int | None]]:
+) -> tuple[dict[str, Any] | None, dict[str, float | int | None]]:
     """Collect undiff carrier AFV rows restricted to tracker-consistent satellites."""
 
     sat_ecef = []
@@ -244,7 +245,7 @@ def _collect_tracked_undiff_carrier_afv_inputs(
 
 def _collect_hybrid_tracked_undiff_carrier_afv_inputs(
     tracker: dict[tuple[int, int], CarrierBiasState],
-    carrier_rows: dict[tuple[int, int], dict[str, object]],
+    carrier_rows: dict[tuple[int, int], dict[str, Any]],
     receiver_state: np.ndarray,
     tow: float,
     *,
@@ -252,7 +253,7 @@ def _collect_hybrid_tracked_undiff_carrier_afv_inputs(
     max_continuity_residual_m: float,
     min_stable_epochs: int,
     min_sats: int,
-) -> tuple[dict[str, np.ndarray] | None, dict[str, float | int | None]]:
+) -> tuple[dict[str, Any] | None, dict[str, float | int | None]]:
     """Collect same-band undiff AFV rows while upweighting tracker-consistent satellites."""
 
     sat_ecef = []
@@ -327,10 +328,10 @@ def _select_same_band_carrier_rows(
     spp_pos_check: np.ndarray,
     wavelength_m: float,
     allowed_system_ids: set[int] | frozenset[int] | None = None,
-) -> dict[tuple[int, int], dict[str, object]]:
+) -> dict[tuple[int, int], dict[str, Any]]:
     """Pick one compatible carrier row per satellite for carrier-bias reuse."""
 
-    by_key: dict[tuple[int, int], object] = {}
+    by_key: dict[tuple[int, int], Any] = {}
     for m in measurements:
         key = (int(getattr(m, "system_id", 0)), int(getattr(m, "prn", 0)))
         prev = by_key.get(key)
@@ -342,7 +343,7 @@ def _select_same_band_carrier_rows(
     if np.isfinite(spp_pos_check).all() and np.linalg.norm(spp_pos_check) > 1e6:
         cb_est_m = float(np.median(pseudoranges - np.linalg.norm(sat_ecef - spp_pos_check, axis=1)))
 
-    out: dict[tuple[int, int], dict[str, object]] = {}
+    out: dict[tuple[int, int], dict[str, Any]] = {}
     for key, m in sorted(by_key.items()):
         system_id = int(getattr(m, "system_id", 0))
         if allowed_system_ids is not None and system_id not in allowed_system_ids:
@@ -432,7 +433,7 @@ def _carrier_bias_continuity_residual_m(
 
 def _carrier_tdcp_predicted_pseudorange_m(
     state: CarrierBiasState,
-    row: dict[str, object],
+    row: dict[str, Any],
     receiver_state: np.ndarray,
     tow: float,
 ) -> float | None:
@@ -486,7 +487,7 @@ def _carrier_tdcp_predicted_pseudorange_m(
 
 def _update_carrier_bias_tracker(
     tracker: dict[tuple[int, int], CarrierBiasState],
-    carrier_rows: dict[tuple[int, int], dict[str, object]],
+    carrier_rows: dict[tuple[int, int], dict[str, Any]],
     receiver_state: np.ndarray,
     tow: float,
     *,
@@ -555,7 +556,7 @@ def _update_carrier_bias_tracker(
 
 def _build_carrier_anchor_pseudorange_update(
     tracker: dict[tuple[int, int], CarrierBiasState],
-    carrier_rows: dict[tuple[int, int], dict[str, object]],
+    carrier_rows: dict[tuple[int, int], dict[str, Any]],
     receiver_state: np.ndarray,
     tow: float,
     *,
@@ -564,7 +565,7 @@ def _build_carrier_anchor_pseudorange_update(
     max_continuity_residual_m: float,
     min_stable_epochs: int,
     min_sats: int,
-) -> tuple[dict[str, np.ndarray] | None, dict[str, float | int | None], dict[tuple[int, int], dict[str, object]]]:
+) -> tuple[dict[str, Any] | None, dict[str, float | int | None], dict[tuple[int, int], dict[str, Any]]]:
     """Create a pseudorange-like update from carrier rows and tracked biases."""
 
     sat_ecef = []
@@ -573,7 +574,7 @@ def _build_carrier_anchor_pseudorange_update(
     abs_residual_m = []
     continuity_residuals_m = []
     max_age_seen_s = 0.0
-    accepted_rows: dict[tuple[int, int], dict[str, object]] = {}
+    accepted_rows: dict[tuple[int, int], dict[str, Any]] = {}
 
     for key, row in carrier_rows.items():
         state = tracker.get(key)
@@ -663,7 +664,7 @@ def _build_carrier_anchor_pseudorange_update(
 def _attempt_carrier_anchor_pseudorange_update(
     pf: ParticleFilterDevice,
     tracker: dict[tuple[int, int], CarrierBiasState],
-    carrier_rows: dict[tuple[int, int], dict[str, object]],
+    carrier_rows: dict[tuple[int, int], dict[str, Any]],
     current_pf_state: np.ndarray,
     prev_pf_state: np.ndarray | None,
     velocity: np.ndarray | None,
@@ -726,7 +727,7 @@ def _prepare_dd_carrier_undiff_fallback(
     pseudoranges: np.ndarray,
     spp_pos_check: np.ndarray,
     tracker: dict[tuple[int, int], CarrierBiasState],
-    carrier_rows: dict[tuple[int, int], dict[str, object]],
+    carrier_rows: dict[tuple[int, int], dict[str, Any]],
     carrier_state: np.ndarray | None,
     tow: float,
     *,
@@ -781,7 +782,7 @@ def _prepare_dd_carrier_undiff_fallback(
             min_sats=fallback_min_sats,
         )
         tracked_consistent_n_sat = (
-            int(attempt.tracked_stats.get("n_tracked_consistent_sat", 0))
+            int(cast(int, attempt.tracked_stats.get("n_tracked_consistent_sat", 0)))
             if attempt.tracked_stats is not None
             else 0
         )
@@ -852,7 +853,7 @@ def _attempt_dd_carrier_undiff_fallback(
     pseudoranges: np.ndarray,
     spp_pos_check: np.ndarray,
     tracker: dict[tuple[int, int], CarrierBiasState],
-    carrier_rows: dict[tuple[int, int], dict[str, object]],
+    carrier_rows: dict[tuple[int, int], dict[str, Any]],
     carrier_state: np.ndarray | None,
     tow: float,
     *,
@@ -1028,7 +1029,7 @@ def _effective_dd_carrier_epoch_median_gate(
 
 def _propagate_carrier_bias_tracker_tdcp(
     tracker: dict[tuple[int, int], CarrierBiasState],
-    carrier_rows: dict[tuple[int, int], dict[str, object]],
+    carrier_rows: dict[tuple[int, int], dict[str, Any]],
     receiver_state: np.ndarray,
     tow: float,
     *,

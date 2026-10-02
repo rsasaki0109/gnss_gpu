@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import cast
 
 import numpy as np
 
@@ -98,7 +99,7 @@ def _finite_motion_edge_mask(deltas: np.ndarray | None) -> np.ndarray:
     arr = np.asarray(deltas, dtype=np.float64)
     if arr.ndim != 2 or arr.shape[1] != 3:
         return np.zeros(0, dtype=bool)
-    return np.isfinite(arr).all(axis=1)
+    return cast(np.ndarray, np.isfinite(arr).all(axis=1))
 
 
 def _select_local_fgo_motion_deltas(
@@ -306,11 +307,12 @@ def _apply_local_fgo_postprocess(
         result, lambda_info = solve_local_fgo_with_lambda(problem, config, lambda_config)
     rel_start = target.start - solve_window.start
     rel_end = rel_start + target.size
-    updated = inject_into_pf(
+    # An ndarray input yields an ndarray output.
+    updated = cast(np.ndarray, inject_into_pf(
         smoothed,
         result.positions_ecef[rel_start:rel_end],
         target,
-    )
+    ))
     if epoch_diagnostics:
         for i, row in enumerate(epoch_diagnostics):
             row["local_fgo_applied"] = bool(target.start <= i <= target.end)
