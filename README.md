@@ -44,9 +44,8 @@ python tools/build_release_bundle.py --output dist/reproducibility --archive dis
 - 🛰️ **Measured against the classic baseline.** On UrbanNav Tokyo *Odaiba*, the
   `PF 100K (DD + smoother + stop-detect)` filter on current main reaches **2.20 m P50**
   (13.51 m RMS, mean of 5 seeds) versus **RTKLIB demo5 at 2.67 m / 13.08 m**: an
-  **18% better median** at a similar RMS. An April 2026 run of the same preset recorded
-  1.36 m / 4.11 m, which current main does not reproduce yet; see
-  [plan item 15](internal_docs/plan.md).
+  **18% better median** at a similar RMS. An April 2026 run recorded 1.36 m / 4.11 m
+  on data that is no longer available; see the note under the results table.
 - ⚡ **It's genuinely fast.** With the device-resident `ParticleFilterDevice`, a full
   **1,000,000-particle** predict → weight → resample step runs in **32 ms** (≈30 Hz) on a
   6 GB Turing-generation consumer GPU, and a 10,000-epoch batch WLS solve takes **~3 ms**.
@@ -111,9 +110,10 @@ UrbanNav route while the full-view trail is drawn from the continuous trajectory
 The PF 100K row is the smoothed output of preset `odaiba_stop_detect` on current main,
 averaged over 5 seeds on 2026-10-03
 ([record](internal_docs/resampler_ablation_urbannav_2026_10_03.md)). An April 2026 run
-of the same preset recorded 1.36 m / 4.11 m. Current main does not reproduce it, and
-the cause (gnss_gpu PF smoother or gnssplusplus SPP changes since then) is under
-investigation. The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
+of the same preset recorded 1.36 m / 4.11 m. That run used an Odaiba data version and
+a gnssplusplus build that are no longer available (it evaluated 12,228 epochs; the
+public subset yields 12,184). Even the gnss_gpu commit that recorded it gives about
+2.0 m / 12.7 m on today's data, so the figure is not reproducible. The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
 `examples/demo_pf_localization_improvement.py` still replay the April artifacts.
 
 ### PF-only RTK stretch campaign
