@@ -62,9 +62,58 @@ re-measures the baselines on today's public data.
   Calibrating this constant once from the reference (one offset, applied
   identically to all methods) was approved on 2026-10-03.
 
+## Calibrated base (2026-10-04)
+
+The base coordinate is calibrated once in
+`configs/urbannav/tokyo_base_cref0001.json`. The removed offset is ENU
+(−0.719, −0.024, −0.052) m: the pooled median of libgnss++ FIX errors, with
+per-route medians agreeing within 0.035 m. The calibrated coordinate is then
+applied identically to every method:
+
+- RTKLIB: `ant2-postype=xyz`;
+- libgnss++: `gnss_solve --base-ecef`;
+- the PF: new `exp_pf_smoother_eval.py --base-ecef X Y Z`, which reaches the
+  DD pseudorange, widelane and DD carrier computers.
+
+**Windows caveat:** the libgnss++ `--base-ecef` parser reads its three values
+in one unsequenced expression. MSVC evaluates right to left, so the values
+must be passed as `Z Y X` on Windows builds; the fix belongs in
+gnssplusplus-library. A wrong order shows up as `Warning: --base-ecef differs
+from RINEX header by 1.08e7 m` and a 0% fix rate.
+
+| Odaiba (calibrated base) | cover | <0.5 m | <1 m | <3 m | <5 m | P50 | RMS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| RTKLIB demo5 | 97.3% | 50.5% | 56.8% | 69.0% | 86.6% | 0.34 | 40.89 |
+| libgnss++ `low-cost` | 78.5% | 61.8% | 66.9% | 72.9% | 74.5% | 0.07 | 1.97 |
+| PF (SPP update) | 98.2% | 3.5% | 13.5% | 63.3% | 81.5% | 2.25 | 13.57 |
+| PF (calibrated-RTK update, σ 1.9 m) | 98.2% | 4.9% | 19.6% | 70.1% | 80.7% | 1.87 | 11.60 |
+| libgnss++ + PF (SPP update) gap fill | 98.2% | 62.0% | 67.6% | 77.5% | 84.6% | 0.20 | 13.24 |
+| libgnss++ + PF (RTK update) gap fill | 98.2% | 62.1% | 67.9% | 78.1% | 83.7% | 0.20 | 11.25 |
+
+| Shinjuku (calibrated base) | cover | <0.5 m | <1 m | <3 m | <5 m | P50 | RMS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| RTKLIB demo5 | 95.3% | 41.0% | 44.4% | 63.4% | 73.5% | 1.32 | 11.75 |
+| libgnss++ `low-cost` | 77.7% | 59.4% | 67.6% | 76.0% | 76.4% | 0.17 | 3.06 |
+| PF (SPP update) | 95.7% | 0.6% | 2.2% | 17.5% | 38.3% | 5.97 | 13.02 |
+| PF (calibrated-RTK update, σ 0.5 m) | 95.7% | 1.6% | 6.4% | 40.8% | 67.3% | 3.43 | 11.04 |
+| libgnss++ + PF (SPP update) gap fill | 95.8% | 59.5% | 67.8% | 77.7% | 80.3% | 0.28 | 10.18 |
+| libgnss++ + PF (RTK update) gap fill | 95.8% | 59.5% | 68.0% | 78.9% | 82.0% | 0.28 | 10.64 |
+
+- Calibration brings libgnss++ FIX to centimetre level (median 0.72 → 0.07 m
+  on Odaiba) and RTKLIB to 0.34 m. The PF output is unchanged: its estimate is
+  dominated by the position update, not the DD terms.
+- **libgnss++ RTK + PF gap fill beats RTKLIB demo5 on every threshold** on
+  Shinjuku, and on <0.5/1/3 m on Odaiba. Odaiba <5 m is the exception: 83.7–84.6%
+  vs RTKLIB's 86.6%, because RTKLIB covers 97% of epochs.
+- The PF does not retain RTK precision even with a 0.5 m update sigma: at most
+  about 5% of epochs are within 0.5 m. Its only contribution is coverage in
+  RTK gaps.
+- Single seed (42); the PF arms carry seed noise of about ±0.3 m in P50.
+
 ## Next
 
-1. Apply the base calibration, then re-measure everything.
-2. Make RTK + PF fusion a first-class path: status-aware position-update sigma
-   from RTK FIX/FLOAT, plus output-level gap fill. Evaluate it on both routes
-   with multiple seeds and lock it in a reproducible benchmark.
+1. Fix the `--base-ecef` argument-order bug in gnssplusplus-library.
+2. Make the PF hold RTK precision while RTK FIX is available. Anchor it
+   tightly to FIX (status-aware update sigma, re-centring), so it enters each
+   RTK gap from a centimetre-level state. Measure accuracy inside RTK gaps
+   specifically, on both routes with multiple seeds.

@@ -1,0 +1,10 @@
+{
+  "station": "CREF0001",
+  "dataset": "UrbanNav Tokyo (Odaiba, Shinjuku) public subset",
+  "rinex_header_ecef_m": [-3961904.4341, 3348994.2660, 3698211.7067],
+  "calibrated_ecef_m": [-3961904.9201, 3348993.7348, 3698211.7564],
+  "offset_removed_enu_m": [-0.719, -0.024, -0.052],
+  "method": "Median ENU error of libgnss++ RTK (low-cost preset, pin 62bd0b73) FIX epochs against reference.csv, pooled over Odaiba (n=5779) and Shinjuku (n=10193); calibrated = header - offset. Per-route medians agree within 0.035 m.",
+  "truth_use": "One constant dataset calibration from the reference trajectory, approved 2026-10-03 and applied identically to every base-relative method. No per-epoch truth enters any estimator.",
+  "record": "internal_docs/urbannav_rtk_baselines_2026_10_03.md"
+}

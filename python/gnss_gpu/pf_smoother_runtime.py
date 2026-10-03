@@ -223,6 +223,11 @@ def build_observation_computers(
     )
     base_obs_path = find_base_obs_path(run_dir) if needs_base else None
     rover_obs_path = run_dir / f"rover_{rover_source}.obs"
+    base_position = (
+        None
+        if observations.base_ecef is None
+        else np.asarray(observations.base_ecef, dtype=np.float64)
+    )
 
     dd_pr_computer = None
     if observations.dd_pseudorange.enabled:
@@ -237,6 +242,7 @@ def build_observation_computers(
             base_obs_path,
             rover_obs_path=rover_obs_path,
             interpolate_base_epochs=observations.dd_pseudorange.base_interp,
+            base_position=base_position,
         )
         print(f"  [DD-PR] base_pos = {dd_pr_computer.base_position}")
 
@@ -258,6 +264,7 @@ def build_observation_computers(
             ),
             ratio_threshold=observations.widelane.ratio_threshold,
             min_fix_rate=observations.widelane.min_fix_rate,
+            base_position=base_position,
         )
         print(
             f"  [WL] base_pos = {wl_computer.base_position}, "
@@ -274,6 +281,7 @@ def build_observation_computers(
                 base_obs_path,
                 rover_obs_path=rover_obs_path,
                 interpolate_base_epochs=observations.dd_carrier.base_interp,
+                base_position=base_position,
             )
             print(f"  [DD] base_pos = {dd_computer.base_position}")
         else:
