@@ -48,6 +48,14 @@ def build_pf_smoother_arg_parser(default_sigma_pos: float) -> argparse.ArgumentP
     )
     parser.add_argument("--urban-rover", type=str, default="trimble")
     parser.add_argument(
+        "--base-ecef",
+        type=float,
+        nargs=3,
+        default=None,
+        metavar=("X", "Y", "Z"),
+        help="Base-station ECEF position (m) for DD/widelane terms; default uses the RINEX header",
+    )
+    parser.add_argument(
         "--smoother-skip-widelane-dd-pseudorange",
         action="store_true",
         help="In the backward smoother pass, replay undifferenced PR instead of wide-lane-derived DD PR",

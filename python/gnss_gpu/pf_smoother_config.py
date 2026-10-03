@@ -210,6 +210,8 @@ class ObservationConfig:
     widelane: WidelaneConfig
     dd_carrier: DDCarrierConfig
     carrier_rescue: CarrierRescueConfig
+    # Base-station ECEF override for DD/widelane terms; None uses the RINEX header.
+    base_ecef: tuple[float, float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -299,6 +301,7 @@ class PfSmootherConfig:
     predict_guide: str
     use_smoother: bool
     rover_source: str = "trimble"
+    base_ecef: tuple[float, float, float] | None = None
     seed: int = 42
     max_epochs: int = 0
     skip_valid_epochs: int = 0
@@ -716,6 +719,11 @@ class PfSmootherConfig:
                 skip_low_support_require_no_dd_pr=(
                     self.mupf_dd_skip_low_support_require_no_dd_pr
                 ),
+            ),
+            base_ecef=(
+                None
+                if self.base_ecef is None
+                else (float(self.base_ecef[0]), float(self.base_ecef[1]), float(self.base_ecef[2]))
             ),
         )
 
