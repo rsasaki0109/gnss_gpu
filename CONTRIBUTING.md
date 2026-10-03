@@ -42,6 +42,24 @@ make -j"$(nproc)"
 # then copy the generated .so files into python/gnss_gpu/
 ```
 
+On Windows, build from a Visual Studio 2022 x64 developer environment with
+Ninja (verified with CUDA 12.8 and Python 3.12). Point CMake at the exact
+interpreter you run tests with, or the extensions get the wrong ABI tag
+(e.g. `cp314` instead of `cp312`):
+
+```bat
+call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+for /f %i in ('python -c "import pybind11;print(pybind11.get_cmake_dir())"') do set PYBIND11_DIR=%i
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=75 ^
+  -Dpybind11_DIR=%PYBIND11_DIR% -DPython_EXECUTABLE=C:\path\to\python.exe
+cmake --build build -j 8
+copy build\*.pyd python\gnss_gpu\
+```
+
+Replace `75` with your GPU's compute capability (`nvidia-smi --query-gpu=compute_cap --format=csv`).
+A non-editable `gnss-gpu` in site-packages shadows the repo; uninstall it or
+use `pip install -e .`.
+
 ## Before you open a pull request
 
 - **Tests**: add or update tests under `tests/` and run
