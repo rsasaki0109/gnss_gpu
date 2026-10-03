@@ -49,9 +49,28 @@ Paired by seed (B=60 minus legacy, seeds 42 and 101–104):
 
 ## Headline reproduction gap
 
-The README headline for this preset is smoothed P50 1.36 m / RMS 4.11 m,
-recorded around 2026-04 on Linux. Current main reproduces P50 ≈2.2 m /
-RMS ≈13.5 m with either resampler, so the gap is not the resampler. Both the
-gnss_gpu PF smoother and the gnssplusplus pin (SPP feeds the position update)
-have changed since. The May-era gnssplusplus pin (`abd4abd1`) does not build on
-Windows, so bisecting needs WSL/Linux (plan.md item 15).
+The README headline for this preset was smoothed P50 1.36 m / RMS 4.11 m, from
+`docs/assets/data/odaiba_pf_smoother_freeze.json`: a 2026-04-14 full run on
+Linux with `n_epochs=12228`. It cannot be reproduced with the data available
+today. The bisection (2026-10-03, all runs `odaiba_stop_detect`, seed 42) was:
+
+| gnss_gpu | SPP fed to the position update | Epochs | FWD P50 | FWD RMS | SMTH P50 | SMTH RMS |
+|---|---|---:|---:|---:|---:|---:|
+| main (6cb73ce) | gnssplusplus pin `62bd0b73` | 12184 | 2.60 | 15.12 | 2.25 | 13.56 |
+| main (6cb73ce) | May pin `abd4abd1` (built in WSL) | 12184 | 1.86 | 13.01 | 1.93 | 13.74 |
+| `421d284` (2026-04-23, the commit that recorded the headline) | May pin `abd4abd1` | 12184 | 1.91 | 13.14 | 1.99 | 12.71 |
+| 2026-04-14 freeze | April pin `49326766` (not available) | **12228** | 1.19 | 4.57 | 1.36 | 4.11 |
+
+- **gnss_gpu code is not the cause.** The commit that recorded the headline
+  gives RMS 12.7 m on today's data, close to main.
+- The gnssplusplus SPP version moves P50 by 0.3–0.7 m but not RMS. The May and
+  current SPP solutions have similar accuracy on their own (P50 1.64 / 1.85 m,
+  RMS 63.7 / 61.4 m) but differ per epoch by a median of 3 m.
+- The evaluated epoch count is set by the input data, not the code or SPP:
+  every run above gives 12184. The freeze evaluated 12228, so the April run
+  used a different Odaiba data version than the public subset that
+  `fetch_urbannav_subset.py` downloads (`reference.csv` 12410 rows,
+  `rover_trimble.obs` 12399 epochs).
+- The April data and the April gnssplusplus pin (`4932676`, absent from the
+  local gnssplusplus clone) are not recoverable here. The README now reports
+  the current-main result (#191).
