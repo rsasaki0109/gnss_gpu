@@ -12,7 +12,8 @@ re-measures the baselines on today's public data.
 - RTKLIB demo5: rtklibexplorer/RTKLIB `81943c1` (2026-09-28), `rnx2rtkp -p 2`,
   built in WSL. Options: gnssplusplus `configs/reproduce/rtklib_demo5_ppc.conf`
   (kinematic, L1+L2, forward, elmask 15, navsys 61, continuous AR).
-- libgnss++ RTK: `gnss_solve` from the gnss_gpu pin `62bd0b73`, presets
+- libgnss++ RTK: `gnss_solve` from gnssplusplus `62bd0b73` (the gnss_gpu
+  pin at the time), presets
   `low-cost` and `odaiba`.
 - PF: preset `odaiba_stop_detect`, current main, seed 42 (the Odaiba P50/RMS
   match the 5-seed mean within noise).
@@ -79,7 +80,9 @@ applied identically to every method:
 in one unsequenced expression. MSVC evaluates right to left, so the values
 must be passed as `Z Y X` on Windows builds; the fix belongs in
 gnssplusplus-library. A wrong order shows up as `Warning: --base-ecef differs
-from RINEX header by 1.08e7 m` and a 0% fix rate.
+from RINEX header by 1.08e7 m` and a 0% fix rate. This applies to `62bd0b73`;
+gnssplusplus develop reads the values in order in `gnss_solve`, `gnss_live` and
+`gnss_replay` (#556), so pass `X Y Z` there.
 
 | Odaiba (calibrated base) | cover | <0.5 m | <1 m | <3 m | <5 m | P50 | RMS |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -100,8 +103,11 @@ from RINEX header by 1.08e7 m` and a 0% fix rate.
 | libgnss++ + PF (RTK update) gap fill | 95.8% | 59.5% | 68.0% | 78.9% | 82.0% | 0.28 | 10.64 |
 
 - Calibration brings libgnss++ FIX to centimetre level (median 0.72 → 0.07 m
-  on Odaiba) and RTKLIB to 0.34 m. The PF output is unchanged: its estimate is
-  dominated by the position update, not the DD terms.
+  on Odaiba) and RTKLIB to 0.34 m. The PF output is unchanged because its DD
+  terms never ran: libgnsspp rows had no `prn`, so no satellite could be paired
+  with the base. See
+  [urbannav_pf_dd_satellite_ids_2026_10_04.md](urbannav_pf_dd_satellite_ids_2026_10_04.md);
+  every PF row in this record predates that fix.
 - **libgnss++ RTK + PF gap fill beats RTKLIB demo5 on every threshold** on
   Shinjuku, and on <0.5/1/3 m on Odaiba. Odaiba <5 m is the exception: 83.7–84.6%
   vs RTKLIB's 86.6%, because RTKLIB covers 97% of epochs.
@@ -112,7 +118,7 @@ from RINEX header by 1.08e7 m` and a 0% fix rate.
 
 ## Next
 
-1. Fix the `--base-ecef` argument-order bug in gnssplusplus-library.
+1. Done (gnssplusplus-library #556): fix the `--base-ecef` argument-order bug.
 2. Make the PF hold RTK precision while RTK FIX is available. Anchor it
    tightly to FIX (status-aware update sigma, re-centring), so it enters each
    RTK gap from a centimetre-level state. Measure accuracy inside RTK gaps
