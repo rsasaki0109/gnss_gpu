@@ -41,10 +41,12 @@ python tools/build_release_bundle.py --output dist/reproducibility --archive dis
 
 ## Why you might care
 
-- 🛰️ **It beats the classic baseline where it hurts most.** On UrbanNav Tokyo *Odaiba*,
-  the `PF 100K (DD + smoother + stop-detect)` filter reaches **1.36 m P50 / 4.11 m RMS**
-  versus **RTKLIB demo5 at 2.67 m / 13.08 m** over 12,228 aligned epochs — a **49% better
-  median and 69% better RMS**.
+- 🛰️ **Measured against the classic baseline.** On UrbanNav Tokyo *Odaiba*, the
+  `PF 100K (DD + smoother + stop-detect)` filter on current main reaches **2.20 m P50**
+  (13.51 m RMS, mean of 5 seeds) versus **RTKLIB demo5 at 2.67 m / 13.08 m**: an
+  **18% better median** at a similar RMS. An April 2026 run of the same preset recorded
+  1.36 m / 4.11 m, which current main does not reproduce yet; see
+  [plan item 15](internal_docs/plan.md).
 - ⚡ **It's genuinely fast.** With the device-resident `ParticleFilterDevice`, a full
   **1,000,000-particle** predict → weight → resample step runs in **32 ms** (≈30 Hz) on a
   6 GB Turing-generation consumer GPU, and a 10,000-epoch batch WLS solve takes **~3 ms**.
@@ -101,10 +103,18 @@ UrbanNav route while the full-view trail is drawn from the continuous trajectory
 
 | Method | Dataset | P50 | RMS 2D |
 |---|---|--:|--:|
-| **PF 100K (DD + smoother + stop-detect)** | UrbanNav Tokyo Odaiba | **1.36 m** | **4.11 m** |
-| RTKLIB demo5 | UrbanNav Tokyo Odaiba | 2.67 m | 13.08 m |
+| **PF 100K (DD + smoother + stop-detect)** | UrbanNav Tokyo Odaiba | **2.20 m** | 13.51 m |
+| RTKLIB demo5 | UrbanNav Tokyo Odaiba | 2.67 m | **13.08 m** |
 | **PF + RobustClear-10K** (external mainline) | UrbanNav, 5 seq / 2 cities | — | **66.6 m** |
 | EKF baseline | UrbanNav, 5 seq / 2 cities | — | 93.25 m |
+
+The PF 100K row is the smoothed output of preset `odaiba_stop_detect` on current main,
+averaged over 5 seeds on 2026-10-03
+([record](internal_docs/resampler_ablation_urbannav_2026_10_03.md)). An April 2026 run
+of the same preset recorded 1.36 m / 4.11 m. Current main does not reproduce it, and
+the cause (gnss_gpu PF smoother or gnssplusplus SPP changes since then) is under
+investigation. The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
+`examples/demo_pf_localization_improvement.py` still replay the April artifacts.
 
 ### PF-only RTK stretch campaign
 
