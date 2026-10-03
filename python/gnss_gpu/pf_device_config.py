@@ -41,6 +41,7 @@ def load_pf_device_bindings() -> SimpleNamespace:
             pf_device_position_spread,
             pf_device_resample_systematic,
             pf_device_resample_megopolis,
+            pf_device_resample_megopolis_coalesced,
             pf_device_estimate,
             pf_device_get_particles,
             pf_device_get_particle_states,
@@ -75,6 +76,7 @@ def load_pf_device_bindings() -> SimpleNamespace:
         pf_device_position_spread=pf_device_position_spread,
         pf_device_resample_systematic=pf_device_resample_systematic,
         pf_device_resample_megopolis=pf_device_resample_megopolis,
+        pf_device_resample_megopolis_coalesced=pf_device_resample_megopolis_coalesced,
         pf_device_estimate=pf_device_estimate,
         pf_device_get_particles=pf_device_get_particles,
         pf_device_get_particle_states=pf_device_get_particle_states,
@@ -106,6 +108,7 @@ _BINDING_ATTRS = (
     "pf_device_position_spread",
     "pf_device_resample_systematic",
     "pf_device_resample_megopolis",
+    "pf_device_resample_megopolis_coalesced",
     "pf_device_estimate",
     "pf_device_get_particles",
     "pf_device_get_particle_states",
@@ -120,6 +123,12 @@ _BINDING_ATTRS = (
 def attach_pf_device_bindings(pf, bindings: SimpleNamespace) -> None:
     for name in _BINDING_ATTRS:
         setattr(pf, f"_{name}", getattr(bindings, name))
+
+
+# "megopolis" is the historical default kept for reproducibility; it does not
+# converge to the weight distribution as iterations grow. "megopolis_coalesced"
+# is the Chesser et al. (2021) algorithm and is unbiased in the B -> inf limit.
+_RESAMPLING_METHODS = frozenset({"megopolis", "megopolis_coalesced", "systematic"})
 
 
 def init_pf_device_config(
@@ -145,6 +154,7 @@ def init_pf_device_config(
     velocity_guide_alpha=1.0,
     rbpf_velocity_kf=False,
     velocity_process_noise=0.0,
+    megopolis_iterations=15,
     bindings: SimpleNamespace | None = None,
 ) -> None:
     """Validate constructor args, attach native hooks, and allocate GPU state."""
@@ -157,7 +167,10 @@ def init_pf_device_config(
     pf.sigma_cb = positive_float("sigma_cb", sigma_cb)
     pf.sigma_pr = positive_float("sigma_pr", sigma_pr)
     pf.nu = finite_float("nu", nu)
+    if resampling not in _RESAMPLING_METHODS:
+        raise ValueError(f"resampling must be one of {sorted(_RESAMPLING_METHODS)}")
     pf.resampling = resampling
+    pf.megopolis_iterations = _positive_int("megopolis_iterations", megopolis_iterations)
     pf.ess_threshold = ess_threshold
     pf.seed = seed
     pf.per_particle_nlos_gate = bool(per_particle_nlos_gate)
@@ -191,6 +204,7 @@ def clone_pf_device_init_kwargs(source) -> dict:
         "sigma_pr": source.sigma_pr,
         "nu": source.nu,
         "resampling": source.resampling,
+        "megopolis_iterations": source.megopolis_iterations,
         "ess_threshold": source.ess_threshold,
         "seed": source.seed + 1,
         "per_particle_nlos_gate": source.per_particle_nlos_gate,

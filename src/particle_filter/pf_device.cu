@@ -1535,6 +1535,42 @@ __global__ void pfd_megopolis_index_kernel(const int* idx_src, int* idx_dst,
     idx_dst[tid] = (u < alpha) ? idx_src[j] : idx_src[tid];
 }
 
+// Megopolis resampling as in Chesser et al. (2021), opt-in: each particle
+// keeps a current ancestor k and accepts a proposal j with probability
+// min(1, w_j / w_k). All threads in a block share the per-iteration offset, so
+// the proposal reads log_weights[(i + offset) % N] are coalesced. The marginal
+// proposal for every particle stays uniform. All B iterations run in one
+// launch with k held in a register.
+__global__ void pfd_megopolis_coalesced_kernel(const double* log_weights, int* ancestors,
+                                              int N, unsigned long long seed,
+                                              int n_iterations) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= N) return;
+
+    // Block-shared offset stream (subsequence N + block) and per-particle
+    // acceptance stream (subsequence i) are disjoint Philox subsequences.
+    curandStatePhilox4_32_10_t block_rng;
+    curand_init(seed, (unsigned long long)N + blockIdx.x, 0, &block_rng);
+    curandStatePhilox4_32_10_t own_rng;
+    curand_init(seed, (unsigned long long)i, 0, &own_rng);
+
+    // Draws and the acceptance test use single precision: consumer GPUs run
+    // FP64 at 1/32 rate, and float resolution is ample for u <= w_j / w_k.
+    int k = i;
+    double lw_k = log_weights[i];
+    for (int b = 0; b < n_iterations; b++) {
+        int offset = (int)(curand(&block_rng) % (unsigned int)N);
+        int j = (i + offset) % N;
+        double lw_j = log_weights[j];
+        float u = curand_uniform(&own_rng);
+        if (__logf(u) <= (float)(lw_j - lw_k)) {
+            k = j;
+            lw_k = lw_j;
+        }
+    }
+    ancestors[i] = k;
+}
+
 __global__ void pfd_megopolis_gather_kernel(const double* src_px, const double* src_py,
                                            const double* src_pz,
                                            const double* src_vx, const double* src_vy,
@@ -2182,6 +2218,34 @@ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsign
     std::swap(state->d_pcb, state->d_pcb_tmp);
 
     // Reset log weights to uniform
+    pfd_reset_weights_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(state->d_log_weights, N);
+    CUDA_CHECK_LAST();
+}
+
+void pf_device_resample_megopolis_coalesced(PFDeviceState* state, int n_iterations,
+                                           unsigned long long seed) {
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    pfd_megopolis_coalesced_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_log_weights, state->d_megopolis_idx_a, N, seed, n_iterations);
+    pfd_megopolis_gather_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
+        state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp,
+        state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_vcov_tmp, state->d_pcb_tmp,
+        state->d_megopolis_idx_a, N);
+    CUDA_CHECK_LAST();
+
+    std::swap(state->d_px, state->d_px_tmp);
+    std::swap(state->d_py, state->d_py_tmp);
+    std::swap(state->d_pz, state->d_pz_tmp);
+    std::swap(state->d_vx, state->d_vx_tmp);
+    std::swap(state->d_vy, state->d_vy_tmp);
+    std::swap(state->d_vz, state->d_vz_tmp);
+    std::swap(state->d_vcov, state->d_vcov_tmp);
+    std::swap(state->d_pcb, state->d_pcb_tmp);
+
     pfd_reset_weights_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(state->d_log_weights, N);
     CUDA_CHECK_LAST();
 }

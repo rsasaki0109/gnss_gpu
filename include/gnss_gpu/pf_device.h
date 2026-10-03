@@ -224,6 +224,10 @@ double pf_device_position_spread(
 // Resample - operates entirely on device
 void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed);
 void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsigned long long seed);
+// Opt-in Megopolis (Chesser et al. 2021): ancestor-weight acceptance with
+// block-shared, coalesced proposals. Not bit-compatible with the default.
+void pf_device_resample_megopolis_coalesced(PFDeviceState* state, int n_iterations,
+                                           unsigned long long seed);
 
 // Estimate - compute weighted mean on device, return [4] to host
 void pf_device_estimate(const PFDeviceState* state, double* result);
