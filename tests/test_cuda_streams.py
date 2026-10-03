@@ -35,6 +35,10 @@ except ImportError:
 pytestmark = pytest.mark.skipif(not HAS_GPU, reason="CUDA pf_device module not available")
 
 SEED = 42
+# Spreads and process noise must be positive (input validation since
+# 2026-07-03); a picometre keeps particles on the given state for the
+# deterministic checks below.
+NEAR_ZERO_SIGMA = 1e-12
 N_PARTICLES = 100_000
 N_SAT = 8
 L1_WAVELENGTH = 0.19029367279836488
@@ -220,7 +224,7 @@ class TestStreamCorrectness:
         pf_device_initialize(
             state,
             10.0, 20.0, 30.0, TRUE_CB,
-            0.0, 0.0, SEED,
+            NEAR_ZERO_SIGMA, NEAR_ZERO_SIGMA, SEED,
             1.5, -2.0, 0.25, 0.0, 2.0,
         )
 
@@ -240,11 +244,11 @@ class TestStreamCorrectness:
         """Predict stores the velocity guide per particle before propagation."""
         n = 2048
         state = pf_device_create(n)
-        pf_device_initialize(state, 0.0, 0.0, 0.0, TRUE_CB, 0.0, 0.0, SEED)
+        pf_device_initialize(state, 0.0, 0.0, 0.0, TRUE_CB, NEAR_ZERO_SIGMA, NEAR_ZERO_SIGMA, SEED)
         pf_device_predict(
             state,
             2.0, -1.0, 0.5,
-            0.25, 0.0, 0.0,
+            0.25, NEAR_ZERO_SIGMA, NEAR_ZERO_SIGMA,
             SEED, 1,
         )
 
@@ -261,13 +265,13 @@ class TestStreamCorrectness:
         pf_device_initialize(
             state,
             0.0, 0.0, 0.0, TRUE_CB,
-            0.0, 0.0, SEED,
+            NEAR_ZERO_SIGMA, NEAR_ZERO_SIGMA, SEED,
             1.0, 0.0, 0.0, 0.0, 2.0,
         )
         pf_device_predict(
             state,
             1.0, 0.0, 0.0,
-            1.0, 0.0, 0.0,
+            1.0, NEAR_ZERO_SIGMA, NEAR_ZERO_SIGMA,
             SEED, 1,
             100.0, 1.0, True, 0.5,
         )
@@ -290,7 +294,7 @@ class TestStreamCorrectness:
         pf_device_initialize(
             state,
             float(rx_pos[0]), float(rx_pos[1]), float(rx_pos[2]), TRUE_CB,
-            0.0, 0.0, SEED,
+            NEAR_ZERO_SIGMA, NEAR_ZERO_SIGMA, SEED,
             0.0, 0.0, 0.0, 0.0,
         )
         pf_device_weight_doppler(
@@ -316,7 +320,7 @@ class TestStreamCorrectness:
         pf_device_initialize(
             state,
             float(rx_pos[0]), float(rx_pos[1]), float(rx_pos[2]), TRUE_CB,
-            0.0, 0.0, SEED,
+            NEAR_ZERO_SIGMA, NEAR_ZERO_SIGMA, SEED,
             0.0, 0.0, 0.0, 0.0, 10.0,
         )
         pf_device_doppler_kf_update(
@@ -409,8 +413,8 @@ class TestParticleFilterDeviceWrapper:
         pf.initialize(
             position_ecef=TRUE_POS,
             clock_bias=TRUE_CB,
-            spread_pos=0.0,
-            spread_cb=0.0,
+            spread_pos=NEAR_ZERO_SIGMA,
+            spread_cb=NEAR_ZERO_SIGMA,
             velocity=np.array([1.0, 0.5, -0.25]),
             spread_vel=0.0,
             velocity_init_sigma=3.0,
@@ -433,8 +437,8 @@ class TestParticleFilterDeviceWrapper:
         pf.initialize(
             position_ecef=rx_pos,
             clock_bias=TRUE_CB,
-            spread_pos=0.0,
-            spread_cb=0.0,
+            spread_pos=NEAR_ZERO_SIGMA,
+            spread_cb=NEAR_ZERO_SIGMA,
             velocity=np.zeros(3),
             spread_vel=0.0,
         )
@@ -462,8 +466,8 @@ class TestParticleFilterDeviceWrapper:
         pf.initialize(
             position_ecef=rx_pos,
             clock_bias=TRUE_CB,
-            spread_pos=0.0,
-            spread_cb=0.0,
+            spread_pos=NEAR_ZERO_SIGMA,
+            spread_cb=NEAR_ZERO_SIGMA,
             velocity=np.zeros(3),
             velocity_init_sigma=10.0,
         )
@@ -494,12 +498,12 @@ class TestParticleFilterDeviceWrapper:
         pf.initialize(
             position_ecef=TRUE_POS,
             clock_bias=TRUE_CB,
-            spread_pos=0.0,
-            spread_cb=0.0,
+            spread_pos=NEAR_ZERO_SIGMA,
+            spread_cb=NEAR_ZERO_SIGMA,
             velocity=np.array([0.5, -0.25, 0.0]),
             velocity_init_sigma=1.0,
         )
-        pf.predict(velocity=np.array([0.5, -0.25, 0.0]), dt=2.0, sigma_pos=0.0)
+        pf.predict(velocity=np.array([0.5, -0.25, 0.0]), dt=2.0, sigma_pos=NEAR_ZERO_SIGMA)
         states = pf.get_particle_states()
         np.testing.assert_allclose(states[:, 4:7], np.tile([0.5, -0.25, 0.0], (4096, 1)))
         np.testing.assert_allclose(states[:, [7, 11, 15]], 1.5)
@@ -582,7 +586,7 @@ class TestParticleFilterDeviceWrapper:
             per_particle_nlos_gate=True,
             per_particle_nlos_undiff_pr_threshold_m=30.0,
         )
-        pf.initialize(TRUE_POS, clock_bias=TRUE_CB, spread_pos=0.0, spread_cb=0.0)
+        pf.initialize(TRUE_POS, clock_bias=TRUE_CB, spread_pos=NEAR_ZERO_SIGMA, spread_cb=NEAR_ZERO_SIGMA)
         pf.update(sat_ecef, pseudoranges_outlier, weights, resample=False)
         undiff_lw = pf.get_log_weights()
         assert float(np.max(np.abs(undiff_lw))) < 1e-6
@@ -597,7 +601,7 @@ class TestParticleFilterDeviceWrapper:
             per_particle_nlos_gate=True,
             per_particle_nlos_undiff_pr_threshold_m=30.0,
         )
-        pf_reject_all.initialize(TRUE_POS, clock_bias=TRUE_CB, spread_pos=0.0, spread_cb=0.0)
+        pf_reject_all.initialize(TRUE_POS, clock_bias=TRUE_CB, spread_pos=NEAR_ZERO_SIGMA, spread_cb=NEAR_ZERO_SIGMA)
         pf_reject_all.update(sat_ecef, pseudoranges + 100.0, weights, resample=False)
         reject_all_lw = pf_reject_all.get_log_weights()
         assert float(np.max(reject_all_lw)) < -900.0
@@ -629,7 +633,7 @@ class TestParticleFilterDeviceWrapper:
             per_particle_nlos_gate=True,
             per_particle_nlos_dd_pr_threshold_m=10.0,
         )
-        pf_dd_pr.initialize(rover_pos, clock_bias=0.0, spread_pos=0.0, spread_cb=0.0)
+        pf_dd_pr.initialize(rover_pos, clock_bias=0.0, spread_pos=NEAR_ZERO_SIGMA, spread_cb=NEAR_ZERO_SIGMA)
         pf_dd_pr.update_dd_pseudorange(dd_pr_result, sigma_pr=0.5, resample=False)
         dd_pr_lw = pf_dd_pr.get_log_weights()
         assert float(np.max(np.abs(dd_pr_lw))) < 1e-6
@@ -660,7 +664,7 @@ class TestParticleFilterDeviceWrapper:
             per_particle_nlos_gate=True,
             per_particle_nlos_dd_carrier_threshold_cycles=0.3,
         )
-        pf_dd_cp.initialize(rover_pos, clock_bias=0.0, spread_pos=0.0, spread_cb=0.0)
+        pf_dd_cp.initialize(rover_pos, clock_bias=0.0, spread_pos=NEAR_ZERO_SIGMA, spread_cb=NEAR_ZERO_SIGMA)
         pf_dd_cp.update_dd_carrier_afv(dd_cp_result, sigma_cycles=0.05, resample=False)
         dd_cp_lw = pf_dd_cp.get_log_weights()
         assert float(np.max(np.abs(dd_cp_lw))) < 1e-6
@@ -682,7 +686,7 @@ class TestParticleFilterDeviceWrapper:
                 per_particle_huber=huber,
                 per_particle_huber_undiff_pr_k=1.5,
             )
-            pf.initialize(TRUE_POS, clock_bias=TRUE_CB, spread_pos=0.0, spread_cb=0.0)
+            pf.initialize(TRUE_POS, clock_bias=TRUE_CB, spread_pos=NEAR_ZERO_SIGMA, spread_cb=NEAR_ZERO_SIGMA)
             pf.update(sat_ecef, pseudoranges_outlier, weights, resample=False)
             return float(pf.get_log_weights()[0])
 
@@ -723,7 +727,7 @@ class TestParticleFilterDeviceWrapper:
                 per_particle_huber=huber,
                 per_particle_huber_dd_pr_k=1.5,
             )
-            pf.initialize(rover_pos, clock_bias=0.0, spread_pos=0.0, spread_cb=0.0)
+            pf.initialize(rover_pos, clock_bias=0.0, spread_pos=NEAR_ZERO_SIGMA, spread_cb=NEAR_ZERO_SIGMA)
             pf.update_dd_pseudorange(dd_pr_result, sigma_pr=0.5, resample=False)
             return float(pf.get_log_weights()[0])
 
@@ -761,7 +765,7 @@ class TestParticleFilterDeviceWrapper:
                 per_particle_huber=huber,
                 per_particle_huber_dd_carrier_k=1.5,
             )
-            pf.initialize(rover_pos, clock_bias=0.0, spread_pos=0.0, spread_cb=0.0)
+            pf.initialize(rover_pos, clock_bias=0.0, spread_pos=NEAR_ZERO_SIGMA, spread_cb=NEAR_ZERO_SIGMA)
             pf.update_dd_carrier_afv(dd_cp_result, sigma_cycles=0.05, resample=False)
             return float(pf.get_log_weights()[0])
 
