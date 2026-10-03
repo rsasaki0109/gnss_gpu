@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `ParticleFilterDevice(resampling="megopolis_coalesced")`: opt-in Megopolis
+  (Chesser et al. 2021) with ancestor-weight acceptance and block-shared,
+  coalesced proposals. It converges to the weight distribution as iterations
+  grow, unlike the default `"megopolis"`, and runs 3-13x faster (9 ms at
+  B=15, 18 ms at B=240 for 1M particles). New `megopolis_iterations` argument
+  (default 15). `ParticleFilterDevice` now rejects unknown `resampling` values.
 - `ParticleFilterDevice` Megopolis resampling now mixes int32 ancestor indices
   and gathers the 16-double particle state once instead of copying it on
   every iteration. Bit-identical output; 1M-particle `predict → update` goes

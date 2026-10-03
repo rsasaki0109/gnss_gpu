@@ -44,6 +44,7 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q \
   tests/test_pf_wrapper.py \
   tests/test_pf_device_wrapper.py \
   tests/test_cuda_streams.py \
+  tests/test_pf_device_resampling.py \
   tests/test_svgd_wrapper.py \
   tests/test_pf3d.py \
   tests/test_pf3d_wrapper.py \

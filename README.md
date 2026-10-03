@@ -45,9 +45,10 @@ python tools/build_release_bundle.py --output dist/reproducibility --archive dis
   the `PF 100K (DD + smoother + stop-detect)` filter reaches **1.36 m P50 / 4.11 m RMS**
   versus **RTKLIB demo5 at 2.67 m / 13.08 m** over 12,228 aligned epochs — a **49% better
   median and 69% better RMS**.
-- ⚡ **It's genuinely fast.** A full **1,000,000-particle** filter step
-  (predict → weight → resample → estimate) runs in **81 ms** (≈12 Hz) on a consumer Ada
-  GPU; a 10,000-epoch batch WLS solve takes **~1 ms**. See [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
+- ⚡ **It's genuinely fast.** With the device-resident `ParticleFilterDevice`, a full
+  **1,000,000-particle** predict → weight → resample step runs in **32 ms** (≈30 Hz) on a
+  6 GB Turing-generation consumer GPU, and a 10,000-epoch batch WLS solve takes **~3 ms**.
+  See [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
 - 🏙️ **City-aware NLOS handling.** Ray tracing against PLATEAU 3D building meshes does
   line-of-sight / non-line-of-sight classification with a **57.8× BVH speedup**, so urban
   multipath can be rejected instead of trusted.

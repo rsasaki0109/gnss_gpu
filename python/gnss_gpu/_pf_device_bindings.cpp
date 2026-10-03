@@ -489,6 +489,16 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
     }, "Megopolis resampling - operates entirely on device",
        py::arg("state"), py::arg("n_iterations"), py::arg("seed"));
 
+    m.def("pf_device_resample_megopolis_coalesced", [](gnss_gpu::PFDeviceState* state,
+                                                       int n_iterations,
+                                                       unsigned long long seed) {
+        if (n_iterations < 0) {
+            throw std::runtime_error("n_iterations must be >= 0");
+        }
+        gnss_gpu::pf_device_resample_megopolis_coalesced(state, n_iterations, seed);
+    }, "Megopolis resampling with ancestor-weight acceptance and coalesced proposals",
+       py::arg("state"), py::arg("n_iterations"), py::arg("seed"));
+
     m.def("pf_device_estimate", [](const gnss_gpu::PFDeviceState* state) {
         double result[4];
         gnss_gpu::pf_device_estimate(state, result);

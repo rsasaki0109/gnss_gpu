@@ -31,11 +31,17 @@ class ParticleFilterDeviceRuntime:
     sigma_pr : float
         Pseudorange observation standard deviation [m] for weighting.
     resampling : str
-        Resampling method: "megopolis" or "systematic".
+        Resampling method: "megopolis" (default, historical), "megopolis_coalesced"
+        or "systematic". "megopolis" does not converge to the weight distribution
+        as iterations grow; "megopolis_coalesced" (Chesser et al. 2021) does and is
+        faster, but changes results, so it is opt-in.
     ess_threshold : float
         ESS ratio threshold for triggering resampling (0-1).
     seed : int
         Random seed for reproducibility.
+    megopolis_iterations : int
+        Iterations B for both Megopolis modes (default 15). With strongly
+        degenerate weights the coalesced mode needs a larger B to be unbiased.
     """
 
     # Attributes assigned dynamically by ``init_pf_device_config`` (config
@@ -47,6 +53,7 @@ class ParticleFilterDeviceRuntime:
     sigma_pr: float
     nu: float
     resampling: str
+    megopolis_iterations: int
     ess_threshold: float
     seed: int
     per_particle_nlos_gate: bool
@@ -83,6 +90,7 @@ class ParticleFilterDeviceRuntime:
     _pf_device_position_spread: Callable[..., Any]
     _pf_device_resample_systematic: Callable[..., Any]
     _pf_device_resample_megopolis: Callable[..., Any]
+    _pf_device_resample_megopolis_coalesced: Callable[..., Any]
     _pf_device_estimate: Callable[..., Any]
     _pf_device_get_particles: Callable[..., Any]
     _pf_device_get_particle_states: Callable[..., Any]
@@ -105,7 +113,8 @@ class ParticleFilterDeviceRuntime:
                  sigma_vel=0.0,
                  velocity_guide_alpha=1.0,
                  rbpf_velocity_kf=False,
-                 velocity_process_noise=0.0):
+                 velocity_process_noise=0.0,
+                 megopolis_iterations=15):
         init_pf_device_config(
             self,
             n_particles=n_particles,
@@ -132,6 +141,7 @@ class ParticleFilterDeviceRuntime:
             velocity_guide_alpha=velocity_guide_alpha,
             rbpf_velocity_kf=rbpf_velocity_kf,
             velocity_process_noise=velocity_process_noise,
+            megopolis_iterations=megopolis_iterations,
         )
 
     def _per_particle_threshold(self, value):
@@ -731,7 +741,11 @@ class ParticleFilterDeviceRuntime:
     def _resample(self):
         """Perform resampling entirely on GPU."""
         if self.resampling == "megopolis":
-            self._pf_device_resample_megopolis(self._state, 15, self.seed)
+            self._pf_device_resample_megopolis(self._state, self.megopolis_iterations, self.seed)
+        elif self.resampling == "megopolis_coalesced":
+            self._pf_device_resample_megopolis_coalesced(
+                self._state, self.megopolis_iterations, self.seed
+            )
         else:
             self._pf_device_resample_systematic(self._state, self.seed)
 
