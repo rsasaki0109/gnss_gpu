@@ -1,0 +1,129 @@
+{
+  "data": "UrbanNav Tokyo Odaiba (Dropbox Tokyo_Data.zip subset), rover_trimble",
+  "generated": "2026-10-03",
+  "libgnsspp": "gnssplusplus 62bd0b73 (gnss_gpu pin), Python 3.12, Windows/MSVC",
+  "note": "megopolis_b15 = pre-2026-10 device kernel (now 'megopolis_legacy'); coalesced_b60 = new default 'megopolis'",
+  "preset": "odaiba_stop_detect",
+  "runs": {
+    "coalesced_b15@seed42": {
+      "forward_p50": 2.8217741707285873,
+      "forward_p95": 10.614396337862615,
+      "forward_rms_2d": 15.600218763580221,
+      "ms_per_epoch": 4.180012861140151,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.3519223518382284,
+      "smoothed_p95": 10.03159803981011,
+      "smoothed_rms_2d": 13.338051216078222
+    },
+    "coalesced_b60@seed101": {
+      "forward_p50": 2.431881954859771,
+      "forward_p95": 11.145218020839161,
+      "forward_rms_2d": 15.55677501192797,
+      "ms_per_epoch": 4.149692325998961,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.149004435121279,
+      "smoothed_p95": 9.918617670865077,
+      "smoothed_rms_2d": 13.729985973213537
+    },
+    "coalesced_b60@seed102": {
+      "forward_p50": 2.6161518705256306,
+      "forward_p95": 11.71377336270717,
+      "forward_rms_2d": 14.69855368276003,
+      "ms_per_epoch": 3.662599253120269,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.216409457054308,
+      "smoothed_p95": 10.111494993235311,
+      "smoothed_rms_2d": 13.367635855423014
+    },
+    "coalesced_b60@seed103": {
+      "forward_p50": 2.7138683877410745,
+      "forward_p95": 12.606611559231354,
+      "forward_rms_2d": 15.544532068748282,
+      "ms_per_epoch": 3.5433379760258465,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.1950150854044965,
+      "smoothed_p95": 10.629893443058755,
+      "smoothed_rms_2d": 13.14135372504138
+    },
+    "coalesced_b60@seed104": {
+      "forward_p50": 2.5402281657454564,
+      "forward_p95": 11.080316830461488,
+      "forward_rms_2d": 15.757911321497918,
+      "ms_per_epoch": 3.742042957980599,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.1833622659500707,
+      "smoothed_p95": 9.83137394539669,
+      "smoothed_rms_2d": 13.736442155512446
+    },
+    "coalesced_b60@seed42": {
+      "forward_p50": 2.598355014654506,
+      "forward_p95": 10.624346315388438,
+      "forward_rms_2d": 15.11834552261247,
+      "ms_per_epoch": 4.10483983913724,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.2471941002456894,
+      "smoothed_p95": 9.81606910812287,
+      "smoothed_rms_2d": 13.564467635663554
+    },
+    "megopolis_b15@seed101": {
+      "forward_p50": 2.8152662534521955,
+      "forward_p95": 11.882899498543084,
+      "forward_rms_2d": 16.13671802898567,
+      "ms_per_epoch": 4.43748488998712,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.2217057776691034,
+      "smoothed_p95": 9.833787696252568,
+      "smoothed_rms_2d": 13.144294477527605
+    },
+    "megopolis_b15@seed102": {
+      "forward_p50": 2.477490227586247,
+      "forward_p95": 10.830425687977966,
+      "forward_rms_2d": 16.23370040706901,
+      "ms_per_epoch": 3.607678299398881,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.158091094732613,
+      "smoothed_p95": 9.974386014313136,
+      "smoothed_rms_2d": 13.970169918357197
+    },
+    "megopolis_b15@seed103": {
+      "forward_p50": 2.5939342741179825,
+      "forward_p95": 11.678327992508606,
+      "forward_rms_2d": 15.332420997801242,
+      "ms_per_epoch": 4.409171717005365,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.2487807844601675,
+      "smoothed_p95": 9.96819710807594,
+      "smoothed_rms_2d": 13.413298686100399
+    },
+    "megopolis_b15@seed104": {
+      "forward_p50": 2.7495638262332407,
+      "forward_p95": 11.05435369056436,
+      "forward_rms_2d": 15.922171857639803,
+      "ms_per_epoch": 3.67767050233532,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.28916964888008,
+      "smoothed_p95": 9.85667336453113,
+      "smoothed_rms_2d": 13.766268524617889
+    },
+    "megopolis_b15@seed42": {
+      "forward_p50": 2.9776245462702122,
+      "forward_p95": 10.893365532990853,
+      "forward_rms_2d": 15.6262884451699,
+      "ms_per_epoch": 3.8471544730979694,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.3582637479493274,
+      "smoothed_p95": 9.728749592075975,
+      "smoothed_rms_2d": 13.014080983282634
+    },
+    "megopolis_b15@seed43": {
+      "forward_p50": 2.672132393797589,
+      "forward_p95": 12.137808900549954,
+      "forward_rms_2d": 16.408292357964562,
+      "ms_per_epoch": 3.445999253127242,
+      "n_epochs": 12184.0,
+      "smoothed_p50": 2.259762114701816,
+      "smoothed_p95": 10.166489851026745,
+      "smoothed_rms_2d": 13.816543771825383
+    }
+  }
+}

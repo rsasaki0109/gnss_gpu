@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Behavior change**: `ParticleFilterDevice(resampling="megopolis")`, the
+  default, now runs the corrected Megopolis (Chesser et al. 2021) with
+  `megopolis_iterations=60`. The previous kernel did not converge to the weight
+  distribution and remains available as `"megopolis_legacy"` for reproducing
+  old results. On PPC (6 routes) PF P50 improves by 0.7 m; on UrbanNav
+  Odaiba the forward RMS improves by 0.6 m and the smoothed output is unchanged
+  within seed noise.
 - `ParticleFilterDevice(resampling="megopolis_coalesced")`: opt-in Megopolis
   (Chesser et al. 2021) with ancestor-weight acceptance and block-shared,
   coalesced proposals. It converges to the weight distribution as iterations

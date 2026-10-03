@@ -9,8 +9,8 @@ variants rarely reach 3 m on PPC, so the error statistics are what separate
 the conditions.
 
 Conditions:
-  megopolis_b15           historical default (fixed seed every call)
-  megopolis_b15_pfseed43  historical default with PF seed 43: run-to-run noise
+  megopolis_b15           pre-2026-10 default ("megopolis_legacy", fixed seed)
+  megopolis_b15_pfseed43  same with PF seed 43: run-to-run noise
   megopolis_b15_seedstep  same, but a fresh seed on every resample
   coalesced_b15           Chesser et al. Megopolis, B=15
   coalesced_b60           Chesser et al. Megopolis, B=60
@@ -41,9 +41,9 @@ from ppc_ctrbpf_io import _load_full_reference  # noqa: E402
 from gnss_gpu.pf_device_config import clone_pf_device_init_kwargs  # noqa: E402
 
 CONDITIONS = {
-    "megopolis_b15": ("megopolis", 15, False),
-    "megopolis_b15_pfseed43": ("megopolis", 15, False, 43),
-    "megopolis_b15_seedstep": ("megopolis", 15, True),
+    "megopolis_b15": ("megopolis_legacy", 15, False),
+    "megopolis_b15_pfseed43": ("megopolis_legacy", 15, False, 43),
+    "megopolis_b15_seedstep": ("megopolis_legacy", 15, True),
     "coalesced_b15": ("megopolis_coalesced", 15, False),
     "coalesced_b60": ("megopolis_coalesced", 60, False),
     "coalesced_b60_seedstep": ("megopolis_coalesced", 60, True),
@@ -58,7 +58,7 @@ def _patched_build_pf(original, resampling: str, iterations: int, seed_step: boo
         if pf_seed is not None:
             # Re-create with another seed; predict noise and resampling both change.
             pf = type(pf)(**(clone_pf_device_init_kwargs(pf) | {"seed": pf_seed}))
-        if pf.resampling != "megopolis":
+        if pf.resampling not in ("megopolis", "megopolis_coalesced", "megopolis_legacy"):
             # FFBSi variants use systematic resampling; leave them untouched.
             return pf
         pf.resampling = resampling
@@ -69,7 +69,7 @@ def _patched_build_pf(original, resampling: str, iterations: int, seed_step: boo
 
             def resample():
                 seed = base + next(counter)
-                if pf.resampling == "megopolis":
+                if pf.resampling == "megopolis_legacy":
                     pf._pf_device_resample_megopolis(pf._state, pf.megopolis_iterations, seed)
                 else:
                     pf._pf_device_resample_megopolis_coalesced(pf._state, pf.megopolis_iterations, seed)

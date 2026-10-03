@@ -96,6 +96,19 @@ def test_filter_dispatches_coalesced_mode_with_configured_iterations():
     assert clone_pf_device_init_kwargs(pf)["resampling"] == "megopolis_coalesced"
 
 
+def test_default_megopolis_dispatches_to_coalesced_kernel_with_60_iterations():
+    pf = ParticleFilterDevice(n_particles=N, seed=5)
+    assert pf.resampling == "megopolis"
+    assert pf.megopolis_iterations == 60
+    calls = []
+    pf._pf_device_resample_megopolis_coalesced = lambda *args: calls.append(("coalesced", args[1:]))
+    pf._pf_device_resample_megopolis = lambda *args: calls.append(("legacy", args[1:]))
+    pf._resample()
+    pf.resampling = "megopolis_legacy"
+    pf._resample()
+    assert calls == [("coalesced", (60, 5)), ("legacy", (60, 5))]
+
+
 def test_rejects_unknown_resampling_and_bad_iterations():
     with pytest.raises(ValueError, match="resampling must be one of"):
         ParticleFilterDevice(n_particles=16, resampling="invalid")

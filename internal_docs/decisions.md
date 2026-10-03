@@ -765,7 +765,12 @@
 
 再開条件: GSDC トラックを再開するとき、または gsdc2023 モジュールを experiments 外（ライブラリ・別ツール）から使う必要が出たとき。その場合は shim ではなく import の一括書き換え＋ monkeypatch 対象の確認を 1 PR で行う。
 
-## D-039: PF device の既定リサンプラは当面 `megopolis` のまま、正しい Megopolis は opt-in
+## D-039: PF device のリサンプラを正しい Megopolis に切り替える（旧版は `megopolis_legacy`）
+
+**更新（2026-10-03、同日）**: 既定を切替えた。`resampling="megopolis"` は Chesser et al. (2021) の正しい Megopolis（`megopolis_coalesced` は別名）、`megopolis_iterations` の既定は 60。旧カーネルは `"megopolis_legacy"` として旧結果の再現用にのみ残す。根拠: PPC 6 route（P50 −0.7 m、`resampler_ablation_ppc_2026_10_03.md`）と UrbanNav Odaiba PF smoother 複数 seed（前向き RMS −0.6 m、smoother 出力は noise 内で同等、`resampler_ablation_urbannav_2026_10_03.md`）で、noise を超える悪化が無く前向きは改善、かつ正しく 1M 粒子で速い（B=60 12 ms vs 旧 B=15 28 ms）。ホスト側 `ParticleFilter` の megopolis（`resampling.cu`）も同じ欠陥を持つが未評価のため変更していない。
+
+以下は同日の当初判断（opt-in 追加時点）。
+
 
 決定: 既定値は変えない。`resampling="megopolis_coalesced"`（Chesser et al. 2021）を opt-in として追加する。
 
