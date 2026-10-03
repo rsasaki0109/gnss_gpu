@@ -39,6 +39,10 @@ struct PFDeviceState {
     double* d_cdf;           // [N] CDF
     int* d_resample_ancestor;  // [N] last systematic resample: out[j]=source index i
 
+    // For Megopolis resampling: ancestor-index ping-pong buffers
+    int* d_megopolis_idx_a;  // [N]
+    int* d_megopolis_idx_b;  // [N]
+
     // Velocity buffer (3 doubles, persistent)
     double* d_vel;
 
