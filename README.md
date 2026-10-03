@@ -41,11 +41,11 @@ python tools/build_release_bundle.py --output dist/reproducibility --archive dis
 
 ## Why you might care
 
-- 🛰️ **Measured against the classic baseline.** On UrbanNav Tokyo *Odaiba*, the
-  `PF 100K (DD + smoother + stop-detect)` filter on current main reaches **2.20 m P50**
-  (13.51 m RMS, mean of 5 seeds) versus **RTKLIB demo5 at 2.67 m / 13.08 m**: an
-  **18% better median** at a similar RMS. An April 2026 run recorded 1.36 m / 4.11 m
-  on data that is no longer available; see the note under the results table.
+- 🛰️ **Complements RTK where it fails.** On UrbanNav Tokyo *Odaiba*, modern RTK engines
+  have the better median: RTKLIB demo5 0.79 m, libgnss++ 0.72 m. But they leave 3–19% of
+  epochs without a solution or with large outliers. The GPU PF smoother (2.20 m median,
+  98% coverage) is not a better standalone engine. Using it to fill the RTK gaps raises
+  the share of all epochs within 5 m from 77.0% to **85.2%** (Shinjuku: 76.9% → 84.7%).
 - ⚡ **It's genuinely fast.** With the device-resident `ParticleFilterDevice`, a full
   **1,000,000-particle** predict → weight → resample step runs in **32 ms** (≈30 Hz) on a
   6 GB Turing-generation consumer GPU, and a 10,000-epoch batch WLS solve takes **~3 ms**.
@@ -102,13 +102,18 @@ UrbanNav route while the full-view trail is drawn from the continuous trajectory
 
 | Method | Dataset | P50 | RMS 2D |
 |---|---|--:|--:|
-| **PF 100K (DD + smoother + stop-detect)** | UrbanNav Tokyo Odaiba | **2.20 m** | 13.51 m |
-| RTKLIB demo5 | UrbanNav Tokyo Odaiba | 2.67 m | **13.08 m** |
+| PF 100K (DD + smoother + stop-detect) | UrbanNav Tokyo Odaiba | 2.20 m | 13.51 m |
+| RTKLIB demo5 (rtklibexplorer, 2026-09) | UrbanNav Tokyo Odaiba | 0.79 m | 40.87 m |
+| libgnss++ RTK, `low-cost` preset (80.8% coverage) | UrbanNav Tokyo Odaiba | **0.72 m** | **2.15 m** |
 | **PF + RobustClear-10K** (external mainline) | UrbanNav, 5 seq / 2 cities | — | **66.6 m** |
 | EKF baseline | UrbanNav, 5 seq / 2 cities | — | 93.25 m |
 
-The PF 100K row is the smoothed output of preset `odaiba_stop_detect` on current main,
-averaged over 5 seeds on 2026-10-03
+All Odaiba rows were measured on 2026-10-03 on the public data subset ([record](internal_docs/urbannav_rtk_baselines_2026_10_03.md)) with the base
+station's RINEX-header coordinates. Those coordinates are about 0.7 m off and bias every
+base-relative method; a corrected comparison will follow. P50/RMS are over the epochs
+each method outputs, so RTK coverage gaps do not count against it here. The PF 100K
+row is the smoothed output of preset `odaiba_stop_detect` on current main, averaged
+over 5 seeds
 ([record](internal_docs/resampler_ablation_urbannav_2026_10_03.md)). An April 2026 run
 of the same preset recorded 1.36 m / 4.11 m. That run used an Odaiba data version and
 a gnssplusplus build that are no longer available (it evaluated 12,228 epochs; the
