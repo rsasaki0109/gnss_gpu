@@ -266,3 +266,37 @@ def test_set_velocity_covariance_feeds_rbpf_velocity_kf_predict():
     # dt^2 * Sigma_v with dt=5, var=4 -> per-axis std ~ 5*2=10m; spread over
     # 3 axes should be well above the tiny 0.01m initial scatter.
     assert spread > 5.0
+
+
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+def test_reset_position_redraws_cloud_around_reference():
+    """A collapsed cloud far from the reference is redrawn around it.
+
+    A weight-only position_update cannot do this: it can only pick the clump
+    nearest the reference. reset_position keeps clock bias and velocity.
+    """
+
+    n_particles = 8192
+    pf = ParticleFilterDevice(n_particles=n_particles, seed=5, sigma_pos=0.05)
+    origin = np.array([-3.96e6, 3.35e6, 3.70e6])
+    pf.initialize(origin, clock_bias=123.0, spread_pos=0.01, spread_cb=0.5)
+    ref = origin + np.array([0.6, -0.4, 0.2])
+
+    pf.reset_position(ref, 0.1)
+
+    states = pf.get_particle_states()
+    np.testing.assert_allclose(states[:, :3].mean(axis=0), ref, atol=0.01)
+    np.testing.assert_allclose(states[:, :3].std(axis=0), 0.1, rtol=0.05)
+    assert abs(states[:, 3].mean() - 123.0) < 0.1
+    np.testing.assert_allclose(pf.get_log_weights(), 0.0)
+    np.testing.assert_allclose(pf.estimate()[:3], ref, atol=0.01)
+
+
+@pytest.mark.skipif(not HAS_GPU, reason="CUDA module not available")
+def test_reset_position_rejects_invalid_inputs_before_native_call():
+    pf = ParticleFilterDevice(n_particles=64)
+    pf.initialize(np.array([1.0, 2.0, 3.0]))
+    with pytest.raises(ValueError, match="ref_ecef"):
+        pf.reset_position([0.0, np.nan, 0.0], 0.1)
+    with pytest.raises(ValueError, match="sigma_pos"):
+        pf.reset_position([0.0, 0.0, 0.0], 0.0)

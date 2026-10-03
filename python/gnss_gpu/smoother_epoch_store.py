@@ -32,6 +32,8 @@ class SmootherEpochStoreInputs:
     doppler_sigma_mps: float | None
     doppler_velocity_update_gain: float | None
     doppler_max_velocity_update_mps: float | None
+    rtk_anchor: np.ndarray | None = None
+    rtk_anchor_sigma: float | None = None
 
     def as_store_kwargs(self) -> dict[str, Any]:
         return {
@@ -50,6 +52,8 @@ class SmootherEpochStoreInputs:
             "doppler_sigma_mps": self.doppler_sigma_mps,
             "doppler_velocity_update_gain": self.doppler_velocity_update_gain,
             "doppler_max_velocity_update_mps": self.doppler_max_velocity_update_mps,
+            "rtk_anchor": self.rtk_anchor,
+            "rtk_anchor_sigma": self.rtk_anchor_sigma,
         }
 
 
@@ -71,6 +75,8 @@ def build_smoother_epoch_store_inputs(
     doppler_velocity_update_gain: float,
     doppler_max_velocity_update_mps: float,
     min_pairs: int = 3,
+    rtk_anchor_ref: np.ndarray | None = None,
+    rtk_anchor_sigma_m: float | None = None,
 ) -> SmootherEpochStoreInputs:
     valid_dd_pr = _has_min_dd_pairs(dd_pseudorange_result, min_pairs)
     valid_dd_carrier = _has_min_dd_pairs(dd_carrier_result, min_pairs)
@@ -111,6 +117,12 @@ def build_smoother_epoch_store_inputs(
             if doppler_update is not None
             else None
         ),
+        rtk_anchor=(
+            None if rtk_anchor_ref is None else np.asarray(rtk_anchor_ref, dtype=np.float64)
+        ),
+        rtk_anchor_sigma=(
+            float(cast(float, rtk_anchor_sigma_m)) if rtk_anchor_ref is not None else None
+        ),
     )
 
 
@@ -130,6 +142,7 @@ def append_smoother_epoch_store(
     doppler_velocity_update_gain: float,
     doppler_max_velocity_update_mps: float,
     need_tdcp_motion: bool,
+    rtk_anchor_sigma_m: float | None = None,
 ) -> SmootherEpochStoreInputs:
     store_inputs = build_smoother_epoch_store_inputs(
         spp_pos=spp_pos,
@@ -147,6 +160,8 @@ def append_smoother_epoch_store(
         doppler_sigma_mps=epoch_state.doppler_sigma_epoch,
         doppler_velocity_update_gain=doppler_velocity_update_gain,
         doppler_max_velocity_update_mps=doppler_max_velocity_update_mps,
+        rtk_anchor_ref=getattr(epoch_state, "rtk_anchor_ref", None),
+        rtk_anchor_sigma_m=rtk_anchor_sigma_m,
     )
     pf.store_epoch(
         sat_ecef,

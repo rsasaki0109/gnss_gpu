@@ -54,6 +54,7 @@ def record_forward_epoch(
             doppler_velocity_update_gain=run_config.doppler_velocity_update_gain,
             doppler_max_velocity_update_mps=run_config.doppler_max_velocity_update_mps,
             need_tdcp_motion=context.run_options.need_fgo_tdcp_motion,
+            rtk_anchor_sigma_m=run_config.rtk_anchor_sigma_m,
         )
 
     finalize_result = finalize_forward_epoch(

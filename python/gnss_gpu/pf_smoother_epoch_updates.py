@@ -130,4 +130,16 @@ def apply_forward_epoch_updates(
         tdcp_position_config=config_parts.tdcp_position_update,
     )
 
+    if context.rtk_anchor_lookup is not None:
+        anchor = context.rtk_anchor_lookup.get(round(float(tow), 1))
+        if anchor is not None:
+            # A weight-only update cannot pull a cloud that has collapsed into
+            # clumps decimetres away from the fix, so redraw it around the fix.
+            context.pf.reset_position(
+                anchor,
+                config_parts.particle_filter.rtk_anchor_sigma_m,
+            )
+            epoch_state.rtk_anchor_ref = anchor
+            context.stats.n_rtk_anchor_used += 1
+
     return ForwardEpochUpdatesResult(spp_position_ecef=spp_position_ecef)

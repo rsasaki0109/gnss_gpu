@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+
 from gnss_gpu.nlos_mask import NlosMaskTables
 from gnss_gpu.pf_smoother_config import PfSmootherConfig, PfSmootherConfigParts
 from gnss_gpu.pf_smoother_epoch_history import ForwardEpochHistory
@@ -36,3 +38,5 @@ class PfSmootherForwardPassContext:
     observation_setup: ObservationComputers
     pr_history: dict[int, list[float]]
     nlos_tables: NlosMaskTables | None = None
+    # FIXED RTK positions by round(tow, 1); the cloud is redrawn around them.
+    rtk_anchor_lookup: dict[float, np.ndarray] | None = None

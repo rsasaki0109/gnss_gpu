@@ -213,6 +213,13 @@ void pf_device_shift_clock_bias(PFDeviceState* state, double shift);
 // Shift all particle positions by a constant ECEF delta, preserving weights.
 void pf_device_shift_position(PFDeviceState* state, double dx, double dy, double dz);
 
+// Redraw every particle position as ref + N(0, sigma_pos^2 I) and reset the
+// weights to uniform. Clock bias and velocity states are kept, so callers
+// should resample first.
+void pf_device_reset_position(PFDeviceState* state,
+    double ref_x, double ref_y, double ref_z, double sigma_pos,
+    unsigned long long seed, int step);
+
 // ESS - compute on device, return scalar to host
 double pf_device_ess(const PFDeviceState* state);
 
