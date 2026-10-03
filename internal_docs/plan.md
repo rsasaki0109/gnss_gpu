@@ -39,7 +39,7 @@
 - 解消（2026-10-02）: `score_vs_inuex35.py` の `_ROVER_EPOCH_COUNTS` が Nagoya run1/2/3 に Tokyo の値（11928 / 9151 / 15301）をコピーしていた。inuex35 README は Tokyo のみなので Nagoya 行を削除し、reference 長に fallback させた。commit 済みの Nagoya 結果でこの値を使ったものは無い。
 - 旧版 plan の GSDC 3.993/4.821 は古い bridge 提出の値。現行 best は上表。
 - `internal_docs/ppc_current_status.md` は旧 ranker contract の文書として stale 注記を追加（本文は未更新）。
-- 未解消: `benchmarks/RESULTS.md`（2026-04-01、「generic GPU」）と README の「consumer Ada GPU で 81 ms」の表記揺れ。GPU 型番は 2ca3623 で意図的に削除済み。再計測を伴うので別作業。
+- 解消（2026-10-03）: `benchmarks/RESULTS.md` を Turing 世代 GPU で再計測し、README の速度表記も Device PF の実測（1M 粒子 32 ms）に更新。
 
 ---
 
@@ -76,12 +76,13 @@
 
 6. **`experiments/exp_ppc_ctrbpf_fgo.py` の分割**（2026-10-03 第 1–2 段完了: 12,680 → 8,066 行）。I/O・CLI パース（`ppc_ctrbpf_io.py`）、`CTRBPFConfig` / `_config_variants`（`ppc_ctrbpf_config.py`）、RTK diag の gate / sort / run-index policy（`ppc_ctrbpf_rtkdiag.py`）を AST 同一のまま移動し、元モジュールから全名 re-export。第 2 段で `main` 冒頭の argparse 定義 797 行を `ppc_ctrbpf_cli._build_arg_parser()` へ移動（`--help` とデフォルト値が完全一致）。残り: `_run_ctrbpf_on_segment`（3,427 行、うち epoch ループ本体 2,802 行）と `main` の run ループ（約 1,400 行）の内部分割。前提として 2026-10-03 に refactor guard `experiments/fingerprint_ctrbpf_segment.py` を追加（合成区間で 43 method を実行し全戻り値の SHA-256 を出す、同一 GPU で決定的。`_gnss_gpu_pf_device` 必須）。ただし合成入力で通るのは関数の 34%（DD 0–2%、IMU-TC 1%、RTK diag 37%、velocity KF 52%）。ループ内ブロックは PF・統計オブジェクト・数十のローカルを共有するため、引数を並べた関数抽出では結合が減らない。次の一手は (1) 合成 DD computer / IMU 入力で guard のカバレッジを上げる、(2) per-run 状態を 1 つの dataclass にまとめてからブロックを method 化する、import 元 50 ファイルを新モジュール直参照へ移すか。引き続き「数値挙動を変えない」commit に限定する。
 7. ~~`experiments/gsdc2023_*` を package にまとめるか~~（2026-10-03 判断: 今は移さない。`decisions.md` D-038。335 import と 17 か所の module monkeypatch のため shim 移動は危険、GSDC 休眠中で便益が薄い）
-8. ~~`benchmarks/RESULTS.md` の再計測~~（2026-10-03 完了: Turing 世代 6 GB GPU で全 native module を計測し 2026-04 の表は historical として併記。PF Device が標準 PF より遅かった原因は Megopolis が毎反復 16 double/粒子をコピーしていたこと。index 化で bit-identical のまま 153 → 32 ms、host-buffered PF の megopolis の GPU メモリリーク（4 buffer 未解放）も修正）。README の「81 ms / Ada」は 2026-04 表と整合しているため据え置き。
+8. ~~`benchmarks/RESULTS.md` の再計測~~（2026-10-03 完了: Turing 世代 6 GB GPU で全 native module を計測し 2026-04 の表は historical として併記。PF Device が標準 PF より遅かった原因は Megopolis が毎反復 16 double/粒子をコピーしていたこと。index 化で bit-identical のまま 153 → 32 ms、host-buffered PF の megopolis の GPU メモリリーク（4 buffer 未解放）も修正）。README の速度表記は Device PF の実測（32 ms、Turing）に更新。
 9. ~~`CONTRIBUTING.md` の lint 指示を CI に合わせる / decisions.md 2 本の関係を明記~~（2026-10-02 完了）。repo 全体の ruff（`ruff check .` で 554 件）を CI 対象に広げるかは未決定。
 10. CI: ~~coverage と pyright basic~~（2026-10-03 導入: full-suite に `--cov=gnss_gpu`（job summary + `coverage-xml` artifact）、PR gate の `typecheck` job で pyright basic を ratchet 方式で強制。負債 71 ファイルは 2026-10-03 に全て解消し exclude は空、`extraPaths: ["python"]` で installed copy ではなく repo source を解決）。self-hosted CUDA workflow は 2026-10-03 からネイティブ依存の test 一式と PF3D-BVH 短区間回帰（`tests/test_pf3d_bvh_short_segment.py`）を実行。合成 street canyon では完全な地図でも PF3D-BVH（2D RMS 10.6 m）が 3D 非考慮 PF（7.5 m）より悪い（未調整パラメータ、D-037 と同傾向）。
 11. ~~GSDC bridge Doppler 2 件の strict xfail~~（2026-10-03 解消）。実装は正しく fixture が古かった: `4f7fc65`（6/6）で raw bridge が `doppler=+PseudorangeRate`・`clock_drift_mps` も正符号に変わったのに fixture が旧符号のまま、かつ `b0607ef`（5/8）で L-factor 用の `_build_trip_arrays(use_tdcp=True)` 呼び出しが増えていた。
 12. ~~full suite を CI で回す~~（2026-10-03 完了: `.github/workflows/full-suite.yml`、毎日 03:00 JST + `workflow_dispatch`、ubuntu-latest / ネイティブ拡張なし。依存は `scripts/ci/requirements-full-suite.txt` に固定）。PR gate にはしていない。
 13. ~~`tests/test_cuda_streams.py` の 11 件~~（2026-10-03 解消）。validation wave（`3ede3c0`）は `spread_pos=0` / `sigma_pos=0` の拒否を `test_pf_device_wrapper.py` で明示的に固定しているため契約は変えず、4 月の古い test 側を `NEAR_ZERO_SIGMA = 1e-12` に置換。self-hosted CUDA の test 一覧に追加。
+14. **PF device リサンプリングの正しさ**（`decisions.md` D-039）。(a) 既定 `megopolis` は重み分布に収束しない → `megopolis_coalesced`（opt-in、2026-10-03 追加）への既定切替を PPC holdout で判断。(b) `pf_device_resample_systematic` の u0 二重除算バグ（FFBSi 系に影響）。(c) `_resample` が毎回同じ seed。いずれも数値が変わるため、実データでの比較とセットで直す。
 
 ---
 
