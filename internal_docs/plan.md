@@ -67,7 +67,9 @@
 ### 研究
 
 1. **D-037 後の pivot を 1 つ選ぶ**（`decisions.md`「現在の未決定事項」）。最小コストの試験は「3D マップ遮蔽率を PPC ranker / RTK 除外候補の feature として 1 列追加」。粒子ごとの遮蔽判定を尤度に入れる案は再提案しない（D-033, D-037）。
+   - 2026-10-03 確認: 候補 (c) の ranker への NLOS 特徴量は 7 月の Wave 2 で既に検証済み（ranker 層は飽和、名古屋 run2 の oracle headroom 0.0 pp）、PF/DD への PLATEAU mask は Wave 1 で Δ=0。同じ形での再試行は見込みが薄い。
 2. **PPC honest 59.22% → 25% safe-FIX milestone**（12,195 epoch、残 1,164）。候補: DD-reference 変更をまたぐ ambiguity evidence の持続、candidate oracle headroom 4,038 epoch。出典 `docs/ppc_pf_fgo_research_plan.md` L86–142。
+   - 2026-10-03: 正規パイプライン（safe IMU PF/FGO tracker 11,031 FIX → 58.521912% → causal FLOAT selector 59.222040%）をWindows dev 機で全 route・全スコア完全再現。gnssplusplus `62bd0b73` を GTSAM 付きでビルドして使う。手順は `ppc_canonical_reproduction_windows_2026_10_03.md`。注意: `run_ppc_basin_fgo_six_route.py` の既定値（top-k 4 等）は凍結ポリシーと違う。
 3. **#169 の実 UrbanNav データ e2e**（`gnss-gpu run --preset urbannav-pf`）が未実行。
 4. RB-FGO-PF run3 の per-cluster relinearization（false-fix 3.09% → ~2%）。runtime source が repo 外なので、先に取り込むかを決める。
 5. PF-only に virgin holdout が無い（Tokyo run1 は operational audit）。
