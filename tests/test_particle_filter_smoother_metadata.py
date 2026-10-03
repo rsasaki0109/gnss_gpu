@@ -83,6 +83,7 @@ def _smooth_shell(source: str | None):
         sigma_pr=3.0,
         nu=0.0,
         resampling="systematic",
+        megopolis_iterations=15,
         ess_threshold=0.5,
         seed=7,
         per_particle_nlos_gate=False,
