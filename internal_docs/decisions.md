@@ -777,7 +777,8 @@
 
 - 既定 `megopolis` は受理判定を「現在の祖先」ではなく「スロットの元の重み」と比べ、反復を増やすと偏りが**増える**。リサンプラとして重み分布に収束しない。
 - `megopolis_coalesced` は B を増やすと noise floor に収束し、1M 粒子で既定より 3–13 倍速い（Turing、単精度の受理判定）。
-- ただし既定を切り替えると PF の全結果が変わる。採用は PPC holdout / LORO を通してから（D-009, D-010）。データがこの環境に無いため未実施。
+- ただし既定を切り替えると PF の全結果が変わる。採用は holdout を通してから（D-009, D-010）。
+- PPC 6 route 全区間での ablation（2026-10-03、`resampler_ablation_ppc_2026_10_03.md`）: `megopolis_coalesced` B=60 だけが noise 幅（P50 ±0.05 m）を超えて改善（PF+PU / RBPF+PU で P50 −0.65〜−0.72 m、RMS −0.8〜−1.0 m）。ただし route 差が大きい（tokyo3 −2.9 m、nagoya3 +0.17 m）、`<10m` は −0.3 pp、B=15 は既定と同等、seed 更新は効果なし。PF 単体の PPC 誤差は multipath 支配（P50 ≈31 m）で公式 score は動かず、正規 59.22% パイプラインはこのリサンプラを使わない。→ 既定切替の判断は README headline の UrbanNav PF smoother（既定 `megopolis`）で B=60 を検証してから。UrbanNav データは dev 機に無い。
 
 同時に見つかった既存の問題（未修正、数値が変わるため別判断）:
 - `pf_device_resample_systematic` は `u0=(seed%1e6)/(1e6·N)` をさらにカーネルで `/N` しており、起点が [0, 1/N²) に縮んで実質決定的・有偏（TV 0.06–0.17）。FFBSi 系 variant が使う。

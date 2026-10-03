@@ -82,7 +82,7 @@
 11. ~~GSDC bridge Doppler 2 件の strict xfail~~（2026-10-03 解消）。実装は正しく fixture が古かった: `4f7fc65`（6/6）で raw bridge が `doppler=+PseudorangeRate`・`clock_drift_mps` も正符号に変わったのに fixture が旧符号のまま、かつ `b0607ef`（5/8）で L-factor 用の `_build_trip_arrays(use_tdcp=True)` 呼び出しが増えていた。
 12. ~~full suite を CI で回す~~（2026-10-03 完了: `.github/workflows/full-suite.yml`、毎日 03:00 JST + `workflow_dispatch`、ubuntu-latest / ネイティブ拡張なし。依存は `scripts/ci/requirements-full-suite.txt` に固定）。PR gate にはしていない。
 13. ~~`tests/test_cuda_streams.py` の 11 件~~（2026-10-03 解消）。validation wave（`3ede3c0`）は `spread_pos=0` / `sigma_pos=0` の拒否を `test_pf_device_wrapper.py` で明示的に固定しているため契約は変えず、4 月の古い test 側を `NEAR_ZERO_SIGMA = 1e-12` に置換。self-hosted CUDA の test 一覧に追加。
-14. **PF device リサンプリングの正しさ**（`decisions.md` D-039）。(a) 既定 `megopolis` は重み分布に収束しない → `megopolis_coalesced`（opt-in、2026-10-03 追加）への既定切替を PPC holdout で判断。(b) `pf_device_resample_systematic` の u0 二重除算バグ（FFBSi 系に影響）。(c) `_resample` が毎回同じ seed。いずれも数値が変わるため、実データでの比較とセットで直す。
+14. **PF device リサンプリングの正しさ**（`decisions.md` D-039）。(a) 既定 `megopolis` は重み分布に収束しない → `megopolis_coalesced`（opt-in、2026-10-03 追加）への既定切替を PPC holdout で判断。(b) `pf_device_resample_systematic` の u0 二重除算バグ（FFBSi 系に影響）。(c) `_resample` が毎回同じ seed。PPC 6 route ablation（2026-10-03、`resampler_ablation_ppc_2026_10_03.md`）: coalesced B=60 で P50 −0.7 m（noise ±0.05）、ただし route 差あり、seed 更新は効果なし。次: UrbanNav（README headline の PF smoother）で B=60 を検証して既定切替を判断。PPC/PLATEAU データは `E:\datasets\` にある（UrbanNav は無い）。
 
 ---
 
