@@ -1503,40 +1503,27 @@ __global__ void pfd_reset_weights_kernel(double* log_weights, int N) {
     log_weights[tid] = 0.0;
 }
 
-// --- Megopolis kernel ---
-__global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
-                                    double* vx_a, double* vy_a, double* vz_a,
-                                    double* vcov_a,
-                                    double* pcb_a,
-                                    double* px_b, double* py_b, double* pz_b,
-                                    double* vx_b, double* vy_b, double* vz_b,
-                                    double* vcov_b,
-                                    double* pcb_b,
-                                    const double* log_weights,
-                                    int N, unsigned long long seed, int iteration,
-                                    int src_buf) {
+// --- Megopolis kernels ---
+// Each iteration lets slot tid take over the content of slot j with an
+// acceptance ratio that depends only on the slots' (fixed) log-weights and the
+// per-(tid, iteration) random draws, never on the particle content. So the
+// iterations can run on an ancestor-index array, followed by one gather of the
+// 16 doubles per particle. This is bit-identical to copying the full state on
+// every iteration, but moves 4-byte indices instead of 128-byte states.
+__global__ void pfd_megopolis_index_init_kernel(int* idx, int N) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+    idx[tid] = tid;
+}
+
+__global__ void pfd_megopolis_index_kernel(const int* idx_src, int* idx_dst,
+                                          const double* log_weights,
+                                          int N, unsigned long long seed, int iteration) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= N) return;
 
     curandStatePhilox4_32_10_t state;
     curand_init(seed, tid, iteration, &state);
-
-    const double* src_px = (src_buf == 0) ? px_a : px_b;
-    const double* src_py = (src_buf == 0) ? py_a : py_b;
-    const double* src_pz = (src_buf == 0) ? pz_a : pz_b;
-    const double* src_vx = (src_buf == 0) ? vx_a : vx_b;
-    const double* src_vy = (src_buf == 0) ? vy_a : vy_b;
-    const double* src_vz = (src_buf == 0) ? vz_a : vz_b;
-    const double* src_vcov = (src_buf == 0) ? vcov_a : vcov_b;
-    const double* src_pcb = (src_buf == 0) ? pcb_a : pcb_b;
-    double* dst_px = (src_buf == 0) ? px_b : px_a;
-    double* dst_py = (src_buf == 0) ? py_b : py_a;
-    double* dst_pz = (src_buf == 0) ? pz_b : pz_a;
-    double* dst_vx = (src_buf == 0) ? vx_b : vx_a;
-    double* dst_vy = (src_buf == 0) ? vy_b : vy_a;
-    double* dst_vz = (src_buf == 0) ? vz_b : vz_a;
-    double* dst_vcov = (src_buf == 0) ? vcov_b : vcov_a;
-    double* dst_pcb = (src_buf == 0) ? pcb_b : pcb_a;
 
     int offset = (int)(curand_uniform_double(&state) * (N - 1)) + 1;
     int j = (tid + offset) % N;
@@ -1545,32 +1532,34 @@ __global__ void pfd_megopolis_kernel(double* px_a, double* py_a, double* pz_a,
     double alpha = fmin(1.0, exp(log_alpha));
     double u = curand_uniform_double(&state);
 
-    if (u < alpha) {
-        dst_px[tid] = src_px[j];
-        dst_py[tid] = src_py[j];
-        dst_pz[tid] = src_pz[j];
-        dst_vx[tid] = src_vx[j];
-        dst_vy[tid] = src_vy[j];
-        dst_vz[tid] = src_vz[j];
-        int dst_cov = tid * 9;
-        int src_cov = j * 9;
-        for (int k = 0; k < 9; k++) {
-            dst_vcov[dst_cov + k] = src_vcov[src_cov + k];
-        }
-        dst_pcb[tid] = src_pcb[j];
-    } else {
-        dst_px[tid] = src_px[tid];
-        dst_py[tid] = src_py[tid];
-        dst_pz[tid] = src_pz[tid];
-        dst_vx[tid] = src_vx[tid];
-        dst_vy[tid] = src_vy[tid];
-        dst_vz[tid] = src_vz[tid];
-        int cov_off = tid * 9;
-        for (int k = 0; k < 9; k++) {
-            dst_vcov[cov_off + k] = src_vcov[cov_off + k];
-        }
-        dst_pcb[tid] = src_pcb[tid];
+    idx_dst[tid] = (u < alpha) ? idx_src[j] : idx_src[tid];
+}
+
+__global__ void pfd_megopolis_gather_kernel(const double* src_px, const double* src_py,
+                                           const double* src_pz,
+                                           const double* src_vx, const double* src_vy,
+                                           const double* src_vz,
+                                           const double* src_vcov, const double* src_pcb,
+                                           double* dst_px, double* dst_py, double* dst_pz,
+                                           double* dst_vx, double* dst_vy, double* dst_vz,
+                                           double* dst_vcov, double* dst_pcb,
+                                           const int* idx, int N) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    int k = idx[tid];
+    dst_px[tid] = src_px[k];
+    dst_py[tid] = src_py[k];
+    dst_pz[tid] = src_pz[k];
+    dst_vx[tid] = src_vx[k];
+    dst_vy[tid] = src_vy[k];
+    dst_vz[tid] = src_vz[k];
+    int dst_cov = tid * 9;
+    int src_cov = k * 9;
+    for (int c = 0; c < 9; c++) {
+        dst_vcov[dst_cov + c] = src_vcov[src_cov + c];
     }
+    dst_pcb[tid] = src_pcb[k];
 }
 
 // CUDA_CHECK macro is provided by gnss_gpu/cuda_check.h (included above)
@@ -1620,6 +1609,10 @@ PFDeviceState* pf_device_create(int n_particles) {
     CUDA_CHECK(cudaMalloc(&state->d_weights_norm, sz));
     CUDA_CHECK(cudaMalloc(&state->d_cdf, sz));
     CUDA_CHECK(cudaMalloc(&state->d_resample_ancestor, (size_t)n_particles * sizeof(int)));
+
+    // Megopolis resampling index buffers
+    CUDA_CHECK(cudaMalloc(&state->d_megopolis_idx_a, (size_t)n_particles * sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&state->d_megopolis_idx_b, (size_t)n_particles * sizeof(int)));
 
     // Velocity buffer (3 doubles)
     CUDA_CHECK(cudaMalloc(&state->d_vel, 3 * sizeof(double)));
@@ -1680,6 +1673,8 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     cudaFree(state->d_weights_norm);
     cudaFree(state->d_cdf);
     cudaFree(state->d_resample_ancestor);
+    cudaFree(state->d_megopolis_idx_a);
+    cudaFree(state->d_megopolis_idx_b);
     cudaFree(state->d_vel);
 
     // Free persistent satellite device buffers
@@ -1720,6 +1715,8 @@ void pf_device_destroy_resources(PFDeviceState* state) {
     state->d_weights_norm = nullptr;
     state->d_cdf = nullptr;
     state->d_resample_ancestor = nullptr;
+    state->d_megopolis_idx_a = nullptr;
+    state->d_megopolis_idx_b = nullptr;
     state->d_reduction_result = nullptr;
     state->d_vel = nullptr;
     state->d_sat_ecef = nullptr;
@@ -2156,34 +2153,33 @@ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsign
     int N = state->n_particles;
     int grid = state->grid_size;
 
-    // Use primary arrays as buffer A and tmp arrays as buffer B.
-    // Megopolis kernel uses double-buffering directly on device memory
-
+    // Mix ancestor indices with double-buffering, then gather the particle
+    // state once into the tmp arrays (see pfd_megopolis_index_kernel).
+    int* idx_src = state->d_megopolis_idx_a;
+    int* idx_dst = state->d_megopolis_idx_b;
+    pfd_megopolis_index_init_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(idx_src, N);
     for (int iter = 0; iter < n_iterations; iter++) {
-        int src_buf = iter % 2;
-        pfd_megopolis_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
-            state->d_px, state->d_py, state->d_pz,
-            state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
-            state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp,
-            state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_vcov_tmp, state->d_pcb_tmp,
-            state->d_log_weights,
-            N, seed, iter, src_buf);
+        pfd_megopolis_index_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+            idx_src, idx_dst, state->d_log_weights, N, seed, iter);
+        std::swap(idx_src, idx_dst);
     }
+    pfd_megopolis_gather_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
+        state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp,
+        state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_vcov_tmp, state->d_pcb_tmp,
+        idx_src, N);
     CUDA_CHECK_LAST();
 
-    // If final result is in buffer B (tmp), swap pointers
-    int final_buf = n_iterations % 2;
-    if (final_buf == 1) {
-        // Last iteration wrote to buffer B (tmp), swap so primary has result
-        std::swap(state->d_px, state->d_px_tmp);
-        std::swap(state->d_py, state->d_py_tmp);
-        std::swap(state->d_pz, state->d_pz_tmp);
-        std::swap(state->d_vx, state->d_vx_tmp);
-        std::swap(state->d_vy, state->d_vy_tmp);
-        std::swap(state->d_vz, state->d_vz_tmp);
-        std::swap(state->d_vcov, state->d_vcov_tmp);
-        std::swap(state->d_pcb, state->d_pcb_tmp);
-    }
+    // The gather wrote to the tmp arrays; swap so the primary arrays hold it.
+    std::swap(state->d_px, state->d_px_tmp);
+    std::swap(state->d_py, state->d_py_tmp);
+    std::swap(state->d_pz, state->d_pz_tmp);
+    std::swap(state->d_vx, state->d_vx_tmp);
+    std::swap(state->d_vy, state->d_vy_tmp);
+    std::swap(state->d_vz, state->d_vz_tmp);
+    std::swap(state->d_vcov, state->d_vcov_tmp);
+    std::swap(state->d_pcb, state->d_pcb_tmp);
 
     // Reset log weights to uniform
     pfd_reset_weights_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(state->d_log_weights, N);

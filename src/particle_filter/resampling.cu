@@ -267,7 +267,9 @@ void pf_resample_megopolis(double* px, double* py, double* pz, double* pcb,
   }
 
   CUDA_CHECK(cudaFree(d_px_a)); CUDA_CHECK(cudaFree(d_py_a));
+  CUDA_CHECK(cudaFree(d_pz_a)); CUDA_CHECK(cudaFree(d_pcb_a));
   CUDA_CHECK(cudaFree(d_px_b)); CUDA_CHECK(cudaFree(d_py_b));
+  CUDA_CHECK(cudaFree(d_pz_b)); CUDA_CHECK(cudaFree(d_pcb_b));
   CUDA_CHECK(cudaFree(d_lw));
 }
 

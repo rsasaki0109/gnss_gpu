@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- `ParticleFilterDevice` Megopolis resampling now mixes int32 ancestor indices
+  and gathers the 16-double particle state once instead of copying it on
+  every iteration. Bit-identical output; 1M-particle `predict → update` goes
+  from 153 ms to 32 ms on a Turing GPU.
+- Fixed a GPU memory leak in the host-buffered `ParticleFilter` Megopolis
+  resampling: 4 of 9 device buffers were never freed (32 MB per call at 1M
+  particles).
+
 ## 0.3.0 - 2026-07-29
 
 - Added immutable evaluation contracts and mandatory negative holdouts.
