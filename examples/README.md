@@ -62,6 +62,9 @@ reads checked-in result artifacts instead of rerunning UrbanNav. It prints the
 Odaiba OpenStreetMap particle-filter comparison against RTKLIB demo5 and the
 PLATEAU LOS/NLOS mask replay gain for the particle-filter consumer.
 
+The PF figures below are from an April 2026 artifact. Rerunning the same preset
+on current main gives P50 2.20 m / RMS 13.51 m (see the README results table).
+
 ```text
 RTKLIB demo5                              P50 2.67 m / RMS 13.08 m
 PF 100K (DD + smoother + stop-detect)     P50 1.36 m / RMS  4.11 m
