@@ -31,17 +31,17 @@ class ParticleFilterDeviceRuntime:
     sigma_pr : float
         Pseudorange observation standard deviation [m] for weighting.
     resampling : str
-        Resampling method: "megopolis" (default, historical), "megopolis_coalesced"
-        or "systematic". "megopolis" does not converge to the weight distribution
-        as iterations grow; "megopolis_coalesced" (Chesser et al. 2021) does and is
-        faster, but changes results, so it is opt-in.
+        Resampling method: "megopolis" (default; Chesser et al. 2021 with
+        coalesced proposals, alias "megopolis_coalesced"), "systematic", or
+        "megopolis_legacy" (the pre-2026-10 kernel, which does not converge to
+        the weight distribution; only for reproducing old results, D-039).
     ess_threshold : float
         ESS ratio threshold for triggering resampling (0-1).
     seed : int
         Random seed for reproducibility.
     megopolis_iterations : int
-        Iterations B for both Megopolis modes (default 15). With strongly
-        degenerate weights the coalesced mode needs a larger B to be unbiased.
+        Iterations B for both Megopolis modes (default 60). Megopolis is only
+        unbiased as B grows; with strongly degenerate weights use a larger B.
     """
 
     # Attributes assigned dynamically by ``init_pf_device_config`` (config
@@ -114,7 +114,7 @@ class ParticleFilterDeviceRuntime:
                  velocity_guide_alpha=1.0,
                  rbpf_velocity_kf=False,
                  velocity_process_noise=0.0,
-                 megopolis_iterations=15):
+                 megopolis_iterations=60):
         init_pf_device_config(
             self,
             n_particles=n_particles,
@@ -740,12 +740,12 @@ class ParticleFilterDeviceRuntime:
 
     def _resample(self):
         """Perform resampling entirely on GPU."""
-        if self.resampling == "megopolis":
-            self._pf_device_resample_megopolis(self._state, self.megopolis_iterations, self.seed)
-        elif self.resampling == "megopolis_coalesced":
+        if self.resampling in ("megopolis", "megopolis_coalesced"):
             self._pf_device_resample_megopolis_coalesced(
                 self._state, self.megopolis_iterations, self.seed
             )
+        elif self.resampling == "megopolis_legacy":
+            self._pf_device_resample_megopolis(self._state, self.megopolis_iterations, self.seed)
         else:
             self._pf_device_resample_systematic(self._state, self.seed)
 

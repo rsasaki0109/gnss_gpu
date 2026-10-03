@@ -55,7 +55,7 @@ Per-route P50 change vs default:
 
 ## Decision status
 
-The default stays `megopolis` (D-039). The README-headline UrbanNav PF
-smoother (`pf_smoother_runtime.py`, default `megopolis`) is where a switch
-matters most, but UrbanNav data is not on the dev machine. Re-evaluate the
-default there, with B=60 as the candidate, before switching.
+The default was later switched (D-039 update), after the UrbanNav Odaiba
+check in `resampler_ablation_urbannav_2026_10_03.md`. `"megopolis"` now means
+the corrected algorithm with B=60, and the arm labelled `megopolis_b15` above is
+`"megopolis_legacy"`.

@@ -125,10 +125,13 @@ def attach_pf_device_bindings(pf, bindings: SimpleNamespace) -> None:
         setattr(pf, f"_{name}", getattr(bindings, name))
 
 
-# "megopolis" is the historical default kept for reproducibility; it does not
-# converge to the weight distribution as iterations grow. "megopolis_coalesced"
-# is the Chesser et al. (2021) algorithm and is unbiased in the B -> inf limit.
-_RESAMPLING_METHODS = frozenset({"megopolis", "megopolis_coalesced", "systematic"})
+# "megopolis" is the Chesser et al. (2021) algorithm (ancestor-weight acceptance,
+# coalesced proposals), unbiased in the B -> inf limit; "megopolis_coalesced" is
+# an alias. "megopolis_legacy" is the pre-2026-10 kernel, kept only to reproduce
+# old results: it does not converge to the weight distribution (D-039).
+_RESAMPLING_METHODS = frozenset(
+    {"megopolis", "megopolis_coalesced", "megopolis_legacy", "systematic"}
+)
 
 
 def init_pf_device_config(
@@ -154,7 +157,7 @@ def init_pf_device_config(
     velocity_guide_alpha=1.0,
     rbpf_velocity_kf=False,
     velocity_process_noise=0.0,
-    megopolis_iterations=15,
+    megopolis_iterations=60,
     bindings: SimpleNamespace | None = None,
 ) -> None:
     """Validate constructor args, attach native hooks, and allocate GPU state."""
