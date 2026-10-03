@@ -86,6 +86,7 @@ class ParticleFilterDeviceRuntime:
     _pf_device_position_update: Callable[..., Any]
     _pf_device_shift_clock_bias: Callable[..., Any]
     _pf_device_shift_position: Callable[..., Any]
+    _pf_device_reset_position: Callable[..., Any]
     _pf_device_ess: Callable[..., Any]
     _pf_device_position_spread: Callable[..., Any]
     _pf_device_resample_systematic: Callable[..., Any]
@@ -706,6 +707,29 @@ class ParticleFilterDeviceRuntime:
             float(delta[2]),
         )
         return shift_norm, True
+
+    def reset_position(self, ref_ecef, sigma_pos):
+        """Redraw the cloud around ``ref_ecef`` from an equally weighted population.
+
+        Resamples first, so clock bias and velocity states keep their posterior
+        diversity, then sets every position to ``ref + N(0, sigma_pos^2 I)`` and
+        resets the weights. Unlike :meth:`position_update`, this works when the
+        cloud has collapsed into a few clumps away from the reference, e.g.
+        when anchoring to an RTK fixed solution.
+        """
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        ref = np.asarray(ref_ecef, dtype=np.float64).ravel()
+        if ref.size != 3 or not np.all(np.isfinite(ref)):
+            raise ValueError("ref_ecef must be 3 finite values")
+        sigma = positive_float("sigma_pos", sigma_pos)
+        self.resample()
+        self._step += 1
+        self._pf_device_reset_position(
+            self._state,
+            float(ref[0]), float(ref[1]), float(ref[2]),
+            sigma, self.seed, self._step,
+        )
 
     def correct_clock_bias(self, sat_ecef, pseudoranges, quantile=0.5):
         """Re-center particles' clock bias using pseudorange residuals.

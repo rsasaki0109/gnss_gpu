@@ -68,6 +68,8 @@ class EpochForwardState:
     fallback_attempt: CarrierFallbackAttempt = field(default_factory=CarrierFallbackAttempt)
     dd_pr_result: Any | None = None
     dd_carrier_result: Any | None = None
+    # RTK fixed position the cloud was redrawn around this epoch, if any.
+    rtk_anchor_ref: np.ndarray | None = None
 
 
 def create_epoch_forward_state(dd_pseudorange_sigma: float) -> EpochForwardState:

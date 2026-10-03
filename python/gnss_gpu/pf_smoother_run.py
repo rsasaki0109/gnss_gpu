@@ -27,6 +27,7 @@ from gnss_gpu.pf_smoother_runtime import (
     resolve_run_dataset,
 )
 from gnss_gpu.pf_smoother_summary import print_pf_smoother_run_summary
+from gnss_gpu.rtk_anchor import load_rtk_fix_lookup
 
 
 def run_pf_smoother_evaluation(
@@ -80,6 +81,13 @@ def run_pf_smoother_evaluation(
             robust.nlos_mask_csv,
             robust.nlos_strong_mask_csv or None,
         )
+    rtk_anchor_lookup = None
+    if str(run_config.rtk_anchor_pos).strip():
+        rtk_anchor_lookup = load_rtk_fix_lookup(run_config.rtk_anchor_pos)
+        print(
+            f"  [rtk_anchor] {len(rtk_anchor_lookup)} FIXED epochs from "
+            f"{run_config.rtk_anchor_pos} (sigma={run_config.rtk_anchor_sigma_m} m)"
+        )
     elapsed_ms = run_pf_smoother_forward_pass(
         PfSmootherForwardPassContext(
             run_name=run_name,
@@ -96,6 +104,7 @@ def run_pf_smoother_evaluation(
             observation_setup=observation_setup,
             pr_history=pr_history,
             nlos_tables=nlos_tables,
+            rtk_anchor_lookup=rtk_anchor_lookup,
         )
     )
 

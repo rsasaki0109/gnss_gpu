@@ -24,6 +24,7 @@ class ParticleFilterRuntimeConfig:
     pf_sigma_vel: float = 0.0
     pf_velocity_guide_alpha: float = 1.0
     pf_init_spread_vel: float = 0.0
+    rtk_anchor_sigma_m: float = 0.1
 
 
 @dataclass(frozen=True)
@@ -302,6 +303,8 @@ class PfSmootherConfig:
     use_smoother: bool
     rover_source: str = "trimble"
     base_ecef: tuple[float, float, float] | None = None
+    rtk_anchor_pos: str = ""
+    rtk_anchor_sigma_m: float = 0.1
     seed: int = 42
     max_epochs: int = 0
     skip_valid_epochs: int = 0
@@ -516,6 +519,7 @@ class PfSmootherConfig:
             pf_sigma_vel=self.pf_sigma_vel,
             pf_velocity_guide_alpha=self.pf_velocity_guide_alpha,
             pf_init_spread_vel=self.pf_init_spread_vel,
+            rtk_anchor_sigma_m=self.rtk_anchor_sigma_m,
         )
 
     @property

@@ -1016,6 +1016,26 @@ __global__ void pfd_shift_position_kernel(
     pz[tid] += dz;
 }
 
+// --- Position reset kernel ---
+// Redraws positions around an external reference and resets weights. The RNG
+// stream is offset from predict's so the same (seed, step) does not reuse its
+// noise.
+__global__ void pfd_reset_position_kernel(
+    double* px, double* py, double* pz,
+    double* log_weights,
+    double ref_x, double ref_y, double ref_z, double sigma_pos,
+    int N, unsigned long long seed, int step) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    curandStatePhilox4_32_10_t state;
+    curand_init(seed ^ 0x9E3779B97F4A7C15ULL, tid, step, &state);
+    px[tid] = ref_x + curand_normal_double(&state) * sigma_pos;
+    py[tid] = ref_y + curand_normal_double(&state) * sigma_pos;
+    pz[tid] = ref_z + curand_normal_double(&state) * sigma_pos;
+    log_weights[tid] = 0.0;
+}
+
 // --- ESS reduction kernel (same logic as weight.cu) ---
 __global__ void pfd_ess_kernel(const double* log_weights,
                                double* partial_sum_w,
@@ -2047,6 +2067,19 @@ void pf_device_shift_position(PFDeviceState* state, double dx, double dy, double
     pfd_shift_position_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
         state->d_px, state->d_py, state->d_pz,
         dx, dy, dz, N);
+    CUDA_CHECK_LAST();
+}
+
+void pf_device_reset_position(PFDeviceState* state,
+    double ref_x, double ref_y, double ref_z, double sigma_pos,
+    unsigned long long seed, int step) {
+    int N = state->n_particles;
+    int grid = state->grid_size;
+
+    pfd_reset_position_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+        state->d_px, state->d_py, state->d_pz,
+        state->d_log_weights,
+        ref_x, ref_y, ref_z, sigma_pos, N, seed, step);
     CUDA_CHECK_LAST();
 }
 

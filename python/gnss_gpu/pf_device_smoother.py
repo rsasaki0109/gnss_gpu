@@ -48,6 +48,8 @@ class ParticleFilterDeviceSmootherMixin:
         doppler_sigma_mps=None,
         doppler_velocity_update_gain=None,
         doppler_max_velocity_update_mps=None,
+        rtk_anchor=None,
+        rtk_anchor_sigma=None,
     ):
         """Store observation data for the current epoch (call after update/estimate).
 
@@ -88,6 +90,11 @@ class ParticleFilterDeviceSmootherMixin:
             Carrier wavelength used for the undifferenced AFV update.
         doppler_update : dict or None
             Per-particle Doppler velocity update used in the forward pass.
+        rtk_anchor : array_like or None
+            RTK fixed position the forward cloud was redrawn around. The
+            backward pass redraws its cloud around it at the same epoch.
+        rtk_anchor_sigma : float or None
+            Position spread used for that redraw.
         """
         if not getattr(self, '_smooth_enabled', False):
             return
@@ -195,6 +202,10 @@ class ParticleFilterDeviceSmootherMixin:
                 if doppler_max_velocity_update_mps is None
                 else float(doppler_max_velocity_update_mps)
             ),
+            'rtk_anchor': (
+                np.asarray(rtk_anchor, dtype=np.float64).copy() if rtk_anchor is not None else None
+            ),
+            'rtk_anchor_sigma': None if rtk_anchor_sigma is None else float(rtk_anchor_sigma),
         })
 
     def smooth(self, position_update_sigma=None, skip_widelane_dd_pseudorange=False):
@@ -350,6 +361,8 @@ class ParticleFilterDeviceSmootherMixin:
             pu_sigma = position_update_sigma if position_update_sigma is not None else None
             if pu_sigma is not None and ep['spp_ref'] is not None:
                 bwd_pf.position_update(ep['spp_ref'][:3], sigma_pos=pu_sigma)
+            if ep.get('rtk_anchor') is not None:
+                bwd_pf.reset_position(ep['rtk_anchor'], ep['rtk_anchor_sigma'])
 
             backward_pos[i] = bwd_pf.estimate()[:3]
 

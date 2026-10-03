@@ -465,6 +465,16 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
     }, "Shift all particle positions by a constant ECEF delta, preserving weights",
        py::arg("state"), py::arg("dx"), py::arg("dy"), py::arg("dz"));
 
+    m.def("pf_device_reset_position", [](gnss_gpu::PFDeviceState* state,
+                                         double ref_x, double ref_y, double ref_z,
+                                         double sigma_pos,
+                                         unsigned long long seed, int step) {
+        gnss_gpu::pf_device_reset_position(state, ref_x, ref_y, ref_z,
+                                           sigma_pos, seed, step);
+    }, "Redraw particle positions around a reference and reset weights",
+       py::arg("state"), py::arg("ref_x"), py::arg("ref_y"), py::arg("ref_z"),
+       py::arg("sigma_pos"), py::arg("seed"), py::arg("step"));
+
     m.def("pf_device_ess", [](const gnss_gpu::PFDeviceState* state) {
         return gnss_gpu::pf_device_ess(state);
     }, "Compute ESS on device, return scalar to host",

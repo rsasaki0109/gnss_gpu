@@ -30,6 +30,12 @@ def build_pf_smoother_summary_lines(result: Mapping[str, Any]) -> list[str]:
             f"gate_skip={_int(result, 'n_tdcp_pu_gate_skip')}"
         )
 
+    if str(result.get("rtk_anchor_pos") or "").strip():
+        lines.append(
+            f"  [rtk_anchor] cloud redrawn at {_int(result, 'n_rtk_anchor_used')} "
+            f"FIXED epochs (sigma={_float(result, 'rtk_anchor_sigma_m')} m)"
+        )
+
     if _bool(result, "doppler_per_particle"):
         used = _int(result, "n_doppler_pp_used")
         skip = _int(result, "n_doppler_pp_skip")

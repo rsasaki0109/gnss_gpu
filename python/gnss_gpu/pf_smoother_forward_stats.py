@@ -39,6 +39,7 @@ class ForwardRunStats:
     n_tdcp_pu_used: int = 0
     n_tdcp_pu_skip: int = 0
     n_tdcp_pu_gate_skip: int = 0
+    n_rtk_anchor_used: int = 0
     n_fgo_tdcp_motion_used: int = 0
     n_fgo_tdcp_motion_skip: int = 0
     n_doppler_pp_used: int = 0

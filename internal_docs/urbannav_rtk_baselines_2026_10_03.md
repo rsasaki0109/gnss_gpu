@@ -119,7 +119,9 @@ gnssplusplus develop reads the values in order in `gnss_solve`, `gnss_live` and
 ## Next
 
 1. Done (gnssplusplus-library #556): fix the `--base-ecef` argument-order bug.
-2. Make the PF hold RTK precision while RTK FIX is available. Anchor it
+2. Done in part (see
+   [urbannav_pf_rtk_anchor_2026_10_04.md](urbannav_pf_rtk_anchor_2026_10_04.md)):
+   make the PF hold RTK precision while RTK FIX is available. Anchor it
    tightly to FIX (status-aware update sigma, re-centring), so it enters each
    RTK gap from a centimetre-level state. Measure accuracy inside RTK gaps
    specifically, on both routes with multiple seeds.

@@ -56,6 +56,19 @@ def build_pf_smoother_arg_parser(default_sigma_pos: float) -> argparse.ArgumentP
         help="Base-station ECEF position (m) for DD/widelane terms; default uses the RINEX header",
     )
     parser.add_argument(
+        "--rtk-anchor-pos",
+        type=str,
+        default="",
+        help="RTK solution (.pos, gnssplusplus or RTKLIB); at its FIXED epochs the "
+        "PF cloud is redrawn around the fix in both smoother passes",
+    )
+    parser.add_argument(
+        "--rtk-anchor-sigma-m",
+        type=float,
+        default=0.1,
+        help="Position spread (m) of the cloud redrawn at RTK FIXED epochs",
+    )
+    parser.add_argument(
         "--smoother-skip-widelane-dd-pseudorange",
         action="store_true",
         help="In the backward smoother pass, replay undifferenced PR instead of wide-lane-derived DD PR",
