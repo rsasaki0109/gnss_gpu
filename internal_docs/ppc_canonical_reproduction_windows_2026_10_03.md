@@ -29,7 +29,8 @@ identical.
 
 - Data: `E:\datasets\PPC-Dataset-data` (6 routes; PLATEAU in
   `E:\datasets\plateau`).
-- gnssplusplus at the gnss_gpu submodule pin `62bd0b73`, exported with
+- gnssplusplus `62bd0b73` (the gnss_gpu submodule pin until 2026-10-04;
+  check it out explicitly, the pin has since moved), exported with
   `git archive` from the local clone
   `C:\Users\rsasa\Workspace\rtklib_v2_ws\gnssplusplus-library`.
 - GTSAM: `E:\gtsam\install`. The native IMU FGO path rejects builds without

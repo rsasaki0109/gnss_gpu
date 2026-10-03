@@ -23,6 +23,7 @@ from gnss_gpu.pf_smoother_runtime import (
     build_observation_computers,
     initialize_imu_filter,
     initialize_particle_filter,
+    require_measurement_satellite_ids,
     resolve_run_dataset,
 )
 from gnss_gpu.pf_smoother_summary import print_pf_smoother_run_summary
@@ -57,6 +58,7 @@ def run_pf_smoother_evaluation(
         run_config.rover_source,
         config_parts.observations,
     )
+    require_measurement_satellite_ids(ds.epochs, observation_setup)
 
     pf = initialize_particle_filter(
         ds.first_pos,

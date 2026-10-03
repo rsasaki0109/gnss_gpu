@@ -11,7 +11,8 @@ whether the corrected Megopolis changes it.
   `E:\datasets\urbannav\Tokyo`.
 - Preset: `odaiba_stop_detect` (100k particles, IMU tight coupling, DD
   pseudorange/carrier, forward-backward smoother).
-- `libgnsspp`: gnssplusplus `62bd0b73` (the gnss_gpu submodule pin), built
+- `libgnsspp`: gnssplusplus `62bd0b73` (the gnss_gpu submodule pin at the
+  time), built
   for Python 3.12 on Windows/MSVC.
 - Script: `experiments/exp_urbannav_resampler_ablation.py`. It patches
   `pf_smoother_runtime.ParticleFilterDevice`; the backward filter inherits
@@ -48,6 +49,15 @@ Paired by seed (B=60 minus legacy, seeds 42 and 101–104):
   it became the default (D-039).
 
 ## Headline reproduction gap
+
+**Update 2026-10-04:** every run in this record had the DD updates disabled
+by a missing `prn` on libgnsspp rows (0 of 12,200 DD epochs). With it fixed,
+the same preset gives smoothed P50 1.50 m / RMS 4.06 m over 5 seeds, which
+matches the April RMS. See
+[urbannav_pf_dd_satellite_ids_2026_10_04.md](urbannav_pf_dd_satellite_ids_2026_10_04.md).
+The resampler comparison below is still valid as a comparison, but on a PF
+without DD terms. The conclusion "gnss_gpu code is not the cause" below is
+wrong; the cause was the gnss_gpu/libgnsspp interface.
 
 The README headline for this preset was smoothed P50 1.36 m / RMS 4.11 m, from
 `docs/assets/data/odaiba_pf_smoother_freeze.json`: a 2026-04-14 full run on

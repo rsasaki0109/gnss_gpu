@@ -42,10 +42,11 @@ python tools/build_release_bundle.py --output dist/reproducibility --archive dis
 ## Why you might care
 
 - 🛰️ **Complements RTK where it fails.** On UrbanNav Tokyo *Odaiba*, modern RTK engines
-  have the better median: RTKLIB demo5 0.79 m, libgnss++ 0.72 m. But they leave 3–19% of
-  epochs without a solution or with large outliers. The GPU PF smoother (2.20 m median,
-  98% coverage) is not a better standalone engine. Using it to fill the RTK gaps raises
-  the share of all epochs within 5 m from 77.0% to **85.2%** (Shinjuku: 76.9% → 84.7%).
+  have the better median: libgnss++ 0.07 m, RTKLIB demo5 0.34 m. But they leave 3–22% of
+  epochs without a solution or with large outliers. The GPU PF smoother (1.50 m median,
+  98% coverage) is not a better standalone engine. Using it to fill the libgnss++ RTK gaps
+  raises the share of all epochs within 5 m from 74.5% to **87.8%**, above RTKLIB's 86.6%
+  (Shinjuku: 76.4% → **84.2%**, RTKLIB 73.5%).
 - ⚡ **It's genuinely fast.** With the device-resident `ParticleFilterDevice`, a full
   **1,000,000-particle** predict → weight → resample step runs in **32 ms** (≈30 Hz) on a
   6 GB Turing-generation consumer GPU, and a 10,000-epoch batch WLS solve takes **~3 ms**.
@@ -102,23 +103,24 @@ UrbanNav route while the full-view trail is drawn from the continuous trajectory
 
 | Method | Dataset | P50 | RMS 2D |
 |---|---|--:|--:|
-| PF 100K (DD + smoother + stop-detect) | UrbanNav Tokyo Odaiba | 2.20 m | 13.51 m |
-| RTKLIB demo5 (rtklibexplorer, 2026-09) | UrbanNav Tokyo Odaiba | 0.79 m | 40.87 m |
-| libgnss++ RTK, `low-cost` preset (80.8% coverage) | UrbanNav Tokyo Odaiba | **0.72 m** | **2.15 m** |
+| PF 100K (DD + smoother + stop-detect) | UrbanNav Tokyo Odaiba | 1.50 m | 4.06 m |
+| RTKLIB demo5 (rtklibexplorer, 2026-09) | UrbanNav Tokyo Odaiba | 0.34 m | 40.89 m |
+| libgnss++ RTK, `low-cost` preset (78.5% coverage) | UrbanNav Tokyo Odaiba | **0.07 m** | **1.97 m** |
+| libgnss++ RTK + PF gap fill (98.2% coverage) | UrbanNav Tokyo Odaiba | 0.20 m | 3.55 m |
 | **PF + RobustClear-10K** (external mainline) | UrbanNav, 5 seq / 2 cities | — | **66.6 m** |
 | EKF baseline | UrbanNav, 5 seq / 2 cities | — | 93.25 m |
 
-All Odaiba rows were measured on 2026-10-03 on the public data subset ([record](internal_docs/urbannav_rtk_baselines_2026_10_03.md)) with the base
-station's RINEX-header coordinates. Those coordinates are about 0.7 m off and bias every
-base-relative method; a corrected comparison will follow. P50/RMS are over the epochs
-each method outputs, so RTK coverage gaps do not count against it here. The PF 100K
-row is the smoothed output of preset `odaiba_stop_detect` on current main, averaged
-over 5 seeds
-([record](internal_docs/resampler_ablation_urbannav_2026_10_03.md)). An April 2026 run
-of the same preset recorded 1.36 m / 4.11 m. That run used an Odaiba data version and
-a gnssplusplus build that are no longer available (it evaluated 12,228 epochs; the
-public subset yields 12,184). Even the gnss_gpu commit that recorded it gives about
-2.0 m / 12.7 m on today's data, so the figure is not reproducible. The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
+All Odaiba rows were measured on 2026-10-04 on the public data subset, with the
+base-station coordinate calibrated once and shared by every method
+([calibration](configs/urbannav/tokyo_base_cref0001.json),
+[RTK record](internal_docs/urbannav_rtk_baselines_2026_10_03.md),
+[PF record](internal_docs/urbannav_pf_dd_satellite_ids_2026_10_04.md)). P50/RMS
+are over the epochs each method outputs, so RTK coverage gaps do not count
+against it here. The PF 100K row is the smoothed output of preset
+`odaiba_stop_detect`, averaged over 5 seeds. Until 2026-10-04 its DD terms never
+ran on real data, because libgnsspp rows carried no satellite number; that is
+why the April 2026 figure (1.36 m / 4.11 m) could not be reproduced. With the
+fix, the RMS matches it. The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
 `examples/demo_pf_localization_improvement.py` still replay the April artifacts.
 
 ### PF-only RTK stretch campaign

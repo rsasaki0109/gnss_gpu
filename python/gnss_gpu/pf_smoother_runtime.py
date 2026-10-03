@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -293,6 +293,36 @@ def build_observation_computers(
         wl_computer=wl_computer,
         dd_computer=dd_computer,
     )
+
+
+def require_measurement_satellite_ids(
+    epochs: object,
+    computers: ObservationComputers,
+) -> None:
+    """Fail fast when base-relative updates cannot pair satellites.
+
+    The DD computers key rover rows on ``(system_id, prn)``. libgnsspp builds
+    that predate ``CorrectedMeasurement.prn`` leave it absent, every row then
+    collapses to one satellite per system, and the DD updates silently never
+    run.
+    """
+
+    if (
+        computers.dd_pr_computer is None
+        and computers.wl_computer is None
+        and computers.dd_computer is None
+    ):
+        return
+    for _, measurements in cast("Iterable[tuple[Any, Sequence[Any]]]", epochs):
+        if len(measurements) == 0:
+            continue
+        if all(hasattr(m, "prn") for m in measurements):
+            return
+        raise RuntimeError(
+            "DD pseudorange / widelane / DD carrier need per-satellite ids, but "
+            "libgnsspp CorrectedMeasurement rows have no 'prn'. Rebuild libgnsspp "
+            "from a gnssplusplus revision that exposes CorrectedMeasurement.prn."
+        )
 
 
 def initialize_particle_filter(
