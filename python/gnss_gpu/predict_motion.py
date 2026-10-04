@@ -348,15 +348,17 @@ def doppler_ground_speed(
     min_sats: int = 5,
     stop_speed_mps: float = 0.15,
     max_speed_mps: float = 50.0,
+    max_residual_mps: float = 0.5,
 ) -> float | None:
     """Horizontal receiver speed from a Doppler least-squares fit.
 
     Uses only GPS / Galileo / QZSS rows that carry a Doppler and a satellite
-    velocity. Speeds below ``stop_speed_mps`` (Doppler noise at standstill)
+    velocity. The row with the largest range-rate residual is dropped and the
+    fit repeated while that residual exceeds ``max_residual_mps`` and more
+    than ``min_sats`` rows remain, so a single multipath Doppler cannot set
+    the speed. Speeds below ``stop_speed_mps`` (Doppler noise at standstill)
     return 0 so the IMU stop detection still works.
     """
-    from gnss_gpu.doppler_velocity import estimate_velocity_from_doppler
-
     sat, vel, dop = [], [], []
     for m in measurements:
         if int(getattr(m, "system_id", -1)) not in _DOPPLER_SPEED_SYSTEM_IDS:
@@ -370,16 +372,23 @@ def doppler_ground_speed(
         dop.append(d)
     if len(dop) < int(min_sats):
         return None
-    velocity = estimate_velocity_from_doppler(
-        receiver_position_ecef,
-        np.asarray(sat),
-        np.asarray(dop),
-        sat_velocities=np.asarray(vel),
-        wavelength=_L1_WAVELENGTH_M,
-    )
-    if velocity is None:
-        return None
     rx = np.asarray(receiver_position_ecef, dtype=np.float64).ravel()[:3]
+    sat_arr = np.asarray(sat)
+    los = sat_arr - rx
+    los /= np.linalg.norm(los, axis=1)[:, None]
+    # Range rate = -lambda * doppler = los . (v_sat - v_rx) + clock drift.
+    y = -_L1_WAVELENGTH_M * np.asarray(dop) - np.sum(los * np.asarray(vel), axis=1)
+    design = np.column_stack([-los, np.ones(len(dop))])
+    keep = np.ones(len(dop), dtype=bool)
+    while True:
+        solution, *_ = np.linalg.lstsq(design[keep], y[keep], rcond=None)
+        residual = np.abs(y - design @ solution)
+        residual[~keep] = -1.0
+        worst = int(np.argmax(residual))
+        if residual[worst] <= float(max_residual_mps) or int(keep.sum()) <= int(min_sats):
+            break
+        keep[worst] = False
+    velocity = solution[:3]
     lat, lon, _ = ecef_to_lla_func(float(rx[0]), float(rx[1]), float(rx[2]))
     east = np.array([-np.sin(lon), np.cos(lon), 0.0])
     north = np.array([-np.sin(lat) * np.cos(lon), -np.sin(lat) * np.sin(lon), np.cos(lat)])

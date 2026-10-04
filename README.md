@@ -129,7 +129,7 @@ demo5: 69%). Its σ_pos 0.1 was chosen across Odaiba and Shinjuku
 ([record](internal_docs/urbannav_pf_rtk_anchor_2026_10_04.md)), and the same configuration
 improves all three PPC Tokyo routes without retuning
 ([PPC record](internal_docs/ppc_pf_rtk_anchor_2026_10_04.md)). Platforms without a wheel
-odometer use preset `rtk_anchored_doppler` (6 PPC routes: 88.9% within 5 m vs
+odometer use preset `rtk_anchored_doppler` (6 PPC routes: 90.4% within 5 m vs
 78.6% for libgnss++ RTK alone). The anchored row is measured with gnssplusplus `9d89a58a`;
 the other rows with `304798e7`, which lacked carrier phase and Doppler on PF inputs
 (about 0.2 m difference at seed 42). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
