@@ -109,8 +109,41 @@ route at <5 m except the three Tokyo runs (−0.1 to −0.2 points), and its PPC
 3.7 points higher with less than half the RMS. Odaiba gains 11.6 points at
 <1 m and 5.0 at <3 m. Shinjuku is unchanged within 0.3 points, RMS +0.15 m.
 
+## Five seeds (2026-10-05)
+
+Seeds 42 and 101–104 for the final `rtk_anchored_doppler` and for the anchor
+alone (`odaiba_stop_detect` + Doppler speed + `--rtk-anchor-pos`). Share of
+all reference epochs, mean ± sd over seeds:
+
+| route | arm | <0.5 m | <1 m | <3 m | <5 m | RMS |
+|---|---|---:|---:|---:|---:|---:|
+| tokyo run1 | anchor | 67.5 ± 0.1 | 72.8 ± 0.3 | 85.6 ± 0.1 | 90.8 ± 0.4 | 2.7 |
+| | **preset** | 76.0 ± 0.7 | 79.9 ± 0.3 | 87.6 ± 0.1 | 93.7 ± 0.4 | 2.6 |
+| tokyo run2 | anchor | 79.6 ± 0.1 | 83.6 ± 0.4 | 92.9 ± 0.8 | 96.4 ± 0.2 | 2.4 |
+| | **preset** | 83.1 ± 0.2 | 86.3 ± 0.2 | 94.5 ± 1.0 | 98.3 ± 0.1 | 1.2 |
+| tokyo run3 | anchor | 72.6 ± 0.3 | 77.3 ± 0.2 | 85.1 ± 0.2 | 87.9 ± 0.2 | 4.1 |
+| | **preset** | 83.7 ± 0.7 | 89.5 ± 0.2 | 94.8 ± 0.0 | 95.7 ± 0.0 | 1.8 |
+| nagoya run1 | anchor | 64.2 ± 0.6 | 68.8 ± 0.9 | 82.4 ± 0.2 | 87.5 ± 0.1 | 3.9 |
+| | **preset** | 67.4 ± 0.3 | 76.4 ± 0.9 | 80.5 ± 1.6 | 86.3 ± 0.3 | 6.8 |
+| nagoya run2 | anchor | 52.3 ± 0.2 | 56.4 ± 0.2 | 67.2 ± 0.6 | 75.7 ± 0.4 | 6.5 |
+| | **preset** | 53.8 ± 0.3 | 56.7 ± 1.5 | 74.7 ± 0.9 | 79.3 ± 0.2 | 5.0 |
+| nagoya run3 | anchor | 42.3 ± 1.3 | 45.7 ± 1.7 | 58.2 ± 0.4 | 69.6 ± 0.8 | 5.5 |
+| | **preset** | 43.6 ± 0.4 | 48.2 ± 1.4 | 71.4 ± 0.6 | 80.0 ± 0.5 | 4.7 |
+| **mean** | libgnss++ RTK alone | 68.1 | 72.1 | 77.4 | 78.6 | |
+| | anchor | 63.1 ± 0.2 | 67.5 ± 0.2 | 78.6 ± 0.2 | 84.6 ± 0.1 | |
+| | **preset** | **67.9 ± 0.2** | **72.8 ± 0.3** | **83.9 ± 0.4** | **88.9 ± 0.1** | |
+
+- Seed spread is small (route-mean sd ≤ 0.4 points), so the preset's gain
+  over the anchor alone, 4.3–5.3 points at every threshold, is well outside
+  it. The seed-42 table above holds.
+- Against libgnss++ RTK alone the preset ties at <0.5 m and adds 6.5 points
+  at <3 m and 10.3 at <5 m.
+- nagoya run1 is the exception: the preset is 1.2 points worse at <5 m and
+  its RMS is 6.8 m vs 3.9 m. It still has a long-gap failure the bias ZUPT did
+  not remove.
+
 ## Next
 
-1. Multi-seed PPC runs (single seed here).
+1. Find the remaining nagoya run1 long-gap failure.
 2. UrbanNav Hong Kong (`experiments/fetch_urbannav_hk_subset.py`) as a third
    held-out set.
