@@ -82,6 +82,8 @@ def run_pf_smoother_evaluation(
             robust.nlos_strong_mask_csv or None,
         )
     rtk_anchor_lookup = None
+    if run_config.rtk_anchor_heading and not str(run_config.rtk_anchor_pos).strip():
+        raise ValueError("--rtk-anchor-heading requires --rtk-anchor-pos")
     if str(run_config.rtk_anchor_pos).strip():
         rtk_anchor_lookup = load_rtk_fix_lookup(run_config.rtk_anchor_pos)
         print(

@@ -139,3 +139,20 @@ def test_store_inputs_carry_anchor_for_backward_pass():
     plain = build_smoother_epoch_store_inputs(**common, rtk_anchor_sigma_m=0.1).as_store_kwargs()
     assert plain["rtk_anchor"] is None
     assert plain["rtk_anchor_sigma"] is None
+
+
+def test_heading_option_flows_into_config():
+    parser = build_pf_smoother_arg_parser(1.2)
+    cfg = namespace_to_run_config(
+        parser.parse_args(
+            ["--data-root", "unused", "--rtk-anchor-pos", "rtk.pos", "--rtk-anchor-heading"]
+        ),
+        position_update_sigma=1.9,
+        use_smoother=True,
+    )
+    assert cfg.rtk_anchor_heading is True
+    assert namespace_to_run_config(
+        parser.parse_args(["--data-root", "unused"]),
+        position_update_sigma=1.9,
+        use_smoother=True,
+    ).rtk_anchor_heading is False

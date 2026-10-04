@@ -55,6 +55,7 @@ def build_pf_smoother_result_row(
         "n_tdcp_pu_gate_skip": int(out.get("n_tdcp_pu_gate_skip", 0)),
         "rtk_anchor_pos": args.rtk_anchor_pos,
         "rtk_anchor_sigma_m": args.rtk_anchor_sigma_m,
+        "rtk_anchor_heading": args.rtk_anchor_heading,
         "n_rtk_anchor_used": int(out.get("n_rtk_anchor_used", 0)),
         "residual_downweight": args.residual_downweight,
         "residual_threshold": args.residual_threshold,

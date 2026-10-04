@@ -163,6 +163,7 @@ _COPY_KEYS: tuple[str, ...] = (
     "n_tdcp_pu_gate_skip",
     "rtk_anchor_pos",
     "rtk_anchor_sigma_m",
+    "rtk_anchor_heading",
     "n_rtk_anchor_used",
     "n_fgo_tdcp_motion_used",
     "n_fgo_tdcp_motion_skip",
