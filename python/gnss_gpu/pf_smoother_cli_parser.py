@@ -384,6 +384,18 @@ def build_pf_smoother_arg_parser(default_sigma_pos: float) -> argparse.ArgumentP
         help="Apply IMU dead-reckoning position_update after SPP in each epoch",
     )
     parser.add_argument(
+        "--imu-speed-source",
+        choices=("wheel", "doppler"),
+        default="wheel",
+        help="Speed for the IMU predict guide: the imu.csv wheel column, or the "
+        "GNSS Doppler ground speed for platforms without an odometer",
+    )
+    parser.add_argument(
+        "--imu-gyro-bias-zupt",
+        action="store_true",
+        help="At IMU-detected standstill, hold the heading and estimate the yaw-rate bias",
+    )
+    parser.add_argument(
         "--imu-stop-sigma-pos",
         type=float,
         default=None,

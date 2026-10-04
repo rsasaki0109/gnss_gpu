@@ -16,6 +16,8 @@ class ForwardEpochHistory:
     prev_pf_estimate: np.ndarray | None = None
     prev_pf_state: np.ndarray | None = None
     epochs_done: int = 0
+    # Last valid Doppler ground speed, held across epochs without one.
+    doppler_speed_mps: float | None = None
 
     def reached_limit(self, max_epochs: int, skip_valid_epochs: int) -> bool:
         return bool(max_epochs) and self.epochs_done >= int(skip_valid_epochs) + int(max_epochs)

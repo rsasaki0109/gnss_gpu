@@ -125,7 +125,12 @@ fix, the RMS matches it. The anchored row redraws the PF cloud at every RTK FIX
 and corrects the IMU heading only from consecutive fixes (`--rtk-anchor-pos`,
 `--rtk-anchor-heading`, preset `urbannav_rtk_anchored`); it is within 5 m on 98% of all
 reference epochs (RTKLIB demo5: 87%). Its σ_pos 0.1 was chosen across Odaiba and Shinjuku
-([record](internal_docs/urbannav_pf_rtk_anchor_2026_10_04.md)). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
+([record](internal_docs/urbannav_pf_rtk_anchor_2026_10_04.md)), and the same configuration
+improves all three PPC Tokyo routes without retuning
+([PPC record](internal_docs/ppc_pf_rtk_anchor_2026_10_04.md)). IMUs without an odometer or
+with a large gyro bias use preset `rtk_anchored_doppler`. These rows were measured with
+gnssplusplus `304798e7`; the current pin also feeds carrier phase and Doppler to the PF,
+which moves them by under 0.2 m (seed 42). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
 `examples/demo_pf_localization_improvement.py` still replay the April artifacts.
 
 ### PF-only RTK stretch campaign

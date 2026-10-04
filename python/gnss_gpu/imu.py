@@ -87,17 +87,37 @@ class ComplementaryHeadingFilter:
         # and `imu_preintegration.PreintegratedIMU`'s default).
         self.sigma_gyro = float(sigma_gyro_radps_sqrthz)
         self.heading_variance_rad2 = float(heading_variance_init_rad2)
+        # Yaw-rate bias [rad/s], estimated at standstill (see apply_stationary_interval).
+        self.gyro_bias = 0.0
+        self._heading_before_gyro = self.heading
 
     def update_heading_gyro(self, t_start: float, t_end: float) -> None:
         """Integrate gyroscope for heading between GNSS epochs."""
+        self._heading_before_gyro = self.heading
         mask = (self.tow >= t_start) & (self.tow < t_end)
         indices = np.where(mask)[0]
         for i in indices:
             dt = self.tow[min(i + 1, len(self.tow) - 1)] - self.tow[i]
             if dt <= 0:
                 dt = 0.02
-            self.heading += self.gyro_z[i] * dt
+            self.heading += (self.gyro_z[i] - self.gyro_bias) * dt
             self.heading_variance_rad2 += (self.sigma_gyro ** 2) * dt
+
+    def apply_stationary_interval(
+        self, t_start: float, t_end: float, gain: float = 0.05
+    ) -> None:
+        """Zero-velocity update for the last gyro interval.
+
+        The vehicle cannot turn at standstill, so the heading integrated over
+        [t_start, t_end) is undone and the mean yaw rate there updates the
+        bias estimate with an exponential gain.
+        """
+        self.heading = self._heading_before_gyro
+        mask = (self.tow >= t_start) & (self.tow < t_end)
+        if np.any(mask):
+            rate = float(np.mean(self.gyro_z[mask]))
+            if np.isfinite(rate):
+                self.gyro_bias += float(gain) * (rate - self.gyro_bias)
 
     def correct_heading_spp(
         self, spp_heading_rad: float, sigma_spp_heading_rad: float | None = None
@@ -136,10 +156,16 @@ class ComplementaryHeadingFilter:
         ws = self.wheel_vel[indices[-1]]
         return float(ws) if np.isfinite(ws) and ws >= 0 else 0.0
 
-    def get_velocity_enu(self, t_start: float, t_end: float) -> np.ndarray:
-        """Get velocity in ENU using fused heading + wheel speed."""
+    def get_velocity_enu(
+        self, t_start: float, t_end: float, speed: float | None = None
+    ) -> np.ndarray:
+        """Get velocity in ENU using fused heading + wheel speed.
+
+        ``speed`` replaces the wheel speed when the platform has no odometer.
+        """
         self.update_heading_gyro(t_start, t_end)
-        speed = self.get_wheel_speed(t_start, t_end)
+        if speed is None:
+            speed = self.get_wheel_speed(t_start, t_end)
         ve = speed * math.sin(self.heading)
         vn = speed * math.cos(self.heading)
         return np.array([ve, vn, 0.0])

@@ -68,5 +68,7 @@ def build_pf_smoother_run_options(run_config: PfSmootherConfig) -> PfSmootherRun
             need_fgo_tdcp_motion=need_fgo_tdcp_motion,
             fgo_local_tdcp_rms_max_m=run_config.fgo_local_tdcp_rms_max_m,
             fgo_local_tdcp_spp_max_diff_mps=run_config.fgo_local_tdcp_spp_max_diff_mps,
+            imu_speed_source=run_config.imu_speed_source,
+            imu_gyro_bias_zupt=run_config.imu_gyro_bias_zupt,
         ),
     )

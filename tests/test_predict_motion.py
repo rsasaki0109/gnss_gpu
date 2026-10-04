@@ -414,3 +414,134 @@ def test_fixed_only_heading_lookup_skips_correction_across_gaps():
         dt=0.1,
     )
     assert imu_filter.corrected_headings == []
+
+
+def _doppler_rows(rx, v_rx, *, system_id=0, clock_drift_mps=12.0):
+    from types import SimpleNamespace
+
+    from gnss_gpu.predict_motion import _L1_WAVELENGTH_M
+
+    rng = np.random.default_rng(3)
+    rows = []
+    for _ in range(8):
+        direction = rng.normal(size=3)
+        direction /= np.linalg.norm(direction)
+        if direction @ rx < 0:
+            direction = -direction
+        sat = rx + 2.2e7 * direction
+        v_sat = rng.normal(scale=2000.0, size=3)
+        los = (sat - rx) / np.linalg.norm(sat - rx)
+        range_rate = los @ (v_sat - v_rx) + clock_drift_mps
+        rows.append(
+            SimpleNamespace(
+                system_id=system_id,
+                satellite_ecef=sat,
+                satellite_velocity=v_sat,
+                doppler=-range_rate / _L1_WAVELENGTH_M,
+            )
+        )
+    return rows
+
+
+def _lla(x, y, z):
+    lon = np.arctan2(y, x)
+    lat = np.arctan2(z, np.hypot(x, y))
+    return lat, lon, 0.0
+
+
+def test_doppler_ground_speed_recovers_horizontal_speed():
+    from gnss_gpu.predict_motion import doppler_ground_speed
+
+    rx = np.array([-3961904.9, 3348993.7, 3698211.8])
+    lat, lon, _ = _lla(*rx)
+    east = np.array([-np.sin(lon), np.cos(lon), 0.0])
+    up = np.array([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
+    v_rx = 8.0 * east + 0.5 * up
+
+    speed = doppler_ground_speed(_doppler_rows(rx, v_rx), rx, _lla)
+    assert speed is not None
+    assert abs(speed - 8.0) < 1e-6
+    # Standstill noise below the stop threshold reads as zero.
+    assert doppler_ground_speed(_doppler_rows(rx, 0.05 * east), rx, _lla) == 0.0
+    # Other constellations (different carrier) are ignored.
+    assert doppler_ground_speed(_doppler_rows(rx, v_rx, system_id=3), rx, _lla) is None
+
+
+def test_apply_epoch_predict_motion_holds_doppler_speed(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        predict_motion,
+        "evaluate_imu_predict_velocity",
+        lambda *args, **kwargs: seen.append(kwargs["speed_mps"]) or ImuPredictDecision(),
+    )
+    monkeypatch.setattr(
+        predict_motion,
+        "evaluate_tdcp_predict_guide",
+        lambda *args, **kwargs: TdcpPredictDecision(),
+    )
+    speeds = iter([6.5, None])
+    monkeypatch.setattr(predict_motion, "doppler_ground_speed", lambda *a, **k: next(speeds))
+    history = ForwardEpochHistory(prev_tow=10.0, prev_measurements=["prev"])
+
+    for _ in range(2):
+        apply_epoch_predict_motion(
+            create_epoch_forward_state(0.5),
+            ForwardRunStats(),
+            history,
+            imu_filter=object(),
+            options=_predict_options(predict_guide="imu", imu_speed_source="doppler"),
+            tow=10.1,
+            tow_key=10.1,
+            dt=0.1,
+            receiver_position_ecef=np.ones(3),
+            current_pf_position_ecef=np.ones(3),
+            measurements=["now"],
+            spp_lookup={},
+            ecef_to_lla_func=lambda _x, _y, _z: (0.0, 0.0, 0.0),
+        )
+
+    assert seen == [6.5, 6.5]
+
+
+def test_stationary_interval_holds_heading_and_learns_gyro_bias():
+    from gnss_gpu.imu import ComplementaryHeadingFilter
+
+    tow = np.arange(0.0, 200.0, 0.01)
+    bias = np.radians(0.15)
+    imu = {
+        "tow": tow,
+        "accel": np.zeros((tow.size, 3)),
+        "gyro": np.column_stack([np.zeros(tow.size), np.zeros(tow.size), np.full(tow.size, bias)]),
+        "wheel_vel": np.zeros(tow.size),
+    }
+    filt = ComplementaryHeadingFilter(imu)
+    t = 0.0
+    while t < 199.9:
+        filt.update_heading_gyro(t, t + 0.1)
+        filt.apply_stationary_interval(t, t + 0.1)
+        t = round(t + 0.1, 1)
+
+    assert filt.heading == 0.0
+    assert abs(filt.gyro_bias - bias) < 1e-6 * bias + 1e-12
+
+
+def test_evaluate_imu_predict_velocity_applies_zupt_only_when_enabled():
+    calls = []
+
+    class _Filter(_FakeImuFilter):
+        def apply_stationary_interval(self, t0, t1):
+            calls.append((t0, t1))
+
+    for enabled in (False, True):
+        evaluate_imu_predict_velocity(
+            _Filter([0.0, 0.0, 0.0]),
+            "imu",
+            prev_tow=10.0,
+            tow=10.1,
+            current_position_ecef=np.array([1.0, 2.0, 3.0]),
+            spp_lookup={},
+            ecef_to_lla_func=lambda _x, _y, _z: (0.0, 0.0, 0.0),
+            dt=0.1,
+            zupt_gyro_bias=enabled,
+        )
+    assert calls == [(10.0, 10.1)]
