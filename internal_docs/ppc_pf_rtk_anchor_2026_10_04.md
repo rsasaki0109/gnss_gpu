@@ -173,5 +173,7 @@ still below the anchor alone at <5 m (86.2 vs 87.5%).
 ## Next
 
 1. Find the remaining nagoya run1 long-gap failure.
-2. UrbanNav Hong Kong (`experiments/fetch_urbannav_hk_subset.py`) as a third
-   held-out set.
+2. A third held-out set with RTK fixes. UrbanNav Hong Kong 2019-04-28
+   (`experiments/fetch_urbannav_hk_subset.py`) does not qualify: 8 minutes of
+   single-frequency u-blox data against a 30 s HKSC base; libgnss++ RTK gives
+   11 solutions and no FIX, so there is nothing to anchor to.

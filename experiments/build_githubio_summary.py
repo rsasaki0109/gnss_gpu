@@ -24,6 +24,7 @@ MEDIA_DIR = ASSETS_DIR / "media"
 SNAPSHOT_PATH = ASSETS_DIR / "results_snapshot.json"
 SNAPSHOT_JS_PATH = ASSETS_DIR / "results_snapshot.js"
 ODAIBA_PF_SMOOTHER_FREEZE_JSON = RESULTS_DIR / "odaiba_pf_smoother_freeze.json"
+URBANNAV_CURRENT_CHECKPOINT_JSON = RESULTS_DIR / "urbannav_current_checkpoint.json"
 PLATEAU_NLOS_VIS_HTML = "demos/plateau_nlos_visualization.html"
 PLATEAU_NLOS_SUITE_JSON = RESULTS_DIR / "plateau_nlos_demo_suite_summary.json"
 PLATEAU_NLOS_SUITE_CSV = RESULTS_DIR / "plateau_nlos_demo_suite_summary.csv"
@@ -410,7 +411,7 @@ def _build_snapshot() -> dict:
     bvh_rows = _read_csv(BVH_RUNTIME_CSV)
     paper_main_rows = _read_csv_path(PAPER_ASSETS_DIR / PAPER_MAIN_TABLE_CSV)
     validation = _read_json(VALIDATION_SUMMARY_JSON)
-    odaiba_freeze = _read_json(ODAIBA_PF_SMOOTHER_FREEZE_JSON)
+    current = _read_json(URBANNAV_CURRENT_CHECKPOINT_JSON)
 
     tuned_safe = _find_row(ppc_tuned_rows, "strategy", PPC_SAFE)
     tuned_best = _find_row(ppc_tuned_rows, "strategy", PPC_EXPLORATORY)
@@ -523,33 +524,36 @@ def _build_snapshot() -> dict:
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "title": "gnss_gpu Artifact Snapshot",
         "subtitle": (
-            "Current Odaiba best: `PF 100K (DD + smoother + stop-detect)`. "
+            f"Current Odaiba best: `{current['pf_method']}`. "
             "External mainline remains `PF+RobustClear-10K` across 5 sequences in 2 cities."
         ),
         "status": {
             "label": "Current Read",
             "value": (
-                f"PF beats RTKLIB demo5 — RMS {odaiba_freeze['pf_rms_2d_m']:.2f}m "
-                f"vs {odaiba_freeze['baseline_rms_2d_m']:.2f}m"
+                f"{current['pf_within_3m_pct']:.0f}% of Odaiba epochs within 3 m "
+                f"(RTKLIB demo5: {current['rtklib_within_3m_pct']:.0f}%)"
             ),
             "detail": (
-                f"On {odaiba_freeze['dataset']}, `{odaiba_freeze['method']}` reaches "
-                f"P50 {odaiba_freeze['pf_p50_m']:.2f}m and RMS {odaiba_freeze['pf_rms_2d_m']:.2f}m "
-                f"against `{odaiba_freeze['baseline_method']}` at "
-                f"{odaiba_freeze['baseline_p50_m']:.2f}m / {odaiba_freeze['baseline_rms_2d_m']:.2f}m. "
-                f"That is a {odaiba_freeze['p50_improvement_pct']:.0f}% P50 gain and "
-                f"{odaiba_freeze['rms_improvement_pct']:.0f}% RMS gain over "
-                f"{int(odaiba_freeze['n_epochs'])} aligned epochs."
+                f"On {current['dataset']}, `{current['pf_method']}` (preset "
+                f"`{current['pf_preset']}`, {current['pf_seeds']} seeds) reaches P50 "
+                f"{current['pf_p50_m']:.2f} m and RMS {current['pf_rms_2d_m']:.2f} m at "
+                f"{current['pf_coverage_pct']:.1f}% coverage. `{current['rtk_method']}` alone has "
+                f"the better median ({current['rtk_p50_m']:.2f} m) but covers "
+                f"{current['rtk_coverage_pct']:.1f}% of epochs; `{current['rtklib_method']}` is at "
+                f"{current['rtklib_p50_m']:.2f} / {current['rtklib_rms_2d_m']:.2f} m. On "
+                f"{current['ppc_routes']} held-out PPC routes `{current['ppc_preset']}` is within "
+                f"5 m on {current['ppc_within_5m_pct']:.1f}% of epochs vs "
+                f"{current['ppc_rtk_within_5m_pct']:.1f}% for RTK alone."
             ),
         },
         "hero_cards": [
             _card(
                 "Odaiba Current Best",
+                f"{current['pf_p50_m']:.2f} / {current['pf_rms_2d_m']:.2f} m",
                 (
-                    f"{odaiba_freeze['pf_p50_m']:.2f} / "
-                    f"{odaiba_freeze['pf_rms_2d_m']:.2f} m"
+                    "PF 100K anchored to libgnss++ RTK FIX: DD terms, smoother, "
+                    "RTK-fix heading, standstill hold."
                 ),
-                "PF 100K with DD carrier, DD pseudorange, smoother, and IMU stop-detect.",
             ),
             _card(
                 "External Mainline",
@@ -588,13 +592,12 @@ def _build_snapshot() -> dict:
             _card(
                 "PF vs RTKLIB demo5",
                 (
-                    f"RMS {odaiba_freeze['pf_rms_2d_m']:.2f} vs "
-                    f"{odaiba_freeze['baseline_rms_2d_m']:.2f} m"
+                    f"{current['pf_within_5m_pct']:.1f}% vs "
+                    f"{current['rtklib_within_5m_pct']:.1f}% < 5 m"
                 ),
                 (
-                    f"`{odaiba_freeze['method']}` beats `{odaiba_freeze['baseline_method']}` "
-                    f"by {odaiba_freeze['rms_improvement_pct']:.0f}% in RMS and "
-                    f"{odaiba_freeze['p50_improvement_pct']:.0f}% in P50 on Odaiba."
+                    f"Share of all Odaiba reference epochs within 5 m; RMS "
+                    f"{current['pf_rms_2d_m']:.2f} vs {current['rtklib_rms_2d_m']:.2f} m."
                 ),
             ),
             _card(
@@ -621,14 +624,14 @@ def _build_snapshot() -> dict:
         ],
         "repo_summary": [
             "This repo is not presenting a single heroic algorithm. It is an experiment-first GNSS package where comparable variants are built, measured, and either kept or discarded.",
-            "The README-facing current read is the Odaiba PF smoother result with IMU stop-detect, while the paper-facing external validation remains the UrbanNav trimble + G,E,J result.",
+            "The README-facing current read is the Odaiba PF anchored to libgnss++ RTK fixes, while the paper-facing external validation remains the UrbanNav trimble + G,E,J result.",
             "The 3D PF path is currently a systems contribution: BVH preserves PF3D accuracy on a real PLATEAU subset while making runtime practical.",
         ],
         "quick_links": [
             {
-                "label": "Odaiba Freeze JSON",
-                "href": _copy_result_path(ODAIBA_PF_SMOOTHER_FREEZE_JSON),
-                "detail": "Frozen PF smoother checkpoint for the current Odaiba README headline.",
+                "label": "Current Checkpoint JSON",
+                "href": _copy_result_path(URBANNAV_CURRENT_CHECKPOINT_JSON),
+                "detail": "Numbers behind the current Odaiba README headline and the PPC check.",
             },
             {
                 "label": "Paper Main Table",
@@ -680,10 +683,12 @@ def _build_snapshot() -> dict:
         "method_freeze": [
             _card(
                 "README Current Best",
-                "PF 100K (DD + smoother + stop-detect)",
+                current["pf_method"],
                 (
-                    f"Odaiba full-run checkpoint at {odaiba_freeze['pf_p50_m']:.2f}m P50 and "
-                    f"{odaiba_freeze['pf_rms_2d_m']:.2f}m RMS. This now drives the README headline."
+                    f"Odaiba {current['pf_seeds']}-seed checkpoint at {current['pf_p50_m']:.2f} m P50 "
+                    f"and {current['pf_rms_2d_m']:.2f} m RMS (preset `{current['pf_preset']}`). "
+                    f"Without the anchor the PF smoother is at {current['unanchored_p50_m']:.2f} / "
+                    f"{current['unanchored_rms_2d_m']:.2f} m."
                 ),
             ),
             _card(
@@ -802,10 +807,11 @@ def _build_snapshot() -> dict:
                 f"{_round(_f(ekf, 'mean_rms_2d'))} m and {_round(_f(ekf, 'mean_p95'))} m."
             ),
             (
-                f"Odaiba README checkpoint: `{odaiba_freeze['method']}` reaches "
-                f"{odaiba_freeze['pf_p50_m']:.2f} m P50 and {odaiba_freeze['pf_rms_2d_m']:.2f} m RMS "
-                f"against `{odaiba_freeze['baseline_method']}` at "
-                f"{odaiba_freeze['baseline_p50_m']:.2f} / {odaiba_freeze['baseline_rms_2d_m']:.2f} m."
+                f"Odaiba README checkpoint: `{current['pf_method']}` reaches "
+                f"{current['pf_p50_m']:.2f} m P50 and {current['pf_rms_2d_m']:.2f} m RMS, within 3 m on "
+                f"{current['pf_within_3m_pct']:.1f}% of all epochs, against `{current['rtklib_method']}` at "
+                f"{current['rtklib_p50_m']:.2f} / {current['rtklib_rms_2d_m']:.2f} m and "
+                f"{current['rtklib_within_3m_pct']:.1f}%."
             ),
             (
                 "`PF-10K` remains a close ablation at "
@@ -828,10 +834,10 @@ def _build_snapshot() -> dict:
                 "generalizes to a second urban geometry when appropriately configured."
             ),
             (
-                "PF vs RTKLIB demo5 (Odaiba, gnssplusplus corrections): "
-                "PF 1M achieves P50=3.64m, RMS=6.72m, >100m=0% vs "
-                "RTKLIB P50=2.67m, RMS=13.08m. PF wins RMS by 49%, P95 by 59%, "
-                "with zero catastrophic failures. RTKLIB wins P50 by 27%."
+                f"Held-out check: on {current['ppc_routes']} PPC-Dataset routes (different receiver "
+                f"and IMU, no retuning) `{current['ppc_preset']}` is within 5 m on "
+                f"{current['ppc_within_5m_pct']:.1f}% of epochs vs "
+                f"{current['ppc_rtk_within_5m_pct']:.1f}% for libgnss++ RTK alone."
             ),
             *(
                 [
