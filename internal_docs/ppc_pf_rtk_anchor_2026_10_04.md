@@ -142,6 +142,34 @@ all reference epochs, mean ± sd over seeds:
   its RMS is 6.8 m vs 3.9 m. It still has a long-gap failure the bias ZUPT did
   not remove.
 
+## Robust Doppler speed (2026-10-05)
+
+On nagoya run1 the remaining failures were 30–66 m forward errors 15–45 s
+into RTK gaps. The heading was fine there (P90 < 1.3°); the Doppler speed was
+not (e.g. 31.7 m/s against a true 11.2 m/s): a single multipath Doppler moved
+the least-squares fit. `doppler_ground_speed` now drops the row with the
+largest range-rate residual and refits while that residual exceeds 0.5 m/s
+and more than five rows remain. Against the reference speed (|error| P90):
+nagoya run1 0.89 → 0.44 m/s, nagoya run2 0.85 → 0.50 m/s, Odaiba 0.149 →
+0.147 m/s. An acceleration gate and a post-fit RMS gate were also tried and
+did not help (the gate locked onto outliers).
+
+`rtk_anchored_doppler` with the robust speed, seed 42 (<1 / <3 / <5 m, RMS):
+
+| route | before | robust |
+|---|---:|---:|
+| tokyo run1 | 80.3 / 87.6 / 93.8, 2.60 m | 80.1 / 88.1 / 94.6, 2.44 m |
+| tokyo run2 | 86.1 / 93.9 / 98.2, 1.20 m | 88.1 / 94.2 / 98.9, 1.06 m |
+| tokyo run3 | 89.5 / 94.9 / 95.7, 1.73 m | 91.3 / 95.2 / 98.1, 1.51 m |
+| nagoya run1 | 74.8 / 79.8 / 86.5, 6.85 m | 77.7 / 81.3 / 86.2, 6.35 m |
+| nagoya run2 | 59.2 / 74.9 / 79.1, 5.19 m | 57.1 / 71.7 / 77.1, 4.85 m |
+| nagoya run3 | 48.1 / 71.1 / 79.9, 4.67 m | 50.2 / 77.1 / 87.9, 4.11 m |
+| **mean** (<0.5 / <1 / <3 / <5 m) | 67.8 / 73.0 / 83.7 / 88.9%, 3.71 m | **70.0 / 74.1 / 84.6 / 90.4%, 3.39 m** |
+
+The mean gain (+1.5 points at <5 m) is well above the five-seed spread
+measured before (≤ 0.4 points). nagoya run2 loses 2 points; nagoya run1 is
+still below the anchor alone at <5 m (86.2 vs 87.5%).
+
 ## Next
 
 1. Find the remaining nagoya run1 long-gap failure.

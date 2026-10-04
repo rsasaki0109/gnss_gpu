@@ -545,3 +545,17 @@ def test_evaluate_imu_predict_velocity_applies_zupt_only_when_enabled():
             zupt_gyro_bias=enabled,
         )
     assert calls == [(10.0, 10.1)]
+
+
+def test_doppler_ground_speed_rejects_a_multipath_row():
+    from gnss_gpu.predict_motion import _L1_WAVELENGTH_M, doppler_ground_speed
+
+    rx = np.array([-3961904.9, 3348993.7, 3698211.8])
+    lat, lon, _ = _lla(*rx)
+    east = np.array([-np.sin(lon), np.cos(lon), 0.0])
+    rows = _doppler_rows(rx, 10.0 * east)
+    rows[0].doppler += 8.0 / _L1_WAVELENGTH_M  # 8 m/s range-rate error on one satellite
+
+    speed = doppler_ground_speed(rows, rx, _lla)
+    assert speed is not None
+    assert abs(speed - 10.0) < 1e-6
