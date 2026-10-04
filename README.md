@@ -107,7 +107,7 @@ UrbanNav route while the full-view trail is drawn from the continuous trajectory
 | RTKLIB demo5 (rtklibexplorer, 2026-09) | UrbanNav Tokyo Odaiba | 0.34 m | 40.89 m |
 | libgnss++ RTK, `low-cost` preset (78.5% coverage) | UrbanNav Tokyo Odaiba | **0.07 m** | **1.97 m** |
 | libgnss++ RTK + PF gap fill (98.2% coverage) | UrbanNav Tokyo Odaiba | 0.20 m | 3.55 m |
-| **PF anchored to libgnss++ RTK FIX** (RTK heading, σ_pos 0.1, 98.2% coverage) | UrbanNav Tokyo Odaiba | 0.21 m | **1.26 m** |
+| **PF anchored to libgnss++ RTK FIX** (preset `urbannav_rtk_anchored`, 98.2% coverage) | UrbanNav Tokyo Odaiba | 0.12 m | **0.83 m** |
 | **PF + RobustClear-10K** (external mainline) | UrbanNav, 5 seq / 2 cities | — | **66.6 m** |
 | EKF baseline | UrbanNav, 5 seq / 2 cities | — | 93.25 m |
 
@@ -123,14 +123,16 @@ ran on real data, because libgnsspp rows carried no satellite number; that is
 why the April 2026 figure (1.36 m / 4.11 m) could not be reproduced. With the
 fix, the RMS matches it. The anchored row redraws the PF cloud at every RTK FIX
 and corrects the IMU heading only from consecutive fixes (`--rtk-anchor-pos`,
-`--rtk-anchor-heading`, preset `urbannav_rtk_anchored`); it is within 5 m on 98% of all
-reference epochs (RTKLIB demo5: 87%). Its σ_pos 0.1 was chosen across Odaiba and Shinjuku
+`--rtk-anchor-heading`) and holds still while the vehicle is parked (preset
+`urbannav_rtk_anchored`); it is within 3 m on 98% of all reference epochs (RTKLIB
+demo5: 69%). Its σ_pos 0.1 was chosen across Odaiba and Shinjuku
 ([record](internal_docs/urbannav_pf_rtk_anchor_2026_10_04.md)), and the same configuration
 improves all three PPC Tokyo routes without retuning
-([PPC record](internal_docs/ppc_pf_rtk_anchor_2026_10_04.md)). IMUs without an odometer or
-with a large gyro bias use preset `rtk_anchored_doppler`. These rows were measured with
-gnssplusplus `304798e7`; the current pin also feeds carrier phase and Doppler to the PF,
-which moves them by under 0.2 m (seed 42). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
+([PPC record](internal_docs/ppc_pf_rtk_anchor_2026_10_04.md)). Platforms without a wheel
+odometer use preset `rtk_anchored_doppler` (6 PPC routes: 88.9% within 5 m vs
+78.6% for libgnss++ RTK alone). The anchored row is measured with gnssplusplus `9d89a58a`;
+the other rows with `304798e7`, which lacked carrier phase and Doppler on PF inputs
+(about 0.2 m difference at seed 42). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
 `examples/demo_pf_localization_improvement.py` still replay the April artifacts.
 
 ### PF-only RTK stretch campaign

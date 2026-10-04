@@ -221,24 +221,26 @@ CLI_PRESETS["odaiba_pf_nlos_soft"] = {
 CLI_PRESETS["urbannav_rtk_anchored"] = {
     "description": (
         "odaiba_stop_detect anchored to an RTK solution: redraw at FIXED epochs, "
-        "IMU heading from consecutive fixes, sigma_pos 0.1. Requires --rtk-anchor-pos."
+        "IMU heading from consecutive fixes, sigma_pos 0.1, standstill held "
+        "(stop sigma 0.01, yaw-rate bias learned). Requires --rtk-anchor-pos."
     ),
     "argv": [
         *CLI_PRESETS["odaiba_stop_detect"]["argv"],
         "--sigma-pos", "0.1",
         "--rtk-anchor-heading",
+        "--imu-stop-sigma-pos", "0.01",
+        "--imu-gyro-bias-zupt",
     ],
 }
 
 CLI_PRESETS["rtk_anchored_doppler"] = {
     "description": (
         "urbannav_rtk_anchored for platforms without wheel odometry: Doppler ground "
-        "speed and a yaw-rate bias learned at standstill. Requires --rtk-anchor-pos."
+        "speed for the IMU guide. Requires --rtk-anchor-pos."
     ),
     "argv": [
         *CLI_PRESETS["urbannav_rtk_anchored"]["argv"],
         "--imu-speed-source", "doppler",
-        "--imu-gyro-bias-zupt",
     ],
 }
 
