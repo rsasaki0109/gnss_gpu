@@ -123,8 +123,8 @@ ran on real data, because libgnsspp rows carried no satellite number; that is
 why the April 2026 figure (1.36 m / 4.11 m) could not be reproduced. With the
 fix, the RMS matches it. The anchored row redraws the PF cloud at every RTK FIX
 and corrects the IMU heading only from consecutive fixes (`--rtk-anchor-pos`,
-`--rtk-anchor-heading`); it is within 5 m on 98% of all reference epochs (RTKLIB
-demo5: 87%). Its σ_pos 0.1 was chosen on Odaiba and Shinjuku themselves
+`--rtk-anchor-heading`, preset `urbannav_rtk_anchored`); it is within 5 m on 98% of all
+reference epochs (RTKLIB demo5: 87%). Its σ_pos 0.1 was chosen across Odaiba and Shinjuku
 ([record](internal_docs/urbannav_pf_rtk_anchor_2026_10_04.md)). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
 `examples/demo_pf_localization_improvement.py` still replay the April artifacts.
 

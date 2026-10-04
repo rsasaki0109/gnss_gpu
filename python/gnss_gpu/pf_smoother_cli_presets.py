@@ -218,6 +218,18 @@ CLI_PRESETS["odaiba_pf_nlos_soft"] = {
     ],
 }
 
+CLI_PRESETS["urbannav_rtk_anchored"] = {
+    "description": (
+        "odaiba_stop_detect anchored to an RTK solution: redraw at FIXED epochs, "
+        "IMU heading from consecutive fixes, sigma_pos 0.1. Requires --rtk-anchor-pos."
+    ),
+    "argv": [
+        *CLI_PRESETS["odaiba_stop_detect"]["argv"],
+        "--sigma-pos", "0.1",
+        "--rtk-anchor-heading",
+    ],
+}
+
 
 def expand_cli_preset_argv(argv: list[str]) -> list[str]:
     """Inline preset argv fragments so later user flags keep normal precedence."""
