@@ -170,6 +170,15 @@ heading, PF alone; 5 seeds unless noted):
 - Both choices sit in 0.05–0.1 and transfer with small losses. The named preset
   `urbannav_rtk_anchored` uses 0.1, the less dead-reckoning-reliant end.
 
+### Update: standstill hold
+
+`urbannav_rtk_anchored` now also holds standstill (`--imu-stop-sigma-pos
+0.01`, `--imu-gyro-bias-zupt`), after PPC exposed a gyro bias and an Odaiba
+stretch showed a parked car drifting under the 0.1 m stop random walk
+([PPC record](ppc_pf_rtk_anchor_2026_10_04.md)). Five seeds, gnssplusplus
+`9d89a58a`: Odaiba P50 0.12 m, RMS 0.83 m, <1 / <3 / <5 m 80.7 / 98.0 /
+98.1%; Shinjuku P50 0.26 m, RMS 2.57 m, 72.2 / 88.0 / 92.1%.
+
 ## Next
 
 1. Confirm on data from another receiver or city. PPC needs a speed source

@@ -35,7 +35,8 @@ record runs the same PF on the six PPC-Dataset routes (Tokyo and Nagoya,
 - B: `odaiba_stop_detect` (no anchor)
 - C: B + `--rtk-anchor-pos` (anchor only)
 - A: `urbannav_rtk_anchored` (anchor + RTK heading + σ_pos 0.1)
-- D: A + `--imu-gyro-bias-zupt` (preset `rtk_anchored_doppler`)
+- D: A + `--imu-gyro-bias-zupt` (the first `rtk_anchored_doppler`; the final
+  presets also hold standstill, see the last section)
 
 ## Results (share of all reference epochs; PF smoothed output)
 
@@ -69,18 +70,47 @@ RTK = libgnss++ `low-cost` alone (63–92% coverage). A's RMS on Nagoya was
   (run2 67.6 → 79.2% <5 m, RMS 26.9 → 4.9 m) and keeps Tokyo within 0.2
   points except run1 (−3.1). Over the six routes D is the best arm on average
   (<5 m 88.4% vs 84.5% for the anchor alone and 78.6% for RTK alone).
-- **ZUPT is not free on low-bias IMUs.** On UrbanNav (wheel speed, bias
-  ≤ 0.01 deg/s) it raises <1 m (Odaiba 70.2 → 76.6%) but lowers <5 m
-  (98.1 → 94.5%), with the loss in gaps longer than 60 s. The cause is not yet
-  understood (stop detection there contains no turning). So it is a separate
-  preset, `rtk_anchored_doppler`, not part of `urbannav_rtk_anchored`.
+- **The ZUPT loss on UrbanNav was standstill drift, not heading.** With the
+  ZUPT, Odaiba <1 m rose (70.2 → 76.6%) but <5 m fell (98.1 → 94.5%, seed
+  42). The heading actually improved (median error beyond 60 s of RTK gap
+  1.00° → 0.48°). The loss sat in one 48 s stretch where the vehicle stood
+  still for ~100 s without a FIX: both runs drifted to 6–9 m (forward) while
+  stationary, D's smoothed error crossed 5 m and A's did not. The preset's
+  stop random walk (`--imu-stop-sigma-pos 0.1`, i.e. ~2 m per 50 s) lets
+  biased pseudoranges move a parked car. Over five seeds the ZUPT-only Odaiba
+  RMS was 1.09–1.60 m, so seed 42 was also on the bad side.
 - Nagoya FIX positions carry a ~0.1 m median offset (Tokyo 0.01–0.02 m),
   consistent with a header-coordinate offset of the Nagoya base.
 
+## One preset for both IMUs (stop σ 0.01)
+
+Holding position at standstill (`--imu-stop-sigma-pos 0.01`) together with
+the ZUPT fixes both datasets. `urbannav_rtk_anchored` now includes both, and
+`rtk_anchored_doppler` is that preset plus Doppler speed.
+
+Share of all reference epochs <1 / <3 / <5 m and RMS (PF smoothed; UrbanNav
+uses wheel speed and the calibrated base, PPC Doppler speed and the header
+base):
+
+| route | A (old preset) | A + ZUPT | A + ZUPT + stop σ 0.01 (new preset) |
+|---|---:|---:|---:|
+| Odaiba (5 seeds for A and new) | 69.1 / 93.0 / 98.1, 1.26 m | 76.6 / 89.3 / 94.5, 1.60 m | **80.7 / 98.0 / 98.1, 0.83 m** |
+| Shinjuku (5 seeds for A and new) | 72.3 / 87.8 / 91.8, 2.42 m | 71.6 / 87.7 / 91.9, 2.58 m | 72.2 / 88.0 / 92.1, 2.57 m |
+| tokyo run1 | 79.2 / 87.6 / 93.9, 2.65 m | 79.2 / 87.7 / 90.8, 2.68 m | 80.3 / 87.6 / 93.8, 2.60 m |
+| tokyo run2 | 87.2 / 94.2 / 98.4, 1.14 m | 86.4 / 96.0 / 98.2, 1.12 m | 86.1 / 93.9 / 98.2, 1.20 m |
+| tokyo run3 | 86.9 / 94.8 / 95.9, 1.69 m | 88.6 / 94.8 / 95.7, 1.71 m | 89.5 / 94.9 / 95.7, 1.73 m |
+| nagoya run1 | 70.6 / 74.2 / 83.2, 10.00 m | 76.4 / 79.5 / 85.8, 6.86 m | 74.8 / 79.8 / 86.5, 6.85 m |
+| nagoya run2 | 55.1 / 64.5 / 67.6, 26.89 m | 56.8 / 74.3 / 79.2, 4.86 m | 59.2 / 74.9 / 79.1, 5.19 m |
+| nagoya run3 | 44.9 / 63.0 / 72.2, 6.80 m | 47.2 / 71.5 / 80.4, 4.76 m | 48.1 / 71.1 / 79.9, 4.67 m |
+| **PPC mean** | 70.7 / 79.7 / 85.2, 8.20 m | 72.5 / 84.0 / 88.4, 3.67 m | **73.0 / 83.7 / 88.9, 3.71 m** |
+
+PPC rows are seed 42. The new preset matches or beats the old one on every
+route at <5 m except the three Tokyo runs (−0.1 to −0.2 points), and its PPC mean is
+3.7 points higher with less than half the RMS. Odaiba gains 11.6 points at
+<1 m and 5.0 at <3 m. Shinjuku is unchanged within 0.3 points, RMS +0.15 m.
+
 ## Next
 
-1. Explain the ZUPT loss on UrbanNav long gaps, then decide whether one preset
-   can serve both IMUs.
-2. Multi-seed PPC runs (single seed here).
-3. UrbanNav Hong Kong (`experiments/fetch_urbannav_hk_subset.py`) as a third
+1. Multi-seed PPC runs (single seed here).
+2. UrbanNav Hong Kong (`experiments/fetch_urbannav_hk_subset.py`) as a third
    held-out set.
