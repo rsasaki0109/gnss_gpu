@@ -49,3 +49,10 @@ def test_urbannav_rtk_anchored_preset_extends_stop_detect():
     # Later --sigma-pos wins over the 1.2 m inherited from odaiba_stop_detect.
     assert expanded[len(expanded) - 1 - expanded[::-1].index("--sigma-pos") + 1] == "0.1"
     assert expanded[-2:] == ["--rtk-anchor-pos", "rtk.pos"]
+
+
+def test_rtk_anchored_doppler_preset_extends_urbannav_rtk_anchored():
+    expanded = expand_cli_preset_argv(["--preset", "rtk_anchored_doppler"])
+    base = CLI_PRESETS["urbannav_rtk_anchored"]["argv"]
+    assert expanded[: len(base)] == base
+    assert expanded[len(base):] == ["--imu-speed-source", "doppler", "--imu-gyro-bias-zupt"]

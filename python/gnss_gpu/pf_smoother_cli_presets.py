@@ -230,6 +230,18 @@ CLI_PRESETS["urbannav_rtk_anchored"] = {
     ],
 }
 
+CLI_PRESETS["rtk_anchored_doppler"] = {
+    "description": (
+        "urbannav_rtk_anchored for platforms without wheel odometry: Doppler ground "
+        "speed and a yaw-rate bias learned at standstill. Requires --rtk-anchor-pos."
+    ),
+    "argv": [
+        *CLI_PRESETS["urbannav_rtk_anchored"]["argv"],
+        "--imu-speed-source", "doppler",
+        "--imu-gyro-bias-zupt",
+    ],
+}
+
 
 def expand_cli_preset_argv(argv: list[str]) -> list[str]:
     """Inline preset argv fragments so later user flags keep normal precedence."""

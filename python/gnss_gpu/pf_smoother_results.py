@@ -56,6 +56,8 @@ def build_pf_smoother_result_row(
         "rtk_anchor_pos": args.rtk_anchor_pos,
         "rtk_anchor_sigma_m": args.rtk_anchor_sigma_m,
         "rtk_anchor_heading": args.rtk_anchor_heading,
+        "imu_speed_source": args.imu_speed_source,
+        "imu_gyro_bias_zupt": args.imu_gyro_bias_zupt,
         "n_rtk_anchor_used": int(out.get("n_rtk_anchor_used", 0)),
         "residual_downweight": args.residual_downweight,
         "residual_threshold": args.residual_threshold,

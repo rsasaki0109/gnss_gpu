@@ -306,6 +306,8 @@ class PfSmootherConfig:
     rtk_anchor_pos: str = ""
     rtk_anchor_sigma_m: float = 0.1
     rtk_anchor_heading: bool = False
+    imu_speed_source: str = "wheel"
+    imu_gyro_bias_zupt: bool = False
     seed: int = 42
     max_epochs: int = 0
     skip_valid_epochs: int = 0

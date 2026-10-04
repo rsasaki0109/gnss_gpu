@@ -28,6 +28,10 @@ class EpochPredictMotionOptions:
     need_fgo_tdcp_motion: bool
     fgo_local_tdcp_rms_max_m: float
     fgo_local_tdcp_spp_max_diff_mps: float | None
+    # "wheel" (odometer column of imu.csv) or "doppler" (GNSS Doppler ground speed).
+    imu_speed_source: str = "wheel"
+    # Hold heading and estimate the yaw-rate bias whenever the IMU guide stops.
+    imu_gyro_bias_zupt: bool = False
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,8 @@ def evaluate_imu_predict_velocity(
     dt: float,
     stop_speed_mps: float = 0.01,
     spp_speed_max_mps: float = 50.0,
+    speed_mps: float | None = None,
+    zupt_gyro_bias: bool = False,
 ) -> ImuPredictDecision:
     if predict_guide not in ("imu", "imu_spp_blend") or imu_filter is None or dt <= 0:
         return ImuPredictDecision()
@@ -89,9 +95,14 @@ def evaluate_imu_predict_velocity(
     elif tow_key not in spp_lookup or prev_key not in spp_lookup:
         spp_fd_velocity = None
 
-    vel_enu = imu_filter.get_velocity_enu(prev_tow, tow)
+    if speed_mps is None:
+        vel_enu = imu_filter.get_velocity_enu(prev_tow, tow)
+    else:
+        vel_enu = imu_filter.get_velocity_enu(prev_tow, tow, speed=float(speed_mps))
     speed_enu = float(np.linalg.norm(np.asarray(vel_enu, dtype=np.float64)[:2]))
     if speed_enu <= float(stop_speed_mps):
+        if zupt_gyro_bias:
+            imu_filter.apply_stationary_interval(prev_tow, tow)
         stopped = np.zeros(3)
         return ImuPredictDecision(
             velocity=stopped,
@@ -219,6 +230,17 @@ def apply_epoch_predict_motion(
     receiver_position = np.asarray(receiver_position_ecef, dtype=np.float64).ravel()[:3]
     current_measurements = list(measurements)
 
+    speed_mps = None
+    if options.imu_speed_source == "doppler":
+        speed = doppler_ground_speed(
+            current_measurements,
+            np.asarray(current_pf_position_ecef, dtype=np.float64).ravel()[:3],
+            ecef_to_lla_func,
+        )
+        if speed is not None:
+            history.doppler_speed_mps = speed
+        speed_mps = history.doppler_speed_mps if history.doppler_speed_mps is not None else 0.0
+
     imu_decision = evaluate_imu_predict_velocity(
         imu_filter,
         options.predict_guide,
@@ -228,6 +250,8 @@ def apply_epoch_predict_motion(
         spp_lookup if heading_lookup is None else heading_lookup,
         ecef_to_lla_func,
         dt=dt,
+        speed_mps=speed_mps,
+        zupt_gyro_bias=options.imu_gyro_bias_zupt,
     )
     if imu_decision.used_imu:
         epoch_state.velocity = imu_decision.velocity
@@ -309,6 +333,60 @@ def apply_epoch_predict_motion(
             tow_key=tow_key,
             dt=dt,
         )
+
+
+# Systems whose primary SPP signal is on 1575.42 MHz (GPS L1, Galileo E1, QZSS L1).
+_DOPPLER_SPEED_SYSTEM_IDS = (0, 2, 4)
+_L1_WAVELENGTH_M = 299792458.0 / 1575.42e6
+
+
+def doppler_ground_speed(
+    measurements: Iterable[Any],
+    receiver_position_ecef: np.ndarray,
+    ecef_to_lla_func: Callable[[float, float, float], tuple[float, float, float]],
+    *,
+    min_sats: int = 5,
+    stop_speed_mps: float = 0.15,
+    max_speed_mps: float = 50.0,
+) -> float | None:
+    """Horizontal receiver speed from a Doppler least-squares fit.
+
+    Uses only GPS / Galileo / QZSS rows that carry a Doppler and a satellite
+    velocity. Speeds below ``stop_speed_mps`` (Doppler noise at standstill)
+    return 0 so the IMU stop detection still works.
+    """
+    from gnss_gpu.doppler_velocity import estimate_velocity_from_doppler
+
+    sat, vel, dop = [], [], []
+    for m in measurements:
+        if int(getattr(m, "system_id", -1)) not in _DOPPLER_SPEED_SYSTEM_IDS:
+            continue
+        d = float(getattr(m, "doppler", float("nan")))
+        v = np.asarray(getattr(m, "satellite_velocity", (np.nan,) * 3), dtype=np.float64).ravel()[:3]
+        if not np.isfinite(d) or d == 0.0 or v.shape[0] != 3 or not np.isfinite(v).all():
+            continue
+        sat.append(np.asarray(m.satellite_ecef, dtype=np.float64).ravel()[:3])
+        vel.append(v)
+        dop.append(d)
+    if len(dop) < int(min_sats):
+        return None
+    velocity = estimate_velocity_from_doppler(
+        receiver_position_ecef,
+        np.asarray(sat),
+        np.asarray(dop),
+        sat_velocities=np.asarray(vel),
+        wavelength=_L1_WAVELENGTH_M,
+    )
+    if velocity is None:
+        return None
+    rx = np.asarray(receiver_position_ecef, dtype=np.float64).ravel()[:3]
+    lat, lon, _ = ecef_to_lla_func(float(rx[0]), float(rx[1]), float(rx[2]))
+    east = np.array([-np.sin(lon), np.cos(lon), 0.0])
+    north = np.array([-np.sin(lat) * np.cos(lon), -np.sin(lat) * np.sin(lon), np.cos(lat)])
+    speed = float(np.hypot(velocity @ east, velocity @ north))
+    if not np.isfinite(speed) or speed > float(max_speed_mps):
+        return None
+    return 0.0 if speed < float(stop_speed_mps) else speed
 
 
 def spp_finite_difference_velocity(
