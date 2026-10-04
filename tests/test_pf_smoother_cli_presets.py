@@ -37,3 +37,15 @@ def test_print_cli_presets_lists_available_presets(capsys):
     assert "Available presets:" in out
     assert "odaiba_reference:" in out
     assert set(CLI_PRESETS) >= {"odaiba_reference", "odaiba_best_accuracy", "odaiba_pf_nlos_soft"}
+
+
+def test_urbannav_rtk_anchored_preset_extends_stop_detect():
+    expanded = expand_cli_preset_argv(
+        ["--preset", "urbannav_rtk_anchored", "--rtk-anchor-pos", "rtk.pos"]
+    )
+    stop_detect = CLI_PRESETS["odaiba_stop_detect"]["argv"]
+    assert expanded[: len(stop_detect)] == stop_detect
+    assert "--rtk-anchor-heading" in expanded
+    # Later --sigma-pos wins over the 1.2 m inherited from odaiba_stop_detect.
+    assert expanded[len(expanded) - 1 - expanded[::-1].index("--sigma-pos") + 1] == "0.1"
+    assert expanded[-2:] == ["--rtk-anchor-pos", "rtk.pos"]

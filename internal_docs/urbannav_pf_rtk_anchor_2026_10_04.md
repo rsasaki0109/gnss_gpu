@@ -149,9 +149,31 @@ The forward error 1 s after FIX loss is 0.39 m instead of 2.21 m (Odaiba).
   heading needs no tuning, but the σ_pos choice should be confirmed on other
   data before the preset changes.
 
+### Choosing σ_pos (leave-one-route-out)
+
+UrbanNav Tokyo ships only these two routes, and PPC has no wheel speed for the
+IMU guide, so σ_pos was checked across the two routes instead (anchor + RTK
+heading, PF alone; 5 seeds unless noted):
+
+| σ_pos | Odaiba <3 m / <5 m / RMS | Shinjuku <3 m / <5 m / RMS |
+|---|---:|---:|
+| 1.2 (seed 42) | 79.6% / 88.9% / 3.30 m | 79.3% / 83.5% / 5.12 m |
+| 0.3 (seed 42) | 84.6% / 94.0% / 1.93 m | 82.4% / 87.0% / 3.05 m |
+| 0.1 | 93.0% / 98.1% / 1.26 m | 87.8% / **91.8%** / **2.42 m** |
+| 0.05 | **96.5%** / 98.1% / **1.01 m** | **88.8%** / 91.6% / 2.70 m |
+| 0.02 (seed 42) | 95.6% / 98.1% / 1.02 m | 89.1% / 91.3% / 2.92 m |
+
+- Selected on Odaiba, σ_pos would be 0.05; on Shinjuku it costs 0.3 points
+  at <5 m and 0.3 m RMS against Shinjuku's own best.
+- Selected on Shinjuku, σ_pos would be 0.1; on Odaiba it costs 3.5 points at
+  <3 m and 0.25 m RMS against Odaiba's own best.
+- Both choices sit in 0.05–0.1 and transfer with small losses. The named preset
+  `urbannav_rtk_anchored` uses 0.1, the less dead-reckoning-reliant end.
+
 ## Next
 
-1. Confirm σ_pos (and the heading option) on data other than these two routes.
-2. Make the anchored configuration a named preset once confirmed.
-3. Long gaps (Shinjuku 15–60 s) remain metre-level; TDCP displacement or
+1. Confirm on data from another receiver or city. PPC needs a speed source
+   other than wheel odometry (e.g. Doppler or RTK-fix finite differences)
+   before the IMU guide can run there.
+2. Long gaps (Shinjuku 15–60 s) remain metre-level; TDCP displacement or
    Doppler velocity could bound the along-track drift there.
