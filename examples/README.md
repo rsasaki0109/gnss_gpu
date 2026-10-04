@@ -59,16 +59,18 @@ PYTHONPATH=python:. python3 examples/demo_pf_localization_improvement.py
 
 [`demo_pf_localization_improvement.py`](demo_pf_localization_improvement.py)
 reads checked-in result artifacts instead of rerunning UrbanNav. It prints the
-Odaiba OpenStreetMap particle-filter comparison against RTKLIB demo5 and the
-PLATEAU LOS/NLOS mask replay gain for the particle-filter consumer.
-
-The PF figures below are from an April 2026 artifact. Rerunning the same preset
-on current main gives P50 2.20 m / RMS 13.51 m (see the README results table).
+current Odaiba comparison from `docs/assets/data/urbannav_current_checkpoint.json`
+(the same numbers as the README results table and the live site), the PPC
+held-out check, and the PLATEAU LOS/NLOS mask replay gain for the
+particle-filter consumer.
 
 ```text
-RTKLIB demo5                              P50 2.67 m / RMS 13.08 m
-PF 100K (DD + smoother + stop-detect)     P50 1.36 m / RMS  4.11 m
-Improvement vs RTKLIB demo5: P50 49%, RMS 69%.
+Method                                                      P50 [m]  RMS [m]  <3 m   <5 m   cover
+RTKLIB demo5                                                  0.34    40.89    69%  86.6%   97.3%
+libgnss++ RTK low-cost                                        0.07     1.97  72.9%  74.5%   78.5%
+PF 100K (DD + smoother + stop-detect)                         1.50     4.06  73.1%  86.7%   98.2%
+PF anchored to libgnss++ RTK FIX (urbannav_rtk_anchored)      0.12     0.83    98%  98.1%   98.2%
+Held-out PPC (6 routes, preset rtk_anchored_doppler): 90.4% within 5 m vs 78.6% for libgnss++ RTK alone.
 PLATEAU PF mask-soft replay: RMS 11.18 m -> 1.40 m, gain 87.4%.
 ```
 
