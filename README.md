@@ -107,6 +107,7 @@ UrbanNav route while the full-view trail is drawn from the continuous trajectory
 | RTKLIB demo5 (rtklibexplorer, 2026-09) | UrbanNav Tokyo Odaiba | 0.34 m | 40.89 m |
 | libgnss++ RTK, `low-cost` preset (78.5% coverage) | UrbanNav Tokyo Odaiba | **0.07 m** | **1.97 m** |
 | libgnss++ RTK + PF gap fill (98.2% coverage) | UrbanNav Tokyo Odaiba | 0.20 m | 3.55 m |
+| **PF anchored to libgnss++ RTK FIX** (RTK heading, σ_pos 0.1, 98.2% coverage) | UrbanNav Tokyo Odaiba | 0.21 m | **1.26 m** |
 | **PF + RobustClear-10K** (external mainline) | UrbanNav, 5 seq / 2 cities | — | **66.6 m** |
 | EKF baseline | UrbanNav, 5 seq / 2 cities | — | 93.25 m |
 
@@ -120,7 +121,11 @@ against it here. The PF 100K row is the smoothed output of preset
 `odaiba_stop_detect`, averaged over 5 seeds. Until 2026-10-04 its DD terms never
 ran on real data, because libgnsspp rows carried no satellite number; that is
 why the April 2026 figure (1.36 m / 4.11 m) could not be reproduced. With the
-fix, the RMS matches it. The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
+fix, the RMS matches it. The anchored row redraws the PF cloud at every RTK FIX
+and corrects the IMU heading only from consecutive fixes (`--rtk-anchor-pos`,
+`--rtk-anchor-heading`); it is within 5 m on 98% of all reference epochs (RTKLIB
+demo5: 87%). Its σ_pos 0.1 was chosen on Odaiba and Shinjuku themselves
+([record](internal_docs/urbannav_pf_rtk_anchor_2026_10_04.md)). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
 `examples/demo_pf_localization_improvement.py` still replay the April artifacts.
 
 ### PF-only RTK stretch campaign

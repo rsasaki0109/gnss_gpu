@@ -49,6 +49,9 @@ def apply_forward_epoch_prediction(
         measurements=measurements,
         spp_lookup=context.dataset.spp_lookup,
         ecef_to_lla_func=context.dependencies.ecef_to_lla_func,
+        heading_lookup=(
+            context.rtk_anchor_lookup if run_config.rtk_anchor_heading else None
+        ),
     )
 
     sigma_predict = select_predict_sigma(

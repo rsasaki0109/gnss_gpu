@@ -69,6 +69,12 @@ def build_pf_smoother_arg_parser(default_sigma_pos: float) -> argparse.ArgumentP
         help="Position spread (m) of the cloud redrawn at RTK FIXED epochs",
     )
     parser.add_argument(
+        "--rtk-anchor-heading",
+        action="store_true",
+        help="Correct the IMU heading from consecutive RTK FIXED positions of "
+        "--rtk-anchor-pos instead of 10 Hz SPP differences; gyro only elsewhere",
+    )
+    parser.add_argument(
         "--smoother-skip-widelane-dd-pseudorange",
         action="store_true",
         help="In the backward smoother pass, replay undifferenced PR instead of wide-lane-derived DD PR",

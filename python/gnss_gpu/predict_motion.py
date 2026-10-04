@@ -201,7 +201,14 @@ def apply_epoch_predict_motion(
     measurements: Iterable[Any],
     spp_lookup: dict[float, np.ndarray],
     ecef_to_lla_func: Callable[[float, float, float], tuple[float, float, float]],
+    heading_lookup: dict[float, np.ndarray] | None = None,
 ) -> None:
+    """``heading_lookup`` replaces ``spp_lookup`` as the IMU heading reference.
+
+    With RTK fixed positions, the heading is corrected only between two
+    consecutive fixed epochs and is gyro-propagated elsewhere, instead of
+    following 10 Hz SPP finite differences whose noise exceeds the motion.
+    """
     if not history.has_previous_motion(dt):
         return
 
@@ -218,7 +225,7 @@ def apply_epoch_predict_motion(
         prev_tow,
         tow,
         current_pf_position_ecef,
-        spp_lookup,
+        spp_lookup if heading_lookup is None else heading_lookup,
         ecef_to_lla_func,
         dt=dt,
     )

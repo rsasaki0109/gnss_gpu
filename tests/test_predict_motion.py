@@ -362,3 +362,55 @@ def test_apply_epoch_predict_motion_estimates_tdcp_pu_fgo_and_spp_fallback(monke
     np.testing.assert_allclose(state.fgo_tdcp_motion_velocity, [7.0, 8.0, 9.0])
     np.testing.assert_allclose(state.velocity, [1.0, 0.0, 0.0])
     assert stats.n_fgo_tdcp_motion_used == 1
+
+
+def test_apply_epoch_predict_motion_uses_heading_lookup_for_imu_heading(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        predict_motion,
+        "evaluate_imu_predict_velocity",
+        lambda *args, **kwargs: seen.append(args[5]) or ImuPredictDecision(),
+    )
+    monkeypatch.setattr(
+        predict_motion,
+        "evaluate_tdcp_predict_guide",
+        lambda *args, **kwargs: TdcpPredictDecision(),
+    )
+    spp_lookup = {10.0: np.zeros(3)}
+    fix_lookup = {10.1: np.ones(3)}
+
+    for heading_lookup in (None, fix_lookup):
+        apply_epoch_predict_motion(
+            create_epoch_forward_state(0.5),
+            ForwardRunStats(),
+            ForwardEpochHistory(prev_tow=10.0, prev_measurements=["prev"]),
+            imu_filter=object(),
+            options=_predict_options(predict_guide="imu"),
+            tow=10.1,
+            tow_key=10.1,
+            dt=0.1,
+            receiver_position_ecef=np.ones(3),
+            current_pf_position_ecef=np.ones(3),
+            measurements=["now"],
+            spp_lookup=spp_lookup,
+            ecef_to_lla_func=lambda _x, _y, _z: (0.0, 0.0, 0.0),
+            heading_lookup=heading_lookup,
+        )
+
+    assert seen == [spp_lookup, fix_lookup]
+
+
+def test_fixed_only_heading_lookup_skips_correction_across_gaps():
+    imu_filter = _FakeImuFilter([2.0, 0.0, 0.0])
+    fix_only = {10.0: np.zeros(3)}  # 10.1 is not FIXED
+    evaluate_imu_predict_velocity(
+        imu_filter,
+        "imu",
+        prev_tow=10.0,
+        tow=10.1,
+        current_position_ecef=np.array([1.0, 2.0, 3.0]),
+        spp_lookup=fix_only,
+        ecef_to_lla_func=lambda _x, _y, _z: (0.0, 0.0, 0.0),
+        dt=0.1,
+    )
+    assert imu_filter.corrected_headings == []

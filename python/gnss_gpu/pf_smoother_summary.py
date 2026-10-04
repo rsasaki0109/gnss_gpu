@@ -33,7 +33,8 @@ def build_pf_smoother_summary_lines(result: Mapping[str, Any]) -> list[str]:
     if str(result.get("rtk_anchor_pos") or "").strip():
         lines.append(
             f"  [rtk_anchor] cloud redrawn at {_int(result, 'n_rtk_anchor_used')} "
-            f"FIXED epochs (sigma={_float(result, 'rtk_anchor_sigma_m')} m)"
+            f"FIXED epochs (sigma={_float(result, 'rtk_anchor_sigma_m')} m, "
+            f"heading={'rtk' if _bool(result, 'rtk_anchor_heading') else 'spp'})"
         )
 
     if _bool(result, "doppler_per_particle"):
