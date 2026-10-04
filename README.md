@@ -132,8 +132,8 @@ improves all three PPC Tokyo routes without retuning
 odometer use preset `rtk_anchored_doppler` (6 PPC routes: 90.4% within 5 m vs
 78.6% for libgnss++ RTK alone). The anchored row is measured with gnssplusplus `9d89a58a`;
 the other rows with `304798e7`, which lacked carrier phase and Doppler on PF inputs
-(about 0.2 m difference at seed 42). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) shows
-these numbers; `examples/demo_pf_localization_improvement.py` still replays the April artifacts.
+(about 0.2 m difference at seed 42). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
+`examples/demo_pf_localization_improvement.py` show these numbers.
 
 ### PF-only RTK stretch campaign
 
@@ -196,8 +196,9 @@ For the zero-data terminal demo behind this visual:
 PYTHONPATH=python:. python3 examples/demo_pf_localization_improvement.py
 ```
 
-It reads checked-in artifacts and prints the UrbanNav Odaiba PF-vs-RTKLIB
-improvement plus the PLATEAU LOS/NLOS mask replay gain for PF.
+It reads checked-in artifacts and prints the current UrbanNav Odaiba comparison (RTKLIB
+demo5, libgnss++ RTK, the PF smoother and the RTK-anchored PF), the PPC held-out check,
+and the PLATEAU LOS/NLOS mask replay gain for PF.
 
 ## Ray-traced NLOS diffraction on real city data
 

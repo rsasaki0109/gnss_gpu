@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Zero-data demo for particle-filter localization improvement.
 
-The script reads checked-in result artifacts and prints a compact comparison of
-the OpenStreetMap particle-filter showcase against RTKLIB demo5, plus the
-PLATEAU LOS/NLOS mask replay result for the particle-filter consumer.
+The script reads checked-in result artifacts and prints the current UrbanNav
+Odaiba comparison (RTKLIB demo5, libgnss++ RTK, the PF smoother, and the PF
+anchored to RTK fixes), the PPC held-out check, plus the PLATEAU LOS/NLOS mask
+replay result for the particle-filter consumer.
 
 Run from the repo root:
 
@@ -23,7 +24,7 @@ from typing import Any
 
 DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-ODAIBA_FREEZE_JSON = Path("docs/assets/data/odaiba_pf_smoother_freeze.json")
+CHECKPOINT_JSON = Path("docs/assets/data/urbannav_current_checkpoint.json")
 PLATEAU_SUITE_CSV = Path("docs/assets/data/plateau_nlos_demo_suite_summary.csv")
 
 VISUAL_ARTIFACTS = {
@@ -86,25 +87,33 @@ def _improvement_pct(baseline: float, improved: float) -> float:
 
 
 def _load_odaiba(project_root: Path) -> dict[str, Any]:
-    data = _read_json(project_root, ODAIBA_FREEZE_JSON)
+    data = _read_json(project_root, CHECKPOINT_JSON)
+
+    def row(method: str, prefix: str) -> dict[str, Any]:
+        return {
+            "method": method,
+            "p50_m": _float(data[f"{prefix}_p50_m"]),
+            "rms_2d_m": _float(data[f"{prefix}_rms_2d_m"]),
+            "within_3m_pct": data.get(f"{prefix}_within_3m_pct"),
+            "within_5m_pct": data.get(f"{prefix}_within_5m_pct"),
+            "coverage_pct": data.get(f"{prefix}_coverage_pct"),
+        }
+
     return {
         "dataset": data["dataset"],
-        "epochs": int(data["n_epochs"]),
-        "source": ODAIBA_FREEZE_JSON.as_posix(),
-        "baseline": {
-            "method": data["baseline_method"],
-            "p50_m": _float(data["baseline_p50_m"]),
-            "rms_2d_m": _float(data["baseline_rms_2d_m"]),
-        },
-        "particle_filter": {
-            "method": data["method"],
-            "variant": data.get("variant", ""),
-            "p50_m": _float(data["pf_p50_m"]),
-            "rms_2d_m": _float(data["pf_rms_2d_m"]),
-        },
-        "improvement": {
-            "p50_pct": _float(data["p50_improvement_pct"]),
-            "rms_2d_pct": _float(data["rms_improvement_pct"]),
+        "measured": data["measured"],
+        "source": CHECKPOINT_JSON.as_posix(),
+        "rows": [
+            row(data["rtklib_method"], "rtklib"),
+            row(data["rtk_method"], "rtk"),
+            row(data["unanchored_method"], "unanchored"),
+            row(f"{data['pf_method']} ({data['pf_preset']})", "pf"),
+        ],
+        "ppc": {
+            "routes": int(data["ppc_routes"]),
+            "preset": data["ppc_preset"],
+            "within_5m_pct": _float(data["ppc_within_5m_pct"]),
+            "rtk_within_5m_pct": _float(data["ppc_rtk_within_5m_pct"]),
         },
         "notes": data.get("notes", ""),
     }
@@ -165,30 +174,31 @@ def print_report(summary: dict[str, Any]) -> None:
     print()
 
     odaiba = summary["odaiba"]
-    baseline = odaiba["baseline"]
-    particle_filter = odaiba["particle_filter"]
-    improvement = odaiba["improvement"]
 
-    print("Real UrbanNav Odaiba freeze")
+    def pct(value: Any) -> str:
+        return "-" if value is None else _fmt_pct(value)
+
+    print(f"Real UrbanNav Odaiba ({odaiba['measured']})")
     print(f"  Dataset : {odaiba['dataset']}")
-    print(f"  Epochs  : {odaiba['epochs']}")
-    print()
-    print("  Method                                      P50 [m]   RMS [m]")
-    print("  -------------------------------------------------------------")
-    print(
-        f"  {baseline['method']:<42}"
-        f"{_fmt_m(baseline['p50_m']):>7}   {_fmt_m(baseline['rms_2d_m']):>7}"
-    )
-    print(
-        f"  {particle_filter['method']:<42}"
-        f"{_fmt_m(particle_filter['p50_m']):>7}   "
-        f"{_fmt_m(particle_filter['rms_2d_m']):>7}"
-    )
     print()
     print(
-        "  Improvement vs "
-        f"{baseline['method']}: P50 {_fmt_pct(improvement['p50_pct'])}, "
-        f"RMS {_fmt_pct(improvement['rms_2d_pct'])}."
+        "  Method                                                      P50 [m]  RMS [m]"
+        "  <3 m   <5 m   cover"
+    )
+    print("  " + "-" * 97)
+    for row in odaiba["rows"]:
+        print(
+            f"  {row['method']:<58}{_fmt_m(row['p50_m']):>8} {_fmt_m(row['rms_2d_m']):>8}"
+            f" {pct(row['within_3m_pct']):>6} {pct(row['within_5m_pct']):>6}"
+            f" {pct(row['coverage_pct']):>7}"
+        )
+    print()
+    print("  <3 m / <5 m count every reference epoch; P50 / RMS are over output epochs.")
+    ppc = odaiba["ppc"]
+    print(
+        f"  Held-out PPC ({ppc['routes']} routes, preset {ppc['preset']}): "
+        f"{_fmt_pct(ppc['within_5m_pct'])} within 5 m vs "
+        f"{_fmt_pct(ppc['rtk_within_5m_pct'])} for libgnss++ RTK alone."
     )
     print()
 
