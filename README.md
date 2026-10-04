@@ -132,8 +132,8 @@ improves all three PPC Tokyo routes without retuning
 odometer use preset `rtk_anchored_doppler` (6 PPC routes: 90.4% within 5 m vs
 78.6% for libgnss++ RTK alone). The anchored row is measured with gnssplusplus `9d89a58a`;
 the other rows with `304798e7`, which lacked carrier phase and Doppler on PF inputs
-(about 0.2 m difference at seed 42). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
-`examples/demo_pf_localization_improvement.py` still replay the April artifacts.
+(about 0.2 m difference at seed 42). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) shows
+these numbers; `examples/demo_pf_localization_improvement.py` still replays the April artifacts.
 
 ### PF-only RTK stretch campaign
 
