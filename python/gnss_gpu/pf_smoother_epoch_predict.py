@@ -9,7 +9,11 @@ import numpy as np
 
 from gnss_gpu.pf_smoother_epoch_state import EpochForwardState, create_epoch_forward_state
 from gnss_gpu.pf_smoother_forward_context import PfSmootherForwardPassContext
-from gnss_gpu.predict_motion import apply_epoch_predict_motion, select_predict_sigma
+from gnss_gpu.predict_motion import (
+    apply_epoch_predict_motion,
+    select_predict_sigma,
+    widen_sigma_for_gap,
+)
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,15 @@ def apply_forward_epoch_prediction(
         tdcp_rms=epoch_state.tdcp_rms,
         tdcp_tight_rms_max_m=run_config.tdcp_tight_rms_max_m,
     )
+    gap_sigma = widen_sigma_for_gap(
+        sigma_predict,
+        dt=dt,
+        gap_velocity_sigma=run_config.predict_gap_velocity_sigma,
+        min_gap_s=run_config.predict_gap_min_s,
+    )
+    if gap_sigma is not None:
+        sigma_predict = gap_sigma
+        epoch_state.gap_predict_sigma = gap_sigma
 
     pf.predict(
         velocity=epoch_state.velocity,

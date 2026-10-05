@@ -34,6 +34,7 @@ class SmootherEpochStoreInputs:
     doppler_max_velocity_update_mps: float | None
     rtk_anchor: np.ndarray | None = None
     rtk_anchor_sigma: float | None = None
+    predict_sigma: float | None = None
 
     def as_store_kwargs(self) -> dict[str, Any]:
         return {
@@ -54,6 +55,7 @@ class SmootherEpochStoreInputs:
             "doppler_max_velocity_update_mps": self.doppler_max_velocity_update_mps,
             "rtk_anchor": self.rtk_anchor,
             "rtk_anchor_sigma": self.rtk_anchor_sigma,
+            "predict_sigma": self.predict_sigma,
         }
 
 
@@ -77,6 +79,7 @@ def build_smoother_epoch_store_inputs(
     min_pairs: int = 3,
     rtk_anchor_ref: np.ndarray | None = None,
     rtk_anchor_sigma_m: float | None = None,
+    predict_sigma: float | None = None,
 ) -> SmootherEpochStoreInputs:
     valid_dd_pr = _has_min_dd_pairs(dd_pseudorange_result, min_pairs)
     valid_dd_carrier = _has_min_dd_pairs(dd_carrier_result, min_pairs)
@@ -123,6 +126,7 @@ def build_smoother_epoch_store_inputs(
         rtk_anchor_sigma=(
             float(cast(float, rtk_anchor_sigma_m)) if rtk_anchor_ref is not None else None
         ),
+        predict_sigma=None if predict_sigma is None else float(predict_sigma),
     )
 
 
@@ -162,6 +166,7 @@ def append_smoother_epoch_store(
         doppler_max_velocity_update_mps=doppler_max_velocity_update_mps,
         rtk_anchor_ref=getattr(epoch_state, "rtk_anchor_ref", None),
         rtk_anchor_sigma_m=rtk_anchor_sigma_m,
+        predict_sigma=getattr(epoch_state, "gap_predict_sigma", None),
     )
     pf.store_epoch(
         sat_ecef,

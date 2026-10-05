@@ -308,6 +308,8 @@ class PfSmootherConfig:
     rtk_anchor_heading: bool = False
     imu_speed_source: str = "wheel"
     imu_gyro_bias_zupt: bool = False
+    predict_gap_velocity_sigma: float | None = None
+    predict_gap_min_s: float = 1.0
     seed: int = 42
     max_epochs: int = 0
     skip_valid_epochs: int = 0

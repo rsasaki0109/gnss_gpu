@@ -70,6 +70,8 @@ class EpochForwardState:
     dd_carrier_result: Any | None = None
     # RTK fixed position the cloud was redrawn around this epoch, if any.
     rtk_anchor_ref: np.ndarray | None = None
+    # Predict spread widened for an epoch gap; replayed by the backward pass.
+    gap_predict_sigma: float | None = None
 
 
 def create_epoch_forward_state(dd_pseudorange_sigma: float) -> EpochForwardState:
