@@ -222,7 +222,8 @@ CLI_PRESETS["urbannav_rtk_anchored"] = {
     "description": (
         "odaiba_stop_detect anchored to an RTK solution: redraw at FIXED epochs, "
         "IMU heading from consecutive fixes, sigma_pos 0.1, standstill held "
-        "(stop sigma 0.01, yaw-rate bias learned). Requires --rtk-anchor-pos."
+        "(stop sigma 0.01, yaw-rate bias learned), smoother passes weighted by "
+        "distance to their fix. Requires --rtk-anchor-pos."
     ),
     "argv": [
         *CLI_PRESETS["odaiba_stop_detect"]["argv"],
@@ -230,6 +231,7 @@ CLI_PRESETS["urbannav_rtk_anchored"] = {
         "--rtk-anchor-heading",
         "--imu-stop-sigma-pos", "0.01",
         "--imu-gyro-bias-zupt",
+        "--smoother-anchor-weighting",
     ],
 }
 

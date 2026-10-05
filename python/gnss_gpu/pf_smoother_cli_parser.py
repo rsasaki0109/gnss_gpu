@@ -80,6 +80,12 @@ def build_pf_smoother_arg_parser(default_sigma_pos: float) -> argparse.ArgumentP
         help="In the backward smoother pass, replay undifferenced PR instead of wide-lane-derived DD PR",
     )
     parser.add_argument(
+        "--smoother-anchor-weighting",
+        action="store_true",
+        help="Combine forward and backward passes by distance in time to their RTK "
+        "anchor (1/(t+1 s), clipped to [0.1, 0.9]) instead of a plain average",
+    )
+    parser.add_argument(
         "--smoother-position-update-sigma",
         type=float,
         default=None,

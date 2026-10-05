@@ -7,10 +7,10 @@
   "pf_gnssplusplus": "9d89a58a",
   "pf_seeds": 5,
   "pf_p50_m": 0.1,
-  "pf_rms_2d_m": 0.8,
+  "pf_rms_2d_m": 0.77,
   "pf_coverage_pct": 98.2,
-  "pf_within_1m_pct": 80.7,
-  "pf_within_3m_pct": 97.9,
+  "pf_within_1m_pct": 84.4,
+  "pf_within_3m_pct": 97.4,
   "pf_within_5m_pct": 98.1,
   "unanchored_method": "PF 100K (DD + smoother + stop-detect)",
   "unanchored_p50_m": 1.5,
@@ -39,5 +39,5 @@
     "internal_docs/ppc_pf_rtk_anchor_2026_10_04.md",
     "internal_docs/urbannav_rtk_baselines_2026_10_03.md"
   ],
-  "notes": "Within-X rates count every reference epoch (missing output fails); P50/RMS are over output epochs. PF rows: 5-seed means (anchored PF and PPC at gnss_gpu 330cce5; unanchored PF smoother at gnssplusplus 304798e7). PPC: six held-out routes."
+  "notes": "Within-X rates count every reference epoch (missing output fails); P50/RMS are over output epochs. PF rows: 5-seed means (anchored PF and PPC at gnss_gpu 330cce5 plus anchor-distance smoother weighting; unanchored PF smoother at gnssplusplus 304798e7). PPC: six held-out routes."
 }

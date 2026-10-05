@@ -239,6 +239,39 @@ the README, the site snapshot and the zero-data demo. Against the earlier
 five-seed tables: Odaiba RMS 0.83 → 0.80 m, Shinjuku RMS 2.57 → 1.70 m and
 <5 m 92.1 → 92.9%, PPC mean <5 m 88.9 → 90.5%.
 
+## Smoother passes weighted by distance to their anchor (2026-10-05)
+
+The smoother combined the forward and backward passes as a plain average.
+Each pass starts from an RTK anchor and is most accurate next to it: after
+nagoya run1's outage the forward pass was 73 m off and the backward pass,
+1 s from the next FIX, nearly right; the average was still 36 m off.
+`--smoother-anchor-weighting` (now in both anchored presets) weights the
+forward pass by 1/(t_since + 1 s) and the backward pass by 1/(t_until + 1 s),
+with t the time since the previous / until the next anchored epoch, clipped
+to [0.1, 0.9]. The offset and the clip were chosen offline on all eight
+routes (unclipped weights raised the PPC RMS by 0.4 m), so there is no
+held-out route left for this choice.
+
+Five seeds (mean ± sd), previous preset → new preset:
+
+| route | <0.5 m | <1 m | <3 m | <5 m | RMS |
+|---|---:|---:|---:|---:|---:|
+| Odaiba | 70.4 → 74.2 | 80.7 → 84.4 | 97.9 → 97.4 | 98.1 → 98.1 | 0.80 → 0.77 |
+| Shinjuku | 62.9 → 65.1 | 72.4 → 75.1 | 88.8 → 90.4 | 92.9 → 93.9 | 1.70 → 1.55 |
+| tokyo run1 | 75.0 → 76.9 | 80.2 → 81.4 | 88.1 → 91.3 | 94.6 → 93.1 | 2.36 → 2.51 |
+| tokyo run2 | 84.9 → 85.3 | 88.5 → 88.7 | 94.6 → 97.4 | 99.0 → 98.9 | 1.05 → 0.91 |
+| tokyo run3 | 85.3 → 86.6 | 91.4 → 92.7 | 95.1 → 96.9 | 97.5 → 98.0 | 1.54 → 1.51 |
+| nagoya run1 | 71.0 → 71.6 | 77.6 → 79.3 | 82.2 → 84.3 | 86.6 → 86.9 | 5.27 → 4.48 |
+| nagoya run2 | 53.3 → 54.4 | 55.7 → 58.5 | 71.9 → 72.5 | 77.1 → 79.0 | 4.69 → 5.18 |
+| nagoya run3 | 46.7 → 48.4 | 51.3 → 56.8 | 76.8 → 77.4 | 87.9 → 86.9 | 4.20 → 6.13 |
+| **PPC mean** | 69.4 → **70.5** | 74.1 → **76.2** | 84.8 → **86.6** | 90.5 → 90.5 | 3.19 → 3.45 |
+
+Seed sd is at most 3.0 points (Odaiba <1 m) and at most 0.4 points on the
+PPC means. Every route gains at <0.5 m and <1 m, and all but Odaiba at <3 m.
+The cost: when one pass has failed near its own anchor the weighting follows
+it, so tokyo run1 (−1.5) and nagoya run3 (−1.0) lose at <5 m and the PPC
+RMS rises by 0.26 m (nagoya run3 4.20 → 6.13 m).
+
 ## Next
 
 1. An outage model that helps both nagoya run1 and Shinjuku. Tried and

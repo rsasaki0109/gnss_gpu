@@ -78,6 +78,7 @@ def finalize_pf_smoother_postrun(
         smoothed_full, _forward_stored = pf.smooth(
             position_update_sigma=smoother_position_update_sigma,
             skip_widelane_dd_pseudorange=smoother_config.skip_widelane_dd_pseudorange,
+            anchor_weighting=bool(getattr(smoother_config, "anchor_weighting", False)),
         )
         result["smoother_position_update_sigma"] = smoother_position_update_sigma
         if buffers.aligned_indices:

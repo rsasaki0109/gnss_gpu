@@ -1,16 +1,16 @@
 {
-  "generated_at_utc": "2026-10-05T04:07:05+00:00",
+  "generated_at_utc": "2026-10-05T13:53:06+00:00",
   "title": "gnss_gpu Artifact Snapshot",
   "subtitle": "Current Odaiba best: `PF anchored to libgnss++ RTK FIX`. External mainline remains `PF+RobustClear-10K` across 5 sequences in 2 cities.",
   "status": {
     "label": "Current Read",
-    "value": "98% of Odaiba epochs within 3 m (RTKLIB demo5: 69%)",
-    "detail": "On UrbanNav Tokyo Odaiba, `PF anchored to libgnss++ RTK FIX` (preset `urbannav_rtk_anchored`, 5 seeds) reaches P50 0.10 m and RMS 0.80 m at 98.2% coverage. `libgnss++ RTK low-cost` alone has the better median (0.07 m) but covers 78.5% of epochs; `RTKLIB demo5` is at 0.34 / 40.89 m. On 6 held-out PPC routes `rtk_anchored_doppler` is within 5 m on 90.5% of epochs vs 78.6% for RTK alone."
+    "value": "97% of Odaiba epochs within 3 m (RTKLIB demo5: 69%)",
+    "detail": "On UrbanNav Tokyo Odaiba, `PF anchored to libgnss++ RTK FIX` (preset `urbannav_rtk_anchored`, 5 seeds) reaches P50 0.10 m and RMS 0.77 m at 98.2% coverage. `libgnss++ RTK low-cost` alone has the better median (0.07 m) but covers 78.5% of epochs; `RTKLIB demo5` is at 0.34 / 40.89 m. On 6 held-out PPC routes `rtk_anchored_doppler` is within 5 m on 90.5% of epochs vs 78.6% for RTK alone."
   },
   "hero_cards": [
     {
       "label": "Odaiba Current Best",
-      "value": "0.10 / 0.80 m",
+      "value": "0.10 / 0.77 m",
       "detail": "PF 100K anchored to libgnss++ RTK FIX: DD terms, smoother, RTK-fix heading, standstill hold."
     },
     {
@@ -41,7 +41,7 @@
     {
       "label": "PF vs RTKLIB demo5",
       "value": "98.1% vs 86.6% < 5 m",
-      "detail": "Share of all Odaiba reference epochs within 5 m; RMS 0.80 vs 40.89 m."
+      "detail": "Share of all Odaiba reference epochs within 5 m; RMS 0.77 vs 40.89 m."
     },
     {
       "label": "BVH Speedup",
@@ -110,7 +110,7 @@
     {
       "label": "README Current Best",
       "value": "PF anchored to libgnss++ RTK FIX",
-      "detail": "Odaiba 5-seed checkpoint at 0.10 m P50 and 0.80 m RMS (preset `urbannav_rtk_anchored`). Without the anchor the PF smoother is at 1.50 / 4.06 m."
+      "detail": "Odaiba 5-seed checkpoint at 0.10 m P50 and 0.77 m RMS (preset `urbannav_rtk_anchored`). Without the anchor the PF smoother is at 1.50 / 4.06 m."
     },
     {
       "label": "External Mainline",
@@ -298,7 +298,7 @@
     "PPC tuned split: the exploratory gate trims mean RMS from 80.02 m to 79.41 m, but mean P95 stays flat at 97.75 m.",
     "PPC holdout split: the same gate survives holdout with 66.92 -> 65.54 m RMS and 81.69 -> 81.22 m P95.",
     "UrbanNav external validation: `PF+RobustClear-10K` is the best method at 66.6 m RMS and 98.53 m P95, ahead of `EKF` at 93.25 m and 178.18 m.",
-    "Odaiba README checkpoint: `PF anchored to libgnss++ RTK FIX` reaches 0.10 m P50 and 0.80 m RMS, within 3 m on 97.9% of all epochs, against `RTKLIB demo5` at 0.34 / 40.89 m and 69.0%.",
+    "Odaiba README checkpoint: `PF anchored to libgnss++ RTK FIX` reaches 0.10 m P50 and 0.77 m RMS, within 3 m on 97.4% of all epochs, against `RTKLIB demo5` at 0.34 / 40.89 m and 69.0%.",
     "`PF-10K` remains a close ablation at 67.61 m RMS, which keeps the robust-clear story honest: the gain is real but not huge.",
     "`WLS+QualityVeto` is useful because it moved a stabilization policy into reusable core code, not because it became the best external method.",
     "Systems result: `PF3D-BVH-10K` keeps PF3D accuracy while cutting runtime from 1028.29 to 17.78 ms/epoch.",
