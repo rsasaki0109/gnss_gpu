@@ -391,6 +391,19 @@ def build_pf_smoother_arg_parser(default_sigma_pos: float) -> argparse.ArgumentP
         "GNSS Doppler ground speed for platforms without an odometer",
     )
     parser.add_argument(
+        "--predict-gap-velocity-sigma",
+        type=float,
+        default=None,
+        help="After an epoch gap longer than --predict-gap-min-s (GNSS outage), widen "
+        "the predict position spread to sqrt(sigma_pos^2 + (this * dt)^2); m/s. Off by default",
+    )
+    parser.add_argument(
+        "--predict-gap-min-s",
+        type=float,
+        default=1.0,
+        help="Epoch gap (s) above which --predict-gap-velocity-sigma applies",
+    )
+    parser.add_argument(
         "--imu-gyro-bias-zupt",
         action="store_true",
         help="At IMU-detected standstill, hold the heading and estimate the yaw-rate bias",

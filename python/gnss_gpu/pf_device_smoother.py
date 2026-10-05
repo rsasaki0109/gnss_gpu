@@ -50,6 +50,7 @@ class ParticleFilterDeviceSmootherMixin:
         doppler_max_velocity_update_mps=None,
         rtk_anchor=None,
         rtk_anchor_sigma=None,
+        predict_sigma=None,
     ):
         """Store observation data for the current epoch (call after update/estimate).
 
@@ -95,6 +96,9 @@ class ParticleFilterDeviceSmootherMixin:
             backward pass redraws its cloud around it at the same epoch.
         rtk_anchor_sigma : float or None
             Position spread used for that redraw.
+        predict_sigma : float or None
+            Predict spread the forward pass widened for an epoch gap; the
+            backward pass uses it for the same interval.
         """
         if not getattr(self, '_smooth_enabled', False):
             return
@@ -206,6 +210,7 @@ class ParticleFilterDeviceSmootherMixin:
                 np.asarray(rtk_anchor, dtype=np.float64).copy() if rtk_anchor is not None else None
             ),
             'rtk_anchor_sigma': None if rtk_anchor_sigma is None else float(rtk_anchor_sigma),
+            'predict_sigma': None if predict_sigma is None else float(predict_sigma),
         })
 
     def smooth(self, position_update_sigma=None, skip_widelane_dd_pseudorange=False):
@@ -262,7 +267,7 @@ class ParticleFilterDeviceSmootherMixin:
         for i in range(n_ep - 1, -1, -1):
             ep = stored[i]
             vel = -ep['velocity'] if ep['velocity'] is not None else None
-            bwd_pf.predict(velocity=vel, dt=ep['dt'])
+            bwd_pf.predict(velocity=vel, dt=ep['dt'], sigma_pos=ep.get('predict_sigma'))
 
             sat = ep['sat_ecef'].reshape(-1, 3)
             pr = ep['pseudoranges']

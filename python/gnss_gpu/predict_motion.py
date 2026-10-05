@@ -422,6 +422,28 @@ def spp_finite_difference_velocity(
     return velocity
 
 
+# Epoch spacing above which the gap is treated as a GNSS outage [s].
+GAP_MIN_DT_S = 1.0
+
+
+def widen_sigma_for_gap(
+    sigma: float,
+    *,
+    dt: float,
+    gap_velocity_sigma: float | None,
+    min_gap_s: float = GAP_MIN_DT_S,
+) -> float | None:
+    """Predict spread after a GNSS outage, or None for an ordinary epoch.
+
+    ``sigma_pos`` is applied once per predict regardless of ``dt``, so after
+    a multi-second outage the cloud is far too tight for the dead-reckoning
+    error it carries. Add a velocity-uncertainty term ``gap_velocity_sigma * dt``.
+    """
+    if gap_velocity_sigma is None or float(dt) <= float(min_gap_s):
+        return None
+    return float(np.hypot(float(sigma), float(gap_velocity_sigma) * float(dt)))
+
+
 def select_predict_sigma(
     sigma_pos: float,
     *,

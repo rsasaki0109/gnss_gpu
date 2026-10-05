@@ -170,9 +170,57 @@ The mean gain (+1.5 points at <5 m) is well above the five-seed spread
 measured before (≤ 0.4 points). nagoya run2 loses 2 points; nagoya run1 is
 still below the anchor alone at <5 m (86.2 vs 87.5%).
 
+## GNSS outages (2026-10-05)
+
+nagoya run1's largest remaining failure was not a bad speed or heading: the
+rover output no epochs for 15 s (550594–550608), and the PF resumed 73 m off.
+Two things went wrong across the outage:
+
+1. One predict spanned the whole 15 s with the speed times the *final*
+   heading, a straight line through a curve.
+2. `sigma_pos` is applied once per predict regardless of `dt`, so the cloud
+   was still 0.1 m wide after 15 s of dead reckoning and could not
+   re-acquire (69 m off 10 s later).
+
+Epoch gaps longer than 1 s occur on seven of the eight routes (5 s or more:
+Shinjuku 6, tokyo run1 1, nagoya run1 1, nagoya run2 1).
+
+- **Path-averaged direction (always on).** For intervals longer than 0.5 s the
+  IMU guide uses the time-weighted mean of the gyro-integrated heading
+  direction (the chord of the path) instead of the final heading. Ordinary
+  epochs are unchanged.
+- **`--predict-gap-velocity-sigma` / `--predict-gap-min-s` (off by
+  default).** After a gap longer than the threshold, the predict spread becomes
+  √(σ_pos² + (σ_v·dt)²), and the backward pass replays it.
+
+Seed 42, current presets (<1 / <3 / <5 m, RMS):
+
+| route | before | path-averaged | + gap σ_v 1.0 m/s (gaps > 1 s) | + gap σ_v 1.0 m/s (gaps > 5 s) |
+|---|---:|---:|---:|---:|
+| Odaiba | 83.8 / 98.0 / 98.1, 0.79 m | 84.4 / 98.0 / 98.1, 0.75 m | 73.8 / 97.1 / 97.8, 1.01 m | (no gap > 5 s) |
+| Shinjuku | 73.3 / 87.7 / 91.8, 2.58 m | 71.9 / 89.1 / 93.0, 1.69 m | 71.2 / 89.6 / 91.1, 2.38 m | 71.4 / 89.0 / 90.9, 2.64 m |
+| tokyo run1 | 80.1 / 88.1 / 94.6, 2.44 m | 80.1 / 88.0 / 94.5, 2.39 m | 80.2 / 88.1 / 94.8, 2.23 m | 80.3 / 88.2 / 94.9, 2.21 m |
+| nagoya run1 | 77.7 / 81.3 / 86.2, 6.35 m | 77.7 / 81.4 / 86.2, 5.23 m | 77.7 / 82.0 / 89.1, 3.04 m | 77.7 / 82.3 / 88.5, 3.52 m |
+| nagoya run2 | 57.1 / 71.7 / 77.1, 4.85 m | 55.1 / 72.6 / 77.4, 4.65 m | 55.3 / 73.1 / 77.1, 4.69 m | 55.1 / 72.6 / 77.4, 4.65 m |
+| **UrbanNav mean** | 78.6 / 92.8 / 95.0, 1.69 m | 78.2 / 93.5 / 95.5, 1.22 m | 72.5 / 93.4 / 94.4, 1.69 m | 77.9 / 93.5 / 94.5, 1.70 m |
+| **PPC mean** | 74.1 / 84.6 / 90.4, 3.39 m | 73.9 / 84.8 / 90.5, 3.16 m | 73.9 / 85.3 / 90.9, 2.78 m | 73.9 / 84.9 / 91.0, 2.84 m |
+
+tokyo run2/run3 and nagoya run3 are unchanged or within 0.2 points.
+
+- The path-averaged direction helps or is neutral everywhere at <5 m and
+  lowers RMS on both datasets (Shinjuku 2.58 → 1.69 m), so it is the default.
+- Widening the spread after outages fixes nagoya run1 (86.2 → 89.1% <5 m,
+  RMS 6.35 → 3.04 m, now above the anchor alone) but costs Shinjuku, whose
+  outages are in deep canyons where a wider cloud follows biased ranges
+  (−1.9 to −2.1 points at <5 m), and Odaiba precision when short
+  gaps are included (<1 m −10.6 points). It stays opt-in.
+- These are seed-42 changes; the five-seed numbers in the README predate them
+  (Odaiba 0.79 → 0.75 m RMS at seed 42).
+
 ## Next
 
-1. Find the remaining nagoya run1 long-gap failure.
+1. An outage model that helps both nagoya run1 and Shinjuku (e.g. widening
+   only when the post-outage residuals disagree with the dead-reckoned cloud).
 2. A third held-out set with RTK fixes. UrbanNav Hong Kong 2019-04-28
    (`experiments/fetch_urbannav_hk_subset.py`) does not qualify: 8 minutes of
    single-frequency u-blox data against a 30 s HKSC base; libgnss++ RTK gives

@@ -559,3 +559,37 @@ def test_doppler_ground_speed_rejects_a_multipath_row():
     speed = doppler_ground_speed(rows, rx, _lla)
     assert speed is not None
     assert abs(speed - 10.0) < 1e-6
+
+
+def test_widen_sigma_for_gap_only_after_outages():
+    from gnss_gpu.predict_motion import widen_sigma_for_gap
+
+    assert widen_sigma_for_gap(0.1, dt=0.2, gap_velocity_sigma=1.0) is None
+    assert widen_sigma_for_gap(0.1, dt=15.0, gap_velocity_sigma=None) is None
+    widened = widen_sigma_for_gap(0.1, dt=15.0, gap_velocity_sigma=1.0)
+    assert widened is not None
+    assert abs(widened - np.hypot(0.1, 15.0)) < 1e-12
+
+
+def test_heading_filter_follows_the_curved_path_across_outages():
+    from gnss_gpu.imu import ComplementaryHeadingFilter
+
+    tow = np.arange(0.0, 20.0, 0.01)
+    rate = np.pi / 10.0  # a 180 deg turn over 10 s
+    imu = {
+        "tow": tow,
+        "accel": np.zeros((tow.size, 3)),
+        "gyro": np.column_stack([np.zeros(tow.size), np.zeros(tow.size), np.full(tow.size, rate)]),
+        "wheel_vel": np.full(tow.size, 10.0),
+    }
+    filt = ComplementaryHeadingFilter(imu)
+    v = filt.get_velocity_enu(0.0, 10.0)
+    # Half circle of radius 10/rate: chord 2r eastward over 10 s.
+    radius = 10.0 / rate
+    np.testing.assert_allclose(v[:2] * 10.0, [2.0 * radius, 0.0], atol=0.5)
+
+    short = ComplementaryHeadingFilter(imu)
+    v_short = short.get_velocity_enu(0.0, 0.1)
+    np.testing.assert_allclose(
+        v_short[:2], [10.0 * np.sin(short.heading), 10.0 * np.cos(short.heading)]
+    )

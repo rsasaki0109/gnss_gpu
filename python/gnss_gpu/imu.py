@@ -63,6 +63,9 @@ class ComplementaryHeadingFilter:
     Reference: complementary filter for attitude estimation (Mahony et al.)
     """
 
+    # Intervals longer than this use the path-averaged direction.
+    PATH_AVERAGE_MIN_DT_S = 0.5
+
     def __init__(
         self,
         imu_data: dict,
@@ -90,18 +93,26 @@ class ComplementaryHeadingFilter:
         # Yaw-rate bias [rad/s], estimated at standstill (see apply_stationary_interval).
         self.gyro_bias = 0.0
         self._heading_before_gyro = self.heading
+        # Time-weighted mean of (sin, cos) of the heading over the last gyro
+        # interval; the chord direction of a curved path.
+        self._mean_direction: tuple[float, float] | None = None
 
     def update_heading_gyro(self, t_start: float, t_end: float) -> None:
         """Integrate gyroscope for heading between GNSS epochs."""
         self._heading_before_gyro = self.heading
         mask = (self.tow >= t_start) & (self.tow < t_end)
         indices = np.where(mask)[0]
+        sum_e = sum_n = total = 0.0
         for i in indices:
             dt = self.tow[min(i + 1, len(self.tow) - 1)] - self.tow[i]
             if dt <= 0:
                 dt = 0.02
             self.heading += (self.gyro_z[i] - self.gyro_bias) * dt
             self.heading_variance_rad2 += (self.sigma_gyro ** 2) * dt
+            sum_e += math.sin(self.heading) * dt
+            sum_n += math.cos(self.heading) * dt
+            total += dt
+        self._mean_direction = (sum_e / total, sum_n / total) if total > 0.0 else None
 
     def apply_stationary_interval(
         self, t_start: float, t_end: float, gain: float = 0.05
@@ -166,8 +177,13 @@ class ComplementaryHeadingFilter:
         self.update_heading_gyro(t_start, t_end)
         if speed is None:
             speed = self.get_wheel_speed(t_start, t_end)
-        ve = speed * math.sin(self.heading)
-        vn = speed * math.cos(self.heading)
+        if t_end - t_start > self.PATH_AVERAGE_MIN_DT_S and self._mean_direction is not None:
+            # Across a GNSS outage one velocity spans seconds of turning:
+            # follow the gyro-integrated path, not the final heading.
+            ve, vn = speed * self._mean_direction[0], speed * self._mean_direction[1]
+        else:
+            ve = speed * math.sin(self.heading)
+            vn = speed * math.cos(self.heading)
         return np.array([ve, vn, 0.0])
 
     @staticmethod
