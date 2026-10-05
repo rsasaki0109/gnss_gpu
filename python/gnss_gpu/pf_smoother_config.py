@@ -219,6 +219,7 @@ class ObservationConfig:
 class SmootherPostprocessConfig:
     position_update_sigma: float | None = None
     skip_widelane_dd_pseudorange: bool = False
+    anchor_weighting: bool = False
     widelane_forward_guard: bool = False
     widelane_forward_guard_min_shift_m: float | None = None
     stop_segment_constant: bool = False
@@ -459,6 +460,7 @@ class PfSmootherConfig:
     collect_epoch_diagnostics: bool = False
     smoother_position_update_sigma: float | None = None
     smoother_skip_widelane_dd_pseudorange: bool = False
+    smoother_anchor_weighting: bool = False
     smoother_widelane_forward_guard: bool = False
     smoother_widelane_forward_guard_min_shift_m: float | None = None
     stop_segment_constant: bool = False
@@ -741,6 +743,7 @@ class PfSmootherConfig:
         return SmootherPostprocessConfig(
             position_update_sigma=self.smoother_position_update_sigma,
             skip_widelane_dd_pseudorange=self.smoother_skip_widelane_dd_pseudorange,
+            anchor_weighting=self.smoother_anchor_weighting,
             widelane_forward_guard=self.smoother_widelane_forward_guard,
             widelane_forward_guard_min_shift_m=(
                 self.smoother_widelane_forward_guard_min_shift_m

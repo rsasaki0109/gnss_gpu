@@ -156,3 +156,22 @@ def test_heading_option_flows_into_config():
         position_update_sigma=1.9,
         use_smoother=True,
     ).rtk_anchor_heading is False
+
+
+def test_anchor_distance_weights_favor_the_nearer_anchor():
+    from gnss_gpu.pf_device_smoother import anchor_distance_weights
+
+    # Anchors at epochs 0 and 10 (1 s apart each), none in between.
+    anchored = [True] + [False] * 9 + [True]
+    w = anchor_distance_weights([1.0] * 11, anchored)
+    # At an anchored epoch both passes were just redrawn on the fix.
+    assert w[0] == 0.5 and w[10] == 0.5
+    assert w[1] > 0.5 > w[9]  # forward wins after the first anchor, backward before the last
+    assert abs(w[5] - 0.5) < 1e-12  # midway
+    assert np.all((w >= 0.1) & (w <= 0.9))
+
+
+def test_anchor_distance_weights_without_anchors_are_equal():
+    from gnss_gpu.pf_device_smoother import anchor_distance_weights
+
+    np.testing.assert_allclose(anchor_distance_weights([0.1] * 5, [False] * 5), 0.5)

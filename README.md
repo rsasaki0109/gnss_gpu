@@ -107,7 +107,7 @@ UrbanNav route while the full-view trail is drawn from the continuous trajectory
 | RTKLIB demo5 (rtklibexplorer, 2026-09) | UrbanNav Tokyo Odaiba | 0.34 m | 40.89 m |
 | libgnss++ RTK, `low-cost` preset (78.5% coverage) | UrbanNav Tokyo Odaiba | **0.07 m** | **1.97 m** |
 | libgnss++ RTK + PF gap fill (98.2% coverage) | UrbanNav Tokyo Odaiba | 0.20 m | 3.55 m |
-| **PF anchored to libgnss++ RTK FIX** (preset `urbannav_rtk_anchored`, 98.2% coverage) | UrbanNav Tokyo Odaiba | 0.10 m | **0.80 m** |
+| **PF anchored to libgnss++ RTK FIX** (preset `urbannav_rtk_anchored`, 98.2% coverage) | UrbanNav Tokyo Odaiba | 0.10 m | **0.77 m** |
 | **PF + RobustClear-10K** (external mainline) | UrbanNav, 5 seq / 2 cities | — | **66.6 m** |
 | EKF baseline | UrbanNav, 5 seq / 2 cities | — | 93.25 m |
 
@@ -124,13 +124,13 @@ why the April 2026 figure (1.36 m / 4.11 m) could not be reproduced. With the
 fix, the RMS matches it. The anchored row redraws the PF cloud at every RTK FIX
 and corrects the IMU heading only from consecutive fixes (`--rtk-anchor-pos`,
 `--rtk-anchor-heading`) and holds still while the vehicle is parked (preset
-`urbannav_rtk_anchored`); it is within 3 m on 98% of all reference epochs (RTKLIB
+`urbannav_rtk_anchored`); it is within 3 m on 97% of all reference epochs (RTKLIB
 demo5: 69%). Its σ_pos 0.1 was chosen across Odaiba and Shinjuku
 ([record](internal_docs/urbannav_pf_rtk_anchor_2026_10_04.md)), and the same configuration
 improves all three PPC Tokyo routes without retuning
 ([PPC record](internal_docs/ppc_pf_rtk_anchor_2026_10_04.md)). Platforms without a wheel
 odometer use preset `rtk_anchored_doppler` (6 PPC routes: 90.5% within 5 m vs
-78.6% for libgnss++ RTK alone). The anchored row is a 5-seed mean at gnss_gpu `330cce5` / gnssplusplus `9d89a58a`;
+78.6% for libgnss++ RTK alone). The anchored row is a 5-seed mean of the current preset (gnssplusplus `9d89a58a`);
 the other rows with `304798e7`, which lacked carrier phase and Doppler on PF inputs
 (about 0.2 m difference at seed 42). The [live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) and
 `examples/demo_pf_localization_improvement.py` show these numbers.

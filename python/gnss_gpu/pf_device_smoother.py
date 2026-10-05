@@ -10,6 +10,41 @@ import numpy as np
 from gnss_gpu.pf_device_config import clone_pf_device_init_kwargs
 
 
+def anchor_distance_weights(dts, anchored, offset_s=1.0, clip=0.1):
+    """Forward-pass weight per stored epoch from the time to each pass's anchor.
+
+    The forward pass is most accurate just after an anchored epoch and the
+    backward pass just before the next one, so each is weighted by
+    ``1 / (t + offset_s)`` with ``t`` the time since the previous anchor
+    (forward) or until the next anchor (backward). The weight is clipped to
+    ``[clip, 1 - clip]`` so that a pass that failed near its own anchor still
+    contributes. Epochs with no anchor on either side get 0.5.
+    """
+    dts = np.asarray(dts, dtype=np.float64)
+    anchored = np.asarray(anchored, dtype=bool)
+    n = len(dts)
+    t = np.cumsum(dts)
+    since = np.full(n, np.inf)
+    until = np.full(n, np.inf)
+    last = None
+    for i in range(n):
+        if anchored[i]:
+            last = t[i]
+        if last is not None:
+            since[i] = t[i] - last
+    nxt = None
+    for i in range(n - 1, -1, -1):
+        if anchored[i]:
+            nxt = t[i]
+        if nxt is not None:
+            until[i] = nxt - t[i]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        wf = 1.0 / (since + offset_s)
+        wb = 1.0 / (until + offset_s)
+        w = np.where((wf + wb) > 0.0, wf / (wf + wb), 0.5)
+    return np.clip(w, clip, 1.0 - clip)
+
+
 class ParticleFilterDeviceSmootherMixin:
     if TYPE_CHECKING:
         # Provided by ParticleFilterDeviceRuntime in ParticleFilterDevice.
@@ -213,7 +248,12 @@ class ParticleFilterDeviceSmootherMixin:
             'predict_sigma': None if predict_sigma is None else float(predict_sigma),
         })
 
-    def smooth(self, position_update_sigma=None, skip_widelane_dd_pseudorange=False):
+    def smooth(
+        self,
+        position_update_sigma=None,
+        skip_widelane_dd_pseudorange=False,
+        anchor_weighting=False,
+    ):
         """Run backward pass and return smoothed (forward+backward averaged) estimates.
 
         Must be called after a complete forward pass with ``enable_smoothing()``
@@ -227,6 +267,10 @@ class ParticleFilterDeviceSmootherMixin:
         skip_widelane_dd_pseudorange : bool
             If True, do not replay DD pseudorange updates tagged as wide-lane in
             the backward pass; replay undifferenced pseudorange instead.
+        anchor_weighting : bool
+            If True, weight each pass by its distance in time to the RTK anchor
+            it started from (see :func:`anchor_distance_weights`) instead of
+            averaging them equally.
 
         Returns
         -------
@@ -371,8 +415,15 @@ class ParticleFilterDeviceSmootherMixin:
 
             backward_pos[i] = bwd_pf.estimate()[:3]
 
-        # Combine: simple average (equal weight)
-        smoothed = (forward_pos + backward_pos) / 2.0
+        if anchor_weighting:
+            w = anchor_distance_weights(
+                [ep['dt'] for ep in stored],
+                [ep.get('rtk_anchor') is not None for ep in stored],
+            )[:, None]
+            smoothed = w * forward_pos + (1.0 - w) * backward_pos
+        else:
+            # Combine: simple average (equal weight)
+            smoothed = (forward_pos + backward_pos) / 2.0
 
         self._smooth_enabled = False
         self._smooth_epochs = []

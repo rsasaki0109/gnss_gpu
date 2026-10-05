@@ -202,6 +202,7 @@ def test_finalize_pf_smoother_postrun_applies_smoother_and_local_fgo(monkeypatch
         {
             "position_update_sigma": 2.2,
             "skip_widelane_dd_pseudorange": True,
+            "anchor_weighting": False,
         }
     ]
     assert captured["aligned_indices"] == [0, 1]
