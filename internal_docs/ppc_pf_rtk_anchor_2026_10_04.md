@@ -249,6 +249,20 @@ five-seed tables: Odaiba RMS 0.83 → 0.80 m, Shinjuku RMS 2.57 → 1.70 m and
    error at 10.3 m. With 4–7 satellites right after an outage the horizontal
    error is largely absorbed by the clock and geometry. A trigger needs
    another signal (e.g. carrier-phase continuity or the RTK FLOAT position).
+   The RTK FLOAT position was then tried and also rejected (2026-10-05). When
+   the forward PF and a FLOAT solution disagree, FLOAT is usually right
+   (FLOAT median error 0.5–0.7 m; when they disagree by more than 8 m FLOAT is
+   closer in 65% of Shinjuku and 97% of nagoya run1 epochs), but FLOAT is
+   sometimes wrong for seconds at a time. Redrawing the cloud around FLOAT
+   after a persistent disagreement (seed 42, <5 m):
+
+   | trigger | Odaiba | Shinjuku | nagoya run1 | nagoya run2 | PPC mean |
+   |---|---:|---:|---:|---:|---:|
+   | none (current presets) | 98.1 | 93.0 | 86.2 | 77.4 | 90.5 |
+   | > 8 m for 5 FLOAT epochs | 93.5 | 88.6 | 91.0 | 79.2 | 90.5 |
+   | > 15 m for ~3 s | 95.6 | 89.0 | 88.6 | 73.7 | 89.7 |
+
+   Even two redraws on Odaiba cost 2.5 points, so this was not merged.
 2. A third held-out set with RTK fixes. UrbanNav Hong Kong 2019-04-28
    (`experiments/fetch_urbannav_hk_subset.py`) does not qualify: 8 minutes of
    single-frequency u-blox data against a 30 s HKSC base; libgnss++ RTK gives
