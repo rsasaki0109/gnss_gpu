@@ -241,8 +241,14 @@ five-seed tables: Odaiba RMS 0.83 → 0.80 m, Shinjuku RMS 2.57 → 1.70 m and
 
 ## Next
 
-1. An outage model that helps both nagoya run1 and Shinjuku (e.g. widening
-   only when the post-outage residuals disagree with the dead-reckoned cloud).
+1. An outage model that helps both nagoya run1 and Shinjuku. Tried and
+   rejected (2026-10-05): widening only when the pseudorange residuals at the
+   dead-reckoned position disagree. At the first epoch after each gap > 1 s
+   the clock-removed residual median did not track the true error: Shinjuku
+   282938 s had a 30.4 m error at a 3.3 m residual median, 283005 s a 2.9 m
+   error at 10.3 m. With 4–7 satellites right after an outage the horizontal
+   error is largely absorbed by the clock and geometry. A trigger needs
+   another signal (e.g. carrier-phase continuity or the RTK FLOAT position).
 2. A third held-out set with RTK fixes. UrbanNav Hong Kong 2019-04-28
    (`experiments/fetch_urbannav_hk_subset.py`) does not qualify: 8 minutes of
    single-frequency u-blox data against a 30 s HKSC base; libgnss++ RTK gives
