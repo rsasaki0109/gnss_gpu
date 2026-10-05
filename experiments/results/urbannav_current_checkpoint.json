@@ -1,16 +1,16 @@
 {
   "dataset": "UrbanNav Tokyo Odaiba",
-  "measured": "2026-10-04",
+  "measured": "2026-10-05",
   "base_station": "CREF0001, calibrated once and shared by every method (configs/urbannav/tokyo_base_cref0001.json)",
   "pf_method": "PF anchored to libgnss++ RTK FIX",
   "pf_preset": "urbannav_rtk_anchored",
   "pf_gnssplusplus": "9d89a58a",
   "pf_seeds": 5,
-  "pf_p50_m": 0.12,
-  "pf_rms_2d_m": 0.83,
+  "pf_p50_m": 0.1,
+  "pf_rms_2d_m": 0.8,
   "pf_coverage_pct": 98.2,
   "pf_within_1m_pct": 80.7,
-  "pf_within_3m_pct": 98.0,
+  "pf_within_3m_pct": 97.9,
   "pf_within_5m_pct": 98.1,
   "unanchored_method": "PF 100K (DD + smoother + stop-detect)",
   "unanchored_p50_m": 1.5,
@@ -32,12 +32,12 @@
   "rtk_within_5m_pct": 74.5,
   "ppc_routes": 6,
   "ppc_preset": "rtk_anchored_doppler",
-  "ppc_within_5m_pct": 90.4,
+  "ppc_within_5m_pct": 90.5,
   "ppc_rtk_within_5m_pct": 78.6,
   "records": [
     "internal_docs/urbannav_pf_rtk_anchor_2026_10_04.md",
     "internal_docs/ppc_pf_rtk_anchor_2026_10_04.md",
     "internal_docs/urbannav_rtk_baselines_2026_10_03.md"
   ],
-  "notes": "Within-X rates count every reference epoch (missing output fails); P50/RMS are over output epochs. PF rows: 5-seed means. PPC: six held-out routes, seed 42."
+  "notes": "Within-X rates count every reference epoch (missing output fails); P50/RMS are over output epochs. PF rows: 5-seed means (anchored PF and PPC at gnss_gpu 330cce5; unanchored PF smoother at gnssplusplus 304798e7). PPC: six held-out routes."
 }

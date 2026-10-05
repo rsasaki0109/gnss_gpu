@@ -69,8 +69,8 @@ Method                                                      P50 [m]  RMS [m]  <3
 RTKLIB demo5                                                  0.34    40.89    69%  86.6%   97.3%
 libgnss++ RTK low-cost                                        0.07     1.97  72.9%  74.5%   78.5%
 PF 100K (DD + smoother + stop-detect)                         1.50     4.06  73.1%  86.7%   98.2%
-PF anchored to libgnss++ RTK FIX (urbannav_rtk_anchored)      0.12     0.83    98%  98.1%   98.2%
-Held-out PPC (6 routes, preset rtk_anchored_doppler): 90.4% within 5 m vs 78.6% for libgnss++ RTK alone.
+PF anchored to libgnss++ RTK FIX (urbannav_rtk_anchored)      0.10     0.80  97.9%  98.1%   98.2%
+Held-out PPC (6 routes, preset rtk_anchored_doppler): 90.5% within 5 m vs 78.6% for libgnss++ RTK alone.
 PLATEAU PF mask-soft replay: RMS 11.18 m -> 1.40 m, gain 87.4%.
 ```
 

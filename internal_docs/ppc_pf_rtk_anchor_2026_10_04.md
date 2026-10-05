@@ -217,6 +217,28 @@ tokyo run2/run3 and nagoya run3 are unchanged or within 0.2 points.
 - These are seed-42 changes; the five-seed numbers in the README predate them
   (Odaiba 0.79 → 0.75 m RMS at seed 42).
 
+## Five seeds on the final code (2026-10-05)
+
+gnss_gpu `330cce5` (robust Doppler speed, path-averaged outage direction),
+seeds 42 and 101–104, mean ± sd (<0.5 / <1 / <3 / <5 m, P50, RMS):
+
+| route | preset | <0.5 m | <1 m | <3 m | <5 m | P50 | RMS |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Odaiba | `urbannav_rtk_anchored` | 70.4 ± 2.2 | 80.7 ± 4.1 | 97.9 ± 0.2 | 98.1 ± 0.0 | 0.10 | 0.80 |
+| Shinjuku | `urbannav_rtk_anchored` | 62.9 ± 1.4 | 72.4 ± 0.7 | 88.8 ± 0.3 | 92.9 ± 0.3 | 0.27 | 1.70 |
+| tokyo run1 | `rtk_anchored_doppler` | 75.0 ± 0.2 | 80.2 ± 0.2 | 88.1 ± 0.1 | 94.6 ± 0.1 | 0.04 | 2.36 |
+| tokyo run2 | `rtk_anchored_doppler` | 84.9 ± 0.1 | 88.5 ± 0.3 | 94.6 ± 0.7 | 99.0 ± 0.1 | 0.02 | 1.05 |
+| tokyo run3 | `rtk_anchored_doppler` | 85.3 ± 1.0 | 91.4 ± 0.1 | 95.1 ± 0.1 | 97.5 ± 0.7 | 0.02 | 1.54 |
+| nagoya run1 | `rtk_anchored_doppler` | 71.0 ± 1.9 | 77.6 ± 0.2 | 82.2 ± 1.5 | 86.6 ± 0.6 | 0.13 | 5.27 |
+| nagoya run2 | `rtk_anchored_doppler` | 53.3 ± 0.1 | 55.7 ± 0.6 | 71.9 ± 0.8 | 77.1 ± 0.2 | 0.18 | 4.69 |
+| nagoya run3 | `rtk_anchored_doppler` | 46.7 ± 0.7 | 51.3 ± 0.8 | 76.8 ± 0.5 | 87.9 ± 0.5 | 0.84 | 4.20 |
+| **PPC mean** | | **69.4 ± 0.3** | **74.1 ± 0.2** | **84.8 ± 0.3** | **90.5 ± 0.1** | 0.20 | 3.19 |
+
+These are the numbers in `experiments/results/urbannav_current_checkpoint.json`,
+the README, the site snapshot and the zero-data demo. Against the earlier
+five-seed tables: Odaiba RMS 0.83 → 0.80 m, Shinjuku RMS 2.57 → 1.70 m and
+<5 m 92.1 → 92.9%, PPC mean <5 m 88.9 → 90.5%.
+
 ## Next
 
 1. An outage model that helps both nagoya run1 and Shinjuku (e.g. widening
