@@ -90,7 +90,16 @@ OFFICIAL are unchanged, but run3's false-fix rate drops from 3.09% to 0.05%,
 below the approximately 2% integrity target, at a 4–5 pp lower fix rate. The
 floor was selected leave-one-run-out
 ([record](internal_docs/inuex35_tc_fgo_benchmark.md)). run1 AllRMS is dominated
-by a tunnel float tail. A later basin-memory ablation improves full-run run3 to
+by a tunnel float tail.
+
+These are single-seed numbers (particle-filter seed 20260710). Over three seeds,
+the shipped configuration averages 58.8 / 78.4 / 81.1% `<50cm_full%` and 56.7 /
+81.2 / 83.6% PPC OFFICIAL, with a sample standard deviation of up to 2.7 pp per
+run. That is still above inuex35 on every run. The run3 0.53 m false-fix block
+occurs only with the shipped seed. An optional map-aided setting (PLATEAU NLOS
+satellites excluded from ambiguity resolution, using a mask ray-traced at a
+first-pass estimate) adds +3.0 / +0.8 / +0.3 pp OFFICIAL on the three-seed mean.
+Only the run1 gain exceeds the seed spread, so the default is unchanged. A later basin-memory ablation improves full-run run3 to
 83.32% `<50cm_full%` and 0.67% false fixes (at the old `nb >= 9` floor), but
 regresses run2 purity; it is
 preserved as a negative result and is **not** the shipped configuration. See the

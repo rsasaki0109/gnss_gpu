@@ -92,6 +92,70 @@ The 0.53 m block is a bias common to the float and the fixed solution. Moving
 it needs a different measurement or bias model, not a FIX/FLOAT selection rule
 (`repro_tc_fgo/results/wp38/WP38_REPORT.md`).
 
+### Per-satellite cause, NLOS-AR exclusion and seed spread (WP39, 2026-10-06)
+
+**Cause.** DD code and carrier residuals per satellite at the reference
+position (`repro_tc_fgo/wp39_block_sat_residuals.py`) trace the block to two
+satellites going NLOS. They pass the existing gates (elevation 15°, CNR
+25 dB-Hz, 4 m code FDE).
+
+- E04 f1/f2: elevation 56° but SNR 27–29 dB-Hz, about 4.4 m of DD code
+  error, and a carrier fraction shift of −0.4 to −0.5 cycles.
+- G09 L1: normal code, but a +0.47-cycle carrier shift.
+
+The PLATEAU ray-traced mask agrees: both satellites are LOS before the block
+and NLOS in it. The bias starts when the DD satellite count drops to 7–10
+(tow about 179735) and lasts until the near-total outage at about 179843.
+
+**Oracle mask.** The existing PLATEAU masks
+(`gnss_gpu/experiments/results/plateau_nlos_phase33`) were ray-traced at the
+ground-truth position (`receiver_source=reference`), so results that use them
+are not admissible. A non-oracle mask was ray-traced at the WP18 output
+position (`build_per_epoch_nlos_csv.py --receiver-pos-file`). It agrees with
+the oracle on 94.2 / 99.0 / 98.7% of satellite-epochs. The runtime reads it via
+`NLOS_MASK_DIR`.
+
+**NLOS layers.** First 2400 run3 epochs, oracle mask, inside the block:
+
+- Excluding NLOS satellites from AR (`NLOS_AR_EXCLUDE=1`): false fixes
+  261 → 1.
+- Inflating their sigma 5x (`NLOS_MEAS_MODE=2`): 261 → 1.
+- Dropping their DD factors (`NLOS_MEAS_MODE=1`): unchanged.
+
+With the non-oracle mask over full runs, the sigma inflation loses 1.4 pp
+OFFICIAL on run3 and is rejected.
+
+**Seed spread.** The WP18 configuration and AR exclusion with the non-oracle
+mask, 3 seeds each (20260710 shipped, 20260711, 20260712), official scorer,
+`nb >= 12`. Values are mean ± sample std:
+
+| run | metric | WP18 | + NLOS-AR exclusion | difference per seed |
+|---|---|---:|---:|---|
+| run1 | PPC OFFICIAL | 56.69 ± 1.22 | 59.64 ± 0.67 | +1.90 / +2.07 / +4.88 |
+| run1 | `<50cm_full%` | 58.80 ± 1.39 | 60.75 ± 0.28 | +1.48 / +1.01 / +3.35 |
+| run2 | PPC OFFICIAL | 81.22 ± 1.35 | 82.05 ± 1.24 | +1.03 / −1.01 / +2.48 |
+| run2 | `<50cm_full%` | 78.36 ± 0.63 | 78.80 ± 0.54 | −0.13 / −0.32 / +1.79 |
+| run3 | PPC OFFICIAL | 83.57 ± 1.33 | 83.87 ± 0.51 | +1.95 / −1.56 / +0.49 |
+| run3 | `<50cm_full%` | 81.15 ± 2.69 | 82.39 ± 0.83 | +3.39 / −0.70 / +1.04 |
+
+FixRMS means are 0.23 / 0.044 / 0.060 m for WP18 and 0.24 / 0.073 / 0.072 m
+with exclusion. False-fix means are 0.59 / 0.01 / 0.12% and 0.77 / 0.13 / 0.20%.
+
+- **The 0.53 m block is seed-specific.** WP18 false fixes inside it are
+  261 / 0 / 0 across the three seeds. NLOS E04/G09 make a stochastic basin lock
+  possible, and the shipped seed happens to hit it. The shipped single-seed
+  numbers carry about ±1–3 pp of seed spread; for example, run3 `<50cm_full%`
+  is 78.1 / 83.2 / 82.1 across seeds. Even the three-seed mean stays above
+  inuex35 on every run.
+- **NLOS-AR exclusion helps reliably only on run1** (+2.95 pp OFFICIAL, every
+  seed positive). The run2/run3 gains (+0.83 / +0.30) are inside the spread.
+  It costs 1–3 cm of FixRMS and +0.1–0.2 pp of false fixes, and it needs
+  PLATEAU data plus a first pass. It is kept as an optional map-aided setting;
+  the default is unchanged.
+
+Comparisons of RB-FGO-PF variants need several seeds
+(`repro_tc_fgo/results/wp39/WP39_REPORT.md`).
+
 Gamma is calibrated where coherent multipath shifts are absent (96.3–97.1%
 full-scale accuracy for gamma >= 0.99), not universally perfect. Run 1 AllRMS
 is 19.5 m because of its tunnel float tail; its fixed layer is unaffected. The
