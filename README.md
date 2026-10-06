@@ -104,7 +104,8 @@ Only the run1 gain exceeds the seed spread, so the default is unchanged. A later
 regresses run2 purity; it is
 preserved as a negative result and is **not** the shipped configuration. See the
 [benchmark record](internal_docs/inuex35_tc_fgo_benchmark.md),
-[RB-FGO-PF design](internal_docs/rbpf_fgo_design.md), and
+[RB-FGO-PF design](internal_docs/rbpf_fgo_design.md), the
+[runtime](experiments/rbpf_fgo/README.md), and
 [WP15 CUDA batch-LAMBDA report](results/wp15/WP15_REPORT.md).
 
 ## Particle-filter localization on OpenStreetMap

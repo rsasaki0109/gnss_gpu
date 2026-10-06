@@ -1,0 +1,12 @@
+# Python packages of the environment that produced the WP18/WP39 results
+# (Python 3.12.10, Windows x64). The custom GTSAM wheel and the tc utilities
+# are built/fetched by setup_deps.sh, not by pip from this file.
+numpy==2.4.6
+scipy==1.18.0
+numba==0.66.0
+llvmlite==0.48.0
+galois==0.4.11
+bitstruct==8.22.1
+crccheck==1.3.1
+matplotlib==3.11.0
+-e git+https://github.com/inuex35/cssrlib-numba.git@dd90eb079e87a9446021d9d0d20a55f8d51ef26c#egg=cssrlib
