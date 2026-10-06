@@ -69,9 +69,28 @@ Official scorer (`experiments/score_vs_inuex35.py`, 3D), `nb >= 9` → `nb >= 12
 | run3 | 73.7 → 69.4 | 0.150 → 0.059 m | 3.09 → 0.05 | 78.1 | 82.19 |
 
 This fixes the integrity of the reported fixes, not their number: the 0.53 m
-block is still output as a 0.53 m position, now labelled float. Raising
-`<50cm_full%` there needs a runtime change (its float solution is closer to
-truth than the wrong fix).
+block is still output as a 0.53 m position, now labelled float.
+
+### Outputting the FLOAT position on disagreement: negative (WP38, 2026-10-06)
+
+The float error in that block is lower (0.48 m vs 0.53 m), so WP38 tested
+outputting the FLOAT position whenever it disagrees with the shipped FIX.
+`repro_tc_fgo` now saves the float ECEF (`flt_xyz`) per epoch. The three WP18
+runs were rerun; their shipped output was bit-identical. Rules of the form
+"switch when the 3D / horizontal / vertical `|fix - float|` > tau (0.2–1.5 m)
+and `nb <= nbmax`" were selected leave-one-run-out.
+
+- Oracle ceiling (switch exactly the false fixes whose float is < 0.5 m):
+  +0.50 / +0.14 / +2.08 pp `<50cm_full%`.
+- Leave-one-run-out: −8 / 0 / +2 epochs (−0.07 / 0.00 / +0.01 pp). The best
+  in-sample rule (horizontal `d > 1.5 m`) is net −6 epochs.
+- Reason: in the block, FIX and FLOAT agree to 0.09 m median. The float
+  carries the same bias and only sits just under the 0.5 m threshold.
+  Correct fixes disagree with float by 0.1–0.3 m at p90 and about 1 m at p99.
+
+The 0.53 m block is a bias common to the float and the fixed solution. Moving
+it needs a different measurement or bias model, not a FIX/FLOAT selection rule
+(`repro_tc_fgo/results/wp38/WP38_REPORT.md`).
 
 Gamma is calibrated where coherent multipath shifts are absent (96.3–97.1%
 full-scale accuracy for gamma >= 0.99), not universally perfect. Run 1 AllRMS
