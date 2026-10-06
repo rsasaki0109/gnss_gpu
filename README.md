@@ -76,6 +76,39 @@ score (missing rover epochs count as failures).
   <img src="docs/assets/figures/rbpf_fgo_tokyo.svg" alt="RB-FGO-PF compared with inuex35 and libgnss++ on three Tokyo PPC runs" width="900">
 </p>
 
+One shared float factor graph supplies the Gaussian part. The particles
+carry only integer hypotheses ("basins"), so a wrong fix competes with the
+right one through accumulated likelihood instead of being locked in by a
+single ratio test. Each epoch of the shipped configuration runs as follows:
+
+```mermaid
+flowchart TD
+    Obs["Epoch k: rover/base GNSS + IMU"] --> FGO["Shared fixed-lag FGO (GTSAM), kept float<br/>IMU preintegration, DD pseudorange, DD carrier,<br/>NHC / ZUPT / Doppler"]
+    FGO --> Marg["Joint marginal:<br/>float position + DD ambiguities (y, Q)"]
+    Marg --> Cand["Top-K integer candidates (MLAMBDA, K = 12)"]
+    Marg --> Spawn["Outage re-entry: DD-pseudorange position prior<br/>x top-K candidates under that prior"]
+    PF["N = 64 particles<br/>each = held DD integers (basin) + log weight"] --> Moves
+    Cand --> Moves["Moves per particle:<br/>survive / extend / adopt candidate / release"]
+    Spawn --> Moves
+    Moves --> Cond["Condition the shared Gaussian on held integers<br/>x given z = x_float - Q_xz Q_zz^-1 (y - z)"]
+    Cond --> W["Weight += tempered likelihood of<br/>this epoch's DD pseudorange / carrier"]
+    W --> Res["Resample when ESS falls below N/2<br/>(systematic, stratified by basin)"]
+    Res --> Gamma["gamma = posterior mass of the MAP basin"]
+    Res -. next epoch .-> PF
+    Gamma --> Dec{"gamma above 0.99 and<br/>float / DD-PR / fix vote agrees?"}
+    Dec -- yes --> Nb{"MAP basin resolves<br/>at least 12 ambiguities?"}
+    Nb -- yes --> Fix["Report FIX:<br/>MAP basin conditional mean"]
+    Nb -- no --> Flt["Report FLOAT"]
+    Dec -- no --> Flt
+    Gamma -- "gamma-gated consensus integers" --> FB["Feedback: hold them in the shared graph;<br/>release when the PF withdraws its mass"]
+    FB -.-> FGO
+```
+
+Cycle slips and outages in the shared graph remove the affected ambiguity
+from every particle in the same epoch. The design rationale is in
+[RB-FGO-PF design](internal_docs/rbpf_fgo_design.md), and the code is in
+[`experiments/rbpf_fgo/`](experiments/rbpf_fgo/README.md).
+
 | Shipped RB-FGO-PF quality | run1 | run2 | run3 |
 |---|---:|---:|---:|
 | FixRMS ↓ | **0.062 m** | **0.042 m** | **0.059 m** |
