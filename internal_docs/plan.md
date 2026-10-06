@@ -28,7 +28,7 @@
 | PPC library FIX-rate | Tokyo 54.36% / Nagoya 69.38%（false 3 / 0） | WP176 satellite-PAR surplus、default-off route | `internal_docs/wp176_fix_rate_final_2026_07_31.md` |
 | PPC GNSS-only MultiSD-FGO | Tokyo 52.29% / Nagoya 70.30%、false 0 | dual-holdout。WLNL oracle 天井 52.72/70.36% → GNSS-only で 70/80% は不可 | `internal_docs/multisd_fgo_ppc_research_2026_08_01.md` |
 | PF-only RTK（v0.3） | Tokyo `<50cm` 46.5112%、FIX 10.87%；Nagoya FIX 18.07% | Tokyo run1 は operational audit（virgin holdout ではない） | `RELEASE_NOTES_v0.3.0.md`, `README.md` |
-| RB-FGO-PF（Tokyo `<50cm_full%` 3D） | 59.6 / 78.7 / 78.1（run1/2/3） | inuex35 56.7/69.9/67.9 超え。**runtime source はこの repo に無い**（local `repro_tc_fgo`） | `internal_docs/inuex35_tc_fgo_benchmark.md` |
+| RB-FGO-PF（Tokyo `<50cm_full%` 3D） | 59.6 / 78.7 / 78.1（run1/2/3） | inuex35 56.7/69.9/67.9 超え。runtime は `experiments/rbpf_fgo/`（2026-10-06 に `repro_tc_fgo` から凍結コピー） | `internal_docs/inuex35_tc_fgo_benchmark.md` |
 | GSDC2023 Kaggle | best v13 public 3.224 / private 3.783 m | 2026-06-10 以降 GSDC commit なし | `docs/gsdc2023_solution.md` |
 | UrbanNav Odaiba | PF100K P50 1.36 m / RMS 4.11 m（RTKLIB 2.67 / 13.08 m） | external mainline は PF+RobustClear-10K RMS 66.6 m（D-029） | `README.md` |
 | PF3D-BVH on real UrbanNav | all-LOS RMS 2D 37.63 m、NLOS 枝付きは 80–85 m | Odaiba G-only 300 epoch 診断 | `decisions.md` D-037 |
@@ -71,7 +71,7 @@
 2. **PPC honest 59.22% → 25% safe-FIX milestone**（12,195 epoch、残 1,164）。候補: DD-reference 変更をまたぐ ambiguity evidence の持続、candidate oracle headroom 4,038 epoch。出典 `docs/ppc_pf_fgo_research_plan.md` L86–142。
    - 2026-10-03: 正規パイプライン（safe IMU PF/FGO tracker 11,031 FIX → 58.521912% → causal FLOAT selector 59.222040%）をWindows dev 機で全 route・全スコア完全再現。gnssplusplus `62bd0b73` を GTSAM 付きでビルドして使う。手順は `ppc_canonical_reproduction_windows_2026_10_03.md`。注意: `run_ppc_basin_fgo_six_route.py` の既定値（top-k 4 等）は凍結ポリシーと違う。
 3. **#169 の実 UrbanNav データ e2e**（`gnss-gpu run --preset urbannav-pf`）が未実行。
-4. ~~RB-FGO-PF run3 の false-fix 3.09% → ~2%~~（2026-10-06: report floor を `nb >= 12` に上げて 0.29/0.00/0.05%、leave-one-run-out で選定、D-040。per-cluster relinearization は WP19–37 で出荷不可と判明済み）。残: run3 の 0.53 m ずれ区間は位置が直っていない。FIX/FLOAT 食い違い時に FLOAT を出す案は WP38 で否定（区間内で FIX と FLOAT は 0.09 m で一致、両者に共通のバイアス）。WP39（D-041）で原因は E04/G09 の NLOS 化と特定したが、ずれは出荷版シードでしか起きない確率的な失敗だった。NLOS-AR 除外は run1 のみ確実に +3.0 pp OFFICIAL で、地図あり 2 パスのオプション扱い。以後、RB-FGO-PF の比較は 3 シード以上で行う。runtime source は repo 外（`Workspace/old/repro_tc_fgo`）。
+4. ~~RB-FGO-PF run3 の false-fix 3.09% → ~2%~~（2026-10-06: report floor を `nb >= 12` に上げて 0.29/0.00/0.05%、leave-one-run-out で選定、D-040。per-cluster relinearization は WP19–37 で出荷不可と判明済み）。残: run3 の 0.53 m ずれ区間は位置が直っていない。FIX/FLOAT 食い違い時に FLOAT を出す案は WP38 で否定（区間内で FIX と FLOAT は 0.09 m で一致、両者に共通のバイアス）。WP39（D-041）で原因は E04/G09 の NLOS 化と特定したが、ずれは出荷版シードでしか起きない確率的な失敗だった。NLOS-AR 除外は run1 のみ確実に +3.0 pp OFFICIAL で、地図あり 2 パスのオプション扱い。以後、RB-FGO-PF の比較は 3 シード以上で行う。runtime は `experiments/rbpf_fgo/` に凍結コピー済み（run1/run3 の先頭 400 エポックで出力がビット一致。GTSAM ビルド段は clean machine で未検証）。
 5. PF-only に virgin holdout が無い（Tokyo run1 は operational audit）。
 
 ### エンジニアリング / docs

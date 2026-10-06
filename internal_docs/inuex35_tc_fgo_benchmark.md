@@ -26,6 +26,9 @@ scorer:
 | libgnss++ GTSAM (2D reference) | 56.8 | 80.5 | 72.8 |
 | **RB-FGO-PF (ours, 3D)** | **59.6** | **78.7** | **78.1** |
 
+The runtime is in `experiments/rbpf_fgo/`: a verbatim copy of `repro_tc_fgo`
+at `fa57b7f` with pinned-dependency setup, the ship command and a copy check.
+
 Shipped FixRMS is 0.062/0.042/0.059 m, median fixed error is about 3 cm,
 fix rate is 37.8/71.1/69.4%, and PPC OFFICIAL is 57.8/80.0/82.2%. The canyon
 probe produced 283 fixes and no false fix. The shipped result uses output
