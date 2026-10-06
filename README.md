@@ -78,16 +78,21 @@ score (missing rover epochs count as failures).
 
 | Shipped RB-FGO-PF quality | run1 | run2 | run3 |
 |---|---:|---:|---:|
-| FixRMS ↓ | **0.104 m** | **0.121 m** | **0.150 m** |
-| Fix rate | 43.1% | 75.1% | 73.7% |
-| Median fixed error | 3.3 cm | 2.6 cm | 3.2 cm |
-| False fixes / shipped fixes ↓ | 0.59% | 0.37% | 3.09% |
+| FixRMS ↓ | **0.062 m** | **0.042 m** | **0.059 m** |
+| Fix rate | 37.8% | 71.1% | 69.4% |
+| Median fixed error | 3.0 cm | 2.5 cm | 3.0 cm |
+| False fixes / shipped fixes ↓ | 0.29% | 0.00% | 0.05% |
 | PPC OFFICIAL | 57.80% | 80.02% | 82.19% |
 
-The result is deliberately reported with its limits: run3's 3.09% false-fix
-rate is above the approximately 2% integrity target, and run1 AllRMS is dominated
+Fixes are reported only when at least 12 ambiguities are resolved (`nb >= 12`,
+raised from 9 on 2026-10-06). That moves no position, so `<50cm_full%` and PPC
+OFFICIAL are unchanged, but run3's false-fix rate drops from 3.09% to 0.05%,
+below the approximately 2% integrity target, at a 4–5 pp lower fix rate. The
+floor was selected leave-one-run-out
+([record](internal_docs/inuex35_tc_fgo_benchmark.md)). run1 AllRMS is dominated
 by a tunnel float tail. A later basin-memory ablation improves full-run run3 to
-83.32% `<50cm_full%` and 0.67% false fixes, but regresses run2 purity; it is
+83.32% `<50cm_full%` and 0.67% false fixes (at the old `nb >= 9` floor), but
+regresses run2 purity; it is
 preserved as a negative result and is **not** the shipped configuration. See the
 [benchmark record](internal_docs/inuex35_tc_fgo_benchmark.md),
 [RB-FGO-PF design](internal_docs/rbpf_fgo_design.md), and

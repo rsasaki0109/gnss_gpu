@@ -49,7 +49,7 @@
 |---|---|---|---|
 | Validation / refactor waves（input_validation、pybind header、PF device 分割、DD kernel fuse） | 7/3–7/12, #104–#116, #124–#126 | 完了 | `docs/common_input_shapes.md`, 旧版 plan |
 | NLOS wave（PLATEAU per-epoch mask → PF/DD、ranker headroom） | 7/4, #117–#118 | 不採用（Δ=0、oracle headroom 0.0pp） | `fable5_nlos_wave2_advice_response_2026_07_04.md`, `nlos_pf_measurement_wiring.md` |
-| inuex35 TC-FGO campaign / RB-FGO-PF | 7/6–7/11, #119–#123 | RB-FGO-PF milestone-2 達成、run3 false-fix 3.09% 残 | `inuex35_tc_fgo_benchmark.md`, `rbpf_fgo_design.md` |
+| inuex35 TC-FGO campaign / RB-FGO-PF | 7/6–7/11, #119–#123 | RB-FGO-PF milestone-2 達成。run3 false-fix 3.09% は 2026-10-06 に report floor `nb >= 12` で 0.05%（位置・`<50cm` は不変、fix 率 −4〜5 pp） | `inuex35_tc_fgo_benchmark.md`, `rbpf_fgo_design.md` |
 | Structural audit / v0.2.0 | 7/14, #127–#129 | 完了 | CHANGELOG |
 | Scenario engine / coverage map / demos / UTD CUDA | 7/17, #130–#136 | 採用（README「Simulate GNSS anywhere」） | CHANGELOG |
 | PF-only RTK（WP21–WP173） | 7/17–7/29, #137, #150, #151 | promotion floor 達成、81/86% stretch 未達 | `HANDOFF_CLAUDE_PF_ONLY_2026_07_23B.md`, `pf_only_rtk_stretch_plan_2026_07_19.md` |
@@ -71,7 +71,7 @@
 2. **PPC honest 59.22% → 25% safe-FIX milestone**（12,195 epoch、残 1,164）。候補: DD-reference 変更をまたぐ ambiguity evidence の持続、candidate oracle headroom 4,038 epoch。出典 `docs/ppc_pf_fgo_research_plan.md` L86–142。
    - 2026-10-03: 正規パイプライン（safe IMU PF/FGO tracker 11,031 FIX → 58.521912% → causal FLOAT selector 59.222040%）をWindows dev 機で全 route・全スコア完全再現。gnssplusplus `62bd0b73` を GTSAM 付きでビルドして使う。手順は `ppc_canonical_reproduction_windows_2026_10_03.md`。注意: `run_ppc_basin_fgo_six_route.py` の既定値（top-k 4 等）は凍結ポリシーと違う。
 3. **#169 の実 UrbanNav データ e2e**（`gnss-gpu run --preset urbannav-pf`）が未実行。
-4. RB-FGO-PF run3 の per-cluster relinearization（false-fix 3.09% → ~2%）。runtime source が repo 外なので、先に取り込むかを決める。
+4. ~~RB-FGO-PF run3 の false-fix 3.09% → ~2%~~（2026-10-06: report floor を `nb >= 12` に上げて 0.29/0.00/0.05%、leave-one-run-out で選定、D-040。per-cluster relinearization は WP19–37 で出荷不可と判明済み）。残: run3 の 0.53 m ずれ区間は位置が直っていない（float の方が真値に近い）ので `<50cm` を上げるには runtime 変更が要る。runtime source は repo 外（`Workspace/old/repro_tc_fgo`）。
 5. PF-only に virgin holdout が無い（Tokyo run1 は operational audit）。
 
 ### エンジニアリング / docs

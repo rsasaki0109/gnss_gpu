@@ -789,6 +789,14 @@
 - `pf_device_resample_systematic` は `u0=(seed%1e6)/(1e6·N)` をさらにカーネルで `/N` しており、起点が [0, 1/N²) に縮んで実質決定的・有偏（TV 0.06–0.17）。FFBSi 系 variant が使う。
 - `ParticleFilterDevice._resample` は毎回同じ `self.seed` を渡すため、全 epoch のリサンプリングが同じ乱数列を使う。
 
+## D-040: RB-FGO-PF の report floor を `nb >= 12` に上げる
+
+**決定（2026-10-06）**: RB-FGO-PF（Tokyo PPC）で FIX として報告する下限を、解いた ambiguity 数 `nb >= 9` から `nb >= 12` に上げる。位置は変えず float に relabel するだけなので `<50cm_full%`（59.6/78.7/78.1）と PPC OFFICIAL は不変。false-fix 0.59/0.37/3.09% → 0.29/0.00/0.05%、FixRMS 0.104/0.121/0.150 → 0.062/0.042/0.059 m、fix 率 43.1/75.1/73.7 → 37.8/71.1/69.4%。
+
+判断材料: WP18 は「run ごとに後付けで floor を選ぶのは cherry-picking」として `nb >= 11` を見送った。今回は保存済み WP18 full run の npz で leave-one-run-out（他 2 run で `kept good − λ·kept false` 最大の floor を選び残りで評価）を行い、run1/run2 を評価する場合は λ=5–20 で `nb >= 12`（λ=50 で 12/13）。run3 を評価する場合は run1/run2 に誤 FIX が 51 個しかなく λ ≤ 10 では `nb >= 9` のまま、λ=50 で `nb >= 13`。つまり「誤 FIX 1 個 = 正しい FIX 約 50 個」という integrity 重視の価値判断を含む。LAMBDA 単独 AR（`ar_raw_nb` / `ar_ratio`）を使う規則も探索したが floor 単独を上回らなかった。
+
+未解決: run3 の 0.53 m ずれ区間は float 表示になっただけで位置は 0.53 m のまま。`<50cm` を上げるには runtime 側の変更が必要（WP19–37 の試みは不採用）。詳細 `inuex35_tc_fgo_benchmark.md`。
+
 ## 現在の未決定事項
 
 棚卸し: 2026-09-26。旧リストの各項目を「解決済み / 休眠 / 未決定」に分類した。解決済み・休眠の項目は、再開条件が満たされるまで議論しない。
