@@ -159,6 +159,21 @@ with exclusion. False-fix means are 0.59 / 0.01 / 0.12% and 0.77 / 0.13 / 0.20%.
 Comparisons of RB-FGO-PF variants need several seeds
 (`repro_tc_fgo/results/wp39/WP39_REPORT.md`).
 
+### Map-free NLOS flag from the C/N0 deficit: negative (WP40, 2026-10-06)
+
+WP40 replaced the PLATEAU mask with a single-pass, map-free flag. A satellite
+is flagged when the rover's C/N0 is more than 8 dB below the open-sky base
+station's for the same satellite and epoch, averaged over the tracked
+frequencies. The threshold is shared by all runs and matches the mask's NLOS
+rate (24–30%). The flag recovers 69–80% of the mask's NLOS sat-epochs and
+also flags E04/G09 in the run3 block. It feeds the same AR exclusion.
+
+Over three seeds the mean PPC OFFICIAL is 56.21 / 81.88 / 83.89. That compares
+with 56.69 / 81.22 / 83.57 for WP18 and 59.64 / 82.05 / 83.87 with the PLATEAU
+mask. The run1 gain does not carry over, and run2/run3 stay inside the seed
+spread, so the flag is not adopted
+(`repro_tc_fgo/results/wp40/WP40_REPORT.md`).
+
 Gamma is calibrated where coherent multipath shifts are absent (96.3–97.1%
 full-scale accuracy for gamma >= 0.99), not universally perfect. Run 1 AllRMS
 is 19.5 m because of its tunnel float tail; its fixed layer is unaffected. The
