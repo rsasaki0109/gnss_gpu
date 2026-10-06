@@ -73,6 +73,19 @@
 3. **#169 の実 UrbanNav データ e2e**（`gnss-gpu run --preset urbannav-pf`）が未実行。
 4. ~~RB-FGO-PF run3 の false-fix 3.09% → ~2%~~（2026-10-06: report floor を `nb >= 12` に上げて 0.29/0.00/0.05%、leave-one-run-out で選定、D-040。per-cluster relinearization は WP19–37 で出荷不可と判明済み）。残: run3 の 0.53 m ずれ区間は位置が直っていない。FIX/FLOAT 食い違い時に FLOAT を出す案は WP38 で否定（区間内で FIX と FLOAT は 0.09 m で一致、両者に共通のバイアス）。WP39（D-041）で原因は E04/G09 の NLOS 化と特定したが、ずれは出荷版シードでしか起きない確率的な失敗だった。NLOS-AR 除外は run1 のみ確実に +3.0 pp OFFICIAL で、地図あり 2 パスのオプション扱い。以後、RB-FGO-PF の比較は 3 シード以上で行う。地図なしの C/N0 低下フラグ（基地局比 8 dB）で代替する案は WP40 で否定（run1 の改善が再現せず、3 シード平均 OFFICIAL 56.2/81.9/83.9）。runtime は `experiments/rbpf_fgo/` に凍結コピー済み（run1/run3 の先頭 400 エポックで出力がビット一致。GTSAM ビルド段は clean machine で未検証）。
 5. PF-only に virgin holdout が無い（Tokyo run1 は operational audit）。
+5b. **RB-FGO-PF: top basin ごとの factor graph**（2026-10-07 時点で設計のみ、未着手。次エージェント向け）
+   - 狙い: 現状は共有 float FGO を 1 本だけ持ち、MAP basin の整数を hold として戻している（WP17。これが最大の改善源だった）。上位 basin それぞれに、自分の hold と履歴を持つ FGO を与える。
+   - 分かっていること:
+     - 位置だけを記憶する cluster shadow は 3 シードで −3.1 pp（WP42）。やるなら本物の graph が必要。
+     - ISAM2 更新は 1 エポックの 2.6% なので、basin を 1 つ増やしても約 5 ms で済み、リアルタイムに収まる。
+     - `IncrementalFixedLagSmoother` は Python から複製できない。`gtsam.ISAM2(other)` は複製できる。
+     - 分岐元は hold のない witness graph（`RBPF_WITNESS=1`）にする。
+     - GPU は、basin graph で計算量が増えてから使う（N=64 の尤度は 1 エポックに約 21 仮説しかない）。
+   - 作業場所と手順:
+     - runtime の研究作業は `Workspace/old/repro_tc_fgo`（private、venv あり）で行う。`gnss_gpu/experiments/rbpf_fgo/` は fa57b7f 時点の凍結コピー。WP41 の basin-id memo（出力は同一）は未反映。
+     - 比較は 3 シード（20260710/11/12）で行う。現行 baseline は `results/wp18/{full,s11_base,s12_base}_r{1,2,3}`。
+     - 手順: `tools/run_seed_queue.sh`（4 並列。6 並列だとメモリ不足になった）→ `tools/score_nb12.sh` → `tools/aggregate_seeds.py`。
+     - 詳細は `repro_tc_fgo/results/wp42/WP42_REPORT.md`。
 
 ### エンジニアリング / docs
 

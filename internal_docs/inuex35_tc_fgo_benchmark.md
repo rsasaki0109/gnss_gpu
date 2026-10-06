@@ -174,6 +174,27 @@ mask. The run1 gain does not carry over, and run2/run3 stay inside the seed
 spread, so the flag is not adopted
 (`repro_tc_fgo/results/wp40/WP40_REPORT.md`).
 
+### Real time, N = 128, and cluster shadows over three seeds (WP41–42, 2026-10-07)
+
+- **Real time** (5 Hz data): with one process on an idle machine, N = 64
+  runs at 13.4 synced epochs/s (2.7x real time) and N = 128 at 9.6 epochs/s
+  (1.9x). These are averages; worst-case latency was not measured. Of an
+  epoch, the PF takes 59% (likelihood 27%), and the ISAM2 update itself only
+  2.6%.
+- **Batched or GPU likelihood does not pay at N = 64.** Only about 21
+  distinct hypotheses reach the likelihood per epoch. A numpy-batched version
+  matched the scalar one to 4e-14 but was about 20% slower.
+- **N = 128 on run3, 3 seeds:** it removes the shipped-seed lock (block false
+  fixes 0 / 3 / 0), but the mean is unchanged (OFFICIAL 83.62 vs 83.57).
+- **Cluster-conditioned shadows (WP19–22), 3 seeds:** the 3-run mean
+  OFFICIAL drops from 73.83 to 70.69, and every seed is worse on runs 1 and 3.
+  The WP22 rejection stands.
+
+The open direction is a real factor graph per top basin (its own holds and
+history), not a position memory; it is designed but not started. The handoff
+note, together with seed-queue, scoring and aggregation tools, is in
+`repro_tc_fgo/results/wp42/WP42_REPORT.md` and `repro_tc_fgo/tools/`.
+
 Gamma is calibrated where coherent multipath shifts are absent (96.3–97.1%
 full-scale accuracy for gamma >= 0.99), not universally perfect. Run 1 AllRMS
 is 19.5 m because of its tunnel float tail; its fixed layer is unaffected. The
