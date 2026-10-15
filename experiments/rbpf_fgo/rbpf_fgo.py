@@ -1020,25 +1020,30 @@ class RbpfFgo:
             return None
         return ranked[0][2]
 
-    def _loglik(self, H, prob, cache):
-        """Tempered per-epoch marginal likelihood of this epoch's DD rows
-        under hypothesis H (position marginalized against Ppos)."""
-        key = _canon_basin_id(H)
-        hit = cache.get(key)
-        if hit is not None:
-            return hit
+    def _likelihood_rows(self, prob, dd):
+        """Prepare residuals and scales, preserving lattice-sum row order."""
         cfg = self.cfg
-        dd = self._pair_dd(H, prob)
         m = len(prob.rows_v0)
         v = prob.rows_v0.copy()
         sig = prob.rows_sig.copy()
         iscp = prob.rows_iscp
         pi = prob.rows_pair
         lam = prob.rows_lam
-        qdiag = np.diag(prob.Qb)
         sb = math.sqrt(cfg.beta)
         uniform = np.zeros(m, dtype=bool)   # flat-over-lattice rows
         const_ll = 0.0
+        if cfg.marg_uniform:
+            cp = np.flatnonzero(iscp)
+            z = dd[pi[cp]]
+            held = np.isfinite(z)
+            rows = cp[held]
+            v[rows] = lam[rows] * (prob.rows_bmeas[rows] - z[held])
+            sig[rows] = sig[rows] / sb
+            for r in cp[~held]:
+                uniform[r] = True
+                const_ll += -math.log(max(lam[r], 1e-3))
+            return v, sig, uniform, const_ll
+        qdiag = np.diag(prob.Qb)
         for r in range(m):
             if not iscp[r]:
                 continue
@@ -1056,6 +1061,19 @@ class RbpfFgo:
                 v[r] = lam[r] * (prob.rows_bmeas[r] - prob.y[p])
                 sig[r] = math.sqrt(
                     sig[r] ** 2 + lam[r] ** 2 * (max(qdiag[p], 0.0) + 1.0 / 12.0)) / sb
+        return v, sig, uniform, const_ll
+
+    def _loglik(self, H, prob, cache):
+        """Tempered per-epoch marginal likelihood of this epoch's DD rows
+        under hypothesis H (position marginalized against Ppos)."""
+        key = _canon_basin_id(H)
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+        cfg = self.cfg
+        dd = self._pair_dd(H, prob)
+        v, sig, uniform, const_ll = self._likelihood_rows(prob, dd)
+        iscp, pi = prob.rows_iscp, prob.rows_pair
         if np.any(uniform):
             keep = ~uniform
             v, sig = v[keep], sig[keep]

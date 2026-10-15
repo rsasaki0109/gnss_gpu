@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "parity": {
+    "schemaVersion": 1,
+    "baselineCommit": "6bbd63bd420df4f180c2a44704ce055a2820d00c",
+    "baseline": {
+      "name": "rbpf_fgo_original.py",
+      "bytes": 158574,
+      "sha256": "ed6883569d240be810f77c1c987b7163b9f258894abc4be562c0ee6a1a14b1c6"
+    },
+    "candidate": {
+      "name": "rbpf_fgo_candidate.py",
+      "bytes": 159326,
+      "sha256": "012d6bec6de99d1a4cb11851e8b6f9e0eae8e960a70b8aa5dec3ef15e7aead3b"
+    },
+    "captureManifest": {
+      "name": "manifest.json",
+      "bytes": 2975619,
+      "sha256": "67781ec9ae0cf29dc1f982dc4976bcaee5c94ce945a167793404d00557ab73cd"
+    },
+    "sourceLibraries": [
+      {
+        "name": "gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "name": "gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "originalInputs": [
+      {
+        "name": "rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "name": "base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "name": "base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "name": "imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "name": "reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "epochs": 24,
+    "cacheMisses": 657,
+    "configuredParticles": [
+      64
+    ],
+    "pipeline": [
+      {
+        "mode": "observer-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track1",
+        "epochs": 350,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 50991,
+          "sha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+        }
+      }
+    ],
+    "note": "Actual scalar misses only. All row residual/scale/mask bytes, ordered lattice sums and recorded likelihood bytes match both exact sources. Hypotheses and arrays unchanged. Fresh observer/candidate TRACK=2 600 and candidate TRACK=1 350 runs match frozen same-source controls, position bytes and all 90 arrays, zero exclusions. Raw data/library hashes rechecked without importing libraries. Correctness timing is not speed evidence."
+  },
+  "replayRecord": {
+    "name": "replay.json",
+    "bytes": 83873,
+    "sha256": "9d5ac25ff7b0ad36d22122fd7a4134e8e31dfa9a17fc92fe81cd0c9f0f78734f"
+  },
+  "summary": {
+    "rows": {
+      "baselineMedianMs": 46.38955,
+      "candidateMedianMs": 10.0037,
+      "medianReductionPercent": 78.92650393270264,
+      "improvedPairs": 10,
+      "minimumReductionPercent": 76.75323574847528,
+      "maximumReductionPercent": 80.02810442698195
+    },
+    "likelihood": {
+      "baselineMedianMs": 307.6735,
+      "candidateMedianMs": 255.52935,
+      "medianReductionPercent": 16.346797003199303,
+      "improvedPairs": 10,
+      "minimumReductionPercent": 13.176605643651996,
+      "maximumReductionPercent": 25.278114622100546
+    }
+  },
+  "scope": "Original scalar cache misses, original epoch/call order per policy. Adjacent epoch windows alternate first policy with trial and epoch. Two warmups per source/stage excluded. Rows include output copies; likelihood includes canonical ID, current DD generation, row preparation and matrix/mixture evaluation with fresh caches and recorded resolved cluster states. Live cluster lookup and input loading/decode/validation excluded. No synthetic or expanded hypotheses. Not live full-filter or GPU latency.",
+  "note": "Independent sums, medians, epoch/call counts, alternating orders, source/controller hashes and full pipeline parity checked. All local jobs/checks completed before timing; no edits, scans, tests or builds overlap timing. Evaluator uses fresh miss caches and recorded already-resolved cluster states, excluding live cluster lookup. No full-filter, full-route or GPU speed claim."
+}

@@ -1782,6 +1782,27 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-209: scalar尤度の保持済みCP行準備をまとめて計算 (2026-10-15)
+
+状態: 採用（行準備と記録済みstateによるmiss evaluator、全体速度は未計測）
+
+_likelihood_rowsで既定uniform-latticeモデルの保持済みCP残差・sigmaをNumPyで計算する。
+未保持の格子定数は元の行順・math.logで加算し、非uniformモデルは従来scalar計算を維持。
+cache/current DD/グループ順/robust solve/mixture/乱数を変えず、Hを保持するcacheは増やさない。
+
+Tokyo run1 600epochの24sample stepから657実cache missを記録（N64/K12/seed20260710）。
+合成・複製・水増しをせず、行準備とmiss evaluatorを別stageで2warmup後10交互pair計測。
+行準備46.38955→10.0037ms（各policy中央値）、paired短縮中央値78.93%、範囲76.75–80.03%、10/10改善。
+記録済みresolved cluster stateとfresh cacheを使う尤度評価は307.6735→255.52935ms、
+paired短縮中央値16.35%、範囲13.18–25.28%、10/10改善。live cluster検索は除外する。
+epoch内で旧新を隣接比較し先行側を交互化。他job/check終了後に計時し、source bytesを固定。
+全weight stage・全体・全経路・GPUの高速化へ一般化せず、過去比率との合成もしない。
+
+記録した行bytes/格子和/尤度と、observer/候補TRACK2 600epoch・候補TRACK1 350epochの
+位置bytes/90配列はcontrolと完全一致、除外0。5682 passed/3778 skipped、追加129回帰case。
+記録: benchmarks/rbpf_scalar_rows_tokyo_prefix_20261015.json、
+benchmarks/rbpf_scalar_rows_audit_20261015.json、experiments/rbpf_fgo/README.md。
+
 ## D-208: RB-FGO-PFの整数差分の参照行配置をepochごとに準備 (2026-10-15)
 
 状態: 採用（DD生成stageのみ、構造移動全体の改善は未確認）

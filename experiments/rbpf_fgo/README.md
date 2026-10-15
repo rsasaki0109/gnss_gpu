@@ -18,6 +18,65 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Bulk preparation of scalar likelihood rows (2026-10-15)
+
+`_likelihood_rows` prepares held carrier residuals and sigma scaling together
+with NumPy for the default uniform-lattice model. Unheld lattice terms still
+accumulate with the original scalar `math.log` calls in original row order.
+The nonuniform model keeps the original scalar calculation. The likelihood
+cache, current DD generation, nuisance-group ordering, robust solve and mixture
+evaluation are unchanged. Outputs are fresh arrays, without persistent H data.
+
+Tokyo run1's 600-epoch prefix supplies **657 actual scalar cache misses inside
+24 sampled steps**, with N=64, K=12 and seed 20260710. Cache hits are excluded;
+no hypotheses are synthesized, duplicated or expanded for measurement.
+
+| Wall-time replay scope | Baseline median ms | Candidate median ms | Paired reduction median | Paired range | Improved pairs |
+|---|---:|---:|---:|---:|---:|
+| Row preparation, including output copies | 46.39 | 10.00 | **78.93%** | 76.75–80.03% | 10/10 |
+| Miss evaluator with recorded resolved cluster state | 307.67 | 255.53 | **16.35%** | 13.18–25.28% | 10/10 |
+
+The second scope includes canonical ID construction, current DD generation,
+row preparation, the robust matrix solve and mixture evaluation. Each call
+uses a fresh cache and an already resolved recorded cluster state. **Live
+cluster-state lookup is excluded.** These figures do not establish live
+weight-stage, full-filter, full-route or GPU latency gains. Percentages are
+medians of individual paired percentages, distinct from the ratio of the
+per-policy time medians; do not combine them with earlier study percentages.
+
+Policies retain the original epoch/call order, run adjacent within epoch
+windows and alternate which goes first with epoch and trial. Two full warmups
+per source/stage are excluded. Imports, capture, decode, validation and hash
+checks stay outside the clocks. Conditions: Windows, Python 3.12.10, NumPy
+2.4.6, one OpenBLAS/OMP thread; all local jobs/checks finish before timing.
+No local edits, scans, tests or builds overlap the clocks.
+
+Every captured residual/scale/mask byte, ordered lattice sum and original
+likelihood value matches both exact source bodies. The original observer
+TRACK=2 run matches the frozen PR #243 control, and fresh candidate TRACK=2
+600 epochs and TRACK=1 350 epochs match their respective controls: position
+bytes and all 90 arrays, zero exclusions. These runs supply correctness
+evidence only. The final suite has 5,682 passed / 3,778 skipped. The 129 new
+cases cover float32/64, partial/empty/full support, row permutations,
+nonfinite values, sigma scaling, lattice floors, both models, recorded
+position priors and cache hits.
+
+To reproduce with fresh directories, save the baseline from `6bbd63b` and
+forward the WP56 flags/environment from `benchmark_shared_moves_cpu.py`:
+
+```bash
+python capture_scalar_rows.py --source BASELINE.py --output NEW_CAPTURE \
+  --tc-src tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_scalar_rows.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_REPLAY.json --pairs 10
+```
+
+The observer records actual scalar misses and raw problem/cluster data,
+returning the original values unchanged. Its elapsed time is not speed
+evidence. Preserve completed controllers/records. See [all raw trials](../../benchmarks/rbpf_scalar_rows_tokyo_prefix_20261015.json)
+and the [independent audit](../../benchmarks/rbpf_scalar_rows_audit_20261015.json).
+
 ## Preparing integer-DD row layouts once per epoch (2026-10-15)
 
 `EpochProblem.set_pairs` freezes pair triples and prepares contiguous
