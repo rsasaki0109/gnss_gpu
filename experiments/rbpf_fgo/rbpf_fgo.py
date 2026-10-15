@@ -1259,11 +1259,13 @@ class RbpfFgo:
         """Conditional-rounding bootstrap: extend H over the un-held part
         of today's support, conditioning the posterior float on H."""
         dd = self._pair_dd(H, prob)
-        idxH = np.where(np.isfinite(dd))[0]
-        idxC = [pi for pi, (g, ref, j) in enumerate(prob.pairs)
-                if not np.isfinite(dd[pi])
-                and H.get(g, {}).get(ref) is not None]
-        if len(idxH) == 0 or len(idxC) == 0:
+        held = np.isfinite(dd)
+        idxH = np.flatnonzero(held)
+        if len(idxH) == 0 or len(idxH) == len(dd):
+            return None
+        idxC = [pi for pi in np.flatnonzero(~held)
+                if H.get(prob.pairs[pi][0], {}).get(prob.pairs[pi][1]) is not None]
+        if len(idxC) == 0:
             return None
         try:
             QHH = prob.Qb[np.ix_(idxH, idxH)]
@@ -1431,19 +1433,21 @@ class RbpfFgo:
         """Release-subset move: drop the held sat whose CP row misfits
         worst this epoch (design step-3 'release subset s' class)."""
         dd = self._pair_dd(H, prob)
-        worst_pi, worst_r = -1, -1.0
-        for r in range(len(prob.rows_v0)):
-            if not prob.rows_iscp[r]:
-                continue
-            pi = prob.rows_pair[r]
-            if not np.isfinite(dd[pi]):
-                continue
-            wr = abs(prob.rows_lam[r] * (prob.rows_bmeas[r] - dd[pi])) \
-                / max(prob.rows_sig[r], 1e-6)
-            if wr > worst_r:
-                worst_r, worst_pi = wr, pi
-        if worst_pi < 0:
+        rows = np.flatnonzero(prob.rows_iscp)
+        pairs = prob.rows_pair[rows]
+        valid = np.isfinite(dd[pairs])
+        rows, pairs = rows[valid], pairs[valid]
+        if len(rows) == 0:
             return None
+        wr = np.abs(prob.rows_lam[rows] * (prob.rows_bmeas[rows] - dd[pairs])) \
+            / np.maximum(prob.rows_sig[rows], np.float64(1e-6))
+        # The scalar strict comparison skips NaNs and keeps the first tie,
+        # including the first +inf. argmax has the same tie order.
+        wr = np.where(np.isnan(wr), -1.0, wr)
+        worst = int(np.argmax(wr))
+        if wr[worst] < 0:
+            return None
+        worst_pi = pairs[worst]
         g, ref, j = prob.pairs[worst_pi]
         H2 = _copy_H(H)
         zmap = H2.get(g)

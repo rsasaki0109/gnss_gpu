@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "parity": {
+    "schemaVersion": 1,
+    "baselineCommit": "7bb55b8ff80e167a261214195490977a8d4b3759",
+    "baseline": {
+      "name": "rbpf_fgo_original.py",
+      "bytes": 156908,
+      "sha256": "a1867db32430a09905cd3a43ff75e1563add2635403dfec042f7e92097340c65"
+    },
+    "candidate": {
+      "name": "rbpf_fgo_candidate.py",
+      "bytes": 157153,
+      "sha256": "4d21d32f38079716c20137634de7029bb1c95015443ac146af7d7aab20cf003c"
+    },
+    "captureManifest": {
+      "name": "manifest.json",
+      "bytes": 29666655,
+      "sha256": "224b9219d289f5de064f69a5b71dd62920bf9b9ffb5b45c6ab4137481b2e6030"
+    },
+    "epochs": 24,
+    "calls": {
+      "_extend": 1536,
+      "_shrink_worst": 1536
+    },
+    "returnsNone": {
+      "_extend": 235,
+      "_shrink_worst": 0
+    },
+    "pairCounts": [
+      24,
+      26,
+      34,
+      36,
+      38,
+      40,
+      42,
+      44,
+      46,
+      48,
+      50,
+      52,
+      54
+    ],
+    "rowCounts": [
+      48,
+      52,
+      68,
+      72,
+      76,
+      80,
+      84,
+      88,
+      92,
+      96,
+      100,
+      104,
+      108
+    ],
+    "particles": [
+      64
+    ],
+    "sourceLibraries": [
+      {
+        "name": "gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "name": "gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "originalInputs": [
+      {
+        "name": "rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "name": "base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "name": "base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "name": "imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "name": "reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "pipeline": [
+      {
+        "run": "warmup-baseline",
+        "exactArrays": 90
+      },
+      {
+        "run": "capture-run",
+        "exactArrays": 90
+      },
+      {
+        "run": "candidate-run",
+        "exactArrays": 90
+      }
+    ],
+    "excludedArrays": [],
+    "positionSha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd",
+    "note": "Both method bodies match every captured integer output including dictionary insertion order. Fresh original observer and candidate runs match all 90 arrays and position bytes against the previous frozen control. Capture and concurrent correctness-run timings are not performance evidence."
+  },
+  "replayRecord": {
+    "name": "replay.json",
+    "bytes": 15732,
+    "sha256": "fe278be4fa8e437279f766d76a32eb759f667081d9e5604c9d16abc28fec0fc4"
+  },
+  "cpuThreads": 1,
+  "openblasThreads": 1,
+  "ompThreads": 1,
+  "timingScope": "Sum of recorded epochs' actual helper calls, original order/count including output construction. Two warmups per source excluded. No synthesized/expanded hypotheses. Imports, input decoding and parity excluded. Not full-filter or GPU latency.",
+  "trials": 10,
+  "improvedPairs": 10,
+  "minimumReductionPercent": 38.21255189403253,
+  "maximumReductionPercent": 48.57681367996285,
+  "medianReductionPercent": 44.14160147313332,
+  "note": "All timing rows, totals, percentages, medians and current/source snapshot hashes checked independently. Full tests and correctness runs completed before timing. No concurrent local edits, scans, builds or tests during replay."
+}

@@ -33,6 +33,7 @@ pytest -q \
   tests/test_realtime_runtime.py \
   tests/test_rbpf_likelihood_replay.py \
   tests/test_rbpf_shared_moves.py \
+  tests/test_rbpf_move_selection.py \
   tests/test_cross_domain_validation.py \
   tests/test_ambiguity_basin_pf.py \
   tests/test_audit_ppc_basin_fgo_candidate_supply.py \

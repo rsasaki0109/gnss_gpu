@@ -18,6 +18,59 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Vectorized move selection (2026-10-15)
+
+Extension computes the held-pair mask once, returns early on empty/full
+support, and checks group references only for missing pairs. Release scores
+the held carrier rows with NumPy and selects the first maximum. NaNs are
+skipped, equal scores (including infinity) retain the first observation, and
+the sigma floor stays double precision even with float32 sigma inputs.
+The conditional solve, integer rounding and copied hypothesis order are
+unchanged. Both the scalar and tracked proposal paths use these helpers.
+
+On actual Tokyo run1 inputs, the combined helpers took **383.46 → 215.48 ms**
+over 3,072 recorded calls: **44.14% median paired reduction**, improving all
+10 alternating pairs (range 38.21–48.58%). This is the sum of 24 sampled
+epochs' helper calls, with 64 original particles per epoch: 1,536 extension
+and 1,536 release calls. Of the extension calls, 1,301 produce a hypothesis
+and 235 return `None`. Problems contain 24–54 pairs and 48–108 measurement
+rows. Naturally repeated particle hypotheses are kept at their original
+count; no workload is synthesized or expanded.
+
+The replay runs the exact original/candidate method bodies without GTSAM,
+including hypothesis copies and output construction. Two full replay
+warmups per source are excluded. Input loading/decoding, imports, parity and
+hash checks are outside the clock. Conditions: Windows, Python 3.12.10,
+NumPy 2.4.6, one OpenBLAS/OMP thread; no local edits, tests, builds or scans
+during timing. This measures the two helpers, and establishes no whole-filter,
+full-route, ensemble or GPU speedup.
+
+Every recorded output matches the original integer values and dictionary
+insertion order exactly. The original observer run and a fresh candidate
+600-epoch run also match the previous frozen control's position bytes,
+all 88 diagnostic arrays and both row-dump arrays, with no exclusions.
+Correctness runs may overlap other checks and their elapsed times are not
+used for performance claims. The 61 selection regression cases cover empty
+and partial support, singular covariance, ties-to-even rounding, row ties,
+duplicate carrier pairs, nonfinite values and the float32 sigma-floor edge.
+
+For a new capture, save the original runtime as `BASELINE.py`, then use
+`capture_move_inputs.py --source BASELINE.py --output NEW_CAPTURE --tc-src
+tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]`. Use the WP56 flags
+and environment listed in `benchmark_shared_moves_cpu.py` (N=64, K=12,
+seed=20260710). The capture observer returns the original results. Replay:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_move_selection.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_REPLAY.json --pairs 10
+```
+
+Use a fresh output path each time. Sources and captured problem arrays are
+hash checked; every output is checked before timing. Complete records:
+[all trials](../../benchmarks/rbpf_move_selection_tokyo_prefix_20261015.json)
+and [independent parity/measurement audit](../../benchmarks/rbpf_move_selection_audit_20261015.json).
+
 ## Shared proposal scores (2026-10-15)
 
 The scalar proposal path (`RBPF_TRACK=0/2`) scores each shared consensus,
