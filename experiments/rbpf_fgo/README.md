@@ -18,6 +18,70 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Matching held integers in feedback (2026-10-16)
+
+`_feedback` prepares a temporary matrix of truncated DD values when its
+provided list/tuple contains one complete FP64 array per particle. For
+exactly representable held integers, NumPy selects matching particle indices
+in their original order. The original scalar `mass += float(w[i])` additions
+remain in that order, preserving rounding and threshold decisions. This
+removes repeated scalar finite/int tests for every held pair. Other DD
+containers, dtypes or shapes and held integers outside ±2^53 retain the
+original scalar comparisons. The temporary matrix stays local to one call.
+
+Tokyo run1's 600-epoch prefix supplies **24 actual feedback calls, 1,536
+particle visits and 5 graph events**, N=64, K=12, seed 20260710. The recording
+retains actual call/particle/pair order and count, with no synthetic or
+expanded inputs. Scalar per-particle DD comparison visits fall **54,208 → 0**;
+matrix preparation and ordered scalar weight additions remain in the clocks.
+
+| Wall-time replay scope | Baseline median ms | Candidate median ms | Paired reduction median | Paired range | Improved pairs |
+|---|---:|---:|---:|---:|---:|
+| Feedback policy with recorded graph transitions | 79.7473 | 19.9985 | **74.21%** | 72.13–77.23% | **10/10** |
+
+**This measures feedback policy replay with recorded graph transitions.**
+Replay replaces GTSAM operations with recorded changes of the graph fields
+read by feedback; transition playback is included in the clocks. It does
+not establish live feedback/GTSAM, full-filter, full-route or GPU latency.
+The observer and pipeline controls call the real graph methods unchanged.
+Do not combine the percentages with earlier studies. Paired reduction
+medians differ from ratios of the per-policy medians.
+
+Clocks include DD matrix validation/allocation/truncation, matching selection,
+ordered scalar additions and the remaining feedback policy. Fresh state
+restoration, existing component DD preparation, imports, decode and output
+validation are excluded. Each policy preserves actual epoch/particle/pair
+order. Policies run adjacent within epoch windows, alternating first policy
+with epoch and trial. Two full warmups per source are excluded. Windows,
+Python 3.12.10, NumPy 2.4.6, one OpenBLAS/OMP thread. All local jobs/checks
+finish before timing; no edits, scans, tests or builds overlap the clocks.
+
+Policy return, every feedback-owned field and projected graph state match
+the observed results. Graph-call arguments/order and before/after transitions
+are checked before timing. Particle H, weights and DDs remain unchanged.
+Restoring the original scalar block and removing matrix preparation makes
+the entire production AST equal to baseline. Fresh observer/candidate
+TRACK=2 600 epochs and candidate TRACK=1 350 epochs match frozen controls:
+position bytes and all 90 arrays, zero exclusions. Full suite: **6,191 passed
+/ 3,778 skipped**, with 75 new cases covering truncation, nonfinite DDs,
+ordered weight cancellation, signed zero, large/extended-precision holds,
+fallback containers/dtypes/shapes, per-call freshness and full policy actions.
+
+For fresh captures, save baseline `49c68f0` and forward the WP56
+flags/environment from `benchmark_shared_moves_cpu.py`:
+
+```bash
+python capture_feedback_mass.py --source BASELINE.py --output NEW_CAPTURE \
+  --tc-src tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_feedback_mass.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_REPLAY.json --pairs 10
+```
+
+Observer elapsed time is correctness evidence only. Preserve completed
+controllers and records. See the [raw trials](../../benchmarks/rbpf_feedback_mass_tokyo_prefix_20261016.json)
+and [independent audit](../../benchmarks/rbpf_feedback_mass_audit_20261016.json).
+
 ## Preparing scalar likelihood nuisance columns (2026-10-16)
 
 `_nuisance_columns` visits only retained carrier rows when assigning common

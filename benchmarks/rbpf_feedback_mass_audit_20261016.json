@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "parity": {
+    "schemaVersion": 1,
+    "baselineCommit": "49c68f0450ab2f8cb4f28102c53b66687d96500f",
+    "baseline": {
+      "name": "rbpf_fgo_original.py",
+      "bytes": 161890,
+      "sha256": "af676519b3de134b1b3a9cfb0419c3dea659bd13f503e65273523bbf51668551"
+    },
+    "candidate": {
+      "name": "rbpf_fgo_candidate.py",
+      "bytes": 162538,
+      "sha256": "d38f95153a30123cf4ed9c0db939710d1f384e727ad3ab6427c42bc7b0968706"
+    },
+    "captureManifest": {
+      "name": "manifest.json",
+      "bytes": 20509,
+      "sha256": "cdace0928bc5ee0fa4025918d7ef4bb54337f95ff449795b2f9444d7eccd948a"
+    },
+    "sourceLibraries": [
+      {
+        "name": "gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "name": "gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "originalInputs": [
+      {
+        "name": "rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "name": "base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "name": "base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "name": "imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "name": "reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "epochs": 24,
+    "particleVisits": 1536,
+    "scalarDdVisits": {
+      "baseline": 54208,
+      "candidate": 0
+    },
+    "graphEvents": 5,
+    "unchangedPolicyAst": true,
+    "configuredParticles": [
+      64
+    ],
+    "pipeline": [
+      {
+        "mode": "observer-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track1",
+        "epochs": 350,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 50991,
+          "sha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+        }
+      }
+    ],
+    "note": "Actual feedback inputs/events only. Provided step DD bytes are copied without recomputation; H/DD/weight inputs stay unchanged. Exact source policy return, all feedback-owned fields, projected graph states, graph-call arguments/order/before/after transitions match observed outputs. Entire production AST matches baseline after removing only mass-matrix preparation and replacing the new matching branch with its original scalar fallback. Original ordered scalar weight additions remain. Fresh observer/candidate TRACK2 600 and candidate TRACK1 350 match frozen controls, position bytes and all 90 arrays, zero exclusions. Actual GTSAM graph methods run unchanged in pipeline controls. Raw data/library/source/controller hashes rechecked without research imports. Replay substitutes recorded projected transitions; not live graph latency. Correctness timing is not speed evidence."
+  },
+  "replayRecord": {
+    "name": "replay.json",
+    "bytes": 35573,
+    "sha256": "e726bcb3551bc4a1020a87b61a55e4b9a922dff6918ea863ee41a1669e4ce7d9"
+  },
+  "summary": {
+    "baselineMedianMs": 79.74725,
+    "candidateMedianMs": 19.99845,
+    "medianReductionPercent": 74.20703311062067,
+    "improvedPairs": 10,
+    "minimumReductionPercent": 72.13396805825505,
+    "maximumReductionPercent": 77.22587998496478
+  },
+  "scope": "Actual feedback-policy calls in original epoch/particle/pair order/count. Clocks include DD matrix validation/allocation/truncation, matching selection and original ordered scalar weight additions. GTSAM graph operations replaced with recorded transitions of feedback-visible fields; transition playback included. Fresh state restoration, existing component DD preparation, imports/decode/validation excluded from clocks. Two warmups excluded; adjacent epoch windows alternate first policy by epoch/trial. No synthetic/expanded hypotheses or persistent DD cache. Not live feedback/GTSAM, full-filter, full-route or GPU latency.",
+  "note": "Independent sums, medians, epoch/particle/scalar-DD-test counts, graph-event count, alternating orders and source/controller hashes checked. All local jobs/checks completed before timing; no edits, scans, tests or builds overlap timing. DD matrix validation/allocation/truncation, selection and ordered scalar weight additions included. Fresh state restore and original component DD preparation excluded; recorded projected graph-transition playback included. No live feedback/GTSAM, full-filter, full-route or GPU speed claim."
+}

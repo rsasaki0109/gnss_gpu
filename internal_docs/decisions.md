@@ -1782,6 +1782,33 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-215: feedbackのDD整数一致判定を配列でまとめる (2026-10-16)
+
+状態: 採用（記録したgraph遷移によるpolicy replay。live graph/全体速度は未計測）
+
+_feedbackへ渡された粒子ごとの完全なFP64 DD配列を、一時matrixにまとめてtrunc。
+±2^53内の保持整数との一致indexを元の粒子順で抽出し、重みのscalar加算は元の順序を保つ。
+他container/dtype/shapeと範囲外保持整数は元のfinite/int比較へfallback。
+呼出を越えるcacheは作らず、支持数/保持解除/commit判定は変更しない。
+
+Tokyo run1 600epochから24実feedback call・1536粒子訪問・5graph event、N64/K12/seed20260710。
+元の順序・件数で合成/複製/水増しなし。Pythonでの粒子別DD検査54208→0。
+matrix検証/確保/trunc、選択と元の順序でのscalar重み加算を含めて計時。
+2warmup後10交互pair、policy replay 79.74725→19.99845ms（各policy中央値）、
+paired短縮中央値74.21%、10/10改善、範囲72.13–77.23%。
+
+GTSAM操作はfeedbackが読むfieldの記録済み遷移へ置換し、その再生費用を含める。
+fresh状態復元/既存component DD準備/import/decode/validationはclock外。
+graph呼出の引数・順序・前後状態、policy返値/全owner field/projected graph stateを照合。
+live feedback/GTSAM/全filter/全経路/GPUの利得へ一般化せず、過去比率とも合成しない。
+epoch内旧新隣接、epoch/trialで先行側交互化。source/controller bytes固定。
+他local job/check完了後に計測し、計時中の編集/test/build/scanなし。
+
+元のscalar比較block復元/matrix準備除去後にproduction全ASTがbaselineと一致。
+H/重み/DD入力は不変。実graphを使うobserver/候補TRACK2 600・候補TRACK1 350epochは
+controlと位置bytes/全90配列一致、除外0。6191 passed/3778 skipped、追加75case。
+記録: benchmarks/rbpf_feedback_mass_{tokyo_prefix,audit}_20261016.json、実験README。
+
 ## D-214: スカラー尤度の共通オフセット列をCP行だけで準備 (2026-10-16)
 
 状態: 採用（列準備の短縮。尤度全体の安定した利得は未確認）

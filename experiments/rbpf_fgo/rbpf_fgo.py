@@ -1636,6 +1636,14 @@ class RbpfFgo:
         if dd_all is None:
             dd_all = [self._pair_dd(p.H, prob) for p in self.particles]
 
+        # Match integers in bulk; keep the original ordered weight additions.
+        mass_dd = None
+        if (committed and isinstance(dd_all, (list, tuple)) and dd_all
+                and len(dd_all) == len(self.particles)
+                and all(isinstance(d, np.ndarray) and d.dtype == np.float64
+                        and d.shape == (len(prob.pairs),) for d in dd_all)):
+            mass_dd = np.trunc(np.asarray(dd_all))
+
         # ---- release pass: per held pair, posterior mass on the HELD DD
         group_held = {}
         group_bad = {}
@@ -1648,10 +1656,14 @@ class RbpfFgo:
                 continue
             z_held = int(np.rint(vr - vj))
             mass = 0.0
-            for i_ in range(len(self.particles)):
-                di = dd_all[i_][pi]
-                if np.isfinite(di) and int(di) == z_held:
+            if mass_dd is not None and abs(z_held) <= 2**53:
+                for i_ in np.flatnonzero(mass_dd[:, pi] == z_held):
                     mass += float(w[i_])
+            else:
+                for i_ in range(len(self.particles)):
+                    di = dd_all[i_][pi]
+                    if np.isfinite(di) and int(di) == z_held:
+                        mass += float(w[i_])
             held_pairs.append((g, ref, j, mass))
             group_held[g] = group_held.get(g, 0) + 1
             if mass < cfg.fb_rel_mass:
