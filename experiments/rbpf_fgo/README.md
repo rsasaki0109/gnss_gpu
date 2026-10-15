@@ -18,6 +18,74 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Preparing integer-DD row layouts once per epoch (2026-10-15)
+
+`EpochProblem.set_pairs` freezes pair triples and prepares contiguous
+group/reference runs once when normal or wide-lane problems are extracted.
+`_pair_dd` reads the group's reference once per run and then visits its target
+rows. The layout contains row indices and satellite identifiers, without any
+hypothesis values or reusable DD arrays. Every call reads the current H.
+The prepared path requires the same immutable pair tuple. Replacing `pairs`
+directly uses the original scalar fallback; preparing again creates a fresh
+layout. Legacy unprepared problems retain scalar behavior.
+
+Actual Tokyo run1 inputs provide 24 sampled epochs, N=64, K=12, seed 20260710,
+and 1,536 original structural particle visits. Per-DD-replay group lookups
+fall **63,104 → 12,288**, and satellite dictionary reads **124,016 → 73,544**.
+No hypotheses are synthesized or expanded. Two approaches were measured;
+both complete studies are retained:
+
+| Study / wall metric | Baseline median ms | Candidate median ms | Paired reduction median | Improved pairs |
+|---|---:|---:|---:|---:|
+| Initial per-row branch reuse / DD | 74.40 | 71.87 | 3.22% | 6/10 |
+| Initial per-row branch reuse / paired moves | 197.56 | 207.10 | -2.66% | 2/10 |
+| Prepared epoch layout / DD, preparation included | 30.14 | 25.98 | **12.90%** | **10/10** |
+| Prepared epoch layout / paired moves, preparation included | 309.41 | 297.78 | 4.87% | 7/10 |
+
+The initial approach is deferred. The prepared layout is adopted for the
+consistent **DD-only** improvement (paired range **9.63–25.47%**). Paired
+moves vary from -11.41 to 11.75%, so their improvement remains unproven.
+Percentages are medians of individual paired percentages, distinct from the
+ratio of per-policy time medians. Absolute timings from separate studies
+must not be compared or their speedups combined. Full-filter, full-route
+and GPU latency gains are not established.
+
+Each policy retains the recorded epoch/particle order. Policies run adjacent
+within each epoch window, alternating which goes first with epoch and trial.
+Two full warmups per source/stage are excluded. Candidate layout freezing
+and construction are charged once per timed epoch window in both stages.
+Output construction is included; imports, decode and validation are excluded.
+Windows, Python 3.12.10, NumPy 2.4.6, one OpenBLAS/OMP thread; no other local
+jobs or edits overlap timing. Process CPU observations are retained as
+secondary data, with coarse quantization and possible zero windows; adoption
+uses DD wall observations. Final pipeline/full-suite checks follow the final
+study on the same source bytes.
+
+Every recorded DD byte (including NaNs), structural output and dictionary
+order matches the baseline. TRACK=2's 600 epochs and TRACK=1's 350 epochs
+match their frozen same-source controls: position bytes and all 90 arrays,
+zero exclusions. These runs supply correctness evidence only. The 101
+regression cases cover prepared and legacy problems, row/reference changes,
+missing support, nonfinite arithmetic, mutation of H, independent outputs,
+input-row freezing and safe fallback after direct pair replacement.
+
+Use new output paths and the existing real structural capture schema. Save
+the baseline from `511aa35` and use WP56 flags from
+`benchmark_shared_moves_cpu.py` when recording fresh actual visits. Replay:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_dd_layout.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_REPLAY.json --pairs 10
+```
+
+The initial candidate is retained as `dd_reference_candidate.patch` against
+that baseline. Apply it to a separate full runtime copy and replay using
+`benchmark_dd_lookups.py` with the same arguments. Completed controllers and
+records remain frozen. Records: [initial study](../../benchmarks/rbpf_dd_lookup_probe_tokyo_prefix_20261015.json),
+[prepared layout study](../../benchmarks/rbpf_dd_layout_tokyo_prefix_20261015.json),
+[independent audit](../../benchmarks/rbpf_dd_layout_audit_20261015.json).
+
 ## Canonical basin identity candidate: adoption deferred (2026-10-15)
 
 The experimental `basin_id_candidate.py` sorts satellite numbers once per

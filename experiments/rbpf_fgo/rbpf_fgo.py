@@ -515,6 +515,7 @@ class EpochProblem:
         self.ok = False
         self.reason = ''
         self.pairs = []          # [(group=(sys,f), ref_sat, sat_j)]
+        self._pair_runs = None
         self.y = None            # DD float (cycles), posterior
         self.Qb = None           # DD covariance (cycles^2), posterior
         self.Qab3 = None         # (3, nb) position x DD cross-cov (m*cyc)
@@ -532,6 +533,16 @@ class EpochProblem:
         self.cand_sqnorm = None
         self.witness_cands = None  # witness top-K reprojected to these pairs
         self._ddpr_cache = False  # memoized _ddpr_offset result (WP18)
+
+    def set_pairs(self, pairs):
+        """Freeze this epoch's row layout, without retaining hypothesis values."""
+        self.pairs = tuple((g, ref, j) for g, ref, j in pairs)
+        runs = []
+        for pi, (g, ref, j) in enumerate(self.pairs):
+            if not runs or g != runs[-1][0] or ref != runs[-1][1]:
+                runs.append((g, ref, []))
+            runs[-1][2].append((pi, j))
+        self._pair_runs = (self.pairs, tuple((g, ref, tuple(rows)) for g, ref, rows in runs))
 
 
 # --------------------------------------------------------------------------
@@ -862,7 +873,7 @@ class RbpfFgo:
             prob.reason = 'no_rows'
             return prob
 
-        prob.pairs = pairs
+        prob.set_pairs(pairs)
         prob.y = np.asarray(y, dtype=float)
         prob.Qb = Qb
         prob.Qab3 = np.asarray(Qab3, dtype=float)
@@ -943,6 +954,18 @@ class RbpfFgo:
     def _pair_dd(self, H, prob):
         """(nb,) DD integers for pairs covered by H (nan = not covered)."""
         out = np.full(len(prob.pairs), np.nan)
+        prepared = getattr(prob, '_pair_runs', None)
+        if prepared is not None and prepared[0] is prob.pairs:
+            for g, ref, rows in prepared[1]:
+                zmap = H.get(g)
+                zr = zmap.get(ref) if zmap is not None else None
+                if zr is None:
+                    continue
+                for pi, j in rows:
+                    zj = zmap.get(j)
+                    if zj is not None:
+                        out[pi] = zr - zj
+            return out
         for pi, (g, ref, j) in enumerate(prob.pairs):
             zmap = H.get(g)
             if zmap is None:
@@ -3079,7 +3102,7 @@ class RbpfFgoWL(RbpfFgo):
             return prob
         T = np.asarray(T)
         Qb = T @ src.Qb @ T.T
-        prob.pairs = pairs
+        prob.set_pairs(pairs)
         prob.y = T @ src.y
         prob.Qb = 0.5 * (Qb + Qb.T) + np.eye(len(pairs)) * self.cfg.qb_jitter
         prob.Qab3 = src.Qab3 @ T.T

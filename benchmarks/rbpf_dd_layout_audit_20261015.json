@@ -1,0 +1,291 @@
+{
+  "schemaVersion": 1,
+  "parity": {
+    "schemaVersion": 1,
+    "baselineCommit": "511aa357bf1971ae8b4062eeee71dd33365c1093",
+    "baseline": {
+      "name": "rbpf_fgo_original.py",
+      "bytes": 157526,
+      "sha256": "43a29f6a7db344494943166f0605ebf9e5759a801a8a99711730dcfbbd802cd9"
+    },
+    "candidate": {
+      "name": "rbpf_fgo_candidate.py",
+      "bytes": 158574,
+      "sha256": "ed6883569d240be810f77c1c987b7163b9f258894abc4be562c0ee6a1a14b1c6"
+    },
+    "captureManifest": {
+      "name": "manifest.json",
+      "bytes": 29667016,
+      "sha256": "012841fb33175adfbff22f7b266ab465df2f531b55d46ece19b626ac9d806ef9"
+    },
+    "sourceLibraries": [
+      {
+        "name": "gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "name": "gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "originalInputs": [
+      {
+        "name": "rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "name": "base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "name": "base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "name": "imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "name": "reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "epochs": 24,
+    "particleVisits": 1536,
+    "configuredParticles": [
+      64
+    ],
+    "lookupCallsPerDdReplay": {
+      "baseline": {
+        "group": 63104,
+        "satellite": 124016
+      },
+      "candidate": {
+        "group": 12288,
+        "satellite": 73544
+      }
+    },
+    "pipeline": [
+      {
+        "mode": "track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "positionSha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+      },
+      {
+        "mode": "track1",
+        "epochs": 350,
+        "exactArrays": 90,
+        "excluded": [],
+        "positionSha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+      }
+    ],
+    "note": "Recorded DD bytes (including NaNs), structural outputs/order, hypotheses and problem arrays match exactly. Group/satellite counters are used only here, never in timed evaluators. Golden pipeline sources are byte-identical to this baseline. Fresh unobserved TRACK=2 600 and TRACK=1 350 candidate runs match all position bytes and 90 arrays, zero exclusions. Input and native/source-library fingerprints rechecked. Correctness jobs may overlap other checks; their times are not speed evidence."
+  },
+  "initialStudy": {
+    "schemaVersion": 1,
+    "parity": {
+      "schemaVersion": 1,
+      "baselineCommit": "511aa357bf1971ae8b4062eeee71dd33365c1093",
+      "baseline": {
+        "name": "rbpf_fgo_original.py",
+        "bytes": 157526,
+        "sha256": "43a29f6a7db344494943166f0605ebf9e5759a801a8a99711730dcfbbd802cd9"
+      },
+      "candidate": {
+        "name": "rbpf_fgo_candidate.py",
+        "bytes": 157692,
+        "sha256": "85eee3c47c273cb4320df4ca1fc20d1265d2271f6358c63c5cd4ae7cce7a8e82"
+      },
+      "captureManifest": {
+        "name": "manifest.json",
+        "bytes": 29667016,
+        "sha256": "012841fb33175adfbff22f7b266ab465df2f531b55d46ece19b626ac9d806ef9"
+      },
+      "sourceLibraries": [
+        {
+          "name": "gnss.py",
+          "bytes": 41184,
+          "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+        },
+        {
+          "name": "gtsam.pyd",
+          "bytes": 16236032,
+          "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+        }
+      ],
+      "originalInputs": [
+        {
+          "name": "rover.obs",
+          "bytes": 90593655,
+          "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+        },
+        {
+          "name": "base.obs",
+          "bytes": 35794907,
+          "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+        },
+        {
+          "name": "base.nav",
+          "bytes": 815565,
+          "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+        },
+        {
+          "name": "imu.csv",
+          "bytes": 22469390,
+          "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+        },
+        {
+          "name": "reference.csv",
+          "bytes": 1658813,
+          "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+        }
+      ],
+      "epochs": 24,
+      "particleVisits": 1536,
+      "configuredParticles": [
+        64
+      ],
+      "lookupCallsPerDdReplay": {
+        "baseline": {
+          "group": 63104,
+          "satellite": 124016
+        },
+        "candidate": {
+          "group": 12288,
+          "satellite": 73544
+        }
+      },
+      "pipeline": [
+        {
+          "mode": "track2",
+          "epochs": 600,
+          "exactArrays": 90,
+          "excluded": [],
+          "positionSha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        },
+        {
+          "mode": "track1",
+          "epochs": 350,
+          "exactArrays": 90,
+          "excluded": [],
+          "positionSha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+        }
+      ],
+      "note": "Recorded DD bytes (including NaNs), structural outputs/order, hypotheses and problem arrays match exactly. Group/satellite counters are used only here, never in timed evaluators. Golden pipeline sources are byte-identical to this baseline. Fresh unobserved TRACK=2 600 and TRACK=1 350 candidate runs match all position bytes and 90 arrays, zero exclusions. Input and native/source-library fingerprints rechecked. Correctness jobs may overlap other checks; their times are not speed evidence."
+    },
+    "replayRecord": {
+      "name": "replay.json",
+      "bytes": 111577,
+      "sha256": "7a54264c0de2f41e3aecf5a1ae4ecaf0687abe5a4194f5604f3cac92ac4378e3"
+    },
+    "summary": {
+      "dd": {
+        "wall": {
+          "baselineMedianMs": 74.40185,
+          "candidateMedianMs": 71.8697,
+          "medianReductionPercent": 3.2205459166818717,
+          "validPairs": 10,
+          "improvedPairs": 6,
+          "minimumReductionPercent": -36.93957632423561,
+          "maximumReductionPercent": 11.078570553994716
+        },
+        "cpu": {
+          "baselineMedianMs": 70.3125,
+          "candidateMedianMs": 62.5,
+          "medianReductionPercent": 0.0,
+          "validPairs": 10,
+          "improvedPairs": 4,
+          "minimumReductionPercent": -100.0,
+          "maximumReductionPercent": 83.33333333333334
+        }
+      },
+      "moves": {
+        "wall": {
+          "baselineMedianMs": 197.55955,
+          "candidateMedianMs": 207.103,
+          "medianReductionPercent": -2.6551531722283084,
+          "validPairs": 10,
+          "improvedPairs": 2,
+          "minimumReductionPercent": -6.6300939971005945,
+          "maximumReductionPercent": 11.55086216601241
+        },
+        "cpu": {
+          "baselineMedianMs": 187.5,
+          "candidateMedianMs": 203.125,
+          "medianReductionPercent": -12.5,
+          "validPairs": 10,
+          "improvedPairs": 4,
+          "minimumReductionPercent": -44.44444444444444,
+          "maximumReductionPercent": 23.529411764705888
+        }
+      }
+    },
+    "scope": "Actual recorded structural visits, original order/count within each policy. One DD per visit, or both paired structural outputs. Policies alternate within every epoch window; first policy alternates with trial and epoch. Two warmups per source/stage excluded. No synthetic/expanded workload. Decode, parity and input loading excluded. CPU times may be quantized or zero and remain secondary to wall latency. Not full-filter or GPU latency.",
+    "note": "Independent arithmetic, original epoch counts, alternating epoch orders, source snapshots, medians and full pipeline parity checked. All local correctness jobs/checks finished before timing. No local edits, tests, scans or builds during timing. DD and paired structural stages only; no full-filter/GPU claim."
+  },
+  "initialDecision": "deferred: per-row branch reuse did not improve DD/moves consistently",
+  "initialCandidatePatch": {
+    "name": "dd_reference_candidate.patch",
+    "bytes": 877,
+    "sha256": "0edf5da3ccbcb73b3da38e4ce9b18c23c9e14dd80edae7d668bf7824fc646725"
+  },
+  "initialCandidateNormalizedSha256": "0f50650092a27b7f3ebdd3a083b9c048cef1bef45b750d437b739a33370b622a",
+  "replayRecord": {
+    "name": "replay.json",
+    "bytes": 112011,
+    "sha256": "d77114755ff1705e6472507451bc153e9cf51da6fce77ecfed88659f4644d744"
+  },
+  "summary": {
+    "dd": {
+      "wall": {
+        "baselineMedianMs": 30.14265,
+        "candidateMedianMs": 25.98385,
+        "medianReductionPercent": 12.899646360788651,
+        "validPairs": 10,
+        "improvedPairs": 10,
+        "minimumReductionPercent": 9.63205766260511,
+        "maximumReductionPercent": 25.470553182727194
+      },
+      "cpu": {
+        "baselineMedianMs": 39.0625,
+        "candidateMedianMs": 15.625,
+        "medianReductionPercent": 58.333333333333336,
+        "validPairs": 10,
+        "improvedPairs": 6,
+        "minimumReductionPercent": -200.0,
+        "maximumReductionPercent": 66.66666666666667
+      }
+    },
+    "moves": {
+      "wall": {
+        "baselineMedianMs": 309.41205,
+        "candidateMedianMs": 297.77779999999996,
+        "medianReductionPercent": 4.8670807179154725,
+        "validPairs": 10,
+        "improvedPairs": 7,
+        "minimumReductionPercent": -11.412241313518345,
+        "maximumReductionPercent": 11.746603540891886
+      },
+      "cpu": {
+        "baselineMedianMs": 304.6875,
+        "candidateMedianMs": 281.25,
+        "medianReductionPercent": 5.397727272727271,
+        "validPairs": 10,
+        "improvedPairs": 6,
+        "minimumReductionPercent": -15.384615384615374,
+        "maximumReductionPercent": 37.93103448275862
+      }
+    }
+  },
+  "scope": "Actual recorded structural visits, original order/count per policy. Candidate layout freezing/preparation charged once per epoch window in both stages. DD-only or paired structural outputs. First policy alternates with trial and epoch. Two warmups per source/stage excluded. No synthetic/expanded hypotheses. Decode/validation excluded. CPU times secondary and may be quantized or zero. Not full-filter/GPU latency.",
+  "note": "Independent arithmetic, original epoch counts, alternating epoch orders, source snapshots, medians and full pipeline parity checked. Focused tests and recorded-call validation preceded timing. Final full-suite/pipeline validation followed timing on the same source bytes. No local jobs, edits, tests, scans or builds overlapped timing. Candidate epoch layout preparation is included in both stages. Process CPU values are secondary and subject to coarse quantization; adoption is based on the DD wall observations only. DD and paired structural stages only; no full-filter/GPU claim."
+}

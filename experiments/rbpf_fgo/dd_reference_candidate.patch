@@ -1,0 +1,23 @@
+--- a/experiments/rbpf_fgo/rbpf_fgo.py
++++ b/experiments/rbpf_fgo/rbpf_fgo.py
+@@ -943,13 +943,16 @@
+     def _pair_dd(self, H, prob):
+         """(nb,) DD integers for pairs covered by H (nan = not covered)."""
+         out = np.full(len(prob.pairs), np.nan)
++        last_group = last_ref = zmap = zr = None
+         for pi, (g, ref, j) in enumerate(prob.pairs):
+-            zmap = H.get(g)
+-            if zmap is None:
++            if g != last_group or ref != last_ref:
++                zmap = H.get(g)
++                zr = zmap.get(ref) if zmap is not None else None
++                last_group, last_ref = g, ref
++            if zr is None:
+                 continue
+-            zr = zmap.get(ref)
+             zj = zmap.get(j)
+-            if zr is not None and zj is not None:
++            if zj is not None:
+                 out[pi] = zr - zj
+         return out
+ 

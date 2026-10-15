@@ -1782,6 +1782,30 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-208: RB-FGO-PFの整数差分の参照行配置をepochごとに準備 (2026-10-15)
+
+状態: 採用（DD生成stageのみ、構造移動全体の改善は未確認）
+
+EpochProblem.set_pairsでpair tripleをimmutable tupleへ固定し、連続group/refの行配置を作る。
+通常・wide-laneの両抽出経路で準備し、_pair_ddは参照整数をrunごとに読み、各対象行を計算。
+配置にはHの値やDD配列を保存しない。pairs直接置換時はidentity guardで従来scalarへ戻る。
+H変更は毎call反映し、参照変更/欠測/任意行順/legacy未準備問題も同じ計算結果を保つ。
+
+Tokyo run1実入力24epoch×64粒子の1536訪問を同じ順序でreplay（合成・水増しなし）。
+group lookup 63104→12288、sat辞書read 124016→73544。最初の行別分岐候補はDD 6/10、
+構造移動2/10改善にとどまり保留し、patchと全試行を保存。
+epoch配置方式は準備コスト込みDD 30.14265→25.98385ms（各policy時間中央値）、
+paired短縮中央値12.90%、範囲9.63–25.47%、10/10改善。2warmup後10交互pairで測る。
+構造移動はpaired中央値4.87%でも7/10のみ、範囲-11.41–11.75%で改善は断定しない。
+別studyの絶対時間を比較せず、既存比率との合成や全体/全経路/GPUの速度主張はしない。
+CPU時計は量子化を伴う補助記録とし、DD wallで判断。epoch内で旧新を隣接比較し先行順を交互化。
+測定に他ローカルjobを重ねず、最終pipeline/全体testは同じsource bytesで計時後に確認する。
+
+記録DD bytes/仮説/挿入順と、TRACK2 600epoch・TRACK1 350epochの位置bytes/90配列は一致、除外0。
+101回帰caseを追加。記録: benchmarks/rbpf_dd_lookup_probe_tokyo_prefix_20261015.json、
+benchmarks/rbpf_dd_layout_tokyo_prefix_20261015.json、benchmarks/rbpf_dd_layout_audit_20261015.json、
+experiments/rbpf_fgo/README.md。
+
 ## D-207: RB-FGO-PFのbasin ID並べ替え候補は安定した高速化がなく採用保留 (2026-10-15)
 
 状態: 保留（本番runtimeはD206から変更なし）
