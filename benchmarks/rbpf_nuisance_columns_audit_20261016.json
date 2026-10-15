@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "parity": {
+    "schemaVersion": 1,
+    "baselineCommit": "89ab8fb505945ab74b8fd1b5f12e55ada0040cf1",
+    "baseline": {
+      "name": "rbpf_fgo_original.py",
+      "bytes": 161607,
+      "sha256": "aba1cfaad0c7187e911cbe157b45ceefdbd193ca682141e111d1f85cdd3e7fdb"
+    },
+    "candidate": {
+      "name": "rbpf_fgo_candidate.py",
+      "bytes": 161890,
+      "sha256": "af676519b3de134b1b3a9cfb0419c3dea659bd13f503e65273523bbf51668551"
+    },
+    "captureManifest": {
+      "name": "manifest.json",
+      "bytes": 3345347,
+      "sha256": "219e180b26722c043bb661e36c06dd88be3b82cc7311478cc64f2b48caaa1cd9"
+    },
+    "sourceLibraries": [
+      {
+        "name": "gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "name": "gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "originalInputs": [
+      {
+        "name": "rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "name": "base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "name": "base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "name": "imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "name": "reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "epochs": 24,
+    "cacheMisses": 657,
+    "configuredParticles": [
+      64
+    ],
+    "pipeline": [
+      {
+        "mode": "observer-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track1",
+        "epochs": 350,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 50991,
+          "sha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+        }
+      }
+    ],
+    "note": "Actual scalar cache misses only. Retained nuisance column dtype/shape/bytes, group count and full likelihood bytes match exact baseline/candidate sources and observed outputs. Input H/problem/retained masks/indices/scales/prior bytes unchanged. Production AST equals baseline after restoring only original group block and removing new helper. Observer callback adds no DD or cluster calls. Fresh observer/candidate TRACK2 600 and candidate TRACK1 350 match frozen same-source controls, position bytes and all 90 arrays, zero exclusions. Raw data/library and all source/controller hashes rechecked without importing research libraries. Likelihood replay uses recorded resolved cluster states, excluding live lookup. Correctness timing is not speed evidence."
+  },
+  "replayRecord": {
+    "name": "replay.json",
+    "bytes": 83512,
+    "sha256": "4185efd19ad194eae4d4b3ae3268c0149c71e99ff8f760227d46929ca1753277"
+  },
+  "summary": {
+    "columns": {
+      "baselineMedianMs": 20.2404,
+      "candidateMedianMs": 16.599899999999998,
+      "medianReductionPercent": 17.749652240243634,
+      "improvedPairs": 10,
+      "minimumReductionPercent": 15.930361675126903,
+      "maximumReductionPercent": 23.260983553287506
+    },
+    "likelihood": {
+      "baselineMedianMs": 287.75065,
+      "candidateMedianMs": 284.5538,
+      "medianReductionPercent": 3.7558681906683153,
+      "improvedPairs": 8,
+      "minimumReductionPercent": -3.6240426246279878,
+      "maximumReductionPercent": 9.636638269136355
+    }
+  },
+  "scope": "Actual scalar likelihood cache misses in original epoch/call order/count. Columns includes CP indices, group IDs, zero allocation and scaled column writes; retained input selection is excluded. Likelihood also includes canonical ID, DD and row preparation, robust solve and mixture evaluation with fresh caches and recorded resolved cluster states; live cluster lookup is excluded. Two warmups excluded; adjacent epoch windows alternate first policy with epoch/trial. Loading/decode/validation excluded. No synthetic/expanded calls or persistent H cache. Not full-filter, full-route or GPU latency.",
+  "note": "Independent sums, medians, epoch/call counts, alternating orders, source/controller hashes and full pipeline parity checked. All local jobs/checks completed before timing; no edits, scans, tests or builds overlap timing. Likelihood uses recorded resolved cluster states, excluding live lookup. No full-filter, full-route or GPU speed claim."
+}

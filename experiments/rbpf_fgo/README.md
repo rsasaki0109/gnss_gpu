@@ -18,6 +18,73 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Preparing scalar likelihood nuisance columns (2026-10-16)
+
+`_nuisance_columns` visits only retained carrier rows when assigning common
+offset groups, then writes FP64 reciprocal scales with NumPy. The original
+two Python loops visited every retained observation row. Groups keep their
+first retained carrier occurrence order, including after uniform-lattice
+masking. Other numeric dtypes retain scalar reciprocal promotion/rounding.
+No hypothesis layout or values persist between calls. The likelihood model,
+robust solve, priors, mixture and cache keys remain unchanged.
+
+Tokyo run1's 600-epoch prefix supplies **657 actual scalar cache misses inside
+24 sampled steps**, N=64, K=12, seed 20260710. A callback immediately before
+the original cache write records the actual retained mask, pair indices,
+scales, columns, resolved cluster state and final likelihood. It adds no DD
+or cluster-state calls and returns the original result unchanged. Call order
+and count are retained; no synthetic or expanded performance inputs.
+
+| Wall-time replay scope | Baseline median ms | Candidate median ms | Paired reduction median | Paired range | Improved pairs |
+|---|---:|---:|---:|---:|---:|
+| Retained nuisance columns | 20.2404 | 16.5999 | **17.75%** | 15.93–23.26% | **10/10** |
+| Scalar likelihood with recorded cluster state | 287.7507 | 284.5538 | 3.76% | **−3.62–9.64%** | **8/10** |
+
+Adopt the column preparation change. **Stable whole-likelihood improvement
+is not established**: retain the slower pairs and full raw results. The
+likelihood scope excludes live cluster lookup, so neither row supports a
+full-filter, full-route or GPU speed claim. Do not combine these percentages
+with earlier studies. Paired reduction medians differ from ratios of the
+per-policy medians.
+
+The baseline column block is extracted unchanged into a helper for isolated
+replay; the complete baseline likelihood retains its inline original block.
+Column clocks include CP selection, group IDs, zero allocation and scaled
+writes, with recorded retained inputs supplied to both policies. Likelihood
+clocks also include canonical ID, current DD generation, row preparation,
+robust solve and mixture, with fresh caches and recorded resolved states.
+Loading/decode/validation stay outside the clocks. Two full warmups per
+policy/stage are excluded. Adjacent epoch windows alternate first policy
+with epoch and trial. Windows, Python 3.12.10, NumPy 2.4.6, one OpenBLAS/OMP
+thread. All local jobs/checks finish before timing; no edits, scans, tests or
+builds overlap the clocks.
+
+Column dtype/shape/bytes, group count and complete likelihood bytes match
+the original observed outputs with both sources. Input H/problem/mask/
+indices/scales/prior bytes remain unchanged. Restoring the original block
+and removing the helper makes the entire production AST equal to baseline.
+Observer and candidate TRACK=2 600 epochs and candidate TRACK=1 350 epochs
+match their frozen controls: position bytes and all 90 arrays, zero
+exclusions. Full suite: **6,116 passed / 3,778 skipped**, including 69 new
+cases for group order, masks, empty/code-only rows, strides, numeric dtypes,
+signed/nonfinite scales, fresh allocations, changed layouts, priors and
+likelihood cache hits.
+
+For fresh captures, save the baseline from `89ab8fb` and forward the WP56
+flags/environment from `benchmark_shared_moves_cpu.py`:
+
+```bash
+python capture_nuisance_columns.py --source BASELINE.py --output NEW_CAPTURE \
+  --tc-src tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_nuisance_columns.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_REPLAY.json --pairs 10
+```
+
+Observer elapsed time is correctness evidence only. Preserve completed
+controllers and records. See the [raw trials](../../benchmarks/rbpf_nuisance_columns_tokyo_prefix_20261016.json)
+and [independent audit](../../benchmarks/rbpf_nuisance_columns_audit_20261016.json).
+
 ## Reusing component DDs in feedback (2026-10-16)
 
 `step` passes its component-agreement DD arrays to `_feedback` while the

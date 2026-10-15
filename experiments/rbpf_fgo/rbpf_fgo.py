@@ -1063,6 +1063,26 @@ class RbpfFgo:
                     sig[r] ** 2 + lam[r] ** 2 * (max(qdiag[p], 0.0) + 1.0 / 12.0)) / sb
         return v, sig, uniform, const_ll
 
+    def _nuisance_columns(self, prob, iscp, pi_kept, sig):
+        """Carrier nuisance columns in first retained group occurrence order."""
+        cp = np.flatnonzero(iscp)
+        groups = {}
+        ids = np.empty(len(cp), dtype=int)
+        for i, r in enumerate(cp):
+            g = prob.pairs[pi_kept[r]][0]
+            ids[i] = groups.setdefault(g, len(groups))
+        G = len(groups)
+        if not G:
+            return None, 0
+        C = np.zeros((len(sig), G))
+        if sig.dtype == np.float64:
+            C[cp, ids] = 1.0 / sig[cp]
+        else:
+            # Keep scalar promotion/rounding for other numeric dtypes.
+            for r, gi in zip(cp, ids):
+                C[r, gi] = 1.0 / sig[r]
+        return C, G
+
     def _loglik(self, H, prob, cache):
         """Tempered per-epoch marginal likelihood of this epoch's DD rows
         under hypothesis H (position marginalized against Ppos)."""
@@ -1101,22 +1121,8 @@ class RbpfFgo:
         b = v / sig
         # per-(sys,f)-group common-offset nuisance columns on HELD CP
         # rows (reference-sat carrier multipath model, see RbpfConfig)
-        grp_ids = []
-        grp_index = {}
-        for ri in range(len(b)):
-            if iscp[ri]:
-                g = prob.pairs[pi_kept[ri]][0]
-                if g not in grp_index:
-                    grp_index[g] = len(grp_index)
-                grp_ids.append(grp_index[g])
-            else:
-                grp_ids.append(-1)
-        G = len(grp_index)
+        C, G = self._nuisance_columns(prob, iscp, pi_kept, sig)
         if G:
-            C = np.zeros((len(b), G))
-            for ri, gi in enumerate(grp_ids):
-                if gi >= 0:
-                    C[ri, gi] = 1.0 / sig[ri]
             A = np.hstack([A, C])
         try:
             Pinv3 = np.linalg.inv(Pprior)

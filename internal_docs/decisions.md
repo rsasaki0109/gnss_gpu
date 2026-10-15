@@ -1782,6 +1782,33 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-214: スカラー尤度の共通オフセット列をCP行だけで準備 (2026-10-16)
+
+状態: 採用（列準備の短縮。尤度全体の安定した利得は未確認）
+
+_nuisance_columnsで保持観測全行の2 Python loopを、CP行のgroup割当と
+FP64 reciprocal一括代入へ変更。uniform除外後のCP初出順を保ち、他dtypeは
+元のscalar promotion/roundingを維持。H/epochを越えるlayout/value cacheなし。
+尤度model/robust solve/prior/mixture/cache keyは変更しない。
+
+Tokyo run1 600epochから24 sampled steps・657実cache miss、N64/K12/seed20260710。
+cache書込直前のcallbackで元のlocals/columns/likelihoodを記録し、追加DD/cluster呼出なし。
+元の順序・件数で合成/複製/水増しなし。2warmup後10交互pair、列準備
+20.2404→16.5999ms（各policy中央値）、paired短縮中央値17.75%、10/10改善、
+範囲15.93–23.26%。旧列blockをそのままhelper抽出し、CP抽出/group/確保/代入を計時。
+
+記録済みcluster stateでのcache-miss尤度は287.75065→284.5538ms、paired中央値
+3.76%、8/10改善、範囲−3.62–9.64%。悪化pairも保存し、尤度全体の安定利得は未確認。
+live cluster lookupは対象外。全filter/全経路/GPUへ一般化せず、過去比率と合成しない。
+epoch内旧新隣接、epoch/trialで先行側交互化。source/controller bytes固定。
+他local job/check完了後に計測し、計時中の編集/test/build/scanなし。
+
+旧新/観測値の列dtype/shape/bytes・group数・尤度bytesが一致、入力bytes不変。
+旧group block復元/helper除去後にproduction全ASTがbaselineと一致。
+observer/候補TRACK2 600・候補TRACK1 350epochはcontrolと位置bytes/全90配列一致、除外0。
+6116 passed/3778 skipped、追加69case。記録は
+benchmarks/rbpf_nuisance_columns_{tokyo_prefix,audit}_20261016.json、実験README。
+
 ## D-213: 成分一致度のDD配列をフィードバックへ渡して再利用 (2026-10-16)
 
 状態: 採用（記録したgraph遷移でのpolicy replay、live graph/全体速度は未計測）

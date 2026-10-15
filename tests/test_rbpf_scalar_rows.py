@@ -11,7 +11,8 @@ import pytest
 
 HERE = Path(__file__).resolve().parents[1]/"experiments/rbpf_fgo"
 sys.path.insert(0, str(HERE))
-from benchmark_scalar_rows import evaluator, exact_rows  # noqa: E402
+from benchmark_scalar_rows import exact_rows  # noqa: E402
+from benchmark_nuisance_columns import evaluator  # noqa: E402
 
 
 def config(uniform=True, beta=0.5):
