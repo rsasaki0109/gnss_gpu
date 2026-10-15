@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "parity": {
+    "schemaVersion": 1,
+    "baselineCommit": "fafc91cf47642fb74fabe69d2e88eee5667279f2",
+    "baseline": {
+      "name": "rbpf_fgo_original.py",
+      "bytes": 159326,
+      "sha256": "012d6bec6de99d1a4cb11851e8b6f9e0eae8e960a70b8aa5dec3ef15e7aead3b"
+    },
+    "candidate": {
+      "name": "rbpf_fgo_candidate.py",
+      "bytes": 159656,
+      "sha256": "9e9248d81ced47345698ba70a74c36e0ee4f51c5185324e360b525b3c99a8088"
+    },
+    "captureManifest": {
+      "name": "manifest.json",
+      "bytes": 9596029,
+      "sha256": "c7557c97cf9efda69bc36d0390be837cf7da3e1199106be2caaef2f5ed953c07"
+    },
+    "sourceLibraries": [
+      {
+        "name": "gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "name": "gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "originalInputs": [
+      {
+        "name": "rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "name": "base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "name": "base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "name": "imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "name": "reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "epochs": 24,
+    "particleVisits": 1536,
+    "configuredParticles": [
+      64
+    ],
+    "ddCalls": {
+      "baseline": 3120,
+      "candidate": 1560
+    },
+    "epochDdCalls": [
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      },
+      {
+        "baseline": 130,
+        "candidate": 65
+      }
+    ],
+    "pipeline": [
+      {
+        "mode": "observer-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track1",
+        "epochs": 350,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 50991,
+          "sha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+        }
+      }
+    ],
+    "note": "Actual phase inputs only. Original DD array bytes, ordered mass sums, used-pair decisions, non-empty diagnostics and result digests match both exact sources. Hypotheses and weights unchanged. Fresh observer/candidate TRACK2 600 and candidate TRACK1 350 runs match frozen same-source controls, position bytes and all 90 arrays, zero exclusions. Every capture/controller/dependency and raw data/library hash rechecked without importing research libraries. Correctness timing is not speed evidence."
+  },
+  "replayRecord": {
+    "name": "replay.json",
+    "bytes": 35795,
+    "sha256": "eddda9a607b70dccfad02c3a6c919a9990bfd1ced1ccbf2c0270667bafb9c0c8"
+  },
+  "summary": {
+    "baselineMedianMs": 326.5502,
+    "candidateMedianMs": 292.5335,
+    "medianReductionPercent": 11.336471318571911,
+    "improvedPairs": 7,
+    "minimumReductionPercent": -11.847396446649894,
+    "maximumReductionPercent": 23.75539997702245
+  },
+  "scope": "Actual per-component posterior agreement and non-empty diagnostic phases; original particle, pair and summation order. Includes DD generation and output construction. Adjacent epoch windows alternate first policy with trial and epoch. Two warmups excluded. Loading, decode, validation and basin ranking excluded. No synthetic/expanded hypotheses. No persistent DD cache. Not full-filter, full-route or GPU latency.",
+  "note": "Independent sums, medians, epoch/particle/DD-call counts, alternating orders, source/controller/dependency hashes and full pipeline parity checked. All local jobs/checks completed before timing; no edits, scans, tests or builds overlap timing. No full-filter, full-route or GPU speed claim."
+}

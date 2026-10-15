@@ -2208,6 +2208,7 @@ class RbpfFgo:
         # integer; fix on the >gamma* subset (partial fix), which is the
         # posterior-mass version of partial AR. Empty/undefined
         # particles count AGAINST agreement.
+        dd_all = None
         dd_map = self._pair_dd(map_H, prob) if map_H else None
         pair_mass = {}
         used_pairs = []
@@ -2245,8 +2246,12 @@ class RbpfFgo:
         out['nb_at_ne'] = [0] * len(NB_AT_THRESH)
         ne_ranked = [(bid, m_) for bid, m_ in ranked if len(bid) != 0]
         if ne_ranked and ne_mass > 0:
-            dd_ne = self._pair_dd(rep[ne_ranked[0][0]], prob)
-            dd_l = {i_: self._pair_dd(self.particles[i_].H, prob)
+            # Hypotheses stay unchanged throughout component agreement.
+            # Reuse this phase's DD arrays for the non-empty diagnostic.
+            dd_ne = (dd_map if dd_map is not None and ne_ranked[0][0] == ranked[0][0]
+                     else self._pair_dd(rep[ne_ranked[0][0]], prob))
+            dd_l = {i_: (dd_all[i_] if dd_all is not None
+                         else self._pair_dd(self.particles[i_].H, prob))
                     for i_ in ne_idx}
             masses_ne = []
             for pi_ in np.where(np.isfinite(dd_ne))[0]:

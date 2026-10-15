@@ -18,6 +18,74 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Reusing DD arrays within component agreement (2026-10-16)
+
+The component-agreement phase reuses its already computed per-particle DD
+arrays for the non-empty diagnostic. When the best non-empty basin is the MAP
+basin, its representative also reuses `dd_map`. If the MAP hypothesis is
+empty, the diagnostic still computes the DDs it needs. Reuse ends with this
+phase: particle changes and later epochs always read fresh hypotheses.
+Scalar weight sums, integer comparisons, pair order and strict thresholds
+are unchanged; the existing arrays remain available to tracked output.
+
+Tokyo run1's 600-epoch prefix supplies **24 actual phases and 1,536 particle
+visits**, N=64, K=12, seed 20260710. DD calls fall **3,120 → 1,560**.
+Inputs and natural repetitions retain their original order/count, without
+synthetic or expanded hypotheses. Both studies are retained:
+
+| Wall-time replay scope | Baseline median ms | Candidate median ms | Paired reduction median | Paired range | Improved pairs |
+|---|---:|---:|---:|---:|---:|
+| Complete component agreement and non-empty diagnostic | 326.55 | 292.53 | 11.34% | -11.85–23.76% | 7/10 |
+| DD materialization, including availability guards | 37.24 | 18.87 | **48.35%** | 45.46–50.29% | **10/10** |
+
+Adoption is supported by reduced DD work and the consistent materialization
+gain. **Stable complete-phase speed improvement remains unproven.** The
+second study retains the exact source DD assignments, conditional guards,
+non-empty index/mass preparation and array construction, checked against
+each observed complete phase. It excludes scalar component-agreement sums
+and diagnostic thresholds. Basin ranking is outside both scopes. These
+measurements do not establish full-filter, full-route or GPU speed gains.
+Percentages are medians of individual paired reductions, distinct from the
+ratio of per-policy medians; do not combine them with earlier percentages.
+
+Each policy visits the original epochs/particles/pairs in order. Policies
+run adjacent within each epoch window, alternating the first policy with
+trial and epoch. Two full warmups per source are excluded. Imports, loading,
+decode, validation and hash checks stay outside the clocks. Windows, Python
+3.12.10, NumPy 2.4.6, one OpenBLAS/OMP thread; local jobs/checks finish before
+timing, with no overlapping edits, scans, tests or builds.
+
+Original DD bytes, ordered mass sums, pair decisions and diagnostic outputs
+match both sources at all 24 epochs. The baseline observer matches the
+frozen PR #244 control. Candidate TRACK=2 600 epochs and TRACK=1 350 epochs
+match their controls: position bytes and all 90 arrays, zero exclusions.
+These runs are correctness evidence only. The full suite has 5,770 passed /
+3,778 skipped. All 88 focused cases also pass with the final materialization
+projection, covering empty MAP fallback, empty groups, missing support,
+zero mass, pair permutations, strict thresholds, large integers and fresh
+H/pair changes on repeated calls. CI includes these cases.
+
+To reproduce with fresh directories, save the baseline from `fafc91c` and
+forward the WP56 flags/environment from `benchmark_shared_moves_cpu.py`:
+
+```bash
+python capture_agreement_dd.py --source BASELINE.py --output NEW_CAPTURE \
+  --tc-src tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_agreement_dd.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_FULL.json --pairs 10
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_agreement_dd_materialization.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --full-replay NEW_FULL.json --output NEW_DD.json --pairs 10
+```
+
+The observer inserts input/output callbacks around the unchanged original
+phase statements. Its elapsed time is not speed evidence. Preserve completed
+controllers and records. See the [complete-phase raw trials](../../benchmarks/rbpf_agreement_dd_tokyo_prefix_20261015.json),
+[complete-phase audit](../../benchmarks/rbpf_agreement_dd_audit_20261015.json),
+[DD materialization raw trials](../../benchmarks/rbpf_agreement_dd_materialization_20261015.json)
+and [materialization audit](../../benchmarks/rbpf_agreement_dd_materialization_audit_20261015.json).
+
 ## Bulk preparation of scalar likelihood rows (2026-10-15)
 
 `_likelihood_rows` prepares held carrier residuals and sigma scaling together

@@ -38,6 +38,7 @@ pytest -q \
   tests/test_rbpf_basin_id.py \
   tests/test_rbpf_dd_lookups.py \
   tests/test_rbpf_scalar_rows.py \
+  tests/test_rbpf_agreement_dd.py \
   tests/test_cross_domain_validation.py \
   tests/test_ambiguity_basin_pf.py \
   tests/test_audit_ppc_basin_fgo_candidate_supply.py \

@@ -1782,6 +1782,32 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-210: 成分一致度判定のDDを同じphase内で再利用 (2026-10-16)
+
+状態: 採用（DD配列生成のみ、成分一致度全体の安定した改善は未確認）
+
+MAP成分の一致度で計算済みの粒子DDを、同じphaseの非空仮説診断でも再利用する。
+最良非空basinがMAPと同じ場合は代表DDも共有。MAPが空なら必要なDDを従来どおり計算。
+phase中にHは変更されず、次のepoch/仮説変更へ持ち越すcacheは作らない。
+元のscalar重み加算順、整数比較、pair順、strictしきい値、tracked出力用配列を維持。
+
+Tokyo run1 600epochの24実phase、64粒子×24=1536訪問、K12/seed20260710。
+合成・複製・水増しなし。DD呼出3120→1560。2warmup後10交互pairを測定。
+成分一致度+非空診断全体326.5502→292.5335ms（各policy中央値）、paired短縮中央値11.34%、
+7/10改善、範囲-11.85–23.76%。安定した全phase利得の根拠とはせず全rawを保存。
+追加のDD配列生成scopeはexact source代入/条件分岐/非空index・mass準備を含め、
+観測した全phaseのDDと照合。scalar一致度加算と診断しきい値を除外する。
+37.2444→18.86865ms、paired短縮中央値48.35%、10/10改善、範囲45.46–50.29%。
+DD生成の改善と作業量削減として採用し、全体/全経路/GPUへ一般化せず過去比率とも合成しない。
+
+各epoch内で旧新を隣接実行し、epochとtrialで先行側を交互化。source bytesを固定し、
+他のlocal job/check終了後に計測、計時中の編集/test/build/scanなし。
+24phaseのDD bytes/加算結果/採用成分/診断値と、observer/候補TRACK2 600epoch・
+候補TRACK1 350epochの位置bytes/全90配列がcontrolと一致、除外0。
+5770 passed/3778 skipped。追加88回帰caseと最終DD projection照合も成功。
+記録: benchmarks/rbpf_agreement_dd_{tokyo_prefix,audit}_20261015.json、
+benchmarks/rbpf_agreement_dd_materialization{,_audit}_20261015.json、実験README。
+
 ## D-209: scalar尤度の保持済みCP行準備をまとめて計算 (2026-10-15)
 
 状態: 採用（行準備と記録済みstateによるmiss evaluator、全体速度は未計測）
