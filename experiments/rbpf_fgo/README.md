@@ -18,6 +18,60 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Reusing DDs within a structural move pair (2026-10-15)
+
+`_move_pair` builds the current particle's integer double differences once
+and passes that array to extension and release. Both helpers read it and
+produce separate hypothesis copies. The array lives only within this call;
+maintenance, changes to the hypothesis and later epochs always construct
+fresh DDs. Individual two-argument helper calls still compute their own DDs.
+The scalar and tracked proposal paths retain move order, priors and RNG calls.
+
+On original Tokyo run1 inputs, 24 sampled epochs with 64 particles give
+1,536 particle visits and 3,072 structural calls. DD construction drops from
+3,072 to 1,536 calls. The paired structural stage has **19.72% median paired
+reduction**, improving all 10 alternating pairs (range 8.43–45.17%). Its
+per-policy time medians are **203.14 → 160.84 ms**; the percentage is the
+median of the individual paired percentages. The baseline is PR #240's
+vectorized helpers, and these figures are not combined with earlier studies.
+
+Timing uses the exact method bodies, the original epoch/particle order and
+both output constructions. Two warmups per source, imports, decoding,
+output validation and DD counters are excluded. The counters are removed
+before timing. Conditions: Windows, Python 3.12.10, NumPy 2.4.6, one
+OpenBLAS/OMP thread; other local checks finish before timing. Hypotheses are
+recorded from actual calls with no synthesized or expanded workload. This
+measures the structural stage, without establishing full-filter, full-route,
+ensemble or GPU latency gains.
+
+All captured integer outputs and dictionary insertion orders match the
+separate baseline helpers. TRACK=2's 600-epoch run matches the frozen PR #240
+control, and fresh TRACK=1 baseline/candidate 350-epoch runs match each other:
+position bytes and all 90 arrays are identical in both comparisons, with no
+exclusions. These are correctness runs; their elapsed times are not speed
+evidence. The 28 new regression cases check one DD allocation, read-only
+use, independent output ownership, fresh computation after hypothesis/epoch
+changes, recovery after an exception and legacy direct helper calls.
+
+For current runtimes, `capture_move_pair_inputs.py` observes `_move_pair`;
+it also supports a legacy source that calls the two helpers separately.
+Use the WP56 flags/environment from `benchmark_shared_moves_cpu.py`, N=64,
+K=12 and seed 20260710, forwarding runner arguments after `--`:
+
+```bash
+python capture_move_pair_inputs.py --source rbpf_fgo.py --output NEW_CAPTURE \
+  --tc-src tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_move_pair.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline PR240_BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_REPLAY.json --pairs 10
+```
+
+Save the baseline from commit `53cd866` before applying this change. Use new
+output paths; replay verifies hashes, adjacent call pairing, every integer
+output, input immutability and DD call counts before timing. Complete
+[timings](../../benchmarks/rbpf_move_pair_tokyo_prefix_20261015.json) and
+[independent audit](../../benchmarks/rbpf_move_pair_audit_20261015.json).
+
 ## Vectorized move selection (2026-10-15)
 
 Extension computes the held-pair mask once, returns early on empty/full

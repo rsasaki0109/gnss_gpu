@@ -1782,6 +1782,25 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-206: RB-FGO-PFの追加・解除の整数差分を1粒子内で再利用 (2026-10-15)
+
+状態: 採用（構造移動stageの速度、全体速度は未計測）
+
+_move_pair内でDD配列を1回作り、read-onlyのextend/shrinkへ渡す。
+寿命は1粒子の呼び出し内のみ。永続cacheを作らず、次epoch/仮説変更では必ず再計算。
+2引数の従来helper API、Hの独立copy/挿入順、移動順、prior、乱数呼び出しを維持する。
+scalar/TRACK=1の両経路に適用し、現行/legacy両方を扱うcaptureを新規追加する。
+
+Tokyo run1実入力600epochから24epoch×64粒子=1536訪問、構造移動3072callを記録。
+DD生成3072→1536回。D205後のbaseline比で203.1391→160.8412ms（各policy時間中央値）、
+paired短縮率中央値19.72%、範囲8.43–45.17%、10交互pair全て改善。2warmup後に測定。
+過去の比率と合成せず、全体/ensemble/GPUの高速化には一般化しない。
+TRACK=2の600epochは既存control、TRACK=1の350epochはfresh旧新で位置bytesと
+診断88+行dump2配列が完全一致、除外0。観測runの時間は速度の根拠に使わない。
+全体5409 passed/3778 skipped、新規28 cases、型検査errors0。
+記録: benchmarks/rbpf_move_pair_tokyo_prefix_20261015.json、
+benchmarks/rbpf_move_pair_audit_20261015.json、experiments/rbpf_fgo/README.md。
+
 ## D-205: RB-FGO-PFの整数追加・解除の行選択をNumPyでまとめる (2026-10-15)
 
 状態: 採用（対象helperの速度、全体速度は未計測）

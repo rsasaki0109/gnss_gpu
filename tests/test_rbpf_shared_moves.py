@@ -88,6 +88,7 @@ def owner(seed, hypotheses):
         particles=[SimpleNamespace(H=deepcopy(H), logw=-float(i), last_move="old")
                    for i, H in enumerate(hypotheses)],
         _extend=extend, _shrink_worst=shrink,
+        _move_pair=lambda H, prob: (extend(H, prob), shrink(H, prob)),
         _moves_tracked=lambda *args: [(H, "tracked") for H in hypotheses])
 
 

@@ -1255,10 +1255,20 @@ class RbpfFgo:
 
     # -- moves ---------------------------------------------------------------
 
-    def _extend(self, H, prob):
+    def _move_pair(self, H, prob):
+        """Build both structural moves from one particle's current DDs.
+
+        H and prob are read-only in both helpers. Keep the shared array
+        local to this call so maintenance or the next epoch cannot reuse it.
+        """
+        dd = self._pair_dd(H, prob)
+        return self._extend(H, prob, dd), self._shrink_worst(H, prob, dd)
+
+    def _extend(self, H, prob, dd=None):
         """Conditional-rounding bootstrap: extend H over the un-held part
         of today's support, conditioning the posterior float on H."""
-        dd = self._pair_dd(H, prob)
+        if dd is None:
+            dd = self._pair_dd(H, prob)
         held = np.isfinite(dd)
         idxH = np.flatnonzero(held)
         if len(idxH) == 0 or len(idxH) == len(dd):
@@ -1429,10 +1439,11 @@ class RbpfFgo:
                     out.append(H)
         return out
 
-    def _shrink_worst(self, H, prob):
+    def _shrink_worst(self, H, prob, dd=None):
         """Release-subset move: drop the held sat whose CP row misfits
         worst this epoch (design step-3 'release subset s' class)."""
-        dd = self._pair_dd(H, prob)
+        if dd is None:
+            dd = self._pair_dd(H, prob)
         rows = np.flatnonzero(prob.rows_iscp)
         pairs = prob.rows_pair[rows]
         valid = np.isfinite(dd[pairs])
@@ -2036,10 +2047,9 @@ class RbpfFgo:
             ll_s = LL(p.H)
             if p.H:
                 moves.append((cfg.p_survive, ll_s, p.H, 'survive'))
-                H_ext = self._extend(p.H, prob)
+                H_ext, H_shr = self._move_pair(p.H, prob)
                 if H_ext is not None:
                     moves.append((cfg.p_extend, LL(H_ext), H_ext, 'extend'))
-                H_shr = self._shrink_worst(p.H, prob)
                 if H_shr is not None:
                     moves.append((cfg.p_shrink, LL(H_shr), H_shr, 'shrink'))
                 moves.append((cfg.p_release, ll_empty, {}, 'release'))
@@ -2558,10 +2568,9 @@ class RbpfFgo:
                               add({}, skey, spred), H, tag))
             if p.H:
                 mv(cfg.p_survive, p.H, 'survive', fk, fp)
-                H_ext = self._extend(p.H, prob)
+                H_ext, H_shr = self._move_pair(p.H, prob)
                 if H_ext is not None:
                     mv(cfg.p_extend, H_ext, 'extend', fk, fp)
-                H_shr = self._shrink_worst(p.H, prob)
                 if H_shr is not None:
                     mv(cfg.p_shrink, H_shr, 'shrink', fk, fp)
                 mv(cfg.p_release, {}, 'release', ek, epred)
