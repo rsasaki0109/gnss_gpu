@@ -18,6 +18,60 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Shared proposal scores (2026-10-15)
+
+The scalar proposal path (`RBPF_TRACK=0/2`) scores each shared consensus,
+LAMBDA and spawn move once per epoch instead of once per particle. With
+64 particles, each shared move needs one score instead of 64. Release uses
+the already computed empty-hypothesis score. Move order, prior arithmetic,
+particle copies and RNG calls are preserved; tracked proposals (`TRACK=1`)
+keep their particle-specific priors.
+
+Two separate studies used the original Tokyo run1 RINEX/IMU/reference files,
+600 epochs, 64 particles, K=12, seed 20260710 and WP56 flags. Each study used
+one full warmup per source, then three alternating pairs in fresh processes,
+with CPU thread counts set to one. No edits or other local checks ran during
+timing. Results are mixed:
+
+| Study | Full-run CPU time reduction | PF elapsed reduction | Full-run elapsed reduction | Improving pairs |
+|---|---:|---:|---:|---:|
+| [Initial](../../benchmarks/rbpf_shared_moves_tokyo_prefix_20261015.json) | not recorded | -4.47% | -12.67% | 1/3 |
+| [Additional CPU-time study](../../benchmarks/rbpf_shared_moves_cpu_tokyo_prefix_20261015.json) | 12.94% | 22.03% | 12.98% | 3/3 |
+
+Values are medians of paired percentage reductions, with negative values
+meaning slower. Initial PF results range from -8.38% to +11.52%; additional
+CPU results range from +6.19% to +22.44%. The first study triggered the
+additional CPU measurement; both full records include all trials and warmups.
+This adopts the redundant-work removal, with no stable end-to-end speedup
+claim across the two studies. It does not establish full-route or ensemble
+latency, or a change in positioning accuracy.
+
+Across all 16 runs the position bytes, all 88 diagnostic arrays and both row
+dump arrays match exactly, with no exclusions. Each has 400 PF steps (397
+measurement updates, three skips), 397 PF fixes and 59 resamples. The prefix
+is mostly fixed and does not cover the difficult parts of the route. The
+46 CPU-only proposal regression cases also compare weights, selected moves,
+RNG state, gauge-equivalent candidate entries, particle ownership and epoch
+boundaries. The runtime environment was Windows/Python 3.12.10/NumPy 2.4.6
+with custom GTSAM and cssrlib; exact dependency hashes are in the records.
+
+Reproduce on a separate branch, saving the baseline before applying this
+optimization. Use a new output directory for every study:
+
+```bash
+python benchmark_shared_moves.py --baseline BASELINE.py --tc-src tc/src \
+  --data-root /data/PPC-Dataset-data/tokyo --output NEW_INITIAL --pairs 3
+python benchmark_shared_moves_cpu.py --baseline BASELINE.py --tc-src tc/src \
+  --data-root /data/PPC-Dataset-data/tokyo --output NEW_CPU --pairs 3
+```
+
+PF time uses the existing `step_seconds` accumulator. Full-run elapsed and
+CPU times cover runner imports, input loading, filtering and output writes;
+process startup, metadata hashing and parity checks are outside those clocks.
+CPU time uses `time.process_time()` and still depends on CPU clock and system
+conditions. The controllers copy both source snapshots, verify hashes, and
+fail if any output array differs.
+
 ## Experimental likelihood replay on CUDA
 
 `capture_likelihood_inputs.py` records actual scalar weight-cache misses and

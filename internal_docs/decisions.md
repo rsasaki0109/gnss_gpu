@@ -1782,6 +1782,25 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-204: RB-FGO-PFの共有候補をエポックごとに一度採点 (2026-10-15)
+
+状態: 重複削減を採用、安定した全体高速化の主張は保留
+
+TRACK=0/2のconsensus/LAMBDA/spawn候補は粒子共通のfloat priorで採点するため、
+64粒子で同じ候補のID生成とlogaddexpを64回呼ぶ処理を1回にする。
+粒子別survive/extend/shrink、移動順、prior計算、乱数消費、Hのcopyは維持する。
+TRACK=1の粒子別prior経路は対象外。永続する可変Hのキャッシュを追加しない。
+
+Tokyo run1実入力600epoch、64粒子/K12/seed20260710、各source 1warmup後3交互pair。
+先行studyはPF時間のpaired短縮中央値-4.47%、全体経過-12.67%、1/3pair改善。
+追加のCPU時間studyは全体CPU 12.94%、PF経過22.03%、全体経過12.98%短縮、3/3改善。
+両studyを残し、時刻による大きな変動から全体の安定した高速化には一般化しない。
+16実行全てで位置bytes、診断88配列、行dump 2配列が完全一致し、除外0。
+全体5320 passed/3778 skipped、新規46 cases、型検査errors0。
+これは序盤のFIX優勢区間であり、full-route/ensemble性能や測位精度改善の証明ではない。
+記録: benchmarks/rbpf_shared_moves_tokyo_prefix_20261015.json、
+benchmarks/rbpf_shared_moves_cpu_tokyo_prefix_20261015.json、experiments/rbpf_fgo/README.md。
+
 ## D-203: 厳密CDF逆検索・全16状態gather・重みresetの統合 (2026-10-15)
 
 状態: 採用

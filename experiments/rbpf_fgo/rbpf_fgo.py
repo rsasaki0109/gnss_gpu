@@ -2012,6 +2012,21 @@ class RbpfFgo:
         if cfg.track == 1:
             new_states = self._moves_tracked(
                 prob, ctx, ep, H_cons, cand_H, spawn_H, _lp_nb, _lp_b)
+        shared_moves = []
+        if cfg.track != 1 and self.particles:
+            # These hypotheses and their float prior are shared by all
+            # particles. Score once per epoch; retain the original move
+            # order and keep particle-dependent survival/extension separate.
+            ll_empty = float(np.logaddexp(_lp_nb + ll_burst, _lp_b))
+            if H_cons is not None:
+                shared_moves.append((cfg.p_adopt_cons, LL(H_cons),
+                                     H_cons, 'adopt_cons'))
+            for Hk in cand_H:
+                shared_moves.append((cfg.p_adopt / len(cand_H), LL(Hk),
+                                     Hk, 'adopt'))
+            for Hs in spawn_H:
+                shared_moves.append((cfg.p_spawn / len(spawn_H), LL(Hs),
+                                     Hs, 'spawn'))
         for p in (self.particles if cfg.track != 1 else ()):
             moves = []           # (logprior, loglik, H, tag)
             ll_s = LL(p.H)
@@ -2023,19 +2038,11 @@ class RbpfFgo:
                 H_shr = self._shrink_worst(p.H, prob)
                 if H_shr is not None:
                     moves.append((cfg.p_shrink, LL(H_shr), H_shr, 'shrink'))
-                moves.append((cfg.p_release, LL({}), {}, 'release'))
+                moves.append((cfg.p_release, ll_empty, {}, 'release'))
             else:
                 moves.append((cfg.p_survive + cfg.p_extend + cfg.p_shrink
                               + cfg.p_release, ll_s, p.H, 'stay'))
-            if H_cons is not None:
-                moves.append((cfg.p_adopt_cons, LL(H_cons),
-                              H_cons, 'adopt_cons'))
-            for Hk in cand_H:
-                moves.append((cfg.p_adopt / len(cand_H), LL(Hk),
-                              Hk, 'adopt'))
-            for Hs in spawn_H:
-                moves.append((cfg.p_spawn / len(spawn_H), LL(Hs),
-                              Hs, 'spawn'))
+            moves.extend(shared_moves)
             pri = np.array([mv[0] for mv in moves], dtype=float)
             pri /= pri.sum()     # renormalize over available moves
             lam_arr = np.log(pri) + np.array([mv[1] for mv in moves])
